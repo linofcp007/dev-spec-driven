@@ -14429,19 +14429,21 @@ function endRun() {
     const although = cls("Kafka consumer for orders — no distributed transactions");
     const saga = cls("Implement checkout as a saga with compensating transactions across the order and payment services");
     const lockOpt = cls("Use optimistic locking so concurrent updates to the cart never overwrite each other");
-    ok(pair.tracks.includes("dist") && pair.weak.includes("dist") && mq.tracks.includes("dist") && !mq.signals.saas.includes("queue") && !mq.possible.some((p) => p.track === "saas") &&
+    // (1.17 D review 4: "message queue" is a +saas weak phrase too — the +saas hint survives; the bare 'queue' inside it is still no second hint)
+    ok(pair.tracks.includes("dist") && pair.weak.includes("dist") && mq.tracks.includes("dist") && !mq.signals.saas.includes("queue") && js(mq.signals.saas) === js(["message queue"]) &&
       both.tracks.includes("dist") && both.tracks.includes("tdd") && both.signals.tdd.includes("exactly-once") && both.signals.dist.includes("exactly-once") &&
       !kept.tracks.includes("dist") && kept.notes.some((n) => /\+dist kept off — 'kafka'/.test(n)) &&
       although.tracks.includes("dist") && although.notes.some((n) => /\+dist is ON although 'distributed transaction' appeared negated/.test(n)) &&
       saga.tracks.includes("dist") && saga.signals.dist.includes("compensating transaction") && lockOpt.signals.dist.includes("optimistic locking"),
-      "1.17 D4: two weak signals turn +dist on (weak-only); 'queue' inside 'message queue' is no +saas hint; 'exactly-once' serves +tdd and +dist; a negated signal keeps it off with a note or annotates it when a strong one wins (got " +
+      "1.17 D4: two weak signals turn +dist on (weak-only); 'queue' inside 'message queue' is no second +saas hint (the phrase itself is one); 'exactly-once' serves +tdd and +dist; a negated signal keeps it off with a note or annotates it when a strong one wins (got " +
       js([pair.signals.dist, mq.signals, both.signals.dist, kept.notes, although.notes]) + ")");
 
     // --- D5: self-match sweep — every +dist keyword (EN / PT / ES) matches itself as a word; a strong one alone turns the track on
-    const probe = { "public … evento": "publicar … evento", "public … mensagem": "publicou … mensagem", "public … mensaje": "publicó … mensaje", reintento: "reintentar" };
+    const probe = { "public … evento": "publicar … evento", "public … mensagem": "publicou … mensagem", "public … mensaje": "publicó … mensaje", reintento: "reintentar",
+      "envi … mensagem": "enviar … mensagem", "envi … mensaje": "enviar … mensaje" }; // (1.17 D review: + the generic tier)
     const sweep = [];
     const sg = S.trackSignals("dist");
-    for (const tier of ["strong", "weak"]) for (const kw of sg[tier]) {
+    for (const tier of ["strong", "weak", "generic"]) for (const kw of sg[tier]) {
       const r = S.classify("We need " + (probe[kw] || kw) + " here");
       if (!r.signals.dist.some((m) => m === kw || m.includes(kw)) || (tier === "strong" && !r.tracks.includes("dist"))) sweep.push(tier + ":" + kw);
     }
@@ -14642,6 +14644,198 @@ function endRun() {
       (brTexts.match(/US-1\.AC-1[6-9]/g) || []).length >= 12 && /## \[DIST\] Modelo de Consistência/.test(brTexts),
       "1.17 D15: PT — the design-save check and ROADMAP.md name the [DIST] sections in Portuguese; the pt-BR twins hold no European-only word ('condição de corrida' kept, atômico), are idempotent and keep [DIST] / the AC IDs (got " +
       js([(brTexts.match(EU) || [])[0], pvSave.text.split("\n")[1]]) + ")");
+
+    // --- 1.17 D review 1: a 1.16 track pack whose name 1.17 reserves ('dist' — now a built-in track —, 'kafka' — an alias). The feature
+    // recorded it in .state.json packMarkers: it stays that feature's missing pack (never dropped, never the built-in track), doctor and
+    // spec_upgrade say why and how out; add-track <built-in name> adopts the built-in track, add-track <name> --remove drops the pack.
+    const lp = d("legacy-packs");
+    S.initProject(lp, ["core"], "en");
+    const legacyFeature = (name, marker, section) => {
+      const pdir = path.join(lp, ".specs", "tracks", name); // the 1.16 pack folder (invalid now: name-reserved)
+      fs.mkdirSync(pdir, { recursive: true });
+      fs.writeFileSync(path.join(pdir, "track.json"), JSON.stringify({ name, marker, title: { en: "Legacy " + name }, sections: [{ name: section, guidance: "Say how." }] }));
+      const f = S.createFeature(lp, "f-" + name, ["core"], "", undefined, "en");
+      const sp = path.join(f.dir, ".state.json");
+      const st = JSON.parse(rd(sp));
+      st.tracks = ["core", name];
+      st.packMarkers = { [name]: "[" + marker + "]" }; // what a 1.16 create with the pack recorded
+      fs.writeFileSync(sp, JSON.stringify(st, null, 2));
+      fs.appendFileSync(path.join(f.dir, "design.md"), "\n## [" + marker + "] " + section + "\n- decided: our " + section.toLowerCase() + ".\n");
+      return f;
+    };
+    const lpDist = legacyFeature("dist", "DIST", "Release Channels");
+    const lpKafka = legacyFeature("kafka", "KAFKA", "Topic Catalog");
+    const lpDocD = S.specDoctor(lp, "f-dist"), lpDocK = S.specDoctor(lp, "f-kafka");
+    const lpStD = S.statusFeature(lp, "f-dist"), lpStK = S.statusFeature(lp, "f-kafka");
+    const lpUp = S.specUpgrade(lp);
+    const lpUpF = (n) => lpUp.features.find((x) => x.name === n) || {};
+    ok(lpStD.tracks === "core" && js(lpStD.missingPacks) === js(["dist"]) && !chk(lpDocD, "dist-sections").status && chk(lpDocD, "track-pack-missing").status === "warn" &&
+      /\+dist \(a track pack from before 1\.17 — 'dist' is a reserved name now, and the built-in \+dist track is NOT applied to this feature: rename \.specs\/tracks\/dist\//.test(chk(lpDocD, "track-pack-missing").detail) &&
+      /dev-spec add-track f-dist dist --remove; to adopt the built-in track instead: dev-spec add-track f-dist dist\)/.test(chk(lpDocD, "track-pack-missing").detail) &&
+      lpStK.tracks === "core" && js(lpStK.missingPacks) === js(["kafka"]) && /'kafka' is a reserved name now: rename/.test(chk(lpDocK, "track-pack-missing").detail) &&
+      lpUpF("f-dist").attention.includes("track-pack-reserved") && js(lpUpF("f-kafka").reservedPacks) === js(["kafka"]) &&
+      lpUp.lines.some((l) => /Rename its track pack\(s\) from before 1\.17 — \+kafka: the name is reserved now/.test(l)),
+      "1.17 D review 1: a 1.16 pack named 'dist' / 'kafka' (recorded in packMarkers) is the feature's missing pack — tracks read core, the built-in +dist is NOT switched on (no dist-sections), doctor's track-pack-missing names the reserved name and the way out, spec_upgrade flags track-pack-reserved (got " +
+      js([lpStD.tracks, lpStD.missingPacks, chk(lpDocD, "dist-sections").status, chk(lpDocK, "track-pack-missing").detail, lpUpF("f-dist").attention]) + ")");
+    const lpAdopt = S.addTrack(lp, "f-dist", "dist");
+    const lpAdoptSt = JSON.parse(rd(lpDist.dir, ".state.json"));
+    const lpAdoptDoc = S.specDoctor(lp, "f-dist");
+    const lpDrop = S.addTrack(lp, "f-kafka", "kafka", { remove: true });
+    const lpDropSt = JSON.parse(rd(lpKafka.dir, ".state.json"));
+    ok(lpAdopt.ok && js(lpAdopt.adopted) === js(["dist"]) && lpAdopt.tracks === "core +dist" && !("packMarkers" in lpAdoptSt) && js(lpAdoptSt.tracks) === js(["core", "dist"]) &&
+      /## \[DIST\] Consistency Model/.test(rd(lpDist.dir, "design.md")) && chk(lpAdoptDoc, "dist-sections").status === "fail" && !chk(lpAdoptDoc, "track-pack-missing").status &&
+      lpDrop.ok && js(lpDrop.removedTracks) === js(["kafka"]) && js(lpDropSt.tracks) === js(["core"]) && lpDropSt.packMarkers.kafka === "[KAFKA]" && !chk(S.specDoctor(lp, "f-kafka"), "track-pack-missing").status,
+      "1.17 D review 1: add-track f-dist dist adopts the built-in track (the pack's record goes, the five [DIST] sections are appended although a [DIST] heading existed); add-track f-kafka kafka --remove drops the legacy pack from the list (its marker stays recorded: its sections stay inactive) (got " +
+      js([lpAdopt.adopted, lpAdopt.tracks, lpAdoptSt.tracks, lpDrop.removedTracks, lpDrop.error, lpDropSt]) + ")");
+
+    // --- 1.17 D review 2: precision — app-level words (a print queue, a music player's retry, a farmers' market, a newsletter, an email
+    // Outbox, a live event stream, Vue's event bus, a club's leader election, "2PCS", an event-driven game loop) never turn +dist on; one
+    // concept is one signal; recall stays high. A compact corpus (EN / PT / ES), before this review: precision 17%, recall 17%.
+    const corpus = [
+      ["N", "Email client: the outbox folder shows messages waiting to be sent."], ["N", "Add a live event stream page where attendees watch the keynote and chat."],
+      ["N", "Replace the Vue event bus with Pinia stores for component communication."], ["N", "Chess club: members hold a leader election every spring."],
+      ["N", "Product page for the 2PCS silicone lid set."], ["N", "An event-driven game loop for the browser puzzle game."],
+      ["N", "A farmers' marketplace connecting local producers with consumers, with product listings and checkout."], ["N", "Newsletter: editors publish the weekly message to all subscribers."],
+      ["N", "Print queue: users send documents to the office printer queue and can retry failed prints."],
+      ["N", "Music player: users queue up songs, and the app retries playback when the connection drops."],
+      ["N", "Offline mode: queue form submissions while offline and retry them when back online."],
+      ["N", "Deduplicate contacts in the CRM: a nightly job finds duplicates and lets the admin dedupe them."],
+      ["N", "Video call stats panel: show network jitter and packet loss; retry the connection when it drops."],
+      ["N", "The content producer uploads videos and the consumer watches them on the TV app."], ["N", "Show a success message after the user saves the profile form."],
+      ["N", "Marketplace que liga produtores locais a consumidores, com catálogo e checkout."], ["N", "Newsletter: o editor publica a mensagem semanal para todos os subscritores."],
+      ["N", "Fila de impressão: os utilizadores enviam documentos para a fila da impressora e podem fazer nova tentativa."],
+      ["N", "Uma janela temporal de cinco minutos para confirmar a encomenda."],
+      ["N", "Cola de impresión: los usuarios envían documentos a la cola de la impresora y pueden reintentar."],
+      ["N", "Marketplace que conecta productores locales con consumidores."], ["N", "Boletín: el editor publica el mensaje semanal para todos los suscriptores."],
+      ["D", "Create an endpoint that writes a user to Postgres and publishes a UserCreated event to Kafka for other services."],
+      ["D", "When an order is paid, send a message to the notification service so it emails the customer."],
+      ["D", "A background job that calls another service to sync inventory every night."], ["D", "A worker processes jobs from Redis and updates the orders table."],
+      ["D", "Use Google Pub/Sub to notify the search indexer when a product changes."], ["D", "Services communicate over NATS; the pricing service subscribes to product updates."],
+      ["D", "Orchestrate the checkout with Temporal workflows across payment, stock and shipping."], ["D", "Stream changes from Postgres to the data warehouse with a CDC pipeline."],
+      ["D", "Stripe webhook handler: mark the invoice paid when Stripe calls us; handle duplicate deliveries."],
+      ["D", "Sidekiq jobs send the welcome email and sync the user to the CRM after sign-up."],
+      ["D", "Celery tasks resize images and update the product record; failed tasks are retried."],
+      ["D", "Two warehouses update the same stock count; make sure concurrent updates never oversell."],
+      ["D", "Apache Pulsar topics carry telemetry from devices to the processing service."], ["D", "Azure Event Hubs ingests clickstream events for the recommendation service."],
+      ["D", "Implement the outbox pattern for order events."],
+      ["D", "Criar um endpoint que grava o utilizador no Postgres e publica um evento UserCreated no Kafka para outros serviços."],
+      ["D", "Enviar uma mensagem para o serviço de notificações quando a encomenda é paga."],
+      ["D", "Um worker em background processa jobs do Redis e atualiza a tabela de encomendas."],
+      ["D", "Dois armazéns atualizam o mesmo stock em simultâneo; nenhuma atualização pode ser perdida."], ["D", "Publicar eventos no Kafka."],
+      ["D", "Crear un endpoint que guarda el usuario en Postgres y publica un evento UserCreated en Kafka para otros servicios."],
+      ["D", "Enviar un mensaje al servicio de notificaciones cuando se paga el pedido."],
+      ["D", "Un worker en segundo plano procesa trabajos de Redis y actualiza la tabla de pedidos."],
+    ];
+    let cTp = 0, cFp = 0, cFn = 0;
+    const cWrong = [];
+    for (const [tag, t] of corpus) {
+      const on = cls(t).tracks.includes("dist");
+      if (tag === "D" && on) cTp++;
+      else if (tag === "D") { cFn++; cWrong.push("FN " + t); } else if (on) { cFp++; cWrong.push("FP " + t); }
+    }
+    const precision = cTp / (cTp + cFp || 1), recall = cTp / (cTp + cFn || 1);
+    const pq = cls("Print queue: users send documents to the office printer queue and can retry failed prints.");
+    const dd = cls("Deduplicate contacts: dedupe them nightly"), fmk = cls("Local producers sell to consumers"), rj = cls("Show the network jitter and retry the call");
+    ok(precision >= 0.9 && recall >= 0.85 && corpus.slice(0, 6).every(([, t]) => !cls(t).tracks.includes("dist")) &&
+      !pq.tracks.includes("dist") && pq.possible.some((p) => p.track === "dist" && js(p.generic) === js(["queue", "retry"])) && pq.notes.some((n) => /only app-level words \('queue', 'retry'\)/.test(n)) &&
+      [dd, fmk, rj].every((r) => r.signals.dist.length === 1 && !r.tracks.includes("dist")) && S.signalConcept("dist", "jitter") === "retry" && S.signalConcept("saas", "worker") === null &&
+      !cls("Kitchen set, 2pcs of lids").signals.dist.length && cls("Use 2PC across the two databases").tracks.includes("dist") && cls("Implement the transactional outbox").tracks.includes("dist"),
+      `1.17 D review 2: +dist precision ${(precision * 100).toFixed(0)}% / recall ${(recall * 100).toFixed(0)}% on ${corpus.length} texts (≥ 90% / 85%); the six strong-word false positives are off; generic words alone stay 'possible' (named); one concept = one signal (dedupe, producers / consumers, retry / jitter); '2PC' is exact (got ` +
+      js([cWrong, pq.notes, dd.signals.dist, fmk.signals.dist, rj.signals.dist]) + ")");
+
+    // --- 1.17 D review 3: recall — named platforms (case-sensitive where they are common words), a service named by its role, a worker
+    // on Redis, a hazard written negated ("never oversell", "no lost updates" count)
+    const plat = ["Use Google Pub/Sub for the order topic", "Services talk over NATS", "Apache Pulsar carries telemetry", "Azure Event Hubs ingests clicks",
+      "Temporal workflows orchestrate checkout", "Sidekiq sends the emails", "Celery tasks resize images", "A CDC pipeline feeds the warehouse"].map((t) => [t, cls(t)]);
+    const common = ["Uma janela temporal de cinco minutos", "Celery soup recipe for the menu", "The pulsar detection telescope", "nats on the porch"].map((t) => [t, cls(t)]);
+    const lostNeg = cls("The system shall have no lost updates"), overwrite = cls("Use optimistic locking so concurrent updates to the cart never overwrite each other");
+    ok(plat.every(([, r]) => r.tracks.includes("dist") && r.confidence.dist !== "none") && common.every(([, r]) => !r.signals.dist.length) &&
+      lostNeg.tracks.includes("dist") && !lostNeg.negated.dist.length && !overwrite.notes.some((n) => /appeared negated/.test(n)) &&
+      cls("The order service calls the payment service over gRPC").tracks.includes("dist") && cls("Keep the search index in sync with the products table").tracks.includes("dist") &&
+      !cls("Users can send a message to customer support").tracks.includes("dist") && cls("No distributed transactions: a simple CRUD form").negated.dist.includes("distributed transaction"),
+      "1.17 D review 3: Google Pub/Sub, NATS, Pulsar, Event Hubs, Temporal, Sidekiq, Celery and a CDC pipeline turn +dist on (the PT adjective 'temporal', celery soup, a pulsar, lower-case 'nats' do not); a hazard written negated counts (no 'appeared negated' note); a service named by its role, gRPC, a search index kept in sync count (got " +
+      js([plat.filter(([, r]) => !r.tracks.includes("dist")).map(([t]) => t), common.filter(([, r]) => r.signals.dist.length).map(([t, r]) => t + ":" + r.signals.dist), lostNeg.negated.dist]) + ")");
+
+    // --- 1.17 D review 4: "message queue" (EN / PT / ES) serves +dist (strong) AND +saas (weak) — the 1.16 +saas hint survives
+    const mqEn = cls("Use a message queue and a background worker to send emails.");
+    const mqPt = cls("Usar uma fila de mensagens e um worker em background para enviar emails.");
+    const mqEs = cls("Usar una cola de mensajes y un worker en segundo plano para enviar correos.");
+    ok([mqEn, mqPt, mqEs].every((r) => r.label === "core +saas +dist") && mqEn.signals.saas.includes("message queue") && mqPt.signals.saas.includes("fila de mensagens") &&
+      mqEs.signals.saas.includes("cola de mensajes") && !mqEn.signals.saas.includes("queue") && cls("A distributed cache in front of the catalog").signals.saas.includes("distributed cache"),
+      "1.17 D review 4: 'message queue' / 'fila de mensagens' / 'cola de mensajes' count for +dist and +saas (1.16 read the message-queue-and-worker example as +saas) — core +saas +dist in EN / PT / ES (got " +
+      js([mqEn.label, mqPt.label, mqEs.label, mqPt.signals.saas]) + ")");
+
+    // --- 1.17 D review 5: a short PT / ES line opening with an infinitive is read in its language — "no Kafka" is PT em + o, never a negation
+    const g1 = cls("Publicar eventos no Kafka."), g2 = cls("Gravar o pedido no Postgres e publicar o evento no Kafka."), g3 = cls("Publicar eventos en Kafka.");
+    const enNeg = ["no Kafka, just Postgres", "Validate the order; no Kafka.", "Plain CRUD endpoint for users, no Kafka and no events"].map((t) => cls(t));
+    ok(g1.lang === "pt" && g2.lang === "pt" && g3.lang === "es" && [g1, g2, g3].every((r) => r.tracks.includes("dist") && r.signals.dist.includes("kafka") && !r.negated.dist.length) &&
+      enNeg.every((r) => r.lang === "en" && r.negated.dist.includes("kafka") && !r.tracks.includes("dist")) && cls("Corrigir o cálculo do IVA no checkout").tracks.includes("tdd"),
+      "1.17 D review 5: 'Publicar eventos no Kafka.' / 'Gravar o pedido … no Kafka.' read as PT (a clause-start infinitive), ES 'en Kafka' as ES — Kafka not negated; English 'no Kafka' stays a negation (got " +
+      js([[g1.lang, g1.negated.dist], [g2.lang, g2.negated.dist], [g3.lang], enNeg.map((r) => r.lang + ":" + r.negated.dist)]) + ")");
+
+    // --- 1.17 D review 6: Failure Modes has strict names — a marker-less hand-written design with the five headings passes (EN / PT / ES);
+    // the singular 'Failure mode' alone stays loose
+    const sx = d("sections");
+    const sxF = S.createFeature(sx, "Strict", ["dist"], "", undefined, "en");
+    const sxCore = rd(sxF.dir, "design.md").split("\n## [DIST]")[0];
+    const sxCheck = (heads) => {
+      fs.writeFileSync(path.join(sxF.dir, "design.md"), sxCore + heads.map((h) => "\n## " + h + "\n- a real decision about this.\n").join(""));
+      return chk(S.specDoctor(sx, sxF.slug), "dist-sections");
+    };
+    const sxEn = sxCheck(["Consistency Model", "Cross-system Writes", "Delivery & Idempotency", "Concurrency Control", "Failure Modes"]);
+    const sxPt = sxCheck(["Modelo de Consistência", "Escritas entre Sistemas", "Entrega e Idempotência", "Controle de Concorrência", "Modos de Falha"]);
+    const sxEs = sxCheck(["Modelo de Consistencia", "Escrituras entre Sistemas", "Entrega y Idempotencia", "Control de Concurrencia", "Modos de Fallo"]);
+    const sxSing = sxCheck(["Consistency Model", "Cross-system Writes", "Delivery & Idempotency", "Concurrency Control", "Failure mode"]);
+    ok([sxEn, sxPt, sxEs].every((c) => c.status === "pass") && sxSing.status === "fail" && /Failure Modes:missing/.test(sxSing.detail),
+      "1.17 D review 6: 'Failure Modes' / 'Modos de Falha' / 'Modos de Fallo' are strict synonyms — a marker-less hand-written design with all five headings passes dist-sections; a bare 'Failure mode' is loose (got " +
+      js([sxEn.detail, sxPt.detail, sxEs.detail, sxSing.detail]) + ")");
+
+    // --- 1.17 D review 7: spec_clarify reads "arrives twice" / "está caído" / "fora do ar" / "duas vezes" as written delivery / failure criteria
+    const clq = (reqs) => { fs.writeFileSync(path.join(combo.dir, "requirements.md"), "# F\n\n## Acceptance Criteria\n" + reqs); return S.clarify(cb, combo.slug).questions; };
+    const clEn = clq("1. **US-1.AC-1** — WHEN a message arrives twice THE SYSTEM SHALL apply it once\n2. **US-1.AC-2** — IF the broker goes down THEN THE SYSTEM SHALL keep the events\n");
+    const clEs = clq("1. **US-1.AC-1** — CUANDO un mensaje llega dos veces EL SISTEMA DEBE aplicarlo una vez\n2. **US-1.AC-2** — SI el broker está caído ENTONCES EL SISTEMA DEBE guardar los eventos\n");
+    const clBr = clq("1. **US-1.AC-1** — QUANDO uma mensagem chega duas vezes O SISTEMA DEVE aplicá-la uma vez\n2. **US-1.AC-2** — SE o broker estiver fora do ar ENTÃO O SISTEMA DEVE guardar os eventos\n");
+    ok([clEn, clEs, clBr].every((q) => !q.includes(Q.distDelivery) && !q.includes(Q.distFailure)),
+      "1.17 D review 7: spec_clarify stops asking for the delivery guarantee / dependency failure once the criteria say 'arrives twice' / 'goes down', 'dos veces' / 'está caído', 'duas vezes' / 'fora do ar' (got " +
+      js([clEn, clEs, clBr].map((q) => q.filter((x) => x === Q.distDelivery || x === Q.distFailure))) + ")");
+
+    // --- 1.17 D review 8: the glossary stub keeps its space ("produto: uma", "producto: una") and still reads as a template
+    const glPt = I.steeringStub("glossary.md", "pt"), glEs = I.steeringStub("glossary.md", "es");
+    ok(/linguagem ubíqua do produto: uma entrada/.test(glPt) && /lenguaje ubicuo del producto: una entrada/.test(glEs) && !/produto:uma|producto:una/.test(glPt + glEs) &&
+      S.artifactState({ text: glPt }) === "placeholder" && S.artifactState({ text: glEs }) === "placeholder",
+      "1.17 D review 8: the PT / ES glossary stubs read 'produto: uma' / 'producto: una' again (a stray edit), and still read 'placeholder' (got " + js([glPt.slice(0, 80), glEs.slice(0, 80)]) + ")");
+
+    // --- 1.17 D review 9: AC-16's slot reads well once filled ("a publicação [do evento]", "la publicación [del evento]"); no European idiom in pt-BR
+    const r9 = (lang) => I.requirements({ name: "X", tracks: ["core", "dist"], label: "core +dist", slug: "x", summary: "" }, lang);
+    const br9 = [r9("pt-BR"), I.design({ name: "X", tracks: ["core", "dist"], label: "core +dist", slug: "x", summary: "" }, "pt-BR"), I.testPlan("X", "pt-BR", ["core", "tdd", "dist"])].join("\n");
+    ok(/SE a publicação \[do evento\] falhar/.test(r9("pt")) && /SI la publicación \[del evento\] falla/.test(r9("es")) && !/de \[o evento\]|de \[el evento\]/.test(r9("pt") + r9("es")) &&
+      !/na mesma"|entregue na mesma|sem o perder|falhar depressa/.test(br9) && /sem que se perca/.test(br9) && /o evento é entregue mesmo assim/.test(br9) && /falhar rapidamente/.test(br9),
+      "1.17 D review 9: the PT / ES AC-16 slot is '[do evento]' / '[del evento]'; the pt-BR twins say 'sem que se perca', 'mesmo assim', 'falhar rapidamente' (no European idiom) (got " +
+      js([(r9("pt").match(/SE a publicação[^,]*/) || [])[0], (br9.match(/(?:sem o perder|na mesma|depressa)/) || [])[0]]) + ")");
+
+    // --- 1.17 D review 10: the classifier stays linear on repeated keywords (100 KB of "queue …" took 6.9 s — each hit compared with every
+    // hit); a track pack's keyword is a literal word (VERB_STEMS / irregular forms are the built-in signals' only: a pack keyword "public")
+    const big = "queue ".repeat(Math.ceil(102400 / 6)); // (6.9 s before this review, 1.8 s in 1.16)
+    const t0 = Date.now();
+    const bigR = S.classify(big);
+    const bigMs = Date.now() - t0;
+    const vp = d("pack-public");
+    S.initProject(vp, ["core"], "en");
+    fs.mkdirSync(path.join(vp, ".specs", "tracks", "opendata"), { recursive: true });
+    fs.writeFileSync(path.join(vp, ".specs", "tracks", "opendata", "track.json"), JSON.stringify({ name: "opendata", marker: "OPEN", title: { en: "Open Data" }, signals: { strong: ["public"] }, sections: [{ name: "Licensing" }] }));
+    const vr = S.classify("Expose the public dataset for researchers", { projectDir: vp });
+    ok(bigMs < 4000 && !bigR.tracks.includes("dist") && vr.tracks.includes("opendata") && (vr.signals.opendata || []).includes("public") && !cls("A public API for partners").signals.dist.length,
+      "1.17 D review 10: 100 KB of repeated +dist / +saas keywords classify in " + bigMs + " ms (< 4 s; the shadowing sweep is linear); a track pack keyword 'public' matches the English word (no verb-stem ending required) while the built-in 'public …' gap still needs one (got " +
+      js([bigMs, vr.tracks, vr.signals.opendata]) + ")");
+
+    // --- 1.17 D review (references): the patterns guide's corrections — write skew under Postgres repeatable read / Oracle serializable, an
+    // order-safe "set", a race-safe upsert, retriable 408 / 429, the record key vs the message-ID header, 4³ = 64 calls
+    const ref = fs.readFileSync(path.join(__dirname, "..", "skills", "dev-spec-driven", "references", "distributed-data-patterns.md"), "utf8");
+    const stubs = ["en", "pt", "es", "pt-BR"].map((l) => I.steeringStub("distributed.md", l)).join("\n");
+    ok(/write skew[^\n]*commits silently/i.test(ref) && /Oracle's SERIALIZABLE is snapshot isolation/.test(ref) && /version < :v/.test(ref) && /`MERGE` is \*\*not\*\*/.test(ref) &&
+      /\*\*408\*\*[^\n]*\*\*429\*\*/.test(ref) && /4³ = 64 calls/.test(ref) && !/27 calls/.test(ref) && !/key header/.test(ref) && /record header `event-id`/.test(ref) &&
+      (stubs.match(/408/g) || []).length === 4 && (stubs.match(/429/g) || []).length === 4,
+      "1.17 D review (references): distributed-data-patterns.md fixes write skew (Postgres RR, Oracle SERIALIZABLE), order-safe set semantics, MERGE, retriable 408 / 429, key vs header, 4³ = 64; the distributed.md stubs (EN / PT / ES / pt-BR) name 408 / 429 as retriable");
   }
 
   // 1.17 package (A) — design trade-offs / risks, /grill constraint questions, the TDD micro-cycle.

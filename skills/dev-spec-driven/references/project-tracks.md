@@ -152,6 +152,15 @@ template's T-01…T-05, `- [ ] A11Y: axe-core …` in checklist.md, and `.specs/
 - **Saved track lists.** A feature's `.state.json → tracks` names a pack when it is a valid pack now or recorded in its
   `packMarkers`; any other unknown word there (a typo, `security`, `gdpr`) makes the list unreadable and the tracks are
   inferred from the files, as before 1.15 — never a phantom missing pack.
+- **A name reserved since (1.17).** 1.17 adds the built-in `+dist` track and reserves `dist` and its words (`kafka`,
+  `distributed`, `microservices`, `consistency`, their PT / ES forms) and the marker `DIST`. A pack of one of those names
+  from an earlier version is now `name-reserved` (ignored); a feature that used it recorded it in `packMarkers`, so it
+  stays that feature's **missing pack** — inactive, never dropped from the list, and a pack named `dist` is never read as
+  the built-in `+dist` (whose five `[DIST]` sections that design doesn't have). doctor's `track-pack-missing` and
+  `spec_upgrade` (`track-pack-reserved`) say so. The way out: rename `.specs/tracks/<name>/` (and its marker, when that is
+  reserved too, and the headings that carry it), `dev-spec add-track <feature> <new-name>`, then
+  `dev-spec add-track <feature> <old-name> --remove`; or, for `dist`, adopt the built-in track instead:
+  `dev-spec add-track <feature> dist` (the old record goes, the built-in sections are added).
 
 ## check — stable codes
 

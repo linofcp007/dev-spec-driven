@@ -35,8 +35,13 @@ is a draft for the human, who confirms Phase 0.
   forms for +sec; `transaction`, `consistency`, `atomic` for +dist) count as weak evidence only beside another signal of the
   same track ("RBAC permissions", "encrypt customer PII at rest"); alone they are no hint at all (file permission bits, a
   leave of absence, a parcel in transit).
-- A weak word inside a longer strong phrase of another track is part of that phrase: `model` in "threat model" is no
-  +ai hint, `security` in "row-level security" no +sec one, `queue` in "message queue" (+dist) no +saas one.
+- A weak word inside a longer strong phrase (of another track, or of its own) is part of that phrase: `model` in "threat
+  model" is no +ai hint, `security` in "row-level security" no +sec one. A phrase may count for two tracks when it names
+  both concerns: "message queue" is strong for +dist and weak for +saas (a queue is a +saas scaling hint too).
+- **Generic** signals (+dist only — app-level words: queue, retry, consumer / producer, subscriber, publish … event,
+  worker) add to the score but never turn the track on alone: at least one strong or weak (cross-system) signal must be
+  there. "Print queue: … retry failed prints" stays *possible* (a note names the app-level words). Words of **one
+  concept** count once: retry · backoff · jitter, consumer · producer · subscriber, dedupe · deduplicate.
 - Auth words (`authentication`, `authorization`, `RBAC`, `MFA`) are **strong for +tdd and weak for +sec**: "login with a
   password" is `core +tdd` with a possible +sec note; "login with a password, RBAC and an audit log" turns +sec on.
 - Upper-case acronyms are matched case-sensitively where the lower-case word means something else: `STRIDE` (weak +sec)
@@ -45,6 +50,8 @@ is a draft for the human, who confirms Phase 0.
   weak for +dist. A gap phrase (`publish … event`, +dist) matches up to three words between its parts.
 - **Negation never vetoes a track**, it annotates it: "no personal data" keeps +privacy off and says so; a negated
   keyword on a track that is ON anyway ("the system shall not hallucinate") comes back as a conflict note to review.
+  A +dist **hazard** (lost update, oversell, race condition, duplicate delivery, write skew, split brain) is written
+  negated by nature — "concurrent updates never oversell" — so its negation is the requirement: it counts.
 
 ---
 
@@ -200,21 +207,29 @@ Turn on `+dist` if **any** are true:
 | Consistency is a product decision | Read replicas, a search index or another service's copy that may lag; CQRS / event sourcing |
 | Partial failure matters | A dependency that can be down or slow while the feature must keep working or recover |
 
-Classifier signals — **strong:** Kafka, RabbitMQ, ActiveMQ, AMQP, SQS, Kinesis, EventBridge, Debezium, message broker /
-queue / bus, event bus / broker / stream, event-driven, event sourcing, domain / integration event, CQRS, outbox,
-transactional outbox, inbox pattern, idempotent consumer, dual write, eventual / strong consistency, read-your-writes,
-distributed transaction / system / lock / cache, two-phase commit (2PC), microservice(s), change data capture,
-exactly-once, at-least-once delivery, saga pattern / orchestration, compensating transaction, optimistic / pessimistic
-locking, isolation level, write skew, lost update, network partition, split brain, leader election (and their PT / ES
-forms: *fila de mensagens, consistência eventual, transação distribuída, microsserviço, bloqueio otimista, nível de
-isolamento · cola de mensajes, consistencia eventual, transacción distribuida, microservicio, bloqueo optimista, nivel de
-aislamiento*). **Weak:** queue, consumer, producer, subscriber, webhook, retry / retries, (exponential) backoff, jitter,
-idempotency, deduplication, race condition, replication, read replica, cache invalidation, at-least-once / at-most-once,
-exactly once, pub/sub, **publish … event / message** (a gap phrase: up to three words between — "publishes a
-UserCreated event"), other / downstream services, cross-service, saga, `CDC` (upper case — also a health agency), dead
-letter, DLQ, poison message, circuit breaker, event store, concurrent updates / writes, clock skew, message ordering
-(*novas tentativas, condição de corrida, replicação, publica … evento, outros serviços · reintento, condición de carrera,
-replicación, publica … evento, otros servicios*). **Corroborating only:** transaction, consistency, atomic(ity).
+Classifier signals — **strong:** Kafka, RabbitMQ, ActiveMQ, AMQP, SQS, Kinesis, EventBridge, Debezium, Google / Cloud
+Pub/Sub, a Pub/Sub topic, `NATS`, Apache Pulsar, Azure Event Hubs, Sidekiq, BullMQ, Resque, NServiceBus, MassTransit,
+`Temporal workflow` / `Celery task` / `CDC pipeline` (capitalised — "temporal" is a PT / ES adjective, celery a vegetable),
+message broker / queue / bus, event broker, event-driven architecture, event sourcing, domain / integration event, CQRS,
+transactional outbox, outbox pattern / table, inbox pattern, idempotent consumer, dual write, eventual / strong
+consistency, read-your-writes, distributed transaction / system / lock / cache, two-phase commit (`2PC`, exact),
+microservice(s), change data capture, exactly-once, at-least-once delivery, saga pattern / orchestration, compensating
+transaction, optimistic / pessimistic locking, isolation level, write skew, lost update, network partition, split brain,
+read replica, replication lag (and their PT / ES forms: *fila de mensagens, consistência eventual, transação distribuída,
+microsserviço, bloqueio otimista, nível de isolamento · cola de mensajes, consistencia eventual, transacción distribuida,
+microservicio, bloqueo optimista, nivel de aislamiento*). **Weak** (a second system or a delivery / concurrency concern):
+webhook, idempotency, at-least-once / at-most-once, duplicate delivery / message / event, delivered twice, other /
+another / downstream services, cross-service, a service named by its role (the notification / payment / billing / order
+/ shipping / inventory service), exponential backoff, replication, cache invalidation, saga, `CDC` (upper case — also a
+health agency), dead letter, DLQ, poison message, circuit breaker, concurrent updates / writes, "update … lost",
+"overwrite each other", a version column, clock skew, message ordering, event bus / stream, event-driven, leader
+election, Redis, a search index, Elasticsearch, gRPC (*outros serviços, serviço de pagamentos, replicação, recuo
+exponencial · otros servicios, servicio de pagos, replicación, retroceso exponencial*). **Generic** (only beside a strong
+or weak one): queue, consumer, producer, subscriber, retry / retries, jitter, deduplication, race condition, pub/sub,
+**publish … event / message**, **send … message** (gap phrases: up to three words between — "publishes a UserCreated
+event"), exactly once, event store, outbox, worker, background job, "keep … in sync", oversell, compensate,
+concurrently (*fila, consumidor, nova tentativa, publica … evento, envia … mensagem, pelo menos uma vez, em simultâneo ·
+cola, reintento, publica … mensaje, al menos una vez*). **Corroborating only:** transaction, consistency, atomic(ity).
 Never a bare "event" (DOM / calendar / analytics events), "lock" (an account lock), "stream" (video) or "broker".
 
 The canonical example — *"Create an endpoint that writes a user to Postgres and publishes a UserCreated event to Kafka
@@ -225,13 +240,16 @@ Worked examples (what `spec_classify` answers):
 
 | Description | Result | Signals |
 |---|---|---|
-| Create an endpoint that writes a user to Postgres and publishes a UserCreated event to Kafka for other services | `core +dist` | kafka, publish … event, other services |
-| … the same without Kafka ("publishes a UserCreated event for other services") | `core +dist` (weak-only) | publish … event, other services |
+| Create an endpoint that writes a user to Postgres and publishes a UserCreated event to Kafka for other services | `core +dist` | kafka, other services, publish … event |
+| … the same without Kafka ("publishes a UserCreated event for other services") | `core +dist` (weak-only) | other services (the anchor), publish … event |
 | Split billing into its own microservice | `core +tdd +dist` | microservice (billing → +tdd) |
 | Implement checkout as a saga with compensating transactions across the order and payment services | `core +tdd +dist` | compensating transaction, saga |
 | Use optimistic locking so concurrent updates to the cart never overwrite each other | `core +dist` | optimistic locking, concurrent updates |
-| Queue the welcome email and retry with exponential backoff | `core +dist` (weak-only) | queue, retry, exponential backoff |
-| Receive Stripe webhooks idempotently and retry failed deliveries | `core +saas +dist` | webhook, retry, idempotent |
+| Queue the welcome email and retry with exponential backoff | `core +dist` (weak-only) | exponential backoff (+ retry: one concept), queue |
+| Receive Stripe webhooks idempotently and retry failed deliveries | `core +saas +dist` | webhook, idempotent, retry |
+| Use a message queue and a background worker to send emails | `core +saas +dist` | message queue (+dist strong, +saas weak), worker |
+| Print queue: users send documents to the printer queue and can retry failed prints | `core`, *possible +dist* | queue, retry (generic only) |
+| *Publicar eventos no Kafka.* | `core +dist` | kafka (PT: "no" is *em + o*), publica … evento |
 | *Sincronizar o stock entre serviços com consistência eventual e um outbox transacional* | `core +dist` | outbox transacional, consistência eventual |
 | *Reintentar los pagos fallidos con retroceso exponencial y una cola de mensajes* | `core +tdd +dist` | cola de mensajes, reintento, retroceso exponencial |
 | Retry the image upload when the network drops | `core`, *possible +dist* | retry |

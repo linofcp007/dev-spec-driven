@@ -798,11 +798,15 @@ function existingFeature(projectDir, name) {
 // ("tdd,saas", "+saas +ai", ["tdd saas"]), case-insensitive, core implied. Unknown tokens are reported
 // (with a did-you-mean) instead of being dropped — silently losing 'sass' also skipped auto-classification.
 // → { tracks (stable order, incl. core), named (valid tokens as given), given (any token at all), unknown }
-function parseTracks(input) {
-  const tokens = (Array.isArray(input) ? input : input == null ? [] : [input])
+// The track tokens a caller wrote (arrays or strings split on space / comma / '+'), lower-cased.
+function trackTokens(input) {
+  return (Array.isArray(input) ? input : input == null ? [] : [input])
     .flatMap((x) => String(x == null ? "" : x).split(/[\s,+]+/))
     .map((t) => t.trim().toLowerCase())
     .filter(Boolean);
+}
+function parseTracks(input) {
+  const tokens = trackTokens(input);
   const valid = allTracks(); // the built-in tracks + the project's track packs (1.15)
   const named = [...new Set(tokens.filter((t) => valid.includes(t)))];
   const unknown = [...new Set(tokens.filter((t) => !valid.includes(t)))].map((token) => ({ token, suggestion: suggestTrack(token) }));
@@ -911,7 +915,11 @@ const SIGNALS = {
       "tenant", "queue", "worker", "background job", "scheduled", "scheduled task",
       "public api", "scale", "throughput", "latency", "p95", "p99", "p50", "tps", "qps",
       "cdn", "cache", "partition",
-      // PT/ES
+      // 1.17 D review: a message queue IS a queue — the phrase counts for +saas too (as 'exactly-once' does for +tdd and +dist):
+      // listed here, its span equals +dist's strong one, so the +saas hint survives (1.16 parity: "a message queue and a worker").
+      "message queue", "distributed cache",
+      // PT/ES ("fila de mensagens" / "cola de mensajes" before "fila" / "cola": the first keyword matching at a place wins it)
+      "fila de mensagens", "cola de mensajes",
       "fila", "agendado", "tarefa agendada", "desempenho", "latência", "cola", "programado",
       "rendimiento", "latencia", "escala", "caché",
     ],
@@ -1050,69 +1058,154 @@ const SIGNALS = {
     ],
   },
   // +dist (1.17 D): distributed systems and data consistency — a write that reaches more than one system (a database AND a
-  // broker, a cache, another service), delivery guarantees, idempotency, concurrency. STRONG: the named brokers and the
-  // patterns that only exist across systems (outbox, saga pattern, dual write, eventual consistency, two-phase commit,
-  // microservices, event sourcing, CQRS, change data capture, optimistic / pessimistic locking…). WEAK — generic alone,
-  // on only in pairs: queue, consumer / producer, webhook, retries / backoff, idempotency, deduplication, race conditions,
-  // replication, cache invalidation, a bare "saga" (also a story series), "CDC" (also the health agency) and the GAP phrases
-  // "publish … event" / "publish … message" (up to three words between: "publishes a UserCreated event" — an events-app
-  // "publish the event" alone stays 'possible'). Never a bare "event" (DOM, calendar, analytics events), "lock" (an account
-  // lock), "stream" (video streaming) or "broker" (an insurance broker). CONTEXT (corroborating only): transaction,
-  // consistency, atomic(ity) — data-consistency words that alone are ordinary ("a consistent UI").
+  // broker, a cache, another service), delivery guarantees, idempotency, concurrency. STRONG: the named brokers / job and workflow
+  // platforms and the patterns that only exist across systems (transactional outbox, saga pattern, dual write, eventual
+  // consistency, two-phase commit, microservices, event sourcing, CQRS, change data capture, optimistic / pessimistic locking…).
+  // WEAK — the cross-system ANCHORS, on only in pairs: webhooks, idempotency, delivery guarantees (at-least-once, duplicate
+  // deliveries), other / another / downstream services, dead letters, circuit breakers, backoff, replication, cache invalidation,
+  // concurrent updates, an event bus / stream / event-driven design, a bare "saga" (also a story series), "CDC" (also the health
+  // agency), Redis, a search index, gRPC. GENERIC (1.17 D review — app-level words: a print queue, a music player's retry, a
+  // farmers' market's producers and consumers, a newsletter's subscribers, a nightly dedupe): weak evidence that turns the
+  // track on only beside a strong or an anchor signal — two generic words alone stay 'possible'. Never a bare "event" (DOM,
+  // calendar, analytics events), "lock" (an account lock), "stream" (video streaming) or "broker" (an insurance broker).
+  // CONTEXT (corroborating only): transaction, consistency, atomic(ity) — data-consistency words that alone are ordinary
+  // ("a consistent UI"). One concept, one signal: SIGNAL_CONCEPTS folds the words of one concept (retry · backoff · jitter,
+  // consumer · producer · subscriber, dedupe · deduplicate).
   // Shared spans: 'exactly-once' is +tdd strong too, 'idempoten' / 'webhook' / 'circuit breaker' / 'dead letter' +saas strong,
-  // 'queue' / 'fila' / 'cola' +saas weak, 'race condition' +tdd weak — a keyword serves both tracks (equal spans are never
-  // shadowed); 'queue' inside "message queue" (a longer +dist STRONG phrase) is no +saas hint.
+  // 'queue' / 'worker' / 'background job' / 'fila' / 'cola' +saas weak, 'race condition' +tdd weak — a keyword serves both tracks
+  // (equal spans are never shadowed); "message queue" / "distributed cache" (and PT / ES) are listed in +saas weak too, so the
+  // +saas hint survives inside them (1.17 D review — 1.16 parity).
   dist: {
     strong: [
       "kafka", "rabbitmq", "activemq", "amqp", "amazon sqs", "sqs", "kinesis", "eventbridge", "service bus", "redis streams", "debezium",
-      "message broker", "message queue", "message bus", "event bus", "event broker", "event-driven", "event driven", "event stream",
+      // named platforms (1.17 D review). A common word is matched only in its capitalised product phrase (a keyword written with
+      // capitals is case-sensitive): "Temporal workflow" (PT / ES "temporal" is an adjective), "Celery task" (a vegetable),
+      // "Pulsar topic" (a star), "NATS", "Event Hubs", "CDC pipeline".
+      "google pub / sub", "cloud pub / sub", "pub / sub topic", "NATS", "apache pulsar", "Pulsar topic", "azure event hub", "Event Hubs",
+      "Temporal workflow", "Temporal worker", "sidekiq", "Celery task", "Celery worker", "bullmq", "resque", "nservicebus", "masstransit",
+      "CDC pipeline", "CDC connector",
+      "message broker", "message queue", "message bus", "event broker", "event-driven architecture", "event driven architecture",
       "stream processing", "event sourcing", "event-sourced", "domain event", "integration event",
-      "transactional outbox", "inbox pattern", "idempotent consumer", "dual write", "dual-write",
+      "transactional outbox", "outbox pattern", "outbox table", "inbox pattern", "idempotent consumer", "dual write", "dual-write",
       "eventual consistency", "eventually consistent", "strong consistency", "strongly consistent", "read-your-writes",
       "distributed transaction", "distributed system", "distributed lock", "distributed cache", "two-phase commit", "two phase commit",
-      "2pc", "microservice", "micro-service", "cqrs", "change data capture", "exactly-once", "at-least-once delivery",
+      "2PC", "microservice", "micro-service", "cqrs", "change data capture", "exactly-once", "at-least-once delivery",
       "saga pattern", "saga orchestration", "saga orchestrator", "compensating transaction", "compensating action",
       "optimistic locking", "pessimistic locking", "isolation level", "write skew", "lost update", "network partition",
-      "split brain", "split-brain", "leader election",
-      // PT (pluralize() adds a plural to a phrase's FIRST word only for -ção / "de" phrases: the other plurals are listed)
-      "fila de mensagens", "barramento de eventos", "broker de mensagens", "outbox transacional", "escrita dupla", "escritas duplas",
+      "split brain", "split-brain", "read replica", "replication lag",
+      // PT (pluralize() adds a plural to a phrase's FIRST word only for -ção / "de" / non-ASCII phrases: the other plurals are listed)
+      "fila de mensagens", "broker de mensagens", "outbox transacional", "padrão outbox", "tabela de outbox", "escrita dupla", "escritas duplas",
       "consistência eventual", "eventualmente consistente", "consistência forte", "transação distribuída", "transações distribuídas",
       "commit em duas fases", "commit de duas fases", "microsserviço", "micro-serviço", "arquitetura orientada a eventos",
-      "orientado a eventos", "orientada a eventos", "sistema distribuído", "bloqueio otimista", "bloqueio pessimista",
+      "sistema distribuído", "bloqueio otimista", "bloqueio pessimista",
       "nível de isolamento", "atualização perdida", "atualizações perdidas", "partição de rede", "partições de rede",
       "captura de dados de alteração", "transação de compensação", "transações de compensação", "consumidor idempotente",
+      "réplica de leitura", "atraso de replicação",
       // ES
-      "cola de mensajes", "bus de eventos", "broker de mensajes", "outbox transaccional", "escritura dual", "escrituras duales",
+      "cola de mensajes", "broker de mensajes", "outbox transaccional", "patrón outbox", "tabla de outbox", "escritura dual", "escrituras duales",
       "doble escritura", "consistencia eventual", "consistencia fuerte", "transacción distribuida", "transacciones distribuidas",
       "commit en dos fases", "confirmación en dos fases", "microservicio", "arquitectura orientada a eventos", "sistema distribuido",
       "sistemas distribuidos", "bloqueo optimista", "bloqueo pesimista", "nivel de aislamiento", "actualización perdida",
       "actualizaciones perdidas", "partición de red", "particiones de red", "captura de datos de cambios", "transacción de compensación",
-      "transacciones de compensación",
-      // last: a keyword matching at the same place as an earlier one is skipped — "outbox transacional" is listed before "outbox"
-      "outbox",
+      "transacciones de compensación", "réplica de lectura", "retraso de replicación",
     ],
+    // ANCHORS: a word that names a second system or a delivery / concurrency concern. (A bare "outbox" — an email client's folder
+    // — an "event stream" (a live keynote), an "event bus" (Vue's in-process bus), "event-driven" (a game loop) and "leader
+    // election" (a club vote) were strong in the first 1.17 cut: weak now.)
     weak: [
-      "queue", "consumer", "producer", "subscriber", "webhook", "retry", "exponential backoff",
-      "backoff exponencial", "backoff", "jitter", // (PT / ES "backoff exponencial" before "backoff": the first keyword matching at a place wins it)
-      "idempoten", "deduplica", "dedup", "dedupe", "race condition", "replication", "read replica", "cache invalidation",
-      "at-least-once", "at-most-once", "exactly once", "pubsub", "pub-sub", "pub / sub", "publish-subscribe", "publish / subscribe",
-      "publish … event", "publish … message", "other services", "downstream service", "cross-service", "saga", "CDC", "dead letter",
-      "dead-letter", "dlq", "poison message", "circuit breaker", "event store", "concurrent updates", "concurrent writes", "clock skew",
-      "message ordering",
-      // PT ("tentar novamente" is no signal: "the user can try again")
-      "fila", "consumidor", "produtor", "subscritor", "nova tentativa", "novas tentativas", "retentativa",
-      "recuo exponencial", "desduplica", "condição de corrida", "condições de corrida", "replicação", "réplica",
-      "invalidação de cache", "pelo menos uma vez", "no máximo uma vez", "exatamente uma vez", "public … evento", "public … mensagem",
-      "outros serviços", "atualizações concorrentes", "escritas concorrentes",
+      "webhook", "idempoten", "at-least-once", "at-most-once", "duplicate delivery", "delivered twice", "delivered more than once",
+      "duplicate message", "duplicate event", "other services", "another service", "downstream service", "cross-service",
+      "exponential backoff", "backoff exponencial", "backoff", // ("backoff exponencial" before "backoff": the first keyword matching at a place wins it)
+      "replication", "cache invalidation", "saga", "CDC", "dead letter", "dead-letter", "dlq", "poison message", "circuit breaker",
+      "concurrent updates", "concurrent writes", "update … lost", "overwrite each other", "version column", "clock skew",
+      "message ordering", "event bus", "event stream",
+      "event-driven", "event driven", "leader election", "redis", "search index", "elasticsearch", "opensearch", "grpc",
+      // a service named by its domain role ("the notification service", "the payment service") — one concept with "other services"
+      "notification service", "payment service", "billing service", "order service", "orders service", "shipping service",
+      "inventory service", "analytics service", "pricing service", "catalog service",
+      // PT
+      "outros serviços", "outro serviço", "recuo exponencial", "replicação", "réplica", "invalidação de cache", "atualizações concorrentes",
+      "escritas concorrentes", "atualização … perdida", "barramento de eventos", "orientado a eventos", "orientada a eventos",
+      "entregue duas vezes", "mensagens duplicadas", "eventos duplicados", "coluna de versão", "serviço de notificações", "serviço de pagamentos",
+      "serviço de faturação", "serviço de faturamento", "serviço de encomendas", "serviço de pedidos", "serviço de envios", "serviço de inventário",
+      "serviço de stock", "serviço de estoque", "serviço de preços", "serviço de catálogo",
       // ES
-      "cola", "productor", "suscriptor", "reintento", "retroceso exponencial", "condición de carrera",
-      "condiciones de carrera", "replicación", "invalidación de caché", "al menos una vez", "como máximo una vez", "exactamente una vez",
-      "public … mensaje", "otros servicios", "actualizaciones concurrentes", "escrituras concurrentes",
+      "otros servicios", "otro servicio", "retroceso exponencial", "replicación", "invalidación de caché", "actualizaciones concurrentes",
+      "escrituras concurrentes", "actualización … perdida", "bus de eventos", "entregado dos veces", "mensajes duplicados", "columna de versión",
+      "servicio de notificaciones", "servicio de pagos", "servicio de facturación", "servicio de pedidos", "servicio de envíos",
+      "servicio de inventario", "servicio de precios", "servicio de catálogo",
+    ],
+    // GENERIC (1.17 D review): app-level words — evidence only beside a strong or an anchor signal (see above).
+    generic: [
+      "queue", "consumer", "producer", "subscriber", "retry", "jitter", "deduplica", "dedup", "dedupe", "race condition",
+      "pubsub", "pub-sub", "pub / sub", "publish-subscribe", "publish / subscribe", "publish … event", "publish … message",
+      "send … message", "exactly once", "event store", "outbox", "worker", "background job", "keep … in sync", "update … same",
+      "oversell", "compensate", "concurrently", "simultaneously",
+      // PT ("tentar novamente" is no signal: "the user can try again")
+      "fila", "consumidor", "produtor", "subscritor", "nova tentativa", "novas tentativas", "retentativa", "desduplica",
+      "condição de corrida", "condições de corrida", "public … evento", "public … mensagem", "envi … mensagem", "pelo menos uma vez",
+      "no máximo uma vez", "exatamente uma vez", "em segundo plano", "em simultâneo", "simultaneamente",
+      // ES
+      "cola", "productor", "suscriptor", "reintento", "condición de carrera", "condiciones de carrera", "public … mensaje",
+      "envi … mensaje", "al menos una vez", "como máximo una vez", "exactamente una vez", "en segundo plano", "simultáneamente",
+      "de forma concurrente",
     ],
     context: ["transaction", "consistency", "atomic", "atomically", "atomicity",
       "transação", "consistência", "atómico", "atômico", "atomicidade", "atomicamente",
       "transacción", "consistencia", "atomicidad", "atómicamente"],
   },
+};
+// One concept, one signal (1.17 D review) — a built-in track's weak / generic keywords that name the SAME concept count once:
+// "deduplicate … dedupe them", "producers and consumers", "retry … with jitter" are one hint each, never the two weak signals
+// that would turn the track on. Keyed by track (a keyword may belong to a concept in one track only: +saas' 'worker' and
+// 'background job' stay two signals there). The concept of the matched keywords decides, whatever their tier: a concept with an
+// anchor (weak) keyword matched counts as an anchor. Track packs have none (their keywords are their own).
+const conceptMap = (groups) => new Map(Object.entries(groups).flatMap(([c, kws]) => kws.map((k) => [k, c])));
+const SIGNAL_CONCEPTS = {
+  dist: conceptMap({
+    queue: ["queue", "fila", "cola"],
+    party: ["consumer", "producer", "subscriber", "consumidor", "produtor", "subscritor", "productor", "suscriptor"],
+    retry: ["retry", "jitter", "nova tentativa", "novas tentativas", "retentativa", "reintento", "exponential backoff", "backoff exponencial",
+      "backoff", "recuo exponencial", "retroceso exponencial"],
+    dedup: ["deduplica", "dedup", "dedupe", "desduplica"],
+    race: ["race condition", "condição de corrida", "condições de corrida", "condición de carrera", "condiciones de carrera"],
+    publish: ["pubsub", "pub-sub", "pub / sub", "publish-subscribe", "publish / subscribe", "publish … event", "publish … message",
+      "public … evento", "public … mensagem", "public … mensaje", "send … message", "envi … mensagem", "envi … mensaje"],
+    worker: ["worker", "background job", "em segundo plano", "en segundo plano"],
+    concurrent: ["concurrently", "simultaneously", "em simultâneo", "simultaneamente", "simultáneamente", "de forma concurrente",
+      "concurrent updates", "concurrent writes", "atualizações concorrentes", "escritas concorrentes", "actualizaciones concurrentes",
+      "escrituras concurrentes"],
+    services: ["other services", "another service", "downstream service", "cross-service", "outros serviços", "outro serviço",
+      "otros servicios", "otro servicio", "notification service", "payment service", "billing service", "order service", "orders service",
+      "shipping service", "inventory service", "analytics service", "pricing service", "catalog service", "serviço de notificações",
+      "serviço de pagamentos", "serviço de faturação", "serviço de faturamento", "serviço de encomendas", "serviço de pedidos",
+      "serviço de envios", "serviço de inventário", "serviço de stock", "serviço de estoque", "serviço de preços", "serviço de catálogo",
+      "servicio de notificaciones", "servicio de pagos", "servicio de facturación", "servicio de pedidos", "servicio de envíos",
+      "servicio de inventario", "servicio de precios", "servicio de catálogo"],
+    deadLetter: ["dead letter", "dead-letter", "dlq", "poison message"],
+    delivery: ["at-least-once", "at-most-once", "exactly once", "duplicate delivery", "delivered twice", "delivered more than once",
+      "duplicate message", "duplicate event", "pelo menos uma vez", "no máximo uma vez", "exatamente uma vez", "entregue duas vezes",
+      "mensagens duplicadas", "eventos duplicados", "al menos una vez", "como máximo una vez", "exactamente una vez", "entregado dos veces",
+      "mensajes duplicados"],
+    replication: ["replication", "réplica", "replicação", "replicación"],
+    cacheInvalidation: ["cache invalidation", "invalidação de cache", "invalidación de caché"],
+    eventBus: ["event bus", "barramento de eventos", "bus de eventos"],
+    eventDriven: ["event-driven", "event driven", "orientado a eventos", "orientada a eventos"],
+    lostUpdate: ["update … lost", "atualização … perdida", "actualización … perdida", "overwrite each other"],
+    versionColumn: ["version column", "coluna de versão", "columna de versión"],
+    sameRecord: ["update … same"],
+    searchIndex: ["search index", "elasticsearch", "opensearch"],
+  }),
+};
+// HAZARDS (1.17 D review): a failure a requirement says must never happen — "concurrent updates never oversell", "no lost updates",
+// "they must not overwrite each other", "no duplicate deliveries". Written negated by nature, the negation is the requirement,
+// not an absence: such a keyword counts (and is no "appeared negated" note). Built-in +dist only.
+const SIGNAL_HAZARDS = {
+  dist: new Set(["lost update", "atualização perdida", "atualizações perdidas", "actualización perdida", "actualizaciones perdidas",
+    "update … lost", "atualização … perdida", "actualización … perdida", "overwrite each other", "write skew", "split brain", "split-brain",
+    "oversell", "race condition", "condição de corrida", "condições de corrida", "condición de carrera", "condiciones de carrera",
+    "duplicate delivery", "duplicate message", "duplicate event", "delivered twice", "delivered more than once", "entregue duas vezes",
+    "entregado dos veces", "mensagens duplicadas", "eventos duplicados", "mensajes duplicados"]),
 };
 
 // Words that negate a signal when they appear just before the keyword (EN/PT/ES).
@@ -1145,13 +1238,25 @@ const ES_STRONG = W("una|unos|pero|también|tambien|usted|esto|eso|entonces|toda
 const ES_STRONG_CHARS = /ción|ciones|ñ/giu;
 const ES_WEAK = W("con|un|por|para|de|del|el|la|las|que|en|solo");
 const EN_WORDS = W("the|and|with|for|of|is|are|to|an|in|on|by|from|that|this|it|should|must|when|without");
+// 1.17 D review: a PT / ES INFINITIVE opening a clause — the form a PT / ES requirement line starts with ("Publicar eventos no
+// Kafka.", "Gravar o pedido no Postgres e …"): a short line with no other marker read as English, and "no" (PT em + o) as a
+// negator. Only at a clause start (the text's start, after . ! ? ; : or a line break, or a list bullet), a STRONG marker (2)
+// for its language(s) — a verb both languages share counts for both. None is an English word ("remover", "registrar", "leer"
+// are left out: an English noun / verb).
+const CLAUSE_START = "(?:^|[.!?;:\\n]|[-*+•]\\s)\\s*";
+const INF = (words) => new RegExp(CLAUSE_START + "(" + words + ")(?![\\p{L}\\p{N}_])", "giu");
+const PT_INF = INF("criar|gravar|atualizar|adicionar|apagar|gerar|escrever|armazenar|receber|manter|processar|reprocessar|substituir|excluir|obter|alterar|mudar|testar|corrigir|melhorar|exibir|carregar|descarregar|baixar");
+const ES_INF = INF("crear|escribir|actualizar|añadir|agregar|borrar|generar|almacenar|recibir|mantener|procesar|reprocesar|sustituir|obtener|cambiar|comprobar|corregir|mejorar|cargar|descargar|reintentar");
+const PTES_INF = INF("publicar|enviar|guardar|consumir|notificar|validar|eliminar|mostrar|permitir|implementar|integrar|calcular|sincronizar|exportar|importar|listar|editar|bloquear|usar|pagar|cobrar|evitar|configurar|definir|verificar|migrar|filtrar|ordenar|buscar");
 // fallback (full review Pb2 — an imported source): the project's language, used when the text shows no language of its own
 // (no PT/ES marker to speak of and fewer than two English function words) — and its variant (pt-BR) when the text is in
 // its family. Without it the answer is the plain guess ('en' when nothing says otherwise).
 function guessLang(text, fallback) {
   const distinct = (re) => new Set((text.match(re) || []).map((m) => m.toLowerCase())).size;
-  const pt = 2 * (distinct(PT_STRONG) + distinct(PT_STRONG_CHARS)) + distinct(PT_WEAK);
-  const es = 2 * (distinct(ES_STRONG) + distinct(ES_STRONG_CHARS)) + distinct(ES_WEAK);
+  const distinctInf = (re) => new Set(Array.from(text.matchAll(re), (m) => m[1].toLowerCase())).size;
+  const shared = distinctInf(PTES_INF);
+  const pt = 2 * (distinct(PT_STRONG) + distinct(PT_STRONG_CHARS) + distinctInf(PT_INF) + shared) + distinct(PT_WEAK);
+  const es = 2 * (distinct(ES_STRONG) + distinct(ES_STRONG_CHARS) + distinctInf(ES_INF) + shared) + distinct(ES_WEAK);
   const en = distinct(EN_WORDS);
   const best = Math.max(pt, es);
   const g = best < 2 || best <= en ? "en" : pt >= es ? "pt" : "es";
@@ -1214,6 +1319,8 @@ const STEMS = new Set(["idempoten", "hallucinat", "summariz", "alucina",
 // VERB stems (full review Pb5): the stem + one of the listed endings, nothing else — 'cifr' is cifrar / cifrado / cifram…,
 // never "cifra" (a figure); 'encript' never "encriptação" (a keyword of its own). The stem is the keyword (its literal and
 // its name in notes), so a verb and its noun (encriptar / encriptação) are one signal, as encrypt / encryption are.
+// VERB_STEMS and IRREGULAR_FORMS apply to the BUILT-IN signals only (1.17 D review): a track pack's keyword is always a literal
+// word + the ordinary inflections — a pack keyword "public" matches "public", never only "publicar" (keywordRe(kw, true)).
 const VERB_STEMS = new Map([
   ["encript", "(?:ar|a|am|an|amos|ando|ado|ada|ados|adas|ou|aram|em|en)"],
   ["cifr", "(?:ar|am|an|amos|ando|ado|ada|ados|adas|ou|aram|em|en)"],
@@ -1221,6 +1328,8 @@ const VERB_STEMS = new Map([
   // +dist (1.17 D): publicar (PT / ES) — only inside the gap phrases "public … evento" / "… mensagem" / "… mensaje"; a bare
   // English "public" (a public API) never matches it: an ending is required.
   ["public", "(?:ar|a|as|am|an|amos|ando|ado|ada|ados|adas|ou|aram|ó|aron|ará|arão|arán)"],
+  // enviar (PT / ES — 1.17 D review): only inside "envi … mensagem" / "envi … mensaje" ("environment" has no listed ending)
+  ["envi", "(?:ar|a|as|am|an|amos|ando|ado|ada|ados|adas|ou|aram|ó|aron|ará|arão|arán)"],
 ]);
 // Irregular inflections (1.17 D): a keyword whose forms the suffix rules can't produce — retry → retries / retried. The key is
 // the keyword (its name in notes); the value its literal prefix and the alternation of endings. One concept, one signal:
@@ -1228,6 +1337,11 @@ const VERB_STEMS = new Map([
 const IRREGULAR_FORMS = new Map([
   ["retry", ["retr", "(?:y|ies|ied|ying)"]],
   ["reintento", ["reintent", "(?:o|os|ar|a|an|ado|ada|ando)"]], // ES reintento(s) / reintentar / reintenta…
+  ["duplicate delivery", ["duplicate deliver", "(?:y|ies)"]], // (1.17 D review)
+  ["mensagem", ["mensage", "(?:m|ns)"]], // PT mensagem → mensagens (a part of "public … mensagem" / "envi … mensagem")
+  // An EXACT form (no inflection at all — 1.17 D review): "2PC", never "2PCS" (a product listing's "2 pieces"). Upper case: matched
+  // case-sensitively like every keyword written with capitals.
+  ["2PC", ["2PC", ""]],
 ]);
 // A GAP keyword (built-in signals only — a track pack's keywords can't hold "…", RE_PACK_KEYWORD): its words with up to three
 // words between them, none crossing sentence punctuation — "publish … event" is "publishes a UserCreated event", "publish
@@ -1264,28 +1378,33 @@ function pluralize(body, kw) {
 // literal — "data retention" no longer compiles a regex for every text that merely says "data".
 const KW_LITERAL = new Map();
 const KW_CACHE_MAX = 5000; // the built-in signals (~700) + every track pack's (≤ 150 each)
-function keywordLiteral(kw) {
-  let lit = KW_LITERAL.get(kw);
+// plain (1.17 D review): a track pack's keyword — a literal word (no gap, no verb stem, no irregular forms); cached apart from a
+// built-in keyword of the same spelling.
+const KW_PLAIN = "\u0001";
+function keywordLiteral(kw, plain) {
+  const key = plain ? KW_PLAIN + kw : kw;
+  let lit = KW_LITERAL.get(key);
   if (lit != null) return lit;
   if (KW_LITERAL.size >= KW_CACHE_MAX) KW_LITERAL.clear();
   // a gap keyword: its first part's literal · an irregular one: its stem (1.17 D)
-  if (kw.includes(KW_GAP)) { lit = keywordLiteral(kw.slice(0, kw.indexOf(KW_GAP))); KW_LITERAL.set(kw, lit); return lit; }
-  if (IRREGULAR_FORMS.has(kw)) { lit = IRREGULAR_FORMS.get(kw)[0]; KW_LITERAL.set(kw, lit); return lit; }
+  if (!plain && kw.includes(KW_GAP)) { lit = keywordLiteral(kw.slice(0, kw.indexOf(KW_GAP))); KW_LITERAL.set(key, lit); return lit; }
+  if (!plain && IRREGULAR_FORMS.has(kw)) { lit = IRREGULAR_FORMS.get(kw)[0]; KW_LITERAL.set(key, lit); return lit; }
   const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const first = (kw.match(/^[\p{L}\p{N}]+/u) || [""])[0];
   const n = pluralize(escaped, kw) === escaped ? kw.length : Math.min(first.length || kw.length, kw.length > 3 ? kw.length - 3 : kw.length);
   lit = kw.slice(0, Math.max(1, n));
-  KW_LITERAL.set(kw, lit);
+  KW_LITERAL.set(key, lit);
   return lit;
 }
 
-function keywordRe(kw) {
-  let re = KW_RE.get(kw);
+function keywordRe(kw, plain) {
+  const key = plain ? KW_PLAIN + kw : kw;
+  let re = KW_RE.get(key);
   if (re) return re;
   if (KW_RE.size >= KW_CACHE_MAX) KW_RE.clear(); // track packs (1.15) add keywords: a long-lived server's cache stays bounded
   // A gap keyword's parts, each its own keyword pattern, joined by at most three words (KW_GAP_RE: whitespace and non-whitespace
   // runs alternate — linear); the edge guards below wrap the whole phrase.
-  const bodyTail = kw.includes(KW_GAP) ? kw.split(KW_GAP).map(keywordPattern).join(KW_GAP_RE) : keywordPattern(kw);
+  const bodyTail = plain ? keywordPattern(kw, true) : kw.includes(KW_GAP) ? kw.split(KW_GAP).map((p) => keywordPattern(p)).join(KW_GAP_RE) : keywordPattern(kw);
   // Left edge: not glued to a word char, and not part of a dotted/slashed/hyphenated identifier
   // ('.claude-plugin', 'src/rag.ts'). Right edge: after the optional inflection/adjective, no word
   // char and no '-<letter>' compound ('claude-plugin') — but '-<digit>' stays legal ('gpt-4').
@@ -1293,15 +1412,16 @@ function keywordRe(kw) {
     "(?<![\\p{L}\\p{N}_\\-./\\\\])" + bodyTail + "(?![\\p{L}\\p{N}_])(?![-./\\\\][\\p{L}])",
     "gu"
   );
-  KW_RE.set(kw, re);
+  KW_RE.set(key, re);
   return re;
 }
 // One keyword (or one part of a gap keyword) → its pattern: the escaped text (pluralized) + its tail — a stem's letters, a verb
-// stem's endings, an irregular keyword's forms, else the inflections (+ an adjective compound).
-function keywordPattern(kw) {
-  if (IRREGULAR_FORMS.has(kw)) { const [stem, ends] = IRREGULAR_FORMS.get(kw); return stem + ends; }
+// stem's endings, an irregular keyword's forms, else the inflections (+ an adjective compound). plain: a track pack's keyword —
+// never a verb stem's or an irregular keyword's forms (STEMS stay as in 1.16).
+function keywordPattern(kw, plain) {
+  if (!plain && IRREGULAR_FORMS.has(kw)) { const [stem, ends] = IRREGULAR_FORMS.get(kw); return stem + ends; }
   const body = pluralize(kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), kw);
-  return body + (STEMS.has(kw) ? "\\p{L}*" : VERB_STEMS.has(kw) ? VERB_STEMS.get(kw) : (kw.length <= 3 ? ACRONYM_INFLECTION : INFLECTION) + ADJ_SUFFIX);
+  return body + (STEMS.has(kw) ? "\\p{L}*" : !plain && VERB_STEMS.has(kw) ? VERB_STEMS.get(kw) : (kw.length <= 3 ? ACRONYM_INFLECTION : INFLECTION) + ADJ_SUFFIX);
 }
 
 // Tokens that look like source paths ("src/rag", "lib/auth.ts") must stay opaque to the classifier.
@@ -1337,42 +1457,59 @@ function classify(description, opts = {}) {
   const perTrack = (mk) => Object.fromEntries(OPT.map((t) => [t, mk()]));
   const seenSpan = perTrack(() => new Set());
   const active = new Set(["core"]);
-  const matched = perTrack(() => ({ strong: [], weak: [] }));
+  const matched = perTrack(() => ({ strong: [], weak: [], generic: [] }));
   const negated = perTrack(() => []);
   const hits = []; // every counted match, in scan order: { track, tier, kw, start, end, neg }
 
   for (const track of OPT) {
     const table = trackSignalTable(track);
-    for (const tier of ["strong", "weak", "context"]) {
+    const plain = !Object.prototype.hasOwnProperty.call(SIGNALS, track); // a track pack's keywords are literal words (1.17 D review)
+    const hazards = Object.prototype.hasOwnProperty.call(SIGNAL_HAZARDS, track) ? SIGNAL_HAZARDS[track] : null; // (never negated)
+    // (tier `generic` — 1.17 D review — exists in the built-in +dist table only; see SIGNALS.dist)
+    for (const tier of ["strong", "weak", "generic", "context"]) {
       for (const kw of table[tier] || []) {
         // A keyword written with upper-case letters ('STRIDE') is an acronym matched CASE-SENSITIVELY, on the original
         // text (C4): the lower-case word is something else (an array stride). `cased` is `text` before toLowerCase().
         const hay = kw === kw.toLowerCase() ? text : cased;
         // A text without the keyword's literal prefix can't match its regex — skipping it spares compiling ~300 unicode
         // regexes on every CLI run (a classify used to cost ~250 ms per process).
-        if (!hay.includes(keywordLiteral(kw))) continue;
-        const re = keywordRe(kw);
+        if (!hay.includes(keywordLiteral(kw, plain))) continue;
+        const re = keywordRe(kw, plain);
         re.lastIndex = 0;
         let m;
         while ((m = re.exec(hay)) !== null) {
           if (seenSpan[track].has(m.index)) continue;
           seenSpan[track].add(m.index);
-          hits.push({ track, tier, kw, start: m.index, end: m.index + m[0].length, neg: isNegated(text, m.index, m[0].length, lang, cased) });
+          hits.push({ track, tier, kw, start: m.index, end: m.index + m[0].length, neg: !(hazards && hazards.has(kw)) && isNegated(text, m.index, m[0].length, lang, cased) });
         }
       }
     }
   }
-  // A WEAK signal inside a longer STRONG signal of another track is part of that phrase, not evidence of its own:
+  // A WEAK signal inside a longer STRONG signal (of another track — and, 1.17 D review, of its own) is part of that phrase, not evidence of its own:
   // 'model' in "threat model" / "modelo de ameaças" (+sec) is no +ai hint, 'security' in "row-level security" (+saas)
   // no +sec one. The same word in two tracks ('authentication': +tdd strong, +sec weak) is not shadowed — equal spans.
-  const shadowed = (h) => h.tier !== "strong" && hits.some((s) => s.track !== h.track && s.tier === "strong" &&
-    s.start <= h.start && h.end <= s.end && s.end - s.start > h.end - h.start);
+  // 1.17 D review: inside a longer strong phrase of its OWN track it is part of that phrase too — "mensagens" in "fila de
+  // mensagens", "outbox" in "transactional outbox", "worker" in "Celery worker" (the name-based de-dupe below misses a plural).
+  // Linear (1.17 D review — every hit was compared with every hit: 100 KB of "queue …" took 9.6 s): the strong hits sorted by
+  // start; a sweep keeps the furthest end of the strong hits starting BEFORE the hit (one reaching its end contains it
+  // strictly) and looks up the strong hits starting AT it (only a longer one shadows).
+  const strongHits = hits.filter((h) => h.tier === "strong").sort((a, b) => a.start - b.start);
+  const startsAt = new Map();
+  for (const s of strongHits) { const l = startsAt.get(s.start); if (l) l.push(s); else startsAt.set(s.start, [s]); }
+  let reach = -1; // the furthest end of the strong hits started before the current hit
+  const shadowedHits = new Set();
+  let si = 0;
+  for (const h of hits.filter((x) => x.tier !== "strong").sort((a, b) => a.start - b.start)) {
+    for (; si < strongHits.length && strongHits[si].start < h.start; si++) if (strongHits[si].end > reach) reach = strongHits[si].end;
+    if (reach >= h.end || (startsAt.get(h.start) || []).some((s) => s.end > h.end)) shadowedHits.add(h);
+  }
   // CORROBORATING-only signals (tier `context`, C4 — 'permission' for +sec) are weak evidence only beside another
   // (non-negated) signal of their track ("RBAC permissions"); a negated one is noted only when the track has some other
   // signal. Alone they are no evidence at all: no signal, no "possible" note, no "kept off" note ("file permission bits").
-  const counted = hits.filter((h) => !shadowed(h));
+  // A GENERIC word (1.17 D review) backs no context word: "retry the card transaction" is no +dist evidence.
+  const counted = hits.filter((h) => !shadowedHits.has(h));
   const own = (pred) => new Set(counted.filter((h) => h.tier !== "context" && pred(h)).map((h) => h.track));
-  const backedBy = own((h) => !h.neg), mentionedBy = own(() => true);
+  const backedBy = own((h) => !h.neg && h.tier !== "generic"), mentionedBy = own(() => true);
   for (const h of counted) {
     if (h.tier === "context" && !(h.neg ? mentionedBy : backedBy).has(h.track)) continue;
     const tier = h.tier === "context" ? "weak" : h.tier;
@@ -1386,34 +1523,47 @@ function classify(description, opts = {}) {
   // containment must sit at a word edge, or a short keyword vanishes inside an unrelated one
   // ("ai" ⊂ "guardr-ai-l").
   for (const t of OPT) {
-    const all = [...matched[t].strong, ...matched[t].weak];
+    const all = [...matched[t].strong, ...matched[t].weak, ...matched[t].generic];
     const keep = (arr) => arr.filter((k) => !all.some((m) => m !== k && (m.startsWith(k) || m.endsWith(k))));
     matched[t].strong = keep(matched[t].strong);
     matched[t].weak = keep(matched[t].weak);
+    matched[t].generic = keep(matched[t].generic);
+    // One concept, one signal (1.17 D review — SIGNAL_CONCEPTS): the first keyword of a concept stays, an anchor (weak) before a
+    // generic one — "retry … with exponential backoff" is one anchor, "producers … consumers" one generic hint.
+    const cm = Object.prototype.hasOwnProperty.call(SIGNAL_CONCEPTS, t) ? SIGNAL_CONCEPTS[t] : null;
+    if (cm) {
+      const seen = new Set();
+      const once = (arr) => arr.filter((k) => { const c = cm.get(k); if (c == null) return true; if (seen.has(c)) return false; seen.add(c); return true; });
+      matched[t].weak = once(matched[t].weak);
+      matched[t].generic = once(matched[t].generic);
+    }
     // The same for the negated ones (1.17 D): "no distributed transactions" is ONE negated concept, not also a negated
     // corroborating 'transaction' (+dist's context word inside it).
     const neg = negated[t];
     negated[t] = neg.filter((k) => !neg.some((m) => m !== k && (m.startsWith(k) || m.endsWith(k))));
   }
 
-  // Weighting: score = strong*2 + weak. A track turns ON at score >= 2 (one strong signal,
+  // Weighting: score = strong*2 + weak (+ generic). A track turns ON at score >= 2 (one strong signal,
   // or two weak ones). A lone weak signal (score 1) is surfaced as "possible" but not enabled.
+  // GENERIC signals (1.17 D review) add to the score but never turn a track on by themselves: at least one strong or weak (anchor)
+  // signal must be there — "a print queue … retry failed prints" stays 'possible'.
   const signals = {};
   const confidence = {};
   const weak = [];
   const possible = [];
   for (const t of OPT) {
-    signals[t] = [...matched[t].strong, ...matched[t].weak];
+    signals[t] = [...matched[t].strong, ...matched[t].weak, ...matched[t].generic];
     const s = matched[t].strong.length;
     const w = matched[t].weak.length;
-    const score = s * 2 + w;
-    if (score >= 2) {
+    const g = matched[t].generic.length;
+    const score = s * 2 + w + g;
+    if (score >= 2 && s + w > 0) {
       active.add(t);
       confidence[t] = score >= 4 ? "high" : "medium";
       if (s === 0) weak.push(t); // on, but from weak signals only
-    } else if (score === 1) {
+    } else if (score >= 1) {
       confidence[t] = "none";
-      possible.push({ track: t, signal: matched[t].weak[0] });
+      possible.push(Object.assign({ track: t, signal: matched[t].weak[0] || matched[t].generic[0] }, g >= 2 ? { generic: matched[t].generic.slice() } : {}));
     } else {
       confidence[t] = "none";
     }
@@ -1428,7 +1578,8 @@ function classify(description, opts = {}) {
     notes.push(C.weakOnly(weak.map((t) => "+" + t).join(", ")));
   }
   for (const p of possible) {
-    notes.push(C.possible(p.track, p.signal.trim()));
+    // (1.17 D review) two or more app-level words and no anchor: named as such
+    notes.push(p.generic ? C.genericOnly(p.track, p.generic.map((k) => `'${k.trim()}'`).join(", ")) : C.possible(p.track, p.signal.trim()));
   }
   // A negation is never silently dropped. It cannot *veto* a track — "the system shall not
   // hallucinate" negates 'hallucinat' on a feature that is unmistakably +ai — so when the track is
@@ -4481,7 +4632,8 @@ function noteGhostPacks(st) {
   const valid = allTracks();
   for (const n of Object.keys(st.packMarkers)) {
     const m = st.packMarkers[n];
-    if (typeof m !== "string" || !RE_PACK_NAME.test(n) || valid.includes(n)) continue;
+    // (a pre-1.17 pack named like a built-in track — 'dist' — is a missing pack too: legacyPackName, 1.17 D review)
+    if (typeof m !== "string" || !RE_PACK_NAME.test(n) || (valid.includes(n) && !legacyPackName(st, n))) continue;
     const token = m.length > 2 && m.startsWith("[") && m.endsWith("]") ? m.slice(1, -1) : "";
     if (!RE_PACK_MARKER.test(token) || RE_PACK_MARKER_RESERVED.test(token) || packRegistry().byToken.has(token)) continue;
     if (!GHOST_MARKERS) GHOST_MARKERS = new Map();
@@ -4491,17 +4643,31 @@ function noteGhostPacks(st) {
 const ghostMarkers = () => (GHOST_MARKERS ? [...GHOST_MARKERS] : []);
 // A saved (non-built-in) track name that is a track pack's: a valid pack now, or one recorded in the state's packMarkers (a pack the
 // feature used) — never a reserved word (F4 review R6: a hand-typed "gdpr" / "security" / a typo is no pack; the list then falls
-// back to the files as in 1.14).
+// back to the files as in 1.14) — except a pre-1.17 pack of a name reserved since (legacyPackName, 1.17 D review).
 function savedPackName(st, n) {
+  if (legacyPackName(st, n)) return true;
   if (VALID_TRACKS.includes(n) || !RE_PACK_NAME.test(n) || packReservedName(n)) return false;
   return isPackTrack(n) || (isObj(st) && isObj(st.packMarkers) && Object.prototype.hasOwnProperty.call(st.packMarkers, n));
 }
-// A feature's saved tracks naming a pack the project no longer has (deleted, or now invalid): inactive, kept in .state.json.
+// A track pack from before 1.17 whose name is reserved now (1.17 D review): 1.15 / 1.16 accepted a pack named 'dist', 'kafka',
+// 'consistency', 'microservices', 'distributed'… — 1.17 reserves them (the built-in +dist track and its TRACK_ALIASES), so the
+// pack is invalid ('name-reserved'). A feature that used it recorded the name in .state.json packMarkers (only a VALID pack is
+// ever recorded there): it stays that feature's MISSING pack — inactive, listed by doctor's track-pack-missing with the reason
+// and the way out (rename the pack folder, add it again) — never silently dropped (the list read "core" and no warning), and a
+// pack named 'dist' is never read as the built-in +dist track (whose five [DIST] sections the pack's design doesn't have).
+// Adding the built-in track by name adopts it (applyTracks drops the record); add_track <name> --remove drops the pack.
+function legacyPackName(st, n) {
+  return typeof n === "string" && RE_PACK_NAME.test(n) && packReservedName(n) && isObj(st) && isObj(st.packMarkers) &&
+    Object.prototype.hasOwnProperty.call(st.packMarkers, n);
+}
+// A feature's saved tracks naming a pack the project no longer has (deleted, now invalid, or — 1.17 — its name reserved since):
+// inactive, kept in .state.json.
 function missingPackTracks(dir) {
   const st = readJson(statePath(dir)).data;
   const saved = isObj(st) && Array.isArray(st.tracks) ? st.tracks : [];
   const valid = allTracks();
-  return [...new Set(saved.filter((x) => typeof x === "string").map((x) => x.toLowerCase()).filter((x) => !valid.includes(x) && savedPackName(st, x)))];
+  return [...new Set(saved.filter((x) => typeof x === "string").map((x) => x.toLowerCase())
+    .filter((x) => legacyPackName(st, x) || (!valid.includes(x) && savedPackName(st, x))))];
 }
 
 // --- rendering a pack's blocks (the design sections, criteria, task block, test rows, checklist items, steering stub) ---
@@ -4892,8 +5058,10 @@ function savedTracks(st) {
   const saved = st && typeof st === "object" && !Array.isArray(st) ? st.tracks : null;
   // A track pack's name (1.15 — a valid pack now, or one the state recorded in packMarkers) is a saved track too, one the project
   // may lack now (inactive: normalizeTracks drops it, doctor warns track-pack-missing); any other unknown name → the files decide,
-  // as in 1.14 (savedPackName — F4 review R6).
-  return Array.isArray(saved) && saved.length && saved.every((x) => typeof x === "string" && (VALID_TRACKS.includes(x.toLowerCase()) || savedPackName(st, x.toLowerCase()))) ? normalizeTracks(saved) : null;
+  // as in 1.14 (savedPackName — F4 review R6). A pre-1.17 pack of a now reserved name (legacyPackName) is a missing pack — never
+  // the built-in track of that name (1.17 D review: a 1.16 pack 'dist' is not +dist).
+  return Array.isArray(saved) && saved.length && saved.every((x) => typeof x === "string" && (VALID_TRACKS.includes(x.toLowerCase()) || savedPackName(st, x.toLowerCase())))
+    ? normalizeTracks(saved.filter((x) => !legacyPackName(st, x.toLowerCase()))) : null;
 }
 
 // A markdown heading (outside fenced code and HTML comments) carrying a track marker.
@@ -11140,6 +11308,10 @@ function applyTracks(projectDir, f, name, trs, lng) {
   const T = i18n.msg(lng).tracks;
   const before = detectTracks(dir);
   const after = allTracks().filter((t) => before.includes(t) || trs.includes(t));
+  // A pre-1.17 pack of this built-in track's name (legacyPackName — 1.17 D review): adding the built-in track by name adopts it —
+  // the pack's record goes, and the track's own design sections are appended even though a heading already carries its marker
+  // (the pack's sections — '## [DIST] Release Channels' — are not the built-in ones).
+  const adopted = trs.filter((tr) => VALID_TRACKS.includes(tr) && legacyPackName(state, tr));
   const added = [];
   const templates = {}; // file → the project template (.specs/templates/…) it was scaffolded from (1.14)
   const note = (x) => { if (!added.includes(x)) added.push(x); };
@@ -11171,7 +11343,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
     const designPath = path.join(dir, "design.md");
     const design = readIfExists(designPath);
     if (design != null) {
-      const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(design)) : headingHasMarker(design, trackMarker(tr));
+      const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(design)) : !adopted.includes(tr) && headingHasMarker(design, trackMarker(tr));
       if (!present) {
         writeFileAtomic(designPath, design.trimEnd() + "\n" + trackDesignBlock(tr, lng, { name, slug })); // trimEnd: no /\s*$/ backtracking
         note(T.addedDesign);
@@ -11204,11 +11376,17 @@ function applyTracks(projectDir, f, name, trs, lng) {
   }
 
   if (updateActiveTracks(path.join(dir, "classification.md"), trackLabel(after))) note(T.addedActiveTracks);
-  state.tracks = after.concat(missingPackTracks(dir)); // a saved track pack the project lacks now stays, inactive (1.15)
+  // a saved track pack the project lacks now stays, inactive (1.15) — unless the built-in track of its name was just adopted
+  state.tracks = after.concat(missingPackTracks(dir).filter((x) => !adopted.includes(x)));
   const pm = packMarkersFor(after).packMarkers; // … and every track pack's marker is remembered (1.15)
   if (pm) state.packMarkers = { ...(isObj(state.packMarkers) ? state.packMarkers : {}), ...pm };
+  if (adopted.length && isObj(state.packMarkers)) {
+    for (const tr of adopted) delete state.packMarkers[tr];
+    if (!Object.keys(state.packMarkers).length) delete state.packMarkers;
+  }
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
   const res = { ok: true, added, tracks: after };
+  if (adopted.length) res.adopted = adopted; // (1.17 D review) the built-in track replaced a pre-1.17 pack of its name
   if (Object.keys(templates).length) res.templates = templates;
   return res;
 }
@@ -11382,7 +11560,9 @@ function updateActiveTracks(file, label) {
 
 // Turning tracks OFF is non-destructive: state.tracks and the Active Tracks line change, every file stays,
 // and the now-inactive artifacts are listed (re-adding the track brings them back into play).
-function removeTracks(projectDir, f, named, lng) {
+// legacy (1.17 D review): pre-1.17 packs of a now reserved name (legacyPackName) to drop from the saved list — their packMarkers
+// record stays (their sections stay inactive, as a removed pack's).
+function removeTracks(projectDir, f, named, lng, legacy = []) {
   const { slug, dir } = f;
   const T = i18n.msg(lng).tracks;
   if (named.includes("core")) return { ok: false, error: T.cannotRemoveCore };
@@ -11391,14 +11571,17 @@ function removeTracks(projectDir, f, named, lng) {
   if (state.kind === "bugfix" && named.includes("tdd")) return { ok: false, error: T.bugfixNeedsTdd };
   const before = detectTracks(dir);
   const gone = named.filter((t) => before.includes(t));
+  const missing = missingPackTracks(dir);
+  const legacyGone = legacy.filter((t) => missing.includes(t));
   const plus = (list) => list.map((t) => "+" + t).join(", ");
-  if (!gone.length) return { ok: true, feature: slug, removedTracks: [], inactive: [], tracks: trackLabel(before), note: T.notActive(plus(named)) };
+  if (!gone.length && !legacyGone.length) return { ok: true, feature: slug, removedTracks: [], inactive: [], tracks: trackLabel(before), note: T.notActive(plus(named.concat(legacy))) };
   const after = before.filter((t) => !gone.includes(t));
-  state.tracks = after.concat(missingPackTracks(dir)); // a saved track pack the project lacks now stays, inactive (1.15)
+  state.tracks = after.concat(missing.filter((x) => !legacyGone.includes(x))); // a saved track pack the project lacks now stays, inactive (1.15)
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
   updateActiveTracks(path.join(dir, "classification.md"), trackLabel(after));
   maybeRefreshRoadmap(projectDir);
-  return { ok: true, feature: slug, removedTracks: gone, inactive: inactiveArtifacts(dir, gone, T), tracks: trackLabel(after), note: T.removed(plus(gone), slug) };
+  const all = gone.concat(legacyGone);
+  return { ok: true, feature: slug, removedTracks: all, inactive: inactiveArtifacts(dir, gone, T), tracks: trackLabel(after), note: T.removed(plus(all), slug) };
 }
 
 function inactiveArtifacts(dir, gone, T) {
@@ -11422,12 +11605,16 @@ function addTrack(projectDir, name, track, opts = {}) {
   const { slug, dir } = f;
   const lng = featureLang(projectDir, slug); // escalate in the feature's own language
   const msg = i18n.msg(lng);
-  const pt = parseTracks(track);
+  // --remove of a pre-1.17 pack whose name is reserved now (1.17 D review — 'kafka', or 'dist' while the feature's record says it
+  // was a pack): that feature's missing pack, by name — never an unknown track, never the built-in one.
+  const st0 = opts.remove ? readJson(statePath(dir)).data : null;
+  const legacy = opts.remove ? [...new Set(trackTokens(track).filter((t) => legacyPackName(st0, t)))] : [];
+  const pt = parseTracks(legacy.length ? trackTokens(track).filter((t) => !legacy.includes(t)) : track);
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(lng, pt.unknown) };
   if (isSpikeDir(dir)) return { ok: false, spike: true, error: msg.spike.noTracks(slug) }; // 1.14 C2: a spike is core-only
   if (opts.remove) {
-    if (!pt.named.length) return { ok: false, error: errs(projectDir, slug).badTrack };
-    return removeTracks(projectDir, f, pt.named, lng);
+    if (!pt.named.length && !legacy.length) return { ok: false, error: errs(projectDir, slug).badTrack };
+    return removeTracks(projectDir, f, pt.named, lng, legacy);
   }
   const asked = pt.named.filter((t) => t !== "core");
   if (!asked.length) return { ok: false, error: errs(projectDir, slug).badTrack };
@@ -11442,6 +11629,7 @@ function addTrack(projectDir, name, track, opts = {}) {
   const res = { ok: true, feature: slug, addedTrack: fresh[0], addedTracks: fresh, added: r.added, tracks: trackLabel(r.tracks),
     note: msg.addTrackNote(fresh.join(", +"), slug) };
   if (r.templates) res.templates = r.templates; // files scaffolded from the project's templates (1.14)
+  if (r.adopted) res.adopted = r.adopted; // (1.17 D review) the built-in track replaced a pre-1.17 pack of its name
   const already = asked.filter((t) => existing.includes(t));
   if (already.length) res.alreadyOn = already;
   return res;
@@ -12224,9 +12412,12 @@ const DIST_SECTIONS = [
   { name: "Concurrency", syn: ["concurrency control", "concurrency", "controlo de concorrência", "controle de concorrência", "controle de concorrencia",
     "concorrência", "concorrencia", "control de concurrencia", "concurrencia"],
   loose: ["concurrency", "concorrência", "concorrencia", "concurrencia"] },
+  // 1.17 D review: the section's own names (Failure Modes / Failure Handling — the core design's heading is "Error Handling")
+  // are strict, as every other [DIST] section's are — a marker-less hand-written design with all five headings passes; the
+  // singular is loose.
   { name: "Failure Modes", syn: ["failure modes", "failure mode", "failure handling", "modos de falha", "modo de falha", "modos de fallo", "modo de fallo",
-    "modos de falla"],
-  loose: ["failure modes", "failure mode", "failure handling", "modos de falha", "modo de falha", "modos de fallo", "modo de fallo", "modos de falla"] },
+    "modos de falla", "modo de falla"],
+  loose: ["failure mode", "modo de falha", "modo de fallo", "modo de falla"] },
 ];
 // The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
 // check read (a marker track = a TRACK_MARKER entry + its table here).
@@ -13188,7 +13379,10 @@ function specDoctor(projectDir, name, opts = {}) {
   const missingPacks = missingPackTracks(dir);
   if (missingPacks.length) {
     const reg = packRegistry();
+    const st = readJson(statePath(dir)).data;
     add("track-pack-missing", "warn", fm.trackPacks.missing(missingPacks.map((n) => {
+      // 1.17 D review: a pre-1.17 pack whose name is reserved now — why, and the way out (for 'dist': the built-in track is NOT on)
+      if (legacyPackName(st, n)) return fm.trackPacks.missingReserved(n, slug, VALID_TRACKS.includes(n));
       const e = reg.entries.find((x) => x.name === n);
       return e ? fm.trackPacks.missingInvalid(n, [...new Set(reg.problems.filter((x) => x.pack === n && x.severity === "error").map((x) => x.code))].join(", ") || "invalid")
         : fm.trackPacks.missingAbsent(n);
@@ -17862,6 +18056,10 @@ function upgradeFeature(projectDir, s, ctx) {
   if (vs.unverified.length) attention.push("unverified");
   if (drift && drift.drifted) attention.push("drift");
   if (drift && drift.stale) attention.push("stale-finish");
+  // 1.17 D review: a track pack from before 1.17 whose name is reserved now ('dist', 'kafka', 'consistency'…) — named, with the way out
+  const rawSt = readJson(statePath(s.dir)).data;
+  const reservedPacks = missingPackTracks(s.dir).filter((n) => legacyPackName(rawSt, n));
+  if (reservedPacks.length) attention.push("track-pack-reserved");
   if (warns.length) attention.push("warnings");
   const res = {
     name: s.slug, kind, tracks: trackLabel(tracks), tracksSource: savedTracks(st) ? "state" : "inferred", tracksPending: !!plan.tracks,
@@ -17871,7 +18069,7 @@ function upgradeFeature(projectDir, s, ctx) {
     history: { present: plan.present, seed: plan.seed.map((x) => x.phase), skip: plan.skip },
     unverified: vs.unverifiedDetail.map((d) => Object.assign({ number: d.number, reason: d.reason }, d.specChanged ? { specChanged: true } : {}, d.unticked ? { unticked: true } : {})),
     next: { step: na.step, recommendation: na.recommendation },
-    review, reviewArtifacts, drift,
+    review, reviewArtifacts, drift, reservedPacks,
     group: fails.length ? "blocked" : attention.length ? "attention" : "ok", attention,
   };
   if (na.impact) res.impact = na.impact.phases; // the spec_impact phases to diff before re-approving
@@ -17972,6 +18170,7 @@ function upgradeItems(f, lang) {
   if (f.unverified.length) act(I.verify(unverifiedLabel({ unverifiedDetail: f.unverified }, lang), f.name));
   if (f.drift && f.drift.drifted) act(I.drift(f.drift.changed.length + f.drift.missing.length + f.drift.nowPresent.length, f.name));
   if (f.drift && f.drift.stale) act(I.stale(f.name));
+  if (f.reservedPacks && f.reservedPacks.length) act(I.packReserved(f.reservedPacks.map((n) => "+" + n).join(", "), f.name)); // 1.17 D review
   if (f.review === "critic") act(I.critic(f.reviewArtifacts.join(", ")));
   else if (f.review === "converge") act(I.converge(f.reviewArtifacts.join(", ")));
   else out.push({ check: false, text: I.none });
@@ -21699,8 +21898,10 @@ function constraintNudge(dir, reqs, tracks, kind, lang) {
   return answered ? null : { code: "consistency-unstated", signals };
 }
 // +dist (1.17 D): a criterion about duplicated / redelivered messages, and one about a dependency being down, EN/PT/ES.
-const RE_DIST_DELIVERY = /idempot|duplicat|duplica|dedup|exactly[ -]once|at[ -]least[ -]once|exatamente uma vez|pelo menos uma vez|exactamente una vez|al menos una vez|more than once|mais de uma vez|más de una vez/i;
-const RE_DIST_FAILURE = /unavailable|is down|timeout|timed out|indispon[íi]ve|n[ãa]o est[áa] dispon[íi]vel|no est[áa] disponible|tempo limite|tiempo de espera|partition|parti[çc][ãa]o|partici[óo]n/i;
+// (1.17 D review: + "arrives twice" / "duas vezes" / "dos veces", a redelivery; + "goes down", "unreachable", ES "está caído" — the
+// ES template's own word —, pt-BR "fora do ar", PT "em baixo" / "inacessível". Literal alternations: linear.)
+const RE_DIST_DELIVERY = /idempot|duplicat|duplica|dedup|exactly[ -]once|at[ -]least[ -]once|exatamente uma vez|pelo menos uma vez|exactamente una vez|al menos una vez|more than once|mais de uma vez|más de una vez|twice|duas vezes|dos veces|re-?deliver|reentreg/i;
+const RE_DIST_FAILURE = /unavailable|is down|goes down|went down|unreachable|timeout|timed out|times out|indispon[íi]ve|n[ãa]o est[áa] dispon[íi]vel|fora do ar|(?:est[áa]|estiver|fica|ficar) em baixo|inacess[íi]vel|no est[áa] disponible|est[áa] ca[íi]d[oa]|se cae|inalcanzable|tempo limite|tiempo de espera|partition|parti[çc][ãa]o|partici[óo]n/i;
 function clarify(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -21927,7 +22128,8 @@ module.exports = {
   // A track's mandatory design sections ([{ name, syn }] — saas / ai / sec / privacy; undefined for core / tdd).
   trackSections: (tr) => (Object.prototype.hasOwnProperty.call(TRACK_SECTIONS, tr) ? TRACK_SECTIONS[tr].map((s) => ({ name: s.name, syn: s.syn.slice() })) : undefined),
   // A track's classifier keywords (copies — the engine's tables stay private): { strong, weak }.
-  trackSignals: (tr) => (Object.prototype.hasOwnProperty.call(SIGNALS, tr) ? { strong: SIGNALS[tr].strong.slice(), weak: SIGNALS[tr].weak.slice(), context: (SIGNALS[tr].context || []).slice() } : undefined),
+  trackSignals: (tr) => (Object.prototype.hasOwnProperty.call(SIGNALS, tr) ? { strong: SIGNALS[tr].strong.slice(), weak: SIGNALS[tr].weak.slice(), generic: (SIGNALS[tr].generic || []).slice(), context: (SIGNALS[tr].context || []).slice() } : undefined),
+  signalConcept: (tr, kw) => (Object.prototype.hasOwnProperty.call(SIGNAL_CONCEPTS, tr) ? SIGNAL_CONCEPTS[tr].get(kw) || null : null), // 1.17 D review
 
   verifyPipeMasked, // a _Verify:_ command that pipes into another one (its exit code is the LAST command's) — `done --run`'s hint
 

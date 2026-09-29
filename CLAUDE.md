@@ -96,23 +96,49 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   most two optional tracks plus all of them (quadratic beyond three tracks — verified equal to the full power set's
   placeholder reports). A TEAM's own track needs none of this: it is a track pack (see Project-defined tracks, 1.15).
 - **+dist (1.17)** — the seventh built-in marker track `[DIST]` (distributed systems & data consistency), added through the
-  registries: SIGNALS.dist (strong: named brokers — kafka, rabbitmq, sqs, kinesis, debezium… — and patterns that only exist
-  across systems — message queue / event bus, event sourcing, CQRS, transactional outbox, dual write, saga pattern, eventual
-  consistency, distributed transaction, 2PC, microservice, change data capture, isolation level, lost update, write skew,
-  network partition…; weak: queue, consumer, producer, webhook, retry, idempotency, deduplication, race condition, a bare
-  `saga`, `CDC` in capitals, DLQ, circuit breaker, other / downstream services; context: transaction, consistency, atomic;
-  deliberately NO signal for a bare event / lock / stream / broker), TRACK_MARKER, `DIST_SECTIONS` (Consistency Model ·
-  Cross-system Writes · Delivery & Idempotency · Concurrency · Failure Modes — the ordinary-word synonyms are `loose`,
-  marker-bound; the dual-write names strict), TRACK_STEERING `distributed.md`, RE_STABLE_BRACKET, RE_PACK_MARKER_RESERVED
-  and TRACK_ALIASES (kafka / distributed / microservices / consistency are reserved pack names); criteria US-1.AC-16..19.
+  registries: SIGNALS.dist has FOUR tiers (1.17 D review) — strong: named brokers / job and workflow platforms (kafka,
+  rabbitmq, sqs, debezium, Google Pub/Sub, sidekiq, bullmq…; a common word only in its capitalised, case-sensitive product
+  phrase: `NATS`, `Temporal workflow`, `Celery task`, `Pulsar topic`, `Event Hubs`, `CDC pipeline`) and patterns that only
+  exist across systems (message queue, event sourcing, CQRS, transactional outbox / outbox pattern, dual write, eventual
+  consistency, distributed transaction, `2PC` — exact, never "2PCS" —, microservice, isolation level, lost update, write
+  skew, read replica…); weak = the cross-system ANCHORS (webhook, idempotency, at-least-once / duplicate delivery, other /
+  another / downstream services and a service named by its role — "the payment service", dead letter, circuit breaker,
+  backoff, replication, concurrent updates, event bus / stream, event-driven, leader election, Redis, a search index,
+  gRPC, a bare `saga`, `CDC` in capitals); **generic** = app-level words (queue, consumer / producer / subscriber, retry,
+  jitter, dedupe, race condition, publish … event, send … message, worker, background job, a bare outbox, oversell…) that
+  add to the score but never turn the track on without a strong or anchor signal (two generic ones stay 'possible', with
+  the `genericOnly` note naming them — a print queue with a retry button, a farmers' market's producers and consumers, a
+  newsletter's subscribers); context: transaction, consistency, atomic (backed by strong / weak only, never by a generic
+  word); deliberately NO signal for a bare event / lock / stream / broker. `SIGNAL_CONCEPTS.dist` = one concept, one
+  signal (retry · backoff · jitter, consumer · producer · subscriber, dedupe · deduplicate, the services, delivery words):
+  per track, weak / generic only, an anchor member wins. `SIGNAL_HAZARDS.dist` (lost update, oversell, race condition,
+  duplicate delivery, write skew, split brain, "overwrite each other") are never negated — "concurrent updates never
+  oversell" states the concern. "message queue" / "distributed cache" (+ PT / ES) are listed in +saas weak too (a phrase
+  may serve two tracks — the 1.16 +saas hint survives). TRACK_MARKER, `DIST_SECTIONS` (Consistency Model · Cross-system
+  Writes · Delivery & Idempotency · Concurrency · Failure Modes — each section's own names strict, incl. Failure Modes /
+  Failure Handling / Modos de Falha / Modos de Fallo; the ordinary words `loose`, marker-bound), TRACK_STEERING
+  `distributed.md`, RE_STABLE_BRACKET, RE_PACK_MARKER_RESERVED and TRACK_ALIASES (kafka / distributed / microservices /
+  consistency are reserved pack names); criteria US-1.AC-16..19.
+  **Pre-1.17 packs of a reserved name** (`legacyPackName(st, n)`: recorded in the feature's packMarkers — only a valid pack
+  ever is — and `packReservedName(n)` now): the feature's MISSING pack — `savedPackName` accepts it, `savedTracks` drops it
+  (a 1.16 pack `dist` is never the built-in +dist), `missingPackTracks` lists it, `noteGhostPacks` ghosts its marker unless
+  that is reserved too, doctor's track-pack-missing says why (`trackPacks.missingReserved`), spec_upgrade flags
+  `track-pack-reserved` (`reservedPacks`); `add-track <f> dist` adopts the built-in track (drops the record, appends its
+  sections even though a `[DIST]` heading exists — `adopted`), `add-track <f> <name> --remove` drops the pack from the list.
   Guide: `references/distributed-data-patterns.md` (dual write → outbox / inbox / saga / CDC, retries, idempotency,
   consistency models and isolation anomalies, locking, CAP / PACELC, monolith vs microservices, large data volumes).
   **Classifier machinery (built-in signals only):** a GAP keyword (`KW_GAP` " … ", `KW_GAP_RE`, linear) matches its parts,
   each via `keywordPattern()`, with ≤ 3 words between and never across `. ! ? ; : ,` ("publishes a UserCreated event");
-  `IRREGULAR_FORMS` gives one signal per concept (retry / retries / retried — a word repeated is not two weak signals);
-  VERB_STEMS `public` needs an ending. Negated keywords are deduped by containment like matched ones (every track).
-  **Gotcha:** within a tier the first keyword matching at a position wins it (seenSpan) — list a longer phrase before its
-  prefix ("outbox transacional" before "outbox", "backoff exponencial" before "backoff"), or the self-match sweep fails.
+  `IRREGULAR_FORMS` gives one signal per word (retry / retries / retried; mensagem / mensagens; an exact form: `2PC`);
+  VERB_STEMS `public` / `envi` need an ending. VERB_STEMS and IRREGULAR_FORMS apply to built-in keywords only — a track
+  pack's keyword is a literal word (`keywordRe(kw, true)`, cached apart). Negated keywords are deduped by containment like
+  matched ones (every track). Shadowing (every track) is a linear sweep over the strong hits sorted by start, and a weak /
+  generic hit inside a longer strong phrase of its OWN track is shadowed too ("mensagens" in "fila de mensagens").
+  `guessLang` counts a PT / ES infinitive opening a clause (`PT_INF` / `ES_INF` / `PTES_INF` — none an English word) as a
+  strong marker: "Publicar eventos no Kafka." is PT (no is em + o), English "no Kafka" stays a negation.
+  **Gotcha:** within a track the first keyword matching at a position wins it (seenSpan — strong, weak, generic, context in
+  that order) — list a longer phrase before its prefix ("backoff exponencial" before "backoff", +saas "fila de mensagens"
+  before "fila"), or the self-match sweep fails.
 - **Readers go through the accessors (1.15), never the constants.** The constants above are the BUILT-IN tables;
   `allTracks()` (VALID_TRACKS + the project's valid packs, in name order after the built-in ones), `optionalTracks()`,
   `markerTracks()`, `trackMarker(tr)`, `trackSectionTable(tr)`, `trackSteeringFiles(tr)`, `trackSignalTable(tr)` add the
