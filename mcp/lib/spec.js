@@ -1832,9 +1832,15 @@ function designSaveCheck(projectDir, name) {
     if (bad.length) sections.push({ track: tr, marker, sections: bad });
   }
   let constitution = null; // null = not checked (bugfix)
+  let weigh = null; // 1.17 A1: {tradeoffs, risks} = designWeighState's status codes (null for a bugfix) — notes, never unclean
+  const notes = [];
   if (kind !== "bugfix") {
     const active = activeDesign(design, tracks);
     constitution = extractSection(active, CONSTITUTION_SYN) == null ? "missing" : sectionFilled(active, CONSTITUTION_SYN) ? "filled" : "unfilled";
+    const wc = designWeighChecks(active, lng);
+    weigh = { tradeoffs: wc[0].state, risks: wc[1].state };
+    // A section still holding its template slots is the placeholders line's; missing / empty / too few options get a ▲ note.
+    for (const c of wc) if (c.status === "warn" && c.state !== "template") notes.push("  ▲ " + c.detail);
   }
   const placeholders = artifactReport(f.dir, "design.md", tracks, design).items;
   const clean = !sections.length && constitution !== "missing" && constitution !== "unfilled" && !placeholders.length;
@@ -1846,8 +1852,8 @@ function designSaveCheck(projectDir, name) {
     lines.push("  - " + D.placeholders(placeholders.length, placeholders.slice(0, 3).map((p) => `L${p.line} ${short(p.text)}`).join(", ") +
       (placeholders.length > 3 ? ", " + fm.gates.more(placeholders.length - 3) : "")));
   }
-  const text = clean ? D.clean(trackLabel(tracks), constitution != null) : [D.head(f.slug, trackLabel(tracks)), ...lines, D.hint(f.slug)].join("\n");
-  return { ok: true, feature: f.slug, tracks: trackLabel(tracks), kind, sections, constitution, placeholders, clean, text };
+  const text = clean ? [D.clean(trackLabel(tracks), constitution != null), ...notes].join("\n") : [D.head(f.slug, trackLabel(tracks)), ...lines, ...notes, D.hint(f.slug)].join("\n");
+  return { ok: true, feature: f.slug, tracks: trackLabel(tracks), kind, sections, constitution, weigh, placeholders, clean, text };
 }
 
 // roadmap.json meta.guard ← on (spec_init {guard} / `dev-spec init --guard on|off`). No write when unchanged.
@@ -3729,6 +3735,9 @@ function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
   }
   if (k === "design") {
     if (!RE_CONSTITUTION_CHECK.test(rendered)) add("warn", "constitution-missing", P["constitution-missing"]);
+    // 1.17 A1: no Alternatives & Trade-offs / Risks heading — doctor would warn on every feature scaffolded from it.
+    if (extractSection(rendered, TRADEOFFS_SYN) == null) add("warn", "tradeoffs-missing", P["tradeoffs-missing"]);
+    if (extractSection(rendered, RISKS_SYN) == null) add("warn", "risks-missing", P["risks-missing"]);
     for (const tr of markerTracks()) { // + the track packs (1.15)
       const marker = trackMarker(tr);
       if (!headingHasMarker(raw, marker)) continue; // no heading of the track: the engine appends its whole block
@@ -12036,6 +12045,7 @@ const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-crit
   "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, "malformed-markers": 5, verification: 6, "outside-code-artifacts": 6 };
 CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
 Object.assign(CHECK_PHASE, { glossary: 1, "cross-feature-acs": 1, "steering-changed-since-approval": 2 }); // 1.16 Q (warns only)
+Object.assign(CHECK_PHASE, { "design-tradeoffs": 2, "design-risks": 2 }); // 1.17 A1 (warns only)
 
 // ---------------------------------------------------------------------------
 // spec_doctor — one health-check that decides "ready to advance?"
@@ -12768,6 +12778,52 @@ function bugTemplateSlots() {
 }
 const CONSTITUTION_SYN = ["constitution check", "verificação da constituição", "verificacao da constituicao", "verificación de la constitución", "verificacion de la constitucion"];
 
+// 1.17 A1 — every design weighs its choices: the core "Alternatives & Trade-offs" and "Risks" sections. Headings matched like
+// the Constitution Check (the synonym STARTS the heading, word-bounded — "Alternatives considered", "Riscos e mitigações",
+// "Trade-offs"), so hand-written and PT/ES designs are recognized. Doctor only WARNS (design-tradeoffs / design-risks) — never
+// an approval check: filled designs written before 1.17 lack both. A fresh scaffold's sections are template slots, which the
+// placeholder gate already refuses at the design approval like every other template section.
+const TRADEOFFS_SYN = ["alternatives", "trade-offs", "tradeoffs", "trade offs", "options considered", "design alternatives", "design options",
+  "alternativas", "compromissos", "opções consideradas", "opcoes consideradas", "opções de design", "opcoes de design",
+  "compensaciones", "concesiones", "opciones consideradas", "opciones de diseño", "opciones de diseno"];
+const RISKS_SYN = ["risks", "risk", "riscos", "risco", "riesgos", "riesgo"];
+// [id, synonyms, the fewest entries that count as weighed]: a decision needs at least two options; one honest line about the
+// risks (a table row, a bullet, or "no material risk, because X") is enough.
+const DESIGN_WEIGH = [["design-tradeoffs", TRADEOFFS_SYN, 2], ["design-risks", RISKS_SYN, 0]];
+// The entries a design section lists: table data rows (a table's header and separator rows skipped) + top-level list items —
+// or, when that is more, its sub-headings (one "### Option A" per option). Comments and fenced code never count. Linear.
+function designEntries(body) {
+  let rows = 0, items = 0, heads = 0, inTable = false;
+  for (const l of stripFencedCode(stripHtmlComments(body || "")).split(/\r?\n/)) {
+    if (/^\s*\|/.test(l)) {
+      if (!inTable) { inTable = true; continue; } // the header row
+      if (!/^[\s|:-]+$/.test(l) && /[^|\s]/.test(l)) rows++; // not the separator row, not an empty row
+      continue;
+    }
+    inTable = false;
+    if (/^ ?(?:[-*+]|\d+[.)])\s+\S/.test(l)) items++;
+    else if (/^#{3,6}\s+\S/.test(l)) heads++;
+  }
+  return Math.max(rows + items, heads);
+}
+// One section's state: missing · template (a slot or the TODO sentinel left) · empty · few (fewer entries than `min`) · filled.
+function designWeighState(design, syn, min) {
+  const body = extractSection(design || "", syn);
+  if (body == null) return { status: "missing", entries: 0 };
+  if (RE_TODO_SENTINEL.test(body) || placeholderReport(body).length) return { status: "template", entries: 0 };
+  if (!stripHtmlComments(body).trim()) return { status: "empty", entries: 0 };
+  const n = designEntries(body);
+  return { status: n < min ? "few" : "filled", entries: n };
+}
+// The two doctor checks over an (active) design → [{ id, status: pass | warn, detail, state, entries }].
+function designWeighChecks(design, lang) {
+  const W = i18n.msg(lang).designWeigh;
+  return DESIGN_WEIGH.map(([id, syn, min]) => {
+    const st = designWeighState(design, syn, min);
+    return { id, status: st.status === "filled" ? "pass" : "warn", detail: W[id][st.status](st.entries, min), state: st.status, entries: st.entries };
+  });
+}
+
 // What approving `phase` requires (the same checks doctor runs, scoped to that phase). → { artifact, file, checks }
 // where `checks` lists only the FAILING ones as { id, detail }; artifact=false = nothing to approve (the file is
 // missing, or its track is off) — an error even with force.
@@ -12993,6 +13049,9 @@ function specDoctor(projectDir, name, opts = {}) {
   else if (kind !== "bugfix") {
     add("mermaid", /```mermaid/.test(design) ? "pass" : "warn", /```mermaid/.test(design) ? m.mermaidOk : m.mermaidMissing);
     add("constitution-check", RE_CONSTITUTION_CHECK.test(design) ? "pass" : "warn", RE_CONSTITUTION_CHECK.test(design) ? m.constitutionOk : m.constitutionMissing);
+    // 1.17 A1 — design-tradeoffs / design-risks: warns only (never a fail, never an approval check). Not while design.md is
+    // still a LATER phase's template (nothing is being designed yet — the placeholders check already says so).
+    if (!ph.later.some((r) => r.file === "design.md")) for (const c of designWeighChecks(activeDesign(design, tracks), lng)) add(c.id, c.status, c.detail);
   }
 
   // Mandatory sections — `<track>-sections` per active marker track (saas, ai, sec, privacy).
@@ -20559,6 +20618,36 @@ const RE_RATE_LIMIT = /rate[\s-]?limit|throttl|limites? de (?:pedidos|taxa|solic
 const RE_ACCESS_DENIED = /unauth(?:enticated|ori[sz]ed)|forbidden|(?<!\d)40[13](?!\d)|\bden(?:y|ies|ied)\b|\breject|n[ãa]o (?:autenticad|autorizad)|no (?:autenticad|autorizad)|\brecus|\brejeit|\bdeneg|\brechaz/i;
 // +privacy: a data subject right written as a criterion (erasure / export / portability), EN/PT/ES.
 const RE_SUBJECT_RIGHTS = /erasure|delet|export|portab|apag|elimin|supres|borrar|borrad/i;
+// 1.17 A2 — the constraint nudge: words that make consistency a design question (queues, events, concurrency, transactions,
+// retries — whole words; English ones in every spec, the feature language's own besides: "fila" is a queue in PT but a table
+// row in ES, "cola" the reverse), and the words that show the design's Alternatives & Trade-offs / Risks answered it.
+const CONSTRAINT_SIGNALS = {
+  en: "queue|queues|queued|event|events|event-driven|webhook|webhooks|async|asynchronous|asynchronously|concurrent|concurrently|concurrency|transaction|transactions|retry|retries|pub/sub|outbox|saga|kafka|rabbitmq",
+  pt: "fila|filas|evento|eventos|assíncrono|assíncrona|assíncronos|assíncronas|concorrente|concorrentes|concorrência|simultâneo|simultâneos|transação|transações|reenvio|reenvios",
+  es: "cola|colas|evento|eventos|asíncrono|asíncrona|asíncronos|asíncronas|concurrente|concurrentes|concurrencia|simultáneo|simultáneos|transacción|transacciones|reintento|reintentos",
+};
+const constraintSignalRe = (lang) => new RegExp("(?<![\\p{L}\\p{N}_/-])(?:" + CONSTRAINT_SIGNALS.en + (lang === "en" ? "" : "|" + CONSTRAINT_SIGNALS[lang]) + ")(?![\\p{L}\\p{N}_/-])", "giu");
+const RE_CONSISTENCY_ANSWER = /consisten|consistên|idempot|atomic|atómic|atômic|at[\s-]least[\s-]once|at[\s-]most[\s-]once|exactly[\s-]once|isolation|isolamento|aislamiento|serializ|eventual|optimistic|pessimistic|otimist|optimist|pessimist|pesimist|dedup/i;
+const CONSTRAINT_MAX_WORDS = 3;
+// → { code: "consistency-unstated", signals: [≤ 3 distinct words, in order of appearance] } | null. Reads requirements.md and
+// design.md as written (active tracks only; comments, fenced code and [bracketed] slots set aside — a scaffold's own text never
+// fires it). Only for a plain feature (a bugfix restores behaviour; a spike has no design) and not with +dist (its Consistency
+// Model / Delivery & Idempotency sections ask the same, 1.17 D).
+function constraintNudge(dir, reqs, tracks, kind, lang) {
+  if (kind !== "feature" || tracks.includes("dist")) return null;
+  const plain = (t) => stripFencedCode(stripHtmlComments(activeDesign(t || "", tracks))).replace(/\[[^\[\]\n]*\]/g, " ");
+  const design = readIfExists(path.join(dir, "design.md")) || "";
+  const re = constraintSignalRe(i18n.baseLang(lang));
+  const signals = [];
+  for (const m of (plain(reqs) + "\n" + plain(design)).slice(0, 200000).matchAll(re)) {
+    const w = m[0].toLowerCase();
+    if (!signals.includes(w)) signals.push(w);
+    if (signals.length >= CONSTRAINT_MAX_WORDS) break;
+  }
+  if (!signals.length) return null;
+  const answered = DESIGN_WEIGH.some(([, syn]) => RE_CONSISTENCY_ANSWER.test(plain(extractSection(activeDesign(design, tracks), syn) || "")));
+  return answered ? null : { code: "consistency-unstated", signals };
+}
 function clarify(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -20622,6 +20711,10 @@ function clarify(projectDir, name) {
   if (tracks.includes("sec") && !/secret|segredo|secreto|credential|credencia|token/i.test(reqs)) add(QP.secSecrets);
   if (tracks.includes("privacy") && !RE_SUBJECT_RIGHTS.test(reqs)) add(QP.privacyRights);
   if (tracks.includes("privacy") && !/retention|reten[çc][ãa]o|retenci[óo]n|conserva[çc][ãa]o|conservaci[óo]n/i.test(reqs)) add(QP.privacyRetention);
+  // 1.17 A2 — the constraint nudge (one question, bounded): the spec names queues / events / concurrency / transactions, and the
+  // design's Alternatives & Trade-offs / Risks say nothing about consistency or idempotency.
+  const nudge = constraintNudge(dir, reqs, tracks, (readJson(statePath(dir)).data || {}).kind || "feature", featureLang(projectDir, name));
+  if (nudge) add(fm.designWeigh.clarifyConsistency(nudge.signals.map((w) => `'${w}'`).join(", ")));
   // 1.16 Q3 — the glossary: every word it says to avoid that requirements.md / design.md use (at most 10 questions, then one
   // pointing at doctor). No glossary → nothing asked.
   const gl = glossaryEntries(f.root);
@@ -20632,6 +20725,7 @@ function clarify(projectDir, name) {
 
   const res = { ok: true, feature: f.slug, tracks: trackLabel(tracks), gapCount: questions.length, questions, verdict: questions.length ? "needs-clarification" : "clear" };
   if (gh.length) res.glossary = gh.map((h) => ({ word: h.word, term: h.term, count: h.count, locations: h.locations })); // 1.16 Q3 (stable)
+  if (nudge) res.nudges = [nudge]; // 1.17 A2 (stable): [{ code: "consistency-unstated", signals }]
   // Past GLOSSARY_MAX_ENTRIES entries the rest is never read: said (stable counts + the localized note), never silent.
   if (gl && gl.truncated) Object.assign(res, { glossaryTruncated: { read: gl.entries.length, total: gl.total }, glossaryNote: Q.glossaryTruncated(gl.entries.length, gl.total) });
   return res;

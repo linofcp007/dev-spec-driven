@@ -13,7 +13,7 @@
     "design": {
       "at": "2026-09-25T17:44:18.663Z",
       "by": "example",
-      "fingerprint": "c66d4c27207eb81fe98230dc170420f60ae088e9"
+      "fingerprint": "877963feead67c81739cf6a91855664c986377a1"
     },
     "test-plan": {
       "at": "2026-09-25T17:44:18.837Z",
@@ -49,7 +49,7 @@
       "phase": "design",
       "at": "2026-09-25T17:44:18.663Z",
       "by": "example",
-      "fingerprint": "c66d4c27207eb81fe98230dc170420f60ae088e9",
+      "fingerprint": "877963feead67c81739cf6a91855664c986377a1",
       "snapshot": ".history/design@1.md"
     },
     {

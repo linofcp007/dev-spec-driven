@@ -7,6 +7,14 @@ Use the **dev-spec-driven** skill, Phase 2 (Design).
 
 Feature: $ARGUMENTS
 
+**Every design weighs its choices:** besides the sections below, fill **Alternatives & Trade-offs** — for each
+key decision (strong vs eventual consistency, monolith vs service, sync vs async, optimistic vs pessimistic locking…)
+at least two options, each with its pros, cons and cost of being wrong, the one chosen and why — and **Risks** (risk ·
+likelihood · impact · mitigation · owner; technical, delivery, data, business: what would make this design wrong).
+`spec_doctor` warns (`design-tradeoffs`, `design-risks`) when either is missing, still the template, or the trade-offs
+list fewer than 2 options — a warning, never a refusal; their leftover template placeholders refuse the approval like
+any other section's.
+
 Re-read steering + approved requirements, scan the codebase for patterns to match, then write
 `design.md`. Include the base sections (overview, architecture with ≥1 Mermaid diagram, data
 models, API contracts, security, error handling, testing strategy, **Constitution Check** against each

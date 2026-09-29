@@ -10,6 +10,15 @@ graph TD
     B -->|query| C[(Database)]
 ```
 
+## Alternatives & Trade-offs
+<!-- The options weighed for each key decision — e.g. strong vs eventual consistency, monolith vs service, sync vs
+     async, optimistic vs pessimistic locking. At least two per decision (one option alone was never weighed), what
+     choosing wrong would cost, the one chosen and why. One row per option. -->
+| Decision | Option | Pros | Cons | Cost if wrong | Chosen |
+|---|---|---|---|---|---|
+| [key decision] | [option A] | [pros] | [cons] | [cost of being wrong] | [✓ — why] |
+| [key decision] | [option B] | [pros] | [cons] | [cost of being wrong] | [✗ — why not] |
+
 ## Data Models
 ```typescript
 interface Entity {
@@ -32,6 +41,13 @@ interface Entity {
 
 ## Testing Strategy
 - Unit / Integration / E2E: [what each covers]
+
+## Risks
+<!-- What could make this design wrong or the delivery late — technical, delivery, data, business. One row per risk;
+     an honest "no material risk, because X" is fine — blank is not. -->
+| Risk | Likelihood | Impact | Mitigation | Owner |
+|---|---|---|---|---|
+| [what could go wrong] | [low / medium / high] | [low / medium / high] | [how we prevent or detect it] | [who watches it] |
 
 ## Constitution Check
 Verify this design against each principle in `steering/constitution.md`. GATE: must pass before

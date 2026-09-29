@@ -216,9 +216,10 @@ gates treat a scaffold that is still a template as unwritten (`placeholders` che
 
 Steps: read steering → ask clarifying questions (don't guess) → fill the scaffolded `requirements.md` → run
 `ears_validate` to catch missing SHALL / missing IDs / vague words → **run `spec_clarify`** (`/clarify`) to surface
-remaining gaps (vague terms, leftover placeholders, missing edge-cases/NFR/out-of-scope, missing IF…THEN failure
-paths, and track-specific gaps like tenant isolation, AI quality/cost, access denial or data subject rights) and ask
-the user those questions → for a deeper, one-question-at-a-time interrogation, offer `/grill` → present for approval.
+remaining gaps (vague terms, leftover placeholders, missing edge-cases/NFR/out-of-scope, missing IF…THEN failure paths,
+track-specific gaps like tenant isolation, AI quality/cost, access denial or data subject rights, unstated consistency for
+queues / events / concurrent writes) and ask the user → for a deeper, one-question-at-a-time interrogation, offer `/grill`
+(its constraints round: atomicity, isolation, races, consistency, idempotency, failures, volume) → present for approval.
 
 ### EARS Quick Reference
 | Pattern | Keyword | Example |
@@ -251,13 +252,12 @@ testable and specific — no "fast", "user-friendly"; use concrete values. Full 
 Convert approved requirements into a technical blueprint (on a design-first feature this phase comes before
 Phase 1). Re-read steering + requirements, scan the existing codebase for patterns to match, then write `design.md`.
 
-**Base sections (always):** Overview · Architecture (≥1 Mermaid diagram) · Data Models · API
-Contracts · Security · Error Handling · Testing Strategy · **Constitution Check** (verify the design
-against each principle in `steering/constitution.md` — a gate, re-checked after any change) ·
-**Complexity Tracking** (justify anything that violates a principle or adds non-obvious complexity;
-empty is good). `spec_create` always scaffolds `quickstart.md` (a manual acceptance scenario a human
-can run) and `checklist.md` (the track-aware quality checklist) — fill both alongside the design. For
-larger features, optionally split research into `research.md` (decisions + rationale).
+**Base sections (always):** Overview · Architecture (≥1 Mermaid diagram) · **Alternatives & Trade-offs** (≥ 2 options per key
+decision — pros, cons, cost of being wrong, the one chosen and why) · Data Models · API Contracts · Security · Error Handling ·
+Testing Strategy · **Risks** (likelihood · impact · mitigation · owner) · **Constitution Check** (each principle of
+`steering/constitution.md` — a gate, re-checked after any change) · **Complexity Tracking** (justify what breaks a principle or
+adds non-obvious complexity; empty is good). Doctor warns `design-tradeoffs` / `design-risks` (never blocks). `spec_create`
+always scaffolds `quickstart.md` (a manual acceptance scenario) and `checklist.md` — fill both; optionally `research.md`.
 
 **+tdd adds:** Testability Notes (seams, determinism, side effects to isolate, test-data strategy).
 
@@ -364,10 +364,10 @@ task whose `_Depends:_` are all done — choosing the loop per task:
 
 - **core task (no +tdd):** announce → implement per design → run existing tests and the task's
   `_Verify:_` → `spec_complete_task {evidence}` → report.
-- **+tdd task:** announce target tests → confirm red for the right reason → write the *minimum* code
-  to green them → run the **full** suite (targets green, prior green still green, future-task tests
-  still red) → refactor on green → `spec_complete_task {evidence}`: the command that runs this task's
-  target tests + its exit code, and in the summary "T-xx green" plus the full-suite tally.
+- **+tdd task:** announce target tests → the micro-cycle, ONE behaviour at a time (test → watch it fail for the right
+  reason → minimum code → watch it pass → refactor on green; code written before its test is deleted and redone —
+  `references/test-patterns.md`) → run the **full** suite (targets green, prior green still green, future-task tests
+  still red) → `spec_complete_task {evidence}`: its target tests' command + exit code, "T-xx green" + the suite tally.
 - **+ai generation/prompt task:** announce baseline → edit prompt in a **new** `prompts/vN.md` →
   run the full eval harness (`/eval`) → accept only if golden improved/held and adversarial held;
   otherwise revert/investigate → `spec_complete_task {evidence}`: the harness command + its exit code,
