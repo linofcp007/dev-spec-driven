@@ -135,6 +135,14 @@ sequenceDiagram
     A->>U: 200 + tokens
 ```
 
+## Alternatives & Trade-offs
+| Decision | Option | Pros | Cons | Cost if wrong | Chosen |
+|---|---|---|---|---|---|
+| Session model | Server-side sessions only (opaque cookie, a DB read per request) | Instant revocation | A database read on every request; a DB outage logs everyone out | Latency on every call | ✗ |
+| Session model | Short-lived JWT (15 min) + hashed refresh token | No DB read per request | A stolen access token lives up to 15 min | A leaked token is usable for ≤ 15 min | ✓ — logout revokes the refresh token (US-4.AC-1) |
+| Verification email | Sent inside the register request | Simple | An email-provider outage fails registration | Lost sign-ups | ✗ |
+| Verification email | Queued, retried with backoff | Registration never blocks on email | At-least-once delivery: a user may get two emails | A duplicate email — harmless, the link is idempotent | ✓ |
+
 ## Data Models
 
 ```typescript
@@ -181,6 +189,13 @@ database, one E2E journey (register → verify → login → logout). See test-p
 ## Testability Notes
 - Clock injected (token expiry, lockout window, link age); email and Google clients behind interfaces with fakes.
 - Test database reset per file; seed factory for users in each state (unverified, verified, locked, Google-only).
+
+## Risks
+| Risk | Likelihood | Impact | Mitigation | Owner |
+|---|---|---|---|---|
+| Credential stuffing spread over many accounts stays under the per-account lockout | medium | high | Per-IP rate limit (NFR-2) on top of the lockout; alert on the 401 rate | security |
+| Google changes its OAuth flow or is unreachable | low | medium | The callback sits behind one adapter; email/password keeps working (EC-3) | backend |
+| Users never verify their email and drop off | medium | medium | Resend on an expired link (EC-1); watch the verification rate after release | product |
 
 ## Constitution Check
 - "Secrets never logged" — tokens and passwords are redacted by the logger's serializer. ✅

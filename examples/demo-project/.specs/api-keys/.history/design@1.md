@@ -17,6 +17,14 @@ graph TD
     E --> G[Handler scoped by tenant_id]
 ```
 
+## Alternatives & Trade-offs
+| Decision | Option | Pros | Cons | Cost if wrong | Chosen |
+|---|---|---|---|---|---|
+| Key storage | Plaintext token in Postgres | Trivial lookup; a key can be shown again | A DB leak or a backup exposes every live key | Every tenant rotates at once; breaks constitution principle 2 | ✗ — not allowed by the constitution |
+| Key storage | SHA-256 hash + 8-char prefix | A leak yields nothing usable; the prefix is safe to log | The token is shown once and can never be recovered | Support can't read a key back (acceptable: rotate instead) | ✓ |
+| Verification path | Postgres lookup on every request | Always consistent with revocations | ~30ms P95 at the target RPS — too close to the 50ms budget | SC-001 missed under load | ✗ — measured too slow |
+| Verification path | Memory + Redis cache, 60s TTL, invalidated on revoke/rotate | P95 well under 50ms; Postgres off the hot path | Eventual consistency with Postgres: every revoke/rotate must reach every cache | A missed invalidation lets a revoked key pass until the TTL (breaks US-1.AC-3) | ✓ — revoke invalidates before it answers; the TTL bounds a lost message |
+
 ## Data Models
 ```typescript
 interface ApiKey {
@@ -47,6 +55,13 @@ Invalid/expired/revoked → 401 with prefix-only log. Deleted tenant → treat k
 
 ## Testing Strategy
 - Unit: hashing, expiry, grace-window logic. Integration: middleware + DB + cache. Isolation probe: cross-tenant.
+
+## Risks
+| Risk | Likelihood | Impact | Mitigation | Owner |
+|---|---|---|---|---|
+| An invalidation is lost and a revoked key passes on one node | low | high | Revoke answers only after the invalidation is published; the 60s TTL bounds the window; the key prefix is logged on every use | backend |
+| Redis outage | low | medium | Verification falls back to Postgres (slower, still correct); alert when the cache hit ratio drops below 80% | SRE |
+| A tenant misses the 24-hour grace window after a rotation and its old callers start failing | medium | medium | The rotate response carries `old_key_revokes_at`; each 401 logs the key prefix so the tenant finds the stale caller | product |
 
 ## Constitution Check
 Verified against `steering/constitution.md` — all principles hold:

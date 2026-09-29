@@ -5197,7 +5197,10 @@ function endRun() {
     ok(/^Design check on design\.md \(metrics \[core \+saas\]\):/.test(dz1) && /\[SaaS\] sections: Performance Budget:unfilled; Scale Design:unfilled/.test(dz1) &&
       /Constitution Check: not filled in/.test(dz1) && /\d+ template placeholder\(s\) left: L\d+ /.test(dz1) && /\/spec-doctor metrics/.test(dz1) && !/Roadmap updated/.test(dz1),
       "hook on design.md (EN template): unfilled [SaaS] sections, the Constitution Check and the placeholders, with a doctor hint");
-    const cleanDesign = "# Design: Metrics\n\n## Overview\nPush counters to Prometheus.\n\n```mermaid\nflowchart LR\n  A-->B\n```\n\n## Constitution Check\n- Principle 1: idempotent writes — respected.\n\n" +
+    // 1.17 A1: a filled design weighs its choices too — without these two sections the save check adds a ▲ note each.
+    const cleanDesign = "# Design: Metrics\n\n## Overview\nPush counters to Prometheus.\n\n```mermaid\nflowchart LR\n  A-->B\n```\n\n" +
+      "## Alternatives & Trade-offs\n- Push to a gateway — simple, but a single point of failure.\n- Scrape an endpoint — chosen: no extra hop.\n\n## Risks\n- Cardinality blow-up — medium — label allow-list.\n\n" +
+      "## Constitution Check\n- Principle 1: idempotent writes — respected.\n\n" +
       ["Performance Budget", "Scale Design", "Multi-tenancy", "Observability", "Cost Envelope"].map((s) => `## [SaaS] ${s}\nConcrete content for ${s}.\n`).join("\n");
     fs.writeFileSync(path.join(ef.dir, "design.md"), cleanDesign);
     const dz2 = runPost(path.join(ef.dir, "design.md"));
@@ -14370,6 +14373,198 @@ function endRun() {
   // 1.17 package (D) — +dist track: distributed systems and data consistency.
 
   // 1.17 package (A) — design trade-offs / risks, /grill constraint questions, the TDD micro-cycle.
+  {
+    const js = (v) => JSON.stringify(v);
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const aRd = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const aDir = (n) => path.join(tmp, "p17a-" + n);
+    const chk = (d, id) => (d.checks || []).find((c) => c.id === id) || {};
+    const weigh = (d) => ["design-tradeoffs", "design-risks"].map((id) => chk(d, id).status || "-").join(",");
+    const wDesign = (f, text) => fs.writeFileSync(path.join(f.dir, "design.md"), text);
+    const REQ = "# Feature: Orders\n\n## Summary\nPlace an order.\n\n## User Stories\n### US-1 (P1): Place an order\nAs a buyer I want to order.\n**Independent Test:** place one order.\n\n" +
+      "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the buyer submits a cart THE SYSTEM SHALL hand the order to the warehouse queue.\n" +
+      "2. **US-1.AC-2** — IF the cart is empty THEN THE SYSTEM SHALL reject it.\n\n## Success Criteria\n- **SC-001** — 95% of orders placed in under 2 s.\n\n" +
+      "## Edge Cases & Error Handling\n- **EC-1** — WHEN stock runs out THE SYSTEM SHALL refuse the order.\n\n## Non-Functional Requirements\n- **NFR-1** — p95 < 2 s.\n\n## Out of Scope\n- Refunds.\n";
+    const ALT = "## Alternatives & Trade-offs\n| Decision | Option | Pros | Cons | Cost if wrong | Chosen |\n|---|---|---|---|---|---|\n" +
+      "| Hand-off | Synchronous call | Simple | Couples uptime | Lost orders | ✗ |\n| Hand-off | Queue + outbox | Survives outages | At-least-once: duplicates | A double shipment | ✓ — idempotency key per order |\n\n";
+    const RISKS = "## Risks\n| Risk | Likelihood | Impact | Mitigation | Owner |\n|---|---|---|---|---|\n| Duplicate delivery | medium | high | Idempotency key per order | backend |\n\n";
+    const design = (alt, risks) => "# Design: Orders\n\n## Overview\nOrders go to the warehouse through a queue.\n\n## Architecture\n```mermaid\ngraph TD\n  A[API] --> Q[Queue]\n```\n\n" + alt +
+      "## Data Models\nOrder {id, total}.\n\n## Error Handling\nRetries with backoff.\n\n## Testing Strategy\nUnit and integration tests.\n\n" + risks +
+      "## Constitution Check\n- [x] Idempotent writes — complies.\n\n## Complexity Tracking\nNone.\n";
+    const cut = (t, from, to) => t.slice(t.indexOf(from), t.indexOf(to));
+
+    // A1 — a fresh scaffold, EN / PT / ES / pt-BR: both sections, after Architecture and before the Constitution Check, holding template
+    // slots the placeholder lookup knows (the corpus renders them) — and the scaffold's own text never fires the clarify nudge.
+    const H = {
+      en: ["## Architecture", "## Alternatives & Trade-offs", "## Data Models", "## Testing Strategy", "## Risks", "## Constitution Check", "[option A]", "[what could go wrong]"],
+      pt: ["## Arquitetura", "## Alternativas e Compromissos", "## Modelos de Dados", "## Estratégia de Testes", "## Riscos", "## Verificação da Constituição", "[opção A]", "[o que pode falhar]"],
+      es: ["## Arquitectura", "## Alternativas y Compensaciones", "## Modelos de Datos", "## Estrategia de Pruebas", "## Riesgos", "## Verificación de la Constitución", "[opción A]", "[qué podría salir mal]"],
+      "pt-BR": ["## Arquitetura", "## Alternativas e Compromissos", "## Modelos de Dados", "## Estratégia de Testes", "## Riscos", "## Verificação da Constituição", "[opção A]", "[o que pode falhar]"],
+    };
+    const fresh = Object.keys(H).map((lang) => {
+      const p = aDir("fresh-" + lang);
+      S.initProject(p, ["core"], lang);
+      const f = S.createFeature(p, "Orders", ["core"], "", undefined, lang);
+      const t = fs.readFileSync(path.join(f.dir, "design.md"), "utf8");
+      const at = H[lang].slice(0, 6).map((h) => t.indexOf(h + "\n"));
+      const slots = S.featurePlaceholders(p, f.slug, "design.md").items.map((x) => x.text);
+      const good = at.every((i) => i >= 0) && at[0] < at[1] && at[1] < at[2] && at[3] < at[4] && at[4] < at[5] &&
+        slots.includes(H[lang][6]) && slots.includes(H[lang][7]) && S.clarify(p, f.slug).nudges === undefined && weigh(S.specDoctor(p, f.slug)) === "-,-";
+      return { lang, good, at, slots: slots.filter((s) => s === H[lang][6] || s === H[lang][7]) };
+    });
+    ok(fresh.every((r) => r.good),
+      "1.17 A1: a fresh design.md (EN / PT / ES / pt-BR) has Alternatives & Trade-offs after Architecture and Risks before the Constitution Check, their slots read as template placeholders; while design.md is a later phase's template doctor adds no design-tradeoffs / design-risks check and clarify no nudge (got " + js(fresh) + ")");
+
+    // A1 — the gate: the new sections still template → the design approval is refused on `placeholders` (the same mechanism as every
+    // template section); filled → both checks pass; deleted → only warns, the approval goes through (never an approval check).
+    const gp = aDir("gate");
+    S.initProject(gp, ["core"], "en");
+    const gf = S.createFeature(gp, "Orders", ["core"]);
+    fs.writeFileSync(path.join(gf.dir, "requirements.md"), REQ);
+    approveBefore(gp, gf.slug, "design");
+    const tpl = fs.readFileSync(path.join(gf.dir, "design.md"), "utf8");
+    wDesign(gf, design(cut(tpl, "## Alternatives & Trade-offs", "## Data Models"), cut(tpl, "## Risks", "## Constitution Check")));
+    const gDocT = S.specDoctor(gp, gf.slug);
+    const gApT = S.approvePhase(gp, gf.slug, "design", "t");
+    wDesign(gf, design(ALT, RISKS));
+    const gDocF = S.specDoctor(gp, gf.slug);
+    const gMcp = payload(await call("spec_doctor", { projectDir: gp, name: gf.slug }));
+    wDesign(gf, design(ALT.split("\n").slice(0, 4).join("\n") + "\n\n", RISKS)); // one option only
+    const gDocFew = S.specDoctor(gp, gf.slug);
+    const gSaveFew = S.designSaveCheck(gp, gf.slug);
+    wDesign(gf, design("", ""));
+    const gDocDel = S.specDoctor(gp, gf.slug);
+    const gSaveDel = S.designSaveCheck(gp, gf.slug);
+    const gApDel = S.approvePhase(gp, gf.slug, "design", "t");
+    ok(gApT.ok === false && js(gApT.failing) === js(["placeholders"]) && /\[option A\]/.test(gApT.checks[0].detail) &&
+      weigh(gDocT) === "warn,warn" && /still the template/.test(chk(gDocT, "design-tradeoffs").detail) && /Risks is still the template/.test(chk(gDocT, "design-risks").detail) &&
+      weigh(gDocF) === "pass,pass" && chk(gDocF, "design-tradeoffs").detail === "2 option(s) weighed" && chk(gDocF, "design-risks").detail === "1 risk(s) listed" &&
+      weigh(gMcp) === "pass,pass" && gMcp.checks.findIndex((c) => c.id === "design-tradeoffs") === gMcp.checks.findIndex((c) => c.id === "constitution-check") + 1 &&
+      weigh(gDocFew) === "warn,pass" && /lists 1 option\(s\) — weigh at least 2 per key decision/.test(chk(gDocFew, "design-tradeoffs").detail) &&
+      js(gSaveFew.weigh) === js({ tradeoffs: "few", risks: "filled" }) && gSaveFew.clean === true && /\n  ▲ Alternatives & Trade-offs lists 1 option/.test(gSaveFew.text) &&
+      weigh(gDocDel) === "warn,warn" && /^no Alternatives & Trade-offs section/.test(chk(gDocDel, "design-tradeoffs").detail) && /^no Risks section/.test(chk(gDocDel, "design-risks").detail) &&
+      gDocDel.readyToAdvance === true && gDocDel.checks.every((c) => c.status !== "fail") &&
+      js(gSaveDel.weigh) === js({ tradeoffs: "missing", risks: "missing" }) && (gSaveDel.text.match(/▲/g) || []).length === 2 &&
+      gApDel.ok === true && !gApDel.forced,
+      "1.17 A1: template sections refuse the design approval on placeholders only; filled → design-tradeoffs / design-risks pass (MCP too, right after constitution-check); one option → warn 'few'; deleted → two warns, readyToAdvance, the approval goes through unforced; the design-save check notes them with ▲ (got " +
+      js([gApT.failing, weigh(gDocT), weigh(gDocF), chk(gDocFew, "design-tradeoffs").detail, gSaveFew.weigh, weigh(gDocDel), gSaveDel.weigh, gApDel.ok]) + ")");
+
+    // A1 — hand-written PT / ES designs: the synonyms (Alternativas consideradas, Riscos e mitigações, Opciones consideradas, one ### per option,
+    // a prose Risks section) are recognized, and the details are in the feature's language.
+    const hp = aDir("hand");
+    S.initProject(hp, ["core"], "en");
+    const ptF = S.createFeature(hp, "Encomendas", ["core"], "", undefined, "pt");
+    const esF = S.createFeature(hp, "Pedidos", ["core"], "", undefined, "es");
+    const brF = S.createFeature(hp, "Pedidos BR", ["core"], "", undefined, "pt-BR");
+    const hand = (lang, alt, risks) => "# Design\n\n## Visão Geral\nx.\n\n## Arquitetura\n```mermaid\ngraph TD\n  A-->B\n```\n\n" + alt + "\n" + risks + "\n## " +
+      (lang === "es" ? "Verificación de la Constitución" : "Verificação da Constituição") + "\n- [x] ok\n";
+    wDesign(ptF, hand("pt", "## Alternativas consideradas\n- **Chamada síncrona** — simples, mas acopla a disponibilidade.\n- **Fila + outbox** — escolhida: sobrevive a falhas.\n",
+      "## Riscos e mitigações\n- Entrega duplicada — média — chave de idempotência.\n"));
+    wDesign(esF, hand("es", "## Opciones consideradas\n### Opción A: llamada síncrona\nSimple.\n### Opción B: cola + outbox\nElegida.\n",
+      "## Riesgos\nNingún riesgo relevante: la función solo lee datos existentes.\n"));
+    wDesign(brF, hand("pt-BR", "## Trade-offs\n1. Cache local — rápido.\n2. Sem cache — sempre consistente.\n", "## Risco\n- Cache desatualizado — baixo.\n"));
+    const hDocs = [ptF, esF, brF].map((f) => S.specDoctor(hp, f.slug));
+    ok(hDocs.every((d) => weigh(d) === "pass,pass") && chk(hDocs[0], "design-tradeoffs").detail === "2 opção(ões) ponderada(s)" && chk(hDocs[0], "design-risks").detail === "1 risco(s) listado(s)" &&
+      chk(hDocs[1], "design-tradeoffs").detail === "2 opción(es) sopesada(s)" && /^escrita \(sin fila ni punto/.test(chk(hDocs[1], "design-risks").detail),
+      "1.17 A1: hand-written PT / ES / pt-BR designs — Alternativas consideradas, Riscos e mitigações, Opciones consideradas (one ### per option), a prose Riesgos, Trade-offs / Risco — pass, with localized details (got " +
+      js(hDocs.map((d) => [weigh(d), chk(d, "design-tradeoffs").detail, chk(d, "design-risks").detail])) + ")");
+
+    // A1 — exempt: a bugfix (bug.md stands in for its design) and a spike (its own doctor); design-first: the design is the current phase,
+    // so its template sections warn at once, and deleting them never blocks its approval.
+    const ep = aDir("exempt");
+    S.initProject(ep, ["core"], "en");
+    const bf = S.createFeature(ep, "Crash on save", ["tdd"], "", undefined, "en", "bugfix");
+    wDesign(bf, "# Design: Crash on save\n\n## Notes\nThe fix stays inside the save handler.\n");
+    const sp = S.createFeature(ep, "Queue spike", undefined, "Kafka or RabbitMQ?", undefined, "en", "spike");
+    const df = S.createFeature(ep, "Arch first", ["core"], "x", undefined, "en", undefined, { flow: "design-first" });
+    const dfDocT = S.specDoctor(ep, df.slug);
+    wDesign(df, design("", ""));
+    S.approvePhase(ep, df.slug, "classification", "t", { force: true }); // design-first: the design follows the classification
+    const dfDoc = S.specDoctor(ep, df.slug);
+    const dfAp = S.approvePhase(ep, df.slug, "design", "t");
+    const bDoc = S.specDoctor(ep, bf.slug), sDoc = S.specDoctor(ep, sp.slug);
+    ok(weigh(bDoc) === "-,-" && S.designSaveCheck(ep, bf.slug).weigh === null && weigh(sDoc) === "-,-" && sDoc.ok !== false &&
+      dfDocT.phase === "design" && weigh(dfDocT) === "warn,warn" && weigh(dfDoc) === "warn,warn" && dfAp.ok === true && !dfAp.forced,
+      "1.17 A1: a bugfix and a spike are exempt (no design-tradeoffs / design-risks check); design-first: the design's template sections warn at once, and without them the design approval still goes through (got " +
+      js([weigh(bDoc), weigh(sDoc), dfDocT.phase, weigh(dfDocT), weigh(dfDoc), dfAp.ok, dfAp.failing]) + ")");
+
+    // A1 — the demo stays clean (a copy: doctor PASS with both checks passing, the approved design's fingerprint still matching, no
+    // clarify nudge); a project design template without the sections is flagged by `templates check` (warn), the built-in one isn't.
+    const dm = aDir("demo");
+    fs.cpSync(path.join(root, "examples", "demo-project"), dm, { recursive: true });
+    const dmDoc = S.specDoctor(dm, "api-keys");
+    const dmCl = S.clarify(dm, "api-keys");
+    const tp = aDir("tpl");
+    S.initProject(tp, ["core"], "en");
+    S.templates(tp, "init", { artifact: "design" });
+    const tpOk = S.templates(tp, "check");
+    fs.writeFileSync(path.join(tp, ".specs", "templates", "design.md"), "# Design: {{name}}\n\n## Overview\n[How it works]\n\n## Constitution Check\n- [ ] [Principle 1] — complies\n");
+    const tpBad = S.templates(tp, "check");
+    const codes = (r) => (r.problems || []).filter((x) => /design/.test(x.file)).map((x) => x.code + ":" + x.severity);
+    ok(dmDoc.verdict === "pass" && weigh(dmDoc) === "pass,pass" && chk(dmDoc, "design-tradeoffs").detail === "4 option(s) weighed" && !chk(dmDoc, "changed-since-approval").id &&
+      dmCl.nudges === undefined && dmCl.questions.length === 1 &&
+      !codes(tpOk).length && js(codes(tpBad)) === js(["tradeoffs-missing:warn", "risks-missing:warn"]) && tpBad.verdict === "warn",
+      "1.17 A1: examples/demo-project stays doctor PASS (design-tradeoffs 4 options, design-risks pass, design approval fingerprint current), no nudge; templates check warns tradeoffs-missing / risks-missing on a design template without them — not on the built-in one (got " +
+      js([dmDoc.verdict, weigh(dmDoc), dmCl.questions, codes(tpOk), codes(tpBad)]) + ")");
+
+    // A2 — the clarify nudge: queue / event / concurrency / transaction words and nothing about consistency or idempotency in the design's
+    // Alternatives & Trade-offs / Risks → ONE question (stable code, ≤ 3 signals); answered there → gone. Language-aware words ("fila" is a
+    // queue in PT, a table row in ES; "cola" the reverse); a bugfix is never asked.
+    const cp = aDir("nudge");
+    S.initProject(cp, ["core"], "en");
+    const cf = S.createFeature(cp, "Orders", ["core"]);
+    fs.writeFileSync(path.join(cf.dir, "requirements.md"), REQ);
+    wDesign(cf, design("", ""));
+    const n1 = S.clarify(cp, cf.slug);
+    const n1Mcp = payload(await call("spec_clarify", { projectDir: cp, name: cf.slug }));
+    wDesign(cf, design(ALT, RISKS));
+    const n2 = S.clarify(cp, cf.slug);
+    fs.writeFileSync(path.join(cf.dir, "requirements.md"), REQ.replace("warehouse queue", "warehouse queue, emit events, call a webhook and commit one transaction"));
+    wDesign(cf, design("", RISKS.replace("Idempotency key per order", "Manual review")));
+    const n3 = S.clarify(cp, cf.slug);
+    const lp = (lang, name, body) => {
+      const f = S.createFeature(cp, name, ["core"], "", undefined, lang);
+      fs.writeFileSync(path.join(f.dir, "requirements.md"), REQ.replace("hand the order to the warehouse queue", body));
+      return S.clarify(cp, f.slug).nudges;
+    };
+    const nPt = lp("pt", "Encomendas pt", "pôr a encomenda na fila do armazém");
+    const nEsRow = lp("es", "Filas es", "escribir cada fila del CSV");
+    const nEsQ = lp("es", "Cola es", "enviar el pedido a la cola del almacén");
+    const nBug = S.createFeature(cp, "Queue crash", ["tdd"], "", undefined, "en", "bugfix");
+    fs.writeFileSync(path.join(nBug.dir, "requirements.md"), REQ);
+    const nB = S.clarify(cp, nBug.slug);
+    ok(js(n1.nudges) === js([{ code: "consistency-unstated", signals: ["queue", "retries"] }]) &&
+      n1.questions.some((q) => /^The spec mentions 'queue', 'retries', but the design's Alternatives & Trade-offs \/ Risks say nothing about consistency or idempotency/.test(q)) &&
+      js(n1Mcp.nudges) === js(n1.nudges) && n2.nudges === undefined && n3.nudges && n3.nudges[0].signals.length === 3 && js(n3.nudges[0].signals) === js(["queue", "events", "webhook"]) &&
+      js(nPt) === js([{ code: "consistency-unstated", signals: ["fila"] }]) && nEsRow === undefined && js(nEsQ) === js([{ code: "consistency-unstated", signals: ["cola"] }]) &&
+      nB.nudges === undefined,
+      "1.17 A2: spec_clarify asks ONE consistency question (nudges consistency-unstated, ≤ 3 signals) when the spec names a queue / events / a transaction and the design's trade-offs / risks don't answer it; answered → none; PT 'fila' fires, ES 'fila' (a row) doesn't, ES 'cola' does; a bugfix is never asked (got " +
+      js([n1.nudges, n2.nudges, n3.nudges, nPt, nEsRow, nEsQ, nB.nudges]) + ")");
+
+    // A2 / A3 — the prose: /grill's constraints round, the micro-cycle (spec-implementer, test-patterns, /executeTask, the superpowers
+    // precedence row), the critic's trade-offs row, /design and SKILL.md — and none of the new text steers toward PRs or CI.
+    const grill = aRd("commands", "grill.md"), impl = aRd("agents", "spec-implementer.md"), tpat = aRd("skills", "dev-spec-driven", "references", "test-patterns.md");
+    const exec = aRd("commands", "executeTask.md"), sup = aRd("commands", "spec-superpowers.md"), critic = aRd("agents", "spec-critic.md"), dcmd = aRd("commands", "design.md");
+    const skill = aRd("skills", "dev-spec-driven", "SKILL.md");
+    const round = cut(grill, "**Constraints round**", "4. When you reach");
+    const micro = cut(tpat, "## The micro-cycle inside a task", "## Anti-Patterns to Reject");
+    const implCycle = cut(impl, "## The micro-cycle (tdd tasks)", "## Hard rules");
+    const excuses = ["Too simple to test", "I'll test after", "Just this once", "keep the code as a reference", "Manual testing is enough", "TDD slows me down"];
+    const flags = ["passed on its first run", "can't explain why it failed", "written after the code"];
+    const newProse = [round, micro, implCycle, cut(dcmd, "**Every design weighs", "Re-read steering"), (critic.match(/^\| \*\*Trade-offs & risks\*\*.*$/m) || [""])[0]];
+    ok(["Atomicity", "ACID and isolation", "isolation level", "Race conditions", "concurrently", "Consistency model", "Delivery and idempotency", "idempoten", "Dependency failure", "Volume and growth", "Business outcome", "Success Criterion"]
+      .every((w) => round.includes(w)) && /\*\*Alternatives & Trade-offs\*\*/.test(round) &&
+      /obra\/superpowers[^\n]*\n?[^\n]*\(MIT\)/.test(micro) && excuses.every((e) => micro.includes(e)) && flags.every((f) => micro.includes(f)) && /one\s+behaviour at a time/.test(micro) &&
+      /deleted and redone/.test(micro) && /for the right reason/.test(micro) && /Refactor only on green/.test(micro) && /_Makes green:_/.test(micro) && /_Expect: fail_/.test(micro) &&
+      /one behaviour at a time/.test(implCycle) && /obra\/superpowers/.test(implCycle) && /\(MIT\)/.test(implCycle) && /deleted and redone from the test/.test(implCycle) &&
+      /Watch it fail for the right reason/.test(implCycle) && /Refactor only on green/.test(implCycle) && /No production code without a failing test first/.test(impl) &&
+      /micro-cycle/.test(exec) && /deleted and redone/.test(exec) && /\| test-driven-development \| [^\n]*micro-cycle[^\n]*\|/.test(sup) &&
+      /Trade-offs & risks/.test(critic) && /at least two REAL options/.test(critic) && /Alternatives & Trade-offs/.test(dcmd) && /\*\*Risks\*\*/.test(dcmd) &&
+      /\*\*Alternatives & Trade-offs\*\*/.test(skill) && /design-tradeoffs/.test(skill) && /micro-cycle/.test(skill) && /constraints round/.test(skill) && skill.split("\n").length <= 540 &&
+      newProse.every((t) => t.length > 50 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
+      "1.17 A2 / A3: /grill has the constraints round (atomicity, ACID + isolation, races, consistency, delivery + idempotency, dependency failure, volume, a measurable outcome); the micro-cycle (credited to obra/superpowers, MIT) with its rationalizations and red flags is in test-patterns.md, spec-implementer.md and /executeTask; the superpowers row, the critic's trade-offs row, /design and SKILL.md (≤ 540 lines) name them; no PR / CI steering in the new text (got " +
+      js([newProse.map((t) => t.length), skill.split("\n").length]) + ")");
+  }
 
   // 1.17 package (F) — spec_import fluidplan.
 

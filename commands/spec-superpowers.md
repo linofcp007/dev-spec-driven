@@ -40,7 +40,7 @@ With the dev-spec-driven plugin installed, use it instead of these superpowers s
 |---|---|
 | brainstorming, writing-plans | the dev-spec-driven skill: Phase 0 classification → EARS requirements → design → tasks (`/spec`, `/clarify`, `/grill`) |
 | executing-plans, subagent-driven-development | `/executeTask` (`--subagents` for the implementer + reviewer loop) |
-| test-driven-development | the `+tdd` track (`/testPlan`, `/writeTests`) |
+| test-driven-development | the `+tdd` track (`/testPlan`, `/writeTests`) and its red-green-refactor micro-cycle inside each task (`/executeTask`) |
 | systematic-debugging | `/spec-bugfix` (reproduction → root cause → failing regression test → fix) |
 | verification-before-completion | the evidence gate: run each task's `_Verify:_` command and record it (`spec_complete_task`, `dev-spec done --run`) |
 | requesting-code-review, receiving-code-review | `/prReview` (local review) and `/spec-review-feedback` |

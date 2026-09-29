@@ -1,7 +1,8 @@
 # Example — a fully worked spec (1.16 shape)
 
 `demo-project/` is a self-contained mini-project showing what a feature looks like with the current
-methodology: **prioritized user stories (P1/P2)**, **Success Criteria**, **Constitution Check**,
+methodology: **prioritized user stories (P1/P2)**, **Success Criteria**, a design that weighs its choices
+(**Alternatives & Trade-offs**, **Risks**), a **Constitution Check**,
 **story-organized tasks** tagged `[US1]`/`[shared]` with `[P]` parallel markers and **Checkpoints**,
 a **quickstart** acceptance scenario, **spec↔code** wiring via `_Implements:_`, the **Phase 4 failing tests**
 named by their T-IDs with a first task that records their **red run** (`_Expect: fail_`), and **fingerprinted
@@ -23,7 +24,7 @@ demo-project/
 │   ├── api-keys/                        # ← the fully-worked feature (core +tdd +saas), approved up to tasks
 │   │   ├── classification.md           # tracks + the signals, blast radius and hot-path call behind them
 │   │   ├── requirements.md             # US-1 (P1) + US-2 (P2), Independent Test, SC-001/002, EC-1/2, NFR-1, EARS ACs
-│   │   ├── design.md                   # mermaid + Constitution Check + Complexity + 5 scale sections
+│   │   ├── design.md                   # mermaid + Alternatives & Trade-offs + Risks + Constitution Check + Complexity + 5 scale sections
 │   │   ├── test-plan.md                # T-01..T-07 mapped to every AC and edge case
 │   │   ├── tasks.md                    # task 1 records the red run (_Expect: fail_); by story, [US1]/[shared] tags, [P], Checkpoints, _Implements:_
 │   │   ├── quickstart.md               # human-runnable acceptance scenario
@@ -60,6 +61,8 @@ Doctor: api-keys  [core +tdd +saas]  verdict=PASS  readyToAdvance=true
   ✓ placeholders — no template placeholders left in the current phase
   ✓ mermaid — has a diagram
   ✓ constitution-check — present — verify each principle is checked
+  ✓ design-tradeoffs — 4 option(s) weighed
+  ✓ design-risks — 3 risk(s) listed
   ✓ saas-sections — all 5 filled
   ✓ test-plan
   ✓ traceability — all 5 ACs covered by tasks

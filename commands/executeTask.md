@@ -11,7 +11,12 @@ Target: $ARGUMENTS
 tasks; summarize your understanding. Use `spec_next_task` to find the next task (or jump to the given
 number) — the first open task whose `_Depends: 3, 5_` tasks are all done (a task without `_Depends:_` just follows
 tasks.md order). Pick the loop per task: plain implement-and-test (core); red → green → refactor against the
-target tests (+tdd); prompt-iteration gated on eval delta with a new `prompts/vN.md` (+ai). After each
+target tests (+tdd) — as the **micro-cycle**, one behaviour at a time: write (or pick) the test, watch it fail for
+the right reason (an assertion or "not implemented" — not a typo or a missing import), write the minimal code, watch
+it pass, refactor only on green, repeat; code written before its test is deleted and redone, never kept as a
+reference (`references/test-patterns.md` — "The micro-cycle inside a task", with the rationalizations it answers and
+its red flags: a test that passes on its first run, a failure you can't explain, a test written after the code);
+prompt-iteration gated on eval delta with a new `prompts/vN.md` (+ai). After each
 task, run its `_Verify:_` command fresh and call `spec_complete_task {…, evidence}` with the command, exit
 code and output summary — evidence before claims (`references/verification.md`). The rules the engine applies:
 - a task whose `_Verify:_` holds a runnable command is **verified only by `{command, exitCode: 0}`** — a text

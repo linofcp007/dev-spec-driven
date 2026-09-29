@@ -343,7 +343,7 @@ dev-spec-driven replaces them — superpowers keeps what it doesn't cover (workt
 |---|---|
 | brainstorming, writing-plans | Phase 0 → requirements → design → tasks (`/spec`, `/clarify`, `/grill`) |
 | executing-plans, subagent-driven-development | `/executeTask [--subagents]` |
-| test-driven-development | the `+tdd` track |
+| test-driven-development | the `+tdd` track and its red-green-refactor micro-cycle inside each task |
 | systematic-debugging | `/spec-bugfix` |
 | verification-before-completion | the evidence gate (`_Verify:_`, `dev-spec done --run`) |
 | requesting / receiving-code-review | `/prReview`, `/spec-review-feedback` |
@@ -745,7 +745,7 @@ paralelo, escrita de skills):
 |---|---|
 | brainstorming, writing-plans | Fase 0 → requisitos → design → tarefas (`/spec`, `/clarify`, `/grill`) |
 | executing-plans, subagent-driven-development | `/executeTask [--subagents]` |
-| test-driven-development | o track `+tdd` |
+| test-driven-development | o track `+tdd` e o seu micro-ciclo red-green-refactor dentro de cada tarefa |
 | systematic-debugging | `/spec-bugfix` |
 | verification-before-completion | o gate de evidência (`_Verify:_`, `dev-spec done --run`) |
 | requesting / receiving-code-review | `/prReview`, `/spec-review-feedback` |
@@ -1151,7 +1151,7 @@ escritura de skills):
 |---|---|
 | brainstorming, writing-plans | Fase 0 → requisitos → diseño → tareas (`/spec`, `/clarify`, `/grill`) |
 | executing-plans, subagent-driven-development | `/executeTask [--subagents]` |
-| test-driven-development | el track `+tdd` |
+| test-driven-development | el track `+tdd` y su microciclo red-green-refactor dentro de cada tarea |
 | systematic-debugging | `/spec-bugfix` |
 | verification-before-completion | la puerta de evidencia (`_Verify:_`, `dev-spec done --run`) |
 | requesting / receiving-code-review | `/prReview`, `/spec-review-feedback` |

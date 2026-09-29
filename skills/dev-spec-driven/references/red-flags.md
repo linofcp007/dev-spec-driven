@@ -24,12 +24,13 @@ phase. Adapted from the rationalization tables of [obra/superpowers](https://git
 | Thought | Reality |
 |---|---|
 | "Scale/cost can be figured out later" | On +saas/+ai the mandatory sections exist because "later" is a rewrite. "Not needed because X" is fine; blank is not. |
-| "There's only one way to do it" | Name the alternative you rejected and why (Complexity Tracking). |
+| "There's only one way to do it" | Then naming the one you rejected takes a minute: Alternatives & Trade-offs — at least two options per key decision, the cost of being wrong, why this one. |
 
 ## Tests first (+tdd, Phases 3–4 and every task)
 
 **Iron law: no production code without a failing test first.** Code written before its test is deleted
-and rewritten from the test — not "kept as reference", not "adapted".
+and rewritten from the test — not "kept as reference", not "adapted". Inside each task the loop is the micro-cycle —
+one behaviour at a time, red for the right reason, minimal code, green, refactor on green (`test-patterns.md`).
 
 | Thought | Reality |
 |---|---|

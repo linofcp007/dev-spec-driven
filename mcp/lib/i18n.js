@@ -353,6 +353,15 @@ graph TD
     B -->|query| C[(Database)]
 \`\`\`
 
+## Alternatives & Trade-offs
+<!-- The options weighed for each key decision — e.g. strong vs eventual consistency, monolith vs service, sync vs
+     async, optimistic vs pessimistic locking. At least two per decision (one option alone was never weighed), what
+     choosing wrong would cost, the one chosen and why. One row per option. -->
+| Decision | Option | Pros | Cons | Cost if wrong | Chosen |
+|---|---|---|---|---|---|
+| [key decision] | [option A] | [pros] | [cons] | [cost of being wrong] | [✓ — why] |
+| [key decision] | [option B] | [pros] | [cons] | [cost of being wrong] | [✗ — why not] |
+
 ## Data Models
 \`\`\`typescript
 interface Entity {
@@ -375,6 +384,13 @@ interface Entity {
 
 ## Testing Strategy
 - Unit / Integration / E2E: [what each covers]
+
+## Risks
+<!-- What could make this design wrong or the delivery late — technical, delivery, data, business. One row per risk;
+     an honest "no material risk, because X" is fine — blank is not. -->
+| Risk | Likelihood | Impact | Mitigation | Owner |
+|---|---|---|---|---|
+| [what could go wrong] | [low / medium / high] | [low / medium / high] | [how we prevent or detect it] | [who watches it] |
 
 ## Constitution Check
 Verify this design against each principle in \`steering/constitution.md\`. GATE: must pass before
@@ -1010,6 +1026,15 @@ graph TD
     B -->|query| C[(Base de Dados)]
 \`\`\`
 
+## Alternativas e Compromissos
+<!-- As opções ponderadas para cada decisão-chave — p.ex. consistência forte vs eventual, monólito vs serviço, síncrono
+     vs assíncrono, bloqueio otimista vs pessimista. Pelo menos duas por decisão (uma opção sozinha nunca foi
+     ponderada), o que custaria escolher mal, a escolhida e porquê. Uma linha por opção. -->
+| Decisão | Opção | Prós | Contras | Custo se errada | Escolhida |
+|---|---|---|---|---|---|
+| [decisão-chave] | [opção A] | [prós] | [contras] | [custo de errar] | [✓ — porquê] |
+| [decisão-chave] | [opção B] | [prós] | [contras] | [custo de errar] | [✗ — motivo da rejeição] |
+
 ## Modelos de Dados
 \`\`\`typescript
 interface Entity {
@@ -1032,6 +1057,13 @@ interface Entity {
 
 ## Estratégia de Testes
 - Unit / Integração / E2E: [o que cada um cobre]
+
+## Riscos
+<!-- O que pode tornar este design errado ou atrasar a entrega — técnico, entrega, dados, negócio. Uma linha por risco;
+     um honesto "nenhum risco relevante, porque X" serve — em branco não. -->
+| Risco | Probabilidade | Impacto | Mitigação | Responsável |
+|---|---|---|---|---|
+| [o que pode falhar] | [baixa / média / alta] | [baixo / médio / alto] | [como o evitamos ou detetamos] | [quem o acompanha] |
 
 ## Verificação da Constituição
 Verifica este design contra cada princípio em \`steering/constitution.md\`. GATE: tem de passar antes
@@ -1665,6 +1697,15 @@ graph TD
     B -->|query| C[(Base de Datos)]
 \`\`\`
 
+## Alternativas y Compensaciones
+<!-- Las opciones sopesadas para cada decisión clave — p.ej. consistencia fuerte vs eventual, monolito vs servicio,
+     síncrono vs asíncrono, bloqueo optimista vs pesimista. Al menos dos por decisión (una opción sola nunca se
+     sopesó), lo que costaría elegir mal, la elegida y por qué. Una fila por opción. -->
+| Decisión | Opción | Pros | Contras | Coste si falla | Elegida |
+|---|---|---|---|---|---|
+| [decisión clave] | [opción A] | [pros] | [contras] | [coste de equivocarse] | [✓ — por qué] |
+| [decisión clave] | [opción B] | [pros] | [contras] | [coste de equivocarse] | [✗ — por qué no] |
+
 ## Modelos de Datos
 \`\`\`typescript
 interface Entity {
@@ -1687,6 +1728,13 @@ interface Entity {
 
 ## Estrategia de Pruebas
 - Unit / Integración / E2E: [qué cubre cada uno]
+
+## Riesgos
+<!-- Lo que podría hacer que este diseño sea erróneo o retrasar la entrega — técnico, entrega, datos, negocio. Una fila
+     por riesgo; un honesto "ningún riesgo relevante, porque X" sirve — en blanco no. -->
+| Riesgo | Probabilidad | Impacto | Mitigación | Responsable |
+|---|---|---|---|---|
+| [qué podría salir mal] | [baja / media / alta] | [bajo / medio / alto] | [cómo lo evitamos o detectamos] | [quién lo vigila] |
 
 ## Verificación de la Constitución
 Verifica este diseño contra cada principio en \`steering/constitution.md\`. GATE: debe pasar antes
@@ -3323,6 +3371,8 @@ const MSG = {
         "missing-section": (marker, section) => `${marker} ${section} is missing — the template has other ${marker} headings, so the engine appends none of that track's sections and doctor fails on this one.`,
         "no-sentinel": (marker, section) => `${marker} ${section} has no > **TODO** line — a fresh feature would read the section as filled (the built-in template seeds one).`,
         "constitution-missing": "no Constitution Check section — doctor warns on every feature scaffolded from it.",
+        "tradeoffs-missing": "no Alternatives & Trade-offs section — doctor warns (design-tradeoffs) on every feature scaffolded from it.",
+        "risks-missing": "no Risks section — doctor warns (design-risks) on every feature scaffolded from it.",
         "no-criteria": "no acceptance criterion (a US-n.AC-m line with SHALL) — nothing for EARS, trace_check or the test plan to follow.",
         "ac-duplicate": (ids) => `duplicate AC IDs: ${ids} — doctor fails on every feature scaffolded from it.`,
         "phantom-ac": (ids, file) => `cites AC IDs ${file} does not define: ${ids} — trace_check reports them as phantoms.`,
@@ -5097,6 +5147,8 @@ _Outcome: [go | no-go | pivot]_
         "missing-section": (marker, section) => `falta ${marker} ${section} — o template tem outros títulos ${marker}, por isso o motor não acrescenta nenhuma secção desse track e o doctor falha nesta.`,
         "no-sentinel": (marker, section) => `${marker} ${section} não tem linha > **TODO** — numa feature nova a secção pareceria preenchida (o template de base semeia uma).`,
         "constitution-missing": "sem secção Verificação da Constituição (Constitution Check) — o doctor avisa em todas as features criadas a partir dele.",
+        "tradeoffs-missing": "sem secção Alternativas e Compromissos — o doctor avisa (design-tradeoffs) em todas as features criadas a partir dele.",
+        "risks-missing": "sem secção Riscos — o doctor avisa (design-risks) em todas as features criadas a partir dele.",
         "no-criteria": "nenhum critério de aceitação (uma linha US-n.AC-m com DEVE) — nada para o EARS, o trace_check ou o plano de testes seguirem.",
         "ac-duplicate": (ids) => `IDs de AC duplicados: ${ids} — o doctor falha em todas as features criadas a partir dele.`,
         "phantom-ac": (ids, file) => `cita IDs de AC que ${file} não define: ${ids} — o trace_check reporta-os como fantasmas.`,
@@ -6827,6 +6879,8 @@ _Outcome: [go | no-go | pivot]_
         "missing-section": (marker, section) => `falta ${marker} ${section} — la plantilla tiene otros encabezados ${marker}, así que el motor no añade ninguna sección de ese track y doctor falla en esta.`,
         "no-sentinel": (marker, section) => `${marker} ${section} no tiene línea > **TODO** — en una función nueva la sección parecería rellenada (la plantilla de serie siembra una).`,
         "constitution-missing": "sin sección Verificación de la Constitución (Constitution Check) — doctor avisa en todas las funciones creadas con ella.",
+        "tradeoffs-missing": "sin sección Alternativas y Compensaciones — doctor avisa (design-tradeoffs) en todas las funciones creadas con ella.",
+        "risks-missing": "sin sección Riesgos — doctor avisa (design-risks) en todas las funciones creadas con ella.",
         "no-criteria": "ningún criterio de aceptación (una línea US-n.AC-m con DEBE) — nada que seguir para EARS, trace_check o el plan de pruebas.",
         "ac-duplicate": (ids) => `IDs de AC duplicados: ${ids} — doctor falla en todas las funciones creadas con ella.`,
         "phantom-ac": (ids, file) => `cita IDs de AC que ${file} no define: ${ids} — trace_check los reporta como fantasmas.`,
@@ -7619,6 +7673,63 @@ const QUALITY_MSG = {
 };
 for (const l of BASE_LANGS) MSG[l].quality = QUALITY_MSG[l];
 
+// 1.17 A — every design weighs its choices: doctor's design-tradeoffs / design-risks details (keyed by check id, then by the
+// section state: missing · template · empty · few · filled) and spec_clarify's consistency nudge (A2). pt-BR derives from pt.
+const DESIGN_WEIGH_MSG = {
+  en: {
+    "design-tradeoffs": {
+      filled: (n) => `${n} option(s) weighed`,
+      missing: () => "no Alternatives & Trade-offs section — list the options weighed for each key decision (pros, cons, cost of being wrong, the one chosen and why)",
+      template: () => "Alternatives & Trade-offs is still the template — replace its placeholders with the options really weighed",
+      empty: () => "Alternatives & Trade-offs is empty — list the options weighed for each key decision",
+      few: (n, min) => `Alternatives & Trade-offs lists ${n} option(s) — weigh at least ${min} per key decision (a table row or a bullet each: one option alone was never weighed)`,
+    },
+    "design-risks": {
+      filled: (n) => (n ? `${n} risk(s) listed` : "written (no row or bullet — an honest 'no material risk' counts)"),
+      missing: () => "no Risks section — list what could make the design wrong or the delivery late (likelihood, impact, mitigation, owner)",
+      template: () => "Risks is still the template — replace its placeholders with the real risks (or say why there is none)",
+      empty: () => "Risks is empty — an honest 'no material risk, because X' is fine; blank is not",
+      few: () => "Risks lists no risk",
+    },
+    clarifyConsistency: (words) => `The spec mentions ${words}, but the design's Alternatives & Trade-offs / Risks say nothing about consistency or idempotency: what must succeed or fail together (atomicity, isolation level), who else writes the same data concurrently, strong or eventual consistency (how stale is acceptable), and the delivery guarantee and idempotency of anything asynchronous?`,
+  },
+  pt: {
+    "design-tradeoffs": {
+      filled: (n) => `${n} opção(ões) ponderada(s)`,
+      missing: () => "sem secção Alternativas e Compromissos — lista as opções ponderadas para cada decisão-chave (prós, contras, custo de errar, a escolhida e porquê)",
+      template: () => "Alternativas e Compromissos ainda é o template — substitui os placeholders pelas opções realmente ponderadas",
+      empty: () => "Alternativas e Compromissos está vazia — lista as opções ponderadas para cada decisão-chave",
+      few: (n, min) => `Alternativas e Compromissos lista ${n} opção(ões) — o mínimo são ${min} por decisão-chave (uma linha da tabela ou um item cada: uma opção sozinha nunca foi ponderada)`,
+    },
+    "design-risks": {
+      filled: (n) => (n ? `${n} risco(s) listado(s)` : "escrita (sem linha nem item — um honesto 'nenhum risco relevante' conta)"),
+      missing: () => "sem secção Riscos — lista o que pode tornar o design errado ou atrasar a entrega (probabilidade, impacto, mitigação, responsável)",
+      template: () => "Riscos ainda é o template — substitui os placeholders pelos riscos reais (ou pela razão de não haver nenhum)",
+      empty: () => "Riscos está vazia — um honesto 'nenhum risco relevante, porque X' serve; em branco não",
+      few: () => "Riscos não lista nenhum risco",
+    },
+    clarifyConsistency: (words) => `A spec menciona ${words}, mas as secções Alternativas e Compromissos / Riscos do design nada dizem sobre consistência ou idempotência: o que tem de ter sucesso ou falhar em conjunto (atomicidade, nível de isolamento), quem mais escreve os mesmos dados ao mesmo tempo, consistência forte ou eventual (que desatualização é aceitável), e a garantia de entrega e a idempotência de tudo o que for assíncrono?`,
+  },
+  es: {
+    "design-tradeoffs": {
+      filled: (n) => `${n} opción(es) sopesada(s)`,
+      missing: () => "sin sección Alternativas y Compensaciones — enumera las opciones sopesadas para cada decisión clave (pros, contras, coste de equivocarse, la elegida y por qué)",
+      template: () => "Alternativas y Compensaciones sigue siendo la plantilla — sustituye sus placeholders por las opciones realmente sopesadas",
+      empty: () => "Alternativas y Compensaciones está vacía — enumera las opciones sopesadas para cada decisión clave",
+      few: (n, min) => `Alternativas y Compensaciones enumera ${n} opción(es) — sopesa al menos ${min} por decisión clave (una fila de la tabla o un punto cada una: una opción sola nunca se sopesó)`,
+    },
+    "design-risks": {
+      filled: (n) => (n ? `${n} riesgo(s) enumerado(s)` : "escrita (sin fila ni punto — un honesto 'ningún riesgo relevante' cuenta)"),
+      missing: () => "sin sección Riesgos — enumera lo que podría hacer erróneo el diseño o retrasar la entrega (probabilidad, impacto, mitigación, responsable)",
+      template: () => "Riesgos sigue siendo la plantilla — sustituye sus placeholders por los riesgos reales (o explica por qué no hay ninguno)",
+      empty: () => "Riesgos está vacía — un honesto 'ningún riesgo relevante, porque X' sirve; en blanco no",
+      few: () => "Riesgos no enumera ningún riesgo",
+    },
+    clarifyConsistency: (words) => `La spec menciona ${words}, pero Alternativas y Compensaciones / Riesgos del diseño no dicen nada de consistencia ni de idempotencia: ¿qué debe tener éxito o fallar a la vez (atomicidad, nivel de aislamiento), quién más escribe los mismos datos a la vez, consistencia fuerte o eventual (qué desfase es aceptable), y cuál es la garantía de entrega y la idempotencia de todo lo asíncrono?`,
+  },
+};
+for (const l of BASE_LANGS) MSG[l].designWeigh = DESIGN_WEIGH_MSG[l];
+
 // ===========================================================================
 // Task brief (spec_task_brief) — the self-contained brief a fresh implementer reads first.
 // Labels and loop rules per language; renderBrief() owns the layout. IDs, `_Label:_` markers and
@@ -8128,7 +8239,7 @@ const PTBR_WORDS = {
   facto: "fato", factos: "fatos", contacto: "contato", contactos: "contatos", contactar: "contatar", contacte: "contate",
   secção: "seção", secções: "seções", receção: "recepção", receções: "recepções", perceção: "percepção", perceções: "percepções",
   conceção: "concepção", conceções: "concepções", deteção: "detecção", deteções: "detecções", detetar: "detectar", deteta: "detecta",
-  detetam: "detectam", detetado: "detectado", detetada: "detectada", detetados: "detectados", detetadas: "detectadas", detetou: "detectou",
+  detetam: "detectam", detetamos: "detectamos", detetado: "detectado", detetada: "detectada", detetados: "detectados", detetadas: "detectadas", detetou: "detectou",
   detete: "detecte", detetável: "detectável", artefacto: "artefato", artefactos: "artefatos", controlo: "controle", controlos: "controles",
   respetivo: "respectivo", respetiva: "respectiva", respetivos: "respectivos", respetivas: "respectivas", retrospetiva: "retrospectiva",
   retrospetivas: "retrospectivas", perspetiva: "perspectiva", perspetivas: "perspectivas", aspeto: "aspecto", aspetos: "aspectos",
