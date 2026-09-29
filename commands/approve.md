@@ -17,7 +17,7 @@ terminal, or `! node <clone>/cli/dev-spec.js approve …`) and wait — never re
 **The approval is a gate:** that phase's checks run first and any failure **refuses** it, listing the failing
 check ids — e.g. requirements: `ears`, `placeholders`, `clarifications`, `success-criteria`, `priorities`,
 `ac-uniqueness` (bugfix: `reproduction`); design: `placeholders`, `constitution-check`, the active
-`saas-sections` / `ai-sections` / `sec-sections` / `privacy-sections`, `clarifications` (bugfix: `root-cause` — its design approval signs off
+`saas-sections` / `ai-sections` / `sec-sections` / `privacy-sections` / `dist-sections`, `clarifications` (bugfix: `root-cause` — its design approval signs off
 `bug.md`); test-plan: `placeholders`, `traceability` (every AC has a test row, and no row cites an AC
 requirements.md doesn't define); eval-plan: `placeholders`; tasks: `placeholders` (no placeholder tasks),
 `traceability` (every AC covered by a task, no phantom AC / T-IDs in tasks); tests (the Phase 4 sign-off —

@@ -17,7 +17,7 @@ its `lines`.
   place, so the team edits them there. `lang` given → `.specs/templates/<lang>/`. It never overwrites a file. Artifacts:
   classification, requirements, design, tasks, test-plan, eval-plan, load-test, quickstart, checklist,
   integration-plan, bug, bug-requirements, bug-test-plan, bug-tasks, spike, spike-tasks, and `steering/<file>.md`
-  (incl. `security.md` / `privacy.md`).
+  (incl. `security.md` / `privacy.md` / `distributed.md`).
 - **`check`** — validates the project's templates against the current rules and lists each problem with its severity
   (the CLI exits 1 on an error). Fix the errors before scaffolding with them.
 
@@ -25,7 +25,7 @@ What to tell the user when they edit a template:
 
 - Variables: `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}` `{{date}}` (in a spike template `{{summary}}`
   is the spike's question) — an unknown `{{x}}` is left as is. Details: `references/steering-templates.md`.
-- Keep the **English-stable** tokens exactly: AC IDs `US-n.AC-m`, test IDs `T-nn`, `[SaaS]`/`[AI]`/`[SEC]`/`[PRIVACY]`,
+- Keep the **English-stable** tokens exactly: AC IDs `US-n.AC-m`, test IDs `T-nn`, `[SaaS]`/`[AI]`/`[SEC]`/`[PRIVACY]`/`[DIST]`,
   `> **TODO**`, `_Requirements:_`, `_Verify:_`, `**Checkpoint:**`.
 - Leave `[bracketed]` slots for what each feature must fill: they count as template placeholders, so an untouched
   scaffold stays unapprovable. A template with no slot at all scaffolds a file its gate could approve unedited.

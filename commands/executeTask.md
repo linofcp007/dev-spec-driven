@@ -71,5 +71,5 @@ When the last task is done, run `/spec-converge` if you doubt every AC is delive
 
 Either way: honor the track-gated "done" checks before finishing the feature: load test + observability
 validation (+saas), cost + safety validation (+ai), security scans + threat model re-check (+sec), data subject
-rights + retention verified (+privacy). A decision or discovery made on the way goes to `/spec-decide`. If blocked,
+rights + retention verified (+privacy), failure-injection tests green (+dist). A decision or discovery made on the way goes to `/spec-decide`. If blocked,
 pause and discuss rather than improvising outside the design. Respond in the user's language (EN/PT/ES).

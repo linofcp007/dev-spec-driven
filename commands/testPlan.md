@@ -18,7 +18,9 @@ Name a concrete test path in the **File** column when you know it — `trace_che
 T-ID in that file. On +saas add tenant-isolation, rate-limit, idempotency, authorization-matrix, and audit-log
 tests; on +sec one abuse-case test per material threat (401 / 403 + audit event, no secret in responses or logs —
 the "never" rules are `property` rows; `references/security-track.md`); on +privacy export, erasure-in-every-store
-and retention-expiry tests (`references/privacy-track.md`). Cover edge cases (`EC-n`), NFRs and success criteria (`SC-nnn`) too — `trace_check` warns about the ones no
+and retention-expiry tests (`references/privacy-track.md`); on +dist failure-injection tests — a crash between the
+commit and the publish, the same message twice (a `property` row), concurrent updates, a dependency down
+(`references/distributed-data-patterns.md`). Cover edge cases (`EC-n`), NFRs and success criteria (`SC-nnn`) too — `trace_check` warns about the ones no
 row covers. The Coverage Check must show every AC appears in ≥1 test. Write `test-plan.md` (no template
 placeholders left — the test-plan gate refuses them) and present for approval — no test code yet. See
 `references/test-patterns.md` (Property-Based Tests; Test IDs in test names).

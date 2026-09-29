@@ -13,7 +13,7 @@ leftover template placeholders and TBDs (one question naming each `requirements.
 criteria / priorities / independent tests, missing edge-cases / non-functional / out-of-scope sections (a bugfix
 is never asked for non-functional requirements — its template has none by design), missing IF…THEN failure-path criteria, and track-specific gaps (tenant isolation and rate limits for +saas; output
 quality and cost for +ai; an access-denied criterion and the secrets handled for +sec; data subject rights and
-retention periods for +privacy). When the spec names queues, events, webhooks, async work, concurrency, transactions
+retention periods for +privacy; the delivery guarantee / duplicates and each dependency's failure for +dist). When the spec names queues, events, webhooks, async work, concurrency, transactions
 or retries and the design's Alternatives & Trade-offs / Risks say nothing about consistency or idempotency, one
 question asks for them (atomicity, isolation level, concurrent writers, strong vs eventual, delivery guarantee +
 idempotency — `nudges: [{code: "consistency-unstated", signals}]`). A removed track's criteria are ignored. With a glossary

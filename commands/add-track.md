@@ -1,23 +1,23 @@
 ---
-description: Escalate an existing feature to a new track (+tdd/+saas/+ai/+sec/+privacy), additive only — or turn one off with --remove (no file deleted). PT - adiciona (ou remove) um track de uma feature. ES - añade (o quita) un track de una feature.
-argument-hint: "[feature name] [tdd|saas|ai|sec|privacy] [--remove]"
+description: Escalate an existing feature to a new track (+tdd/+saas/+ai/+sec/+privacy/+dist), additive only — or turn one off with --remove (no file deleted). PT - adiciona (ou remove) um track de uma feature. ES - añade (o quita) un track de una feature.
+argument-hint: "[feature name] [tdd|saas|ai|sec|privacy|dist] [--remove]"
 ---
 
 Use the **dev-spec-driven** skill to add a track to an existing feature.
 
 Args: $ARGUMENTS
 
-Call the `spec_add_track` MCP tool `{name, track}` (CLI `dev-spec add-track <feature> <tdd|saas|ai|sec|privacy>`).
+Call the `spec_add_track` MCP tool `{name, track}` (CLI `dev-spec add-track <feature> <tdd|saas|ai|sec|privacy|dist>`).
 `track` takes one or several (`'saas,ai'`, `'+sec +privacy'`); an unknown name is an error with a did-you-mean. It is
 **additive and never overwrites**: it scaffolds only the missing artifacts for the new track (test-plan.md +
 tests/ for +tdd; eval-plan.md + prompts/ + evals/ for +ai; load-test.md for +saas), appends that track's
-mandatory `design.md` sections (`[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]`) and template tasks if they aren't
-already there, adds its steering files (`security.md` for +sec, `privacy.md` for +privacy), updates
+mandatory `design.md` sections (`[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]`) and template tasks if they aren't
+already there, adds its steering files (`security.md` for +sec, `privacy.md` for +privacy, `distributed.md` for +dist), updates
 `classification.md`'s Active Tracks line and persists the track set in `.state.json`. Use it when a feature grew into
-needing tests, scale, AI, security or privacy work after it was first created. After running it, report which files
+needing tests, scale, AI, security, privacy or data-consistency work after it was first created. After running it, report which files
 were added, tell the user to fill the new design sections and tasks (the design gate refuses unfilled track sections)
-and to add the track's criteria to `requirements.md` (e.g. the access-denied and data subject rights criteria —
-`references/security-track.md`, `references/privacy-track.md`), then run `spec_doctor` for the feature. An approved artifact the track changed now reads
+and to add the track's criteria to `requirements.md` (e.g. the access-denied, data subject rights and duplicate-delivery criteria —
+`references/security-track.md`, `references/privacy-track.md`, `references/distributed-data-patterns.md`), then run `spec_doctor` for the feature. An approved artifact the track changed now reads
 "changed since approval": re-review and re-approve it. Respond in the user's language (EN/PT/ES).
 
 To take a track **off** (the feature turned out simpler), pass `remove: true` (CLI `--remove`): the track leaves

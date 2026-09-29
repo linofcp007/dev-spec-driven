@@ -91,4 +91,14 @@ one behaviour at a time, red for the right reason, minimal code, green, refactor
 | "We only store an email address, GDPR doesn't apply" | An email address is personal data. `+privacy`: inventory, lawful basis, retention, rights. |
 | "Legal will sort out the DPIA later" | The spec records the DPO's decision now; "later" is after the data is collected. |
 
-See also: `verification.md`, `bugfix.md`, `review-feedback.md`, `security-track.md`, `privacy-track.md`.
+## Distributed data (+dist)
+
+| Thought | Reality |
+|---|---|
+| "Save, then publish — Kafka is always up" | A crash or a timeout between the two loses the event with no error anywhere. Transactional outbox, or write the accepted risk in `[DIST] Cross-system Writes`. |
+| "The broker guarantees exactly-once" | Delivery is at-least-once end to end; exactly-once is an idempotent consumer. |
+| "Two users won't edit the same row at the same time" | They will (two tabs, a retry, a double click). Optimistic locking or a unique constraint. |
+| "We'll add retries" | Retries without timeouts, jitter, a budget and idempotency keys turn one outage into two. |
+
+See also: `verification.md`, `bugfix.md`, `review-feedback.md`, `security-track.md`, `privacy-track.md`,
+`distributed-data-patterns.md`.

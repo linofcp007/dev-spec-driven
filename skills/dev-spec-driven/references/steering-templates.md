@@ -3,7 +3,7 @@
 Steering files are short (20–60 lines each) and sit at `.specs/steering/`. They encode the
 context every spec needs — product vision, tech stack, conventions, and (when the relevant
 tracks are active) scale targets, observability standards, cost budget, AI strategy, testing,
-security and privacy standards — so each feature spec doesn't relitigate the basics. The last
+security, privacy and data-consistency standards — so each feature spec doesn't relitigate the basics. The last
 section covers **project templates** (`.specs/templates/`): a team's own scaffolds for new features and
 steering files.
 
@@ -24,6 +24,7 @@ steering files.
 | `ai-strategy.md` | `+ai` | when the AI track is used |
 | `security.md` | `+sec` | when the security track is used |
 | `privacy.md` | `+privacy` | when the privacy track is used |
+| `distributed.md` | `+dist` | when the distributed systems & data consistency track is used |
 | `glossary.md` | any (optional) | when the product has domain terms people use loosely — `steering_scaffold` only, `spec_init` never creates it |
 
 At project start, create at least the four `core` files. Add the others the first time a
@@ -475,6 +476,41 @@ How to fill each item (not legal advice — the DPO or counsel decides): `refere
 
 ---
 
+## `distributed.md` (+dist)
+
+```markdown
+# Distributed Systems & Data Consistency Standards
+
+## Delivery Guarantee
+- Default: at-least-once — every consumer is idempotent. Exactly-once is an effect of idempotency, never a broker promise.
+- Ordering: per key (partition / message group) only where a feature says so: [e.g. per order id]
+
+## Cross-system Writes
+- A write that touches more than one system (DB + broker, DB + cache, DB + external API) goes through a transactional outbox (or CDC) — never "commit, then publish".
+- Business transactions across services: a saga with one compensation per step; orchestration or choreography: [orchestration for 4+ steps]
+
+## Idempotency
+- Idempotency key source (client header / message ID / natural key): [Idempotency-Key header, event id] · where processed keys live (inbox table / unique constraint) and for how long: [processed_messages, 7 days]
+
+## Retry Policy (defaults)
+- Exponential backoff with jitter · max attempts: [5] · per-call timeout: [from the dependency's P99, e.g. 2 s]
+- Never retried: a non-idempotent call without a key, a validation error (4xx) · poison messages → DLQ after [5] attempts, with an alert.
+
+## Locking Policy
+- Default: optimistic locking (a version column); pessimistic (SELECT … FOR UPDATE) only for short, hot sections · lock timeout: [2 s]
+
+## Consistency Defaults
+- Default isolation level: [read committed] · where eventual consistency is accepted and the maximum staleness: [search, analytics: 30 s] · read-your-writes for the user who wrote.
+
+## Observability
+- Outbox lag, consumer lag, DLQ depth and retry counts are metrics with alerts: [thresholds]
+```
+
+The patterns behind each rule (outbox, inbox, sagas, isolation levels, locking, CAP / PACELC):
+`references/distributed-data-patterns.md`.
+
+---
+
 ## `glossary.md` (optional — the ubiquitous language)
 
 One entry per domain term: the word the specs use, what it means in this product, and the words **not** to use for it.
@@ -534,7 +570,7 @@ override when present — create-only, never over an existing file.
 - **Variables:** `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}` `{{date}}` (`{{summary}}` is a spike's
   question); an unknown `{{x}}` is left as is; no summary → a generic `[TBD]` slot.
 - **Track blocks are the engine's.** An overridden `design.md` still gets each active track's sections (+tdd
-  Testability Notes, `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]`), `requirements.md` each marker track's criteria
+  Testability Notes, `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]`), `requirements.md` each marker track's criteria
   (renumbered after the template's own US-1 ACs when they would collide), `tasks.md` its task block and
   `test-plan.md` its test rows — appended at the end, as `spec_add_track` does — unless the template already has that
   track's heading (for the test plan: already cites its criteria). A design template that carries some of a track's
@@ -558,7 +594,7 @@ override when present — create-only, never over an existing file.
    a template full of placeholders is a liability.
 2. **First time a track activates:** add its steering file (e.g., first SaaS feature → `scale.md`,
    `observability.md`, `cost.md`; first AI feature → `ai-strategy.md`; first TDD feature →
-   `testing-standards.md`; first +sec feature → `security.md`; first +privacy feature → `privacy.md`).
+   `testing-standards.md`; first +sec feature → `security.md`; first +privacy feature → `privacy.md`; first +dist feature → `distributed.md`).
 3. **At feature spec time:** the design phase reads the active-track files. If a design conflicts
    with a steering file (exceeds budget, breaks an SLA), raise it in review — never silently exceed.
    Area-specific rules go in a scoped file (`inclusion: fileMatch`) rather than bloating `tech.md`.
