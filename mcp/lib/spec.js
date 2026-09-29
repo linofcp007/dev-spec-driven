@@ -10,6 +10,12 @@
  * and the mutators under the feature lock (featureLocked). See mcp/test.js for the assertions.
  */
 
+// Node's module compile cache (Node ≥ 22.8; nothing on older ones): every hook and CLI call is a fresh process that
+// compiles the engine's modules again — the cache keeps their compiled code between processes (one small file per module
+// and Node version, in NODE_COMPILE_CACHE or <os.tmpdir()>/node-compile-cache; NODE_DISABLE_COMPILE_CACHE=1 turns it off).
+// A quiet optimization: it never throws; the first process after an update writes the cache (once), a cache that can't
+// be written only costs the time it would have saved. Measured and explained in CLAUDE.md ("Few, cohesive files").
+try { require("module").enableCompileCache?.(); } catch { /* never a reason to fail */ }
 const i18n = require("./i18n.js");
 const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalGuardDecision, approvalGuardLevel,
   approvalRolesOf, approvePhase, archiveFeature, artifactState, backlog, BACKLOG_ACTIONS, catalog, changelog,

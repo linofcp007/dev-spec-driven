@@ -18,10 +18,10 @@ const CTX = {
   // templates.js — the project's templates as template corpus (placeholder detection)
   TEMPLATE_SCOPE_ROOT: null, // the .specs/ folder of the current engine call (specsRoot), reset per read-cache scope
   TEMPLATE_MEMO: null, // { root, tdirKey, sets } — this call's parsed project templates
-  // packs.js / tracks.js — the project's track packs
+  // tracks.js — the project's track packs
   PACK_MEMO: null, // { root, dirKey, reg } — the current call's track packs (withReadCache scope)
   GHOST_MARKERS: null, // Map(name → "[TOKEN]") — the missing packs' markers noteGhostPacks records (tracks.js), same scope
-  // placeholders.js — > 0 while templateSets / templateSetsBr build the process-wide built-in corpus: isPackMarkerBracket
+  // markdown.js — > 0 while templateSets / templateSetsBr build the process-wide built-in corpus: isPackMarkerBracket
   // (tracks.js) then never reads a pack marker as stable (not per call: the corpus is built once per process)
   BUILTIN_CORPUS_BUILD: 0,
 };
