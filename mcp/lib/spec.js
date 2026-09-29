@@ -19097,6 +19097,18 @@ const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec
 const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 const TEXT_IMPORT_TOOLS = ["plan", "execplan", "fluidplan"]; // 1.16 C4: the single-document sources spec_import {text} accepts (1.17 F: a fluidplan PLAN.md, DECISIONS.md after it)
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+// An imported line never opens an HTML comment (1.17 F review): every parser reads its source without its comments, so a `<!--`
+// left in the text was an unclosed one — plain text there, but in the files written it paired with a later `-->` (the
+// `<!-- <tool>: … -->` line under a converted criterion) and hid every criterion between.
+const commentInert = (s) => String(s).replace(/<!--/g, "&lt;!--");
+// A block of imported lines as requirements.md holds it: commentInert outside fenced code (a fenced `<!--` is code, kept), and a
+// fence the block leaves open closed at its end (the block starts outside any fence: it follows a heading the importer writes).
+function inertBlock(lines) {
+  const st = { fence: null };
+  const out = lines.map((l) => (fenceStep(st, l) ? l : commentInert(l)));
+  if (st.fence) out.push(" ".repeat(st.fence.indent) + st.fence.mark);
+  return out;
+}
 
 function isInsideDir(root, p) {
   const f = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
@@ -19161,15 +19173,29 @@ function insideDirAlias(root, p) {
 
 // Headings outside fenced code: [{ i, level, text }].
 function mdHeadings(lines) {
-  return headingIndex(lines).map((i) => {
-    const m = lines[i].match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
-    return { i, level: m[1].length, text: m[2].trim() };
-  });
+  return headingIndex(lines).map((i) => ({ i, ...mdHeadingParts(lines[i]) }));
+}
+// "## Title ##" → { level, text }: what /^(#{1,6})\s+(.*?)\s*#*\s*$/ captured (text trimmed), read by a scan — that pattern
+// backtracked cubically on a heading holding a long run of spaces (a 3,000-space heading took 10 s; 1.17 F review). The line
+// is one headingIndex() accepts (1–6 '#' then whitespace). The closing sequence is the longest suffix whitespace · '#'s ·
+// whitespace.
+const isWs = (c) => c !== undefined && c.trim() === "";
+function mdHeadingParts(line) {
+  let level = 0;
+  while (level < 6 && line[level] === "#") level++;
+  let lo = level;
+  while (lo < line.length && isWs(line[lo])) lo++;
+  let hi = line.length;
+  while (hi > lo && isWs(line[hi - 1])) hi--;
+  while (hi > lo && line[hi - 1] === "#") hi--;
+  while (hi > lo && isWs(line[hi - 1])) hi--;
+  return { level, text: line.slice(lo, hi).trim() };
 }
 // [lo, hi) of the lines under heading hs[k], up to the next heading of the same or a higher level.
 function mdRange(lines, hs, k) {
   const h = hs[k];
-  const next = hs.slice(k + 1).find((x) => x.level <= h.level);
+  let next = null; // a scan, no slice: copying the rest of the headings for each one was quadratic on a long PLAN.md (1.17 F review)
+  for (let j = k + 1; j < hs.length && !next; j++) if (hs[j].level <= h.level) next = hs[j];
   return [h.i + 1, next ? next.i : lines.length];
 }
 function mdBody(lines, hs, k) {
@@ -19236,13 +19262,13 @@ function leftoverExtras(lines, hs, used, prefix = "") {
     if (h) {
       near = h;
       if (used.has(i)) { cur = null; return; }
-      if (cur && cur.level != null && h.level > cur.level) { cur.lines.push(raw.replace(/\s+$/, "")); return; }
+      if (cur && cur.level != null && h.level > cur.level) { cur.lines.push(raw.trimEnd()); return; } // trimEnd: /\s+$/ is quadratic on a long space run
       cur = { label: prefix + h.text, level: h.level, lines: [] };
       out.push(cur);
       return;
     }
     if (used.has(i)) return;
-    const l = raw.replace(/\s+$/, "");
+    const l = raw.trimEnd();
     if (!l.trim() || RE_MD_HR.test(l)) { if (cur) cur.lines.push(""); return; }
     if (!cur) { cur = { label: near ? prefix + near.text : null, level: null, lines: [] }; out.push(cur); }
     cur.lines.push(l);
@@ -19620,7 +19646,7 @@ function parseOpenSpec(dir, read, W) {
             continue;
           }
           open = false;
-          other.push(l.replace(/\s+$/, ""));
+          other.push(l.trimEnd());
         }
         const prose = tidyLines(other);
         // A prose-only scenario becomes its criterion's text; prose beside clauses follows the criteria.
@@ -19730,7 +19756,7 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
     }
     out.push(owner || !inert.has(i) ? rewrite(l, null, i + 1) : l); // owner here = a parent (see above)
   });
-  return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n"), count: n, anyRefs };
+  return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n", count: n, anyRefs }; // trimEnd: /\s*$/ is quadratic (1.17 F review)
 }
 
 // The scaffold's template tasks.md that spec_import keeps when the source has none: each _Requirements:_ keeps only the
@@ -19965,7 +19991,7 @@ function planTaskLines(lines, u, o) {
   if (o.verify) out.push(`  - _Verify: ${o.verify}_`);
   const base = u.content != null ? u.content : u.indent + 2;
   for (const b of u.body || []) {
-    const l = lines[b].replace(/\s+$/, "");
+    const l = lines[b].trimEnd();
     out.push(!l.trim() ? "" : "  " + l.slice(Math.min(indentOf(l), base)));
   }
   return out;
@@ -20305,7 +20331,7 @@ function parseExecPlan(dir, read, W, src) {
       if (!what || /^\(?(?:none|n\/a|tbd|nenhuma|ninguna)(?:\s+yet)?\)?\.?$/i.test(what)) continue;
       const n = decisions.length + 1;
       model.mapping[`Decision Log ${n}`] = `D-${n}`;
-      decisions.push(`- **D-${n}** — ${what}`, ...it.body.map((b) => lines[b].replace(/\s+$/, "")).filter((l) => l.trim()).map((l) => "  " + l.trim()));
+      decisions.push(`- **D-${n}** — ${what}`, ...it.body.map((b) => lines[b].trimEnd()).filter((l) => l.trim()).map((l) => "  " + l.trim()));
     }
   }
   planStory(model, model.title || model.nameHint, criteria);
@@ -20510,7 +20536,7 @@ function parseBmad(dir, read0, W, src) {
   else model.warnings.push(W.wNoTasks);
   if (workflow.size) model.warnings.push(P.wWorkflow([...workflow].map(([t, where]) => `${t} (${where.join(", ")})`).join(", ")));
   const arch = archFile ? read(archFile) : null;
-  const design = [arch != null ? arch.replace(/\s+$/, "") : null, ...(designParts.length ? ["", ...designParts] : [])].filter((x) => x != null);
+  const design = [arch != null ? arch.trimEnd() : null, ...(designParts.length ? ["", ...designParts] : [])].filter((x) => x != null);
   if (tidyLines(design).length) model.design = { text: tidyLines(design).join("\n"), file: archFile ? path.basename(archFile) : "Dev Notes" };
   else model.warnings.push(W.wNoDesign("architecture.md"));
   if (model.title) model.nameHint = model.title; // the product's name, not "docs"
@@ -20609,11 +20635,62 @@ const FP_OPS = { create: "create", "créer": "create", creer: "create", modify: 
 const FP_IMPORTANCE = { critical: "critical", critique: "critical", important: "important", minor: "minor", mineur: "minor", mineure: "minor" };
 const FP_SRC_LABELS = { en: { loose: "Cross-cutting tasks", rejected: "rejected" }, fr: { loose: "Tâches transverses", rejected: "écartée" } };
 const fpFilled = (s) => String(s == null ? "" : s).trim() !== "";
-const fpOneLine = (s) => String(s == null ? "" : s).replace(/\s*\n\s*/g, " ").trim();
+// A line break as a markdown reader and the task scanner see one: LF, a lone CR, U+2028 / U+2029 (built from their code points:
+// written raw inside a regex literal they end the line — a syntax error).
+const FP_LS_PS = String.fromCharCode(0x2028, 0x2029);
+const RE_FP_BREAK = new RegExp("[\\n\\r" + FP_LS_PS + "]");
+const RE_FP_BREAKS = new RegExp("[\\n\\r" + FP_LS_PS + "]+", "g");
+const RE_FP_LINE_SPLIT = new RegExp("\\r\\n|[\\n\\r" + FP_LS_PS + "]");
+const RE_FP_VERIFY_BAD = new RegExp("[\\n\\r" + FP_LS_PS + "]|<!--|-->");
+// One line: every whitespace run holding a line break → one space (what /\s*\n\s*/g did — quadratic on a long space run
+// without a break, 80,000 spaces took 6 s; 1.17 F review), then trimmed. A lone CR / U+2028 / U+2029 is a line break too for a
+// markdown reader (and ends a task line for the scanners): folded like "\n".
+const fpOneLine = (s) => String(s == null ? "" : s).split(RE_FP_BREAK).map((x) => x.trim()).filter(Boolean).join(" ");
 const fpList = (v) => (Array.isArray(v) ? v : []);
 const fpStr = (v) => (typeof v === "string" ? v : v == null ? "" : String(v));
-const fpCell = (s) => fpOneLine(s).replace(/\|/g, "\\|") || "—";
-const fpSafe = (s) => String(s).replace(/<!--/g, "&lt;!--"); // a comment opener never hides the lines after it
+// Imported free text never becomes markup a tool reads (1.17 F review) — each escape renders the same in a markdown reader:
+//   a comment opener / closer → `&lt;!--` / `--&gt;` (a title's `<!--` and a later `-->` hid the markers between them);
+//   a task / decision marker look-alike → its colon escaped, `_Verify\:` (taskMarkerSpans() needs the colon right after the
+//     label — a title `Clean up _Verify: rm -rf ~_` was a runnable _Verify:_; only fluidplan's own `verify` field makes one);
+//   an AC / T / EC / NFR / SC ID → `US-7\.AC-1`, `T\-01`, `NFR\-2` (extractAcIds & co. read the plain spelling only — a page
+//     intro's `US-7.AC-1` was a phantom criterion, a Do text's `T-01` a phantom test).
+// Linear: fixed alternatives after a one-character lookbehind. Idempotent (an escaped form never matches again).
+const RE_FP_MARKER_LIKE = new RegExp("(?<=[_*])(" + [...TASK_MARKER_LABELS, "Kind", "Date", "Affects", "Supersedes", "Outcome"].join("|") + ")(?=:)", "giu");
+function fpInert(s) {
+  return String(s == null ? "" : s).replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;").replace(RE_FP_MARKER_LIKE, "$1\\")
+    .replace(/(?<![A-Za-z0-9])(US-\d+)\.(?=AC-\d)/g, "$1\\.").replace(/(?<![A-Za-z0-9])(T|EC|NFR|SC)-(?=\d)/g, "$1\\-");
+}
+const fpV = (s) => fpInert(fpOneLine(s)); // a value written inside one line
+// A value written into a heading (a title): fpV with its whitespace runs folded — a markdown reader shows one space anyway, and the
+// heading readers downstream (the task scanner's /^#{1,6}\s+(.*?)\s*$/) are quadratic on a long space run (1.17 F review: an
+// 80,000-space plan title took 15 s).
+const fpHead = (s) => fpV(s).replace(/\s+/g, " ");
+const fpTitle = (s) => fpV(s).replace(/^\[/, "\\["); // a task title: never a leading [P] / [US2] / [shared] tag run
+// A line as a file holds it — never a heading, a task line or a checkpoint: one physical line (a CR / U+2028 / U+2029 folded,
+// as fpOneLine does), then the structural escapes (the task scanner's and a markdown reader's).
+function fpLine(l) {
+  const s = String(l).replace(RE_FP_BREAKS, " ");
+  if (/^\s{0,3}#{1,6}(?:\s|$)/.test(s)) return s.replace("#", "\\#");
+  if (RE_TASK_LINE.test(s)) return s.replace("[", "\\[");
+  if (RE_CHECKPOINT.test(s)) return s.replace("**", "\\*\\*");
+  return s;
+}
+// Imported prose, line for line, each written at the start of a line of requirements.md / design.md: fpInert outside fenced code
+// (+ fpLine's escapes when `structural` — requirements.md, where a heading or an ID-led line is structure); a fence it leaves open
+// is closed (it swallowed every line after it — the criteria, the decisions). The fence view is the readers' own (fenceStep):
+// the block starts outside any fence and is written whole lines at column 0.
+function fpProse(lines, structural) {
+  const st = { fence: null };
+  const out = [];
+  for (const raw of lines) {
+    const l = String(raw).replace(RE_FP_BREAKS, " ");
+    if (fenceStep(st, l)) { out.push(l); continue; }
+    out.push(structural ? fpLine(fpInert(l)) : fpInert(l));
+  }
+  if (st.fence) out.push(" ".repeat(st.fence.indent) + st.fence.mark);
+  return out;
+}
+const fpCell = (s) => fpV(s).replace(/\|/g, "\\|") || "—";
 // A verdict as the exports print it (EN / FR) → fluidplan's code: pending · modify · explain · ko · ok (null: unknown).
 function fpVerdictOfText(s) {
   const t = String(s || "").trim().toLowerCase();
@@ -20665,7 +20742,7 @@ function fpChoice(d, a) {
 }
 const fpChoices = (d, a) => (a && Array.isArray(a.choices) ? a.choices.filter((x) => typeof x === "string") : fpOptions(d).filter((o) => o.recommended === true).map((o) => o.id));
 const fpValue = (d, a) => (a && Number.isFinite(a.value) ? a.value : isObj(d.control) && Number.isFinite(d.control.default) ? d.control.default : null);
-const fpOptionLabel = (a, o) => fpStr(fpTextOf(a, `options/${o.id}/label`, o.label));
+const fpOptionLabel = (a, o) => fpOneLine(fpTextOf(a, `options/${o.id}/label`, o.label)); // a label (or its rewrite) is one line
 function fpOrderedPhases(plan, answerOf) {
   const phases = fpList(plan.phases).filter((p) => isObj(p) && typeof p.id === "string");
   let order = null;
@@ -20674,9 +20751,10 @@ function fpOrderedPhases(plan, answerOf) {
   }
   const a = order ? answerOf(order.id) : null;
   const byId = new Map(phases.map((p) => [p.id, p]));
-  const out = [];
-  for (const id of a && Array.isArray(a.order) ? a.order : []) { const p = byId.get(id); if (p && !out.includes(p)) out.push(p); }
-  for (const p of phases) if (!out.includes(p)) out.push(p);
+  const out = [], inOut = new Set();
+  const add = (p) => { if (p && !inOut.has(p)) { inOut.add(p); out.push(p); } };
+  for (const id of a && Array.isArray(a.order) ? a.order : []) add(byId.get(id));
+  for (const p of phases) add(p);
   return out;
 }
 function fpControlSummary(plan, answerOf, d, a, P) {
@@ -20687,11 +20765,11 @@ function fpControlSummary(plan, answerOf, d, a, P) {
     if (!id) return "";
     if (id === FP_OTHER) return P.otherOption;
     const o = fpOptions(d).find((x) => x.id === id);
-    return o ? fpOptionLabel(a, o) : id;
+    return o ? fpOptionLabel(a, o) : fpOneLine(id);
   }
   if (c.kind === "multi") { const ids = fpChoices(d, a); return fpOptions(d).filter((o) => ids.includes(o.id)).map((o) => fpOptionLabel(a, o)).join(", ") || "—"; }
-  if (c.kind === "number") { const v = fpValue(d, a); return v == null ? "" : `${v}${c.unit ? " " + c.unit : ""}`; }
-  if (c.kind === "order") return fpOrderedPhases(plan, (id) => (id === d.id ? a : answerOf(id))).map((p, i) => `${i + 1}. ${fpStr(p.title)}`).join(" · ");
+  if (c.kind === "number") { const v = fpValue(d, a); return v == null ? "" : `${v}${fpFilled(c.unit) ? " " + fpOneLine(c.unit) : ""}`; }
+  if (c.kind === "order") return fpOrderedPhases(plan, (id) => (id === d.id ? a : answerOf(id))).map((p, i) => `${i + 1}. ${fpOneLine(p.title)}`).join(" · ");
   return "";
 }
 // The tasks an answer keeps: the decision's own, the chosen option's (the checked options'), the kept items' — templates filled
@@ -20705,7 +20783,7 @@ function fpDecisionTasks(d, a) {
   if (c && c.kind === "multi") for (const o of fpOptions(d)) if (ids.includes(o.id)) picked.push(...fpList(o.tasks));
   for (const it of fpList(d.items)) if (isObj(it) && fpItemVerdict(a, it.id) !== "ko") picked.push(...fpList(it.tasks));
   const vars = {};
-  if (c && c.kind === "number") { vars.value = fpValue(d, a); vars.unit = fpStr(c.unit); }
+  if (c && c.kind === "number") { vars.value = fpValue(d, a); vars.unit = fpOneLine(c.unit); }
   if (c && c.kind === "choice") { vars["choice.id"] = chosen ? chosen.id : ""; vars["choice.label"] = chosen ? fpOptionLabel(a, chosen) : ""; }
   if (c && c.kind === "multi") vars.choices = fpOptions(d).filter((o) => ids.includes(o.id)).map((o) => fpOptionLabel(a, o)).join(", ");
   const fill = (s) => (typeof s === "string" ? s.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (m, k) => (own(vars, k) && vars[k] != null ? String(vars[k]) : m)) : s);
@@ -20724,28 +20802,30 @@ function fpFromPlanJson(plan, answers, state, P, lang) {
   const SL = FP_SRC_LABELS[lang] || FP_SRC_LABELS.en;
   const fp = fpEmpty();
   fp.title = fpFilled(plan.title) ? fpOneLine(plan.title) : null;
+  fp.subtitle = fpFilled(plan.subtitle) ? fpOneLine(plan.subtitle) : null; // 1.17 F review: carried (the summary, or design.md's Context)
   fp.id = typeof plan.id === "string" && FP_PLAN_ID.test(plan.id) ? plan.id : null;
   fp.context = typeof plan.context === "string" ? tidyLines(plan.context.split(/\r?\n/)) : [];
-  fp.sourceDoc = isObj(plan.source) && typeof plan.source.path === "string" ? plan.source.path : typeof plan.source === "string" ? plan.source : null;
+  const srcPath = isObj(plan.source) && typeof plan.source.path === "string" ? plan.source.path : typeof plan.source === "string" ? plan.source : null;
+  fp.sourceDoc = fpFilled(srcPath) ? fpOneLine(srcPath) : null;
   const st = isObj(state) ? state : {};
   const hist = fpList(st.history).filter(isObj);
   const stamp = [st.submitted_at, hist.length ? hist[hist.length - 1].submitted_at : null, st.opened_at].find((x) => typeof x === "string" && !isNaN(Date.parse(x)));
   fp.date = stamp ? new Date(stamp) : null;
   fp.round = Number.isInteger(st.round) ? st.round : null;
   const phases = fpList(plan.phases).filter((p) => isObj(p) && typeof p.id === "string");
-  const phaseTitle = new Map(phases.map((p, i) => [p.id, `Phase ${i + 1} — ${fpStr(p.title)}`]));
+  const phaseTitle = new Map(phases.map((p, i) => [p.id, `Phase ${i + 1} — ${fpOneLine(p.title)}`]));
   const rows = [];
   const seen = new Set();
   fpList(plan.pages).forEach((pg, pi) => {
     if (!isObj(pg)) return;
     const pid = typeof pg.id === "string" ? pg.id : "page-" + (pi + 1);
-    fp.pages.set(pid, { title: fpFilled(pg.title) ? fpOneLine(pg.title) : pid, section: fpStr(pg.section), intro: typeof pg.intro === "string" ? tidyLines(pg.intro.split(/\r?\n/)) : [], index: pi });
-    if (isObj(pg.visual) && pg.visual.kind) fp.visuals.push({ where: fp.pages.get(pid).title, kind: fpStr(pg.visual.kind), caption: fpStr(pg.visual.caption || pg.visual.alt) });
+    fp.pages.set(pid, { title: fpFilled(pg.title) ? fpOneLine(pg.title) : fpOneLine(pid), intro: typeof pg.intro === "string" ? tidyLines(pg.intro.split(/\r?\n/)) : [], index: pi });
+    if (isObj(pg.visual) && pg.visual.kind) fp.visuals.push({ where: fp.pages.get(pid).title, kind: fpOneLine(pg.visual.kind), caption: fpStr(pg.visual.caption || pg.visual.alt) });
     for (const d of fpList(pg.decisions)) {
       if (!isObj(d) || typeof d.id !== "string" || !FP_ID.test(d.id) || seen.has(d.id)) continue;
       seen.add(d.id);
       rows.push({ pid, pi, d, a: answerOf(d.id) });
-      if (isObj(d.visual) && d.visual.kind) fp.visuals.push({ where: d.id, kind: fpStr(d.visual.kind), caption: fpStr(d.visual.caption || d.visual.alt) });
+      if (isObj(d.visual) && d.visual.kind) fp.visuals.push({ where: d.id, kind: fpOneLine(d.visual.kind), caption: fpStr(d.visual.caption || d.visual.alt) });
     }
   });
   let pending = 0, revise = 0;
@@ -20767,9 +20847,19 @@ function fpFromPlanJson(plan, answers, state, P, lang) {
       pageId: pid, pageTitle: fp.pages.get(pid).title, stateText: P.verdict[v] || null,
       options: fpOptions(d).map((o) => ({ label: fpOptionLabel(a, o), detail: fpTextOf(a, `options/${o.id}/detail`, fpStr(o.detail)), pros: fpList(o.pros).map(fpStr), cons: fpList(o.cons).map(fpStr),
         effort: fpStr(o.effort), cost: fpStr(o.cost), chosen: chosenIds.includes(o.id) })),
-      items: fpList(d.items).filter(isObj).map((it) => ({ title: fpOneLine(it.title), tag: fpStr(it.tag), detail: fpOneLine(fpTextOf(a, `items/${it.id}/detail`, it.detail)),
+      items: fpList(d.items).filter(isObj).map((it) => ({ title: fpOneLine(it.title), tag: fpOneLine(it.tag), detail: fpOneLine(fpTextOf(a, `items/${it.id}/detail`, it.detail)),
         verdict: fpItemVerdict(a, it.id), comment: a && isObj(a.items) && own(a.items, it.id) && isObj(a.items[it.id]) && fpFilled(a.items[it.id].comment) ? fpOneLine(a.items[it.id].comment) : "" })),
     });
+    // 1.17 F review: what the reviewer and Claude said of it is carried — the revision note (Claude's, the latest round) in
+    // decisions.md's Context, and for a decision still open, its question / request and its unsettled items' remarks on the
+    // Open decisions line (they were dropped without a warning).
+    if (isObj(d.revision) && fpFilled(d.revision.note)) dec.revisionNote = P.revisionNote(Number.isInteger(d.revision.round) ? d.revision.round : "?", fpOneLine(d.revision.note));
+    if (status === "open") {
+      const note = [fpFilled(a.comment) ? `“${fpOneLine(a.comment)}”` : null,
+        ...dec.items.filter((it) => it.verdict === "modify" || it.verdict === "pending").map((it) => `${it.title} (${P.verdict[it.verdict]}${it.comment ? `: “${it.comment}”` : ""})`),
+        dec.revisionNote].filter(Boolean);
+      dec.openNote = note.length ? note.join(" · ") : null;
+    }
     fp.decisions.set(d.id, dec);
     fp.decisionOrder.push(d.id);
     fp.decisionPage.set(d.id, pid);
@@ -20786,27 +20876,67 @@ function fpFromPlanJson(plan, answers, state, P, lang) {
   const ordered = fpOrderedPhases(plan, answerOf);
   const known = new Set(ordered.map((p) => p.id));
   const afterOf = (e) => fpList(e.task.after).filter((x) => typeof x === "string").map((x) => (x.includes("/") ? x : `${e.r.d.id}/${x}`));
+  // fluidplan's order within a group: repeatedly the first entry (page order) whose in-group `after` are all placed — a cycle
+  // (nothing ready) places the first remaining one. Kahn's walk with a min-heap of ready positions: the same order, linear-log
+  // (the findIndex + splice loop was quadratic — a reversed `after` chain of 8,000 tasks took 9 s; 1.17 F review).
   const sortGroup = (group) => {
+    const n = group.length;
     const inGroup = new Set(group.map((e) => e.ref));
-    const placed = new Set();
-    const out = [];
-    const rest = [...group];
-    while (rest.length) {
-      let i = rest.findIndex((e) => afterOf(e).every((x) => !inGroup.has(x) || placed.has(x)));
-      if (i < 0) i = 0; // a cycle: page order (fluidplan's check reports it)
-      const [e] = rest.splice(i, 1);
-      placed.add(e.ref);
-      out.push(e);
+    const need = new Array(n).fill(0);
+    const waiting = new Map(); // ref → positions waiting for it
+    group.forEach((e, i) => {
+      for (const x of new Set(afterOf(e))) {
+        if (!inGroup.has(x)) continue;
+        need[i]++;
+        if (!waiting.has(x)) waiting.set(x, []);
+        waiting.get(x).push(i);
+      }
+    });
+    const heap = [];
+    const push = (v) => { heap.push(v); for (let i = heap.length - 1; i > 0;) { const p = (i - 1) >> 1; if (heap[p] <= heap[i]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+    const pop = () => {
+      const top = heap[0], last = heap.pop();
+      if (heap.length) {
+        heap[0] = last;
+        for (let i = 0; ;) {
+          const l = 2 * i + 1, r = l + 1;
+          let m = i;
+          if (l < heap.length && heap[l] < heap[m]) m = l;
+          if (r < heap.length && heap[r] < heap[m]) m = r;
+          if (m === i) break;
+          [heap[m], heap[i]] = [heap[i], heap[m]];
+          i = m;
+        }
+      }
+      return top;
+    };
+    need.forEach((k, i) => { if (!k) push(i); });
+    const done = new Array(n).fill(false), placed = new Set(), out = [];
+    let low = 0;
+    while (out.length < n) {
+      let i = -1;
+      while (heap.length) { const c = pop(); if (!done[c]) { i = c; break; } }
+      if (i < 0) { while (done[low]) low++; i = low; } // a cycle: page order (fluidplan's check reports it)
+      done[i] = true;
+      out.push(group[i]);
+      const ref = group[i].ref;
+      if (!placed.has(ref)) { placed.add(ref); for (const j of waiting.get(ref) || []) if (--need[j] === 0 && !done[j]) push(j); }
     }
     return out;
   };
   const groups = [];
-  const loose = sortGroup(entries.filter((e) => !e.phaseId || !known.has(e.phaseId)));
+  const byPhase = new Map(), looseEntries = [];
+  for (const e of entries) {
+    if (!e.phaseId || !known.has(e.phaseId)) { looseEntries.push(e); continue; }
+    if (!byPhase.has(e.phaseId)) byPhase.set(e.phaseId, []);
+    byPhase.get(e.phaseId).push(e);
+  }
+  const loose = sortGroup(looseEntries);
   if (loose.length) groups.push({ heading: SL.loose, title: SL.loose, entries: loose, num: (k) => `0.${k + 1}` });
   ordered.forEach((p, index) => {
-    const es = sortGroup(entries.filter((e) => e.phaseId === p.id));
-    const meta = [p.estimate, p.cost].filter((x) => typeof x === "string" && x.trim()).join(" · ");
-    const title = `Phase ${index + 1} — ${fpStr(p.title)}`;
+    const es = sortGroup(byPhase.get(p.id) || []);
+    const meta = [p.estimate, p.cost].filter((x) => typeof x === "string" && x.trim()).map(fpOneLine).join(" · ");
+    const title = `Phase ${index + 1} — ${fpOneLine(p.title)}`;
     if (es.length) groups.push({ heading: title + (meta ? ` (${meta})` : ""), title, entries: es, num: (k) => `${index + 1}.${k + 1}` });
   });
   const numOf = new Map();
@@ -20822,9 +20952,11 @@ function fpFromPlanJson(plan, answers, state, P, lang) {
       for (const x of afterOf(e)) (numOf.has(x) ? after : dangling).push(numOf.has(x) ? numOf.get(x) : x);
       fp.tasks.push({ num: numOf.get(e.ref), done: false, title: fpOneLine(e.task.title) || e.task.id, fid: d.id, group: gi, state: dec.status === "open" ? dec.verdict : null,
         files: fpList(e.task.files).filter((f) => isObj(f) && typeof f.path === "string").map((f) => ({ path: f.path, op: fpMap(FP_OPS, f.op) || "modify" })),
-        doLines: e.task.do ? e.task.do.split(/\r?\n/) : [], acceptance: e.task.acceptance.map(fpOneLine).filter(Boolean), verify: e.task.verify, after, dangling,
+        doLines: e.task.do ? e.task.do.split(RE_FP_LINE_SPLIT) : [], acceptance: e.task.acceptance.map(fpOneLine).filter(Boolean), verify: e.task.verify, after, dangling,
         remark: first && fpFilled(a.comment) ? `“${fpOneLine(a.comment)}”` : null,
-        items: first ? dec.items.filter((it) => it.verdict !== "ko").map((it) => `- ${it.title}${it.tag ? ` (${it.tag})` : ""}${it.detail ? ` — ${it.detail}` : ""}`) : [],
+        // An item kept as PLAN.md lists it: its verdict when not OK and the reviewer's remark (1.17 F review: the remark was dropped).
+        items: first ? dec.items.filter((it) => it.verdict !== "ko").map((it) => `- ${it.title}${it.tag ? ` (${it.tag})` : ""}${it.detail ? ` — ${it.detail}` : ""}` +
+          (it.verdict !== "ok" ? ` (${P.verdict[it.verdict] || it.verdict}${it.comment ? `: “${it.comment}”` : ""})` : it.comment ? ` (“${it.comment}”)` : "")) : [],
         extra: [], summary: dec.choice, critical: dec.importance === "critical" });
     });
   });
@@ -20833,25 +20965,43 @@ function fpFromPlanJson(plan, answers, state, P, lang) {
   for (const { d } of rows) {
     const dec = fp.decisions.get(d.id);
     dec.hasTasks = withTasks.has(d.id);
-    if (dec.status === "ok" && !dec.hasTasks) fp.rules.push({ fid: d.id, title: dec.title, rest: [dec.choice ? ` — ${dec.choice}` : "", dec.proposal ? `. ${dec.proposal}` : ""].join(""), remark: dec.remarks[0] || null });
+    // A rule has the shape PLAN.md's parser gives it (lines, state): fpImportModel reads r.lines (1.17 F review — a plan.json
+    // with an accepted decision and no task, a working rule, threw "Cannot read properties of undefined").
+    if (dec.status === "ok" && !dec.hasTasks) fp.rules.push({ fid: d.id, title: dec.title, rest: [dec.choice ? ` — ${dec.choice}` : "", dec.proposal ? `. ${dec.proposal}` : ""].join(""), state: null, remark: dec.remarks[0] || null, lines: [] });
     if (dec.status === "ko") fp.outOfScope.push(`- **${d.id} · ${dec.title}** — ${SL.rejected}${dec.reason ? `: ${dec.reason}` : ""}`);
     else for (const it of dec.items) if (it.verdict === "ko") fp.outOfScope.push(`- **${d.id}** / ${it.title} — ${SL.rejected}${it.comment ? `: “${it.comment}”` : ""}`);
   }
-  const cmds = [];
-  for (const t of fp.tasks) for (const c of t.verify) if (!cmds.includes(c)) cmds.push(c);
-  fp.finalCheck = cmds.map((c) => `- [ ] \`${c}\``);
+  const cmds = new Set();
+  for (const t of fp.tasks) for (const c of t.verify) cmds.add(c);
+  fp.finalCheck = [...cmds].map((c) => `- [ ] \`${fpOneLine(c)}\``);
   fp.glossary = fpList(plan.glossary).filter((g) => isObj(g) && fpFilled(g.term)).sort((x, y) => fpStr(x.term).localeCompare(fpStr(y.term)))
-    .map((g) => `- **${fpOneLine(g.term)}**${fpList(g.aliases).length ? ` (${fpList(g.aliases).map(fpStr).join(", ")})` : ""} — ${fpOneLine(g.definition)}`);
+    .map((g) => `- **${fpOneLine(g.term)}**${fpList(g.aliases).length ? ` (${fpList(g.aliases).map(fpOneLine).join(", ")})` : ""} — ${fpOneLine(g.definition)}`);
   return fp;
 }
 function fpEmpty() {
-  return { title: null, id: null, context: [], sourceDoc: null, date: null, round: null, draft: null, groups: [], tasks: [], decisions: new Map(), decisionOrder: [],
+  return { title: null, subtitle: null, id: null, context: [], sourceDoc: null, date: null, round: null, draft: null, groups: [], tasks: [], decisions: new Map(), decisionOrder: [],
     decisionPage: new Map(), pages: new Map(), rules: [], outOfScope: [], finalCheck: [], glossary: [], visuals: [], extra: [] };
 }
 function fpNewDecision(fid, title, status) {
   return { fid, title, status, verdict: status === "ko" ? "ko" : status === "open" ? "pending" : "ok", importance: null, phaseTitle: null, choice: null, why: null, proposal: null,
     rewritten: false, remarks: [], reason: null, dependsOn: [], learnMore: null, facts: [], question: null, sourceRef: null, pageId: null, pageTitle: null, options: null,
-    othersText: null, items: [], itemsTable: [], extra: [], stateText: null, hasTasks: false };
+    othersText: null, items: [], itemsTable: [], extra: [], stateText: null, hasTasks: false, openNote: null, revisionNote: null };
+}
+// fluidplan's "To change" / "À modifier" (an item's verdict, in DECISIONS.md's items table or PLAN.md's "_(to change)_" mark).
+const RE_FP_TO_CHANGE = /^(?:to change|[àa] modifier)$/i;
+// DECISIONS.md's items table row "| Item | Detail | Opinion | Remark |" → its cells (a `\|` stays in its cell), else null.
+function fpTableCells(row) {
+  const t = String(row).trim();
+  if (!t.startsWith("|") || !fpShort(t)) return null;
+  const cells = [];
+  let cur = "";
+  for (let i = 1; i < t.length; i++) {
+    if (t[i] === "\\" && t[i + 1] === "|") { cur += "\\|"; i++; continue; }
+    if (t[i] === "|") { cells.push(cur.trim()); cur = ""; continue; }
+    cur += t[i];
+  }
+  if (cur.trim()) cells.push(cur.trim());
+  return cells;
 }
 // ----- PLAN.md / DECISIONS.md (fluidplan's exports, EN or FR) -----
 // The blockquote header: the DRAFT notice ({pending, revise}), the date ("Approved on 2026-09-25 at 14:02"), the round, the source
@@ -20923,6 +21073,8 @@ function fpTaskFromMd(th, body, group) {
     else if (f.key === "items") t.items.push(...f.lines.filter((l) => l.trim()).map((l) => l.trim()));
     else t.extra.push(f.raw.trim(), ...f.lines.filter((l) => l.trim()).map((l) => "  " + l.trim()));
   }
+  // An item kept "_(to change)_" (PLAN.md's mark): its decision waits for a revision — not settled (1.17 F review).
+  t.itemsToChange = t.items.filter((l) => fpShort(l) && [...l.matchAll(/_\(([^()\n]*)\)_/g)].some((m) => fpVerdictOfText(m[1]) === "modify"));
   return t;
 }
 function fpParsePlanMd(text, fp) {
@@ -21021,6 +21173,10 @@ function fpParseDecisionsMd(text, fp) {
           else if (f.key === "reason") d.reason = v && v !== "—" ? v : null;
           else d.extra.push(f.raw.trim(), ...f.lines.map((l) => l.trim()).filter(Boolean));
         }
+        // A list decision kept with an item still "To change" is not settled — fluidplan lists it with the accepted ones (its
+        // verdict is "mixed") while it waits for a revision (1.17 F review: it was imported as settled).
+        const toChange = d.itemsTable.map(fpTableCells).filter((c) => c && c.length >= 3 && RE_FP_TO_CHANGE.test(c[2]));
+        if (status === "ok" && toChange.length) { d.status = "open"; d.verdict = "mixed"; d.itemsToChange = toChange.map((c) => ({ label: c[0], remark: c[3] || "" })); }
         decisions.push(d);
       }
       return;
@@ -21042,16 +21198,16 @@ function fpParseDecisionsMd(text, fp) {
   });
   return { looks: !!m1 || decisions.length > 0, header, decisions, context, glossary, extra };
 }
-// The plans folder a project uses (fluidplan.config.json → plansDir, default .fluidplan), inside the project only.
-function fpPlansDir(root, read) {
-  let dirName = ".fluidplan";
-  try {
-    const cfg = JSON.parse(read(path.join(root, "fluidplan.config.json")) || "null");
-    if (isObj(cfg) && typeof cfg.plansDir === "string" && cfg.plansDir.trim()) dirName = cfg.plansDir.trim();
-  } catch { /* the default */ }
-  const abs = path.resolve(root, dirName);
-  return isInsideDir(root, abs) ? abs : null;
+// A project's fluidplan.config.json (fluidplan's engine/lib/config.mjs): plansDir (default .fluidplan — inside the project only,
+// else null), outputDir (where finalize writes PLAN.md / DECISIONS.md, default "{plansDir}/{id}" — the plan folder), lang.
+function fpConfig(root, read) {
+  let cfg = null;
+  try { cfg = JSON.parse(read(path.join(root, "fluidplan.config.json")) || "null"); } catch { /* the defaults */ }
+  const str = (k) => (isObj(cfg) && typeof cfg[k] === "string" && cfg[k].trim() ? cfg[k].trim() : null);
+  const abs = path.resolve(root, str("plansDir") || ".fluidplan");
+  return { plansDir: isInsideDir(root, abs) ? abs : null, outputDir: str("outputDir"), lang: str("lang") };
 }
+const fpPlansDir = (root, read) => fpConfig(root, read).plansDir;
 // A fluidplan document's kind from its title: "plan" (PLAN.md), "decisions" (DECISIONS.md) or null.
 function fpDocKind(text) {
   const lines = stripHtmlComments(String(text || "")).split(/\r?\n/);
@@ -21084,13 +21240,16 @@ function parseFluidplan(dir, read, W, src) {
   };
   // Where the plan is: its folder (plan.json) and / or its finalized documents.
   let planDir = null, planText = null, decText = null, sourceFile = null;
-  const planSubdirs = (d) => safeReaddir(d).filter((n) => FP_PLAN_ID.test(n) && isDirL(path.join(d, n)) && fs.existsSync(path.join(d, n, "plan.json"))).sort();
+  // A folder is listed only when its real path is inside the project (1.17 F review: a `.fluidplan` junction to a folder outside
+  // was listed, and the "several plans" refusal named what it held); a plan folder is never a link.
+  const realInside = (p) => { try { return isInsideDir(src.root, fs.realpathSync.native(p)); } catch { return false; } };
+  const planSubdirs = (d) => (realInside(d) ? safeReaddir(d).filter((n) => FP_PLAN_ID.test(n) && isDirL(path.join(d, n)) && realInside(path.join(d, n)) && fs.existsSync(path.join(d, n, "plan.json"))).sort() : []);
   if (src.file && !/\.json$/i.test(src.file)) {
     const text = read(src.file);
     if (text == null) return null;
     const both = fpSplitDocs(text);
     const kind = both ? "plan" : fpDocKind(text);
-    if (!kind) return { error: P.notFluidplan(rel(src.file)) };
+    if (!kind) return { error: src.inline ? P.notFluidplanText : P.notFluidplan(rel(src.file)) }; // inline text has no file to name
     sourceFile = src.file;
     if (both) { planText = both.plan; decText = both.decisions; } else if (kind === "plan") planText = text; else decText = text;
     // The other document beside it (PLAN.md ↔ DECISIONS.md, PLAN_x.md ↔ DECISIONS_x.md), and plan.json: beside it, else the plan
@@ -21119,7 +21278,7 @@ function parseFluidplan(dir, read, W, src) {
   } else {
     // A plans folder (or the project root / a folder holding .fluidplan/): exactly one plan in it.
     const bases = [dir, path.join(dir, ".fluidplan")];
-    if (fs.existsSync(path.join(dir, "fluidplan.config.json"))) { const pd = fpPlansDir(dir, read); if (pd) bases.push(pd); }
+    if (fs.existsSync(path.join(dir, "fluidplan.config.json"))) { const pd = fpPlansDir(dir, read); if (pd && realInside(pd)) bases.push(pd); }
     for (const b of bases) {
       const found = planSubdirs(b);
       if (found.length > 1) return { error: P.several(rel(b), found.join(", ")) };
@@ -21128,24 +21287,36 @@ function parseFluidplan(dir, read, W, src) {
     if (!planDir) return null;
   }
   let plan = null, answers = null, state = null;
+  const cfg = fpConfig(src.root, read);
   if (planDir) {
     plan = json(path.join(planDir, "plan.json"));
     answers = json(path.join(planDir, "answers.json"));
     state = json(path.join(planDir, "state.json"));
-    // The finalized documents: in the plan folder, else where plan.json's `output` sends them (inside the project only).
+    // The finalized documents: in the plan folder, else where fluidplan writes them (engine/lib/config.mjs outputPaths) — plan.json's
+    // `output`, else fluidplan.config.json's outputDir ("{plansDir}/{id}" by default; 1.17 F review: a finalized PLAN.md in
+    // `docs/fp/{id}` wasn't found, and its ticks were lost). Inside the project only (read() checks the real path too).
+    const planId = plan && typeof plan.id === "string" && FP_PLAN_ID.test(plan.id) ? plan.id : path.basename(planDir);
     const outputOf = (key, name) => {
       const inDir = read(path.join(planDir, name));
       if (inDir != null) return inDir;
       const o = plan && isObj(plan.output) && typeof plan.output[key] === "string" ? plan.output[key].trim() : "";
-      if (!/\.md$/i.test(o)) return null;
-      const abs = path.resolve(src.root, o);
+      if (o) {
+        if (!/\.md$/i.test(o)) return null;
+        const abs = path.resolve(src.root, o);
+        return isInsideDir(src.root, abs) ? read(abs) : null;
+      }
+      if (!cfg.outputDir || (cfg.outputDir.includes("{plansDir}") && !cfg.plansDir)) return null;
+      const abs = path.resolve(src.root, cfg.outputDir.split("{plansDir}").join(cfg.plansDir || "").split("{id}").join(planId), name);
       return isInsideDir(src.root, abs) ? read(abs) : null;
     };
     if (planText == null) { const t = outputOf("plan", "PLAN.md"); if (t != null && fpDocKind(t) === "plan") planText = t; }
     if (decText == null) { const t = outputOf("decisions", "DECISIONS.md"); if (t != null && fpDocKind(t) === "decisions") decText = t; }
     if (!plan && planText == null && decText == null) return warnings.length ? { error: warnings[0] } : null;
+    // Finalized (state.json) but no PLAN.md found: the tasks come from plan.json, unticked — said, never silently.
+    if (plan && planText == null && isObj(state) && state.status === "exported") warnings.push(P.wNoExport);
   }
-  const lang = plan && plan.lang === "fr" ? "fr" : "en"; // plan.json's language: the headings it builds (a PLAN.md carries its own)
+  // plan.json's language (else fluidplan.config.json's): the headings it builds (a PLAN.md carries its own).
+  const lang = plan && (plan.lang === "fr" || plan.lang === "en") ? plan.lang : cfg.lang === "fr" ? "fr" : "en";
   // The normalized plan: plan.json's view first (the pages, the options), then the finalized documents over it.
   const fp = plan ? fpFromPlanJson(plan, answers, state, P, lang) : fpEmpty();
   const fromJson = { decisions: fp.decisions, order: fp.decisionOrder };
@@ -21178,7 +21349,7 @@ function parseFluidplan(dir, read, W, src) {
     for (const d of dm.decisions) {
       const j = fromJson.decisions.get(d.fid);
       if (j) {
-        for (const k of ["dependsOn", "learnMore", "facts", "question", "sourceRef", "pageId", "pageTitle", "items", "hasTasks"]) d[k] = j[k];
+        for (const k of ["dependsOn", "learnMore", "facts", "question", "sourceRef", "pageId", "pageTitle", "items", "hasTasks", "revisionNote"]) d[k] = j[k];
         if (!d.importance) d.importance = j.importance;
         if (j.options && j.options.length) {
           const picked = String(d.choice || "").split(", ").map((s) => s.trim());
@@ -21212,13 +21383,30 @@ function parseFluidplan(dir, read, W, src) {
     }
     if (fp.decisions.size) warnings.push(P.wNoDecisions);
   }
-  // A decision a task or rule shows as not settled is open, whatever the source.
-  for (const t of fp.tasks) { const d = fp.decisions.get(t.fid); if (d && t.state && d.status === "ok") { d.status = "open"; d.verdict = t.state; } }
+  // A decision a task or rule shows as not settled is open, whatever the source — a task keeping an item "_(to change)_" too
+  // (fluidplan prints no state on such a task: its decision's verdict is "mixed").
+  for (const t of fp.tasks) {
+    const d = fp.decisions.get(t.fid);
+    const toChange = t.itemsToChange && t.itemsToChange.length;
+    if (d && (t.state || toChange) && d.status === "ok") { d.status = "open"; d.verdict = t.state || "mixed"; }
+    if (d && toChange && d.status === "open" && !d.itemsToChangeMd) d.itemsToChangeMd = t.itemsToChange;
+  }
   for (const r of fp.rules) { const d = r.fid ? fp.decisions.get(r.fid) : null; if (d && r.state && d.status === "ok") { d.status = "open"; d.verdict = r.state; } }
+  // What an open decision's line carries besides its state (1.17 F review — dropped before): plan.json's view already holds it
+  // (fpFromPlanJson); a decision read from the exports gets its remarks (DECISIONS.md's "Remarks:" — a "Still open" line
+  // quotes its own), its items not settled (plan.json's, else DECISIONS.md's table, else PLAN.md's marked lines) and the revision note.
+  for (const d of fp.decisions.values()) {
+    if (d.status !== "open" || d.openNote) continue;
+    const items = d.items.length ? d.items.filter((it) => it.verdict === "modify" || it.verdict === "pending").map((it) => `${it.title} (${P.verdict[it.verdict]}${it.comment ? `: “${it.comment}”` : ""})`)
+      : d.itemsToChange ? d.itemsToChange.map((it) => `${it.label} (${P.verdict.modify}${it.remark ? `: ${it.remark}` : ""})`)
+      : (d.itemsToChangeMd || []).map((l) => l.replace(/^[-*+]\s+/, ""));
+    const note = [...(d.stateText ? [] : d.remarks), ...items, d.revisionNote].filter(Boolean);
+    d.openNote = note.length ? note.join(" · ") : null;
+  }
   if (!fp.title && !fp.tasks.length && !fp.decisions.size) return null;
   const model = fpImportModel(fp, P, PP, W, src, warnings);
   model.sourceFile = sourceFile;
-  model.nameHint = fp.title || fp.id || path.basename(planDir || dir);
+  model.nameHint = model.title || fp.id || path.basename(planDir || dir);
   const roundsDir = planDir ? path.join(planDir, "rounds") : null;
   if ((roundsDir && isDirL(roundsDir)) || (fp.round && fp.round > 1)) model.warnings.push(P.wRounds);
   return model;
@@ -21227,7 +21415,8 @@ function parseFluidplan(dir, read, W, src) {
 // design.md, decisions.md, the Out of Scope / Open decisions sections, warnings and the mapping.
 function fpImportModel(fp, P, PP, W, src, warnings) {
   const model = newImportModel();
-  model.title = fp.title;
+  // Every value below comes from the plan: written through fpV (one line) / fpProse (line for line) — never markup (1.17 F review).
+  model.title = fp.title ? fpHead(fp.title) : null;
   const L = P.label;
   // D-1… for the settled decisions (accepted and rejected), in the plan's order.
   const dn = new Map();
@@ -21235,10 +21424,13 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
     const d = fp.decisions.get(fid);
     if (d.status === "ok" || d.status === "ko") { dn.set(fid, "D-" + (dn.size + 1)); model.mapping["decision " + fid] = dn.get(fid); }
   }
-  // Summary: the context's first paragraph (the rest goes to design.md).
+  // Summary: the context's first paragraph (the rest goes to design.md), else plan.json's subtitle.
   const at = [];
-  model.summary = firstParagraph(fp.context, at);
-  const ctxRest = tidyLines(fp.context.filter((_, i) => !at.includes(i)));
+  const first = firstParagraph(fp.context, at);
+  const atSet = new Set(at);
+  const ctxRest = tidyLines(fp.context.filter((_, i) => !atSet.has(i)));
+  const summary = first || fp.subtitle;
+  model.summary = summary ? fpLine(fpV(summary)) : null;
   // Stories: the pages (themes), else PLAN.md's phase groups — each gathers its tasks' criteria; a criterion stated twice in one
   // story is one AC, cited by every task stating it.
   const stories = new Map();
@@ -21250,12 +21442,13 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
     const key = page ? "p:" + pid : "g:" + t.group;
     if (!stories.has(key)) {
       const g = fp.groups[t.group] || { title: fp.title || PP.planTitle };
-      stories.set(key, page ? { order: page.index, key: "page " + pid, title: page.title, prose: page.intro, crit: [], byText: new Map() }
-        : { order: 1e6 + t.group, key: g.title, title: g.title, prose: [], crit: [], byText: new Map() });
+      stories.set(key, page ? { order: page.index, key: "page " + pid, title: fpHead(page.title), prose: fpProse(page.intro, true), crit: [], byText: new Map() }
+        : { order: 1e6 + t.group, key: g.title, title: fpHead(g.title), prose: [], crit: [], byText: new Map() });
     }
     const s = stories.get(key);
     const list = [];
-    t.acceptance.forEach((raw, m) => {
+    t.acceptance.forEach((raw0, m) => {
+      const raw = fpV(raw0);
       const norm = raw.replace(/\s+/g, " ").trim().toLowerCase();
       let c = s.byText.get(norm);
       if (!c) { c = { key: `task ${t.num} / acceptance ${m + 1}`, raw, ears: earsFromPlanText(raw), also: [] }; s.byText.set(norm, c); s.crit.push(c); }
@@ -21269,27 +21462,51 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
     s.crit.forEach((c, j) => { c.id = `US-${idx + 1}.AC-${j + 1}`; for (const k of c.also) model.mapping[k] = c.id; });
     model.stories.push({ printed: null, key: s.key, title: s.title, priority: null, prose: s.prose, quote: [], after: [], criteria: s.crit.map((c) => ({ key: c.key, raw: c.raw, ears: c.ears })) });
   });
-  if (!model.stories.length) planStory(model, fp.title || PP.planTitle, []);
+  if (!model.stories.length) planStory(model, fp.title ? fpHead(fp.title) : PP.planTitle, []);
   // The decisions' criteria (their _Affects:_) and the open decisions' ones.
   const acsOf = new Map();
-  fp.tasks.forEach((t, i) => { for (const c of taskCrit.get(i) || []) { if (!acsOf.has(t.fid)) acsOf.set(t.fid, []); if (!acsOf.get(t.fid).includes(c.id)) acsOf.get(t.fid).push(c.id); } });
-  const stateOf = (d) => d.stateText || P.verdict[d.verdict] || P.verdict.pending;
-  const ref = (fid) => { const d = fp.decisions.get(fid); return dn.has(fid) ? `${dn.get(fid)} — ${d ? d.title : fid}` : `${fid}${d ? " · " + d.title : ""}`; };
+  fp.tasks.forEach((t, i) => { for (const c of taskCrit.get(i) || []) { if (!acsOf.has(t.fid)) acsOf.set(t.fid, new Set()); acsOf.get(t.fid).add(c.id); } });
+  const acsList = (fid) => [...(acsOf.get(fid) || [])];
+  const stateOf = (d) => fpV(d.stateText || P.verdict[d.verdict] || P.verdict.pending);
+  const ref = (fid) => { const d = fp.decisions.get(fid); return dn.has(fid) ? `${dn.get(fid)} — ${d ? fpV(d.title) : fpV(fid)}` : `${fpV(fid)}${d ? " · " + fpV(d.title) : ""}`; };
   // tasks.md
   const numOf = new Map();
   fp.tasks.forEach((t, i) => { if (!numOf.has(t.num)) numOf.set(t.num, i + 1); });
   const ruleLines = [];
   for (const r of fp.rules) {
-    if (!r.fid) { ruleLines.push(r.raw.replace(/^(?![-*]\s)/, "- ")); continue; }
+    if (!r.fid) { ruleLines.push(fpLine(fpInert(r.raw).replace(/^(?![-*]\s)/, "- "))); continue; }
     const d = fp.decisions.get(r.fid);
     if (r.state || (d && d.status === "open")) continue; // not settled: listed under Open decisions instead
-    ruleLines.push(fpSafe(`- ${dn.get(r.fid) || r.fid} · ${r.title}${r.rest}`), ...(r.remark ? [`  - ${L.remark}: ${fpSafe(r.remark)}`] : []), ...r.lines.map((l) => "  " + fpSafe(l)));
+    ruleLines.push(fpLine(`- ${dn.get(r.fid) || fpV(r.fid)} · ${fpV(r.title)}${fpInert(r.rest)}`), ...(r.remark ? [`  - ${L.remark}: ${fpV(r.remark)}`] : []),
+      ...(r.lines || []).map((l) => fpLine("  " + fpInert(l))));
+  }
+  // The dependencies (fluidplan's `after`, renumbered), then the cycles among them broken (1.17 F review): an `after` cycle became
+  // mutual _Depends:_ — no task of it could ever start, doctor's task-deps failed and the tasks approval was refused. In each
+  // cycle (a strongly connected set, dependencyCycles) the edges against the plan's order — a task depending on a LATER one, the
+  // `after` fluidplan's own numbering had to break — are dropped, each named in a warning.
+  const depsOf = fp.tasks.map((t, i) => {
+    const deps = [];
+    for (const a of t.after) { const d = numOf.get(a); if (d != null && d !== i + 1 && !deps.includes(d)) deps.push(d); }
+    return deps;
+  });
+  const byNum = new Map(fp.tasks.map((_, i) => [i + 1, [i]]));
+  const cycles = fp.tasks.length ? dependencyCycles({ blocks: fp.tasks.map((_, i) => ({ number: i + 1, done: false })), byNum, specs: depsOf.map((numbers) => ({ numbers })) }, false) : [];
+  for (const cyc of cycles) {
+    const inCyc = new Set(cyc);
+    const dropped = [];
+    for (const i of cyc) {
+      const keep = depsOf[i - 1].filter((j) => !(inCyc.has(j) && j > i));
+      if (keep.length === depsOf[i - 1].length) continue;
+      for (const j of depsOf[i - 1]) if (!keep.includes(j)) dropped.push(`${fp.tasks[i - 1].num} → ${fp.tasks[j - 1].num}`);
+      depsOf[i - 1] = keep;
+    }
+    warnings.push(P.wCycle(cyc.map((i) => fp.tasks[i - 1].num).join(", "), dropped.join(", ")));
   }
   const out = [];
   const keys = [];
   let g = -1;
   fp.tasks.forEach((t, i) => {
-    if (t.group !== g) { g = t.group; if (fp.groups[g]) out.push("", "## " + fpSafe(fp.groups[g].heading)); }
+    if (t.group !== g) { g = t.group; if (fp.groups[g]) out.push("", "## " + fpHead(fp.groups[g].heading)); }
     const n = i + 1;
     keys.push("task " + t.num);
     const body = [];
@@ -21297,47 +21514,49 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
     if (acs.length) body.push(`  - _Requirements: ${acs.join(", ")}_`);
     const impl = [], deletes = [], untraced = [];
     for (const f of t.files) {
-      const p = planPaths("`" + f.path + "`")[0];
+      const p = f.path.includes("`") ? null : planPaths("`" + f.path + "`")[0]; // a backtick would split the span: "src/`x`.js" read as ".js"
       const readable = p && taskMarkers({ text: "", body: [`- _Implements: ${p}_`], bodyCode: [] }).implements.join("\n") === p;
-      if (!readable) { untraced.push(f); warnings.push(P.wPath(t.num, f.path)); continue; }
+      if (!readable) { untraced.push(f); warnings.push(P.wPath(t.num, fpOneLine(f.path))); continue; }
       if (f.op === "delete") { if (!deletes.includes(p)) deletes.push(p); } else if (!impl.includes(p)) impl.push(p);
     }
     if (impl.length) body.push(`  - _Implements: ${impl.join(", ")}_`);
     const badVerify = [];
     for (const c of t.verify) {
       const cmd = String(c).trim();
-      const readable = cmd && !/[\r\n]/.test(cmd) && taskMarkers({ text: "", body: [`- _Verify: ${cmd}_`], bodyCode: [] }).verify.join("\n") === cmd;
+      // Only fluidplan's `verify` field makes a _Verify:_ — and only a command the marker holds whole, on one line, opening or
+      // closing no HTML comment (a `<!--` in one command and a `-->` in the next hid the lines between).
+      const readable = cmd && !RE_FP_VERIFY_BAD.test(cmd) && taskMarkers({ text: "", body: [`- _Verify: ${cmd}_`], bodyCode: [] }).verify.join("\n") === cmd;
       if (readable) { if (!body.includes(`  - _Verify: ${cmd}_`)) body.push(`  - _Verify: ${cmd}_`); } else { badVerify.push(cmd); warnings.push(P.wVerify(t.num, fpOneLine(cmd).slice(0, 120))); }
     }
-    const deps = [];
-    for (const a of t.after) { const d = numOf.get(a); if (d != null && d !== n) { if (!deps.includes(d)) deps.push(d); } else if (d == null) warnings.push(P.wAfter(t.num, a)); }
-    for (const a of t.dangling || []) warnings.push(P.wAfter(t.num, a));
-    if (deps.length) body.push(`  - _Depends: ${deps.join(", ")}_`);
+    for (const a of t.after) { if (!numOf.has(a)) warnings.push(P.wAfter(t.num, fpOneLine(a))); }
+    for (const a of t.dangling || []) warnings.push(P.wAfter(t.num, fpOneLine(a)));
+    if (depsOf[i].length) body.push(`  - _Depends: ${depsOf[i].join(", ")}_`);
     const dec = fp.decisions.get(t.fid);
     const open = dec && dec.status === "open";
-    body.push(`  - ${L.decision}: ${fpSafe(ref(t.fid))}${!open && t.summary ? ` (${fpSafe(t.summary)})` : ""}${open ? ` — ${P.openMark(stateOf(dec))}` : ""}`);
+    body.push(`  - ${L.decision}: ${ref(t.fid)}${!open && t.summary ? ` (${fpV(t.summary)})` : ""}${open ? ` — ${P.openMark(stateOf(dec))}` : ""}`);
     if (deletes.length) body.push(`  - ${L.deletes}: ${deletes.map((p) => "`" + p + "`").join(", ")}`);
-    if (untraced.length) body.push(`  - ${L.untraced}: ${untraced.map((f) => "`" + f.path.replace(/`/g, "'") + "` (" + f.op + ")").join(", ")}`);
-    if (badVerify.length) body.push(`  - ${L.verify}: ${badVerify.map((c) => fpSafe(fpOneLine(c))).join(" · ")}`);
+    // A refused path is shown in a code span, inert (1.17 F review: one holding `_, _Verify:` made a marker of the line).
+    if (untraced.length) body.push(`  - ${L.untraced}: ${untraced.map((f) => "`" + fpV(f.path).replace(/`/g, "'") + "` (" + f.op + ")").join(", ")}`);
+    if (badVerify.length) body.push(`  - ${L.verify}: ${badVerify.map(fpV).join(" · ")}`);
     if (t.doLines.length) {
       const st = { fence: null };
-      const lines = t.doLines.map((l) => { fenceStep(st, l); return fpSafe(l); });
+      const lines = t.doLines.map((l) => { fenceStep(st, l); return fpInert(l); });
       if (st.fence) lines.push(st.fence.mark);
       body.push(`  - ${L.do}: ${lines[0]}`, ...lines.slice(1).map((l) => (l.trim() ? "    " + l : "")));
     }
-    if (t.remark) body.push(`  - ${L.remark}: ${fpSafe(t.remark)}`);
-    if (t.items.length) body.push(`  - ${L.itemsKept}:`, ...t.items.map((l) => "    " + fpSafe(l)));
-    body.push(...t.extra.map((l) => "  " + fpSafe(l.trim())));
-    // A body line never reads as a task, a checkpoint or a heading of tasks.md.
-    const safe = body.map((l) => (RE_TASK_LINE.test(l) ? l.replace("[", "\\[") : RE_CHECKPOINT.test(l) ? l.replace("**", "\\*\\*") : l));
-    out.push(`- [${t.done ? "x" : " "}] ${n}. ${fpSafe(fpOneLine(t.title))}`, ...safe);
+    if (t.remark) body.push(`  - ${L.remark}: ${fpV(t.remark)}`);
+    if (t.items.length) body.push(`  - ${L.itemsKept}:`, ...t.items.map((l) => "    " + fpInert(l)));
+    body.push(...t.extra.map((l) => "  " + fpInert(l.trim())));
+    // Line by line (a value holding a line break is one line; 1.17 F review: only an entry's first line was checked), a body line
+    // never reads as a task, a checkpoint or a heading of tasks.md.
+    out.push(`- [${t.done ? "x" : " "}] ${n}. ${fpTitle(t.title)}`, ...body.map(fpLine));
   });
   if (fp.tasks.length) {
     const text = [...(ruleLines.length ? [P.constraints, "", ...ruleLines, ""] : []), ...out].join("\n").replace(/^\n+/, "");
     model.tasks = { text, file: "PLAN.md", numbered: true };
     model.taskKeys = keys;
   } else warnings.push(P.wNoTasks);
-  // decisions.md — spec_decide's format.
+  // decisions.md — spec_decide's format (decisionEntryLines runs every text through safeSpecText; the title is ours to make safe).
   const at0 = (fp.date && !isNaN(fp.date.getTime()) ? fp.date : new Date()).toISOString();
   model.decisions = [];
   const summaryLines = [];
@@ -21356,6 +21575,7 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
     if (d.sourceRef) ctx.push(`- ${L.sourceRef}: ${d.sourceRef}`);
     for (const f of d.facts) ctx.push(`- ${f.label}: ${f.value}`);
     if (d.learnMore) ctx.push(`- ${L.learnMore}: ${d.learnMore}`);
+    if (d.revisionNote) ctx.push(`- ${d.revisionNote}`);
     const decision = [];
     if (d.status === "ko") {
       decision.push(P.rejected(d.reason));
@@ -21376,9 +21596,11 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
       if (others.length) cons.push(`- ${L.others}:`, ...others.map((o) => `  - ${o.label}${optText(o) ? ` — ${optText(o)}` : ""}`));
     } else if (d.status === "ok" && d.othersText) cons.push(`- ${L.others}: ${d.othersText}`);
     if (cons.length && cons[0].startsWith("- ")) cons[0] = cons[0].slice(2);
-    model.decisions.push({ id, title: fpOneLine(d.title).slice(0, DECISION_TITLE_MAX), kind: "decision", at: at0, affects: d.status === "ok" ? (acsOf.get(fid) || []) : [], supersedes: [],
+    // The title: one line, inert (1.17 F review: a `<!--` in it reached the heading — the import bypasses decisionInput — and a
+    // later `-->` hid the entry's markers).
+    model.decisions.push({ id, title: fpHead(fpOneLine(d.title).replace(/\s+/g, " ").slice(0, DECISION_TITLE_MAX)), kind: "decision", at: at0, affects: d.status === "ok" ? acsList(fid) : [], supersedes: [],
       context: ctx.join("\n"), decision: decision.join("\n"), consequences: cons.join("\n") || null });
-    summaryLines.push(`- **${id}** — ${d.title}${d.status === "ko" ? `: ${P.rejectedMark}${d.reason ? ` — ${d.reason}` : ""}` : d.choice ? `: ${d.choice}` : ""}${d.importance === "critical" ? ` _(${P.importance.critical})_` : ""}`);
+    summaryLines.push(`- **${id}** — ${fpV(d.title)}${d.status === "ko" ? `: ${P.rejectedMark}${d.reason ? ` — ${fpV(d.reason)}` : ""}` : d.choice ? `: ${fpV(d.choice)}` : ""}${d.importance === "critical" ? ` _(${P.importance.critical})_` : ""}`);
     // Alternatives & Trade-offs: every option of a choice, the chosen one first; without plan.json, the choice + DECISIONS.md's others.
     const label = `${id} ${d.title}`;
     if (d.options && d.options.length > 1) {
@@ -21395,13 +21617,13 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
     }
   }
   // requirements.md: Out of Scope, Open decisions.
-  const scope = fp.outOfScope.length ? fp.outOfScope.map(fpSafe)
-    : fp.decisionOrder.map((fid) => fp.decisions.get(fid)).filter((d) => d.status === "ko").map((d) => `- **${d.fid} · ${d.title}** — ${P.rejectedMark}${d.reason ? `: ${d.reason}` : ""}`);
+  const scope = fp.outOfScope.length ? fpProse(fp.outOfScope, true)
+    : fp.decisionOrder.map((fid) => fp.decisions.get(fid)).filter((d) => d.status === "ko").map((d) => `- **${fpV(d.fid)} · ${fpV(d.title)}** — ${P.rejectedMark}${d.reason ? `: ${fpV(d.reason)}` : ""}`);
   if (scope.length) model.extra.push({ heading: P.outOfScope, lines: scope });
   const openD = fp.decisionOrder.map((fid) => fp.decisions.get(fid)).filter((d) => d.status === "open");
   if (openD.length) {
-    model.extra.push({ heading: P.openDecisions, lines: openD.map((d) => fpSafe(P.openLine(d.fid, d.title, stateOf(d), (acsOf.get(d.fid) || []).join(", ")))) });
-    warnings.push(P.wOpen(openD.map((d) => `${d.fid} (${stateOf(d)})`).join(", ")));
+    model.extra.push({ heading: P.openDecisions, lines: openD.map((d) => fpLine(P.openLine(fpV(d.fid), fpV(d.title), stateOf(d), acsList(d.fid).join(", "), d.openNote ? fpV(d.openNote) : null))) });
+    warnings.push(P.wOpen(openD.map((d) => `${fpOneLine(d.fid)} (${stateOf(d)})`).join(", ")));
   }
   const rejected = fp.decisionOrder.map((fid) => fp.decisions.get(fid)).filter((d) => d.status === "ko");
   if (rejected.length) warnings.push(P.wRejected(rejected.map((d) => `${d.fid} → ${dn.get(d.fid)}`).join(", ")));
@@ -21409,17 +21631,24 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
   // design.md
   const design = [];
   const section = (heading, lines) => { if (lines.length) design.push(...(design.length ? [""] : []), heading, "", ...lines); };
-  section(P.context, [...ctxRest.map(fpSafe), ...(fp.sourceDoc ? [...(ctxRest.length ? [""] : []), P.sourceDoc(fp.sourceDoc)] : [])]);
-  if (summaryLines.length) section(PP.decisionsHeading, [P.decisionsIntro, "", ...summaryLines.map(fpSafe)]);
-  if (tradeRows.length) section(FP_TRADEOFFS_HEADING, [`| ${P.tradeoffsHead.join(" | ")} |`, "|" + P.tradeoffsHead.map(() => "---").join("|") + "|", ...tradeRows.map(fpSafe)]);
+  const sub = fp.subtitle && first ? [`${L.subtitle}: ${fpV(fp.subtitle)}`] : []; // the subtitle, when the summary is the context's
+  const ctxLines = fpProse(ctxRest, false);
+  section(P.context, [...sub, ...(sub.length && ctxLines.length ? [""] : []), ...ctxLines, ...(fp.sourceDoc ? [...(sub.length || ctxLines.length ? [""] : []), P.sourceDoc(fpV(fp.sourceDoc))] : [])]);
+  // A page no story carries (its tasks state no criterion, or it keeps none): its intro is said here (1.17 F review: dropped).
+  const storyPages = new Set([...stories.keys()].filter((k) => k.startsWith("p:")).map((k) => k.slice(2)));
+  const themes = [];
+  for (const [pid, pg] of fp.pages) if (!storyPages.has(pid) && pg.intro.length) themes.push(...(themes.length ? [""] : []), `### ${fpHead(pg.title)}`, "", ...fpProse(pg.intro, true));
+  section(P.themes, themes);
+  if (summaryLines.length) section(PP.decisionsHeading, [P.decisionsIntro, "", ...summaryLines]);
+  if (tradeRows.length) section(FP_TRADEOFFS_HEADING, [`| ${P.tradeoffsHead.join(" | ")} |`, "|" + P.tradeoffsHead.map(() => "---").join("|") + "|", ...tradeRows]);
   if (!fp.tasks.length && ruleLines.length) section(P.constraints, ruleLines);
-  section(P.glossary, fp.glossary.map(fpSafe));
-  section(P.finalCheck, fp.finalCheck.map(fpSafe));
+  section(P.glossary, fpProse(fp.glossary, false));
+  section(P.finalCheck, fpProse(fp.finalCheck, false));
   if (fp.visuals.length) {
-    section(P.visuals, fp.visuals.map((v) => fpSafe(`- ${v.where}: ${v.kind}${v.caption ? ` — ${fpOneLine(v.caption)}` : ""}`)));
-    warnings.push(P.wVisuals(fp.visuals.map((v) => `${v.where} (${v.kind})`).join(", ")));
+    section(P.visuals, fp.visuals.map((v) => `- ${fpV(v.where)}: ${fpV(v.kind)}${fpFilled(v.caption) ? ` — ${fpV(v.caption)}` : ""}`));
+    warnings.push(P.wVisuals(fp.visuals.map((v) => `${fpOneLine(v.where)} (${fpOneLine(v.kind)})`).join(", ")));
   }
-  for (const x of fp.extra) section(fpSafe(x.heading), x.lines.map(fpSafe));
+  for (const x of fp.extra) section(fpHead(x.heading), fpProse(x.lines, false));
   if (design.length) model.design = { text: design.join("\n"), file: "PLAN.md" };
   else warnings.push(PP.wNoDesignLeft);
   model.warnings.push(...warnings);
@@ -21486,13 +21715,14 @@ function importSpec(projectDir, tool, source, opts = {}) {
   } // inline (1.16 C4) or a path
   // C3 parsers also get the file named (a plan among several), the language and the real root: { file, lang, root }.
   const parse = own(C3_PARSERS, t) ? C3_PARSERS[t] : t === "kiro" ? parseKiro : t === "spec-kit" ? parseSpecKit : parseOpenSpec;
-  const model = parse(dir, read, W, { file: isFileSrc ? realSrc : null, lang: lang0, root: realRoot });
+  const model = parse(dir, read, W, { file: isFileSrc ? realSrc : null, lang: lang0, root: realRoot, inline }); // inline: no file to name (1.17 F review)
   if (!model) return { ok: false, error: W.nothing(IMPORT_TOOLS[t], rel) };
   if (model.error) return { ok: false, error: model.error }; // C3: a folder of several plans — name the file
   // C3: a single-document source shows its file; inline text (1.16 C4) has none — `source` null, `inline` true.
   const srcRel = inline ? null : model.sourceFile ? toPosix(path.relative(realRoot, model.sourceFile)) : rel;
 
-  const name = opts.name != null && String(opts.name).trim() ? String(opts.name).trim() : model.nameHint;
+  // The source's title never opens an HTML comment in the files' titles (1.17 F review); a name the caller gives is theirs.
+  const name = opts.name != null && String(opts.name).trim() ? String(opts.name).trim() : model.nameHint == null ? model.nameHint : commentInert(model.nameHint);
   const f = resolveFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   if (fs.existsSync(f.dir)) return { ok: false, error: W.exists(f.slug) };
@@ -21520,13 +21750,17 @@ function importSpec(projectDir, tool, source, opts = {}) {
   const critMap = new Map(); // source criterion key → new AC ID
   const notEars = [];
   const noCriteria = [];
-  const req = [L.featureTitle(name), "", note, "", L.summary, model.summary || L.summaryPlaceholder, "", L.stories];
+  // Every imported line is written inert to HTML comments (commentInert — the parsers read their sources without comments, so a
+  // `<!--` left is an unclosed one): one criterion's `<!--` and a later `-->` (another criterion's, or the `<!-- <tool>: … -->`
+  // line under a converted one) hid the criteria between (1.17 F review, every importer). A block of imported lines closes a
+  // fence it leaves open (inertBlock) — it swallowed every criterion after it.
+  const req = [L.featureTitle(name), "", note, "", L.summary, model.summary ? commentInert(model.summary) : L.summaryPlaceholder, "", L.stories];
   model.stories.forEach((s, idx) => {
     const n = keepNumbers ? s.printed : idx + 1;
     mapping[s.key] = "US-" + n;
-    req.push("", L.story(n, s.priority, s.title));
-    if (s.prose.length) req.push(...s.prose);
-    if (s.quote.length) req.push(...s.quote.map((q) => "> " + q));
+    req.push("", L.story(n, s.priority, s.title == null ? s.title : commentInert(s.title)));
+    if (s.prose.length) req.push(...inertBlock(s.prose));
+    if (s.quote.length) req.push(...s.quote.map((q) => "> " + commentInert(q)));
     req.push("", L.criteria);
     const ids = [];
     s.criteria.forEach((c, j) => {
@@ -21535,16 +21769,16 @@ function importSpec(projectDir, tool, source, opts = {}) {
       mapping[c.key] = id;
       critMap.set(c.key, id);
       if (!c.ears) notEars.push(id);
-      req.push(`${j + 1}. **${id}** — ${c.ears || c.raw + " " + L.notEars}`);
+      req.push(`${j + 1}. **${id}** — ${commentInert(c.ears || c.raw + " " + L.notEars)}`);
       if (c.ears && c.ears !== c.raw) req.push("   " + L.original(IMPORT_TOOLS[t], c.raw.replace(/-->/g, "—>")));
     });
     if (!s.criteria.length) { req.push(L.noCriteria); noCriteria.push("US-" + n); }
-    if (s.after && s.after.length) req.push("", ...s.after); // a note after the criteria, a sub-section… verbatim
+    if (s.after && s.after.length) req.push("", ...inertBlock(s.after)); // a note after the criteria, a sub-section… verbatim
     acOf.set(n, ids);
   });
   // The recognised sections, then whatever no parser mapped (carried verbatim — never dropped silently).
   for (const x of [...model.extra, ...model.carried]) {
-    req.push("", x.heading || L[x.key] || L.importedNotes, ...x.lines.map((l) => l.trimEnd()));
+    req.push("", x.heading ? commentInert(x.heading) : L[x.key] || L.importedNotes, ...inertBlock(x.lines.map((l) => l.trimEnd())));
   }
   Object.assign(mapping, model.mapping);
   if (notEars.length) warnings.push(W.wNotEars(notEars.join(", ")));
