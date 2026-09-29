@@ -46,8 +46,8 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
   tracks.js                    the track registries (built-in + packs: allTracks, trackMarker…), parseTracks, detectTracks,
                                TRACK_SECTIONS, the inactive-section readers; the Phase 0 classifier (SIGNALS, negation, the
                                language guess); track packs (.specs/tracks/: load + validate, cached; render; spec_tracks) —
-                               the largest module (~2,100 lines, three concerns): a candidate for a later split into
-                               registries / classify / packs
+                               the largest module (~2,700 lines since 1.19 — the three new tracks' signals and cues —,
+                               three concerns): a candidate for a later split into registries / classify / packs
   templates.js                 project templates (.specs/templates/), their placeholder corpus, spec_templates
   scaffold.js                  spec_init, spec_create, the artifact skeletons, steering stubs, spec_add_track; scoped steering
                                (front matter, the brief's steering, custom names), steering amendments (1.16 Q1)
@@ -61,8 +61,8 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
                                spec_approve (force, waivers, revoke, roles, the fast-forward); .history/ snapshots, spec_impact
   doctor.js                    spec_doctor, spec_next_action, the design.md save check; spec_list / spec_status, the status line,
                                the plan-mode bridge, the DEV_SPEC_* defaults
-  quality.js                   cross-feature ACs (Q2), the glossary (Q3), design trade-offs / risks (A1), the constraint
-                               nudge (A2), spec_clarify
+  quality.js                   cross-feature ACs (Q2), the glossary (Q3), design trade-offs / risks (A1) and reuse (1.19 R1),
+                               the brief's Reuse section (R2), the constraint nudge (A2), spec_clarify
   finish.js                    spec_finish and the drift baseline (spec_drift); remove / rename / archive / restore;
                                _Supersedes:_ and .specs/SPECS.md; spec_metrics (+ retro.md)
   roadmap-md.js                ROADMAP.md / .html (roadmapData), forecasts, cross-feature overlaps
@@ -159,7 +159,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   root is three levels up: `approvalGuardDecision`'s cli path, `engineVersion`'s package.json).
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
   costs ~0.65 ms before any compile (stat, realpath, open + read — the open is the expensive part) — the engine is 20
-  modules (+ 8 importers) of 400–2,100 lines, not one per helper. Add to the module of the concept; a new file must earn
+  modules (+ 8 importers) of 400–2,700 lines (tracks.js the largest — the split candidate), not one per helper. Add to the module of the concept; a new file must earn
   its load cost. **The compile cache:** the facade (spec.js, first line) calls `module.enableCompileCache()` (Node ≥ 22.8;
   nothing on older ones): the compiled code of every module loaded after it is kept between processes in
   `NODE_COMPILE_CACHE` or `<os.tmpdir()>/node-compile-cache/<node version>/` (one file per module, ~1.4 MB for the engine;
@@ -179,7 +179,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   without a single toPtBr (its first call compiles the pt-BR word maps: ~17 ms).
 
 ## The track model
-`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17) are independent and
+`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17), `+api` / `+ui` / `+obs` (1.19) are independent and
 composable, chosen in Phase 0 by `spec_classify` (keyword heuristic with negation + confidence) and confirmed by the
 human. The track set drives which artifacts/sections/loops apply. See `references/classification-matrix.md`
 (GDPR / RGPD / LGPD / CCPA / HIPAA are +privacy signals, not +saas).
@@ -244,6 +244,119 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   **Gotcha:** within a track the first keyword matching at a position wins it (seenSpan — strong, weak, generic, context in
   that order) — list a longer phrase before its prefix ("backoff exponencial" before "backoff", +saas "fila de mensagens"
   before "fila"), or the self-match sweep fails.
+- **+api (1.19 T)** — the eighth built-in marker track `[API]` (API contracts), added through the same registries (VALID_TRACKS
+  after dist, TRACK_MARKER, `API_SECTIONS`, TRACK_STEERING `api.md`, TEMPLATE_ACS US-1.AC-20..23, RE_STABLE_BRACKET,
+  RE_PACK_MARKER_RESERVED, TRACK_ALIASES: apis / rest / restful / openapi / swagger / graphql / grpc are reserved pack names).
+  SIGNALS.api — strong: contract-level words only (RESTful, OpenAPI, Swagger, GraphQL, gRPC, protobuf, API versioning, the API
+  contract / spec, API consumers, third-party developers, a developer portal, contract tests, problem+json, RFC 9457,
+  Idempotency-Key, rate-limit headers incl. `X-RateLimit-Remaining` / `-Limit` / `-Reset` by name, Retry-After, Sunset); weak
+  (anchors): the **ownership-ambiguous** names (`API_AMBIGUOUS`: a public / REST / HTTP / web / JSON / partner API, an API
+  version, problem details — one concept `kind`), a breaking change, backward compatibility, an SDK / client library, ETag /
+  If-Match, status codes, JSON Schema, cursor pagination, deprecation, an internal / management / admin API / API gateway / API
+  docs; **generic**: api, endpoint, route, request (IRREGULAR_FORMS: the noun only, never "requested"), pagination.
+  SIGNAL_CONCEPTS.api folds compatibility, ETag / If-Match, status codes, schemas, the client, the endpoint / route words;
+  SIGNAL_HAZARDS.api: a breaking change is never negated ("without breaking changes"). **Ownership (1.19 T review —
+  `SIGNAL_CUES.api`, `apiCueTier`):** an API someone else owns is app-level for us — a hit after a third-party owner (`X's`
+  with X Titlecase or a third-party noun: provider / supplier / partner / bank / carrier…, "their", PT / ES "do|da|de|del
+  <Name|fornecedor|banco…>" after it) is GENERIC; so is one governed by a consumer verb (call, integrate with, sync, via,
+  through, fetch, poll; integrar com, chamar, consultar; integrar con, llamar a, obtener — only link words, Titlecase names and
+  ≤ 1 other word between: "the order service calls the payment service over gRPC" is no consumer) or right after "the <Name>"
+  ("the Shopify API version") — unless the clause says it is ours (an own cue: "our" / nosso / nuestro ≤ 3 words back, an own
+  verb anywhere before it — expose, publish, offer, provide, design, document, deprecate, versionar… —, "Version …" opening the
+  clause, a build verb whose direct object it is: "Build a REST API", "Criar uma API REST"). An ambiguous name is strong with an
+  own cue, or (the API-kind names) when it opens its clause or follows a plain article + ≤ 2 lowercase adjectives ("REST API
+  for the mobile app", "add rate limiting to the public API"); "Stripe REST API integration" stays weak. **1.19 verify 2:** an
+  ALL-CAPS organisation acronym is an owner too ("la API pública del BCE", "the ECB's public API" — `RE_API_ACRONYM`, never a
+  technical one: `API_TECH_ACRONYMS` REST / CRM / SDK / HR…); a past participle right after a determiner is an adjective, no
+  own verb ("Replace the deprecated Google Places API calls"); breaking compatibility as a VERB (`API_BREAK_VERBS`: break
+  compatibility, quebrar a compatibilidade, romper la compatibilidad…) is a weak compat anchor and a hazard, so PT "não pode
+  quebrar a compatibilidade da API pública" is +api like EN / ES. An API **key** stays
+  +sec's word — "an API key management page" / "call the Stripe API" have a *possible +api* note at most.
+  The core design already has `## API Contracts` / `## Error Handling`: every ordinary name in API_SECTIONS is `loose`
+  (marker-bound), only the full compound names are strict. The generic-only note names what an anchor would be, per track
+  (`classify.genericOnly`). A pre-1.19 pack named `api` / `rest`… is a missing pack like a pre-1.17 `dist` one; doctor and
+  spec_upgrade say "from before 1.19" (`packReservedSince()` — `TRACK_RESERVED_SINCE`). **A pack of ANY name whose recorded
+  MARKER is a built-in track's now** (1.19 T review — `legacyPackMarkerTrack(st, n)`: 'webui' with `[UI]`, 'contracts' with
+  `[API]`, 'ops' with `[OBS]`; its `## [UI] …` headings would pass for the built-in track's): doctor's track-pack-missing says so
+  (`trackPacks.missingReservedMarker` — change the marker, adopt the built-in track, or --remove the pack), spec_upgrade lists
+  it (`reservedMarkers` [{name, marker, track}], attention `track-pack-reserved`, `upgrade.packMarkerReserved`); `add-track <f>
+  ui` ADOPTS it (the five built-in sections are appended although a `[UI]` heading exists, the pack leaves the list and
+  packMarkers — `adopted: ["ui"]`, `adoptedPacks: ["webui"]`); `add-track <f> webui --remove` drops it. Guide: `references/api-design-patterns.md`.
+- **+ui (1.19 T)** — the ninth built-in marker track `[UI]` (user-facing UI, the design system, accessibility): TRACK_MARKER,
+  `UI_SECTIONS` (Design System Usage · UI States · Accessibility · Responsiveness & i18n · UI Performance Budget — every ordinary
+  name `loose`: a core "## Accessibility" never stands in for the deleted [UI] one, nor does +saas's "[SaaS] Performance
+  Budget"), TRACK_STEERING `ui.md`, US-1.AC-24..27, TRACK_ALIASES frontend / front-end / ux / gui / wcag — **never `a11y` /
+  `accessibility`**: the canonical track-pack example is a team's `a11y` pack, it keeps its name (its signals and +ui's then
+  both fire, as a pack's may). SIGNALS.ui — strong: the design system (tokens, a component library),
+  WCAG / a11y and the concrete accessibility words (screen reader, keyboard navigation, focus order, contrast, alt text,
+  `ARIA`, reduced motion), responsive design, dark mode, Storybook / Figma, Core Web Vitals / `LCP`, visual regression, an empty
+  state, the UI-heavy page types (a settings / admin / management / profile page, an admin panel — "an API key management
+  page" is +ui); weak: accessibility (1.19 T review — a venue's "wheelchair accessibility" alone; with a page / form / WCAG it
+  is UI), frontend, `UI` / `UX` (capitals, one concept — "translate the UI into Spanish" alone stays possible;
+  1.19 T made it an anchor, not strong: two 1.18 tests read such texts as core), `React` / `Vue` / `Angular` / `Svelte` (one
+  concept), CSS, widgets (+ a picker, a confirm dialog, swipe), responsive, i18n,
+  `RTL` / `CLS` / `INP`, a loading / error state, form validation, inline errors; **generic**: screen, page, form
+  (IRREGULAR_FORMS: the nouns only — "screening", "formed", "paged" are no signal), button, click, dialog, dashboard (ES
+  tablero / cuadro de mando), menu, icon, widget, layout, theme. A dashboard is +ui's generic word only, never +obs's ("a
+  metrics dashboard for sales"). **Cues (1.19 T review — `SIGNAL_CUES.ui`, `uiCueTier`):** in a CLAUSE (`cueClause()`:
+  CUE_BOUNDARY . ! ? ; : or a line break — a colon after a short label, ≤ 4 words, joins the label to what it introduces:
+  "Profile page: the GET /me handler…", "Sin backend: …") that says the work is backend-only (`RE_UI_BACKEND`: an HTTP method +
+  path, a request / route handler, an endpoint, the backend, an API — never "API keys" / "chave de API" —, a data layer /
+  repository / SQL, "already exists" / já existe / ya existe) a page type and frontend / UI / UX are GENERIC ("a PATCH
+  /me/preferences handler that the settings page calls; the UI already exists"); an empty state in a sentence about a state
+  machine is weak ("the empty state blocks sales"). **1.19 verify 1** (the sentence-wide test lost +ui): a backend word does not
+  count when a negator governs it (≤ 4 words back in the clause — no / not / without / n't / sem / não / nem / sin / ni; PT "no"
+  is em + o: `lang` is the cue's 4th argument) — "no backend changes", "does not touch the backend", "needs no API changes" —
+  nor when it FOLLOWS the page word with a consumer verb between them (`UI_CONSUMER_VERBS`: "The landing page loads its
+  testimonials from the CMS API"; a backend word before the page — "a handler that the settings page calls" — or right after
+  it — "the profile page backend", "the admin page's API" — still demotes); nothing is demoted in a text that says "frontend
+  only" / "apenas frontend" / "solo frontend" (`RE_UI_FRONTEND_ONLY`, tested once per text); "the frontend team" / "equipa de
+  frontend" names a team (generic). The genericOnly note no longer offers "the frontend" as an anchor.
+- **+obs (1.19 T)** — the tenth built-in marker track `[OBS]` (observability & operability): TRACK_MARKER, `OBS_SECTIONS` (SLIs &
+  SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health & Capacity — no section is named "Observability", +saas's;
+  ordinary names `loose`), TRACK_STEERING **`observability.md`** — the +saas stub, extended with SLOs & error budgets, rollout &
+  rollback, health & capacity (no new steering file) —, US-1.AC-28..31, TRACK_ALIASES observability / o11y / monitoring / sre /
+  telemetry / opentelemetry. SIGNALS.obs — strong: SLO / SLI, error budget, burn rate, observability, OpenTelemetry / `OTel`
+  (capitals — a lower-case "otel" is weak: "Otel reservations"), distributed tracing, runbook, paging the on-call (gap keyword
+  "page … on-call" — shadows +ui's "page"), the tools (PagerDuty, Prometheus, Grafana, Datadog, Sentry…), structured logging, a
+  correlation / trace ID, `X-Request-ID`, incident response, feature flag / kill switch, a canary release / deployment (a bare
+  "canary" is weak — "Canary Islands"), blue-green / progressive / staged rollout (PT implantação canário / gradual), a
+  rollback plan, rolling back a deployment / release (gap keywords "roll back … release", "reverter … implantação", "revertir
+  … despliegue"), liveness / readiness probes, a health (check) endpoint, fault injection, zero downtime, a monitoring / Grafana
+  dashboard (listed before "grafana": the longer phrase wins its place and shadows +ui's "dashboard"); weak: monitoring /
+  monitor, alert(s) / alerting, a postmortem, uptime, outage, downtime, rollback, rollout, telemetry, tracing, `APM`, error rate,
+  5xx, on-call / on call, game day (1.19 T review: on-call, game day, postmortem were strong — a hospital's on-call schedule, a
+  match's game day, a pathology postmortem), a request ID, latency metrics, request logs; **generic**: metrics, logs / logging,
+  latency, p99 / p95 / p50, deploy — never a bare "log" ("log in") or "trace"; **context** (1.19 T review): SLA, incident, health
+  check (+ PT / ES) and the **technical targets** (one concept `target`: a service, servers, production phrases, a cluster /
+  Kubernetes / pod, a cron / batch / sync / import / backup job, a data / CI pipeline, an endpoint, the backend, the
+  infrastructure, ops / DevOps / SRE, a status page, disk / CPU / memory usage, queue depth, consumer lag — never the bare
+  business words: a sales pipeline, a production line, a job posting, a reefer container, a restaurant's server;
+  `SIGNAL_CUES.obs` drops "customer / room service", "service level"). SIGNAL_CONCEPTS.obs.**watch** = monitoring · monitor ·
+  alert(s) · alerting · incident · postmortem · SLA (+ PT / ES, and — 1.19 verify 3 — the verbs "alertar" / "avisar", weak; a
+  health check endpoint is strong in PT / ES too: "endpoint de verificação de saúde", "endpoint de comprobación de salud"):
+  business monitoring ("monitor stock levels and send alerts to
+  purchasing", "incident alerts for the store manager", a help desk's SLA + alerts) is ONE hint, never +obs; a watch word +
+  a technical target is ("Monitor the ERP sync job and alert ops"). SIGNAL_HAZARDS.obs: downtime / an outage ("without
+  downtime") is never negated. Shared: observability / SLO / SLA / uptime stay +saas signals (a phrase may serve two tracks),
+  rollback +tdd weak. The tasks' telemetry task carries `_Emits metrics:_`. No logged 1.18 classify input turns +obs on.
+  **Cues** (`SIGNAL_CUES` — 1.19 T review): `SIGNAL_CUES[track](hit, text, cased)` → a new tier, "none" or null; built-in tracks
+  only, applied after shadowing and before the context rule; each reads a bounded window (`CUE_SPAN` 200 characters of the
+  hit's clause / sentence) with linear regexes.
+  **The three tracks, measured (1.19 T):** a precision / recall corpus of 133 EN / PT / ES texts (positives and hard negatives —
+  mcp/test.js 1.19 T8) — 100% / 100% for each track; the 1,783 classify inputs both suites log gave the same 1.18 track
+  decisions (only +api / +ui switched on beside them). The placeholder corpus (`templateCorpus()`, ≤ 2 optional tracks + all:
+  47 track sets now) renders 1,165 texts (1.18: 628); `templateSets()` builds in ~95 ms (1.18: ~70 ms) — T10 bounds it
+  relatively. Test helpers: `T19` in the 1.19 T block runs the same eight checks for each new track — a new built-in track adds
+  one entry there. **1.19 T review:** on the reviewer's independent 205-text EN / PT / ES corpus precision / recall went +api
+  70.4% / 95.0% → 100% / 100%, +ui 86.0% / 79.6% → 100% / 87.0% (the misses left are sales dashboards — a dashboard is +ui's
+  generic word by design — and a downtime banner), +obs 68.6% / 82.8% → 100% / 100%; `1.19 T review` in mcp/test.js embeds 78
+  of its hardest texts (+ 10 from the 1.19 verification's +ui findings; ≥ 90% / ≥ 85% per track); the logged classify
+  inputs of both suites (2,578 distinct) replayed through 1.18, the 1.19 package-T base and the fix give the same 1.18 track
+  decisions. **1.19 verification** (the verifier's 146-text corpus): +api 92.6% / 92.6% → 100% / 96.3%, +ui 100% / 71.0% →
+  100% / 74.2% (the misses left are generic-word UIs: a confirm dialog, a toast, a login screen), +obs 90.6% / 93.5% → 91.2% /
+  100% (the false positives left are coordinated negations: "not add feature flags or canary releases"); the reviewer's 205
+  texts unchanged; 2,644 logged classify inputs and a 12,390-text keyword sweep give the seven older tracks' 1.18 decisions.
 - **Readers go through the accessors (1.15), never the constants.** The constants above are the BUILT-IN tables;
   `allTracks()` (VALID_TRACKS + the project's valid packs, in name order after the built-in ones), `optionalTracks()`,
   `markerTracks()`, `trackMarker(tr)`, `trackSectionTable(tr)`, `trackSteeringFiles(tr)`, `trackSignalTable(tr)` add the
@@ -1637,6 +1750,77 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   reviewer flags production behaviour that no test exercises (a target T-ID, committed in Phase 4, or a helper test in
   the diff) — never "no test in the diff" (review 5).
 
+## Reuse & Integration and clean code (1.19 R)
+- **The section** — the core design builder (every plain feature, EN / PT / ES; pt-BR derived) scaffolds `## Reuse &
+  Integration` between Architecture and Alternatives & Trade-offs: a Kind · What · Where (path) · Why table (Reuse / Extend /
+  New rows) + a `**Module boundaries:**` line — slots, so the placeholder corpus knows them and a fresh design's approval is
+  refused on `placeholders` like every template section. Guide: `references/code-reuse-and-quality.md`.
+- **Doctor `design-reuse`** (WARN only, CHECK_PHASE 2, never in `approvalChecks`) is the third `DESIGN_WEIGH` entry
+  (`engine/quality.js`: `[id, synonyms, min, stamp]`) — the 1.17 A pattern exactly: `designWeighState` over `weighSection(…,
+  REUSE_SYN)` → missing · template · empty · filled (min 0: any row / item / line of prose — "greenfield: nothing to reuse"
+  counts); skipped for a bugfix, a spike and a later-phase template design; `designSaveCheck` returns `reuse` (its state) + a ▲
+  note (never unclean); `templates check` warns `reuse-missing`; spec_upgrade lists it but never counts it toward `attention`
+  (`DESIGN_WEIGH_IDS`). `REUSE_SYN`: Reuse (& / and Integration…), Code reuse, Existing components / code / modules /
+  services / helpers, Integration points, Integration with the existing system / code, PT Reutilização / Reaproveitamento /
+  Reúso / Componentes existentes / Pontos de integração / Integração com o sistema existente, ES Reutilización /
+  Aprovechamiento / Componentes existentes / Puntos de integración / Integración con el sistema existente… — never a bare
+  "Integration" or "Existing" (the heading must NAME the section: `weighHeadingMatches`). **Brownfield:** when the design's
+  section is missing or empty and `integration-plan.md` → Integration Points (a REUSE_SYN heading) is filled, the check passes
+  with state `integration` (`designReuseFallback`); a template section still warns.
+- **The stamp scheme** — `approvePhase` stamps a design approval (and its history record) `weigh: true` (1.17) AND `reuse:
+  true` (1.19). Each DESIGN_WEIGH check names the stamp it needs; `designWeighChecks(design, lang, {approval, integrationPlan})`
+  treats a check as legacy when the design approval lacks its stamp → a pass with `designWeigh.legacyApproval(detail,
+  DESIGN_WEIGH_STAMPS[stamp])` ("approved before 1.19"). So a 1.17 / 1.18 approval (weigh only) is still held to trade-offs /
+  risks, never to reuse; an unstamped one to none. `opts.legacy: true` (the 1.17 form) still makes every check legacy. A new
+  design check → a new stamp key (additive: an older engine reading the state keeps its own rules).
+- **The brief (R2)** — `briefReuse(projectDir, design, implements, acIds)` (quality.js) → `{state, total, entries, omitted, files,
+  more, truncated?}`: the section's units (`reuseUnits`: table data rows, outermost list items with their deeper lines, prose
+  lines; a unit holding a template slot is none) that name the task — its file, a sibling in its folder, the folder, a folder
+  above it (`RE_REUSE_PATH` path tokens through `implementsKey`; the look-behind makes a long slash-less run linear), a
+  ≥ 5-character basename word-bounded, or one of its AC IDs — ≤ 8 entries / 1,500 characters; and the existing source files
+  (`GUARD_CODE_EXT`, dot files / SCAN_IGNORE folders / the task's own files out) next to its `_Implements:_` targets: ≤ 5
+  folders, each read by ONE bounded `opendirSync` of at most 1,000 entries (`readDirBounded` — a 100,000-entry folder costs
+  what its first 1,000 do), a `Set` of names, then the first 15 in (non-test, path) order — `isTestCodePath` asked only until
+  15 non-test files are found — + `more`; `truncated: true` (only then present) when a folder held more entries, so `more` is a
+  lower bound ("…and at least N more", "possibly more" when none is counted — `reuseFilesMore(n, atLeast)`). `taskBrief`
+  renders it after Files (`BRIEF.reuse*`, i18n) when there is an entry, a section to point at (`reuseNoMatch`) or a file.
+  Result `reuse`; with `write: true` only `refs.reuse {entries: <count>, files}`.
+- **Paths from spec text (R review 1 / 3)** — `reuseTargets` keeps only a reference INSIDE the project, decided on its TEXT
+  before any fs call (`reuseInsideRel`): a network path (`isNetworkPath` — the 1.19 code stat'ed `//host/share/x.ts` and
+  opened an SMB connection to the host a spec named: 4.7–7.2 s on an unreachable one, NTLM credentials on Windows), an
+  absolute path elsewhere, a `..` out of the project or the root itself names nothing (no target, no entry match); an absolute
+  path into the project reads as its relative spelling. Inside, `reuseProbe` lstat's each segment below the project root
+  (memoized per call, iterative) and a symlink or a junction on the way stops it — never followed, so a link out of the project
+  (or to a share) lists nothing; stricter than templates / import's realpath check (a link that stays inside isn't listed
+  either: the list is a hint, and following a link could reach a share).
+- **Design context (R review 2)** — only the ONE section weighSection picks (`weighSectionHead` → {level, title, body}) can
+  leave the brief's "Design context", and only when the Reuse section quotes ALL of it (`reuseQuotedSection`: a `##` heading,
+  every unit of the body Design context would show, in order, none omitted, no fenced code). Every other section — an
+  "Integration Points" beside it, "Existing code", a 1.18 design's contract section whose bullets aren't entries of their own —
+  keeps the 1.18 needle rule (the r19 exclusion of every REUSE_SYN heading dropped whole sections; mcp/test.js "1.19 R review
+  2" diffs it against a copy of the 1.18 rule). `_Emits metrics:_` also pulls an +obs feature's `[OBS] Telemetry` section
+  (marker + the Telemetry synonyms, `trackSectionTable("obs")`), beside the `[SaaS] Observability` rule (T review 6).
+- **Backlog names (R review 5)** — `spec_backlog add` of a name already in the backlog (case-insensitive) keeps its entry and
+  spelling and APPENDS a new note to its note (`BACKLOG_NOTE_SEP` " · ", one line; a note it already holds, or none, changes
+  nothing; the whole note ≤ `BACKLOG_NOTE_MAX` 2,000 characters — past it add is refused, nothing written) → `exists: true`,
+  `appended`, a localized `note` (`featureOps.backlogAppended` / `backlogKept` / `backlogNoteFull`); the CLI prints that note
+  instead of "✓ added". It answered "✓ added" and kept the old note, so a second refactor candidate filed as the same
+  `refactor-<topic>` was lost; the prose asks for one name per candidate. A NEW entry's note has the same cap (1.19 verify 5 —
+  a first add stored any length): past it add is refused, nothing written (`featureOps.backlogNoteLong`), MCP and CLI alike.
+- **Prose (R3)** — agents/spec-implementer.md: "Search before you write" is Before-you-begin step 3 (a hard step: the brief's
+  Reuse section, concept + three synonyms, shared folders, `.specs/SPECS.md`; reuse → extend → create, the rule of three, no
+  copy-paste) + a hard rule + the report's `### Reuse` block (Reused / Extended / Created + searched / Duplicated on purpose /
+  Refactor candidates); agents/spec-reviewer.md: Code quality = duplication against the EXISTING codebase (a new unit
+  duplicating one is Important), the guide's smells Minor; the controller files refactor candidates with `spec_backlog add`
+  (`refactor:` note) — subagent-execution.md, /executeTask; red-flags rows; SKILL.md, AGENTS.md, /design. No engine gate reads
+  the Reuse block (R5: prose only — the SubagentStop gate is unchanged). Extending a unit OUTSIDE the task's `_Implements:_`
+  files is never a silent edit (R review 6): NEEDS_CONTEXT → a converge task (`spec_append_tasks`, re-approved) or the
+  controller's go-ahead, or create locally and name it in the report — the scope guard (`meta.guard: "scope"`) would otherwise
+  stop a subagent mid-task on a permission prompt; spec-implementer step 3 + hard rule, the guide ("Extending a unit outside
+  the task's files"), subagent-execution.md (NEEDS_CONTEXT), /executeTask and the brief's `reuseRule` (EN / PT / ES).
+- **Steering (R4)** — the `structure.md` stub gains Module Boundaries and Shared Code slots, the constitution stub a fifth
+  example principle ("Search before you write: extend an existing module before adding a new one") — EN / PT / ES.
+
 ## Conventions & gotchas
 - **Every name-taking op resolves its folder through `resolveFeature()` / `existingFeature()`** —
   never `path.join(specsRoot, slugify(name))`. An empty slug (non-Latin names, `...`, `undefined`)
@@ -1960,9 +2144,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(1447 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(1529 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
-`node cli/test-cli.js` adds 455 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 471 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 Exact counts that change when a package adds a command, tool or template (54 command files, the tools/list length, the

@@ -1,4 +1,4 @@
-# Example — a fully worked spec (1.18 shape)
+# Example — a fully worked spec (1.19 shape)
 
 `demo-project/` is a self-contained mini-project showing what a feature looks like with the current
 methodology: **prioritized user stories (P1/P2)**, **Success Criteria**, a design that weighs its choices
@@ -63,6 +63,7 @@ Doctor: api-keys  [core +tdd +saas]  verdict=PASS  readyToAdvance=true
   ✓ constitution-check — present — verify each principle is checked
   ✓ design-tradeoffs — 4 option(s) weighed
   ✓ design-risks — 3 risk(s) listed
+  ✓ design-reuse — design approved before 1.19 — asked only from its next approval (no Reuse & Integration section — name the existing modules, components, helpers or services this feature reuses or extends (with their paths), what is new and why nothing existing fits, and where the new code lives)
   ✓ saas-sections — all 5 filled
   ✓ test-plan
   ✓ traceability — all 5 ACs covered by tasks

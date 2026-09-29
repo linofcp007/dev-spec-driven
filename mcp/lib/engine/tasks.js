@@ -22,7 +22,8 @@ let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDeci
   projectChecks, RE_FENCE_CLOSE, RE_LIST_ITEM, RE_TEST_REF, readIfExists, readState, redProof, REPRO_SYN,
   ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
-  trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent;
+  trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
+  briefReuse, reuseQuotedSection, trackSectionTable;
 function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
@@ -32,7 +33,8 @@ function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, b
   packTracks, planIdText, projectChecks, RE_FENCE_CLOSE, RE_LIST_ITEM, RE_TEST_REF, readIfExists, readState, redProof,
   REPRO_SYN, ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
-  trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent } = E); }
+  trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
+  briefReuse, reuseQuotedSection, trackSectionTable } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
 // scanner — so status/next/phase can never count a task that complete/brief/finish don't see.
@@ -1251,20 +1253,34 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const stories = [...storyNums].map((n) => storyContext(reqText, n)).filter(Boolean);
 
   // Design sections that mention the task's IDs or files, plus the track sections its markers touch.
-  const sections = designSections(readIfExists(path.join(dir, "design.md")) || "");
+  const designText = readIfExists(path.join(dir, "design.md"));
+  const sections = designSections(designText || "");
   // The files as the design spells them: `src/payment.js:10` / `#L10` / backticks never appear there (implementsRel, the
   // way briefSteering reads them) — the raw spelling left the design section out.
   const impFiles = mk.implements.map(implementsRel).filter(Boolean);
   const needles = [...acIds, ...testIds, ...impFiles, ...impFiles.map((f) => path.posix.basename(f)).filter((b) => b.length >= 5)];
   // A task proving a +sec / +privacy criterion reads that track's design sections (threat model, authz, retention…).
   // … and a track pack's (1.15) — its sections are the rigor its criteria were written for.
-  const trackMarks = ["sec", "privacy", "dist", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
+  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
+  // 1.19 R2 — search before you write: the design's Reuse & Integration entries naming this task's files / folders / ACs, and the
+  // existing source files next to its _Implements:_ targets (names only; bounded).
+  const reuse = briefReuse(projectDir, designText, mk.implements, acIds);
+  const reuseShown = reuse.entries.length > 0 || reuse.total > 0 || reuse.files.length > 0;
+  // … and the design section it quotes leaves "Design context" only when the Reuse section quotes ALL of it (R review 2 —
+  // reuseQuotedSection): every other section, whatever its heading, keeps the 1.18 selection below.
+  const reuseSection = reuseQuotedSection(sections, designText, reuse);
+  // A task emitting metrics reads the design's observability: a section named like [SaaS] Observability (any track, as in 1.18) and,
+  // on an +obs feature, its [OBS] Telemetry section (T review 6 — a task citing a core AC reached no [OBS] section).
+  const obsMarker = tracks.includes("obs") ? trackMarker("obs") : null;
+  const obsTelemetry = obsMarker ? ((trackSectionTable("obs") || []).find((x) => x.name === "Telemetry") || { syn: [] }).syn : [];
   const want = (s) => {
+    if (s === reuseSection) return false;
     const hay = s.title + "\n" + s.body;
     if (needles.some((x) => hay.includes(x))) return true;
     const title = s.title.toLowerCase();
     const syn = (list, nm) => list.find((x) => x.name === nm).syn.some((y) => title.includes(y));
     if (mk["emits metrics"].length && syn(SAAS_SECTIONS, "Observability")) return true;
+    if (mk["emits metrics"].length && obsTelemetry.length && s.title.includes(obsMarker) && obsTelemetry.some((y) => title.includes(y))) return true;
     if (mk["affects evals"].length && (syn(AI_SECTIONS, "Prompt Architecture") || syn(AI_SECTIONS, "Eval Strategy"))) return true;
     if (trackMarks.some((m) => s.title.includes(m))) return true; // the case-sensitive marker (C4)
     return false;
@@ -1309,6 +1325,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     evals: mk["affects evals"],
     metrics: mk["emits metrics"],
     implements: mk.implements,
+    reuse: reuseShown ? reuse : null,
     unresolved,
     design: { path: rel(path.join(dir, "design.md")), toc: sections.map((s) => s.title), included, omitted },
     steering,
@@ -1369,6 +1386,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (dec.omitted.length) res.decisionsOmitted = dec.omitted;
   if (gloss.items.length) res.glossary = gloss.items.map((g) => ({ term: g.term, definition: g.definition, avoid: g.avoid })); // 1.16 Q3
   if (gloss.omitted.length) res.glossaryOmitted = gloss.omitted;
+  if (reuseShown) res.reuse = reuse; // 1.19 R2: {state, total, entries, omitted, files, more}
   if (block.done) res.note = t.alreadyDone(block.number);
   if (includeBrief) res.brief = md;
   else if (write) {
@@ -1379,7 +1397,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
     res.refs = { acs: acceptanceCriteria.map((a) => a.id), tests: testRows.map((r) => r.id) };
     if (res.decisions) res.refs.decisions = res.decisions.map((x) => x.id); // 1.14 C2: the IDs only (their text is in the brief)
     if (res.glossary) res.refs.glossary = res.glossary.map((g) => g.term); // 1.16 Q3: the terms only (the entries are in the brief)
-    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary"]) delete res[k];
+    // 1.19 R2: the nearby files (identifiers) and how many design entries the brief quotes — never the entries' text
+    if (res.reuse) res.refs.reuse = { entries: res.reuse.entries.length, files: res.reuse.files };
+    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary", "reuse"]) delete res[k];
   }
   return res;
 }

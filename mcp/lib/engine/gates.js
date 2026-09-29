@@ -148,7 +148,8 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
     if (Object.keys(sf.steeringMatch).length) entry.steeringMatch = sf.steeringMatch; // fileMatch files: counted while _Implements:_ match
   }
   // 1.17 A review 3: a design approved by 1.17+ is held to the Alternatives & Trade-offs / Risks warns; one approved before never is.
-  if (p === "design") entry.weigh = true;
+  // 1.19 R1: `reuse` — the same for the Reuse & Integration warn (design-reuse): a 1.17 / 1.18 approval carries weigh only.
+  if (p === "design") { entry.weigh = true; entry.reuse = true; }
   if (rc.role) entry.role = rc.role; // 1.14 B3: the role signing (informational on a phase no role is required for)
   if (opts.batch === true) entry.batch = true; // 1.14 B3: approved by a fast-forward (metrics count them apart)
   // Change history (1.13): `approvals[p]` stays the latest approval; every approval is also appended to
@@ -165,6 +166,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (entry.steering) record.steering = entry.steering; // 1.16 Q1
   if (entry.steeringMatch) record.steeringMatch = entry.steeringMatch;
   if (entry.weigh) record.weigh = true; // 1.17 A review 3
+  if (entry.reuse) record.reuse = true; // 1.19 R1
   if (entry.role) record.role = entry.role;
   if (entry.batch) record.batch = true;
   // 1.14 B3: with roles, a sign-off that doesn't complete the phase waits in state.signoffs — approvals[p] untouched, no snapshot.
@@ -1243,11 +1245,11 @@ function storeCreateFlow(dir, flow) {
 // (and earlier ones) first. A check not listed (placeholders: it only fails for the current phase or an earlier
 // one) counts as current.
 const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-criteria": 1, priorities: 1, "ac-uniqueness": 1, reproduction: 1,
-  design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "dist-sections": 2, "root-cause": 2,
+  design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "dist-sections": 2, "api-sections": 2, "ui-sections": 2, "obs-sections": 2, "root-cause": 2,
   "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, "malformed-markers": 5, verification: 6, "outside-code-artifacts": 6 };
 CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
 Object.assign(CHECK_PHASE, { glossary: 1, "cross-feature-acs": 1, "steering-changed-since-approval": 2 }); // 1.16 Q (warns only)
-Object.assign(CHECK_PHASE, { "design-tradeoffs": 2, "design-risks": 2 }); // 1.17 A1 (warns only)
+Object.assign(CHECK_PHASE, { "design-tradeoffs": 2, "design-risks": 2, "design-reuse": 2 }); // 1.17 A1, 1.19 R1 (warns only)
 
 // ---------------------------------------------------------------------------
 // Gates — the ONE view doctor / approve / next_action / finish / roadmap share of what a phase still lacks

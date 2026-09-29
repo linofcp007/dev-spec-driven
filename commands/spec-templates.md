@@ -17,7 +17,7 @@ its `lines`.
   place, so the team edits them there. `lang` given → `.specs/templates/<lang>/`. It never overwrites a file. Artifacts:
   classification, requirements, design, tasks, test-plan, eval-plan, load-test, quickstart, checklist,
   integration-plan, bug, bug-requirements, bug-test-plan, bug-tasks, spike, spike-tasks, and `steering/<file>.md`
-  (incl. `security.md` / `privacy.md` / `distributed.md`).
+  (incl. `security.md` / `privacy.md` / `distributed.md` / `api.md` / `ui.md`).
 - **`check`** — validates the project's templates against the current rules and lists each problem with its severity
   (the CLI exits 1 on an error). Fix the errors before scaffolding with them.
 

@@ -25,6 +25,7 @@ phase. Adapted from the rationalization tables of [obra/superpowers](https://git
 |---|---|
 | "Scale/cost can be figured out later" | On +saas/+ai the mandatory sections exist because "later" is a rewrite. "Not needed because X" is fine; blank is not. |
 | "There's only one way to do it" | Then naming the one you rejected takes a minute: Alternatives & Trade-offs — at least two options per key decision, the cost of being wrong, why this one. |
+| "We'll figure out what to reuse while coding" | Then every task reinvents it. Reuse & Integration names the existing modules, what is extended, what is new and why — before the tasks are written. |
 
 ## Tests first (+tdd, Phases 3–4 and every task)
 
@@ -46,7 +47,9 @@ one behaviour at a time, red for the right reason, minimal code, green, refactor
 |---|---|
 | "Close enough to the AC" | An AC is met or it isn't. Check it by ID. |
 | "I'll tick it now and verify later" | A tick is a claim. Evidence first (`_Verify:_`, `spec_complete_task {evidence}`). |
-| "While I'm here I'll also refactor X" | Out of the task = out of scope. File it. |
+| "While I'm here I'll also refactor X" | Out of the task = out of scope. File it: `spec_backlog add` with a `refactor:` note. |
+| "I'll write a quick helper" | Search first — the design's Reuse & Integration, then the codebase by concept and synonyms. The fourth retry wrapper was a quick helper too. |
+| "I'll copy this function and tweak it" | A copy forks the knowledge: the bug fixed in one lives on in the other. Extend it (a parameter with a default, callers unchanged) — or, at the third use, extract it (the rule of three). |
 | "The subagent said DONE" | Review the diff and the evidence. A report is a claim. |
 | "The command is slow, a note will do" | A runnable `_Verify:_` counts only with its command and exit 0. Run it. |
 | "I have no shell here, so I'll tick it with a note" | No run, no tick. Name the `_Verify:_` command and ask the user for its output (or `dev-spec done <f> <n> --run`); tick unverified only if they ask for exactly that. |
@@ -101,4 +104,4 @@ one behaviour at a time, red for the right reason, minimal code, green, refactor
 | "We'll add retries" | Retries without timeouts, jitter, a budget and idempotency keys turn one outage into two. |
 
 See also: `verification.md`, `bugfix.md`, `review-feedback.md`, `security-track.md`, `privacy-track.md`,
-`distributed-data-patterns.md`.
+`distributed-data-patterns.md`, `code-reuse-and-quality.md`.

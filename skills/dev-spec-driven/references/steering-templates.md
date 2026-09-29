@@ -19,12 +19,14 @@ steering files.
 | `structure.md` | `core` | ✅ always |
 | `testing-standards.md` | `+tdd` | when any feature uses the TDD track |
 | `scale.md` | `+saas` | when any feature uses the SaaS track |
-| `observability.md` | `+saas` (also useful for `+ai`) | when SaaS or AI track is used |
+| `observability.md` | `+saas`, `+obs` (also useful for `+ai`) | when the SaaS, operability or AI track is used |
 | `cost.md` | `+saas` | when the SaaS track is used |
 | `ai-strategy.md` | `+ai` | when the AI track is used |
 | `security.md` | `+sec` | when the security track is used |
 | `privacy.md` | `+privacy` | when the privacy track is used |
 | `distributed.md` | `+dist` | when the distributed systems & data consistency track is used |
+| `api.md` | `+api` | when the API contract track is used |
+| `ui.md` | `+ui` | when the UI track is used |
 | `glossary.md` | any (optional) | when the product has domain terms people use loosely — `steering_scaffold` only, `spec_init` never creates it |
 
 At project start, create at least the four `core` files. Add the others the first time a
@@ -97,6 +99,7 @@ Each design's Constitution Check answers to them; a design that violates a princ
 2. [e.g., No PII in logs; user IDs are pseudonymized.]
 3. [e.g., No breaking API change without a versioned migration path.]
 4. [e.g., Errors fail closed (deny) on the security path.]
+5. [e.g., Search before you write: extend an existing module before adding a new one.]
 
 ## Constraints
 - [Hard tech/regulatory constraints that bound all designs.]
@@ -206,6 +209,17 @@ src/
 └── workers/                  # Background job handlers
 \`\`\`
 
+## Module Boundaries
+- **Public surface:** each feature exposes one entry point (`features/<feature>/index.ts`); its internals are not
+  imported from outside
+- **Dependency direction:** `features/*` import `lib/*` and `components/*` — never each other; `lib/*` imports no
+  feature; no cycles (checked by dependency-cruiser as a project check)
+
+## Shared Code
+- **Where it lives:** `src/lib/` (http client, logger, money, dates, validation), `src/components/` (the design
+  system) — search there before adding a helper or a component
+- **Promotion:** code moves into `lib/` on its second or third real use, feature-agnostic, with its own tests
+
 ## Naming
 - **Files:** kebab-case (`user-settings.tsx`)
 - **Components:** PascalCase export, file in kebab-case
@@ -293,7 +307,7 @@ Journeys where a regression is visible to users and threatens business outcomes:
 
 ---
 
-## `observability.md` (+saas, also useful for +ai)
+## `observability.md` (+saas, +obs, also useful for +ai)
 
 ```markdown
 # Observability Standards
@@ -322,7 +336,20 @@ for business sections > 50ms. Sampling 10% in prod; always sample errors.
 
 ## Dashboards
 Every feature: request rate, error rate, P50/P95/P99 latency, saturation of its main resource.
+
+## SLOs & Error Budgets
+- Per critical journey: the SLI, the SLO target and window: [checkout: 99.5% of valid requests < 800 ms, 28 days] · the error-budget policy (what stops when it is spent): [feature launches pause]
+- Burn-rate alerts: the fast ones page (e.g. 14.4× over 1 h, 6× over 6 h), the slow one (e.g. 1× over 3 days) opens a ticket.
+
+## Rollout & Rollback
+- Feature flags: an owner and a removal date each · canary / progressive steps and the metrics that gate them: [1% → 10% → 50% → 100%, gated on the SLO] · rollback criteria and target time: [error rate > baseline + 1 pt → roll back in < 5 min]
+
+## Health & Capacity
+- Liveness checks the process only, readiness its dependencies · capacity signals (saturation, queue depth, pool usage) with thresholds: [pool usage > 80% for 10 min]
 ```
+
+The per-feature SLOs, alerts, flags and rollout steps belong in the feature's `[OBS]` design sections; the reasoning (SLIs, burn
+rates, RED / USE, structured logs, tracing, runbooks, progressive delivery, operability tests): `references/observability-patterns.md`.
 
 ---
 
@@ -511,6 +538,67 @@ The patterns behind each rule (outbox, inbox, sagas, isolation levels, locking, 
 
 ---
 
+## `api.md` (+api)
+
+```markdown
+# API Standards
+
+## Style & Contract
+- Style: [REST] · the contract lives in: [openapi.yaml at the repo root] — written first, reviewed before the handlers.
+- Naming: plural nouns for collections · [snake_case] fields · ISO 8601 UTC timestamps · IDs as strings.
+
+## Versioning & Compatibility
+- Strategy: [URL /v1] · only additive changes within a version · a breaking change ships as a new version.
+- Deprecation: the Deprecation and Sunset headers, at least [6 months] of notice, a changelog entry, usage tracked per client.
+
+## Errors
+- application/problem+json (RFC 9457): type, title, status, detail, instance + a stable `code`; a validation error lists each field. No stack trace in a response.
+
+## Pagination, Idempotency & Concurrency
+- Cursor pagination (an opaque cursor, at most [100] items per page) · an Idempotency-Key on every non-idempotent create, kept for [24 h] · ETag / If-Match on updates (412 on a stale version).
+
+## Rate Limits
+- Per [API key]: [600] requests per [minute] · 429 with Retry-After and the RateLimit headers.
+
+## Checks (local)
+- Contract tests: [npm run test:contract] · breaking-change diff against the published contract: [npm run api:diff].
+```
+
+Per-feature decisions (the resources, the error codes, the page size of one endpoint) belong in the feature's `[API]`
+design sections, not here. The reasoning behind each rule (what counts as breaking, the deprecation lifecycle,
+problem details, cursor pagination, Idempotency-Key, ETag / If-Match): `references/api-design-patterns.md`.
+
+---
+
+## `ui.md` (+ui)
+
+```markdown
+# UI Standards
+
+## Design System
+- Components: [the component library, its Storybook URL] · tokens: [colour, spacing, type — in tokens.json] · a new component enters the system first (documented, reviewed), never as a one-off.
+
+## States
+- Every view designs: loading · empty · error (with Retry) · partial · offline · permission denied · success.
+- Forms: inline errors + a summary, values kept on an error, the submit button never the only feedback.
+
+## Accessibility
+- Target: WCAG 2.2 AA · keyboard operable, visible focus · every control named · contrast 4.5:1 (text) / 3:1 (UI) · targets ≥ 24×24 px · prefers-reduced-motion honoured.
+- Checks: [npm run test:a11y — axe] on every local run · a manual keyboard + screen-reader pass ([NVDA, VoiceOver]) per feature.
+
+## Responsiveness & i18n
+- Breakpoints: [360 / 768 / 1280 px] · text expansion +30–40 % · RTL: [no] · dates, numbers and currency through the locale.
+
+## Performance Budget
+- Core Web Vitals (p75): LCP ≤ 2.5 s · INP ≤ 200 ms · CLS ≤ 0.1 · JS per route ≤ [170 KB gz] · measured by: [Lighthouse locally, RUM in production].
+```
+
+Per-feature decisions (the state matrix of one view, a new component, a view's own budget) belong in the feature's `[UI]`
+design sections. The reasoning behind each rule (the design system first, the states, WCAG 2.2 AA and how to test it,
+i18n, performance budgets, visual regression): `references/ui-design-patterns.md`.
+
+---
+
 ## `glossary.md` (optional — the ubiquitous language)
 
 One entry per domain term: the word the specs use, what it means in this product, and the words **not** to use for it.
@@ -594,7 +682,7 @@ override when present — create-only, never over an existing file.
    a template full of placeholders is a liability.
 2. **First time a track activates:** add its steering file (e.g., first SaaS feature → `scale.md`,
    `observability.md`, `cost.md`; first AI feature → `ai-strategy.md`; first TDD feature →
-   `testing-standards.md`; first +sec feature → `security.md`; first +privacy feature → `privacy.md`; first +dist feature → `distributed.md`).
+   `testing-standards.md`; first +sec feature → `security.md`; first +privacy feature → `privacy.md`; first +dist feature → `distributed.md`; first +api feature → `api.md`; first +ui feature → `ui.md`; first +obs feature → `observability.md`).
 3. **At feature spec time:** the design phase reads the active-track files. If a design conflicts
    with a steering file (exceeds budget, breaks an SLA), raise it in review — never silently exceed.
    Area-specific rules go in a scoped file (`inclusion: fileMatch`) rather than bloating `tech.md`.

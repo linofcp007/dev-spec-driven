@@ -62,6 +62,7 @@ Task 3: dispatched (base a1b2c3d, model sonnet)
 Task 3: minor (deferred): <one-liner>
 Task 3: fix round 1/5 (2 addressed, 0 open — <one-liners>; commits a1b2c3d..e4f5a6b)
 Task 3: parked — <finding> — Ruling: <why the code stands>
+Task 3: refactor candidate filed: refactor-pricing-rules (backlog)
 Task 3: complete (commits a1b2c3d..e4f5a6b, review clean)
 Checkpoint US1: presented → approved
 ```
@@ -85,7 +86,10 @@ test is not yours to rule on — see "Where autonomy stops".
 text, `loop`, `inlineOnly`, its `_Verify:_` command — with `verifyPipes` when one pipes and `expect: "fail"` on an
 `_Expect: fail_` task — the project checks `projectChecks`, `refs` — the AC/T IDs it cites — `unresolved` IDs, a
 bugfix `gated`), never the spec text the brief quotes: the brief never enters your context. The brief itself also
-carries the decisions (`decisions.md`) that cite the task's ACs / T-IDs.
+carries the decisions (`decisions.md`) that cite the task's ACs / T-IDs, and a **Reuse** section — the design's Reuse &
+Integration entries for the task's files, folders or ACs, and the existing source files next to its `_Implements:_`
+targets (`refs.reuse`: how many entries, the files) — where the implementer's search before writing starts
+(`references/code-reuse-and-quality.md`).
 If the result says `inlineOnly`, do this task yourself in the inline prompt-iteration loop instead.
 Record `BASE = git rev-parse HEAD`.
 
@@ -117,10 +121,14 @@ reaches you only with its evidence written down — still read it: the gate read
 command (`spec_complete_task` records the run you pass it, and refuses a failed one).
 `dev-spec stop-check --agent spec-implementer --message "<its reply>"` shows the gate's decision; `spec_init {stopCheck: false}` turns the Stop and SubagentStop gates off for the project.
 
-- **DONE** → build the review package, dispatch the reviewer.
+- **DONE** → check the report has its **Reuse** block (what was searched, reused, extended or created, and why —
+  missing for a task that added code: resume the implementer), then build the review package, dispatch the reviewer.
 - **DONE_WITH_CONCERNS** → read the concerns; correctness/scope concerns get resolved before review,
   observations get noted.
-- **NEEDS_CONTEXT** → supply it and resume the same implementer.
+- **NEEDS_CONTEXT** → supply it and resume the same implementer. One the implementer raises to **extend a unit outside
+  the task's files** (`_Implements:_`) is a plan question: add a converge task for it (`spec_append_tasks` with that file
+  in `_Implements:_` — the human approves the changed tasks) and run it first, or tell the implementer to go ahead (with
+  `meta.guard: "scope"` the edit then asks the user) or to create locally — never let it edit that file silently.
 - **BLOCKED** → context problem: more context, same model. Needs more reasoning: re-dispatch one tier
   up. Too big: split it (ledger a ruling). **The spec is wrong** (a test that can't be right, an AC that
   contradicts the design): stop — this is a phase problem, not an implementation one.
@@ -169,6 +177,16 @@ Clean review (or every open finding parked with a ruling) → `spec_complete_tas
 with the evidence **from the implementer's report** — the task's `_Verify:_` command, its exit code and
 the output summary (`references/verification.md`) — + ledger `complete` line. A non-zero exit code is
 refused by the engine: that task is not done. Never tick a task with open Critical/Important findings.
+
+**Refactor candidates are filed, never done in the task.** The report's **Reuse** block lists them (a smell, a
+duplicate, a tangled file the implementer noticed), and so do the reviewer's out-of-scope refactor ideas: file each
+one in the roadmap backlog — `spec_backlog {action: "add", name: "refactor-<topic>", note: "refactor: <smell> in <files>
+— <the refactoring> — found in <feature> task N"}` (CLI `dev-spec backlog add refactor-<topic> "refactor: …"`) — and
+ledger `Task N: refactor candidate filed: refactor-<topic>`. One name per candidate (the topic, not the area): an `add`
+of a name already in the backlog appends its note to that entry (`exists: true`, `appended`) — right for the same
+candidate found again, wrong for a different one. A candidate becomes an improvement spec later
+(`references/improvement-specs.md`: characterization tests first, the refactor on green); one the task can't be done
+without is a preparatory task — `/spec-converge` and the human's approval, not the current diff.
 
 ## Parallel mode (optional): `[P]` tasks in separate worktrees
 
@@ -338,3 +356,5 @@ Turn count beats token price: the cheapest models take 2–3× the turns on mult
 | "I'll tick the task now and review later" | `tasks.md` `[x]` means reviewed. The roadmap reads it. |
 | "The implementer said the tests pass" | Tick with the evidence from its report (command, exit code, output) — no evidence, no claim. |
 | "The SubagentStop hook let it through, so it passed" | The gate reads the report's text — each `_Verify:_` command with the exit code the task needs — it never ran anything. Read it; record the run with `spec_complete_task`. |
+| "The implementer found a good refactor — let it do it in this task" | File it: `spec_backlog add` with a `refactor:` note. A refactor folded into a feature task makes the diff bigger and a regression unattributable. |
+| "The new helper is tiny, no need to look for an existing one" | Tiny duplicates are how a codebase ends up with four retry wrappers. No **Reuse** block with the search in the report → send it back. |

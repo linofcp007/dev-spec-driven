@@ -16,7 +16,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs, evidenceMode,
   evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText, guardInput,
   guardLevel, headingHasMarker, headRest, implementsRel, isInsideDir, isObj, isPackTrack, isRecord, isSpikeDir,
-  legacyPackName, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
+  legacyPackName, legacyPackMarkerTrack, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
   optionalTracks, own, packDesignBlock, packMarkersFor, packOf, packTaskBlock, parseTasks, parseTracks,
   placeholderReport, projectChecks, projectLang, quotedValue, RE_ACTIVE_TRACKS, RE_TESTABILITY, RE_WIN_RESERVED,
   readIfExists, readJson, readRoadmap, readState, requirementAcIds, resolveFeature, roadmapError, rolesSummary,
@@ -31,7 +31,7 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   checksInput, checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
   guardInput, guardLevel, headingHasMarker, headRest, implementsRel, isInsideDir, isObj, isPackTrack, isRecord,
-  isSpikeDir, legacyPackName, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
+  isSpikeDir, legacyPackName, legacyPackMarkerTrack, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
   optionalTracks, own, packDesignBlock, packMarkersFor, packOf, packTaskBlock, parseTasks, parseTracks,
   placeholderReport, projectChecks, projectLang, quotedValue, RE_ACTIVE_TRACKS, RE_TESTABILITY, RE_WIN_RESERVED,
   readIfExists, readJson, readRoadmap, readState, requirementAcIds, resolveFeature, roadmapError, rolesSummary,
@@ -768,7 +768,12 @@ function applyTracks(projectDir, f, name, trs, lng) {
   // A pre-1.17 pack of this built-in track's name (legacyPackName — 1.17 D review): adding the built-in track by name adopts it —
   // the pack's record goes, and the track's own design sections are appended even though a heading already carries its marker
   // (the pack's sections — '## [DIST] Release Channels' — are not the built-in ones).
-  const adopted = trs.filter((tr) => VALID_TRACKS.includes(tr) && legacyPackName(state, tr));
+  // 1.19 T review: so does a pack of ANY name whose recorded marker is this track's now (legacyPackMarkerTrack — 'webui' with [UI]):
+  // its '## [UI] …' headings are not the built-in sections either; the pack's record goes with the adoption.
+  const markerPacks = isObj(state.packMarkers) ? Object.keys(state.packMarkers).filter((n) => trs.includes(legacyPackMarkerTrack(state, n))) : [];
+  const byName = trs.filter((tr) => VALID_TRACKS.includes(tr) && legacyPackName(state, tr));
+  const adopted = [...new Set(byName.concat(markerPacks.map((n) => legacyPackMarkerTrack(state, n))))];
+  const adoptedPacks = [...new Set(byName.concat(markerPacks))];
   const added = [];
   const templates = {}; // file → the project template (.specs/templates/…) it was scaffolded from (1.14)
   const note = (x) => { if (!added.includes(x)) added.push(x); };
@@ -834,16 +839,17 @@ function applyTracks(projectDir, f, name, trs, lng) {
 
   if (updateActiveTracks(path.join(dir, "classification.md"), trackLabel(after))) note(T.addedActiveTracks);
   // a saved track pack the project lacks now stays, inactive (1.15) — unless the built-in track of its name was just adopted
-  state.tracks = after.concat(missingPackTracks(dir).filter((x) => !adopted.includes(x)));
+  state.tracks = after.concat(missingPackTracks(dir).filter((x) => !adoptedPacks.includes(x)));
   const pm = packMarkersFor(after).packMarkers; // … and every track pack's marker is remembered (1.15)
   if (pm) state.packMarkers = { ...(isObj(state.packMarkers) ? state.packMarkers : {}), ...pm };
-  if (adopted.length && isObj(state.packMarkers)) {
-    for (const tr of adopted) delete state.packMarkers[tr];
+  if (adoptedPacks.length && isObj(state.packMarkers)) {
+    for (const n of adoptedPacks) delete state.packMarkers[n];
     if (!Object.keys(state.packMarkers).length) delete state.packMarkers;
   }
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
   const res = { ok: true, added, tracks: after };
   if (adopted.length) res.adopted = adopted; // (1.17 D review) the built-in track replaced a pre-1.17 pack of its name
+  if (markerPacks.length) res.adoptedPacks = adoptedPacks; // (1.19 T review) … or a pack of another name with its marker
   if (Object.keys(templates).length) res.templates = templates;
   return res;
 }
@@ -950,7 +956,7 @@ function removeTracks(projectDir, f, named, lng, legacy = []) {
 }
 
 function inactiveArtifacts(dir, gone, T) {
-  const files = { tdd: ["test-plan.md", "tests/"], saas: ["load-test.md"], ai: ["eval-plan.md", "prompts/", "evals/"], sec: [], privacy: [], dist: [] };
+  const files = { tdd: ["test-plan.md", "tests/"], saas: ["load-test.md"], ai: ["eval-plan.md", "prompts/", "evals/"], sec: [], privacy: [], dist: [], api: [], ui: [], obs: [] };
   const design = readIfExists(path.join(dir, "design.md")) || "";
   const tasksText = readIfExists(path.join(dir, "tasks.md")) || "";
   const out = [];
@@ -973,7 +979,8 @@ function addTrack(projectDir, name, track, opts = {}) {
   // --remove of a pre-1.17 pack whose name is reserved now (1.17 D review — 'kafka', or 'dist' while the feature's record says it
   // was a pack): that feature's missing pack, by name — never an unknown track, never the built-in one.
   const st0 = opts.remove ? readJson(statePath(dir)).data : null;
-  const legacy = opts.remove ? [...new Set(trackTokens(track).filter((t) => legacyPackName(st0, t)))] : [];
+  // (1.19 T review: and a pack whose marker is a built-in track's now — 'webui' with [UI] — by its name)
+  const legacy = opts.remove ? [...new Set(trackTokens(track).filter((t) => legacyPackName(st0, t) || legacyPackMarkerTrack(st0, t)))] : [];
   const pt = parseTracks(legacy.length ? trackTokens(track).filter((t) => !legacy.includes(t)) : track);
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(lng, pt.unknown) };
   if (isSpikeDir(dir)) return { ok: false, spike: true, error: msg.spike.noTracks(slug) }; // 1.14 C2: a spike is core-only
@@ -995,6 +1002,7 @@ function addTrack(projectDir, name, track, opts = {}) {
     note: msg.addTrackNote(fresh.join(", +"), slug) };
   if (r.templates) res.templates = r.templates; // files scaffolded from the project's templates (1.14)
   if (r.adopted) res.adopted = r.adopted; // (1.17 D review) the built-in track replaced a pre-1.17 pack of its name
+  if (r.adoptedPacks) res.adoptedPacks = r.adoptedPacks; // (1.19 T review) the packs whose marker it took over ('webui' [UI])
   const already = asked.filter((t) => existing.includes(t));
   if (already.length) res.alreadyOn = already;
   return res;

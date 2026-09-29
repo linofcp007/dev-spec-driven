@@ -116,6 +116,19 @@ function renderBrief(d, lang) {
   if (d.evals.length) push("", t.evals, ...d.evals.map((e) => "- " + e));
   if (d.metrics.length) push("", t.metrics, ...d.metrics.map((m) => "- `" + m + "`"));
   if (d.implements.length) push("", t.files, ...d.implements.map((f) => "- `" + f + "`"));
+  // 1.19 R2 — search before you write: the design's Reuse & Integration entries for this task (a table row's cells joined by
+  // " · ", a list item without its bullet) and the existing source files next to the task's own (bounded by the engine)
+  if (d.reuse) {
+    const r = d.reuse;
+    const entry = (e) => (/^\s*\|/.test(e) ? e.split("|").map((c) => c.trim()).filter(Boolean).join(" · ") : e.replace(/^(?:[-*+]|\d+[.)])\s+/, ""));
+    push("", t.reuse, t.reuseRule);
+    if (r.entries.length) push("", t.reuseEntries, ...r.entries.map((e) => "- " + entry(e)));
+    if (r.omitted) push(t.reuseOmitted(r.omitted));
+    if (!r.entries.length && r.total) push("", t.reuseNoMatch(r.total));
+    if (r.files.length) push("", t.reuseFiles, ...r.files.map((f) => "- `" + f + "`"));
+    // R review 4: a folder read up to its cap (`truncated`) makes the count a lower bound — "at least N more", or "possibly more"
+    if (r.files.length && (r.more || r.truncated)) push(t.reuseFilesMore(r.more, !!r.truncated));
+  }
   const verify = d.verify || [];
   if (verify.length) push("", t.verification, ...verify.map((c) => "- `" + c + "`"));
   if ((d.verifyPipes || []).length) push("", MSG[normalizeLang(lang)].verifyPipe.brief(d.verifyPipes));

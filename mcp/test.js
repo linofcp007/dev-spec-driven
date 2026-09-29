@@ -5211,8 +5211,10 @@ function endRun() {
     ok(/^Design check on design\.md \(metrics \[core \+saas\]\):/.test(dz1) && /\[SaaS\] sections: Performance Budget:unfilled; Scale Design:unfilled/.test(dz1) &&
       /Constitution Check: not filled in/.test(dz1) && /\d+ template placeholder\(s\) left: L\d+ /.test(dz1) && /\/spec-doctor metrics/.test(dz1) && !/Roadmap updated/.test(dz1),
       "hook on design.md (EN template): unfilled [SaaS] sections, the Constitution Check and the placeholders, with a doctor hint");
-    // 1.17 A1: a filled design weighs its choices too — without these two sections the save check adds a ▲ note each.
+    // 1.17 A1: a filled design weighs its choices too — without these two sections the save check adds a ▲ note each (1.19 R1: and it
+    // names what it reuses — Reuse & Integration).
     const cleanDesign = "# Design: Metrics\n\n## Overview\nPush counters to Prometheus.\n\n```mermaid\nflowchart LR\n  A-->B\n```\n\n" +
+      "## Reuse & Integration\n- Reuse the existing metrics client (src/lib/metrics.ts).\n\n" +
       "## Alternatives & Trade-offs\n- Push to a gateway — simple, but a single point of failure.\n- Scrape an endpoint — chosen: no extra hop.\n\n## Risks\n- Cardinality blow-up — medium — label allow-list.\n\n" +
       "## Constitution Check\n- Principle 1: idempotent writes — respected.\n\n" +
       ["Performance Budget", "Scale Design", "Multi-tenancy", "Observability", "Cost Envelope"].map((s) => `## [SaaS] ${s}\nConcrete content for ${s}.\n`).join("\n");
@@ -6942,7 +6944,7 @@ function endRun() {
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
 
     // --- the track list itself
-    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy,dist" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy,dist" && // 1.17 D: + dist
+    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy,dist,api,ui,obs" && // 1.17 D: + dist; 1.19 T: + api, ui, obs
       S.TRACK_MARKER.sec === "[SEC]" && S.TRACK_MARKER.privacy === "[PRIVACY]" && S.trackLabel(S.normalizeTracks("privacy sec saas")) === "core +saas +sec +privacy",
       "A2: sec and privacy are valid, composable tracks with English-stable markers, labelled in track order");
     const typo = S.createFeature(a2("typo"), "Typo", "privcy");
@@ -7551,7 +7553,7 @@ function endRun() {
     const lsEn = S.templates(pp, "list");
     const lreq = (l) => l.templates.find((e) => e.artifact === "requirements");
     ok(lsPt.ok && lsPt.action === "list" && lreq(lsPt).source === "override" && lreq(lsPt).override === ".specs/templates/pt/requirements.md" && lreq(lsPt).overrides.length === 2 &&
-      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 29 && /^Templates para features em 'pt'/.test(lsPt.lines[0]) &&
+      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 31 && /^Templates para features em 'pt'/.test(lsPt.lines[0]) &&
       lsEn.lang === "pt" && lreq(S.templates(pp, "list", { lang: "en" })).override === ".specs/templates/requirements.md" &&
       S.templates(ps, "list").templates.some((e) => e.artifact === "steering/api-rules.md" && e.source === "override"),
       "B1: spec_templates list — built-in vs project template per artifact for a language (the <lang>/ one wins; default: the project language), in that language, custom steering templates included");
@@ -7563,10 +7565,10 @@ function endRun() {
     const tplDir = path.join(pi, ".specs", "templates");
     ok(i1.ok && i1.created.join() === ".specs/templates/requirements.md" && rd(tplDir, "requirements.md").startsWith("# Feature: {{name}}\n\n## Summary\n{{summary}}\n") &&
       i2.ok && !i2.created.length && i2.kept.join() === ".specs/templates/requirements.md" && /Nothing copied/.test(i2.lines[0]) && rd(tplDir, "requirements.md").includes("<!-- team edit -->") &&
-      i3.created.length === 29 && i3.created.every((c) => c.startsWith(".specs/templates/es/")) && rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}") &&
+      i3.created.length === 31 && i3.created.every((c) => c.startsWith(".specs/templates/es/")) && rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}") &&
       fs.existsSync(path.join(tplDir, "es", "steering", "constitution.md")) && /copiada\(s\) en \.specs\/templates\//.test(i3.lines[0]) &&
       S.templates(pi, "check").verdict === "pass" && S.templates(pi, "check", { lang: "es" }).verdict === "pass",
-      "B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 29 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md), --lang into <lang>/ (in that language) — never over an edited file; the copies check clean");
+      "B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 31 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md; 1.19: + steering/api.md, ui.md), --lang into <lang>/ (in that language) — never over an edited file; the copies check clean");
 
     // --- spec_templates check: a design template with some [SaaS] headings but not Observability, and the other rules
     const pk = b1("check");
@@ -12085,9 +12087,9 @@ function endRun() {
     const lst = payload(await call("spec_tracks", { projectDir: tp }));
     const chk = payload(await call("spec_tracks", { action: "check", projectDir: tp }));
     const a11yRow = (lst.packs || []).find((p) => p.name === "a11y");
-    ok(lst.ok && lst.builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist" && a11yRow && a11yRow.valid && a11yRow.marker === "[A11Y]" &&
+    ok(lst.ok && lst.builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs" && a11yRow && a11yRow.valid && a11yRow.marker === "[A11Y]" &&
       a11yRow.title === "Accessibility" && a11yRow.sections.length === 3 && a11yRow.steering === "accessibility.md" && chk.ok && chk.verdict === "pass" && chk.errors === 0,
-      "feature F4: spec_tracks list shows the seven built-in tracks and the valid +a11y pack ([A11Y], 3 sections, steering); check passes (got " + js(a11yRow) + " / " + js(chk.problems) + ")");
+      "feature F4: spec_tracks list shows the built-in tracks and the valid +a11y pack ([A11Y], 3 sections, steering); check passes (got " + js(a11yRow) + " / " + js(chk.problems) + ")");
 
     // Classification: spec_classify with the project picks +a11y from its signals (a strong keyword); without it, never.
     const cl = payload(await call("spec_classify", { description: "Make the settings page usable with a screen reader and the keyboard", projectDir: tp }));
@@ -14399,7 +14401,7 @@ function endRun() {
     // --- D1: the registry
     const typo = S.createFeature(d("typo"), "Typo", "distt");
     const alias = S.createFeature(d("typo"), "Typo", ["kafka"]);
-    ok(S.VALID_TRACKS.includes("dist") && S.OPTIONAL_TRACKS[S.OPTIONAL_TRACKS.length - 1] === "dist" && S.TRACK_MARKER.dist === "[DIST]" &&
+    ok(S.VALID_TRACKS.includes("dist") && S.OPTIONAL_TRACKS.indexOf("dist") === S.OPTIONAL_TRACKS.indexOf("privacy") + 1 && S.TRACK_MARKER.dist === "[DIST]" &&
       S.trackLabel(S.normalizeTracks("+dist privacy tdd")) === "core +tdd +privacy +dist" && S.trackSections("dist").map((x) => x.name).join() === "Consistency Model,Cross-system Writes,Delivery & Idempotency,Concurrency,Failure Modes" &&
       !typo.ok && /did you mean 'dist'/.test(typo.error) && !alias.ok && /'kafka' \(did you mean 'dist'\?\)/.test(alias.error),
       "1.17 D1: dist is a valid, composable marker track ([DIST], 5 sections, labelled after privacy); 'distt' / 'kafka' get a did-you-mean (got " + js([S.OPTIONAL_TRACKS, typo.error, alias.error]) + ")");
@@ -14614,8 +14616,8 @@ function endRun() {
     const pChk = S.trackPacks(tp, "check");
     const probs = JSON.stringify(pChk);
     ok(!pDist.ok && /reserved/.test(pDist.error) && !pKafka.ok && /reserved/.test(pKafka.error) && /marker-reserved/.test(probs) &&
-      !S.parseTracks("events").tracks.includes("events") && S.trackPacks(tp, "list").builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist",
-      "1.17 D12: a track pack named dist (or kafka) is refused, one with the marker DIST is invalid (marker-reserved); spec_tracks list names the seven built-in tracks (got " + js([pDist.error, pKafka.error, probs.slice(0, 300)]) + ")");
+      !S.parseTracks("events").tracks.includes("events") && S.trackPacks(tp, "list").builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs",
+      "1.17 D12: a track pack named dist (or kafka) is refused, one with the marker DIST is invalid (marker-reserved); spec_tracks list names the built-in tracks (got " + js([pDist.error, pKafka.error, probs.slice(0, 300)]) + ")");
 
     // --- D13: project templates — the copied built-ins check clean; a design template with some [DIST] headings needs them all
     const tt = d("templates");
@@ -14981,7 +14983,7 @@ function endRun() {
       js(gSaveFew.weigh) === js({ tradeoffs: "few", risks: "filled" }) && gSaveFew.clean === true && /\n  ▲ Alternatives & Trade-offs lists 1 option/.test(gSaveFew.text) &&
       weigh(gDocDel) === "warn,warn" && /^no Alternatives & Trade-offs section/.test(chk(gDocDel, "design-tradeoffs").detail) && /^no Risks section/.test(chk(gDocDel, "design-risks").detail) &&
       gDocDel.readyToAdvance === true && gDocDel.checks.every((c) => c.status !== "fail") &&
-      js(gSaveDel.weigh) === js({ tradeoffs: "missing", risks: "missing" }) && (gSaveDel.text.match(/▲/g) || []).length === 2 &&
+      js(gSaveDel.weigh) === js({ tradeoffs: "missing", risks: "missing" }) && (gSaveDel.text.match(/▲ no (?:Alternatives|Risks)/g) || []).length === 2 && // (+ design-reuse's ▲, 1.19 R1)
       gApDel.ok === true && !gApDel.forced,
       "1.17 A1: template sections refuse the design approval on placeholders only; filled → design-tradeoffs / design-risks pass (MCP too, right after constitution-check); one option → warn 'few'; deleted → two warns, readyToAdvance, the approval goes through unforced; the design-save check notes them with ▲ (got " +
       js([gApT.failing, weigh(gDocT), weigh(gDocF), chk(gDocFew, "design-tradeoffs").detail, gSaveFew.weigh, weigh(gDocDel), gSaveDel.weigh, gApDel.ok]) + ")");
@@ -15040,7 +15042,7 @@ function endRun() {
     const codes = (r) => (r.problems || []).filter((x) => /design/.test(x.file)).map((x) => x.code + ":" + x.severity);
     ok(dmDoc.verdict === "pass" && weigh(dmDoc) === "pass,pass" && chk(dmDoc, "design-tradeoffs").detail === "4 option(s) weighed" && !chk(dmDoc, "changed-since-approval").id &&
       dmCl.nudges === undefined && dmCl.questions.length === 1 &&
-      !codes(tpOk).length && js(codes(tpBad)) === js(["tradeoffs-missing:warn", "risks-missing:warn"]) && tpBad.verdict === "warn",
+      !codes(tpOk).length && js(codes(tpBad)) === js(["tradeoffs-missing:warn", "risks-missing:warn", "reuse-missing:warn"]) && tpBad.verdict === "warn", // (+ reuse-missing, 1.19 R1)
       "1.17 A1: examples/demo-project stays doctor PASS (design-tradeoffs 4 options, design-risks pass, design approval fingerprint current), no nudge; templates check warns tradeoffs-missing / risks-missing on a design template without them — not on the built-in one (got " +
       js([dmDoc.verdict, weigh(dmDoc), dmCl.questions, codes(tpOk), codes(tpBad)]) + ")");
 
@@ -15165,7 +15167,7 @@ function endRun() {
     ok(weigh(rv3Legacy) === "pass,pass" && /^design approved before 1\.17 — asked only from its next approval \(no Alternatives & Trade-offs section/.test(chk(rv3Legacy, "design-tradeoffs").detail) &&
       /^design approved before 1\.17/.test(chk(rv3Legacy, "design-risks").detail) &&
       rv3Ap.ok === true && rv3St.approvals.design.weigh === true && rv3St.approvalHistory[rv3St.approvalHistory.length - 1].weigh === true && rv3St.approvals.requirements.weigh === undefined &&
-      weigh(rv3Doc) === "warn,warn" && js(rv3Up.doctor.warnings) === js(["design-tradeoffs", "design-risks"]) && !rv3Up.attention.includes("warnings") &&
+      weigh(rv3Doc) === "warn,warn" && js(rv3Up.doctor.warnings) === js(["design-tradeoffs", "design-risks", "design-reuse"]) && !rv3Up.attention.includes("warnings") && // (+ design-reuse, 1.19 R1)
       /^design aprovado antes da 1\.17 — só é exigido/.test(W3.msg("pt").designWeigh.legacyApproval("x")) && /^diseño aprobado antes de la 1\.17/.test(W3.msg("es").designWeigh.legacyApproval("x")) &&
       /^design aprovado antes da 1\.17/.test(W3.msg("pt-BR").designWeigh.legacyApproval("x")),
       "1.17 A review 3: a pre-1.17 design approval → design-tradeoffs / design-risks pass with 'approved before 1.17' (EN / PT / ES / pt-BR); a 1.17 design approval carries weigh: true (approval + history, not on other phases) and warns; spec_upgrade lists them under doctor.warnings without the 'warnings' attention (got " +
@@ -15931,6 +15933,1151 @@ function endRun() {
     ok(ccOn && got && got.afterEn === false && got.claim === true && got.lazy > 3 && got.extra > 0 && got.head !== "undefined",
       "1.18 load time: the facade enables Node's module compile cache (where Node has it), an English process loads no pt-BR, and the stop gate reads pt-BR's raw claim patterns without deriving its messages (got " +
       JSON.stringify({ ccOn, got }) + ")");
+  }
+
+  // 1.19 package (R) — reuse and clean code.
+  {
+    const js = (v) => JSON.stringify(v);
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const I = require("./lib/i18n.js");
+    const rRd = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const rDir = (n) => path.join(tmp, "p19r-" + n);
+    const chk = (d, id) => (d.checks || []).find((c) => c.id === id) || {};
+    const reuseSt = (d) => chk(d, "design-reuse").status || "-";
+    const st3 = (d) => ["design-tradeoffs", "design-risks", "design-reuse"].map((id) => chk(d, id).status || "-").join(",");
+    const wDesign = (f, text) => fs.writeFileSync(path.join(f.dir, "design.md"), text);
+    const readSt = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    const writeSt = (f, s) => fs.writeFileSync(path.join(f.dir, ".state.json"), JSON.stringify(s, null, 2));
+    const cut = (t, from, to) => t.slice(t.indexOf(from), t.indexOf(to));
+    const REQ = "# Feature: Orders\n\n## Summary\nPlace an order.\n\n## User Stories\n### US-1 (P1): Place an order\nAs a buyer I want to order.\n**Independent Test:** place one order.\n\n" +
+      "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the buyer submits a cart THE SYSTEM SHALL store the order.\n" +
+      "2. **US-1.AC-2** — IF the cart is empty THEN THE SYSTEM SHALL reject it.\n\n## Success Criteria\n- **SC-001** — 95% of orders placed in under 2 s.\n\n" +
+      "## Edge Cases & Error Handling\n- **EC-1** — WHEN stock runs out THE SYSTEM SHALL refuse the order.\n\n## Non-Functional Requirements\n- **NFR-1** — p95 < 2 s.\n\n## Out of Scope\n- Refunds.\n";
+    const ALT = "## Alternatives & Trade-offs\n| Decision | Option | Pros | Cons | Cost if wrong | Chosen |\n|---|---|---|---|---|---|\n" +
+      "| Storage | One table | Simple | Wide rows | A migration later | ✓ |\n| Storage | Two tables | Normalized | A join per read | Slower reads | ✗ |\n\n";
+    const RISKS = "## Risks\n| Risk | Likelihood | Impact | Mitigation | Owner |\n|---|---|---|---|---|\n| Lost order on a crash | low | high | One transaction per order | backend |\n\n";
+    const REUSE = "## Reuse & Integration\n| Kind | What | Where (path) | Why / notes |\n|---|---|---|---|\n" +
+      "| Reuse | `withRetry` | `src/lib/http/retry.ts` | the same backoff as the rest of the app |\n" +
+      "| Extend | `Money` | `src/lib/money.ts` | adds allocate(); existing callers unchanged |\n" +
+      "| New | the order store | `src/orders/store.ts` | nothing stores orders yet (searched store, repository, persist) |\n\n" +
+      "**Module boundaries:** src/orders/ imports src/lib/, never the reverse.\n\n";
+    const design = (reuse) => "# Design: Orders\n\n## Overview\nOrders are stored.\n\n## Architecture\n```mermaid\ngraph TD\n  A[API] --> S[Store]\n```\n\n" + reuse + ALT +
+      "## Data Models\nOrder {id, total}.\n\n## Testing Strategy\nUnit tests.\n\n" + RISKS + "## Constitution Check\n- [x] Small functions — complies.\n\n## Complexity Tracking\nNone.\n";
+
+    // R1 — a fresh scaffold, EN / PT / ES / pt-BR: Reuse & Integration between Architecture and Alternatives & Trade-offs, holding
+    // template slots the placeholder lookup knows (the corpus renders them) — and no design-reuse check while design.md is a later
+    // phase's template.
+    const H = {
+      en: ["## Architecture", "## Reuse & Integration", "## Alternatives & Trade-offs", "[existing module, component, helper or service]", "[its path]"],
+      pt: ["## Arquitetura", "## Reutilização e Integração", "## Alternativas e Compromissos", "[módulo, componente, helper ou serviço existente]", "[o seu caminho]"],
+      es: ["## Arquitectura", "## Reutilización e Integración", "## Alternativas y Compensaciones", "[módulo, componente, helper o servicio existente]", "[su ruta]"],
+      "pt-BR": ["## Arquitetura", "## Reutilização e Integração", "## Alternativas e Compromissos", "[módulo, componente, helper ou serviço existente]", "[o seu caminho]"],
+    };
+    const fresh = Object.keys(H).map((lang) => {
+      const p = rDir("fresh-" + lang);
+      S.initProject(p, ["core"], lang);
+      const f = S.createFeature(p, "Orders", ["core", "tdd", "saas"], "", undefined, lang);
+      const t = fs.readFileSync(path.join(f.dir, "design.md"), "utf8");
+      const at = H[lang].slice(0, 3).map((h) => t.indexOf(h + "\n"));
+      const slots = S.featurePlaceholders(p, f.slug, "design.md").items.map((x) => x.text);
+      const good = at.every((i) => i >= 0) && at[0] < at[1] && at[1] < at[2] && slots.includes(H[lang][3]) && slots.includes(H[lang][4]) &&
+        reuseSt(S.specDoctor(p, f.slug)) === "-";
+      return { lang, good, at, slots: slots.filter((s) => s === H[lang][3] || s === H[lang][4]) };
+    });
+    ok(fresh.every((r) => r.good),
+      "1.19 R1: a fresh design.md (EN / PT / ES / pt-BR, +tdd +saas) has Reuse & Integration between Architecture and Alternatives & Trade-offs, its slots read as template placeholders; while design.md is a later phase's template doctor adds no design-reuse check (got " + js(fresh) + ")");
+
+    // R1 — the gate: the section still template → the design approval is refused on `placeholders` (like every template section);
+    // filled → pass; empty → warn; one line of prose ("greenfield") → pass; deleted → warn only (readyToAdvance, the approval goes
+    // through unforced) and the approval is stamped `reuse: true` — a 1.19 approval keeps the warn.
+    const gp = rDir("gate");
+    S.initProject(gp, ["core"], "en");
+    const gf = S.createFeature(gp, "Orders", ["core"]);
+    fs.writeFileSync(path.join(gf.dir, "requirements.md"), REQ);
+    approveBefore(gp, gf.slug, "design");
+    const tpl = fs.readFileSync(path.join(gf.dir, "design.md"), "utf8");
+    const tplReuse = cut(tpl, "## Reuse & Integration", "## Alternatives & Trade-offs");
+    wDesign(gf, design(tplReuse));
+    const gDocT = S.specDoctor(gp, gf.slug);
+    const gApT = S.approvePhase(gp, gf.slug, "design", "t");
+    wDesign(gf, design(REUSE));
+    const gDocF = S.specDoctor(gp, gf.slug);
+    const gMcp = payload(await call("spec_doctor", { projectDir: gp, name: gf.slug }));
+    wDesign(gf, design("## Reuse & Integration\n\n"));
+    const gDocE = S.specDoctor(gp, gf.slug);
+    wDesign(gf, design("## Reuse & Integration\nGreenfield: nothing to reuse yet — the first module of the app.\n\n"));
+    const gDocP = S.specDoctor(gp, gf.slug);
+    wDesign(gf, design(""));
+    const gDocDel = S.specDoctor(gp, gf.slug);
+    const gSave = S.designSaveCheck(gp, gf.slug);
+    const gAp = S.approvePhase(gp, gf.slug, "design", "t");
+    const gSt = readSt(gf);
+    const gDocAfter = S.specDoctor(gp, gf.slug);
+    ok(gApT.ok === false && js(gApT.failing) === js(["placeholders"]) && /\[existing module, component, helper or service\]/.test(gApT.checks[0].detail) &&
+      reuseSt(gDocT) === "warn" && /^Reuse & Integration is still the template/.test(chk(gDocT, "design-reuse").detail) &&
+      st3(gDocF) === "pass,pass,pass" && chk(gDocF, "design-reuse").detail === "3 item(s) named (reused / extended / new)" &&
+      st3(gMcp) === "pass,pass,pass" && gMcp.checks.findIndex((c) => c.id === "design-reuse") === gMcp.checks.findIndex((c) => c.id === "design-risks") + 1 &&
+      reuseSt(gDocE) === "warn" && /^Reuse & Integration is empty/.test(chk(gDocE, "design-reuse").detail) &&
+      reuseSt(gDocP) === "pass" && /^written \(no row or bullet/.test(chk(gDocP, "design-reuse").detail) &&
+      reuseSt(gDocDel) === "warn" && /^no Reuse & Integration section/.test(chk(gDocDel, "design-reuse").detail) && gDocDel.readyToAdvance === true &&
+      gDocDel.checks.every((c) => c.status !== "fail") && gSave.reuse === "missing" && gSave.clean === true && /\n  ▲ no Reuse & Integration section/.test(gSave.text) &&
+      gAp.ok === true && !gAp.forced && gSt.approvals.design.reuse === true && gSt.approvals.design.weigh === true &&
+      gSt.approvalHistory[gSt.approvalHistory.length - 1].reuse === true && gSt.approvals.requirements.reuse === undefined && reuseSt(gDocAfter) === "warn",
+      "1.19 R1: the Reuse & Integration slots refuse the design approval on placeholders only; filled → design-reuse passes (MCP too, right after design-risks); empty → warn; a line of prose ('greenfield') passes; deleted → warn, readyToAdvance, the approval goes through unforced and stamps reuse: true (approval + history, design only) — the 1.19 approval keeps the warn; the design-save check notes it with ▲ (got " +
+      js([gApT.failing, reuseSt(gDocT), st3(gDocF), chk(gDocF, "design-reuse").detail, reuseSt(gDocE), reuseSt(gDocP), reuseSt(gDocDel), gSave.reuse, gAp.ok, gSt.approvals.design, reuseSt(gDocAfter)]) + ")");
+
+    // R1 — the stamp scheme: a design approval without `reuse` (made by 1.17 / 1.18: `weigh` only) is never flagged by design-reuse
+    // (a pass with 'approved before 1.19') while design-tradeoffs still warns for it; without `weigh` either (pre-1.17) nothing warns.
+    // spec_upgrade lists a 1.19 design-reuse warn under doctor.warnings but never counts it toward `attention`.
+    const lSt = readSt(gf);
+    delete lSt.approvals.design.reuse;
+    writeSt(gf, lSt);
+    wDesign(gf, design("").replace(ALT, ""));
+    const l17 = S.specDoctor(gp, gf.slug);
+    delete lSt.approvals.design.weigh;
+    writeSt(gf, lSt);
+    const lPre = S.specDoctor(gp, gf.slug);
+    const dm = rDir("demo");
+    fs.cpSync(path.join(root, "examples", "demo-project"), dm, { recursive: true });
+    const dmDoc = S.specDoctor(dm, "api-keys");
+    const dmAp = S.approvePhase(dm, "api-keys", "design", "t");
+    const dmUp = S.specUpgrade(dm).features.find((x) => x.name === "api-keys");
+    ok(st3(l17) === "warn,pass,pass" && /^design approved before 1\.19 — asked only from its next approval \(no Reuse & Integration section/.test(chk(l17, "design-reuse").detail) &&
+      st3(lPre) === "pass,pass,pass" && /^design approved before 1\.17/.test(chk(lPre, "design-tradeoffs").detail) && /^design approved before 1\.19/.test(chk(lPre, "design-reuse").detail) &&
+      /^design aprovado antes da 1\.19 — só é exigido/.test(I.msg("pt").designWeigh.legacyApproval("x", "1.19")) && /^diseño aprobado antes de la 1\.19/.test(I.msg("es").designWeigh.legacyApproval("x", "1.19")) &&
+      /^design aprovado antes da 1\.19/.test(I.msg("pt-BR").designWeigh.legacyApproval("x", "1.19")) && /antes de la 1\.17/.test(I.msg("es").designWeigh.legacyApproval("x")) &&
+      reuseSt(dmDoc) === "pass" && dmAp.ok === true && dmUp.doctor.warnings.includes("design-reuse") && !dmUp.attention.includes("warnings"),
+      "1.19 R1: a 1.17 / 1.18 design approval (weigh, no reuse) → design-reuse passes with 'approved before 1.19' while design-tradeoffs still warns; an unstamped (pre-1.17) one → all three pass (EN / PT / ES / pt-BR notes); spec_upgrade lists a 1.19 design-reuse warn under doctor.warnings without the 'warnings' attention (got " +
+      js([st3(l17), chk(l17, "design-reuse").detail, st3(lPre), reuseSt(dmDoc), dmAp.ok, dmUp.doctor.warnings, dmUp.attention]) + ")");
+
+    // R1 — exempt: a bugfix (bug.md stands in for its design) and a spike (its own doctor).
+    const ep = rDir("exempt");
+    S.initProject(ep, ["core"], "en");
+    const bf = S.createFeature(ep, "Crash on save", ["tdd"], "", undefined, "en", "bugfix");
+    wDesign(bf, "# Design: Crash on save\n\n## Notes\nThe fix stays inside the save handler.\n");
+    const sp = S.createFeature(ep, "Queue spike", undefined, "Kafka or RabbitMQ?", undefined, "en", "spike");
+    const bDoc = S.specDoctor(ep, bf.slug), sDoc = S.specDoctor(ep, sp.slug);
+    ok(reuseSt(bDoc) === "-" && S.designSaveCheck(ep, bf.slug).reuse === null && reuseSt(sDoc) === "-" && sDoc.ok !== false,
+      "1.19 R1: a bugfix and a spike are exempt (no design-reuse check; the bugfix's design-save check reports reuse: null) (got " + js([reuseSt(bDoc), reuseSt(sDoc)]) + ")");
+
+    // R1 — hand-written headings (EN / PT / ES / pt-BR synonyms — the heading must NAME the section, never a modifier), localized
+    // details, and a brownfield feature's integration-plan.md → Integration Points standing in for a missing section.
+    const hp = rDir("hand");
+    S.initProject(hp, ["core"], "en");
+    const hand = (sec) => "# Design\n\n## Overview\nx.\n\n## Architecture\n```mermaid\ngraph TD\n  A-->B\n```\n\n" + sec + "\n## Constitution Check\n- [x] ok\n";
+    const cases = [["en", "## Reuse and integration\n- Reuse `src/lib/http.ts` as is.\n", "pass"],
+      ["en", "## Existing components: what we build on\n- `src/components/Button.tsx` as is.\n", "pass"],
+      ["en", "## Integration Points\n- The order service (`src/orders/service.ts`).\n", "pass"],
+      ["en", "## Code reuse\nGreenfield: nothing to reuse yet.\n", "pass"],
+      ["en", "## Reuse-based caching\n- A cache in front of the store.\n", "warn"],
+      ["en", "## Existing code paths\n- The checkout flow.\n", "warn"],
+      ["pt", "## Reutilização e integração\n- Reutilizar `src/lib/http.ts` tal como está.\n", "pass"],
+      ["pt", "## Pontos de Integração\n- O serviço de encomendas.\n", "pass"],
+      ["pt-BR", "## Reúso\n- `src/lib/http.ts` como está.\n", "pass"],
+      ["es", "## Componentes existentes\n- `src/lib/http.ts` tal cual.\n", "pass"],
+      ["es", "## Reutilización e Integración\n- Reutilizar `src/lib/http.ts` tal cual.\n", "pass"],
+      ["pt-BR", "", "warn"]];
+    const handGot = cases.map(([lang, sec], i) => {
+      const f = S.createFeature(hp, "Hand " + i, ["core"], "", undefined, lang);
+      wDesign(f, hand(sec));
+      const d = S.specDoctor(hp, f.slug);
+      return [lang, reuseSt(d), chk(d, "design-reuse").detail];
+    });
+    const bp = rDir("brownfield");
+    S.initProject(bp, ["core"], "en");
+    const bw = S.createFeature(bp, "Orders", ["core"], "", undefined, "en", undefined, { brownfield: true });
+    fs.writeFileSync(path.join(bw.dir, "requirements.md"), REQ);
+    approveBefore(bp, bw.slug, "design"); // the design is the current phase: its template section is checked (a warn)
+    wDesign(bw, design(""));
+    const bwTpl = S.specDoctor(bp, bw.slug);
+    fs.writeFileSync(path.join(bw.dir, "integration-plan.md"), "# Integration Plan: Orders\n\n## Integration Points\n- `src/orders/service.ts` — the order service this feature extends.\n" +
+      "- `src/lib/db.ts` — the shared database client, reused as is.\n\n## Required Modifications\n- The service gains a store() method.\n\n## Sequencing\n- Phase 1: the store.\n\n" +
+      "## Risks & Mitigations\n- None.\n\n## Affected Files (best estimate)\n- src/orders/service.ts → store()\n");
+    const bwDoc = S.specDoctor(bp, bw.slug);
+    const bwSave = S.designSaveCheck(bp, bw.slug);
+    wDesign(bw, design(tplReuse));
+    const bwT = S.specDoctor(bp, bw.slug);
+    ok(handGot.every((g, i) => g[1] === cases[i][2]) && handGot[6][2] === "1 item(ns) indicado(s) (reutilizado / estendido / novo)" &&
+      handGot[9][2] === "1 elemento(s) indicado(s) (reutilizado / extendido / nuevo)" && /^sem seção Reutilização e Integração — indique/.test(handGot[11][2]) &&
+      reuseSt(bwTpl) === "warn" && /^no Reuse & Integration section/.test(chk(bwTpl, "design-reuse").detail) &&
+      reuseSt(bwDoc) === "pass" && chk(bwDoc, "design-reuse").detail === "covered by integration-plan.md → Integration Points (2 item(s))" &&
+      bwSave.reuse === "integration" && !/▲ no Reuse/.test(bwSave.text) && reuseSt(bwT) === "warn",
+      "1.19 R1: hand-written Reuse and integration / Existing components: … / Integration Points / Code reuse / Reutilização e integração / Pontos de Integração / Reúso / Componentes existentes / Reutilización e Integración pass (localized details), 'Reuse-based caching' and 'Existing code paths' don't name the section; a brownfield feature's filled integration-plan.md → Integration Points covers a missing section (the template plan doesn't), a template section still warns (got " +
+      js([handGot, reuseSt(bwTpl), chk(bwDoc, "design-reuse").detail, bwSave.reuse, reuseSt(bwT)]) + ")");
+
+    // R1 — templates check: a project design template without the section warns reuse-missing (localized), a synonym heading
+    // doesn't, and the built-in template never does.
+    const tp = rDir("tpl");
+    S.initProject(tp, ["core"], "en");
+    S.templates(tp, "init", { artifact: "design" });
+    const tpOk = S.templates(tp, "check");
+    const tplDesign = (reuse) => "# Design: {{name}}\n\n## Overview\n[How it works]\n\n" + reuse + "## Alternatives & Trade-offs\n- [option A]\n- [option B]\n\n## Risks\n- [what could go wrong]\n\n## Constitution Check\n- [ ] [Principle 1] — complies\n";
+    fs.writeFileSync(path.join(tp, ".specs", "templates", "design.md"), tplDesign(""));
+    const tpBad = S.templates(tp, "check");
+    fs.writeFileSync(path.join(tp, ".specs", "templates", "design.md"), tplDesign("## Existing components\n- [what this feature reuses]\n\n"));
+    const tpSyn = S.templates(tp, "check");
+    const tpPt = rDir("tpl-pt");
+    S.initProject(tpPt, ["core"], "pt");
+    fs.mkdirSync(path.join(tpPt, ".specs", "templates"), { recursive: true });
+    fs.writeFileSync(path.join(tpPt, ".specs", "templates", "design.md"), tplDesign(""));
+    const tpPtR = S.templates(tpPt, "check");
+    const codes = (r) => (r.problems || []).filter((x) => /design/.test(x.file)).map((x) => x.code + ":" + x.severity);
+    const ptMsg = ((tpPtR.problems || []).find((x) => x.code === "reuse-missing") || {}).message || "";
+    ok(!codes(tpOk).length && codes(tpBad).includes("reuse-missing:warn") && !codes(tpSyn).includes("reuse-missing:warn") && tpBad.verdict === "warn" &&
+      /^sem secção Reutilização e Integração — o doctor avisa \(design-reuse\)/.test(ptMsg),
+      "1.19 R1: templates check warns reuse-missing on a design template without Reuse & Integration (PT message too), not on one with a synonym heading, never on the built-in one (got " +
+      js([codes(tpOk), codes(tpBad), codes(tpSyn), ptMsg]) + ")");
+
+    // R2 — the brief's Reuse section: the design's entries that name the task's file / a sibling / its folder / its ACs (a table row's
+    // cells joined), the existing source files next to its own (non-test first, its own file, dot files, docs and ignored folders
+    // out); the Reuse & Integration section is no longer quoted whole under "Design context"; write:true keeps refs.reuse.
+    const rp = rDir("brief");
+    S.initProject(rp, ["core"], "en");
+    const rf = S.createFeature(rp, "Orders", ["core"]);
+    fs.writeFileSync(path.join(rf.dir, "requirements.md"), REQ);
+    const REUSE2 = "## Reuse & Integration\n| Kind | What | Where (path) | Why / notes |\n|---|---|---|---|\n" +
+      "| Reuse | the order repository | `src/orders/repo.ts` | reads and writes orders already |\n" +
+      "| Extend | `Money` | `src/lib/money.ts` | adds allocate() |\n" +
+      "| New | the cart validator | `src/cart/validate.ts` | nothing validates carts (searched validate, check, schema) |\n" +
+      "- US-1.AC-2 — an empty cart: reuse `ValidationError` from src/lib/errors.ts\n\n";
+    wDesign(rf, design(REUSE2));
+    fs.writeFileSync(path.join(rf.dir, "tasks.md"), "# Tasks\n\n## Story US-1 (P1)\n" +
+      "- [ ] 1. [US1] Store the order\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/orders/api.ts_\n" +
+      "- [ ] 2. [US1] Reject an empty cart\n  - _Requirements: US-1.AC-2_\n  - _Implements: src/cart/validate.ts_\n" +
+      "- [ ] 3. [US1] Document the order endpoint\n  - _Requirements: US-1.AC-1_\n" +
+      "- [ ] 4. [US1] Many helpers\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/many/_\n" +
+      "- [ ] 5. [US1] Vendored\n  - _Requirements: US-1.AC-1_\n  - _Implements: node_modules/lib/x.js_\n");
+    const put = (rel, s = "x") => { const p = path.join(rp, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    for (const n of ["api.ts", "repo.ts", "helpers.ts", "api.test.ts", "README.md", ".hidden.ts"]) put("src/orders/" + n);
+    for (let i = 0; i < 30; i++) put("src/many/m" + String(i).padStart(2, "0") + ".ts");
+    put("src/many/node_modules/y.js");
+    put("node_modules/lib/x.js");
+    put("node_modules/lib/z.js");
+    const b1 = S.taskBrief(rp, rf.slug, 1), b2 = S.taskBrief(rp, rf.slug, 2), b3 = S.taskBrief(rp, rf.slug, 3), b4 = S.taskBrief(rp, rf.slug, 4), b5 = S.taskBrief(rp, rf.slug, 5);
+    const sec = (b) => (b.brief.split("## Reuse — search before you write")[1] || "").split("\n## ")[0];
+    const b1W = S.taskBrief(rp, rf.slug, 1, { write: true });
+    const b1Mcp = payload(await call("spec_task_brief", { projectDir: rp, name: rf.slug, number: 1, write: true }));
+    const b1File = fs.readFileSync(b1W.paths.brief, "utf8");
+    ok(js(b1.reuse.entries) === js(["| Reuse | the order repository | `src/orders/repo.ts` | reads and writes orders already |"]) && b1.reuse.total === 4 &&
+      js(b1.reuse.files) === js(["src/orders/helpers.ts", "src/orders/repo.ts", "src/orders/api.test.ts"]) && b1.reuse.state === "filled" &&
+      /\n- Reuse · the order repository · `src\/orders\/repo\.ts` · reads and writes orders already\n/.test(sec(b1)) && /\n- `src\/orders\/helpers\.ts`\n/.test(sec(b1)) &&
+      /search the codebase by concept and synonyms \(references\/code-reuse-and-quality\.md\)/.test(sec(b1)) && !b1.designSections.includes("Reuse & Integration") &&
+      b2.reuse.entries.length === 2 && /US-1\.AC-2 — an empty cart/.test(b2.reuse.entries[1]) && !b2.reuse.files.length &&
+      !b3.reuse.entries.length && b3.reuse.total === 4 && /lists 4 item\(s\), none naming this task's files or criteria/.test(sec(b3)) &&
+      b4.reuse.files.length === 15 && b4.reuse.more === 15 && b4.reuse.files[0] === "src/many/m00.ts" && /…and 15 more in the same folder\(s\)\./.test(sec(b4)) &&
+      !b5.reuse.files.length &&
+      b1W.reuse === undefined && js(b1W.refs.reuse) === js({ entries: 1, files: ["src/orders/helpers.ts", "src/orders/repo.ts", "src/orders/api.test.ts"] }) &&
+      js(b1Mcp.refs.reuse) === js(b1W.refs.reuse) && b1Mcp.reuse === undefined && /## Reuse — search before you write/.test(b1File),
+      "1.19 R2: the brief's Reuse section quotes the design's entries naming the task (a sibling file, its own file, its AC; a table row's cells joined by ' · '), says when none does, and lists the existing source files next to its own (non-test first; its own file, dot files, docs, node_modules out; ≤ 15 + 'more'); a Reuse & Integration section not naming the task stays out of Design context; write:true (MCP too) keeps refs.reuse {entries, files} (got " +
+      js([b1.reuse, b2.reuse.entries, b3.reuse, b4.reuse.more, b5.reuse, b1W.refs, b1.designSections]) + ")");
+
+    // R2 — bounded: at most 8 entries (the rest counted in `omitted`), a 200,000-character line with no '/' is read once (the path
+    // token only starts at a token boundary), the brief is localized (PT).
+    const many = "## Reuse & Integration\n" + Array.from({ length: 12 }, (_, i) => `- Reuse \`src/orders/r${i}.ts\` — helper ${i}.\n`).join("") + "- " + "a".repeat(200000) + "\n\n";
+    wDesign(rf, design(many));
+    const t0 = Date.now();
+    const bMany = S.taskBrief(rp, rf.slug, 1);
+    const manyMs = Date.now() - t0;
+    const ptp = rDir("brief-pt");
+    S.initProject(ptp, ["core"], "pt");
+    const ptf = S.createFeature(ptp, "Encomendas", ["core"], "", undefined, "pt");
+    wDesign(ptf, design("## Reutilização e Integração\n- Reutilizar o repositório (`src/orders/repo.ts`).\n\n"));
+    fs.writeFileSync(path.join(ptf.dir, "tasks.md"), "# Tarefas\n\n## História US-1 (P1)\n- [ ] 1. [US1] Guardar a encomenda\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/orders/api.ts_\n");
+    const bPt = S.taskBrief(ptp, ptf.slug, 1);
+    ok(bMany.reuse.entries.length === 8 && bMany.reuse.omitted === 4 && /4 more matching item\(s\) — read them in design\.md/.test(bMany.brief) && manyMs < 3000 &&
+      /## Reutilização — pesquisar antes de escrever\nProcura no código, pelo conceito e por sinónimos/.test(bPt.brief) && /As entradas de Reutilização e Integração do design para esta tarefa/.test(bPt.brief),
+      "1.19 R2: the Reuse section is bounded (8 entries, the rest counted), a 200,000-character slash-less line stays fast, and the brief speaks the feature's language (PT) (got " +
+      js([bMany.reuse.entries.length, bMany.reuse.omitted, manyMs, (bPt.brief.split("## Reutiliza")[1] || "").slice(0, 160)]) + ")");
+
+    // R3 — the prose: the implementer searches before it writes (a hard step) and reports a Reuse block; the reviewer checks new code
+    // against the EXISTING codebase (a duplicate is Important); the controller files refactor candidates in the backlog; /executeTask,
+    // red-flags, /design, AGENTS.md and SKILL.md (≤ 540 lines) say so — and none of the new text steers toward PRs or CI.
+    const impl = rRd("agents", "spec-implementer.md"), rev = rRd("agents", "spec-reviewer.md"), sub = rRd("skills", "dev-spec-driven", "references", "subagent-execution.md");
+    const exec = rRd("commands", "executeTask.md"), flags = rRd("skills", "dev-spec-driven", "references", "red-flags.md"), skill = rRd("skills", "dev-spec-driven", "SKILL.md");
+    const dcmd = rRd("commands", "design.md"), agentsMd = rRd("AGENTS.md"), guide = rRd("skills", "dev-spec-driven", "references", "code-reuse-and-quality.md");
+    const implSearch = cut(impl, "3. **Search before you write**", "4. If anything is unclear");
+    const implReuse = cut(impl, "- **Reuse** — a `### Reuse` block", "- Files changed; commits");
+    const revQuality = cut(rev, "### 4. Code quality", "### Calibration");
+    const subRefactor = cut(sub, "**Refactor candidates are filed", "## Parallel mode");
+    const execReuse = cut(exec, "**Search before you write**", "**Can't run the");
+    ok(/concept and at least three synonyms/.test(implSearch) && /brief's \*\*Reuse\*\* section/.test(implSearch) && /\*\*reuse\*\*, else \*\*extend\*\*/.test(implSearch) &&
+      /copy-paste/.test(implSearch) && /rule of three/.test(implSearch) && /No new helper, component or client without the search/.test(impl) && /filed, not done/.test(impl) &&
+      ["### Reuse", "Reused:", "Extended:", "Created:", "searched:", "Duplicated on purpose:", "Refactor candidates:"].every((w) => implReuse.includes(w)) &&
+      /Duplication against the EXISTING codebase, not only inside the diff/.test(revQuality) && /duplicates an existing one is \*\*Important\*\*/.test(revQuality) &&
+      /Grep the name's stem and two synonyms/.test(revQuality) && /report's \*\*Reuse\*\* block/.test(revQuality) && /\*\*Minor\*\* unless they hide a defect/.test(revQuality) &&
+      /Duplication is always such a risk/.test(rev) && /a new unit duplicating an existing one/.test(rev) &&
+      /spec_backlog \{action: "add", name: "refactor-<topic>"/.test(subRefactor) && /Task 3: refactor candidate filed/.test(sub) && /check the report has its \*\*Reuse\*\* block/.test(sub) &&
+      /refactor:/.test(execReuse) && /duplicate in the existing codebase/.test(exec) &&
+      /"I'll write a quick helper" \| Search first/.test(flags) && /"I'll copy this function and tweak it"/.test(flags) && /rule of three/.test(flags) &&
+      /\*\*Reuse & Integration\*\*/.test(skill) && /design-reuse/.test(skill) && /code-reuse-and-quality\.md/.test(skill) && /\*\*Search before you write:\*\*/.test(skill) &&
+      skill.split("\n").length <= 540 && /\*\*Every design names what it reuses:\*\*/.test(dcmd) && /design-reuse/.test(dcmd) &&
+      /\*\*Reuse & Integration\*\*/.test(agentsMd) && /design-reuse/.test(agentsMd) && /Search before you write/.test(agentsMd) && /design-reuse/.test(guide) &&
+      [implSearch, implReuse, revQuality, subRefactor, execReuse].every((t) => t.length > 100 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
+      "1.19 R3: spec-implementer searches before it writes (a hard step: concept + synonyms, reuse → extend → create, no copy-paste) and reports a Reuse block; spec-reviewer checks every new unit against the existing codebase (a duplicate is Important, smells Minor); the controller files refactor candidates in the backlog (subagent-execution.md, /executeTask); red-flags, /design, AGENTS.md and SKILL.md (≤ 540 lines) name them; no PR / CI steering in the new text (got " +
+      js([implSearch.length, implReuse.length, revQuality.length, subRefactor.length, execReuse.length, skill.split("\n").length]) + ")");
+
+    // R4 — steering: structure.md gains Module Boundaries and Shared Code slots, the constitution's example principles a reuse rule
+    // (EN / PT / ES / pt-BR) — slots, so a fresh stub still reads as a template.
+    const steerWant = { en: ["## Module Boundaries", "## Shared Code", "[e.g., Search before you write: extend an existing module before adding a new one.]"],
+      pt: ["## Fronteiras de Módulos", "## Código Partilhado", "[ex.: Pesquisar antes de escrever: estender um módulo existente antes de criar um novo.]"],
+      es: ["## Límites de Módulos", "## Código Compartido", "[p.ej., Buscar antes de escribir: extender un módulo existente antes de crear uno nuevo.]"],
+      "pt-BR": ["## Fronteiras de Módulos", "## Código Compartilhado", "[ex.: Pesquisar antes de escrever: estender um módulo existente antes de criar um novo.]"] };
+    const steerGot = Object.entries(steerWant).map(([l, [a, b, c]]) => {
+      const s = I.steeringStub("structure.md", l), k = I.steeringStub("constitution.md", l);
+      const slots = S.placeholderReport(s).map((x) => x.text);
+      return [l, s.indexOf(a + "\n") > s.indexOf("## Layout") && s.indexOf(b + "\n") > s.indexOf(a) && k.includes(c) && slots.length >= 3];
+    });
+    ok(steerGot.every((g) => g[1]),
+      "1.19 R4: the structure.md stub has Module Boundaries and Shared Code (slots) after Layout and the constitution stub a 'search before you write' example principle — EN / PT / ES / pt-BR (got " + js(steerGot) + ")");
+
+    // The demo and the eval fixtures stay clean for this check: the demo's api-keys design was approved before 1.19 (a pass with the
+    // note, no warning — examples/README.md pastes it); the fixtures' designs name what they reuse, so approving them (as the
+    // behavioural fixtures do) keeps design-reuse passing on its own merits.
+    const fxBad = [];
+    for (const [lang, feat] of [["en", "csv-export"], ["es", "exportar-csv"]]) {
+      const d = rDir("fx-" + lang);
+      S.initProject(d, ["core"], lang);
+      S.createFeature(d, feat, ["core"], "x", undefined, lang);
+      fs.cpSync(path.join(root, "evals", "fixtures", "specs-" + lang, feat), path.join(d, ".specs", feat), { recursive: true });
+      approveBefore(d, feat, "design");
+      const ap = S.approvePhase(d, feat, "design", "t");
+      const doc = S.specDoctor(d, feat);
+      if (!ap.ok || reuseSt(doc) !== "pass" || /approved before/.test(chk(doc, "design-reuse").detail || "")) fxBad.push(lang + ": " + ap.ok + " " + reuseSt(doc) + " " + chk(doc, "design-reuse").detail);
+    }
+    const fxRoot = path.join(tmp, "a3-eval-fixtures"); // the behavioural fixtures built above (when bash is here)
+    let fxSeen = 0;
+    for (const c of fs.existsSync(fxRoot) ? fs.readdirSync(fxRoot) : []) {
+      const d = path.join(fxRoot, c);
+      if (!fs.existsSync(path.join(d, ".specs"))) continue;
+      for (const f of S.listFeatures(d).features || []) {
+        const st = S.readState(d, f.name);
+        if (!st.approvals || !st.approvals.design) continue;
+        fxSeen++;
+        if (reuseSt(S.specDoctor(d, f.name)) !== "pass") fxBad.push(c + "/" + f.name);
+      }
+    }
+    ok(dmDoc.verdict === "pass" && /^design approved before 1\.19/.test(chk(dmDoc, "design-reuse").detail) && !dmDoc.checks.some((c) => c.status === "warn") && !fxBad.length,
+      "1.19 R1: examples/demo-project stays doctor PASS with no warning (its pre-1.19 design approval → design-reuse passes with the note); evals/fixtures specs-en / specs-es designs pass design-reuse once approved, and so do the " + fxSeen + " approved design(s) of the built behavioural fixtures (got " +
+      js([dmDoc.verdict, chk(dmDoc, "design-reuse").detail, fxBad]) + ")");
+
+    // 1.19 R review 1 (security) — a network _Implements:_ never reaches the file system: the brief decides on the TEXT that a UNC
+    // reference (//host/share, \\host\share, \\?\UNC\…, a UNC glob) lies outside the project, before any stat — it opened an SMB
+    // connection to the host a spec named (4.7–7.2 s on an unreachable one; NTLM credentials on Windows). A non-resolving name and
+    // TEST-NET-1, in a child process with a timeout. A `..` or absolute reference outside the project names nothing either; an
+    // absolute path INTO the project reads as its relative spelling.
+    const rv = rDir("rv-net"), rvOut = rDir("rv-outside");
+    S.initProject(rv, ["core"], "en");
+    const rvf = S.createFeature(rv, "Orders", ["core"]);
+    fs.writeFileSync(path.join(rvf.dir, "requirements.md"), REQ);
+    wDesign(rvf, design(REUSE2));
+    const rvPut = (base, rel) => { const p = path.join(base, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, "x"); };
+    for (const n of ["api.ts", "repo.ts", "helpers.ts"]) rvPut(rv, "src/orders/" + n);
+    for (const n of ["other.ts", "secret-helper.ts"]) rvPut(rvOut, n);
+    for (let i = 0; i < 1005; i++) rvPut(rv, "src/big/b" + String(i).padStart(4, "0") + ".ts");
+    const fwd = (p) => p.split(path.sep).join("/");
+    fs.writeFileSync(path.join(rvf.dir, "tasks.md"), "# Tasks\n\n## Story US-1 (P1)\n" +
+      "- [ ] 1. [US1] A\n  - _Implements: //nonexistent-host-zz9.invalid/share/x.ts_\n" +
+      "- [ ] 2. [US1] B\n  - _Implements: \\\\192.0.2.1\\share\\y.ts_\n" +
+      "- [ ] 3. [US1] C\n  - _Implements: //nonexistent-host-zz9.invalid/share/*.ts, \\\\?\\UNC\\192.0.2.1\\share\\z.ts_\n" +
+      "- [ ] 4. [US1] D\n  - _Implements: ../p19r-rv-outside/other.ts_\n" +
+      "- [ ] 5. [US1] E\n  - _Implements: " + fwd(rvOut) + "/_\n" +
+      "- [ ] 6. [US1] F\n  - _Implements: " + fwd(path.join(rv, "src", "orders", "api.ts")) + "_\n" +
+      "- [ ] 7. [US1] G\n  - _Implements: src/link/new.ts_\n" +
+      "- [ ] 8. [US1] H\n  - _Implements: src/link/_\n" +
+      "- [ ] 9. [US1] I\n  - _Implements: src/link/sub/deep.ts_\n" +
+      "- [ ] 10. [US1] J\n  - _Implements: src/big/_\n");
+    const rvChild = path.join(tmp, "p19r-rv-child.js");
+    fs.writeFileSync(rvChild, "const S = require(" + JSON.stringify(path.join(root, "mcp", "lib", "spec.js")) + ");\n" +
+      "const out = [1, 2, 3].map((n) => { const t0 = Date.now(); const b = S.taskBrief(" + JSON.stringify(rv) + ", " + JSON.stringify(rvf.slug) + ", n);\n" +
+      "  return { n, ms: Date.now() - t0, ok: b.ok, files: b.reuse ? b.reuse.files : [], entries: b.reuse ? b.reuse.entries : [] }; });\n" +
+      "process.stdout.write(JSON.stringify(out));\n");
+    const rvT0 = Date.now();
+    const rvNet = spawnSync(process.execPath, [rvChild], { encoding: "utf8", timeout: 20000 });
+    const rvWall = Date.now() - rvT0;
+    let rvGot = null;
+    try { rvGot = JSON.parse(rvNet.stdout); } catch { rvGot = null; }
+    const [rv4, rv5, rv6] = [4, 5, 6].map((n) => S.taskBrief(rv, rvf.slug, n));
+    ok(!rvNet.error && rvNet.status === 0 && Array.isArray(rvGot) && rvGot.length === 3 && rvGot.every((x) => x.ok && x.ms < 3000 && !x.files.length && !x.entries.length) && rvWall < 15000 &&
+      !rv4.reuse.files.length && !rv4.reuse.entries.length && !rv5.reuse.files.length && !js([rv4, rv5]).includes("secret-helper") &&
+      js(rv6.reuse.files) === js(["src/orders/helpers.ts", "src/orders/repo.ts"]) && rv6.reuse.entries.length === 1 && /src\/orders\/repo\.ts/.test(rv6.reuse.entries[0]),
+      "1.19 R review 1: a UNC _Implements:_ (//host/share, \\\\host\\share on TEST-NET, \\\\?\\UNC\\…, a UNC glob) makes no fs call — each brief returns at once (child process, 20 s timeout); a `..` or absolute reference outside the project lists nothing; an absolute path into the project reads as its relative spelling (got " +
+      js([rvNet.error && rvNet.error.code, rvNet.status, rvWall, rvGot, (rvNet.stderr || "").slice(0, 300), rv4.reuse, rv5.reuse, rv6.reuse]) + ")");
+
+    // 1.19 R review 3 (security) — a folder reached through a link (a junction on Windows, a symlink elsewhere) is never listed:
+    // each segment below the project root is lstat'ed and nothing is followed (src/link → a folder outside listed its files).
+    let rvLink = true;
+    try { fs.symlinkSync(rvOut, path.join(rv, "src", "link"), "junction"); } catch (e) { rvLink = e.code || String(e); }
+    const rvL = [7, 8, 9].map((n) => S.taskBrief(rv, rvf.slug, n));
+    ok(rvLink !== true || (rvL.every((b) => b.ok && !(b.reuse && b.reuse.files.length)) && !js(rvL).includes("secret-helper") && !js(rvL).includes("other.ts")),
+      "1.19 R review 3: a task implementing src/link/new.ts, src/link/ or src/link/sub/deep.ts, where src/link is a junction / symlink to a folder outside the project, lists none of its files (got " +
+      js([rvLink, rvL.map((b) => b.reuse)]) + ")");
+
+    // 1.19 R review 4 — a folder read up to its cap: at most 1,000 entries per folder (opendir, never the whole listing), and the
+    // count past the 15 listed is a lower bound — "at least N more" (EN / PT / ES / pt-BR; "possibly more" when none is counted).
+    const rvBig = S.taskBrief(rv, rvf.slug, 10);
+    const moreTxt = ["en", "pt", "es", "pt-BR"].map((l) => I.brief(l).reuseFilesMore(985, true));
+    ok(rvBig.reuse.files.length === 15 && rvBig.reuse.more === 985 && rvBig.reuse.truncated === true &&
+      /\n…and at least 985 more in the same folder\(s\) — a large folder: only its first entries were read\.\n/.test(rvBig.brief) &&
+      b4.reuse.truncated === undefined && /pelo menos mais 985/.test(moreTxt[1]) && /al menos 985 más/.test(moreTxt[2]) && moreTxt[3] === I.toPtBr(moreTxt[1]) &&
+      /possibly more/.test(I.brief("en").reuseFilesMore(0, true)) && I.brief("en").reuseFilesMore(15, false) === "…and 15 more in the same folder(s).",
+      "1.19 R review 4: a 1,005-file folder lists 15 and says 'at least 985 more' (truncated: true — only its first 1,000 entries are read); a small one keeps the exact count; PT / ES / pt-BR (got " +
+      js([rvBig.reuse.files.length, rvBig.reuse.more, rvBig.reuse.truncated, moreTxt]) + ")");
+
+    // 1.19 R review 2 — the design context. Differential vs 1.18 for designs WITHOUT a Reuse & Integration section: the sections a
+    // synonym names ("Integration Points" with a handler's contract bullets, "Existing code", "Reuse of HTTP connections") are
+    // selected exactly as 1.18 did (ref118: the needle rule — the task's ACs, files and 5+-character basenames in a `##` section's
+    // title or body) and quoted whole. With a Reuse & Integration section, only THAT one leaves Design context, and only when the
+    // Reuse part quotes all of it (every entry, no code block); a second synonym section ("Integration Points") always stays.
+    const ref118 = (text, files, acs) => {
+      const secs = [];
+      let cur = null;
+      for (const l of text.split("\n")) { const m = /^## (.*)$/.exec(l); if (m) { cur = { title: m[1].trim(), body: [] }; secs.push(cur); } else if (cur) cur.body.push(l); }
+      const needles = [...acs, ...files, ...files.map((f) => path.posix.basename(f)).filter((b) => b.length >= 5)];
+      return secs.filter((s) => needles.some((x) => (s.title + "\n" + s.body.join("\n").trim()).includes(x))).map((s) => s.title);
+    };
+    const cx = rDir("rv-ctx");
+    S.initProject(cx, ["core"], "en");
+    const cxf = S.createFeature(cx, "Hooks", ["core"]);
+    fs.writeFileSync(path.join(cxf.dir, "requirements.md"), REQ);
+    const cxTasks = [["src/hooks/stripe.ts", "US-1.AC-1"], ["src/lib/money.ts", "US-1.AC-2"], ["src/http/pool.ts", null], ["src/other/x.ts", null]];
+    fs.writeFileSync(path.join(cxf.dir, "tasks.md"), "# Tasks\n\n## Story US-1 (P1)\n" +
+      cxTasks.map(([f, ac], i) => `- [ ] ${i + 1}. [US1] Task ${i + 1}\n` + (ac ? `  - _Requirements: ${ac}_\n` : "") + `  - _Implements: ${f}_\n`).join(""));
+    const D118 = "# Design: Hooks\n\n## Overview\nStripe webhooks.\n\n## Integration Points\nThe Stripe webhook handler src/hooks/stripe.ts:\n" +
+      "- verifies the X-Sig header with HMAC-SHA256 over the raw body\n- dedups on event.id in the processed_events table\n\n" +
+      "## Existing code\n- src/lib/money.ts formats amounts (reuse it in the receipt)\n\n## Reuse of HTTP connections\nA keep-alive agent in src/http/pool.ts.\n\n" +
+      "## Data Models\nEvent {id}.\n";
+    wDesign(cxf, D118);
+    const cx118 = cxTasks.map(([f, ac], i) => {
+      const b = S.taskBrief(cx, cxf.slug, i + 1);
+      const want = ref118(D118, [f], ac ? [ac] : []);
+      return { n: i + 1, got: b.designSections, want, same: js(b.designSections) === js(want), ctx: (b.brief.split("\n## Design context\n")[1] || "") };
+    });
+    const RI = (rows) => "## Reuse & Integration\n| Kind | What | Where (path) | Why / notes |\n|---|---|---|---|\n" + rows + "\n";
+    const IP = "## Integration Points\n- src/hooks/stripe.ts answers 2xx within 3 s; Stripe retries for 3 days\n\n";
+    const rowHook = "| Extend | the webhook router | `src/hooks/stripe.ts` | registers the handler |\n";
+    const cxWith = (reuse) => { wDesign(cxf, "# Design: Hooks\n\n## Overview\nStripe webhooks.\n\n" + reuse + IP + "## Data Models\nEvent {id}.\n"); return S.taskBrief(cx, cxf.slug, 1); };
+    const cxAll = cxWith(RI(rowHook));
+    const cxPart = cxWith(RI(rowHook + "| Reuse | Money | `src/lib/money.ts` | formats amounts |\n"));
+    const cxCode = cxWith(RI(rowHook) + "```ts\nexport function register(r: Router): void\n```\n\n");
+    ok(cx118.every((r) => r.same) && /dedups on event\.id in the processed_events table/.test(cx118[0].ctx) && /X-Sig header/.test(cx118[0].ctx) &&
+      js(cx118[0].got) === js(["Integration Points"]) && js(cx118[1].got) === js(["Existing code"]) && js(cx118[2].got) === js(["Reuse of HTTP connections"]) && !cx118[3].got.length &&
+      js(cxAll.designSections) === js(["Integration Points"]) && js(cxAll.reuse.entries) === js([rowHook.trim()]) &&
+      js(cxPart.designSections) === js(["Reuse & Integration", "Integration Points"]) && cxPart.reuse.entries.length === 1 &&
+      js(cxCode.designSections) === js(["Reuse & Integration", "Integration Points"]),
+      "1.19 R review 2: a 1.18-style design (Integration Points with its contract bullets, Existing code, Reuse of HTTP connections) gets the 1.18 Design context, whole; with a Reuse & Integration section only that one leaves it, and only when the Reuse part quotes all of it (not with a row left out or a code block); Integration Points beside it stays (got " +
+      js([cx118.map((r) => [r.n, r.got, r.want]), cxAll.designSections, cxPart.designSections, cxCode.designSections]) + ")");
+
+    // T review 6 — a task emitting metrics reads the design's observability: on an +obs feature (and saas + obs) its [OBS] Telemetry
+    // section reaches the brief although the task cites a core AC; without _Emits metrics:_ it doesn't; PT's heading too.
+    const ob = rDir("rv-obs");
+    S.initProject(ob, ["core"], "en");
+    const obTasks = "# Tasks\n\n## Story US-1 (P1)\n- [ ] 1. [US1] Count orders\n  - _Requirements: US-1.AC-1_\n  - _Emits metrics: orders_placed_total_\n  - _Implements: src/orders/api.ts_\n" +
+      "- [ ] 2. [US1] Store orders\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/orders/store.ts_\n";
+    const obBrief = (name, tracks, lang) => {
+      const f = S.createFeature(ob, name, tracks, "", undefined, lang);
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), obTasks);
+      // the sections quoted, plus the "Relevant but not included (size)" line (a section that didn't fit the design budget still counts)
+      return [1, 2].map((n) => { const b = S.taskBrief(ob, f.slug, n); return [...b.designSections, ...(b.brief.match(/^Relevant(?:es)? [^\n]*$/m) || [])]; });
+    };
+    const obEn = obBrief("Metrics", ["core", "obs"], "en"), obBoth = obBrief("Metrics Saas", ["core", "saas", "obs"], "en"), obPt = obBrief("Métricas", ["core", "obs"], "pt");
+    ok(obEn[0].includes("[OBS] Telemetry") && !obEn[1].includes("[OBS] Telemetry") &&
+      obBoth[0].includes("[OBS] Telemetry") && obBoth[0].includes("[SaaS] Observability") && obPt[0].includes("[OBS] Telemetria") && !obPt[1].includes("[OBS] Telemetria"),
+      "1.19 R review T-6: _Emits metrics:_ pulls the +obs feature's [OBS] Telemetry section into the brief (with [SaaS] Observability on a saas + obs feature; PT Telemetria) for a task citing a core AC; a task without it doesn't (got " +
+      js([obEn, obBoth, obPt]) + ")");
+
+    // 1.19 R review 5 — spec_backlog add of a name already there keeps the entry and APPENDS the new note (one line, ' · '): a second
+    // refactor candidate filed under the same name was dropped while add answered ok. exists / appended / a localized note; the same
+    // note again changes nothing; a note past 2,000 characters is refused (nothing written); PT project → PT note.
+    const bl = rDir("rv-backlog");
+    S.initProject(bl, ["core"], "en");
+    const blAdd = async (p, name, note) => payload(await call("spec_backlog", { projectDir: p, action: "add", name, note }));
+    const bl1 = await blAdd(bl, "refactor-pricing", "refactor: Repeated Switches in pricing.ts, invoice.ts");
+    const bl2 = await blAdd(bl, "Refactor-Pricing", "refactor: a rounding helper copied in cart.ts");
+    const bl3 = await blAdd(bl, "refactor-pricing", "refactor: a rounding helper copied in cart.ts");
+    const blBig = await blAdd(bl, "refactor-pricing", "x".repeat(2000));
+    const blNote = (S.backlog(bl, "list").backlog.find((b) => b.name === "refactor-pricing") || {}).note;
+    const blp = rDir("rv-backlog-pt");
+    S.initProject(blp, ["core"], "pt");
+    await blAdd(blp, "refactor-precos", "refactor: a");
+    const blPt = await blAdd(blp, "refactor-precos", "refactor: b");
+    ok(bl1.exists === undefined && bl2.exists === true && bl2.appended === true && bl2.note === "'refactor-pricing' is already in the backlog — the new note was appended to its note." &&
+      bl3.exists === true && bl3.appended === false && /with that note — nothing changed/.test(bl3.note) &&
+      blBig.exists === true && /would pass 2000 characters — the new note was not added/.test(blBig.error || "") &&
+      blNote === "refactor: Repeated Switches in pricing.ts, invoice.ts · refactor: a rounding helper copied in cart.ts" &&
+      S.backlog(bl, "list").backlog.length === 1 && blPt.appended === true && /já está no backlog — a nova nota foi acrescentada/.test(blPt.note) &&
+      I.toPtBr(blPt.note) === I.msg("pt-BR").featureOps.backlogAppended("refactor-precos"),
+      "1.19 R review 5: backlog add of an existing name (case-insensitive) appends the new note to its entry (exists, appended, a localized note — EN / PT / pt-BR), the same note twice changes nothing, past 2,000 characters it is refused; one entry, both notes (got " +
+      js([bl1, bl2, bl3, blBig, blNote, blPt]) + ")");
+
+    // 1.19 R review 6 — the PT / ES "integration with the existing system" headings name the section (EN had it); and the prose: a
+    // unit to extend OUTSIDE the task's files is never edited silently — NEEDS_CONTEXT / a converge task (spec_append_tasks) or a note
+    // in the report, the scope guard named — in the implementer, the guide, the protocol, /executeTask and the brief (EN / PT / ES /
+    // pt-BR); refactor candidates get one name each (an existing name appends).
+    const sysGot = [["pt", "## Integração com o sistema existente\n- O serviço de encomendas (`src/orders/service.ts`).\n"],
+      ["pt-BR", "## Integracao com o sistema existente\n- O serviço de pedidos.\n"],
+      ["es", "## Integración con el sistema existente\n- El servicio de pedidos (`src/orders/service.ts`).\n"]].map(([lang, sec], i) => {
+      const f = S.createFeature(hp, "Sistema " + i, ["core"], "", undefined, lang);
+      wDesign(f, hand(sec));
+      return reuseSt(S.specDoctor(hp, f.slug));
+    });
+    const impl6 = rRd("agents", "spec-implementer.md"), guide6 = rRd("skills", "dev-spec-driven", "references", "code-reuse-and-quality.md");
+    const sub6 = rRd("skills", "dev-spec-driven", "references", "subagent-execution.md"), exec6 = rRd("commands", "executeTask.md");
+    const step3 = cut(impl6, "3. **Search before you write**", "4. If anything is unclear");
+    const outside6 = cut(guide6, "**Extending a unit outside the task's files.**", "## Module boundaries");
+    const rules6 = ["en", "pt", "es", "pt-BR"].map((l) => I.brief(l).reuseRule);
+    ok(sysGot.every((s) => s === "pass") &&
+      /never edited silently/.test(step3) && /\*\*NEEDS_CONTEXT\*\*/.test(step3) && /spec_append_tasks/.test(step3) && /meta\.guard: "scope"/.test(step3) &&
+      /NEEDS_CONTEXT/.test(outside6) && /spec_append_tasks/.test(outside6) && /meta\.guard: "scope"/.test(outside6) && /Reuse\*\* block/.test(outside6) &&
+      /extend a unit outside\s+the task's files/.test(sub6) && /One name per candidate/.test(sub6) && /spec_append_tasks/.test(cut(exec6, "**Search before you write**", "**Can't run the")) &&
+      /its \*\*own name\*\*/.test(guide6) && /never edited silently — stop and ask \(NEEDS_CONTEXT\)/.test(rules6[0]) && /nunca é editada em silêncio — pede contexto \(NEEDS_CONTEXT\)/.test(rules6[1]) &&
+      /nunca se edita en silencio/.test(rules6[2]) && rules6[3] === I.toPtBr(rules6[1]) && /peça contexto/.test(rules6[3]) &&
+      [step3, outside6].every((t) => !/pull request|\bPRs?\b|\bCI\b/.test(t)),
+      "1.19 R review 6: PT / ES 'integração com o sistema existente' / 'integración con el sistema existente' name the Reuse section; extending a unit outside the task's files is NEEDS_CONTEXT or a converge task, never a silent edit (the scope guard named) — implementer, guide, protocol, /executeTask and the brief's rule in EN / PT / ES / pt-BR; one backlog name per refactor candidate (got " +
+      js([sysGot, step3.length, outside6.length, rules6.map((r) => r.slice(-160))]) + ")");
+
+    // 1.19 verify 5 — a NEW backlog entry's note has the same cap as an appended one: one line, at most 2,000 characters; past it
+    // add is refused with a localized error and nothing is written (MCP and CLI — the CLI exits 1)
+    const bl5 = rDir("vf-backlog");
+    S.initProject(bl5, ["core"], "en");
+    const v5Long = await blAdd(bl5, "long-note", "y".repeat(2500));
+    const v5Max = await blAdd(bl5, "max-note", "z".repeat(2000));
+    const v5Lines = await blAdd(bl5, "lines-note", "first line\n\nsecond  line");
+    const v5Cli = spawnSync(process.execPath, [path.join(__dirname, "..", "cli", "dev-spec.js"), "backlog", "add", "cli-long", "w".repeat(2001), "--project", bl5],
+      { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } });
+    const v5Pt = await blAdd(blp, "nota-longa", "n".repeat(2001));
+    const v5List = S.backlog(bl5, "list").backlog, v5Rm = JSON.parse(fs.readFileSync(path.join(bl5, ".specs", "roadmap.json"), "utf8"));
+    ok(v5Long.ok === false && v5Long.error === "The note for 'long-note' passes 2000 characters — nothing was added to the backlog: shorten the note." &&
+      v5Max.ok === true && v5Lines.ok === true && (v5List.find((b) => b.name === "lines-note") || {}).note === "first line second line" &&
+      v5List.map((b) => b.name).join() === "max-note,lines-note" && (v5Rm.backlog || []).every((b) => b.note.length <= 2000) &&
+      v5Cli.status === 1 && /The note for 'cli-long' passes 2000 characters/.test(v5Cli.stdout + v5Cli.stderr) &&
+      v5Pt.ok === false && /A nota de 'nota-longa' passa de 2000 caracteres — nada foi acrescentado ao backlog: encurta a nota\./.test(v5Pt.error || "") &&
+      I.toPtBr(v5Pt.error) === I.msg("pt-BR").featureOps.backlogNoteLong("nota-longa", 2000) && /encurte a nota/.test(I.msg("pt-BR").featureOps.backlogNoteLong("x", 1)) &&
+      !S.backlog(blp, "list").backlog.some((b) => b.name === "nota-longa"),
+      "1.19 verify 5: backlog add of a NEW name with a 2,500-character note is refused (localized — EN / PT / pt-BR; the CLI exits 1), nothing written; 2,000 characters pass; a multi-line note is stored on one line (got " +
+      js([v5Long, v5Max.ok, v5Lines.ok, v5List, v5Cli.status, (v5Cli.stdout + v5Cli.stderr).slice(0, 200), v5Pt.error]) + ")");
+  }
+
+  // 1.19 package (T) — the +api, +ui and +obs tracks.
+
+  { // 1.19 T — the built-in +api / +ui / +obs tracks end to end: registry, classifier (EN / PT / ES), scaffolds (EN / PT / ES / pt-BR), gates,
+    // views, add_track / remove, legacy packs of a now-reserved name. Each new track is one entry of T19: the checks below run for each.
+    const I = require("./lib/i18n.js");
+    const js = (v) => JSON.stringify(v);
+    const rd = (...p) => fs.readFileSync(path.join(...p), "utf8");
+    const tRoot = path.join(tmp, "p19t");
+    const d = (n) => path.join(tRoot, n);
+    const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
+    const dropTodo = (file) => fs.writeFileSync(file, rd(file).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+    const cls = (t, lang) => S.classify(t, lang ? { lang } : {});
+    const unfilledWord = { en: /unfilled/, pt: /por preencher/, es: /sin rellenar/, "pt-BR": /sem preencher/ };
+    const T19 = [
+      { tr: "api", marker: "[API]", token: "API", ids: ["20", "21", "22", "23"], steering: "api.md", typo: "apii", alias: "openapi", legacy: "rest",
+        sections: ["API Contract", "Versioning & Compatibility", "Error Model", "Pagination, Idempotency & Concurrency", "Rate Limits & Quotas"],
+        title: { en: "Error Model", pt: "Modelo de Erros", es: "Modelo de Errores", "pt-BR": "Modelo de Erros" }, taskHead: "Story US-1 — API Contract",
+        loose: ["## [API] API Contract", "## API Contract", "API Contract:missing"], prose: "### Errors [api]\n- the error rate, in [api] calls\n", infer: "## [API] Error Model\n- problem+json\n",
+        briefTask: /^\[US1\] Error model/, briefSection: "[API] Error Model", matrixAc: "US-1.AC-21", matrixSection: "[API] Pagination, Idempotency & Concurrency",
+        finish: /^\+api: contract tests/, statusKey: "apiSections", plan: [/\| T-(\d+) \| contract \| example \| contract test: a request missing a required field gets 400 problem\+json naming it \| US-1\.AC-20 \|/,
+          /\| T-\d+ \| integration \| property \| a create replayed with the same Idempotency-Key has one effect and returns the first response \| US-1\.AC-21 \|/],
+        importAc: "WHEN a partner calls the public REST API v2 THEN the system SHALL return the order as the OpenAPI spec defines it",
+        steeringHead: { en: /^# API Standards/, pt: /^# Padrões de API/, es: /^# Estándares de API/, "pt-BR": /^# Padrões de API/ } },
+      { tr: "ui", marker: "[UI]", token: "UI", ids: ["24", "25", "26", "27"], steering: "ui.md", typo: "uii", alias: "frontend", legacy: "wcag",
+        sections: ["Design System Usage", "UI States", "Accessibility", "Responsiveness & i18n", "UI Performance Budget"],
+        title: { en: "UI States", pt: "Estados da Interface", es: "Estados de la Interfaz", "pt-BR": "Estados da Interface" }, taskHead: "Story US-1 — User Interface",
+        loose: ["## [UI] Accessibility", "## Accessibility", "Accessibility:missing"], prose: "### Colours [ui]\n- the spacing, in [ui] units\n", infer: "## [UI] UI States\n- loading, empty, error\n",
+        briefTask: /^\[US1\] UI states/, briefSection: "[UI] Accessibility", matrixAc: "US-1.AC-25", matrixSection: "[UI] UI States",
+        finish: /^\+ui: the automated accessibility check/, statusKey: "uiSections",
+        plan: [/\| T-\d+ \| e2e \| example \| keyboard-only walk-through \+ an automated accessibility check \(axe\): every action reachable, focus visible, no violation \| US-1\.AC-24 \|/,
+          /\| T-\d+ \| component \| property \| a form with invalid fields: every value kept, each error named in text, focus on the summary \| US-1\.AC-25 \|/],
+        importAc: "WHEN the user opens the settings page THEN the system SHALL show it with the design system components and meet WCAG 2.2 AA",
+        steeringHead: { en: /^# UI Standards/, pt: /^# Padrões de Interface/, es: /^# Estándares de Interfaz/, "pt-BR": /^# Padrões de Interface/ } },
+      { tr: "obs", marker: "[OBS]", token: "OBS", ids: ["28", "29", "30", "31"], steering: "observability.md", typo: "obss", alias: "monitoring", legacy: "sre",
+        sections: ["SLIs & SLOs", "Telemetry", "Alerting & Runbooks", "Rollout & Rollback", "Health & Capacity"],
+        title: { en: "Alerting & Runbooks", pt: "Alertas e Runbooks", es: "Alertas y Runbooks", "pt-BR": "Alertas e Runbooks" }, taskHead: "Story US-1 — Operability",
+        loose: ["## [OBS] Rollout & Rollback", "## Rollback", "Rollout & Rollback:missing"], prose: "### Retries [obs]\n- the delay, in [obs] units\n", infer: "## [OBS] Telemetry\n- metrics\n",
+        briefTask: /^\[US1\] Telemetry/, briefSection: "[OBS] SLIs & SLOs", matrixAc: "US-1.AC-30", matrixSection: "[OBS] Rollout & Rollback",
+        finish: /^\+obs: an alert fired/, statusKey: "obsSections",
+        plan: [/\| T-\d+ \| integration \| property \| every request emits the metric, a structured log line and a trace with one correlation ID; no personal data in the log \| US-1\.AC-28 \|/,
+          /\| T-\d+ \| integration \| example \| rollback drill: a canary whose error rate crosses the threshold stops the rollout and rolls back \| US-1\.AC-30 \|/],
+        importAc: "WHEN the checkout SLO burns its error budget THEN the system SHALL page the on-call engineer with a link to the runbook",
+        steeringHead: { en: /## SLOs & Error Budgets/, pt: /## SLOs e Orçamentos de Erro/, es: /## SLOs y Presupuestos de Error/, "pt-BR": /## SLOs e Orçamentos de Erro/ } },
+    ];
+    const SLOT = /\[(?!shared\]|US\d+\]|[ xX]\]|P\]|DIST\]|API\]|UI\]|OBS\]|NEEDS)[^\]\n]*\]/g;
+
+    for (const X of T19) {
+      const n0 = X.tr;
+      // --- registry: a valid, composable marker track after the one before it; a typo and an alias get a did-you-mean
+      const typo = S.createFeature(d("typo-" + n0), "Typo", X.typo), alias = S.createFeature(d("typo-" + n0), "Typo", [X.alias]);
+      const vi = S.VALID_TRACKS.indexOf(n0);
+      ok(vi > S.VALID_TRACKS.indexOf("dist") && S.OPTIONAL_TRACKS.includes(n0) && S.TRACK_MARKER[n0] === X.marker && js(S.trackSections(n0).map((x) => x.name)) === js(X.sections) &&
+        S.trackLabel(S.normalizeTracks(n0 + " dist tdd")) === "core +tdd +dist +" + n0 && !typo.ok && new RegExp("did you mean '" + n0 + "'").test(typo.error) &&
+        !alias.ok && new RegExp("'" + X.alias + "' \\(did you mean '" + n0 + "'\\?\\)").test(alias.error),
+        `1.19 T1: +${n0} is a valid, composable marker track (${X.marker}, ${X.sections.length} sections, labelled after +dist); '${X.typo}' / '${X.alias}' get a did-you-mean (got ` + js([S.OPTIONAL_TRACKS, typo.error, alias.error]) + ")");
+
+      // --- scaffold per language: the sections with the TODO sentinel, the criteria, every fresh artifact reads 'placeholder'; <track>-sections
+      // fails and the design approval is refused while TODO; filled, it passes
+      for (const lang of ["en", "pt", "es", "pt-BR"]) {
+        const p = d(n0 + "-scaffold-" + lang);
+        const f = S.createFeature(p, n0 + " " + lang, [n0], "", undefined, lang);
+        const design = rd(f.dir, "design.md"), reqs = rd(f.dir, "requirements.md"), tasks = rd(f.dir, "tasks.md");
+        const heads = design.split("\n").filter((l) => l.startsWith("## " + X.marker + " "));
+        const e = S.earsValidate(reqs, lang);
+        const own = e.issues.filter((i) => i.code !== "placeholder" && X.ids.some((id) => (i.text || "").includes("US-1.AC-" + id)));
+        const states = fs.readdirSync(f.dir).filter((nm) => nm.endsWith(".md") && nm !== "checklist.md").map((nm) => [nm, S.artifactState(path.join(f.dir, nm))]);
+        const before = S.specDoctor(p, f.slug);
+        S.approvePhase(p, f.slug, "classification", "t", { force: true });
+        S.approvePhase(p, f.slug, "requirements", "t", { force: true });
+        const refused = S.approvePhase(p, f.slug, "design", "t");
+        dropTodo(path.join(f.dir, "design.md"));
+        const after = S.specDoctor(p, f.slug);
+        const retry = S.approvePhase(p, f.slug, "design", "t");
+        const id = n0 + "-sections";
+        ok(f.ok && f.label === "core +" + n0 && heads.length === X.sections.length && design.includes(X.title[lang]) && (design.match(/^> \*\*TODO\*\*/gm) || []).length === X.sections.length &&
+          reqs.includes("#### " + X.marker) && X.ids.every((n) => reqs.includes("US-1.AC-" + n) && tasks.includes("US-1.AC-" + n)) &&
+          !own.length && e.issues.every((i) => i.severity !== "error") && states.length >= 4 && states.every(([, st]) => st === "placeholder") &&
+          chk(before, id).status === "fail" && unfilledWord[lang].test(chk(before, id).detail) && !chk(before, "dist-sections").status &&
+          !refused.ok && refused.failing.includes(id) && chk(after, id).status === "pass" && new RegExp(String(X.sections.length)).test(chk(after, id).detail) && !(retry.failing || []).includes(id),
+          `1.19 T2: ${lang} +${n0} scaffold — ${X.sections.length} ${X.marker} sections with the TODO sentinel, criteria US-1.AC-${X.ids[0]}..${X.ids[X.ids.length - 1]} (no EARS issue but slots), every fresh artifact reads 'placeholder', ${id} fails and the design approval is refused while TODO, passes once filled (got ` +
+          js([heads, own.map((i) => i.code), states.filter(([, st]) => st !== "placeholder"), chk(before, id).detail, chk(after, id).detail]) + ")");
+      }
+
+      // --- a filled feature is ready: doctor has no fail and every gate approves without force (EN / PT / ES round trip)
+      for (const lang of ["en", "pt", "es"]) {
+        const p = d(n0 + "-filled-" + lang);
+        S.initProject(p, ["core", n0], lang);
+        const f = S.createFeature(p, "Filled " + lang, [n0], "", undefined, lang);
+        for (const file of ["classification.md", "requirements.md", "design.md", "tasks.md"]) {
+          const fp = path.join(f.dir, file);
+          let t = rd(fp);
+          for (let i = 0; i < 3; i++) t = t.replace(SLOT, "the order record");
+          fs.writeFileSync(fp, t.split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+        }
+        const doc = S.specDoctor(p, f.slug);
+        const gates = ["classification", "requirements", "design", "tasks"].map((ph) => [ph, S.approvePhase(p, f.slug, ph, "t")]);
+        ok(doc.readyToAdvance && !doc.checks.some((c) => c.status === "fail") && chk(doc, n0 + "-sections").status === "pass" && chk(doc, "ears").status === "pass" &&
+          chk(doc, "traceability").status === "pass" && gates.every(([ph, r]) => r.ok && r.approved === ph && !r.forced),
+          `1.19 T3: ${lang} — a filled +${n0} feature is ready (doctor has no fail, EARS + traceability pass) and classification → requirements → design → tasks approve without force (got ` +
+          js([doc.checks.filter((c) => c.status === "fail").map((c) => c.id + ": " + c.detail), gates.filter(([, r]) => !r.ok).map(([ph, r]) => ph + ":" + (r.failing || []).join(","))]) + ")");
+      }
+
+      // --- add_track / remove / re-add (additive, non-destructive)
+      const at = d(n0 + "-add");
+      S.initProject(at, ["core"], "en");
+      const plain = S.createFeature(at, "Plain", ["core"], "", undefined, "en");
+      const tBefore = S.statusFeature(at, plain.slug).tasks.total;
+      const add = S.addTrack(at, plain.slug, "+" + n0);
+      const pTasks = rd(plain.dir, "tasks.md");
+      const docAdd = S.specDoctor(at, plain.slug);
+      const tAdded = S.statusFeature(at, plain.slug).tasks.total;
+      const rm = S.removeTrack(at, plain.slug, n0);
+      const docRm = S.specDoctor(at, plain.slug), stRm = S.statusFeature(at, plain.slug);
+      const reAdd = S.addTrack(at, plain.slug, n0);
+      const added = (add.added || []).join("|");
+      ok(add.ok && add.tracks === "core +" + n0 && added.includes("steering/" + X.steering) && rd(plain.dir, "design.md").includes("## " + X.marker + " " + X.sections[0]) && pTasks.includes("## " + X.taskHead) &&
+        pTasks.includes("_Requirements: [the +" + n0 + " criterion this task proves]_") && rd(plain.dir, "classification.md").includes("## Active Tracks\ncore +" + n0) && chk(docAdd, n0 + "-sections").status === "fail" &&
+        tAdded === tBefore + 5 && rm.ok && rm.tracks === "core" && rm.inactive.includes("design.md (" + X.marker + " sections)") && rm.inactive.includes("tasks.md (" + X.taskHead + ")") &&
+        !chk(docRm, n0 + "-sections").status && stRm[X.statusKey] === null && stRm.tasks.total === tBefore && rd(plain.dir, "design.md").includes(X.marker + " " + X.sections[0]) &&
+        reAdd.ok && reAdd.tracks === "core +" + n0 && rd(plain.dir, "tasks.md").split("## " + X.taskHead).length === 2 && S.statusFeature(at, plain.slug).tasks.total === tBefore + 5,
+        `1.19 T4: add_track ${n0} (sections, steering/${X.steering}, 5 template tasks with placeholder ACs, Active Tracks, ${n0}-sections fails); --remove is non-destructive (inactive, no check, ${X.statusKey} null, tasks not counted); re-adding duplicates nothing (got ` +
+        js([add.added, rm.inactive, tBefore, tAdded]) + ")");
+
+      // --- markers are case-sensitive; the loose (ordinary) names count only in the track's context; the marker is no placeholder
+      const cs = d(n0 + "-case");
+      const csF = S.createFeature(cs, "Case", ["core"], "", undefined, "en");
+      fs.appendFileSync(path.join(csF.dir, "design.md"), "\n" + X.prose);
+      const csState = path.join(csF.dir, ".state.json");
+      const csSt = JSON.parse(rd(csState)); delete csSt.tracks; fs.writeFileSync(csState, JSON.stringify(csSt, null, 2));
+      const csTracks = S.statusFeature(cs, csF.slug).tracks;
+      fs.appendFileSync(path.join(csF.dir, "design.md"), "\n" + X.infer);
+      const csInferred = S.statusFeature(cs, csF.slug).tracks;
+      const lz = S.createFeature(d(n0 + "-loose"), "Loose", [n0], "", undefined, "en");
+      dropTodo(path.join(lz.dir, "design.md"));
+      fs.writeFileSync(path.join(lz.dir, "design.md"), rd(lz.dir, "design.md").replace(X.loose[0], X.loose[1]));
+      const lzDoc = chk(S.specDoctor(d(n0 + "-loose"), lz.slug), n0 + "-sections");
+      ok(csTracks === "core" && csInferred === "core +" + n0 && lzDoc.status === "fail" && lzDoc.detail.includes(X.loose[2]) &&
+        S.artifactState({ text: "# Notes\n\nThe " + X.marker + " sections were reviewed on Monday by the whole team.\n" }) === "filled",
+        `1.19 T5: a lower-case '${X.prose.split("\n")[0]}' is prose (no +${n0} inferred), a '${X.marker}' heading infers it; '${X.loose[1]}' (an ordinary design heading) never satisfies ${X.loose[0].slice(3)}; ${X.marker} is a stable bracket, not a slot (got ` +
+        js([csTracks, csInferred, lzDoc.detail]) + ")");
+
+      // --- a track pack named like the new track (or its alias), recorded by a feature before 1.19, is that feature's MISSING pack — never the
+      // built-in track; doctor / spec_upgrade say why ("from before 1.19"); add-track <track> adopts the built-in one, --remove drops the pack
+      const lp = d(n0 + "-legacy");
+      S.initProject(lp, ["core"], "en");
+      const legacyFeature = (name, marker) => {
+        const pdir = path.join(lp, ".specs", "tracks", name);
+        fs.mkdirSync(pdir, { recursive: true });
+        fs.writeFileSync(path.join(pdir, "track.json"), JSON.stringify({ name, marker, title: { en: "Legacy " + name }, sections: [{ name: "Team Section", guidance: "Say how." }] }));
+        const f = S.createFeature(lp, "f-" + name, ["core"], "", undefined, "en");
+        const sp = path.join(f.dir, ".state.json");
+        const st = JSON.parse(rd(sp));
+        st.tracks = ["core", name];
+        st.packMarkers = { [name]: "[" + marker + "]" };
+        fs.writeFileSync(sp, JSON.stringify(st, null, 2));
+        fs.appendFileSync(path.join(f.dir, "design.md"), "\n## [" + marker + "] Team Section\n- decided.\n");
+        return f;
+      };
+      const lpMain = legacyFeature(n0, X.token), lpAlias = legacyFeature(X.legacy, X.legacy.toUpperCase());
+      const lpDoc = S.specDoctor(lp, "f-" + n0), lpDocA = S.specDoctor(lp, "f-" + X.legacy);
+      const lpSt = S.statusFeature(lp, "f-" + n0);
+      const lpUp = S.specUpgrade(lp);
+      const lpUpF = (nm) => lpUp.features.find((x) => x.name === nm) || {};
+      const adopt = S.addTrack(lp, "f-" + n0, n0);
+      const drop = S.addTrack(lp, "f-" + X.legacy, X.legacy, { remove: true });
+      ok(lpSt.tracks === "core" && js(lpSt.missingPacks) === js([n0]) && !chk(lpDoc, n0 + "-sections").status && chk(lpDoc, "track-pack-missing").status === "warn" &&
+        new RegExp("\\+" + n0 + " \\(a track pack from before 1\\.19 — '" + n0 + "' is a reserved name now, and the built-in \\+" + n0 + " track is NOT applied").test(chk(lpDoc, "track-pack-missing").detail) &&
+        new RegExp("'" + X.legacy + "' is a reserved name now: rename").test(chk(lpDocA, "track-pack-missing").detail) && lpUpF("f-" + n0).attention.includes("track-pack-reserved") &&
+        lpUp.lines.some((l) => /Rename its track pack\(s\) from before 1\.19 — /.test(l)) &&
+        adopt.ok && js(adopt.adopted) === js([n0]) && adopt.tracks === "core +" + n0 && rd(lpMain.dir, "design.md").includes("## " + X.marker + " " + X.sections[0]) &&
+        chk(S.specDoctor(lp, "f-" + n0), n0 + "-sections").status === "fail" && drop.ok && js(drop.removedTracks) === js([X.legacy]) && js(JSON.parse(rd(lpAlias.dir, ".state.json")).tracks) === js(["core"]),
+        `1.19 T6: a pre-1.19 pack named '${n0}' / '${X.legacy}' is the feature's missing pack (tracks read core, the built-in +${n0} is NOT applied, doctor and spec_upgrade say 'from before 1.19'); add-track adopts the built-in track, --remove drops the alias pack (got ` +
+        js([lpSt.tracks, lpSt.missingPacks, chk(lpDoc, "track-pack-missing").detail, chk(lpDocA, "track-pack-missing").detail, adopt.adopted, drop.error]) + ")");
+
+      // --- views: the test rows, status, spec_finish checks, the brief's and the matrix's track sections, the Gherkin tag, spec_import, steering
+      const vw = d(n0 + "-views");
+      const initV = S.initProject(vw, ["core", n0], "en");
+      const vf = S.createFeature(vw, "Views", ["tdd", n0], "", undefined, "en");
+      const vPlan = rd(vf.dir, "test-plan.md");
+      const vTr = S.traceCheck(vw, vf.slug);
+      dropTodo(path.join(vf.dir, "design.md"));
+      const vSt = S.statusFeature(vw, vf.slug), vFin = S.finishFeature(vw, vf.slug);
+      const vTask = S.parseTasks(rd(vf.dir, "tasks.md")).find((x) => X.briefTask.test(x.text)) || {};
+      const vBrief = S.taskBrief(vw, vf.slug, vTask.number);
+      const vRow = ((S.traceMatrix(vw, vf.slug).rows) || []).find((r) => r.id === X.matrixAc) || {};
+      const vGk = S.exportSpecs(vw, { name: vf.slug, format: "gherkin" });
+      ok(X.plan.every((re) => re.test(vPlan)) && !vTr.uncoveredByTasks.length && !vTr.uncoveredByTests.length && !vTr.phantomAcsInTasks.length && !(vTr.testsNotMappedToTasks || []).length &&
+        Array.isArray(vSt[X.statusKey]) && vSt[X.statusKey].length === X.sections.length && vSt[X.statusKey].every((s) => s.filled) && vFin.checks.some((c) => X.finish.test(c)) &&
+        vBrief.ok && vBrief.designSections.includes(X.briefSection) && (vRow.design || []).includes(X.matrixSection) &&
+        new RegExp("(^|\\s)@" + X.token + "(\\s|$)", "m").test(vGk.content || "") && initV.created.includes(X.steering) && I.steeringKnownFiles().includes(X.steering) &&
+        ["en", "pt", "es", "pt-BR"].every((l) => X.steeringHead[l].test(I.steeringStub(X.steering, l) || "")) && (chk(S.specDoctor(vw, vf.slug), "steering").detail || "").includes(X.steering),
+        `1.19 T7: +${n0} views — its test rows are planned and traced, spec_status ${X.statusKey}, spec_finish's +${n0} checks, the brief and the matrix link a ${X.marker} criterion to its sections, Gherkin @${X.token}, steering/${X.steering} in EN / PT / ES / pt-BR (got ` +
+        js([vPlan.split("\n").filter((l) => X.ids.some((i) => l.includes("US-1.AC-" + i))), vSt[X.statusKey], vBrief.designSections, vRow.design, (vGk.content || "").split("\n")[0]]) + ")");
+      const im = d(n0 + "-import");
+      fs.mkdirSync(path.join(im, ".kiro", "specs", "orders"), { recursive: true });
+      fs.writeFileSync(path.join(im, ".kiro", "specs", "orders", "requirements.md"), "### Requirement 1\n\n**User Story:** As a partner, I want the orders.\n\n#### Acceptance Criteria\n\n1. " + X.importAc + "\n");
+      fs.writeFileSync(path.join(im, ".kiro", "specs", "orders", "design.md"), "# Design\n\n## Overview\nThe orders feature.\n");
+      const imp = S.importSpec(im, "kiro", ".kiro/specs/orders", {});
+      const impDesign = imp.ok ? rd(im, ".specs", "orders", "design.md") : "";
+      ok(imp.ok && imp.tracks.includes(n0) && /The orders feature/.test(impDesign) && impDesign.includes("## " + X.marker + " " + X.sections[1]),
+        `1.19 T7: spec_import auto-classifies +${n0} and appends the ${X.marker} sections to the imported design (got ` + js([imp.tracks, imp.error]) + ")");
+
+      // --- classifier: self-match sweep (every keyword, EN / PT / ES, matches itself as a word; a strong one alone turns the track on; a generic
+      // one alone never does)
+      const sg = S.trackSignals(n0);
+      const sweep = [];
+      for (const tier of ["strong", "weak", "generic"]) for (const kw of sg[tier]) {
+        const r = S.classify("We need " + kw + " here");
+        if (!r.signals[n0].some((m) => m === kw || m.includes(kw)) || (tier === "strong" && !r.tracks.includes(n0)) || (tier === "generic" && r.tracks.includes(n0))) sweep.push(tier + ":" + kw);
+      }
+      ok(sweep.length === 0 && sg.strong.length >= 25 && sg.weak.length >= 15 && sg.generic.length >= 5,
+        `1.19 T8: +${n0} self-match sweep — every keyword matches itself; a strong one alone turns +${n0} on, a generic one alone never does (misses: ` + sweep.join(", ") + ")");
+    }
+
+    // --- 1.19 T8: precision / recall on a corpus of EN / PT / ES texts (positives and hard negatives) — ≥ 90% / ≥ 85% per track
+    const CORPUS = [
+      // +api — positives
+      ["api", "Publish an OpenAPI spec for the orders REST API and generate the client SDKs from it"], ["api", "Version the public API: ship v2 and deprecate v1 with a Sunset header"],
+      ["api", "Return every error as application/problem+json with a stable error code"], ["api", "Add cursor-based pagination to the list endpoints without breaking existing clients"],
+      ["api", "Expose a GraphQL schema for the product catalog"], ["api", "Define the pricing service's gRPC contract in protobuf"],
+      ["api", "Accept an Idempotency-Key header on POST /payments so a retried request never charges twice"], ["api", "Return rate limit headers and Retry-After on every 429 response"],
+      ["api", "Third-party developers integrate through our developer portal"], ["api", "Add ETag support and require If-Match on updates to the orders endpoint"],
+      ["api", "Avoid breaking changes to the webhooks API for existing consumers"], ["api", "Contract tests validate the implementation against the Swagger document"],
+      ["api", "Design a RESTful API for managing invoices"], ["api", "The mobile app's API must stay backward compatible for six months"],
+      ["api", "Document every status code the refunds endpoint returns"], ["api", "Build an internal API for the billing team with stable status codes"],
+      ["api", "Partners call the shipment tracking endpoint; keep its response schema stable"],
+      ["api", "Publicar a especificação OpenAPI da API REST de encomendas"], ["api", "Versionar a API pública e descontinuar a v1"],
+      ["api", "Devolver os erros em formato problem+json com códigos estáveis"], ["api", "Paginação por cursor nos endpoints de listagem da API"],
+      ["api", "Os programadores externos integram através do portal do programador"], ["api", "Nenhuma alteração incompatível no contrato da API sem uma nova versão"],
+      ["api", "Criar um esquema GraphQL para o catálogo de produtos"],
+      ["api", "Versionar la API pública y retirar la v1 con una cabecera Sunset"], ["api", "Devolver los errores como problem+json con códigos estables"],
+      ["api", "Añadir paginación por cursor a los endpoints de la API sin cambios incompatibles"], ["api", "Los desarrolladores externos se integran a través del portal de desarrolladores"],
+      ["api", "Definir el contrato gRPC del servicio de precios en protobuf"], ["api", "Publicar la especificación de la API con OpenAPI"],
+      // +api — hard negatives
+      ["ui", "API key management page where admins create and revoke keys"], ["", "Call the Stripe API to charge the customer's card"],
+      ["", "Fix the route guard so logged-out users are redirected to the login page"], ["", "Upgrade React to version 19 and fix the breaking changes in the router"],
+      ["", "Send an HTTP request to the weather service and cache the response for ten minutes"], ["", "Bump the AWS SDK to v3"], ["", "Add pagination to the admin users table"],
+      ["", "Users can request a refund from their order history"], ["", "Plan the delivery route for each driver"], ["", "Store the uploaded photos in S3"],
+      ["", "Handle HTTP status 500 from the payment gateway with a retry"], ["", "Create a JSON schema for the config file"],
+      ["", "Chamar a API do Stripe para cobrar o cartão"], ["", "Planear a rota de entrega de cada motorista"], ["", "Atualizar o SDK da AWS para a versão 3"],
+      ["", "O utilizador pode pedir o reembolso de uma encomenda"],
+      ["", "Llamar a la API de Stripe para cobrar la tarjeta"], ["", "Calcular la ruta de reparto de cada conductor"], ["", "Actualizar el SDK de AWS a la versión 3"],
+      // +ui — positives
+      ["ui", "Build the settings page with design-system components and WCAG 2.2 AA accessibility"], ["ui", "Make the checkout form usable with a screen reader and keyboard navigation"],
+      ["ui", "Add a dark mode using the design tokens"], ["ui", "Redesign the dashboard as a responsive layout for mobile and desktop"],
+      ["ui", "Create a reusable date picker in the component library, documented in Storybook"], ["ui", "Show an empty state and a skeleton screen while the orders load"],
+      ["ui", "Improve the Core Web Vitals of the product page: LCP under 2.5 s"], ["ui", "Fix the color contrast and the focus indicator on the login page"],
+      ["ui", "Implement the new onboarding UI from the Figma designs"], ["ui", "Add visual regression tests for the invoice screens"], ["ui", "Admin panel to manage users and roles"],
+      ["ui", "Build the profile page with inline form validation"], ["ui", "Rewrite the frontend in React"], ["ui", "Support right-to-left languages in the mobile app UI"],
+      ["ui", "Add alt text to every product image"], ["ui", "A modal with a dropdown to pick the delivery slot"],
+      ["ui", "Criar a página de definições com componentes do design system e acessibilidade WCAG"], ["ui", "Tornar o formulário de checkout utilizável com leitor de ecrã e navegação por teclado"],
+      ["ui", "Adicionar modo escuro à aplicação"], ["ui", "Mostrar um estado vazio quando a lista de encomendas não tem itens"], ["ui", "Layout responsivo para o painel de administração"],
+      ["ui", "Melhorar o contraste de cores e o texto alternativo das imagens"],
+      ["ui", "Crear la página de ajustes con el sistema de diseño y accesibilidad WCAG"], ["ui", "Hacer el formulario de pago usable con lector de pantalla y navegación por teclado"],
+      ["ui", "Añadir modo oscuro a la aplicación"], ["ui", "Mostrar un estado vacío cuando no hay pedidos"], ["ui", "Diseño responsivo para el panel de administración"],
+      // +ui — hard negatives
+      ["", "Add a button to export orders as CSV"], ["", "Log in form"], ["", "Metrics dashboard for sales"], ["", "The support team screens job applicants before the interview"],
+      ["", "Nightly job that recalculates the loyalty points of every customer"], ["", "Form a committee to review the refund policy"], ["", "Translate the error messages into Portuguese"],
+      ["", "Add a React Native push notification handler"], ["", "Update the page count in the PDF export"], ["", "Generate the monthly PDF report for the accountants"],
+      ["", "Adicionar um botão para exportar as encomendas em CSV"], ["", "Formulário de login"], ["", "Gerar o relatório mensal em PDF"],
+      ["", "Añadir un botón para exportar los pedidos a CSV"], ["", "Formulario de inicio de sesión"], ["", "Generar el informe mensual en PDF"],
+      // +obs — positives
+      ["obs", "Define an SLO for checkout availability and alert on the error budget burn rate"], ["obs", "Instrument the payments service with OpenTelemetry distributed tracing"],
+      ["obs", "Add structured logging with a correlation ID to the order service"], ["obs", "Roll out the new pricing engine behind a feature flag with a canary release and automatic rollback"],
+      ["obs", "Write runbooks for the on-call rotation and wire the alerts to PagerDuty"], ["obs", "Add liveness and readiness probes to the worker deployment"],
+      ["obs", "Grafana dashboard and Prometheus alerts for the queue depth"], ["obs", "Zero-downtime deployment of the billing service with a rollback plan"],
+      ["obs", "Page the on-call engineer when the queue backs up"], ["obs", "Add monitoring and alerts for the nightly import job"],
+      ["obs", "Progressive rollout of the new search, gated on the error rate"], ["obs", "Incident response: a postmortem template and severity levels"],
+      ["obs", "Capture front-end errors in Sentry with the release version"], ["obs", "Chaos engineering game day: kill a cache node and verify the fallback"],
+      ["obs", "Alert the on-call when the 5xx error rate exceeds 1%"], ["obs", "Roll it out as a canary and roll back when the error rate rises"],
+      ["obs", "Definir um SLO para a disponibilidade do checkout e alertas sobre o orçamento de erro"], ["obs", "Instrumentar o serviço de pagamentos com OpenTelemetry e rastreio distribuído"],
+      ["obs", "Logs estruturados com ID de correlação no serviço de encomendas"], ["obs", "Lançamento canário do novo motor de preços com plano de rollback"],
+      ["obs", "Adicionar monitorização e alertas ao processo de importação noturno"], ["obs", "Observabilidade do serviço de faturação: métricas, logs e traces"],
+      ["obs", "Definir un SLO para la disponibilidad del checkout y alertas sobre el presupuesto de errores"], ["obs", "Instrumentar el servicio de pagos con OpenTelemetry y trazas distribuidas"],
+      ["obs", "Logs estructurados con ID de correlación en el servicio de pedidos"], ["obs", "Despliegue canario del nuevo motor de precios con plan de reversión"],
+      ["obs", "Añadir monitorización y alertas al proceso de importación nocturno"],
+      // +obs — hard negatives
+      ["ui", "Show the user's activity logs in the account page"], ["", "Send price alerts to users when a product gets cheaper"],
+      ["", "Roll back the database transaction when the payment fails"], ["", "Incident report form for the hospital staff"], ["", "A heart rate monitor screen for the fitness app"],
+      ["", "Log the user's search terms for product analytics"], ["", "Canary Islands shipping rates"], ["", "Upgrade the logging library to the latest version"],
+      ["", "The latency of the search results is too high"], ["", "The doctor on call receives the patient's lab results"],
+      ["", "Enviar alertas de preço aos clientes quando um produto fica mais barato"], ["", "Reverter a transação quando o pagamento falha"],
+      ["", "Enviar alertas de precio a los clientes cuando un producto baja"], ["", "Formulario de incidencias para el personal del hospital"],
+    ];
+    for (const X of T19) {
+      let tp = 0, fp = 0, fn = 0, pos = 0;
+      const wrong = [];
+      for (const [labels, t] of CORPUS) {
+        const want = labels.split(/[ ,]+/).includes(X.tr), on = cls(t).tracks.includes(X.tr);
+        if (want) pos++;
+        if (on && want) tp++; else if (on) { fp++; wrong.push("FP " + t); } else if (want) { fn++; wrong.push("FN " + t); }
+      }
+      const precision = tp / (tp + fp || 1), recall = tp / (pos || 1);
+      ok(CORPUS.length >= 40 && pos >= 20 && precision >= 0.9 && recall >= 0.85,
+        `1.19 T8: +${X.tr} precision ${(precision * 100).toFixed(0)}% / recall ${(recall * 100).toFixed(0)}% on ${CORPUS.length} EN / PT / ES texts, ${pos} positives (≥ 90% / 85%) (wrong: ` + js(wrong) + ")");
+    }
+    const keyPage = cls("API key management page where admins create and revoke keys"), stripe = cls("Call the Stripe API to charge the customer's card");
+    const noBreak = cls("Avoid breaking changes to the webhooks API for existing consumers"), sdk = cls("Bump the AWS SDK to v3");
+    ok(!keyPage.tracks.includes("api") && !stripe.tracks.includes("api") && stripe.possible.some((p) => p.track === "api") && noBreak.tracks.includes("api") && !noBreak.negated.api.length &&
+      !sdk.tracks.includes("api") && sdk.possible.some((p) => p.track === "api" && p.signal === "sdk") && S.signalConcept("api", "if-match") === "etag" &&
+      cls("Add an endpoint and a route for the orders request").possible.some((p) => p.track === "api" && (p.generic || []).length >= 2) &&
+      cls("Add an endpoint and a route for the orders request").notes.some((n) => /only app-level words .*none names an API contract/.test(n)),
+      "1.19 T8: +api — an API key page, a call to the Stripe API and an SDK bump are no API contract ('possible' at most); 'no breaking changes' states the concern (a hazard, never negated); generic words alone are named as such (got " +
+      js([keyPage.signals.api, stripe.possible, noBreak.negated.api, sdk.possible]) + ")");
+    const btn = cls("Add a button to export orders as CSV"), login = cls("Log in form"), sales = cls("Metrics dashboard for sales");
+    ok(keyPage.tracks.includes("ui") && keyPage.signals.ui.includes("management page") && !btn.tracks.includes("ui") && btn.possible.some((p) => p.track === "ui") &&
+      !login.tracks.includes("ui") && !(login.signals.obs || []).length && !sales.tracks.includes("ui") &&
+      cls("The screening of job applicants").signals.ui.length === 0 && cls("A team formed in 2020").signals.ui.length === 0 &&
+      !cls("Translate the UI into Spanish").tracks.includes("ui") && cls("Build the UI for invoices in React").tracks.includes("ui") && !cls("no UI change: a backend-only fix").tracks.includes("ui") && S.signalConcept("ui", "Vue") === "framework" &&
+      cls("A modal with a dropdown").notes.some((n) => /on from weak signals only/i.test(n)) && btn.notes.some((n) => /none names a UI concern of its own/.test(n) || /weak signal 'button'|app-level words \('button'\)/.test(n)),
+      "1.19 T8: +ui — an API key management page is UI (not API); a button, the log in form (no +obs from 'log') and a sales dashboard are 'possible' at most; 'screening' / 'formed' are no screen / form; 'UI' (capitals) is an anchor — 'translate the UI' alone stays possible, UI + React turns it on, 'no UI' keeps it off (got " +
+      js([keyPage.signals, btn.possible, login.signals.ui, sales.possible]) + ")");
+    const grafana = cls("A Grafana dashboard for the checkout"), obsSaas = cls("Add observability to the billing service"), noDown = cls("Deploy the billing service without downtime and roll back on errors");
+    ok(!sales.tracks.includes("obs") && sales.possible.some((p) => p.track === "obs") && grafana.tracks.includes("obs") && !(grafana.signals.ui || []).includes("dashboard") &&
+      obsSaas.tracks.includes("obs") && obsSaas.tracks.includes("saas") && noDown.tracks.includes("obs") && !noDown.negated.obs.length &&
+      !cls("Canary Islands shipping rates").tracks.includes("obs") && !cls("Send price alerts to users").tracks.includes("obs") && !cls("Log in form").signals.obs.length &&
+      cls("Roll it out as a canary and roll back when the error rate rises").tracks.includes("obs") && S.signalConcept("obs", "p99") === "latency",
+      "1.19 T8: +obs — a sales metrics dashboard is 'possible' at most (never +obs), a Grafana dashboard is +obs and no +ui dashboard; 'observability' serves +saas and +obs; 'without downtime' states the concern (a hazard); Canary Islands, price alerts and the log in form are no operability (got " +
+      js([sales.possible, grafana.signals, obsSaas.label, noDown.signals.obs, noDown.negated.obs]) + ")");
+
+    // --- 1.19 T9: every built-in track together — criteria in track order with unique IDs (US-1.AC-1..31), one T-ID per template AC,
+    // every template AC planned and tasked, one <track>-sections check per marker track
+    const all = d("all-tracks");
+    const every = S.createFeature(all, "Everything", S.OPTIONAL_TRACKS.slice(), "", undefined, "en");
+    const aReq = rd(every.dir, "requirements.md"), aPlan = rd(every.dir, "test-plan.md"), aTasks = S.parseTasks(rd(every.dir, "tasks.md"));
+    const acIds = [...aReq.matchAll(/\*\*(US-\d+\.AC-\d+)\*\*/g)].map((m) => m[1]);
+    const tIds = [...aPlan.matchAll(/^\| (T-\d+) \|/gm)].map((m) => m[1]);
+    const aTr = S.traceCheck(all, every.slug), aDoc = S.specDoctor(all, every.slug);
+    const order = ["[SaaS]", "[AI]", "[SEC]", "[PRIVACY]", "[DIST]", "[API]", "[UI]", "[OBS]"].map((m) => aReq.indexOf("#### " + m));
+    ok(every.ok && every.label === "core +tdd +saas +ai +sec +privacy +dist +api +ui +obs" && acIds.length === 32 && new Set(acIds).size === 32 && acIds.includes("US-1.AC-31") &&
+      tIds.length === 32 && new Set(tIds).size === 32 && new Set(aTasks.map((t) => t.number)).size === aTasks.length && order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])) &&
+      !aTr.uncoveredByTasks.length && !aTr.uncoveredByTests.length && !aTr.phantomAcsInTasks.length && !aTr.phantomTestsInTasks.length && !(aTr.testsNotMappedToTasks || []).length &&
+      ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs"].every((t) => chk(aDoc, t + "-sections").status === "fail"),
+      "1.19 T9: all ten tracks — 32 unique criteria (the [API] / [UI] / [OBS] blocks after [DIST], US-1.AC-20..31), 32 unique T-IDs, unique task numbers, every template AC planned and tasked, eight <track>-sections checks (got " +
+      js([every.label, acIds.length, tIds.length, order, aTr.uncoveredByTasks, aTr.uncoveredByTests]) + ")");
+
+    // --- 1.19 T10: the placeholder corpus stays bounded as tracks are added (every set of at most two optional tracks + all of them):
+    // its texts are counted and its render time is compared with one all-tracks scaffold (relative — no absolute milliseconds)
+    const EI = require("./lib/engine/index.js");
+    const renderAll = () => { for (const l of ["en", "pt", "es"]) { const a = { name: "x", tracks: S.VALID_TRACKS.slice(), label: "core", slug: "x", summary: "" };
+      I.classification(a, l); I.requirements(a, l); I.design(a, l); I.tasks(a, l); I.testPlan("x", l, a.tracks); I.checklist(a, l); } };
+    renderAll();
+    const ratios = [];
+    let texts = 0;
+    for (let k = 0; k < 3; k++) {
+      let t0 = process.hrtime.bigint(); for (let i = 0; i < 10; i++) renderAll(); const unit = Number(process.hrtime.bigint() - t0) / 10;
+      t0 = process.hrtime.bigint(); texts = EI.templateCorpus().length; ratios.push(Number(process.hrtime.bigint() - t0) / unit);
+    }
+    ratios.sort((a, b) => a - b);
+    ok(texts > 900 && texts <= 1400 && ratios[1] <= 60,
+      `1.19 T10: the template corpus renders ${texts} texts (≤ 1400) in ~${ratios[1].toFixed(0)}× one all-tracks scaffold (≤ 60×; 1.18: 628 texts, ~19×)`);
+
+    // --- 1.19 T11: the pt-BR twins of the new PT strings hold no European-only word, are idempotent and keep the markers / IDs
+    const aBr = { name: "ARGN", tracks: ["core", "tdd", "api", "ui", "obs"], label: "core +tdd +api +ui +obs", slug: "argn", summary: "" };
+    const brTexts = [...["requirements", "design", "tasks", "checklist"].map((b) => I[b](aBr, "pt-BR")), I.testPlan("ARGN", "pt-BR", aBr.tracks),
+      ...["api.md", "ui.md", "observability.md"].map((f) => I.steeringStub(f, "pt-BR")), ...["api", "ui", "obs"].flatMap((t) => S.msg("pt-BR").secPrivacy.finishChecks[t])].join("\n");
+    const EU = /(?<![\p{L}])(?:utilizador(?:es)?|registos?|partilhad[oa]s?|atómic[oa]s?|secç(?:ão|ões)|ficheiros?|ecrã|controlo)(?![\p{L}])|por omissão|em baixo/iu;
+    ok(!EU.test(brTexts) && I.toPtBr(brTexts) === brTexts && (brTexts.match(/US-1\.AC-(?:2\d|3[01])/g) || []).length >= 36 && /## \[API\] Contrato da API/.test(brTexts) &&
+      /## \[UI\] Estados da Interface/.test(brTexts) && /## \[OBS\] SLIs e SLOs/.test(brTexts) && /leitor de tela/.test(brTexts) && /Interface do Usuário/.test(brTexts),
+      "1.19 T11: the pt-BR twins of the +api / +ui / +obs strings hold no European-only word (arquivo, tela, usuário, controle…), are idempotent and keep the markers and AC IDs (got " +
+      js([(brTexts.match(EU) || [])[0]]) + ")");
+
+    // --- 1.19 T review 1: +obs — business monitoring / alerts, help-desk incidents and SLAs, a clinical health check are no operability:
+    // the watch words are ONE concept, SLA / incident / health check are context, on-call / game day / postmortem / a lower-case otel are
+    // weak; a technical target (a job, a service, ops…) backs a lone weak word; "customer service" is no target
+    const onOf = (t, tr) => cls(t).tracks.includes(tr);
+    const bizObs = ["Monitor stock levels and send alerts to the purchasing team when inventory is low.",
+      "Warehouse temperature monitoring: sensors report every minute and alerts go to the shift manager.", "Send price-drop alerts to shoppers and monitor competitor prices daily.",
+      "Monitorização dos níveis de stock e alertas ao responsável do armazém.", "Monitoramento da temperatura das câmaras frigoríficas com alertas por SMS.",
+      "Monitoreo del inventario y alertas al responsable del almacén.", "Monitorización de la temperatura de los camiones frigoríficos con alertas.",
+      "Support incident escalation: a ticket not answered within the SLA escalates to the team lead.", "O incidente de suporte deve ser atribuído a um agente em 2 horas, conforme o SLA de suporte.",
+      "Patients fill a health check questionnaire before the visit; any adverse incident is reported to the doctor.", "Alertas de incidentes de seguridad física en la tienda para el gerente.",
+      "Customer service alerts: flag VIP tickets that wait more than an hour.", "Incidencias de clientes con SLA de 24 horas y alertas al supervisor."];
+    const otherDomain = ["On-call schedule for the hospital's nurses with shift swaps.", "Game day ticketing: open the box office two hours before kickoff.",
+      "Postmortem report for the pathology lab.", "Otel reservations for the sales team's offsite."];
+    const stock = cls(bizObs[0]), desk = cls(bizObs[7]);
+    const opsObs = ["Monitor the ERP sync job and send alerts to ops when it fails.", "Alert the team when the nightly backup job hasn't completed by 6 am.",
+      "Monitorizar o serviço de pagamentos e alertar o plantão quando a taxa de erro subir.", "Monitoreo del servicio de búsqueda con alertas cuando la latencia supera 500 ms.",
+      "OTel instrumentation for the gateway.", "Page the on-call engineer when the queue backs up"];
+    ok(bizObs.every((t) => !onOf(t, "obs")) && otherDomain.every((t) => { const r = cls(t); return !r.tracks.includes("obs") && r.possible.some((p) => p.track === "obs"); }) &&
+      stock.possible.some((p) => p.track === "obs") && stock.signals.obs.length === 1 && !desk.signals.obs.length && opsObs.every((t) => onOf(t, "obs")) &&
+      ["monitoring", "monitor", "alerts", "alert", "incident", "sla", "postmortem", "alertas", "monitoreo"].every((k) => S.signalConcept("obs", k) === "watch") &&
+      S.signalConcept("obs", "sync job") === "target" && S.trackSignals("obs").context.includes("incident") && S.trackSignals("obs").weak.includes("on-call") && S.trackSignals("obs").strong.includes("OTel"),
+      "1.19 T review 1: +obs — business monitoring / alerts (EN / PT / ES), a help desk's incident + SLA, a clinical health check stay off (one 'watch' hint at most); on-call / game day / postmortem / Otel from other domains are 'possible' only; a watch word + a technical target (a job, a service, ops) and OTel / paging the on-call are +obs (got " +
+      js([bizObs.filter((t) => onOf(t, "obs")), otherDomain.map((t) => cls(t).tracks), stock.signals.obs, desk.signals.obs, opsObs.filter((t) => !onOf(t, "obs"))]) + ")");
+
+    // --- 1.19 T review 2: +api — consuming someone else's API is app-level ('possible' at most, EN / PT / ES); the ownership-ambiguous
+    // names are weak — strong beside an own cue or as the clause's own subject; a consumer verb counts only when it governs the API phrase
+    const consumed = ["Call Stripe's REST API to create payment intents and handle webhooks for payment confirmation.", "Integrate with the Salesforce REST API to sync contacts every hour.",
+      "Sync contacts from HubSpot's public API into our CRM table nightly.", "Replace our calls to Shopify's old GraphQL endpoint with their new Admin API version.",
+      "Generate a typed client from the payment provider's OpenAPI spec and use it in the checkout.", "Book the courier through the partner API.", "Send the order to the supplier's HTTP API.",
+      "Integrate the Google Maps JSON API.", "Use the Shopify API version 2024-04.", "Integrar com a API REST do Stripe para criar pagamentos.",
+      "Integrar con la API REST de Stripe para crear pagos.", "Llamar a la API REST del banco para consultar el saldo de las cuentas."];
+    const weakAmbig = ["Stripe REST API integration for subscriptions.", "The About dialog shows the app version and the API version it talks to.",
+      "Show the problem details for each support ticket in the agent view."];
+    const ownApi = ["Expose our product catalog to partners through a versioned REST API with OAuth2 client credentials.",
+      "Add CRUD endpoints for the products resource to our public REST API, with cursor pagination, versioned under /v2.", "Version the public API: ship v2 and deprecate v1 with a Sunset header",
+      "Add rate limiting to the public API", "REST API for the mobile app to list and filter orders.", "Criar uma API REST pública para parceiros, com versionamento e limites de pedidos.",
+      "SDK de JavaScript para nuestra API pública con reintentos automáticos.", "Management API for tenants: create, suspend and delete tenants through the internal API.",
+      "The order service calls the payment service over gRPC"];
+    const sfc = cls(consumed[1]);
+    ok(consumed.every((t) => { const r = cls(t); return !r.tracks.includes("api") && r.possible.some((p) => p.track === "api"); }) && weakAmbig.every((t) => !onOf(t, "api")) &&
+      ownApi.every((t) => onOf(t, "api")) && sfc.signals.api.includes("rest api") && S.trackSignals("api").weak.includes("rest api") && S.signalConcept("api", "public api") === "kind",
+      "1.19 T review 2: +api — calling / integrating with / syncing from someone else's API (a possessive owner, 'their', the <Name>, PT / ES 'do Stripe' / 'del banco', a governing consumer verb) is 'possible' at most; an ambiguous name without an owner cue stays weak; our own API — an own cue, the clause's subject, 'to the public API', an internal / management API, services calling each other over gRPC — is +api (got " +
+      js([consumed.filter((t) => onOf(t, "api")), weakAmbig.filter((t) => onOf(t, "api")), ownApi.filter((t) => !onOf(t, "api"))]) + ")");
+
+    // --- 1.19 T review 3: +ui — a page type in a backend-only sentence, an empty state in a state machine, a venue's accessibility are no UI
+    // work; the reviewer's negations still keep +ui off; a backend sentence of its own leaves the page's sentence alone
+    const backendUi = ["Build the data layer for the admin page (a SQL view and a repository method); the page itself is built by the frontend team.",
+      "Add a PATCH /me/preferences handler that the settings page calls to save preferences; the UI already exists.", "The profile page backend should return the user's avatar URL and display name.",
+      "Expose the admin page's API so the mobile app can fetch the same stats.", "Endpoint interno para o painel de administração obter estatísticas; a interface já existe.",
+      "Order state machine: an order moves from the empty state to draft to submitted; the empty state is created when a cart is opened.",
+      "State machine for the vending machine: states empty, ready, dispensing; the empty state blocks sales.", "Wheelchair accessibility of each venue and its entrances.",
+      "Acessibilidade das lojas físicas para cadeiras de rodas.", "Accesibilidad de los edificios: rampas y ascensores en cada sede.",
+      "Backend only, no UI changes: move the invoice PDF generation to a background worker.", "No frontend work: add a nightly job that purges soft-deleted accounts after 30 days.",
+      "Apenas backend, sem interface do utilizador: nova tarefa que apaga contas inativas.", "Sin interfaz de usuario: solo un proceso nocturno que borra cuentas inactivas."];
+    const realUi = ["Settings page for notifications. The backend exposes a PATCH endpoint.", "Página de configurações para gerir as chaves de API.",
+      "Management page for API keys: create, revoke and see the last-used date.", "The cart page should show an empty state with a call to action when there are no items.",
+      "Improve the accessibility of the signup form.", "Rever a acessibilidade do formulário de checkout: ordem de foco e leitor de ecrã.", "Mostrar un estado vacío en la pantalla de pedidos."];
+    const venue = cls(backendUi[7]);
+    ok(backendUi.every((t) => !onOf(t, "ui")) && realUi.every((t) => onOf(t, "ui")) && venue.possible.some((p) => p.track === "ui") &&
+      S.trackSignals("ui").weak.includes("accessibility") && S.trackSignals("ui").strong.includes("wcag") && cls(backendUi[1]).signals.ui.includes("settings page"),
+      "1.19 T review 3: +ui — a settings / admin / profile page named in a backend-only sentence (a handler, an endpoint, the backend, an API, a data layer, 'the UI already exists'), an empty state in a state machine and a venue's wheelchair accessibility (EN / PT / ES) stay off; 'no UI changes' / 'sem interface do utilizador' / 'Sin interfaz de usuario' too; API keys are no backend cue (got " +
+      js([backendUi.filter((t) => onOf(t, "ui")), realUi.filter((t) => !onOf(t, "ui")), venue.signals.ui]) + ")");
+
+    // --- 1.19 T review 4: a pack of ANOTHER name whose recorded marker is a built-in track's now ('webui' [UI], 'contracts' [API], 'ops' [OBS]):
+    // doctor and spec_upgrade explain it; add-track <track> adopts it (the built-in sections are appended although a heading carries the
+    // marker, the pack leaves the list and packMarkers); --remove drops it by its name
+    const mp = d("marker-legacy");
+    S.initProject(mp, ["core"], "en");
+    const markerFeature = (name, marker, lang) => {
+      const pdir = path.join(mp, ".specs", "tracks", name);
+      fs.mkdirSync(pdir, { recursive: true });
+      fs.writeFileSync(path.join(pdir, "track.json"), JSON.stringify({ name, marker, title: { en: "Pack " + name }, sections: [{ name: "Thing " + name, guidance: "Say how." }] }));
+      const f = S.createFeature(mp, "f-" + name, ["core"], "", undefined, lang || "en");
+      const sp = path.join(f.dir, ".state.json");
+      const st = JSON.parse(rd(sp));
+      st.tracks = ["core", name];
+      st.packMarkers = { [name]: "[" + marker + "]" };
+      fs.writeFileSync(sp, JSON.stringify(st, null, 2));
+      fs.appendFileSync(path.join(f.dir, "design.md"), "\n## [" + marker + "] Thing " + name + "\n- decided.\n");
+      return f;
+    };
+    const mWeb = markerFeature("webui", "UI"), mCon = markerFeature("contracts", "API"), mOps = markerFeature("ops", "OBS", "pt");
+    const mDoc = chk(S.specDoctor(mp, "f-webui"), "track-pack-missing"), mDocPt = chk(S.specDoctor(mp, "f-ops"), "track-pack-missing");
+    const mUp = S.specUpgrade(mp), mUpF = mUp.features.find((x) => x.name === "f-webui") || {};
+    const mAdopt = S.addTrack(mp, "f-webui", "ui");
+    const mWebSt = JSON.parse(rd(mWeb.dir, ".state.json")), mWebDesign = rd(mWeb.dir, "design.md");
+    const mUiDoc = chk(S.specDoctor(mp, "f-webui"), "ui-sections");
+    const mDrop = S.addTrack(mp, "f-contracts", "contracts", { remove: true });
+    ok(/\+webui \(a track pack from before 1\.19 — its marker \[UI\] is the built-in \+ui track's now/.test(mDoc.detail || "") && /dev-spec add-track f-webui ui/.test(mDoc.detail || "") &&
+      /o seu marcador \[OBS\] é agora o do track \+obs incluído/.test(mDocPt.detail || "") && js(mUpF.reservedMarkers) === js([{ name: "webui", marker: "[UI]", track: "ui" }]) &&
+      (mUpF.attention || []).includes("track-pack-reserved") && mUp.lines.some((l) => /Change the marker of its track pack\(s\) from before 1\.19 — \+webui \[UI\]/.test(l)) &&
+      mAdopt.ok && js(mAdopt.adopted) === js(["ui"]) && js(mAdopt.adoptedPacks) === js(["webui"]) && mWebDesign.includes("## [UI] Design System Usage") && mWebDesign.includes("## [UI] Thing webui") &&
+      !mWebSt.tracks.includes("webui") && !(mWebSt.packMarkers || {}).webui && mUiDoc.status === "fail" && !/:missing/.test(mUiDoc.detail) && !chk(S.specDoctor(mp, "f-webui"), "track-pack-missing").status &&
+      mDrop.ok && js(mDrop.removedTracks) === js(["contracts"]) && js(JSON.parse(rd(mCon.dir, ".state.json")).tracks) === js(["core"]) && mOps.ok,
+      "1.19 T review 4: a pre-1.19 pack of another name with a now-reserved marker ('webui' [UI]) — doctor says why (EN / PT) and spec_upgrade lists it (reservedMarkers, track-pack-reserved); add-track ui adopts it (the five [UI] sections appended beside the pack's heading, adopted / adoptedPacks, the pack's record gone, ui-sections 'unfilled' not 'missing'); add-track contracts --remove drops the pack (got " +
+      js([mDoc.detail, mDocPt.detail, mUpF.reservedMarkers, mAdopt.adopted, mAdopt.adoptedPacks, mUiDoc.detail, mDrop.error || mDrop.removedTracks]) + ")");
+
+    // --- 1.19 T review 5: the burn-rate guidance agrees with observability-patterns.md (the SRE workbook): 14.4× / 1 h and 6× / 6 h page,
+    // 1× / 3 days opens a ticket — in the observability.md stub (EN / PT / ES / pt-BR) and in references/steering-templates.md
+    const refDir = path.join(__dirname, "..", "skills", "dev-spec-driven", "references");
+    const obsGuide = fs.readFileSync(path.join(refDir, "observability-patterns.md"), "utf8"), stTpl = fs.readFileSync(path.join(refDir, "steering-templates.md"), "utf8");
+    const burn = { en: /the fast ones page \(e\.g\. 14\.4× over 1 h, 6× over 6 h\), the slow one \(e\.g\. 1× over 3 days\) opens a ticket/, pt: /os rápidos chamam \(ex\.: 14,4× em 1 h, 6× em 6 h\), o lento \(ex\.: 1× em 3 dias\) abre um ticket/,
+      es: /las rápidas avisan \(p\. ej\., 14,4× en 1 h, 6× en 6 h\), la lenta \(p\. ej\., 1× en 3 días\) abre un ticket/, "pt-BR": /os rápidos acionam o plantão \(ex\.: 14,4× em 1 h, 6× em 6 h\)/ };
+    ok(Object.entries(burn).every(([l, re]) => re.test(I.steeringStub("observability.md", l) || "")) && burn.en.test(stTpl) && !/6× over 6 h\) opens a ticket/.test(stTpl) &&
+      /\| \*\*Page\*\* \| 6 hours \| 30 minutes \| 6 \|/.test(obsGuide) && /\| \*\*Ticket\*\* \| 3 days \| 6 hours \| 1 \|/.test(obsGuide),
+      "1.19 T review 5: the observability.md stub (EN / PT / ES / pt-BR) and steering-templates.md say 6× over 6 h PAGES and 1× over 3 days opens a ticket, as observability-patterns.md's table does (got " +
+      js((I.steeringStub("observability.md", "en") || "").split("\n").filter((l) => /Burn-rate/.test(l))) + ")");
+
+    // --- 1.19 T review 7: pt-BR — the runbook gets a "link" (a "ligação" is a phone call in Brazil), the on-call person is "de plantão"
+    const brObs = { name: "x", tracks: ["core", "tdd", "obs"], label: "core +tdd +obs", slug: "x", summary: "" };
+    const brReq = I.requirements(brObs, "pt-BR"), brPlan = I.testPlan("x", "pt-BR", brObs.tracks);
+    const ac29 = brReq.split("\n").find((l) => l.includes("US-1.AC-29")) || "", t29 = brPlan.split("\n").find((l) => /US-1\.AC-29/.test(l) && /runbook/.test(l)) || "";
+    ok(/alertar a pessoa de plantão \(on-call\) com um link para o runbook/.test(ac29) && /dispara e aciona o plantão com o link para o runbook/.test(t29) &&
+      ![ac29, t29].some((l) => /ligação|pessoa de serviço/.test(l)) && I.toPtBr(brReq + brPlan) === brReq + brPlan && /ligação para o runbook/.test(I.requirements(brObs, "pt")),
+      "1.19 T review 7: pt-BR — US-1.AC-29 pages 'a pessoa de plantão' with 'um link para o runbook' and its test row 'aciona o plantão com o link'; no 'ligação' / 'pessoa de serviço' left; PT keeps its wording; idempotent (got " + js([ac29, t29]) + ")");
+
+    // --- 1.19 T review 8: recall — PT implantação canário / gradual, ES revertir el despliegue + comprobaciones de salud, PT verificação de saúde,
+    // a singular "alert" beside a job (alone: 'possible'), X-Request-ID, the X-RateLimit-* headers by name, form validation + inline errors
+    const lone = cls("Alert the team when the report is ready."), rl = cls("Return X-RateLimit-Remaining and X-RateLimit-Reset on every response.");
+    const recallT = ["Implantação canário do novo motor de recomendações para 5% dos utilizadores.", "Implantação gradual da nova versão com reversão automática.",
+      "Revertir el despliegue automáticamente si fallan las comprobaciones de salud.", "Reverter a implantação se a verificação de saúde falhar.",
+      "Alert the team when the nightly backup job hasn't completed by 6 am.", "Propagate the X-Request-ID header through all services and include it in every log line."];
+    ok(recallT.every((t) => onOf(t, "obs")) && !lone.tracks.includes("obs") && lone.possible.some((p) => p.track === "obs" && p.signal === "alert") &&
+      rl.tracks.includes("api") && rl.signals.api.includes("x-ratelimit-remaining") && onOf("Form validation for the signup form: email format, password strength and inline errors.", "ui") &&
+      onOf("Translate the UI into Spanish and German and add a language picker to the header.", "ui"),
+      "1.19 T review 8: recall — PT 'implantação canário / gradual', ES 'revertir el despliegue' / 'comprobaciones de salud', PT 'verificação de saúde', 'alert' + a nightly job, X-Request-ID are +obs ('alert the team' alone is 'possible'); X-RateLimit-Remaining / -Reset are +api; form validation + inline errors and the UI + a language picker are +ui (got " +
+      js([recallT.filter((t) => !onOf(t, "obs")), lone.possible, rl.signals.api]) + ")");
+
+    // --- 1.19 T review: precision / recall on the reviewer's hardest texts (EN / PT / ES — the false positives and misses of the review, their
+    // positives and hard negatives): ≥ 90% precision and ≥ 85% recall per track
+    const HARD = [
+      ["api", "Add CRUD endpoints for the products resource to our public REST API, with cursor pagination, versioned under /v2."],
+      ["api", "Our public API must return RFC 9457 problem details for every error and document all status codes in the OpenAPI spec."],
+      ["api", "Deprecate the legacy /v1/orders endpoints: add Sunset and Deprecation headers and a migration guide for API consumers."],
+      ["api", "Expose our product catalog to partners through a versioned REST API with OAuth2 client credentials."],
+      ["api", "Management API for tenants: create, suspend and delete tenants through the internal API."],
+      ["api", "Add rate limiting to the partner API: 1000 requests per hour per key, with X-RateLimit headers."],
+      ["api", "Return proper HTTP status codes from the internal API instead of 200 with an error field."],
+      ["api", "Endpoint REST para listar encomendas com paginação por cursor e versionamento da API."], ["api", "SDK de JavaScript para nuestra API pública con reintentos automáticos."],
+      ["api", "Versionado de la API: /v2 con cambios incompatibles documentados en OpenAPI."], ["api", "Criar uma API REST pública para parceiros, com versionamento e limites de pedidos."],
+      ["api", "Add an X-RateLimit-Remaining header to every response of our API."], ["api", "REST API for the mobile app to list and filter orders."],
+      ["api", "Nuestra API REST debe devolver errores con códigos de estado consistentes."],
+      ["", "Call Stripe's REST API to create payment intents and handle webhooks for payment confirmation."], ["", "Integrate with the Salesforce REST API to sync contacts every hour."],
+      ["", "Sync contacts from HubSpot's public API into our CRM table nightly."], ["", "Replace our calls to Shopify's old GraphQL endpoint with their new Admin API version."],
+      ["", "Generate a typed client from the payment provider's OpenAPI spec and use it in the checkout."], ["", "Integrar com a API REST do Stripe para criar pagamentos."],
+      ["", "Integrar con la API REST de Stripe para crear pagos."], ["", "Llamar a la API REST del banco para consultar el saldo de las cuentas."],
+      ["", "Book the courier through the partner API."], ["", "Send the order to the supplier's HTTP API."], ["", "Integrate the Google Maps JSON API."],
+      ["", "Use the Shopify API version 2024-04."], ["", "Show the problem details for each support ticket in the agent view."],
+      ["ui", "Settings page where users can change their notification preferences, email frequency and language."], ["ui", "Admin panel to manage coupons: list, create, disable, with search and filters."],
+      ["ui", "The cart page should show an empty state with a call to action when there are no items."], ["ui", "Form validation for the signup form: email format, password strength and inline errors."],
+      ["ui", "Translate the UI into Spanish and German and add a language picker to the header."],
+      ["ui", "Accessibility fixes: focus order in the checkout form, a visible focus indicator, screen reader announcements for errors."],
+      ["ui", "Management page for API keys: create, revoke and see the last-used date."], ["ui", "Página de configurações onde o utilizador altera o idioma e as notificações por email."],
+      ["ui", "Rever a acessibilidade do formulário de checkout: ordem de foco e leitor de ecrã."], ["ui", "Mostrar un estado vacío en la pantalla de pedidos."],
+      ["ui", "Improve the accessibility of the signup form."], ["ui", "Cancel subscription flow: a confirm dialog, a reason survey and a win-back offer screen."],
+      ["", "Build the data layer for the admin page (a SQL view and a repository method); the page itself is built by the frontend team."],
+      ["", "Add a PATCH /me/preferences handler that the settings page calls to save preferences; the UI already exists."],
+      ["", "The profile page backend should return the user's avatar URL and display name."], ["", "Endpoint interno para o painel de administração obter estatísticas; a interface já existe."],
+      ["", "Order state machine: an order moves from the empty state to draft to submitted; the empty state is created when a cart is opened."],
+      ["", "State machine for the vending machine: states empty, ready, dispensing; the empty state blocks sales."], ["", "Wheelchair accessibility information for each venue and its entrances."],
+      ["", "Accesibilidad de los edificios: rampas y ascensores en cada sede."], ["", "Backend only, no UI changes: move the invoice PDF generation to a background worker."],
+      ["", "Sin interfaz de usuario: solo un proceso nocturno que borra cuentas inactivas."], ["", "Apenas backend, sem interface do utilizador: nova tarefa que apaga contas inativas."],
+      ["obs", "Add latency metrics and request logs to the image resizing service."], ["obs", "Propagate the X-Request-ID header through all services and include it in every log line."],
+      ["obs", "Alert the team when the nightly backup job hasn't completed by 6 am."], ["obs", "Monitor the ERP sync job and send alerts to ops when it fails."],
+      ["obs", "Uptime monitoring for our public status page with alerts to Slack."], ["obs", "If the deploy fails its health checks, automatically roll back to the previous release."],
+      ["obs", "Implantação canário do novo motor de recomendações para 5% dos utilizadores."], ["obs", "Revertir el despliegue automáticamente si fallan las comprobaciones de salud."],
+      ["obs", "Monitorizar o serviço de pagamentos e alertar o plantão quando a taxa de erro subir."], ["obs", "Page the on-call engineer via PagerDuty when the checkout error rate exceeds 2% for 5 minutes."],
+      ["obs", "Monitoreo del servicio de búsqueda con alertas cuando la latencia supera 500 ms."], ["obs", "Rollout da nova versão da app para 10% dos utilizadores com monitorização da taxa de erro."],
+      ["", "Monitor stock levels and send alerts to the purchasing team when inventory is low."], ["", "Warehouse temperature monitoring: sensors report every minute and alerts go to the shift manager."],
+      ["", "Send price-drop alerts to shoppers and monitor competitor prices daily."], ["", "Monitorização dos níveis de stock e alertas ao responsável do armazém."],
+      ["", "Monitoramento da temperatura das câmaras frigoríficas com alertas por SMS."], ["", "Monitoreo del inventario y alertas al responsable del almacén."],
+      ["", "Monitorización de la temperatura de los camiones frigoríficos con alertas."], ["", "Support incident escalation: a ticket not answered within the SLA escalates to the team lead."],
+      ["", "O incidente de suporte deve ser atribuído a um agente em 2 horas, conforme o SLA de suporte."],
+      ["", "Patients fill a health check questionnaire before the visit; any adverse incident is reported to the doctor."], ["", "On-call schedule for the hospital's nurses with shift swaps."],
+      ["", "Game day ticketing: open the box office two hours before kickoff."], ["", "Postmortem report for the pathology lab."], ["", "Otel reservations for the sales team's offsite."],
+      ["", "Alertas de incidentes de seguridad física en la tienda para el gerente."], ["", "Customer service alerts: flag VIP tickets that wait more than an hour."],
+      // 1.19 verify 1: +ui was lost when the backend was negated or named in another clause; the page consuming an API is UI work
+      ["ui", "Frontend only, no backend changes: a new landing page with a hero section and a signup form."],
+      ["ui", "The redesign does not touch the backend: only the landing page, the header and the footer change."],
+      ["ui", "The settings page redesign needs no API changes."], ["ui", "Redesign the admin panel; the backend team will add the endpoints later."],
+      ["ui", "The landing page loads its testimonials from the CMS API."], ["ui", "Apenas frontend, sem backend: nova página de perfil com foto e biografia."],
+      ["ui", "Sin backend: nueva página de ajustes y panel de administración."],
+      ["", "Backend for the profile page: the GET /me handler must return the avatar URL and the locale."],
+      ["", "Profile page: the GET /me handler must also return the avatar URL."], ["", "A lógica fica no backend da página de definições."],
+    ];
+    const hardStats = T19.map((X) => {
+      let tp = 0, fp = 0, pos = 0;
+      const wrong = [];
+      for (const [labels, t] of HARD) {
+        const want = labels.split(/[ ,]+/).includes(X.tr), on = onOf(t, X.tr);
+        if (want) pos++;
+        if (on && want) tp++; else if (on) { fp++; wrong.push("FP " + t); } else if (want) wrong.push("FN " + t);
+      }
+      return { tr: X.tr, precision: tp / (tp + fp || 1), recall: tp / (pos || 1), pos, wrong };
+    });
+    ok(HARD.length >= 60 && hardStats.every((x) => x.pos >= 10 && x.precision >= 0.9 && x.recall >= 0.85),
+      `1.19 T review: precision / recall on ${HARD.length} of the reviewer's hardest EN / PT / ES texts ≥ 90% / 85% per track — ` +
+      hardStats.map((x) => `+${x.tr} ${(x.precision * 100).toFixed(0)}% / ${(x.recall * 100).toFixed(0)}% (${x.pos} positives)`).join(", ") + " (got " + js(hardStats.flatMap((x) => x.wrong)) + ")");
+
+    // --- 1.19 verify 1: +ui — the backend cue reads the page word's CLAUSE (a short label before a colon joins what it introduces),
+    // a negated backend word and one the page consumes never demote it, "frontend only" demotes nothing, "the frontend team" is a
+    // team; the reviewer's backend-only texts stay off; the genericOnly note no longer offers "the frontend" as an anchor
+    const v1On = ["Frontend only, no backend changes: a new landing page with a hero section and a signup form.",
+      "The redesign does not touch the backend: only the landing page, the header and the footer change.", "The settings page redesign needs no API changes.",
+      "Redesign the admin panel; the backend team will add the endpoints later.", "The landing page loads its testimonials from the CMS API.",
+      "Apenas frontend, sem backend: nova página de perfil com foto e biografia.", "Sin backend: nueva página de ajustes y panel de administración.",
+      "O redesenho não mexe no backend: só muda a página de perfil e o cabeçalho.", "El rediseño no toca el backend: solo cambian la página de ajustes y la cabecera.",
+      "A página de definições carrega os dados da API de preferências.", "La página de ajustes carga los datos desde la API de preferencias.",
+      "Redesign the settings page; the endpoint already exists.", "Frontend-only change: the settings page gets a new layout; the PATCH endpoint already exists."];
+    const v1Off = [...backendUi, "Backend for the profile page: the GET /me handler must return the avatar URL and the locale.",
+      "Profile page: the GET /me handler must also return the avatar URL.", "Backend: the settings page calls the new PATCH /me/preferences endpoint.",
+      "Settings page: a PATCH handler saves the preferences; the form already exists.", "Settings page preferences are saved through a new handler; the UI already exists.",
+      "A lógica fica no backend da página de definições.", "Apenas backend: o endpoint da página de perfil passa a devolver também a morada de faturação.",
+      "Solo backend: el endpoint de la página de perfil devuelve también la dirección de facturación."];
+    const v1Team = cls(backendUi[0]), v1Note = v1Team.notes.find((n) => /Possible \+ui/.test(n)) || "";
+    ok(v1On.every((t) => onOf(t, "ui")) && v1Off.every((t) => !onOf(t, "ui")) && v1Team.signals.ui.includes("frontend") && !v1Team.tracks.includes("ui") &&
+      /only app-level words \('admin page', 'frontend'\)/.test(v1Note) && !/the frontend/.test(v1Note) &&
+      ["pt", "es"].every((l) => !/o frontend|el frontend/.test(I.msg(l).classify.genericOnly("ui", "'x'"))),
+      "1.19 verify 1: +ui — a negated backend ('no backend changes', 'does not touch the backend', 'needs no API changes', sem / sin backend), a backend in another clause, an API the page loads from and 'frontend only' keep the page words (EN / PT / ES); a backend word before / right after the page, a label ('Profile page: the GET /me handler…'), 'the UI already exists' and PT 'no backend' (em + o) still demote; 'the frontend team' is generic; the note offers no 'frontend' anchor (got " +
+      js([v1On.filter((t) => !onOf(t, "ui")), v1Off.filter((t) => onOf(t, "ui")), v1Team.signals.ui, v1Note]) + ")");
+
+    // --- 1.19 verify 2: +api — "the deprecated X API" is an adjective (no own verb), an ALL-CAPS organisation after / before the API
+    // phrase owns it (a technical acronym doesn't), and breaking compatibility as a verb is a compat anchor + hazard in EN / PT / ES
+    const v2Off = ["Replace the deprecated Google Places API calls with the new Places API version before they are shut down.",
+      "Obtener las tasas de cambio de la API pública del BCE cada mañana.", "Sync the ECB's public API rates into the ledger.", "Use the documented Stripe API version."];
+    const v2On = ["Expose the REST API of the CRM to partners.", "Deprecate the old public API and publish v2.",
+      "This change must not break the public API; existing clients keep working without changes.",
+      "Esta alteração não pode quebrar a compatibilidade da API pública com os clientes existentes.",
+      "Este cambio no puede romper la compatibilidad de la API pública con los clientes existentes.", "The public API must not break compatibility with existing clients."];
+    const v2Pt = cls(v2On[3]), v2Places = cls(v2Off[0]);
+    ok(v2Off.every((t) => !onOf(t, "api")) && v2Places.possible.some((p) => p.track === "api") && v2On.every((t) => onOf(t, "api")) &&
+      v2Pt.signals.api.includes("quebrar a compatibilidade") && !v2Pt.negated.api.length && S.signalConcept("api", "romper la compatibilidad") === "compat" &&
+      S.signalConcept("api", "break compatibility") === "compat",
+      "1.19 verify 2: +api — 'the deprecated … API' is no own cue, 'del BCE' / 'the ECB's' own the API ('of the CRM' doesn't), PT 'não pode quebrar a compatibilidade da API pública' is +api like EN / ES (a compat hazard, never negated) (got " +
+      js([v2Off.filter((t) => onOf(t, "api")), v2On.filter((t) => !onOf(t, "api")), v2Pt.signals.api, v2Pt.negated.api, v2Places.signals.api]) + ")");
+
+    // --- 1.19 verify 3: +obs recall — PT "alertar" / ES "avisar" are the watch concept (a technical target makes them +obs, a business
+    // target leaves a hint); a health check endpoint is strong in PT / ES as in EN
+    const v3On = ["Alertar a equipa de operações quando a tarefa agendada de cópias de segurança falhar.",
+      "Avisar al equipo de operaciones cuando falle la tarea programada de copias de seguridad.", "Adicionar um endpoint de verificação de saúde ao serviço de encomendas.",
+      "Añadir un endpoint de comprobación de salud.", "Criar um endpoint de verificação de saúde."];
+    const v3Off = ["Avisar al encargado de la tienda cuando el stock de un producto baje del mínimo.", "Alertar o gestor da loja quando o stock de um produto ficar abaixo do mínimo."];
+    ok(v3On.every((t) => onOf(t, "obs")) && v3Off.every((t) => { const r = cls(t); return !r.tracks.includes("obs") && r.possible.some((p) => p.track === "obs"); }) &&
+      ["alertar", "avisar"].every((k) => S.signalConcept("obs", k) === "watch" && S.trackSignals("obs").weak.includes(k)) &&
+      S.trackSignals("obs").strong.includes("endpoint de comprobación de salud"),
+      "1.19 verify 3: +obs — 'Alertar' / 'Avisar' + a scheduled job are +obs, + a store manager a hint only; 'endpoint de verificação de saúde' / 'endpoint de comprobación de salud' alone turn +obs on (got " +
+      js([v3On.filter((t) => !onOf(t, "obs")), v3Off.map((t) => cls(t).signals.obs)]) + ")");
+
+    // --- 1.19 verify 4: pt-BR — the [OBS] Alerting guidance, the observability.md heading and the +obs finish check: nobody is
+    // "chamado", no alert "liga" to a runbook (a phone call in Brazil); PT keeps its wording; idempotent
+    const v4Arg = { name: "x", tracks: ["core", "obs"], label: "core +obs", slug: "x", summary: "" };
+    const v4Br = [I.design(v4Arg, "pt-BR"), I.steeringStub("observability.md", "pt-BR"), S.msg("pt-BR").secPrivacy.finishChecks.obs.join("\n")].join("\n");
+    const v4Pt = I.design(v4Arg, "pt") + I.steeringStub("observability.md", "pt");
+    ok(/quem é acionado · cada alerta aponta para um runbook \(triagem, mitigação, verificação\) · o que vira um ticket e não aciona o plantão/.test(v4Br) &&
+      /## Alertas \(cada um com um link para o runbook\)/.test(v4Br) && /runbooks para os quais os alertas apontam existem/.test(v4Br) &&
+      !/(?<![\p{L}])(?:liga|ligam|ligação|ligações)(?![\p{L}])|quem é chamado|uma chamada/u.test(v4Br) && I.toPtBr(v4Br) === v4Br &&
+      /quem é chamado · cada chamada liga a um runbook/.test(v4Pt) && /## Alertas \(cada um liga a um runbook\)/.test(v4Pt),
+      "1.19 verify 4: pt-BR — '[OBS] Alerting' says 'quem é acionado · cada alerta aponta para um runbook … o que vira um ticket e não aciona o plantão', the steering heading 'Alertas (cada um com um link para o runbook)', the finish check 'os runbooks para os quais os alertas apontam'; no liga / ligação / chamada left; PT unchanged; idempotent (got " +
+      js(v4Br.split("\n").filter((l) => /runbook/.test(l))) + ")");
   }
 
   // Release hygiene: the three version fields agree.

@@ -3,6 +3,68 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.19.0] — 2026-09-29
+
+Code you don't have to write twice, and three more kinds of rigor: every design names what it reuses and the implementer
+searches before writing, and three built-in tracks for API contracts, user interfaces and operability. 38 MCP tools,
+54 commands, ten built-in tracks (was seven).
+
+### Added — reuse and clean code
+- **Every design names what it reuses** — a scaffolded **Reuse & Integration** section (the existing modules, components and
+  helpers reused or extended, with their paths; what is new and why nothing existing fits; where it lives — module
+  boundaries). `spec_doctor` warns `design-reuse` while it is missing, empty or still the template — a warning only, never
+  a refused approval; a design approved before 1.19 is never flagged (a new `reuse` approval stamp); a brownfield
+  feature's filled integration-plan.md → Integration Points counts; `templates check` warns `reuse-missing`.
+- **Task briefs gain a Reuse section** — the design's entries that name the task's files, folders or criteria, and the
+  existing source files next to its own (bounded; never a path outside the project, a network path or a link out).
+- **Search before you write** — a hard step for the implementer (with a Reuse block in its report: reused / extended /
+  created and why); the reviewer checks duplication against the existing codebase, not only inside the diff (a helper
+  duplicating an existing one is Important); refactor candidates go to the backlog instead of into the task; extending code
+  outside the task's files is a NEEDS_CONTEXT or a converge task, never a silent edit. `structure.md` gains Module
+  Boundaries and Shared Code; the constitution stub a reuse principle.
+- Guide **`references/code-reuse-and-quality.md`** — search before you write, reuse vs extend vs new (the rule of three),
+  module boundaries, duplication, the code smells worth acting on and the refactoring that answers each.
+
+### Added — three built-in tracks: +api, +ui, +obs
+- **+api** `[API]` — API Contract · Versioning & Compatibility · Error Model (RFC 9457 problem+json) · Pagination,
+  Idempotency & Concurrency · Rate Limits & Quotas; criteria US-1.AC-20..23; contract, Idempotency-Key replay, stale ETag
+  (412) and breaking-change tests; `steering/api.md`; guide `references/api-design-patterns.md`.
+- **+ui** `[UI]` — Design System Usage · UI States · Accessibility (WCAG 2.2 AA) · Responsiveness & i18n · UI Performance
+  Budget (Core Web Vitals); criteria US-1.AC-24..27; keyboard + automated accessibility, form errors, visual regression and
+  failed-load tests; `steering/ui.md`; guide `references/ui-design-patterns.md`.
+- **+obs** `[OBS]` — SLIs & SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health & Capacity; criteria
+  US-1.AC-28..31; telemetry, burn-rate alert, rollback drill and fault-injection tests; `observability.md` gains SLOs,
+  rollout and health; guide `references/observability-patterns.md`.
+- Each: doctor `<track>-sections` (the design approval refuses it until filled), status, finish checks, brief / matrix /
+  Gherkin, add_track / --remove, import, project templates, spec_tracks; EN / PT / ES / pt-BR.
+- Classifier: +api fires on designing an API (ours — "expose a REST API", "publish an OpenAPI spec", "API consumers"),
+  not on consuming someone else's ("call Stripe's REST API"); +obs on operating a service (SLOs, telemetry, runbooks,
+  rollouts), not on business monitoring or support incidents; +ui on user-facing work, not on the backend behind a page.
+  No decision of the seven older tracks changes.
+
+### Upgrade note — track packs with a now-reserved name or marker
+- Track packs named `api`, `rest`, `openapi`, `graphql`, `ui`, `frontend`, `ux`, `wcag`, `obs`, `observability`,
+  `monitoring`, `sre`, `telemetry` (and the other aliases listed in references/project-tracks.md), or marked `API`, `UI`
+  or `OBS`, are now reserved (`a11y` stays free). A feature that used one keeps it as a missing pack (doctor
+  `track-pack-missing`, spec_upgrade "from before 1.19"); `dev-spec add-track <feature> api|ui|obs` adopts the built-in
+  track, or rename the pack and re-add it.
+
+### Changed
+- Ten built-in tracks, 31 built-in templates; the placeholder corpus renders ~1,165 texts.
+- `spec_backlog add` of a name that already exists appends the new note (`exists: true`, `appended`) instead of keeping
+  the old one silently; a backlog note — a new entry's too — is one line of at most 2,000 characters (past it add is
+  refused).
+
+### Fixed
+- `references/saas-patterns.md` cited RFC 8594 for the `Deprecation` header — it is RFC 9745 (`Sunset` is RFC 8594).
+
+### Tests
+- `node mcp/test.js` 1529 assertions (was 1447), `node cli/test-cli.js` 471 (was 455): the three tracks end to end (a
+  precision / recall assertion over 88 hard EN / PT / ES texts — consuming vs designing an API, business monitoring vs
+  operability, the backend behind a page — every track combination, legacy packs by name and by marker), the Reuse &
+  Integration check and its upgrade path, the brief's Reuse section (a network path, a link out, a big folder), backlog
+  notes, and one regression per review finding.
+
 ## [1.18.0] — 2026-09-29
 
 A pure refactor: the engine as modules. No behaviour change — same tools, commands, results and files.

@@ -22,8 +22,9 @@ You judge the diff against them, then judge how well it is built. You are read-o
 - **Read the package once.** Its context lines ARE the changed files. Read a changed file separately
   only when a hunk you must judge is cut off — and say so. Don't crawl the codebase: inspect code
   outside the diff only for a concrete risk you can name (a changed contract → check its call sites),
-  and name the risk and what you checked. (Converge mode has no package: read the code each AC needs, starting
-  from the tasks' `_Implements:_` files and the tests `trace_check` found.)
+  and name the risk and what you checked. **Duplication is always such a risk:** every new unit the diff adds is
+  searched for in the existing codebase (Code quality, below) — a search, not a crawl. (Converge mode has no package:
+  read the code each AC needs, starting from the tasks' `_Implements:_` files and the tests `trace_check` found.)
 - **Do not trust the report.** It is the implementer's claims, including its rationales ("kept it
   simple", "per YAGNI"). Verify against the diff; a rationale never lowers a finding's severity.
 - **Don't re-run the suite** the implementer already ran. Run one focused test only when the code
@@ -75,16 +76,33 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
 - **+dist:** no database commit followed by a direct publish, cache write or API call — the outbox / inbox / saga the
   design names; the dedup record in the same transaction as the effect; retries with a timeout, backoff + jitter and a
   key; the version check / unique constraint the design names for concurrent updates.
+- **+api:** the handlers return exactly what the contract file documents (status codes, problem+json errors with stable
+  codes, headers); nothing breaking inside a version; Idempotency-Key and If-Match honoured where the design says.
+- **+ui:** design-system components and tokens (no one-off styles); every state of the design's state matrix handled; keyboard
+  operable with a visible focus, labelled controls, errors named in text; the accessibility check the task names clean.
+- **+obs:** the metrics the task's `_Emits metrics:_` names, structured logs with the correlation ID and no personal data, the
+  spans the design names; alerts linked to runbooks; liveness free of dependencies; the flag and the rollback path as designed.
 - **Security (always):** injection, authz, data exposure in the changed code.
 
 ### 4. Code quality
-Separation of concerns, error handling (no swallowed errors), duplication (verbatim logic copies),
-edge cases, tests that verify behavior rather than mocks, file growth this change caused.
+**Duplication against the EXISTING codebase, not only inside the diff** (`references/code-reuse-and-quality.md` → "What
+the reviewer checks"): read the report's **Reuse** block first, then list every new exported function, class,
+component, module, client or config key the diff adds and search for an existing equivalent — similarly named or
+shaped (Grep the name's stem and two synonyms, the library it wraps, the shared folders `structure.md` names). A new
+helper, component or client that duplicates an existing one is **Important** (the fix: reuse the existing unit and
+delete the new one — never "we'll consolidate later"), and so is a verbatim copy of existing logic, a swallowed error
+and a dependency against the rules (shared code importing a feature, a feature importing another, a new cycle). A new
+shared abstraction with a single user is Important when exported from shared code, otherwise Minor. Then separation of
+concerns, edge cases, tests that verify behavior rather than mocks, file growth this change caused, and smells in the
+NEW code — a long function or parameter list, deep nesting, a mysterious name, primitive obsession, repeated switches,
+dead code, speculative generality, comments that say *what* instead of *why* — **Minor** unless they hide a defect. A
+refactor idea outside the diff is out of scope: one line, deferred (the controller files it in the backlog).
 
 ### Calibration
 **Critical** = wrong behavior, data loss, security hole, a changed planned test. **Important** = this
 task can't be trusted until fixed: a missed AC, fragile logic, swallowed errors, tests that assert
-nothing, verbatim duplication. **Minor** = polish, broader-coverage wishes. If the brief itself mandates
+nothing, verbatim duplication, a new unit duplicating an existing one. **Minor** = polish, broader-coverage wishes,
+smells in new code. If the brief itself mandates
 something this rubric calls a defect, report it as Important, labeled **plan-mandated** — the
 controller rules on it.
 
@@ -98,7 +116,10 @@ Apply the `/prReview` checklist to the whole branch, gated by active tracks: spe
 all ACs (every AC has code + a test on +tdd), red-first evidence in git history (+tdd — `dev-spec log <feature>` lists
 it per task when the commits follow `/spec-commit`), scale sections honored and tenant isolation (+saas), eval delta
 and versioned prompts (+ai), threat-model mitigations and access control (+sec), the data inventory, retention and
-data subject rights honoured (+privacy), no dual write that bypasses its outbox / inbox (+dist), security. Decisions in `decisions.md` that the code contradicts are
+data subject rights honoured (+privacy), no dual write that bypasses its outbox / inbox (+dist), no breaking change inside a version (+api), the UI states and accessibility (+ui), telemetry, alerts
+and the rollback path (+obs), security, and
+duplication — the units the branch adds against the existing codebase and against each other (two tasks that each
+wrote the same helper). Decisions in `decisions.md` that the code contradicts are
 findings. Triage the ledger's deferred minors and parked findings: which must be fixed before merge, which can ship.
 
 ## Converge mode
@@ -112,7 +133,9 @@ The question is "does the code deliver every AC?", not "is this diff right?". Re
    scoping on every tenant-data query, `_Emits metrics:_` metrics actually emitted; +ai prompts versioned, eval
    harness wired, cost tracking present; +sec the `[SEC]` criteria (401 / 403 + audit, no secrets in output) and the
    abuse-case tests; +privacy export, erasure and retention implemented across every store of the data inventory;
-   +dist outbox / idempotent consumers / concurrency control as designed and the failure-injection tests; security always.
+   +dist outbox / idempotent consumers / concurrency control as designed and the failure-injection tests; +api the contract
+   file and the contract tests; +ui the state matrix and the accessibility checks; +obs the telemetry, the alerts and the rollback drill;
+   security always.
 3. **Classify each gap:** a **task** (fixable within the approved ACs and design) or a **spec change** (needs a
    different AC, design decision or test expectation — list it apart; the controller routes it to its phase,
    never into a task).

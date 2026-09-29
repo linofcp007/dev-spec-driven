@@ -12,14 +12,14 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeTasks, baselineDrift, chainArtifacts, DESIGN_WEIGH_IDS, detectTracks, ensureLockIgnore, errs, existsCached,
   featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord, isGeneratedOrAbsent, isObj,
-  isRecord, latestSnapshot, legacyPackName, legacyRecord, LOCK_IGNORE_LINES, maybeRefreshRoadmap, missingPackTracks,
+  isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES, maybeRefreshRoadmap, missingPackTracks,
   nextAction, normalizeLang, parseTasks, PHASE_FILE, phaseActive, phaseFile, positionPhase, projectLang, readIfExists,
   readJson, readRoadmap, realRootOf, roadmapBusyResult, roadmapError, savedTracks, scanTestCode, specDoctor, specsRoot,
   staleFinish, stateFromFile, statePath, timeOf, trackLabel, unverifiedLabel, verificationStatus, withFeatureLock,
   withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot;
 function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, DESIGN_WEIGH_IDS, detectTracks, ensureLockIgnore,
   errs, existsCached, featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord,
-  isGeneratedOrAbsent, isObj, isRecord, latestSnapshot, legacyPackName, legacyRecord, LOCK_IGNORE_LINES,
+  isGeneratedOrAbsent, isObj, isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES,
   maybeRefreshRoadmap, missingPackTracks, nextAction, normalizeLang, parseTasks, PHASE_FILE, phaseActive, phaseFile,
   positionPhase, projectLang, readIfExists, readJson, readRoadmap, realRootOf, roadmapBusyResult, roadmapError,
   savedTracks, scanTestCode, specDoctor, specsRoot, staleFinish, stateFromFile, statePath, timeOf, trackLabel,
@@ -226,8 +226,12 @@ function upgradeFeature(projectDir, s, ctx) {
   if (drift && drift.stale) attention.push("stale-finish");
   // 1.17 D review: a track pack from before 1.17 whose name is reserved now ('dist', 'kafka', 'consistency'…) — named, with the way out
   const rawSt = readJson(statePath(s.dir)).data;
-  const reservedPacks = missingPackTracks(s.dir).filter((n) => legacyPackName(rawSt, n));
-  if (reservedPacks.length) attention.push("track-pack-reserved");
+  const missingPacks = missingPackTracks(s.dir);
+  const reservedPacks = missingPacks.filter((n) => legacyPackName(rawSt, n));
+  // 1.19 T review: a pack whose MARKER is a built-in track's now ('webui' with [UI]) — { name, marker, track }
+  const reservedMarkers = missingPacks.filter((n) => !legacyPackName(rawSt, n) && legacyPackMarkerTrack(rawSt, n))
+    .map((n) => ({ name: n, marker: rawSt.packMarkers[n], track: legacyPackMarkerTrack(rawSt, n) }));
+  if (reservedPacks.length || reservedMarkers.length) attention.push("track-pack-reserved");
   // 1.17 A review 3: the design weigh warns (design-tradeoffs / design-risks) are listed, never an upgrade to-do on their own.
   if (warns.some((c) => !DESIGN_WEIGH_IDS.has(c.id))) attention.push("warnings");
   const res = {
@@ -238,7 +242,7 @@ function upgradeFeature(projectDir, s, ctx) {
     history: { present: plan.present, seed: plan.seed.map((x) => x.phase), skip: plan.skip },
     unverified: vs.unverifiedDetail.map((d) => Object.assign({ number: d.number, reason: d.reason }, d.specChanged ? { specChanged: true } : {}, d.unticked ? { unticked: true } : {})),
     next: { step: na.step, recommendation: na.recommendation },
-    review, reviewArtifacts, drift, reservedPacks,
+    review, reviewArtifacts, drift, reservedPacks, reservedMarkers,
     group: fails.length ? "blocked" : attention.length ? "attention" : "ok", attention,
   };
   if (na.impact) res.impact = na.impact.phases; // the spec_impact phases to diff before re-approving
@@ -339,7 +343,11 @@ function upgradeItems(f, lang) {
   if (f.unverified.length) act(I.verify(unverifiedLabel({ unverifiedDetail: f.unverified }, lang), f.name));
   if (f.drift && f.drift.drifted) act(I.drift(f.drift.changed.length + f.drift.missing.length + f.drift.nowPresent.length, f.name));
   if (f.drift && f.drift.stale) act(I.stale(f.name));
-  if (f.reservedPacks && f.reservedPacks.length) act(I.packReserved(f.reservedPacks.map((n) => "+" + n).join(", "), f.name)); // 1.17 D review
+  if (f.reservedPacks && f.reservedPacks.length) act(I.packReserved(f.reservedPacks.map((n) => "+" + n).join(", "), f.name, f.reservedPacks.map(packReservedSince).sort().pop())); // 1.17 D review
+  if (f.reservedMarkers && f.reservedMarkers.length) { // 1.19 T review
+    act(I.packMarkerReserved(f.reservedMarkers.map((x) => `+${x.name} ${x.marker}`).join(", "), f.name,
+      f.reservedMarkers.map((x) => packReservedSince(x.track)).sort().pop(), [...new Set(f.reservedMarkers.map((x) => x.track))].join(" ")));
+  }
   if (f.review === "critic") act(I.critic(f.reviewArtifacts.join(", ")));
   else if (f.review === "converge") act(I.converge(f.reviewArtifacts.join(", ")));
   else out.push({ check: false, text: I.none });

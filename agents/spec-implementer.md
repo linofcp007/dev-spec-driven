@@ -21,7 +21,21 @@ requirements, the spec is the authority behind it, and the controller holds ever
 1. Read the brief completely. Its acceptance criteria (by AC ID), tests to make green (by T-ID),
    files, design context and definition of done are **binding**. Read the steering files it lists.
 2. Read the code you will touch. Follow the patterns already there.
-3. If anything is unclear — an AC you can't satisfy as written, a missing interface, an unresolved
+3. **Search before you write** (a hard step, not advice). Before creating any helper, component, client, validator,
+   formatter or module, look for one that already does it (`references/code-reuse-and-quality.md` → "Search before you
+   write"): the brief's **Reuse** section first (the design's Reuse & Integration entries for this task, the existing
+   files next to yours), then the codebase by **concept and at least three synonyms** (`rg -n -i "retry|backoff|with_?retries"`),
+   the shared folders `structure.md` names, whoever already wraps the library you were about to wrap, and
+   `.specs/SPECS.md`. Then **reuse**, else **extend** (a parameter with a default — existing callers and their tests
+   unchanged — in the files your task's `_Implements:_` names), else **create** — local to the feature until a second or
+   third real use (the rule of three). A unit to extend **outside** the task's files is never edited silently: report
+   **NEEDS_CONTEXT** naming the unit and the change (the controller adds a converge task for it — `spec_append_tasks` with
+   that file in `_Implements:_`, approved like any change to the plan — or tells you to go ahead), or, when the task
+   can be done without it, create locally and name the extension in the report's Reuse block. Under the scope guard
+   (`meta.guard: "scope"`) an edit to a file no open task plans stops for the user's permission mid-task.
+   Never reuse by copy-paste. What you searched and found goes in the report's **Reuse** block, also when nothing was
+   found.
+4. If anything is unclear — an AC you can't satisfy as written, a missing interface, an unresolved
    reference listed in the brief — **stop and report NEEDS_CONTEXT** with the specific question.
    Asking costs minutes; guessing costs a review loop.
 
@@ -99,8 +113,13 @@ run. The report's RED and GREEN runs of the target tests are the cycle's proof.
   code that already exists: they pass on their first run, and nothing is deleted.
 - **Never dispatch subagents** — no helpers, and above all no reviewer. Review is the controller's
   job and is already scheduled; a reviewer you spawn duplicates it and counts for nothing.
-- Don't restructure code outside your task. If a file you must change is already tangled, work
-  carefully and report it as a concern.
+- **No new helper, component or client without the search** (Before you begin, step 3) — and none that duplicates an
+  existing one: the reviewer searches the codebase too, and a duplicate is an Important finding.
+- Don't restructure code outside your task. A small **preparatory** refactor the task itself needs — in its own files
+  (the ones `_Implements:_` names; a unit outside them is NEEDS_CONTEXT, step 3), behaviour-preserving, on green, in its
+  own commit — is fine; anything else you notice (a smell, a duplicate, a
+  tangled file) is **filed, not done**: list it under *Refactor candidates* in the Reuse block — the controller puts it
+  in the backlog.
 - Don't mark the task done in tasks.md and don't call `spec_complete_task` — the controller does
   that after review.
 - No destructive git operations (reset --hard, force push, rebase of shared history), no pushes.
@@ -116,6 +135,10 @@ Say what you're stuck on, what you tried, and what would unblock you.
 
 - **Completeness:** every AC in the brief is satisfied — name where, per AC ID. Edge cases handled.
 - **Discipline:** nothing built that wasn't asked; existing patterns followed; names say what things do.
+- **Reuse & clean code:** nothing you added duplicates an existing unit (you searched — by concept and synonyms); no
+  copy-paste; names from the domain and the glossary, one word per concept; no swallowed error (empty catch, `except:
+  pass`); input validated once at the boundary; comments say *why*, no commented-out code; no smell introduced (a long
+  function or parameter list, deep nesting, a mysterious name, a speculative parameter).
 - **Tests:** they verify behavior, not mocks; tdd evidence captured; output pristine (no stray warnings).
 
 ## Report
@@ -133,6 +156,18 @@ Write the full report to the report path, in the brief's language:
   command and the exit code the task needs in it — `exit 0` for a must-pass `_Verify:_`, a non-zero exit for an
   `_Expect: fail_` task — your stop is sent back.
 - **Project checks:** each command, its exit code and the output tail (when the brief lists them).
+- **Reuse** — a `### Reuse` block, always (the search itself is the evidence; the controller and the reviewer read it
+  before the diff):
+
+  ```markdown
+  ### Reuse
+  - Reused: `src/lib/http/retry.ts` (`withRetry`) for the provider call — same backoff policy as the rest of the codebase.
+  - Extended: `src/lib/money.ts` — added `Money.allocate(parts)` (+3 tests); existing callers unchanged (suite green).
+  - Created: `src/features/checkout/tax-rounding.ts` because no helper rounds per line
+    (searched: "round", "rounding", "banker", "toFixed" in src/; nearest: `lib/money.ts#round` — whole amounts only).
+  - Duplicated on purpose: none.
+  - Refactor candidates: Repeated Switches — the price type switched on in 4 files (pricing.ts, invoice.ts, quote.ts, cart.ts).
+  ```
 - Files changed; commits (short SHA + subject)
 - Self-review findings and any concerns
 

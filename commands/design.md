@@ -15,6 +15,15 @@ likelihood · impact · mitigation · owner; technical, delivery, data, business
 list fewer than 2 options — a warning, never a refusal; their leftover template placeholders refuse the approval like
 any other section's.
 
+**Every design names what it reuses:** fill **Reuse & Integration** — the existing modules, components, helpers and
+services this feature reuses (with their paths), what it extends, what is new and why nothing existing fits, and where
+the new code lives (module boundaries: what it exposes, what it may import — features depend on shared code, never the
+reverse). Search before writing it (`references/code-reuse-and-quality.md`: by concept and synonyms, the shared folders
+`steering/structure.md` names, `.specs/SPECS.md`); a greenfield project says so in one line. `spec_doctor` warns
+`design-reuse` when it is missing, empty or still the template (a brownfield feature's filled `integration-plan.md` →
+Integration Points counts) — a warning, never a refusal. Name the existing files a task extends in its `_Implements:_`:
+the task brief quotes the section's entries for that task.
+
 Re-read steering + approved requirements, scan the codebase for patterns to match, then write
 `design.md`. Include the base sections (overview, architecture with ≥1 Mermaid diagram, data
 models, API contracts, security, error handling, testing strategy, **Constitution Check** against each
@@ -23,7 +32,11 @@ the active tracks: Testability Notes (+tdd); the 5 scale sections (+saas); the 1
 (+ai); the 5 `[SEC]` sections — threat model (STRIDE), security requirements (ASVS level), authn/authz, secrets,
 security testing (+sec); the 6 `[PRIVACY]` sections — data inventory, lawful basis, retention, data subject rights,
 processors & transfers, DPIA (+privacy); the 5 `[DIST]` sections — consistency model, cross-system writes (every dual
-write → outbox / inbox / saga, or an accepted risk), delivery & idempotency, concurrency, failure modes (+dist). No mandatory section may be blank — an honest "not needed because X" is
+write → outbox / inbox / saga, or an accepted risk), delivery & idempotency, concurrency, failure modes (+dist); the 5 `[API]` sections — API contract, versioning &
+compatibility, error model, pagination / idempotency / concurrency, rate limits & quotas (+api — `references/api-design-patterns.md`); the 5 `[UI]` sections — design-system
+usage, UI states (a state matrix per view), accessibility (WCAG 2.2 AA), responsiveness & i18n, UI performance budget (+ui —
+`references/ui-design-patterns.md`); the 5 `[OBS]` sections — SLIs & SLOs, telemetry, alerting & runbooks, rollout & rollback,
+health & capacity (+obs — `references/observability-patterns.md`). No mandatory section may be blank — an honest "not needed because X" is
 acceptable; remove each `> **TODO**` sentinel and template placeholder as you fill it (saving `design.md` reports what
 is still open, and the design approval is refused while a track section, the Constitution Check or a placeholder is
 unfilled). Keep the markers `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]` exactly (English, case-sensitive). In an

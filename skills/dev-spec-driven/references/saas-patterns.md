@@ -366,7 +366,7 @@ optional fields, new endpoints) don't need a new version.
 
 When retiring a version:
 1. Document deprecation + sunset date in docs.
-2. Add `Deprecation:` and `Sunset:` response headers (RFC 8594).
+2. Add `Deprecation:` (RFC 9745) and `Sunset:` (RFC 8594) response headers.
 3. Log every call to deprecated endpoint with client identifier.
 4. Email the top N callers by traffic.
 5. Return 410 Gone after sunset date (not 404 — explicit signal).

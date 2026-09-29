@@ -26,7 +26,7 @@ function __link(E) { ({ acIndex, commentLines, earsValidate, existsCached, extra
   readJson, readRoadmap, requirementAcIds, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription,
   templateBracketKeys, templateLangChain, testIndex, useTemplateScopeOf, writeIfAbsent } = E); }
 
-const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist"];
+const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
 // Adding a track: VALID_TRACKS + its classifier SIGNALS; a MARKER track (mandatory design sections under a stable
 // [Marker]) also needs TRACK_MARKER, a sections table in TRACK_SECTIONS, TRACK_STEERING and its i18n builders
@@ -34,7 +34,7 @@ const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist"];
 const OPTIONAL_TRACKS = VALID_TRACKS.filter((t) => t !== "core");
 // The steering files a track brings (spec_init / add_track write them, the task brief lists them).
 const TRACK_STEERING = { tdd: ["testing-standards.md"], saas: ["scale.md", "observability.md", "cost.md"], ai: ["ai-strategy.md"], sec: ["security.md"], privacy: ["privacy.md"],
-  dist: ["distributed.md"] };
+  dist: ["distributed.md"], api: ["api.md"], ui: ["ui.md"], obs: ["observability.md"] };
 
 // Track input from MCP or the CLI: an array or a string, EVERY element split on whitespace, commas and '+'
 // ("tdd,saas", "+saas +ai", ["tdd saas"]), case-insensitive, core implied. Unknown tokens are reported
@@ -64,7 +64,13 @@ const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd",
   priv: "privacy", gdpr: "privacy", rgpd: "privacy", lgpd: "privacy", pii: "privacy", privacidade: "privacy", privacidad: "privacy",
   // +dist (1.17 D) — also names a pack can't take (packReservedName reads these keys)
   distributed: "dist", distribuido: "dist", "distribuído": "dist", distribuida: "dist", microservices: "dist", microservicos: "dist",
-  microsservicos: "dist", microservicios: "dist", consistency: "dist", consistencia: "dist", "consistência": "dist", kafka: "dist" };
+  microsservicos: "dist", microservicios: "dist", consistency: "dist", consistencia: "dist", "consistência": "dist", kafka: "dist",
+  // +api (1.19 T) — also names a pack can't take (a pre-1.19 pack of one of these names is the feature's missing pack: legacyPackName)
+  apis: "api", rest: "api", restful: "api", openapi: "api", swagger: "api", graphql: "api", grpc: "api",
+  // +ui (1.19 T) — never "a11y" / "accessibility": a team's accessibility pack (the example of references/project-tracks.md) keeps its name
+  frontend: "ui", "front-end": "ui", ux: "ui", gui: "ui", wcag: "ui",
+  // +obs (1.19 T)
+  observability: "obs", o11y: "obs", monitoring: "obs", sre: "obs", telemetry: "obs", opentelemetry: "obs" };
 function suggestTrack(token) {
   // Own keys only: a plain-object lookup matched 'constructor' / '__proto__' and suggested Object itself.
   if (Object.prototype.hasOwnProperty.call(TRACK_ALIASES, token)) return TRACK_ALIASES[token];
@@ -103,6 +109,12 @@ function trackLabel(tracks) {
 // a single weak match is reported as "possible" but does NOT auto-enable the track, which
 // cuts false positives like "user-agent" → +ai or "data model" → +ai). Multilingual EN/PT/ES
 // plus technical synonyms.
+// +api (1.19 verify 2): breaking compatibility as a verb — "must not break compatibility", "não pode quebrar a compatibilidade da API
+// pública", "no puede romper la compatibilidad": weak, one concept with the compatibility nouns (SIGNAL_CONCEPTS.api.compat) and a
+// hazard (SIGNAL_HAZARDS.api — the negation is the requirement), in the three languages alike.
+const API_BREAK_VERBS = ["break compatibility", "breaks compatibility", "breaking compatibility", "quebrar a compatibilidade",
+  "quebra a compatibilidade", "quebre a compatibilidade", "quebrem a compatibilidade", "quebrar compatibilidade", "romper la compatibilidad",
+  "rompa la compatibilidad", "rompe la compatibilidad", "rompan la compatibilidad", "romper compatibilidad"];
 const SIGNALS = {
   tdd: {
     strong: [
@@ -396,6 +408,224 @@ const SIGNALS = {
       "transação", "consistência", "atómico", "atômico", "atomicidade", "atomicamente",
       "transacción", "consistencia", "atomicidad", "atómicamente"],
   },
+  // +api (1.19 T): an API contract other code depends on — public, partner or internal. STRONG: contract-level words only (a
+  // public / REST / HTTP API, OpenAPI / Swagger, GraphQL, gRPC / protobuf, API versioning, the contract itself, its consumers —
+  // third-party developers, a developer portal —, the headers and formats a contract fixes: problem+json, Idempotency-Key,
+  // rate-limit headers, Retry-After, Sunset). WEAK — the anchors, on only in pairs or beside a generic word: compatibility
+  // (backward compatible, a breaking change), an SDK / client library (also the one you consume), ETag / If-Match, status codes,
+  // JSON Schema, cursor pagination, deprecation, an API gateway / internal API / the API docs. GENERIC (app-level): api, endpoint,
+  // route, request, pagination — every app has them; alone they are 'possible' at most ("call the Stripe API", "an API key
+  // management page" — +sec's api key is no contract). HAZARDS: a breaking change is written negated by nature ("without
+  // breaking changes") — the negation is the requirement.
+  // OWNERSHIP (1.19 T review — SIGNAL_CUES.api, apiCueTier): an API someone ELSE owns is app-level for us. A keyword right after
+  // a third-party owner ("Stripe's REST API", "the payment provider's OpenAPI spec", "their Admin API version"; PT / ES "a API
+  // REST do Stripe", "la API REST del banco") counts as a GENERIC word, and so does one after a consumer verb ("call", "integrate
+  // with", "sync from", "through", "via", "the Salesforce REST API"; PT "integrar com", "chamar"; ES "integrar con", "llamar a")
+  // unless the clause says the API is ours ("our", an own verb: expose, publish, offer, provide, design, document…). The
+  // ownership-AMBIGUOUS names (API_AMBIGUOUS: a REST / public / HTTP / JSON / web / partner API, an API version, problem
+  // details) are weak — strong only beside an own cue ("our public REST API", "Expose … through a versioned REST API",
+  // "Versionar a API pública").
+  api: {
+    strong: [
+      "restful", "api-first", "contract-first",
+      "openapi", "swagger", "graphql", "grpc", "protobuf", "protocol buffers", "proto file",
+      "api versioning", "versioned api", "api v1", "api v2", "api v3", "breaking api change", "api contract",
+      "api spec", "api specification", "api design", "api consumer", "third-party developers", "third party developers",
+      "external developers", "developer portal", "contract test", "consumer-driven contract",
+      "application/problem+json", "problem+json", "rfc 9457", "rfc 7807", "idempotency-key", "rate limit headers",
+      "ratelimit header", "x-ratelimit", "retry-after", "sunset header", "deprecation header",
+      // the rate-limit headers by name (1.19 T review: 'x-ratelimit' never matched "X-RateLimit-Remaining" — a '-<letter>'
+      // compound ends no keyword)
+      "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "ratelimit-limit", "ratelimit-remaining", "ratelimit-reset",
+      "ratelimit-policy",
+      // PT (the plural of a phrase's first word is generated only for "de" / non-ASCII phrases: the others are listed)
+      "versionamento da api", "versionamento de api",
+      "contrato da api", "contrato de api", "especificação da api", "consumidores da api", "programadores externos",
+      "desenvolvedores externos", "programadores terceiros", "desenvolvedores terceiros", "portal de programadores",
+      "portal do programador", "portal do desenvolvedor", "portal de desenvolvedores", "teste de contrato",
+      // ES
+      "versionado de la api", "versionado de api", "contrato de la api",
+      "especificación de la api", "consumidores de la api", "desarrolladores externos", "desarrolladores de terceros",
+      "portal de desarrolladores", "prueba de contrato",
+    ],
+    weak: [
+      // ownership-ambiguous (API_AMBIGUOUS — strong beside an own cue; one concept: "the public API is a REST API" is one hint)
+      "public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "problem details",
+      "api pública", "api rest", "versão da api", "versões da api", "versión de la api", "versiones de la api",
+      "breaking change", "backward compatible", "backwards compatible", "backward-compatible", "backwards-compatible",
+      "backward compatibility", "backwards compatibility", "sdk", "client library", "client libraries", "etag", "if-match",
+      "if-none-match", "status code", "http status", "json schema", "request schema", "response schema", "cursor pagination",
+      "cursor-based pagination", "keyset pagination", "deprecation", "api gateway", "internal api", "api client",
+      "api documentation", "api docs", "api reference", "content negotiation",
+      "management api", "admin api", // (1.19 T review) an API named by its role — "Management API for tenants"
+      ...API_BREAK_VERBS, // (1.19 verify 2) breaking compatibility as a verb, EN / PT / ES
+      // PT
+      "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis", "mudança incompatível", "mudanças incompatíveis",
+      "compatibilidade retroativa", "retrocompatível", "retrocompatíveis", "retrocompatibilidade", "compatível com versões anteriores",
+      "código de estado", "código de status", "esquema json", "paginação por cursor",
+      "cliente da api", "api interna", "documentação da api", "descontinuação", "gateway de api",
+      // ES
+      "cambio incompatible", "cambios incompatibles", "compatibilidad hacia atrás", "retrocompatible",
+      "retrocompatibilidad", "paginación por cursor", "cliente de la api", "documentación de la api", "obsolescencia",
+    ],
+    generic: [
+      "api", "endpoint", "route", "request", "pagination", "paginate",
+      // PT / ES
+      "rota", "requisição", "paginação", "ruta", "solicitud http", "petición http", "paginación",
+    ],
+  },
+  // +ui (1.19 T): a user-facing interface — the screens, the design system, accessibility, the states every view needs, the
+  // front-end performance budget. STRONG: the design system and its parts (tokens, a component library, UI components), WCAG /
+  // accessibility and its concrete words (a screen reader, keyboard navigation, focus order, contrast, alt text, ARIA, reduced
+  // motion), responsive design, dark mode, Storybook / Figma, Core Web Vitals (LCP), visual regression, an empty state / skeleton
+  // screen and the UI-heavy page types (a settings / admin / management / profile / landing page, an admin panel). WEAK (anchors):
+  // the frontend, UI / UX (capitals — "translate the UI into Spanish", "Spanish UI labels" alone stay 'possible'), a UI framework named with its capital (React, Vue, Angular,
+  // Svelte), CSS / Tailwind, widgets (modal, dropdown, tooltip, sidebar, toast, carousel, spinner), responsive, i18n / l10n,
+  // RTL / CLS / INP (capitals), a loading / error state, form validation, a wireframe / mockup. GENERIC (app-level — every
+  // feature has them): screen, page, form, button, dialog, dashboard, menu, icon, widget, click, layout, theme — "add a button
+  // to export" or "the log in form" is 'possible' at most. A dashboard is +ui's generic word only (never +obs: "a metrics
+  // dashboard for sales" is a product screen); a monitoring / Grafana dashboard is +obs strong and shadows it.
+  // CUES (1.19 T review — SIGNAL_CUES.ui, uiCueTier): a page type (a settings / admin / profile page, an admin panel…) and the
+  // frontend / UI / UX words count as GENERIC in a CLAUSE that says the work is backend-only — a handler, an endpoint, the
+  // backend, an API (never "API keys"), a data layer / repository / SQL, "the UI already exists" ("a PATCH handler that the
+  // settings page calls", "the profile page backend should return…") — unless a negator governs the backend word ("no backend
+  // changes"), the page consumes it ("loads … from the CMS API") or the text says "frontend only" (1.19 verify 1; "the frontend
+  // team" names a team: generic); an empty state is weak in a sentence about a state
+  // machine ("the empty state blocks sales"). "accessibility" alone is weak (a venue's wheelchair accessibility): it needs a
+  // digital co-signal — WCAG, a screen reader, a page, a form… (WCAG / a11y / screen reader stay strong).
+  ui: {
+    strong: [
+      "design system", "design-system", "design tokens", "component library", "ui component", "ui kit", "user interface", "wcag", "a11y",
+      "screen reader", "screen-reader", "keyboard navigation", "keyboard accessible", "keyboard-only", "keyboard only", "focus order",
+      "focus trap", "focus indicator", "focus management", "color contrast", "colour contrast", "contrast ratio", "alt text", "aria-label",
+      "aria-live", "ARIA", "reduced motion", "prefers-reduced-motion", "responsive layout", "responsive design", "mobile-first", "dark mode",
+      "storybook", "figma", "core web vitals", "largest contentful paint", "cumulative layout shift", "interaction to next paint", "LCP",
+      "visual regression", "skeleton screen", "skeleton loader", "empty state", "right-to-left", "landing page", "settings page",
+      "settings screen", "admin page", "admin panel", "admin ui", "management page", "profile page", "account page",
+      // PT
+      "sistema de design", "leitor de ecrã", "leitor de tela", "navegação por teclado", "contraste de cor", "texto alternativo", "movimento reduzido", "design responsivo", "layout responsivo", "modo escuro", "tema escuro",
+      "interface do utilizador", "interface de utilizador", "interface do usuário", "interface de usuário", "componente de interface",
+      "biblioteca de componentes", "regressão visual", "estado vazio", "página de definições", "página de configurações",
+      "página de administração", "painel de administração", "página de gestão", "página de perfil", "ecrã de definições",
+      "tela de configurações",
+      // ES
+      "sistema de diseño", "lector de pantalla", "navegación por teclado", "contraste de color", "movimiento reducido",
+      "diseño responsivo", "diseño adaptable", "modo oscuro", "tema oscuro", "interfaz de usuario", "componente de interfaz", "regresión visual",
+      "estado vacío", "página de ajustes", "página de configuración", "panel de administración", "página de gestión", "pantalla de ajustes",
+    ],
+    weak: [
+      "accessibility", // (1.19 T review) weak: "wheelchair accessibility of each venue" — with a page / form / WCAG it is +ui
+      "frontend", "front-end", "UI", "UX", "React", "Vue", "Angular", "Svelte", "tailwind", "css", "stylesheet", "modal", "dropdown", "tooltip",
+      "navbar", "sidebar", "toast", "carousel", "spinner", "responsive", "i18n", "l10n", "RTL", "CLS", "INP", "loading state", "error state",
+      "form validation", "wireframe", "mockup",
+      // 1.19 T review: a picker ("a language picker"), a confirm dialog, a swipe gesture, inline form errors
+      "picker", "confirmation dialog", "confirm dialog", "swipeable", "swipe", "inline error", "inline validation",
+      // PT
+      "acessibilidade", "responsivo", "responsiva", "estado de carregamento", "estado de erro", "validação de formulário",
+      "validação inline", "erros inline",
+      // ES
+      "accesibilidad", "estado de carga", "estado de error", "validación de formulario", "validación inline", "errores inline",
+    ],
+    generic: [
+      "screen", "page", "form", "button", "dialog", "dashboard", "menu", "icon", "widget", "click", "layout", "theme",
+      // PT
+      "ecrã", "tela", "página", "formulário", "botão", "painel", "ícone",
+      // ES ("tablero" / "cuadro de mando": a dashboard — 1.19 T review)
+      "pantalla", "formulario", "botón", "icono", "tablero", "cuadro de mando",
+    ],
+  },
+  // +obs (1.19 T): observability & operability — a feature the team can watch, alert on, roll out and roll back. STRONG: SLOs /
+  // SLIs / error budgets / burn rates, observability, OpenTelemetry, distributed tracing, runbooks, on-call, the alerting and
+  // monitoring tools (PagerDuty, Opsgenie, Prometheus, Grafana, Datadog, Sentry…), structured logging, correlation / trace IDs,
+  // incident response and postmortems, feature flags / kill switches, a canary release / blue-green / progressive / staged
+  // rollout, a rollback plan, liveness / readiness probes, synthetic monitoring, chaos engineering / fault injection, a monitoring
+  // dashboard. WEAK (anchors): monitoring, alerts, a health check, uptime, an SLA, an incident, an outage, downtime, a rollback, a
+  // rollout, a bare canary ("Canary Islands" is no release),
+  // telemetry, instrumentation, tracing, APM (capitals), an error rate, 5xx, on call (two words — a doctor on call is prose).
+  // GENERIC: metrics, logs / logging, latency, p99 / p95 / p50, monitor, deploy — every service has them: "a metrics dashboard for
+  // sales" or "store the import logs" is 'possible' at most. Never a bare "log" ("log in"), "trace" or "dashboard" (+ui's word).
+  // HAZARDS: "zero downtime", "without an outage" state the concern. Shared: observability / SLO / SLA / uptime are +saas strong
+  // too (the 1.14 +saas hint survives — a phrase may serve two tracks), rollback +tdd weak, latency / p95 / p99 +saas weak.
+  // 1.19 T review — business monitoring is no operability: "monitor stock levels and send alerts to purchasing", "warehouse
+  // temperature monitoring … alerts go to the shift manager", "price-drop alerts … monitor competitor prices", a support
+  // incident within the SLA, a clinical health check. So: monitoring · monitor · alert(s) · alerting · an incident · a
+  // postmortem · an SLA are ONE concept (SIGNAL_CONCEPTS.obs.watch — "monitoring and alerts" is one hint); an SLA, an incident
+  // and a health check are CONTEXT (evidence only beside another obs signal); on-call, game day, postmortem and a lower-case
+  // "otel" (Otel reservations) are weak ("OTel" in its capitals stays strong); and a TECHNICAL TARGET — a service, servers, a
+  // cron / batch / sync job, production, a cluster, an endpoint, the backend, the infrastructure, ops / SRE, a status page, disk /
+  // CPU / queue depth (CONTEXT, one concept) — backs a lone weak word: "monitor the ERP sync job and alert ops", "alert the team
+  // when the nightly backup job hasn't completed" are +obs. (SIGNAL_CUES.obs drops "customer / room service", "service level".)
+  obs: {
+    strong: [
+      "observability", "slo", "sli", "error budget", "burn rate", "burn-rate", "opentelemetry", "OTel", "otel collector", "distributed tracing",
+      "runbook", "pagerduty", "opsgenie", "alertmanager", "alerting rule", "alert rule",
+      // paging the on-call (a gap keyword: "page the on-call engineer") — shadows +ui's generic "page"
+      "page … on-call", "page … on call",
+      // (a longer phrase before its prefix: the first keyword matching at a place wins it — and shadows +ui's generic "dashboard")
+      "monitoring dashboard", "grafana dashboard", "datadog dashboard", "prometheus", "grafana", "datadog", "new relic",
+      "jaeger", "zipkin", "sentry", "structured logging", "structured logs", "correlation id", "trace id", "trace context", "x-request-id",
+      "context propagation", "golden signals", "mttr", "mttd", "incident response", "feature flag",
+      "feature toggle", "kill switch", "canary release", "canary deployment", "canary deploy", "canary rollout", "canary analysis", "blue-green", "progressive delivery", "progressive rollout", "gradual rollout",
+      "staged rollout", "phased rollout", "percentage rollout", "dark launch", "rollback plan", "automatic rollback", "liveness probe",
+      "readiness probe", "health check endpoint", "health endpoint", "synthetic monitoring", "real user monitoring", "chaos engineering", "fault injection",
+      "zero-downtime", "zero downtime", "operational dashboard", "ops dashboard",
+      "log aggregation", "error tracking",
+      // rolling a deployment back (gap keywords: "roll back to the previous release", PT / ES "reverter a implantação", "revertir el despliegue")
+      "roll back … deployment", "roll back … deploy", "roll back … release",
+      // PT
+      "observabilidade", "orçamento de erro", "rastreio distribuído", "rastreamento distribuído", "registos estruturados",
+      "logs estruturados", "resposta a incidentes", "lançamento canário", "lançamento gradual", "lançamento progressivo", "plano de rollback",
+      "plano de reversão", "painel de monitorização", "painel de monitoramento", "engenharia do caos", "injeção de falhas",
+      "implantação canário", "implantação canária", "implantação gradual", "implantação progressiva", "reverter … implantação", "reverter … deploy",
+      // (1.19 verify 3) a health check endpoint, as in EN (PT / ES; the English noun too) — before the context words it shadows
+      "endpoint de verificação de saúde", "endpoint de verificação do estado", "endpoint de health check", "endpoint de healthcheck",
+      // ES
+      "observabilidad", "presupuesto de error", "rastreo distribuido", "trazas distribuidas", "logs estructurados",
+      "registros estructurados", "respuesta a incidentes", "despliegue canario", "lanzamiento canario", "despliegue gradual",
+      "despliegue progresivo", "plan de reversión", "plan de rollback", "panel de monitorización", "panel de monitoreo", "ingeniería del caos",
+      "inyección de fallos", "revertir … despliegue", "endpoint de comprobación de salud", "endpoint de comprobación de estado",
+    ],
+    weak: [
+      "monitoring", "monitor", "alerts", "alerting", "alert", "postmortem", "post-mortem", "healthcheck", "liveness", "readiness", "uptime",
+      "outage", "downtime", "rollback", "roll back", "rollout", "roll out", "canary", "telemetry", "instrumentation", "tracing", "APM",
+      "error rate", "5xx", "on-call", "on call", "game day", "otel", "request id", "latency metrics", "request logs", "application logs",
+      // PT
+      // (1.19 verify 3) the verbs "alertar" (PT / ES) and "avisar" (ES / PT) are the watch concept too: alone a hint, beside a
+      // technical target +obs ("Alertar a equipa de operações quando a tarefa agendada … falhar", "Avisar … cuando falle la tarea
+      // programada …"), a business watch stays 'possible' ("Avisar al encargado de la tienda cuando el stock baje")
+      "alertar", "avisar",
+      "monitorização", "monitoramento", "monitorizar", "monitorar", "alertas", "alerta", "indisponibilidade", "reversão", "telemetria",
+      "instrumentação", "rastreio", "taxa de erro", "tempo de inatividade", "plantão", "métricas de latência",
+      // ES
+      "monitorización", "monitoreo", "monitorear", "caída del servicio", "reversión", "telemetría", "instrumentación", "trazas",
+      "tasa de error", "tiempo de inactividad", "guardia", "métricas de latencia",
+    ],
+    generic: [
+      "metrics", "logs", "logging", "latency", "p99", "p95", "p50", "deploy",
+      // PT / ES
+      "métricas", "latência", "latencia", "implantação", "despliegue",
+    ],
+    // CONTEXT (1.19 T review): evidence only beside another (non-negated) obs signal — the SLA / incident / health-check words of
+    // support desks and clinics, and the technical targets that make a lone monitoring / rollback / error-rate word operability.
+    context: [
+      "sla", "incident", "incidente", "health check", "verificação de saúde", "verificações de saúde", "comprobación de salud",
+      "comprobaciones de salud",
+      // technical targets (one concept) — phrases where the bare word is also a business word (a sales pipeline, a production
+      // line, a job posting, a reefer container, a restaurant's server)
+      "service", "servers", "web server", "app server", "microservice", "in production", "to production", "on production",
+      "production environment", "production traffic", "in prod", "to prod", "cluster", "kubernetes", "k8s", "pod", "cron job", "cronjob",
+      "cron", "batch job", "sync job", "import job", "export job", "backup job", "scheduled job", "nightly job", "background job",
+      "background worker", "etl job", "data pipeline", "etl pipeline", "ci pipeline", "deployment pipeline", "endpoint", "backend",
+      "infrastructure", "ops", "devops", "sre", "status page", "queue depth", "consumer lag", "disk usage", "disk space", "cpu",
+      "memory usage",
+      // PT
+      "serviço", "servidor", "servidores", "microsserviço", "em produção", "para produção", "ambiente de produção", "tarefa agendada",
+      "tarefa noturna", "processo … noturno", "infraestrutura", "página de estado", "uso de disco", "espaço em disco",
+      // ES
+      "servicio", "microservicio", "en producción", "a producción", "entorno de producción", "tarea programada", "tarea nocturna",
+      "proceso … nocturno", "infraestructura", "espacio en disco",
+    ],
+  },
 };
 // One concept, one signal (1.17 D review) — a built-in track's weak / generic keywords that name the SAME concept count once:
 // "deduplicate … dedupe them", "producers and consumers", "retry … with jitter" are one hint each, never the two weak signals
@@ -438,6 +668,84 @@ const SIGNAL_CONCEPTS = {
     sameRecord: ["update … same"],
     searchIndex: ["search index", "elasticsearch", "opensearch"],
   }),
+  // +api (1.19 T): compatibility is one concept ("no breaking change, stay backward compatible"), so are ETag / If-Match, the
+  // status codes, the schemas, cursor pagination, a client library / SDK; the generic words (an endpoint and its route, a request).
+  api: conceptMap({
+    // (1.19 T review) the ownership-ambiguous names: one hint, whichever of them a text uses
+    kind: ["public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "api pública", "api rest",
+      "versão da api", "versões da api", "versión de la api", "versiones de la api"],
+    role: ["management api", "admin api"],
+    compat: ["breaking change", "backward compatible", "backwards compatible", "backward-compatible", "backwards-compatible",
+      "backward compatibility", "backwards compatibility", "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis",
+      "mudança incompatível", "mudanças incompatíveis", "compatibilidade retroativa", "retrocompatível", "retrocompatíveis",
+      "retrocompatibilidade", "compatível com versões anteriores", "cambio incompatible", "cambios incompatibles",
+      "compatibilidad hacia atrás", "retrocompatible", "retrocompatibilidad", ...API_BREAK_VERBS],
+    client: ["sdk", "client library", "client libraries", "api client", "cliente da api", "cliente de la api"],
+    etag: ["etag", "if-match", "if-none-match"],
+    status: ["status code", "http status", "código de estado", "código de status"],
+    schema: ["json schema", "request schema", "response schema", "esquema json"],
+    cursor: ["cursor pagination", "cursor-based pagination", "keyset pagination", "paginação por cursor", "paginación por cursor"],
+    docs: ["api documentation", "api docs", "api reference", "documentação da api", "documentación de la api"],
+    deprecation: ["deprecation", "descontinuação", "obsolescencia"],
+    endpoint: ["endpoint", "route", "rota", "ruta"],
+    request: ["request", "requisição", "solicitud http", "petición http"],
+    paging: ["pagination", "paginate", "paginação", "paginación"],
+  }),
+  // +ui (1.19 T): a UI framework, the styling, i18n, a loading / error state, form validation, "responsive" are one concept each;
+  // the generic words too (a screen is a page, a form, a button, a dashboard, an icon).
+  ui: conceptMap({
+    framework: ["React", "Vue", "Angular", "Svelte"],
+    uiux: ["UI", "UX"],
+    style: ["css", "stylesheet", "tailwind"],
+    frontend: ["frontend", "front-end"],
+    i18n: ["i18n", "l10n", "RTL"],
+    vitals: ["CLS", "INP"],
+    states: ["loading state", "error state", "estado de carregamento", "estado de erro", "estado de carga", "estado de error"],
+    formValidation: ["form validation", "validação de formulário", "validación de formulario"],
+    responsive: ["responsive", "responsivo", "responsiva"],
+    design: ["wireframe", "mockup"],
+    a11y: ["accessibility", "acessibilidade", "accesibilidad"],
+    gesture: ["swipe", "swipeable"],
+    dialog: ["confirmation dialog", "confirm dialog"],
+    inline: ["inline error", "inline validation", "validação inline", "erros inline", "validación inline", "errores inline"],
+    screen: ["screen", "page", "ecrã", "tela", "página", "pantalla"],
+    form: ["form", "formulário", "formulario"],
+    button: ["button", "botão", "botón", "click"],
+    dashboard: ["dashboard", "painel", "tablero", "cuadro de mando"],
+    icon: ["icon", "ícone", "icono"],
+  }),
+  // +obs (1.19 T): alerting, monitoring, health checks, a rollback, a rollout, an outage, telemetry, tracing, error rates, on-call and
+  // availability are one concept each; the generic metrics / logs / latency / deploy words too.
+  // 1.19 T review: watching and alerting — monitoring, monitor, alert(s), an incident, a postmortem (+ PT / ES) — are ONE concept
+  // ("monitor stock levels and send alerts" is one hint, never the two that turned +obs on); the technical targets are one too.
+  obs: conceptMap({
+    // (an SLA too: "tickets breaching the SLA … alerts to the supervisor" is a help desk's words, one hint)
+    watch: ["monitoring", "monitor", "alerts", "alerting", "alert", "incident", "postmortem", "post-mortem", "sla", "alertar", "avisar", "monitorização",
+      "monitoramento", "monitorizar", "monitorar", "alertas", "alerta", "incidente", "monitorización", "monitoreo", "monitorear"],
+    health: ["health check", "healthcheck", "liveness", "readiness", "verificação de saúde", "verificações de saúde",
+      "comprobación de salud", "comprobaciones de salud"],
+    rollback: ["rollback", "roll back", "reversão", "reversión"],
+    rollout: ["rollout", "roll out"],
+    outage: ["outage", "downtime", "indisponibilidade", "tempo de inatividade", "caída del servicio", "tiempo de inactividad"],
+    telemetry: ["telemetry", "instrumentation", "telemetria", "instrumentação", "telemetría", "instrumentación"],
+    tracing: ["tracing", "rastreio", "trazas"],
+    errors: ["error rate", "5xx", "taxa de erro", "tasa de error"],
+    oncall: ["on-call", "on call", "plantão", "guardia"],
+    availability: ["uptime"],
+    metrics: ["metrics", "métricas", "latency metrics", "métricas de latência", "métricas de latencia"],
+    logs: ["logs", "logging", "request logs", "application logs"],
+    latency: ["latency", "p99", "p95", "p50", "latência", "latencia"],
+    deploy: ["deploy", "implantação", "despliegue"],
+    target: ["service", "servers", "web server", "app server", "microservice", "in production", "to production", "on production",
+      "production environment", "production traffic", "in prod", "to prod", "cluster", "kubernetes", "k8s", "pod", "cron job", "cronjob",
+      "cron", "batch job", "sync job", "import job", "export job", "backup job", "scheduled job", "nightly job", "background job",
+      "background worker", "etl job", "data pipeline", "etl pipeline", "ci pipeline", "deployment pipeline", "endpoint", "backend",
+      "infrastructure", "ops", "devops", "sre", "status page", "queue depth", "consumer lag", "disk usage", "disk space", "cpu",
+      "memory usage", "serviço", "servidor", "servidores", "microsserviço", "em produção", "para produção", "ambiente de produção",
+      "tarefa agendada", "tarefa noturna", "processo … noturno", "infraestrutura", "página de estado", "uso de disco", "espaço em disco",
+      "servicio", "microservicio", "en producción", "a producción", "entorno de producción", "tarea programada", "tarea nocturna",
+      "proceso … nocturno", "infraestructura", "espacio en disco"],
+  }),
 };
 // HAZARDS (1.17 D review): a failure a requirement says must never happen — "concurrent updates never oversell", "no lost updates",
 // "they must not overwrite each other", "no duplicate deliveries". Written negated by nature, the negation is the requirement,
@@ -448,7 +756,224 @@ const SIGNAL_HAZARDS = {
     "oversell", "race condition", "condição de corrida", "condições de corrida", "condición de carrera", "condiciones de carrera",
     "duplicate delivery", "duplicate message", "duplicate event", "delivered twice", "delivered more than once", "entregue duas vezes",
     "entregado dos veces", "mensagens duplicadas", "eventos duplicados", "mensajes duplicados"]),
+  // +api (1.19 T): "no breaking changes", "sem quebra de compatibilidade", "sin cambios incompatibles" state the contract concern.
+  api: new Set(["breaking change", "breaking api change", "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis",
+    "mudança incompatível", "mudanças incompatíveis", "cambio incompatible", "cambios incompatibles", ...API_BREAK_VERBS]),
+  // +obs (1.19 T): "zero downtime", "without an outage", "sem indisponibilidade", "sin tiempo de inactividad" state the concern.
+  obs: new Set(["downtime", "outage", "indisponibilidade", "tempo de inatividade", "caída del servicio", "tiempo de inactividad"]),
 };
+
+// CUES (1.19 T review) — a built-in keyword whose tier depends on the words around it: SIGNAL_CUES[track](hit, text, cased, lang) → a new
+// tier ("strong" / "weak" / "generic"), "none" (no signal at all) or null (unchanged). Built-in tracks only (a track pack's keywords
+// are its own). Every rule reads a BOUNDED window around the hit (its clause / sentence, ≤ CUE_SPAN characters each way) with
+// linear regexes — the classifier stays linear in the text.
+const CUE_SPAN = 200;
+const CUE_BOUNDARY = /[.!?;:\n]/;
+const SENTENCE_BOUNDARY = /[.!?\n]/;
+// The text before the hit, back to its clause start (. ! ? ; : or a line break — `bound` picks the set), at most CUE_SPAN characters.
+function cueBefore(s, start, bound) {
+  const from = Math.max(0, start - CUE_SPAN);
+  let i = start - 1;
+  while (i >= from && !bound.test(s[i])) i--;
+  return s.slice(i + 1, start);
+}
+function cueAfter(s, end, bound) {
+  const to = Math.min(s.length, end + CUE_SPAN);
+  let i = end;
+  while (i < to && !bound.test(s[i])) i++;
+  return s.slice(end, i);
+}
+const cueWords = (s) => s.match(/[\p{L}\p{N}'’-]+/gu) || [];
+// The hit's CLAUSE (1.19 verify 1): the text between the CUE_BOUNDARY characters around it (≤ CUE_SPAN each way) → {from, to} —
+// except that a colon after a short LABEL (≤ CUE_LABEL_WORDS words: "Profile page: the GET /me handler…", "Sin backend: nueva
+// página…") joins the label to the clause it introduces, in either direction (a label is the topic of what follows it).
+const CUE_LABEL_WORDS = 4;
+function cueClause(s, start, end) {
+  const from = Math.max(0, start - CUE_SPAN), to = Math.min(s.length, end + CUE_SPAN);
+  let a = start - 1;
+  while (a >= from && !CUE_BOUNDARY.test(s[a])) a--;
+  let b = end;
+  while (b < to && !CUE_BOUNDARY.test(s[b])) b++;
+  if (a >= from && s[a] === ":") { // the clause opens after a colon: a short label before it belongs to it
+    let p = a - 1;
+    while (p >= from && !CUE_BOUNDARY.test(s[p])) p--;
+    if (cueWords(s.slice(p + 1, a)).length <= CUE_LABEL_WORDS) a = p;
+  }
+  if (b < to && s[b] === ":" && cueWords(s.slice(a + 1, b)).length <= CUE_LABEL_WORDS) { // the clause IS a label: what it introduces joins
+    let q = b + 1;
+    while (q < to && !CUE_BOUNDARY.test(s[q])) q++;
+    b = q;
+  }
+  return { from: a + 1, to: b };
+}
+
+// +api — who owns the API (see SIGNALS.api). A third party named at the API phrase always makes it someone else's; a consumer verb
+// does unless the clause says the API is ours; an ownership-ambiguous name is strong only beside an own cue.
+const API_AMBIGUOUS = new Set(["public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "problem details",
+  "api pública", "api rest", "versão da api", "versões da api", "versión de la api", "versiones de la api"]);
+const API_KIND = new Set(["public api", "rest api", "http api", "web api", "json api", "partner api", "api pública", "api rest"]);
+const API_OWN_NAMES = new Set(["internal api", "api interna", "management api", "admin api"]); // ours by name — never consumed by a verb
+const API_THIRD_PARTY = new Set(["provider", "providers", "supplier", "suppliers", "vendor", "vendors", "partner", "partners", "bank", "banks",
+  "carrier", "carriers", "courier", "couriers", "merchant", "merchants", "third-party", "fornecedor", "fornecedores", "parceiro", "parceiros",
+  "banco", "bancos", "transportadora", "transportadoras", "provedor", "provedores", "terceiros", "proveedor", "proveedores", "socio", "socios",
+  "transportista", "transportistas", "terceros"]);
+const API_OWN_WORDS = new Set(["our", "ours", "own", "nosso", "nossa", "nossos", "nossas", "próprio", "própria", "nuestro", "nuestra",
+  "nuestros", "nuestras", "propio", "propia"]);
+const RE_API_OWN_VERB = /^(?:expos(?:e|es|ed|ing)|publish(?:es|ed|ing)?|offer(?:s|ed|ing)?|provid(?:e|es|ed|ing)|design(?:s|ed|ing)?|document(?:s|ed|ing)?|deprecat\p{L}*|expor|expõe|expõem|expomos|publicar|publica|publicam|publicamos|disponibiliz\p{L}*|oferecer|oferece|oferecem|oferecemos|versionar|versiona|versionam|versionamos|desenhar|projetar|documentar|documenta|documentam|descontinuar|exponer|expone|exponen|exponemos|ofrecer|ofrece|ofrecen|ofrecemos|proporcionar|proporciona|diseñar|diseña|deprecar)$/u;
+// A build verb is an own cue only when the API phrase is its direct object ("Build a REST API", "Criar uma API REST pública") —
+// never "Create payment intents via the Stripe REST API".
+const RE_API_BUILD_VERB = /^(?:build|builds|building|create|creates|creating|implement|implements|implementing|develop|develops|developing|ship|construir|constrói|criar|cria|implementar|implementa|desenvolver|desenvolve|crear|crea|desarrollar|desarrolla)$/u;
+const API_ARTICLES = new Set(["a", "an", "the", "this", "um", "uma", "o", "un", "una", "el", "la"]);
+// A consumer verb counts only when it governs the API phrase — between them nothing but these link words, Titlecase names and at
+// most one other word ("Integrate with the Salesforce REST API", "Retry calls to the PayPal REST API", "Llamar a la API REST del
+// banco") — never "the order service calls the payment service over gRPC" (the verb's object is the service).
+const API_LINK_WORDS = new Set([...API_ARTICLES, "its", "their", "that", "os", "as", "los", "las", "seu", "sua", "seus", "suas", "su", "sus",
+  "with", "to", "from", "into", "via", "through", "on", "com", "ao", "à", "aos", "às", "do", "da", "dos", "das", "de", "del", "con", "al", "en"]);
+const RE_API_CONSUMER_VERB = /^(?:call|calls|called|calling|consume|consumes|consumed|consuming|integrate|integrates|integrated|integrating|integration|integrations|sync|syncs|synced|syncing|synchroni[sz]\p{L}*|via|through|connect|connects|connected|connecting|fetch|fetches|fetched|fetching|pull|pulls|pulled|pulling|poll|polls|polled|polling|integrar|integra|integram|integração|integrações|chamar|chama|chamam|chamada|chamadas|consumir|consome|consomem|sincronizar|sincroniza|sincronizam|através|buscar|busca|consultar|consulta|obter|obtém|vía|integran|integración|integraciones|llamar|llama|llaman|llamada|llamadas|consumen|sincronizan|través|conectar|conecta|conectan|obtener|obtiene)$/u;
+function consumerVerbGoverns(before, lower) {
+  let other = 0;
+  for (let i = lower.length - 1; i >= 0 && i >= lower.length - 8; i--) {
+    if (RE_API_CONSUMER_VERB.test(lower[i])) return true;
+    if (API_LINK_WORDS.has(lower[i]) || RE_TITLECASE.test(before[i])) continue;
+    if (++other > 1) return false;
+  }
+  return false;
+}
+// words that look like an owner but aren't one ("It's", "the Public REST API", "the New API version")
+const API_NOT_OWNER = new Set(["it", "that", "there", "here", "what", "let", "he", "she", "who", "public", "private", "internal", "external",
+  "new", "old", "legacy", "current", "next", "main", "core", "our", "admin", "management", "rest", "http", "json", "web", "open", "the"]);
+const RE_POSSESSIVE = /^(.+?)(?:['’]s|s['’])$/u;
+const RE_TITLECASE = /^\p{Lu}\p{Ll}/u;
+const RE_API_OWNER_AFTER = /^\s+(?:of|do|da|dos|das|de|del)(?:\s+(?:the|la|el|los|las|o|a|os|as))?\s+([\p{L}][\p{L}\p{N}-]*)/u;
+// (1.19 verify 2) an ALL-CAPS owner — an organisation's acronym ("the ECB's public API", "la API pública del BCE", "a API do INE") — is
+// a third party too; a technical acronym never names one ("the REST API of the CRM", "the public API of the SDK")
+const RE_API_ACRONYM = /^\p{Lu}{2,6}$/u;
+const API_TECH_ACRONYMS = new Set(["api", "apis", "rest", "http", "https", "json", "xml", "yaml", "soap", "rpc", "sdk", "cli", "crm", "erp", "cms",
+  "lms", "dms", "pos", "mvp", "ui", "ux", "gui", "spa", "pwa", "iot", "etl", "saas", "paas", "iaas", "sso", "jwt", "oauth", "oidc", "ldap",
+  "url", "uri", "sql", "db", "pdf", "csv", "qa", "ci", "cd", "ai", "ml", "llm", "sms", "mfa", "otp", "crud", "id", "ids", "app", "web", "os",
+  "ios", "kpi", "smtp", "ftp", "sftp", "tcp", "udp", "dns", "cdn", "vpn", "b2b", "b2c", "hr", "rh", "rrhh", "ti"]);
+// (1.19 verify 2) a past participle right after a determiner is an adjective, never an own verb: "Replace the deprecated Google
+// Places API calls", "the documented Stripe API"
+const API_DETERMINERS = new Set(["a", "an", "the", "this", "that", "these", "those", "its", "their", "his", "her", "any", "some", "every"]);
+function apiCueTier(h, text, cased) {
+  const before = cueWords(cueBefore(cased, h.start, CUE_BOUNDARY));
+  const lower = before.map((w) => w.toLowerCase());
+  const last3 = before.slice(-3);
+  const owner = (w) => !API_NOT_OWNER.has(w.toLowerCase()) && (RE_TITLECASE.test(w) || API_THIRD_PARTY.has(w.toLowerCase()) ||
+    (RE_API_ACRONYM.test(w) && !API_TECH_ACRONYMS.has(w.toLowerCase())));
+  // a third party named at the API phrase: "Stripe's REST API", "the provider's OpenAPI spec", "their API", "a API REST do Stripe"
+  const possessed = last3.some((w) => { const m = RE_POSSESSIVE.exec(w); return !!m && owner(m[1]); }) || lower.slice(-3).includes("their");
+  const post = RE_API_OWNER_AFTER.exec(cased.slice(h.end, Math.min(cased.length, h.end + 60)));
+  if (possessed || (post && owner(post[1]))) return "generic";
+  const n = lower.length;
+  const ownVerb = (w, i) => RE_API_OWN_VERB.test(w) && !(/ed$/.test(w) && i > 0 && API_DETERMINERS.has(lower[i - 1]));
+  const own = lower.slice(-3).some((w) => API_OWN_WORDS.has(w)) || lower.some(ownVerb) ||
+    (n > 0 && lower[0] === "version") ||
+    (n > 0 && RE_API_BUILD_VERB.test(lower[n - 1])) || (n > 1 && API_ARTICLES.has(lower[n - 1]) && RE_API_BUILD_VERB.test(lower[n - 2]));
+  if (!own && !API_OWN_NAMES.has(h.kw)) {
+    // a consumer verb governing the API phrase ("Integrate with the Salesforce REST API", "Book the courier through the partner API")
+    if (consumerVerbGoverns(before, lower)) return "generic";
+    // "the <Name> <API phrase>" — "the Shopify API version", "the Google Maps JSON API"
+    let k = before.length;
+    while (k > 0 && before.length - k < 3 && RE_TITLECASE.test(before[k - 1]) && !API_NOT_OWNER.has(before[k - 1].toLowerCase())) k--;
+    if (k < before.length && k > 0 && lower[k - 1] === "the") return "generic";
+  }
+  if (!API_AMBIGUOUS.has(h.kw)) return null;
+  if (own) return "strong";
+  // an API-kind name with no owner named is ours when it opens its clause or follows a plain determiner, adjectives allowed ("REST
+  // API for the mobile app…", "Add rate limiting to the public API", "a versioned REST API", "Uma API pública para os parceiros"):
+  // a third party's is named first ("Stripe REST API integration", "the shipping provider REST API" stay weak)
+  if (!API_KIND.has(h.kw)) return null;
+  let j = n, adj = 0;
+  while (j > 0 && adj < 2 && /^\p{Ll}+$/u.test(before[j - 1]) && !API_LINK_WORDS.has(lower[j - 1]) && !API_THIRD_PARTY.has(lower[j - 1])) { j--; adj++; }
+  return j === 0 || API_ARTICLES.has(lower[j - 1]) ? "strong" : null;
+}
+
+// +ui — a page type / the frontend words in a sentence that says the work is backend-only; an empty state in a state machine.
+const UI_PAGE_WORDS = new Set(["landing page", "settings page", "settings screen", "admin page", "admin panel", "admin ui", "management page",
+  "profile page", "account page", "página de definições", "página de configurações", "página de administração", "painel de administração",
+  "página de gestão", "página de perfil", "ecrã de definições", "tela de configurações", "página de ajustes", "página de configuración",
+  "panel de administración", "página de gestión", "pantalla de ajustes", "frontend", "front-end", "UI", "UX"]);
+const UI_EMPTY_STATE = new Set(["empty state", "estado vazio", "estado vacío"]);
+const RE_UI_BACKEND = /(?<![\p{L}\p{N}_])(?:(?:get|post|put|patch|delete)[^\S\n]+(?:\/|(?:handlers?|endpoints?|routes?)(?![\p{L}\p{N}_]))|(?:request handlers?|route handlers?|endpoints?|back-?end|data layer|repositor(?:y|ies)|sql|server-side|already exists?|já existe|ya existe|camada de dados|capa de datos)(?![\p{L}\p{N}_])|(?<!(?:chaves?|claves?)[^\S\n]+(?:de|da|del)[^\S\n]+)apis?(?![\p{L}\p{N}_])(?![^\S\n]+(?:keys?|tokens?)(?![\p{L}])))/gu;
+const RE_UI_STATE_MACHINE = /(?<![\p{L}])(?:state[- ]machines?|state transitions?|máquinas? de estados?|transiç(?:ão|ões) de estados?|transici(?:ón|ones) de estados?)(?![\p{L}])/u;
+// 1.19 verify 1 — the backend cue reads the page word's CLAUSE (cueClause), never the whole sentence ("Redesign the admin panel;
+// the backend team will add the endpoints later"), and a backend word does not count when
+// - a negator governs it (≤ UI_NEG_WINDOW words before it in the clause: "no backend changes", "does not touch the backend",
+//   "needs no API changes", "sem backend", "sin backend" — PT "no" is em + o, never a negator), or
+// - the page CONSUMES it: it follows the page word, a consumer verb between them ("The landing page loads its testimonials from
+//   the CMS API") — a backend word before the page ("a PATCH handler that the settings page calls") or right after it ("the
+//   profile page backend", "the admin page's API") still says the work is backend-only;
+// and nothing is demoted where the text says the work is frontend-only ("Frontend only, …", "Apenas frontend", "Solo frontend").
+// "the frontend team" / "a equipa de frontend" names a team, not UI work: generic.
+const UI_NEG_WINDOW = 4;
+const UI_NEGATORS = new Set(["no", "not", "without", "never", "nor", "none", "sem", "não", "nao", "nem", "nunca", "sin", "ni"]);
+const UI_CONSUMER_VERBS = new Set(["load", "loads", "loaded", "loading", "fetch", "fetches", "fetched", "fetching", "call", "calls", "called",
+  "calling", "consume", "consumes", "consumed", "consuming", "read", "reads", "reading", "pull", "pulls", "pulled", "pulling", "get", "gets",
+  "getting", "query", "queries", "queried", "querying", "use", "uses", "used", "using", "submit", "submits", "submitted", "submitting",
+  "send", "sends", "sending", "post", "posts", "posted", "posting",
+  "carrega", "carregam", "carregar", "busca", "buscam", "buscar", "chama", "chamam", "chamar", "consome", "consomem", "consumir", "lê",
+  "leem", "ler", "obtém", "obtêm", "obter", "usa", "usam", "usar", "utiliza", "utilizam", "utilizar", "envia", "enviam", "enviar", "consulta",
+  "consultam", "consultar",
+  "carga", "cargan", "cargar", "obtiene", "obtienen", "obtener", "llama", "llaman", "llamar", "consumen", "lee", "leen", "leer", "usan",
+  "envía", "envían", "consultan", "buscan"]);
+const UI_FRONTEND_WORDS = new Set(["frontend", "front-end"]);
+const RE_UI_TEAM_AFTER = /^[^\S\n]*(?:teams?|developers?|devs?|engineers?|squads?)(?![\p{L}])/u;
+const RE_UI_TEAM_BEFORE = /(?<![\p{L}])(?:equipas?|equipes?|equipos?)[^\S\n]+(?:de|do|del)[^\S\n]+$/u;
+const RE_UI_FRONTEND_ONLY = /(?<![\p{L}\p{N}_])(?:front-?end[- ]only|only[^\S\n]+(?:the[^\S\n]+)?front-?end|(?:apenas|só|somente|unicamente)[^\S\n]+(?:o[^\S\n]+)?front-?end|(?:solo|sólo|solamente|únicamente)[^\S\n]+(?:el[^\S\n]+)?front-?end)(?![\p{L}\p{N}_])/u;
+// one test per classified text, not per page word (the classifier stays linear in the text)
+let uiFrontendOnlyText = null;
+let uiFrontendOnlyAnswer = false;
+function uiFrontendOnly(text) {
+  if (text !== uiFrontendOnlyText) { uiFrontendOnlyText = text; uiFrontendOnlyAnswer = RE_UI_FRONTEND_ONLY.test(text); }
+  return uiFrontendOnlyAnswer;
+}
+function uiBackendInClause(h, text, lang) {
+  const c = cueClause(text, h.start, h.end);
+  const clause = text.slice(c.from, c.to);
+  const pt = i18n.baseLang(lang || "en") === "pt";
+  // where the first consumer verb after the page word ends (a backend word after it is consumed) — one pass over the clause
+  let consumedFrom = Infinity;
+  const RE_WORD = /[\p{L}\p{N}'’-]+/gu;
+  const tail = text.slice(h.end, c.to);
+  let w;
+  while ((w = RE_WORD.exec(tail)) !== null) if (UI_CONSUMER_VERBS.has(w[0].toLowerCase())) { consumedFrom = h.end + w.index + w[0].length; break; }
+  RE_UI_BACKEND.lastIndex = 0;
+  let m;
+  while ((m = RE_UI_BACKEND.exec(clause)) !== null) {
+    const at = c.from + m.index;
+    if (at < h.end && at + m[0].length > h.start) continue; // (never the hit itself)
+    // the words just before it (a bounded look-back: UI_NEG_WINDOW words fit in 80 characters but for very long words)
+    const before = cueWords(text.slice(Math.max(c.from, at - 80), at)).slice(-UI_NEG_WINDOW).map((x) => x.toLowerCase());
+    if (before.some((x) => (UI_NEGATORS.has(x) && !(pt && x === "no")) || /n['’]t$/.test(x))) continue;
+    if (at >= consumedFrom) continue;
+    return true;
+  }
+  return false;
+}
+// "the UI / the interface / the form already exists" speaks for its whole sentence (the backend words stay clause-bound: "the
+// endpoint already exists; redesign the settings page" is UI work)
+const RE_UI_ALREADY = /(?<![\p{L}\p{N}_])(?:ui|ux|user interface|interface|interfaz|front-?end|form|formulário|formulario)[^\S\n]+(?:itself[^\S\n]+|em si[^\S\n]+|en sí[^\S\n]+)?(?:already exists?|já existe|ya existe)(?![\p{L}\p{N}_])/u;
+function uiCueTier(h, text, cased, lang) {
+  const isPage = UI_PAGE_WORDS.has(h.kw), isEmpty = UI_EMPTY_STATE.has(h.kw);
+  if (!isPage && !isEmpty) return null;
+  const sentence = () => cueBefore(text, h.start, SENTENCE_BOUNDARY) + text.slice(h.start, h.end) + cueAfter(text, h.end, SENTENCE_BOUNDARY);
+  if (isEmpty) return h.tier === "strong" && RE_UI_STATE_MACHINE.test(sentence()) ? "weak" : null;
+  if (UI_FRONTEND_WORDS.has(h.kw) && (RE_UI_TEAM_AFTER.test(text.slice(h.end, h.end + 20)) || RE_UI_TEAM_BEFORE.test(text.slice(Math.max(0, h.start - 20), h.start)))) return "generic";
+  if (uiFrontendOnly(text)) return null;
+  return uiBackendInClause(h, text, lang) || RE_UI_ALREADY.test(sentence()) ? "generic" : null;
+}
+
+// +obs — "customer service", "room service", "service level", "serviço ao cliente", "servicio al cliente" are no technical target.
+const OBS_SERVICE_WORDS = new Set(["service", "serviço", "servicio"]);
+const RE_OBS_NOT_TARGET_BEFORE = /(?:customer|client|room|table|field|after-sales|delivery)[^\S\n]*$/u;
+const RE_OBS_NOT_TARGET_AFTER = /^(?:s|es)?[^\S\n]+(?:level|ao cliente|a clientes|de atendimento|al cliente|de atención)(?![\p{L}])/u;
+function obsCueTier(h, text) {
+  if (!OBS_SERVICE_WORDS.has(h.kw)) return null;
+  return RE_OBS_NOT_TARGET_BEFORE.test(text.slice(Math.max(0, h.start - 20), h.start)) || RE_OBS_NOT_TARGET_AFTER.test(text.slice(h.start + h.kw.length, h.end + 30))
+    ? "none" : null;
+}
+const SIGNAL_CUES = { api: apiCueTier, ui: uiCueTier, obs: obsCueTier };
 
 // Words that negate a signal when they appear just before the keyword (EN/PT/ES).
 const NEGATORS = ["no", "not", "without", "never", "skip", "exclude", "avoid", "omit", "dispensa", "prescinde", "sem", "não", "nao", "sin"];
@@ -602,6 +1127,10 @@ const IRREGULAR_FORMS = new Map([
   // An EXACT form (no inflection at all — 1.17 D review): "2PC", never "2PCS" (a product listing's "2 pieces"). Upper case: matched
   // case-sensitively like every keyword written with capitals.
   ["2PC", ["2PC", ""]],
+  // +api (1.19 T): the noun only — "requests", never "requested" ("the user requested a refund" is no HTTP request)
+  ["request", ["request", "(?:s)?"]],
+  // +ui (1.19 T): the nouns only — "screening", "formed", "paged the on-call" are no UI
+  ["screen", ["screen", "(?:s)?"]], ["page", ["page", "(?:s)?"]], ["form", ["form", "(?:s)?"]],
 ]);
 // A GAP keyword (built-in signals only — a track pack's keywords can't hold "…", RE_PACK_KEYWORD): its words with up to three
 // words between them, none crossing sentence punctuation — "publish … event" is "publishes a UserCreated event", "publish
@@ -767,7 +1296,16 @@ function classify(description, opts = {}) {
   // (non-negated) signal of their track ("RBAC permissions"); a negated one is noted only when the track has some other
   // signal. Alone they are no evidence at all: no signal, no "possible" note, no "kept off" note ("file permission bits").
   // A GENERIC word (1.17 D review) backs no context word: "retry the card transaction" is no +dist evidence.
-  const counted = hits.filter((h) => !shadowedHits.has(h));
+  // CUES (1.19 T review — SIGNAL_CUES): a built-in keyword whose tier depends on the words around it ("Stripe's REST API" is
+  // app-level for us, "the settings page backend" is no UI work, "customer service" no technical target).
+  const counted = [];
+  for (const h of hits) {
+    if (shadowedHits.has(h)) continue;
+    const cue = Object.prototype.hasOwnProperty.call(SIGNAL_CUES, h.track) && Object.prototype.hasOwnProperty.call(SIGNALS, h.track) ? SIGNAL_CUES[h.track] : null;
+    const tier = cue ? cue(h, text, cased, lang) : null;
+    if (tier === "none") continue;
+    counted.push(tier && tier !== h.tier ? Object.assign({}, h, { tier }) : h);
+  }
   const own = (pred) => new Set(counted.filter((h) => h.tier !== "context" && pred(h)).map((h) => h.track));
   const backedBy = own((h) => !h.neg && h.tier !== "generic"), mentionedBy = own(() => true);
   for (const h of counted) {
@@ -910,7 +1448,7 @@ const RE_PACK_NAME = /^[a-z][a-z0-9]{1,19}$/;
 const RE_PACK_MARKER = /^[A-Z][A-Z0-9]{1,11}$/;
 // Bracket words the engine already reads — the built-in markers, the story / parallel tags ([US1] [P1] [shared]), the generic
 // slots ([TODO] [TBD] [FIXME]…) and ID prefixes — are never a pack marker.
-const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|DIST|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
+const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|DIST|API|UI|OBS|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
 // A classifier keyword: letters / digits with inner spaces, hyphens, apostrophes and dots, 2–60 characters (a bounded class — linear).
 const RE_PACK_KEYWORD = /^[\p{L}\p{N}][\p{L}\p{N}' .’-]{0,58}[\p{L}\p{N}]$/u;
 const PACK_KEYS = new Set(["name", "marker", "title", "description", "signals", "sections", "steering", "$schema"]);
@@ -1443,6 +1981,26 @@ function legacyPackName(st, n) {
   return typeof n === "string" && RE_PACK_NAME.test(n) && packReservedName(n) && isObj(st) && isObj(st.packMarkers) &&
     Object.prototype.hasOwnProperty.call(st.packMarkers, n);
 }
+// A track pack whose MARKER is a built-in track's now (1.19 T review): 1.15–1.18 accepted a pack of any name with the marker [UI],
+// [API] or [OBS] (before 1.17, [DIST]) — 'webui' with [UI], 'contracts' with [API]. The marker is reserved since, so the pack is
+// invalid ('marker-reserved') and the feature's missing pack; its '## [UI] …' headings would pass for the built-in track's. → the
+// built-in track whose marker the feature's .state.json packMarkers records for pack n (n no valid pack now), else null. Adding
+// that track adopts it (applyTracks: the built-in sections are appended although a heading carries the marker, the pack's record
+// goes); doctor's track-pack-missing and spec_upgrade say so.
+function legacyPackMarkerTrack(st, n) {
+  if (typeof n !== "string" || !isObj(st) || !isObj(st.packMarkers) || !Object.prototype.hasOwnProperty.call(st.packMarkers, n)) return null;
+  const m = st.packMarkers[n];
+  if (typeof m !== "string" || VALID_TRACKS.includes(n) || isPackTrack(n)) return null;
+  for (const tr of MARKER_TRACKS) if (TRACK_MARKER[tr] === m) return tr;
+  return null;
+}
+// The dev-spec release that reserved a pack name a feature still records (1.19 T): the +api / +ui / +obs names and their aliases
+// became reserved in 1.19, +dist's in 1.17 — the doctor / upgrade messages say "a track pack from before <that release>".
+const TRACK_RESERVED_SINCE = { dist: "1.17", api: "1.19", ui: "1.19", obs: "1.19" };
+function packReservedSince(n) {
+  const tr = Object.prototype.hasOwnProperty.call(TRACK_ALIASES, n) ? TRACK_ALIASES[n] : n;
+  return Object.prototype.hasOwnProperty.call(TRACK_RESERVED_SINCE, tr) ? TRACK_RESERVED_SINCE[tr] : "1.17";
+}
 // A feature's saved tracks naming a pack the project no longer has (deleted, now invalid, or — 1.17 — its name reserved since):
 // inactive, kept in .state.json.
 function missingPackTracks(dir) {
@@ -1854,7 +2412,7 @@ function headingHasMarker(md, marker) {
 
 // The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
 // language). MARKER_TRACKS drives every per-marker loop: detection, inactive sections/tasks, doctor, approve, status.
-const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]" };
+const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]", api: "[API]", ui: "[UI]", obs: "[OBS]" };
 const MARKER_TRACKS = Object.keys(TRACK_MARKER);
 // The AC IDs requirements.md defines as a track's criteria: under a heading carrying its marker ([SaaS] / [AI] — the
 // template's "#### [SaaS] Acceptance Criteria (EARS)", in any language) or with the marker in the criterion itself.
@@ -2028,9 +2586,68 @@ const DIST_SECTIONS = [
     "modos de falla", "modo de falla"],
   loose: ["failure mode", "modo de falha", "modo de fallo", "modo de falla"] },
 ];
+// +api (1.19 T) — API contracts. The core design already has "## API Contracts" (PT / ES "Contratos de API") and "## Error
+// Handling": every ordinary name here is `loose` — it names an [API] section only on a heading carrying the marker or nested
+// under one, so deleting "## [API] API Contract" never lets the core heading stand in for it. The full compound names stay strict.
+const API_SECTIONS = [
+  { name: "API Contract", syn: ["api contract", "api specification", "api spec", "contrato da api", "contrato de api", "especificação da api",
+    "contrato de la api", "especificación de la api"],
+  loose: ["api contract", "api specification", "api spec", "contrato da api", "contrato de api", "especificação da api", "contrato de la api",
+    "especificación de la api"] },
+  { name: "Versioning & Compatibility", syn: ["versioning & compatibility", "versioning and compatibility", "api versioning", "versioning", "compatibility",
+    "versionamento e compatibilidade", "versionamento", "compatibilidade", "versionado y compatibilidad", "versionado", "compatibilidad"],
+  loose: ["api versioning", "versioning", "compatibility", "versionamento", "compatibilidade", "versionado", "compatibilidad"] },
+  { name: "Error Model", syn: ["error model", "error format", "api errors", "errors", "modelo de erros", "formato de erros", "erros da api", "erros",
+    "modelo de errores", "formato de errores", "errores de la api", "errores"],
+  loose: ["error format", "api errors", "errors", "formato de erros", "erros da api", "erros", "formato de errores", "errores de la api", "errores"] },
+  { name: "Pagination, Idempotency & Concurrency", syn: ["pagination, idempotency & concurrency", "pagination, idempotency and concurrency", "pagination",
+    "paginação, idempotência e concorrência", "paginação", "paginación, idempotencia y concurrencia", "paginación"],
+  loose: ["pagination", "paginação", "paginación"] },
+  { name: "Rate Limits & Quotas", syn: ["rate limits & quotas", "rate limits and quotas", "rate limits", "rate limiting", "quotas",
+    "limites de taxa e quotas", "limites de taxa e cotas", "limites de taxa", "cotas", "límites de tasa y cuotas", "límites de tasa", "cuotas"],
+  loose: ["rate limits", "rate limiting", "quotas", "limites de taxa", "cotas", "límites de tasa", "cuotas"] },
+];
+// +ui (1.19 T) — user-facing UI. Every ordinary name is `loose` (marker-bound): a core "## Accessibility" or "## States" note, or
+// +saas's "## [SaaS] Performance Budget", never stands in for a deleted [UI] section; the full names stay strict.
+const UI_SECTIONS = [
+  { name: "Design System Usage", syn: ["design system usage", "design system", "component inventory", "uso do design system", "sistema de design",
+    "inventário de componentes", "uso del design system", "sistema de diseño", "inventario de componentes"],
+  loose: ["design system", "component inventory", "sistema de design", "inventário de componentes", "sistema de diseño", "inventario de componentes"] },
+  { name: "UI States", syn: ["ui states", "view states", "states", "estados da interface", "estados da ui", "estados de la interfaz", "estados de la ui", "estados"],
+  loose: ["view states", "states", "estados"] },
+  { name: "Accessibility", syn: ["accessibility", "a11y", "acessibilidade", "accesibilidad"], loose: ["accessibility", "a11y", "acessibilidade", "accesibilidad"] },
+  { name: "Responsiveness & i18n", syn: ["responsiveness & i18n", "responsiveness and i18n", "responsiveness", "responsive design", "internationalization",
+    "internationalisation", "i18n", "design responsivo e i18n", "design responsivo", "responsividade", "internacionalização", "diseño adaptable e i18n",
+    "diseño adaptable", "diseño responsivo", "internacionalización"],
+  loose: ["responsiveness", "responsive design", "internationalization", "internationalisation", "i18n", "design responsivo", "responsividade",
+    "internacionalização", "diseño adaptable", "diseño responsivo", "internacionalización"] },
+  { name: "UI Performance Budget", syn: ["ui performance budget", "web performance budget", "front-end performance", "frontend performance", "core web vitals",
+    "performance budget", "orçamento de desempenho da interface", "orçamento de desempenho", "presupuesto de rendimiento de la interfaz",
+    "presupuesto de rendimiento"],
+  loose: ["front-end performance", "frontend performance", "core web vitals", "performance budget", "orçamento de desempenho", "presupuesto de rendimiento"] },
+];
+// +obs (1.19 T) — observability & operability. No name is "Observability" (+saas's section); every ordinary name is `loose`
+// (marker-bound) — a core "## Rollback" or "## Alerts" note never stands in for a deleted [OBS] section; the full names stay strict.
+const OBS_SECTIONS = [
+  { name: "SLIs & SLOs", syn: ["slis & slos", "slis and slos", "sli & slo", "service level objectives", "slos", "slo", "error budget", "slis e slos",
+    "objetivos de nível de serviço", "slis y slos", "objetivos de nivel de servicio"],
+  loose: ["service level objectives", "slos", "slo", "error budget", "objetivos de nível de serviço", "objetivos de nivel de servicio"] },
+  { name: "Telemetry", syn: ["telemetry", "instrumentation", "metrics, logs & traces", "metrics, logs and traces", "telemetria", "instrumentação", "telemetría",
+    "instrumentación"],
+  loose: ["telemetry", "instrumentation", "metrics, logs & traces", "metrics, logs and traces", "telemetria", "instrumentação", "telemetría", "instrumentación"] },
+  { name: "Alerting & Runbooks", syn: ["alerting & runbooks", "alerting and runbooks", "alerting", "alerts", "runbooks", "alertas e runbooks", "alertas y runbooks",
+    "alertas"],
+  loose: ["alerting", "alerts", "runbooks", "alertas"] },
+  { name: "Rollout & Rollback", syn: ["rollout & rollback", "rollout and rollback", "rollout", "rollback", "release strategy", "lançamento e reversão", "rollout e rollback",
+    "despliegue y reversión", "rollout y rollback"],
+  loose: ["rollout", "rollback", "release strategy"] },
+  { name: "Health & Capacity", syn: ["health & capacity", "health and capacity", "health checks", "capacity", "saúde e capacidade", "verificações de saúde",
+    "capacidade", "salud y capacidad", "comprobaciones de salud", "capacidad"],
+  loose: ["health checks", "capacity", "verificações de saúde", "capacidade", "comprobaciones de salud", "capacidad"] },
+];
 // The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
 // check read (a marker track = a TRACK_MARKER entry + its table here).
-const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS };
+const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS, api: API_SECTIONS, ui: UI_SECTIONS, obs: OBS_SECTIONS };
 // [[track, sections, marker]] for the ACTIVE marker tracks, in track order.
 function activeSectionTracks(tracks) {
   return markerTracks().filter((t) => tracks.includes(t)).map((t) => [t, trackSectionTable(t), trackMarker(t)]); // + the track packs (1.15)
@@ -2044,7 +2661,7 @@ function activeDesign(design, tracks) {
 }
 
 module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, parseTracks, normalizeTracks,
-  TRACK_ALIASES, suggestTrack, unknownTracksError, trackLabel, SIGNALS, conceptMap, SIGNAL_CONCEPTS, SIGNAL_HAZARDS,
+  TRACK_ALIASES, suggestTrack, unknownTracksError, trackLabel, SIGNALS, conceptMap, SIGNAL_CONCEPTS, SIGNAL_HAZARDS, SIGNAL_CUES,
   NEGATORS, NEG_FILLER, NEG_FILLER_EN, NEG_AFTER, W, PT_STRONG, PT_STRONG_CHARS, PT_WEAK, ES_STRONG, ES_STRONG_CHARS,
   ES_WEAK, EN_WORDS, CLAUSE_START, INF_WORDS, INF, PT_INF, ES_INF, PTES_INF, ES_NO_INF, guessLang, configuredLang,
   isNegated, STEMS, VERB_STEMS, IRREGULAR_FORMS, KW_GAP, KW_GAP_RE, INFLECTION, ACRONYM_INFLECTION, ADJ_SUFFIX, KW_RE,
@@ -2056,11 +2673,11 @@ module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, p
   packVarRefs, parsePackFragment, packLocalized, PACK_CACHE, loadPack, loadPackScan, loadTrackPacks, NO_PACKS,
   packRegistry, packTracks, packOf, isPackTrack, allTracks, optionalTracks, markerTracks, trackMarker,
   trackSectionTable, trackSteeringFiles, trackSignalTable, isPackMarkerBracket, packMarkersFor, noteGhostPacks,
-  ghostMarkers, savedPackName, legacyPackName, missingPackTracks, packLocal, packTitle, packFragment, packSubst,
+  ghostMarkers, savedPackName, legacyPackName, legacyPackMarkerTrack, TRACK_RESERVED_SINCE, packReservedSince, missingPackTracks, packLocal, packTitle, packFragment, packSubst,
   packCtx, packSubstBasic, packDesignBlock, packRequirementsBlock, insertPackRequirements, packPlanRows, packTaskBlock,
   packTestRowsBlock, packChecklistBlock, packSteeringStub, trackSteeringStub, RE_PACK_WILD_VAR, RE_PACK_WILD_VAR_G,
   PACK_CORPUS_CACHE, packCorpusSets, localizePackProblem, trackPacks, listTrackPacks, checkTrackPacks, initTrackPack,
   detectTracks, savedTracks, headingHasMarker, TRACK_MARKER, MARKER_TRACKS, trackAcIds, normTaskHeading, TASK_HEADINGS,
   trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
   inactiveMarkerLines, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
-  SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, TRACK_SECTIONS, activeSectionTracks, activeDesign, __link };
+  SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, OBS_SECTIONS, TRACK_SECTIONS, activeSectionTracks, activeDesign, __link };
