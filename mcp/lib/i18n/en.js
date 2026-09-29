@@ -1028,7 +1028,7 @@ const msg = {
       possible: (t, sig) => `Possible +${t} — weak signal '${sig}' (needs corroboration; not auto-enabled).`,
       // (1.19 T) what an anchor names, per track — +dist's wording unchanged
       genericOnly: (t, list) => `Possible +${t} — only app-level words (${list}): none names ${({ api: "an API contract (a public API, OpenAPI / GraphQL / gRPC, a breaking change…)",
-        ui: "a UI concern of its own (a design system, accessibility, the frontend, a UI component…)", obs: "an operability concern (an SLO, alerting, on-call, a runbook, a rollout…)" })[t] ||
+        ui: "a UI concern of its own (a design system, accessibility, a UI component, an empty or loading state…)", obs: "an operability concern (an SLO, alerting, on-call, a runbook, a rollout…)" })[t] ||
         "a second system (a broker, another service, a webhook…)"}; not auto-enabled.`,
       keptOff: (t, kw) => `+${t} kept off — '${kw}' appeared negated.`,
       onAlthough: (t, quoted, list) => `+${t} is ON although ${quoted} appeared negated — enabled by: ${list}. Confirm this is intentional.`,
@@ -1316,6 +1316,8 @@ const msg = {
       backlogAppended: (name) => `'${name}' is already in the backlog — the new note was appended to its note.`,
       backlogKept: (name) => `'${name}' is already in the backlog with that note — nothing changed.`,
       backlogNoteFull: (name, max) => `'${name}' is already in the backlog and its note would pass ${max} characters — the new note was not added: file it under another name.`,
+      // 1.19 verify 5: a NEW entry's note past the same cap
+      backlogNoteLong: (name, max) => `The note for '${name}' passes ${max} characters — nothing was added to the backlog: shorten the note.`,
     },
     // CLI human output (--json output is the structured result, never localized).
     cliOutput: {

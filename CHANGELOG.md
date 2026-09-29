@@ -52,7 +52,8 @@ searches before writing, and three built-in tracks for API contracts, user inter
 ### Changed
 - Ten built-in tracks, 31 built-in templates; the placeholder corpus renders ~1,165 texts.
 - `spec_backlog add` of a name that already exists appends the new note (`exists: true`, `appended`) instead of keeping
-  the old one silently.
+  the old one silently; a backlog note — a new entry's too — is one line of at most 2,000 characters (past it add is
+  refused).
 
 ### Fixed
 - `references/saas-patterns.md` cited RFC 8594 for the `Deprecation` header — it is RFC 9745 (`Sunset` is RFC 8594).

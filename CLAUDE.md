@@ -46,8 +46,8 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
   tracks.js                    the track registries (built-in + packs: allTracks, trackMarker…), parseTracks, detectTracks,
                                TRACK_SECTIONS, the inactive-section readers; the Phase 0 classifier (SIGNALS, negation, the
                                language guess); track packs (.specs/tracks/: load + validate, cached; render; spec_tracks) —
-                               the largest module (~2,100 lines, three concerns): a candidate for a later split into
-                               registries / classify / packs
+                               the largest module (~2,700 lines since 1.19 — the three new tracks' signals and cues —,
+                               three concerns): a candidate for a later split into registries / classify / packs
   templates.js                 project templates (.specs/templates/), their placeholder corpus, spec_templates
   scaffold.js                  spec_init, spec_create, the artifact skeletons, steering stubs, spec_add_track; scoped steering
                                (front matter, the brief's steering, custom names), steering amendments (1.16 Q1)
@@ -159,7 +159,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   root is three levels up: `approvalGuardDecision`'s cli path, `engineVersion`'s package.json).
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
   costs ~0.65 ms before any compile (stat, realpath, open + read — the open is the expensive part) — the engine is 20
-  modules (+ 8 importers) of 400–2,100 lines, not one per helper. Add to the module of the concept; a new file must earn
+  modules (+ 8 importers) of 400–2,700 lines (tracks.js the largest — the split candidate), not one per helper. Add to the module of the concept; a new file must earn
   its load cost. **The compile cache:** the facade (spec.js, first line) calls `module.enableCompileCache()` (Node ≥ 22.8;
   nothing on older ones): the compiled code of every module loaded after it is kept between processes in
   `NODE_COMPILE_CACHE` or `<os.tmpdir()>/node-compile-cache/<node version>/` (one file per module, ~1.4 MB for the engine;
@@ -265,7 +265,12 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   verb anywhere before it — expose, publish, offer, provide, design, document, deprecate, versionar… —, "Version …" opening the
   clause, a build verb whose direct object it is: "Build a REST API", "Criar uma API REST"). An ambiguous name is strong with an
   own cue, or (the API-kind names) when it opens its clause or follows a plain article + ≤ 2 lowercase adjectives ("REST API
-  for the mobile app", "add rate limiting to the public API"); "Stripe REST API integration" stays weak. An API **key** stays
+  for the mobile app", "add rate limiting to the public API"); "Stripe REST API integration" stays weak. **1.19 verify 2:** an
+  ALL-CAPS organisation acronym is an owner too ("la API pública del BCE", "the ECB's public API" — `RE_API_ACRONYM`, never a
+  technical one: `API_TECH_ACRONYMS` REST / CRM / SDK / HR…); a past participle right after a determiner is an adjective, no
+  own verb ("Replace the deprecated Google Places API calls"); breaking compatibility as a VERB (`API_BREAK_VERBS`: break
+  compatibility, quebrar a compatibilidade, romper la compatibilidad…) is a weak compat anchor and a hazard, so PT "não pode
+  quebrar a compatibilidade da API pública" is +api like EN / ES. An API **key** stays
   +sec's word — "an API key management page" / "call the Stripe API" have a *possible +api* note at most.
   The core design already has `## API Contracts` / `## Error Handling`: every ordinary name in API_SECTIONS is `loose`
   (marker-bound), only the full compound names are strict. The generic-only note names what an anchor would be, per track
@@ -293,11 +298,20 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   `RTL` / `CLS` / `INP`, a loading / error state, form validation, inline errors; **generic**: screen, page, form
   (IRREGULAR_FORMS: the nouns only — "screening", "formed", "paged" are no signal), button, click, dialog, dashboard (ES
   tablero / cuadro de mando), menu, icon, widget, layout, theme. A dashboard is +ui's generic word only, never +obs's ("a
-  metrics dashboard for sales"). **Cues (1.19 T review — `SIGNAL_CUES.ui`, `uiCueTier`):** in a SENTENCE (. ! ? line) that
-  says the work is backend-only (`RE_UI_BACKEND`: an HTTP method + path, a request / route handler, an endpoint, the backend,
-  an API — never "API keys" / "chave de API" —, a data layer / repository / SQL, "already exists" / já existe / ya existe) a
-  page type and frontend / UI / UX are GENERIC ("a PATCH /me/preferences handler that the settings page calls; the UI already
-  exists"); an empty state in a sentence about a state machine is weak ("the empty state blocks sales").
+  metrics dashboard for sales"). **Cues (1.19 T review — `SIGNAL_CUES.ui`, `uiCueTier`):** in a CLAUSE (`cueClause()`:
+  CUE_BOUNDARY . ! ? ; : or a line break — a colon after a short label, ≤ 4 words, joins the label to what it introduces:
+  "Profile page: the GET /me handler…", "Sin backend: …") that says the work is backend-only (`RE_UI_BACKEND`: an HTTP method +
+  path, a request / route handler, an endpoint, the backend, an API — never "API keys" / "chave de API" —, a data layer /
+  repository / SQL, "already exists" / já existe / ya existe) a page type and frontend / UI / UX are GENERIC ("a PATCH
+  /me/preferences handler that the settings page calls; the UI already exists"); an empty state in a sentence about a state
+  machine is weak ("the empty state blocks sales"). **1.19 verify 1** (the sentence-wide test lost +ui): a backend word does not
+  count when a negator governs it (≤ 4 words back in the clause — no / not / without / n't / sem / não / nem / sin / ni; PT "no"
+  is em + o: `lang` is the cue's 4th argument) — "no backend changes", "does not touch the backend", "needs no API changes" —
+  nor when it FOLLOWS the page word with a consumer verb between them (`UI_CONSUMER_VERBS`: "The landing page loads its
+  testimonials from the CMS API"; a backend word before the page — "a handler that the settings page calls" — or right after
+  it — "the profile page backend", "the admin page's API" — still demotes); nothing is demoted in a text that says "frontend
+  only" / "apenas frontend" / "solo frontend" (`RE_UI_FRONTEND_ONLY`, tested once per text); "the frontend team" / "equipa de
+  frontend" names a team (generic). The genericOnly note no longer offers "the frontend" as an anchor.
 - **+obs (1.19 T)** — the tenth built-in marker track `[OBS]` (observability & operability): TRACK_MARKER, `OBS_SECTIONS` (SLIs &
   SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health & Capacity — no section is named "Observability", +saas's;
   ordinary names `loose`), TRACK_STEERING **`observability.md`** — the +saas stub, extended with SLOs & error budgets, rollout &
@@ -319,7 +333,9 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   infrastructure, ops / DevOps / SRE, a status page, disk / CPU / memory usage, queue depth, consumer lag — never the bare
   business words: a sales pipeline, a production line, a job posting, a reefer container, a restaurant's server;
   `SIGNAL_CUES.obs` drops "customer / room service", "service level"). SIGNAL_CONCEPTS.obs.**watch** = monitoring · monitor ·
-  alert(s) · alerting · incident · postmortem · SLA (+ PT / ES): business monitoring ("monitor stock levels and send alerts to
+  alert(s) · alerting · incident · postmortem · SLA (+ PT / ES, and — 1.19 verify 3 — the verbs "alertar" / "avisar", weak; a
+  health check endpoint is strong in PT / ES too: "endpoint de verificação de saúde", "endpoint de comprobación de salud"):
+  business monitoring ("monitor stock levels and send alerts to
   purchasing", "incident alerts for the store manager", a help desk's SLA + alerts) is ONE hint, never +obs; a watch word +
   a technical target is ("Monitor the ERP sync job and alert ops"). SIGNAL_HAZARDS.obs: downtime / an outage ("without
   downtime") is never negated. Shared: observability / SLO / SLA / uptime stay +saas signals (a phrase may serve two tracks),
@@ -335,8 +351,12 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   one entry there. **1.19 T review:** on the reviewer's independent 205-text EN / PT / ES corpus precision / recall went +api
   70.4% / 95.0% → 100% / 100%, +ui 86.0% / 79.6% → 100% / 87.0% (the misses left are sales dashboards — a dashboard is +ui's
   generic word by design — and a downtime banner), +obs 68.6% / 82.8% → 100% / 100%; `1.19 T review` in mcp/test.js embeds 78
-  of its hardest texts (≥ 90% / ≥ 85% per track); the logged classify inputs of both suites (2,578 distinct) replayed through
-  1.18, the 1.19 package-T base and the fix give the same 1.18 track decisions.
+  of its hardest texts (+ 10 from the 1.19 verification's +ui findings; ≥ 90% / ≥ 85% per track); the logged classify
+  inputs of both suites (2,578 distinct) replayed through 1.18, the 1.19 package-T base and the fix give the same 1.18 track
+  decisions. **1.19 verification** (the verifier's 146-text corpus): +api 92.6% / 92.6% → 100% / 96.3%, +ui 100% / 71.0% →
+  100% / 74.2% (the misses left are generic-word UIs: a confirm dialog, a toast, a login screen), +obs 90.6% / 93.5% → 91.2% /
+  100% (the false positives left are coordinated negations: "not add feature flags or canary releases"); the reviewer's 205
+  texts unchanged; 2,644 logged classify inputs and a 12,390-text keyword sweep give the seven older tracks' 1.18 decisions.
 - **Readers go through the accessors (1.15), never the constants.** The constants above are the BUILT-IN tables;
   `allTracks()` (VALID_TRACKS + the project's valid packs, in name order after the built-in ones), `optionalTracks()`,
   `markerTracks()`, `trackMarker(tr)`, `trackSectionTable(tr)`, `trackSteeringFiles(tr)`, `trackSignalTable(tr)` add the
@@ -1785,7 +1805,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   nothing; the whole note ≤ `BACKLOG_NOTE_MAX` 2,000 characters — past it add is refused, nothing written) → `exists: true`,
   `appended`, a localized `note` (`featureOps.backlogAppended` / `backlogKept` / `backlogNoteFull`); the CLI prints that note
   instead of "✓ added". It answered "✓ added" and kept the old note, so a second refactor candidate filed as the same
-  `refactor-<topic>` was lost; the prose asks for one name per candidate.
+  `refactor-<topic>` was lost; the prose asks for one name per candidate. A NEW entry's note has the same cap (1.19 verify 5 —
+  a first add stored any length): past it add is refused, nothing written (`featureOps.backlogNoteLong`), MCP and CLI alike.
 - **Prose (R3)** — agents/spec-implementer.md: "Search before you write" is Before-you-begin step 3 (a hard step: the brief's
   Reuse section, concept + three synonyms, shared folders, `.specs/SPECS.md`; reuse → extend → create, the rule of three, no
   copy-paste) + a hard rule + the report's `### Reuse` block (Reused / Extended / Created + searched / Duplicated on purpose /

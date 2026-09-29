@@ -428,7 +428,8 @@ function addBacklog(projectDir, name, note) {
 // (1.19 R review 5 — add answered "added" and kept the old note, so a second refactor candidate filed under the same name was
 // lost): joined with " · " on one line; a note the entry already holds (or none) changes nothing; the whole note stays within
 // BACKLOG_NOTE_MAX characters — past it nothing is appended and add is refused (file it under another name). Such a result
-// carries `exists: true`, `appended` and a localized `note`.
+// carries `exists: true`, `appended` and a localized `note`. A NEW entry's note (1.19 verify 5) has the same cap: past it the
+// add is refused and nothing is written.
 const BACKLOG_NOTE_MAX = 2000;
 const BACKLOG_NOTE_SEP = " · ";
 function addBacklogUnlocked(projectDir, nm, note) {
@@ -438,12 +439,14 @@ function addBacklogUnlocked(projectDir, nm, note) {
   rm.backlog = rm.backlog || [];
   const text = flatText(note);
   const cur = rm.backlog.find((b) => b.name.toLowerCase() === nm.toLowerCase());
+  const O = i18n.msg(projectLang(projectDir)).featureOps;
   if (!cur) {
+    // (1.19 verify 5) a new entry's note has the same cap (one line, BACKLOG_NOTE_MAX characters) — a first add stored any length
+    if (text.length > BACKLOG_NOTE_MAX) return { ok: false, backlog: rm.backlog, error: O.backlogNoteLong(nm, BACKLOG_NOTE_MAX) };
     rm.backlog.push({ name: nm, note: text });
     writeRoadmap(projectDir, rm);
     return { ok: true, backlog: rm.backlog };
   }
-  const O = i18n.msg(projectLang(projectDir)).featureOps;
   const old = flatText(cur.note);
   if (!text || old === text || old.split(BACKLOG_NOTE_SEP).includes(text)) {
     return { ok: true, exists: true, appended: false, backlog: rm.backlog, note: O.backlogKept(cur.name) };
