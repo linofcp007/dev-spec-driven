@@ -776,4 +776,201 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       "1.16 U review 5: spec_log {gitLog: ''} (0 commits, the CLI's JSON) and spec_stop_check {message: ''} (no-claim) are accepted — name stays required; `dev-spec undone` refuses --evidence / --exit / --cmd / --run (exit 1, localized, --json the refusal) and changes nothing (got " +
       js([l5a.p.error, s5a.p.why, n5a.p.error, u5.map((r) => r.code), u5jj]) + ")");
   }
+
+  { // 1.21 F1b — human approvals over MCP elicitation: a fake MCP client that can ask its user answers accept / decline / cancel /
+    // an error / never (the timeout shortened by DEV_SPEC_ELICIT_TIMEOUT_MS), in EN / PT / ES; a client without elicitation.
+    const js = JSON.stringify;
+    const fbRoot = path.join(tmp, "f1b-elicit");
+    const SERVER_JS = path.join(__dirname, "server.js");
+    // A private server and a scripted client. answer(request) → the reply to an elicitation/create ({result} / {error}), or
+    // null (never answer). Every elicitation asked and every notification the server sends are kept.
+    const client = (caps, env) => {
+      const kid = spawn(process.execPath, [SERVER_JS], { env: { ...process.env, SPEC_MCP_APPROVAL_HOOK: "", DEV_SPEC_ELICIT_TIMEOUT_MS: "700", ...env }, stdio: ["pipe", "pipe", "inherit"] });
+      const waiting = new Map(), asked = [], notes = [], batches = [];
+      let buf = "", n = 0, answer = () => null;
+      const write = (m) => kid.stdin.write(JSON.stringify(m) + "\n");
+      const settle = (m) => { if (waiting.has(m.id)) { const cb = waiting.get(m.id); waiting.delete(m.id); cb(m); } };
+      kid.stdout.on("data", (d) => {
+        buf += d.toString();
+        let nl;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line) continue;
+          const m = JSON.parse(line);
+          if (Array.isArray(m)) { batches.push(m); if (waiting.has("batch")) settle({ id: "batch", replies: m }); continue; }
+          if (m.method === "elicitation/create") {
+            asked.push(m);
+            const a = answer(m);
+            if (a) setTimeout(() => write(Object.assign({ jsonrpc: "2.0", id: m.id }, a)), 20);
+            continue;
+          }
+          if (m.method) { notes.push(m); continue; }
+          settle(m);
+        }
+      });
+      const req = (method, params) => new Promise((resolve) => {
+        const id = "f1b-" + ++n;
+        const t = setTimeout(() => { console.log("  FAIL - F1b: no reply to " + method + " (" + id + ")"); resolve({ result: { content: [{ text: "{}" }] } }); }, 15000);
+        waiting.set(id, (m) => { clearTimeout(t); resolve(m); });
+        write({ jsonrpc: "2.0", id, method, params });
+      });
+      const call = async (name, args) => { const r = await req("tools/call", { name, arguments: args }); return JSON.parse(r.result.content[0].text); };
+      const batch = (msgs) => new Promise((resolve) => { waiting.set("batch", (m) => resolve(m.replies)); write(msgs); });
+      const stop = () => new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
+      return { init: () => req("initialize", { protocolVersion: "2025-06-18", capabilities: caps, clientInfo: { name: "fake-client", version: "1" } }),
+        call, req, batch, asked, notes, batches, stop, setAnswer: (f) => { answer = f; } };
+    };
+    // A project (its language, its approval guard) whose features' classification gate passes (the template filled) — except
+    // the `raw` ones (the scaffold's placeholders: the gate refuses).
+    const project = (name, lang, level, features, raw = []) => {
+      const p = path.join(fbRoot, name);
+      S.initProject(p, ["core"], lang, { approvalGuard: level });
+      for (const ft of features) {
+        const f = S.createFeature(p, ft, ["core"]);
+        if (raw.includes(ft)) continue;
+        const cls = path.join(f.dir, "classification.md");
+        fs.writeFileSync(cls, fs.readFileSync(cls, "utf8").split("\n").map((l) => (/^- /.test(l) ? l : l.replace(/\[[^\]]*\]/g, "filled"))).join("\n"));
+      }
+      return p;
+    };
+    const stateOf = (p, slug) => JSON.parse(fs.readFileSync(path.join(p, ".specs", slug, ".state.json"), "utf8"));
+    const accept = (note) => () => ({ result: { action: "accept", content: Object.assign({ approve: true }, note ? { note } : {}) } });
+    const decline = () => ({ result: { action: "decline" } });
+    const cancel = () => ({ result: { action: "cancel" } });
+
+    // --- a client that CAN ask its user (capabilities.elicitation), meta.approvalGuard ask (EN)
+    const A = client({ elicitation: {} });
+    const ai = await A.init();
+    const pEn = project("en-ask", "en", "ask", ["acc", "dec", "can", "err", "never", "forced", "bat"], ["forced"]);
+    A.setAnswer(accept("  looks\ngood  "));
+    const rAcc = await A.call("spec_approve", { name: "acc", phase: "classification", projectDir: pEn });
+    const qAcc = A.asked[0] || { params: {} };
+    const sAcc = stateOf(pEn, "acc");
+    const lastHist = (sAcc.approvalHistory || []).slice(-1)[0] || {};
+    ok(ai.result && !ai.result.capabilities.elicitation && rAcc.ok === true && rAcc.approved === "classification" && rAcc.confirmed && rAcc.confirmed.via === "elicitation" &&
+      rAcc.confirmed.note === "looks good" && /^Confirmed by the user/.test(rAcc.confirmed.message) && A.asked.length === 1 &&
+      /^dev-spec: an agent asks to approve the classification phase of 'acc'\. The phase's checks pass\. Approvals are yours/.test(qAcc.params.message) &&
+      qAcc.params.requestedSchema && qAcc.params.requestedSchema.properties.approve.type === "boolean" && js(qAcc.params.requestedSchema.required) === '["approve"]' &&
+      qAcc.params.requestedSchema.properties.note.type === "string" && typeof qAcc.id === "string" &&
+      sAcc.approvals.classification.confirmed.via === "elicitation" && sAcc.approvals.classification.confirmed.note === "looks good" && lastHist.confirmed && lastHist.confirmed.via === "elicitation",
+      "1.21 F1b: a client with elicitation, meta.approvalGuard ask — spec_approve asks the user (elicitation/create: the action, the gate, a boolean approve + note) and an explicit approve records it with `confirmed` {via: elicitation, at, note} on the approval and its history record (got " +
+      js([rAcc, qAcc.params.message, sAcc.approvals.classification]) + ")");
+
+    A.setAnswer(decline);
+    const rDec = await A.call("spec_approve", { name: "dec", phase: "classification", projectDir: pEn });
+    A.setAnswer(cancel);
+    const rCan = await A.call("spec_approve", { name: "can", phase: "classification", projectDir: pEn });
+    A.setAnswer(() => ({ result: { action: "accept", content: { approve: false } } }));
+    const rNo = await A.call("spec_approve", { name: "can", phase: "classification", projectDir: pEn });
+    A.setAnswer(() => ({ error: { code: -32601, message: "elicitation not available" } }));
+    const rErr = await A.call("spec_approve", { name: "err", phase: "classification", projectDir: pEn });
+    ok(rDec.ok === false && rDec.declined === true && rDec.action === "decline" && /^The user declined in the MCP client: nothing recorded \(approve the classification phase of 'dec'\)/.test(rDec.error) &&
+      rCan.declined === true && rCan.action === "cancel" && /^The user dismissed the confirmation/.test(rCan.error) &&
+      rNo.declined === true && rNo.action === "accept" && /declined/.test(rNo.error) &&
+      rErr.declined === true && rErr.elicitationError && rErr.elicitationError.code === -32601 && /could not ask the user \(elicitation not available\)/.test(rErr.error) &&
+      ["dec", "can", "err"].every((s) => !stateOf(pEn, s).approvals.classification && !(stateOf(pEn, s).approvalHistory || []).length),
+      "1.21 F1b: decline, cancel, an accept without approve: true and a client error each refuse it (declined: true + the action / elicitationError, a localized refusal) and record nothing (got " + js([rDec, rCan, rNo, rErr]) + ")");
+
+    // never answered → refused after DEV_SPEC_ELICIT_TIMEOUT_MS, the client is told (notifications/cancelled), and the server kept
+    // answering meanwhile (a ping sent while it waits is answered first)
+    A.setAnswer(() => null);
+    const order = [];
+    const pNever = A.call("spec_approve", { name: "never", phase: "classification", projectDir: pEn }).then((r) => { order.push("approve"); return r; });
+    const pPing = A.req("ping", {}).then((r) => { order.push("ping"); return r; });
+    const [rNever, rPing] = await Promise.all([pNever, pPing]);
+    const qNever = A.asked[A.asked.length - 1] || {};
+    const cancelled = A.notes.find((x) => x.method === "notifications/cancelled") || { params: {} };
+    ok(rNever.ok === false && rNever.declined === true && rNever.timedOut === true && /^No answer from the user within 0\.7 s/.test(rNever.error) && rPing.result && js(order) === '["ping","approve"]' &&
+      cancelled.params.requestId === qNever.id && cancelled.params.reason === "timeout" && !stateOf(pEn, "never").approvals.classification,
+      "1.21 F1b: an elicitation never answered is refused after DEV_SPEC_ELICIT_TIMEOUT_MS (timedOut: true, nothing recorded) and cancelled at the client (notifications/cancelled); the server answers other requests while it waits (got " +
+      js([rNever, order, cancelled]) + ")");
+
+    // force (+ a waiver): the question says FORCED and names the failing checks; a gate that refuses anyway asks nobody; a revoke asks too
+    const nAsked = A.asked.length;
+    const rRefused = await A.call("spec_approve", { name: "forced", phase: "classification", projectDir: pEn });
+    const refusedAsked = A.asked.length - nAsked;
+    A.setAnswer(accept());
+    const rForced = await A.call("spec_approve", { name: "forced", phase: "classification", force: true, reason: "demo day", expires: "30d", projectDir: pEn });
+    const qForced = A.asked[A.asked.length - 1] || { params: {} };
+    const rRevoke = await A.call("spec_approve", { name: "acc", phase: "classification", revoke: true, reason: "wrong scope", projectDir: pEn });
+    const qRevoke = A.asked[A.asked.length - 1] || { params: {} };
+    const revRec = (stateOf(pEn, "acc").approvalHistory || []).slice(-1)[0] || {};
+    ok(rRefused.ok === false && rRefused.refused === true && refusedAsked === 0 && rForced.ok === true && rForced.forced === true &&
+      /FORCED \(--force\)/.test(qForced.params.message) && /⚠ FORCED: the phase's checks fail \(placeholders\)/.test(qForced.params.message) && /Waiver: "demo day" until \d{4}-\d{2}-\d{2}\./.test(qForced.params.message) &&
+      stateOf(pEn, "forced").approvals.classification.confirmed.via === "elicitation" &&
+      rRevoke.ok === true && rRevoke.revoked === "classification" && /revoke the approval of the classification phase of 'acc'/.test(qRevoke.params.message) && revRec.revoked === true && revRec.confirmed && revRec.confirmed.via === "elicitation",
+      "1.21 F1b: a gate that refuses without force is answered as it is — nobody is asked; a forced approval's question says FORCED, names the failing checks and the waiver; a revocation is asked too and its record carries `confirmed` (got " +
+      js([rRefused.failing, refusedAsked, qForced.params.message, qRevoke.params.message]) + ")");
+
+    // a JSON-RPC batch holding an approval that waits for the user: ONE array reply, once the user answered
+    A.setAnswer(accept());
+    const bReplies = await A.batch([{ jsonrpc: "2.0", id: "b1", method: "tools/call", params: { name: "spec_approve", arguments: { name: "bat", phase: "classification", projectDir: pEn } } },
+      { jsonrpc: "2.0", id: "b2", method: "ping", params: {} }]);
+    const bApprove = (bReplies || []).find((x) => x.id === "b1");
+    let bOut = null;
+    try { bOut = JSON.parse(bApprove.result.content[0].text); } catch { bOut = null; }
+    ok(Array.isArray(bReplies) && bReplies.length === 2 && A.batches.length === 1 && bOut && bOut.ok === true && bOut.confirmed && (bReplies || []).some((x) => x.id === "b2" && x.result),
+      "1.21 F1b: a batch holding an approval that asks the user gets ONE array reply (both answers) once the user answered (got " + js(bReplies) + ")");
+
+    // spec_init lowering the guard (a guard-down) is asked too; declined → meta unchanged
+    A.setAnswer(decline);
+    const rDown = await A.call("spec_init", { approvalGuard: "off", projectDir: pEn });
+    const qDown = A.asked[A.asked.length - 1] || { params: {} };
+    ok(rDown.ok === false && rDown.declined === true && /lower the approval guard from ask to off/.test(qDown.params.message) && S.approvalGuardLevel(pEn) === "ask",
+      "1.21 F1b: spec_init lowering the approval guard is asked of the user too; declined → the guard stays (got " + js([rDown, qDown.params.message]) + ")");
+    // spec_feature remove {confirm}: asked (declined → the folder stays); a feature that doesn't exist is answered as it is, nobody asked
+    const nBefore = A.asked.length;
+    const rGhost = await A.call("spec_feature", { action: "remove", name: "ghost", confirm: true, projectDir: pEn });
+    const ghostAsked = A.asked.length - nBefore;
+    const rRm = await A.call("spec_feature", { action: "remove", name: "dec", confirm: true, projectDir: pEn });
+    const qRm = A.asked[A.asked.length - 1] || { params: {} };
+    ok(rGhost.ok === false && !rGhost.declined && ghostAsked === 0 && rRm.ok === false && rRm.declined === true &&
+      /permanently delete the feature 'dec'/.test(qRm.params.message) && fs.existsSync(path.join(pEn, ".specs", "dec", ".state.json")),
+      "1.21 F1b: spec_feature remove {confirm: true} is asked of the user (declined → the feature stays); a feature that doesn't exist gets the engine's own error — nobody is asked (got " + js([rGhost, rRm, qRm.params.message]) + ")");
+
+    // PT (deny: with elicitation the user's explicit approve still records it) and ES (ask): the question and the refusal in the
+    // feature's language
+    const pPt = project("pt-deny", "pt", "deny", ["faturas", "recibos"]);
+    const pEs = project("es-ask", "es", "ask", ["facturas"]);
+    A.setAnswer(accept("ok"));
+    const rPt = await A.call("spec_approve", { name: "faturas", phase: "classification", projectDir: pPt });
+    const qPt = A.asked[A.asked.length - 1] || { params: {} };
+    A.setAnswer(decline);
+    const rPtNo = await A.call("spec_approve", { name: "recibos", phase: "classification", projectDir: pPt });
+    const rEs = await A.call("spec_approve", { name: "facturas", phase: "classification", projectDir: pEs });
+    const qEs = A.asked[A.asked.length - 1] || { params: {} };
+    ok(rPt.ok === true && rPt.confirmed && /^dev-spec: um agente pede para aprovar a fase classification de 'faturas'\. As verificações da fase passam\. As aprovações são tuas/.test(qPt.params.message) &&
+      qPt.params.requestedSchema.properties.approve.title === "Aprovar" && /^O utilizador recusou no cliente MCP: nada foi registado/.test(rPtNo.error) &&
+      /^dev-spec: un agente pide aprobar la fase classification de 'facturas'\. Las comprobaciones de la fase pasan\./.test(qEs.params.message) &&
+      qEs.params.requestedSchema.properties.note.title === "Nota" && /^El usuario lo rechazó en el cliente MCP: no se registró nada/.test(rEs.error) && !stateOf(pEs, "facturas").approvals.classification,
+      "1.21 F1b: the question and the refusals speak the feature's language — PT (deny: an explicit approve in the client records it), ES (ask) (got " + js([qPt.params.message, rPtNo.error, qEs.params.message, rEs.error]) + ")");
+    await A.stop();
+
+    // --- a client WITHOUT elicitation: ask and off → today's behaviour (recorded, nobody asked); deny → refused, the command given
+    const B = client({});
+    await B.init();
+    const pB = project("no-elicit", "en", "ask", ["one", "two"]);
+    const rAsk = await B.call("spec_approve", { name: "one", phase: "classification", projectDir: pB });
+    S.initProject(pB, ["core"], undefined, { approvalGuard: "deny" });
+    const rDeny = await B.call("spec_approve", { name: "two", phase: "classification", force: true, projectDir: pB });
+    const pOff = project("off-elicit", "en", "off", ["solo"]);
+    const C = client({ elicitation: {} });
+    await C.init();
+    const rOff = await C.call("spec_approve", { name: "solo", phase: "classification", projectDir: pOff });
+    await C.stop();
+    // the Claude Code plugin's server (SPEC_MCP_APPROVAL_HOOK=on — its PreToolUse hook guards the call): no question, no refusal
+    const pHook = project("hook", "en", "deny", ["hooked"]);
+    const H = client({ elicitation: {} }, { SPEC_MCP_APPROVAL_HOOK: "on" });
+    await H.init();
+    const rHook = await H.call("spec_approve", { name: "hooked", phase: "classification", projectDir: pHook });
+    await H.stop();
+    await B.stop();
+    ok(rAsk.ok === true && rAsk.approved === "classification" && !rAsk.confirmed && B.asked.length === 0 &&
+      rDeny.ok === false && rDeny.humanRequired === true && rDeny.approvalGuard === "deny" && /approve two classification --force/.test(rDeny.command || "") &&
+      /^dev-spec approval guard: refused — approvals are the human's/.test(rDeny.error) && !stateOf(pB, "two").approvals.classification &&
+      rOff.ok === true && !rOff.confirmed && C.asked.length === 0 && rHook.ok === true && !rHook.confirmed && H.asked.length === 0,
+      "1.21 F1b: without elicitation, ask keeps today's behaviour (recorded, nobody asked) and deny is refused (humanRequired + the command the user runs, nothing recorded); approvalGuard off asks nobody; SPEC_MCP_APPROVAL_HOOK=on (the Claude Code plugin — its hook guards the call) leaves the call as it was (got " +
+      js([rAsk.approved, rDeny, rOff.approved, rHook.approved]) + ")");
+  }
 };

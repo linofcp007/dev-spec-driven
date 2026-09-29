@@ -149,6 +149,7 @@ const CLI_SWITCHES = new Set(["json", "run", "remove", "write", "md", "html", "b
   "print-config"]); // the CLI's BOOL_FLAGS ARE this list (print-config: 1.16 C1 — statusline --print-config)
 CLI_SWITCHES.add("revoke"); // 1.16 U2: approve <feature> <phase> --revoke (the approval hook reads it as a switch too)
 CLI_SWITCHES.add("gherkin"); // 1.16 E1: export [f] --gherkin (= spec_export {format: "gherkin"})
+CLI_SWITCHES.add("install").add("uninstall"); // 1.21 F1a: merge-state --install / --uninstall (the git merge driver's setup)
 // Words that may come before the CLI's script in the same simple command (a launcher, an env assignment, an option, a timeout, a
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "pnpx", "npm", "pnpm", "yarn", "sudo", "doas", "env", "nohup",
@@ -771,7 +772,8 @@ function approvalGuardDecision(payload, level, opts = {}) {
   const cli = typeof opts.cli === "string" && opts.cli ? opts.cli : toPosix(path.resolve(__dirname, "..", "..", "..", "cli", "dev-spec.js"));
   const commands = [...new Set(actions.map((a) => approvalCommand(a, cli)).filter(Boolean))];
   const command = commands.length ? "! " + commands.join(" && ") : null;
-  const res = { decision: lvl, why: "approval", level: lvl, tool, actions, force, command, reason: lvl === "deny" ? A.deny(text, command) : A.ask(text, force) };
+  // summary (1.21 F1b): the actions as one localized line — what the MCP server's elicitation asks the user about.
+  const res = { decision: lvl, why: "approval", level: lvl, tool, actions, force, command, summary: text, reason: lvl === "deny" ? A.deny(text, command) : A.ask(text, force) };
   if (lvl === "deny") res.userNote = A.denyUser(text, command);
   return res;
 }

@@ -226,7 +226,8 @@ for specs not implemented yet, the converge pass for half-done ones) runs inline
 | Hooks on save (EARS / traceability / design checks) + SessionStart status, drift, upgrade and overlap lines | ✅ | — (use git `pre-commit`, `dev-spec doctor`, `dev-spec drift`, `dev-spec upgrade`, `dev-spec roadmap`) | ✅ git pre-commit |
 | End-of-turn evidence gate (a "done" claim with unverified ticks is sent back) | ✅ Stop / SubagentStop hook, on by default | — (run `dev-spec stop-check --message "…"` before claiming done) | — (`dev-spec stop-check`) |
 | Guard mode (asks before code edits while no feature has approved tasks; `scope`: outside the plan too) | ✅ opt-in PreToolUse hook | — (`spec_init {guard}` stores the setting, but nothing enforces it) | — |
-| Human approval guard (an agent's approval asks the user, or is refused) | ✅ opt-in PreToolUse hook (`approvalGuard` ask / deny) | — (`spec_init {approvalGuard}` stores the setting, but nothing enforces it) | — |
+| Human approval guard (an agent's approval asks the user, or is refused) | ✅ opt-in PreToolUse hook (`approvalGuard` ask / deny) | ✅ the MCP server enforces it: with MCP elicitation it asks the user (only an explicit approve records it); without it `ask` runs as before and `deny` is refused with the command to run | — (the CLI is the human's) |
+| Team merges of the spec state (`.state.json` / `roadmap.json` merged semantically by git) | ✅ `dev-spec merge-state --install` | ✅ same (git runs it) | ✅ same |
 | Observed evidence (each reported run stamped `observed`; opt-in `evidence: "observed"` verifies only runs the harness saw) | ✅ PostToolUse / PostToolUseFailure hook on Bash | — (no hook: every reported run reads `observed: false` — under `"observed"`, record runs with `dev-spec done <f> <n> --run`) | ✅ `done --run` / `finish --run` (stamped `"cli"`) |
 | Subagent execution (`/executeTask --subagents`) | ✅ | — (`dev-spec brief` per task, run inline) | — (`dev-spec brief`) |
 | Eval harness | ✅ | ✅ (CLI) | ✅ CLI |
@@ -236,8 +237,11 @@ trigger is available through `dev-spec` and the MCP tools** (and the commands th
 that show them), so no capability is lost — only the invocation surface differs. The exceptions are the enforcing
 hooks: guard mode is a Claude Code **hook** (PreToolUse, wired in `hooks/hooks.json`), so other tools can store the
 setting but only Claude Code asks before a code edit — elsewhere, follow the rule in `AGENTS.md` (no implementation
-before the tasks are approved); the approval guard is a PreToolUse hook as well (elsewhere approvals are the user's, as
-`AGENTS.md` says); the observed-evidence log is a Claude Code hook on the Bash tool, so a project that opts into
+before the tasks are approved); the approval guard is a PreToolUse hook as well — elsewhere the MCP server enforces it
+(1.21): a client that supports MCP **elicitation** (`elicitation/create`) shows the user the question — the phase, whether
+the gate is forced, the waiver — with an Approve box and an optional note, and only an explicit approve records the approval
+(`confirmed` in `.state.json`); decline, dismiss or no answer (5 min — `DEV_SPEC_ELICIT_TIMEOUT_MS` in the server's `env`)
+records nothing; with `deny` a client without elicitation is refused and the user runs the command it names; the observed-evidence log is a Claude Code hook on the Bash tool, so a project that opts into
 `evidence: "observed"` records runs from other tools with `dev-spec done --run`; the end-of-turn evidence gate is a Stop / SubagentStop hook — elsewhere, the agent runs
 `dev-spec stop-check` before claiming a task or feature is done, as `AGENTS.md` says. The PostToolUse and SessionStart
 hooks are Claude Code only too; everything they report is also available on demand through `dev-spec ears` / `trace` /

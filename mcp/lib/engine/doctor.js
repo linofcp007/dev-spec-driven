@@ -20,7 +20,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText, flowPhaseIndex,
   FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority, hasSuccessCriteria,
   headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord, isSpikeDir, isTestCodePath,
-  legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, missingPackTracks, packReservedSince, normalizeLang, outsideCodeTemplates,
+  legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang, outsideCodeTemplates,
   overlapDoctorDetail, own, packOf, packRegistry, packTitle, packTracks, parseTasks, pendingGateList, PHASE_FILE,
   phaseActive, phaseContent, phaseFile, PHASES, placeholderSummary, planFileScopes, planIdText, projectLang,
   RE_CODE_TID, RE_CONSTITUTION_CHECK, readIfExists, readJson, readRoadmap, readState, realRootOf, redPhaseHint,
@@ -41,7 +41,7 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   expectsFail, extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText,
   flowPhaseIndex, FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority,
   hasSuccessCriteria, headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord,
-  isSpikeDir, isTestCodePath, legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, missingPackTracks, packReservedSince, normalizeLang,
+  isSpikeDir, isTestCodePath, legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang,
   outsideCodeTemplates, overlapDoctorDetail, own, packOf, packRegistry, packTitle, packTracks, parseTasks,
   pendingGateList, PHASE_FILE, phaseActive, phaseContent, phaseFile, PHASES, placeholderSummary, planFileScopes,
   planIdText, projectLang, RE_CODE_TID, RE_CONSTITUTION_CHECK, readIfExists, readJson, readRoadmap, readState,
@@ -793,6 +793,8 @@ function specDoctor(projectDir, name, opts = {}) {
   for (const c of decisionDoctorChecks(projectDir, slug, dir, state, kind, lng, tr)) add(c.id, c.status, c.detail); // 1.14 C2 (warns)
   const wExp = waiverExpiredCheck(approvals, tracks, slug, lng); // 1.16 U3: a forced approval whose waiver expired
   if (wExp) add(wExp.id, wExp.status, wExp.detail);
+  const mc = mergeConflictsCheck(projectDir, slug, state, lng); // 1.21 F1a: conflicts the merge driver left unresolved (a fail)
+  if (mc) add(mc.id, mc.status, mc.detail);
   const gatesOk = pendingGates.length === 0;
   if (kind === "feature" && !(opts.lean && checks.some((c) => c.status !== "pass"))) {
     const xac = crossFeatureAcs(projectDir, { only: slug }).pairs;

@@ -84,6 +84,9 @@
  *                                      done / verified while a recently active feature has ticked tasks without evidence? (exit 1 = sent back)
  *   log <feature> [--max N] [-]        Commits citing each task ("task #N" + the feature name, T-/AC IDs) + the +tdd red-first
  *                                      check, from git log (read-only, local; default 1000 commits); - reads a log from stdin
+ *   merge-state <base> <ours> <theirs> [<path>]  git's merge driver for the spec state (%O %A %B %P): a semantic 3-way merge of
+ *                                      .state.json / roadmap.json into <ours> (exit 1 = a real conflict, kept as valid JSON:
+ *                                      "mergeConflicts"); --install / --uninstall writes .gitattributes + this clone's git config
  *   upgrade [--apply]                  After a plugin update: audit .specs/ against the current rules (read-only);
  *                                      --apply runs the safe migrations + writes .specs/UPGRADE.md (exit 1 only on errors)
  *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap: ETA forecasts, cross-feature overlaps (+ .specs/ROADMAP.md / .html)
@@ -1400,6 +1403,17 @@ function main() {
       });
     }
 
+    case "merge-state": {
+      // 1.21 F1a — git's merge driver for the spec state: merge-state <base> <ours> <theirs> [<path>] (git's %O %A %B %P) merges
+      // .state.json / roadmap.json SEMANTICALLY (spec.mergeStateText) and writes the result to <ours> — exit 0 merged, 1 a real
+      // conflict (ours kept at each, listed in the file as "mergeConflicts" — valid JSON, doctor fails merge-conflicts). The
+      // generated overviews (ROADMAP.md / .html, SPECS.md) keep ours. --install / --uninstall: .gitattributes + this clone's
+      // git config (merge.dev-spec-state.*) — the only git this command runs besides `git merge-file` for a hand-written overview.
+      if (on("install") || on("uninstall")) return mergeDriverSetup(on("uninstall"));
+      if (pos.length < 3 || pos.length > 4) usage("dev-spec merge-state <base> <ours> <theirs> [<path>] · dev-spec merge-state --install | --uninstall [--project <dir>]");
+      return mergeStateRun(pos[0], pos[1], pos[2], pos[3]);
+    }
+
     case "mcp-config":
       return console.log(mcpConfig(pos[0]));
 
@@ -1419,6 +1433,89 @@ function main2list() {
     if (!r.exists || !r.features.length) return console.log(T.noFeatures(r.specsDir));
     r.features.forEach((f) => console.log(T.listLine(f.name, f.tracks, T.phase(f.phase), f.tasksDone, f.tasks)));
   });
+}
+
+// ---- merge-state (1.21 F1a) -------------------------------------------------------------------------------------------------
+// The driver git runs on a .state.json / roadmap.json both branches changed (and on the generated overviews): the three files git
+// hands it (%O %A %B, relative to its cwd — the top of the work tree), the merge written into <ours>. Messages in the project
+// language; stdout stays empty unless --json (git shows a driver's output as it runs).
+function mergeStateRun(baseF, oursF, theirsF, rel) {
+  const M = spec.msg(spec.projectLang(projectDir)).mergeState;
+  const read = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return null; } };
+  const oursText = read(oursF), theirsText = read(theirsF);
+  if (oursText == null || theirsText == null) die(M.unreadable(oursText == null ? oursF : theirsF));
+  const r = spec.mergeStateText(read(baseF) || "", oursText, theirsText, { path: rel, kind: flags.kind });
+  if (r.kind === "generated") {
+    // Both sides dev-spec's own output: ours stays (the next dev-spec write regenerates it from the merged state). A hand-written
+    // overview (no AUTO-GENERATED marker): git's own text merge, in place — its exit status is the number of conflicts.
+    if (r.keepOurs) return flags.json ? console.log(JSON.stringify({ ok: true, kind: r.kind, kept: "ours" }, null, 2)) : undefined;
+    let g;
+    try { g = spawnSync("git", ["merge-file", "-L", "ours", "-L", "base", "-L", "theirs", oursF, baseF, theirsF], { encoding: "utf8", windowsHide: true, timeout: 30000 }); } catch { g = null; }
+    process.exitCode = g && !g.error && g.status === 0 ? 0 : 1;
+    return;
+  }
+  if (!r.ok) { console.error(M.parseError(r.parseError, r.error)); process.exitCode = 1; return; } // ours left as it is
+  fs.writeFileSync(oursF, r.text);
+  if (flags.json) {
+    console.log(JSON.stringify({ ok: true, kind: r.kind, clean: r.clean, conflicts: r.conflicts }, null, 2));
+    if (!r.clean) process.exitCode = 1;
+    return;
+  }
+  if (r.clean) return;
+  const show = (v) => { if (v === undefined) return M.absent; const s = JSON.stringify(v); return s.length > 60 ? s.slice(0, 59) + "…" : s; };
+  console.error(M.conflictHead(rel || oursF, r.conflicts.length));
+  r.conflicts.slice(0, 20).forEach((c) => console.error(M.conflictLine(c.path || "(root)", show(c.ours), show(c.theirs), show(c.base))));
+  if (r.conflicts.length > 20) console.error("  …");
+  console.error(M.conflictTail);
+  process.exitCode = 1;
+}
+// merge-state --install / --uninstall: the .gitattributes lines (in the project folder — its patterns are relative to it; commit
+// it) and this clone's git config (merge.dev-spec-state.name / .driver — per clone, never committed). Nothing without git.
+function mergeDriverSetup(uninstall) {
+  const M = spec.msg(spec.projectLang(projectDir)).mergeState;
+  const git = (args) => {
+    try { return spawnSync("git", args, { cwd: projectDir, encoding: "utf8", windowsHide: true, timeout: 30000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { return { error: e }; }
+  };
+  const top = git(["rev-parse", "--show-toplevel"]);
+  if (!top || top.error || top.status !== 0) return fail({ ok: false, error: M.noGit(projectDir) });
+  const file = path.join(projectDir, ".gitattributes");
+  let before = "";
+  try { before = fs.readFileSync(file, "utf8"); } catch { before = ""; }
+  const a = spec.mergeAttributes(before, uninstall);
+  if (a.changed) {
+    if (a.text) fs.writeFileSync(file, a.text);
+    else fs.rmSync(file, { force: true }); // it held only the driver's lines
+  }
+  const key = "merge." + spec.MERGE_DRIVER;
+  const driver = mergeDriverCommand();
+  const config = [];
+  if (uninstall) {
+    const r = git(["config", "--remove-section", key]); // exit 128: no such section — nothing to remove
+    if (r && !r.error && r.status === 0) config.push({ removed: key });
+  } else {
+    for (const [k, v] of [[key + ".name", "dev-spec: semantic merge of the spec state (.state.json, roadmap.json)"], [key + ".driver", driver]]) {
+      const r = git(["config", k, v]);
+      if (!r || r.error || r.status !== 0) return fail({ ok: false, error: M.configFailed(String((r && (r.stderr || (r.error && r.error.message))) || "?").trim()) });
+      config.push({ key: k, value: v });
+    }
+  }
+  const res = { ok: true, action: uninstall ? "uninstall" : "install", attributes: { file, changed: a.changed, lines: a.lines }, config };
+  return out(res, () => {
+    if (uninstall) {
+      console.log(a.changed ? M.attrsRemoved(file) : M.attrsNone(file));
+      config.forEach((c) => console.log(M.configRemoved(c.removed)));
+      return;
+    }
+    console.log(a.changed ? M.attrsAdded(file) : M.attrsKept(file));
+    if (a.changed) a.lines.forEach((l) => console.log("  " + l));
+    config.forEach((c) => console.log(M.configSet(c.key, c.value)));
+    console.log(M.teamNote);
+  });
+}
+// The command git runs (sh -c, Git's own sh on Windows): this clone's CLI by its absolute path, forward slashes, single-quoted.
+function mergeDriverCommand() {
+  const cli = path.resolve(__filename).replace(/\\/g, "/");
+  return "node '" + cli.replace(/'/g, "'\\''") + "' merge-state %O %A %B %P";
 }
 
 // 1.14 F5 — `trace <f> --matrix`: the requirements traceability matrix as a table (localized headers and notes; IDs as written).
@@ -1570,6 +1667,12 @@ function helpText() {
                                   writes "Part of .specs/<feature>/ task #N."), or its T-/AC IDs ("Makes T-01 green") — and, +tdd, a
                                   red-first check (implementation committed before its test?); reads git log (read-only, local, --max
                                   commits, default 1000); - reads a log from stdin (git log --name-only --relative)
+  merge-state --install [--project <dir>]   Teams: git merges the spec state SEMANTICALLY — .gitattributes (commit it) + this
+                                  clone's git config (merge.dev-spec-state.driver; every teammate runs it once); --uninstall removes both.
+                                  Git then runs merge-state <base> <ours> <theirs> <path> on .state.json / roadmap.json: approvals,
+                                  ticks, evidence and history of both branches are united; a real conflict (a meta value both sides
+                                  set differently) exits 1 with ours kept and the file listing it under "mergeConflicts" (valid
+                                  JSON; doctor fails merge-conflicts until it is resolved); ROADMAP.md / SPECS.md keep ours
   upgrade [--apply]               After a plugin update: audit every active feature against the current rules (read-only) — status,
                                   what doctor flags, next step, review (critic / converge); --apply saves inferred tracks, seeds the
                                   approval history, stamps meta.specVersion and writes .specs/UPGRADE.md (never edits a spec)
@@ -1605,7 +1708,7 @@ function helpText() {
          --brownfield / --flow design-first (create)  --flow (feature flow)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
          --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
-         --text "<markdown>" (import plan|execplan|fluidplan)  --print-config (statusline)
+         --text "<markdown>" (import plan|execplan|fluidplan)  --print-config (statusline)  --install / --uninstall (merge-state)
          --guard on|off|scope / --stop-check on|off / --approval-guard off|ask|deny / --evidence reported|observed (init)  --message "…" / --agent <type> (stop-check)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).

@@ -6,7 +6,8 @@
       "cwd": "${CLAUDE_PROJECT_DIR}",
       "env": {
         "SPEC_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}",
-        "SPEC_MCP_PROMPTS": "off"
+        "SPEC_MCP_PROMPTS": "off",
+        "SPEC_MCP_APPROVAL_HOOK": "on"
       }
     }
   }

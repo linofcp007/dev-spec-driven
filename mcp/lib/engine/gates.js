@@ -125,6 +125,11 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
     return { ok: false, refused: true, failing, checks: gate.checks,
       error: G.approveRefused(p, f.slug, failing.join(", "), gate.checks.map((c) => G.checkLine(c.id, c.detail)).join("\n")) };
   }
+  // 1.21 F1b: the MCP server's preview before it asks the user (elicitation) — every check above ran, nothing is written.
+  if (opts.dryRun === true) {
+    return Object.assign({ ok: true, dryRun: true, feature: f.slug, phase: p, failing, checks: gate.checks }, rc.role ? { role: rc.role } : {},
+      failing.length && wv.waiver ? { waiver: wv.waiver } : {});
+  }
   // One default for every surface (the CLI used $USER, the MCP server 'user').
   const entry = { at: new Date().toISOString(), by: by || process.env.USER || process.env.USERNAME || "user" };
   // The artifact is read ONCE: its fingerprint and its snapshot are the same version.
@@ -152,6 +157,8 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (p === "design") { entry.weigh = true; entry.reuse = true; }
   if (rc.role) entry.role = rc.role; // 1.14 B3: the role signing (informational on a phase no role is required for)
   if (opts.batch === true) entry.batch = true; // 1.14 B3: approved by a fast-forward (metrics count them apart)
+  const conf = confirmationOf(opts.confirmation); // 1.21 F1b: the user confirmed it in the MCP client (elicitation)
+  if (conf) entry.confirmed = conf;
   // Change history (1.13): `approvals[p]` stays the latest approval; every approval is also appended to
   // approvalHistory, with a snapshot of what it signed off (.history/<phase>@<n>.md) — the baseline spec_impact diffs.
   // A feature upgraded mid-flight: the approvals made before the history are seeded first as `legacy` records (no
@@ -169,6 +176,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (entry.reuse) record.reuse = true; // 1.19 R1
   if (entry.role) record.role = entry.role;
   if (entry.batch) record.batch = true;
+  if (entry.confirmed) record.confirmed = entry.confirmed;
   // 1.14 B3: with roles, a sign-off that doesn't complete the phase waits in state.signoffs — approvals[p] untouched, no snapshot.
   const so = rc.roles.length ? recordRoleSignOff(state, p, entry, rc.roles, record) : dropRoleSignOffs(state, p);
   // A bugfix's design approval keeps design.md as it was too (<phase>@<n>.design.md): spec_impact diffs both files.
@@ -192,6 +200,17 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   else if (wv.waiver) Object.assign(res, { waiverIgnored: true, note: [res.note, W.notForced].filter(Boolean).join(" ") });
   if (so && so.complete && entry.waiver) res.waiver = entry.waiver; // the completing sign-off: the waiver the approval carries
   return res;
+}
+
+// 1.21 F1b — how the user confirmed an agent's approval over MCP (mcp/server.js asked them: elicitation/create) → { via:
+// "elicitation", at, note? } | null — recorded as `confirmed` on the approval, its history record and a role's sign-off (a
+// revocation's record too). Only the server passes it, never a tool argument; the note: one line, at most 500 characters.
+function confirmationOf(c) {
+  if (!isObj(c) || c.via !== "elicitation") return null;
+  const out = { via: "elicitation", at: typeof c.at === "string" && c.at ? c.at : new Date().toISOString() };
+  const note = typeof c.note === "string" ? c.note.replace(/\s+/g, " ").trim().slice(0, 500) : "";
+  if (note) out.note = note;
+  return out;
 }
 
 // 1.16 U3 — the waiver a forced approval carries: spec_approve {force: true, reason?, expires?} / `approve <f> <phase> --force
@@ -299,6 +318,8 @@ function revokeApproval(projectDir, name, phase, by, opts) {
   const appr = isRecord(state.approvals[p]) ? state.approvals[p] : null;
   const waiting = isObj(state.signoffs) && isObj(state.signoffs[p]) ? Object.keys(state.signoffs[p]) : [];
   if (!appr && !waiting.length) return { ok: false, notApproved: true, error: R.notApproved(p, f.slug) };
+  if (opts.dryRun === true) return { ok: true, dryRun: true, feature: f.slug, phase: p, revoke: true }; // 1.21 F1b: the MCP server's preview
+  const conf = confirmationOf(opts.confirmation); // 1.21 F1b
   const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory : [];
   const legacy = legacySeeds(state.approvals, hist);
   const record = { phase: p, at: new Date().toISOString(), by: by || process.env.USER || process.env.USERNAME || "user", revoked: true };
@@ -309,6 +330,7 @@ function revokeApproval(projectDir, name, phase, by, opts) {
     if (appr.forced === true) record.wasForced = true;
   } else record.partial = true; // only waiting sign-offs were withdrawn: nothing had been approved
   if (waiting.length) record.roles = waiting;
+  if (conf) record.confirmed = conf;
   state.approvalHistory = hist.concat(legacy, [record]);
   delete state.approvals[p];
   dropRoleSignOffs(state, p);
@@ -484,6 +506,7 @@ function recordRoleSignOff(state, phase, entry, required, record) {
   if (entry.forced) { rec.forced = true; rec.failing = entry.failing; }
   if (entry.waiver) rec.waiver = entry.waiver; // 1.16 U3: a forced sign-off's waiver
   if (entry.batch) rec.batch = true;
+  if (entry.confirmed) rec.confirmed = entry.confirmed; // 1.21 F1b
   const signoffs = isObj(state.signoffs) ? state.signoffs : {};
   const cur = isObj(signoffs[phase]) ? signoffs[phase] : {};
   const view = roleSignOffs({ signoffs: { [phase]: { ...cur, [entry.role]: rec } }, approvals: state.approvals }, phase, required, entry);
@@ -669,10 +692,12 @@ function approveThrough(projectDir, name, phase, by, opts) {
   const chain = walk.slice(0, walk.indexOf(t) + 1).filter((ph) => !state.approvals[ph]);
   const base = { feature: f.slug, through: t, batch: true };
   if (!chain.length) return { ok: true, ...base, approved: [], steps: [], complete: true, nothingToDo: true, approvals: state.approvals, message: E.ffNothing(f.slug, t) };
+  if (opts.dryRun === true) return { ok: true, dryRun: true, ...base, chain }; // 1.21 F1b: the MCP server's preview (each gate runs when approved)
   const approved = [], steps = [];
   let approvals = state.approvals;
   for (const ph of chain) {
-    const r = approvePhase(projectDir, f.slug, ph, by, { force: opts.force === true, role: opts.role, batch: true, reason: opts.reason, expires: opts.expires });
+    const r = approvePhase(projectDir, f.slug, ph, by, { force: opts.force === true, role: opts.role, batch: true, reason: opts.reason, expires: opts.expires,
+      confirmation: opts.confirmation });
     if (r.approvals) approvals = r.approvals;
     const step = { phase: ph, approved: !!r.ok && r.complete !== false };
     if (r.role) step.role = r.role;

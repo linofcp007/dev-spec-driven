@@ -217,6 +217,17 @@ flows, the bugfix kind.
   `gitLog` (a repository without commits → 0 commits) and an empty `message` (→ `no-claim`) are values, not missing
   arguments: server.js `EMPTY_OK` exempts them from `missingArgs`' blank-string rule (the CLI accepted them already).
 
+## Approvals the user confirmed over MCP, and the dry run (1.21 F1b)
+- **`confirmed`** `{via: "elicitation", at, note?}` — set only by mcp/server.js after its user accepted an `elicitation/create`
+  question (mcp.md → Human approvals over MCP elicitation), passed as `opts.confirmation` (`confirmationOf()`: anything but that
+  shape is ignored; the note one line, ≤ 500 characters): recorded on `approvals[phase]`, its approvalHistory record, a role's
+  waiting sign-off and a revocation record; a fast-forward passes it to every phase it approves. No reader branches on it — it is
+  the audit trail of WHO approved (the human, in the client), next to `by`.
+- **`opts.dryRun`** — approvePhase runs everything up to its write and returns `{ok: true, dryRun: true, feature, phase, failing,
+  checks, role?, waiver?}` (revoke: `{dryRun, revoke: true}` after its own checks; through: `{dryRun, chain}` — the phases it
+  would walk, each gate running only when approved); a refusal / error comes back exactly as without it. Only the server passes it
+  (the preview before it asks the user — a gate that refuses anyway asks nobody); never a tool argument or a CLI flag.
+
 ## Flows (1.14 — from Import sources and flows)
 - **Flows:** `.state.json → flow: "design-first"` (`spec_create {flow}` / `create --flow`; changed with
   `spec_feature {action: "flow"}` / `feature flow <name> <flow>` — approved phases stay approved, pending gates follow the

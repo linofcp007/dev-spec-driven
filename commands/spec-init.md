@@ -34,6 +34,11 @@ unchanged):
   runs it in their own terminal or with Claude Code's `!` prefix). Lowering it — or weakening what it protects (evidence → reported, roles cleared or dropped, a check removed or changed, the stop gate or edit guard off, a shell write of .specs/roadmap.json) — is guarded too: only the user does that.
 - `evidence` — `"reported"` (default) or `"observed"` (CLI `--evidence observed`): then only a run the harness saw (the plugin's Bash hook in Claude Code) or `dev-spec done --run` / `finish --run` made verifies a `_Verify:_` or a project check — an MCP-only client has no such hook.
 
+**Teams** (several people on branches): suggest the merge driver once — `dev-spec merge-state --install` (CLI only; it
+runs `git config`, so let the user run it or confirm it) writes `.gitattributes` (commit it) and the clone's git config,
+so git merges `.state.json` / `roadmap.json` semantically instead of conflicting on every approval, tick or evidence
+record; each teammate runs it once in their clone.
+
 Then help the user fill each file with real, project-specific content using `references/steering-templates.md` —
 a steering file full of placeholders is a liability (`spec_doctor` warns about each one by name). For rules that
 apply only to part of the code (API conventions, a UI kit), add a scoped steering file with

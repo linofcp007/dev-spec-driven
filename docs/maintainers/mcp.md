@@ -44,6 +44,26 @@ slash commands are the same files — without it Claude Code lists every command
   (JSON-RPC `error()` takes an optional `data`). Prompts and resources use the default project (SPEC_PROJECT_DIR /
   CLAUDE_PROJECT_DIR / cwd) — neither request carries a projectDir — and speak its language.
 
+**Human approvals over MCP elicitation (1.21 F1b).** A client that declares `capabilities.elicitation` in `initialize`
+(`clientElicits`) gets, while `roadmap.json → meta.approvalGuard` is `ask` or `deny`, an `elicitation/create` request before
+an AGENT's approval runs — the calls the approval hook guards, read by the same pure `spec.approvalGuardDecision()` (a synthetic
+PreToolUse payload): `spec_approve` (approve, revoke, `through`, force / waiver), `spec_feature {action: "remove", confirm: true}`,
+`spec_init` lowering a protection. `approvalPolicy()` (server.js) decides: guard off, `SPEC_MCP_APPROVAL_HOOK=on` (mcp/servers.json
+sets it for the Claude Code plugin — its PreToolUse hook asks / refuses there, so that path is unchanged and nothing is asked
+twice), a network / `..` projectDir (runTool refuses it) → the call runs as before; elicitation → ask; no elicitation → `ask`
+runs as today, `deny` is refused (`{ok: false, refused, humanRequired: true, approvalGuard: "deny", command, error}` — the
+guard's own deny reason and the `!` command the human runs). The question (`msg.elicit`, the feature's language — else the
+project's): `summary` (approvalGuardDecision's action line) + the gate from a **dry run** — `spec.approvePhase(…, {dryRun: true})`
+runs every check and writes nothing (approve → `{dryRun, failing, checks, role?, waiver?}`, revoke → `{dryRun, revoke}`, through
+→ `{dryRun, chain}`); a gate that refuses anyway (or an error, or a fast-forward with nothing to do) is answered as it is and
+NOBODY is asked. `requestedSchema`: `approve` (boolean, default false, required) + `note` (string ≤ 500). Only `action:
+"accept"` with `content.approve === true` runs the call, with `confirmation` {via: "elicitation", at, note?} (a one-line note)
+recorded as `confirmed` on the approval, its history record, a role's sign-off and a revocation record (`confirmationOf()`,
+gates.js — never a tool argument); the result gains `confirmed` (+ a localized `message`). Decline / cancel / an accept without
+approve / a client error / no answer within `DEV_SPEC_ELICIT_TIMEOUT_MS` (default 300000, ≤ 1 h) → `{ok: false, declined: true,
+approvalGuard, action | elicitationError | timedOut, error}` (localized), nothing recorded; a timeout also sends the client
+`notifications/cancelled {requestId, reason: "timeout"}`. A guardrail on the approve paths, like the hook — not a sandbox.
+
 **Argument validation (server.js).** Before dispatch, `tools/call` arguments are checked against the
 tool's advertised `inputSchema`: required keys (`missingArgs`), then types (`invalidArgs` — `integer` means
 a *safe* integer, so `1.9` / `1e21` never become task 1), `enum`, `minimum`, array `items` and nested
@@ -75,3 +95,10 @@ types): `spec_init`'s `guard` is a plain string enum `on | off | scope`, and `fo
   before the id rule — a client's error reply carries id null). A JSON-RPC batch gets ONE array
   reply; `null`/malformed input gets -32600/-32700; an unknown method -32601; an unknown tool (or `tools/call` without a
   name) -32602, localized (`args.unknownTool` / `args.noTool`); prompts/resources use -32602 / -32002 (see Capabilities).
+- **Server-initiated requests (1.21 F1b).** The server is synchronous except for ONE path: an approval waiting for the user.
+  `clientRequest()` writes `{id: "dev-spec-<n>", method: "elicitation/create", params}` straight to stdout (never into a batch
+  reply), keeps its resolver in `serverRequests` and a timer; a client RESPONSE (result / error, no method) whose string id is
+  there resolves it — any other response is still ignored. The tools/call handler returns a Promise then; the event loop stays
+  free, so every other request (a ping, another tool) is answered meanwhile, and the late reply goes where its request came from
+  (`sendTo(sink, …)`): straight out, or into its batch — `onLine` sends a batch's ONE array only once every request of it that
+  waits has answered. On stdin close the server still exits after its flush (a pending question dies with the session).
