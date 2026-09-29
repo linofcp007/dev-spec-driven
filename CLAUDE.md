@@ -79,7 +79,7 @@ codes (`step`, `code`, `unverifiedReason`, check ids) never change, while messag
 `cliText` only localizes the human-readable CLI output.
 
 ## The track model
-`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14) are independent and
+`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17) are independent and
 composable, chosen in Phase 0 by `spec_classify` (keyword heuristic with negation + confidence) and confirmed by the
 human. The track set drives which artifacts/sections/loops apply. See `references/classification-matrix.md`
 (GDPR / RGPD / LGPD / CCPA / HIPAA are +privacy signals, not +saas).
@@ -95,6 +95,24 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   from the registries; update the MCP descriptions and CLI help by hand. `templateCorpus()` renders every set of at
   most two optional tracks plus all of them (quadratic beyond three tracks — verified equal to the full power set's
   placeholder reports). A TEAM's own track needs none of this: it is a track pack (see Project-defined tracks, 1.15).
+- **+dist (1.17)** — the seventh built-in marker track `[DIST]` (distributed systems & data consistency), added through the
+  registries: SIGNALS.dist (strong: named brokers — kafka, rabbitmq, sqs, kinesis, debezium… — and patterns that only exist
+  across systems — message queue / event bus, event sourcing, CQRS, transactional outbox, dual write, saga pattern, eventual
+  consistency, distributed transaction, 2PC, microservice, change data capture, isolation level, lost update, write skew,
+  network partition…; weak: queue, consumer, producer, webhook, retry, idempotency, deduplication, race condition, a bare
+  `saga`, `CDC` in capitals, DLQ, circuit breaker, other / downstream services; context: transaction, consistency, atomic;
+  deliberately NO signal for a bare event / lock / stream / broker), TRACK_MARKER, `DIST_SECTIONS` (Consistency Model ·
+  Cross-system Writes · Delivery & Idempotency · Concurrency · Failure Modes — the ordinary-word synonyms are `loose`,
+  marker-bound; the dual-write names strict), TRACK_STEERING `distributed.md`, RE_STABLE_BRACKET, RE_PACK_MARKER_RESERVED
+  and TRACK_ALIASES (kafka / distributed / microservices / consistency are reserved pack names); criteria US-1.AC-16..19.
+  Guide: `references/distributed-data-patterns.md` (dual write → outbox / inbox / saga / CDC, retries, idempotency,
+  consistency models and isolation anomalies, locking, CAP / PACELC, monolith vs microservices, large data volumes).
+  **Classifier machinery (built-in signals only):** a GAP keyword (`KW_GAP` " … ", `KW_GAP_RE`, linear) matches its parts,
+  each via `keywordPattern()`, with ≤ 3 words between and never across `. ! ? ; : ,` ("publishes a UserCreated event");
+  `IRREGULAR_FORMS` gives one signal per concept (retry / retries / retried — a word repeated is not two weak signals);
+  VERB_STEMS `public` needs an ending. Negated keywords are deduped by containment like matched ones (every track).
+  **Gotcha:** within a tier the first keyword matching at a position wins it (seenSpan) — list a longer phrase before its
+  prefix ("outbox transacional" before "outbox", "backoff exponencial" before "backoff"), or the self-match sweep fails.
 - **Readers go through the accessors (1.15), never the constants.** The constants above are the BUILT-IN tables;
   `allTracks()` (VALID_TRACKS + the project's valid packs, in name order after the built-in ones), `optionalTracks()`,
   `markerTracks()`, `trackMarker(tr)`, `trackSectionTable(tr)`, `trackSteeringFiles(tr)`, `trackSignalTable(tr)` add the
@@ -1174,7 +1192,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   it; the changelog never lists one. Prototype code lives outside `.specs/`.
 
 ## Import sources and flows (1.14)
-- **`spec_import` tools** (exact enum on both surfaces): `kiro` · `spec-kit` · `openspec` · `plan` · `execplan` · `bmad`,
+- **`spec_import` tools** (exact enum on both surfaces): `kiro` · `spec-kit` · `openspec` · `plan` · `execplan` · `bmad` · `fluidplan`,
   same guarantees for all (a NEW feature, the source only read and inside the project, mapping + warnings, the localized
   "Imported from" note, tracks auto-classified unless given; nothing dropped silently — what no mapping takes goes to
   design.md (plan / ExecPlan) or requirements.md (PRD), or into a warning).
@@ -1193,6 +1211,16 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
     NFR-n; epic stories + story files (`docs/stories/*.md`; the file wins over the PRD's copy) → US-1…US-n in story order,
     their ACs → US-n.AC-m; Tasks / Subtasks → `[USn]` tasks with `(AC: 1, 3)` → `_Requirements:_`; architecture + Dev
     Notes → design.md. One story file imports one story.
+  - `fluidplan` (1.17) — a plan settled with the fluidplan skill (`.fluidplan/<id>/`, its plan.json, PLAN.md / DECISIONS.md —
+    also at plan.json's `output` paths —, or PLAN.md's text inline, DECISIONS.md optionally following it). The finalized
+    PLAN.md / DECISIONS.md win (PLAN.md is where fluidplan ticks tasks); plan.json + answers.json fill in or stand alone
+    (`fpFromPlanJson` restates fluidplan's rules — "Not OK" is a final rejection there). Pages → stories, acceptance →
+    criteria (EARS, else `[NEEDS CLARIFICATION]`), tasks numbered by the parser (`model.tasks.numbered`), files →
+    `_Implements:_` (a delete → a "To delete" line), one `_Verify:_` per command, after → `_Depends:_`, settled decisions →
+    decisions.md (`decisionEntryLines`, `_Affects:_` = their tasks' criteria) + design.md `## Decisions` /
+    `## Alternatives & Trade-offs`, rejected → Out of Scope, open ones → "Open decisions" with `[NEEDS CLARIFICATION]`,
+    working rules → Global Constraints. EN / FR labels; every pattern linear (`fpTitleOf` / `fpTaskHeading`,
+    `FP_LINE_MAX`). Pinned to fluidplan 755d1b2 (2026-09-26).
 - **Flows:** `.state.json → flow: "design-first"` (`spec_create {flow}` / `create --flow`; changed with
   `spec_feature {action: "flow"}` / `feature flow <name> <flow>` — approved phases stay approved, pending gates follow the
   new order) orders the chain classification → design → requirements → test-plan / eval-plan → tests → tasks
@@ -1393,6 +1421,31 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   (`changelogData(…, only)`).
 - CLI: switches `revoke`, `print-config`, `gherkin` (`spec.CLI_SWITCHES`); value flags `reason`, `expires`, `text`,
   `tracker`, `milestone`.
+
+## Design trade-offs and risks, the constraint nudge, the micro-cycle (1.17 A)
+- The core design builder scaffolds `## Alternatives & Trade-offs` (after Architecture: the options per key decision with
+  pros / cons / cost of being wrong, the chosen one and why) and `## Risks` (before the Constitution Check: likelihood,
+  impact, mitigation, owner) — EN / PT / ES; the slots join the placeholder corpus automatically, so a fresh scaffold's
+  design approval is refused on `placeholders` like any template section. Doctor `design-tradeoffs` / `design-risks` are
+  WARN only (CHECK_PHASE 2), never in `approvalChecks`: `designWeighChecks()` over `activeDesign()` → a state missing ·
+  template · empty · few · filled (`designWeighState`); `designEntries()` counts table rows + top-level bullets, or
+  sub-headings when there are more; trade-offs need ≥ 2 options, risks any real content. Skipped for a bugfix, a spike and a
+  later-phase template design (`ph.later`); a design-first feature warns at once. Headings: `TRADEOFFS_SYN` / `RISKS_SYN`;
+  details `msg(lang).designWeigh[id][state]`. `designSaveCheck` returns `weigh` + ▲ notes (never unclean); `templates
+  check` warns `tradeoffs-missing` / `risks-missing`. An existing design without them only warns (the spec_upgrade audit
+  reads `warnings`) — no artifact is ever edited.
+- **Constraint nudge** — `constraintNudge()`: when requirements.md / design.md name a queue, events, webhooks, async work,
+  concurrency, transactions or retries (`CONSTRAINT_SIGNALS`: English in every spec + the feature language's own — "fila"
+  is a queue in PT but a table row in ES, "cola" the reverse) and neither weigh section answers it (`RE_CONSISTENCY_ANSWER`),
+  spec_clarify asks one question — `nudges [{code: "consistency-unstated", signals ≤ 3}]`; plain features only, never
+  with +dist (its sections ask the same); comments, fences and `[slots]` set aside. /grill has the matching "Constraints
+  round" (atomicity, ACID / isolation, race conditions, consistency model, delivery + idempotency, dependency failure,
+  volume, a measurable business outcome).
+- **The TDD micro-cycle** (adapted from obra/superpowers' test-driven-development, MIT) is prose only —
+  references/test-patterns.md "The micro-cycle inside a task", agents/spec-implementer.md (a hard rule), spec-reviewer,
+  /executeTask, SKILL.md Phase 6: one behaviour at a time, fail for the right reason, minimal code, refactor only on green,
+  code written before its test is deleted and redone; the rationalizations table and red flags. It lives INSIDE a task —
+  never a new T-ID, never an edit of a planned assertion.
 
 ## Conventions & gotchas
 - **Every name-taking op resolves its folder through `resolveFeature()` / `existingFeature()`** —
@@ -1642,7 +1695,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   gets a ⚠ line (`earsWarnings`), never "EARS clean" — the PostToolUse hook's rule.
 - **`spec_import` stays inside the project.** The source path must resolve inside `projectDir` — checked
   lexically first (nothing outside is even stat'ed), then by real path (a symlink out is refused) — and it is
-  only read. Tool names are exact (`kiro` | `spec-kit` | `openspec` | `plan` | `execplan` | `bmad`, the schema enum) on
+  only read. Tool names are exact (`kiro` | `spec-kit` | `openspec` | `plan` | `execplan` | `bmad` | `fluidplan`, the schema enum) on
   both surfaces, and it never imports over an existing feature.
 - **Tests run on Windows AND Linux** (`npm run test:docker`): a `_Verify:_` a test writes must work under cmd.exe AND
   `/bin/sh` — quote it (`node -e "process.exit(0)"`; the bare `node -e process.exit(0)` is a sh syntax error that cmd.exe

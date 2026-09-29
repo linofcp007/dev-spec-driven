@@ -214,6 +214,20 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
 
+### New in 1.17
+
+- **+dist — distributed systems & data consistency** — a seventh track that switches on for queues, events published to
+  a broker, sagas, microservices… ("an endpoint that writes a user to Postgres and publishes an event to Kafka"). Its
+  design must answer the consistency model (what is atomic, ACID and isolation, strong vs eventual), every dual write and
+  its mitigation (transactional outbox, inbox, saga, CDC), delivery and idempotency (duplicates, retries with backoff,
+  DLQ), concurrency (optimistic vs pessimistic locking) and failure modes — with criteria, tasks and failure-injection
+  tests to match, and a guide: `skills/dev-spec-driven/references/distributed-data-patterns.md`.
+- **Every design weighs its choices** — Alternatives & Trade-offs (options, pros, cons, the cost of being wrong) and Risks
+  sections in every design; `/grill` asks about atomicity, ACID, race conditions, the consistency model and a measurable
+  business outcome; the +tdd loop runs the red → green → refactor micro-cycle inside each task.
+- **`import fluidplan`** — a plan settled with the fluidplan skill becomes a spec: stories, criteria, tasks with their
+  checks and dependencies, and the decisions you took in `decisions.md`.
+
 ### New in 1.16
 
 - **Undo and revoke** — `dev-spec undone <feature> <n>` reopens a ticked task (its evidence turns stale, so a re-tick
@@ -606,6 +620,20 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabalho, aprovações forçadas, pedidos de
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
+
+### Novidades da 1.17
+
+- **+dist — sistemas distribuídos e consistência de dados** — um sétimo track que se liga com filas, eventos publicados
+  num broker, sagas, microsserviços… ("um endpoint que grava um utilizador no Postgres e publica um evento no Kafka"). O
+  design tem de responder ao modelo de consistência (o que é atómico, ACID e isolamento, forte vs eventual), a cada escrita
+  dupla e à sua mitigação (outbox transacional, inbox, saga, CDC), à entrega e idempotência (duplicados, retries com
+  backoff, DLQ), à concorrência (locking otimista vs pessimista) e aos modos de falha — com critérios, tarefas e testes de
+  injeção de falhas a condizer, e um guia: `skills/dev-spec-driven/references/distributed-data-patterns.md`.
+- **Todo o design pesa as suas escolhas** — secções Alternatives & Trade-offs (opções, prós, contras, o custo de errar) e
+  Risks em todos os designs; o `/grill` pergunta por atomicidade, ACID, race conditions, o modelo de consistência e um
+  resultado de negócio mensurável; o ciclo +tdd faz o micro-ciclo vermelho → verde → refactor dentro de cada tarefa.
+- **`import fluidplan`** — um plano decidido com a skill fluidplan passa a spec: histórias, critérios, tarefas com as suas
+  verificações e dependências, e as decisões tomadas em `decisions.md`.
 
 ### Novidades da 1.16
 
@@ -1016,6 +1044,21 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabajo, aprobaciones forzadas, solicitudes de
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
+
+### Novedades de la 1.17
+
+- **+dist — sistemas distribuidos y consistencia de datos** — un séptimo track que se activa con colas, eventos publicados
+  en un broker, sagas, microservicios… ("un endpoint que guarda un usuario en Postgres y publica un evento en Kafka"). El
+  diseño tiene que responder al modelo de consistencia (qué es atómico, ACID y aislamiento, fuerte vs eventual), a cada
+  escritura doble y su mitigación (outbox transaccional, inbox, saga, CDC), a la entrega e idempotencia (duplicados,
+  reintentos con backoff, DLQ), a la concurrencia (bloqueo optimista vs pesimista) y a los modos de fallo — con criterios,
+  tareas y pruebas de inyección de fallos a juego, y una guía: `skills/dev-spec-driven/references/distributed-data-patterns.md`.
+- **Todo diseño sopesa sus decisiones** — secciones Alternatives & Trade-offs (opciones, pros, contras, el coste de
+  equivocarse) y Risks en todos los diseños; `/grill` pregunta por atomicidad, ACID, condiciones de carrera, el modelo de
+  consistencia y un resultado de negocio medible; el ciclo +tdd hace el microciclo rojo → verde → refactor dentro de cada
+  tarea.
+- **`import fluidplan`** — un plan decidido con la skill fluidplan se convierte en spec: historias, criterios, tareas con
+  sus comprobaciones y dependencias, y las decisiones tomadas en `decisions.md`.
 
 ### Novedades de la 1.16
 

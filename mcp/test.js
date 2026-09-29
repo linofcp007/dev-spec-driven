@@ -10880,8 +10880,8 @@ function endRun() {
     const d7Readme = dRead("examples", "README.md");
     ok(S.specVersionStatus(d7).behind === false && d7States.every((st) => Array.isArray(st.tracks) && st.tracks.includes("core")) &&
       fs.readFileSync(path.join(d7, ".specs", ".gitignore"), "utf8") === fs.readFileSync(path.join(d7Init, ".specs", ".gitignore"), "utf8") &&
-      d7Red.ok && d7Red.redRecorded === true && d7Rg && d7Rg.status === "pass" && /^# Example — a fully worked spec \(1\.16 shape\)/.test(d7Readme) && /0\/9 tasks done/.test(d7Readme),
-      "full review D7: the demo is current-shaped (1.16 — no upgrade notice, tracks stored, init's .gitignore) and its red-run task leaves red-green passing once every task is done (got " +
+      d7Red.ok && d7Red.redRecorded === true && d7Rg && d7Rg.status === "pass" && d7Readme.startsWith("# Example — a fully worked spec (" + JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version.split(".").slice(0, 2).join(".") + " shape)") && /0\/9 tasks done/.test(d7Readme),
+      "full review D7: the demo is current-shaped (the current version — no upgrade notice, tracks stored, init's .gitignore) and its red-run task leaves red-green passing once every task is done (got " +
       JSON.stringify([S.specVersionStatus(d7), d7Red.ok, d7Rg && d7Rg.status]) + ")");
     // The +tdd reference example: an _Expect: fail_ task names every T-ID the other tasks make green; the combined example
     // no longer claims "all four tracks" (there are six).

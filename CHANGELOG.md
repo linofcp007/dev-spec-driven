@@ -3,6 +3,67 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.17.0] — 2026-09-29
+
+Engineering judgement in the spec: a seventh track for distributed systems and data consistency (the dual-write problem,
+outbox, idempotency, retries, consistency models, locking), every design weighing its alternatives and risks, /grill
+asking about the constraints, the red → green → refactor micro-cycle inside each task, and plans settled with fluidplan
+imported as specs. 38 MCP tools, 54 commands, seven built-in tracks (was six).
+
+### Added — the +dist track (distributed systems & data consistency)
+- A seventh built-in track **`+dist`**, marker `[DIST]`: five mandatory design sections — **Consistency Model** (what must
+  be atomic, ACID and the isolation level, strong vs eventual), **Cross-system Writes** (every dual write with its
+  mitigation: transactional outbox, inbox, saga, CDC or an accepted risk), **Delivery & Idempotency** (at-least-once,
+  idempotency keys, deduplication, retry policy, DLQ), **Concurrency** (race conditions, optimistic vs pessimistic locking)
+  and **Failure Modes** (partial failures, partitions, each dependency down); `[DIST]` criteria (US-1.AC-16..19: the event
+  delivered later without loss or duplicates when publishing fails after the commit, a duplicate delivery applied once, no
+  lost concurrent update, a dependency down), data-consistency tasks, failure-injection test rows (+tdd), checklist items
+  and `steering/distributed.md`; doctor `dist-sections` (the design approval refuses it until filled), `spec_status`
+  `distSections`, clarify questions, brief / matrix / export / Gherkin; EN / PT / ES / pt-BR.
+- Classifier: EN / PT / ES +dist signals (named brokers and cross-system patterns strong; queue, retry, webhook,
+  idempotency, race condition weak; transaction / consistency only as context), gap phrases ("publishes a UserCreated
+  event"), retry / retries counted once. "Create an endpoint that writes a user to Postgres and publishes a UserCreated
+  event to Kafka" is `core +dist` in the three languages.
+- **`references/distributed-data-patterns.md`** — the dual-write problem, transactional outbox (polling relay vs CDC),
+  inbox / idempotent consumer, sagas and compensations, retries with backoff and jitter, deduplication and idempotency,
+  consistency models, ACID isolation levels and their anomalies, optimistic vs pessimistic locking, CAP / PACELC, monolith
+  vs microservices, large data volumes, and a decision checklist.
+
+### Added — every design weighs its choices
+- The core design template gains **Alternatives & Trade-offs** (the options per key decision — pros, cons, the cost of
+  being wrong, the one chosen and why) and **Risks** (likelihood, impact, mitigation, owner), EN / PT / ES; doctor warns
+  `design-tradeoffs` / `design-risks` when they are missing, empty, still the template, or list fewer than two options —
+  a warning only, never a refused approval (a bugfix and a spike are exempt); the design-save hook notes them and
+  `templates check` warns about a project design template without them.
+- **/grill constraints round** — atomicity, ACID and the isolation level, race conditions, the consistency model, delivery
+  guarantees and idempotency, each dependency failing, volume and growth, and a business outcome you can measure after
+  release. `spec_clarify` asks one question (`nudges: [{code: "consistency-unstated"}]`) when the spec names queues,
+  events, webhooks, async work, concurrency, transactions or retries and the design says nothing about consistency or
+  idempotency.
+- **The TDD micro-cycle** inside each task (adapted from obra/superpowers' test-driven-development, MIT): one behaviour at
+  a time, watch it fail for the right reason, minimal code, refactor only on green, code written before its test is
+  deleted and redone — with the usual rationalizations answered and the red flags; in the +tdd loop, the implementer and
+  reviewer agents and /executeTask.
+
+### Added — import
+- **`spec_import {tool: "fluidplan"}`** / `dev-spec import fluidplan <path>|-` — a plan settled with the fluidplan skill
+  (`.fluidplan/<id>/`: the finalized PLAN.md / DECISIONS.md, else plan.json + answers.json; English or French labels)
+  becomes a new feature: pages → stories, acceptance → EARS criteria (else `[NEEDS CLARIFICATION]`), tasks with their
+  ticks, `_Implements:_`, `_Verify:_` and `_Depends:_`, the settled decisions → `decisions.md` + the design's Decisions /
+  Alternatives & Trade-offs, rejected ones → Out of Scope, open ones flagged. Inline text (a pasted PLAN.md) works too.
+
+### Changed
+- Existing designs without Alternatives & Trade-offs / Risks now warn in doctor (and read `warnings` in the spec_upgrade
+  audit); nothing is refused and no artifact is edited.
+- Negated classifier keywords are deduplicated like matched ones; "message queue" no longer hints +saas.
+- `spec_templates` lists 29 built-in templates (the `distributed.md` steering stub).
+
+### Fixed
+- Line trimming in the importers and `spec_decide` is linear (a document with a very long run of spaces hung for minutes).
+
+### Tests
+- `node mcp/test.js` TBD assertions (was 1362), `node cli/test-cli.js` TBD (was 438).
+
 ## [1.16.0] — 2026-09-29
 
 Day-to-day comfort and reach: undo a tick, revoke an approval, say why a gate was forced and until when; a status line,
