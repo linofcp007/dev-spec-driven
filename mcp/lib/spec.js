@@ -40,6 +40,191 @@ function errs(projectDir, slug) {
 }
 
 // ---------------------------------------------------------------------------
+// Linear text scans (1.17 H). Regexes such as /^#{1,6}\s+(.*?)\s*$/, /\/+$/ or /\s*\r?\n\s*/g backtracked quadratically
+// (or worse) on a line holding a long run of one character — a heading with 100,000 spaces stalled the MCP server or a
+// hook. Each scan here returns byte for byte what the regex it replaces returned; the pattern is quoted beside each use.
+// "Whitespace" is JavaScript's \s (= what String.prototype.trim removes), one UTF-16 unit at a time.
+// ---------------------------------------------------------------------------
+
+function isWsUnit(c) {
+  if (c === undefined) return false;
+  const u = c.charCodeAt(0);
+  return u === 32 || (u >= 9 && u <= 13) || u === 0xa0 || u === 0x1680 || (u >= 0x2000 && u <= 0x200a) || u === 0x2028 || u === 0x2029
+    || u === 0x202f || u === 0x205f || u === 0x3000 || u === 0xfeff;
+}
+// A line terminator — what `.` never matches and `$` (with the m flag) stops before.
+const RE_LINE_TERMINATOR = /[\n\r\u2028\u2029]/;
+const isLtUnit = (c) => c === "\n" || c === "\r" || c === "\u2028" || c === "\u2029";
+function lastLtIndex(s) {
+  for (let i = s.length - 1; i >= 0; i--) if (isLtUnit(s[i])) return i;
+  return -1;
+}
+// s without a trailing " # comment" — s.replace(/\s+#.*$/, ""): the first whitespace run followed by a '#' with no line
+// terminator after it, and everything from that run on.
+function stripHashComment(s) {
+  const lastLt = lastLtIndex(s);
+  for (let i = 0; i < s.length; i++) {
+    if (!isWsUnit(s[i])) continue;
+    const r = i;
+    while (i < s.length && isWsUnit(s[i])) i++;
+    if (s[i] === "#" && i > lastLt) return s.slice(0, r);
+  }
+  return s;
+}
+// 'x' / "x" (then whitespace and an optional # comment) → x, else null — s.match(/^(["'])(.*?)\1\s*(?:#.*)?$/)[2].
+function quotedValue(s) {
+  const q = s[0];
+  if (q !== '"' && q !== "'") return null;
+  const lastLt = lastLtIndex(s);
+  const tail = new Array(s.length + 1); // tail[p]: from p on, whitespace then an optional '#' comment, to the end
+  tail[s.length] = true;
+  for (let p = s.length - 1; p >= 0; p--) tail[p] = isWsUnit(s[p]) ? tail[p + 1] : s[p] === "#" && p > lastLt;
+  for (let c = 1; c < s.length; c++) {
+    if (isLtUnit(s[c])) return null;
+    if (s[c] === q && tail[c + 1]) return s.slice(1, c);
+  }
+  return null;
+}
+// Unit predicates for stripEnd / stripStart: the units of `chars`, optionally with whitespace.
+const unitIn = (chars) => (c) => chars.includes(c);
+const wsOrUnitIn = (chars) => (c) => isWsUnit(c) || chars.includes(c);
+const isSlashUnit = (c) => c === "/";
+const isBacktickUnit = (c) => c === "`";
+// s without its trailing run of units `test` accepts — s.replace(/[set]+$/, "") (unanchored, that regex rescanned the run
+// from each of its units).
+function stripEnd(s, test) {
+  let hi = s.length;
+  while (hi > 0 && test(s[hi - 1])) hi--;
+  return hi === s.length ? s : s.slice(0, hi);
+}
+function stripStart(s, test) {
+  let lo = 0;
+  while (lo < s.length && test(s[lo])) lo++;
+  return lo ? s.slice(lo) : s;
+}
+// s.replace(/^[lead]+|[trail]+$/g, "") — a string made of the units alone comes back empty, as with the regex.
+function stripEnds(s, lead, trail = lead) {
+  return stripEnd(stripStart(s, lead), trail);
+}
+// A line's text after its blanks: `\s+(.*)$` at p (needBlank) or `\s*(.*)$` → the text, or null when a line terminator
+// follows the text (no shorter blank run reads then either — the greedy pattern rescanned the text from each blank it gave
+// back).
+function restAfterBlanks(s, p, needBlank) {
+  if (needBlank && !isWsUnit(s[p])) return null;
+  let q = p;
+  while (q < s.length && isWsUnit(s[q])) q++;
+  const rest = s.slice(q);
+  return RE_LINE_TERMINATOR.test(rest) ? null : rest;
+}
+// `\s*(.+)$` at p → the text | null: the rest after the blanks — only blanks left: the last one (no line terminator), as the
+// engine giving back \s* read it.
+function plusAfterBlanks(s, p) {
+  let q = p;
+  while (q < s.length && isWsUnit(s[q])) q++;
+  if (q < s.length) return RE_LINE_TERMINATOR.test(s.slice(q)) ? null : s.slice(q);
+  return q > p && !isLtUnit(s[q - 1]) ? s[q - 1] : null;
+}
+// s.match(/^HEAD\s+(.*)$/) (needBlank) or /^HEAD\s*(.*)$/ as [line, …HEAD's groups, text] | null — `head` is the anchored
+// part before the blanks, read by the regex engine, the text by restAfterBlanks.
+function headRest(s, head, needBlank) {
+  const h = head.exec(s);
+  const rest = h && restAfterBlanks(s, h[0].length, needBlank);
+  if (rest == null) return null;
+  const m = Array.from(h);
+  m[0] = s;
+  m.push(rest);
+  return m;
+}
+// s.match(/^HEAD\s*(.+)$/) as [line, …HEAD's groups, text] | null (the text by plusAfterBlanks).
+function headPlus(s, head) {
+  const h = head.exec(s);
+  const text = h && plusAfterBlanks(s, h[0].length);
+  if (text == null) return null;
+  const m = Array.from(h);
+  m[0] = s;
+  m.push(text);
+  return m;
+}
+// s.replace(/<!--[\s\S]*?-->/g, fn): each "<!--" to the first "-->" after it; an opener with none after it ends the scan
+// (the pattern rescanned the rest of the text from each such opener).
+function replaceHtmlCommentSpans(s, fn) {
+  let out = "", at = 0;
+  for (let i = s.indexOf("<!--"); i !== -1;) {
+    const j = s.indexOf("-->", i + 4);
+    if (j === -1) break;
+    out += s.slice(at, i) + fn(s.slice(i, j + 3));
+    at = j + 3;
+    i = s.indexOf("<!--", at);
+  }
+  return at ? out + s.slice(at) : s;
+}
+// The code spans of s — what /(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g matched, read from the backtick runs: an opener is the
+// rest of a run (the whole run first), its closer the first later run of exactly its length; bodyMax bounds the body as
+// the export's [^`][\s\S]{0,4000}?[^`] does (4002). → [{ index, end, tick, body }]. The pattern rescanned the text from
+// each unit of a long backtick run.
+function codeSpans(s, bodyMax = Infinity) {
+  const runs = [];
+  for (let i = s.indexOf("`"); i !== -1;) {
+    let e = i;
+    while (s[e] === "`") e++;
+    runs.push([i, e - i]);
+    i = s.indexOf("`", e);
+  }
+  const byLen = new Map(); // run length → indices of the runs of that length, in order
+  runs.forEach(([, len], k) => { if (!byLen.has(len)) byLen.set(len, []); byLen.get(len).push(k); });
+  const firstAfter = (list, k) => { // the first index in list greater than k, or -1
+    let lo = 0, hi = list.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (list[mid] > k) hi = mid; else lo = mid + 1; }
+    return lo < list.length ? list[lo] : -1;
+  };
+  const out = [];
+  for (let k = 0; k < runs.length; k++) {
+    const e = runs[k][0] + runs[k][1];
+    for (let L = runs[k][1]; L >= 1; L--) {
+      const j = byLen.has(L) ? firstAfter(byLen.get(L), k) : -1;
+      if (j === -1 || runs[j][0] - e > bodyMax) continue;
+      out.push({ index: e - L, end: runs[j][0] + L, tick: "`".repeat(L), body: s.slice(e, runs[j][0]) });
+      k = j;
+      break;
+    }
+  }
+  return out;
+}
+// s.replace(<that code-span pattern>, fn) — fn(match, tick, body).
+function replaceCodeSpans(s, fn, bodyMax) {
+  let out = "", at = 0;
+  for (const m of codeSpans(s, bodyMax)) {
+    out += s.slice(at, m.index) + fn(s.slice(m.index, m.end), m.tick, m.body);
+    at = m.end;
+  }
+  return at ? out + s.slice(at) : s;
+}
+// An ATX heading line → { level, text } | null, as /^(#{min,max})\s+(.*?)\s*$/ read it (text trimmed at the end). closing:
+// a closing sequence led by whitespace goes too — /^(#{min,max})\s+(.*?)(?:\s+#+)?\s*$/. raw: the text is the whole rest —
+// /^(#{min,max})\s+(.*)$/. The text never holds a line terminator (`.` stops there): a line whose would is no heading.
+function atxHeading(line, min = 1, max = 6, mode = "trim") {
+  const s = String(line);
+  let level = 0;
+  while (s[level] === "#") level++;
+  if (level < min || level > max || !isWsUnit(s[level])) return null;
+  let lo = level + 1;
+  while (lo < s.length && isWsUnit(s[lo])) lo++;
+  let hi = s.length;
+  if (mode !== "raw") {
+    while (hi > lo && isWsUnit(s[hi - 1])) hi--;
+    if (mode === "closing" && s[hi - 1] === "#") {
+      let h0 = hi - 1;
+      while (h0 > lo && s[h0 - 1] === "#") h0--;
+      let w0 = h0;
+      while (w0 > lo && isWsUnit(s[w0 - 1])) w0--;
+      if (w0 > lo && w0 < h0) hi = w0;
+    }
+  }
+  const text = s.slice(lo, hi);
+  return RE_LINE_TERMINATOR.test(text) ? null : { level, text };
+}
+
+// ---------------------------------------------------------------------------
 // Paths & small fs helpers
 // ---------------------------------------------------------------------------
 
@@ -1820,8 +2005,8 @@ function steeringFrontMatter(text) {
   // 'x' / "x" → x; a trailing " # comment" is dropped (inside quotes a '#' is kept).
   const unquote = (v) => {
     const s = String(v).trim();
-    const q = s.match(/^(["'])(.*?)\1\s*(?:#.*)?$/);
-    return (q ? q[2] : s.replace(/\s+#.*$/, "")).trim();
+    const q = quotedValue(s);
+    return (q != null ? q : stripHashComment(s)).trim();
   };
   // "[a, 'b', "{c,d}/**"]" → items; commas inside quotes or {braces} don't split.
   const values = (v) => {
@@ -1845,11 +2030,11 @@ function steeringFrontMatter(text) {
   let inList = false; // under "fileMatchPattern:" with an empty value → YAML "- item" lines follow
   for (const line of lines.slice(1, end)) {
     if (/^\s*(?:#|$)/.test(line)) continue;
-    const item = inList && line.match(/^\s*-\s+(.*)$/);
+    const item = inList && headRest(line, /^\s*-/, true); // /^\s*-\s+(.*)$/ (headRest: 1.17 H)
     if (item) { patterns.push(...values(item[1])); continue; }
     inList = false;
     if (line.match(/^\s*/)[0].length > keyIndent) continue; // a continuation line, not a key
-    const kv = line.match(/^\s*([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
+    const kv = headRest(line, /^\s*([A-Za-z_][\w-]*)\s*:/, false); // /^\s*([A-Za-z_][\w-]*)\s*:\s*(.*)$/
     if (!kv) continue;
     const key = kv[1].toLowerCase();
     if (key === "inclusion") {
@@ -1976,7 +2161,8 @@ function briefSteering(root, tracks, implementsList) {
       // never reach the brief, and only real content is quoted. Read as a markdown reader does (scanTaskLines'
       // `vis`) — a plain regex strip also ate a "<!-- -->" inside fenced code or an `inline code span`, so a
       // rule about comments was quoted saying something else.
-      const body = scanTaskLines(fm.body).map((l) => l.vis).join("\n").replace(/(?:[ \t]*\n){3,}/g, "\n\n").trim();
+      // (?<![ \t]): a blank run is read from its start only — from each of its units it was quadratic (1.17 H).
+      const body = scanTaskLines(fm.body).map((l) => l.vis).join("\n").replace(/(?<![ \t])(?:[ \t]*\n){3,}/g, "\n\n").trim();
       const quote = body && artifactState({ text: body }) === "filled" && body.length <= budget;
       if (quote) budget -= body.length;
       included.push({ name, inclusion, patterns: fm.patterns, matched, body: quote ? body : null });
@@ -2980,9 +3166,10 @@ function stopPastFailure(text, start, end, wordsOf) {
 // lines (> …) — a pasted command output or a quoted instruction claims nothing.
 function stopProse(message) {
   const s = String(message == null ? "" : message).replace(/\r\n?/g, "\n");
-  return s.slice(-STOP_MESSAGE_MAX)
-    .replace(/(^|\n)[ \t]*(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n[ \t]*\2[^\n]*(?=\n|$)|$)/g, "$1")
-    .replace(/<!--[\s\S]*?-->/g, " ")
+  // (?=(…))\2: the fence opener taken whole, never backtracked (a line of 20,000 backticks was quadratic — 1.17 H); the
+  // comments by replaceHtmlCommentSpans (/<!--[\s\S]*?-->/g rescanned the rest from each unclosed "<!--").
+  const unfenced = s.slice(-STOP_MESSAGE_MAX).replace(/(^|\n)[ \t]*(?=(`{3,}|~{3,}))\2[^\n]*\n[\s\S]*?(?:\n[ \t]*\2[^\n]*(?=\n|$)|$)/g, "$1");
+  return replaceHtmlCommentSpans(unfenced, () => " ")
     .replace(/`[^`\n]*`/g, " ")
     .split("\n").filter((l) => !/^[ \t]*>/.test(l)).join("\n");
 }
@@ -6074,14 +6261,14 @@ function criterionBlocks(text, opts = {}) {
       return;
     }
     cleaned.push({ line: ln, text: line.trim() });
-    const hd = line.match(/^\s*(#{1,6})\s+(.*)$/);
+    const hd = atxHeading(stripStart(line, isWsUnit), 1, 6, "raw"); // /^\s*(#{1,6})\s+(.*)$/
     if (hd) {
-      while (stack.length && stack[stack.length - 1].level >= hd[1].length) stack.pop();
-      stack.push({ level: hd[1].length, text: hd[2].trim() });
+      while (stack.length && stack[stack.length - 1].level >= hd.level) stack.pop();
+      stack.push({ level: hd.level, text: hd.text.trim() });
       section = stack.map((h) => h.text).join(" / ");
-      if (acUnits && RE_LEAD_DEFINES_AC.test(hd[2].trim()) && definesHere(hd[2].trim(), stack.slice(0, -1).map((h) => h.text).join(" / ") || null)) {
+      if (acUnits && RE_LEAD_DEFINES_AC.test(hd.text.trim()) && definesHere(hd.text.trim(), stack.slice(0, -1).map((h) => h.text).join(" / ") || null)) {
         flush();
-        cur = { line: ln, endLine: ln, numbered: false, section, indent: 0, parts: [hd[2].trim()], definesAc: true, heading: true };
+        cur = { line: ln, endLine: ln, numbered: false, section, indent: 0, parts: [hd.text.trim()], definesAc: true, heading: true };
         return;
       }
     }
@@ -6626,7 +6813,7 @@ const RE_FILE_COLUMN = /^(?:test\s+)?(?:files?|paths?|ficheiros?|arquivos?|camin
 function pathUnder(rel, p) {
   const fold = (s) => (FOLD_CASE ? s.toLowerCase() : s);
   const r = fold(rel);
-  const q = fold(p).replace(/\/+$/, "");
+  const q = stripEnd(fold(p), isSlashUnit); // /\/+$/
   return q !== "" && (r === q || r.startsWith(q + "/"));
 }
 // Does the File cell path `p` name `rel`? People write the cell from the project root, from the feature folder, from a
@@ -6636,7 +6823,7 @@ function pathUnder(rel, p) {
 function pathNames(rel, p) {
   const fold = (s) => (FOLD_CASE ? s.toLowerCase() : s);
   const r = "/" + fold(rel);
-  const q = fold(p).replace(/\/+$/, "");
+  const q = stripEnd(fold(p), isSlashUnit); // /\/+$/
   return q !== "" && (r.endsWith("/" + q) || r.includes("/" + q + "/"));
 }
 // A File cell path the test-code scan can find a T-ID in: a folder (`tests/auth/`, no extension) or a file the scan reads.
@@ -6651,7 +6838,7 @@ function scannableTestPath(t) {
 // reads none of them, so a row whose File column names only such files is checked outside test code (a load run, the eval
 // harness, a manual pass) — expecting its T-ID in a test file warned forever (the scaffold's own load/eval rows did).
 function nonCodeArtifactPath(t) {
-  const ext = path.posix.extname(t.replace(/^[("'[]+|[)"'\].,:;]+$/g, "")).toLowerCase();
+  const ext = path.posix.extname(stripEnds(t, unitIn("(\"'["), unitIn(")\"'].,:;"))).toLowerCase(); // /^[("'[]+|[)"'\].,:;]+$/g
   return /^\.[a-z][a-z0-9]*$/.test(ext) && !GUARD_CODE_EXT.has(ext);
 }
 // Does a File cell token look like code — a source file in any language, or a folder? Then the row is not "outside code".
@@ -6783,7 +6970,7 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
   // File `test/` passed the Phase 4 gate, doctor and trace --code on another feature's test/shortener.test.js.
   // Ownership is claimed by the EXACT project-relative path only — pathNames' suffix match made another plan's
   // `tests/test_api.py` own services/beta/tests/test_api.py and hid a monorepo feature's own tests.
-  const fold = (s) => { const t = String(s).replace(/^\.\//, "").replace(/\/+$/, ""); return FOLD_CASE ? t.toLowerCase() : t; };
+  const fold = (s) => { const t = stripEnd(String(s).replace(/^\.\//, ""), isSlashUnit); return FOLD_CASE ? t.toLowerCase() : t; };
   const claimed = new Set(otherPlanTestFiles(projectDir, dir).map(fold));
   const foreignMemo = new Map();
   const foreign = (rel) => {
@@ -6828,12 +7015,16 @@ function withinRoot(root, p) {
 // under and the **Checkpoint:** that closes its section. This is the ONE task scanner: parseTasks() (the
 // line-only view public through spec_status) projects it, and completeTask ticks the line it resolves.
 // Task-looking lines inside HTML comments (single- or multi-line) or fenced code are NOT tasks.
-const RE_TASK_LINE = /^(\s*-\s*\[)([ xX])\]\s*(\d+)\.(?!\d)\s*(.*)$/; // "1.1 sub-step" is not task 1
+// A task line → [line, lead, box, number, text] | null: /^(\s*-\s*\[)([ xX])\]\s*(\d+)\.(?!\d)\s*(.*)$/ ("1.1 sub-step" is
+// not task 1), its text read by headRest (\s*(.*)$ rescanned a long blank run before a line terminator — 1.17 H).
+const RE_TASK_LINE_HEAD = /^(\s*-\s*\[)([ xX])\]\s*(\d+)\.(?!\d)/;
+const taskLine = (s) => headRest(s, RE_TASK_LINE_HEAD, false);
 const RE_CHECKPOINT = /^\s*\*\*Checkpoint:?\*\*:?\s*/i;
 const COMMENT_MASK = "\u0001";
 // CommonMark fence opener: a backtick fence's info string can't hold a backtick ("```npm test``` must pass"
-// is inline code, not a fence); a tilde fence's can.
-const RE_TASK_FENCE_OPEN = /^(\s*)(?:(`{3,})[^`]*|(~{3,}).*)$/;
+// is inline code, not a fence); a tilde fence's can. The fence run is taken whole ((?=(…))\2): giving it back never
+// helps, and a long run followed by a backtick or a line terminator was quadratic (1.17 H).
+const RE_TASK_FENCE_OPEN = /^(\s*)(?:(?=(`{3,}))\2[^`]*|(?=(~{3,}))\3.*)$/;
 // Read like a markdown reader, in document order: fenced code first, then — outside code — HTML comments,
 // where an `inline code span` wins over a "<!--"/"-->" inside it. Comments are blanked IN PLACE (same
 // length), so each line keeps its index and the checkbox its column; `vis` is what a reader sees.
@@ -6905,7 +7096,7 @@ function scanTaskLines(tasksText) {
       }
     }
     const vis = masked.split(COMMENT_MASK).join("");
-    const t = masked.split(COMMENT_MASK).join(" ").match(RE_TASK_LINE); // column-aligned with the source
+    const t = taskLine(masked.split(COMMENT_MASK).join(" ")); // column-aligned with the source
     if (!t) { out.push({ vis, code: false, task: null, inComment }); continue; }
     const text = masked.slice(masked.length - t[4].length).split(COMMENT_MASK).join("").trim();
     out.push({ vis, code: false, task: { col: t[1].length, done: t[2].toLowerCase() === "x", number: parseInt(t[3], 10), text }, inComment });
@@ -7010,9 +7201,9 @@ function scanTaskBlocks(tasksText) {
       return;
     }
     owner = null;
-    const h = line.match(/^#{1,6}\s+(.*?)\s*$/);
+    const h = atxHeading(line); // /^#{1,6}\s+(.*?)\s*$/
     if (h) {
-      phase = h[1];
+      phase = h.text;
       cur = null;
       open = [];
     } else if (RE_CHECKPOINT.test(line)) {
@@ -7178,7 +7369,7 @@ function taskMarkers(block) {
       const key = sp.key;
       if (!out[key]) continue; // _Size:_ — taskSize reads it
       let parts = WHOLE_VALUE_MARKERS.has(key) ? [sp.value.trim()] : sp.value.split(/[,;]/).map((s) => s.trim());
-      if (key === "verify") parts = parts.map((p) => p.replace(/^`+|`+$/g, "").trim()).filter((p) => p && !/^\[.*\]$/.test(p));
+      if (key === "verify") parts = parts.map((p) => stripEnds(p, isBacktickUnit).trim()).filter((p) => p && !/^\[.*\]$/.test(p));
       const have = seen[key] || (seen[key] = new Set());
       parts.filter(Boolean).forEach((p) => { if (!have.has(p)) { have.add(p); out[key].push(p); } });
     }
@@ -7619,7 +7810,7 @@ function shellScript(words) {
         k++;
         continue;
       }
-      if (/^-[A-Za-z]*c[A-Za-z]*$/.test(a) || a === "--command") c = true; // fish spells it --command too
+      if ((/^-[A-Za-z]*$/.test(a) && a.includes("c")) || a === "--command") c = true; // /^-[A-Za-z]*c[A-Za-z]*$/ (quadratic) — fish spells it --command too
     }
     return null;
   }
@@ -7670,7 +7861,7 @@ function verifyPipes(block) {
 // _Expect: fail_ — an English-stable task marker, its value kept whole like _Verify:_: the task's run must FAIL (a test
 // written before its fix). Only `fail` (any case, backticks dropped) sets it; any other value leaves a must-pass task.
 function expectsFail(block) {
-  return !!block && taskMarkers(block).expect.some((v) => /^fail$/i.test(v.replace(/^`+|`+$/g, "").trim()));
+  return !!block && taskMarkers(block).expect.some((v) => /^fail$/i.test(stripEnds(v, isBacktickUnit).trim()));
 }
 // Exit codes of a shell that could not run the command at all — never a red test: 126 (not executable), 127 (command not
 // found, POSIX shells), 9009 (cmd.exe: "… is not recognized as an internal or external command").
@@ -8224,7 +8415,7 @@ function parseGitLog(text) {
     if (!cur) continue;
     if (part === "head") {
       if (!l.trim()) { part = "msg"; continue; }
-      const kv = l.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
+      const kv = headRest(l, /^([A-Za-z][\w-]*):/, false); // /^([A-Za-z][\w-]*):\s*(.*)$/ (headRest: 1.17 H)
       if (kv && /^author$/i.test(kv[1])) cur.author = kv[2].trim();
       else if (kv && /^(?:author)?date$/i.test(kv[1])) cur.date = kv[2].trim();
       continue;
@@ -8264,7 +8455,7 @@ function taskCommits(projectDir, name, logText, opts = {}) {
   const wordRe = (s) => new RegExp("(?<![\\p{L}\\p{N}_-])" + s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}_-])", "iu");
   const self = wordRe(slug);
   const others = featureDirs(projectDir).map((d) => d.slug).filter((s) => s !== slug).map(wordRe);
-  const RE_NUM = /(?<![\p{L}\p{N}_])(?:tasks?|tarefas?|tareas?)\s*#?\s*(\d+)(?!\d)|(?<![\p{L}\p{N}_#&/])#(\d+)(?!\d)/giu;
+  const RE_NUM = /(?<![\p{L}\p{N}_])(?:tasks?|tarefas?|tareas?)\s*(?:#\s*)?(\d+)(?!\d)|(?<![\p{L}\p{N}_#&/])#(\d+)(?!\d)/giu; // \s*(?:#\s*)?: \s*#?\s* was quadratic on a blank run
   const info = blocks.map((b) => {
     const prose = taskProse(b).join(" ");
     return { b, tids: new Map([...extractTestIds(prose)].map((id) => [tKey(id.slice(2)), id])), acs: extractAcIds(prose),
@@ -8430,8 +8621,8 @@ function designSections(designText) {
   let cur = null;
   const fst = { fence: null };
   for (const line of stripHtmlComments(designText || "").split(/\r?\n/)) {
-    const h = !fenceStep(fst, line) && line.match(/^##\s+(.*?)\s*$/);
-    if (h) { cur = { title: h[1], body: [] }; out.push(cur); continue; }
+    const h = !fenceStep(fst, line) && atxHeading(line, 2, 2); // /^##\s+(.*?)\s*$/
+    if (h) { cur = { title: h.text, body: [] }; out.push(cur); continue; }
     if (cur) cur.body.push(line);
   }
   return out.map((s) => ({ title: s.title, body: s.body.join("\n").trim() }));
@@ -8669,7 +8860,7 @@ function sectionFirstParagraph(md, synonyms) {
 // Markdown helpers for the merge summary: multi-line output collapsed to one line; a code span whose fence is
 // longer than any backtick run inside it.
 function oneLine(s) {
-  return String(s || "").replace(/\s*\r?\n\s*/g, " ⏎ ").trim();
+  return String(s || "").replace(/(?<!\s)\s*\r?\n\s*/g, " ⏎ ").trim(); // (?<!\s): a blank run is read from its start only (1.17 H)
 }
 function codeSpan(s) {
   const text = oneLine(s);
@@ -8914,7 +9105,9 @@ function fingerprintMatches(raw, phase, stored) {
 }
 const BOM_CHAR = String.fromCharCode(0xfeff);
 const artifactMatches = (file, phase, stored) => fingerprintMatches(readIfExists(file), phase, stored);
-const uncheckTasks = (text) => text.replace(/^(\s*-\s*\[)[xX](\])/gm, "$1 $2"); // checkbox state is not content
+// Checkbox state is not content. The indent is read within its line ([^\S\n\r\u2028\u2029], not \s): from each line start of a
+// long blank run \s* rescanned the whole run (1.17 H) — the lines above keep their text either way ($1 puts it back).
+const uncheckTasks = (text) => text.replace(/^([^\S\n\r\u2028\u2029]*-\s*\[)[xX](\])/gm, "$1 $2");
 // The artifact a phase's approval signs off: a bugfix has no design of its own — its design approval signs off bug.md
 // (the Root Cause the gate checks). approvePhase records it as `file` on the approval, so changedSinceApproval
 // compares the right file (an approval without `file` signed off PHASE_FILE's, as before).
@@ -10573,9 +10766,12 @@ function glossaryEntry(cur) {
   if (!term || /^\[.*\]$/.test(term) || isGenericSlot(term)) return null;
   const avoid = [];
   const seen = new Set([foldTerm(term)]);
-  const rest = cur.rest.join(" ").replace(/_Avoid:[ \t]*([^_]*)_/gi, (m, list) => {
+  // /_Avoid:[ \t]*([^_]*)_/ read as _Avoid:([^_]*)_ minus the leading blanks: the same matches, without the quadratic
+  // rescan of a long blank run (1.17 H).
+  const rest = cur.rest.join(" ").replace(/_Avoid:([^_]*)_/gi, (m, list0) => {
+    const list = stripStart(list0, unitIn(" \t"));
     for (const w0 of list.split(/[,;]/)) {
-      const w = w0.trim().replace(/^[`'"*“”‘’]+|[`'"*“”‘’.]+$/g, "").trim();
+      const w = stripEnds(w0.trim(), unitIn("`'\"*“”‘’"), unitIn("`'\"*“”‘’.")).trim(); // /^[`'"*“”‘’]+|[`'"*“”‘’.]+$/g
       if (!w || w.length > 60 || /^\[.*\]$/.test(w) || !/\p{L}/u.test(w) || seen.has(foldTerm(w)) || avoid.length >= GLOSSARY_MAX_AVOID) continue;
       seen.add(foldTerm(w));
       avoid.push(w);
@@ -11250,7 +11446,10 @@ function renameSupersedesRefs(projectDir, fromDir, raw, oldKey, newSlug) {
   const text = raw.replace(new RegExp(RE_SUPERSEDES_SRC, "gi"), (whole, value, offset) => {
     const line = (raw.slice(0, offset).match(/\n/g) || []).length + 1;
     if (!(visible.get(line) || "").includes("_Supersedes:")) return whole; // inside a comment or fenced code: no marker
-    const nv = value.replace(/(^|[,;])(\s*`?\s*)([^,;`/]+?)(\s*\/\s*)(US-\d+\.AC-\d+)/g, (t, sep, lead, name, slash, ac) => {
+    // (^|[,;])(\s*`?\s*)([^,;`/]+?)(\s*\/\s*)(US-…) with the lead taken whole ((?=(…))\2) and the name read up to its last
+    // non-blank unit: the same references, without the cubic backtracking over a long blank run (1.17 H). (The old pattern
+    // also read a lone blank before the '/' as a name — "" names no feature, so nothing was ever rewritten there.)
+    const nv = value.replace(/(^|[,;])(?=(\s*`?\s*))\2([^,;`/\s](?:[^,;`/]*[^,;`/\s])?)(\s*\/\s*)(US-\d+\.AC-\d+)/g, (t, sep, lead, name, slash, ac) => {
       if (!hitsOld(name.trim(), ac)) return t;
       refs++;
       return sep + lead + newSlug + slash + ac;
@@ -11853,7 +12052,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   const scan = scanTaskLines(raw);
   const off = inactiveTaskLines(lines, tracks);
   const heads = [];
-  scan.forEach((s, i) => { const m = !s.code && s.vis.match(/^(#{1,6})\s+(.*?)\s*$/); if (m) heads.push({ i, level: m[1].length, text: m[2] }); });
+  scan.forEach((s, i) => { const m = !s.code && atxHeading(s.vis); if (m) heads.push({ i, level: m.level, text: m.text }); }); // /^(#{1,6})\s+(.*?)\s*$/
   const lastContent = (from, to, skip) => { for (let i = to - 1; i >= from; i--) if (lines[i].trim() && !(skip && skip.has(i))) return i; return -1; };
 
   const matches = heads.filter((h) => h.level >= 2 && normTaskHeading(h.text) === norm); // never the H1 title
@@ -12482,9 +12681,9 @@ function headingLeadRe() {
 // section — "Threat Modeling" / "Threat Modelling" / "Threat Models" are the Threat Model.
 const RE_SYN_INFLECTION = /^(?:s|es|ing|ling)(?![\p{L}\p{N}])/u;
 function headingMatches(line, syns, inflect) {
-  const m = line.match(/^#{2,6}\s+(.*)$/);
+  const m = atxHeading(line, 2, 6, "raw"); // /^#{2,6}\s+(.*)$/
   if (!m) return false;
-  let t = m[1].toLowerCase();
+  let t = m.text.toLowerCase();
   const lead = headingLeadRe();
   for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, ""); }
   return syns.some((s) => t.startsWith(s) && (!/[\p{L}\p{N}]/u.test(t.charAt(s.length)) || (inflect && RE_SYN_INFLECTION.test(t.slice(s.length)))));
@@ -12531,7 +12730,9 @@ function extractSection(md, synonyms, marker, loose) {
   return lines.slice(start + 1, end == null ? lines.length : end).join("\n");
 }
 
-const RE_TODO_SENTINEL = /^\s*>\s*\*\*TODO\*\*/m;
+// The indent is read within its line ([^\S\n\r\u2028\u2029], not \s — a line start of a long blank run rescanned the whole
+// run, 1.17 H): the line holding the '>' matches either way, and every reader only asks whether one does.
+const RE_TODO_SENTINEL = /^[^\S\n\r\u2028\u2029]*>\s*\*\*TODO\*\*/m;
 const ROOT_CAUSE_SYN = ["root cause", "causa raiz", "causa raíz"];
 const REPRO_SYN = ["reproduction", "reprodução", "reproducao", "reproducción", "reproduccion"];
 function sectionState(design, sections, marker) {
@@ -12741,7 +12942,7 @@ function templateBracketKeys(text, seen) {
   const slot = (body) => { const b = body.match(/^\[([^[\]]*)\]$/); return !!b && !!b[1].trim(); };
   for (const [, line, refs] of visibleLines(text)) {
     if (seen && !refs.size) { if (seen.has(line)) continue; seen.add(line); } // the corpus repeats most lines
-    for (const m of line.matchAll(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g)) if (slot(m[2].trim())) code.push(placeholderKey(m[2].trim().slice(1, -1)));
+    for (const m of codeSpans(line)) if (slot(m.body.trim())) code.push(placeholderKey(m.body.trim().slice(1, -1)));
     scanBrackets(line, refs, slot, (inner, raw) => { brackets.push(placeholderKey(raw)); return false; });
   }
   return { brackets, code };
@@ -12845,7 +13046,7 @@ function bracketPlaceholders(line, refs) {
 // contents (stable tags / IDs, NEEDS CLARIFICATION, the legacy core-only answer) are skipped whole, never visited.
 // codeSlot(body) says which code spans are unwrapped; every other span is blanked (columns kept). Linear per line.
 function scanBrackets(line, refs, codeSlot, visit) {
-  const s = line.replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g, (m, tick, body) =>
+  const s = replaceCodeSpans(line, (m, tick, body) =>
     codeSlot(body.trim()) ? tick.replace(/`/g, " ") + body + tick.replace(/`/g, " ") : " ".repeat(m.length));
   const box = s.match(RE_LIST_CHECKBOX);
   const groupEnd = (i) => { // index of the "]" closing the "[" at i (nesting-aware), or -1
@@ -13046,7 +13247,9 @@ function hasPriority(md) {
 // fenced example is no definition.
 function acDuplicates(md) {
   const seen = new Set(), dups = new Set();
-  for (const mm of stripFencedCode(stripHtmlComments(md || "")).matchAll(/^\s*(?:\d+[.)]|[-*+])\s+(?:\*\*|__)?(US-\d+\.AC-\d+)(?!\d)/gm)) (seen.has(mm[1]) ? dups : seen).add(mm[1]);
+  // The indent within its line ([^\S\n\r\u2028\u2029]): the same IDs, without rescanning a long blank run from each of its
+  // line starts (1.17 H).
+  for (const mm of stripFencedCode(stripHtmlComments(md || "")).matchAll(/^[^\S\n\r\u2028\u2029]*(?:\d+[.)]|[-*+])\s+(?:\*\*|__)?(US-\d+\.AC-\d+)(?!\d)/gm)) (seen.has(mm[1]) ? dups : seen).add(mm[1]);
   return [...dups];
 }
 // A section with real content: present, no `> **TODO**` sentinel, not empty, no template placeholder left.
@@ -13096,7 +13299,9 @@ function bugPlaceholders(text, items) {
   const isSlot = (k) => slots.has(k) || projectTemplateHas("bugSlots", k); // + the slots of the project's bug.md template (1.14)
   return (items || []).filter((p) => p.kind !== "bracket" || isSlot(placeholderKey(String(p.text).slice(1, -1))) || !unitHasProse(p.line - 1));
 }
-const RE_TODO_SENTINEL_LINE = /^\s*>\s*\*\*TODO\*\*.*$/gm;
+// (hasProseOutsideBrackets: the blank lines above a sentinel line are no longer part of what is blanked — they hold no
+// bracket, letter or digit, so its answer is the same; 1.17 H, as RE_TODO_SENTINEL)
+const RE_TODO_SENTINEL_LINE = /^[^\S\n\r\u2028\u2029]*>\s*\*\*TODO\*\*.*$/gm;
 // Every bracketed slot of the bug report template, in every language (the Summary slot included: built without one).
 let BUG_SLOTS = null;
 function bugTemplateSlots() {
@@ -13142,9 +13347,9 @@ const DESIGN_WEIGH_IDS = new Set(DESIGN_WEIGH.map(([id]) => id));
 // assumptions" are other sections. Trailing emphasis, emoji or closing #s are fine (no letter or digit after the synonym).
 const RE_WEIGH_HEADING_REST = /^(?:[^\p{L}\p{N}]*$|\s*[:,;(\[/&+|—–.]|\s+-(?=\s|$)|\s+(?:and|or|vs|versus|for|of|to|in|on|per|with|e|ou|de|do|da|dos|das|para|por|em|no|na|com|y|o|u|del|en|con)(?![\p{L}\p{N}]))/u;
 function weighHeadingMatches(line, syns) {
-  const m = line.match(/^#{2,6}\s+(.*)$/); // never the H1 title (it carries the feature name)
+  const m = atxHeading(line, 2, 6, "raw"); // /^#{2,6}\s+(.*)$/ — never the H1 title (it carries the feature name)
   if (!m) return false;
-  let t = m[1].toLowerCase();
+  let t = m.text.toLowerCase();
   const lead = headingLeadRe();
   for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, ""); }
   return syns.some((s) => t.startsWith(s) && RE_WEIGH_HEADING_REST.test(t.slice(s.length)));
@@ -13162,7 +13367,7 @@ function weighSection(md, syns) {
   return lines.slice(start + 1, end == null ? lines.length : end).join("\n");
 }
 // A unit's text is a generic slot word (TODO, TBD, TBC, FIXME, "…", "a definir" — isGenericSlot), trailing punctuation aside.
-const genericUnit = (s) => isGenericSlot(String(s).replace(/[*_`]+/g, "").trim().replace(/[.:;!?]+$/, ""));
+const genericUnit = (s) => isGenericSlot(stripEnd(String(s).replace(/[*_`]+/g, "").trim(), unitIn(".:;!?"))); // /[.:;!?]+$/
 // What a design section holds (A review 6): `entries` = table data rows (a table's header and separator rows skipped) + list items
 // at the section's outermost list level (indented up to 3 spaces; deeper ones are that item's pros / cons) — or, when that is
 // more, its sub-headings / bold-led paragraphs (one "### Option A" or "**Option A — …**" per option); `proseWords` = the words
@@ -13184,7 +13389,8 @@ function designBody(body) {
     inTable = false;
     const li = l.match(/^( *)(?:[-*+]|\d+[.)])\s+(\S.*)$/);
     if (li) { if (genericUnit(li[2])) generic++; else items.push(li[1].length); continue; }
-    if (/^#{3,6}\s+\S/.test(l) || /^ {0,3}\*\*[^*\n]*\p{L}[^*\n]*\*\*/u.test(l)) { heads++; continue; }
+    // (?=[^*\n]*\p{L}): the bold run's letter found by one look ahead — [^*\n]*\p{L}[^*\n]* backtracked quadratically (1.17 H)
+    if (/^#{3,6}\s+\S/.test(l) || /^ {0,3}\*\*(?=[^*\n]*\p{L})[^*\n]*\*\*/u.test(l)) { heads++; continue; }
     if (genericUnit(l)) { generic++; continue; }
     proseWords += (l.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || []).length;
   }
@@ -14765,7 +14971,10 @@ function locateFeatures(projectDir, name) {
 // text), acIndex and supersedesMarkers (one criterion at a time, lines joined by "\n") all read the same marker.
 const SUP_NL = "\\r?\\n(?![ \\t]*(?:\\r?\\n|$|(?:[-*+]|\\d+[.)])[ \\t]|#{1,6}[ \\t]|[>|]|```|~~~|(?:-{3,}|={3,}|\\*{3,})[ \\t]*(?:\\r?\\n|$)))";
 // The value never runs into a second marker (an unclosed one before it stays unclosed).
-const RE_SUPERSEDES_SRC = "_Supersedes:[ \\t]*((?:(?!_Supersedes:)[^\\r\\n]|" + SUP_NL + ")+?)_(?=[\\s.,;:!?)\\]*`|'\"]|$)";
+// The blanks after the colon: all of them (the value starts at its first other unit) — or, only when that finds no closing
+// "_", all but the last one when the next unit is that "_" (`_Supersedes: _`: a one-blank value). That is what
+// `_Supersedes:[ \t]*(…+?)_` read, without rescanning the value from each of a long blank run's units (1.17 H).
+const RE_SUPERSEDES_SRC = "_Supersedes:(?:[ \\t]*(?=[^ \\t])|[ \\t]*?(?=[ \\t]_))((?:(?!_Supersedes:)[^\\r\\n]|" + SUP_NL + ")+?)_(?=[\\s.,;:!?)\\]*`|'\"]|$)";
 // Safety net: a marker never closed runs to the end of its criterion — its foreign ID must never become one of this
 // feature's ACs; supersedesMarkers reports it (reason `unterminated`).
 const RE_SUPERSEDES_OPEN_SRC = "_Supersedes:[ \\t]*((?:[^\\r\\n]|" + SUP_NL + ")*)";
@@ -14811,7 +15020,7 @@ function supersedesMarkers(reqText) {
     const re = new RegExp(RE_SUPERSEDES_SRC, "gi");
     let m;
     while ((m = re.exec(text)) !== null) {
-      for (const ref of m[1].split(/[,;]/).map((s) => fold(s).replace(/^`+|`+$/g, "").trim()).filter(Boolean)) {
+      for (const ref of m[1].split(/[,;]/).map((s) => stripEnds(fold(s), isBacktickUnit).trim()).filter(Boolean)) {
         const mm = ref.match(/^(.+?)\s*\/\s*(US-\d+\.AC-\d+)$/);
         out.push({ ref, feature: mm ? mm[1].trim() : null, ac: mm ? mm[2] : null, by, line: lineAt(m.index) });
       }
@@ -14873,7 +15082,7 @@ function acOneLine(text, id, max = 200) { // max: the length cap (spec_export sh
   // it ("… days (_Supersedes: …_)." → "… days.").
   let s = String(text || "").replace(new RegExp("(?:(?:^|\\s)[-*+]\\s+)?(?:" + RE_SUPERSEDES_SRC + "|" + RE_SUPERSEDES_OPEN_SRC + ")", "gi"), "\u0000")
     .replace(/(\*\*|__|\*|~~)\s*\u0000\s*\1/g, "\u0000")
-    .replace(/\s*\(\s*\u0000\s*\)/g, "").replace(/\s*\u0000\s*(?=[.,;:!?]|$)/g, "").replace(/\u0000/g, " ").replace(/\s+/g, " ").trim();
+    .replace(/(?<!\s)\s*\(\s*\u0000\s*\)/g, "").replace(/(?<!\s)\s*\u0000\s*(?=[.,;:!?]|$)/g, "").replace(/\u0000/g, " ").replace(/\s+/g, " ").trim(); // (?<!\s): a blank run read from its start only (1.17 H)
   if (s.startsWith("|")) s = s.split("|").map((c) => c.trim()).filter((c) => c && c.replace(/[*_`]/g, "") !== id).join(" — ");
   const esc = id.replace(/\./g, "\\.");
   s = s.replace(new RegExp("^(?:\\*\\*|__|\\*|_)?" + esc + "(?:\\*\\*|__|\\*|_)?\\s*(?:[—–:-]\\s*)?"), "").replace(new RegExp("\\s*\\(" + esc + "\\)"), "");
@@ -15051,8 +15260,46 @@ function maybeRefreshCatalog(projectDir) {
 const DECISIONS_FILE = "decisions.md";
 const DECISION_TITLE_MAX = 200;
 const DECISION_TEXT_MAX = 20000;
-const RE_DECISION_HEAD = /^(#{2,3})[ \t]+D-(\d{1,6})(?!\d)[ \t]*(?:[—–:-]+[ \t]*)?(.*?)[ \t]*$/;
-const RE_DECISION_MARKER = /^\s*(?:[-*+]\s+)?_(Kind|Date|Affects|Supersedes):[ \t]*(.*)_\s*$/i;
+// A "## D-3 — Title" heading → [line, hashes, number, title] | null — what
+// /^(#{2,3})[ \t]+D-(\d{1,6})(?!\d)[ \t]*(?:[—–:-]+[ \t]*)?(.*?)[ \t]*$/ matched; the title is read by a scan (the lazy title
+// before [ \t]*$ was quadratic on a long blank run — 1.17 H).
+const RE_DECISION_HEAD_START = /^(#{2,3})[ \t]+D-(\d{1,6})(?!\d)/;
+const isBlankUnit = (c) => c === " " || c === "\t";
+function decisionHead(line) {
+  const h = RE_DECISION_HEAD_START.exec(line);
+  if (!h) return null;
+  let i = h[0].length;
+  while (i < line.length && isBlankUnit(line[i])) i++;
+  if (i < line.length && "—–:-".includes(line[i])) {
+    while (i < line.length && "—–:-".includes(line[i])) i++;
+    while (i < line.length && isBlankUnit(line[i])) i++;
+  }
+  const title = stripEnd(line.slice(i), isBlankUnit);
+  return RE_LINE_TERMINATOR.test(title) ? null : [line, h[1], h[2], title];
+}
+// s.replace(/[ \t]+#+$/, "") — a closing "##" sequence led by blanks.
+function stripClosingHashes(s) {
+  let h0 = s.length;
+  while (h0 > 0 && s[h0 - 1] === "#") h0--;
+  let w0 = h0;
+  while (w0 > 0 && isBlankUnit(s[w0 - 1])) w0--;
+  return h0 < s.length && w0 < h0 ? s.slice(0, w0) : s;
+}
+// A whole-line `_Label: value_` marker (a list item too) → { label, value } | null — what
+// /^\s*(?:[-*+]\s+)?_(Label…):[ \t]*(.*)_\s*$/i matched ($1, $2): `head` reads up to the colon, the value is scanned (the
+// pattern's [ \t]*(.*)_ backtracked quadratically on a value with a long blank run and no closing "_" — 1.17 H).
+function underscoreMarkerLine(line, head) {
+  const h = head.exec(line);
+  if (!h) return null;
+  let a = h[0].length;
+  while (a < line.length && isBlankUnit(line[a])) a++;
+  const u = stripEnd(line, isWsUnit).length - 1; // the closing "_": the last unit before trailing whitespace
+  if (u < a || line[u] !== "_") return null;
+  const value = line.slice(a, u);
+  return RE_LINE_TERMINATOR.test(value) ? null : { label: h[1], value };
+}
+const RE_DECISION_MARKER_HEAD = /^\s*(?:[-*+]\s+)?_(Kind|Date|Affects|Supersedes):/i;
+const decisionMarker = (line) => underscoreMarkerLine(line, RE_DECISION_MARKER_HEAD);
 const DECISION_LABELS = {
   context: ["context", "contexto"],
   decision: ["decision", "decisão", "decisao", "decisión", "discovery", "descoberta", "descubrimiento"],
@@ -15062,9 +15309,9 @@ const RE_DECISION_LABEL = new RegExp("^\\s*\\*\\*(" + Object.values(DECISION_LAB
 const BRIEF_DECISIONS_MAX = 5; // entries a brief carries…
 const BRIEF_DECISIONS_CHARS = 2000; // …and the characters of their titles + texts (the most recent kept first)
 const RE_LEADING_BOM = new RegExp("^" + BOM_CHAR);
-// HTML comments blanked line for line (line numbers hold).
-const blankHtmlComments = (s) => String(s || "").replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, ""));
-const splitRefs = (v) => String(v == null ? "" : v).split(/[,;]/).map((s) => s.trim().replace(/^`+|`+$/g, "").trim()).filter(Boolean);
+// HTML comments blanked line for line (line numbers hold) — /<!--[\s\S]*?-->/g by replaceHtmlCommentSpans (1.17 H).
+const blankHtmlComments = (s) => replaceHtmlCommentSpans(String(s || ""), (m) => m.replace(/[^\n]/g, ""));
+const splitRefs = (v) => String(v == null ? "" : v).split(/[,;]/).map((s) => stripEnds(s.trim(), isBacktickUnit).trim()).filter(Boolean);
 const normDecisionId = (s) => { const m = String(s || "").trim().match(/^D-(\d{1,6})$/i); return m ? "D-" + parseInt(m[1], 10) : null; };
 function decisionLabelKey(label) {
   const l = String(label).toLowerCase();
@@ -15083,9 +15330,9 @@ function decisionLog(text) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (fenceStep(fst, line)) { if (cur) cur.parts[seg].push(line); continue; }
-    const h = line.match(RE_DECISION_HEAD);
+    const h = decisionHead(line);
     if (h) {
-      cur = { id: "D-" + parseInt(h[2], 10), n: parseInt(h[2], 10), level: h[1].length, line: i + 1, title: h[3].replace(/[ \t]+#+$/, "").trim(),
+      cur = { id: "D-" + parseInt(h[2], 10), n: parseInt(h[2], 10), level: h[1].length, line: i + 1, title: stripClosingHashes(h[3]).trim(),
         kind: "decision", date: null, affects: [], supersedes: [], parts: { body: [], context: [], decision: [], consequences: [] } };
       entries.push(cur);
       seg = "body";
@@ -15099,12 +15346,12 @@ function decisionLog(text) {
       continue;
     }
     if (!cur) continue;
-    const mk = seg === "body" ? line.match(RE_DECISION_MARKER) : null;
+    const mk = seg === "body" ? decisionMarker(line) : null;
     if (mk) {
-      const key = mk[1].toLowerCase();
+      const key = mk.label.toLowerCase();
       if (!seen.has(key)) {
         seen.add(key);
-        const v = mk[2].trim();
+        const v = mk.value.trim();
         if (key === "kind") cur.kind = /^discovery$/i.test(v.replace(/`/g, "").trim()) ? "discovery" : "decision";
         else if (key === "date") cur.date = v.replace(/`/g, "").trim();
         else cur[key] = splitRefs(v);
@@ -15136,7 +15383,8 @@ function retiredDecisions(log) {
 // ':' / '.') and the same without a leading [Marker] / numbering (headingMatches' RE_HEADING_LEAD) — "Data Model" names
 // "## 3. Data Model", "[SaaS] Observability" and "Observability" name "### [SaaS] Observability".
 function decisionSectionKeys(text) {
-  const base = String(text || "").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim().toLowerCase().replace(/[:.]+$/, "").trim();
+  const base0 = String(text || "").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const base = stripEnd(base0, unitIn(":.")).trim(); // /[:.]+$/
   const keys = new Set(base ? [base] : []);
   let t = base;
   const lead = headingLeadRe(); // + the track packs' markers (1.15)
@@ -15153,9 +15401,9 @@ function decisionTargets(dir, kind) {
   for (const file of files) {
     const lines = blankHtmlComments(read(file)).split(/\r?\n/);
     for (const i of headingIndex(lines)) {
-      const m = lines[i].match(/^#{2,6}\s+(.*?)(?:\s+#+)?\s*$/);
-      if (!m || !m[1].trim()) continue;
-      for (const k of decisionSectionKeys(m[1])) if (!sections.has(k)) sections.set(k, { title: m[1].trim(), file });
+      const m = atxHeading(lines[i], 2, 6, "closing"); // /^#{2,6}\s+(.*?)(?:\s+#+)?\s*$/
+      if (!m || !m.text.trim()) continue;
+      for (const k of decisionSectionKeys(m.text)) if (!sections.has(k)) sections.set(k, { title: m.text.trim(), file });
     }
   }
   return {
@@ -15190,12 +15438,12 @@ function safeSpecText(s) {
   const out = String(s).replace(/\r\n?/g, "\n").replace(/<!--/g, "&lt;!--").split("\n").map(trimBlanksEnd).map((l) => {
     if (fenceStep(st, l)) return l;
     if (/^\s{0,3}#{1,6}(?:\s|$)/.test(l)) return l.replace("#", "\\#");
-    if (RE_DECISION_MARKER.test(l) || RE_OUTCOME_LINE.test(l)) return l.replace("_", "\\_");
+    if (decisionMarker(l) || outcomeMarker(l)) return l.replace("_", "\\_");
     if (RE_DECISION_LABEL.test(l)) return l.replace("**", "\\*\\*");
     return l;
   });
   if (st.fence) out.push(" ".repeat(st.fence.indent) + st.fence.mark);
-  return out.join("\n").replace(/^\n+|\n+$/g, "");
+  return stripEnds(out.join("\n"), unitIn("\n")); // /^\n+|\n+$/g
 }
 
 // spec_decide input → { title, decision, context, consequences, kind, affects, supersedes } | { error }.
@@ -15440,7 +15688,9 @@ const SPIKE_SYN = {
   decision: ["decision", "decisão", "decisao", "decisión"],
   followUp: ["follow-up", "follow up", "seguimento", "seguimiento"],
 };
-const RE_OUTCOME_LINE = /^\s*(?:[-*+]\s+)?_Outcome:[ \t]*(.*)_\s*$/i;
+// /^\s*(?:[-*+]\s+)?_Outcome:[ \t]*(.*)_\s*$/i ($1 = value), scanned (underscoreMarkerLine — 1.17 H).
+const RE_OUTCOME_HEAD = /^\s*(?:[-*+]\s+)?_Outcome:/i;
+const outcomeMarker = (line) => underscoreMarkerLine(line, RE_OUTCOME_HEAD);
 // _Outcome:_ values (English-stable go | no-go | pivot; the PT / ES words and yes / no read too).
 const OUTCOME_SYN = {
   go: ["go", "yes", "sim", "sí", "si", "avançar", "avancar", "avanzar", "seguir"],
@@ -15448,13 +15698,13 @@ const OUTCOME_SYN = {
   pivot: ["pivot", "pivotar", "pivotear", "mudar de rumo", "cambiar de rumbo"],
 };
 function normOutcome(v) {
-  const s = String(v == null ? "" : v).replace(/[`*[\]]/g, "").replace(/\s+/g, " ").trim().toLowerCase().replace(/[.!]+$/, "");
+  const s = stripEnd(String(v == null ? "" : v).replace(/[`*[\]]/g, "").replace(/\s+/g, " ").trim().toLowerCase(), unitIn(".!")); // /[.!]+$/
   if (!s || s.includes("|")) return null;
   return Object.keys(OUTCOME_SYN).find((k) => OUTCOME_SYN[k].includes(s)) || null;
 }
 // A spike.md section's own prose: comments out, the TODO sentinel and the _Outcome:_ line set aside.
 function spikeProse(body) {
-  return stripHtmlComments(body || "").split(/\r?\n/).filter((l) => !RE_OUTCOME_LINE.test(l) && !RE_TODO_SENTINEL.test(l)).join("\n");
+  return stripHtmlComments(body || "").split(/\r?\n/).filter((l) => !outcomeMarker(l) && !RE_TODO_SENTINEL.test(l)).join("\n");
 }
 // Written = present, no `> **TODO**` sentinel, and some prose outside [bracketed slots] (the _Outcome:_ line alone is no rationale).
 function spikeFilled(body) {
@@ -15464,8 +15714,8 @@ function spikeFilled(body) {
 function spikeOutcome(body) {
   if (body == null) return null;
   const lines = stripHtmlComments(body).split(/\r?\n/);
-  const mk = lines.map((l) => l.match(RE_OUTCOME_LINE)).find(Boolean);
-  const marked = mk ? normOutcome(mk[1]) : null; // the template's `_Outcome: [go | no-go | pivot]_` reads as none
+  const mk = lines.map((l) => outcomeMarker(l)).find(Boolean);
+  const marked = mk ? normOutcome(mk.value) : null; // the template's `_Outcome: [go | no-go | pivot]_` reads as none
   if (marked) return marked;
   const first = spikeProse(body).split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "";
   const m = first.match(/^(?:[-*+>]\s*)*(?:\*\*|__)?(no-go|no go|nogo|go|pivot|não avançar|nao avancar|no avanzar|avançar|avancar|avanzar|pivotar|pivotear)(?![\p{L}\p{N}-])/iu);
@@ -15596,7 +15846,7 @@ function spikeNextAction(projectDir, f, opts = {}) {
     Object.assign(res, { step: "promote", outcome: "go", seed: { name: seed.name, summary: seed.summary },
       recommendation: (seed.archiveFirst ? N.goArchiveFirst : N.goCreateFirst)(slug, seed.name, seed.summary) });
   } else {
-    const why = s.rationale ? s.rationale.replace(/[\s.;:!…]+$/, "") : null; // the message ends the sentence itself
+    const why = s.rationale ? stripEnd(s.rationale, wsOrUnitIn(".;:!…")) : null; // /[\s.;:!…]+$/ — the message ends the sentence itself
     if (s.outcome === "no-go") Object.assign(res, { step: "archive", outcome: "no-go", recommendation: N.noGo(slug, why) });
     else Object.assign(res, { step: "pivot", outcome: "pivot", recommendation: N.pivot(slug, why) });
   }
@@ -15677,16 +15927,19 @@ const SUCCESS_SYN = ["success criteria", "critérios de sucesso", "criterios de 
 // inline code, **strong** / _em_ / ~~del~~ and links. EVERY text run is escaped (htmlEsc): raw HTML in a spec (a <script> in
 // a criterion) is shown as text, never run. A link keeps an http(s) / mailto target only — javascript:, data:, a relative
 // path keep just their text — and an image becomes its alt text: an exported document never loads anything.
-const RE_EXP_ITEM = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
+// A list item → [line, indent, marker, text] | null: /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/ with its text read by headRest (1.17 H).
+const expItem = (line) => headRest(line, /^(\s*)([-*+]|\d{1,9}[.)])/, true);
 const RE_EXP_RULE = /^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const RE_EXP_BLOCK = /^(?:#{1,6}\s|\s*\||\s{0,3}>)/; // a heading, table row or quote: ends a list at the margin
-const RE_EXP_SEP = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/; // a table's header separator row
+// A table's header separator row. \s*\|?\s* → \s*(?:\|\s*)? (same rows): two blank runs meeting with no pipe between them
+// backtracked quadratically (1.17 H).
+const RE_EXP_SEP = /^\s*(?:\|\s*)?:?-+:?\s*(?:\|\s*:?-+:?\s*)*(?:\|\s*)?$/;
 function expInline(text) {
   const slots = [];
   const put = (html) => "\u0001" + (slots.push(html) - 1) + "\u0002";
   let s = String(text == null ? "" : text).replace(/[\u0001\u0002]/g, "");
   // Spans are bounded (4000 / 2000 chars): an unclosed `, * or ~~ used to rescan the rest of the paragraph from every opener.
-  s = s.replace(/(`+)([^`]|[^`][\s\S]{0,4000}?[^`])\1(?!`)/g, (m, tick, body) => put("<code>" + htmlEsc(body.trim()) + "</code>"));
+  s = replaceCodeSpans(s, (m, tick, body) => put("<code>" + htmlEsc(body.trim()) + "</code>"), 4002); // /(`+)([^`]|[^`][\s\S]{0,4000}?[^`])\1(?!`)/g
   const target = "(<[^<>\\s]*>|[^()\\s]*(?:\\([^()\\s]*\\)[^()\\s]*)*)(?:\\s+\"[^\"]*\")?";
   // A label holds no '[' (full review Pb6): "[" × N rescanned the rest of the paragraph from every '[' — quadratic. A nested
   // "[a [b] c](url)" never matched as a whole either (its first ']' is no "](").
@@ -15804,7 +16057,7 @@ function expList(lines, i) {
   for (; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim()) { blank = true; continue; }
-    const m = line.match(RE_EXP_ITEM);
+    const m = expItem(line);
     if (m && !RE_EXP_RULE.test(line)) {
       cur = { indent: indentOf(m[1]), ordered: /\d/.test(m[2]), start: parseInt(m[2], 10), text: [m[3]], extra: [] };
       items.push(cur);
@@ -15844,7 +16097,7 @@ function expBlocks(lines) {
     if (!para.length) return;
     let joined = "";
     para.forEach((l, k) => {
-      if (k) joined += / {2,}$|\\$/.test(para[k - 1]) || /^\s*(?:\*\*|__)/.test(l) ? "\u0003" : " ";
+      if (k) joined += para[k - 1].endsWith("  ") || para[k - 1].endsWith("\\") || /^\s*(?:\*\*|__)/.test(l) ? "\u0003" : " "; // / {2,}$|\\$/ rescanned a blank run
       joined += l.trim().replace(/\\$/, "");
     });
     out.push("<p>" + expInline(joined).replace(/\u0003/g, "<br>") + "</p>");
@@ -15854,8 +16107,8 @@ function expBlocks(lines) {
     const line = lines[i];
     if (!line.trim()) { flush(); i++; continue; }
     if (RE_FENCE.test(line)) { flush(); const f = expFence(lines, i); out.push(f.html); i = f.next; continue; }
-    const h = line.match(/^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/);
-    if (h) { flush(); out.push(`<h${h[1].length}>${expInline(h[2])}</h${h[1].length}>`); i++; continue; }
+    const h = atxHeading(line, 1, 6, "closing"); // /^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/
+    if (h) { flush(); out.push(`<h${h.level}>${expInline(h.text)}</h${h.level}>`); i++; continue; }
     if (RE_EXP_RULE.test(line)) { flush(); out.push("<hr>"); i++; continue; }
     if (/^\s*\|/.test(line)) {
       flush();
@@ -15871,7 +16124,7 @@ function expBlocks(lines) {
       out.push("<blockquote>" + expBlocks(inner) + "</blockquote>");
       continue;
     }
-    if (RE_EXP_ITEM.test(line)) { flush(); const l = expList(lines, i); out.push(l.html); i = l.next; continue; }
+    if (expItem(line)) { flush(); const l = expList(lines, i); out.push(l.html); i = l.next; continue; }
     para.push(line);
     i++;
   }
@@ -15938,7 +16191,7 @@ function specTitle(text, slug) {
 }
 // "Title" when the title slugs to the folder name, else "Title (slug)".
 const titledSlug = (title, slug) => (slugify(title) === slug ? title : `${title} (${slug})`);
-const mdCell = (s) => String(s == null ? "" : s).replace(/(?<!\\)\|/g, "\\|").replace(/\s*\r?\n\s*/g, " ");
+const mdCell = (s) => String(s == null ? "" : s).replace(/(?<!\\)\|/g, "\\|").replace(/(?<!\s)\s*\r?\n\s*/g, " "); // (?<!\s): 1.17 H
 const utcStamp = (v) => { const t = timeOf(v); return t == null ? "—" : new Date(t).toISOString().slice(0, 16).replace("T", " ") + " UTC"; };
 const italic = (s) => `_${s}_`;
 
@@ -16886,7 +17139,7 @@ function earsSteps(raw, lang) {
       // else the last determiner before the modal ("the system shall", "o sistema deve"); neither → no clean split.
       let runStart = modalAt;
       if (mod[1] === mod[1].toUpperCase()) {
-        const trimmed = region.replace(/\s+$/, "");
+        const trimmed = region.trimEnd(); // /\s+$/ rescanned a blank run from each of its units (1.17 H)
         const words = trimmed.split(" ");
         let end = trimmed.length;
         for (let w = words.length - 1; w >= 0 && words[w] && words[w] === words[w].toUpperCase() && /\p{Lu}/u.test(words[w]); w--) {
@@ -16907,14 +17160,14 @@ function earsSteps(raw, lang) {
   const withLead = (t) => (!lead ? t : /\s$/.test(lead) ? lead.trim() + " " + t : lead.trim() + t);
   let resp = text.slice(subj).replace(/^[\s,]+/, "").trim();
   if (!conds.length && !thenKw) {
-    const ctx = text.slice(0, subj).replace(/[\s,]+$/, "").trim();
+    const ctx = stripEnd(text.slice(0, subj), wsOrUnitIn(",")).trim(); // /[\s,]+$/
     if (ctx) steps.push({ kind: "given", text: ctx });
   } else {
     lead = text.slice(0, conds.length ? conds[0].at : thenKw.at);
     if (ghMask(lead).replace(/[\s([{*_~]/g, "")) return whole; // text before the first keyword
     for (let i = 0; i < conds.length; i++) {
       const stop = i + 1 < conds.length ? conds[i + 1].at : thenKw ? thenKw.at : subj;
-      const t = text.slice(conds[i].end, stop).replace(/^[\s,]+|[\s,]+$/g, "");
+      const t = stripEnds(text.slice(conds[i].end, stop), wsOrUnitIn(",")); // /^[\s,]+|[\s,]+$/g
       if (!t) return whole;
       steps.push({ kind: GHERKIN_COND[conds[i].word] || "given", text: i ? t : withLead(t) });
     }
@@ -18515,8 +18768,10 @@ const RE_JS_IMPORT = /(?:require\s*\(\s*|from\s+)['"](express|koa|@koa\/router|k
 const RE_JS_CLIENT_IMPORT = /(?:require\s*\(\s*|from\s+)['"](axios|ky|ky-universal|got|node-fetch|cross-fetch|isomorphic-fetch|ofetch|redaxios|wretch|superagent|undici|@angular\/common\/http)(?:\/[^'"]*)?['"]/;
 const RE_JS_CLIENT_DEF = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*(?:axios|ky|got|ofetch|wretch|redaxios|superagent)\s*\.\s*(?:create|extend)\s*\(/g;
 const JS_GENERIC_OWNERS = new Set(["api", "instance", "r", "route", "routes", "server"]);
-const RE_NEST_ROUTE = /@(Get|Post|Put|Patch|Delete|Options|Head|All)\s*\(\s*(?:(['"`])([^'"`]*)\2)?\s*\)/g;
-const RE_NEST_CTRL = /@Controller\s*\(\s*(?:(['"`])([^'"`]*)\1|\{[^}]*?path\s*:\s*(['"`])([^'"`]*)\3[^}]*\})?\s*\)/;
+// `\(\s*(?:X)?\s*\)` read as `\(\s*(?:X\s*)?\)` (same calls): two blank runs meeting around an absent argument backtracked
+// quadratically (1.17 H).
+const RE_NEST_ROUTE = /@(Get|Post|Put|Patch|Delete|Options|Head|All)\s*\(\s*(?:(['"`])([^'"`]*)\2\s*)?\)/g;
+const RE_NEST_CTRL = /@Controller\s*\(\s*(?:(?:(['"`])([^'"`]*)\1|\{[^}]*?path\s*:\s*(['"`])([^'"`]*)\3[^}]*\})\s*)?\)/;
 const RE_NEXT_APP = /(?:^|\/)app\/((?:[^/]+\/)*)route\.[cm]?[jt]sx?$/; // Next.js app router: app/**/route.ts
 const RE_NEXT_PAGES = /(?:^|\/)pages\/api\/(.+)\.[cm]?[jt]sx?$/;
 const RE_NEXT_EXPORT = /^\s*export\s+(?:async\s+)?(?:function\s+|const\s+)(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/;
@@ -18530,14 +18785,14 @@ const RE_PY_OWNER_SUFFIX = /(?:_app|_api|_router|_routes|_bp|_blueprint|App|Api|
 const RE_PY_APP_DEF = /^\s*([A-Za-z_]\w*)\s*(?::\s*[\w.]+\s*)?=\s*(?:[\w.]+\.)?(?:FastAPI|Flask|APIRouter|Blueprint|Quart|Sanic|Starlette)\s*\(/;
 const RE_PY_PREFIX_DEF = /^\s*([A-Za-z_]\w*)\s*(?::\s*[\w.]+\s*)?=\s*(?:[\w.]+\.)?(?:APIRouter|Blueprint)\s*\((.*)$/;
 const RE_PY_PREFIX_ARG = /\b(?:prefix|url_prefix)\s*=\s*[rRuU]?(['"])([^'"]*)\1/;
-const RE_PY_WEB_IMPORT = /^\s*(?:from|import)\s+(fastapi|flask|django)\b/m;
+const RE_PY_WEB_IMPORT = /^[^\S\n\r\u2028\u2029]*(?:from|import)\s+(fastapi|flask|django)\b/m; // the indent within its line (1.17 H)
 const RE_DJANGO_ROUTE = /(?<![\w.])(?:path|re_path|url)\s*\(\s*[rRuU]?(['"])([^'"]*)\1/g;
 const RE_SPRING = /@(Get|Post|Put|Patch|Delete|Request)Mapping\b(?:\s*\(([^)]*)\))?/g;
 const RE_ASP_ATTR = /\[\s*(?:[\w.]+\s*,\s*)*Http(Get|Post|Put|Patch|Delete|Head|Options)\s*(?:\(\s*(?:template\s*:\s*)?"([^"]*)"[^)]*\))?/g;
 const RE_ASP_ROUTE_ATTR = /\[\s*Route\s*\(\s*"([^"]*)"\s*\)/;
 const RE_ASP_MAP = /\.Map(Get|Post|Put|Patch|Delete)?\s*\(\s*"([^"]*)"/g;
-const RE_RUBY_VERB = /^\s*(get|post|put|patch|delete|match)\s*\(?\s*(['"])([^'"]+)\2/;
-const RE_RAILS_RES = /^\s*(resources|resource)\s*\(?\s*:(\w+)/;
+const RE_RUBY_VERB = /^\s*(get|post|put|patch|delete|match)\s*(?:\(\s*)?(['"])([^'"]+)\2/; // \s*\(?\s* → \s*(?:\(\s*)? (1.17 H)
+const RE_RAILS_RES = /^\s*(resources|resource)\s*(?:\(\s*)?:(\w+)/;
 const RE_LARAVEL = /Route::(get|post|put|patch|delete|options|any|match|resource|apiResource)\s*\(\s*(?:\[[^\]]*\]\s*,\s*)?(['"])([^'"]+)\2/g;
 const RE_LARAVEL_CHAIN = /->\s*(get|post|put|patch|delete|options|any)\s*\(\s*(['"])([^'"]*)\2/g; // routes/*.php only
 const RE_SYMFONY = /#\[\s*Route\s*\(\s*(?:path\s*:\s*)?(['"])([^'"]+)\1(.*)$/; // the rest of the line holds methods: [...]
@@ -18567,7 +18822,7 @@ function normRoutePath(p) {
   return /^[/^*]/.test(s) ? s : "/" + s; // Django regexes (^…$) and wildcards stay as written
 }
 function joinRoute(prefix, sub) {
-  const a = String(prefix || "").trim().replace(/\/+$/, "");
+  const a = stripEnd(String(prefix || "").trim(), isSlashUnit); // /\/+$/
   const b = String(sub || "").trim().replace(/^\/+/, "");
   return normRoutePath(a ? (b ? a + "/" + b : a) : b);
 }
@@ -18834,7 +19089,10 @@ function scanCodebase(projectDir, opts = {}) {
         if (Object.prototype.hasOwnProperty.call(NODE_TEST_RUNNERS, d)) testFws.add(NODE_TEST_RUNNERS[d]);
       });
       const scripts = isObj(pj.scripts) ? pj.scripts : {};
-      if (typeof scripts.test === "string" && /\bnode\s+(?:[^|&;]*\s)?--test\b/.test(scripts.test)) testFws.add("node:test");
+      // /\bnode\s+(?:[^|&;]*\s)?--test\b/, one command at a time: that pattern rescanned the command from each "node" and
+      // each of a long blank run's units (1.17 H).
+      const nodeTest = (seg) => { const m = /\bnode\s/.exec(seg); return !!m && /\s--test\b/.test(seg.slice(m.index + 4)); };
+      if (typeof scripts.test === "string" && scripts.test.split(/[|&;]/).some(nodeTest)) testFws.add("node:test");
       if (typeof pj.main === "string" && pj.main.trim()) addEntry(normEntry(pj.main), "package.json main");
       if (typeof pj.bin === "string" && pj.bin.trim()) addEntry(normEntry(pj.bin), "package.json bin");
       else if (isObj(pj.bin)) Object.values(pj.bin).filter((v) => typeof v === "string" && v.trim()).forEach((v) => addEntry(normEntry(v), "package.json bin"));
@@ -18861,7 +19119,7 @@ function scanCodebase(projectDir, opts = {}) {
   [["laravel/framework", "laravel"], ["symfony/framework-bundle", "symfony"]].forEach(([k, v]) => { if (composer.includes(k)) frameworks.add(v); });
   [["phpunit/phpunit", "phpunit"], ["pestphp/pest", "pest"]].forEach(([k, v]) => { if (composer.includes(k)) testFws.add(v); });
   const cargo = has("Cargo.toml") ? text("Cargo.toml") : "";
-  [["actix-web", "actix"], ["axum", "axum"], ["rocket", "rocket"]].forEach(([k, v]) => { if (new RegExp("^\\s*" + k + "\\s*=", "m").test(cargo)) frameworks.add(v); });
+  [["actix-web", "actix"], ["axum", "axum"], ["rocket", "rocket"]].forEach(([k, v]) => { if (new RegExp("^[^\\S\\n\\r\\u2028\\u2029]*" + k + "\\s*=", "m").test(cargo)) frameworks.add(v); }); // the indent within its line (1.17 H)
 
   // bounded recursive walk
   const walk = walkProject(root, cap, (rel, full, name) => {
@@ -18899,15 +19157,15 @@ function scanCodebase(projectDir, opts = {}) {
     if (ext === ".rs" && /#\[(?:test|cfg\(test\))\]/.test(txt)) testFws.add("cargo test");
     if (test) {
       // The runner a test file imports (the manifests above only cover declared dependencies).
-      [[/['"]node:test['"]/, "node:test"], [/from\s+['"]vitest['"]/, "vitest"], [/['"]@jest\/globals['"]/, "jest"], [/^\s*(?:import|from)\s+pytest\b/m, "pytest"],
-        [/^\s*(?:import|from)\s+unittest\b/m, "unittest"], [/import\s+org\.junit\b/, "junit"], [/using\s+Xunit\b/, "xunit"], [/using\s+NUnit\b/, "nunit"]]
+      [[/['"]node:test['"]/, "node:test"], [/from\s+['"]vitest['"]/, "vitest"], [/['"]@jest\/globals['"]/, "jest"], [/^[^\S\n\r\u2028\u2029]*(?:import|from)\s+pytest\b/m, "pytest"],
+        [/^[^\S\n\r\u2028\u2029]*(?:import|from)\s+unittest\b/m, "unittest"], [/import\s+org\.junit\b/, "junit"], [/using\s+Xunit\b/, "xunit"], [/using\s+NUnit\b/, "nunit"]]
         .forEach(([re, fw]) => { if (re.test(txt)) testFws.add(fw); });
       return; // tests call routes (supertest's api.get('/x')), they don't declare them
     }
     if (ext === ".py") { const im = txt.match(RE_PY_WEB_IMPORT); if (im) frameworks.add(im[1]); } // FastAPI/Flask without a manifest
     if (/@SpringBootApplication\b/.test(txt)) addEntry(rel, "spring boot");
     else if (ext === ".java" && /\bstatic\s+void\s+main\s*\(/.test(txt)) addEntry(rel, "java main");
-    else if (ext === ".kt" && /^\s*fun\s+main\s*\(/m.test(txt)) addEntry(rel, "kotlin main");
+    else if (ext === ".kt" && /^[^\S\n\r\u2028\u2029]*fun\s+main\s*\(/m.test(txt)) addEntry(rel, "kotlin main"); // indents within their line (1.17 H)
     const found = scanRoutes(rel, txt);
     if (!found.length) return;
     routeFiles.add(rel);
@@ -18975,7 +19233,7 @@ function scanCodebase(projectDir, opts = {}) {
 function implementsRefs(tasksText) {
   const out = [];
   for (const v of taskMarkerValues(tasksProseText(tasksText || ""), "implements")) {
-    v.split(/[,;]/).map((s) => s.trim().replace(/^`+|`+$/g, "").trim()).filter(Boolean).forEach((p) => { if (!out.includes(p)) out.push(p); });
+    v.split(/[,;]/).map((s) => stripEnds(s.trim(), isBacktickUnit).trim()).filter(Boolean).forEach((p) => { if (!out.includes(p)) out.push(p); });
   }
   return out;
 }
@@ -19048,11 +19306,38 @@ function globFolderNames(g) {
 }
 // The code files one reference names (keys of `code`): the file itself, every code file under a folder, or a
 // glob's matches. `path/to/file.js:12` and `#L12` anchors are dropped; a path outside the project names nothing.
-const implementsPath = (ref) => String(ref).trim().replace(/\\/g, "/").replace(/#L?\d+.*$/, "").replace(/:\d+(?:[-:]\d+)*$/, "").trim();
+const implementsPath = (ref) => {
+  const s = stripHashLineAnchor(String(ref).trim().replace(/\\/g, "/")); // .replace(/#L?\d+.*$/, "")
+  const c = colonLineAnchorAt(s); // .replace(/:\d+(?:[-:]\d+)*$/, "")
+  return (c === -1 ? s : s.slice(0, c)).trim();
+};
+function isDigitUnit(c) {
+  return c !== undefined && c >= "0" && c <= "9";
+}
+// s.replace(/#L?\d+.*$/, ""): from the first '#' followed by digits (or L and digits) with no line terminator after it.
+function stripHashLineAnchor(s) {
+  for (let i = s.indexOf("#", lastLtIndex(s) + 1); i !== -1; i = s.indexOf("#", i + 1)) {
+    if (isDigitUnit(s[s[i + 1] === "L" ? i + 2 : i + 1])) return s.slice(0, i);
+  }
+  return s;
+}
+// Where /:\d+(?:[-:]\d+)*$/ matches in s (a trailing ":12" / ":12-20" / ":3:5" anchor), else -1: the leftmost ':' of the
+// trailing run of digit groups joined by single '-' / ':'.
+function colonLineAnchorAt(s) {
+  let at = -1;
+  for (let i = s.length - 1; i >= 0 && isDigitUnit(s[i]);) {
+    let j = i;
+    while (j >= 0 && isDigitUnit(s[j])) j--;
+    if (s[j] === ":") at = j;
+    if (s[j] !== ":" && s[j] !== "-") break;
+    i = j - 1;
+  }
+  return at;
+}
 // One _Implements:_ reference as every reader spells the file: backticks, a line anchor (:12 / #L12), a leading ./ and a
 // trailing / dropped, forward slashes. implementsKey: the same, case-folded where the file system folds case — so
 // `src/payment.js:10`, `./src/payment.js#L50` and `SRC/Payment.js` (on Windows / macOS) compare as one file.
-const implementsRel = (ref) => implementsPath(String(ref).trim().replace(/^`+|`+$/g, "")).replace(/^(?:\.\/)+/, "").replace(/\/+$/, "");
+const implementsRel = (ref) => stripEnd(implementsPath(stripEnds(String(ref).trim(), isBacktickUnit)).replace(/^(?:\.\/)+/, ""), isSlashUnit);
 const implementsKey = (ref) => (FOLD_CASE ? implementsRel(ref).toLowerCase() : implementsRel(ref));
 function implementsTargets(root, ref, code, fold) {
   const p = implementsPath(ref);
@@ -19333,7 +19618,8 @@ function mdListItems(lines, numberedOnly) {
     const f = l.match(RE_FENCE);
     if (f) { fence = f[1]; cur = null; return; }
     const ind = indentOf(l);
-    const m = l.match(numberedOnly ? /^\s*(\d+)[.)]\s+(.*)$/ : /^\s*(?:(\d+)[.)]|[-*+])\s+(.*)$/);
+    // /^\s*(\d+)[.)]\s+(.*)$/ (or with a bullet too), the text read by headRest (1.17 H)
+    const m = headRest(l, numberedOnly ? /^\s*(\d+)[.)]/ : /^\s*(?:(\d+)[.)]|[-*+])/, true);
     if (m && (!cur || ind <= cur.indent)) { cur = { n: m[1] ? +m[1] : null, text: m[2].trim(), indent: ind, at: [i] }; items.push(cur); return; }
     if (!l.trim() || /^\s*(?:#|>|\|)/.test(l) || RE_MD_HR.test(l)) { cur = null; return; }
     if (!cur) return;
@@ -19370,7 +19656,7 @@ function leftoverExtras(lines, hs, used, prefix = "") {
   });
   return out.map((b) => ({ heading: b.label != null ? "## " + b.label : null, label: b.label, lines: tidyLines(b.lines) })).filter((b) => b.lines.length);
 }
-const trimClause = (s) => String(s || "").trim().replace(/[\s,.;:]+$/, "");
+const trimClause = (s) => stripEnd(String(s || "").trim(), wsOrUnitIn(",.;:")); // /[\s,.;:]+$/
 // Prose lines as written (trailing spaces dropped), blank runs folded, no blank edges.
 function tidyLines(lines) {
   const out = [];
@@ -19414,29 +19700,136 @@ function earsFromClauses(cl, lng) {
   if (!then) return null;
   return [cl.given ? E.while + " " + trimClause(cl.given) + "," : null, cl.when ? E.when + " " + trimClause(cl.when) + "," : null, then].filter(Boolean).join(" ");
 }
-// Given/When/Then prose (spec-kit scenarios; Gherkin keywords in EN/PT/ES) → EARS, in the scenario's language.
+// 1.17 H — the importer's clause patterns, read by a scan. /^(?:given\s+(.+?)\s*,?\s+)?(?:when\s+(.+?)\s*,?\s+)?then\s+(.+)$/i
+// and /^(WHEN|IF|WHILE|WHERE)\s+(.+?),?\s+THEN\s+(.+)$/i backtracked quadratically — Given/When/Then cubically — on a long
+// blank run, a long run of "when"s or a line break a capture can't cross. The scan tries the choices in the order the regex
+// engine does, so the first reading it finds is the engine's own, captures included (down to the one-blank capture the
+// engine settled for by giving back a keyword's \s+). Per-position facts are filled in one pass; every run of blanks /
+// commas that a keyword follows is judged once.
+function clauseScanner(t) {
+  const n = t.length;
+  const nnw = new Int32Array(n + 1), nlt = new Int32Array(n + 1), sepEnd = new Int32Array(n + 1), prevComma = new Int32Array(n + 1);
+  nnw[n] = n; nlt[n] = n; sepEnd[n] = n;
+  for (let i = n - 1; i >= 0; i--) {
+    const c = t[i], w = isWsUnit(c);
+    nnw[i] = w ? nnw[i + 1] : i; // the first non-blank at or after i
+    nlt[i] = isLtUnit(c) ? i : nlt[i + 1]; // the first line terminator at or after i (n: none)
+    sepEnd[i] = w || c === "," ? sepEnd[i + 1] : i; // the end of the run of blanks / commas at i
+  }
+  for (let i = 0, pc = -1; i <= n; i++) { prevComma[i] = pc; if (t[i] === ",") pc = i; }
+  const runStart = [], runKw = []; // each run of blanks / commas that something follows: its start and what follows
+  for (let i = 0; i < n;) {
+    if (isWsUnit(t[i]) || t[i] === ",") { if (sepEnd[i] < n) { runStart.push(i); runKw.push(sepEnd[i]); } i = sepEnd[i]; } else i++;
+  }
+  const firstRun = new Int32Array(n + 2); // the first run starting at or after p
+  for (let p = n + 1, j = runStart.length; p >= 0; p--) { while (j > 0 && runStart[j - 1] >= p) j--; firstRun[p] = j; }
+  const kwAt = (re, at) => { re.lastIndex = at; const m = re.exec(t); return m ? { end: at + m[0].length, m } : null; };
+  // The smallest e ≥ x (x..k inside one run) whose separator t[e..k) the rule reads: "gwt" \s*,?\s+ (one comma at most, a
+  // blank last), "kiro" ,?\s+ (a comma only first). -1: none.
+  const sepStart = (rule, x, k) => {
+    if (k <= x || !isWsUnit(t[k - 1])) return -1;
+    const c1 = prevComma[k];
+    if (rule === "kiro") return c1 < x ? x : c1 < k - 1 ? c1 : -1;
+    const c2 = c1 >= x ? prevComma[c1] : -1;
+    return c2 >= x ? c2 + 1 : x;
+  };
+  // (.+?)<separator> before a keyword whose continuation cont(k) reads: from a capture start gs → { e, k, r } | null.
+  const lazyReader = (rule, cont) => {
+    const nv = new Int32Array(runStart.length + 1).fill(-1), res = new Array(runStart.length).fill(null);
+    for (let j = runStart.length - 1; j >= 0; j--) {
+      if (sepStart(rule, runStart[j], runKw[j]) !== -1) res[j] = cont(runKw[j]);
+      nv[j] = res[j] ? j : nv[j + 1]; // the first run from j on whose keyword reads
+    }
+    return (gs) => {
+      const x = gs + 1, lt = nlt[gs]; // the capture t[gs..e) holds no line terminator: e ≤ lt
+      if (x >= n) return null;
+      let j = firstRun[x];
+      if (isWsUnit(t[x]) || t[x] === ",") { // a run under way at x is read from x
+        const k = sepEnd[x];
+        const e = k < n ? sepStart(rule, x, k) : -1;
+        if (e !== -1) { if (e > lt) return null; const r = cont(k); if (r) return { e, k, r }; }
+        j = firstRun[k + 1];
+      }
+      j = j < runStart.length ? nv[j] : -1;
+      if (j === -1) return null;
+      const e = sepStart(rule, runStart[j], runKw[j]);
+      return e > lt ? null : { e, k: runKw[j], r: res[j] };
+    };
+  };
+  // KW\s+(.+?)<separator><keyword …> at `a` (just past KW, a blank there): the capture from the first non-blank — else,
+  // as the engine giving back \s+ found it, one blank (the last that is no line terminator, a blank kept on each side)
+  // before a keyword at that first non-blank.
+  const clause = (a, lazy, cont) => {
+    const gs = nnw[a];
+    if (gs >= n) return null;
+    const m = lazy(gs);
+    if (m) return { g: t.slice(gs, m.e), r: m.r };
+    if (t[gs] === "," || gs - a < 3) return null;
+    const r = cont(gs);
+    if (r) for (let s = gs - 2; s > a; s--) if (!isLtUnit(t[s])) return { g: t[s], r };
+    return null;
+  };
+  // THEN\s+(.+)$ at c → the response | null (all blanks: the last one, as the engine giving back \s+ read it).
+  const thenAt = (re, c) => {
+    const kw = kwAt(re, c);
+    if (!kw) return null;
+    const q = nnw[kw.end];
+    if (q < n) return nlt[q] === n ? t.slice(q) : null;
+    return n - kw.end >= 2 && !isLtUnit(t[n - 1]) ? t[n - 1] : null;
+  };
+  const memo = (f) => { const c = new Map(); return (k) => { if (!c.has(k)) c.set(k, f(k)); return c.get(k); }; };
+  return { n, nnw, kwAt, lazyReader, clause, thenAt, memo };
+}
+// Given/When/Then prose (spec-kit scenarios; Gherkin keywords in EN/PT/ES) → EARS, in the scenario's language. Each language's
+// keywords, a blank after each (`given\s+` …; PT / ES: dad[oa]s?\s+(?:que\s+)?).
 const GWT = [
-  ["en", /^(?:given\s+(.+?)\s*,?\s+)?(?:when\s+(.+?)\s*,?\s+)?then\s+(.+)$/i],
-  ["pt", /^(?:dad[oa]s?\s+(?:que\s+)?(.+?)\s*,?\s+)?(?:quando\s+(.+?)\s*,?\s+)?ent[ãa]o\s+(.+)$/i],
-  ["es", /^(?:dad[oa]s?\s+(?:que\s+)?(.+?)\s*,?\s+)?(?:cuando\s+(.+?)\s*,?\s+)?entonces\s+(.+)$/i],
+  ["en", { given: /given(?=\s)/iy, que: null, when: /when(?=\s)/iy, then: /then(?=\s)/iy }],
+  ["pt", { given: /dad[oa]s?(?=\s)/iy, que: /que(?=\s)/iy, when: /quando(?=\s)/iy, then: /ent[ãa]o(?=\s)/iy }],
+  ["es", { given: /dad[oa]s?(?=\s)/iy, que: /que(?=\s)/iy, when: /cuando(?=\s)/iy, then: /entonces(?=\s)/iy }],
 ];
+// /^(?:given\s+(.+?)\s*,?\s+)?(?:when\s+(.+?)\s*,?\s+)?then\s+(.+)$/i on t → [t, given, when, then] | null (clauseScanner S).
+function gwtMatch(S, t, K) {
+  const C = S.memo((k) => S.thenAt(K.then, k));
+  const lazyC = S.lazyReader("gwt", C);
+  const B = S.memo((k) => { const kw = S.kwAt(K.when, k); const c = kw && S.clause(kw.end, lazyC, C); return c ? { when: c.g, then: c.r } : null; });
+  const cont = S.memo((k) => B(k) || (C(k) != null ? { then: C(k) } : null)); // (?:when…)? then…
+  const g = S.kwAt(K.given, 0);
+  if (g) {
+    const lazyAG = S.lazyReader("gwt", cont);
+    const g0 = S.nnw[g.end];
+    const q = K.que && g0 < S.n ? S.kwAt(K.que, g0) : null;
+    const r = (q && S.clause(q.end, lazyAG, cont)) || S.clause(g.end, lazyAG, cont);
+    if (r) return [t, r.g, r.r.when, r.r.then];
+  }
+  const r0 = cont(0);
+  return r0 ? [t, undefined, r0.when, r0.then] : null;
+}
 function earsFromGwt(text) {
   const t = String(text).replace(/\*\*|__/g, "").trim();
   if (RE_MODAL.test(t) && RE_EARS_KEYWORD.test(t)) return t;
-  for (const [lng, re] of GWT) {
-    const m = t.match(re);
+  const S = clauseScanner(t);
+  for (const [lng, K] of GWT) {
+    const m = gwtMatch(S, t, K);
     if (m && (m[1] || m[2])) return earsFromClauses({ given: m[1], when: m[2], then: m[3] }, lng);
   }
   return null;
 }
 // A Kiro criterion is usually EARS already ("WHEN … THEN the system SHALL …") — kept verbatim; a WHEN/IF … THEN
 // without SHALL gets its response rewritten. A spec written in Portuguese / Spanish (QUANDO … ENTÃO … / CUANDO … ENTONCES …)
-// the same way, in its language (full review Pb1: only the English keywords were read).
+// the same way, in its language (full review Pb1: only the English keywords were read). Read as
+// /^(WHEN|IF|WHILE|WHERE)\s+(.+?),?\s+THEN\s+(.+)$/i by clauseScanner (1.17 H): [lang, the condition keyword, THEN, …].
 const KIRO_COND = [
-  ["en", /^(WHEN|IF|WHILE|WHERE)\s+(.+?),?\s+THEN\s+(.+)$/i, { when: "when", if: "if", while: "while", where: "where" }],
-  ["pt", /^(QUANDO|SE|ENQUANTO|ONDE)\s+(.+?),?\s+ENT[ÃA]O\s+(.+)$/i, { quando: "when", se: "if", enquanto: "while", onde: "where" }],
-  ["es", /^(CUANDO|SI|MIENTRAS|DONDE)\s+(.+?),?\s+ENTONCES\s+(.+)$/i, { cuando: "when", si: "if", mientras: "while", donde: "where" }],
+  ["en", /(WHEN|IF|WHILE|WHERE)(?=\s)/iy, /THEN(?=\s)/iy, { when: "when", if: "if", while: "while", where: "where" }],
+  ["pt", /(QUANDO|SE|ENQUANTO|ONDE)(?=\s)/iy, /ENT[ÃA]O(?=\s)/iy, { quando: "when", se: "if", enquanto: "while", onde: "where" }],
+  ["es", /(CUANDO|SI|MIENTRAS|DONDE)(?=\s)/iy, /ENTONCES(?=\s)/iy, { cuando: "when", si: "if", mientras: "while", donde: "where" }],
 ];
+function kiroCondMatch(S, t, head, thenRe) {
+  const h = S.kwAt(head, 0);
+  if (!h) return null;
+  const C = S.memo((k) => S.thenAt(thenRe, k));
+  const c = S.clause(h.end, S.lazyReader("kiro", C), C);
+  return c ? [t, h.m[1], c.g, c.r] : null;
+}
 // Kiro's requirements.md headings in EN / PT / ES: the document title, "## Introduction", "## Requirements" and the story
 // headings "### Requirement N" (PT/ES "Requisito N" — or a translated "História de Utilizador / Usuário N", "Historia de
 // Usuario N"). The English forms read exactly as before; a PT/ES "## Requisitos" wrapper only when it is the whole heading
@@ -19444,12 +19837,20 @@ const KIRO_COND = [
 const RE_KIRO_REQ_TITLE = /^(?:requirements?(?:\s+document)?|(?:documento\s+de\s+)?requisitos)$/i;
 const RE_KIRO_INTRO = /^(?:introduction\b|introdu[çc][ãa]o(?![\p{L}\p{N}_])|introducci[óo]n(?![\p{L}\p{N}_]))/iu;
 const RE_KIRO_REQS = /^(?:requirements\b|requisitos\s*$)/i;
-const RE_KIRO_STORY = /^(requirement|requisito|hist[óo]ria\s+de\s+(?:utilizador|usu[áa]rio)|historia\s+de\s+usuario)\s+(\d+)\s*[:.\-–—]?\s*(.*)$/i;
+// A Kiro story heading → [text, word, number, title] | null — /^(requirement|…)\s+(\d+)\s*[:.\-–—]?\s*(.*)$/i with the
+// title read by a scan (the two \s* around the optional dash backtracked quadratically before a line break — 1.17 H).
+const RE_KIRO_STORY_HEAD = /^(requirement|requisito|hist[óo]ria\s+de\s+(?:utilizador|usu[áa]rio)|historia\s+de\s+usuario)\s+(\d+)/i;
+function kiroStoryHeading(text) {
+  const h = RE_KIRO_STORY_HEAD.exec(text);
+  const title = h && titleAfterDash(text, h[0].length);
+  return title == null ? null : [text, h[1], h[2], title];
+}
 function earsFromKiro(text) {
   const t = String(text).trim();
   if (RE_MODAL.test(t)) return t;
-  for (const [lng, re, kws] of KIRO_COND) {
-    const m = t.match(re);
+  const S = clauseScanner(t);
+  for (const [lng, head, thenRe, kws] of KIRO_COND) {
+    const m = kiroCondMatch(S, t, head, thenRe);
     if (!m) continue;
     const E = i18n.msg(lng).importSpec.ears;
     const then = earsThen(m[3], lng, E);
@@ -19461,9 +19862,39 @@ function earsFromKiro(text) {
 // The story's title from its "I want …" clause (PT "quero …", ES "quiero …").
 function titleFromStory(prose) {
   const s = prose.join(" ");
-  const m = s.match(/\bI want\s+(?:to\s+)?(.+?)(?:,|\s+so that\b|$)/i) ||
-    s.match(/(?<![\p{L}\p{N}_])(?:quero|quiero)\s+(?:que\s+)?(.+?)(?:,|\s+(?:para|de modo a|de forma a)(?![\p{L}\p{N}_])|$)/iu);
-  return m ? shortTitle(m[1].charAt(0).toUpperCase() + m[1].slice(1), 60) : null;
+  const m = wantClause(s, /\bI want(?=\s)/gi, /to(?=\s)/iy, /so that\b/iy) ||
+    wantClause(s, /(?<![\p{L}\p{N}_])(?:quero|quiero)(?=\s)/giu, /que(?=\s)/iuy, /(?:para|de modo a|de forma a)(?![\p{L}\p{N}_])/iuy);
+  return m ? shortTitle(m.charAt(0).toUpperCase() + m.slice(1), 60) : null;
+}
+// The capture of /\bI want\s+(?:to\s+)?(.+?)(?:,|\s+so that\b|$)/i (and its PT / ES twin) by a scan: head / opt / closing are
+// its pieces (head global, opt / closing sticky). The lazy capture rescanned a long blank run at each step and every head
+// the text after it (1.17 H); here each position's "a clause ends here" is known once. Choices in the engine's order: the
+// heads left to right; the optional word taken, its blanks given back one by one, not taken; the head's blanks given back.
+function wantClause(s, head, opt, closing) {
+  const n = s.length;
+  const nnw = new Int32Array(n + 1), nlt = new Int32Array(n + 1), nextEnd = new Int32Array(n + 1);
+  nnw[n] = n; nlt[n] = n; nextEnd[n] = n;
+  for (let i = n - 1; i >= 0; i--) {
+    nnw[i] = isWsUnit(s[i]) ? nnw[i + 1] : i;
+    nlt[i] = isLtUnit(s[i]) ? i : nlt[i + 1];
+    let ends = s[i] === ",";
+    if (!ends && nnw[i] > i) { closing.lastIndex = nnw[i]; ends = closing.test(s); } // \s+ then the closing words
+    nextEnd[i] = ends ? i : nextEnd[i + 1]; // the first position ≥ i where the capture may end (n: the end)
+  }
+  const from = (cs) => { const e = cs < n ? nextEnd[cs + 1] : -1; return e !== -1 && e <= nlt[cs] ? s.slice(cs, e) : null; };
+  head.lastIndex = 0;
+  for (let h; (h = head.exec(s));) {
+    const a = h.index + h[0].length, g0 = nnw[a];
+    let r = null;
+    opt.lastIndex = g0;
+    if (g0 < n && opt.test(s)) {
+      const a1 = opt.lastIndex, g1 = nnw[a1];
+      for (let cs = g1; cs > a1 && r == null; cs--) r = from(cs);
+    }
+    for (let cs = g0; cs > a && r == null; cs--) r = from(cs);
+    if (r != null) return r;
+  }
+  return null;
 }
 function newImportModel() {
   return { title: null, summary: null, nameHint: null, stories: [], extra: [], carried: [], design: null, tasks: null, skipped: [], warnings: [], mapping: {} };
@@ -19493,7 +19924,7 @@ function parseKiro(dir, read, W) {
     sAt.forEach((r) => used.add(sLo + r)); // the rest of the introduction is carried verbatim
     hs.forEach((h, k) => {
       if (h.level === 2 && RE_KIRO_REQS.test(h.text)) { used.add(h.i); return; }
-      const hm = h.text.match(RE_KIRO_STORY);
+      const hm = kiroStoryHeading(h.text);
       if (!hm) return;
       // m = [, number, title] as the English form always had it; the heading's own word names the story in the mapping
       // ("Requisito 1") — English keeps "Requirement N" whatever its case.
@@ -19503,7 +19934,8 @@ function parseKiro(dir, read, W) {
       markRange(used, h.i, hi); // prose, criteria AND what follows them are all written into the story
       const body = lines.slice(lo, hi);
       // "#### Acceptance Criteria" (or a bold "**Acceptance Criteria:**" label) opens the criteria.
-      const acAt = body.findIndex((l) => /^\s*(?:#{1,6}\s+|\*\*|__).*(?:acceptance criteria|crit[ée]rios de aceita|criterios de aceptaci)/i.test(l));
+      // (?=(\s+))\1: the heading's blanks taken whole — \s+.* rescanned a long blank run from each of its units (1.17 H).
+      const acAt = body.findIndex((l) => /^\s*(?:#{1,6}(?=(\s+))\1|\*\*|__).*(?:acceptance criteria|crit[ée]rios de aceita|criterios de aceptaci)/i.test(l));
       const off = acAt === -1 ? 0 : acAt + 1;
       const acBody = body.slice(off);
       // Numbered criteria (Kiro's form); bulleted ones when there are none — but only under an explicit label, where
@@ -19542,6 +19974,94 @@ function parseKiro(dir, read, W) {
 // Acceptance Scenarios, Edge Cases, FR-xxx, Key Entities, SC-xxx), plan.md (→ design.md), tasks.md (T001 [P] [US1]).
 // Template guidance sections (Execution Flow, Quick Guidelines, checklists) are the tool's own, never imported.
 const SPECKIT_GUIDANCE = /^(?:execution flow|quick guidelines|review & acceptance checklist|execution status)\b/i;
+// Per-position facts for the scans below: nnw[i] the first non-blank ≥ i, nlt[i] the first line terminator ≥ i (n: none),
+// and tws(p) — "\s* then $ (m flag)" reads at p: the blank run at p reaches the end or holds a line terminator.
+function blankFacts(s) {
+  const n = s.length;
+  const nnw = new Int32Array(n + 1), nlt = new Int32Array(n + 1);
+  nnw[n] = n; nlt[n] = n;
+  for (let i = n - 1; i >= 0; i--) { nnw[i] = isWsUnit(s[i]) ? nnw[i + 1] : i; nlt[i] = isLtUnit(s[i]) ? i : nlt[i + 1]; }
+  return { n, nnw, nlt, tws: (p) => nnw[p] === n || nlt[p] < nnw[p] };
+}
+// spec-kit's summary — $1 of /^\*\*Input\*\*:\s*(?:User description:\s*)?"?(.+?)"?\s*$/im, by a scan (the lazy text before
+// "?\s*$ rescanned a long blank run at each step — 1.17 H). The choices in the engine's order; the text runs to the first
+// place where `"?`, blanks and a line end follow.
+function specKitInput(spec) {
+  const F = blankFacts(spec), n = F.n;
+  const nextTail = new Int32Array(n + 1); // the first e ≥ p where "?\s*$ reads
+  nextTail[n] = n;
+  for (let p = n - 1; p >= 0; p--) nextTail[p] = (spec[p] === '"' && F.tws(p + 1)) || F.tws(p) ? p : nextTail[p + 1];
+  const text = (d) => (d < n && !isLtUnit(spec[d]) ? spec.slice(d, nextTail[d + 1]) : null); // it never needs a line terminator
+  const head = /^\*\*Input\*\*:/gim;
+  for (let h; (h = head.exec(spec));) {
+    const a = head.lastIndex, b = F.nnw[a];
+    let r = null;
+    if (/^User description:/i.test(spec.slice(b, b + 17))) {
+      const c0 = b + 17;
+      for (let c = F.nnw[c0]; c >= c0 && r == null; c--) r = (spec[c] === '"' ? text(c + 1) : null) ?? text(c);
+    }
+    if (r == null) r = (spec[b] === '"' ? text(b + 1) : null) ?? text(b);
+    for (let x = b - 1; x >= a && r == null; x--) r = text(x);
+    if (r != null) return r;
+  }
+  return null;
+}
+// A spec-kit story heading → [text, number, title, priority] | null — what
+// /^user story\s+(\d+)\s*[-–—:.]?\s*(.*?)\s*(?:\((?:priority\s*:\s*)?(P\d)\))?\s*(?:🎯.*)?$/iu matched, the title read by a
+// scan (its lazy capture rescanned a long blank run at each step — 1.17 H). When no title end reads, nothing does.
+const RE_SPECKIT_PRIORITY = /\((?:priority\s*:\s*)?(P\d)\)/iuy;
+function specKitStoryHeading(text) {
+  const h = /^user story\s+(\d+)/iu.exec(text);
+  if (!h) return null;
+  const F = blankFacts(text), n = F.n;
+  let ts = F.nnw[h[0].length];
+  if (ts < n && "-–—:.".includes(text[ts])) ts = F.nnw[ts + 1];
+  const target = "\u{1F3AF}";
+  const tail = (e) => { // \s*(?:\((?:priority\s*:\s*)?(P\d)\))?\s*(?:🎯.*)?$ at e → { prio } | null
+    const ends = (p) => p === n || (text.startsWith(target, p) && F.nlt[p + 2] === n);
+    const p1 = F.nnw[e];
+    RE_SPECKIT_PRIORITY.lastIndex = p1;
+    const pm = RE_SPECKIT_PRIORITY.exec(text);
+    if (pm && ends(F.nnw[p1 + pm[0].length])) return { prio: pm[1] };
+    return ends(p1) ? { prio: undefined } : null;
+  };
+  for (let e = ts, lt = F.nlt[ts]; e <= lt;) {
+    const r = tail(e);
+    if (r) return [text, h[1], text.slice(ts, e), r.prio];
+    if (e === n) break;
+    e = isWsUnit(text[e]) ? Math.max(F.nnw[e], e + 1) : e + 1; // a blank run ends the same way from each of its units
+  }
+  return null;
+}
+// $1 of each match of /FROM:\s*`?(?:#+\s*)?Requirement:\s*([^`\n]+?)`?\s*$/gim (head: its part up to the colon, global) — by
+// a scan: the lazy name before `?\s*$ rescanned a long blank run at each step (1.17 H).
+function renamedRequirementNames(s, head) {
+  const F = blankFacts(s), n = F.n;
+  const nextTws = new Int32Array(n + 1), nextStop = new Int32Array(n + 1), lastLt = new Int32Array(n + 1);
+  nextTws[n] = n; nextStop[n] = n;
+  for (let p = n - 1; p >= 0; p--) {
+    nextTws[p] = F.tws(p) ? p : nextTws[p + 1];
+    nextStop[p] = s[p] === "`" || s[p] === "\n" ? p : nextStop[p + 1];
+  }
+  for (let i = 0, l = -1; i <= n; i++) { lastLt[i] = l; if (isLtUnit(s[i])) l = i; }
+  const endAt = (p) => (F.nnw[p] === n ? n : lastLt[F.nnw[p]]); // where \s*$ stops: the end, or before the run's last line terminator
+  const name = (cs) => { // (.+?)`?\s*$ from cs → { e, end } | null
+    if (cs >= n || s[cs] === "`" || s[cs] === "\n") return null;
+    const B = nextStop[cs], e = nextTws[cs + 1];
+    if (e < B) return { e, end: endAt(e) };
+    if (B === n || s[B] === "\n") return { e: B, end: endAt(B) };
+    return F.tws(B + 1) ? { e: B, end: endAt(B + 1) } : null; // a closing backtick
+  };
+  const out = [];
+  head.lastIndex = 0;
+  for (let h; (h = head.exec(s));) {
+    const a = head.lastIndex;
+    let r = null, cs = F.nnw[a];
+    for (; cs >= a && !r; cs--) r = name(cs);
+    if (r) { out.push(s.slice(cs + 1, r.e)); head.lastIndex = r.end; }
+  }
+  return out;
+}
 function parseSpecKit(dir, read, W) {
   const spec = read(path.join(dir, "spec.md"));
   const plan = read(path.join(dir, "plan.md"));
@@ -19549,20 +20069,30 @@ function parseSpecKit(dir, read, W) {
   if (spec == null && tasks == null) return null;
   const model = newImportModel();
   model.nameHint = path.basename(dir).replace(/^\d+[-_]/, "") || path.basename(dir);
-  const norm = (t) => t.replace(/\s*\*?\((?:mandatory|optional|include if[^)]*)\)\*?\s*$/i, "").trim();
+  // /\s*\*?\((?:mandatory|optional|include if[^)]*)\)\*?\s*$/i dropped — read after the last ')' but the closing one (the
+  // only place it can match), from a blank run's start (?<!\s): each "(include if" and each blank rescanned the rest (1.17 H).
+  const norm = (t) => {
+    let e = stripEnd(t, isWsUnit).length;
+    if (t[e - 1] === "*") e--;
+    if (t[e - 1] !== ")") return t.trim();
+    const from = e >= 2 ? t.lastIndexOf(")", e - 2) + 1 : 0;
+    return (t.slice(0, from) + t.slice(from).replace(/(?<!\s)\s*\*?\((?:mandatory|optional|include if[^)]*)\)\*?\s*$/i, "")).trim();
+  };
   if (spec != null) {
     const lines = stripHtmlComments(spec).split(/\r?\n/);
     const hs = mdHeadings(lines);
     const used = new Set();
     const h1 = hs.find((h) => h.level === 1);
     if (h1) { used.add(h1.i); model.title = h1.text.replace(/^feature specification:\s*/i, "").trim() || null; }
-    const input = spec.match(/^\*\*Input\*\*:\s*(?:User description:\s*)?"?(.+?)"?\s*$/im);
-    model.summary = input && input[1].trim() && !/\$ARGUMENTS/.test(input[1]) ? input[1].trim() : null;
+    const input = specKitInput(spec);
+    model.summary = input != null && input.trim() && !/\$ARGUMENTS/.test(input) ? input.trim() : null;
     // spec-kit's own metadata (branch, date, status; Input is the summary) describes its workflow, not the feature.
     lines.forEach((l, i) => { if (/^\s*\*\*(?:feature branch|created|status|input)\*\*\s*:/i.test(l)) used.add(i); });
     // body: the story's lines (all written into it: prose, scenarios, then whatever follows the scenarios).
     const storyFrom = (body, printed, title, priority) => {
-      const at = body.findIndex((l) => /^\s*(?:\*\*|__)?acceptance scenarios(?:\*\*|__)?\s*:?\s*(?:\*\*|__)?\s*:?\s*$/i.test(l));
+      // \s*:?\s*(?:\*\*|__)?\s*:?\s*$ → \s*(?::\s*)?(?:(?:\*\*|__)\s*)?(?::\s*)?$ (the same lines): blank runs meeting with
+      // nothing between them backtracked exponentially (1.17 H).
+      const at = body.findIndex((l) => /^\s*(?:\*\*|__)?acceptance scenarios(?:\*\*|__)?\s*(?::\s*)?(?:(?:\*\*|__)\s*)?(?::\s*)?$/i.test(l));
       const off = at === -1 ? 0 : at + 1;
       const scen = mdListItems(body.slice(off), true).filter((it) => at !== -1 || /\bthen\b|\bent[ãa]o\b|\bentonces\b/i.test(it.text));
       const inScen = new Set(scen.flatMap((it) => it.at.map((r) => r + off)));
@@ -19575,7 +20105,7 @@ function parseSpecKit(dir, read, W) {
       });
     };
     hs.forEach((h, k) => {
-      const m = h.text.match(/^user story\s+(\d+)\s*[-–—:.]?\s*(.*?)\s*(?:\((?:priority\s*:\s*)?(P\d)\))?\s*(?:🎯.*)?$/iu);
+      const m = specKitStoryHeading(h.text);
       if (!m) return;
       const [lo, hi] = mdRange(lines, hs, k);
       markRange(used, h.i, hi);
@@ -19626,7 +20156,18 @@ function parseSpecKit(dir, read, W) {
 
 // OpenSpec: a capability (openspec/specs/<capability>/spec.md) or a change (openspec/changes/<id>/ — proposal.md,
 // tasks.md, design.md, specs/<capability>/spec.md with ADDED/MODIFIED/REMOVED/RENAMED Requirements).
-const RE_OS_CLAUSE = /^\s*[-*+]\s+(?:\*\*|__)?(GIVEN|WHEN|THEN|AND|BUT)(?:\*\*|__)?\s*:?\s*(.*)$/i;
+// A scenario clause "- **WHEN** …" → [line, keyword, text] | null — /^\s*[-*+]\s+(?:\*\*|__)?(GIVEN|WHEN|THEN|AND|BUT)(?:\*\*|__)?\s*:?\s*(.*)$/i
+// with the text read by a scan (\s*:?\s*(.*)$ backtracked quadratically before a line break — 1.17 H).
+const RE_OS_CLAUSE_HEAD = /^\s*[-*+]\s+(?:\*\*|__)?(GIVEN|WHEN|THEN|AND|BUT)(?:\*\*|__)?/i;
+function openSpecClause(line) {
+  const h = RE_OS_CLAUSE_HEAD.exec(line);
+  if (!h) return null;
+  let i = h[0].length;
+  while (i < line.length && isWsUnit(line[i])) i++;
+  if (line[i] === ":") { i++; while (i < line.length && isWsUnit(line[i])) i++; }
+  const text = line.slice(i);
+  return RE_LINE_TERMINATOR.test(text) ? null : [line, h[1], text];
+}
 function parseOpenSpec(dir, read, W) {
   const walkSpecs = (d, depth, out) => {
     if (depth > 4) return out;
@@ -19678,7 +20219,12 @@ function parseOpenSpec(dir, read, W) {
     const used = new Set();
     const h1 = hs.find((h) => h.level === 1);
     if (h1) used.add(h1.i);
-    if (!model.title && h1) model.title = h1.text.replace(/\s+specification$/i, "").trim() || null;
+    if (!model.title && h1) { // h1.text.replace(/\s+specification$/i, ""), without rescanning a blank run from each unit (1.17 H)
+      const sp = h1.text.search(/specification$/i);
+      let w0 = sp;
+      while (w0 > 0 && isWsUnit(h1.text[w0 - 1])) w0--;
+      model.title = (sp > 0 && w0 < sp ? h1.text.slice(0, w0) : h1.text).trim() || null;
+    }
     const purpose = hs.findIndex((h) => /^purpose\b/i.test(h.text));
     if (!model.summary && purpose !== -1) { // the rest of Purpose (and every other capability's Purpose) is carried
       const [lo, hi] = mdRange(lines, hs, purpose);
@@ -19695,11 +20241,11 @@ function parseOpenSpec(dir, read, W) {
         const [lo, hi] = mdRange(lines, hs, k);
         markRange(used, lo, hi);
         const body = lines.slice(lo, hi).join("\n");
-        const froms = [...body.matchAll(/FROM:\s*`?(?:#+\s*)?Requirement:\s*([^`\n]+?)`?\s*$/gim)].map((x) => x[1].trim());
-        const tos = [...body.matchAll(/TO:\s*`?(?:#+\s*)?Requirement:\s*([^`\n]+?)`?\s*$/gim)].map((x) => x[1].trim());
+        const froms = renamedRequirementNames(body, /FROM:\s*`?(?:#+\s*)?Requirement:/gi).map((x) => x.trim());
+        const tos = renamedRequirementNames(body, /TO:\s*`?(?:#+\s*)?Requirement:/gi).map((x) => x.trim());
         froms.forEach((f, i) => model.warnings.push(W.wRenamed(f, tos[i] || "?")));
       }
-      const m = h.text.match(/^requirement:\s*(.+)$/i);
+      const m = headPlus(h.text, /^requirement:/i); // /^requirement:\s*(.+)$/i (headPlus: 1.17 H)
       if (!m) return;
       const name = m[1].trim();
       const [lo, hi] = mdRange(lines, hs, k);
@@ -19716,7 +20262,7 @@ function parseOpenSpec(dir, read, W) {
       const top = firstScenario ? sub.filter((s) => s.i >= firstScenario.i && s.level <= firstScenario.level) : [];
       top.forEach((s) => {
         const sb = mdBody(body, sub, sub.indexOf(s));
-        const sm = s.text.match(/^scenario:\s*(.+)$/i);
+        const sm = headPlus(s.text, /^scenario:/i); // /^scenario:\s*(.+)$/i
         if (!sm) { after.push("", body[s.i], ...sb); return; }
         const cl = { given: "", when: "", then: "" };
         let last = null;
@@ -19724,7 +20270,7 @@ function parseOpenSpec(dir, read, W) {
         const rawParts = [];
         const other = [];
         for (const l of sb) {
-          const b = l.match(RE_OS_CLAUSE);
+          const b = openSpecClause(l);
           if (b) {
             open = true;
             rawParts.push(b[1].toUpperCase() + " " + b[2].trim());
@@ -19761,6 +20307,59 @@ function parseOpenSpec(dir, read, W) {
   return model;
 }
 
+const RE_IMPORT_TASK_HEAD = /^(\s*)[-*+]\s+\[([ xX~\-/])\](\*)?/;
+// line.replace(/_Requirements:\s*(.+?)_(?=\s|$)/g, fn) — fn(match, list) — by a scan: the lazy list rescanned a long blank run
+// at each step, and each marker the rest of a line with no closing "_" (1.17 H). As the engine: the list runs from the first
+// non-blank to the first "_" followed by a blank or the end, never over a line terminator — else, when that "_" comes
+// right after the blanks, the list is their last one.
+function replaceRequirementsMarkers(s, fn) {
+  const open = "_Requirements:";
+  if (!s.includes(open)) return s;
+  const n = s.length;
+  const nextClose = new Int32Array(n + 2), nlt = new Int32Array(n + 1);
+  nextClose[n] = nextClose[n + 1] = n + 1;
+  nlt[n] = n;
+  for (let p = n - 1; p >= 0; p--) {
+    nlt[p] = isLtUnit(s[p]) ? p : nlt[p + 1];
+    nextClose[p] = s[p] === "_" && (p + 1 === n || isWsUnit(s[p + 1])) ? p : nextClose[p + 1];
+  }
+  let out = "", at = 0;
+  for (let i = s.indexOf(open); i !== -1;) {
+    const a = i + open.length;
+    let j = a;
+    while (j < n && isWsUnit(s[j])) j++;
+    let cs = -1, e = -1;
+    if (j < n && nextClose[j + 1] <= nlt[j]) { cs = j; e = nextClose[j + 1]; }
+    else if (j > a && !isLtUnit(s[j - 1]) && nextClose[j] === j) { cs = j - 1; e = j; }
+    if (cs === -1) { i = s.indexOf(open, i + 1); continue; }
+    out += s.slice(at, i) + fn(s.slice(i, e + 1), s.slice(cs, e));
+    at = e + 1;
+    i = s.indexOf(open, at);
+  }
+  return at ? out + s.slice(at) : s;
+}
+// s.replace(/_LABEL:\s*([^_\n]+)_/g, fn) — fn(match, list) — by a scan (the blanks before the list backtracked quadratically —
+// 1.17 H): the list runs from the first non-blank to the next "_" (never a line feed) — else, when that "_" comes right after
+// the blanks, the list is their last one (not a line feed).
+function replaceUnderscoreList(s, label, fn) {
+  const open = "_" + label + ":";
+  let out = "", at = 0;
+  for (let i = s.indexOf(open); i !== -1;) {
+    const a = i + open.length;
+    let j = a;
+    while (j < s.length && isWsUnit(s[j])) j++;
+    let b = j;
+    while (b < s.length && s[b] !== "_" && s[b] !== "\n") b++;
+    let cs = -1;
+    if (s[b] === "_" && b > j) cs = j;
+    else if (b === j && s[j] === "_" && j > a && s[j - 1] !== "\n") cs = j - 1;
+    if (cs === -1) { i = s.indexOf(open, i + 1); continue; }
+    out += s.slice(at, i) + fn(s.slice(i, b + 1), s.slice(cs, b));
+    at = b + 1;
+    i = s.indexOf(open, at);
+  }
+  return at ? out + s.slice(at) : s;
+}
 // tasks.md of any of the three tools → dev-spec tasks: every checkbox (outside code fences and HTML comments)
 // that is not a parent of numbered sub-tasks becomes `- [x|space] N.` numbered 1…K in order, keeping its
 // checkbox state, its [P]/[USn] tags and its indented sub-lines; a Kiro/OpenSpec parent ("2." with "2.1", "2.2")
@@ -19793,7 +20392,9 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
     }
     // Any one-character state is a task: Kiro marks one in progress `[-]` (also `[~]`, `[/]` elsewhere). Only x/X is
     // done — anything else imports as open, never dropped into the previous task's body.
-    const m = l.match(/^(\s*)[-*+]\s+\[([ xX~\-/])\](\*)?\s+(.*)$/);
+    const h = RE_IMPORT_TASK_HEAD.exec(l); // /^(\s*)[-*+]\s+\[([ xX~\-/])\](\*)?\s+(.*)$/, its text scanned (1.17 H)
+    const text = h && restAfterBlanks(l, h[0].length, true);
+    const m = text == null ? null : [l, h[1], h[2], h[3], text];
     if (m) {
       const rest = m[4];
       const idm = rest.match(/^(T\d+)\b[.:]?\s*(.*)$/) || rest.match(/^(\d+(?:\.\d+)*)\.?(?=\s)\s*(.*)$/);
@@ -19812,7 +20413,7 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
   let n = 0;
   let anyRefs = false;
   // taskNo: the task a reference belongs to; a line no task owns is reported by its line number instead.
-  const rewrite = (line, taskNo, lineNo) => line.replace(/_Requirements:\s*(.+?)_(?=\s|$)/g, (all, list) => {
+  const rewrite = (line, taskNo, lineNo) => replaceRequirementsMarkers(line, (all, list) => {
     anyRefs = true;
     const outIds = [];
     for (const ref of list.split(/[,;]/).map((s) => s.trim()).filter(Boolean)) {
@@ -19883,16 +20484,16 @@ function fitTemplateTasks(tasksText, reqText, planText, lng) {
     }
     if (/^\s*#{1,6}\s/.test(line) || /^\s*[-*+]\s+\[[ xX-]\]/.test(line)) acs = [];
     const fits = section ? trackKnown[section] : known;
-    return line
-      .replace(/_Requirements:\s*([^_\n]+)_/g, (m, ids) => {
-        const keep = ids.split(/[,;]/).map((s) => s.trim()).filter((id) => fits.has(id));
-        acs = acs.concat(keep);
-        return "_Requirements: " + (keep.length ? keep.join(", ") : section ? T.acPlaceholder(section) : I.taskAcPlaceholder) + "_";
-      })
-      .replace(/_Makes green:\s*([^_\n]+)_/g, () => {
-        const ids = [...new Set(acs.flatMap((ac) => testsFor.get(ac) || []))];
-        return "_Makes green: " + (ids.length ? ids.join(", ") : I.taskTestPlaceholder) + "_";
-      });
+    // /_Requirements:\s*([^_\n]+)_/g then /_Makes green:\s*([^_\n]+)_/g, by a scan (1.17 H)
+    const fitted = replaceUnderscoreList(line, "Requirements", (m, ids) => {
+      const keep = ids.split(/[,;]/).map((s) => s.trim()).filter((id) => fits.has(id));
+      acs = acs.concat(keep);
+      return "_Requirements: " + (keep.length ? keep.join(", ") : section ? T.acPlaceholder(section) : I.taskAcPlaceholder) + "_";
+    });
+    return replaceUnderscoreList(fitted, "Makes green", () => {
+      const ids = [...new Set(acs.flatMap((ac) => testsFor.get(ac) || []))];
+      return "_Makes green: " + (ids.length ? ids.join(", ") : I.taskTestPlaceholder) + "_";
+    });
   }).join("\n");
 }
 
@@ -19917,8 +20518,26 @@ function fitTemplateTasks(tasksText, reqText, planText, lng) {
 // A path naming a folder with several plans is refused (name the file). Nothing is dropped silently: what no mapping takes is
 // carried (design.md for a plan / ExecPlan, requirements.md for a PRD) or named in a warning.
 // ---------------------------------------------------------------------------
-const RE_PLAN_CHECKBOX = /^(\s*)[-*+]\s+\[([ xX~\-/])\]\s+(.*)$/;
-const RE_PLAN_ITEM = /^(\s*)(?:[-*+]|\d+[.)])\s+(?:\[([ xX~\-/])\]\s+)?(.*)$/;
+// /^(\s*)[-*+]\s+\[([ xX~\-/])\]\s+(.*)$/ → [line, indent, box, text] | null (restAfterBlanks for the text)
+const RE_PLAN_CHECKBOX_HEAD = /^(\s*)[-*+]\s+\[([ xX~\-/])\]/;
+function planCheckbox(l) {
+  const h = RE_PLAN_CHECKBOX_HEAD.exec(l);
+  const rest = h && restAfterBlanks(l, h[0].length, true);
+  return rest == null ? null : [l, h[1], h[2], rest];
+}
+// /^(\s*)(?:[-*+]|\d+[.)])\s+(?:\[([ xX~\-/])\]\s+)?(.*)$/ → [line, indent, box | undefined, text] | null
+const RE_PLAN_ITEM_HEAD = /^(\s*)(?:[-*+]|\d+[.)])/;
+const RE_PLAN_ITEM_BOX = /\[([ xX~\-/])\](?=\s)/y;
+function planItem(l) {
+  const h = RE_PLAN_ITEM_HEAD.exec(l);
+  if (!h || !isWsUnit(l[h[0].length])) return null;
+  let q = h[0].length;
+  while (q < l.length && isWsUnit(l[q])) q++;
+  RE_PLAN_ITEM_BOX.lastIndex = q;
+  const box = RE_PLAN_ITEM_BOX.exec(l);
+  const rest = restAfterBlanks(l, box ? q + 3 : h[0].length, true);
+  return rest == null ? null : [l, h[1], box ? box[1] : undefined, rest];
+}
 // A single backticked name reads as a file with one of these extensions (`package.json`); a name with a folder part needs none.
 const PLAN_FILE_EXT = new Set(["js", "mjs", "cjs", "jsx", "ts", "tsx", "mts", "cts", "py", "rb", "go", "rs", "java", "kt", "kts", "scala", "cs", "fs", "php",
   "swift", "m", "mm", "c", "h", "cc", "cpp", "hpp", "md", "mdx", "json", "jsonc", "yaml", "yml", "toml", "ini", "cfg", "conf", "css", "scss", "sass", "less",
@@ -19932,7 +20551,13 @@ const PLAN_BARE_FILES = /^(?:Dockerfile|Makefile|Procfile|Gemfile|Rakefile|Jenki
 function planPaths(text) {
   const out = [];
   const add = (raw, spanned) => {
-    const p = String(raw).trim().replace(/^\.\//, "").replace(/(?::\d+(?:[-:]\d+)*|#L\d+(?:-L?\d+)?)$/, "");
+    const p0 = String(raw).trim().replace(/^\.\//, "");
+    // .replace(/(?::\d+(?:[-:]\d+)*|#L\d+(?:-L?\d+)?)$/, "") — the leftmost of the two anchors, found without rescanning a
+    // long run of ":1" from each of its units (1.17 H): a "#L…" one can only start at the last '#'.
+    const h = p0.lastIndexOf("#"), c = colonLineAnchorAt(p0);
+    const hl = h !== -1 && /^#L\d+(?:-L?\d+)?$/.test(p0.slice(h)) ? h : -1;
+    const cut = c === -1 ? hl : hl === -1 ? c : Math.min(c, hl);
+    const p = cut === -1 ? p0 : p0.slice(0, cut);
     if (!p || p.length > 200 || /[\s,;<>|"'`*?\\]/.test(p) || /^(?:[a-z][a-z0-9+.-]*:|\/|~|@|\$|%)/i.test(p) || /(?:^|\/)\.\.(?:\/|$)/.test(p)) return;
     if (PLAN_NOT_FILES.has(p.toLowerCase())) return;
     const bare = p.replace(/\/+$/, "");
@@ -19979,7 +20604,9 @@ function planCommand(candidates) {
 // A command-only bullet ("Run `npm test`", "`npm test` passes") is a check to run, not a criterion.
 function planCommandOnly(text) {
   const t = String(text).replace(/\*\*|__/g, "").trim();
-  const m = t.match(/^(?:run|execute|corre|correr|executa|executar|ejecuta|ejecutar)?\s*:?\s*`([^`]+)`\s*(?:passes|succeeds|is green|should pass|passa|pasa)?\s*[.;]?$/i);
+  // \s*:?\s* → \s*(?::\s*)? and \s*(?:word)?\s* → \s*(?:word\s*)? (the same lines): blank runs meeting around an absent
+  // token backtracked quadratically (1.17 H).
+  const m = t.match(/^(?:run|execute|corre|correr|executa|executar|ejecuta|ejecutar)?\s*(?::\s*)?`([^`]+)`\s*(?:(?:passes|succeeds|is green|should pass|passa|pasa)\s*)?[.;]?$/i);
   return !!(m && RE_PLAN_RUNNER.test(m[1].trim().replace(/^\$\s+/, "")));
 }
 // A criterion as written in a plan → EARS when it already reads like one: a modal requirement (kept), Given/When/Then, or a
@@ -20026,7 +20653,7 @@ function planBlocks(lines, lo, hi) {
     }
     if (/^\s*#{1,6}\s/.test(l)) { cur = null; prevBlank = false; continue; }
     const blank = !l.trim();
-    const m = l.match(RE_PLAN_ITEM);
+    const m = planItem(l);
     const ind = indentOf(l);
     if (m && (!cur || ind <= cur.indent)) {
       cur = { i, indent: ind, content: l.length - l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").length, box: m[2] != null ? m[2] : null, text: m[3].trim(), body: [], code: new Set() };
@@ -20059,7 +20686,7 @@ function checkboxUnits(lines, lo, hi, skip) {
     if (skip && skip(i)) { cur = null; continue; }
     const f = l.match(RE_FENCE);
     if (f) { fence = f[1]; if (cur && indentOf(l) > cur.indent) { cur.body.push(i); cur.code.add(i); } else cur = null; continue; }
-    const m = l.match(RE_PLAN_CHECKBOX);
+    const m = planCheckbox(l);
     if (m) {
       cur = { i, indent: m[1].length, content: l.length - l.replace(/^\s*[-*+]\s+/, "").length, box: m[2], text: m[3].trim(), body: [], code: new Set() };
       units.push(cur);
@@ -20150,14 +20777,16 @@ function planFrontMatter(lines) {
     const s = String(v).trim();
     if (/^"(?:[^"\\]|\\.)*"$/.test(s)) return s.slice(1, -1).replace(/\\(["\\/])/g, "$1").replace(/\\n/g, " ").replace(/\\t/g, " ");
     if (/^'(?:[^']|'')*'$/.test(s)) return s.slice(1, -1).replace(/''/g, "'");
-    return s.replace(/\s+#.*$/, "");
+    return stripHashComment(s); // s.replace(/\s+#.*$/, "") (1.17 H)
   };
   const data = Object.create(null); // a key named __proto__ is a plain key
   let list = null, item = null;
+  // The key: value / list entry patterns below read their text by headRest — \s*(.*)$ rescanned a long blank run before a
+  // line terminator (1.17 H).
   for (let i = 1; i < end; i++) {
     const l = lines[i];
     if (!l.trim() || /^\s*#/.test(l)) continue;
-    const top = l.match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
+    const top = headRest(l, /^([A-Za-z_][\w-]*):/, false); // /^([A-Za-z_][\w-]*):\s*(.*)$/
     if (top) {
       list = item = null;
       if (/^[|>][-+]?\s*$/.test(top[2])) { // a block scalar: the more-indented lines under it, folded into one line
@@ -20168,15 +20797,15 @@ function planFrontMatter(lines) {
       else data[top[1]] = unq(top[2]);
       continue;
     }
-    const entry = list && l.match(/^\s*-\s+(.*)$/);
+    const entry = list && headRest(l, /^\s*-/, true); // /^\s*-\s+(.*)$/
     if (entry) { // a list entry: a map ("- id: x") or a scalar
-      const kv = entry[1].match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
+      const kv = headRest(entry[1], /^([A-Za-z_][\w-]*):/, false);
       item = kv ? Object.create(null) : null;
       if (kv) item[kv[1]] = unq(kv[2]);
       list.push(item || unq(entry[1]));
       continue;
     }
-    const kv = item && l.match(/^\s+([A-Za-z_][\w-]*):\s*(.*)$/);
+    const kv = item && headRest(l, /^\s+([A-Za-z_][\w-]*):/, false); // /^\s+([A-Za-z_][\w-]*):\s*(.*)$/
     if (kv) item[kv[1]] = unq(kv[2]); // the entry's next key (null-prototype maps: any key is a plain key)
   }
   return { data, end: end + 1 };
@@ -20207,9 +20836,35 @@ function planStory(model, title, criteria) {
   return story;
 }
 // A plan / ExecPlan wrapped whole in one ```md fence (PLANS.md's own examples are) → its inside.
+// What /^\s*(`{3,}|~{3,})\s*(?:md|markdown)?\s*\r?\n([\s\S]*?)\r?\n\1\s*$/i took as the inside ($2), by a scan — that pattern
+// backtracked quadratically over a long fence run or blank run (1.17 H). The closing fence can only be the text's last
+// non-blank run (on a line of its own); the inside starts after the opening line's newline: the last one of the blanks after
+// "md" / "markdown" when the word is there, else the last one of the blanks after the fence (the engine's order), as long as
+// the inside does not run past the closing fence.
 function unwrapDocFence(text) {
-  const m = String(text).match(/^\s*(`{3,}|~{3,})\s*(?:md|markdown)?\s*\r?\n([\s\S]*?)\r?\n\1\s*$/i);
-  return m ? m[2] : text;
+  const s = String(text);
+  let f0 = 0;
+  while (f0 < s.length && isWsUnit(s[f0])) f0++;
+  const c = s[f0];
+  if (c !== "`" && c !== "~") return text;
+  let p1 = f0;
+  while (s[p1] === c) p1++;
+  const L = p1 - f0, T = stripEnd(s, isWsUnit).length, close = T - L - 1; // the closing fence's newline
+  if (L < 3 || close < p1 || s[close] !== "\n" || s.slice(T - L, T) !== c.repeat(L)) return text;
+  const bodyStart = (hi, lo) => { for (let x = hi - 1; x >= lo; x--) if (s[x] === "\n" && x + 1 <= close) return x + 1; return -1; };
+  let q1 = p1;
+  while (q1 < s.length && isWsUnit(s[q1])) q1++;
+  let bs = -1;
+  const word = /^(?:md|markdown)/i.exec(s.slice(q1, q1 + 8));
+  if (word) {
+    const w = q1 + word[0].length;
+    let q2 = w;
+    while (q2 < s.length && isWsUnit(s[q2])) q2++;
+    bs = bodyStart(q2, w);
+  }
+  if (bs === -1) bs = bodyStart(q1, p1);
+  if (bs === -1) return text;
+  return s.slice(bs, s[close - 1] === "\r" && close - 1 >= bs ? close - 1 : close);
 }
 
 const RE_PLAN_CRITERIA = /^(?:goals?|objectives?|acceptance(?:\s+criteria)?|success\s+criteria|requirements|definition\s+of\s+done|done\s+when|expected\s+(?:outcomes?|behaviou?r|results?)|verification|validation|objetivos?|metas?|crit[ée]rios\s+de\s+(?:aceita[çc][ãa]o|sucesso)|requisitos|defini[çc][ãa]o\s+de\s+(?:pronto|conclu[íi]do)|resultados?\s+esperados?|verifica[çc][ãa]o|valida[çc][ãa]o|criterios\s+de\s+(?:aceptaci[óo]n|[ée]xito)|definici[óo]n\s+de\s+(?:hecho|terminado)|verificaci[óo]n|validaci[óo]n)\b/i;
@@ -20409,7 +21064,7 @@ function parseExecPlan(dir, read, W, src) {
   hs.forEach((h, k) => {
     if (sec.kinds[k] !== "steps") return;
     const [lo, hi] = sec.direct(k);
-    const hasBoxes = lines.slice(lo, hi).some((l) => RE_PLAN_CHECKBOX.test(l));
+    const hasBoxes = lines.slice(lo, hi).some((l) => !!planCheckbox(l));
     const units = hasBoxes ? checkboxUnits(lines, lo, hi) : planBlocks(lines, lo, hi);
     units.forEach((u, n) => {
       if (!seen.has(norm(u.text))) return addUnit(u, `Concrete Steps ${n + 1}`, "## " + h.text);
@@ -20442,8 +21097,74 @@ function parseExecPlan(dir, read, W, src) {
 }
 
 // bmad — BMAD-METHOD docs (v4 docs/…, v6 _bmad-output/…): see the block comment above.
-const RE_BMAD_STORY_HEAD = /^(?:story\s+)?(\d+)\.(\d+)\s*(?:[:.\-–—]\s*)?(.*)$/i;
-const RE_BMAD_FR = /^\s*(?:[-*+]|\d+[.)])?\s*(?:\*\*|__)?(N?FR)[-\s]?(\d+)(?:\*\*|__)?\s*[:.\-–—]\s*(?:\*\*|__)?\s*(.+)$/i;
+// 1.17 H — the heads below are read by a regex up to their separator, the text after it by a scan: their \s*…\s*(.*)$ tails
+// rescanned a long blank run from each blank they gave back.
+// /^(?:story\s+)?(\d+)\.(\d+)\s*(?:[:.\-–—]\s*)?(.*)$/i → [text, epic, story, title] | null
+const RE_BMAD_STORY_START = /^(?:story\s+)?(\d+)\.(\d+)/i;
+function bmadStoryHead(text) {
+  const h = RE_BMAD_STORY_START.exec(text);
+  const title = h && titleAfterDash(text, h[0].length);
+  return title == null ? null : [text, h[1], h[2], title];
+}
+// A PRD title without its "Product Requirements Document" / "(PRD)" / "PRD" words and the separator they leave at either end:
+// text.replace(/\s*(?:product requirements document|\(prd\)|prd)\s*/gi, " ").replace(/^\s*[:—–-]\s*|\s*[:—–-]\s*$/g, ""), by a
+// scan (a blank run was rescanned from each of its units). A word's blanks: the run before it (from where the last match
+// ended at most) and the one after it.
+const RE_PRD_WORDS = /product requirements document|\(prd\)|prd/gi;
+function bmadPrdTitle(text) {
+  let out = "", at = 0;
+  RE_PRD_WORDS.lastIndex = 0;
+  for (let m; (m = RE_PRD_WORDS.exec(text));) {
+    let p = m.index, e = p + m[0].length;
+    while (p > at && isWsUnit(text[p - 1])) p--;
+    while (e < text.length && isWsUnit(text[e])) e++;
+    out += text.slice(at, p) + " ";
+    at = RE_PRD_WORDS.lastIndex = e;
+  }
+  const s = out + text.slice(at);
+  const lead = /^\s*[:—–-]\s*/.exec(s);
+  const from = lead ? lead[0].length : 0;
+  const end = stripEnd(s, isWsUnit).length;
+  if (end <= from || !":—–-".includes(s[end - 1])) return s.slice(from);
+  let p = end - 1;
+  while (p > from && isWsUnit(s[p - 1])) p--;
+  return s.slice(from, p);
+}
+// /^story\s+(\d+)\.(\d+)\s*[:.\-–—]?\s*(.*)$/i → [text, epic, story, title] | null
+const RE_BMAD_EPIC_STORY_START = /^story\s+(\d+)\.(\d+)/i;
+function bmadEpicStory(text) {
+  const h = RE_BMAD_EPIC_STORY_START.exec(text);
+  const title = h && titleAfterDash(text, h[0].length);
+  return title == null ? null : [text, h[1], h[2], title];
+}
+// /^\s*(?:[-*+]|\d+[.)])?\s*(?:\*\*|__)?(N?FR)[-\s]?(\d+)(?:\*\*|__)?\s*[:.\-–—]\s*(?:\*\*|__)?\s*(.+)$/i → [line, kind, n, text] | null
+const RE_BMAD_FR_HEAD = /^\s*(?:(?:[-*+]|\d+[.)])\s*)?(?:\*\*|__)?(N?FR)[-\s]?(\d+)(?:\*\*|__)?\s*[:.\-–—]/i;
+function bmadFrLine(l) {
+  const h = RE_BMAD_FR_HEAD.exec(l);
+  if (!h) return null;
+  const text = boldThenText(l, h[0].length);
+  return text == null ? null : [l, h[1], h[2], text];
+}
+// /^#{1,6}\s+(N?FR)[-\s]?(\d+)\s*[:.\-–—]\s*(.+)$/i → [line, kind, n, text] | null
+const RE_BMAD_FR_HEADING = /^#{1,6}\s+(N?FR)[-\s]?(\d+)\s*[:.\-–—]/i;
+function bmadFrHeading(l) {
+  const h = RE_BMAD_FR_HEADING.exec(l);
+  const text = h && plusAfterBlanks(l, h[0].length);
+  return text == null ? null : [l, h[1], h[2], text];
+}
+// \s*[:.\-–—]?\s*(.*)$ (= \s*(?:[:.\-–—]\s*)?(.*)$) from i → the title | null
+function titleAfterDash(s, i) {
+  while (i < s.length && isWsUnit(s[i])) i++;
+  if (i < s.length && ":.-–—".includes(s[i])) i++;
+  return restAfterBlanks(s, i, false);
+}
+// \s*(?:\*\*|__)?\s*(.+)$ from p: with the bold marker first, then without it.
+function boldThenText(s, p) {
+  let w = p;
+  while (w < s.length && isWsUnit(s[w])) w++;
+  const b = s.startsWith("**", w) || s.startsWith("__", w) ? plusAfterBlanks(s, w + 2) : null;
+  return b != null ? b : plusAfterBlanks(s, p);
+}
 const RE_BMAD_WORKFLOW = /^(?:change log|changelog|status)$/i; // BMAD's own workflow records — named in a warning, not imported
 const RE_BMAD_PRD_DESIGN = /^(?:technical assumptions|user interface design goals)\b/i;
 function parseBmad(dir, read0, W, src) {
@@ -20461,7 +21182,7 @@ function parseBmad(dir, read0, W, src) {
   if (src.file) {
     const t = read(src.file);
     if (t == null) return null;
-    if (isStoryText(t) && !/^\s*(?:[-*+]\s*)?(?:\*\*)?N?FR-?\d+/im.test(t)) storyFiles = [src.file];
+    if (isStoryText(t) && !/^[^\S\n\r\u2028\u2029]*(?:[-*+]\s*)?(?:\*\*)?N?FR-?\d+/im.test(t)) storyFiles = [src.file];
     else { prdFiles = [src.file]; storyFiles = mdIn(path.join(dir, "stories")).filter((f) => isStoryText(read(f))); }
   } else {
     const prd = first(["prd.md", "PRD.md"]);
@@ -20485,7 +21206,7 @@ function parseBmad(dir, read0, W, src) {
   const designParts = [];
   // A story's criteria items ("1: text" / "1. text" / "- text"; a BDD block's bold title dropped) → [{ n, raw }].
   const acItems = (body) => mdListItems(body.map((l) => l.replace(/^(\s*)(\d+)\s*:\s/, "$1$2. ")), false).map((it) => ({
-    n: it.n, raw: it.text.replace(/^(?:\*\*|__)?AC\s*#?\s*(\d+)(?:\*\*|__)?\s*[:.\-–—]\s*/i, "").trim(),
+    n: it.n, raw: it.text.replace(/^(?:\*\*|__)?AC\s*(?:#\s*)?(\d+)(?:\*\*|__)?\s*[:.\-–—]\s*/i, "").trim(),
   }));
   const acEars = (raw) => {
     const t = raw.replace(/^(?:\*\*|__)[^*_]+(?:\*\*|__)\s*(?=(?:\*\*|__)?(?:given|when|dad[oa]|quando|cuando)\b)/i, "");
@@ -20502,7 +21223,7 @@ function parseBmad(dir, read0, W, src) {
     if (!isPrd && hs.length && hs[0].level === 1) used.add(hs[0].i); // epics.md's own title
     if (isPrd) {
       const h1 = hs.find((h) => h.level === 1);
-      if (h1) { used.add(h1.i); model.title = h1.text.replace(/\s*(?:product requirements document|\(prd\)|prd)\s*/gi, " ").replace(/^\s*[:—–-]\s*|\s*[:—–-]\s*$/g, "").trim() || null; }
+      if (h1) { used.add(h1.i); model.title = bmadPrdTitle(h1.text).trim() || null; }
       const sk = hs.findIndex((h) => /^(?:background context|vision|1\.\s*vision)\b/i.test(planHeadingText(h.text)));
       const [lo, hi] = sk !== -1 ? [hs[sk].i + 1, sk + 1 < hs.length ? hs[sk + 1].i : lines.length] : [h1 ? h1.i + 1 : 0, (hs.find((h) => h.level > 1) || { i: lines.length }).i];
       const at = [];
@@ -20515,8 +21236,8 @@ function parseBmad(dir, read0, W, src) {
         if (fence) { if (closesFence(l, fence)) fence = null; return; }
         const f = l.match(RE_FENCE);
         if (f) { fence = f[1]; return; }
-        const hm = l.match(/^#{1,6}\s+(N?FR)[-\s]?(\d+)\s*[:.\-–—]\s*(.+)$/i);
-        const m = hm || (!/^\s*#/.test(l) && l.match(RE_BMAD_FR));
+        const hm = bmadFrHeading(l);
+        const m = hm || (!/^\s*#/.test(l) && bmadFrLine(l));
         if (!m) return;
         const kind = m[1].toUpperCase();
         let txt2 = m[3].replace(/(?:\*\*|__)\s*$/, "").trim();
@@ -20538,12 +21259,14 @@ function parseBmad(dir, read0, W, src) {
     }
     // Stories: "### Story 1.1 Title" (v4 PRD epic sections), "### Story 1.1: Title" (v6 epics.md).
     hs.forEach((h, k) => {
-      const m = planHeadingText(h.text).match(/^story\s+(\d+)\.(\d+)\s*[:.\-–—]?\s*(.*)$/i);
+      const m = bmadEpicStory(planHeadingText(h.text));
       if (!m) return;
       const [lo, hi] = mdRange(lines, hs, k);
       markRange(used, h.i, hi);
       const body = lines.slice(lo, hi);
-      const acAt = body.findIndex((l) => /^\s*(?:#{1,6}\s+|\*\*|__)?\s*acceptance criteria/i.test(l));
+      // /^\s*(?:#{1,6}\s+|\*\*|__)?\s*acceptance criteria/i as \s*(?:(?:#{1,6}\s|\*\*|__)\s*)? (the same lines): blank runs meeting
+      // around an absent marker backtracked quadratically (1.17 H)
+      const acAt = body.findIndex((l) => /^\s*(?:(?:#{1,6}\s|\*\*|__)\s*)?acceptance criteria/i.test(l));
       const prose = tidyLines(body.slice(0, acAt === -1 ? body.length : acAt).filter((l) => !/^\s*#/.test(l)));
       const acs = acAt === -1 ? [] : acItems(body.slice(acAt + 1));
       const key = `${+m[1]}.${+m[2]}`;
@@ -20568,15 +21291,15 @@ function parseBmad(dir, read0, W, src) {
     const lines = stripHtmlComments(txt).split(/\r?\n/);
     const hs = mdHeadings(lines);
     const h1 = hs.find((h) => h.level === 1);
-    const m = h1 && planHeadingText(h1.text).match(RE_BMAD_STORY_HEAD);
+    const m = h1 && bmadStoryHead(planHeadingText(h1.text));
     if (!m) continue;
     const key = `${+m[1]}.${+m[2]}`;
     const st = { e: +m[1], s: +m[2], title: m[3].trim() || `Story ${key}`, prose: [], acs: [], tasks: null, design: [], from: toPosix(path.relative(src.root, file)) };
     const top = hs.filter((h) => h.level === 2);
     // Before the first section: v6's "Status: ready-for-dev" line (a workflow record); any other text → the story's design notes.
     const intro = lines.slice(h1.i + 1, top.length ? top[0].i : lines.length);
-    if (intro.some((l) => /^s*statuss*:/i.test(l))) addWorkflow("Status", key);
-    const introRest = tidyLines(intro.filter((l) => !/^s*statuss*:/i.test(l)));
+    if (intro.some((l) => /^\s*status\s*:/i.test(l))) addWorkflow("Status", key);
+    const introRest = tidyLines(intro.filter((l) => !/^\s*status\s*:/i.test(l)));
     if (introRest.length) st.design.push("", ...introRest);
     for (const h of top) {
       const k = hs.indexOf(h);
@@ -20585,7 +21308,7 @@ function parseBmad(dir, read0, W, src) {
       const body = lines.slice(lo, hi);
       if (/^(?:story|user story)$/i.test(t)) st.prose = tidyLines(body.filter((l) => !/^\s*#/.test(l)).map((l) => l.replace(/\*\*(as an?|i want|so that)\*\*/gi, "$1")));
       else if (/^acceptance criteria$/i.test(t)) st.acs = acItems(body);
-      else if (/^tasks?\s*(?:\/|&|and)?\s*(?:subtasks?)?$/i.test(t)) st.tasks = { lines, lo, hi };
+      else if (/^tasks?\s*(?:(?:\/|&|and)\s*)?(?:subtasks?)?$/i.test(t)) st.tasks = { lines, lo, hi };
       else if (RE_BMAD_WORKFLOW.test(t)) addWorkflow(t, key);
       else if (tidyLines(body).length) st.design.push("", `### ${t}`, ...tidyLines(body.map((l) => l.replace(/^(#{1,4})(\s)/, "#$1$2"))));
     }
@@ -20611,7 +21334,9 @@ function parseBmad(dir, read0, W, src) {
     if (!units.length) return;
     out.push("", `## US-${n}: ${st.title}`);
     units.forEach((u, j) => {
-      const refM = u.text.match(/\(\s*ACs?\s*[:#]?\s*([^)]*)\)/i);
+      // /\(\s*ACs?\s*[:#]?\s*([^)]*)\)/i, read up to the last ')' (no match can end later: each "(AC" rescanned the rest of a
+      // text with no ')' after it) with \s*(?:[:#]\s*)? (blank runs meeting with no ':' / '#' between them) — 1.17 H.
+      const refM = u.text.slice(0, u.text.lastIndexOf(")") + 1).match(/\(\s*ACs?\s*(?:[:#]\s*)?([^)]*)\)/i);
       // "(AC: 1, 3)", "(AC #2)", "(ACs: 1-3)" — a range is every number in it (bounded: a typo like 1-9999 is not expanded)
       const nums = refM ? (refM[1].match(/\d+\s*[-–]\s*\d+|\d+/g) || []).flatMap((x) => {
         const r = x.match(/^(\d+)\s*[-–]\s*(\d+)$/);
@@ -20719,7 +21444,26 @@ function fpPhaseHeading(text) {
   if (meta && meta.index > 0 && /\s/.test(title[meta.index - 1])) title = title.slice(0, meta.index);
   return title.trim() ? { n: +m[1], title: title.trim() } : null;
 }
-const RE_FP_DEC_LINE = /^[-*][ \t]+\*\*([A-Za-z0-9][A-Za-z0-9_-]*)[ \t]+·[ \t]+(?![ \t])(.+?)\*\*(.*)$/; // "- **D3 · Logging** …"
+// An acceptance bullet → [line, text] | null — /^\s*[-*+]\s+(?:\[[ xX]\]\s+)?(.*)$/ with its text read by restAfterBlanks
+// (1.17 H): after the optional checkbox when it is there; a line terminator after the text → null either way.
+function fpAcceptanceItem(l) {
+  const h = /^\s*[-*+]/.exec(l);
+  if (!h || !isWsUnit(l[h[0].length])) return null;
+  let q = h[0].length;
+  while (q < l.length && isWsUnit(l[q])) q++;
+  const text = restAfterBlanks(l, /^\[[ xX]\]\s/.test(l.slice(q, q + 4)) ? q + 3 : h[0].length, true);
+  return text == null ? null : [l, text];
+}
+// "- **D3 · Logging** …" → [line, id, title, rest] | null — /^[-*][ \t]+\*\*([A-Za-z0-9][A-Za-z0-9_-]*)[ \t]+·[ \t]+(?![ \t])(.+?)\*\*(.*)$/
+// by a scan after its head: the title runs to the first "**" after it and nothing after it holds a line terminator (the lazy
+// title rescanned the rest of the line from each "**" — 1.17 H).
+const RE_FP_DEC_HEAD = /^[-*][ \t]+\*\*([A-Za-z0-9][A-Za-z0-9_-]*)[ \t]+·[ \t]+(?![ \t])/;
+function fpDecLine(l) {
+  const h = RE_FP_DEC_HEAD.exec(l);
+  if (!h) return null;
+  const ts = h[0].length, k = l.indexOf("**", ts + 1);
+  return k === -1 || RE_LINE_TERMINATOR.test(l.slice(ts)) ? null : [l, h[1], l.slice(ts, k), l.slice(k + 2)];
+}
 const FP_TASK_FIELDS = [["decision", /^d[ée]cision$/i], ["files", /^(?:files|fichiers)$/i], ["do", /^(?:do|faire)$/i],
   ["acceptance", /^(?:acceptance criteria|crit[èe]res d['’]acceptation)$/i], ["verify", /^(?:verify|v[ée]rifier)$/i], ["after", /^(?:after|apr[èe]s)$/i],
   ["remark", /^(?:remark|remarque)$/i], ["items", /^(?:items kept|[ée]l[ée]ments retenus)$/i]];
@@ -20772,7 +21516,7 @@ const fpTitle = (s) => fpV(s).replace(/^\[/, "\\["); // a task title: never a le
 function fpLine(l) {
   const s = String(l).replace(RE_FP_BREAKS, " ");
   if (/^\s{0,3}#{1,6}(?:\s|$)/.test(s)) return s.replace("#", "\\#");
-  if (RE_TASK_LINE.test(s)) return s.replace("[", "\\[");
+  if (taskLine(s)) return s.replace("[", "\\[");
   if (RE_CHECKPOINT.test(s)) return s.replace("**", "\\*\\*");
   return s;
 }
@@ -21167,9 +21911,9 @@ function fpTaskFromMd(th, body, group) {
       for (const m of v.matchAll(/`([^`\n]+)`(?:[ \t]*\(([^()\n]*)\))?/g)) t.files.push({ path: m[1].trim(), op: fpMap(FP_OPS, String(m[2] || "").trim().toLowerCase()) || "modify" });
     } else if (f.key === "do") t.doLines = tidyLines([v, ...f.lines.map((l) => l.replace(/^ {2}/, ""))]);
     else if (f.key === "acceptance") {
-      for (const l of f.lines) { const m = l.match(/^\s*[-*+]\s+(?:\[[ xX]\]\s+)?(.*)$/); if (m && m[1].trim()) t.acceptance.push(m[1].trim()); else if (l.trim() && t.acceptance.length) t.acceptance[t.acceptance.length - 1] += " " + l.trim(); }
+      for (const l of f.lines) { const m = fpAcceptanceItem(l); if (m && m[1].trim()) t.acceptance.push(m[1].trim()); else if (l.trim() && t.acceptance.length) t.acceptance[t.acceptance.length - 1] += " " + l.trim(); }
     } else if (f.key === "verify") { for (const m of v.matchAll(/`([^`\n]+)`/g)) t.verify.push(m[1]); }
-    else if (f.key === "after") t.after.push(...(v.match(/\d+\.\d+/g) || []));
+    else if (f.key === "after") t.after.push(...(v.match(/(?<!\d)\d+\.\d+/g) || [])); // (?<!\d): a digit run read from its start (1.17 H)
     else if (f.key === "remark") t.remark = v || null;
     else if (f.key === "items") t.items.push(...f.lines.filter((l) => l.trim()).map((l) => l.trim()));
     else t.extra.push(f.raw.trim(), ...f.lines.filter((l) => l.trim()).map((l) => "  " + l.trim()));
@@ -21199,7 +21943,7 @@ function fpParsePlanMd(text, fp) {
     if (FP_SEC.rules.test(t)) {
       let cur = null;
       for (const l of body) {
-        const m = fpShort(l) ? l.match(RE_FP_DEC_LINE) : null;
+        const m = fpShort(l) ? fpDecLine(l) : null;
         if (m) {
           let rest = m[3];
           let state = null;
@@ -21284,7 +22028,7 @@ function fpParseDecisionsMd(text, fp) {
     }
     if (FP_SEC.open.test(t)) {
       for (const l of body) {
-        const m = fpShort(l) ? l.match(RE_FP_DEC_LINE) : null;
+        const m = fpShort(l) ? fpDecLine(l) : null;
         if (!m) continue;
         const d = fpNewDecision(m[1], m[2].trim(), "open");
         const rest = m[3].replace(/^\s*[—–-]\s*/, "").trim();
@@ -21475,7 +22219,7 @@ function parseFluidplan(dir, read, W, src) {
       d.hasTasks = true;
     }
     for (const l of fp.outOfScope) {
-      const m = l.match(RE_FP_DEC_LINE);
+      const m = fpDecLine(l);
       if (!m) continue;
       const d = add(m[1], m[2].trim(), "ko");
       d.status = "ko";
@@ -22446,8 +23190,9 @@ function clarify(projectDir, name) {
   const drop = inactiveMarkerLines(reqs, tracks);
   const tbd = [];
   // Comments are blanked, not deleted: their newlines stay, so `i` is the real line — the same index `drop` and
-  // artifactReport's items use (stripping a multi-line comment shifted every TBD below it).
-  reqs.replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\r\n]/g, " ")).split(/\r?\n/).forEach((l, i) => { if (!drop.has(i) && /(?<![\p{L}])TBD(?![\p{L}])/u.test(l.slice(0, 2000))) tbd.push({ line: i + 1, text: "TBD" }); });
+  // artifactReport's items use (stripping a multi-line comment shifted every TBD below it). The comments: /<!--[\s\S]*?-->/g
+  // by replaceHtmlCommentSpans (1.17 H).
+  replaceHtmlCommentSpans(reqs, (m) => m.replace(/[^\r\n]/g, " ")).split(/\r?\n/).forEach((l, i) => { if (!drop.has(i) && /(?<![\p{L}])TBD(?![\p{L}])/u.test(l.slice(0, 2000))) tbd.push({ line: i + 1, text: "TBD" }); });
   const slots = [...active.items, ...tbd].sort((a, b) => a.line - b.line);
   if (slots.length) {
     const shown = slots.slice(0, 8).map((p) => `requirements.md:${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`);

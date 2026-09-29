@@ -80,9 +80,20 @@ imported as specs. 38 MCP tools, 54 commands, seven built-in tracks (was six).
 - A PT / ES request starting with an infinitive ("Publicar eventos no Kafka") is read in its language: "no" there is em+o,
   not a negation.
 - The PT / ES glossary stub lost a space in 1.16 ("produto:uma").
+- **Linear markdown readers everywhere** — a heading, list item, table row or marker holding a long whitespace / backtick /
+  `#` run (or a line break after it) no longer stalls the MCP server, a hook or spec_import (the readers were quadratic,
+  Given / When / Then cubic: a 100,000-character run took 18–30 s in status / doctor / trace / imports; now well under 1 s).
+- The BMAD importer's story `Status:` line is recognised with spaces around it (`/^\s*status\s*:/i` had lost its
+  backslashes in 1.14).
+- A Spanish or short English request is no longer read as Portuguese because it starts with a verb both languages share
+  ("Alterar el formulario…; no usar LLM" switched +ai on).
 
 ### Tests
-- `node mcp/test.js` TBD assertions (was 1362), `node cli/test-cli.js` TBD (was 438).
+- `node mcp/test.js` 1442 assertions (was 1362), `node cli/test-cli.js` 455 (was 438): the +dist track end to end
+  (the user's example and a precision / recall corpus in EN / PT / ES, every track combination, a 1.16 pack upgrade), the
+  design weigh checks and the nudge (every track's pristine scaffold stays quiet), real fluidplan exports (injection,
+  cycles, half-settled decisions), linear-time bounds on adversarial markdown, a guard against backslash-stripped regex
+  literals, and one regression per review finding.
 
 ## [1.16.0] — 2026-09-29
 
