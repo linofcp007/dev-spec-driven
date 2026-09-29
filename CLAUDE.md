@@ -2156,7 +2156,10 @@ U+FEFF, no `child_process`, no backslash-stripped regex literal, the roadmap's p
 - **Linux, locally:** `npm run test:docker` (`scripts/test-docker.js`, zero-dep) runs both suites in
   `node:18-alpine` (the engines floor, musl), `node:22-bookworm-slim` and `node:24-alpine`:
   `docker run --rm --network none --user 1000:1000 -v <repo>:/repo:ro`, `--init`, the repo READ-ONLY (the suites work
-  under `os.tmpdir()`), no network, an unprivileged user (`--root` to opt out). Only the first run needs network — to pull
+  under `os.tmpdir()`) and copied (without .git) into the container's own file system, where the suite runs — where an
+  installed plugin lives: a Docker Desktop bind mount costs tens of ms per file loaded and the engine is ~36 files since
+  1.18 (a 50-feature statusline took 9–10 s on the mount, 0.7 s on the copy); `--mounted` runs from the mount to measure a
+  slow file system. No network, an unprivileged user (`--root` to opt out). Only the first run needs network — to pull
   and to build a cached derived image `dev-spec-test:<image>` that adds git (`--no-git` skips it; the git-dependent tests
   then skip; `--rebuild` rebuilds it). Options `--image <name>` (repeatable), `--suite mcp|cli`. Exit 0 all passed · 1 a
   suite failed or an image couldn't be prepared · 2 no Docker (not installed, daemon down, Windows-containers mode) or a

@@ -86,6 +86,10 @@ A pure refactor: the engine as modules. No behaviour change — same tools, comm
   loads only when pt-BR is read — the guard hook 220 → 238 ms (+8%), `dev-spec status` 211 → 224 (+6%), SessionStart
   345 → 364 (+5%), the observe hook 167 → 156, the stop hook on a "done" claim 252 → 231 (its claim scan no longer derives
   pt-BR's messages); without those two the split cost 10–18% (guard 260, status 243, stop 284).
+- On a SLOW file system the extra files cost more: a clone on a Docker Desktop bind mount, a network drive or WSL's
+  `/mnt/c` loads the engine in ~0.4–1.7 s instead of ~0.2 s. Keep the plugin on a local disk (Claude Code installs
+  plugins there). `npm run test:docker` now copies the repo into each container before running the suites (a local
+  disk, as installed); `--mounted` runs from the bind mount.
 - Proof: a differential harness ran the 1.17.0 engine and the new one side by side — 897,053 comparisons (pure functions
   over 13,996 corpus strings, every i18n table leaf in four locales, lockstep project scenarios in EN / PT / ES / pt-BR,
   every importer, 57 CLI commands, an MCP session, the hooks with 72 malformed payloads) — 0 differences.
