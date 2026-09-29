@@ -387,9 +387,10 @@ behaviour at a time:
 7. **Repeat** with the next behaviour until every T-ID in `_Makes green:_` is green; then run the full suite and
    record the task's `_Verify:_` run (`spec_complete_task {evidence}` / `dev-spec done <f> <n> --run`).
 
-**Code written before its test is deleted and redone** — test first, then the code again, driven by the test. Not
-kept "as a reference", not "adapted": code already written shapes the test to fit it, and the test then proves the
-code does what it does, not what the AC asks.
+**Code written before its test is deleted and redone** — the code of a NEW behaviour: test first, then the code
+again, driven by the test. Not kept "as a reference", not "adapted": code already written shapes the test to fit it,
+and the test then proves the code does what it does, not what the AC asks. Code that already existed before the task
+— what a characterization or guard test pins — is not "written before its test": it is what that test describes.
 
 The micro-cycle never changes the plan: it adds no T-ID to `test-plan.md` on its own (a behaviour the plan misses is
 a spec gap — `/spec-converge`, `spec_append_tasks`), never edits a planned test's assertion to get green ("When a
@@ -411,11 +412,23 @@ test is wrong", below), and the task's evidence is still its `_Verify:_` run.
 
 ### Red flags — stop and restart the cycle
 
-- **The test passed on its first run.** It tests nothing new (or the code was already there): make it fail first.
+For the test of a NEW behaviour — the one this step is about to add:
+
+- **The test passed on its first run.** It tests nothing new (or the code was already there): make it fail first —
+  by testing the behaviour that is still missing, never by breaking the code or bending the assertion.
 - **You can't explain why it failed.** The failure isn't the missing behaviour — fix the test until it fails for the
   right reason.
-- **The test was written after the code.** Delete the code, keep the test, watch it fail, write the code again.
+- **The test was written after the code.** Delete that new code, keep the test, watch it fail, write the code again.
 - Several behaviours in one step, a refactor while red, a test edited until it passes.
+
+**Green on its first run is expected — not a red flag — for:**
+
+- a **guard test**: behaviour that already works and must keep working — a bugfix's guard test (T-02) passes before
+  the fix too; never make it fail artificially and never list it under `_Makes green:_` ([bugfix.md](bugfix.md));
+- a **characterization test** of existing code: it pins what the code does today, before a refactor moves it —
+  characterization tests → refactor → still green ([improvement-specs.md](improvement-specs.md)); nothing is deleted;
+- a **planned T-ID an earlier task already turned green**: run it to confirm it stays green — its red run belongs to
+  the task that made it green.
 
 ---
 

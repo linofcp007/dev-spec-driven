@@ -81,18 +81,22 @@ answers, is in `references/test-patterns.md` ("The micro-cycle inside a task"):
 7. **Repeat** until every T-ID of `_Makes green:_` is green.
 
 **Code written before its test is deleted and redone from the test** — never kept "as a reference", never adapted.
-Red flags that restart the cycle: a test that passed on its first run, a failure you can't explain, a test written
-after its code. The micro-cycle never changes the plan — no new T-ID, no planned assertion edited to pass (BLOCKED
-instead, see Hard rules) — and the task's evidence is still its `_Verify:_` run. The report's RED and GREEN runs of
-the target tests are the cycle's proof.
+Red flags that restart the cycle, for the test of a NEW behaviour: a test that passed on its first run, a failure you
+can't explain, a test written after its code. Green on the first run is expected — never make it fail artificially —
+for a **guard test** (behaviour that already works, e.g. a bugfix's T-02, never under `_Makes green:_`), a
+**characterization test** of existing code (it pins today's behaviour before a refactor; nothing is deleted) and a
+**planned T-ID an earlier task already turned green**. The micro-cycle never changes the plan — no new T-ID, no
+planned assertion edited to pass (BLOCKED instead, see Hard rules) — and the task's evidence is still its `_Verify:_`
+run. The report's RED and GREEN runs of the target tests are the cycle's proof.
 
 ## Hard rules
 
 - **Never edit a planned test's expectation, and never weaken an assertion to make it pass.** If a
   test looks wrong, stop and report BLOCKED with the evidence — a wrong test is a spec problem the
   human decides, not an implementation detail.
-- **No production code without a failing test first** (tdd tasks). Code you wrote before its test is deleted and
-  written again from the test — never kept as a reference.
+- **No production code without a failing test first** (tdd tasks — a new behaviour's code). Code you wrote before its
+  test is deleted and written again from the test — never kept as a reference. Guard and characterization tests pin
+  code that already exists: they pass on their first run, and nothing is deleted.
 - **Never dispatch subagents** — no helpers, and above all no reviewer. Review is the controller's
   job and is already scheduled; a reviewer you spawn duplicates it and counts for nothing.
 - Don't restructure code outside your task. If a file you must change is already tangled, work

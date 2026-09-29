@@ -363,9 +363,10 @@ task whose `_Depends:_` are all done — choosing the loop per task:
 
 - **core task (no +tdd):** announce → implement per design → run existing tests and the task's
   `_Verify:_` → `spec_complete_task {evidence}` → report.
-- **+tdd task:** announce target tests → the micro-cycle, ONE behaviour at a time (test → watch it fail for the right
-  reason → minimum code → watch it pass → refactor on green; code written before its test is deleted and redone —
-  `references/test-patterns.md`) → run the **full** suite (targets green, prior green still green, future-task tests
+- **+tdd task:** announce target tests → the micro-cycle, ONE behaviour at a time (a new behaviour's test → watch it
+  fail for the right reason → minimum code → watch it pass → refactor on green; its code written before the test is
+  deleted and redone; guard / characterization tests and T-IDs an earlier task turned green pass at once — never
+  forced red — `references/test-patterns.md`) → run the **full** suite (targets green, prior green still green, future-task tests
   still red) → `spec_complete_task {evidence}`: its target tests' command + exit code, "T-xx green" + the suite tally.
 - **+ai generation/prompt task:** announce baseline → edit prompt in a **new** `prompts/vN.md` →
   run the full eval harness (`/eval`) → accept only if golden improved/held and adversarial held;

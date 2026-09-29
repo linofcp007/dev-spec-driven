@@ -1428,24 +1428,60 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   impact, mitigation, owner) — EN / PT / ES; the slots join the placeholder corpus automatically, so a fresh scaffold's
   design approval is refused on `placeholders` like any template section. Doctor `design-tradeoffs` / `design-risks` are
   WARN only (CHECK_PHASE 2), never in `approvalChecks`: `designWeighChecks()` over `activeDesign()` → a state missing ·
-  template · empty · few · filled (`designWeighState`); `designEntries()` counts table rows + top-level bullets, or
-  sub-headings when there are more; trade-offs need ≥ 2 options, risks any real content. Skipped for a bugfix, a spike and a
-  later-phase template design (`ph.later`); a design-first feature warns at once. Headings: `TRADEOFFS_SYN` / `RISKS_SYN`;
-  details `msg(lang).designWeigh[id][state]`. `designSaveCheck` returns `weigh` + ▲ notes (never unclean); `templates
-  check` warns `tradeoffs-missing` / `risks-missing`. An existing design without them only warns (the spec_upgrade audit
-  reads `warnings`) — no artifact is ever edited.
-- **Constraint nudge** — `constraintNudge()`: when requirements.md / design.md name a queue, events, webhooks, async work,
-  concurrency, transactions or retries (`CONSTRAINT_SIGNALS`: English in every spec + the feature language's own — "fila"
-  is a queue in PT but a table row in ES, "cola" the reverse) and neither weigh section answers it (`RE_CONSISTENCY_ANSWER`),
-  spec_clarify asks one question — `nudges [{code: "consistency-unstated", signals ≤ 3}]`; plain features only, never
-  with +dist (its sections ask the same); comments, fences and `[slots]` set aside. /grill has the matching "Constraints
-  round" (atomicity, ACID / isolation, race conditions, consistency model, delivery + idempotency, dependency failure,
-  volume, a measurable business outcome).
+  template · empty · few · filled (`designWeighState`). Skipped for a bugfix, a spike and a later-phase template design
+  (`ph.later`); a design-first feature warns at once. Details `msg(lang).designWeigh[id][state]`. `designSaveCheck` returns
+  `weigh` + ▲ notes (never unclean — kept for a pre-1.17 approval too: an edit means a re-approval, which asks); `templates
+  check` warns `tradeoffs-missing` / `risks-missing`. No artifact is ever edited.
+- **Pre-1.17 approvals are never flagged (review 3).** `approvePhase` stamps `weigh: true` on a design approval (and its
+  history record) since 1.17; `designApprovedBeforeWeigh(approvals)` = an approvals.design without it. Then doctor turns
+  what would warn into a PASS whose detail says so (`designWeigh.legacyApproval`): only a design not approved yet, or
+  approved by 1.17+, is warned — a finished feature following the advice would re-open re-review, changed-since-approval,
+  a stale finish and the execution sign-off (the 1.16 `steering` precedent). spec_upgrade lists the two ids under
+  `doctor.warnings` but never counts them toward `attention` (`DESIGN_WEIGH_IDS`).
+- **Headings (review 6)** — `weighSection()` (not extractSection): after the heading lead, a `TRADEOFFS_SYN` / `RISKS_SYN`
+  synonym must be the WHOLE heading or be followed by a separator (`: , ; ( [ / & + | — – .`, a spaced hyphen) or a
+  connector word (and / or / vs / for / of … e / ou / de … y / o / en — `RE_WEIGH_HEADING_REST`): "Risks & Mitigations",
+  "Riscos e mitigações" match; "Risk-based rate limiting", "Options parser", "Riskiest assumptions" don't. An unmarked
+  heading wins over a `[MARKER]` one; never the H1. Synonyms include Trade-off(s) / Tradeoff(s) / Trade-off analysis,
+  Alternatives considered, MADR's Considered Options, Key / Design Decisions, Options (EN / PT Opções / ES Opciones), PT
+  Decisões e alternativas / decisões-chave, ES Compromisos / Decisiones clave, Risk register / assessment / analysis and
+  twins. A plain **"Decisions"** heading is NOT one: the execplan / fluidplan imports write `## Decisions` — a decision LOG
+  (what was chosen), not the options weighed; its entries would read as options.
+- **Counting (review 6)** — `designBody()`: table data rows (a header + separator alone is no row) + list items at the
+  section's OUTERMOST level (indented up to 3 spaces; deeper ones are pros / cons) — or, when more, sub-headings / bold-led
+  paragraphs (`**Option A — …**`); units holding only a generic slot word (a bare TODO / TBD) → `template`; nothing else →
+  `empty`. Trade-offs: ≥ 2 entries, OR no option list and a written paragraph of ≥ `WEIGH_PROSE_WORDS` (3) words — the
+  options weighed in prose, or "No key decision here: …" (the escape Risks has; detail "written as prose"); one listed
+  option → `few`. Risks: any entry or any prose ("None." counts — an honest answer).
+- **Constraint nudge** — `constraintNudge(projectDir, …)`: reads only the USER's text of requirements.md + design.md
+  (`userSpecText()`, review 1): visible lines minus every line that IS template text — `glossUserParts()` over the glossary
+  check's line patterns (`glossBuiltinLines`: every track combination's requirements / design + the track blocks, the
+  feature's language, pt-BR derived; `glossProjectLines`: .specs/templates + track packs), so a pristine scaffold of any
+  track in any language never fires it, nor does a template criterion kept as written (+sec's "record a security audit
+  event") — minus a section still holding `> **TODO**`, with template slots and code spans blanked. Signals by concept
+  (`CONSTRAINT_SIGNALS` {en, pt, es} × strong / queue / event / async / concurrency / transaction / retry — English in every
+  spec + the feature language's own; "fila" is a queue in PT but a table row in ES, "cola" the reverse): it fires on TWO
+  distinct concepts or ONE strong phrase (message queue, event bus, publish … event, domain event, background job / worker,
+  concurrent writes / updates, race condition, double booking, distributed transaction, two-phase commit, webhook, Kafka,
+  RabbitMQ, SQS, saga — PT / ES twins), review 7 — "click event", "Retry button", "Images load async" alone never do.
+  Answered (review 2) ANYWHERE in that user text — /clarify folds the answer into requirements.md, /grill asks in Phase 1
+  while the design is a template — by a multi-word phrase only (`RE_CONSISTENCY_ANSWER`: eventual / strong consistency,
+  consistency model, idempotent / idempotency…, at-least / at-most / exactly-once, isolation level, optimistic / pessimistic
+  locking, outbox, dedup…, atomicity / atomically, two-phase commit; PT / ES twins; `ACID` upper-case) — never a bare
+  "consistent", "eventually", "atomic" or "isolation" ("tenant isolation"). → `nudges [{code: "consistency-unstated",
+  signals ≤ 3}]` (one word per concept, each strong phrase); plain features only, never with +dist. /grill has the matching
+  "Constraints round" (atomicity, ACID / isolation, race conditions, consistency model, delivery + idempotency, dependency
+  failure, volume, a measurable business outcome).
 - **The TDD micro-cycle** (adapted from obra/superpowers' test-driven-development, MIT) is prose only —
   references/test-patterns.md "The micro-cycle inside a task", agents/spec-implementer.md (a hard rule), spec-reviewer,
-  /executeTask, SKILL.md Phase 6: one behaviour at a time, fail for the right reason, minimal code, refactor only on green,
-  code written before its test is deleted and redone; the rationalizations table and red flags. It lives INSIDE a task —
-  never a new T-ID, never an edit of a planned assertion.
+  /executeTask, AGENTS.md, SKILL.md Phase 6: one behaviour at a time, fail for the right reason, minimal code, refactor only
+  on green, code written before its test is deleted and redone; the rationalizations table and red flags. It lives INSIDE a
+  task — never a new T-ID, never an edit of a planned assertion. The red flags (a test green on its first run, a test
+  written after the code → delete the code) are scoped to a NEW behaviour's test (review 4): a guard test (a bugfix's
+  T-02 — references/bugfix.md), a characterization test of existing code (references/improvement-specs.md) and a planned
+  T-ID an earlier task already turned green pass on their first run by design — never forced red, nothing deleted. The
+  reviewer flags production behaviour that no test exercises (a target T-ID, committed in Phase 4, or a helper test in
+  the diff) — never "no test in the diff" (review 5).
 
 ## Conventions & gotchas
 - **Every name-taking op resolves its folder through `resolveFeature()` / `existingFeature()`** —
