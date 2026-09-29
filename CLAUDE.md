@@ -9,7 +9,8 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
   server). Never add a `.github/workflows/` for this project, never open PRs — merge locally and push.
   No user-facing text may steer users toward PRs or CI (a test scans the prose; CHANGELOG is exempt).
 - **Zero runtime dependencies.** The MCP server and all scripts use only Node core (`fs`, `path`, `os`,
-  `readline`, `string_decoder`, `child_process`, `crypto`, built-in `fetch`). No `npm install` required. Keep it that way.
+  `readline`, `string_decoder`, `child_process`, `crypto`, `module` — the compile cache —, built-in `fetch`). No `npm
+  install` required. Keep it that way.
 - Specs always live in `.specs/` (no alternate directory detection).
 
 ## Layout
@@ -44,7 +45,9 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
                                AC / T-ID readers; the template corpus, the bracket scan, artifact / feature / chain placeholders
   tracks.js                    the track registries (built-in + packs: allTracks, trackMarker…), parseTracks, detectTracks,
                                TRACK_SECTIONS, the inactive-section readers; the Phase 0 classifier (SIGNALS, negation, the
-                               language guess); track packs (.specs/tracks/: load + validate, cached; render; spec_tracks)
+                               language guess); track packs (.specs/tracks/: load + validate, cached; render; spec_tracks) —
+                               the largest module (~2,100 lines, three concerns): a candidate for a later split into
+                               registries / classify / packs
   templates.js                 project templates (.specs/templates/), their placeholder corpus, spec_templates
   scaffold.js                  spec_init, spec_create, the artifact skeletons, steering stubs, spec_add_track; scoped steering
                                (front matter, the brief's steering, custom names), steering amendments (1.16 Q1)
@@ -133,12 +136,18 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
 `featureLocked` mutators, exactly as when it was one file) and `i18n.js`. Inside the engine:
 - **Load time — a DAG.** A name a module needs while it LOADS (a table or regex built from another module's constant —
   `RE_HEADING_LEAD` from `MARKER_TRACKS`, `featureLocked(setFeatureFlow)`, `C3_PARSERS`, `TRACE_INFO_FIELDS.add(…)`) comes from a
-  destructured `require()` of the module that owns it, marked `// load time`. Those requires form a DAG — never a cycle (a
-  cycle would hand out a half-built `module.exports`).
+  destructured `require()` of the module that owns it, marked `// load time` — whatever their order in `MODULES`
+  (markdown.js loads tracks.js, listed after it; decisions / export / finish load trace.js, listed before them). Those
+  requires form a DAG — never a cycle (a cycle would hand out a half-built `module.exports`).
 - **Call time — any direction.** Every other name a module uses from another module is a `let` declared at its top and
   assigned by `__link(E)` once EVERY module has loaded (`index.js` merges all exports into `E` — a name defined in two
   modules throws — then links each module). Call sites keep their bare names, so moved code reads as it always did. Never
-  read a late-bound name while the module loads: it is `undefined` until `__link`.
+  read a late-bound name while the module loads: it is `undefined` until `__link`. The bare `let` list and the `__link`
+  destructure name exactly the same names, each exported by some module, and never the parameter itself (`({ …, E } = E)`
+  assigns the parameter and leaves the module's `E` undefined — and `E` IS a name, trace.js's word-boundary fragment); a
+  module's private cache is a `let` WITH an initializer (`= null`, `= undefined`), so it never reads as a linked name.
+  mcp/test.js ("1.18 module rule") checks all of it from the sources, plus the load-time graph (acyclic, every engine →
+  engine / i18n → i18n require marked `// load time`) and that every module in `MODULES` is loaded.
 - **Shared mutable state lives in `engine/ctx.js`:** ONE object, `CTX`, mutated in place and never re-bound (a destructured
   copy would go stale) — the read cache and everything else one engine call scopes (`CTX.READ_CACHE`, `CTX.GLOB_CACHE`,
   `CTX.XAC_MEMO`, `CTX.TEMPLATE_SCOPE_ROOT`, `CTX.TEMPLATE_MEMO`, `CTX.PACK_MEMO`, `CTX.GHOST_MARKERS`, reset by
@@ -148,14 +157,26 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
 - **A new module** goes into `MODULES` (index.js) — `mcp/test.js` checks the list matches the files, and that every
   `mcp/lib` source requires only Node core or a relative file. `__dirname` in a module is `mcp/lib/engine/` (the clone's
   root is three levels up: `approvalGuardDecision`'s cli path, `engineVersion`'s package.json).
-- **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and each file costs
-  about 0.4 ms on Windows (stat, realpath, read, compile) — the engine is 20 modules (+ 8 importers) of 400–2,100 lines,
-  not one per helper. Add to the module of the concept; a new file must earn its load cost.
+- **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
+  costs ~0.65 ms before any compile (stat, realpath, open + read — the open is the expensive part) — the engine is 20
+  modules (+ 8 importers) of 400–2,100 lines, not one per helper. Add to the module of the concept; a new file must earn
+  its load cost. **The compile cache:** the facade (spec.js, first line) calls `module.enableCompileCache()` (Node ≥ 22.8;
+  nothing on older ones): the compiled code of every module loaded after it is kept between processes in
+  `NODE_COMPILE_CACHE` or `<os.tmpdir()>/node-compile-cache/<node version>/` (one file per module, ~1.4 MB for the engine;
+  `NODE_DISABLE_COMPILE_CACHE=1` turns it off; it never throws). It saves the compile of the large modules but adds one
+  cache-file read per module — a tiny module loads SLOWER with it (36 one-line files: 23 ms → 51 ms), one more reason not to
+  add small files — and the first process after an update writes it (45–60 ms more, once). Measured for 1.18 (Windows,
+  Node 24, p50 of 40 interleaved fresh processes; 1.17 → the first split → with the cache and the lazy pt-BR below): guard
+  hook 220 → 260 → 238 ms, `dev-spec status` 211 → 243 → 224, SessionStart 345 → 380 → 364, the stop hook on a "done"
+  claim 252 → 284 → 231. Measure the same way: interleave the variants, fresh processes, p50 + spread — never one run.
 - **i18n** follows the same shape: `i18n/en.js` / `pt.js` / `es.js` require `i18n/common.js` at load time and reach the
   assembled `BUILD` / `MSG` through `__link` from `i18n.js`. The tables hold their `en` · `pt` · `es` keys from the start,
   in that order; a language's file loads on the FIRST read of any table's entry for it (`loadLocale`: its blocks replace
   the getters, then the `sectionNames` / `quality` / `designWeigh` merges, then its link) — a process pays only for the
-  languages it speaks. pt-BR is derived from pt on its first use (`defineDerivedLocale`), as before.
+  languages it speaks. pt-BR is derived from pt on its first use (`defineDerivedLocale`), as before, and `i18n/pt-br.js`
+  itself loads only then (a table's `pt-BR` entry, `toPtBr`, `derivePtBr` — `ptbr()` in i18n.js). A group with raw entries
+  (MSG `stopGate`: the claim patterns) is derived entry by entry, so the stop gate's claim scan reads pt-BR's patterns
+  without a single toPtBr (its first call compiles the pt-BR word maps: ~17 ms).
 
 ## The track model
 `core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17), `+api` / `+ui` / `+obs` (1.19) are independent and
@@ -2031,7 +2052,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(1443 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(1447 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
 `node cli/test-cli.js` adds 455 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior. Keep
@@ -2071,8 +2092,10 @@ U+FEFF, no `child_process`, no backslash-stripped regex literal, the roadmap's p
 
 ## When extending
 - New operation → the engine module of its concern (`mcp/lib/engine/<concern>.js`, see Layout; only a genuinely new
-  concern is a new module — listed in `engine/index.js` `MODULES`, each file costs load time), under the module rule (load-time imports only from a module below; every
-  other name through `__link`; shared mutable state in `CTX`), then its key in the facade object of `mcp/lib/spec.js`
+  concern is a new module — listed in `engine/index.js` `MODULES`, each file costs load time), under the module rule
+  (load-time imports marked `// load time` and acyclic, in either direction of `MODULES`; every other name through
+  `__link`, in the module's bare `let` list AND its `__link` destructure; shared mutable state in `CTX`), then its key in
+  the facade object of `mcp/lib/spec.js`
   (wrapped in `featureLocked` when it writes a feature) — every surface requires the facade, never a module.
 - New MCP tool → the operation above, a TOOLS entry + dispatch case in
   `mcp/server.js` (its `inputSchema` IS the validation — declare types, enums, required keys), the CLI

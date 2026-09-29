@@ -32,9 +32,9 @@ function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, DESIGN_WEIGH
 // absent or older than the engine.
 // ---------------------------------------------------------------------------
 
-// The engine's own version: package.json at the repo root (mcp/lib → ../../package.json), read once. null when it can't be
-// read or isn't x.y.z — then nothing is stamped and no notice is shown (never a guessed version).
-let ENGINE_VERSION;
+// The engine's own version: package.json at the repo root (mcp/lib/engine → ../../../package.json), read once. null when it
+// can't be read or isn't x.y.z — then nothing is stamped and no notice is shown (never a guessed version).
+let ENGINE_VERSION = undefined; // undefined: not read yet — initialized, so it never reads as a linked name (mcp/test.js)
 function engineVersion() {
   if (ENGINE_VERSION === undefined) {
     ENGINE_VERSION = null;

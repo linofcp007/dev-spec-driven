@@ -2,7 +2,8 @@
 
 /**
  * dev-spec-driven i18n — pt-BR, Brazilian Portuguese as a DERIVED locale (toPtBr over the pt strings, built lazily per
- * table group by defineDerivedLocale). mcp/lib/i18n.js derives every table's pt-BR twin with it.
+ * table group by defineDerivedLocale). mcp/lib/i18n.js derives every table's pt-BR twin with it, and loads this file only
+ * on the first pt-BR read (a table's pt-BR entry, toPtBr, derivePtBr).
  */
 // ===========================================================================
 // pt-BR — Brazilian Portuguese as a DERIVED locale (1.14 D1). `pt` stays European Portuguese (the default for pt /
@@ -495,20 +496,38 @@ function derivePtBr(v, raw, masks, self) {
   return out;
 }
 // table["pt-BR"], derived from table.pt on first use — and each top-level key only when it is read (a hook reads two or
-// three of MSG's sixty groups; a process that never meets pt-BR pays nothing). patch[k](derived, pt) adjusts one group.
+// three of MSG's sixty groups; a process that never meets pt-BR pays nothing). patch[k](derived, pt) adjusts one group; a
+// group with raw entries (raw[k] an object) and patch[k] an object of (derived, pt) => value per entry is derived entry by
+// entry, each when it is read — the stop gate reads only stopGate's raw patterns, never a string toPtBr would transform.
 function defineDerivedLocale(table, raw, patch) {
   let cache = null;
+  const lazy = (obj, key, derive) => Object.defineProperty(obj, key, { enumerable: true, configurable: true, get() {
+    const v = derive();
+    Object.defineProperty(obj, key, { value: v, enumerable: true, configurable: true, writable: true });
+    return v;
+  } });
   const build = () => {
     const src = table.pt, out = {};
     if (!ptbrPlain(src)) return derivePtBr(src, raw, null, src);
     for (const k of Object.keys(src)) {
-      Object.defineProperty(out, k, { enumerable: true, configurable: true, get() {
-        let v = derivePtBr(src[k], raw && raw[k] !== true ? raw[k] || null : null, null, src);
-        if (raw && raw[k] === true) v = src[k];
-        if (patch && patch[k]) v = patch[k](v, src[k]);
-        Object.defineProperty(out, k, { value: v, enumerable: true, configurable: true, writable: true });
+      const r = raw && raw[k], p = patch && patch[k];
+      if (r && r !== true && typeof p !== "function" && ptbrPlain(src[k])) {
+        lazy(out, k, () => {
+          const g = src[k], group = {};
+          for (const e of Object.keys(g)) lazy(group, e, () => {
+            const v = r[e] === true ? g[e] : derivePtBr(g[e], r[e] || null, null, g);
+            return p && p[e] ? p[e](v, g[e]) : v;
+          });
+          return group;
+        });
+        continue;
+      }
+      lazy(out, k, () => {
+        let v = derivePtBr(src[k], r && r !== true ? r : null, null, src);
+        if (r === true) v = src[k];
+        if (p) v = p(v, src[k]);
         return v;
-      } });
+      });
     }
     return out;
   };

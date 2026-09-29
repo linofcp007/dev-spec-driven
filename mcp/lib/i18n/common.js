@@ -1,34 +1,18 @@
 "use strict";
 
 /**
- * dev-spec-driven i18n — the language codes and the template test IDs every language's builders share.
- */
-/**
- * dev-spec-driven — localized scaffold content (EN / PT / ES, plus pt-BR DERIVED from PT — see "pt-BR — a derived
- * locale" near the end). Zero-dependency, data-only.
+ * dev-spec-driven i18n — what every language shares: the language codes (BASE_LANGS / LANGS, canonicalLang,
+ * normalizeLang, baseLang), the template's track criteria and the order the builders render them in (TEMPLATE_ACS,
+ * MARKER_TRACK_ORDER, signalTracks), and the template test IDs / rows every language's builders number alike
+ * (templateTests, greenLine, templateTestRows). Zero-dependency, data-only.
  *
- * This module holds ALL user-facing text the engine GENERATES (feature artifacts, steering
- * stubs) and the human-readable tool messages (doctor / clarify / next-action / hooks).
- * `mcp/lib/spec.js` keeps the logic; it calls the builders here with a resolved `lang`.
- *
- * Language model: a project picks ONE language (persisted in `.specs/roadmap.json` meta.lang —
- * the single source of truth), inherited by every new feature and overridable per feature
- * (persisted in `.specs/<feature>/.state.json` lang). `spec.js` resolves the lang and passes it.
- *
- * STABLE TOKENS — never translated, the tooling matches them literally:
- *   AC/SC/test IDs (US-1.AC-1, SC-001, T-01, EC-1, NFR-1), section markers ([SaaS], [AI], [SEC], [PRIVACY], [DIST]),
- *   story/parallel tags ([US1], [US2], [shared], [P]), the unfilled sentinel `> **TODO**`,
- *   `[NEEDS CLARIFICATION]`, the annotation tags `_Requirements:_ / _Makes green:_ /
- *   _Affects evals:_ / _Emits metrics:_ / _Implements:_`, `**Checkpoint:**`, the ```mermaid /
- *   ```typescript fences, the eval-harness headings `## System` / `## User Template`, and the test-plan
- *   Kind values (example / property).
- * EARS modal/keywords ARE localized (WHEN→QUANDO→CUANDO, THE SYSTEM SHALL→O SISTEMA DEVE→
- * EL SISTEMA DEBE, …) because earsValidate recognizes all three languages. Translated headings
- * are matched by the synonym tables (SAAS_SECTIONS/AI_SECTIONS/SEC_SECTIONS/PRIVACY_SECTIONS/DIST_SECTIONS) and RE_* matchers in spec.js.
+ * Part of the localized content behind mcp/lib/i18n.js (the facade, which assembles the tables and is what the engine
+ * requires): each authored language's blocks live in i18n/en.js · pt.js · es.js (they require this file at load time),
+ * the pt-BR derivation in i18n/pt-br.js. The language model and the English-stable tokens are described in i18n.js.
  */
 
-// The AUTHORED locales (one hand-written block each in BUILD / STEERING / MSG / BRIEF / EVALS_README) and every locale the
-// engine speaks: pt-BR (1.14 D1) is DERIVED from pt — see "pt-BR — a derived locale" near the end of this file.
+// The AUTHORED locales (one hand-written block each in BUILD / STEERING / MSG / BRIEF / EVALS_README — i18n/<lang>.js) and
+// every locale the engine speaks: pt-BR (1.14 D1) is DERIVED from pt — see "pt-BR — a derived locale" in i18n/pt-br.js.
 const BASE_LANGS = ["en", "pt", "es"];
 const LANGS = [...BASE_LANGS, "pt-BR"];
 // The strict reading every surface validates with (MCP `lang` enum, CLI --lang, templates): a known code or alias → the
