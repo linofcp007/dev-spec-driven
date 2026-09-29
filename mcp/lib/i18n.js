@@ -28,33 +28,39 @@
 
 const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests } = require("./i18n/common.js");
 const { toPtBr, derivePtBr, defineDerivedLocale, PTBR_STOP_EXTRA } = require("./i18n/pt-br.js");
-// Each language's blocks (the AUTHORED locales: pt-BR derives from pt below).
-const LOCALES = { en: require("./i18n/en.js"), pt: require("./i18n/pt.js"), es: require("./i18n/es.js") };
-const table = (key) => ({ en: LOCALES.en[key], pt: LOCALES.pt[key], es: LOCALES.es[key] });
 
 // Artifact builders, one set per language (i18n/<lang>.js `build`).
-const BUILD = table("build");
+const BUILD = {};
 // Steering stubs, one set per language. Filenames stay constant; content localized.
-const STEERING = table("steering");
+const STEERING = {};
 // The evals README, a single block per language.
-const EVALS_README = table("evalsReadme");
+const EVALS_README = {};
 // Human-readable tool messages (doctor / clarify / next-action / add-track / init notes / hook output).
-const MSG = table("msg");
-// The [SEC] / [PRIVACY] section display names live with their track's messages; every caller reads sectionNames.
-for (const l of BASE_LANGS) Object.assign(MSG[l].sectionNames, MSG[l].secPrivacy.sectionNames); // pt-BR derives from pt's merged table
-
+const MSG = {};
 // 1.16 Q — spec quality (Q1 steering amendments, Q2 cross-feature acceptance criteria, Q3 the glossary): one group per
 // language, merged into MSG (pt-BR derives from pt's).
-const QUALITY_MSG = table("quality");
-for (const l of BASE_LANGS) MSG[l].quality = QUALITY_MSG[l];
-
+const QUALITY_MSG = {};
 // 1.17 A — doctor's design-tradeoffs / design-risks details and spec_clarify's consistency nudge, merged into MSG.
-const DESIGN_WEIGH_MSG = table("designWeigh");
-for (const l of BASE_LANGS) MSG[l].designWeigh = DESIGN_WEIGH_MSG[l];
-
+const DESIGN_WEIGH_MSG = {};
 // Task brief (spec_task_brief) labels and loop rules per language; renderBrief() owns the layout.
-const BRIEF = table("brief");
-for (const l of BASE_LANGS) LOCALES[l].__link({ BUILD, MSG }); // the builders' and messages' own cross-references (call time)
+const BRIEF = {};
+// Each AUTHORED locale's blocks (i18n/<lang>.js) load on the first use of any table's entry for that language — a process
+// pays only for the languages it speaks. Every table holds its en · pt · es keys from the start, in that order (pt-BR
+// follows, derived from pt below); the first read of one replaces all of that language's getters by its blocks, runs
+// the merges into MSG and links the language file to the assembled BUILD / MSG (its own cross-references, call time).
+const LOCALE_FILES = { en: "./i18n/en.js", pt: "./i18n/pt.js", es: "./i18n/es.js" };
+const TABLES = [[BUILD, "build"], [STEERING, "steering"], [EVALS_README, "evalsReadme"], [MSG, "msg"], [QUALITY_MSG, "quality"],
+  [DESIGN_WEIGH_MSG, "designWeigh"], [BRIEF, "brief"]];
+function loadLocale(l) {
+  const blocks = require(LOCALE_FILES[l]);
+  for (const [t, key] of TABLES) Object.defineProperty(t, l, { value: blocks[key], enumerable: true, configurable: true, writable: true });
+  // The [SEC] / [PRIVACY] section display names live with their track's messages; every caller reads sectionNames.
+  Object.assign(MSG[l].sectionNames, MSG[l].secPrivacy.sectionNames); // pt-BR derives from pt's merged table
+  MSG[l].quality = QUALITY_MSG[l];
+  MSG[l].designWeigh = DESIGN_WEIGH_MSG[l];
+  blocks.__link({ BUILD, MSG });
+}
+for (const l of BASE_LANGS) for (const [t] of TABLES) Object.defineProperty(t, l, { enumerable: true, configurable: true, get() { loadLocale(l); return t[l]; } });
 
 // Layout of the brief (language-neutral; every label comes from BRIEF[lang]).
 function renderBrief(d, lang) {

@@ -1289,8 +1289,10 @@ dev-spec-driven/                      ← plugin root
 ├── mcp/
 │   ├── server.js                     ← local stdio MCP server (38 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
-│   ├── lib/spec.js                   ← the spec engine (classify, scaffold, lint, trace, doctor, gates, impact, roadmap, scan, import)
-│   ├── lib/i18n.js                   ← localized content (artifact + steering builders, messages)
+│   ├── lib/spec.js                   ← the spec engine's facade (the one object the server, CLI and hooks require)
+│   ├── lib/engine/                   ← the engine, one module per concern (classify, scaffold, lint, trace, doctor, gates, impact, roadmap, scan, import/)
+│   ├── lib/i18n.js                   ← localized content's facade (artifact + steering builders, messages)
+│   ├── lib/i18n/                     ← each language's text (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)
 │   └── test.js                       ← smoke test (node mcp/test.js — must end `0 failed`)
