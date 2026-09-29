@@ -12,12 +12,13 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   (wrapped in `featureLocked` when it writes a feature) — every surface requires the facade, never a module.
 - New MCP tool → the operation above, a TOOLS entry + dispatch case in
   `mcp/server.js` (its `inputSchema` IS the validation — declare types, enums, required keys), the CLI
-  subcommand, a test in `mcp/test.js` (and bump the exact tool count), the README tool tables (EN/PT/ES —
+  subcommand, a test in the file of its area in `mcp/tests/` and `cli/tests/` (testing.md → The suites; bump the exact
+  tool count — the handshake's, `mcp/tests/harness.js`), the README tool tables (EN/PT/ES —
   `mcp/test.js` builds the expected set from the live `tools/list`: a missing or phantom row in any language fails
   the suite), a `TOOL_ANNOTATIONS` entry in `mcp/server.js` (1.16 — mcp/test.js requires one per tool and snapshots `.specs/`
   around every read-only one), and (usually) a thin command in `commands/`.
 - New command → a `commands/<name>.md` with `description` + `argument-hint` front matter; it is automatically an MCP
-  prompt too (bump the exact command count in `mcp/test.js` and the README command lists). Never a Claude Code built-in
+  prompt too (bump the exact command count in `mcp/tests/17-docs.js` and the README command lists). Never a Claude Code built-in
   name.
 - New track → a TEAM's track is a track pack (`.specs/tracks/<name>/`, no code — see Project-defined tracks); a BUILT-IN
   one → The track model (registries and its classifier `SIGNALS`: `engine/tracks.js`; its builders in the

@@ -72,9 +72,13 @@ mcp/lib/i18n/                  en.js · pt.js · es.js (every table's block for 
                                template test IDs) · pt-br.js (the pt-BR derivation: toPtBr, derivePtBr, defineDerivedLocale)
 mcp/lib/prompts-resources.js   MCP prompts (one per commands/*.md, read at runtime) + specs:// resources (read-only, confined)
 mcp/evals/run-evals.js         local eval harness (uses ANTHROPIC_API_KEY; --dry-run offline)
-mcp/test.js                    smoke test — `node mcp/test.js`
+mcp/test.js                    the MCP suite's entry point — `node mcp/test.js [--only <file|area|NN>] [--list]`
+mcp/tests/                     its files, one per area: NN-<area>[-<topic>].js (each exports run(ctx)) + harness.js (the
+                               server under test, ok / rpc / payload, the shared helpers) — see testing.md → The suites
 cli/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; also prints MCP configs, rule files and prompts)
-cli/test-cli.js                smoke test for the CLI — `node cli/test-cli.js` (never a top-level bin/, see below)
+cli/test-cli.js                the CLI suite's entry point — `node cli/test-cli.js` (never a top-level bin/, see below)
+cli/tests/                     its files: NN-<area>-<topic>.js (NN = the same area numbers as mcp/tests/) + harness.js
+scripts/test-runner.js         the runner both suites share: files → chains (deps) → parallel processes, --only / --list
 scripts/test-docker.js         both suites in Linux containers — `npm run test:docker` (local Docker, never hosted CI)
 hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|MultiEdit|NotebookEdit) + approval-hook.js
                                (^(Bash|PowerShell|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$) · PostToolUse → spec-hook.js

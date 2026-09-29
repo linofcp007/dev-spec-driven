@@ -1,0 +1,851 @@
+"use strict";
+// Core — the end-to-end walk on the server's default project, v1.0 to v1.12.
+// classify → init → create → tasks → EARS → trace → doctor → approve → roadmap → scan → clarify → add_track →
+// next_action → feature ops (EN / PT / ES), the task brief, evidence, the bugfix flow and finish, and the regressions of
+// the early whole-plugin reviews. Order matters here: later statements read the projects earlier ones built.
+
+const fs = require("fs");
+const path = require("path");
+const { spawnSync } = require("child_process");
+
+exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, require, __dirname }) => {
+
+  const cls = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Stripe billing webhook for multi-tenant SaaS that also summarizes invoices with an LLM" } }));
+  ok(cls.tracks.includes("tdd") && cls.tracks.includes("saas") && cls.tracks.includes("ai"), "classify detects tdd+saas+ai (" + cls.label + ")");
+
+  const init2 = payload(await rpc("tools/call", { name: "spec_init", arguments: { tracks: ["tdd", "saas", "ai"] } }));
+  ok(init2.created.includes("scale.md") && init2.created.includes("ai-strategy.md") && init2.created.includes("testing-standards.md"), "spec_init creates track-specific steering files");
+
+  const created = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "Invoice Summary", tracks: ["tdd", "saas", "ai"], summary: "Summarize invoices per tenant" } }));
+  ok(created.ok && created.slug === "invoice-summary", "spec_create makes feature folder");
+  ok(created.created.includes("test-plan.md") && created.created.includes("eval-plan.md") && created.created.includes("load-test.md"), "spec_create writes track artifacts");
+
+  const status = payload(await rpc("tools/call", { name: "spec_status", arguments: { name: "Invoice Summary" } }));
+  ok(status.ok && status.tasks.total > 0, "spec_status reports tasks (" + status.tasks.total + ")");
+  ok(Array.isArray(status.scaleSections) && status.scaleSections.length === 5, "spec_status lists 5 scale sections");
+
+  const next = payload(await rpc("tools/call", { name: "spec_next_task", arguments: { name: "Invoice Summary" } }));
+  ok(next.ok && next.next && next.next.number === 1, "spec_next_task returns task 1");
+
+  const done = payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { name: "Invoice Summary", number: 1 } }));
+  ok(done.ok && done.done === 1, "spec_complete_task marks task 1 done");
+
+  const next2 = payload(await rpc("tools/call", { name: "spec_next_task", arguments: { name: "Invoice Summary" } }));
+  ok(next2.next && next2.next.number === 2, "next task advances to 2");
+
+  const ears = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text: "1. **US-1.AC-1** — WHEN a user clicks submit THE SYSTEM SHALL validate input\n2. The response should be fast and user-friendly" } }));
+  ok(ears.ok && ears.verdict === "fail", "ears_validate flags the bad criterion");
+  ok(ears.issues.some((i) => /SHALL/.test(i.msg)) && ears.issues.some((i) => /Vague/.test(i.msg)), "ears_validate reports SHALL + vague issues");
+
+  const trace = payload(await rpc("tools/call", { name: "trace_check", arguments: { name: "Invoice Summary" } }));
+  ok(trace.ok && typeof trace.totalAcs === "number", "trace_check runs (acs=" + trace.totalAcs + ", uncovered=" + trace.uncoveredByTasks.length + ")");
+
+  const listFeat = payload(await rpc("tools/call", { name: "spec_list", arguments: {} }));
+  ok(listFeat.features.length === 1 && listFeat.features[0].name === "invoice-summary", "spec_list shows the feature");
+
+  // --- new: classifier negation + confidence ---
+  const neg = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Build a simple CRUD admin page with no auth and without any LLM" } }));
+  ok(!neg.tracks.includes("tdd") && !neg.tracks.includes("ai"), "classify respects negation (no auth / no LLM → core only: " + neg.label + ")");
+  ok(neg.confidence && typeof neg.confidence.tdd === "string", "classify returns confidence levels");
+
+  // --- new: Portuguese classification ---
+  const ptc = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Webhook de faturação multi-inquilino com resumo gerado por um LLM" } }));
+  ok(ptc.tracks.includes("tdd") && ptc.tracks.includes("saas") && ptc.tracks.includes("ai"), "classify works in Portuguese (" + ptc.label + ")");
+
+  // --- new: weighting — a single weak signal is 'possible', not auto-enabled ---
+  const wk = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Build an agent dashboard for the internal team" } }));
+  ok(!wk.tracks.includes("ai"), "single weak signal does NOT auto-enable a track");
+  ok(Array.isArray(wk.possible) && wk.possible.some((p) => p.track === "ai"), "single weak signal is surfaced as 'possible' (+ai via 'agent')");
+
+  // --- new: EARS recognizes PT modal (DEVE) + PT vague word ---
+  const ptEars = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text: "1. **US-1.AC-1** — QUANDO o utilizador submete, O SISTEMA DEVE validar os dados\n2. A resposta deve ser rápida e amigável" } }));
+  ok(ptEars.summary.criteriaDetected === 2 && ptEars.summary.withShall === 2, "EARS accepts PT modal DEVE (2 criteria, 2 with modal)");
+  ok(ptEars.verdict === "pass" && ptEars.issues.some((i) => i.msg.includes("amigável")), "EARS passes PT (no SHALL error) and flags PT vague 'amigável'");
+
+  // --- regression: a criterion is a LOGICAL unit, not a physical line. EARS phrasing wraps
+  //     ("WHILE … WHEN … THE SYSTEM SHALL …"); a line-based parser scored each half separately
+  //     (ID half → "no modal verb" error, modal half → "no stable ID" warn). ---
+  const wrapped = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
+    "## Acceptance Criteria\n\n" +
+    "1. **US-1.AC-1** — WHEN a user submits the form THE SYSTEM SHALL validate every field\n" +
+    "2. **US-2.AC-2** — IF the access token has expired, THEN\n" +
+    "   THE SYSTEM SHALL return HTTP 401 with the code TOKEN_EXPIRED\n" +
+    "3. **US-2.AC-3** — WHILE an upload is in progress,\n" +
+    "   THE SYSTEM SHALL display the completed percentage\n" } }));
+  ok(wrapped.summary.criteriaDetected === 3, "wrapped EARS criteria count once each (got " + wrapped.summary.criteriaDetected + ", want 3)");
+  ok(wrapped.summary.withShall === 3 && wrapped.summary.withStableId === 3, "wrapped criteria keep their modal + stable ID (shall=" + wrapped.summary.withShall + ", id=" + wrapped.summary.withStableId + ")");
+  ok(wrapped.verdict === "pass" && wrapped.issues.length === 0, "wrapped criteria raise no spurious issues (got " + wrapped.issues.length + ")");
+  const wrappedPt = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
+    "1. **US-1.AC-1** — QUANDO o utilizador submete o formulário, O SISTEMA DEVE validar os campos\n" +
+    "2. **US-2.AC-2** — SE o token expirou, ENTÃO\n" +
+    "   O SISTEMA DEVE devolver um erro 401 com o código TOKEN_EXPIRED\n" } }));
+  ok(wrappedPt.summary.criteriaDetected === 2 && wrappedPt.verdict === "pass", "wrapped PT criteria validate as 2 passing criteria");
+  ok(wrapped.issues.filter((i) => i.severity === "error").length === 0, "no 'missing modal verb' error from a wrapped criterion");
+  // Block-level constructs bound a criterion: fenced code is code (a `const shall = 1` line is not
+  // an AC), a heading ends the criterion, and a comment-only line does not split one.
+  const bounded = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
+    "1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y\n```ts\nconst shall = 1;\n```\n## Out of Scope\nEverything else" } }));
+  ok(bounded.summary.criteriaDetected === 1, "fenced code + heading bound the criterion (got " + bounded.summary.criteriaDetected + ", want 1)");
+  const commented = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
+    "1. **US-1.AC-1** — IF the token expired, THEN\n<!-- reviewer: check this -->\n   THE SYSTEM SHALL return HTTP 401" } }));
+  ok(commented.summary.criteriaDetected === 1 && commented.verdict === "pass", "a comment-only line does not split a criterion");
+  // A "<!--" that never closes is plain text (as trace_check and the task scanner read it): it hides no criterion below it.
+  const unclosed = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
+    "## Acceptance Criteria\n<!-- TODO: revisit wording\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y\n2. **US-1.AC-2** — passwords are stored hashed, fast and secure.\n" } }));
+  const closedLater = S.earsValidate("## Acceptance Criteria\n<!-- note\n1. **US-1.AC-9** — hidden\n-->\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y\n");
+  ok(unclosed.summary.criteriaDetected === 2 && unclosed.verdict === "fail" && unclosed.issues.some((i) => i.code === "no-modal" && i.line === 4) &&
+    closedLater.summary.criteriaDetected === 1 && closedLater.verdict === "pass",
+    "an unclosed '<!--' hides no criterion: both ACs are linted and the no-modal one fails; a comment that closes later still hides its body (got " + unclosed.summary.criteriaDetected + ")");
+  const vagueWrap = payload(await rpc("tools/call", { name: "ears_validate", arguments: { text:
+    "1. **US-1.AC-1** — WHEN a page loads,\n   THE SYSTEM SHALL render it fast" } }));
+  ok((vagueWrap.issues.find((i) => /Vague/.test(i.msg)) || {}).line === 1, "a vague term on a continuation line is reported at the criterion's start line");
+
+  // --- regression: signals are matched as WORDS, not substrings. `indexOf` fired 'claude'
+  //     inside '.claude-plugin', 'rag' inside 'storage', 'sla' inside 'translate', 'auth'
+  //     inside 'author' — a phantom STRONG signal silently masked the negation it computed. ---
+  const fp = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Fix the duplicate hooks key in .claude-plugin/plugin.json. No LLM involved — this is pure JSON parsing." } }));
+  ok(!fp.tracks.includes("ai"), "classify does not fire +ai on 'claude' inside '.claude-plugin/plugin.json' (" + fp.label + ")");
+  ok(/negated/i.test(fp.note || ""), "classify reports the negated 'llm' it computed");
+  const subs = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Add object storage for uploaded files, translate the UI into Spanish, and show the author name on each post." } }));
+  ok(subs.tracks.length === 1 && subs.tracks[0] === "core", "no phantom tracks from storage/translate/author substrings (got " + subs.label + ")");
+  // …but real signals must still match, including inflections, versions and hyphenated adjectives.
+  const kept = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "An AI-powered assistant on GPT-4 and Claude: reduce hallucinations, add guardrails, and log token cost." } }));
+  ok(kept.tracks.includes("ai"), "classify still detects +ai from 'AI-powered', 'GPT-4', 'Claude', 'hallucinations' (" + kept.label + ")");
+  const infl = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Process Stripe payments and refunds, replay webhooks idempotently, and enforce rate-limiting per tenant." } }));
+  ok(infl.tracks.includes("tdd") && infl.tracks.includes("saas"), "classify matches inflected keywords (payments/webhooks/idempotently/rate-limiting) (" + infl.label + ")");
+  const conflict = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Summarize support tickets with an LLM and detect hallucinations, but no auth is needed for this internal page." } }));
+  ok(conflict.tracks.includes("ai") && !conflict.tracks.includes("tdd"), "negation suppresses only the negated track (+ai on, +tdd off: " + conflict.label + ")");
+
+  // --- new: spec_doctor flags unfilled mandatory sections on a fresh scaffold ---
+  const doc = payload(await rpc("tools/call", { name: "spec_doctor", arguments: { name: "Invoice Summary" } }));
+  ok(doc.ok && doc.verdict === "fail" && doc.readyToAdvance === false, "spec_doctor flags fresh scaffold as not ready (verdict=" + doc.verdict + ")");
+  ok(doc.checks.some((c) => c.id === "saas-sections" && c.status === "fail") && doc.checks.some((c) => c.id === "ai-sections" && c.status === "fail"), "spec_doctor detects unfilled +saas and +ai sections");
+
+  // --- new: spec_approve records a phase gate, surfaced by doctor ---
+  // 1.13: the requirements are still the template, so the gate refuses them — force records a flagged approval.
+  const appr = payload(await rpc("tools/call", { name: "spec_approve", arguments: { name: "Invoice Summary", phase: "requirements", force: true } }));
+  ok(appr.ok && appr.approvals.requirements && appr.approvals.requirements.forced === true, "spec_approve records the requirements gate (forced over the template's failing checks)");
+  const doc2 = payload(await rpc("tools/call", { name: "spec_doctor", arguments: { name: "Invoice Summary" } }));
+  ok(doc2.approvals && doc2.approvals.requirements, "spec_doctor surfaces recorded approvals");
+
+  // --- new: bidirectional trace_check fields present ---
+  const tr2 = payload(await rpc("tools/call", { name: "trace_check", arguments: { name: "Invoice Summary" } }));
+  ok(Array.isArray(tr2.phantomAcsInTasks), "trace_check reports phantom AC refs (reverse direction)");
+  ok(Array.isArray(tr2.implementsFiles) && Array.isArray(tr2.missingImplFiles), "trace_check reports spec↔code (_Implements:_) fields");
+
+  // --- new (sdd-skill ideas): roadmap + dependencies + cycle ---
+  await rpc("tools/call", { name: "spec_create", arguments: { name: "User Auth", tracks: ["tdd"] } });
+  const dep = payload(await rpc("tools/call", { name: "spec_depend", arguments: { name: "Invoice Summary", dependsOn: ["user-auth"] } }));
+  ok(dep.ok && dep.dependsOn[0] === "user-auth", "spec_depend declares a dependency");
+  const cyc = payload(await rpc("tools/call", { name: "spec_depend", arguments: { name: "User Auth", dependsOn: ["invoice-summary"] } }));
+  ok(cyc.ok === false && /Circular/.test(cyc.error), "spec_depend rejects a cycle");
+  const rm = payload(await rpc("tools/call", { name: "spec_roadmap", arguments: {} }));
+  ok(rm.ok && rm.total === 2 && typeof rm.overallPercent === "number", "spec_roadmap returns the multi-feature view");
+  ok(rm.features.find((f) => f.name === "invoice-summary").blocked === true, "roadmap marks blocked feature (unmet dep)");
+
+  // --- ROADMAP.md generator + backlog + auto-regen ---
+  const bk = payload(await rpc("tools/call", { name: "spec_backlog", arguments: { action: "add", name: "sso-login", note: "SAML SSO" } }));
+  ok(bk.ok && bk.backlog.some((b) => b.name === "sso-login"), "spec_backlog add records a planned feature");
+  const wr = payload(await rpc("tools/call", { name: "spec_roadmap", arguments: { write: true, html: true, lang: "pt" } }));
+  ok(wr.wrote && fs.existsSync(path.join(tmp, ".specs", "ROADMAP.md")) && fs.existsSync(path.join(tmp, ".specs", "ROADMAP.html")), "spec_roadmap write generates ROADMAP.md (default) + ROADMAP.html (html:true)");
+  const rmMd = fs.readFileSync(path.join(tmp, ".specs", "ROADMAP.md"), "utf8");
+  ok(/## Features/.test(rmMd) && /```mermaid/.test(rmMd) && /sso-login/.test(rmMd) && /Progresso/.test(rmMd), "ROADMAP.md (default) keeps Mermaid graph + backlog, localized PT");
+  const rmHtml = fs.readFileSync(path.join(tmp, ".specs", "ROADMAP.html"), "utf8");
+  ok(/#11689B/.test(rmHtml) && /prefers-color-scheme/.test(rmHtml) && /localStorage/.test(rmHtml) && !/https?:\/\//.test(rmHtml), "ROADMAP.html is brand-styled, system-default + toggle, zero external deps");
+  await rpc("tools/call", { name: "spec_complete_task", arguments: { name: "User Auth", number: 1 } });
+  ok(/🟡/.test(fs.readFileSync(path.join(tmp, ".specs", "ROADMAP.md"), "utf8")), "ROADMAP.md auto-regenerates on spec_complete_task (no write)");
+
+  // --- regression: progress % reflects real task completion, not just the phase. A fully-planned
+  //     but unimplemented feature (phase "tasks-ready", 0 tasks done) used to read as a flat 70%,
+  //     even though implementation — the bulk of the work — had not started. Planning now tops out
+  //     at the planning ceiling (30%) and the executing phase is driven by the real done/total. ---
+  const progDir = path.join(tmp, ".specs", "progress-demo");
+  fs.mkdirSync(progDir, { recursive: true });
+  fs.writeFileSync(path.join(progDir, "requirements.md"), "# Requirements\n", "utf8");
+  fs.writeFileSync(path.join(progDir, "design.md"), "# Design\n", "utf8");
+  const fourTasks = (doneCount) =>
+    "# Tasks\n\n" + [1, 2, 3, 4].map((n) => `- [${n <= doneCount ? "x" : " "}] ${n}. Task ${n}`).join("\n") + "\n";
+  const pctOf = async (name) =>
+    (payload(await rpc("tools/call", { name: "spec_roadmap", arguments: {} })).features.find((f) => f.name === name) || {});
+  fs.writeFileSync(path.join(progDir, "tasks.md"), fourTasks(0), "utf8");
+  let pf = await pctOf("progress-demo");
+  ok(pf.phase === "tasks-ready" && pf.percent === 30, "tasks-ready (0/4 done) reads as planning ceiling 30%, not 70% (got " + pf.percent + ")");
+  fs.writeFileSync(path.join(progDir, "tasks.md"), fourTasks(2), "utf8");
+  pf = await pctOf("progress-demo");
+  ok(pf.phase === "executing" && pf.percent === 65, "executing 2/4 done interpolates to 65% (got " + pf.percent + ")");
+  fs.writeFileSync(path.join(progDir, "tasks.md"), fourTasks(4), "utf8");
+  pf = await pctOf("progress-demo");
+  ok(pf.phase === "complete" && pf.percent === 100, "all tasks done → complete → 100%");
+  // Clean up so the added feature does not perturb later whole-roadmap assertions.
+  fs.rmSync(progDir, { recursive: true, force: true });
+
+  // --- new: brownfield scan + coverage (scan the real repo, not the empty temp project) ---
+  const repoRoot = path.resolve(__dirname, "..");
+  const scan = payload(await rpc("tools/call", { name: "spec_scan", arguments: { projectDir: repoRoot, cap: 1500 } }));
+  ok(scan.ok && scan.filesScanned > 0 && Array.isArray(scan.topLevelDirs), "spec_scan inventories the codebase");
+  const cov = payload(await rpc("tools/call", { name: "spec_coverage", arguments: {} }));
+  ok(cov.ok && typeof cov.coveragePercent === "number", "spec_coverage returns a percentage");
+
+  // --- new: clarify ---
+  const cl = payload(await rpc("tools/call", { name: "spec_clarify", arguments: { name: "Invoice Summary" } }));
+  ok(cl.ok && Array.isArray(cl.questions) && cl.questions.length > 0, "spec_clarify surfaces clarification questions");
+
+  // --- v1.5 (spec-kit ideas): prioritized stories, success criteria, clarification gate, constitution check ---
+  const reqV15 = payload(await rpc("tools/call", { name: "ears_validate", arguments: { name: "Invoice Summary" } }));
+  ok(typeof reqV15.summary.needsClarification === "number" && reqV15.summary.needsClarification === 0, "scaffold requirements have 0 open [NEEDS CLARIFICATION]");
+  const doc3 = payload(await rpc("tools/call", { name: "spec_doctor", arguments: { name: "Invoice Summary" } }));
+  ok(["success-criteria", "priorities", "clarifications", "constitution-check", "ac-uniqueness"].every((id) => doc3.checks.some((c) => c.id === id)), "spec_doctor includes v1.5 checks");
+  ok(doc3.checks.find((c) => c.id === "success-criteria").status === "warn" && doc3.checks.find((c) => c.id === "priorities").status === "warn",
+    "1.13: the scaffold's placeholder SC-001 and its P1 legend don't pass success-criteria & priorities while still template");
+
+  // --- multilingual: a PT-headed design passes the +saas/Constitution checks ---
+  await rpc("tools/call", { name: "spec_create", arguments: { name: "Escala PT", tracks: ["saas"] } });
+  const ptDesign = [
+    "# Design: Escala PT", "", "## Visão Geral", "Resumo.", "",
+    "## Arquitetura", "```mermaid", "graph TD", "  A-->B", "```", "",
+    "## Verificação da Constituição", "- [x] Isolamento de inquilino respeitado.", "",
+    "## Orçamento de Desempenho", "P95 < 50ms, throughput 500 rps.", "",
+    "## Design de Escala", "Cache com TTL 60s; índices em (tenant_id).", "",
+    "## Modelo Multi-inquilino", "Pooled; todas as queries com tenant_id.", "",
+    "## Observabilidade", "Métricas req_duration_seconds; alertas.", "",
+    "## Envelope de Custo", "$0,002 / 1000 pedidos.", "",
+  ].join("\n");
+  fs.writeFileSync(path.join(tmp, ".specs", "escala-pt", "design.md"), ptDesign, "utf8");
+  const ptDoc = payload(await rpc("tools/call", { name: "spec_doctor", arguments: { name: "Escala PT" } }));
+  ok(ptDoc.checks.find((c) => c.id === "saas-sections").status === "pass", "doctor accepts the 5 +saas sections written in Portuguese");
+  ok(ptDoc.checks.find((c) => c.id === "constitution-check").status === "pass", "doctor accepts a Portuguese 'Verificação da Constituição' heading");
+
+  // --- v1.8: approval gates are a real gate ---
+  const gateDoc = payload(await rpc("tools/call", { name: "spec_doctor", arguments: { name: "User Auth" } }));
+  ok(gateDoc.checks.some((c) => c.id === "approval-gates") && gateDoc.gatesOk === false && gateDoc.pendingGates.includes("requirements"), "doctor reports pending approval gates (gatesOk=false)");
+
+  // --- v1.8: spec_add_track escalates an existing feature (additive, never overwrites) ---
+  const addTr = payload(await rpc("tools/call", { name: "spec_add_track", arguments: { name: "User Auth", track: "saas" } }));
+  ok(addTr.ok && addTr.added.includes("load-test.md") && /saas/.test(addTr.tracks), "spec_add_track adds +saas artifacts to an existing feature");
+  ok(fs.readFileSync(path.join(tmp, ".specs", "user-auth", "design.md"), "utf8").includes("[SaaS]"), "spec_add_track appends the +saas design sections");
+  const addTr2 = payload(await rpc("tools/call", { name: "spec_add_track", arguments: { name: "User Auth", track: "saas" } }));
+  ok(addTr2.ok && addTr2.added.length === 0, "spec_add_track is idempotent (no duplicate scaffolding)");
+
+  // --- v1.8: spec_next_action synthesizes a recommendation + changed-since-approval ---
+  const na = payload(await rpc("tools/call", { name: "spec_next_action", arguments: { name: "User Auth" } }));
+  ok(na.ok && typeof na.recommendation === "string" && Array.isArray(na.changedSinceApproval), "spec_next_action returns a recommendation + changedSinceApproval");
+
+  // --- v1.8: spec_feature remove / archive / rename keep roadmap.json consistent ---
+  await rpc("tools/call", { name: "spec_create", arguments: { name: "Throwaway", tracks: ["core"] } });
+  const ren = payload(await rpc("tools/call", { name: "spec_feature", arguments: { action: "rename", name: "Throwaway", newName: "Renamed Feature" } }));
+  ok(ren.ok && ren.to === "renamed-feature" && fs.existsSync(path.join(tmp, ".specs", "renamed-feature")), "spec_feature rename moves the folder + slug");
+  const arch = payload(await rpc("tools/call", { name: "spec_feature", arguments: { action: "archive", name: "renamed-feature" } }));
+  ok(arch.ok && fs.existsSync(path.join(tmp, ".specs", "_archive", "renamed-feature")), "spec_feature archive moves to .specs/_archive/");
+  const listAfter = payload(await rpc("tools/call", { name: "spec_list", arguments: {} }));
+  ok(!listAfter.features.some((f) => f.name === "renamed-feature" || f.name === "_archive"), "archived feature (and _archive) are hidden from spec_list");
+  const rmRes = payload(await rpc("tools/call", { name: "spec_feature", arguments: { action: "remove", name: "Escala PT", confirm: true } })); // 1.13: remove needs confirm
+  ok(rmRes.ok && !fs.existsSync(path.join(tmp, ".specs", "escala-pt")), "spec_feature remove deletes the folder");
+
+  // --- trilingual: project language cascades to steering + generated artifacts (PT) ---
+  const ptDir = path.join(tmp, "proj-pt");
+  const ptInit = payload(await rpc("tools/call", { name: "spec_init", arguments: { tracks: ["saas", "ai"], lang: "pt", projectDir: ptDir } }));
+  ok(ptInit.lang === "pt" && typeof ptInit.note === "string", "spec_init lang:pt sets the project language");
+  const ptConst = fs.readFileSync(path.join(ptDir, ".specs", "steering", "constitution.md"), "utf8");
+  ok(/# Constituição/.test(ptConst) && /Princípios/.test(ptConst), "spec_init lang:pt writes Portuguese steering");
+  const ptFeat = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "Resumo Faturas", tracks: ["saas", "ai"], projectDir: ptDir } }));
+  ok(ptFeat.ok && ptFeat.lang === "pt", "spec_create inherits the project language (pt)");
+  const ptReq = fs.readFileSync(path.join(ptDir, ".specs", "resumo-faturas", "requirements.md"), "utf8");
+  ok(/## Histórias de Utilizador/.test(ptReq) && /US-1\.AC-1/.test(ptReq) && /O SISTEMA DEVE/.test(ptReq), "PT requirements: localized headings, stable AC IDs, PT EARS modal");
+  const ptDes = fs.readFileSync(path.join(ptDir, ".specs", "resumo-faturas", "design.md"), "utf8");
+  ok(/\[SaaS\]/.test(ptDes) && /\[AI\]/.test(ptDes) && /Orçamento de Desempenho/.test(ptDes) && /> \*\*TODO\*\*/.test(ptDes), "PT design keeps [SaaS]/[AI]/TODO markers with localized headings");
+  const ptDoc2 = payload(await rpc("tools/call", { name: "spec_doctor", arguments: { name: "Resumo Faturas", projectDir: ptDir } }));
+  ok(ptDoc2.checks.find((c) => c.id === "saas-sections").status === "fail" && /aguardar aprova/i.test(ptDoc2.checks.find((c) => c.id === "approval-gates").detail), "doctor runs on the PT feature with localized messages");
+  const ptClar = payload(await rpc("tools/call", { name: "spec_clarify", arguments: { name: "Resumo Faturas", projectDir: ptDir } }));
+  ok(ptClar.questions.some((s) => /na linha|teto de custo|limites de taxa/.test(s)), "spec_clarify returns Portuguese questions for a PT feature");
+
+  // --- trilingual: Spanish project, and per-feature override of the project default ---
+  const esDir = path.join(tmp, "proj-es");
+  await rpc("tools/call", { name: "spec_init", arguments: { tracks: ["tdd"], lang: "es", projectDir: esDir } });
+  const esFeat = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "Inicio Sesion", tracks: ["tdd"], projectDir: esDir } }));
+  ok(esFeat.ok && esFeat.lang === "es", "spec_create inherits the project language (es)");
+  const esReq = fs.readFileSync(path.join(esDir, ".specs", "inicio-sesion", "requirements.md"), "utf8");
+  ok(/## Historias de Usuario/.test(esReq) && /EL SISTEMA DEBE/.test(esReq), "ES requirements: localized headings + ES EARS modal");
+  const esTasks = fs.readFileSync(path.join(esDir, ".specs", "inicio-sesion", "tasks.md"), "utf8");
+  ok(/\[US1\]/.test(esTasks) && /## Fase: Setup/.test(esTasks), "ES tasks keep [US1] tags with localized phase headings");
+  const enOver = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "Override EN", tracks: ["core"], lang: "en", projectDir: ptDir } }));
+  const enOverReq = fs.readFileSync(path.join(ptDir, ".specs", "override-en", "requirements.md"), "utf8");
+  ok(enOver.lang === "en" && /## User Stories/.test(enOverReq), "per-feature lang overrides the project default (EN feature in a PT project)");
+
+  // --- v1.8: projectDir traversal is rejected at the MCP boundary ---
+  const trav = payload(await rpc("tools/call", { name: "spec_list", arguments: { projectDir: "../../etc" } }));
+  ok(trav.ok === false && /\.\./.test(trav.error), "MCP rejects projectDir with '..' segments");
+
+  // --- v1.11: spec_task_brief — a self-contained brief per task (subagent-driven execution) ---
+  const bDir = path.join(tmp, "proj-brief");
+  await rpc("tools/call", { name: "spec_create", arguments: { name: "Brief Demo", tracks: ["tdd"], projectDir: bDir } });
+  const bFeat = path.join(bDir, ".specs", "brief-demo");
+  fs.writeFileSync(path.join(bFeat, "requirements.md"), [
+    "# Feature: brief-demo", "", "## User Stories", "",
+    "### US-1 (P1 — MVP): Create keys",
+    "**As a** tenant admin, **I want** API keys, **so that** scripts can authenticate.", "",
+    "#### Acceptance Criteria (EARS)",
+    "1. **US-1.AC-1** — WHEN an admin creates a key",
+    "   THE SYSTEM SHALL return the token exactly once.",
+    "2. **US-1.AC-2** — IF the key is revoked THEN THE SYSTEM SHALL reject it with 401.",
+    "3. **US-1.AC-10** — THE SYSTEM SHALL log every key creation.", "",
+    "<!-- **US-9.AC-9** — WHEN example THE SYSTEM SHALL be ignored -->", "",
+  ].join("\r\n")); // CRLF on purpose (EC-1)
+  fs.writeFileSync(path.join(bFeat, "test-plan.md"), [
+    "# Test Plan: brief-demo", "",
+    "| Test ID | Layer | Description | Covers (AC IDs) | File |",
+    "|---------|-------|-------------|-----------------|------|",
+    "| T-01 | unit | token returned once | US-1.AC-1 | `tests/unit/keys.test.js` |",
+    "| T-02 | integration | revoked key rejected | US-1.AC-2 | `tests/integration/keys.test.js` |",
+    "| T-10 | unit | creation logged | US-1.AC-10 | `tests/unit/log.test.js` |", "",
+  ].join("\n"));
+  fs.writeFileSync(path.join(bFeat, "tasks.md"), [
+    "# Tasks: brief-demo", "",
+    "## Phase: Setup",
+    "- [x] 1. [shared] Scaffold the module", "",
+    "## Story US-1 (P1 — MVP)",
+    "- [ ] 2. [US1][P] Create-key endpoint (token shown once)",
+    "  - _Requirements: US-1.AC-1_",
+    "  - _Makes green: T-01_",
+    "  - _Implements: src/keys.js_",
+    "- [ ] 3. [US1] Revocation",
+    "  - _Requirements: US-1.AC-2, US-7.AC-9_",
+    "  - _Makes green: T-02, T-99_",
+    "**Checkpoint:** US-1 is independently shippable.", "",
+  ].join("\n"));
+  const brief = (args) => rpc("tools/call", { name: "spec_task_brief", arguments: { projectDir: bDir, ...args } }).then(payload);
+
+  const b2 = await brief({ name: "Brief Demo", number: 2 }); // T-01
+  ok(b2.ok && b2.task.number === 2 && b2.task.story === "US1" && b2.task.parallel === true,
+    "spec_task_brief returns the task with its story and [P] flag");
+  ok(b2.acceptanceCriteria.length === 1 && b2.acceptanceCriteria[0].id === "US-1.AC-1" &&
+    /WHEN an admin creates a key THE SYSTEM SHALL return the token exactly once/.test(b2.acceptanceCriteria[0].text),
+    "spec_task_brief resolves the full (multi-line, CRLF) EARS text of each referenced AC");
+  ok(/Create-key endpoint/.test(b2.brief) && /US-1\.AC-1/.test(b2.brief) && /As a\*\* tenant admin/.test(b2.brief) &&
+    /Story US-1/.test(b2.task.phase) && /independently shippable/.test(b2.task.checkpoint),
+    "brief carries the task text, story context, phase and closing checkpoint");
+  ok(b2.loop === "tdd" && b2.tests.length === 1 && /token returned once/.test(b2.tests[0].row) && /T-01/.test(b2.brief), // T-02
+    "+tdd brief includes the test-plan row of each T-ID and the tdd loop");
+  ok(!/log every key creation/.test(b2.brief) && !b2.tests.some((t) => t.id === "T-10") && b2.implements[0] === "src/keys.js", // T-04
+    "AC-1 / T-01 never resolve to AC-10 / T-10 (prefix collision); _Implements:_ parsed");
+  const b3 = await brief({ name: "Brief Demo", number: 3 });
+  ok(b3.ok && b3.unresolved.acs.includes("US-7.AC-9") && b3.unresolved.tests.includes("T-99") && b3.acceptanceCriteria.length === 1,
+    "unknown AC/T IDs are listed as unresolved instead of failing");
+  const bNext = await brief({ name: "Brief Demo" }); // T-03
+  ok(bNext.ok && bNext.task.number === 2, "spec_task_brief defaults to the next open task");
+  const bMissing = await brief({ name: "Brief Demo", number: 42 }); // T-05
+  ok(bMissing.ok === false && /42/.test(bMissing.error), "spec_task_brief rejects a task number that doesn't exist");
+
+  const bw = await brief({ name: "Brief Demo", number: 2, write: true }); // T-06
+  const exDir = path.join(bFeat, ".execution");
+  ok(bw.ok && bw.wrote === true && bw.brief === undefined && fs.existsSync(path.join(exDir, "task-2-brief.md")) &&
+    fs.readFileSync(path.join(exDir, ".gitignore"), "utf8").trim() === "*" && fs.existsSync(bw.paths.ledger) && /task-2-report\.md$/.test(bw.paths.report),
+    "write:true writes the brief + self-ignoring .execution/ + ledger and returns paths, not content");
+  // "paths only (the brief never enters your context)" — references/subagent-execution.md: no spec text either (the AC
+  // EARS text, test rows, design, steering stay in the file); the controller gets the IDs it acts on. includeBrief: all.
+  const bwFull = await brief({ name: "Brief Demo", number: 2, write: true, includeBrief: true });
+  ok(!("acceptanceCriteria" in bw) && !("tests" in bw) && !("designSections" in bw) && !("steering" in bw) && !/THE SYSTEM SHALL/.test(JSON.stringify(bw)) &&
+    bw.task.number === 2 && bw.loop === "tdd" && bw.inlineOnly === false && JSON.stringify(bw.refs) === JSON.stringify({ acs: ["US-1.AC-1"], tests: ["T-01"] }) &&
+    Array.isArray(bw.unresolved.acs) && bw.implements[0] === "src/keys.js" &&
+    bwFull.brief && bwFull.acceptanceCriteria[0].id === "US-1.AC-1" && bwFull.tests[0].id === "T-01" && !("refs" in bwFull),
+    "write:true returns the paths + the task's identifiers (refs, loop, inlineOnly, markers) and no spec text; includeBrief:true returns the full result");
+  fs.appendFileSync(bw.paths.ledger, "Task 2: complete (commits a..b, review clean)\n");
+  await brief({ name: "Brief Demo", number: 2, write: true });
+  ok(/Task 2: complete/.test(fs.readFileSync(bw.paths.ledger, "utf8")), "a second write never overwrites the ledger");
+
+  await rpc("tools/call", { name: "spec_create", arguments: { name: "Brief PT", tracks: ["tdd"], lang: "pt", projectDir: bDir } }); // T-07
+  const bpt = await brief({ name: "Brief PT", number: 2 });
+  ok(bpt.ok && bpt.lang === "pt" && /Critérios de aceitação/.test(bpt.brief) && /US-1\.AC-1/.test(bpt.brief) && /O SISTEMA DEVE/.test(bpt.brief),
+    "brief is generated in the feature language (PT) with English-stable IDs");
+
+  await rpc("tools/call", { name: "spec_create", arguments: { name: "Brief AI", tracks: ["ai"], projectDir: bDir } }); // T-08
+  fs.writeFileSync(path.join(bDir, ".specs", "brief-ai", "tasks.md"),
+    "# Tasks\n\n- [ ] 1. [US1] Tighten the summary prompt\n  - _Requirements: US-1.AC-1_\n  - _Affects evals: golden (maintain baseline)_\n- [ ] 2. [US1] Validate output schema\n  - _Requirements: US-1.AC-1_\n");
+  const bai = await brief({ name: "Brief AI", number: 1 });
+  const bai2 = await brief({ name: "Brief AI", number: 2 });
+  ok(bai.ok && bai.inlineOnly === true && bai.loop === "ai-prompt" && bai.evals.length === 1 && bai2.inlineOnly === false,
+    "+ai task with _Affects evals:_ is flagged inlineOnly (prompt loop); a deterministic +ai task is not");
+
+  // T-10: the hook ignores the execution workspace (no roadmap churn, no context spam).
+  const hk = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], {
+    input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: path.join(exDir, "ledger.md") } }),
+    encoding: "utf8",
+  });
+  ok(hk.status === 0 && hk.stdout.trim() === "", "PostToolUse hook stays silent for files under .specs/<feature>/.execution/");
+
+  // US-2: the protocol ships with the plugin and the skill routes to it.
+  const skillMd = fs.readFileSync(path.join(root, "skills", "dev-spec-driven", "SKILL.md"), "utf8");
+  ok(fs.existsSync(path.join(root, "skills", "dev-spec-driven", "references", "subagent-execution.md")) &&
+    fs.existsSync(path.join(root, "agents", "spec-implementer.md")) && fs.existsSync(path.join(root, "agents", "spec-reviewer.md")) &&
+    /subagent-execution\.md/.test(skillMd) && /spec_task_brief/.test(skillMd),
+    "subagent protocol + agents ship with the plugin and SKILL.md routes Phase 6 to them");
+
+  // --- v1.11 review fixes: each assertion reproduces a finding from the full plugin review ---
+  const rDir = path.join(tmp, "proj-review");
+  const rSpecs = path.join(rDir, ".specs");
+  S.initProject(rDir, ["tdd"], "en");
+  S.createFeature(rDir, "Billing", ["core"]);
+
+  // Critical: a name with no ASCII letters must never resolve to .specs/ itself (remove used to wipe it all).
+  const rmEmpty = payload(await rpc("tools/call", { name: "spec_feature", arguments: { action: "remove", name: "日本語", projectDir: rDir } }));
+  const rmSteer = S.manageFeature(rDir, "remove", "steering");
+  ok(rmEmpty.ok === false && rmSteer.ok === false && fs.existsSync(path.join(rSpecs, "billing")) && fs.existsSync(path.join(rSpecs, "steering", "constitution.md")),
+    "remove with an empty-slug name or 'steering' is refused and .specs/ survives");
+  const noName = await rpc("tools/call", { name: "spec_create", arguments: { tracks: ["core"], projectDir: rDir } });
+  ok(noName.result.isError === true && /Missing required argument/.test(noName.result.content[0].text) && !fs.existsSync(path.join(rSpecs, "undefined")),
+    "MCP validates required args (no .specs/undefined/ from a missing name)");
+  ok(S.manageFeature(rDir, "rename", "billing").ok === false && S.createFeature(rDir, "nul", ["core"]).ok === false,
+    "rename without a new name and Windows device names (nul) are refused");
+
+  // Accented names transliterate; folders created under the old slug are still found.
+  const acc = S.createFeature(rDir, "Autenticação", ["core"]);
+  fs.mkdirSync(path.join(rSpecs, "fatura-o"), { recursive: true }); // pre-1.11 slug of "Faturação"
+  fs.writeFileSync(path.join(rSpecs, "fatura-o", "tasks.md"), "- [ ] 1. x\n");
+  ok(acc.slug === "autenticacao" && S.nextTask(rDir, "Faturação").feature === "fatura-o", "slugs transliterate accents; legacy slug folders still resolve");
+
+  // Important: unparseable JSON is reported, never "repaired" into an empty file (data loss).
+  S.setDependency(rDir, "billing", ["autenticacao"]);
+  const rmPath = path.join(rSpecs, "roadmap.json");
+  fs.writeFileSync(rmPath, "\uFEFF" + fs.readFileSync(rmPath, "utf8")); // Windows editor BOM
+  ok(S.backlog(rDir, "add", "Exports").ok && S.readRoadmap(rDir).features.billing.dependsOn[0] === "autenticacao", "roadmap.json with a BOM is read, not reset");
+  const broken = fs.readFileSync(rmPath, "utf8").replace(/\}\s*$/, ",}");
+  fs.writeFileSync(rmPath, broken);
+  const blAdd = S.backlog(rDir, "add", "More");
+  ok(blAdd.ok === false && /not valid JSON/.test(blAdd.error) && fs.readFileSync(rmPath, "utf8") === broken, "invalid roadmap.json → mutators refuse; the file is left untouched");
+  fs.writeFileSync(rmPath, broken.replace(",}", "}"));
+  const stPath = path.join(rSpecs, "billing", ".state.json");
+  fs.writeFileSync(stPath, '{"lang":"en","approvals":{"requirements":{"at":"x"}},}');
+  ok(S.approvePhase(rDir, "billing", "design").ok === false && /requirements/.test(fs.readFileSync(stPath, "utf8")), "invalid .state.json → approve refuses instead of erasing approvals");
+  fs.writeFileSync(stPath, '{"lang":"en","approvals":{}}');
+
+  // setDependency with only an order keeps the declared deps; roadmap lang doesn't change the project lang.
+  const ord = S.setDependency(rDir, "billing", undefined, 2);
+  ok(ord.ok && ord.dependsOn[0] === "autenticacao" && ord.order === 2, "order-only spec_depend keeps existing dependencies");
+  S.writeRoadmapMd(rDir, "es");
+  ok(S.projectLang(rDir) === "en" && /Hoja de ruta|Progreso/.test(fs.readFileSync(path.join(rSpecs, "ROADMAP.md"), "utf8")), "roadmap lang:es localizes the roadmap only — the project stays EN");
+  const handDir = path.join(tmp, "proj-hand");
+  fs.mkdirSync(path.join(handDir, ".specs"), { recursive: true });
+  fs.writeFileSync(path.join(handDir, ".specs", "ROADMAP.md"), "# My own roadmap\n- Q1: ship X\n");
+  S.createFeature(handDir, "Thing", ["core"]);
+  ok(/My own roadmap/.test(fs.readFileSync(path.join(handDir, ".specs", "ROADMAP.md"), "utf8")), "a hand-written ROADMAP.md is never overwritten");
+
+  // EARS: DEVERÁ/DEBERÁ are modals; ordinary numbered prose outside AC sections is not a criterion.
+  ok(S.earsValidate("1. **US-1.AC-1** — QUANDO o utilizador submete, O SISTEMA DEVERÁ guardar o registo.\n2. **US-1.AC-2** — CUANDO falla, EL SISTEMA DEBERÁ reintentar.").verdict === "pass",
+    "EARS recognizes DEVERÁ / DEBERÁ (unicode word boundaries)");
+  const prose = S.earsValidate("## Acceptance Criteria\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y\n\n## Assumptions\n1. Users will already have an account.\n\n## Pressupostos\n1. O utilizador já se registou.\n");
+  ok(prose.verdict === "pass" && prose.summary.criteriaDetected === 1, "numbered prose under Assumptions/Pressupostos is not linted as a criterion");
+  const ptFresh = S.earsValidate(fs.readFileSync(path.join(ptDir, ".specs", "resumo-faturas", "requirements.md"), "utf8"));
+  ok(ptFresh.issues.filter((i) => i.severity === "warn" && i.code !== "placeholder").length === 0 && ptFresh.issues.some((i) => i.code === "placeholder"),
+    "a fresh PT scaffold has no EARS warnings beyond its template placeholders (template prose 'deve' is not a criterion)");
+
+  // Doctor: [AI] Observability for AI can't stand in for [SaaS] Observability; definitions-only AC uniqueness.
+  const aiSaas = S.createFeature(rDir, "Mixed", ["ai"]);
+  S.addTrack(rDir, "mixed", "saas");
+  const mixedDesign = path.join(aiSaas.dir, "design.md");
+  const filled = fs.readFileSync(mixedDesign, "utf8").split(/\r?\n/);
+  let inSaasObs = false;
+  const keptLines = filled.filter((l) => {
+    if (/^#{1,6}\s/.test(l)) inSaasObs = /\[SaaS\]/.test(l) && /Observability/i.test(l);
+    return inSaasObs || !/^\s*>\s*\*\*TODO\*\*/.test(l);
+  });
+  fs.writeFileSync(mixedDesign, keptLines.join("\n").replace(/\n(#{2,3} [^\n]*\n)/g, "\n$1filled.\n"));
+  const mixedDoc = S.specDoctor(rDir, "mixed").checks.find((c) => c.id === "saas-sections");
+  ok(mixedDoc.status === "fail" && /Observability:unfilled/.test(mixedDoc.detail), "doctor sees the unfilled [SaaS] Observability even after [AI] Observability for AI");
+  fs.writeFileSync(path.join(rSpecs, "billing", "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n2. **US-1.AC-2** — WHEN c THE SYSTEM SHALL reuse the key from US-1.AC-1\n");
+  const dupChk = S.specDoctor(rDir, "billing").checks.find((c) => c.id === "ac-uniqueness");
+  ok(dupChk.status === "pass", "a reference to US-1.AC-1 inside another criterion is not a duplicate definition");
+
+  // Tasks: duplicated numbers progress; "1.1" is not task 1; _Implements: keeps underscores.
+  fs.writeFileSync(path.join(rSpecs, "billing", "tasks.md"), "- [ ] 1. a\n- [ ] 1.1 sub-step\n- [ ] 2. b\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Implements: src/user_service.py_\n- [ ] 2. b again\n");
+  fs.mkdirSync(path.join(rDir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(rDir, "src", "user_service.py"), "");
+  const c1 = S.completeTask(rDir, "billing", 2), c2 = S.completeTask(rDir, "billing", 2), c3 = S.completeTask(rDir, "billing", 2);
+  ok(c1.done === 1 && c2.done === 2 && c3.alreadyDone === true && S.parseTasks(fs.readFileSync(path.join(rSpecs, "billing", "tasks.md"), "utf8")).length === 3,
+    "duplicate task numbers tick the next open one; '1.1' is not parsed as task 1");
+  const trImpl = S.traceCheck(rDir, "billing");
+  ok(trImpl.implementsFiles[0] === "src/user_service.py" && trImpl.missingImplFiles.length === 0, "_Implements: src/user_service.py_ keeps the underscore");
+  // One reading of an _Implements:_ reference: a `:12` / `#L12` anchor names the file (as coverage and the drift baseline
+  // read it) — trace_check resolved the raw string, so doctor and finish failed "files that don't exist" for a file
+  // coverage counted. An anchor-only reference names nothing (missing); the spelling reported is the task's.
+  const anc = S.createFeature(rDir, "Anchors", ["core"]);
+  fs.writeFileSync(path.join(anc.dir, "requirements.md"), "# R\n\n## Acceptance Criteria\n\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y.\n");
+  fs.writeFileSync(path.join(anc.dir, "tasks.md"), "# T\n\n- [x] 1. Build it _Requirements: US-1.AC-1_\n  - _Implements: src/user_service.py:1_\n" +
+    "- [x] 2. More _Requirements: US-1.AC-1_\n  - _Implements: src/user_service.py#L1-L3, `src/user_service.py:4:2`_\n");
+  const ancTr = S.traceCheck(rDir, "anchors");
+  const ancDoc = S.specDoctor(rDir, "anchors").checks.find((c) => c.id === "traceability");
+  fs.appendFileSync(path.join(anc.dir, "tasks.md"), "- [x] 3. Anchor only _Requirements: US-1.AC-1_\n  - _Implements: #L9_\n");
+  const ancTr2 = S.traceCheck(rDir, "anchors");
+  ok(ancTr.verdict === "pass" && ancTr.missingImplFiles.length === 0 && ancTr.implementsFiles.join() === "src/user_service.py:1,src/user_service.py#L1-L3,src/user_service.py:4:2" &&
+    ancDoc.status === "pass" && ancTr2.missingImplFiles.join() === "#L9",
+    "trace_check reads _Implements: path:12 / path#L12_ as the file (like coverage and the drift baseline): no 'files that don't exist', doctor passes; an anchor alone names nothing (got " +
+    JSON.stringify([ancTr.verdict, ancTr.missingImplFiles, ancDoc.status, ancTr2.missingImplFiles]) + ")");
+
+  // next_action: ticking tasks after approval is progress, not a spec change.
+  const na2Feat = S.createFeature(rDir, "Flow", ["core"]);
+  fs.writeFileSync(path.join(na2Feat.dir, "tasks.md"), "- [ ] 1. first\n- [ ] 2. second\n");
+  ["classification", "requirements", "design", "tasks"].forEach((p) => S.approvePhase(rDir, "flow", p, undefined, { force: true })); // templates: 1.13 gate
+  S.completeTask(rDir, "flow", 1);
+  const na2 = S.nextAction(rDir, "flow");
+  ok(!na2.changedSinceApproval.includes("tasks.md"), "completing a task does not flag tasks.md as changed since approval");
+
+  // Phase: a fresh scaffold (placeholder tasks only) is not "tasks-ready"; doctor warns on zero criteria.
+  const fresh = S.createFeature(rDir, "Fresh", ["tdd"]);
+  ok(S.statusFeature(rDir, "fresh").phase === "requirements", "fresh scaffold phase ignores placeholder-only template tasks (and still-template artifacts → requirements)");
+  fs.writeFileSync(path.join(fresh.dir, "requirements.md"), "# Feature: fresh\n");
+  ok(S.specDoctor(rDir, "fresh").checks.find((c) => c.id === "ears").status === "warn", "doctor warns (not passes) when requirements.md has zero criteria");
+
+  // clarify: English-stable tags, links and inline code are not placeholders.
+  fs.writeFileSync(path.join(fresh.dir, "requirements.md"), "## Success Criteria\n- **SC-001** — 99% [P] tasks use [RFC 7519](https://x) and `[x]` code\n");
+  ok(!S.clarify(rDir, "fresh").questions.some((q) => /placeholder/.test(q)), "clarify ignores [P]/[US1] tags, markdown links and inline code");
+
+  // MCP protocol: malformed input gets a JSON-RPC error and the server keeps serving.
+  const bad1 = await rawOnce("null");
+  const bad2 = await rawOnce("{not json");
+  const alive = await rpc("ping", {});
+  ok(bad1.error && bad1.error.code === -32600 && bad2.error && bad2.error.code === -32700 && alive.result, "null / malformed JSON → -32600 / -32700 and the server stays up");
+
+  // Hook: never crashes on a hostile payload.
+  const hkNull = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: "null", encoding: "utf8" });
+  const hkNum = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: 123 } }), encoding: "utf8" });
+  ok(hkNull.status === 0 && hkNum.status === 0 && !hkNull.stderr && !hkNum.stderr, "hook exits 0 silently on a null payload or a non-string file_path");
+
+  // --- v1.11 final-review regressions (defects the change set itself introduced, caught before release) ---
+  const fDir = path.join(tmp, "proj-final");
+  const fSpecs = path.join(fDir, ".specs");
+  // Sections whose content sits under ### sub-headings are filled (the plugin's own reference template).
+  const tpl = S.createFeature(fDir, "Tpl", ["saas"]);
+  fs.copyFileSync(path.join(__dirname, "..", "skills", "dev-spec-driven", "references", "scale-design-template.md"), path.join(tpl.dir, "design.md"));
+  ok(S.specDoctor(fDir, "tpl").checks.find((c) => c.id === "saas-sections").status === "pass", "a mandatory section filled under ### sub-headings counts as filled (scale-design-template.md passes)");
+  // Kiro-style "1.1" sub-tasks belong to their parent in the brief too.
+  const kiro = S.createFeature(fDir, "Kiro", ["core"]);
+  fs.writeFileSync(path.join(kiro.dir, "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
+  fs.writeFileSync(path.join(kiro.dir, "tasks.md"), "- [ ] 1. Parser\n  - [ ] 1.1 tokenise\n  - _Requirements: US-1.AC-1_\n- [ ] 2. Printer\n");
+  const kb1 = S.taskBrief(fDir, "kiro");
+  S.completeTask(fDir, "kiro", 1);
+  const kb2 = S.taskBrief(fDir, "kiro");
+  ok(kb1.task.number === 1 && kb1.acceptanceCriteria.length === 1 && kb2.task.number === 2, "brief treats '1.1' checkbox lines as part of task 1 and advances to task 2");
+  // _Implements: in the middle of a line; bracket-style real tasks don't read as complete after one tick.
+  fs.mkdirSync(path.join(fDir, "src"), { recursive: true });
+  fs.writeFileSync(path.join(fDir, "src", "x.js"), "");
+  fs.writeFileSync(path.join(kiro.dir, "tasks.md"), "- [ ] 1. Do X _Implements: src/x.js_ _Requirements: US-1.AC-1_\n- [ ] 2. Y _Implements: src/x.js_ (see notes)\n");
+  const midTr = S.traceCheck(fDir, "kiro");
+  ok(midTr.implementsFiles.length === 1 && midTr.implementsFiles[0] === "src/x.js" && midTr.missingImplFiles.length === 0, "_Implements: parsed mid-line (followed by another marker or prose)");
+  fs.writeFileSync(path.join(kiro.dir, "tasks.md"), "- [ ] 1. [US1] [Create users table]\n- [ ] 2. [US1] [Add endpoint]\n- [ ] 3. [US1] [Wire UI]\n");
+  S.completeTask(fDir, "kiro", 1);
+  ok(S.statusFeature(fDir, "kiro").phase === "executing", "ticking 1 of 3 bracket-style tasks is 'executing', not 'complete'");
+  // _Affects evals: on an ordinary code task keeps its tdd loop; only real prompt work is inline-only.
+  const mix = S.createFeature(fDir, "Mix", ["tdd", "ai"]);
+  const promptNo = S.taskBlocks(fs.readFileSync(path.join(mix.dir, "tasks.md"), "utf8")).find((t) => /Prompt v1/.test(t.text)).number;
+  const m3 = S.taskBrief(fDir, "mix", 3), m7 = S.taskBrief(fDir, "mix", promptNo);
+  ok(m3.loop === "tdd" && m3.inlineOnly === false && m7.loop === "ai-prompt" && m7.inlineOnly === true && /run the eval harness afterwards/.test(m3.brief),
+    "_Affects evals: on a code task keeps the tdd loop (+ an eval check); the prompt task stays inline-only");
+  // acIndex keys a criterion by the ID it defines; table-row ACs resolve.
+  fs.writeFileSync(path.join(kiro.dir, "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a token expires THE SYSTEM SHALL refresh it (replaces the old US-1.AC-2 flow)\n2. **US-1.AC-2** — WHEN refresh fails THE SYSTEM SHALL log out\n\n| ID | Criterion |\n|---|---|\n| US-1.AC-3 | THE SYSTEM SHALL audit logins |\n");
+  fs.writeFileSync(path.join(kiro.dir, "tasks.md"), "- [ ] 1. Logout\n  - _Requirements: US-1.AC-2, US-1.AC-3_\n");
+  const ab = S.taskBrief(fDir, "kiro", 1);
+  ok(/log out/.test(ab.acceptanceCriteria[0].text) && ab.acceptanceCriteria.length === 2 && ab.unresolved.acs.length === 0, "a brief resolves each AC to the criterion that DEFINES it (and table-row ACs)");
+  // EARS: previously valid specs stay valid.
+  const earsOk = (t) => S.earsValidate(t).verdict === "pass";
+  ok(earsOk("## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n\n## Open Questions\n1. Does US-1.AC-1 apply to admins?\n\n## Non-Functional Requirements\n1. All measurements are reported in SI units.\n") &&
+    earsOk("#### Critérios de Aceite\n1. US-1.AC-1 — QUANDO o utilizador entra, a aplicação deve mostrar o painel\n") &&
+    earsOk("## Acceptance Criteria\n##### Erros\n1. **US-1.AC-1** — SE falha ENTÃO o serviço deve reintentar\n") &&
+    earsOk("## Criterios de Aceptación\n1. **US-1.AC-1** — CUANDO fallan, LOS SERVICIOS DEBERÁN reintentar\n"),
+    "EARS: open questions / SI units / pt-BR 'Aceite' / sub-headings under AC / DEBERÁN keep passing");
+  const bullet = S.earsValidate("- US-1.AC-1 — QUANDO o pedido chega, a API deve responder 200\n");
+  ok(bullet.summary.criteriaDetected === 1 && bullet.verdict === "pass", "a bullet that defines an AC with lowercase 'deve' is still a criterion");
+  // Legacy accented slug via ears_validate {name}; an existing 'aux' folder can be renamed away.
+  fs.mkdirSync(path.join(fSpecs, "autentica-o"), { recursive: true });
+  fs.writeFileSync(path.join(fSpecs, "autentica-o", "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
+  const earsLegacy = payload(await rpc("tools/call", { name: "ears_validate", arguments: { name: "Autenticação", projectDir: fDir } }));
+  fs.mkdirSync(path.join(fSpecs, "aux"), { recursive: true });
+  const renAux = S.manageFeature(fDir, "rename", "aux", "auxiliary");
+  ok(earsLegacy.verdict === "pass" && renAux.ok === true && renAux.to === "auxiliary", "ears_validate {name} resolves legacy slugs; an existing 'aux' folder can be renamed");
+  // Hook: a v1.8-era project (generated ROADMAP.md, no steering/roadmap.json/.state.json) is still served.
+  const oldDir = path.join(tmp, "proj-v18");
+  fs.mkdirSync(path.join(oldDir, ".specs", "legacy"), { recursive: true });
+  fs.writeFileSync(path.join(oldDir, ".specs", "ROADMAP.md"), "# Roadmap — x\n\n<!-- AUTO-GENERATED by dev-spec — do not edit by hand. -->\n");
+  const oldReq = path.join(oldDir, ".specs", "legacy", "requirements.md");
+  fs.writeFileSync(oldReq, "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
+  const hkOld = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: oldReq } }), encoding: "utf8" });
+  ok(/EARS check/.test(hkOld.stdout), "the hook still serves a v1.8-era project identified by its generated ROADMAP.md");
+
+  // --- v1.11 remaining-items round: classifier, i18n of returned text, parity, structure ---
+  const cls2 = (d, o) => S.classify(d, o).tracks;
+  ok(cls2("desconto aplicado no checkout").includes("tdd") && !cls2("Build a CRUD page with no auth and without any LLM").includes("ai") &&
+    !cls2("Página interna que no usa LLM, sólo una tabla").includes("ai"),
+    "classifier: PT 'no' (em+o) is not a negator; EN/ES 'no' still negates");
+  ok(cls2("login/signup flow").includes("tdd") && cls2("RAG/embeddings over the docs").includes("ai") && !cls2("refactor src/rag.ts").includes("ai"),
+    "classifier: 'a/b' word pairs are matched; source paths stay opaque");
+  ok(cls2("Migrações de base de dados").includes("tdd") && cls2("Suscripciones mensuales").includes("tdd") && cls2("limites de taxa por inquilino").includes("saas") &&
+    cls2("Planos de subscrição mensal").includes("tdd") && cls2("Resumir faturas com um modelo de linguagem").includes("ai") && cls2("Inicio de sesión con Google").includes("tdd"),
+    "classifier: PT/ES plurals (-ções/-ciones, first word of phrases) and new PT/ES/EN signals");
+  ok(cls2("simple page", { name: "LLM chatbot billing" }).includes("ai"), "classifier uses the optional feature name as evidence");
+  ok(/sempre ativo/.test(S.classify("Webhook de faturação com resumo por um LLM").reasoning) && /always on/.test(S.classify("Stripe billing webhook").reasoning) &&
+    /siempre activo/.test(S.classify("x", { lang: "es" }).reasoning), "classify reasoning follows the description's language (or an explicit lang)");
+
+  // Returned text is localized; the structured fields stay stable.
+  const ptProj = path.join(tmp, "proj-pt-msgs");
+  S.initProject(ptProj, [], "pt");
+  ok(/não encontrada/.test(S.statusFeature(ptProj, "inexistente").error) && /nome reservado/.test(S.createFeature(ptProj, "steering", ["core"]).error),
+    "engine errors come back in the project language (PT)");
+  const ptF = S.createFeature(ptProj, "Pagamentos", ["saas"]);
+  fs.writeFileSync(path.join(ptF.dir, "requirements.md"), "## Critérios de Aceitação\n1. **US-1.AC-1** — QUANDO paga, a resposta deve ser rápida e amigável\n");
+  const ptE = S.earsFeature(ptProj, "pagamentos");
+  ok(ptE.issues.filter((i) => i.code === "vague").length === 2 && ptE.issues.every((i) => /Termo vago/.test(i.msg)),
+    "EARS: every vague term is reported, with a stable code and a PT message");
+  const ptDocSaas = S.specDoctor(ptProj, "pagamentos").checks.find((c) => c.id === "saas-sections").detail;
+  ok(/Observabilidade:por preencher/.test(ptDocSaas), "doctor names unfilled sections in the feature language");
+  const reLang = S.createFeature(ptProj, "Pagamentos", ["saas"], undefined, undefined, "en");
+  ok(reLang.lang === "pt" && /mantive/.test(reLang.note || ""), "re-running spec_create with another lang keeps the feature's language and says so");
+  const hkSess = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: ptProj } });
+  ok(/tarefas\)/.test(hkSess.stdout), "SessionStart feature lines are localized (PT 'tarefas')");
+
+  // Parity / robustness
+  const covDir = path.join(tmp, "proj-cov");
+  ["build-tools/x.js", "happy-path-tests/y.js", "auth/login.js", "payments/pay.js"].forEach((f) => { fs.mkdirSync(path.dirname(path.join(covDir, f)), { recursive: true }); fs.writeFileSync(path.join(covDir, f), "x"); });
+  ["ui", "app", "user-auth", "payment"].forEach((n) => S.createFeature(covDir, n, ["core"]));
+  fs.writeFileSync(path.join(covDir, ".specs", "user-auth", "tasks.md"), "- [ ] 1. a\n  - _Implements: auth/login.js_\n");
+  const covSeg = S.coverage(covDir);
+  // 1.13: coverage counts code files named in _Implements:_ — a folder whose NAME matches a feature is no longer "documented".
+  ok(covSeg.documented.join(",") === "auth" && covSeg.undocumented.includes("payments") && covSeg.undocumented.includes("build-tools") && covSeg.coveragePercent === 25,
+    "coverage counts files named in _Implements:_ ('payments' ≈ feature 'payment' by name alone is not covered)");
+  ok(S.resolveProjectDir("${CLAUDE_PROJECT_DIR}") !== path.resolve("${CLAUDE_PROJECT_DIR}"), "an unexpanded ${VAR} projectDir is ignored, not created as a folder");
+  const autoCreate = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "LLM Summaries", projectDir: path.join(tmp, "proj-auto") } }));
+  ok(autoCreate.ok && autoCreate.tracks.includes("ai"), "MCP spec_create without tracks auto-classifies (same as the CLI)");
+  const batch = await rawOnce(JSON.stringify([{ jsonrpc: "2.0", id: 901, method: "ping" }, { jsonrpc: "2.0", method: "notifications/initialized" }, { jsonrpc: "2.0", id: 902, method: "ping" }]));
+  ok(Array.isArray(batch) && batch.length === 2 && batch.map((r) => r.id).join() === "901,902", "a JSON-RPC batch gets ONE array reply (notifications contribute nothing)");
+
+  // Plugin structure: no root .mcp.json (it broke every maintainer session); renamed commands; references resolve.
+  const pj = JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin", "plugin.json"), "utf8"));
+  ok(!fs.existsSync(path.join(root, ".mcp.json")) && fs.existsSync(path.join(root, pj.mcpServers)) &&
+    /\$\{CLAUDE_PLUGIN_ROOT\}\/mcp\/server\.js/.test(fs.readFileSync(path.join(root, pj.mcpServers), "utf8")),
+    "plugin.json → mcp/servers.json (no root .mcp.json), server path via ${CLAUDE_PLUGIN_ROOT}");
+  ok(["spec-init", "spec-status", "spec-doctor", "spec-commit"].every((c) => fs.existsSync(path.join(root, "commands", c + ".md"))) &&
+    !["init", "status", "doctor", "commit"].some((c) => fs.existsSync(path.join(root, "commands", c + ".md"))),
+    "commands that collided with Claude Code built-ins are renamed spec-*");
+  const skillNow = fs.readFileSync(path.join(root, "skills", "dev-spec-driven", "SKILL.md"), "utf8");
+  const refsCited = [...new Set([...skillNow.matchAll(/references\/([\w-]+\.md)/g)].map((m) => m[1]))];
+  ok(refsCited.length > 15 && refsCited.every((r) => fs.existsSync(path.join(root, "skills", "dev-spec-driven", "references", r))) && skillNow.split("\n").length <= 540,
+    `every reference SKILL.md cites exists (${refsCited.length}) and SKILL.md stays compact`);
+
+  // --- review round 3 regressions ---
+  const enNeg = ["Do the export; no auth", "Export page for da Vinci museum; no auth, no payment", "Static page on example.com with no billing",
+    "Show a to-do list with no login", "Guests in Canada no login required", "CSV export for USA offices; no login"];
+  ok(enNeg.every((d) => { const r = S.classify(d); return !r.tracks.includes("tdd") && /always on/.test(r.reasoning); }),
+    "English with 'do/da/.com/to-do/Canada/USA' stays English: negation and reasoning unchanged");
+  ok(!cls2("Admin tools used by the support staff").includes("ai") && !cls2("The seeder loads test fixtures into the database").includes("saas") &&
+    !cls2("routes/login handler").includes("tdd"), "no phantom signals from English first-word plurals or extensionless paths");
+  const twin = S.classify("Guardar a sessão do utilizador");
+  ok(twin.signals.tdd.length === 1 && twin.confidence.tdd === "medium", "accented/unaccented keyword twins count once per word");
+  const existing = S.createFeature(rDir, "Chat Support", ["core"]);
+  const again = S.createFeature(rDir, "Chat Support", undefined, "LLM chatbot for billing");
+  const strTracks = S.createFeature(rDir, "String Tracks", "tdd");
+  ok(existing.ok && again.label === "core" && !fs.existsSync(path.join(again.dir, "eval-plan.md")) && strTracks.tracks.includes("tdd"),
+    "spec_create without tracks never re-classifies an existing feature; string tracks are honoured");
+  ok(S.earsValidate("1. **US-1.AC-1** — QUANDO exporta, O SISTEMA DEVE garantir que a exportação não leve mais de 5 s.", "pt").issues.every((i) => i.code !== "vague"),
+    "'leve' (subjunctive of levar) is not a vague term");
+  ok(/heurístic/i.test(S.coverage(ptProj).note) && /heurístic/i.test(S.scanCodebase(ptProj).note), "scan/coverage notes are localized");
+
+  // --- v1.12: verification evidence, Global Constraints, parallel batches, bugfix flow, finish ---
+  const vDir = path.join(tmp, "proj-v112");
+  const vf = S.createFeature(vDir, "Keys", ["tdd"]);
+  const tplTasks = fs.readFileSync(path.join(vf.dir, "tasks.md"), "utf8");
+  ok(/## Global Constraints/.test(tplTasks) && /_Verify: \[/.test(tplTasks), "tasks template carries a Global Constraints section and a _Verify:_ marker");
+  fs.writeFileSync(path.join(vf.dir, "requirements.md"), "## Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
+  fs.writeFileSync(path.join(vf.dir, "tasks.md"), [
+    "## Global Constraints", "- Node >= 20", "- [placeholder]", "",
+    "## Story US-1 (P1)",
+    "- [ ] 1. [US1] Core", "  - _Requirements: US-1.AC-1_", "  - _Verify: node -e \"process.exit(0)\"_",
+    "- [ ] 2. [US1][P] Parser", "  - _Requirements: US-1.AC-1_", "  - _Implements: src/parser.js_",
+    "- [ ] 3. [US1][P] Printer", "  - _Requirements: US-1.AC-1_", "  - _Implements: src/printer.js_",
+    "- [ ] 4. [US1][P] Printer tweak", "  - _Requirements: US-1.AC-1_", "  - _Implements: src/printer.js_", "",
+  ].join("\n"));
+  const vb = S.taskBrief(vDir, "keys", 1);
+  ok(vb.verify[0] === 'node -e "process.exit(0)"' && /## Verification/.test(vb.brief) && /Node >= 20/.test(vb.brief) && !/\[placeholder\]/.test(vb.brief),
+    "brief carries the _Verify:_ command and the Global Constraints (placeholders skipped)");
+  const failEv = payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { name: "keys", number: 1, evidence: { command: "npm test", exitCode: 1 }, projectDir: vDir } }));
+  ok(failEv.ok === false && /exit 1/.test(failEv.error) && S.nextTask(vDir, "keys").next.number === 1, "a failed verification refuses the tick (evidence before claims)");
+  const noEv = S.completeTask(vDir, "keys", 1);
+  ok(noEv.ok && noEv.verified === false && /_Verify:_/.test(noEv.note) && S.specDoctor(vDir, "keys").checks.find((c) => c.id === "verification").status === "warn" &&
+    /^- \*\*keys\*\* — 1 task\(s\) ticked without verification evidence: #1 \(latest run failed\)$/m.test(fs.readFileSync(path.join(vDir, ".specs", "ROADMAP.md"), "utf8")),
+    "ticking a _Verify:_ task without evidence warns (result, doctor, roadmap)");
+  const backfill = payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { name: "keys", number: 1, evidence: { command: "npm test", exitCode: 0, summary: "3/3 passing" }, projectDir: vDir } }));
+  const vState = JSON.parse(fs.readFileSync(path.join(vf.dir, ".state.json"), "utf8"));
+  ok(backfill.verified && vState.evidence["1"].summary === "3/3 passing" && S.specDoctor(vDir, "keys").checks.find((c) => c.id === "verification").status === "pass" &&
+    S.statusFeature(vDir, "keys").tasks.list[0].verified === true, "evidence is recorded (and back-fillable) — doctor and status see it");
+  const batch2 = payload(await rpc("tools/call", { name: "spec_next_task", arguments: { name: "keys", batch: true, projectDir: vDir } }));
+  ok(batch2.batch.map((b) => b.number).join() === "2,3", "next_task batch: consecutive [P] tasks with disjoint _Implements:_ (stops at the shared file)");
+
+  // bugfix flow
+  const bf = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "Login Loop", kind: "bugfix", summary: "users bounce back to /login", projectDir: vDir } }));
+  ok(bf.ok && bf.kind === "bugfix" && bf.label === "core +tdd" && ["bug.md", "requirements.md", "test-plan.md", "tasks.md"].every((x) => bf.created.includes(x)) &&
+    S.listFeatures(vDir).features.find((x) => x.name === "login-loop").kind === "bugfix", "spec_create kind:bugfix scaffolds bug.md + regression plan, always +tdd");
+  const bdoc = S.specDoctor(vDir, "login-loop");
+  ok(bdoc.checks.find((c) => c.id === "root-cause").status === "fail" && !bdoc.checks.some((c) => c.id === "design") && S.traceCheck(vDir, "login-loop").verdict === "pass",
+    "bugfix doctor gates on the root cause (no fix before the cause) and needs no design.md");
+  const bugPath = path.join(vDir, ".specs", "login-loop", "bug.md");
+  fs.writeFileSync(bugPath, fs.readFileSync(bugPath, "utf8")
+    .replace(/## Reproduction\n> \*\*TODO\*\*[^\n]*/, "## Reproduction\nLog in with an expired refresh token.")
+    .replace(/## Root Cause\n> \*\*TODO\*\*[^\n]*/, "## Root Cause\nThe refresh handler returns 302 to /login before clearing the cookie (auth.js:88).")
+    .replace(/## Fix\n\[[^\n]*\]/, "## Fix\nClear the cookie before redirecting."));
+  ok(S.specDoctor(vDir, "login-loop").checks.find((c) => c.id === "root-cause").status === "pass", "filling bug.md → Root Cause clears the gate");
+  const notReady = payload(await rpc("tools/call", { name: "spec_finish", arguments: { name: "login-loop", projectDir: vDir } }));
+  ok(notReady.ok && notReady.readyToFinish === false && notReady.blockers.length >= 2 && /^fix\(login-loop\): users bounce back/.test(notReady.mergeTitle) &&
+    /cookie/.test(notReady.mergeSummary) && notReady.checks.some((c) => /no longer reproduce/.test(c)), "spec_finish reports blockers + a merge summary built from the spec (root cause, fix)");
+  // 1.13 gates: the bugfix templates' placeholders must be filled before approving and finishing.
+  const llFill = (rel, pairs) => { const fp = path.join(vDir, ".specs", "login-loop", rel); let t = fs.readFileSync(fp, "utf8"); pairs.forEach(([a, b]) => { t = t.split(a).join(b); }); fs.writeFileSync(fp, t); };
+  llFill("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
+    ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
+  llFill("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
+  llFill("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[full test suite command]", "npm test"]]);
+  llFill("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"]]);
+  [1, 2].forEach((n) => S.completeTask(vDir, "login-loop", n));
+  S.completeTask(vDir, "login-loop", 3, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
+  S.completeTask(vDir, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
+  const llReq = S.approvePhase(vDir, "login-loop", "requirements");
+  // Phase by phase: the test plan and the tasks can't be approved before the design (bug.md) — refused, naming it.
+  const llEarly = ["test-plan", "tasks"].map((p) => S.approvePhase(vDir, "login-loop", p));
+  // A bugfix has no design.md: its design gate signs off bug.md (Root Cause) and is pending all the same — asked for
+  // by next_action (never skipped to "implement"/"finish"), counted in gatesOk, blocking spec_finish. No Phase 4 gate:
+  // the bugfix's failing regression test is one of its tasks.
+  const llDoc = S.specDoctor(vDir, "login-loop");
+  const llNext = S.nextAction(vDir, "login-loop");
+  const llFin = S.finishFeature(vDir, "login-loop");
+  ok(llReq.ok && llEarly.every((r) => r.ok === false && r.refused && r.failing.join() === "phase-order" && /earlier phases are not approved yet: design(, test-plan)? — approve them first, in order \(\/approve login-loop design\)/.test(r.error)) &&
+    llDoc.pendingGates.join() === "design,test-plan,tasks" && llDoc.gatesOk === false && llNext.step === "approve" && /bug\.md/.test(llNext.recommendation) &&
+    /\/approve login-loop design/.test(llNext.recommendation) && llFin.readyToFinish === false && llFin.blockers.some((b) => /design/.test(b)),
+    "bugfix: the design gate (bug.md) comes before the test plan and the tasks — approving them first is refused (phase-order, naming design); next_action asks for it, gatesOk is false, finish is blocked (got " + llDoc.pendingGates.join() + " / " + llNext.step + " / " + llEarly.map((r) => r.failing).join(";") + ")");
+  ["design", "test-plan", "tasks"].forEach((p) => S.approvePhase(vDir, "login-loop", p));
+  const ready = S.finishFeature(vDir, "login-loop", { write: true });
+  const prFile = fs.readFileSync(ready.paths.summary, "utf8");
+  ok(ready.readyToFinish === true && ready.blockers.length === 0 && /42\/42 passing/.test(prFile) && /US-1\.AC-1/.test(prFile) && ready.mergeSummary === undefined && /merge-summary\.md$/.test(ready.paths.summary),
+    "all tasks done + evidence + approvals → readyToFinish; the merge summary (with evidence) is written to .execution/");
+  // 1.14: the bugfix scaffold's task 3 carries its _Verify:_ + _Expect: fail_ (the red run is the proof) and T-02 — a guard
+  // test, green before and after the fix — is in no task's _Makes green:_, so doctor's red-green passes on a finished bugfix
+  // (it warned "T-02 has no red run" on every one). spec_status carries kind + flow; the brief's reply line names the report.
+  {
+    const llDocDone = S.specDoctor(vDir, "login-loop");
+    const rgLl = llDocDone.checks.find((c) => c.id === "red-green");
+    const scaf = ["en", "pt", "es", "pt-BR"].map((lg) => require("./lib/i18n.js").bugTasks("X", lg));
+    const t3 = (t) => (t.match(/- \[ \] 3\.[\s\S]*?(?=\n- \[ \] 4\.)/) || [""])[0];
+    const t4 = (t) => (t.match(/- \[ \] 4\.[\s\S]*?(?=\n\*\*Checkpoint)/) || [""])[0];
+    const stBug = S.statusFeature(vDir, "login-loop");
+    const dfSt = S.createFeature(vDir, "Arch first", ["core"], "x", undefined, "en", undefined, { flow: "design-first" });
+    const stDf = S.statusFeature(vDir, dfSt.slug);
+    const brLl = S.taskBrief(vDir, "login-loop", 4, {});
+    ok(rgLl && rgLl.status === "pass" && scaf.every((t) => /_Verify: \[[^\]\n]+T-01\]_\n  - _Expect: fail_/.test(t3(t)) && !/_Makes green:/.test(t3(t)) &&
+      /_Makes green: T-01_/.test(t4(t)) && !/_Makes green:[^\n]*T-02/.test(t) && /T-02/.test(t3(t)) && /T-02/.test(t4(t))) &&
+      stBug.kind === "bugfix" && stBug.flow === "requirements-first" && stDf.kind === "feature" && stDf.flow === "design-first" &&
+      /the report path written out in full \(`\.specs\/login-loop\/\.execution\/task-4-report\.md`\)/.test(brLl.brief),
+      "bugfix: task 3 scaffolds with _Verify:_ + _Expect: fail_ and T-02 stays out of _Makes green:_ (EN/PT/ES/pt-BR) → red-green passes on a finished bugfix; spec_status returns kind + flow; the brief asks the implementer to name its report path (got " +
+      JSON.stringify([rgLl && rgLl.status, rgLl && rgLl.detail, stBug.kind, stBug.flow, stDf.flow, (brLl.brief || "").slice(-400)]) + ")");
+  }
+  // 1.14 final review — engine: a re-finish keeps the FIRST finish (release notes don't list a shipped feature again), and a
+  // zone-less `since` timestamp is UTC (like a bare date), never the machine's local time.
+  {
+    const stPath = path.join(vDir, ".specs", "login-loop", ".state.json");
+    const t1 = JSON.parse(fs.readFileSync(stPath, "utf8")).finished.at;
+    const until = Date.now() + 5; while (Date.now() < until) { /* the second finish gets a later stamp */ }
+    const again = S.finishFeature(vDir, "login-loop", { write: true });
+    const fin2 = JSON.parse(fs.readFileSync(stPath, "utf8")).finished;
+    const notes = S.changelog(vDir, { since: new Date(Date.parse(t1) + 1).toISOString() });
+    const zNo = S.changelog(vDir, { since: "2026-09-20T10:00" }), zZ = S.changelog(vDir, { since: "2026-09-20T10:00Z" });
+    ok(again.readyToFinish === true && fin2.firstAt === t1 && fin2.at > t1 && notes.ok && !notes.fixed.some((x) => x.feature === "login-loop") &&
+      zNo.ok && zNo.since === "2026-09-20T10:00:00.000Z" && zNo.since === zZ.since,
+      "final review: a re-finish keeps finished.firstAt, so spec_changelog since the first finish doesn't list the feature again; a zone-less since is UTC (got " +
+      JSON.stringify([again.readyToFinish, fin2.firstAt === t1, notes.fixed.map((x) => x.feature), zNo.since, zZ.since]) + ")");
+  }
+  const ptBug = S.createFeature(path.join(tmp, "proj-pt-msgs"), "Erro de Login", undefined, undefined, undefined, undefined, "bugfix");
+  ok(/## Causa Raiz/.test(fs.readFileSync(path.join(ptBug.dir, "bug.md"), "utf8")) && /Restrições Globais/.test(fs.readFileSync(path.join(ptBug.dir, "tasks.md"), "utf8")),
+    "bugfix scaffolds are localized (PT)");
+  // clarify asks what the scaffold holds: a filled bugfix template (EN/PT/ES — no NFR section by design) is clear; a
+  // feature's requirements still get the NFR question.
+  {
+    const cq = path.join(tmp, "proj-clarify-bugfix");
+    const filled = {};
+    const verdicts = ["en", "pt", "es"].map((lg) => {
+      const b = S.createFeature(cq, "Login crash " + lg, undefined, "crash", undefined, lg, "bugfix");
+      const rq = path.join(b.dir, "requirements.md");
+      fs.writeFileSync(rq, (filled[lg] = fs.readFileSync(rq, "utf8").replace(/\[[^\]\n]+\]/g, "the session cookie is kept on login")));
+      return S.clarify(cq, b.slug);
+    });
+    // the same text in a FEATURE's requirements.md: the feature is asked for NFRs
+    const feat = S.createFeature(cq, "Reports", ["core"], "reports", undefined, "en");
+    fs.writeFileSync(path.join(feat.dir, "requirements.md"), filled.en);
+    const fq = S.clarify(cq, feat.slug);
+    ok(verdicts.every((v) => v.ok && v.verdict === "clear" && v.gapCount === 0) && fq.questions.some((x) => /non-functional/.test(x)),
+      "clarify: a filled bugfix template (EN/PT/ES) is 'clear' — no NFR question for a bugfix; a feature is still asked for NFRs (got " +
+      JSON.stringify(verdicts.map((v) => v.questions)) + ")");
+  }
+
+  // --- v1.12 final-review regressions ---
+  fs.writeFileSync(path.join(vf.dir, "tasks.md"), [
+    "## Story A", "- [ ] 1. [US1] Core", "  - _Verify: `node -e \"process.exit(0)\"`_", "- [ ] 2. [US1] Placeholder", "  - _Verify: [full suite command]_",
+    "- [ ] 3. [US1][P] a", "  - _Implements: src/a.js_", "- [ ] 4. [US1][P] b", "  - _Implements: src/b.js_", "**Checkpoint:** A done.",
+    "- [ ] 5. [US1][P] c", "  - _Implements: src/c.js_", "",
+  ].join("\n"));
+  const st2 = path.join(vf.dir, ".state.json");
+  fs.writeFileSync(st2, JSON.stringify({ lang: "en", approvals: {} }));
+  ok(S.taskBrief(vDir, "keys", 1).verify[0] === 'node -e "process.exit(0)"' && S.taskBrief(vDir, "keys", 2).verify.length === 0,
+    "_Verify:_ values lose wrapping backticks; a [placeholder] is not a command");
+  ok(S.completeTask(vDir, "keys", 1, { command: "npm test", exitCode: "FAILED" }).ok === false && S.completeTask(vDir, "keys", 1, { command: "npm test" }).ok === false &&
+    S.nextTask(vDir, "keys").next.number === 1, "a non-integer exit code, or a command without its exit code, is rejected (never 'verified')");
+  S.completeTask(vDir, "keys", 1, { command: "npm test", exitCode: 0, summary: "ok" });
+  const reFail = S.completeTask(vDir, "keys", 1, { command: "npm test", exitCode: 1, summary: "1 failing" });
+  ok(reFail.ok === false && reFail.recorded === true && S.statusFeature(vDir, "keys").tasks.list[0].verified === false &&
+    S.specDoctor(vDir, "keys").checks.find((c) => c.id === "verification").status === "warn", "a failed re-check of a ticked task is recorded: the task becomes unverified");
+  ok(S.completeTask(vDir, "keys", 2, "checked the login page by hand").verified === true, "a summary-only (manual) attestation verifies");
+  ok(S.nextTask(vDir, "keys", { batch: true, max: 8 }).batch.map((b) => b.number).join() === "3,4", "a parallel batch never crosses a **Checkpoint:**");
+  const aiF = S.createFeature(vDir, "Prompty", ["ai"]);
+  fs.writeFileSync(path.join(aiF.dir, "tasks.md"), "- [ ] 1. [US1][P] a\n  - _Implements: src/a.js_\n- [ ] 2. [US1][P] tune prompt\n  - _Implements: prompts/v2.md_\n");
+  ok(S.nextTask(vDir, "prompty", { batch: true }).batch.length === 1, "+ai prompt tasks never join a parallel batch");
+  // _Implements: path:12 / #L12 (read by trace_check) name the same file as the bare path: a shared file ends the batch —
+  // the raw spellings sent parallel implementers to one file — and the brief finds the design section that names it.
+  const anF = S.createFeature(vDir, "Anchors", ["core"]);
+  fs.writeFileSync(path.join(anF.dir, "design.md"), "# Design: Anchors\n\n## Payment module\nThe charge flow lives in payment.js.\n\n## Other\nNothing here.\n");
+  const anTasks = (a, b, c) => fs.writeFileSync(path.join(anF.dir, "tasks.md"), `## Phase: Core\n- [ ] 1. [US1][P] a\n  - _Implements: ${a}_\n- [ ] 2. [US1][P] b\n  - _Implements: ${b}_\n` +
+    `- [ ] 3. [US1][P] c\n  - _Implements: ${c}_\n`);
+  const anBatch = () => S.nextTask(vDir, "anchors", { batch: true, max: 3 }).batch.map((b) => b.number).join();
+  anTasks("src/payment.js:10", "src/payment.js#L50", "./src/payment.js");
+  const anB1 = anBatch();
+  anTasks("src/payment.js", "`./src/payment.js`", "src/other.js");
+  const anB2 = anBatch();
+  anTasks("src/pay/", "src/pay/a.js", "src/other.js");
+  const anB3 = anBatch();
+  anTasks("src/a.js", "src/b.js#L3", "src/c.js:9");
+  const anB4 = anBatch();
+  const anSecs = ["src/payment.js", "src/payment.js:10", "src/payment.js#L10", "`src/payment.js`"].map((ref) => {
+    anTasks(ref, "src/b.js", "src/c.js");
+    return S.taskBrief(vDir, "anchors", 1).designSections.map((s) => s.title || s).join("|");
+  });
+  ok(anB1 === "1" && anB2 === "1" && anB3 === "1" && anB4 === "1,2,3" && anSecs.every((s) => s === "Payment module"),
+    "parallel batch: `path:10`, `path#L50`, `./path`, backticked and a folder vs a file under it are one file (batch ends); disjoint anchored files still batch; the brief's design section is found with any spelling (got " +
+    JSON.stringify([anB1, anB2, anB3, anB4, anSecs]) + ")");
+  const bfx2 = S.createFeature(vDir, "Pay Bug", undefined, "charge fails", undefined, "en", "bugfix");
+  S.addTrack(vDir, "pay-bug", "saas");
+  const bfxDoc = S.specDoctor(vDir, "pay-bug");
+  ok(fs.existsSync(path.join(bfx2.dir, "design.md")) && bfxDoc.checks.find((c) => c.id === "saas-sections").status === "fail" && !bfxDoc.checks.some((c) => c.id === "mermaid"),
+    "add_track saas on a bugfix creates design.md with the mandatory sections (no mermaid/constitution noise)");
+  const mixed = S.createFeature(vDir, "Pay Bug", undefined, undefined, undefined, undefined, "feature");
+  ok(mixed.kind === "bugfix" && /kind/.test(mixed.note || "") && !fs.existsSync(path.join(bfx2.dir, "classification.md")), "a different explicit kind on an existing feature is reported; the stored kind wins");
+  const empty = S.createFeature(vDir, "Empty One", ["core"]);
+  fs.writeFileSync(path.join(empty.dir, "tasks.md"), "# Tasks\n");
+  ok(S.finishFeature(vDir, "empty-one").blockers.some((b) => /no tasks/.test(b)), "spec_finish is never ready with zero tasks");
+  const tpNa = S.createFeature(vDir, "Gate Chain", ["tdd"]);
+  fs.writeFileSync(path.join(tpNa.dir, "requirements.md"), "## Success Criteria\n- **SC-001** — x\n\n### US-1 (P1)\n#### Acceptance Criteria\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
+  fs.writeFileSync(path.join(tpNa.dir, "test-plan.md"), "| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\n");
+  fs.writeFileSync(path.join(tpNa.dir, "tasks.md"), "- [ ] 1. real task\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n");
+  fs.writeFileSync(path.join(tpNa.dir, "design.md"), "# Design: Gate Chain\n\n## Overview\nOne endpoint.\n\n## Constitution Check\n- [x] Principle 1 — complies\n"); // 1.13: gates need real content
+  S.approvePhase(vDir, "gate-chain", "classification", undefined, { force: true });
+  ["requirements", "design"].forEach((p) => S.approvePhase(vDir, "gate-chain", p));
+  ok(/test-plan/.test(S.nextAction(vDir, "gate-chain").recommendation), "next_action prompts the test-plan gate (spec_finish blocks on it)");
+  const shortT = S.createFeature(vDir, "Title Case", ["core"]);
+  fs.writeFileSync(path.join(shortT.dir, "requirements.md"), "## Summary\nPer-tenant API keys, e.g. Stripe-style secrets. They rotate.\n");
+  fs.writeFileSync(path.join(shortT.dir, "tasks.md"), "- [x] 1. a\n  - _Verify: node x.js_\n");
+  S.completeTask(vDir, "title-case", 1, { command: "node -e \"console.log(`x`)\"", exitCode: 0, summary: "# tests 5\n# pass 5" });
+  const tc = S.finishFeature(vDir, "title-case");
+  ok(tc.mergeTitle === "feat(title-case): Per-tenant API keys, e.g. Stripe-style secrets" && !/\n# pass/.test(tc.mergeSummary) && /`` node -e/.test(tc.mergeSummary),
+    "merge title keeps 'e.g.' inside the sentence; evidence stays on one line with a safe code span");
+
+  // vDir: 17-docs reads this project: its login-loop feature went through the bugfix flow to its finish above.
+  return { vDir }; // joins the context of the files that run after this one (their deps)
+};
