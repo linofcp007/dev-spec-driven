@@ -116,7 +116,7 @@ function exitCodeOf(payload, failure, strict) {
   if (typeof r.returnCodeInterpretation === "string" && r.returnCodeInterpretation.trim()) return null;
   if (!failure) return r.is_error === true || r.isError === true ? 1 : 0;
   const err = typeof payload.error === "string" ? payload.error : typeof r.error === "string" ? r.error : "";
-  const m = /exit(?:ed)?(?:\s+with)?\s+(?:code|status)\s*:?\s*(-?\d{1,9})\b/i.exec(err.slice(0, 4000));
+  const m = /exit(?:ed)?(?:\s+with)?\s+(?:code|status)\s*(?::\s*)?(-?\d{1,9})\b/i.exec(err.slice(0, 4000)); // \s*(?::\s*)?: 1.17 H
   return nonZero(m ? parseInt(m[1], 10) : 1);
 }
 

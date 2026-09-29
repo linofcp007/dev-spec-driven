@@ -10,6 +10,12 @@ graph TD
     CLI -->|toCsv| CSV[src/csv.js]
 ```
 
+## Alternativas y Compensaciones
+| Decisión | Opción | Pros | Contras | Coste si falla | Elegida |
+|---|---|---|---|---|---|
+| Escritor CSV | Una librería CSV | Cubre todas las reglas de entrecomillado | Una dependencia de runtime (la constitución lo prohíbe) | Una dependencia que auditar y actualizar | ✗ |
+| Escritor CSV | Un serializador pequeño en `src/csv.js` | Solo el núcleo de Node; cuatro reglas que probar | Las reglas de entrecomillado son nuestras | Una columna rota con un nombre raro — lo detectan los tests de entrecomillado | ✓ |
+
 ## Modelos de Datos
 ```typescript
 interface Order {
@@ -32,6 +38,11 @@ Sin pedidos se imprime solo la cabecera (EC-1). No hay otros modos de fallo.
 
 ## Estrategia de Testing
 - Unitarios: `test/csv.test.js` cubre la cabecera, el entrecomillado y la lista vacía; `test/cli.test.js` cubre el flag.
+
+## Riesgos
+| Riesgo | Probabilidad | Impacto | Mitigación | Responsable |
+|---|---|---|---|---|
+| Una hoja de cálculo lee como fórmula un nombre de cliente que empieza por `=` | baja | media | Fuera del alcance de este flag; anotado para después | mantenedor |
 
 ## Verificación de la Constitución
 - [x] Sin dependencias de runtime — cumple, solo el núcleo de Node.

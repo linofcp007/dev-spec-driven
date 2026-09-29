@@ -58,9 +58,15 @@ function parseFrontMatter(text) {
   for (let i = 1; i < lines.length && i < 200; i++) if (/^---[ \t]*$/.test(lines[i])) { end = i; break; }
   if (end === -1) return { data, body: lines.join("\n"), frontMatter: false };
   for (let i = 1; i < end; i++) {
-    const m = /^([A-Za-z0-9_-]+)[ \t]*:[ \t]*(.*?)[ \t]*$/.exec(lines[i]);
-    if (!m) continue;
-    let v = m[2];
+    // /^([A-Za-z0-9_-]+)[ \t]*:[ \t]*(.*?)[ \t]*$/ with the value read by a scan: the lazy value before [ \t]*$ rescanned a
+    // long blank run at each step (1.17 H). Its blanks at either end go; a line terminator in it: no value, as with `.`.
+    const m = /^([A-Za-z0-9_-]+)[ \t]*:/.exec(lines[i]);
+    const rest = m ? lines[i].slice(m[0].length) : "";
+    if (!m || /[\n\r\u2028\u2029]/.test(rest)) continue;
+    let a = 0, b = rest.length;
+    while (a < b && (rest[a] === " " || rest[a] === "\t")) a++;
+    while (b > a && (rest[b - 1] === " " || rest[b - 1] === "\t")) b--;
+    let v = rest.slice(a, b);
     if (/^[|>][+-]?$/.test(v)) {
       const block = [];
       while (i + 1 < end && (/^[ \t]/.test(lines[i + 1]) || !lines[i + 1].trim())) block.push(lines[++i].trim());
@@ -136,7 +142,7 @@ function getPrompt(name, args, opts = {}) {
   const root = toPosix(PLUGIN_ROOT);
   // split/join, not String.replace: a `$&` or `$1` in the arguments is text, not a replacement pattern — and the
   // arguments are inserted last, so a "$ARGUMENTS" or "${CLAUDE_PLUGIN_ROOT}" they contain stays as typed.
-  const body = c.body.replace(/^(?:[ \t]*\n)+/, "").replace(/\s+$/, "")
+  const body = c.body.replace(/^(?:[ \t]*\n)+/, "").trimEnd() // trimEnd: /\s+$/ rescanned a blank run from each unit (1.17 H)
     .split("${CLAUDE_PLUGIN_ROOT}").join(root)
     .split("$ARGUMENTS").join(args == null ? "" : args);
   const text = L.preamble(root + "/AGENTS.md", root + "/skills/dev-spec-driven/references/") + "\n\n" + body + "\n";

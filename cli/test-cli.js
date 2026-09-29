@@ -34,6 +34,7 @@ SECTIONS.push("frpb"); // 1.14 full review (Pb) — import, classifier, section 
 SECTIONS.push("frga"); // 1.14 full review (Ga) — evidence, project checks, CLI runs
 SECTIONS.push("ffobs", "ffgate", "ffdeps", "ffrtm"); // 1.14 features F1 / F2 / F3 / F5 — each branch fills its own section
 SECTIONS.push("p16u", "p16c", "p16q", "p16e"); // 1.16 packages U / C / Q / E — each branch fills its own section
+SECTIONS.push("p17d", "p17a", "p17f"); // 1.17 packages D / A / F — each branch fills its own section
 SECTIONS.push("fftracks"); // 1.15 feature F4 — project-defined tracks (track packs)
 const SECTION = process.env.CLI_TEST_SECTION || "";
 const inSection = (name) => SECTION === name;
@@ -783,7 +784,7 @@ if (inSection("wp6")) { // 1.13 WP6 — scan sections, coverage by _Implements:_
   const help6 = run(["help"]).out;
   const lines6 = help6.split("\n");
   const covAt = lines6.findIndex((l) => /^\s+coverage\s/.test(l));
-  ok(/^\s+import <kiro\|spec-kit\|openspec\|plan\|execplan\|bmad> <path>/.test(lines6[covAt + 1] || "") /* 1.14 C3: + plan · execplan · bmad */ && /--brownfield/.test(help6) && /--tracks/.test(help6), "help: `import` right after `coverage`; --brownfield and --tracks documented");
+  ok(/^\s+import <kiro\|spec-kit\|openspec\|plan\|execplan\|bmad\|fluidplan> <path>/.test(lines6[covAt + 1] || "") /* 1.14 C3: + plan · execplan · bmad */ && /--brownfield/.test(help6) && /--tracks/.test(help6), "help: `import` right after `coverage`; --brownfield and --tracks documented");
 
   // Review round: --tracks is a value flag everywhere, so every command that takes tracks honours it (never dropped).
   const tk = path.join(tmp, "wp6-tracks");
@@ -1863,8 +1864,8 @@ if (inSection("pa2")) { // 1.14 package A2 (CLI tests) — the +sec / +privacy t
     "steering security.md (PT template, not a custom file) and import --tracks sec,privacy (the [SEC] / [PRIVACY] design sections)");
   const help = run(["help"]).out;
   const usage = run(["add-track", "--project", a2]).out;
-  ok(/core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy/.test(help) && /\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy \(additive, never overwrites\)/.test(help) && /<tdd\|saas\|ai\|sec\|privacy>/.test(usage),
-    "help and the add-track usage name the +sec / +privacy tracks");
+  ok(/core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy/.test(help) && /\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy\/\+dist \(additive, never overwrites\)/.test(help) && /<tdd\|saas\|ai\|sec\|privacy\|dist>/.test(usage),
+    "help and the add-track usage name the +sec / +privacy / +dist tracks");
 }
 
 if (inSection("pa4")) { // 1.14 package A4 (CLI tests)
@@ -1927,11 +1928,11 @@ if (inSection("pb1")) { // 1.14 package B1 (CLI tests) — `dev-spec templates [
   const inPt = run(["templates", "init", "--lang", "pt", "--project", b1]);
   ok(in1.code === 0 && /1 built-in template\(s\) copied into \.specs\/templates\//.test(in1.out) && /\+ \.specs\/templates\/requirements\.md/.test(in1.out) &&
     fs.readFileSync(tpl("requirements.md"), "utf8").startsWith("# Feature: {{name}}") && in2.code === 0 && /Nothing copied/.test(in2.out) &&
-    inPt.code === 0 && /28 template\(s\) de base copiado\(s\) para \.specs\/templates\//.test(inPt.out) && fs.readFileSync(tpl("pt", "design.md"), "utf8").startsWith("# Design: {{name}}") &&
+    inPt.code === 0 && /29 template\(s\) de base copiado\(s\) para \.specs\/templates\//.test(inPt.out) && fs.readFileSync(tpl("pt", "design.md"), "utf8").startsWith("# Design: {{name}}") &&
     fs.existsSync(tpl("pt", "steering", "tech.md")),
-    "templates init <artifact> copies one built-in template (never over an existing one); init --lang pt copies all 28 (1.16: + steering/glossary.md) into .specs/templates/pt/, reported in Portuguese");
+    "templates init <artifact> copies one built-in template (never over an existing one); init --lang pt copies all 29 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md) into .specs/templates/pt/, reported in Portuguese");
   const ckClean = run(["templates", "check", "--project", b1]);
-  ok(ckClean.code === 0 && /^29 template file\(s\) checked — 0 error\(s\), 0 warning\(s\)\./.test(ckClean.out), "templates check on the copied built-in templates: clean, exit 0");
+  ok(ckClean.code === 0 && /^30 template file\(s\) checked — 0 error\(s\), 0 warning\(s\)\./.test(ckClean.out), "templates check on the copied built-in templates: clean, exit 0");
   // A team template: used by `create`, variables substituted; a broken design template → check exits 1 naming the missing section.
   fs.writeFileSync(tpl("requirements.md"), "# Req — {{name}} ({{slug}}, {{tracks}})\n\n## Summary\n{{summary}}\n\n## Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN [nu trigger] THE SYSTEM SHALL [nu behaviour]\n");
   const cr = run(["create", "Team Report", "--tracks", "saas", "--summary", "Weekly numbers", "--json", "--project", b1]);
@@ -2610,7 +2611,7 @@ if (inSection("pc3")) { // 1.14 package C3 (CLI tests) — import plan / execpla
   const again = run(["import", "plan", ".claude/plans/dark.md", "--project", c3]);
   const bad = run(["import", "notion", "x", "--project", c3]);
   ok(home.code === 1 && /outside the project[^\n]*plansDirectory \(default ~\/\.claude\/plans/.test(home.out) && sev.code === 1 && sevJ && sevJ.ok === false && /several documents \(a\.md, b\.md\)/.test(sevJ.error) &&
-    again.code === 1 && /already exists/.test(again.out) && bad.code === 1 && /Known: kiro, spec-kit, openspec, plan, execplan, bmad\./.test(bad.out),
+    again.code === 1 && /already exists/.test(again.out) && bad.code === 1 && /Known: kiro, spec-kit, openspec, plan, execplan, bmad, fluidplan\./.test(bad.out),
     "import plan refusals exit 1: ~/.claude/plans (outside — says how to bring the plan in), a folder of several plans (--json: the refusal on stdout), an existing feature; an unknown format lists the six");
   put("exec/health.md", "# Health endpoint\n\n## Purpose / Big Picture\n\nOperators can check the API.\n\n## Progress\n\n- [x] (2025-10-01 13:00Z) Add `src/health.ts`\n- [ ] Ping the database and run `npm test`\n\n" +
     "## Decision Log\n\n- Decision: SELECT 1 as the ping.\n  Rationale: cheap.\n\n## Validation and Acceptance\n\n- If the database is down, the endpoint returns 503\n");
@@ -2660,7 +2661,7 @@ if (inSection("pc3")) { // 1.14 package C3 (CLI tests) — import plan / execpla
     "roadmap shows a fresh design-first feature at 8%; feature flow <name> <flow> / --flow sets it (idempotent), a bad or missing flow and a bugfix exit 1 (got " + JSON.stringify([rmOut.split("\n").filter((l) => /port-engine/.test(l)), fl.out, flNone.out]).slice(0, 400) + ")");
   const help = run(["help"]).out;
   const doc = fs.readFileSync(CLI, "utf8").split("*/")[0];
-  ok(/import <kiro\|spec-kit\|openspec\|plan\|execplan\|bmad> <path>/.test(help) && /import <kiro\|spec-kit\|openspec\|plan\|execplan\|bmad> <path>/.test(doc) &&
+  ok(/import <kiro\|spec-kit\|openspec\|plan\|execplan\|bmad\|fluidplan> <path>/.test(help) && /import <kiro\|spec-kit\|openspec\|plan\|execplan\|bmad\|fluidplan> <path>/.test(doc) &&
     /feature flow <name> <requirements-first\|design-first>/.test(help) && /--flow design-first/.test(help) && /--flow design-first/.test(doc),
     "help and the header docblock document import plan|execplan|bmad, create --flow design-first and feature flow");
 }
@@ -3421,7 +3422,7 @@ if (inSection("fftracks")) {
   const ck = r(["tracks", "check"]);
   let ckJ = {};
   try { ckJ = JSON.parse(r(["tracks", "check", "--json"]).out); } catch { /* stays {} */ }
-  ok(ls.code === 0 && /^Tracks — 6 built-in, 1 project pack\(s\) in \.specs\/tracks\/ \(1 valid\):/.test(ls.out) && /  ✎ a11y +\[A11Y\]  Accessibility — 2 section\(s\) · 3 signal\(s\) · steering\/a11y\.md/.test(ls.out) &&
+  ok(ls.code === 0 && /^Tracks — 7 built-in, 1 project pack\(s\) in \.specs\/tracks\/ \(1 valid\):/.test(ls.out) && /  ✎ a11y +\[A11Y\]  Accessibility — 2 section\(s\) · 3 signal\(s\) · steering\/a11y\.md/.test(ls.out) &&
     /  · sec +\[SEC\]  5 section\(s\)/.test(ls.out) && ck.code === 0 && /1 track pack\(s\) checked — 1 valid, 0 error\(s\), 0 warning\(s\)\./.test(ck.out) && ckJ.ok === true && ckJ.verdict === "pass",
     "feature F4: tracks (list) shows the built-in tracks and the pack; tracks check passes (exit 0; --json = spec_tracks' result) (got " + js(ls.out.slice(0, 400)) + ")");
   // classify / create / status / doctor with the pack.
@@ -3724,7 +3725,7 @@ if (inSection("p16c")) { // 1.16 package C — the status line, the user's DEV_S
     js(im.map((r) => [r.code, (r.out || r.err).slice(0, 70)])) + ")");
   const help16 = run(["help"]).out;
   const doc16 = fs.readFileSync(CLI, "utf8").split("*/")[0];
-  ok([help16, doc16].every((t) => /statusline \[--print-config\]/.test(t) && /import <plan\|execplan> - \| --text "<markdown>"/.test(t)) && S16.CLI_SWITCHES.has("print-config"),
+  ok([help16, doc16].every((t) => /statusline \[--print-config\]/.test(t) && /import <plan\|execplan\|fluidplan> - \| --text "<markdown>"/.test(t)) && S16.CLI_SWITCHES.has("print-config"),
     "1.16: help and the header docblock document statusline [--print-config] and import <plan|execplan> - | --text; print-config is one of spec.CLI_SWITCHES");
   // 1.16 C review 5: a UNC folder in the session JSON is never stat'ed (an unreachable host hung the status line for minutes) —
   // a TEST-NET address (192.0.2.1, never routed), a child process with its own timeout; silent and fast on every platform.
@@ -3955,6 +3956,240 @@ if (inSection("p16e")) {
   try { brkDoc = JSON.parse(brkJ.stdout); } catch { /* stays null */ }
   ok(brk.code === 1 && /roadmap\.json is not valid JSON/.test(brk.out) && !/No milestones yet/.test(brk.out) && brkJ.code === 1 && brkDoc && brkDoc.ok === false && /roadmap\.json/.test(brkDoc.error),
     "1.16 E review (CLI) extra: milestone list on a roadmap.json that doesn't parse exits 1 with its error (--json: the {ok: false} result) — never 'No milestones yet' (got " + js([brk.code, brk.out]) + ")");
+}
+
+// 1.17 package (D): if (inSection("p17d")) { … }
+if (inSection("p17d")) { // 1.17 package D (CLI tests) — the +dist track (distributed systems and data consistency) on the CLI, EN / PT / ES
+  const js = (v) => JSON.stringify(v);
+  const pd = path.join(tmp, "p17d-proj");
+  const rd = (...p) => fs.readFileSync(path.join(...p), "utf8");
+  const en = run(["classify", "Create an endpoint that writes a user to Postgres and publishes a UserCreated event to Kafka for other services", "--project", pd]);
+  const es = run(["classify", "Crear un endpoint que escribe un usuario en Postgres y publica un evento UserCreated en Kafka para otros servicios", "--project", pd]);
+  const plain = run(["classify", "Create an endpoint that writes a user to Postgres and returns it", "--project", pd]);
+  // (1.17 D review: 'publish … event' is a generic signal now — listed after the weak 'other services')
+  ok(en.code === 0 && /^Tracks: core \+dist /.test(en.out) && /dist=high/.test(en.out) && /\+dist: ON \[high confidence\] — matched signals: kafka, other services, publish … event/.test(en.out) &&
+    /^Tracks: core \+dist /.test(es.out) && /\+dist: ACTIVO/.test(es.out) && /^Tracks: core /.test(plain.out) && !/^Tracks: core \+dist/.test(plain.out),
+    "1.17 D1 (CLI): classify turns +dist on for the user's example (EN / ES), with its confidence and signals; plain CRUD stays core (got " + js([en.out.split("\n")[0], es.out.split("\n")[0], plain.out.split("\n")[0]]) + ")");
+  const ini = run(["init", "dist", "--lang", "pt", "--project", pd]);
+  const cr = run(["create", "Publicar eventos", "--tracks", "tdd,dist", "--lang", "es", "--project", pd]);
+  const st = run(["status", "publicar-eventos", "--project", pd]).out;
+  ok(ini.code === 0 && /distributed\.md/.test(ini.out) && /^# Padrões de Sistemas Distribuídos/.test(rd(pd, ".specs", "steering", "distributed.md")) &&
+    cr.code === 0 && /\[core \+tdd \+dist\] \(es\)/.test(cr.out) && /Secciones de consistencia de datos: ◐ Modelo de Consistencia \(sin rellenar\)[^\n]*◐ Modos de Fallo \(sin rellenar\)/.test(st),
+    "1.17 D2 (CLI): init dist --lang pt writes the PT distributed.md steering; create --tracks tdd,dist (ES) → status shows the five [DIST] sections ◐ unfilled, in Spanish (got " + js([ini.out, cr.out, st]) + ")");
+  const doc = run(["doctor", "publicar-eventos", "--project", pd]);
+  run(["approve", "publicar-eventos", "classification", "--force", "--project", pd]);
+  run(["approve", "publicar-eventos", "requirements", "--force", "--project", pd]);
+  const appr = run(["approve", "publicar-eventos", "design", "--project", pd]);
+  const des = path.join(pd, ".specs", "publicar-eventos", "design.md");
+  fs.writeFileSync(des, rd(des).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+  const doc2 = run(["doctor", "publicar-eventos", "--project", pd]).out;
+  const sj = JSON.parse(run(["status", "publicar-eventos", "--json", "--project", pd]).out);
+  ok(doc.code === 1 && /✗ dist-sections — Modelo de Consistencia:sin rellenar/.test(doc.out) && appr.code === 1 && /dist-sections/.test(appr.out) &&
+    /✓ dist-sections — las 5 rellenadas/.test(doc2) && sj.distSections.length === 5 && sj.distSections.every((s) => s.filled) && sj.secSections === null,
+    "1.17 D3 (CLI): doctor exits 1 with dist-sections failing and approve design is refused naming it; once the TODO lines are gone the check passes (--json: distSections) (got " + js([doc.out.split("\n").filter((l) => /dist-sections/.test(l)), appr.out.slice(0, 200)]) + ")");
+  run(["create", "Plain", "core", "--lang", "en", "--project", pd]);
+  const typo = run(["add-track", "plain", "distt", "--project", pd]);
+  const add = run(["add-track", "plain", "+dist", "--project", pd]);
+  const stPlain = run(["status", "plain", "--project", pd]).out;
+  const rm = run(["add-track", "plain", "dist", "--remove", "--project", pd]);
+  const stRm = run(["status", "plain", "--project", pd]).out;
+  ok(typo.code === 1 && /did you mean 'dist'/.test(typo.out) && add.code === 0 && /core \+dist/.test(add.out) && /Data consistency sections: ◐ Consistency Model \(unfilled\)/.test(stPlain) &&
+    rm.code === 0 && /design\.md \(\[DIST\] sections\)/.test(rm.out) && !/Data consistency sections/.test(stRm),
+    "1.17 D4 (CLI): add-track 'distt' gets a did-you-mean, +dist is added (status shows its sections), --remove lists the inactive [DIST] sections and status stops showing them (got " + js([typo.out, rm.out]) + ")");
+  const trk = run(["tracks", "--project", pd]);
+  const pk = run(["tracks", "init", "dist", "--project", pd]);
+  const help = run(["help"]).out;
+  const usage = run(["add-track", "--project", pd]).out;
+  ok(trk.code === 0 && /^Tracks — 7 incluídos/.test(trk.out) && /  · dist +\[DIST\]  5 secção/.test(trk.out) && pk.code === 1 && /reservado/.test(pk.out) && // the project speaks PT (init --lang pt)
+    /core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy\/\+dist/.test(help) && /<tdd\|saas\|ai\|sec\|privacy\|dist>/.test(usage),
+    "1.17 D5 (CLI): tracks lists dist [DIST] (5 sections) among the seven built-in tracks; tracks init dist is refused (reserved); help and the add-track usage name +dist (got " + js([trk.out.split("\n").slice(0, 9), pk.out]) + ")");
+  const kiro = path.join(pd, ".kiro", "specs", "signup");
+  fs.mkdirSync(kiro, { recursive: true });
+  fs.writeFileSync(path.join(kiro, "requirements.md"), "### Requirement 1\n\n**User Story:** As a user, I want to sign up.\n\n#### Acceptance Criteria\n\n1. WHEN the user signs up THEN the system SHALL store the user and publish a UserCreated event to Kafka\n");
+  const imp = run(["import", "kiro", ".kiro/specs/signup", "--lang", "en", "--project", pd]);
+  const impDesign = fs.existsSync(path.join(pd, ".specs", "signup", "design.md")) ? rd(pd, ".specs", "signup", "design.md") : "";
+  ok(imp.code === 0 && /\+dist/.test(imp.out) && /## \[DIST\] Cross-system Writes/.test(impDesign),
+    "1.17 D6 (CLI): import kiro auto-classifies a Kafka-publishing spec as +dist and appends the [DIST] design sections (got " + js(imp.out.slice(0, 300)) + ")");
+
+  // 1.17 D review 1 (CLI): a 1.16 track pack named 'kafka' (reserved since) — doctor names it, upgrade flags it, add-track … --remove drops it
+  const lp = path.join(tmp, "p17d-legacy");
+  run(["init", "--lang", "en", "--project", lp]);
+  run(["create", "Orders", "core", "--lang", "en", "--project", lp]);
+  fs.mkdirSync(path.join(lp, ".specs", "tracks", "kafka"), { recursive: true });
+  fs.writeFileSync(path.join(lp, ".specs", "tracks", "kafka", "track.json"), JSON.stringify({ name: "kafka", marker: "KAFKA", title: { en: "Kafka" }, sections: [{ name: "Topic Catalog" }] }));
+  const lsp = path.join(lp, ".specs", "orders", ".state.json");
+  const lst = JSON.parse(rd(lsp));
+  lst.tracks = ["core", "kafka"];
+  lst.packMarkers = { kafka: "[KAFKA]" };
+  fs.writeFileSync(lsp, JSON.stringify(lst, null, 2));
+  const lDoc = run(["doctor", "orders", "--project", lp]).out;
+  const lUp = run(["upgrade", "--project", lp]).out;
+  const lRm = run(["add-track", "orders", "kafka", "--remove", "--project", lp]);
+  const lDoc2 = run(["doctor", "orders", "--project", lp]).out;
+  ok(/track-pack-missing — track pack\(s\) not available: \+kafka \(a track pack from before 1\.17 — 'kafka' is a reserved name now/.test(lDoc) &&
+    /Rename its track pack\(s\) from before 1\.17 — \+kafka/.test(lUp) && lRm.code === 0 && !/track-pack-missing/.test(lDoc2) &&
+    JSON.parse(rd(lsp)).tracks.join() === "core",
+    "1.17 D review 1 (CLI): a 1.16 'kafka' pack — doctor's track-pack-missing names the reserved name, upgrade asks to rename it, add-track orders kafka --remove drops it (got " +
+    js([lDoc.split("\n").filter((l) => /track-pack/.test(l)), lRm.out, lRm.code]) + ")");
+  // 1.17 D review 2 (CLI): app-level words alone never turn +dist on — the note names them
+  const pq = run(["classify", "Print queue: users send documents to the office printer queue and can retry failed prints", "--project", pd]);
+  ok(pq.code === 0 && !/^Tracks: core \+dist/.test(pq.out) && /Possible \+dist — only app-level words \('queue', 'retry'\)|Possível \+dist — só palavras comuns de aplicação \('queue', 'retry'\)/.test(pq.out),
+    "1.17 D review 2 (CLI): classify keeps a print queue with a retry off +dist and names the app-level words (got " + js(pq.out.split("\n").slice(0, 4)) + ")");
+}
+
+// 1.17 package (A): if (inSection("p17a")) { … }
+
+if (inSection("p17a")) {
+  const SA = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const js = (v) => JSON.stringify(v);
+  const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return {}; } };
+  const REQ = "# Feature: Orders\n\n## Summary\nPlace an order.\n\n## User Stories\n### US-1 (P1): Place an order\nAs a buyer I want to order.\n**Independent Test:** place one order.\n\n" +
+    "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the buyer submits a cart THE SYSTEM SHALL hand the order to the warehouse queue.\n" +
+    "2. **US-1.AC-2** — IF the cart is empty THEN THE SYSTEM SHALL reject it.\n\n## Success Criteria\n- **SC-001** — 95% of orders placed in under 2 s.\n\n" +
+    "## Edge Cases & Error Handling\n- **EC-1** — WHEN stock runs out THE SYSTEM SHALL refuse the order.\n\n## Non-Functional Requirements\n- **NFR-1** — p95 < 2 s.\n\n## Out of Scope\n- Refunds.\n";
+  const DESIGN = "# Design: Orders\n\n## Overview\nOrders go to the warehouse.\n\n## Architecture\n```mermaid\ngraph TD\n  A[API] --> W[Warehouse]\n```\n\n" +
+    "## Data Models\nOrder {id, total}.\n\n## Constitution Check\n- [x] Small functions — complies.\n"; // (A review 2: "Idempotent writes" anywhere in the design answers the nudge)
+
+  // EN: a design without Alternatives & Trade-offs / Risks — doctor warns (▲, exit 0), --json carries both ids; the design approval goes
+  // through (warn only); clarify asks the consistency question (the spec names a queue) and --json carries nudges.
+  const ap = path.join(tmp, "p17a-en");
+  SA.initProject(ap, ["core"], "en");
+  const af = SA.createFeature(ap, "Orders", ["core"]);
+  fs.writeFileSync(path.join(af.dir, "requirements.md"), REQ.replace("warehouse queue", "warehouse message queue")); // A review 7: a strong phrase fires alone
+  fs.writeFileSync(path.join(af.dir, "design.md"), DESIGN);
+  const doc = run(["doctor", "orders", "--project", ap]);
+  const docJ = jsonOf(run(["doctor", "orders", "--json", "--project", ap]));
+  const cl = run(["clarify", "orders", "--project", ap]);
+  const clJ = jsonOf(run(["clarify", "orders", "--json", "--project", ap]));
+  run(["approve", "orders", "classification", "--force", "--project", ap]);
+  const apReq = run(["approve", "orders", "requirements", "--project", ap]);
+  const apDes = run(["approve", "orders", "design", "--project", ap]);
+  const ids = (docJ.checks || []).filter((c) => /^design-(?:tradeoffs|risks)$/.test(c.id)).map((c) => c.id + ":" + c.status);
+  ok(/  ▲ design-tradeoffs — no Alternatives & Trade-offs section/.test(doc.out) && /  ▲ design-risks — no Risks section/.test(doc.out) &&
+    js(ids) === js(["design-tradeoffs:warn", "design-risks:warn"]) && docJ.readyToAdvance === true &&
+    apReq.code === 0 && apDes.code === 0 && !/forced|refused/i.test(apDes.out) &&
+    cl.code === 0 && /The spec mentions 'message queue', but neither the requirements nor the design say anything about consistency or idempotency/.test(cl.out) &&
+    js(clJ.nudges) === js([{ code: "consistency-unstated", signals: ["message queue"] }]),
+    "1.17 A1 / A2 (CLI): doctor warns design-tradeoffs / design-risks (▲; --json ids, readyToAdvance), the design approval still goes through; clarify asks the consistency question (--json nudges) (got " +
+    js([doc.code, ids, apReq.code, apDes.code, apDes.out.slice(0, 160), cl.out.slice(0, 200), clJ.nudges]) + ")");
+
+  // Filled (one table row per option, one risk): both pass and the question is gone.
+  fs.writeFileSync(path.join(af.dir, "design.md"), DESIGN.replace("## Data Models",
+    "## Alternatives & Trade-offs\n| Decision | Option | Pros | Cons | Cost if wrong | Chosen |\n|---|---|---|---|---|---|\n| Hand-off | Synchronous call | Simple | Couples uptime | Lost orders | ✗ |\n" +
+    "| Hand-off | Queue + outbox | Survives outages | At-least-once | A double shipment | ✓ — idempotency key |\n\n## Risks\n- Duplicate delivery — medium — idempotency key per order.\n\n## Data Models"));
+  const doc2 = run(["doctor", "orders", "--project", ap]);
+  const cl2 = jsonOf(run(["clarify", "orders", "--json", "--project", ap]));
+  ok(/  ✓ design-tradeoffs — 2 option\(s\) weighed/.test(doc2.out) && /  ✓ design-risks — 1 risk\(s\) listed/.test(doc2.out) && cl2.nudges === undefined,
+    "1.17 A1 / A2 (CLI): filled sections → ✓ design-tradeoffs (2 options) / ✓ design-risks; clarify no longer asks (got " + js([doc2.out.split("\n").filter((l) => /design-/.test(l)), cl2.nudges]) + ")");
+
+  // PT: the details and the question in the feature's language; `templates check` warns (exit 0) on a design template without the sections.
+  const pp = path.join(tmp, "p17a-pt");
+  SA.initProject(pp, ["core"], "pt");
+  const pf = SA.createFeature(pp, "Encomendas", ["core"], "", undefined, "pt");
+  fs.writeFileSync(path.join(pf.dir, "requirements.md"), REQ.replace("hand the order to the warehouse queue", "pôr a encomenda na fila de mensagens do armazém"));
+  fs.writeFileSync(path.join(pf.dir, "design.md"), "# Design: Encomendas\n\n## Visão Geral\nx.\n\n## Alternativas consideradas\n- Chamada síncrona.\n\n## Verificação da Constituição\n- [x] ok\n");
+  const pDoc = run(["doctor", "encomendas", "--project", pp]);
+  const pCl = run(["clarify", "encomendas", "--project", pp]);
+  run(["templates", "init", "design", "--project", pp]);
+  fs.writeFileSync(path.join(pp, ".specs", "templates", "design.md"), "# Design: {{name}}\n\n## Visão Geral\n[Como funciona]\n\n## Verificação da Constituição\n- [ ] [Princípio 1] — cumpre\n");
+  const pTpl = run(["templates", "check", "--project", pp]);
+  ok(/▲ design-tradeoffs — Alternativas e Compromissos lista 1 opção\(ões\) — o mínimo são 2 por decisão-chave/.test(pDoc.out) && /▲ design-risks — sem secção Riscos/.test(pDoc.out) &&
+    /A spec menciona 'fila de mensagens', mas nem os requisitos nem o design dizem nada sobre consistência ou idempotência/.test(pCl.out) &&
+    pTpl.code === 0 && /sem secção Alternativas e Compromissos — o doctor avisa \(design-tradeoffs\)/.test(pTpl.out) && /sem secção Riscos — o doctor avisa \(design-risks\)/.test(pTpl.out),
+    "1.17 A1 / A2 (CLI, PT): doctor's design-tradeoffs ('lista 1 opção') / design-risks details and the clarify question are Portuguese; templates check warns (exit 0) on a design template without the sections (got " +
+    js([pDoc.out.split("\n").filter((l) => /design-/.test(l)), pCl.out.slice(0, 160), pTpl.code, pTpl.out.slice(0, 300)]) + ")");
+
+  // 1.17 A review 3 (CLI): a design approval made by 1.17 is stamped (weigh) and its missing sections warn (▲); the same approval without the
+  // stamp (made before 1.17) → ✓ with the 'approved before 1.17' note — a finished pre-1.17 feature is never asked to reopen its design.
+  fs.writeFileSync(path.join(af.dir, "design.md"), DESIGN);
+  const rApp = run(["approve", "orders", "design", "--project", ap]);
+  const rStamped = run(["doctor", "orders", "--project", ap]);
+  const rState = path.join(af.dir, ".state.json");
+  const rSt = JSON.parse(fs.readFileSync(rState, "utf8"));
+  const rWeigh = rSt.approvals.design.weigh;
+  delete rSt.approvals.design.weigh;
+  fs.writeFileSync(rState, JSON.stringify(rSt, null, 2));
+  const rLegacy = run(["doctor", "orders", "--project", ap]);
+  ok(rApp.code === 0 && rWeigh === true && /  ▲ design-tradeoffs — no Alternatives & Trade-offs section/.test(rStamped.out) &&
+    /  ✓ design-tradeoffs — design approved before 1\.17 — asked only from its next approval \(no Alternatives & Trade-offs section/.test(rLegacy.out) &&
+    /  ✓ design-risks — design approved before 1\.17/.test(rLegacy.out),
+    "1.17 A review 3 (CLI): a 1.17 design approval carries weigh: true and doctor warns (▲) on its missing sections; without the stamp (approved before 1.17) both read ✓ 'design approved before 1.17' (got " +
+    js([rApp.code, rWeigh, rStamped.out.split("\n").filter((l) => /design-/.test(l)), rLegacy.out.split("\n").filter((l) => /design-/.test(l))]) + ")");
+}
+
+// 1.17 package (F): if (inSection("p17f")) { … }
+if (inSection("p17f")) { // 1.17 package F — dev-spec import fluidplan (= spec_import {tool: "fluidplan"})
+  const SF = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const js = (v) => JSON.stringify(v);
+  const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, typeof s === "string" ? s : JSON.stringify(s, null, 2)); };
+  const rd = (root, ...p) => { try { return fs.readFileSync(path.join(root, ...p), "utf8"); } catch { return ""; } };
+  const withStdin = (args, input) => { const r = spawnSync(process.execPath, [CLI, ...args], { input, encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } }); return { out: r.stdout || "", err: r.stderr || "", code: r.status }; };
+  // plan.json v2 + answers.json, as fluidplan writes them (github.com/morganhub/fluidplan @ 755d1b24): D2's task is a template
+  // ({{value}} {{unit}}) the answer fills (20 min), and it comes `after` D1's task.
+  const plan = { version: 2, id: "cache", title: "Session cache", lang: "en", context: "Cache API sessions to handle the load.",
+    phases: [{ id: "p1", title: "Foundation", estimate: "≈ 1 d" }],
+    pages: [{ id: "storage", title: "Where sessions live", decisions: [
+      { id: "D1", title: "The cache engine", importance: "critical", phase: "p1", why: "It sets how far the API scales.", control: { kind: "choice", options: [
+        { id: "memory", label: "In-process memory", recommended: true, pros: ["Nothing to run"], cons: ["Lost on restart"], effort: "S",
+          tasks: [{ id: "lru", title: "In-memory LRU cache", files: [{ path: "src/cache/lru.js", op: "create" }],
+            acceptance: ["When the cache is full, the system evicts the least recently used entry"], verify: ["npm test -- cache"] }] },
+        { id: "redis", label: "Redis", pros: ["Shared"], cons: ["One more service to run"], effort: "M" }] } },
+      { id: "D2", title: "The time to live", phase: "p1", control: { kind: "number", min: 5, max: 120, step: 5, default: 30, unit: "min" },
+        tasks: [{ id: "ttl", title: "TTL of {{value}} {{unit}}", do: "Set the expiry to {{value}} {{unit}}.", after: ["D1/lru"], acceptance: ["A session expires after {{value}} {{unit}}"] }] }] }] };
+  const answers = { D1: { status: "ok" }, D2: { status: "ok", value: 20, comment: "Shorter in staging" } };
+  const mk = (name) => { const p = path.join(tmp, name); run(["init", "core", "--project", p]); put(p, ".fluidplan/cache/plan.json", plan); put(p, ".fluidplan/cache/answers.json", answers); return p; };
+  const fa = mk("p17f-a"), fb = mk("p17f-b"), fc = mk("p17f-c");
+  const im = run(["import", "fluidplan", ".fluidplan/cache", "core", "--project", fa]);
+  const tA = rd(fa, ".specs", "session-cache", "tasks.md"), rA = rd(fa, ".specs", "session-cache", "requirements.md");
+  const logA = SF.decisionLog(rd(fa, ".specs", "session-cache", "decisions.md"));
+  ok(im.code === 0 && /^Imported fluidplan \.fluidplan\/cache → feature 'session-cache' \[core\] \(en\)\n/.test(im.out) && /mapping: \d+ ID\(s\) — page storage → US-1, task 1\.1 \/ acceptance 1 → US-1\.AC-1/.test(im.out) &&
+    /⚠ not converted to EARS[^\n]*US-1\.AC-2/.test(im.out) && /1\. \*\*US-1\.AC-1\*\* — WHEN the cache is full, THE SYSTEM SHALL evict the least recently used entry\n/.test(rA) &&
+    /## Phase 1 — Foundation \(≈ 1 d\)\n- \[ \] 1\. In-memory LRU cache\n  - _Requirements: US-1\.AC-1_\n  - _Implements: src\/cache\/lru\.js_\n  - _Verify: npm test -- cache_\n/.test(tA) &&
+    /- \[ \] 2\. TTL of 20 min\n  - _Requirements: US-1\.AC-2_\n  - _Depends: 1_\n  - Decision: D-2 — The time to live \(20 min\)\n  - Do: Set the expiry to 20 min\.\n  - Remark: “Shorter in staging”/.test(tA) &&
+    js(logA.map((e) => [e.id, e.title, e.decision.split("\n")[0]])) === js([["D-1", "The cache engine", "In-process memory"], ["D-2", "The time to live", "20 min"]]),
+    "1.17 F (CLI): import fluidplan <plan folder> [tracks] — plan.json + answers.json alone: the kept option's task and the filled template, after → _Depends:_, the criteria, decisions.md (D-1, D-2); the summary line, mapping and warnings printed (got " + js(im.out) + ")");
+  const jB = (() => { try { return JSON.parse(run(["import", "fluidplan", ".fluidplan/cache", "core", "--json", "--project", fb]).out); } catch { return null; } })();
+  const eC = SF.importSpec(fc, "fluidplan", ".fluidplan/cache", { tracks: ["core"] });
+  ok(jB && jB.ok === true && jB.tool === "fluidplan" && eC.ok && js(jB.mapping) === js(eC.mapping) && js(jB.warnings) === js(eC.warnings) && js(jB.imported) === js(eC.imported) &&
+    rd(fb, ".specs", "session-cache", "decisions.md").replace(/\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z)?/g, "D") === rd(fc, ".specs", "session-cache", "decisions.md").replace(/\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z)?/g, "D"),
+    "1.17 F (CLI): import fluidplan --json prints spec_import's result — the same mapping, warnings and files as the engine call, the same decisions.md (got " + js(jB).slice(0, 300) + ")");
+  const planMd = ["<!-- generated by fluidplan: regenerated on export, edits are overwritten -->", "# Session cache — execution plan", "",
+    "> Approved on 2026-09-25 at 14:02, round 1 · generated by fluidplan", "> Do not edit by hand before execution: regenerate with `fluidplan export --plan cache`. During execution, tick tasks as you go.", "",
+    "## Phase 1 — Foundation (≈ 1 d)", "", "### [x] 1.1 In-memory LRU cache · D1", "", "- Decision: **D1** The cache engine — In-process memory [critical]", "- Files: `src/cache/lru.js` (create)",
+    "- Acceptance criteria:", "  - [x] When the cache is full, the system evicts the least recently used entry", "- Verify: `npm test -- cache`", "",
+    "### [ ] 1.2 TTL of 20 min · D2", "", "- Decision: **D2** The time to live — 20 min", "- Do: Set the expiry to 20 min.", "- Acceptance criteria:", "  - [ ] A session expires after 20 min",
+    "- After: 1.1", "- Remark: “Shorter in staging”", "", "## Final check", "", "- [ ] `npm test -- cache`", ""].join("\n");
+  const st = withStdin(["import", "fluidplan", "-", "core", "--name", "From stdin", "--project", fa], planMd);
+  const stJ = withStdin(["import", "fluidplan", "-", "core", "--name", "From stdin json", "--json", "--project", fa], planMd);
+  let stDoc = null;
+  try { stDoc = JSON.parse(stJ.out); } catch { /* stays null */ }
+  const tS = rd(fa, ".specs", "from-stdin", "tasks.md");
+  ok(st.code === 0 && /\(inline text\)/.test(st.out) && /^> Imported from fluidplan \(inline text\) on /m.test(tS) && /- \[x\] 1\. In-memory LRU cache\n/.test(tS) && /- \[ \] 2\. TTL of 20 min\n[\s\S]*  - _Depends: 1_/.test(tS) &&
+    stDoc && stDoc.ok === true && stDoc.inline === true && stDoc.source === null && stDoc.warnings.some((w) => /no DECISIONS\.md and no plan\.json beside PLAN\.md/.test(w)),
+    "1.17 F (CLI): import fluidplan - reads a PLAN.md from stdin (a ticked task stays ticked, After → _Depends:_); --json = spec_import {text} (inline, source null, the PLAN.md-only warning) (got " + js([st.out, stJ.out.slice(0, 200)]) + ")");
+  put(fa, ".fluidplan/other/plan.json", { ...plan, id: "other", title: "Other" });
+  put(fa, "notes/todo.md", "# Todo\n\n- buy milk\n");
+  const sev = run(["import", "fluidplan", ".fluidplan", "--json", "--project", fa]);
+  let sevJ = null;
+  try { sevJ = JSON.parse(sev.out); } catch { /* not JSON */ }
+  const outside = run(["import", "fluidplan", "../p17f-b/.fluidplan/cache", "--project", fa]);
+  const notFp = run(["import", "fluidplan", "notes/todo.md", "--project", fa]);
+  const pt = run(["import", "fluidplan", ".fluidplan/cache", "core", "--lang", "pt", "--name", "Cache PT", "--project", fa]);
+  const help = run(["help"]).out;
+  ok(sev.code === 1 && sevJ && sevJ.ok === false && /'\.fluidplan' holds several fluidplan plans \(cache, other\)/.test(sevJ.error) && outside.code === 1 && /outside the project/.test(outside.out) &&
+    notFp.code === 1 && /is not a fluidplan PLAN\.md or DECISIONS\.md/.test(notFp.out) && pt.code === 0 && /^Importado de fluidplan \.fluidplan\/cache → feature 'cache-pt'/.test(pt.out) &&
+    /^> Importado de fluidplan `\.fluidplan\/cache` em /m.test(rd(fa, ".specs", "cache-pt", "tasks.md")) && /  - Decisão: D-2 — The time to live \(20 min\)/.test(rd(fa, ".specs", "cache-pt", "tasks.md")) &&
+    /^# Decisões: Cache PT\n/.test(rd(fa, ".specs", "cache-pt", "decisions.md")) && /fluidplan = a fluidplan plan \(\.fluidplan\/<id>\/:/.test(help),
+    "1.17 F (CLI): exit 1 for a plans folder holding several plans (--json: the refusal), a path outside the project, a document that is no fluidplan one; --lang pt localizes the note, the labels and decisions.md; help documents fluidplan (got " + js([sev.out, outside.out, notFp.out, pt.out]).slice(0, 400) + ")");
+  // 1.17 F review 11: stdin that is no fluidplan document is refused naming the text, never a virtual 'fluidplan.md'; review 2: a PLAN.md
+  // task title holding '_Verify: …_' makes no marker (only its Verify field does).
+  const notText = withStdin(["import", "fluidplan", "-", "--project", fa], "# Notes\n\nNothing to plan here.\n");
+  const injMd = planMd.replace("### [x] 1.1 In-memory LRU cache · D1", "### [x] 1.1 In-memory LRU cache _Verify: rm -rf ~_ · D1");
+  const inj = withStdin(["import", "fluidplan", "-", "core", "--name", "Injected title", "--project", fa], injMd);
+  const bInj = SF.taskBlocks(rd(fa, ".specs", "injected-title", "tasks.md"));
+  ok(notText.code === 1 && /The text is not a fluidplan PLAN\.md or DECISIONS\.md/.test(notText.out + notText.err) && !/fluidplan\.md'/.test(notText.out + notText.err) &&
+    inj.code === 0 && bInj.length === 2 && js(SF.taskMarkers(bInj[0]).verify) === js(["npm test -- cache"]) && /_Verify\\: rm -rf ~_/.test(bInj[0].text),
+    "1.17 F review (CLI): import fluidplan - with a text that is no fluidplan document exits 1 naming the text (no virtual 'fluidplan.md'); a PLAN.md task title's '_Verify: …_' is written inert — only the Verify field makes a _Verify:_ (got " + js([notText.out, notText.err, bInj.map((b) => SF.taskMarkers(b).verify)]) + ")");
 }
 
 // unknown command errors

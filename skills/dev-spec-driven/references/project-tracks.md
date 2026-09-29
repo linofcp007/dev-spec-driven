@@ -1,6 +1,6 @@
 # Project-defined tracks (track packs)
 
-Read on demand from `SKILL.md`. Six tracks are built in — core, +tdd, +saas, +ai, +sec, +privacy. A team that needs
+Read on demand from `SKILL.md`. Seven tracks are built in — core, +tdd, +saas, +ai, +sec, +privacy, +dist. A team that needs
 its own domain rigor (+a11y, +mobile, +dbmigration, +compliance…) defines it as a **track pack**: a folder in
 `.specs/tracks/<name>/`. A valid pack behaves like a built-in *marker* track (+sec, +privacy) everywhere — it is
 classified, scaffolded, gated, traced, briefed, exported and removed the same way. Manage packs with `/spec-tracks`
@@ -27,8 +27,8 @@ by `check` and ignored. `dev-spec tracks init a11y` scaffolds all of it, comment
 
 | Key | Rule |
 |---|---|
-| `name` | The folder name: `^[a-z][a-z0-9]{1,19}$`. Never a built-in track (core tdd saas ai sec privacy), a word people type for one (`security`, `gdpr`, `test`…), one of `none all any track tracks pack packs list init check`, a Windows device name or an `Object.prototype` key. |
-| `marker` | `^[A-Z][A-Z0-9]{1,11}$` (`"A11Y"` or `"[A11Y]"`). The stable, **case-sensitive** token of the pack's headings — `[A11Y]`. Never a built-in marker (SaaS / AI / SEC / PRIVACY), a story / parallel tag (`US1`, `P1`, `SHARED`), a generic slot (`TODO`, `TBD`, `FIXME`…) or an ID prefix (`AC1`, `T2`…); unique across packs — two packs with one marker: the first by name keeps it, the other is refused. |
+| `name` | The folder name: `^[a-z][a-z0-9]{1,19}$`. Never a built-in track (core tdd saas ai sec privacy dist), a word people type for one (`security`, `gdpr`, `test`…), one of `none all any track tracks pack packs list init check`, a Windows device name or an `Object.prototype` key. |
+| `marker` | `^[A-Z][A-Z0-9]{1,11}$` (`"A11Y"` or `"[A11Y]"`). The stable, **case-sensitive** token of the pack's headings — `[A11Y]`. Never a built-in marker (SaaS / AI / SEC / PRIVACY / DIST), a story / parallel tag (`US1`, `P1`, `SHARED`), a generic slot (`TODO`, `TBD`, `FIXME`…) or an ID prefix (`AC1`, `T2`…); unique across packs — two packs with one marker: the first by name keeps it, the other is refused. |
 | `title` | `{ "en": "…", "pt"?: "…", "es"?: "…", "pt-BR"?: "…" }` (a plain string = its English). 2–80 characters, one line, no `[ ] < >` or backtick. Shown in the headings. |
 | `description` | Optional, one line, ≤ 300 characters (listed by `list`). |
 | `signals` | Optional `{ "strong"?: [...], "weak"?: [...], "context"?: [...] }` — classifier keywords, ≤ 50 per tier, 2–60 characters of letters / digits with inner spaces, `-`, `'`, `.`. |
@@ -152,6 +152,15 @@ template's T-01…T-05, `- [ ] A11Y: axe-core …` in checklist.md, and `.specs/
 - **Saved track lists.** A feature's `.state.json → tracks` names a pack when it is a valid pack now or recorded in its
   `packMarkers`; any other unknown word there (a typo, `security`, `gdpr`) makes the list unreadable and the tracks are
   inferred from the files, as before 1.15 — never a phantom missing pack.
+- **A name reserved since (1.17).** 1.17 adds the built-in `+dist` track and reserves `dist` and its words (`kafka`,
+  `distributed`, `microservices`, `consistency`, their PT / ES forms) and the marker `DIST`. A pack of one of those names
+  from an earlier version is now `name-reserved` (ignored); a feature that used it recorded it in `packMarkers`, so it
+  stays that feature's **missing pack** — inactive, never dropped from the list, and a pack named `dist` is never read as
+  the built-in `+dist` (whose five `[DIST]` sections that design doesn't have). doctor's `track-pack-missing` and
+  `spec_upgrade` (`track-pack-reserved`) say so. The way out: rename `.specs/tracks/<name>/` (and its marker, when that is
+  reserved too, and the headings that carry it), `dev-spec add-track <feature> <new-name>`, then
+  `dev-spec add-track <feature> <old-name> --remove`; or, for `dist`, adopt the built-in track instead:
+  `dev-spec add-track <feature> dist` (the old record goes, the built-in sections are added).
 
 ## check — stable codes
 

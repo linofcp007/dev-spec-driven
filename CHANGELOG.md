@@ -3,6 +3,98 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.17.0] — 2026-09-29
+
+Engineering judgement in the spec: a seventh track for distributed systems and data consistency (the dual-write problem,
+outbox, idempotency, retries, consistency models, locking), every design weighing its alternatives and risks, /grill
+asking about the constraints, the red → green → refactor micro-cycle inside each task, and plans settled with fluidplan
+imported as specs. 38 MCP tools, 54 commands, seven built-in tracks (was six).
+
+### Added — the +dist track (distributed systems & data consistency)
+- A seventh built-in track **`+dist`**, marker `[DIST]`: five mandatory design sections — **Consistency Model** (what must
+  be atomic, ACID and the isolation level, strong vs eventual), **Cross-system Writes** (every dual write with its
+  mitigation: transactional outbox, inbox, saga, CDC or an accepted risk), **Delivery & Idempotency** (at-least-once,
+  idempotency keys, deduplication, retry policy, DLQ), **Concurrency** (race conditions, optimistic vs pessimistic locking)
+  and **Failure Modes** (partial failures, partitions, each dependency down); `[DIST]` criteria (US-1.AC-16..19: the event
+  delivered later without loss or duplicates when publishing fails after the commit, a duplicate delivery applied once, no
+  lost concurrent update, a dependency down), data-consistency tasks, failure-injection test rows (+tdd), checklist items
+  and `steering/distributed.md`; doctor `dist-sections` (the design approval refuses it until filled), `spec_status`
+  `distSections`, clarify questions, brief / matrix / export / Gherkin; EN / PT / ES / pt-BR.
+- Classifier: EN / PT / ES +dist signals (named brokers and cross-system patterns strong; queue, retry, webhook,
+  idempotency, race condition weak; transaction / consistency only as context), gap phrases ("publishes a UserCreated
+  event"), retry / retries counted once. "Create an endpoint that writes a user to Postgres and publishes a UserCreated
+  event to Kafka" is `core +dist` in the three languages.
+- **`references/distributed-data-patterns.md`** — the dual-write problem, transactional outbox (polling relay vs CDC),
+  inbox / idempotent consumer, sagas and compensations, retries with backoff and jitter, deduplication and idempotency,
+  consistency models, ACID isolation levels and their anomalies, optimistic vs pessimistic locking, CAP / PACELC, monolith
+  vs microservices, large data volumes, and a decision checklist.
+
+### Added — every design weighs its choices
+- The core design template gains **Alternatives & Trade-offs** (the options per key decision — pros, cons, the cost of
+  being wrong, the one chosen and why) and **Risks** (likelihood, impact, mitigation, owner), EN / PT / ES; doctor warns
+  `design-tradeoffs` / `design-risks` when they are missing, empty, still the template, or list fewer than two options —
+  a warning only, never a refused approval (a bugfix and a spike are exempt); the design-save hook notes them and
+  `templates check` warns about a project design template without them.
+- **/grill constraints round** — atomicity, ACID and the isolation level, race conditions, the consistency model, delivery
+  guarantees and idempotency, each dependency failing, volume and growth, and a business outcome you can measure after
+  release. `spec_clarify` asks one question (`nudges: [{code: "consistency-unstated"}]`) when your own text (never the
+  templates') names two such concepts — queues, events, webhooks, async work, concurrency, transactions, retries — or one
+  strong phrase (a message queue, publishing an event, a background job, concurrent writes, Kafka…), and neither the
+  requirements nor the design answer it (eventual / strong consistency, idempotency, at-least-once, isolation level,
+  optimistic / pessimistic locking, outbox…).
+- **The TDD micro-cycle** inside each task (adapted from obra/superpowers' test-driven-development, MIT): one behaviour at
+  a time, watch it fail for the right reason, minimal code, refactor only on green, code written before its new
+  behaviour's test is deleted and redone — with the usual rationalizations answered and the red flags (guard tests,
+  characterization tests of existing code and a test an earlier task already turned green are exempt); in the +tdd loop,
+  the implementer and reviewer agents and /executeTask.
+
+### Added — import
+- **`spec_import {tool: "fluidplan"}`** / `dev-spec import fluidplan <path>|-` — a plan settled with the fluidplan skill
+  (`.fluidplan/<id>/`: the finalized PLAN.md / DECISIONS.md, else plan.json + answers.json; English or French labels)
+  becomes a new feature: pages → stories, acceptance → EARS criteria (else `[NEEDS CLARIFICATION]`), tasks with their
+  ticks, `_Implements:_`, `_Verify:_` and `_Depends:_`, the settled decisions → `decisions.md` + the design's Decisions /
+  Alternatives & Trade-offs, rejected ones → Out of Scope, open ones flagged. Inline text (a pasted PLAN.md) works too.
+
+### Changed
+- Design approvals record `weigh: true`; `design-tradeoffs` / `design-risks` warn on a design not yet approved or approved
+  from 1.17 on — a design approved before 1.17 is never flagged (a pass with a note: it is asked from its next approval),
+  and the checks never count toward the spec_upgrade audit's attention. Nothing is refused and no artifact is edited.
+- Negated classifier keywords are deduplicated like matched ones; "message queue" hints +dist as well as +saas.
+- `spec_templates` lists 29 built-in templates (the `distributed.md` steering stub).
+
+### Upgrade note — track packs with a now-reserved name
+- Track packs from before 1.17 named `dist`, `kafka`, `distributed`, `microservices`, `consistency` (or their PT / ES
+  forms), or marked `DIST`, are now reserved and ignored. A feature that used one keeps it as a missing pack: doctor's
+  `track-pack-missing` and `spec_upgrade` (`track-pack-reserved`) say so. A pack named `dist` is never read as the
+  built-in +dist. The way out: rename `.specs/tracks/<name>/` (and its marker and headings if the marker is reserved),
+  then `dev-spec add-track <feature> <new-name>` and `dev-spec add-track <feature> <old-name> --remove` — or, for `dist`,
+  adopt the built-in track with `dev-spec add-track <feature> dist`.
+
+### Fixed
+- `spec_import` no longer stalls on long whitespace runs or long plans: markdown headings and ranges are read by scans (a
+  3,000-space heading took 10 s), the importers' trailing trims use `trimEnd` (`/\s+$/` was quadratic), a long dependency
+  chain is ordered in linear time, and imported requirements.md lines never open an HTML comment that hides the criteria
+  below it (every importer — a Kiro `<!-- … -->` line could hide an acceptance criterion).
+- The classifier's shadowing check (a weak keyword inside a longer strong one) is linear — 100 KB of repeated keywords
+  took seconds.
+- A PT / ES request starting with an infinitive ("Publicar eventos no Kafka") is read in its language: "no" there is em+o,
+  not a negation.
+- The PT / ES glossary stub lost a space in 1.16 ("produto:uma").
+- **Linear markdown readers everywhere** — a heading, list item, table row or marker holding a long whitespace / backtick /
+  `#` run (or a line break after it) no longer stalls the MCP server, a hook or spec_import (the readers were quadratic,
+  Given / When / Then cubic: a 100,000-character run took 18–30 s in status / doctor / trace / imports; now well under 1 s).
+- The BMAD importer's story `Status:` line is recognised with spaces around it (`/^\s*status\s*:/i` had lost its
+  backslashes in 1.14).
+- A Spanish or short English request is no longer read as Portuguese because it starts with a verb both languages share
+  ("Alterar el formulario…; no usar LLM" switched +ai on).
+
+### Tests
+- `node mcp/test.js` 1442 assertions (was 1362), `node cli/test-cli.js` 455 (was 438): the +dist track end to end
+  (the user's example and a precision / recall corpus in EN / PT / ES, every track combination, a 1.16 pack upgrade), the
+  design weigh checks and the nudge (every track's pristine scaffold stays quiet), real fluidplan exports (injection,
+  cycles, half-settled decisions), linear-time bounds on adversarial markdown, a guard against backslash-stripped regex
+  literals, and one regression per review finding.
+
 ## [1.16.0] — 2026-09-29
 
 Day-to-day comfort and reach: undo a tick, revoke an approval, say why a gate was forced and until when; a status line,

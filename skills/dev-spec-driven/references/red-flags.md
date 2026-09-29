@@ -24,12 +24,13 @@ phase. Adapted from the rationalization tables of [obra/superpowers](https://git
 | Thought | Reality |
 |---|---|
 | "Scale/cost can be figured out later" | On +saas/+ai the mandatory sections exist because "later" is a rewrite. "Not needed because X" is fine; blank is not. |
-| "There's only one way to do it" | Name the alternative you rejected and why (Complexity Tracking). |
+| "There's only one way to do it" | Then naming the one you rejected takes a minute: Alternatives & Trade-offs — at least two options per key decision, the cost of being wrong, why this one. |
 
 ## Tests first (+tdd, Phases 3–4 and every task)
 
 **Iron law: no production code without a failing test first.** Code written before its test is deleted
-and rewritten from the test — not "kept as reference", not "adapted".
+and rewritten from the test — not "kept as reference", not "adapted". Inside each task the loop is the micro-cycle —
+one behaviour at a time, red for the right reason, minimal code, green, refactor on green (`test-patterns.md`).
 
 | Thought | Reality |
 |---|---|
@@ -90,4 +91,14 @@ and rewritten from the test — not "kept as reference", not "adapted".
 | "We only store an email address, GDPR doesn't apply" | An email address is personal data. `+privacy`: inventory, lawful basis, retention, rights. |
 | "Legal will sort out the DPIA later" | The spec records the DPO's decision now; "later" is after the data is collected. |
 
-See also: `verification.md`, `bugfix.md`, `review-feedback.md`, `security-track.md`, `privacy-track.md`.
+## Distributed data (+dist)
+
+| Thought | Reality |
+|---|---|
+| "Save, then publish — Kafka is always up" | A crash or a timeout between the two loses the event with no error anywhere. Transactional outbox, or write the accepted risk in `[DIST] Cross-system Writes`. |
+| "The broker guarantees exactly-once" | Delivery is at-least-once end to end; exactly-once is an idempotent consumer. |
+| "Two users won't edit the same row at the same time" | They will (two tabs, a retry, a double click). Optimistic locking or a unique constraint. |
+| "We'll add retries" | Retries without timeouts, jitter, a budget and idempotency keys turn one outage into two. |
+
+See also: `verification.md`, `bugfix.md`, `review-feedback.md`, `security-track.md`, `privacy-track.md`,
+`distributed-data-patterns.md`.

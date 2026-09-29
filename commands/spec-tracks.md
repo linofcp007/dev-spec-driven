@@ -10,7 +10,7 @@ Args: $ARGUMENTS
 Call the `spec_tracks` MCP tool (CLI `dev-spec tracks [list|init <name>|check] [name] [--lang en|pt|pt-BR|es]`) and show
 its `lines`.
 
-- **`list`** (default) — the built-in tracks (core, tdd, saas, ai, sec, privacy) and every pack folder in
+- **`list`** (default) — the built-in tracks (core, tdd, saas, ai, sec, privacy, dist) and every pack folder in
   `.specs/tracks/`, valid or not (an invalid pack is ignored everywhere until it is fixed).
 - **`init <name>`** — scaffolds `.specs/tracks/<name>/`: a commented example `track.json` and one example of each
   fragment (`requirements.md`, `tasks.md`, `test-plan.md`, `checklist.md`, `steering.md`) in `lang` or the project
@@ -21,7 +21,7 @@ its `lines`.
 What to tell the user when they write a pack (details: `references/project-tracks.md`):
 
 - `track.json`: `name` = the folder name (`^[a-z][a-z0-9]{1,19}$`, never a built-in track), `marker` (`^[A-Z][A-Z0-9]{1,11}$`,
-  case-sensitive, unique — never SaaS / AI / SEC / PRIVACY), `title` {en, pt?, es?}, `signals` {strong, weak, context} (the
+  case-sensitive, unique — never SaaS / AI / SEC / PRIVACY / DIST), `title` {en, pt?, es?}, `signals` {strong, weak, context} (the
   classifier matches them as literal words — never as patterns), `sections` [{name, syn?, loose?, guidance?}] (the
   mandatory design sections), `steering` (optional file name). `//` comments are allowed.
 - Fragments are plain markdown: one list item = one criterion / task / checklist line; test-plan rows keep the built-in

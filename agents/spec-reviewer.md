@@ -56,9 +56,12 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
   fabricated run.
 
 ### 3. Track checks (only for active tracks)
-- **+tdd:** the report shows RED for the right reason before GREEN; the target T-IDs are green; no
-  planned test's expectation or assertion changed in the diff (any such change is **Critical** — it is
-  a spec change nobody approved).
+- **+tdd:** the report shows RED for the right reason before GREEN for each new behaviour's test (a guard test, a
+  characterization test of existing code or a T-ID an earlier task turned green is green from its first run — never
+  a finding); the target T-IDs are green; no planned test's expectation or assertion changed in the diff (any such
+  change is **Critical** — it is a spec change nobody approved). Production behaviour in the diff that no test
+  exercises (a target T-ID — committed in Phase 4, so usually not in this diff — or a helper test in the diff) is
+  **Important**: the micro-cycle writes each behaviour's test first (`references/test-patterns.md`).
 - **+saas:** `_Emits metrics:_` metrics actually emitted; queries on tenant data scoped
   (`WHERE tenant_id = ?` or RLS); no new unbounded hot-path work.
 - **+ai (deterministic tasks):** prompts in versioned files, not inline strings; no PII sent to a
@@ -69,6 +72,9 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
 - **+privacy:** only the fields the design's data inventory lists are collected or stored; retention / deletion and
   export / erasure reach every store the inventory names; no personal data in logs or sent to a processor the design
   doesn't list.
+- **+dist:** no database commit followed by a direct publish, cache write or API call — the outbox / inbox / saga the
+  design names; the dedup record in the same transaction as the effect; retries with a timeout, backoff + jitter and a
+  key; the version check / unique constraint the design names for concurrent updates.
 - **Security (always):** injection, authz, data exposure in the changed code.
 
 ### 4. Code quality
@@ -92,7 +98,7 @@ Apply the `/prReview` checklist to the whole branch, gated by active tracks: spe
 all ACs (every AC has code + a test on +tdd), red-first evidence in git history (+tdd — `dev-spec log <feature>` lists
 it per task when the commits follow `/spec-commit`), scale sections honored and tenant isolation (+saas), eval delta
 and versioned prompts (+ai), threat-model mitigations and access control (+sec), the data inventory, retention and
-data subject rights honoured (+privacy), security. Decisions in `decisions.md` that the code contradicts are
+data subject rights honoured (+privacy), no dual write that bypasses its outbox / inbox (+dist), security. Decisions in `decisions.md` that the code contradicts are
 findings. Triage the ledger's deferred minors and parked findings: which must be fixed before merge, which can ship.
 
 ## Converge mode
@@ -106,7 +112,7 @@ The question is "does the code deliver every AC?", not "is this diff right?". Re
    scoping on every tenant-data query, `_Emits metrics:_` metrics actually emitted; +ai prompts versioned, eval
    harness wired, cost tracking present; +sec the `[SEC]` criteria (401 / 403 + audit, no secrets in output) and the
    abuse-case tests; +privacy export, erasure and retention implemented across every store of the data inventory;
-   security always.
+   +dist outbox / idempotent consumers / concurrency control as designed and the failure-injection tests; security always.
 3. **Classify each gap:** a **task** (fixable within the approved ACs and design) or a **spec change** (needs a
    different AC, design decision or test expectation — list it apart; the controller routes it to its phase,
    never into a task).

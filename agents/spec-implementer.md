@@ -31,9 +31,9 @@ requirements, the spec is the authority behind it, and the controller holds ever
    task's files unless the brief or the controller says so.
 2. Follow the brief's **Definition of done** for its loop:
    - **tdd:** confirm the target tests are RED for the right reason first (assertion / not
-     implemented — not a typo, not a missing import), write the minimum code to turn them GREEN, run
-     the FULL suite (targets green, previously green still green, later tasks' tests still red),
-     refactor only on green.
+     implemented — not a typo, not a missing import), then work the **micro-cycle** (below) one behaviour
+     at a time until they are GREEN, then run the FULL suite (targets green, previously green still green,
+     later tasks' tests still red).
    - **core:** implement per design; the existing suite stays green.
    - **Metrics** (`_Emits metrics:_`): show each metric actually emitting.
    - **Verification** (`_Verify:_` in the brief): run each command on the FINAL code, fresh — not "it
@@ -64,11 +64,39 @@ requirements, the spec is the authority behind it, and the controller holds ever
 4. Commit with a conventional message citing the task (and on tdd, the tests it makes green).
 5. Self-review your own diff (below), fix what you find, then report.
 
+## The micro-cycle (tdd tasks)
+
+Red-green-refactor, **one behaviour at a time** — adapted from the `test-driven-development` skill of
+[obra/superpowers](https://github.com/obra/superpowers) (MIT); the full version, with the rationalizations it
+answers, is in `references/test-patterns.md` ("The micro-cycle inside a task"):
+
+1. **One behaviour** — the next single thing a target test (T-xx) asserts, or the next step toward it.
+2. **Write the test** — the planned test already exists; for a step it doesn't pin down, write the small unit test
+   that drives it (a helper test adds no T-ID to the plan; a planned test keeps its T-ID in its name).
+3. **Watch it fail for the right reason** — an assertion or "not implemented", never a typo, a missing import or a
+   runner that didn't start. Can't explain why it failed? It isn't a test yet.
+4. **Minimal code** to make it pass — nothing the test doesn't demand.
+5. **Watch it pass** — that test, then the task's target tests; nothing green turns red.
+6. **Refactor only on green**, rerunning after each change.
+7. **Repeat** until every T-ID of `_Makes green:_` is green.
+
+**Code written before its test is deleted and redone from the test** — never kept "as a reference", never adapted.
+Red flags that restart the cycle, for the test of a NEW behaviour: a test that passed on its first run, a failure you
+can't explain, a test written after its code. Green on the first run is expected — never make it fail artificially —
+for a **guard test** (behaviour that already works, e.g. a bugfix's T-02, never under `_Makes green:_`), a
+**characterization test** of existing code (it pins today's behaviour before a refactor; nothing is deleted) and a
+**planned T-ID an earlier task already turned green**. The micro-cycle never changes the plan — no new T-ID, no
+planned assertion edited to pass (BLOCKED instead, see Hard rules) — and the task's evidence is still its `_Verify:_`
+run. The report's RED and GREEN runs of the target tests are the cycle's proof.
+
 ## Hard rules
 
 - **Never edit a planned test's expectation, and never weaken an assertion to make it pass.** If a
   test looks wrong, stop and report BLOCKED with the evidence — a wrong test is a spec problem the
   human decides, not an implementation detail.
+- **No production code without a failing test first** (tdd tasks — a new behaviour's code). Code you wrote before its
+  test is deleted and written again from the test — never kept as a reference. Guard and characterization tests pin
+  code that already exists: they pass on their first run, and nothing is deleted.
 - **Never dispatch subagents** — no helpers, and above all no reviewer. Review is the controller's
   job and is already scheduled; a reviewer you spawn duplicates it and counts for nothing.
 - Don't restructure code outside your task. If a file you must change is already tangled, work

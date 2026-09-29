@@ -20,6 +20,8 @@ Review against the full chain, gating checks by the feature's active tracks:
   by default); no secret, token or stack trace in responses or logs; the abuse-case tests exist and the scans ran.
 - **+privacy** — only the fields the data inventory lists are collected; retention / deletion implemented; export and
   erasure reach every store the inventory names; no personal data in logs or sent to an unlisted processor.
+- **+dist** — no database commit followed by a direct publish / cache / API write (outbox, inbox or saga as the design
+  says); consumers idempotent; retries with timeouts, backoff + jitter and a DLQ; the concurrency control the design names.
 - **Security** — injection, authz, data exposure — always.
 
 Run `trace_check` to confirm coverage. Report findings grouped by severity.

@@ -41,10 +41,12 @@ feature and composes exactly the rigor it needs:
 | **+ai** | Eval-driven dev, prompts-as-code, token economics, safety, model lifecycle |
 | **+sec** | Threat model (STRIDE), security requirements, authentication & authorization, secrets & key management, security testing |
 | **+privacy** | GDPR / RGPD: personal data inventory, lawful basis, retention & deletion, data subject rights, processors & transfers, DPIA |
+| **+dist** | Distributed systems & data consistency: consistency model, cross-system (dual) writes → transactional outbox / inbox / saga, delivery & idempotency, concurrency, failure modes (CAP / PACELC) |
 
 Tracks **combine**. A Stripe webhook in a multi-tenant SaaS that also summarizes invoices with an
 LLM is `core +tdd +saas +ai`; a signup form that stores personal data is `+privacy` (GDPR, RGPD and HIPAA
-point there). A copy tweak is Vibe mode: no ceremony at all. A **Phase 0
+point there); an endpoint that writes a user to Postgres and publishes a `UserCreated` event to Kafka is `+dist`. A copy
+tweak is Vibe mode: no ceremony at all. A **Phase 0
 classifier** (the local `spec_classify` tool, multilingual) picks the track set; you approve it. The
 chosen tracks are stored with the feature, and a track can be added or turned off later.
 
@@ -203,12 +205,28 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   feature: criteria become `US-N.AC-M` EARS lines (or keep their text with `[NEEDS CLARIFICATION]`),
   tasks are renumbered with their checkbox state. Plans too: `plan` (a Claude Code plan-mode file copied into
   the project, or a Cursor `.cursor/plans/*.plan.md`), `execplan` (a Codex ExecPlan) and `bmad` (BMAD-METHOD PRD
-  and stories). The source must be inside the project and is only read.
+  and stories) — and `fluidplan` (a plan settled with the fluidplan skill: `.fluidplan/<id>/` or its `PLAN.md` /
+  `DECISIONS.md` → stories, criteria, tasks with `_Verify:_` / `_Depends:_`, and a `decisions.md` of the settled decisions).
+  The source must be inside the project and is only read.
 - **Deeper traceability** — `trace_check` warns about edge cases (EC-n), NFRs and success criteria
   (SC-nnn) nothing covers; `--code` looks for T-IDs in test names (`test("T-01 …")`, `def test_T01_…`).
   Test plans have a **Kind** column (`example` | `property`) with property-based testing guidance.
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
+
+### New in 1.17
+
+- **+dist — distributed systems & data consistency** — a seventh track that switches on for queues, events published to
+  a broker, sagas, microservices… ("an endpoint that writes a user to Postgres and publishes an event to Kafka"). Its
+  design must answer the consistency model (what is atomic, ACID and isolation, strong vs eventual), every dual write and
+  its mitigation (transactional outbox, inbox, saga, CDC), delivery and idempotency (duplicates, retries with backoff,
+  DLQ), concurrency (optimistic vs pessimistic locking) and failure modes — with criteria, tasks and failure-injection
+  tests to match, and a guide: `skills/dev-spec-driven/references/distributed-data-patterns.md`.
+- **Every design weighs its choices** — Alternatives & Trade-offs (options, pros, cons, the cost of being wrong) and Risks
+  sections in every design; `/grill` asks about atomicity, ACID, race conditions, the consistency model and a measurable
+  business outcome; the +tdd loop runs the red → green → refactor micro-cycle inside each task.
+- **`import fluidplan`** — a plan settled with the fluidplan skill becomes a spec: stories, criteria, tasks with their
+  checks and dependencies, and the decisions you took in `decisions.md`.
 
 ### New in 1.16
 
@@ -343,7 +361,7 @@ dev-spec-driven replaces them — superpowers keeps what it doesn't cover (workt
 |---|---|
 | brainstorming, writing-plans | Phase 0 → requirements → design → tasks (`/spec`, `/clarify`, `/grill`) |
 | executing-plans, subagent-driven-development | `/executeTask [--subagents]` |
-| test-driven-development | the `+tdd` track |
+| test-driven-development | the `+tdd` track and its red-green-refactor micro-cycle inside each task |
 | systematic-debugging | `/spec-bugfix` |
 | verification-before-completion | the evidence gate (`_Verify:_`, `dev-spec done --run`) |
 | requesting / receiving-code-review | `/prReview`, `/spec-review-feedback` |
@@ -425,10 +443,12 @@ funcionalidade e compõe exatamente o rigor necessário:
 | **+ai** | Desenvolvimento guiado por evals, prompts como código, economia de tokens, segurança, ciclo de vida do modelo |
 | **+sec** | Modelo de ameaças (STRIDE), requisitos de segurança, autenticação e autorização, gestão de segredos e chaves, testes de segurança |
 | **+privacy** | RGPD / GDPR: inventário de dados pessoais, fundamento de licitude, conservação e eliminação, direitos dos titulares, subcontratantes e transferências, AIPD |
+| **+dist** | Sistemas distribuídos e consistência de dados: modelo de consistência, escritas entre sistemas (escrita dupla) → outbox transacional / inbox / saga, entrega e idempotência, concorrência, modos de falha (CAP / PACELC) |
 
 Os tracks **combinam-se**. Um webhook do Stripe num SaaS multi-inquilino que também resume faturas
 com um LLM é `core +tdd +saas +ai`; um formulário de registo que guarda dados pessoais é `+privacy` (o RGPD, o GDPR e
-a HIPAA apontam para aí). Uma alteração de texto é modo Vibe: sem cerimónia. Um
+a HIPAA apontam para aí); um endpoint que grava um utilizador no Postgres e publica um evento `UserCreated` no Kafka é
+`+dist`. Uma alteração de texto é modo Vibe: sem cerimónia. Um
 **classificador de Fase 0** (a ferramenta local `spec_classify`, multilíngue) escolhe os tracks; tu
 aprovas. Os tracks escolhidos ficam guardados com a funcionalidade, e é possível acrescentar ou desligar
 um track mais tarde.
@@ -590,7 +610,9 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   funcionalidade: os critérios passam a linhas EARS `US-N.AC-M` (ou mantêm o texto com
   `[NEEDS CLARIFICATION]`) e as tarefas são renumeradas com o estado das checkboxes. Também planos: `plan` (um
   ficheiro do plan mode do Claude Code copiado para o projeto, ou um `.cursor/plans/*.plan.md` do Cursor), `execplan`
-  (um ExecPlan do Codex) e `bmad` (PRD e stories do BMAD-METHOD). A origem tem de estar dentro do projeto e só é lida.
+  (um ExecPlan do Codex) e `bmad` (PRD e stories do BMAD-METHOD) — e `fluidplan` (um plano decidido com a skill
+  fluidplan: `.fluidplan/<id>/` ou o `PLAN.md` / `DECISIONS.md` dele → histórias, critérios, tarefas com `_Verify:_` /
+  `_Depends:_` e um `decisions.md` com as decisões tomadas). A origem tem de estar dentro do projeto e só é lida.
 - **Rastreabilidade mais funda** — o `trace_check` avisa sobre casos-limite (EC-n), NFRs e critérios de
   sucesso (SC-nnn) sem cobertura; `--code` procura T-IDs nos nomes dos testes (`test("T-01 …")`,
   `def test_T01_…`). Os planos de testes têm uma coluna **Tipo** (Kind: `example` | `property`) com orientação
@@ -598,6 +620,20 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabalho, aprovações forçadas, pedidos de
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
+
+### Novidades da 1.17
+
+- **+dist — sistemas distribuídos e consistência de dados** — um sétimo track que se liga com filas, eventos publicados
+  num broker, sagas, microsserviços… ("um endpoint que grava um utilizador no Postgres e publica um evento no Kafka"). O
+  design tem de responder ao modelo de consistência (o que é atómico, ACID e isolamento, forte vs eventual), a cada escrita
+  dupla e à sua mitigação (outbox transacional, inbox, saga, CDC), à entrega e idempotência (duplicados, retries com
+  backoff, DLQ), à concorrência (locking otimista vs pessimista) e aos modos de falha — com critérios, tarefas e testes de
+  injeção de falhas a condizer, e um guia: `skills/dev-spec-driven/references/distributed-data-patterns.md`.
+- **Todo o design pesa as suas escolhas** — secções Alternatives & Trade-offs (opções, prós, contras, o custo de errar) e
+  Risks em todos os designs; o `/grill` pergunta por atomicidade, ACID, race conditions, o modelo de consistência e um
+  resultado de negócio mensurável; o ciclo +tdd faz o micro-ciclo vermelho → verde → refactor dentro de cada tarefa.
+- **`import fluidplan`** — um plano decidido com a skill fluidplan passa a spec: histórias, critérios, tarefas com as suas
+  verificações e dependências, e as decisões tomadas em `decisions.md`.
 
 ### Novidades da 1.16
 
@@ -745,7 +781,7 @@ paralelo, escrita de skills):
 |---|---|
 | brainstorming, writing-plans | Fase 0 → requisitos → design → tarefas (`/spec`, `/clarify`, `/grill`) |
 | executing-plans, subagent-driven-development | `/executeTask [--subagents]` |
-| test-driven-development | o track `+tdd` |
+| test-driven-development | o track `+tdd` e o seu micro-ciclo red-green-refactor dentro de cada tarefa |
 | systematic-debugging | `/spec-bugfix` |
 | verification-before-completion | o gate de evidência (`_Verify:_`, `dev-spec done --run`) |
 | requesting / receiving-code-review | `/prReview`, `/spec-review-feedback` |
@@ -827,10 +863,12 @@ compone exactamente el rigor necesario:
 | **+ai** | Desarrollo guiado por evals, prompts como código, economía de tokens, seguridad, ciclo de vida del modelo |
 | **+sec** | Modelo de amenazas (STRIDE), requisitos de seguridad, autenticación y autorización, gestión de secretos y claves, pruebas de seguridad |
 | **+privacy** | RGPD / GDPR: inventario de datos personales, base de legitimación, conservación y supresión, derechos de los interesados, encargados y transferencias, EIPD |
+| **+dist** | Sistemas distribuidos y consistencia de datos: modelo de consistencia, escrituras entre sistemas (escritura dual) → outbox transaccional / inbox / saga, entrega e idempotencia, concurrencia, modos de fallo (CAP / PACELC) |
 
 Los tracks **se combinan**. Un webhook de Stripe en un SaaS multiinquilino que además resume
 facturas con un LLM es `core +tdd +saas +ai`; un formulario de registro que guarda datos personales es `+privacy` (el
-RGPD, el GDPR y la HIPAA apuntan ahí). Un cambio de texto es modo Vibe: sin ceremonia. Un
+RGPD, el GDPR y la HIPAA apuntan ahí); un endpoint que escribe un usuario en Postgres y publica un evento `UserCreated` en
+Kafka es `+dist`. Un cambio de texto es modo Vibe: sin ceremonia. Un
 **clasificador de Fase 0** (la herramienta local `spec_classify`, multilingüe) elige los tracks; tú
 apruebas. Los tracks elegidos se guardan con la función, y se puede añadir o desactivar un track más
 adelante.
@@ -996,7 +1034,9 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   nueva: los criterios pasan a líneas EARS `US-N.AC-M` (o conservan su texto con `[NEEDS CLARIFICATION]`) y
   las tareas se renumeran con el estado de sus casillas. También planes: `plan` (un archivo del plan mode de Claude
   Code copiado al proyecto, o un `.cursor/plans/*.plan.md` de Cursor), `execplan` (un ExecPlan de Codex) y `bmad` (PRD
-  e historias de BMAD-METHOD). El origen debe estar dentro del proyecto y solo se lee.
+  e historias de BMAD-METHOD) — y `fluidplan` (un plan decidido con la skill fluidplan: `.fluidplan/<id>/` o su
+  `PLAN.md` / `DECISIONS.md` → historias, criterios, tareas con `_Verify:_` / `_Depends:_` y un `decisions.md` con las
+  decisiones tomadas). El origen debe estar dentro del proyecto y solo se lee.
 - **Trazabilidad más profunda** — `trace_check` avisa de casos límite (EC-n), NFRs y criterios de éxito
   (SC-nnn) sin cobertura; `--code` busca T-IDs en los nombres de las pruebas (`test("T-01 …")`,
   `def test_T01_…`). Los planes de pruebas tienen una columna **Tipo** (Kind: `example` | `property`) con
@@ -1004,6 +1044,21 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabajo, aprobaciones forzadas, solicitudes de
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
+
+### Novedades de la 1.17
+
+- **+dist — sistemas distribuidos y consistencia de datos** — un séptimo track que se activa con colas, eventos publicados
+  en un broker, sagas, microservicios… ("un endpoint que guarda un usuario en Postgres y publica un evento en Kafka"). El
+  diseño tiene que responder al modelo de consistencia (qué es atómico, ACID y aislamiento, fuerte vs eventual), a cada
+  escritura doble y su mitigación (outbox transaccional, inbox, saga, CDC), a la entrega e idempotencia (duplicados,
+  reintentos con backoff, DLQ), a la concurrencia (bloqueo optimista vs pesimista) y a los modos de fallo — con criterios,
+  tareas y pruebas de inyección de fallos a juego, y una guía: `skills/dev-spec-driven/references/distributed-data-patterns.md`.
+- **Todo diseño sopesa sus decisiones** — secciones Alternatives & Trade-offs (opciones, pros, contras, el coste de
+  equivocarse) y Risks en todos los diseños; `/grill` pregunta por atomicidad, ACID, condiciones de carrera, el modelo de
+  consistencia y un resultado de negocio medible; el ciclo +tdd hace el microciclo rojo → verde → refactor dentro de cada
+  tarea.
+- **`import fluidplan`** — un plan decidido con la skill fluidplan se convierte en spec: historias, criterios, tareas con
+  sus comprobaciones y dependencias, y las decisiones tomadas en `decisions.md`.
 
 ### Novedades de la 1.16
 
@@ -1151,7 +1206,7 @@ escritura de skills):
 |---|---|
 | brainstorming, writing-plans | Fase 0 → requisitos → diseño → tareas (`/spec`, `/clarify`, `/grill`) |
 | executing-plans, subagent-driven-development | `/executeTask [--subagents]` |
-| test-driven-development | el track `+tdd` |
+| test-driven-development | el track `+tdd` y su microciclo red-green-refactor dentro de cada tarea |
 | systematic-debugging | `/spec-bugfix` |
 | verification-before-completion | la puerta de evidencia (`_Verify:_`, `dev-spec done --run`) |
 | requesting / receiving-code-review | `/prReview`, `/spec-review-feedback` |

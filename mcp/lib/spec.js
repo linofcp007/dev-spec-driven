@@ -13,14 +13,15 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("./i18n.js");
 
-const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy"];
+const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
 // Adding a track: VALID_TRACKS + its classifier SIGNALS; a MARKER track (mandatory design sections under a stable
 // [Marker]) also needs TRACK_MARKER, a sections table in TRACK_SECTIONS, TRACK_STEERING and its i18n builders
 // (requirements criteria, design block, template tasks, test rows, steering stub).
 const OPTIONAL_TRACKS = VALID_TRACKS.filter((t) => t !== "core");
 // The steering files a track brings (spec_init / add_track write them, the task brief lists them).
-const TRACK_STEERING = { tdd: ["testing-standards.md"], saas: ["scale.md", "observability.md", "cost.md"], ai: ["ai-strategy.md"], sec: ["security.md"], privacy: ["privacy.md"] };
+const TRACK_STEERING = { tdd: ["testing-standards.md"], saas: ["scale.md", "observability.md", "cost.md"], ai: ["ai-strategy.md"], sec: ["security.md"], privacy: ["privacy.md"],
+  dist: ["distributed.md"] };
 
 // Language resolution. The project's language is the single source of truth, persisted in
 // .specs/roadmap.json meta.lang (seeded by spec_init); each feature may override it via
@@ -36,6 +37,191 @@ function featureLang(projectDir, name) {
 // Localized engine errors: the feature's language when there is one, else the project's.
 function errs(projectDir, slug) {
   return i18n.msg(slug ? featureLang(projectDir, slug) : projectLang(projectDir)).err;
+}
+
+// ---------------------------------------------------------------------------
+// Linear text scans (1.17 H). Regexes such as /^#{1,6}\s+(.*?)\s*$/, /\/+$/ or /\s*\r?\n\s*/g backtracked quadratically
+// (or worse) on a line holding a long run of one character — a heading with 100,000 spaces stalled the MCP server or a
+// hook. Each scan here returns byte for byte what the regex it replaces returned; the pattern is quoted beside each use.
+// "Whitespace" is JavaScript's \s (= what String.prototype.trim removes), one UTF-16 unit at a time.
+// ---------------------------------------------------------------------------
+
+function isWsUnit(c) {
+  if (c === undefined) return false;
+  const u = c.charCodeAt(0);
+  return u === 32 || (u >= 9 && u <= 13) || u === 0xa0 || u === 0x1680 || (u >= 0x2000 && u <= 0x200a) || u === 0x2028 || u === 0x2029
+    || u === 0x202f || u === 0x205f || u === 0x3000 || u === 0xfeff;
+}
+// A line terminator — what `.` never matches and `$` (with the m flag) stops before.
+const RE_LINE_TERMINATOR = /[\n\r\u2028\u2029]/;
+const isLtUnit = (c) => c === "\n" || c === "\r" || c === "\u2028" || c === "\u2029";
+function lastLtIndex(s) {
+  for (let i = s.length - 1; i >= 0; i--) if (isLtUnit(s[i])) return i;
+  return -1;
+}
+// s without a trailing " # comment" — s.replace(/\s+#.*$/, ""): the first whitespace run followed by a '#' with no line
+// terminator after it, and everything from that run on.
+function stripHashComment(s) {
+  const lastLt = lastLtIndex(s);
+  for (let i = 0; i < s.length; i++) {
+    if (!isWsUnit(s[i])) continue;
+    const r = i;
+    while (i < s.length && isWsUnit(s[i])) i++;
+    if (s[i] === "#" && i > lastLt) return s.slice(0, r);
+  }
+  return s;
+}
+// 'x' / "x" (then whitespace and an optional # comment) → x, else null — s.match(/^(["'])(.*?)\1\s*(?:#.*)?$/)[2].
+function quotedValue(s) {
+  const q = s[0];
+  if (q !== '"' && q !== "'") return null;
+  const lastLt = lastLtIndex(s);
+  const tail = new Array(s.length + 1); // tail[p]: from p on, whitespace then an optional '#' comment, to the end
+  tail[s.length] = true;
+  for (let p = s.length - 1; p >= 0; p--) tail[p] = isWsUnit(s[p]) ? tail[p + 1] : s[p] === "#" && p > lastLt;
+  for (let c = 1; c < s.length; c++) {
+    if (isLtUnit(s[c])) return null;
+    if (s[c] === q && tail[c + 1]) return s.slice(1, c);
+  }
+  return null;
+}
+// Unit predicates for stripEnd / stripStart: the units of `chars`, optionally with whitespace.
+const unitIn = (chars) => (c) => chars.includes(c);
+const wsOrUnitIn = (chars) => (c) => isWsUnit(c) || chars.includes(c);
+const isSlashUnit = (c) => c === "/";
+const isBacktickUnit = (c) => c === "`";
+// s without its trailing run of units `test` accepts — s.replace(/[set]+$/, "") (unanchored, that regex rescanned the run
+// from each of its units).
+function stripEnd(s, test) {
+  let hi = s.length;
+  while (hi > 0 && test(s[hi - 1])) hi--;
+  return hi === s.length ? s : s.slice(0, hi);
+}
+function stripStart(s, test) {
+  let lo = 0;
+  while (lo < s.length && test(s[lo])) lo++;
+  return lo ? s.slice(lo) : s;
+}
+// s.replace(/^[lead]+|[trail]+$/g, "") — a string made of the units alone comes back empty, as with the regex.
+function stripEnds(s, lead, trail = lead) {
+  return stripEnd(stripStart(s, lead), trail);
+}
+// A line's text after its blanks: `\s+(.*)$` at p (needBlank) or `\s*(.*)$` → the text, or null when a line terminator
+// follows the text (no shorter blank run reads then either — the greedy pattern rescanned the text from each blank it gave
+// back).
+function restAfterBlanks(s, p, needBlank) {
+  if (needBlank && !isWsUnit(s[p])) return null;
+  let q = p;
+  while (q < s.length && isWsUnit(s[q])) q++;
+  const rest = s.slice(q);
+  return RE_LINE_TERMINATOR.test(rest) ? null : rest;
+}
+// `\s*(.+)$` at p → the text | null: the rest after the blanks — only blanks left: the last one (no line terminator), as the
+// engine giving back \s* read it.
+function plusAfterBlanks(s, p) {
+  let q = p;
+  while (q < s.length && isWsUnit(s[q])) q++;
+  if (q < s.length) return RE_LINE_TERMINATOR.test(s.slice(q)) ? null : s.slice(q);
+  return q > p && !isLtUnit(s[q - 1]) ? s[q - 1] : null;
+}
+// s.match(/^HEAD\s+(.*)$/) (needBlank) or /^HEAD\s*(.*)$/ as [line, …HEAD's groups, text] | null — `head` is the anchored
+// part before the blanks, read by the regex engine, the text by restAfterBlanks.
+function headRest(s, head, needBlank) {
+  const h = head.exec(s);
+  const rest = h && restAfterBlanks(s, h[0].length, needBlank);
+  if (rest == null) return null;
+  const m = Array.from(h);
+  m[0] = s;
+  m.push(rest);
+  return m;
+}
+// s.match(/^HEAD\s*(.+)$/) as [line, …HEAD's groups, text] | null (the text by plusAfterBlanks).
+function headPlus(s, head) {
+  const h = head.exec(s);
+  const text = h && plusAfterBlanks(s, h[0].length);
+  if (text == null) return null;
+  const m = Array.from(h);
+  m[0] = s;
+  m.push(text);
+  return m;
+}
+// s.replace(/<!--[\s\S]*?-->/g, fn): each "<!--" to the first "-->" after it; an opener with none after it ends the scan
+// (the pattern rescanned the rest of the text from each such opener).
+function replaceHtmlCommentSpans(s, fn) {
+  let out = "", at = 0;
+  for (let i = s.indexOf("<!--"); i !== -1;) {
+    const j = s.indexOf("-->", i + 4);
+    if (j === -1) break;
+    out += s.slice(at, i) + fn(s.slice(i, j + 3));
+    at = j + 3;
+    i = s.indexOf("<!--", at);
+  }
+  return at ? out + s.slice(at) : s;
+}
+// The code spans of s — what /(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g matched, read from the backtick runs: an opener is the
+// rest of a run (the whole run first), its closer the first later run of exactly its length; bodyMax bounds the body as
+// the export's [^`][\s\S]{0,4000}?[^`] does (4002). → [{ index, end, tick, body }]. The pattern rescanned the text from
+// each unit of a long backtick run.
+function codeSpans(s, bodyMax = Infinity) {
+  const runs = [];
+  for (let i = s.indexOf("`"); i !== -1;) {
+    let e = i;
+    while (s[e] === "`") e++;
+    runs.push([i, e - i]);
+    i = s.indexOf("`", e);
+  }
+  const byLen = new Map(); // run length → indices of the runs of that length, in order
+  runs.forEach(([, len], k) => { if (!byLen.has(len)) byLen.set(len, []); byLen.get(len).push(k); });
+  const firstAfter = (list, k) => { // the first index in list greater than k, or -1
+    let lo = 0, hi = list.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (list[mid] > k) hi = mid; else lo = mid + 1; }
+    return lo < list.length ? list[lo] : -1;
+  };
+  const out = [];
+  for (let k = 0; k < runs.length; k++) {
+    const e = runs[k][0] + runs[k][1];
+    for (let L = runs[k][1]; L >= 1; L--) {
+      const j = byLen.has(L) ? firstAfter(byLen.get(L), k) : -1;
+      if (j === -1 || runs[j][0] - e > bodyMax) continue;
+      out.push({ index: e - L, end: runs[j][0] + L, tick: "`".repeat(L), body: s.slice(e, runs[j][0]) });
+      k = j;
+      break;
+    }
+  }
+  return out;
+}
+// s.replace(<that code-span pattern>, fn) — fn(match, tick, body).
+function replaceCodeSpans(s, fn, bodyMax) {
+  let out = "", at = 0;
+  for (const m of codeSpans(s, bodyMax)) {
+    out += s.slice(at, m.index) + fn(s.slice(m.index, m.end), m.tick, m.body);
+    at = m.end;
+  }
+  return at ? out + s.slice(at) : s;
+}
+// An ATX heading line → { level, text } | null, as /^(#{min,max})\s+(.*?)\s*$/ read it (text trimmed at the end). closing:
+// a closing sequence led by whitespace goes too — /^(#{min,max})\s+(.*?)(?:\s+#+)?\s*$/. raw: the text is the whole rest —
+// /^(#{min,max})\s+(.*)$/. The text never holds a line terminator (`.` stops there): a line whose would is no heading.
+function atxHeading(line, min = 1, max = 6, mode = "trim") {
+  const s = String(line);
+  let level = 0;
+  while (s[level] === "#") level++;
+  if (level < min || level > max || !isWsUnit(s[level])) return null;
+  let lo = level + 1;
+  while (lo < s.length && isWsUnit(s[lo])) lo++;
+  let hi = s.length;
+  if (mode !== "raw") {
+    while (hi > lo && isWsUnit(s[hi - 1])) hi--;
+    if (mode === "closing" && s[hi - 1] === "#") {
+      let h0 = hi - 1;
+      while (h0 > lo && s[h0 - 1] === "#") h0--;
+      let w0 = h0;
+      while (w0 > lo && isWsUnit(s[w0 - 1])) w0--;
+      if (w0 > lo && w0 < h0) hi = w0;
+    }
+  }
+  const text = s.slice(lo, hi);
+  return RE_LINE_TERMINATOR.test(text) ? null : { level, text };
 }
 
 // ---------------------------------------------------------------------------
@@ -797,11 +983,15 @@ function existingFeature(projectDir, name) {
 // ("tdd,saas", "+saas +ai", ["tdd saas"]), case-insensitive, core implied. Unknown tokens are reported
 // (with a did-you-mean) instead of being dropped — silently losing 'sass' also skipped auto-classification.
 // → { tracks (stable order, incl. core), named (valid tokens as given), given (any token at all), unknown }
-function parseTracks(input) {
-  const tokens = (Array.isArray(input) ? input : input == null ? [] : [input])
+// The track tokens a caller wrote (arrays or strings split on space / comma / '+'), lower-cased.
+function trackTokens(input) {
+  return (Array.isArray(input) ? input : input == null ? [] : [input])
     .flatMap((x) => String(x == null ? "" : x).split(/[\s,+]+/))
     .map((t) => t.trim().toLowerCase())
     .filter(Boolean);
+}
+function parseTracks(input) {
+  const tokens = trackTokens(input);
   const valid = allTracks(); // the built-in tracks + the project's track packs (1.15)
   const named = [...new Set(tokens.filter((t) => valid.includes(t)))];
   const unknown = [...new Set(tokens.filter((t) => !valid.includes(t)))].map((token) => ({ token, suggestion: suggestTrack(token) }));
@@ -814,7 +1004,10 @@ function normalizeTracks(tracks) {
 // Words people type for a track — suggestion only, never accepted as input.
 const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd", tests: "tdd", testing: "tdd", scale: "saas", scaling: "saas",
   security: "sec", secure: "sec", appsec: "sec", owasp: "sec", seguranca: "sec", "segurança": "sec", seguridad: "sec",
-  priv: "privacy", gdpr: "privacy", rgpd: "privacy", lgpd: "privacy", pii: "privacy", privacidade: "privacy", privacidad: "privacy" };
+  priv: "privacy", gdpr: "privacy", rgpd: "privacy", lgpd: "privacy", pii: "privacy", privacidade: "privacy", privacidad: "privacy",
+  // +dist (1.17 D) — also names a pack can't take (packReservedName reads these keys)
+  distributed: "dist", distribuido: "dist", "distribuído": "dist", distribuida: "dist", microservices: "dist", microservicos: "dist",
+  microsservicos: "dist", microservicios: "dist", consistency: "dist", consistencia: "dist", "consistência": "dist", kafka: "dist" };
 function suggestTrack(token) {
   // Own keys only: a plain-object lookup matched 'constructor' / '__proto__' and suggested Object itself.
   if (Object.prototype.hasOwnProperty.call(TRACK_ALIASES, token)) return TRACK_ALIASES[token];
@@ -907,7 +1100,11 @@ const SIGNALS = {
       "tenant", "queue", "worker", "background job", "scheduled", "scheduled task",
       "public api", "scale", "throughput", "latency", "p95", "p99", "p50", "tps", "qps",
       "cdn", "cache", "partition",
-      // PT/ES
+      // 1.17 D review: a message queue IS a queue — the phrase counts for +saas too (as 'exactly-once' does for +tdd and +dist):
+      // listed here, its span equals +dist's strong one, so the +saas hint survives (1.16 parity: "a message queue and a worker").
+      "message queue", "distributed cache",
+      // PT/ES ("fila de mensagens" / "cola de mensajes" before "fila" / "cola": the first keyword matching at a place wins it)
+      "fila de mensagens", "cola de mensajes",
       "fila", "agendado", "tarefa agendada", "desempenho", "latência", "cola", "programado",
       "rendimiento", "latencia", "escala", "caché",
     ],
@@ -1045,6 +1242,155 @@ const SIGNALS = {
       "política de conservación",
     ],
   },
+  // +dist (1.17 D): distributed systems and data consistency — a write that reaches more than one system (a database AND a
+  // broker, a cache, another service), delivery guarantees, idempotency, concurrency. STRONG: the named brokers / job and workflow
+  // platforms and the patterns that only exist across systems (transactional outbox, saga pattern, dual write, eventual
+  // consistency, two-phase commit, microservices, event sourcing, CQRS, change data capture, optimistic / pessimistic locking…).
+  // WEAK — the cross-system ANCHORS, on only in pairs: webhooks, idempotency, delivery guarantees (at-least-once, duplicate
+  // deliveries), other / another / downstream services, dead letters, circuit breakers, backoff, replication, cache invalidation,
+  // concurrent updates, an event bus / stream / event-driven design, a bare "saga" (also a story series), "CDC" (also the health
+  // agency), Redis, a search index, gRPC. GENERIC (1.17 D review — app-level words: a print queue, a music player's retry, a
+  // farmers' market's producers and consumers, a newsletter's subscribers, a nightly dedupe): weak evidence that turns the
+  // track on only beside a strong or an anchor signal — two generic words alone stay 'possible'. Never a bare "event" (DOM,
+  // calendar, analytics events), "lock" (an account lock), "stream" (video streaming) or "broker" (an insurance broker).
+  // CONTEXT (corroborating only): transaction, consistency, atomic(ity) — data-consistency words that alone are ordinary
+  // ("a consistent UI"). One concept, one signal: SIGNAL_CONCEPTS folds the words of one concept (retry · backoff · jitter,
+  // consumer · producer · subscriber, dedupe · deduplicate).
+  // Shared spans: 'exactly-once' is +tdd strong too, 'idempoten' / 'webhook' / 'circuit breaker' / 'dead letter' +saas strong,
+  // 'queue' / 'worker' / 'background job' / 'fila' / 'cola' +saas weak, 'race condition' +tdd weak — a keyword serves both tracks
+  // (equal spans are never shadowed); "message queue" / "distributed cache" (and PT / ES) are listed in +saas weak too, so the
+  // +saas hint survives inside them (1.17 D review — 1.16 parity).
+  dist: {
+    strong: [
+      "kafka", "rabbitmq", "activemq", "amqp", "amazon sqs", "sqs", "kinesis", "eventbridge", "service bus", "redis streams", "debezium",
+      // named platforms (1.17 D review). A common word is matched only in its capitalised product phrase (a keyword written with
+      // capitals is case-sensitive): "Temporal workflow" (PT / ES "temporal" is an adjective), "Celery task" (a vegetable),
+      // "Pulsar topic" (a star), "NATS", "Event Hubs", "CDC pipeline".
+      "google pub / sub", "cloud pub / sub", "pub / sub topic", "NATS", "apache pulsar", "Pulsar topic", "azure event hub", "Event Hubs",
+      "Temporal workflow", "Temporal worker", "sidekiq", "Celery task", "Celery worker", "bullmq", "resque", "nservicebus", "masstransit",
+      "CDC pipeline", "CDC connector",
+      "message broker", "message queue", "message bus", "event broker", "event-driven architecture", "event driven architecture",
+      "stream processing", "event sourcing", "event-sourced", "domain event", "integration event",
+      "transactional outbox", "outbox pattern", "outbox table", "inbox pattern", "idempotent consumer", "dual write", "dual-write",
+      "eventual consistency", "eventually consistent", "strong consistency", "strongly consistent", "read-your-writes",
+      "distributed transaction", "distributed system", "distributed lock", "distributed cache", "two-phase commit", "two phase commit",
+      "2PC", "microservice", "micro-service", "cqrs", "change data capture", "exactly-once", "at-least-once delivery",
+      "saga pattern", "saga orchestration", "saga orchestrator", "compensating transaction", "compensating action",
+      "optimistic locking", "pessimistic locking", "isolation level", "write skew", "lost update", "network partition",
+      "split brain", "split-brain", "read replica", "replication lag",
+      // PT (pluralize() adds a plural to a phrase's FIRST word only for -ção / "de" / non-ASCII phrases: the other plurals are listed)
+      "fila de mensagens", "broker de mensagens", "outbox transacional", "padrão outbox", "tabela de outbox", "escrita dupla", "escritas duplas",
+      "consistência eventual", "eventualmente consistente", "consistência forte", "transação distribuída", "transações distribuídas",
+      "commit em duas fases", "commit de duas fases", "microsserviço", "micro-serviço", "arquitetura orientada a eventos",
+      "sistema distribuído", "bloqueio otimista", "bloqueio pessimista",
+      "nível de isolamento", "atualização perdida", "atualizações perdidas", "partição de rede", "partições de rede",
+      "captura de dados de alteração", "transação de compensação", "transações de compensação", "consumidor idempotente",
+      "réplica de leitura", "atraso de replicação",
+      // ES
+      "cola de mensajes", "broker de mensajes", "outbox transaccional", "patrón outbox", "tabla de outbox", "escritura dual", "escrituras duales",
+      "doble escritura", "consistencia eventual", "consistencia fuerte", "transacción distribuida", "transacciones distribuidas",
+      "commit en dos fases", "confirmación en dos fases", "microservicio", "arquitectura orientada a eventos", "sistema distribuido",
+      "sistemas distribuidos", "bloqueo optimista", "bloqueo pesimista", "nivel de aislamiento", "actualización perdida",
+      "actualizaciones perdidas", "partición de red", "particiones de red", "captura de datos de cambios", "transacción de compensación",
+      "transacciones de compensación", "réplica de lectura", "retraso de replicación",
+    ],
+    // ANCHORS: a word that names a second system or a delivery / concurrency concern. (A bare "outbox" — an email client's folder
+    // — an "event stream" (a live keynote), an "event bus" (Vue's in-process bus), "event-driven" (a game loop) and "leader
+    // election" (a club vote) were strong in the first 1.17 cut: weak now.)
+    weak: [
+      "webhook", "idempoten", "at-least-once", "at-most-once", "duplicate delivery", "delivered twice", "delivered more than once",
+      "duplicate message", "duplicate event", "other services", "another service", "downstream service", "cross-service",
+      "exponential backoff", "backoff exponencial", "backoff", // ("backoff exponencial" before "backoff": the first keyword matching at a place wins it)
+      "replication", "cache invalidation", "saga", "CDC", "dead letter", "dead-letter", "dlq", "poison message", "circuit breaker",
+      "concurrent updates", "concurrent writes", "update … lost", "overwrite each other", "version column", "clock skew",
+      "message ordering", "event bus", "event stream",
+      "event-driven", "event driven", "leader election", "redis", "search index", "elasticsearch", "opensearch", "grpc",
+      // a service named by its domain role ("the notification service", "the payment service") — one concept with "other services"
+      "notification service", "payment service", "billing service", "order service", "orders service", "shipping service",
+      "inventory service", "analytics service", "pricing service", "catalog service",
+      // PT
+      "outros serviços", "outro serviço", "recuo exponencial", "replicação", "réplica", "invalidação de cache", "atualizações concorrentes",
+      "escritas concorrentes", "atualização … perdida", "barramento de eventos", "orientado a eventos", "orientada a eventos",
+      "entregue duas vezes", "mensagens duplicadas", "eventos duplicados", "coluna de versão", "serviço de notificações", "serviço de pagamentos",
+      "serviço de faturação", "serviço de faturamento", "serviço de encomendas", "serviço de pedidos", "serviço de envios", "serviço de inventário",
+      "serviço de stock", "serviço de estoque", "serviço de preços", "serviço de catálogo",
+      // ES
+      "otros servicios", "otro servicio", "retroceso exponencial", "replicación", "invalidación de caché", "actualizaciones concurrentes",
+      "escrituras concurrentes", "actualización … perdida", "bus de eventos", "entregado dos veces", "mensajes duplicados", "columna de versión",
+      "servicio de notificaciones", "servicio de pagos", "servicio de facturación", "servicio de pedidos", "servicio de envíos",
+      "servicio de inventario", "servicio de precios", "servicio de catálogo",
+    ],
+    // GENERIC (1.17 D review): app-level words — evidence only beside a strong or an anchor signal (see above).
+    generic: [
+      "queue", "consumer", "producer", "subscriber", "retry", "jitter", "deduplica", "dedup", "dedupe", "race condition",
+      "pubsub", "pub-sub", "pub / sub", "publish-subscribe", "publish / subscribe", "publish … event", "publish … message",
+      "send … message", "exactly once", "event store", "outbox", "worker", "background job", "keep … in sync", "update … same",
+      "oversell", "compensate", "concurrently", "simultaneously",
+      // PT ("tentar novamente" is no signal: "the user can try again")
+      "fila", "consumidor", "produtor", "subscritor", "nova tentativa", "novas tentativas", "retentativa", "desduplica",
+      "condição de corrida", "condições de corrida", "public … evento", "public … mensagem", "envi … mensagem", "pelo menos uma vez",
+      "no máximo uma vez", "exatamente uma vez", "em segundo plano", "em simultâneo", "simultaneamente",
+      // ES
+      "cola", "productor", "suscriptor", "reintento", "condición de carrera", "condiciones de carrera", "public … mensaje",
+      "envi … mensaje", "al menos una vez", "como máximo una vez", "exactamente una vez", "en segundo plano", "simultáneamente",
+      "de forma concurrente",
+    ],
+    context: ["transaction", "consistency", "atomic", "atomically", "atomicity",
+      "transação", "consistência", "atómico", "atômico", "atomicidade", "atomicamente",
+      "transacción", "consistencia", "atomicidad", "atómicamente"],
+  },
+};
+// One concept, one signal (1.17 D review) — a built-in track's weak / generic keywords that name the SAME concept count once:
+// "deduplicate … dedupe them", "producers and consumers", "retry … with jitter" are one hint each, never the two weak signals
+// that would turn the track on. Keyed by track (a keyword may belong to a concept in one track only: +saas' 'worker' and
+// 'background job' stay two signals there). The concept of the matched keywords decides, whatever their tier: a concept with an
+// anchor (weak) keyword matched counts as an anchor. Track packs have none (their keywords are their own).
+const conceptMap = (groups) => new Map(Object.entries(groups).flatMap(([c, kws]) => kws.map((k) => [k, c])));
+const SIGNAL_CONCEPTS = {
+  dist: conceptMap({
+    queue: ["queue", "fila", "cola"],
+    party: ["consumer", "producer", "subscriber", "consumidor", "produtor", "subscritor", "productor", "suscriptor"],
+    retry: ["retry", "jitter", "nova tentativa", "novas tentativas", "retentativa", "reintento", "exponential backoff", "backoff exponencial",
+      "backoff", "recuo exponencial", "retroceso exponencial"],
+    dedup: ["deduplica", "dedup", "dedupe", "desduplica"],
+    race: ["race condition", "condição de corrida", "condições de corrida", "condición de carrera", "condiciones de carrera"],
+    publish: ["pubsub", "pub-sub", "pub / sub", "publish-subscribe", "publish / subscribe", "publish … event", "publish … message",
+      "public … evento", "public … mensagem", "public … mensaje", "send … message", "envi … mensagem", "envi … mensaje"],
+    worker: ["worker", "background job", "em segundo plano", "en segundo plano"],
+    concurrent: ["concurrently", "simultaneously", "em simultâneo", "simultaneamente", "simultáneamente", "de forma concurrente",
+      "concurrent updates", "concurrent writes", "atualizações concorrentes", "escritas concorrentes", "actualizaciones concurrentes",
+      "escrituras concurrentes"],
+    services: ["other services", "another service", "downstream service", "cross-service", "outros serviços", "outro serviço",
+      "otros servicios", "otro servicio", "notification service", "payment service", "billing service", "order service", "orders service",
+      "shipping service", "inventory service", "analytics service", "pricing service", "catalog service", "serviço de notificações",
+      "serviço de pagamentos", "serviço de faturação", "serviço de faturamento", "serviço de encomendas", "serviço de pedidos",
+      "serviço de envios", "serviço de inventário", "serviço de stock", "serviço de estoque", "serviço de preços", "serviço de catálogo",
+      "servicio de notificaciones", "servicio de pagos", "servicio de facturación", "servicio de pedidos", "servicio de envíos",
+      "servicio de inventario", "servicio de precios", "servicio de catálogo"],
+    deadLetter: ["dead letter", "dead-letter", "dlq", "poison message"],
+    delivery: ["at-least-once", "at-most-once", "exactly once", "duplicate delivery", "delivered twice", "delivered more than once",
+      "duplicate message", "duplicate event", "pelo menos uma vez", "no máximo uma vez", "exatamente uma vez", "entregue duas vezes",
+      "mensagens duplicadas", "eventos duplicados", "al menos una vez", "como máximo una vez", "exactamente una vez", "entregado dos veces",
+      "mensajes duplicados"],
+    replication: ["replication", "réplica", "replicação", "replicación"],
+    cacheInvalidation: ["cache invalidation", "invalidação de cache", "invalidación de caché"],
+    eventBus: ["event bus", "barramento de eventos", "bus de eventos"],
+    eventDriven: ["event-driven", "event driven", "orientado a eventos", "orientada a eventos"],
+    lostUpdate: ["update … lost", "atualização … perdida", "actualización … perdida", "overwrite each other"],
+    versionColumn: ["version column", "coluna de versão", "columna de versión"],
+    sameRecord: ["update … same"],
+    searchIndex: ["search index", "elasticsearch", "opensearch"],
+  }),
+};
+// HAZARDS (1.17 D review): a failure a requirement says must never happen — "concurrent updates never oversell", "no lost updates",
+// "they must not overwrite each other", "no duplicate deliveries". Written negated by nature, the negation is the requirement,
+// not an absence: such a keyword counts (and is no "appeared negated" note). Built-in +dist only.
+const SIGNAL_HAZARDS = {
+  dist: new Set(["lost update", "atualização perdida", "atualizações perdidas", "actualización perdida", "actualizaciones perdidas",
+    "update … lost", "atualização … perdida", "actualización … perdida", "overwrite each other", "write skew", "split brain", "split-brain",
+    "oversell", "race condition", "condição de corrida", "condições de corrida", "condición de carrera", "condiciones de carrera",
+    "duplicate delivery", "duplicate message", "duplicate event", "delivered twice", "delivered more than once", "entregue duas vezes",
+    "entregado dos veces", "mensagens duplicadas", "eventos duplicados", "mensajes duplicados"]),
 };
 
 // Words that negate a signal when they appear just before the keyword (EN/PT/ES).
@@ -1077,18 +1423,48 @@ const ES_STRONG = W("una|unos|pero|también|tambien|usted|esto|eso|entonces|toda
 const ES_STRONG_CHARS = /ción|ciones|ñ/giu;
 const ES_WEAK = W("con|un|por|para|de|del|el|la|las|que|en|solo");
 const EN_WORDS = W("the|and|with|for|of|is|are|to|an|in|on|by|from|that|this|it|should|must|when|without");
+// 1.17 D review: a PT / ES INFINITIVE opening a clause — the form a PT / ES requirement line starts with ("Publicar eventos no
+// Kafka.", "Gravar o pedido no Postgres e …"): a short line with no other marker read as English, and "no" (PT em + o) as a
+// negator. Only at a clause start (the text's start, after . ! ? ; : or a line break, or a list bullet) and followed by its
+// object (a word on the same line — a UI label list "Guardar, Enviar, Cancelar" or "Enviar. Pagar." is no clause), a STRONG
+// marker (2) — and only in a text with no English function word (1.17 verification N1: "Spanish labels: …" is English).
+// PT_INF / ES_INF hold verbs that exist in ONE language only; a verb both languages have (alterar, excluir, mudar, apagar,
+// agregar, cambiar…) is in PTES_INF and counts for both — it tells PT / ES from English, never PT from ES (a tie is PT, or the
+// project's language when that is ES). None is an English word ("remover", "registrar", "leer" are left out: an English noun /
+// verb). CLAUSE_START is linear: the spaces after a start never cross a line break (`\s*` there re-read a whole run of blank
+// lines from each of its line breaks — quadratic; 1.17 verification N2).
+const CLAUSE_START = "(?:^|[.!?;:\\n]|[-*+•]\\s)[^\\S\\n]*";
+const INF_WORDS = {
+  pt: "atualizar|gerar|escrever|armazenar|receber|manter|processar|reprocessar|obter|corrigir|melhorar|exibir|carregar|descarregar|baixar",
+  es: "crear|escribir|actualizar|añadir|generar|almacenar|recibir|mantener|procesar|reprocesar|sustituir|obtener|comprobar|corregir|mejorar|cargar|descargar|reintentar",
+  both: "publicar|enviar|guardar|consumir|notificar|validar|eliminar|mostrar|permitir|implementar|integrar|calcular|sincronizar|exportar|importar|listar|editar|bloquear|usar|pagar|cobrar|evitar|configurar|definir|verificar|migrar|filtrar|ordenar|buscar|" +
+    "criar|gravar|adicionar|apagar|substituir|excluir|alterar|mudar|testar|agregar|borrar|cambiar",
+};
+const INF = (words) => new RegExp(CLAUSE_START + "(" + words + ")(?=[^\\S\\n]+[\\p{L}\\p{N}\"'`“«(])", "giu");
+const PT_INF = INF(INF_WORDS.pt);
+const ES_INF = INF(INF_WORDS.es);
+const PTES_INF = INF(INF_WORDS.both);
+// "no" + an infinitive is Spanish ("no usar LLM", "No enviar correos"): Portuguese negates with "não" (and its "no" = em + o
+// never precedes an infinitive). A STRONG ES marker (1.17 verification N1: "Adicionar productos al carrito, no usar LLM." read PT).
+const ES_NO_INF = new RegExp("(?<![\\p{L}\\p{N}_])no[^\\S\\n]+(" + INF_WORDS.es + "|" + INF_WORDS.both + ")(?![\\p{L}\\p{N}_])", "giu");
 // fallback (full review Pb2 — an imported source): the project's language, used when the text shows no language of its own
 // (no PT/ES marker to speak of and fewer than two English function words) — and its variant (pt-BR) when the text is in
 // its family. Without it the answer is the plain guess ('en' when nothing says otherwise).
 function guessLang(text, fallback) {
   const distinct = (re) => new Set((text.match(re) || []).map((m) => m.toLowerCase())).size;
-  const pt = 2 * (distinct(PT_STRONG) + distinct(PT_STRONG_CHARS)) + distinct(PT_WEAK);
-  const es = 2 * (distinct(ES_STRONG) + distinct(ES_STRONG_CHARS)) + distinct(ES_WEAK);
+  const distinctInf = (re) => new Set(Array.from(text.matchAll(re), (m) => m[1].toLowerCase())).size;
   const en = distinct(EN_WORDS);
+  // clause-start infinitives only in a text without English function words (1.17 verification N1)
+  const inf = (re) => (en ? 0 : distinctInf(re));
+  const shared = inf(PTES_INF);
+  const pt = 2 * (distinct(PT_STRONG) + distinct(PT_STRONG_CHARS) + inf(PT_INF) + shared) + distinct(PT_WEAK);
+  const es = 2 * (distinct(ES_STRONG) + distinct(ES_STRONG_CHARS) + inf(ES_INF) + shared + distinctInf(ES_NO_INF)) + distinct(ES_WEAK);
   const best = Math.max(pt, es);
-  const g = best < 2 || best <= en ? "en" : pt >= es ? "pt" : "es";
-  if (!fallback) return g;
-  const f = normalizeLang(fallback);
+  const f = fallback ? normalizeLang(fallback) : null;
+  // a PT / ES tie (a shared verb, "de", "para"…) is PT — unless the project's language is Spanish
+  const tieEs = pt === es && f !== null && i18n.baseLang(f) === "es";
+  const g = best < 2 || best <= en ? "en" : pt > es || (pt === es && !tieEs) ? "pt" : "es";
+  if (!f) return g;
   if (i18n.baseLang(f) === g) return f;
   return g === "en" && best < 2 && en < 2 ? f : g;
 }
@@ -1140,15 +1516,41 @@ function isNegated(text, idx, kwLen, lang, cased) {
 const STEMS = new Set(["idempoten", "hallucinat", "summariz", "alucina",
   // +sec / +privacy: vulnerability / vulnerabilities / vulnerabilidade(s) / vulnerabilidad(es); sanitize / sanitização;
   // anonymize / anonymisation / anonimização / anonimización; data minimization / minimisation.
-  "vulnerabili", "sanitiz", "anonymiz", "anonymis", "pseudonymiz", "pseudonymis", "data minimi", "anonimiza", "pseudonimiza", "seudonimiza"]);
+  "vulnerabili", "sanitiz", "anonymiz", "anonymis", "pseudonymiz", "pseudonymis", "data minimi", "anonimiza", "pseudonimiza", "seudonimiza",
+  // +dist (1.17 D): deduplicate / deduplication / deduplicação / deduplicación; desduplicação
+  "deduplica", "desduplica"]);
 // VERB stems (full review Pb5): the stem + one of the listed endings, nothing else — 'cifr' is cifrar / cifrado / cifram…,
 // never "cifra" (a figure); 'encript' never "encriptação" (a keyword of its own). The stem is the keyword (its literal and
 // its name in notes), so a verb and its noun (encriptar / encriptação) are one signal, as encrypt / encryption are.
+// VERB_STEMS and IRREGULAR_FORMS apply to the BUILT-IN signals only (1.17 D review): a track pack's keyword is always a literal
+// word + the ordinary inflections — a pack keyword "public" matches "public", never only "publicar" (keywordRe(kw, true)).
 const VERB_STEMS = new Map([
   ["encript", "(?:ar|a|am|an|amos|ando|ado|ada|ados|adas|ou|aram|em|en)"],
   ["cifr", "(?:ar|am|an|amos|ando|ado|ada|ados|adas|ou|aram|em|en)"],
   ["criptograf", "(?:ar|a|am|amos|ando|ado|ada|ados|adas|ou|aram|em)"],
+  // +dist (1.17 D): publicar (PT / ES) — only inside the gap phrases "public … evento" / "… mensagem" / "… mensaje"; a bare
+  // English "public" (a public API) never matches it: an ending is required.
+  ["public", "(?:ar|a|as|am|an|amos|ando|ado|ada|ados|adas|ou|aram|ó|aron|ará|arão|arán)"],
+  // enviar (PT / ES — 1.17 D review): only inside "envi … mensagem" / "envi … mensaje" ("environment" has no listed ending)
+  ["envi", "(?:ar|a|as|am|an|amos|ando|ado|ada|ados|adas|ou|aram|ó|aron|ará|arão|arán)"],
 ]);
+// Irregular inflections (1.17 D): a keyword whose forms the suffix rules can't produce — retry → retries / retried. The key is
+// the keyword (its name in notes); the value its literal prefix and the alternation of endings. One concept, one signal:
+// "retry … retries" is a single +dist hint, not the two weak ones that would turn the track on.
+const IRREGULAR_FORMS = new Map([
+  ["retry", ["retr", "(?:y|ies|ied|ying)"]],
+  ["reintento", ["reintent", "(?:o|os|ar|a|an|ado|ada|ando)"]], // ES reintento(s) / reintentar / reintenta…
+  ["duplicate delivery", ["duplicate deliver", "(?:y|ies)"]], // (1.17 D review)
+  ["mensagem", ["mensage", "(?:m|ns)"]], // PT mensagem → mensagens (a part of "public … mensagem" / "envi … mensagem")
+  // An EXACT form (no inflection at all — 1.17 D review): "2PC", never "2PCS" (a product listing's "2 pieces"). Upper case: matched
+  // case-sensitively like every keyword written with capitals.
+  ["2PC", ["2PC", ""]],
+]);
+// A GAP keyword (built-in signals only — a track pack's keywords can't hold "…", RE_PACK_KEYWORD): its words with up to three
+// words between them, none crossing sentence punctuation — "publish … event" is "publishes a UserCreated event", "publish
+// events", "publicou o evento". Each part is matched as a keyword of its own (inflections, stems, verb stems).
+const KW_GAP = " … ";
+const KW_GAP_RE = "(?:\\s+[^\\s.!?;:,]+){0,3}?\\s+";
 // Inflections accepted on an exact keyword: payment→payments, cache→cached, rate-limit→rate-limiting.
 const INFLECTION = "(?:e?s|ed|ing|d)?";
 // Short acronyms ('rag', 'sla', 'slo', 'gpt', 'llm', 'ai') pluralize but never conjugate — without
@@ -1179,33 +1581,50 @@ function pluralize(body, kw) {
 // literal — "data retention" no longer compiles a regex for every text that merely says "data".
 const KW_LITERAL = new Map();
 const KW_CACHE_MAX = 5000; // the built-in signals (~700) + every track pack's (≤ 150 each)
-function keywordLiteral(kw) {
-  let lit = KW_LITERAL.get(kw);
+// plain (1.17 D review): a track pack's keyword — a literal word (no gap, no verb stem, no irregular forms); cached apart from a
+// built-in keyword of the same spelling.
+const KW_PLAIN = "\u0001";
+function keywordLiteral(kw, plain) {
+  const key = plain ? KW_PLAIN + kw : kw;
+  let lit = KW_LITERAL.get(key);
   if (lit != null) return lit;
   if (KW_LITERAL.size >= KW_CACHE_MAX) KW_LITERAL.clear();
+  // a gap keyword: its first part's literal · an irregular one: its stem (1.17 D)
+  if (!plain && kw.includes(KW_GAP)) { lit = keywordLiteral(kw.slice(0, kw.indexOf(KW_GAP))); KW_LITERAL.set(key, lit); return lit; }
+  if (!plain && IRREGULAR_FORMS.has(kw)) { lit = IRREGULAR_FORMS.get(kw)[0]; KW_LITERAL.set(key, lit); return lit; }
   const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const first = (kw.match(/^[\p{L}\p{N}]+/u) || [""])[0];
   const n = pluralize(escaped, kw) === escaped ? kw.length : Math.min(first.length || kw.length, kw.length > 3 ? kw.length - 3 : kw.length);
   lit = kw.slice(0, Math.max(1, n));
-  KW_LITERAL.set(kw, lit);
+  KW_LITERAL.set(key, lit);
   return lit;
 }
 
-function keywordRe(kw) {
-  let re = KW_RE.get(kw);
+function keywordRe(kw, plain) {
+  const key = plain ? KW_PLAIN + kw : kw;
+  let re = KW_RE.get(key);
   if (re) return re;
   if (KW_RE.size >= KW_CACHE_MAX) KW_RE.clear(); // track packs (1.15) add keywords: a long-lived server's cache stays bounded
-  const body = pluralize(kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), kw);
-  const tail = STEMS.has(kw) ? "\\p{L}*" : VERB_STEMS.has(kw) ? VERB_STEMS.get(kw) : (kw.length <= 3 ? ACRONYM_INFLECTION : INFLECTION) + ADJ_SUFFIX;
+  // A gap keyword's parts, each its own keyword pattern, joined by at most three words (KW_GAP_RE: whitespace and non-whitespace
+  // runs alternate — linear); the edge guards below wrap the whole phrase.
+  const bodyTail = plain ? keywordPattern(kw, true) : kw.includes(KW_GAP) ? kw.split(KW_GAP).map((p) => keywordPattern(p)).join(KW_GAP_RE) : keywordPattern(kw);
   // Left edge: not glued to a word char, and not part of a dotted/slashed/hyphenated identifier
   // ('.claude-plugin', 'src/rag.ts'). Right edge: after the optional inflection/adjective, no word
   // char and no '-<letter>' compound ('claude-plugin') — but '-<digit>' stays legal ('gpt-4').
   re = new RegExp(
-    "(?<![\\p{L}\\p{N}_\\-./\\\\])" + body + tail + "(?![\\p{L}\\p{N}_])(?![-./\\\\][\\p{L}])",
+    "(?<![\\p{L}\\p{N}_\\-./\\\\])" + bodyTail + "(?![\\p{L}\\p{N}_])(?![-./\\\\][\\p{L}])",
     "gu"
   );
-  KW_RE.set(kw, re);
+  KW_RE.set(key, re);
   return re;
+}
+// One keyword (or one part of a gap keyword) → its pattern: the escaped text (pluralized) + its tail — a stem's letters, a verb
+// stem's endings, an irregular keyword's forms, else the inflections (+ an adjective compound). plain: a track pack's keyword —
+// never a verb stem's or an irregular keyword's forms (STEMS stay as in 1.16).
+function keywordPattern(kw, plain) {
+  if (!plain && IRREGULAR_FORMS.has(kw)) { const [stem, ends] = IRREGULAR_FORMS.get(kw); return stem + ends; }
+  const body = pluralize(kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), kw);
+  return body + (STEMS.has(kw) ? "\\p{L}*" : !plain && VERB_STEMS.has(kw) ? VERB_STEMS.get(kw) : (kw.length <= 3 ? ACRONYM_INFLECTION : INFLECTION) + ADJ_SUFFIX);
 }
 
 // Tokens that look like source paths ("src/rag", "lib/auth.ts") must stay opaque to the classifier.
@@ -1241,42 +1660,59 @@ function classify(description, opts = {}) {
   const perTrack = (mk) => Object.fromEntries(OPT.map((t) => [t, mk()]));
   const seenSpan = perTrack(() => new Set());
   const active = new Set(["core"]);
-  const matched = perTrack(() => ({ strong: [], weak: [] }));
+  const matched = perTrack(() => ({ strong: [], weak: [], generic: [] }));
   const negated = perTrack(() => []);
   const hits = []; // every counted match, in scan order: { track, tier, kw, start, end, neg }
 
   for (const track of OPT) {
     const table = trackSignalTable(track);
-    for (const tier of ["strong", "weak", "context"]) {
+    const plain = !Object.prototype.hasOwnProperty.call(SIGNALS, track); // a track pack's keywords are literal words (1.17 D review)
+    const hazards = Object.prototype.hasOwnProperty.call(SIGNAL_HAZARDS, track) ? SIGNAL_HAZARDS[track] : null; // (never negated)
+    // (tier `generic` — 1.17 D review — exists in the built-in +dist table only; see SIGNALS.dist)
+    for (const tier of ["strong", "weak", "generic", "context"]) {
       for (const kw of table[tier] || []) {
         // A keyword written with upper-case letters ('STRIDE') is an acronym matched CASE-SENSITIVELY, on the original
         // text (C4): the lower-case word is something else (an array stride). `cased` is `text` before toLowerCase().
         const hay = kw === kw.toLowerCase() ? text : cased;
         // A text without the keyword's literal prefix can't match its regex — skipping it spares compiling ~300 unicode
         // regexes on every CLI run (a classify used to cost ~250 ms per process).
-        if (!hay.includes(keywordLiteral(kw))) continue;
-        const re = keywordRe(kw);
+        if (!hay.includes(keywordLiteral(kw, plain))) continue;
+        const re = keywordRe(kw, plain);
         re.lastIndex = 0;
         let m;
         while ((m = re.exec(hay)) !== null) {
           if (seenSpan[track].has(m.index)) continue;
           seenSpan[track].add(m.index);
-          hits.push({ track, tier, kw, start: m.index, end: m.index + m[0].length, neg: isNegated(text, m.index, m[0].length, lang, cased) });
+          hits.push({ track, tier, kw, start: m.index, end: m.index + m[0].length, neg: !(hazards && hazards.has(kw)) && isNegated(text, m.index, m[0].length, lang, cased) });
         }
       }
     }
   }
-  // A WEAK signal inside a longer STRONG signal of another track is part of that phrase, not evidence of its own:
+  // A WEAK signal inside a longer STRONG signal (of another track — and, 1.17 D review, of its own) is part of that phrase, not evidence of its own:
   // 'model' in "threat model" / "modelo de ameaças" (+sec) is no +ai hint, 'security' in "row-level security" (+saas)
   // no +sec one. The same word in two tracks ('authentication': +tdd strong, +sec weak) is not shadowed — equal spans.
-  const shadowed = (h) => h.tier !== "strong" && hits.some((s) => s.track !== h.track && s.tier === "strong" &&
-    s.start <= h.start && h.end <= s.end && s.end - s.start > h.end - h.start);
+  // 1.17 D review: inside a longer strong phrase of its OWN track it is part of that phrase too — "mensagens" in "fila de
+  // mensagens", "outbox" in "transactional outbox", "worker" in "Celery worker" (the name-based de-dupe below misses a plural).
+  // Linear (1.17 D review — every hit was compared with every hit: 100 KB of "queue …" took 9.6 s): the strong hits sorted by
+  // start; a sweep keeps the furthest end of the strong hits starting BEFORE the hit (one reaching its end contains it
+  // strictly) and looks up the strong hits starting AT it (only a longer one shadows).
+  const strongHits = hits.filter((h) => h.tier === "strong").sort((a, b) => a.start - b.start);
+  const startsAt = new Map();
+  for (const s of strongHits) { const l = startsAt.get(s.start); if (l) l.push(s); else startsAt.set(s.start, [s]); }
+  let reach = -1; // the furthest end of the strong hits started before the current hit
+  const shadowedHits = new Set();
+  let si = 0;
+  for (const h of hits.filter((x) => x.tier !== "strong").sort((a, b) => a.start - b.start)) {
+    for (; si < strongHits.length && strongHits[si].start < h.start; si++) if (strongHits[si].end > reach) reach = strongHits[si].end;
+    if (reach >= h.end || (startsAt.get(h.start) || []).some((s) => s.end > h.end)) shadowedHits.add(h);
+  }
   // CORROBORATING-only signals (tier `context`, C4 — 'permission' for +sec) are weak evidence only beside another
   // (non-negated) signal of their track ("RBAC permissions"); a negated one is noted only when the track has some other
   // signal. Alone they are no evidence at all: no signal, no "possible" note, no "kept off" note ("file permission bits").
-  const counted = hits.filter((h) => !shadowed(h));
+  // A GENERIC word (1.17 D review) backs no context word: "retry the card transaction" is no +dist evidence.
+  const counted = hits.filter((h) => !shadowedHits.has(h));
   const own = (pred) => new Set(counted.filter((h) => h.tier !== "context" && pred(h)).map((h) => h.track));
-  const backedBy = own((h) => !h.neg), mentionedBy = own(() => true);
+  const backedBy = own((h) => !h.neg && h.tier !== "generic"), mentionedBy = own(() => true);
   for (const h of counted) {
     if (h.tier === "context" && !(h.neg ? mentionedBy : backedBy).has(h.track)) continue;
     const tier = h.tier === "context" ? "weak" : h.tier;
@@ -1290,30 +1726,47 @@ function classify(description, opts = {}) {
   // containment must sit at a word edge, or a short keyword vanishes inside an unrelated one
   // ("ai" ⊂ "guardr-ai-l").
   for (const t of OPT) {
-    const all = [...matched[t].strong, ...matched[t].weak];
+    const all = [...matched[t].strong, ...matched[t].weak, ...matched[t].generic];
     const keep = (arr) => arr.filter((k) => !all.some((m) => m !== k && (m.startsWith(k) || m.endsWith(k))));
     matched[t].strong = keep(matched[t].strong);
     matched[t].weak = keep(matched[t].weak);
+    matched[t].generic = keep(matched[t].generic);
+    // One concept, one signal (1.17 D review — SIGNAL_CONCEPTS): the first keyword of a concept stays, an anchor (weak) before a
+    // generic one — "retry … with exponential backoff" is one anchor, "producers … consumers" one generic hint.
+    const cm = Object.prototype.hasOwnProperty.call(SIGNAL_CONCEPTS, t) ? SIGNAL_CONCEPTS[t] : null;
+    if (cm) {
+      const seen = new Set();
+      const once = (arr) => arr.filter((k) => { const c = cm.get(k); if (c == null) return true; if (seen.has(c)) return false; seen.add(c); return true; });
+      matched[t].weak = once(matched[t].weak);
+      matched[t].generic = once(matched[t].generic);
+    }
+    // The same for the negated ones (1.17 D): "no distributed transactions" is ONE negated concept, not also a negated
+    // corroborating 'transaction' (+dist's context word inside it).
+    const neg = negated[t];
+    negated[t] = neg.filter((k) => !neg.some((m) => m !== k && (m.startsWith(k) || m.endsWith(k))));
   }
 
-  // Weighting: score = strong*2 + weak. A track turns ON at score >= 2 (one strong signal,
+  // Weighting: score = strong*2 + weak (+ generic). A track turns ON at score >= 2 (one strong signal,
   // or two weak ones). A lone weak signal (score 1) is surfaced as "possible" but not enabled.
+  // GENERIC signals (1.17 D review) add to the score but never turn a track on by themselves: at least one strong or weak (anchor)
+  // signal must be there — "a print queue … retry failed prints" stays 'possible'.
   const signals = {};
   const confidence = {};
   const weak = [];
   const possible = [];
   for (const t of OPT) {
-    signals[t] = [...matched[t].strong, ...matched[t].weak];
+    signals[t] = [...matched[t].strong, ...matched[t].weak, ...matched[t].generic];
     const s = matched[t].strong.length;
     const w = matched[t].weak.length;
-    const score = s * 2 + w;
-    if (score >= 2) {
+    const g = matched[t].generic.length;
+    const score = s * 2 + w + g;
+    if (score >= 2 && s + w > 0) {
       active.add(t);
       confidence[t] = score >= 4 ? "high" : "medium";
       if (s === 0) weak.push(t); // on, but from weak signals only
-    } else if (score === 1) {
+    } else if (score >= 1) {
       confidence[t] = "none";
-      possible.push({ track: t, signal: matched[t].weak[0] });
+      possible.push(Object.assign({ track: t, signal: matched[t].weak[0] || matched[t].generic[0] }, g >= 2 ? { generic: matched[t].generic.slice() } : {}));
     } else {
       confidence[t] = "none";
     }
@@ -1328,7 +1781,8 @@ function classify(description, opts = {}) {
     notes.push(C.weakOnly(weak.map((t) => "+" + t).join(", ")));
   }
   for (const p of possible) {
-    notes.push(C.possible(p.track, p.signal.trim()));
+    // (1.17 D review) two or more app-level words and no anchor: named as such
+    notes.push(p.generic ? C.genericOnly(p.track, p.generic.map((k) => `'${k.trim()}'`).join(", ")) : C.possible(p.track, p.signal.trim()));
   }
   // A negation is never silently dropped. It cannot *veto* a track — "the system shall not
   // hallucinate" negates 'hallucinat' on a feature that is unmistakably +ai — so when the track is
@@ -1551,8 +2005,8 @@ function steeringFrontMatter(text) {
   // 'x' / "x" → x; a trailing " # comment" is dropped (inside quotes a '#' is kept).
   const unquote = (v) => {
     const s = String(v).trim();
-    const q = s.match(/^(["'])(.*?)\1\s*(?:#.*)?$/);
-    return (q ? q[2] : s.replace(/\s+#.*$/, "")).trim();
+    const q = quotedValue(s);
+    return (q != null ? q : stripHashComment(s)).trim();
   };
   // "[a, 'b', "{c,d}/**"]" → items; commas inside quotes or {braces} don't split.
   const values = (v) => {
@@ -1576,11 +2030,11 @@ function steeringFrontMatter(text) {
   let inList = false; // under "fileMatchPattern:" with an empty value → YAML "- item" lines follow
   for (const line of lines.slice(1, end)) {
     if (/^\s*(?:#|$)/.test(line)) continue;
-    const item = inList && line.match(/^\s*-\s+(.*)$/);
+    const item = inList && headRest(line, /^\s*-/, true); // /^\s*-\s+(.*)$/ (headRest: 1.17 H)
     if (item) { patterns.push(...values(item[1])); continue; }
     inList = false;
     if (line.match(/^\s*/)[0].length > keyIndent) continue; // a continuation line, not a key
-    const kv = line.match(/^\s*([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
+    const kv = headRest(line, /^\s*([A-Za-z_][\w-]*)\s*:/, false); // /^\s*([A-Za-z_][\w-]*)\s*:\s*(.*)$/
     if (!kv) continue;
     const key = kv[1].toLowerCase();
     if (key === "inclusion") {
@@ -1707,7 +2161,8 @@ function briefSteering(root, tracks, implementsList) {
       // never reach the brief, and only real content is quoted. Read as a markdown reader does (scanTaskLines'
       // `vis`) — a plain regex strip also ate a "<!-- -->" inside fenced code or an `inline code span`, so a
       // rule about comments was quoted saying something else.
-      const body = scanTaskLines(fm.body).map((l) => l.vis).join("\n").replace(/(?:[ \t]*\n){3,}/g, "\n\n").trim();
+      // (?<![ \t]): a blank run is read from its start only — from each of its units it was quadratic (1.17 H).
+      const body = scanTaskLines(fm.body).map((l) => l.vis).join("\n").replace(/(?<![ \t])(?:[ \t]*\n){3,}/g, "\n\n").trim();
       const quote = body && artifactState({ text: body }) === "filled" && body.length <= budget;
       if (quote) budget -= body.length;
       included.push({ name, inclusion, patterns: fm.patterns, matched, body: quote ? body : null });
@@ -1832,9 +2287,15 @@ function designSaveCheck(projectDir, name) {
     if (bad.length) sections.push({ track: tr, marker, sections: bad });
   }
   let constitution = null; // null = not checked (bugfix)
+  let weigh = null; // 1.17 A1: {tradeoffs, risks} = designWeighState's status codes (null for a bugfix) — notes, never unclean
+  const notes = [];
   if (kind !== "bugfix") {
     const active = activeDesign(design, tracks);
     constitution = extractSection(active, CONSTITUTION_SYN) == null ? "missing" : sectionFilled(active, CONSTITUTION_SYN) ? "filled" : "unfilled";
+    const wc = designWeighChecks(active, lng);
+    weigh = { tradeoffs: wc[0].state, risks: wc[1].state };
+    // A section still holding its template slots is the placeholders line's; missing / empty / too few options get a ▲ note.
+    for (const c of wc) if (c.status === "warn" && c.state !== "template") notes.push("  ▲ " + c.detail);
   }
   const placeholders = artifactReport(f.dir, "design.md", tracks, design).items;
   const clean = !sections.length && constitution !== "missing" && constitution !== "unfilled" && !placeholders.length;
@@ -1846,8 +2307,8 @@ function designSaveCheck(projectDir, name) {
     lines.push("  - " + D.placeholders(placeholders.length, placeholders.slice(0, 3).map((p) => `L${p.line} ${short(p.text)}`).join(", ") +
       (placeholders.length > 3 ? ", " + fm.gates.more(placeholders.length - 3) : "")));
   }
-  const text = clean ? D.clean(trackLabel(tracks), constitution != null) : [D.head(f.slug, trackLabel(tracks)), ...lines, D.hint(f.slug)].join("\n");
-  return { ok: true, feature: f.slug, tracks: trackLabel(tracks), kind, sections, constitution, placeholders, clean, text };
+  const text = clean ? [D.clean(trackLabel(tracks), constitution != null), ...notes].join("\n") : [D.head(f.slug, trackLabel(tracks)), ...lines, ...notes, D.hint(f.slug)].join("\n");
+  return { ok: true, feature: f.slug, tracks: trackLabel(tracks), kind, sections, constitution, weigh, placeholders, clean, text };
 }
 
 // roadmap.json meta.guard ← on (spec_init {guard} / `dev-spec init --guard on|off`). No write when unchanged.
@@ -2705,9 +3166,10 @@ function stopPastFailure(text, start, end, wordsOf) {
 // lines (> …) — a pasted command output or a quoted instruction claims nothing.
 function stopProse(message) {
   const s = String(message == null ? "" : message).replace(/\r\n?/g, "\n");
-  return s.slice(-STOP_MESSAGE_MAX)
-    .replace(/(^|\n)[ \t]*(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n[ \t]*\2[^\n]*(?=\n|$)|$)/g, "$1")
-    .replace(/<!--[\s\S]*?-->/g, " ")
+  // (?=(…))\2: the fence opener taken whole, never backtracked (a line of 20,000 backticks was quadratic — 1.17 H); the
+  // comments by replaceHtmlCommentSpans (/<!--[\s\S]*?-->/g rescanned the rest from each unclosed "<!--").
+  const unfenced = s.slice(-STOP_MESSAGE_MAX).replace(/(^|\n)[ \t]*(?=(`{3,}|~{3,}))\2[^\n]*\n[\s\S]*?(?:\n[ \t]*\2[^\n]*(?=\n|$)|$)/g, "$1");
+  return replaceHtmlCommentSpans(unfenced, () => " ")
     .replace(/`[^`\n]*`/g, " ")
     .split("\n").filter((l) => !/^[ \t]*>/.test(l)).join("\n");
 }
@@ -3729,6 +4191,9 @@ function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
   }
   if (k === "design") {
     if (!RE_CONSTITUTION_CHECK.test(rendered)) add("warn", "constitution-missing", P["constitution-missing"]);
+    // 1.17 A1: no Alternatives & Trade-offs / Risks heading — doctor would warn on every feature scaffolded from it.
+    if (weighSection(rendered, TRADEOFFS_SYN) == null) add("warn", "tradeoffs-missing", P["tradeoffs-missing"]);
+    if (weighSection(rendered, RISKS_SYN) == null) add("warn", "risks-missing", P["risks-missing"]);
     for (const tr of markerTracks()) { // + the track packs (1.15)
       const marker = trackMarker(tr);
       if (!headingHasMarker(raw, marker)) continue; // no heading of the track: the engine appends its whole block
@@ -3864,7 +4329,7 @@ const RE_PACK_NAME = /^[a-z][a-z0-9]{1,19}$/;
 const RE_PACK_MARKER = /^[A-Z][A-Z0-9]{1,11}$/;
 // Bracket words the engine already reads — the built-in markers, the story / parallel tags ([US1] [P1] [shared]), the generic
 // slots ([TODO] [TBD] [FIXME]…) and ID prefixes — are never a pack marker.
-const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
+const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|DIST|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
 // A classifier keyword: letters / digits with inner spaces, hyphens, apostrophes and dots, 2–60 characters (a bounded class — linear).
 const RE_PACK_KEYWORD = /^[\p{L}\p{N}][\p{L}\p{N}' .’-]{0,58}[\p{L}\p{N}]$/u;
 const PACK_KEYS = new Set(["name", "marker", "title", "description", "signals", "sections", "steering", "$schema"]);
@@ -4372,7 +4837,8 @@ function noteGhostPacks(st) {
   const valid = allTracks();
   for (const n of Object.keys(st.packMarkers)) {
     const m = st.packMarkers[n];
-    if (typeof m !== "string" || !RE_PACK_NAME.test(n) || valid.includes(n)) continue;
+    // (a pre-1.17 pack named like a built-in track — 'dist' — is a missing pack too: legacyPackName, 1.17 D review)
+    if (typeof m !== "string" || !RE_PACK_NAME.test(n) || (valid.includes(n) && !legacyPackName(st, n))) continue;
     const token = m.length > 2 && m.startsWith("[") && m.endsWith("]") ? m.slice(1, -1) : "";
     if (!RE_PACK_MARKER.test(token) || RE_PACK_MARKER_RESERVED.test(token) || packRegistry().byToken.has(token)) continue;
     if (!GHOST_MARKERS) GHOST_MARKERS = new Map();
@@ -4382,17 +4848,31 @@ function noteGhostPacks(st) {
 const ghostMarkers = () => (GHOST_MARKERS ? [...GHOST_MARKERS] : []);
 // A saved (non-built-in) track name that is a track pack's: a valid pack now, or one recorded in the state's packMarkers (a pack the
 // feature used) — never a reserved word (F4 review R6: a hand-typed "gdpr" / "security" / a typo is no pack; the list then falls
-// back to the files as in 1.14).
+// back to the files as in 1.14) — except a pre-1.17 pack of a name reserved since (legacyPackName, 1.17 D review).
 function savedPackName(st, n) {
+  if (legacyPackName(st, n)) return true;
   if (VALID_TRACKS.includes(n) || !RE_PACK_NAME.test(n) || packReservedName(n)) return false;
   return isPackTrack(n) || (isObj(st) && isObj(st.packMarkers) && Object.prototype.hasOwnProperty.call(st.packMarkers, n));
 }
-// A feature's saved tracks naming a pack the project no longer has (deleted, or now invalid): inactive, kept in .state.json.
+// A track pack from before 1.17 whose name is reserved now (1.17 D review): 1.15 / 1.16 accepted a pack named 'dist', 'kafka',
+// 'consistency', 'microservices', 'distributed'… — 1.17 reserves them (the built-in +dist track and its TRACK_ALIASES), so the
+// pack is invalid ('name-reserved'). A feature that used it recorded the name in .state.json packMarkers (only a VALID pack is
+// ever recorded there): it stays that feature's MISSING pack — inactive, listed by doctor's track-pack-missing with the reason
+// and the way out (rename the pack folder, add it again) — never silently dropped (the list read "core" and no warning), and a
+// pack named 'dist' is never read as the built-in +dist track (whose five [DIST] sections the pack's design doesn't have).
+// Adding the built-in track by name adopts it (applyTracks drops the record); add_track <name> --remove drops the pack.
+function legacyPackName(st, n) {
+  return typeof n === "string" && RE_PACK_NAME.test(n) && packReservedName(n) && isObj(st) && isObj(st.packMarkers) &&
+    Object.prototype.hasOwnProperty.call(st.packMarkers, n);
+}
+// A feature's saved tracks naming a pack the project no longer has (deleted, now invalid, or — 1.17 — its name reserved since):
+// inactive, kept in .state.json.
 function missingPackTracks(dir) {
   const st = readJson(statePath(dir)).data;
   const saved = isObj(st) && Array.isArray(st.tracks) ? st.tracks : [];
   const valid = allTracks();
-  return [...new Set(saved.filter((x) => typeof x === "string").map((x) => x.toLowerCase()).filter((x) => !valid.includes(x) && savedPackName(st, x)))];
+  return [...new Set(saved.filter((x) => typeof x === "string").map((x) => x.toLowerCase())
+    .filter((x) => legacyPackName(st, x) || (!valid.includes(x) && savedPackName(st, x))))];
 }
 
 // --- rendering a pack's blocks (the design sections, criteria, task block, test rows, checklist items, steering stub) ---
@@ -4783,8 +5263,10 @@ function savedTracks(st) {
   const saved = st && typeof st === "object" && !Array.isArray(st) ? st.tracks : null;
   // A track pack's name (1.15 — a valid pack now, or one the state recorded in packMarkers) is a saved track too, one the project
   // may lack now (inactive: normalizeTracks drops it, doctor warns track-pack-missing); any other unknown name → the files decide,
-  // as in 1.14 (savedPackName — F4 review R6).
-  return Array.isArray(saved) && saved.length && saved.every((x) => typeof x === "string" && (VALID_TRACKS.includes(x.toLowerCase()) || savedPackName(st, x.toLowerCase()))) ? normalizeTracks(saved) : null;
+  // as in 1.14 (savedPackName — F4 review R6). A pre-1.17 pack of a now reserved name (legacyPackName) is a missing pack — never
+  // the built-in track of that name (1.17 D review: a 1.16 pack 'dist' is not +dist).
+  return Array.isArray(saved) && saved.length && saved.every((x) => typeof x === "string" && (VALID_TRACKS.includes(x.toLowerCase()) || savedPackName(st, x.toLowerCase())))
+    ? normalizeTracks(saved.filter((x) => !legacyPackName(st, x.toLowerCase()))) : null;
 }
 
 // A markdown heading (outside fenced code and HTML comments) carrying a track marker.
@@ -4985,6 +5467,7 @@ function statusFeature(projectDir, name) {
     aiSections,
     secSections: trackView("sec"),
     privacySections: trackView("privacy"),
+    distSections: trackView("dist"), // 1.17 D
     ...(Object.keys(packSections).length ? { packSections } : {}),
     ...(missingPacks.length ? { missingPacks } : {}), // saved track packs the project lacks now (inactive — doctor: track-pack-missing)
   };
@@ -5778,14 +6261,14 @@ function criterionBlocks(text, opts = {}) {
       return;
     }
     cleaned.push({ line: ln, text: line.trim() });
-    const hd = line.match(/^\s*(#{1,6})\s+(.*)$/);
+    const hd = atxHeading(stripStart(line, isWsUnit), 1, 6, "raw"); // /^\s*(#{1,6})\s+(.*)$/
     if (hd) {
-      while (stack.length && stack[stack.length - 1].level >= hd[1].length) stack.pop();
-      stack.push({ level: hd[1].length, text: hd[2].trim() });
+      while (stack.length && stack[stack.length - 1].level >= hd.level) stack.pop();
+      stack.push({ level: hd.level, text: hd.text.trim() });
       section = stack.map((h) => h.text).join(" / ");
-      if (acUnits && RE_LEAD_DEFINES_AC.test(hd[2].trim()) && definesHere(hd[2].trim(), stack.slice(0, -1).map((h) => h.text).join(" / ") || null)) {
+      if (acUnits && RE_LEAD_DEFINES_AC.test(hd.text.trim()) && definesHere(hd.text.trim(), stack.slice(0, -1).map((h) => h.text).join(" / ") || null)) {
         flush();
-        cur = { line: ln, endLine: ln, numbered: false, section, indent: 0, parts: [hd[2].trim()], definesAc: true, heading: true };
+        cur = { line: ln, endLine: ln, numbered: false, section, indent: 0, parts: [hd.text.trim()], definesAc: true, heading: true };
         return;
       }
     }
@@ -6330,7 +6813,7 @@ const RE_FILE_COLUMN = /^(?:test\s+)?(?:files?|paths?|ficheiros?|arquivos?|camin
 function pathUnder(rel, p) {
   const fold = (s) => (FOLD_CASE ? s.toLowerCase() : s);
   const r = fold(rel);
-  const q = fold(p).replace(/\/+$/, "");
+  const q = stripEnd(fold(p), isSlashUnit); // /\/+$/
   return q !== "" && (r === q || r.startsWith(q + "/"));
 }
 // Does the File cell path `p` name `rel`? People write the cell from the project root, from the feature folder, from a
@@ -6340,7 +6823,7 @@ function pathUnder(rel, p) {
 function pathNames(rel, p) {
   const fold = (s) => (FOLD_CASE ? s.toLowerCase() : s);
   const r = "/" + fold(rel);
-  const q = fold(p).replace(/\/+$/, "");
+  const q = stripEnd(fold(p), isSlashUnit); // /\/+$/
   return q !== "" && (r.endsWith("/" + q) || r.includes("/" + q + "/"));
 }
 // A File cell path the test-code scan can find a T-ID in: a folder (`tests/auth/`, no extension) or a file the scan reads.
@@ -6355,7 +6838,7 @@ function scannableTestPath(t) {
 // reads none of them, so a row whose File column names only such files is checked outside test code (a load run, the eval
 // harness, a manual pass) — expecting its T-ID in a test file warned forever (the scaffold's own load/eval rows did).
 function nonCodeArtifactPath(t) {
-  const ext = path.posix.extname(t.replace(/^[("'[]+|[)"'\].,:;]+$/g, "")).toLowerCase();
+  const ext = path.posix.extname(stripEnds(t, unitIn("(\"'["), unitIn(")\"'].,:;"))).toLowerCase(); // /^[("'[]+|[)"'\].,:;]+$/g
   return /^\.[a-z][a-z0-9]*$/.test(ext) && !GUARD_CODE_EXT.has(ext);
 }
 // Does a File cell token look like code — a source file in any language, or a folder? Then the row is not "outside code".
@@ -6487,7 +6970,7 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
   // File `test/` passed the Phase 4 gate, doctor and trace --code on another feature's test/shortener.test.js.
   // Ownership is claimed by the EXACT project-relative path only — pathNames' suffix match made another plan's
   // `tests/test_api.py` own services/beta/tests/test_api.py and hid a monorepo feature's own tests.
-  const fold = (s) => { const t = String(s).replace(/^\.\//, "").replace(/\/+$/, ""); return FOLD_CASE ? t.toLowerCase() : t; };
+  const fold = (s) => { const t = stripEnd(String(s).replace(/^\.\//, ""), isSlashUnit); return FOLD_CASE ? t.toLowerCase() : t; };
   const claimed = new Set(otherPlanTestFiles(projectDir, dir).map(fold));
   const foreignMemo = new Map();
   const foreign = (rel) => {
@@ -6532,12 +7015,16 @@ function withinRoot(root, p) {
 // under and the **Checkpoint:** that closes its section. This is the ONE task scanner: parseTasks() (the
 // line-only view public through spec_status) projects it, and completeTask ticks the line it resolves.
 // Task-looking lines inside HTML comments (single- or multi-line) or fenced code are NOT tasks.
-const RE_TASK_LINE = /^(\s*-\s*\[)([ xX])\]\s*(\d+)\.(?!\d)\s*(.*)$/; // "1.1 sub-step" is not task 1
+// A task line → [line, lead, box, number, text] | null: /^(\s*-\s*\[)([ xX])\]\s*(\d+)\.(?!\d)\s*(.*)$/ ("1.1 sub-step" is
+// not task 1), its text read by headRest (\s*(.*)$ rescanned a long blank run before a line terminator — 1.17 H).
+const RE_TASK_LINE_HEAD = /^(\s*-\s*\[)([ xX])\]\s*(\d+)\.(?!\d)/;
+const taskLine = (s) => headRest(s, RE_TASK_LINE_HEAD, false);
 const RE_CHECKPOINT = /^\s*\*\*Checkpoint:?\*\*:?\s*/i;
 const COMMENT_MASK = "\u0001";
 // CommonMark fence opener: a backtick fence's info string can't hold a backtick ("```npm test``` must pass"
-// is inline code, not a fence); a tilde fence's can.
-const RE_TASK_FENCE_OPEN = /^(\s*)(?:(`{3,})[^`]*|(~{3,}).*)$/;
+// is inline code, not a fence); a tilde fence's can. The fence run is taken whole ((?=(…))\2): giving it back never
+// helps, and a long run followed by a backtick or a line terminator was quadratic (1.17 H).
+const RE_TASK_FENCE_OPEN = /^(\s*)(?:(?=(`{3,}))\2[^`]*|(?=(~{3,}))\3.*)$/;
 // Read like a markdown reader, in document order: fenced code first, then — outside code — HTML comments,
 // where an `inline code span` wins over a "<!--"/"-->" inside it. Comments are blanked IN PLACE (same
 // length), so each line keeps its index and the checkbox its column; `vis` is what a reader sees.
@@ -6609,7 +7096,7 @@ function scanTaskLines(tasksText) {
       }
     }
     const vis = masked.split(COMMENT_MASK).join("");
-    const t = masked.split(COMMENT_MASK).join(" ").match(RE_TASK_LINE); // column-aligned with the source
+    const t = taskLine(masked.split(COMMENT_MASK).join(" ")); // column-aligned with the source
     if (!t) { out.push({ vis, code: false, task: null, inComment }); continue; }
     const text = masked.slice(masked.length - t[4].length).split(COMMENT_MASK).join("").trim();
     out.push({ vis, code: false, task: { col: t[1].length, done: t[2].toLowerCase() === "x", number: parseInt(t[3], 10), text }, inComment });
@@ -6714,9 +7201,9 @@ function scanTaskBlocks(tasksText) {
       return;
     }
     owner = null;
-    const h = line.match(/^#{1,6}\s+(.*?)\s*$/);
+    const h = atxHeading(line); // /^#{1,6}\s+(.*?)\s*$/
     if (h) {
-      phase = h[1];
+      phase = h.text;
       cur = null;
       open = [];
     } else if (RE_CHECKPOINT.test(line)) {
@@ -6882,7 +7369,7 @@ function taskMarkers(block) {
       const key = sp.key;
       if (!out[key]) continue; // _Size:_ — taskSize reads it
       let parts = WHOLE_VALUE_MARKERS.has(key) ? [sp.value.trim()] : sp.value.split(/[,;]/).map((s) => s.trim());
-      if (key === "verify") parts = parts.map((p) => p.replace(/^`+|`+$/g, "").trim()).filter((p) => p && !/^\[.*\]$/.test(p));
+      if (key === "verify") parts = parts.map((p) => stripEnds(p, isBacktickUnit).trim()).filter((p) => p && !/^\[.*\]$/.test(p));
       const have = seen[key] || (seen[key] = new Set());
       parts.filter(Boolean).forEach((p) => { if (!have.has(p)) { have.add(p); out[key].push(p); } });
     }
@@ -7323,7 +7810,7 @@ function shellScript(words) {
         k++;
         continue;
       }
-      if (/^-[A-Za-z]*c[A-Za-z]*$/.test(a) || a === "--command") c = true; // fish spells it --command too
+      if ((/^-[A-Za-z]*$/.test(a) && a.includes("c")) || a === "--command") c = true; // /^-[A-Za-z]*c[A-Za-z]*$/ (quadratic) — fish spells it --command too
     }
     return null;
   }
@@ -7374,7 +7861,7 @@ function verifyPipes(block) {
 // _Expect: fail_ — an English-stable task marker, its value kept whole like _Verify:_: the task's run must FAIL (a test
 // written before its fix). Only `fail` (any case, backticks dropped) sets it; any other value leaves a must-pass task.
 function expectsFail(block) {
-  return !!block && taskMarkers(block).expect.some((v) => /^fail$/i.test(v.replace(/^`+|`+$/g, "").trim()));
+  return !!block && taskMarkers(block).expect.some((v) => /^fail$/i.test(stripEnds(v, isBacktickUnit).trim()));
 }
 // Exit codes of a shell that could not run the command at all — never a red test: 126 (not executable), 127 (command not
 // found, POSIX shells), 9009 (cmd.exe: "… is not recognized as an internal or external command").
@@ -7928,7 +8415,7 @@ function parseGitLog(text) {
     if (!cur) continue;
     if (part === "head") {
       if (!l.trim()) { part = "msg"; continue; }
-      const kv = l.match(/^([A-Za-z][\w-]*):\s*(.*)$/);
+      const kv = headRest(l, /^([A-Za-z][\w-]*):/, false); // /^([A-Za-z][\w-]*):\s*(.*)$/ (headRest: 1.17 H)
       if (kv && /^author$/i.test(kv[1])) cur.author = kv[2].trim();
       else if (kv && /^(?:author)?date$/i.test(kv[1])) cur.date = kv[2].trim();
       continue;
@@ -7968,7 +8455,7 @@ function taskCommits(projectDir, name, logText, opts = {}) {
   const wordRe = (s) => new RegExp("(?<![\\p{L}\\p{N}_-])" + s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}_-])", "iu");
   const self = wordRe(slug);
   const others = featureDirs(projectDir).map((d) => d.slug).filter((s) => s !== slug).map(wordRe);
-  const RE_NUM = /(?<![\p{L}\p{N}_])(?:tasks?|tarefas?|tareas?)\s*#?\s*(\d+)(?!\d)|(?<![\p{L}\p{N}_#&/])#(\d+)(?!\d)/giu;
+  const RE_NUM = /(?<![\p{L}\p{N}_])(?:tasks?|tarefas?|tareas?)\s*(?:#\s*)?(\d+)(?!\d)|(?<![\p{L}\p{N}_#&/])#(\d+)(?!\d)/giu; // \s*(?:#\s*)?: \s*#?\s* was quadratic on a blank run
   const info = blocks.map((b) => {
     const prose = taskProse(b).join(" ");
     return { b, tids: new Map([...extractTestIds(prose)].map((id) => [tKey(id.slice(2)), id])), acs: extractAcIds(prose),
@@ -8134,8 +8621,8 @@ function designSections(designText) {
   let cur = null;
   const fst = { fence: null };
   for (const line of stripHtmlComments(designText || "").split(/\r?\n/)) {
-    const h = !fenceStep(fst, line) && line.match(/^##\s+(.*?)\s*$/);
-    if (h) { cur = { title: h[1], body: [] }; out.push(cur); continue; }
+    const h = !fenceStep(fst, line) && atxHeading(line, 2, 2); // /^##\s+(.*?)\s*$/
+    if (h) { cur = { title: h.text, body: [] }; out.push(cur); continue; }
     if (cur) cur.body.push(line);
   }
   return out.map((s) => ({ title: s.title, body: s.body.join("\n").trim() }));
@@ -8227,7 +8714,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const needles = [...acIds, ...testIds, ...impFiles, ...impFiles.map((f) => path.posix.basename(f)).filter((b) => b.length >= 5)];
   // A task proving a +sec / +privacy criterion reads that track's design sections (threat model, authz, retention…).
   // … and a track pack's (1.15) — its sections are the rigor its criteria were written for.
-  const trackMarks = ["sec", "privacy", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
+  const trackMarks = ["sec", "privacy", "dist", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
   const want = (s) => {
     const hay = s.title + "\n" + s.body;
     if (needles.some((x) => hay.includes(x))) return true;
@@ -8373,7 +8860,7 @@ function sectionFirstParagraph(md, synonyms) {
 // Markdown helpers for the merge summary: multi-line output collapsed to one line; a code span whose fence is
 // longer than any backtick run inside it.
 function oneLine(s) {
-  return String(s || "").replace(/\s*\r?\n\s*/g, " ⏎ ").trim();
+  return String(s || "").replace(/(?<!\s)\s*\r?\n\s*/g, " ⏎ ").trim(); // (?<!\s): a blank run is read from its start only (1.17 H)
 }
 function codeSpan(s) {
   const text = oneLine(s);
@@ -8468,7 +8955,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (kind === "bugfix") checks.push(F.checkBug);
   if (tracks.includes("saas")) checks.push(F.checkLoad, F.checkObs);
   if (tracks.includes("ai")) checks.push(F.checkCost, F.checkSafety);
-  for (const tr of ["sec", "privacy"]) if (tracks.includes(tr)) checks.push(...i18n.msg(lng).secPrivacy.finishChecks[tr]);
+  for (const tr of ["sec", "privacy", "dist"]) if (tracks.includes(tr)) checks.push(...i18n.msg(lng).secPrivacy.finishChecks[tr]);
 
   // Merge summary from the spec chain (usable as the merge commit message).
   const reqs = readIfExists(path.join(dir, "requirements.md")) || "";
@@ -8618,7 +9105,9 @@ function fingerprintMatches(raw, phase, stored) {
 }
 const BOM_CHAR = String.fromCharCode(0xfeff);
 const artifactMatches = (file, phase, stored) => fingerprintMatches(readIfExists(file), phase, stored);
-const uncheckTasks = (text) => text.replace(/^(\s*-\s*\[)[xX](\])/gm, "$1 $2"); // checkbox state is not content
+// Checkbox state is not content. The indent is read within its line ([^\S\n\r\u2028\u2029], not \s): from each line start of a
+// long blank run \s* rescanned the whole run (1.17 H) — the lines above keep their text either way ($1 puts it back).
+const uncheckTasks = (text) => text.replace(/^([^\S\n\r\u2028\u2029]*-\s*\[)[xX](\])/gm, "$1 $2");
 // The artifact a phase's approval signs off: a bugfix has no design of its own — its design approval signs off bug.md
 // (the Root Cause the gate checks). approvePhase records it as `file` on the approval, so changedSinceApproval
 // compares the right file (an approval without `file` signed off PHASE_FILE's, as before).
@@ -8685,6 +9174,8 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
     entry.steering = sf.steering;
     if (Object.keys(sf.steeringMatch).length) entry.steeringMatch = sf.steeringMatch; // fileMatch files: counted while _Implements:_ match
   }
+  // 1.17 A review 3: a design approved by 1.17+ is held to the Alternatives & Trade-offs / Risks warns; one approved before never is.
+  if (p === "design") entry.weigh = true;
   if (rc.role) entry.role = rc.role; // 1.14 B3: the role signing (informational on a phase no role is required for)
   if (opts.batch === true) entry.batch = true; // 1.14 B3: approved by a fast-forward (metrics count them apart)
   // Change history (1.13): `approvals[p]` stays the latest approval; every approval is also appended to
@@ -8700,6 +9191,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (entry.waiver) record.waiver = entry.waiver;
   if (entry.steering) record.steering = entry.steering; // 1.16 Q1
   if (entry.steeringMatch) record.steeringMatch = entry.steeringMatch;
+  if (entry.weigh) record.weigh = true; // 1.17 A review 3
   if (entry.role) record.role = entry.role;
   if (entry.batch) record.batch = true;
   // 1.14 B3: with roles, a sign-off that doesn't complete the phase waits in state.signoffs — approvals[p] untouched, no snapshot.
@@ -9912,7 +10404,7 @@ function xacNumbers(low, base) {
 // nums: [numbers in document order], numKey: "n unit|…" (sorted), neg: the response's polarity }.
 function acShape(text, lang) {
   const base = i18n.baseLang(normalizeLang(lang));
-  const low = stripSupersedes(String(text || "")).replace(RE_XAC_IDS, " ").replace(/\[(?:SaaS|AI|SEC|PRIVACY)\]/g, " ")
+  const low = stripSupersedes(String(text || "")).replace(RE_XAC_IDS, " ").replace(/\[(?:SaaS|AI|SEC|PRIVACY|DIST)\]/g, " ")
     .normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
   const sys = low.match(RE_XAC_SYS_MODAL);
   const m = sys ? null : low.match(RE_XAC_MODAL);
@@ -10274,9 +10766,12 @@ function glossaryEntry(cur) {
   if (!term || /^\[.*\]$/.test(term) || isGenericSlot(term)) return null;
   const avoid = [];
   const seen = new Set([foldTerm(term)]);
-  const rest = cur.rest.join(" ").replace(/_Avoid:[ \t]*([^_]*)_/gi, (m, list) => {
+  // /_Avoid:[ \t]*([^_]*)_/ read as _Avoid:([^_]*)_ minus the leading blanks: the same matches, without the quadratic
+  // rescan of a long blank run (1.17 H).
+  const rest = cur.rest.join(" ").replace(/_Avoid:([^_]*)_/gi, (m, list0) => {
+    const list = stripStart(list0, unitIn(" \t"));
     for (const w0 of list.split(/[,;]/)) {
-      const w = w0.trim().replace(/^[`'"*“”‘’]+|[`'"*“”‘’.]+$/g, "").trim();
+      const w = stripEnds(w0.trim(), unitIn("`'\"*“”‘’"), unitIn("`'\"*“”‘’.")).trim(); // /^[`'"*“”‘’]+|[`'"*“”‘’.]+$/g
       if (!w || w.length > 60 || /^\[.*\]$/.test(w) || !/\p{L}/u.test(w) || seen.has(foldTerm(w)) || avoid.length >= GLOSSARY_MAX_AVOID) continue;
       seen.add(foldTerm(w));
       avoid.push(w);
@@ -10951,7 +11446,10 @@ function renameSupersedesRefs(projectDir, fromDir, raw, oldKey, newSlug) {
   const text = raw.replace(new RegExp(RE_SUPERSEDES_SRC, "gi"), (whole, value, offset) => {
     const line = (raw.slice(0, offset).match(/\n/g) || []).length + 1;
     if (!(visible.get(line) || "").includes("_Supersedes:")) return whole; // inside a comment or fenced code: no marker
-    const nv = value.replace(/(^|[,;])(\s*`?\s*)([^,;`/]+?)(\s*\/\s*)(US-\d+\.AC-\d+)/g, (t, sep, lead, name, slash, ac) => {
+    // (^|[,;])(\s*`?\s*)([^,;`/]+?)(\s*\/\s*)(US-…) with the lead taken whole ((?=(…))\2) and the name read up to its last
+    // non-blank unit: the same references, without the cubic backtracking over a long blank run (1.17 H). (The old pattern
+    // also read a lone blank before the '/' as a name — "" names no feature, so nothing was ever rewritten there.)
+    const nv = value.replace(/(^|[,;])(?=(\s*`?\s*))\2([^,;`/\s](?:[^,;`/]*[^,;`/\s])?)(\s*\/\s*)(US-\d+\.AC-\d+)/g, (t, sep, lead, name, slash, ac) => {
       if (!hitsOld(name.trim(), ac)) return t;
       refs++;
       return sep + lead + newSlug + slash + ac;
@@ -11016,7 +11514,7 @@ function manageFeature(projectDir, action, name, arg, opts = {}) {
 
 // The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
 // language). MARKER_TRACKS drives every per-marker loop: detection, inactive sections/tasks, doctor, approve, status.
-const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]" };
+const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]" };
 const MARKER_TRACKS = Object.keys(TRACK_MARKER);
 
 // The ONE code path that turns tracks ON for an existing feature — spec_add_track, and spec_create re-run on
@@ -11030,6 +11528,10 @@ function applyTracks(projectDir, f, name, trs, lng) {
   const T = i18n.msg(lng).tracks;
   const before = detectTracks(dir);
   const after = allTracks().filter((t) => before.includes(t) || trs.includes(t));
+  // A pre-1.17 pack of this built-in track's name (legacyPackName — 1.17 D review): adding the built-in track by name adopts it —
+  // the pack's record goes, and the track's own design sections are appended even though a heading already carries its marker
+  // (the pack's sections — '## [DIST] Release Channels' — are not the built-in ones).
+  const adopted = trs.filter((tr) => VALID_TRACKS.includes(tr) && legacyPackName(state, tr));
   const added = [];
   const templates = {}; // file → the project template (.specs/templates/…) it was scaffolded from (1.14)
   const note = (x) => { if (!added.includes(x)) added.push(x); };
@@ -11061,7 +11563,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
     const designPath = path.join(dir, "design.md");
     const design = readIfExists(designPath);
     if (design != null) {
-      const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(design)) : headingHasMarker(design, trackMarker(tr));
+      const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(design)) : !adopted.includes(tr) && headingHasMarker(design, trackMarker(tr));
       if (!present) {
         writeFileAtomic(designPath, design.trimEnd() + "\n" + trackDesignBlock(tr, lng, { name, slug })); // trimEnd: no /\s*$/ backtracking
         note(T.addedDesign);
@@ -11094,11 +11596,17 @@ function applyTracks(projectDir, f, name, trs, lng) {
   }
 
   if (updateActiveTracks(path.join(dir, "classification.md"), trackLabel(after))) note(T.addedActiveTracks);
-  state.tracks = after.concat(missingPackTracks(dir)); // a saved track pack the project lacks now stays, inactive (1.15)
+  // a saved track pack the project lacks now stays, inactive (1.15) — unless the built-in track of its name was just adopted
+  state.tracks = after.concat(missingPackTracks(dir).filter((x) => !adopted.includes(x)));
   const pm = packMarkersFor(after).packMarkers; // … and every track pack's marker is remembered (1.15)
   if (pm) state.packMarkers = { ...(isObj(state.packMarkers) ? state.packMarkers : {}), ...pm };
+  if (adopted.length && isObj(state.packMarkers)) {
+    for (const tr of adopted) delete state.packMarkers[tr];
+    if (!Object.keys(state.packMarkers).length) delete state.packMarkers;
+  }
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
   const res = { ok: true, added, tracks: after };
+  if (adopted.length) res.adopted = adopted; // (1.17 D review) the built-in track replaced a pre-1.17 pack of its name
   if (Object.keys(templates).length) res.templates = templates;
   return res;
 }
@@ -11272,7 +11780,9 @@ function updateActiveTracks(file, label) {
 
 // Turning tracks OFF is non-destructive: state.tracks and the Active Tracks line change, every file stays,
 // and the now-inactive artifacts are listed (re-adding the track brings them back into play).
-function removeTracks(projectDir, f, named, lng) {
+// legacy (1.17 D review): pre-1.17 packs of a now reserved name (legacyPackName) to drop from the saved list — their packMarkers
+// record stays (their sections stay inactive, as a removed pack's).
+function removeTracks(projectDir, f, named, lng, legacy = []) {
   const { slug, dir } = f;
   const T = i18n.msg(lng).tracks;
   if (named.includes("core")) return { ok: false, error: T.cannotRemoveCore };
@@ -11281,18 +11791,21 @@ function removeTracks(projectDir, f, named, lng) {
   if (state.kind === "bugfix" && named.includes("tdd")) return { ok: false, error: T.bugfixNeedsTdd };
   const before = detectTracks(dir);
   const gone = named.filter((t) => before.includes(t));
+  const missing = missingPackTracks(dir);
+  const legacyGone = legacy.filter((t) => missing.includes(t));
   const plus = (list) => list.map((t) => "+" + t).join(", ");
-  if (!gone.length) return { ok: true, feature: slug, removedTracks: [], inactive: [], tracks: trackLabel(before), note: T.notActive(plus(named)) };
+  if (!gone.length && !legacyGone.length) return { ok: true, feature: slug, removedTracks: [], inactive: [], tracks: trackLabel(before), note: T.notActive(plus(named.concat(legacy))) };
   const after = before.filter((t) => !gone.includes(t));
-  state.tracks = after.concat(missingPackTracks(dir)); // a saved track pack the project lacks now stays, inactive (1.15)
+  state.tracks = after.concat(missing.filter((x) => !legacyGone.includes(x))); // a saved track pack the project lacks now stays, inactive (1.15)
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
   updateActiveTracks(path.join(dir, "classification.md"), trackLabel(after));
   maybeRefreshRoadmap(projectDir);
-  return { ok: true, feature: slug, removedTracks: gone, inactive: inactiveArtifacts(dir, gone, T), tracks: trackLabel(after), note: T.removed(plus(gone), slug) };
+  const all = gone.concat(legacyGone);
+  return { ok: true, feature: slug, removedTracks: all, inactive: inactiveArtifacts(dir, gone, T), tracks: trackLabel(after), note: T.removed(plus(all), slug) };
 }
 
 function inactiveArtifacts(dir, gone, T) {
-  const files = { tdd: ["test-plan.md", "tests/"], saas: ["load-test.md"], ai: ["eval-plan.md", "prompts/", "evals/"], sec: [], privacy: [] };
+  const files = { tdd: ["test-plan.md", "tests/"], saas: ["load-test.md"], ai: ["eval-plan.md", "prompts/", "evals/"], sec: [], privacy: [], dist: [] };
   const design = readIfExists(path.join(dir, "design.md")) || "";
   const tasksText = readIfExists(path.join(dir, "tasks.md")) || "";
   const out = [];
@@ -11312,12 +11825,16 @@ function addTrack(projectDir, name, track, opts = {}) {
   const { slug, dir } = f;
   const lng = featureLang(projectDir, slug); // escalate in the feature's own language
   const msg = i18n.msg(lng);
-  const pt = parseTracks(track);
+  // --remove of a pre-1.17 pack whose name is reserved now (1.17 D review — 'kafka', or 'dist' while the feature's record says it
+  // was a pack): that feature's missing pack, by name — never an unknown track, never the built-in one.
+  const st0 = opts.remove ? readJson(statePath(dir)).data : null;
+  const legacy = opts.remove ? [...new Set(trackTokens(track).filter((t) => legacyPackName(st0, t)))] : [];
+  const pt = parseTracks(legacy.length ? trackTokens(track).filter((t) => !legacy.includes(t)) : track);
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(lng, pt.unknown) };
   if (isSpikeDir(dir)) return { ok: false, spike: true, error: msg.spike.noTracks(slug) }; // 1.14 C2: a spike is core-only
   if (opts.remove) {
-    if (!pt.named.length) return { ok: false, error: errs(projectDir, slug).badTrack };
-    return removeTracks(projectDir, f, pt.named, lng);
+    if (!pt.named.length && !legacy.length) return { ok: false, error: errs(projectDir, slug).badTrack };
+    return removeTracks(projectDir, f, pt.named, lng, legacy);
   }
   const asked = pt.named.filter((t) => t !== "core");
   if (!asked.length) return { ok: false, error: errs(projectDir, slug).badTrack };
@@ -11332,6 +11849,7 @@ function addTrack(projectDir, name, track, opts = {}) {
   const res = { ok: true, feature: slug, addedTrack: fresh[0], addedTracks: fresh, added: r.added, tracks: trackLabel(r.tracks),
     note: msg.addTrackNote(fresh.join(", +"), slug) };
   if (r.templates) res.templates = r.templates; // files scaffolded from the project's templates (1.14)
+  if (r.adopted) res.adopted = r.adopted; // (1.17 D review) the built-in track replaced a pre-1.17 pack of its name
   const already = asked.filter((t) => existing.includes(t));
   if (already.length) res.alreadyOn = already;
   return res;
@@ -11534,7 +12052,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   const scan = scanTaskLines(raw);
   const off = inactiveTaskLines(lines, tracks);
   const heads = [];
-  scan.forEach((s, i) => { const m = !s.code && s.vis.match(/^(#{1,6})\s+(.*?)\s*$/); if (m) heads.push({ i, level: m[1].length, text: m[2] }); });
+  scan.forEach((s, i) => { const m = !s.code && atxHeading(s.vis); if (m) heads.push({ i, level: m.level, text: m.text }); }); // /^(#{1,6})\s+(.*?)\s*$/
   const lastContent = (from, to, skip) => { for (let i = to - 1; i >= from; i--) if (lines[i].trim() && !(skip && skip.has(i))) return i; return -1; };
 
   const matches = heads.filter((h) => h.level >= 2 && normTaskHeading(h.text) === norm); // never the H1 title
@@ -12032,10 +12550,11 @@ function storeCreateFlow(dir, flow) {
 // (and earlier ones) first. A check not listed (placeholders: it only fails for the current phase or an earlier
 // one) counts as current.
 const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-criteria": 1, priorities: 1, "ac-uniqueness": 1, reproduction: 1,
-  design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "root-cause": 2,
+  design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "dist-sections": 2, "root-cause": 2,
   "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, "malformed-markers": 5, verification: 6, "outside-code-artifacts": 6 };
 CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
 Object.assign(CHECK_PHASE, { glossary: 1, "cross-feature-acs": 1, "steering-changed-since-approval": 2 }); // 1.16 Q (warns only)
+Object.assign(CHECK_PHASE, { "design-tradeoffs": 2, "design-risks": 2 }); // 1.17 A1 (warns only)
 
 // ---------------------------------------------------------------------------
 // spec_doctor — one health-check that decides "ready to advance?"
@@ -12097,9 +12616,32 @@ const PRIVACY_SECTIONS = [
     "ripd", "relatório de impacto à proteção de dados", "relatorio de impacto a protecao de dados", "relatório de impacto", "relatorio de impacto"],
     loose: ["avaliação de impacto", "avaliacao de impacto", "evaluación de impacto", "evaluacion de impacto", "relatório de impacto", "relatorio de impacto"] },
 ];
+// +dist (1.17 D) — distributed systems and data consistency. `loose`: the synonyms that are ordinary design words (a core
+// "## Concurrency", "## Failure modes", "## Idempotency", "## Consistency") — they name a [DIST] section only on a heading
+// carrying the marker or nested under one. The cross-system writes names (dual writes) are unambiguous: strict.
+const DIST_SECTIONS = [
+  { name: "Consistency Model", syn: ["consistency model", "data consistency", "consistency", "modelo de consistência", "modelo de consistencia",
+    "consistência de dados", "consistencia de dados", "consistencia de datos", "consistência", "consistencia"],
+  loose: ["data consistency", "consistency", "consistência de dados", "consistencia de dados", "consistencia de datos", "consistência", "consistencia"] },
+  { name: "Cross-system Writes", syn: ["cross-system writes", "cross-system write", "cross system writes", "dual writes", "dual write", "dual-writes",
+    "escritas entre sistemas", "escrita entre sistemas", "escritas duplas", "escrita dupla", "escrituras entre sistemas", "escritura entre sistemas",
+    "escrituras duales", "escritura dual", "doble escritura"] },
+  { name: "Delivery & Idempotency", syn: ["delivery & idempotency", "delivery and idempotency", "idempotency", "delivery guarantees", "message delivery",
+    "entrega e idempotência", "entrega e idempotencia", "idempotência", "idempotencia", "garantias de entrega", "garantías de entrega", "entrega y idempotencia"],
+  loose: ["idempotency", "delivery guarantees", "message delivery", "idempotência", "idempotencia", "garantias de entrega", "garantías de entrega"] },
+  { name: "Concurrency", syn: ["concurrency control", "concurrency", "controlo de concorrência", "controle de concorrência", "controle de concorrencia",
+    "concorrência", "concorrencia", "control de concurrencia", "concurrencia"],
+  loose: ["concurrency", "concorrência", "concorrencia", "concurrencia"] },
+  // 1.17 D review: the section's own names (Failure Modes / Failure Handling — the core design's heading is "Error Handling")
+  // are strict, as every other [DIST] section's are — a marker-less hand-written design with all five headings passes; the
+  // singular is loose.
+  { name: "Failure Modes", syn: ["failure modes", "failure mode", "failure handling", "modos de falha", "modo de falha", "modos de fallo", "modo de fallo",
+    "modos de falla", "modo de falla"],
+  loose: ["failure mode", "modo de falha", "modo de fallo", "modo de falla"] },
+];
 // The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
 // check read (a marker track = a TRACK_MARKER entry + its table here).
-const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS };
+const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS };
 // [[track, sections, marker]] for the ACTIVE marker tracks, in track order.
 function activeSectionTracks(tracks) {
   return markerTracks().filter((t) => tracks.includes(t)).map((t) => [t, trackSectionTable(t), trackMarker(t)]); // + the track packs (1.15)
@@ -12139,9 +12681,9 @@ function headingLeadRe() {
 // section — "Threat Modeling" / "Threat Modelling" / "Threat Models" are the Threat Model.
 const RE_SYN_INFLECTION = /^(?:s|es|ing|ling)(?![\p{L}\p{N}])/u;
 function headingMatches(line, syns, inflect) {
-  const m = line.match(/^#{2,6}\s+(.*)$/);
+  const m = atxHeading(line, 2, 6, "raw"); // /^#{2,6}\s+(.*)$/
   if (!m) return false;
-  let t = m[1].toLowerCase();
+  let t = m.text.toLowerCase();
   const lead = headingLeadRe();
   for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, ""); }
   return syns.some((s) => t.startsWith(s) && (!/[\p{L}\p{N}]/u.test(t.charAt(s.length)) || (inflect && RE_SYN_INFLECTION.test(t.slice(s.length)))));
@@ -12188,7 +12730,9 @@ function extractSection(md, synonyms, marker, loose) {
   return lines.slice(start + 1, end == null ? lines.length : end).join("\n");
 }
 
-const RE_TODO_SENTINEL = /^\s*>\s*\*\*TODO\*\*/m;
+// The indent is read within its line ([^\S\n\r\u2028\u2029], not \s — a line start of a long blank run rescanned the whole
+// run, 1.17 H): the line holding the '>' matches either way, and every reader only asks whether one does.
+const RE_TODO_SENTINEL = /^[^\S\n\r\u2028\u2029]*>\s*\*\*TODO\*\*/m;
 const ROOT_CAUSE_SYN = ["root cause", "causa raiz", "causa raíz"];
 const REPRO_SYN = ["reproduction", "reprodução", "reproducao", "reproducción", "reproduccion"];
 function sectionState(design, sections, marker) {
@@ -12209,7 +12753,7 @@ function sectionState(design, sections, marker) {
 // The list separator is UNAMBIGUOUS — `\s*(?:[,;/]\s*)?`, never `\s*[,;/]?\s*`: with the separator optional
 // between two `\s*`, every whitespace gap could split two ways and a failing match (`[US-1 US-2 … and more]`)
 // backtracked 2^k — 26 space-separated IDs froze the MCP server and pushed the hooks past their timeout.
-const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|SEC|PRIVACY|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*(?:[,;/]\s*)?(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
+const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|SEC|PRIVACY|DIST|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*(?:[,;/]\s*)?(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
 const RE_REF_DEFINITION = /^\s{0,3}\[([^\]]+)\]:\s*\S/;
 // The core-only Signals answer scaffolds before 1.13 wrote in brackets (`- [none beyond core]`, PT/ES): the tool's own
 // final answer, never a slot — the classification.md of every core-only feature created by 1.12 still holds it.
@@ -12360,7 +12904,7 @@ function templateCorpus(langs) {
   // a larger set does (for three tracks this IS the full power set; it grows quadratically, not 2^n, as tracks are added).
   const combos = [[], ...OPTIONAL_TRACKS.map((t) => [t]), ...OPTIONAL_TRACKS.flatMap((t, i) => OPTIONAL_TRACKS.slice(i + 1).map((u) => [t, u])), OPTIONAL_TRACKS]
     .map((x) => ["core", ...x]);
-  const signals = { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"], sec: ["owasp"], privacy: ["gdpr"] };
+  const signals = { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"], sec: ["owasp"], privacy: ["gdpr"], dist: ["kafka"] };
   for (const l of langs || i18n.BASE_LANGS) { // the authored locales; pt-BR's slots come from pt's lines (templateSetsBr)
     const M = i18n.msg(l);
     for (const tracks of combos) {
@@ -12398,7 +12942,7 @@ function templateBracketKeys(text, seen) {
   const slot = (body) => { const b = body.match(/^\[([^[\]]*)\]$/); return !!b && !!b[1].trim(); };
   for (const [, line, refs] of visibleLines(text)) {
     if (seen && !refs.size) { if (seen.has(line)) continue; seen.add(line); } // the corpus repeats most lines
-    for (const m of line.matchAll(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g)) if (slot(m[2].trim())) code.push(placeholderKey(m[2].trim().slice(1, -1)));
+    for (const m of codeSpans(line)) if (slot(m.body.trim())) code.push(placeholderKey(m.body.trim().slice(1, -1)));
     scanBrackets(line, refs, slot, (inner, raw) => { brackets.push(placeholderKey(raw)); return false; });
   }
   return { brackets, code };
@@ -12502,7 +13046,7 @@ function bracketPlaceholders(line, refs) {
 // contents (stable tags / IDs, NEEDS CLARIFICATION, the legacy core-only answer) are skipped whole, never visited.
 // codeSlot(body) says which code spans are unwrapped; every other span is blanked (columns kept). Linear per line.
 function scanBrackets(line, refs, codeSlot, visit) {
-  const s = line.replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g, (m, tick, body) =>
+  const s = replaceCodeSpans(line, (m, tick, body) =>
     codeSlot(body.trim()) ? tick.replace(/`/g, " ") + body + tick.replace(/`/g, " ") : " ".repeat(m.length));
   const box = s.match(RE_LIST_CHECKBOX);
   const groupEnd = (i) => { // index of the "]" closing the "[" at i (nesting-aware), or -1
@@ -12703,7 +13247,9 @@ function hasPriority(md) {
 // fenced example is no definition.
 function acDuplicates(md) {
   const seen = new Set(), dups = new Set();
-  for (const mm of stripFencedCode(stripHtmlComments(md || "")).matchAll(/^\s*(?:\d+[.)]|[-*+])\s+(?:\*\*|__)?(US-\d+\.AC-\d+)(?!\d)/gm)) (seen.has(mm[1]) ? dups : seen).add(mm[1]);
+  // The indent within its line ([^\S\n\r\u2028\u2029]): the same IDs, without rescanning a long blank run from each of its
+  // line starts (1.17 H).
+  for (const mm of stripFencedCode(stripHtmlComments(md || "")).matchAll(/^[^\S\n\r\u2028\u2029]*(?:\d+[.)]|[-*+])\s+(?:\*\*|__)?(US-\d+\.AC-\d+)(?!\d)/gm)) (seen.has(mm[1]) ? dups : seen).add(mm[1]);
   return [...dups];
 }
 // A section with real content: present, no `> **TODO**` sentinel, not empty, no template placeholder left.
@@ -12753,7 +13299,9 @@ function bugPlaceholders(text, items) {
   const isSlot = (k) => slots.has(k) || projectTemplateHas("bugSlots", k); // + the slots of the project's bug.md template (1.14)
   return (items || []).filter((p) => p.kind !== "bracket" || isSlot(placeholderKey(String(p.text).slice(1, -1))) || !unitHasProse(p.line - 1));
 }
-const RE_TODO_SENTINEL_LINE = /^\s*>\s*\*\*TODO\*\*.*$/gm;
+// (hasProseOutsideBrackets: the blank lines above a sentinel line are no longer part of what is blanked — they hold no
+// bracket, letter or digit, so its answer is the same; 1.17 H, as RE_TODO_SENTINEL)
+const RE_TODO_SENTINEL_LINE = /^[^\S\n\r\u2028\u2029]*>\s*\*\*TODO\*\*.*$/gm;
 // Every bracketed slot of the bug report template, in every language (the Summary slot included: built without one).
 let BUG_SLOTS = null;
 function bugTemplateSlots() {
@@ -12767,6 +13315,121 @@ function bugTemplateSlots() {
   return (BUG_SLOTS = set);
 }
 const CONSTITUTION_SYN = ["constitution check", "verificação da constituição", "verificacao da constituicao", "verificación de la constitución", "verificacion de la constitucion"];
+
+// 1.17 A1 — every design weighs its choices: the core "Alternatives & Trade-offs" and "Risks" sections, found by weighSection()
+// (a synonym that NAMES the heading — see below), so hand-written and PT/ES designs are recognized. Doctor only WARNS
+// (design-tradeoffs / design-risks) — never an approval check — and only on a design not approved yet or approved by 1.17+
+// (`weigh: true` on the approval, A review 3): a design approved before 1.17 is never flagged. A fresh scaffold's sections are
+// template slots, which the placeholder gate already refuses at the design approval like every other template section.
+// A plain "Decisions" heading is NOT a trade-offs section (A review 6): the execplan / fluidplan imports write `## Decisions` — a
+// decision LOG (what was chosen, D-1…), not the options weighed; reading its entries as options would pass one-entry logs as
+// "few" and multi-entry logs as weighed. "Key decisions" / "Design decisions" (an ADR / MADR habit) are.
+const TRADEOFFS_SYN = ["alternatives", "alternatives considered", "considered alternatives", "analysis of alternatives", "trade-offs", "trade-off",
+  "tradeoffs", "tradeoff", "trade offs", "trade off", "trade-off analysis", "tradeoff analysis", "trade off analysis", "options", "options considered",
+  "considered options", "design alternatives", "design options", "key decisions", "key design decisions", "design decisions",
+  "alternativas", "alternativas consideradas", "análise de alternativas", "analise de alternativas", "compromissos", "opções", "opcoes",
+  "opções consideradas", "opcoes consideradas", "decisões e alternativas", "decisoes e alternativas", "decisões-chave", "decisoes-chave",
+  "decisões chave", "decisoes chave", "decisões principais", "decisoes principais", "decisões de design", "decisoes de design",
+  "compensaciones", "concesiones", "compromisos", "opciones", "opciones consideradas", "análisis de alternativas", "analisis de alternativas",
+  "decisiones y alternativas", "decisiones clave", "decisiones principales", "decisiones de diseño", "decisiones de diseno"];
+const RISKS_SYN = ["risks", "risk", "known risks", "key risks", "main risks", "open risks", "risk register", "risk assessment", "risk analysis",
+  "risk matrix", "risk log", "riscos", "risco", "riscos conhecidos", "principais riscos", "análise de riscos", "analise de riscos",
+  "avaliação de riscos", "avaliacao de riscos", "matriz de riscos", "registo de riscos", "registro de riscos",
+  "riesgos", "riesgo", "riesgos conocidos", "principales riesgos", "análisis de riesgos", "analisis de riesgos", "evaluación de riesgos",
+  "evaluacion de riesgos", "matriz de riesgos", "registro de riesgos"];
+// [id, synonyms, the fewest entries that count as weighed]: a decision needs at least two options; one honest line about the
+// risks (a table row, a bullet, or "no material risk, because X") is enough.
+const DESIGN_WEIGH = [["design-tradeoffs", TRADEOFFS_SYN, 2], ["design-risks", RISKS_SYN, 0]];
+const DESIGN_WEIGH_IDS = new Set(DESIGN_WEIGH.map(([id]) => id));
+// A weigh heading NAMES its section (A review 6): after the heading lead (numbering, an emoji, a marker) the synonym is the whole
+// heading, or it is followed by a separator ( : , ; ( [ / & + | — – . or a spaced hyphen) or a connector word (and / or / vs / for /
+// of … e / ou / de … y / o / en …) — never a modifier: "## Risk-based rate limiting", "## Options parser", "## Riskiest
+// assumptions" are other sections. Trailing emphasis, emoji or closing #s are fine (no letter or digit after the synonym).
+const RE_WEIGH_HEADING_REST = /^(?:[^\p{L}\p{N}]*$|\s*[:,;(\[/&+|—–.]|\s+-(?=\s|$)|\s+(?:and|or|vs|versus|for|of|to|in|on|per|with|e|ou|de|do|da|dos|das|para|por|em|no|na|com|y|o|u|del|en|con)(?![\p{L}\p{N}]))/u;
+function weighHeadingMatches(line, syns) {
+  const m = atxHeading(line, 2, 6, "raw"); // /^#{2,6}\s+(.*)$/ — never the H1 title (it carries the feature name)
+  if (!m) return false;
+  let t = m.text.toLowerCase();
+  const lead = headingLeadRe();
+  for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, ""); }
+  return syns.some((s) => t.startsWith(s) && RE_WEIGH_HEADING_REST.test(t.slice(s.length)));
+}
+// A weigh section's body (up to the next heading of its level or above) or null. An unmarked heading wins over one carrying a
+// track marker ("## [DIST] Risks" is a track's section, the core one is the design's own); fenced code never holds a heading.
+function weighSection(md, syns) {
+  const lines = String(md || "").split(/\r?\n/);
+  const heads = headingIndex(lines).filter((i) => weighHeadingMatches(lines[i], syns));
+  if (!heads.length) return null;
+  const MARKERS = markerTracks().map((t) => trackMarker(t));
+  const start = heads.find((i) => !MARKERS.some((mk) => lines[i].includes(mk))) ?? heads[0];
+  const level = (i) => (lines[i].match(/^(#{1,6})\s/) || ["", "######"])[1].length;
+  const end = headingIndex(lines).find((i) => i > start && level(i) <= level(start));
+  return lines.slice(start + 1, end == null ? lines.length : end).join("\n");
+}
+// A unit's text is a generic slot word (TODO, TBD, TBC, FIXME, "…", "a definir" — isGenericSlot), trailing punctuation aside.
+const genericUnit = (s) => isGenericSlot(stripEnd(String(s).replace(/[*_`]+/g, "").trim(), unitIn(".:;!?"))); // /[.:;!?]+$/
+// What a design section holds (A review 6): `entries` = table data rows (a table's header and separator rows skipped) + list items
+// at the section's outermost list level (indented up to 3 spaces; deeper ones are that item's pros / cons) — or, when that is
+// more, its sub-headings / bold-led paragraphs (one "### Option A" or "**Option A — …**" per option); `proseWords` = the words
+// of its other lines (a paragraph); `generic` = units holding only a generic slot word (a bare TODO / TBD), never counted.
+// Comments and fenced code never count. Linear.
+function designBody(body) {
+  let rows = 0, heads = 0, proseWords = 0, generic = 0, inTable = false;
+  const items = [];
+  for (const l of stripFencedCode(stripHtmlComments(body || "")).split(/\r?\n/)) {
+    if (!l.trim()) { inTable = false; continue; }
+    if (/^\s*\|/.test(l)) {
+      if (!inTable) { inTable = true; continue; } // the header row
+      if (/^[\s|:-]+$/.test(l)) continue; // the separator row
+      const cells = l.split("|").map((c) => c.trim()).filter((c) => /[\p{L}\p{N}]/u.test(c));
+      if (!cells.length) continue; // an empty row
+      if (cells.every(genericUnit)) generic++; else rows++;
+      continue;
+    }
+    inTable = false;
+    const li = l.match(/^( *)(?:[-*+]|\d+[.)])\s+(\S.*)$/);
+    if (li) { if (genericUnit(li[2])) generic++; else items.push(li[1].length); continue; }
+    // (?=[^*\n]*\p{L}): the bold run's letter found by one look ahead — [^*\n]*\p{L}[^*\n]* backtracked quadratically (1.17 H)
+    if (/^#{3,6}\s+\S/.test(l) || /^ {0,3}\*\*(?=[^*\n]*\p{L})[^*\n]*\*\*/u.test(l)) { heads++; continue; }
+    if (genericUnit(l)) { generic++; continue; }
+    proseWords += (l.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || []).length;
+  }
+  const top = items.reduce((a, n) => Math.min(a, n), Infinity);
+  const listed = top <= 3 ? items.filter((n) => n < top + 2).length : 0;
+  return { entries: Math.max(rows + listed, heads), proseWords, generic };
+}
+const designEntries = (body) => designBody(body).entries;
+// A trade-offs section with no option list passes on a written paragraph of at least this many words: the options weighed in
+// prose, or the honest "No key decision here: the feature only reads existing data" (A review 6 — the escape Risks has).
+const WEIGH_PROSE_WORDS = 3;
+// One section's state: missing · template (a slot or the TODO sentinel left, or nothing but a generic TODO / TBD) · empty (blank,
+// or a table's header and separator alone) · few (fewer entries than `min`) · filled. Trade-offs: ≥ 2 entries, or no entry and a
+// written paragraph (prose); risks: any entry or any prose.
+function designWeighState(design, syn, min) {
+  const body = weighSection(design || "", syn);
+  if (body == null) return { status: "missing", entries: 0 };
+  if (RE_TODO_SENTINEL.test(body) || placeholderReport(body).length) return { status: "template", entries: 0 };
+  const b = designBody(body);
+  if (!b.entries && !b.proseWords) return { status: b.generic ? "template" : "empty", entries: 0 };
+  if (b.entries >= Math.max(min, 1)) return { status: "filled", entries: b.entries };
+  if (!b.entries && b.proseWords >= (min ? WEIGH_PROSE_WORDS : 1)) return { status: "filled", entries: 0, prose: true };
+  return { status: "few", entries: b.entries };
+}
+// The two doctor checks over an (active) design → [{ id, status: pass | warn, detail, state, entries }]. opts.legacy (A review 3):
+// the design was approved before 1.17 (its approval carries no `weigh`) — what would warn passes, with a note: the sections are
+// asked of a design from its next approval on, never of one already signed off (a finished feature following the advice would
+// re-open its re-review, changed-since-approval, stale finish and execution sign-off).
+function designWeighChecks(design, lang, opts = {}) {
+  const W = i18n.msg(lang).designWeigh;
+  return DESIGN_WEIGH.map(([id, syn, min]) => {
+    const st = designWeighState(design, syn, min);
+    const detail = W[id][st.status](st.entries, min);
+    if (st.status !== "filled" && opts.legacy) return { id, status: "pass", detail: W.legacyApproval(detail), state: st.status, entries: st.entries, legacy: true };
+    return { id, status: st.status === "filled" ? "pass" : "warn", detail, state: st.status, entries: st.entries };
+  });
+}
+// A design approval made before 1.17 (A review 3): an approval record without the `weigh` stamp approvePhase adds since 1.17.
+const designApprovedBeforeWeigh = (approvals) => isRecord(approvals && approvals.design) && approvals.design.weigh !== true;
 
 // What approving `phase` requires (the same checks doctor runs, scoped to that phase). → { artifact, file, checks }
 // where `checks` lists only the FAILING ones as { id, detail }; artifact=false = nothing to approve (the file is
@@ -12993,6 +13656,13 @@ function specDoctor(projectDir, name, opts = {}) {
   else if (kind !== "bugfix") {
     add("mermaid", /```mermaid/.test(design) ? "pass" : "warn", /```mermaid/.test(design) ? m.mermaidOk : m.mermaidMissing);
     add("constitution-check", RE_CONSTITUTION_CHECK.test(design) ? "pass" : "warn", RE_CONSTITUTION_CHECK.test(design) ? m.constitutionOk : m.constitutionMissing);
+    // 1.17 A1 — design-tradeoffs / design-risks: warns only (never a fail, never an approval check). Not while design.md is
+    // still a LATER phase's template (nothing is being designed yet — the placeholders check already says so). A design approved
+    // before 1.17 (no `weigh` stamp) is never flagged: a pass with a note (A review 3).
+    if (!ph.later.some((r) => r.file === "design.md")) {
+      const legacy = designApprovedBeforeWeigh(readState(projectDir, slug).approvals);
+      for (const c of designWeighChecks(activeDesign(design, tracks), lng, { legacy })) add(c.id, c.status, c.detail);
+    }
   }
 
   // Mandatory sections — `<track>-sections` per active marker track (saas, ai, sec, privacy).
@@ -13008,7 +13678,10 @@ function specDoctor(projectDir, name, opts = {}) {
   const missingPacks = missingPackTracks(dir);
   if (missingPacks.length) {
     const reg = packRegistry();
+    const st = readJson(statePath(dir)).data;
     add("track-pack-missing", "warn", fm.trackPacks.missing(missingPacks.map((n) => {
+      // 1.17 D review: a pre-1.17 pack whose name is reserved now — why, and the way out (for 'dist': the built-in track is NOT on)
+      if (legacyPackName(st, n)) return fm.trackPacks.missingReserved(n, slug, VALID_TRACKS.includes(n));
       const e = reg.entries.find((x) => x.name === n);
       return e ? fm.trackPacks.missingInvalid(n, [...new Set(reg.problems.filter((x) => x.pack === n && x.severity === "error").map((x) => x.code))].join(", ") || "invalid")
         : fm.trackPacks.missingAbsent(n);
@@ -14298,7 +14971,10 @@ function locateFeatures(projectDir, name) {
 // text), acIndex and supersedesMarkers (one criterion at a time, lines joined by "\n") all read the same marker.
 const SUP_NL = "\\r?\\n(?![ \\t]*(?:\\r?\\n|$|(?:[-*+]|\\d+[.)])[ \\t]|#{1,6}[ \\t]|[>|]|```|~~~|(?:-{3,}|={3,}|\\*{3,})[ \\t]*(?:\\r?\\n|$)))";
 // The value never runs into a second marker (an unclosed one before it stays unclosed).
-const RE_SUPERSEDES_SRC = "_Supersedes:[ \\t]*((?:(?!_Supersedes:)[^\\r\\n]|" + SUP_NL + ")+?)_(?=[\\s.,;:!?)\\]*`|'\"]|$)";
+// The blanks after the colon: all of them (the value starts at its first other unit) — or, only when that finds no closing
+// "_", all but the last one when the next unit is that "_" (`_Supersedes: _`: a one-blank value). That is what
+// `_Supersedes:[ \t]*(…+?)_` read, without rescanning the value from each of a long blank run's units (1.17 H).
+const RE_SUPERSEDES_SRC = "_Supersedes:(?:[ \\t]*(?=[^ \\t])|[ \\t]*?(?=[ \\t]_))((?:(?!_Supersedes:)[^\\r\\n]|" + SUP_NL + ")+?)_(?=[\\s.,;:!?)\\]*`|'\"]|$)";
 // Safety net: a marker never closed runs to the end of its criterion — its foreign ID must never become one of this
 // feature's ACs; supersedesMarkers reports it (reason `unterminated`).
 const RE_SUPERSEDES_OPEN_SRC = "_Supersedes:[ \\t]*((?:[^\\r\\n]|" + SUP_NL + ")*)";
@@ -14344,7 +15020,7 @@ function supersedesMarkers(reqText) {
     const re = new RegExp(RE_SUPERSEDES_SRC, "gi");
     let m;
     while ((m = re.exec(text)) !== null) {
-      for (const ref of m[1].split(/[,;]/).map((s) => fold(s).replace(/^`+|`+$/g, "").trim()).filter(Boolean)) {
+      for (const ref of m[1].split(/[,;]/).map((s) => stripEnds(fold(s), isBacktickUnit).trim()).filter(Boolean)) {
         const mm = ref.match(/^(.+?)\s*\/\s*(US-\d+\.AC-\d+)$/);
         out.push({ ref, feature: mm ? mm[1].trim() : null, ac: mm ? mm[2] : null, by, line: lineAt(m.index) });
       }
@@ -14406,7 +15082,7 @@ function acOneLine(text, id, max = 200) { // max: the length cap (spec_export sh
   // it ("… days (_Supersedes: …_)." → "… days.").
   let s = String(text || "").replace(new RegExp("(?:(?:^|\\s)[-*+]\\s+)?(?:" + RE_SUPERSEDES_SRC + "|" + RE_SUPERSEDES_OPEN_SRC + ")", "gi"), "\u0000")
     .replace(/(\*\*|__|\*|~~)\s*\u0000\s*\1/g, "\u0000")
-    .replace(/\s*\(\s*\u0000\s*\)/g, "").replace(/\s*\u0000\s*(?=[.,;:!?]|$)/g, "").replace(/\u0000/g, " ").replace(/\s+/g, " ").trim();
+    .replace(/(?<!\s)\s*\(\s*\u0000\s*\)/g, "").replace(/(?<!\s)\s*\u0000\s*(?=[.,;:!?]|$)/g, "").replace(/\u0000/g, " ").replace(/\s+/g, " ").trim(); // (?<!\s): a blank run read from its start only (1.17 H)
   if (s.startsWith("|")) s = s.split("|").map((c) => c.trim()).filter((c) => c && c.replace(/[*_`]/g, "") !== id).join(" — ");
   const esc = id.replace(/\./g, "\\.");
   s = s.replace(new RegExp("^(?:\\*\\*|__|\\*|_)?" + esc + "(?:\\*\\*|__|\\*|_)?\\s*(?:[—–:-]\\s*)?"), "").replace(new RegExp("\\s*\\(" + esc + "\\)"), "");
@@ -14584,8 +15260,46 @@ function maybeRefreshCatalog(projectDir) {
 const DECISIONS_FILE = "decisions.md";
 const DECISION_TITLE_MAX = 200;
 const DECISION_TEXT_MAX = 20000;
-const RE_DECISION_HEAD = /^(#{2,3})[ \t]+D-(\d{1,6})(?!\d)[ \t]*(?:[—–:-]+[ \t]*)?(.*?)[ \t]*$/;
-const RE_DECISION_MARKER = /^\s*(?:[-*+]\s+)?_(Kind|Date|Affects|Supersedes):[ \t]*(.*)_\s*$/i;
+// A "## D-3 — Title" heading → [line, hashes, number, title] | null — what
+// /^(#{2,3})[ \t]+D-(\d{1,6})(?!\d)[ \t]*(?:[—–:-]+[ \t]*)?(.*?)[ \t]*$/ matched; the title is read by a scan (the lazy title
+// before [ \t]*$ was quadratic on a long blank run — 1.17 H).
+const RE_DECISION_HEAD_START = /^(#{2,3})[ \t]+D-(\d{1,6})(?!\d)/;
+const isBlankUnit = (c) => c === " " || c === "\t";
+function decisionHead(line) {
+  const h = RE_DECISION_HEAD_START.exec(line);
+  if (!h) return null;
+  let i = h[0].length;
+  while (i < line.length && isBlankUnit(line[i])) i++;
+  if (i < line.length && "—–:-".includes(line[i])) {
+    while (i < line.length && "—–:-".includes(line[i])) i++;
+    while (i < line.length && isBlankUnit(line[i])) i++;
+  }
+  const title = stripEnd(line.slice(i), isBlankUnit);
+  return RE_LINE_TERMINATOR.test(title) ? null : [line, h[1], h[2], title];
+}
+// s.replace(/[ \t]+#+$/, "") — a closing "##" sequence led by blanks.
+function stripClosingHashes(s) {
+  let h0 = s.length;
+  while (h0 > 0 && s[h0 - 1] === "#") h0--;
+  let w0 = h0;
+  while (w0 > 0 && isBlankUnit(s[w0 - 1])) w0--;
+  return h0 < s.length && w0 < h0 ? s.slice(0, w0) : s;
+}
+// A whole-line `_Label: value_` marker (a list item too) → { label, value } | null — what
+// /^\s*(?:[-*+]\s+)?_(Label…):[ \t]*(.*)_\s*$/i matched ($1, $2): `head` reads up to the colon, the value is scanned (the
+// pattern's [ \t]*(.*)_ backtracked quadratically on a value with a long blank run and no closing "_" — 1.17 H).
+function underscoreMarkerLine(line, head) {
+  const h = head.exec(line);
+  if (!h) return null;
+  let a = h[0].length;
+  while (a < line.length && isBlankUnit(line[a])) a++;
+  const u = stripEnd(line, isWsUnit).length - 1; // the closing "_": the last unit before trailing whitespace
+  if (u < a || line[u] !== "_") return null;
+  const value = line.slice(a, u);
+  return RE_LINE_TERMINATOR.test(value) ? null : { label: h[1], value };
+}
+const RE_DECISION_MARKER_HEAD = /^\s*(?:[-*+]\s+)?_(Kind|Date|Affects|Supersedes):/i;
+const decisionMarker = (line) => underscoreMarkerLine(line, RE_DECISION_MARKER_HEAD);
 const DECISION_LABELS = {
   context: ["context", "contexto"],
   decision: ["decision", "decisão", "decisao", "decisión", "discovery", "descoberta", "descubrimiento"],
@@ -14595,9 +15309,9 @@ const RE_DECISION_LABEL = new RegExp("^\\s*\\*\\*(" + Object.values(DECISION_LAB
 const BRIEF_DECISIONS_MAX = 5; // entries a brief carries…
 const BRIEF_DECISIONS_CHARS = 2000; // …and the characters of their titles + texts (the most recent kept first)
 const RE_LEADING_BOM = new RegExp("^" + BOM_CHAR);
-// HTML comments blanked line for line (line numbers hold).
-const blankHtmlComments = (s) => String(s || "").replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, ""));
-const splitRefs = (v) => String(v == null ? "" : v).split(/[,;]/).map((s) => s.trim().replace(/^`+|`+$/g, "").trim()).filter(Boolean);
+// HTML comments blanked line for line (line numbers hold) — /<!--[\s\S]*?-->/g by replaceHtmlCommentSpans (1.17 H).
+const blankHtmlComments = (s) => replaceHtmlCommentSpans(String(s || ""), (m) => m.replace(/[^\n]/g, ""));
+const splitRefs = (v) => String(v == null ? "" : v).split(/[,;]/).map((s) => stripEnds(s.trim(), isBacktickUnit).trim()).filter(Boolean);
 const normDecisionId = (s) => { const m = String(s || "").trim().match(/^D-(\d{1,6})$/i); return m ? "D-" + parseInt(m[1], 10) : null; };
 function decisionLabelKey(label) {
   const l = String(label).toLowerCase();
@@ -14616,9 +15330,9 @@ function decisionLog(text) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (fenceStep(fst, line)) { if (cur) cur.parts[seg].push(line); continue; }
-    const h = line.match(RE_DECISION_HEAD);
+    const h = decisionHead(line);
     if (h) {
-      cur = { id: "D-" + parseInt(h[2], 10), n: parseInt(h[2], 10), level: h[1].length, line: i + 1, title: h[3].replace(/[ \t]+#+$/, "").trim(),
+      cur = { id: "D-" + parseInt(h[2], 10), n: parseInt(h[2], 10), level: h[1].length, line: i + 1, title: stripClosingHashes(h[3]).trim(),
         kind: "decision", date: null, affects: [], supersedes: [], parts: { body: [], context: [], decision: [], consequences: [] } };
       entries.push(cur);
       seg = "body";
@@ -14632,12 +15346,12 @@ function decisionLog(text) {
       continue;
     }
     if (!cur) continue;
-    const mk = seg === "body" ? line.match(RE_DECISION_MARKER) : null;
+    const mk = seg === "body" ? decisionMarker(line) : null;
     if (mk) {
-      const key = mk[1].toLowerCase();
+      const key = mk.label.toLowerCase();
       if (!seen.has(key)) {
         seen.add(key);
-        const v = mk[2].trim();
+        const v = mk.value.trim();
         if (key === "kind") cur.kind = /^discovery$/i.test(v.replace(/`/g, "").trim()) ? "discovery" : "decision";
         else if (key === "date") cur.date = v.replace(/`/g, "").trim();
         else cur[key] = splitRefs(v);
@@ -14669,7 +15383,8 @@ function retiredDecisions(log) {
 // ':' / '.') and the same without a leading [Marker] / numbering (headingMatches' RE_HEADING_LEAD) — "Data Model" names
 // "## 3. Data Model", "[SaaS] Observability" and "Observability" name "### [SaaS] Observability".
 function decisionSectionKeys(text) {
-  const base = String(text || "").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim().toLowerCase().replace(/[:.]+$/, "").trim();
+  const base0 = String(text || "").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const base = stripEnd(base0, unitIn(":.")).trim(); // /[:.]+$/
   const keys = new Set(base ? [base] : []);
   let t = base;
   const lead = headingLeadRe(); // + the track packs' markers (1.15)
@@ -14686,9 +15401,9 @@ function decisionTargets(dir, kind) {
   for (const file of files) {
     const lines = blankHtmlComments(read(file)).split(/\r?\n/);
     for (const i of headingIndex(lines)) {
-      const m = lines[i].match(/^#{2,6}\s+(.*?)(?:\s+#+)?\s*$/);
-      if (!m || !m[1].trim()) continue;
-      for (const k of decisionSectionKeys(m[1])) if (!sections.has(k)) sections.set(k, { title: m[1].trim(), file });
+      const m = atxHeading(lines[i], 2, 6, "closing"); // /^#{2,6}\s+(.*?)(?:\s+#+)?\s*$/
+      if (!m || !m.text.trim()) continue;
+      for (const k of decisionSectionKeys(m.text)) if (!sections.has(k)) sections.set(k, { title: m.text.trim(), file });
     }
   }
   return {
@@ -14709,20 +15424,26 @@ function resolveAffect(ref, t) {
   return hit ? { ref: hit.title, type: "section", ok: true, file: hit.file } : { ref: r, type: "section", ok: false };
 }
 
+// A line without its trailing spaces / tabs — a scan, not /[ \t]+$/ (quadratic on a long run of blanks inside the line; 1.17 F).
+function trimBlanksEnd(l) {
+  let e = l.length;
+  while (e > 0 && (l[e - 1] === " " || l[e - 1] === "\t")) e--;
+  return e === l.length ? l : l.slice(0, e);
+}
 // User text written into a spec file (a decision's paragraphs, a spike's question): a line that would read as a heading, an
 // entry marker or a label is escaped, an HTML comment opener neutralized, an unclosed code fence closed — nothing a caller
 // writes can hide or fake the entries after it.
 function safeSpecText(s) {
   const st = { fence: null };
-  const out = String(s).replace(/\r\n?/g, "\n").replace(/<!--/g, "&lt;!--").split("\n").map((l) => l.replace(/[ \t]+$/, "")).map((l) => {
+  const out = String(s).replace(/\r\n?/g, "\n").replace(/<!--/g, "&lt;!--").split("\n").map(trimBlanksEnd).map((l) => {
     if (fenceStep(st, l)) return l;
     if (/^\s{0,3}#{1,6}(?:\s|$)/.test(l)) return l.replace("#", "\\#");
-    if (RE_DECISION_MARKER.test(l) || RE_OUTCOME_LINE.test(l)) return l.replace("_", "\\_");
+    if (decisionMarker(l) || outcomeMarker(l)) return l.replace("_", "\\_");
     if (RE_DECISION_LABEL.test(l)) return l.replace("**", "\\*\\*");
     return l;
   });
   if (st.fence) out.push(" ".repeat(st.fence.indent) + st.fence.mark);
-  return out.join("\n").replace(/^\n+|\n+$/g, "");
+  return stripEnds(out.join("\n"), unitIn("\n")); // /^\n+|\n+$/g
 }
 
 // spec_decide input → { title, decision, context, consequences, kind, affects, supersedes } | { error }.
@@ -14967,7 +15688,9 @@ const SPIKE_SYN = {
   decision: ["decision", "decisão", "decisao", "decisión"],
   followUp: ["follow-up", "follow up", "seguimento", "seguimiento"],
 };
-const RE_OUTCOME_LINE = /^\s*(?:[-*+]\s+)?_Outcome:[ \t]*(.*)_\s*$/i;
+// /^\s*(?:[-*+]\s+)?_Outcome:[ \t]*(.*)_\s*$/i ($1 = value), scanned (underscoreMarkerLine — 1.17 H).
+const RE_OUTCOME_HEAD = /^\s*(?:[-*+]\s+)?_Outcome:/i;
+const outcomeMarker = (line) => underscoreMarkerLine(line, RE_OUTCOME_HEAD);
 // _Outcome:_ values (English-stable go | no-go | pivot; the PT / ES words and yes / no read too).
 const OUTCOME_SYN = {
   go: ["go", "yes", "sim", "sí", "si", "avançar", "avancar", "avanzar", "seguir"],
@@ -14975,13 +15698,13 @@ const OUTCOME_SYN = {
   pivot: ["pivot", "pivotar", "pivotear", "mudar de rumo", "cambiar de rumbo"],
 };
 function normOutcome(v) {
-  const s = String(v == null ? "" : v).replace(/[`*[\]]/g, "").replace(/\s+/g, " ").trim().toLowerCase().replace(/[.!]+$/, "");
+  const s = stripEnd(String(v == null ? "" : v).replace(/[`*[\]]/g, "").replace(/\s+/g, " ").trim().toLowerCase(), unitIn(".!")); // /[.!]+$/
   if (!s || s.includes("|")) return null;
   return Object.keys(OUTCOME_SYN).find((k) => OUTCOME_SYN[k].includes(s)) || null;
 }
 // A spike.md section's own prose: comments out, the TODO sentinel and the _Outcome:_ line set aside.
 function spikeProse(body) {
-  return stripHtmlComments(body || "").split(/\r?\n/).filter((l) => !RE_OUTCOME_LINE.test(l) && !RE_TODO_SENTINEL.test(l)).join("\n");
+  return stripHtmlComments(body || "").split(/\r?\n/).filter((l) => !outcomeMarker(l) && !RE_TODO_SENTINEL.test(l)).join("\n");
 }
 // Written = present, no `> **TODO**` sentinel, and some prose outside [bracketed slots] (the _Outcome:_ line alone is no rationale).
 function spikeFilled(body) {
@@ -14991,8 +15714,8 @@ function spikeFilled(body) {
 function spikeOutcome(body) {
   if (body == null) return null;
   const lines = stripHtmlComments(body).split(/\r?\n/);
-  const mk = lines.map((l) => l.match(RE_OUTCOME_LINE)).find(Boolean);
-  const marked = mk ? normOutcome(mk[1]) : null; // the template's `_Outcome: [go | no-go | pivot]_` reads as none
+  const mk = lines.map((l) => outcomeMarker(l)).find(Boolean);
+  const marked = mk ? normOutcome(mk.value) : null; // the template's `_Outcome: [go | no-go | pivot]_` reads as none
   if (marked) return marked;
   const first = spikeProse(body).split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "";
   const m = first.match(/^(?:[-*+>]\s*)*(?:\*\*|__)?(no-go|no go|nogo|go|pivot|não avançar|nao avancar|no avanzar|avançar|avancar|avanzar|pivotar|pivotear)(?![\p{L}\p{N}-])/iu);
@@ -15123,7 +15846,7 @@ function spikeNextAction(projectDir, f, opts = {}) {
     Object.assign(res, { step: "promote", outcome: "go", seed: { name: seed.name, summary: seed.summary },
       recommendation: (seed.archiveFirst ? N.goArchiveFirst : N.goCreateFirst)(slug, seed.name, seed.summary) });
   } else {
-    const why = s.rationale ? s.rationale.replace(/[\s.;:!…]+$/, "") : null; // the message ends the sentence itself
+    const why = s.rationale ? stripEnd(s.rationale, wsOrUnitIn(".;:!…")) : null; // /[\s.;:!…]+$/ — the message ends the sentence itself
     if (s.outcome === "no-go") Object.assign(res, { step: "archive", outcome: "no-go", recommendation: N.noGo(slug, why) });
     else Object.assign(res, { step: "pivot", outcome: "pivot", recommendation: N.pivot(slug, why) });
   }
@@ -15204,16 +15927,19 @@ const SUCCESS_SYN = ["success criteria", "critérios de sucesso", "criterios de 
 // inline code, **strong** / _em_ / ~~del~~ and links. EVERY text run is escaped (htmlEsc): raw HTML in a spec (a <script> in
 // a criterion) is shown as text, never run. A link keeps an http(s) / mailto target only — javascript:, data:, a relative
 // path keep just their text — and an image becomes its alt text: an exported document never loads anything.
-const RE_EXP_ITEM = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
+// A list item → [line, indent, marker, text] | null: /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/ with its text read by headRest (1.17 H).
+const expItem = (line) => headRest(line, /^(\s*)([-*+]|\d{1,9}[.)])/, true);
 const RE_EXP_RULE = /^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const RE_EXP_BLOCK = /^(?:#{1,6}\s|\s*\||\s{0,3}>)/; // a heading, table row or quote: ends a list at the margin
-const RE_EXP_SEP = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/; // a table's header separator row
+// A table's header separator row. \s*\|?\s* → \s*(?:\|\s*)? (same rows): two blank runs meeting with no pipe between them
+// backtracked quadratically (1.17 H).
+const RE_EXP_SEP = /^\s*(?:\|\s*)?:?-+:?\s*(?:\|\s*:?-+:?\s*)*(?:\|\s*)?$/;
 function expInline(text) {
   const slots = [];
   const put = (html) => "\u0001" + (slots.push(html) - 1) + "\u0002";
   let s = String(text == null ? "" : text).replace(/[\u0001\u0002]/g, "");
   // Spans are bounded (4000 / 2000 chars): an unclosed `, * or ~~ used to rescan the rest of the paragraph from every opener.
-  s = s.replace(/(`+)([^`]|[^`][\s\S]{0,4000}?[^`])\1(?!`)/g, (m, tick, body) => put("<code>" + htmlEsc(body.trim()) + "</code>"));
+  s = replaceCodeSpans(s, (m, tick, body) => put("<code>" + htmlEsc(body.trim()) + "</code>"), 4002); // /(`+)([^`]|[^`][\s\S]{0,4000}?[^`])\1(?!`)/g
   const target = "(<[^<>\\s]*>|[^()\\s]*(?:\\([^()\\s]*\\)[^()\\s]*)*)(?:\\s+\"[^\"]*\")?";
   // A label holds no '[' (full review Pb6): "[" × N rescanned the rest of the paragraph from every '[' — quadratic. A nested
   // "[a [b] c](url)" never matched as a whole either (its first ']' is no "](").
@@ -15223,16 +15949,61 @@ function expInline(text) {
     return /^(?:https?:\/\/|mailto:)/i.test(u) ? put(`<a href="${htmlEsc(u)}" rel="noopener noreferrer">`) + label + put("</a>") : label;
   });
   // An entity reference is text in markdown (`&lt;!--` — how spec_decide stores a comment opener — reads "<!--"): kept as
-  // is, never escaped again into a literal "&lt;". It can only ever render as a character, never as markup.
-  s = s.replace(/&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/g, (m) => put(m));
+  // is, never escaped again into a literal "&lt;". It can only ever render as a character, never as markup. After an odd run
+  // of backslashes its '&' is escaped: `\&lt;` is the text "&lt;" (1.17 verification N3).
+  s = s.replace(/(?<!(?:^|[^\\])(?:\\\\)*\\)&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/g, (m) => put(m));
+  // Any ASCII punctuation escaped with a backslash is that character (CommonMark) — not only markup characters: an import
+  // writes `US-3\.AC-1`, `T\-800`, `_Verify\:` to keep IDs and markers inert, and the export showed the backslashes (1.17
+  // verification N3). After htmlEsc, an escaped `<` `>` `&` `"` reads `\&lt;` … — the backslash goes, the entity stays.
   s = htmlEsc(s)
     .replace(/\*\*(?=\S)([\s\S]{0,2000}?\S)\*\*/g, "<strong>$1</strong>")
     .replace(/(?<![\p{L}\p{N}_\\])__(?=\S)([\s\S]{0,2000}?\S)__(?![\p{L}\p{N}_])/gu, "<strong>$1</strong>")
     .replace(/~~(?=\S)([\s\S]{0,2000}?\S)~~/g, "<del>$1</del>")
     .replace(/(?<![*\p{L}\p{N}\\])\*(?=[^\s*])([\s\S]{0,2000}?[^\s*\\])\*(?![*\p{L}\p{N}])/gu, "<em>$1</em>")
     .replace(/(?<![\p{L}\p{N}_\\])_(?=[^\s_])([\s\S]{0,2000}?[^\s_\\])_(?![\p{L}\p{N}_])/gu, "<em>$1</em>")
-    .replace(/\\([\\`*_~|#[\]])/g, "$1");
+    .replace(RE_MD_ESCAPE, "$1");
   return s.replace(/\u0001(\d+)\u0002/g, (m, k) => slots[+k]);
+}
+// A backslash escape: `\` + one ASCII punctuation character (CommonMark's set).
+const RE_MD_ESCAPE = /\\([!-/:-@[-`{-~])/g;
+const MD_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: String.fromCharCode(0xa0) };
+// Markdown inline text → the plain text a reader sees, for the exports that are no markdown (Gherkin, the CSV files, a page
+// <title>): outside inline code spans (backtickRuns — the engine's pairing, line by line), a backslash escape is its character
+// and an entity reference (&lt; &gt; &amp; &quot; &apos; &nbsp;, &#n; &#xh;) its character — an unknown name, and a numeric one
+// naming a control character or a line separator (the outputs are line-based), stay as written.
+// A code span is kept whole, backticks included (nothing is decoded inside one). Markup (emphasis, links) is left as it is.
+// Linear: one pass per line, each code span skipped once (1.17 verification N3 — the Gherkin export printed `NFR\-2`,
+// `US-3\.AC-1` and `&lt;!--` that the importer writes to keep IDs and comment openers inert).
+function mdPlainText(s) {
+  const text = String(s == null ? "" : s);
+  if (!text.includes("\\") && !text.includes("&")) return text;
+  return text.split("\n").map((line) => {
+    const ticks = line.includes("`") ? backtickRuns(line) : null;
+    let out = "";
+    let k = 0;
+    while (k < line.length) {
+      const c = line[k];
+      if (c === "`" && ticks) { const e = ticks.spanEnd(k); out += line.slice(k, e); k = e; continue; }
+      if (c === "\\" && k + 1 < line.length && /[!-/:-@[-`{-~]/.test(line[k + 1])) { out += line[k + 1]; k += 2; continue; }
+      if (c === "&") {
+        const m = /^&(?:#([0-9]{1,7})|#[xX]([0-9a-fA-F]{1,6})|([A-Za-z][A-Za-z0-9]{1,31}));/.exec(line.slice(k, k + 40));
+        const cp = m ? (m[1] != null ? parseInt(m[1], 10) : m[2] != null ? parseInt(m[2], 16) : null) : null;
+        // a numeric reference to a control character or a line / paragraph separator stays as written: the output is line-based
+        const ch = !m ? null : cp != null ? (cp >= 0x20 && cp <= 0x10ffff && !(cp >= 0x7f && cp <= 0x9f) && cp !== 0x2028 && cp !== 0x2029 && (cp < 0xd800 || cp > 0xdfff) ? String.fromCodePoint(cp) : null)
+          : own(MD_ENTITIES, m[3]) ? MD_ENTITIES[m[3]] : null;
+        if (ch != null) { out += ch; k += m[0].length; continue; }
+      }
+      const j = nextPlainStop(line, k + 1);
+      out += line.slice(k, j);
+      k = j;
+    }
+    return out;
+  }).join("\n");
+}
+// The next index at or after `from` holding a character mdPlainText acts on (` \ &), else the line's length.
+function nextPlainStop(line, from) {
+  for (let i = from; i < line.length; i++) { const c = line[i]; if (c === "`" || c === "\\" || c === "&") return i; }
+  return line.length;
 }
 // A fenced block from its opener at lines[i] → { html, next }. As fenceStep reads it: a fence opened inside a list item
 // (indented) ends with that item — a non-blank line less indented than its opener.
@@ -15286,7 +16057,7 @@ function expList(lines, i) {
   for (; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim()) { blank = true; continue; }
-    const m = line.match(RE_EXP_ITEM);
+    const m = expItem(line);
     if (m && !RE_EXP_RULE.test(line)) {
       cur = { indent: indentOf(m[1]), ordered: /\d/.test(m[2]), start: parseInt(m[2], 10), text: [m[3]], extra: [] };
       items.push(cur);
@@ -15326,7 +16097,7 @@ function expBlocks(lines) {
     if (!para.length) return;
     let joined = "";
     para.forEach((l, k) => {
-      if (k) joined += / {2,}$|\\$/.test(para[k - 1]) || /^\s*(?:\*\*|__)/.test(l) ? "\u0003" : " ";
+      if (k) joined += para[k - 1].endsWith("  ") || para[k - 1].endsWith("\\") || /^\s*(?:\*\*|__)/.test(l) ? "\u0003" : " "; // / {2,}$|\\$/ rescanned a blank run
       joined += l.trim().replace(/\\$/, "");
     });
     out.push("<p>" + expInline(joined).replace(/\u0003/g, "<br>") + "</p>");
@@ -15336,8 +16107,8 @@ function expBlocks(lines) {
     const line = lines[i];
     if (!line.trim()) { flush(); i++; continue; }
     if (RE_FENCE.test(line)) { flush(); const f = expFence(lines, i); out.push(f.html); i = f.next; continue; }
-    const h = line.match(/^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/);
-    if (h) { flush(); out.push(`<h${h[1].length}>${expInline(h[2])}</h${h[1].length}>`); i++; continue; }
+    const h = atxHeading(line, 1, 6, "closing"); // /^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/
+    if (h) { flush(); out.push(`<h${h.level}>${expInline(h.text)}</h${h.level}>`); i++; continue; }
     if (RE_EXP_RULE.test(line)) { flush(); out.push("<hr>"); i++; continue; }
     if (/^\s*\|/.test(line)) {
       flush();
@@ -15353,7 +16124,7 @@ function expBlocks(lines) {
       out.push("<blockquote>" + expBlocks(inner) + "</blockquote>");
       continue;
     }
-    if (RE_EXP_ITEM.test(line)) { flush(); const l = expList(lines, i); out.push(l.html); i = l.next; continue; }
+    if (expItem(line)) { flush(); const l = expList(lines, i); out.push(l.html); i = l.next; continue; }
     para.push(line);
     i++;
   }
@@ -15420,7 +16191,7 @@ function specTitle(text, slug) {
 }
 // "Title" when the title slugs to the folder name, else "Title (slug)".
 const titledSlug = (title, slug) => (slugify(title) === slug ? title : `${title} (${slug})`);
-const mdCell = (s) => String(s == null ? "" : s).replace(/(?<!\\)\|/g, "\\|").replace(/\s*\r?\n\s*/g, " ");
+const mdCell = (s) => String(s == null ? "" : s).replace(/(?<!\\)\|/g, "\\|").replace(/(?<!\s)\s*\r?\n\s*/g, " "); // (?<!\s): 1.17 H
 const utcStamp = (v) => { const t = timeOf(v); return t == null ? "—" : new Date(t).toISOString().slice(0, 16).replace("T", " ") + " UTC"; };
 const italic = (s) => `_${s}_`;
 
@@ -15684,7 +16455,7 @@ function exportHtml(doc) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="dev-spec">
-<title>${htmlEsc(doc.title)} — ${htmlEsc(doc.kicker)}</title>
+<title>${htmlEsc(mdPlainText(doc.title))} — ${htmlEsc(doc.kicker)}</title>
 <style>
 ${EXPORT_CSS}
 </style>
@@ -15966,7 +16737,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     dsecs = designSections(read("bug.md") || "").map(byFile("bug.md")).concat(dsecs.map(byFile(PHASE_FILE.design)));
   }
   const dinfo = dsecs.map((s) => { const hay = s.title + "\n" + s.body; return { title: s.title, acs: extractAcIds(hay), sec: secondaryIds(hay) }; });
-  const trackMarks = ["sec", "privacy", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs (1.15)
+  const trackMarks = ["sec", "privacy", "dist", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs (1.15)
 
   // decisions.md — the current entries (a later entry's _Supersedes: D-n_ retires D-n).
   const decRaw = read(DECISIONS_FILE);
@@ -16127,7 +16898,7 @@ function matrixCsv(matrices, lang, opts = {}) {
         feature: m.feature,
         id: r.id,
         kind: r.kind.toUpperCase(),
-        requirement: r.text,
+        requirement: mdPlainText(r.text), // plain text: an escape / entity as the character (1.17 verification N3)
         status: R.status[r.status] || r.status,
         gaps: r.gaps.map((g) => R.gap[g === "no-coverage" && r.kind === "sc" ? "no-coverage-sc" : g] || g).join("; "),
         template: r.template ? R.yes : "",
@@ -16136,7 +16907,7 @@ function matrixCsv(matrices, lang, opts = {}) {
         tests: r.tests.map((t) => t.id).join("; "),
         testFiles: r.tests.map((t) => `${t.id}: ${t.outsideCode ? R.outsideCode : t.files && t.files.length ? t.files.join(", ") : R.notInCode}`).join("; "),
         evidence: r.tasks.filter((t) => t.evidence).map((t) => rtmEvidenceWords(t, lang)).join("; "),
-        decisions: r.decisions.map((d) => `${d.id} ${d.title}`).join("; "),
+        decisions: r.decisions.map((d) => `${d.id} ${mdPlainText(d.title)}`).join("; "),
         supersedes: r.supersedes.join("; "),
         supersededBy: r.supersedePending ? R.toBeSupersededBy(r.supersededBy.join("; ")) : r.supersededBy.join("; "), // 1.15: pending reads apart
         approvedAt: r.approval ? r.approval.at || "" : "",
@@ -16155,6 +16926,9 @@ const RTM_ICON = { verified: "✅", implemented: "⚠", planned: "☐", untraced
 // A table cell: a '|' escaped, lines folded (mdCell), and an HTML comment opener neutralized — markdownToHtml drops
 // <!-- … --> first, so an opener in one cell and a closer in a later one would swallow the cells between them.
 const rtmCell = (s) => mdCell(s).replace(/<!--/g, "&lt;!--");
+// The requirement's cell (the row's first text — only its ID before it, no backtick): an opener inside a code span stays as
+// written (commentInert's rule — "escape `<!--` in names" showed `&lt;!--` in the export's code; 1.17 verification N3).
+const rtmTextCell = (s) => inertOutsideCode(mdCell(s), false);
 function rtmMarkdown(mx, lang) {
   const R = i18n.msg(lang).rtm;
   const code = (s) => "`" + s + "`";
@@ -16174,7 +16948,7 @@ function rtmMarkdown(mx, lang) {
     const taskIcon = (t) => (!t.done ? "☐" : t.verified ? "✅" : "⚠");
     const cells = [
       r.supersededBy.length && !r.supersedePending ? `~~${r.id}~~` : r.id,
-      rtmCell(r.text) + (notes.length ? " " + italic("(" + rtmCell(notes.join("; ")) + ")") : ""),
+      rtmTextCell(r.text) + (notes.length ? " " + italic("(" + rtmCell(notes.join("; ")) + ")") : ""),
       `${RTM_ICON[r.status]} ${R.status[r.status]}` + (gaps.length ? " — " + rtmCell(gaps.join("; ")) : ""),
       r.design.length ? rtmCell(r.design.join("; ")) : "—",
       r.tasks.length ? r.tasks.map((t) => `#${t.number} ${taskIcon(t)}`).join(", ") : "—",
@@ -16289,6 +17063,9 @@ function ghStripEmphasis(s) {
   for (let i = 0; i < n;) {
     if (codeEnd.has(i)) { i = codeEnd.get(i); continue; }
     const c = s[i];
+    // a backslash escape (`\*`, `\_`) is a literal character, never a delimiter (1.17 verification N3 — mdPlainText drops the
+    // backslash afterwards; a paired `\*x\*` was markup, and left `\x\`)
+    if (c === "\\" && i + 1 < n && s[i + 1] !== "`" && /[!-/:-@[-`{-~]/.test(s[i + 1])) { i += 2; continue; }
     if (c !== "*" && c !== "_") { i++; continue; }
     let j = i;
     while (s[j] === c) j++;
@@ -16362,7 +17139,7 @@ function earsSteps(raw, lang) {
       // else the last determiner before the modal ("the system shall", "o sistema deve"); neither → no clean split.
       let runStart = modalAt;
       if (mod[1] === mod[1].toUpperCase()) {
-        const trimmed = region.replace(/\s+$/, "");
+        const trimmed = region.trimEnd(); // /\s+$/ rescanned a blank run from each of its units (1.17 H)
         const words = trimmed.split(" ");
         let end = trimmed.length;
         for (let w = words.length - 1; w >= 0 && words[w] && words[w] === words[w].toUpperCase() && /\p{Lu}/u.test(words[w]); w--) {
@@ -16383,14 +17160,14 @@ function earsSteps(raw, lang) {
   const withLead = (t) => (!lead ? t : /\s$/.test(lead) ? lead.trim() + " " + t : lead.trim() + t);
   let resp = text.slice(subj).replace(/^[\s,]+/, "").trim();
   if (!conds.length && !thenKw) {
-    const ctx = text.slice(0, subj).replace(/[\s,]+$/, "").trim();
+    const ctx = stripEnd(text.slice(0, subj), wsOrUnitIn(",")).trim(); // /[\s,]+$/
     if (ctx) steps.push({ kind: "given", text: ctx });
   } else {
     lead = text.slice(0, conds.length ? conds[0].at : thenKw.at);
     if (ghMask(lead).replace(/[\s([{*_~]/g, "")) return whole; // text before the first keyword
     for (let i = 0; i < conds.length; i++) {
       const stop = i + 1 < conds.length ? conds[i + 1].at : thenKw ? thenKw.at : subj;
-      const t = text.slice(conds[i].end, stop).replace(/^[\s,]+|[\s,]+$/g, "");
+      const t = stripEnds(text.slice(conds[i].end, stop), wsOrUnitIn(",")); // /^[\s,]+|[\s,]+$/g
       if (!t) return whole;
       steps.push({ kind: GHERKIN_COND[conds[i].word] || "given", text: i ? t : withLead(t) });
     }
@@ -16436,12 +17213,14 @@ function gherkinFeature(projectDir, f, opts = {}) {
   const lines = [`# language: ${i18n.baseLang(lang)}`, `# ${G.autogen}`, `# ${G.source(".specs/" + slug + "/requirements.md")}`];
   const ftags = gherkinFeatureTags(tracks, state.kind);
   if (ftags.length) lines.push(ftags.join(" "));
-  lines.push(`${D.feature}: ${ghLine(titledSlug(specTitle(reqRaw, slug), slug))}`);
+  // Gherkin is plain text: markdown escapes and entities are written as the characters a reader sees (mdPlainText — 1.17
+  // verification N3: `NFR\-2`, `US-3\.AC-1`, `&lt;!--` from an import reached the steps as written).
+  lines.push(`${D.feature}: ${ghLine(mdPlainText(titledSlug(specTitle(reqRaw, slug), slug)))}`);
   const summary = sectionText(reqs, SUMMARY_SYN) || (state.kind === "bugfix" ? sectionText(readContained(projectDir, path.join(dir, "bug.md")) || "", SUMMARY_SYN) : null);
   if (summary) {
     // A description line that reads like a Gherkin token (a tag, a comment, a table row, a doc string, any keyword of the
     // dialect or English — ghRiskyLine) would change the file's structure: it gets the summary label in front — the words stay.
-    const s = ghLine(summary);
+    const s = ghLine(mdPlainText(summary));
     lines.push("  " + (ghRiskyLine(s, D) ? G.summaryLabel + ": " : "") + s);
   }
   const skipped = { template: [], superseded: [] };
@@ -16454,7 +17233,7 @@ function gherkinFeature(projectDir, f, opts = {}) {
     if (n !== story) {
       story = n;
       const ctx = storyContext(reqs, n);
-      lines.push("", `  # ${ghLine(ctx ? ctx[0] : "US-" + n)}`);
+      lines.push("", `  # ${ghLine(mdPlainText(ctx ? ctx[0] : "US-" + n))}`);
     }
     if (r.template) { skipped.template.push(r.id); lines.push("", `  # ${G.template(r.id)}`); continue; }
     if (r.supersededBy.length && !r.supersedePending) { skipped.superseded.push(r.id); lines.push("", `  # ${G.superseded(r.id, r.supersededBy.join(", "))}`); continue; }
@@ -16462,14 +17241,15 @@ function gherkinFeature(projectDir, f, opts = {}) {
     const full = acOneLine(e ? e.text : r.text, r.id, Infinity);
     const sp = earsSteps(full, lang);
     if (!sp.split) unsplit.push(r.id);
+    const steps = sp.steps.map((st) => ({ kind: st.kind, text: mdPlainText(st.text) })); // split first: an escape never cuts a clause
     lines.push("");
     if (r.supersedePending) lines.push(`  # ${X.toBeSupersededBy(r.supersededBy.join(", "))}`);
     if (!sp.split) lines.push(`  # ${G.unsplit}`);
     const tags = ["@" + r.id, ...r.tests.map((t) => "@" + t.id), ...byTrack.filter((t) => t.acs.has(r.id)).map((t) => t.tag)];
     lines.push("  " + [...new Set(tags)].join(" "));
-    lines.push(`  ${D.scenario}: ${r.id} — ${ghLine(oneLiner(sp.steps[sp.steps.length - 1].text, 100) || full)}`);
+    lines.push(`  ${D.scenario}: ${r.id} — ${ghLine(oneLiner(steps[steps.length - 1].text, 100) || mdPlainText(full))}`);
     let prev = null;
-    for (const st of sp.steps) {
+    for (const st of steps) {
       lines.push(`    ${st.kind === prev ? D.and : D[st.kind]} ${st.text}`);
       prev = st.kind;
     }
@@ -16524,7 +17304,7 @@ function trackerRecords(projectDir, f, lang, supBy) {
   const summary = sectionText(reqs, SUMMARY_SYN) || (kind === "bugfix" ? sectionText(readContained(projectDir, path.join(dir, "bug.md")) || "", SUMMARY_SYN) : null) ||
     (kind === "spike" ? spikeInfo(dir).question : null);
   const title = specTitle(reqRaw || (kind === "spike" ? readContained(projectDir, path.join(dir, SPIKE_FILE)) || "" : ""), slug);
-  const feature = { key: slug, parent: null, type: "feature", summary: titledSlug(title, slug),
+  const feature = { key: slug, parent: null, type: "feature", summary: mdPlainText(titledSlug(title, slug)),
     description: [summary, T.featureLine(".specs/" + slug + "/", trackLabel(tracks), (i18n.msg(lang).phaseNames || {})[phase] || phase, done, blocks.length)].filter(Boolean).join("\n\n"),
     status: phase === "complete" ? "done" : status(done, blocks.length), labels: cap(base) };
   // The stories: heading order, then first-AC order (the export's); each with its intro and its criteria, whole.
@@ -16544,10 +17324,11 @@ function trackerRecords(projectDir, f, lang, supBy) {
       const k = dirKey(dir) + "\n" + a.id;
       const by = marks.get(k);
       const note = !by ? "" : " — " + (marks.live && !marks.live.has(k) ? X.toBeSupersededBy(by.join(", ")) : X.supersededBy(((marks.liveBy && marks.liveBy.get(k)) || by).join(", ")));
-      return `- ${a.id} — ${acOneLine(a.text, a.id, Infinity)}${note}${placeholderReport(a.text).length ? ` (${X.template})` : ""}`;
+      // the criterion as a reader sees it (mdPlainText — an import's `NFR\-2` / `&lt;!--` read as written; 1.17 verification N3)
+      return `- ${a.id} — ${mdPlainText(acOneLine(a.text, a.id, Infinity))}${note}${placeholderReport(a.text).length ? ` (${X.template})` : ""}`;
     });
     const st = blocks.filter((b) => b.story && b.story.toUpperCase() === "US" + n);
-    stories.push({ n, rec: { key: `${slug}/US-${n}`, parent: slug, type: "story", summary: ghLine(ctx ? ctx[0] : `US-${n}`),
+    stories.push({ n, rec: { key: `${slug}/US-${n}`, parent: slug, type: "story", summary: ghLine(mdPlainText(ctx ? ctx[0] : `US-${n}`)),
       description: [intro.join("\n"), acLines.length ? T.acceptance + "\n" + acLines.join("\n") : ""].filter(Boolean).join("\n\n"),
       status: status(st.filter((b) => b.done).length, st.length), labels: cap(base.concat(own.map((a) => a.id))) } });
   }
@@ -16562,7 +17343,7 @@ function trackerRecords(projectDir, f, lang, supBy) {
     const size = taskSize(b);
     const occ = (seen.get(String(b.number)) || 0) + 1;
     seen.set(String(b.number), occ);
-    return { key: `${slug}/#${b.number}${occ > 1 ? ` (${occ})` : ""}`, parent, type: parent === slug ? "task" : "subtask", summary: `#${b.number} ${ghLine(withoutTaskMarkers(cleanTaskText(b.text))) || ghLine(b.text)}`,
+    return { key: `${slug}/#${b.number}${occ > 1 ? ` (${occ})` : ""}`, parent, type: parent === slug ? "task" : "subtask", summary: `#${b.number} ${ghLine(mdPlainText(withoutTaskMarkers(cleanTaskText(b.text)))) || ghLine(b.text)}`,
       description: prose.map((l) => l.trim()).filter(Boolean).join("\n") + "\n\n" + T.taskLine(".specs/" + slug + "/tasks.md", b.number),
       status: b.done ? "done" : "open", labels: cap(base.concat([...extractAcIds(prose.join("\n"))])), estimate: size ? SIZE_POINTS[size] : null };
   });
@@ -17676,7 +18457,12 @@ function upgradeFeature(projectDir, s, ctx) {
   if (vs.unverified.length) attention.push("unverified");
   if (drift && drift.drifted) attention.push("drift");
   if (drift && drift.stale) attention.push("stale-finish");
-  if (warns.length) attention.push("warnings");
+  // 1.17 D review: a track pack from before 1.17 whose name is reserved now ('dist', 'kafka', 'consistency'…) — named, with the way out
+  const rawSt = readJson(statePath(s.dir)).data;
+  const reservedPacks = missingPackTracks(s.dir).filter((n) => legacyPackName(rawSt, n));
+  if (reservedPacks.length) attention.push("track-pack-reserved");
+  // 1.17 A review 3: the design weigh warns (design-tradeoffs / design-risks) are listed, never an upgrade to-do on their own.
+  if (warns.some((c) => !DESIGN_WEIGH_IDS.has(c.id))) attention.push("warnings");
   const res = {
     name: s.slug, kind, tracks: trackLabel(tracks), tracksSource: savedTracks(st) ? "state" : "inferred", tracksPending: !!plan.tracks,
     lang: normalizeLang(st.lang || projectLang(projectDir)), phase, status, tasks: { done, total: tasks.length },
@@ -17685,7 +18471,7 @@ function upgradeFeature(projectDir, s, ctx) {
     history: { present: plan.present, seed: plan.seed.map((x) => x.phase), skip: plan.skip },
     unverified: vs.unverifiedDetail.map((d) => Object.assign({ number: d.number, reason: d.reason }, d.specChanged ? { specChanged: true } : {}, d.unticked ? { unticked: true } : {})),
     next: { step: na.step, recommendation: na.recommendation },
-    review, reviewArtifacts, drift,
+    review, reviewArtifacts, drift, reservedPacks,
     group: fails.length ? "blocked" : attention.length ? "attention" : "ok", attention,
   };
   if (na.impact) res.impact = na.impact.phases; // the spec_impact phases to diff before re-approving
@@ -17786,6 +18572,7 @@ function upgradeItems(f, lang) {
   if (f.unverified.length) act(I.verify(unverifiedLabel({ unverifiedDetail: f.unverified }, lang), f.name));
   if (f.drift && f.drift.drifted) act(I.drift(f.drift.changed.length + f.drift.missing.length + f.drift.nowPresent.length, f.name));
   if (f.drift && f.drift.stale) act(I.stale(f.name));
+  if (f.reservedPacks && f.reservedPacks.length) act(I.packReserved(f.reservedPacks.map((n) => "+" + n).join(", "), f.name)); // 1.17 D review
   if (f.review === "critic") act(I.critic(f.reviewArtifacts.join(", ")));
   else if (f.review === "converge") act(I.converge(f.reviewArtifacts.join(", ")));
   else out.push({ check: false, text: I.none });
@@ -17981,8 +18768,10 @@ const RE_JS_IMPORT = /(?:require\s*\(\s*|from\s+)['"](express|koa|@koa\/router|k
 const RE_JS_CLIENT_IMPORT = /(?:require\s*\(\s*|from\s+)['"](axios|ky|ky-universal|got|node-fetch|cross-fetch|isomorphic-fetch|ofetch|redaxios|wretch|superagent|undici|@angular\/common\/http)(?:\/[^'"]*)?['"]/;
 const RE_JS_CLIENT_DEF = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*(?:axios|ky|got|ofetch|wretch|redaxios|superagent)\s*\.\s*(?:create|extend)\s*\(/g;
 const JS_GENERIC_OWNERS = new Set(["api", "instance", "r", "route", "routes", "server"]);
-const RE_NEST_ROUTE = /@(Get|Post|Put|Patch|Delete|Options|Head|All)\s*\(\s*(?:(['"`])([^'"`]*)\2)?\s*\)/g;
-const RE_NEST_CTRL = /@Controller\s*\(\s*(?:(['"`])([^'"`]*)\1|\{[^}]*?path\s*:\s*(['"`])([^'"`]*)\3[^}]*\})?\s*\)/;
+// `\(\s*(?:X)?\s*\)` read as `\(\s*(?:X\s*)?\)` (same calls): two blank runs meeting around an absent argument backtracked
+// quadratically (1.17 H).
+const RE_NEST_ROUTE = /@(Get|Post|Put|Patch|Delete|Options|Head|All)\s*\(\s*(?:(['"`])([^'"`]*)\2\s*)?\)/g;
+const RE_NEST_CTRL = /@Controller\s*\(\s*(?:(?:(['"`])([^'"`]*)\1|\{[^}]*?path\s*:\s*(['"`])([^'"`]*)\3[^}]*\})\s*)?\)/;
 const RE_NEXT_APP = /(?:^|\/)app\/((?:[^/]+\/)*)route\.[cm]?[jt]sx?$/; // Next.js app router: app/**/route.ts
 const RE_NEXT_PAGES = /(?:^|\/)pages\/api\/(.+)\.[cm]?[jt]sx?$/;
 const RE_NEXT_EXPORT = /^\s*export\s+(?:async\s+)?(?:function\s+|const\s+)(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/;
@@ -17996,14 +18785,14 @@ const RE_PY_OWNER_SUFFIX = /(?:_app|_api|_router|_routes|_bp|_blueprint|App|Api|
 const RE_PY_APP_DEF = /^\s*([A-Za-z_]\w*)\s*(?::\s*[\w.]+\s*)?=\s*(?:[\w.]+\.)?(?:FastAPI|Flask|APIRouter|Blueprint|Quart|Sanic|Starlette)\s*\(/;
 const RE_PY_PREFIX_DEF = /^\s*([A-Za-z_]\w*)\s*(?::\s*[\w.]+\s*)?=\s*(?:[\w.]+\.)?(?:APIRouter|Blueprint)\s*\((.*)$/;
 const RE_PY_PREFIX_ARG = /\b(?:prefix|url_prefix)\s*=\s*[rRuU]?(['"])([^'"]*)\1/;
-const RE_PY_WEB_IMPORT = /^\s*(?:from|import)\s+(fastapi|flask|django)\b/m;
+const RE_PY_WEB_IMPORT = /^[^\S\n\r\u2028\u2029]*(?:from|import)\s+(fastapi|flask|django)\b/m; // the indent within its line (1.17 H)
 const RE_DJANGO_ROUTE = /(?<![\w.])(?:path|re_path|url)\s*\(\s*[rRuU]?(['"])([^'"]*)\1/g;
 const RE_SPRING = /@(Get|Post|Put|Patch|Delete|Request)Mapping\b(?:\s*\(([^)]*)\))?/g;
 const RE_ASP_ATTR = /\[\s*(?:[\w.]+\s*,\s*)*Http(Get|Post|Put|Patch|Delete|Head|Options)\s*(?:\(\s*(?:template\s*:\s*)?"([^"]*)"[^)]*\))?/g;
 const RE_ASP_ROUTE_ATTR = /\[\s*Route\s*\(\s*"([^"]*)"\s*\)/;
 const RE_ASP_MAP = /\.Map(Get|Post|Put|Patch|Delete)?\s*\(\s*"([^"]*)"/g;
-const RE_RUBY_VERB = /^\s*(get|post|put|patch|delete|match)\s*\(?\s*(['"])([^'"]+)\2/;
-const RE_RAILS_RES = /^\s*(resources|resource)\s*\(?\s*:(\w+)/;
+const RE_RUBY_VERB = /^\s*(get|post|put|patch|delete|match)\s*(?:\(\s*)?(['"])([^'"]+)\2/; // \s*\(?\s* → \s*(?:\(\s*)? (1.17 H)
+const RE_RAILS_RES = /^\s*(resources|resource)\s*(?:\(\s*)?:(\w+)/;
 const RE_LARAVEL = /Route::(get|post|put|patch|delete|options|any|match|resource|apiResource)\s*\(\s*(?:\[[^\]]*\]\s*,\s*)?(['"])([^'"]+)\2/g;
 const RE_LARAVEL_CHAIN = /->\s*(get|post|put|patch|delete|options|any)\s*\(\s*(['"])([^'"]*)\2/g; // routes/*.php only
 const RE_SYMFONY = /#\[\s*Route\s*\(\s*(?:path\s*:\s*)?(['"])([^'"]+)\1(.*)$/; // the rest of the line holds methods: [...]
@@ -18033,7 +18822,7 @@ function normRoutePath(p) {
   return /^[/^*]/.test(s) ? s : "/" + s; // Django regexes (^…$) and wildcards stay as written
 }
 function joinRoute(prefix, sub) {
-  const a = String(prefix || "").trim().replace(/\/+$/, "");
+  const a = stripEnd(String(prefix || "").trim(), isSlashUnit); // /\/+$/
   const b = String(sub || "").trim().replace(/^\/+/, "");
   return normRoutePath(a ? (b ? a + "/" + b : a) : b);
 }
@@ -18300,7 +19089,10 @@ function scanCodebase(projectDir, opts = {}) {
         if (Object.prototype.hasOwnProperty.call(NODE_TEST_RUNNERS, d)) testFws.add(NODE_TEST_RUNNERS[d]);
       });
       const scripts = isObj(pj.scripts) ? pj.scripts : {};
-      if (typeof scripts.test === "string" && /\bnode\s+(?:[^|&;]*\s)?--test\b/.test(scripts.test)) testFws.add("node:test");
+      // /\bnode\s+(?:[^|&;]*\s)?--test\b/, one command at a time: that pattern rescanned the command from each "node" and
+      // each of a long blank run's units (1.17 H).
+      const nodeTest = (seg) => { const m = /\bnode\s/.exec(seg); return !!m && /\s--test\b/.test(seg.slice(m.index + 4)); };
+      if (typeof scripts.test === "string" && scripts.test.split(/[|&;]/).some(nodeTest)) testFws.add("node:test");
       if (typeof pj.main === "string" && pj.main.trim()) addEntry(normEntry(pj.main), "package.json main");
       if (typeof pj.bin === "string" && pj.bin.trim()) addEntry(normEntry(pj.bin), "package.json bin");
       else if (isObj(pj.bin)) Object.values(pj.bin).filter((v) => typeof v === "string" && v.trim()).forEach((v) => addEntry(normEntry(v), "package.json bin"));
@@ -18327,7 +19119,7 @@ function scanCodebase(projectDir, opts = {}) {
   [["laravel/framework", "laravel"], ["symfony/framework-bundle", "symfony"]].forEach(([k, v]) => { if (composer.includes(k)) frameworks.add(v); });
   [["phpunit/phpunit", "phpunit"], ["pestphp/pest", "pest"]].forEach(([k, v]) => { if (composer.includes(k)) testFws.add(v); });
   const cargo = has("Cargo.toml") ? text("Cargo.toml") : "";
-  [["actix-web", "actix"], ["axum", "axum"], ["rocket", "rocket"]].forEach(([k, v]) => { if (new RegExp("^\\s*" + k + "\\s*=", "m").test(cargo)) frameworks.add(v); });
+  [["actix-web", "actix"], ["axum", "axum"], ["rocket", "rocket"]].forEach(([k, v]) => { if (new RegExp("^[^\\S\\n\\r\\u2028\\u2029]*" + k + "\\s*=", "m").test(cargo)) frameworks.add(v); }); // the indent within its line (1.17 H)
 
   // bounded recursive walk
   const walk = walkProject(root, cap, (rel, full, name) => {
@@ -18365,15 +19157,15 @@ function scanCodebase(projectDir, opts = {}) {
     if (ext === ".rs" && /#\[(?:test|cfg\(test\))\]/.test(txt)) testFws.add("cargo test");
     if (test) {
       // The runner a test file imports (the manifests above only cover declared dependencies).
-      [[/['"]node:test['"]/, "node:test"], [/from\s+['"]vitest['"]/, "vitest"], [/['"]@jest\/globals['"]/, "jest"], [/^\s*(?:import|from)\s+pytest\b/m, "pytest"],
-        [/^\s*(?:import|from)\s+unittest\b/m, "unittest"], [/import\s+org\.junit\b/, "junit"], [/using\s+Xunit\b/, "xunit"], [/using\s+NUnit\b/, "nunit"]]
+      [[/['"]node:test['"]/, "node:test"], [/from\s+['"]vitest['"]/, "vitest"], [/['"]@jest\/globals['"]/, "jest"], [/^[^\S\n\r\u2028\u2029]*(?:import|from)\s+pytest\b/m, "pytest"],
+        [/^[^\S\n\r\u2028\u2029]*(?:import|from)\s+unittest\b/m, "unittest"], [/import\s+org\.junit\b/, "junit"], [/using\s+Xunit\b/, "xunit"], [/using\s+NUnit\b/, "nunit"]]
         .forEach(([re, fw]) => { if (re.test(txt)) testFws.add(fw); });
       return; // tests call routes (supertest's api.get('/x')), they don't declare them
     }
     if (ext === ".py") { const im = txt.match(RE_PY_WEB_IMPORT); if (im) frameworks.add(im[1]); } // FastAPI/Flask without a manifest
     if (/@SpringBootApplication\b/.test(txt)) addEntry(rel, "spring boot");
     else if (ext === ".java" && /\bstatic\s+void\s+main\s*\(/.test(txt)) addEntry(rel, "java main");
-    else if (ext === ".kt" && /^\s*fun\s+main\s*\(/m.test(txt)) addEntry(rel, "kotlin main");
+    else if (ext === ".kt" && /^[^\S\n\r\u2028\u2029]*fun\s+main\s*\(/m.test(txt)) addEntry(rel, "kotlin main"); // indents within their line (1.17 H)
     const found = scanRoutes(rel, txt);
     if (!found.length) return;
     routeFiles.add(rel);
@@ -18441,7 +19233,7 @@ function scanCodebase(projectDir, opts = {}) {
 function implementsRefs(tasksText) {
   const out = [];
   for (const v of taskMarkerValues(tasksProseText(tasksText || ""), "implements")) {
-    v.split(/[,;]/).map((s) => s.trim().replace(/^`+|`+$/g, "").trim()).filter(Boolean).forEach((p) => { if (!out.includes(p)) out.push(p); });
+    v.split(/[,;]/).map((s) => stripEnds(s.trim(), isBacktickUnit).trim()).filter(Boolean).forEach((p) => { if (!out.includes(p)) out.push(p); });
   }
   return out;
 }
@@ -18514,11 +19306,38 @@ function globFolderNames(g) {
 }
 // The code files one reference names (keys of `code`): the file itself, every code file under a folder, or a
 // glob's matches. `path/to/file.js:12` and `#L12` anchors are dropped; a path outside the project names nothing.
-const implementsPath = (ref) => String(ref).trim().replace(/\\/g, "/").replace(/#L?\d+.*$/, "").replace(/:\d+(?:[-:]\d+)*$/, "").trim();
+const implementsPath = (ref) => {
+  const s = stripHashLineAnchor(String(ref).trim().replace(/\\/g, "/")); // .replace(/#L?\d+.*$/, "")
+  const c = colonLineAnchorAt(s); // .replace(/:\d+(?:[-:]\d+)*$/, "")
+  return (c === -1 ? s : s.slice(0, c)).trim();
+};
+function isDigitUnit(c) {
+  return c !== undefined && c >= "0" && c <= "9";
+}
+// s.replace(/#L?\d+.*$/, ""): from the first '#' followed by digits (or L and digits) with no line terminator after it.
+function stripHashLineAnchor(s) {
+  for (let i = s.indexOf("#", lastLtIndex(s) + 1); i !== -1; i = s.indexOf("#", i + 1)) {
+    if (isDigitUnit(s[s[i + 1] === "L" ? i + 2 : i + 1])) return s.slice(0, i);
+  }
+  return s;
+}
+// Where /:\d+(?:[-:]\d+)*$/ matches in s (a trailing ":12" / ":12-20" / ":3:5" anchor), else -1: the leftmost ':' of the
+// trailing run of digit groups joined by single '-' / ':'.
+function colonLineAnchorAt(s) {
+  let at = -1;
+  for (let i = s.length - 1; i >= 0 && isDigitUnit(s[i]);) {
+    let j = i;
+    while (j >= 0 && isDigitUnit(s[j])) j--;
+    if (s[j] === ":") at = j;
+    if (s[j] !== ":" && s[j] !== "-") break;
+    i = j - 1;
+  }
+  return at;
+}
 // One _Implements:_ reference as every reader spells the file: backticks, a line anchor (:12 / #L12), a leading ./ and a
 // trailing / dropped, forward slashes. implementsKey: the same, case-folded where the file system folds case — so
 // `src/payment.js:10`, `./src/payment.js#L50` and `SRC/Payment.js` (on Windows / macOS) compare as one file.
-const implementsRel = (ref) => implementsPath(String(ref).trim().replace(/^`+|`+$/g, "")).replace(/^(?:\.\/)+/, "").replace(/\/+$/, "");
+const implementsRel = (ref) => stripEnd(implementsPath(stripEnds(String(ref).trim(), isBacktickUnit)).replace(/^(?:\.\/)+/, ""), isSlashUnit);
 const implementsKey = (ref) => (FOLD_CASE ? implementsRel(ref).toLowerCase() : implementsRel(ref));
 function implementsTargets(root, ref, code, fold) {
   const p = implementsPath(ref);
@@ -18632,10 +19451,44 @@ function coverage(projectDir) {
 // imported content. Requirement/story N, criterion/scenario M → US-N.AC-M; scenarios become ONE EARS criterion
 // where possible (else the text is kept with [NEEDS CLARIFICATION]); spec-kit FR-xxx / SC-xxx lines keep their IDs.
 
-const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec", plan: "plan", execplan: "ExecPlan", bmad: "BMAD" }; // C3: + plan · execplan · bmad
+const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec", plan: "plan", execplan: "ExecPlan", bmad: "BMAD", fluidplan: "fluidplan" }; // C3: + plan · execplan · bmad; 1.17 F: + fluidplan
 const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
-const TEXT_IMPORT_TOOLS = ["plan", "execplan"]; // 1.16 C4: the single-document sources spec_import {text} accepts
+const TEXT_IMPORT_TOOLS = ["plan", "execplan", "fluidplan"]; // 1.16 C4: the single-document sources spec_import {text} accepts (1.17 F: a fluidplan PLAN.md, DECISIONS.md after it)
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+// An imported line never opens an HTML comment (1.17 F review): every parser reads its source without its comments, so a `<!--`
+// left in the text was an unclosed one — plain text there, but in the files written it paired with a later `-->` (the
+// `<!-- <tool>: … -->` line under a converted criterion) and hid every criterion between.
+// Outside inline code spans only (1.17 verification N3): a code span's `<!--` is text to every comment reader (commentLines —
+// the same pairing, backtickRuns, line by line) and a code span shows its text verbatim — "escape `<!--` in user names" became
+// `&lt;!--` in requirements.md and the exports (1.16 kept it). The written line starts with the text or follows a prefix of the
+// importer's without backticks, so the pairing read here is the file's.
+const commentInert = (s) => inertOutsideCode(String(s), false);
+// `<!--` (and, with `closers`, `-->`) → `&lt;!--` / `--&gt;` outside inline code spans, line by line. Linear.
+function inertOutsideCode(text, closers) {
+  if (!text.includes("<!--") && !(closers && text.includes("-->"))) return text;
+  const esc = (t) => (closers ? t.replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;") : t.replace(/<!--/g, "&lt;!--"));
+  return text.split("\n").map((line) => {
+    if (!line.includes("`")) return esc(line);
+    const ticks = backtickRuns(line);
+    let out = "";
+    let from = 0;
+    // [k, spanEnd(k)) is a whole code span, or an unmatched backtick run (literal — the scan goes on after it): kept as written
+    for (let k = line.indexOf("`"); k !== -1; k = line.indexOf("`", from)) {
+      const e = ticks.spanEnd(k);
+      out += esc(line.slice(from, k)) + line.slice(k, e);
+      from = e;
+    }
+    return out + esc(line.slice(from));
+  }).join("\n");
+}
+// A block of imported lines as requirements.md holds it: commentInert outside fenced code (a fenced `<!--` is code, kept), and a
+// fence the block leaves open closed at its end (the block starts outside any fence: it follows a heading the importer writes).
+function inertBlock(lines) {
+  const st = { fence: null };
+  const out = lines.map((l) => (fenceStep(st, l) ? l : commentInert(l)));
+  if (st.fence) out.push(" ".repeat(st.fence.indent) + st.fence.mark);
+  return out;
+}
 
 function isInsideDir(root, p) {
   const f = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
@@ -18700,15 +19553,29 @@ function insideDirAlias(root, p) {
 
 // Headings outside fenced code: [{ i, level, text }].
 function mdHeadings(lines) {
-  return headingIndex(lines).map((i) => {
-    const m = lines[i].match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
-    return { i, level: m[1].length, text: m[2].trim() };
-  });
+  return headingIndex(lines).map((i) => ({ i, ...mdHeadingParts(lines[i]) }));
+}
+// "## Title ##" → { level, text }: what /^(#{1,6})\s+(.*?)\s*#*\s*$/ captured (text trimmed), read by a scan — that pattern
+// backtracked cubically on a heading holding a long run of spaces (a 3,000-space heading took 10 s; 1.17 F review). The line
+// is one headingIndex() accepts (1–6 '#' then whitespace). The closing sequence is the longest suffix whitespace · '#'s ·
+// whitespace.
+const isWs = (c) => c !== undefined && c.trim() === "";
+function mdHeadingParts(line) {
+  let level = 0;
+  while (level < 6 && line[level] === "#") level++;
+  let lo = level;
+  while (lo < line.length && isWs(line[lo])) lo++;
+  let hi = line.length;
+  while (hi > lo && isWs(line[hi - 1])) hi--;
+  while (hi > lo && line[hi - 1] === "#") hi--;
+  while (hi > lo && isWs(line[hi - 1])) hi--;
+  return { level, text: line.slice(lo, hi).trim() };
 }
 // [lo, hi) of the lines under heading hs[k], up to the next heading of the same or a higher level.
 function mdRange(lines, hs, k) {
   const h = hs[k];
-  const next = hs.slice(k + 1).find((x) => x.level <= h.level);
+  let next = null; // a scan, no slice: copying the rest of the headings for each one was quadratic on a long PLAN.md (1.17 F review)
+  for (let j = k + 1; j < hs.length && !next; j++) if (hs[j].level <= h.level) next = hs[j];
   return [h.i + 1, next ? next.i : lines.length];
 }
 function mdBody(lines, hs, k) {
@@ -18751,7 +19618,8 @@ function mdListItems(lines, numberedOnly) {
     const f = l.match(RE_FENCE);
     if (f) { fence = f[1]; cur = null; return; }
     const ind = indentOf(l);
-    const m = l.match(numberedOnly ? /^\s*(\d+)[.)]\s+(.*)$/ : /^\s*(?:(\d+)[.)]|[-*+])\s+(.*)$/);
+    // /^\s*(\d+)[.)]\s+(.*)$/ (or with a bullet too), the text read by headRest (1.17 H)
+    const m = headRest(l, numberedOnly ? /^\s*(\d+)[.)]/ : /^\s*(?:(\d+)[.)]|[-*+])/, true);
     if (m && (!cur || ind <= cur.indent)) { cur = { n: m[1] ? +m[1] : null, text: m[2].trim(), indent: ind, at: [i] }; items.push(cur); return; }
     if (!l.trim() || /^\s*(?:#|>|\|)/.test(l) || RE_MD_HR.test(l)) { cur = null; return; }
     if (!cur) return;
@@ -18775,24 +19643,24 @@ function leftoverExtras(lines, hs, used, prefix = "") {
     if (h) {
       near = h;
       if (used.has(i)) { cur = null; return; }
-      if (cur && cur.level != null && h.level > cur.level) { cur.lines.push(raw.replace(/\s+$/, "")); return; }
+      if (cur && cur.level != null && h.level > cur.level) { cur.lines.push(raw.trimEnd()); return; } // trimEnd: /\s+$/ is quadratic on a long space run
       cur = { label: prefix + h.text, level: h.level, lines: [] };
       out.push(cur);
       return;
     }
     if (used.has(i)) return;
-    const l = raw.replace(/\s+$/, "");
+    const l = raw.trimEnd();
     if (!l.trim() || RE_MD_HR.test(l)) { if (cur) cur.lines.push(""); return; }
     if (!cur) { cur = { label: near ? prefix + near.text : null, level: null, lines: [] }; out.push(cur); }
     cur.lines.push(l);
   });
   return out.map((b) => ({ heading: b.label != null ? "## " + b.label : null, label: b.label, lines: tidyLines(b.lines) })).filter((b) => b.lines.length);
 }
-const trimClause = (s) => String(s || "").trim().replace(/[\s,.;:]+$/, "");
+const trimClause = (s) => stripEnd(String(s || "").trim(), wsOrUnitIn(",.;:")); // /[\s,.;:]+$/
 // Prose lines as written (trailing spaces dropped), blank runs folded, no blank edges.
 function tidyLines(lines) {
   const out = [];
-  for (const l of lines.map((x) => x.replace(/\s+$/, ""))) if (l || (out.length && out[out.length - 1])) out.push(l);
+  for (const l of lines.map((x) => x.trimEnd())) if (l || (out.length && out[out.length - 1])) out.push(l); // trimEnd: /\s+$/ is quadratic on a long blank run (1.17 F)
   while (out.length && !out[out.length - 1]) out.pop();
   return out;
 }
@@ -18832,29 +19700,136 @@ function earsFromClauses(cl, lng) {
   if (!then) return null;
   return [cl.given ? E.while + " " + trimClause(cl.given) + "," : null, cl.when ? E.when + " " + trimClause(cl.when) + "," : null, then].filter(Boolean).join(" ");
 }
-// Given/When/Then prose (spec-kit scenarios; Gherkin keywords in EN/PT/ES) → EARS, in the scenario's language.
+// 1.17 H — the importer's clause patterns, read by a scan. /^(?:given\s+(.+?)\s*,?\s+)?(?:when\s+(.+?)\s*,?\s+)?then\s+(.+)$/i
+// and /^(WHEN|IF|WHILE|WHERE)\s+(.+?),?\s+THEN\s+(.+)$/i backtracked quadratically — Given/When/Then cubically — on a long
+// blank run, a long run of "when"s or a line break a capture can't cross. The scan tries the choices in the order the regex
+// engine does, so the first reading it finds is the engine's own, captures included (down to the one-blank capture the
+// engine settled for by giving back a keyword's \s+). Per-position facts are filled in one pass; every run of blanks /
+// commas that a keyword follows is judged once.
+function clauseScanner(t) {
+  const n = t.length;
+  const nnw = new Int32Array(n + 1), nlt = new Int32Array(n + 1), sepEnd = new Int32Array(n + 1), prevComma = new Int32Array(n + 1);
+  nnw[n] = n; nlt[n] = n; sepEnd[n] = n;
+  for (let i = n - 1; i >= 0; i--) {
+    const c = t[i], w = isWsUnit(c);
+    nnw[i] = w ? nnw[i + 1] : i; // the first non-blank at or after i
+    nlt[i] = isLtUnit(c) ? i : nlt[i + 1]; // the first line terminator at or after i (n: none)
+    sepEnd[i] = w || c === "," ? sepEnd[i + 1] : i; // the end of the run of blanks / commas at i
+  }
+  for (let i = 0, pc = -1; i <= n; i++) { prevComma[i] = pc; if (t[i] === ",") pc = i; }
+  const runStart = [], runKw = []; // each run of blanks / commas that something follows: its start and what follows
+  for (let i = 0; i < n;) {
+    if (isWsUnit(t[i]) || t[i] === ",") { if (sepEnd[i] < n) { runStart.push(i); runKw.push(sepEnd[i]); } i = sepEnd[i]; } else i++;
+  }
+  const firstRun = new Int32Array(n + 2); // the first run starting at or after p
+  for (let p = n + 1, j = runStart.length; p >= 0; p--) { while (j > 0 && runStart[j - 1] >= p) j--; firstRun[p] = j; }
+  const kwAt = (re, at) => { re.lastIndex = at; const m = re.exec(t); return m ? { end: at + m[0].length, m } : null; };
+  // The smallest e ≥ x (x..k inside one run) whose separator t[e..k) the rule reads: "gwt" \s*,?\s+ (one comma at most, a
+  // blank last), "kiro" ,?\s+ (a comma only first). -1: none.
+  const sepStart = (rule, x, k) => {
+    if (k <= x || !isWsUnit(t[k - 1])) return -1;
+    const c1 = prevComma[k];
+    if (rule === "kiro") return c1 < x ? x : c1 < k - 1 ? c1 : -1;
+    const c2 = c1 >= x ? prevComma[c1] : -1;
+    return c2 >= x ? c2 + 1 : x;
+  };
+  // (.+?)<separator> before a keyword whose continuation cont(k) reads: from a capture start gs → { e, k, r } | null.
+  const lazyReader = (rule, cont) => {
+    const nv = new Int32Array(runStart.length + 1).fill(-1), res = new Array(runStart.length).fill(null);
+    for (let j = runStart.length - 1; j >= 0; j--) {
+      if (sepStart(rule, runStart[j], runKw[j]) !== -1) res[j] = cont(runKw[j]);
+      nv[j] = res[j] ? j : nv[j + 1]; // the first run from j on whose keyword reads
+    }
+    return (gs) => {
+      const x = gs + 1, lt = nlt[gs]; // the capture t[gs..e) holds no line terminator: e ≤ lt
+      if (x >= n) return null;
+      let j = firstRun[x];
+      if (isWsUnit(t[x]) || t[x] === ",") { // a run under way at x is read from x
+        const k = sepEnd[x];
+        const e = k < n ? sepStart(rule, x, k) : -1;
+        if (e !== -1) { if (e > lt) return null; const r = cont(k); if (r) return { e, k, r }; }
+        j = firstRun[k + 1];
+      }
+      j = j < runStart.length ? nv[j] : -1;
+      if (j === -1) return null;
+      const e = sepStart(rule, runStart[j], runKw[j]);
+      return e > lt ? null : { e, k: runKw[j], r: res[j] };
+    };
+  };
+  // KW\s+(.+?)<separator><keyword …> at `a` (just past KW, a blank there): the capture from the first non-blank — else,
+  // as the engine giving back \s+ found it, one blank (the last that is no line terminator, a blank kept on each side)
+  // before a keyword at that first non-blank.
+  const clause = (a, lazy, cont) => {
+    const gs = nnw[a];
+    if (gs >= n) return null;
+    const m = lazy(gs);
+    if (m) return { g: t.slice(gs, m.e), r: m.r };
+    if (t[gs] === "," || gs - a < 3) return null;
+    const r = cont(gs);
+    if (r) for (let s = gs - 2; s > a; s--) if (!isLtUnit(t[s])) return { g: t[s], r };
+    return null;
+  };
+  // THEN\s+(.+)$ at c → the response | null (all blanks: the last one, as the engine giving back \s+ read it).
+  const thenAt = (re, c) => {
+    const kw = kwAt(re, c);
+    if (!kw) return null;
+    const q = nnw[kw.end];
+    if (q < n) return nlt[q] === n ? t.slice(q) : null;
+    return n - kw.end >= 2 && !isLtUnit(t[n - 1]) ? t[n - 1] : null;
+  };
+  const memo = (f) => { const c = new Map(); return (k) => { if (!c.has(k)) c.set(k, f(k)); return c.get(k); }; };
+  return { n, nnw, kwAt, lazyReader, clause, thenAt, memo };
+}
+// Given/When/Then prose (spec-kit scenarios; Gherkin keywords in EN/PT/ES) → EARS, in the scenario's language. Each language's
+// keywords, a blank after each (`given\s+` …; PT / ES: dad[oa]s?\s+(?:que\s+)?).
 const GWT = [
-  ["en", /^(?:given\s+(.+?)\s*,?\s+)?(?:when\s+(.+?)\s*,?\s+)?then\s+(.+)$/i],
-  ["pt", /^(?:dad[oa]s?\s+(?:que\s+)?(.+?)\s*,?\s+)?(?:quando\s+(.+?)\s*,?\s+)?ent[ãa]o\s+(.+)$/i],
-  ["es", /^(?:dad[oa]s?\s+(?:que\s+)?(.+?)\s*,?\s+)?(?:cuando\s+(.+?)\s*,?\s+)?entonces\s+(.+)$/i],
+  ["en", { given: /given(?=\s)/iy, que: null, when: /when(?=\s)/iy, then: /then(?=\s)/iy }],
+  ["pt", { given: /dad[oa]s?(?=\s)/iy, que: /que(?=\s)/iy, when: /quando(?=\s)/iy, then: /ent[ãa]o(?=\s)/iy }],
+  ["es", { given: /dad[oa]s?(?=\s)/iy, que: /que(?=\s)/iy, when: /cuando(?=\s)/iy, then: /entonces(?=\s)/iy }],
 ];
+// /^(?:given\s+(.+?)\s*,?\s+)?(?:when\s+(.+?)\s*,?\s+)?then\s+(.+)$/i on t → [t, given, when, then] | null (clauseScanner S).
+function gwtMatch(S, t, K) {
+  const C = S.memo((k) => S.thenAt(K.then, k));
+  const lazyC = S.lazyReader("gwt", C);
+  const B = S.memo((k) => { const kw = S.kwAt(K.when, k); const c = kw && S.clause(kw.end, lazyC, C); return c ? { when: c.g, then: c.r } : null; });
+  const cont = S.memo((k) => B(k) || (C(k) != null ? { then: C(k) } : null)); // (?:when…)? then…
+  const g = S.kwAt(K.given, 0);
+  if (g) {
+    const lazyAG = S.lazyReader("gwt", cont);
+    const g0 = S.nnw[g.end];
+    const q = K.que && g0 < S.n ? S.kwAt(K.que, g0) : null;
+    const r = (q && S.clause(q.end, lazyAG, cont)) || S.clause(g.end, lazyAG, cont);
+    if (r) return [t, r.g, r.r.when, r.r.then];
+  }
+  const r0 = cont(0);
+  return r0 ? [t, undefined, r0.when, r0.then] : null;
+}
 function earsFromGwt(text) {
   const t = String(text).replace(/\*\*|__/g, "").trim();
   if (RE_MODAL.test(t) && RE_EARS_KEYWORD.test(t)) return t;
-  for (const [lng, re] of GWT) {
-    const m = t.match(re);
+  const S = clauseScanner(t);
+  for (const [lng, K] of GWT) {
+    const m = gwtMatch(S, t, K);
     if (m && (m[1] || m[2])) return earsFromClauses({ given: m[1], when: m[2], then: m[3] }, lng);
   }
   return null;
 }
 // A Kiro criterion is usually EARS already ("WHEN … THEN the system SHALL …") — kept verbatim; a WHEN/IF … THEN
 // without SHALL gets its response rewritten. A spec written in Portuguese / Spanish (QUANDO … ENTÃO … / CUANDO … ENTONCES …)
-// the same way, in its language (full review Pb1: only the English keywords were read).
+// the same way, in its language (full review Pb1: only the English keywords were read). Read as
+// /^(WHEN|IF|WHILE|WHERE)\s+(.+?),?\s+THEN\s+(.+)$/i by clauseScanner (1.17 H): [lang, the condition keyword, THEN, …].
 const KIRO_COND = [
-  ["en", /^(WHEN|IF|WHILE|WHERE)\s+(.+?),?\s+THEN\s+(.+)$/i, { when: "when", if: "if", while: "while", where: "where" }],
-  ["pt", /^(QUANDO|SE|ENQUANTO|ONDE)\s+(.+?),?\s+ENT[ÃA]O\s+(.+)$/i, { quando: "when", se: "if", enquanto: "while", onde: "where" }],
-  ["es", /^(CUANDO|SI|MIENTRAS|DONDE)\s+(.+?),?\s+ENTONCES\s+(.+)$/i, { cuando: "when", si: "if", mientras: "while", donde: "where" }],
+  ["en", /(WHEN|IF|WHILE|WHERE)(?=\s)/iy, /THEN(?=\s)/iy, { when: "when", if: "if", while: "while", where: "where" }],
+  ["pt", /(QUANDO|SE|ENQUANTO|ONDE)(?=\s)/iy, /ENT[ÃA]O(?=\s)/iy, { quando: "when", se: "if", enquanto: "while", onde: "where" }],
+  ["es", /(CUANDO|SI|MIENTRAS|DONDE)(?=\s)/iy, /ENTONCES(?=\s)/iy, { cuando: "when", si: "if", mientras: "while", donde: "where" }],
 ];
+function kiroCondMatch(S, t, head, thenRe) {
+  const h = S.kwAt(head, 0);
+  if (!h) return null;
+  const C = S.memo((k) => S.thenAt(thenRe, k));
+  const c = S.clause(h.end, S.lazyReader("kiro", C), C);
+  return c ? [t, h.m[1], c.g, c.r] : null;
+}
 // Kiro's requirements.md headings in EN / PT / ES: the document title, "## Introduction", "## Requirements" and the story
 // headings "### Requirement N" (PT/ES "Requisito N" — or a translated "História de Utilizador / Usuário N", "Historia de
 // Usuario N"). The English forms read exactly as before; a PT/ES "## Requisitos" wrapper only when it is the whole heading
@@ -18862,12 +19837,20 @@ const KIRO_COND = [
 const RE_KIRO_REQ_TITLE = /^(?:requirements?(?:\s+document)?|(?:documento\s+de\s+)?requisitos)$/i;
 const RE_KIRO_INTRO = /^(?:introduction\b|introdu[çc][ãa]o(?![\p{L}\p{N}_])|introducci[óo]n(?![\p{L}\p{N}_]))/iu;
 const RE_KIRO_REQS = /^(?:requirements\b|requisitos\s*$)/i;
-const RE_KIRO_STORY = /^(requirement|requisito|hist[óo]ria\s+de\s+(?:utilizador|usu[áa]rio)|historia\s+de\s+usuario)\s+(\d+)\s*[:.\-–—]?\s*(.*)$/i;
+// A Kiro story heading → [text, word, number, title] | null — /^(requirement|…)\s+(\d+)\s*[:.\-–—]?\s*(.*)$/i with the
+// title read by a scan (the two \s* around the optional dash backtracked quadratically before a line break — 1.17 H).
+const RE_KIRO_STORY_HEAD = /^(requirement|requisito|hist[óo]ria\s+de\s+(?:utilizador|usu[áa]rio)|historia\s+de\s+usuario)\s+(\d+)/i;
+function kiroStoryHeading(text) {
+  const h = RE_KIRO_STORY_HEAD.exec(text);
+  const title = h && titleAfterDash(text, h[0].length);
+  return title == null ? null : [text, h[1], h[2], title];
+}
 function earsFromKiro(text) {
   const t = String(text).trim();
   if (RE_MODAL.test(t)) return t;
-  for (const [lng, re, kws] of KIRO_COND) {
-    const m = t.match(re);
+  const S = clauseScanner(t);
+  for (const [lng, head, thenRe, kws] of KIRO_COND) {
+    const m = kiroCondMatch(S, t, head, thenRe);
     if (!m) continue;
     const E = i18n.msg(lng).importSpec.ears;
     const then = earsThen(m[3], lng, E);
@@ -18879,9 +19862,39 @@ function earsFromKiro(text) {
 // The story's title from its "I want …" clause (PT "quero …", ES "quiero …").
 function titleFromStory(prose) {
   const s = prose.join(" ");
-  const m = s.match(/\bI want\s+(?:to\s+)?(.+?)(?:,|\s+so that\b|$)/i) ||
-    s.match(/(?<![\p{L}\p{N}_])(?:quero|quiero)\s+(?:que\s+)?(.+?)(?:,|\s+(?:para|de modo a|de forma a)(?![\p{L}\p{N}_])|$)/iu);
-  return m ? shortTitle(m[1].charAt(0).toUpperCase() + m[1].slice(1), 60) : null;
+  const m = wantClause(s, /\bI want(?=\s)/gi, /to(?=\s)/iy, /so that\b/iy) ||
+    wantClause(s, /(?<![\p{L}\p{N}_])(?:quero|quiero)(?=\s)/giu, /que(?=\s)/iuy, /(?:para|de modo a|de forma a)(?![\p{L}\p{N}_])/iuy);
+  return m ? shortTitle(m.charAt(0).toUpperCase() + m.slice(1), 60) : null;
+}
+// The capture of /\bI want\s+(?:to\s+)?(.+?)(?:,|\s+so that\b|$)/i (and its PT / ES twin) by a scan: head / opt / closing are
+// its pieces (head global, opt / closing sticky). The lazy capture rescanned a long blank run at each step and every head
+// the text after it (1.17 H); here each position's "a clause ends here" is known once. Choices in the engine's order: the
+// heads left to right; the optional word taken, its blanks given back one by one, not taken; the head's blanks given back.
+function wantClause(s, head, opt, closing) {
+  const n = s.length;
+  const nnw = new Int32Array(n + 1), nlt = new Int32Array(n + 1), nextEnd = new Int32Array(n + 1);
+  nnw[n] = n; nlt[n] = n; nextEnd[n] = n;
+  for (let i = n - 1; i >= 0; i--) {
+    nnw[i] = isWsUnit(s[i]) ? nnw[i + 1] : i;
+    nlt[i] = isLtUnit(s[i]) ? i : nlt[i + 1];
+    let ends = s[i] === ",";
+    if (!ends && nnw[i] > i) { closing.lastIndex = nnw[i]; ends = closing.test(s); } // \s+ then the closing words
+    nextEnd[i] = ends ? i : nextEnd[i + 1]; // the first position ≥ i where the capture may end (n: the end)
+  }
+  const from = (cs) => { const e = cs < n ? nextEnd[cs + 1] : -1; return e !== -1 && e <= nlt[cs] ? s.slice(cs, e) : null; };
+  head.lastIndex = 0;
+  for (let h; (h = head.exec(s));) {
+    const a = h.index + h[0].length, g0 = nnw[a];
+    let r = null;
+    opt.lastIndex = g0;
+    if (g0 < n && opt.test(s)) {
+      const a1 = opt.lastIndex, g1 = nnw[a1];
+      for (let cs = g1; cs > a1 && r == null; cs--) r = from(cs);
+    }
+    for (let cs = g0; cs > a && r == null; cs--) r = from(cs);
+    if (r != null) return r;
+  }
+  return null;
 }
 function newImportModel() {
   return { title: null, summary: null, nameHint: null, stories: [], extra: [], carried: [], design: null, tasks: null, skipped: [], warnings: [], mapping: {} };
@@ -18911,7 +19924,7 @@ function parseKiro(dir, read, W) {
     sAt.forEach((r) => used.add(sLo + r)); // the rest of the introduction is carried verbatim
     hs.forEach((h, k) => {
       if (h.level === 2 && RE_KIRO_REQS.test(h.text)) { used.add(h.i); return; }
-      const hm = h.text.match(RE_KIRO_STORY);
+      const hm = kiroStoryHeading(h.text);
       if (!hm) return;
       // m = [, number, title] as the English form always had it; the heading's own word names the story in the mapping
       // ("Requisito 1") — English keeps "Requirement N" whatever its case.
@@ -18921,7 +19934,8 @@ function parseKiro(dir, read, W) {
       markRange(used, h.i, hi); // prose, criteria AND what follows them are all written into the story
       const body = lines.slice(lo, hi);
       // "#### Acceptance Criteria" (or a bold "**Acceptance Criteria:**" label) opens the criteria.
-      const acAt = body.findIndex((l) => /^\s*(?:#{1,6}\s+|\*\*|__).*(?:acceptance criteria|crit[ée]rios de aceita|criterios de aceptaci)/i.test(l));
+      // (?=(\s+))\1: the heading's blanks taken whole — \s+.* rescanned a long blank run from each of its units (1.17 H).
+      const acAt = body.findIndex((l) => /^\s*(?:#{1,6}(?=(\s+))\1|\*\*|__).*(?:acceptance criteria|crit[ée]rios de aceita|criterios de aceptaci)/i.test(l));
       const off = acAt === -1 ? 0 : acAt + 1;
       const acBody = body.slice(off);
       // Numbered criteria (Kiro's form); bulleted ones when there are none — but only under an explicit label, where
@@ -18960,6 +19974,94 @@ function parseKiro(dir, read, W) {
 // Acceptance Scenarios, Edge Cases, FR-xxx, Key Entities, SC-xxx), plan.md (→ design.md), tasks.md (T001 [P] [US1]).
 // Template guidance sections (Execution Flow, Quick Guidelines, checklists) are the tool's own, never imported.
 const SPECKIT_GUIDANCE = /^(?:execution flow|quick guidelines|review & acceptance checklist|execution status)\b/i;
+// Per-position facts for the scans below: nnw[i] the first non-blank ≥ i, nlt[i] the first line terminator ≥ i (n: none),
+// and tws(p) — "\s* then $ (m flag)" reads at p: the blank run at p reaches the end or holds a line terminator.
+function blankFacts(s) {
+  const n = s.length;
+  const nnw = new Int32Array(n + 1), nlt = new Int32Array(n + 1);
+  nnw[n] = n; nlt[n] = n;
+  for (let i = n - 1; i >= 0; i--) { nnw[i] = isWsUnit(s[i]) ? nnw[i + 1] : i; nlt[i] = isLtUnit(s[i]) ? i : nlt[i + 1]; }
+  return { n, nnw, nlt, tws: (p) => nnw[p] === n || nlt[p] < nnw[p] };
+}
+// spec-kit's summary — $1 of /^\*\*Input\*\*:\s*(?:User description:\s*)?"?(.+?)"?\s*$/im, by a scan (the lazy text before
+// "?\s*$ rescanned a long blank run at each step — 1.17 H). The choices in the engine's order; the text runs to the first
+// place where `"?`, blanks and a line end follow.
+function specKitInput(spec) {
+  const F = blankFacts(spec), n = F.n;
+  const nextTail = new Int32Array(n + 1); // the first e ≥ p where "?\s*$ reads
+  nextTail[n] = n;
+  for (let p = n - 1; p >= 0; p--) nextTail[p] = (spec[p] === '"' && F.tws(p + 1)) || F.tws(p) ? p : nextTail[p + 1];
+  const text = (d) => (d < n && !isLtUnit(spec[d]) ? spec.slice(d, nextTail[d + 1]) : null); // it never needs a line terminator
+  const head = /^\*\*Input\*\*:/gim;
+  for (let h; (h = head.exec(spec));) {
+    const a = head.lastIndex, b = F.nnw[a];
+    let r = null;
+    if (/^User description:/i.test(spec.slice(b, b + 17))) {
+      const c0 = b + 17;
+      for (let c = F.nnw[c0]; c >= c0 && r == null; c--) r = (spec[c] === '"' ? text(c + 1) : null) ?? text(c);
+    }
+    if (r == null) r = (spec[b] === '"' ? text(b + 1) : null) ?? text(b);
+    for (let x = b - 1; x >= a && r == null; x--) r = text(x);
+    if (r != null) return r;
+  }
+  return null;
+}
+// A spec-kit story heading → [text, number, title, priority] | null — what
+// /^user story\s+(\d+)\s*[-–—:.]?\s*(.*?)\s*(?:\((?:priority\s*:\s*)?(P\d)\))?\s*(?:🎯.*)?$/iu matched, the title read by a
+// scan (its lazy capture rescanned a long blank run at each step — 1.17 H). When no title end reads, nothing does.
+const RE_SPECKIT_PRIORITY = /\((?:priority\s*:\s*)?(P\d)\)/iuy;
+function specKitStoryHeading(text) {
+  const h = /^user story\s+(\d+)/iu.exec(text);
+  if (!h) return null;
+  const F = blankFacts(text), n = F.n;
+  let ts = F.nnw[h[0].length];
+  if (ts < n && "-–—:.".includes(text[ts])) ts = F.nnw[ts + 1];
+  const target = "\u{1F3AF}";
+  const tail = (e) => { // \s*(?:\((?:priority\s*:\s*)?(P\d)\))?\s*(?:🎯.*)?$ at e → { prio } | null
+    const ends = (p) => p === n || (text.startsWith(target, p) && F.nlt[p + 2] === n);
+    const p1 = F.nnw[e];
+    RE_SPECKIT_PRIORITY.lastIndex = p1;
+    const pm = RE_SPECKIT_PRIORITY.exec(text);
+    if (pm && ends(F.nnw[p1 + pm[0].length])) return { prio: pm[1] };
+    return ends(p1) ? { prio: undefined } : null;
+  };
+  for (let e = ts, lt = F.nlt[ts]; e <= lt;) {
+    const r = tail(e);
+    if (r) return [text, h[1], text.slice(ts, e), r.prio];
+    if (e === n) break;
+    e = isWsUnit(text[e]) ? Math.max(F.nnw[e], e + 1) : e + 1; // a blank run ends the same way from each of its units
+  }
+  return null;
+}
+// $1 of each match of /FROM:\s*`?(?:#+\s*)?Requirement:\s*([^`\n]+?)`?\s*$/gim (head: its part up to the colon, global) — by
+// a scan: the lazy name before `?\s*$ rescanned a long blank run at each step (1.17 H).
+function renamedRequirementNames(s, head) {
+  const F = blankFacts(s), n = F.n;
+  const nextTws = new Int32Array(n + 1), nextStop = new Int32Array(n + 1), lastLt = new Int32Array(n + 1);
+  nextTws[n] = n; nextStop[n] = n;
+  for (let p = n - 1; p >= 0; p--) {
+    nextTws[p] = F.tws(p) ? p : nextTws[p + 1];
+    nextStop[p] = s[p] === "`" || s[p] === "\n" ? p : nextStop[p + 1];
+  }
+  for (let i = 0, l = -1; i <= n; i++) { lastLt[i] = l; if (isLtUnit(s[i])) l = i; }
+  const endAt = (p) => (F.nnw[p] === n ? n : lastLt[F.nnw[p]]); // where \s*$ stops: the end, or before the run's last line terminator
+  const name = (cs) => { // (.+?)`?\s*$ from cs → { e, end } | null
+    if (cs >= n || s[cs] === "`" || s[cs] === "\n") return null;
+    const B = nextStop[cs], e = nextTws[cs + 1];
+    if (e < B) return { e, end: endAt(e) };
+    if (B === n || s[B] === "\n") return { e: B, end: endAt(B) };
+    return F.tws(B + 1) ? { e: B, end: endAt(B + 1) } : null; // a closing backtick
+  };
+  const out = [];
+  head.lastIndex = 0;
+  for (let h; (h = head.exec(s));) {
+    const a = head.lastIndex;
+    let r = null, cs = F.nnw[a];
+    for (; cs >= a && !r; cs--) r = name(cs);
+    if (r) { out.push(s.slice(cs + 1, r.e)); head.lastIndex = r.end; }
+  }
+  return out;
+}
 function parseSpecKit(dir, read, W) {
   const spec = read(path.join(dir, "spec.md"));
   const plan = read(path.join(dir, "plan.md"));
@@ -18967,20 +20069,30 @@ function parseSpecKit(dir, read, W) {
   if (spec == null && tasks == null) return null;
   const model = newImportModel();
   model.nameHint = path.basename(dir).replace(/^\d+[-_]/, "") || path.basename(dir);
-  const norm = (t) => t.replace(/\s*\*?\((?:mandatory|optional|include if[^)]*)\)\*?\s*$/i, "").trim();
+  // /\s*\*?\((?:mandatory|optional|include if[^)]*)\)\*?\s*$/i dropped — read after the last ')' but the closing one (the
+  // only place it can match), from a blank run's start (?<!\s): each "(include if" and each blank rescanned the rest (1.17 H).
+  const norm = (t) => {
+    let e = stripEnd(t, isWsUnit).length;
+    if (t[e - 1] === "*") e--;
+    if (t[e - 1] !== ")") return t.trim();
+    const from = e >= 2 ? t.lastIndexOf(")", e - 2) + 1 : 0;
+    return (t.slice(0, from) + t.slice(from).replace(/(?<!\s)\s*\*?\((?:mandatory|optional|include if[^)]*)\)\*?\s*$/i, "")).trim();
+  };
   if (spec != null) {
     const lines = stripHtmlComments(spec).split(/\r?\n/);
     const hs = mdHeadings(lines);
     const used = new Set();
     const h1 = hs.find((h) => h.level === 1);
     if (h1) { used.add(h1.i); model.title = h1.text.replace(/^feature specification:\s*/i, "").trim() || null; }
-    const input = spec.match(/^\*\*Input\*\*:\s*(?:User description:\s*)?"?(.+?)"?\s*$/im);
-    model.summary = input && input[1].trim() && !/\$ARGUMENTS/.test(input[1]) ? input[1].trim() : null;
+    const input = specKitInput(spec);
+    model.summary = input != null && input.trim() && !/\$ARGUMENTS/.test(input) ? input.trim() : null;
     // spec-kit's own metadata (branch, date, status; Input is the summary) describes its workflow, not the feature.
     lines.forEach((l, i) => { if (/^\s*\*\*(?:feature branch|created|status|input)\*\*\s*:/i.test(l)) used.add(i); });
     // body: the story's lines (all written into it: prose, scenarios, then whatever follows the scenarios).
     const storyFrom = (body, printed, title, priority) => {
-      const at = body.findIndex((l) => /^\s*(?:\*\*|__)?acceptance scenarios(?:\*\*|__)?\s*:?\s*(?:\*\*|__)?\s*:?\s*$/i.test(l));
+      // \s*:?\s*(?:\*\*|__)?\s*:?\s*$ → \s*(?::\s*)?(?:(?:\*\*|__)\s*)?(?::\s*)?$ (the same lines): blank runs meeting with
+      // nothing between them backtracked exponentially (1.17 H).
+      const at = body.findIndex((l) => /^\s*(?:\*\*|__)?acceptance scenarios(?:\*\*|__)?\s*(?::\s*)?(?:(?:\*\*|__)\s*)?(?::\s*)?$/i.test(l));
       const off = at === -1 ? 0 : at + 1;
       const scen = mdListItems(body.slice(off), true).filter((it) => at !== -1 || /\bthen\b|\bent[ãa]o\b|\bentonces\b/i.test(it.text));
       const inScen = new Set(scen.flatMap((it) => it.at.map((r) => r + off)));
@@ -18993,7 +20105,7 @@ function parseSpecKit(dir, read, W) {
       });
     };
     hs.forEach((h, k) => {
-      const m = h.text.match(/^user story\s+(\d+)\s*[-–—:.]?\s*(.*?)\s*(?:\((?:priority\s*:\s*)?(P\d)\))?\s*(?:🎯.*)?$/iu);
+      const m = specKitStoryHeading(h.text);
       if (!m) return;
       const [lo, hi] = mdRange(lines, hs, k);
       markRange(used, h.i, hi);
@@ -19044,7 +20156,18 @@ function parseSpecKit(dir, read, W) {
 
 // OpenSpec: a capability (openspec/specs/<capability>/spec.md) or a change (openspec/changes/<id>/ — proposal.md,
 // tasks.md, design.md, specs/<capability>/spec.md with ADDED/MODIFIED/REMOVED/RENAMED Requirements).
-const RE_OS_CLAUSE = /^\s*[-*+]\s+(?:\*\*|__)?(GIVEN|WHEN|THEN|AND|BUT)(?:\*\*|__)?\s*:?\s*(.*)$/i;
+// A scenario clause "- **WHEN** …" → [line, keyword, text] | null — /^\s*[-*+]\s+(?:\*\*|__)?(GIVEN|WHEN|THEN|AND|BUT)(?:\*\*|__)?\s*:?\s*(.*)$/i
+// with the text read by a scan (\s*:?\s*(.*)$ backtracked quadratically before a line break — 1.17 H).
+const RE_OS_CLAUSE_HEAD = /^\s*[-*+]\s+(?:\*\*|__)?(GIVEN|WHEN|THEN|AND|BUT)(?:\*\*|__)?/i;
+function openSpecClause(line) {
+  const h = RE_OS_CLAUSE_HEAD.exec(line);
+  if (!h) return null;
+  let i = h[0].length;
+  while (i < line.length && isWsUnit(line[i])) i++;
+  if (line[i] === ":") { i++; while (i < line.length && isWsUnit(line[i])) i++; }
+  const text = line.slice(i);
+  return RE_LINE_TERMINATOR.test(text) ? null : [line, h[1], text];
+}
 function parseOpenSpec(dir, read, W) {
   const walkSpecs = (d, depth, out) => {
     if (depth > 4) return out;
@@ -19096,7 +20219,12 @@ function parseOpenSpec(dir, read, W) {
     const used = new Set();
     const h1 = hs.find((h) => h.level === 1);
     if (h1) used.add(h1.i);
-    if (!model.title && h1) model.title = h1.text.replace(/\s+specification$/i, "").trim() || null;
+    if (!model.title && h1) { // h1.text.replace(/\s+specification$/i, ""), without rescanning a blank run from each unit (1.17 H)
+      const sp = h1.text.search(/specification$/i);
+      let w0 = sp;
+      while (w0 > 0 && isWsUnit(h1.text[w0 - 1])) w0--;
+      model.title = (sp > 0 && w0 < sp ? h1.text.slice(0, w0) : h1.text).trim() || null;
+    }
     const purpose = hs.findIndex((h) => /^purpose\b/i.test(h.text));
     if (!model.summary && purpose !== -1) { // the rest of Purpose (and every other capability's Purpose) is carried
       const [lo, hi] = mdRange(lines, hs, purpose);
@@ -19113,11 +20241,11 @@ function parseOpenSpec(dir, read, W) {
         const [lo, hi] = mdRange(lines, hs, k);
         markRange(used, lo, hi);
         const body = lines.slice(lo, hi).join("\n");
-        const froms = [...body.matchAll(/FROM:\s*`?(?:#+\s*)?Requirement:\s*([^`\n]+?)`?\s*$/gim)].map((x) => x[1].trim());
-        const tos = [...body.matchAll(/TO:\s*`?(?:#+\s*)?Requirement:\s*([^`\n]+?)`?\s*$/gim)].map((x) => x[1].trim());
+        const froms = renamedRequirementNames(body, /FROM:\s*`?(?:#+\s*)?Requirement:/gi).map((x) => x.trim());
+        const tos = renamedRequirementNames(body, /TO:\s*`?(?:#+\s*)?Requirement:/gi).map((x) => x.trim());
         froms.forEach((f, i) => model.warnings.push(W.wRenamed(f, tos[i] || "?")));
       }
-      const m = h.text.match(/^requirement:\s*(.+)$/i);
+      const m = headPlus(h.text, /^requirement:/i); // /^requirement:\s*(.+)$/i (headPlus: 1.17 H)
       if (!m) return;
       const name = m[1].trim();
       const [lo, hi] = mdRange(lines, hs, k);
@@ -19134,7 +20262,7 @@ function parseOpenSpec(dir, read, W) {
       const top = firstScenario ? sub.filter((s) => s.i >= firstScenario.i && s.level <= firstScenario.level) : [];
       top.forEach((s) => {
         const sb = mdBody(body, sub, sub.indexOf(s));
-        const sm = s.text.match(/^scenario:\s*(.+)$/i);
+        const sm = headPlus(s.text, /^scenario:/i); // /^scenario:\s*(.+)$/i
         if (!sm) { after.push("", body[s.i], ...sb); return; }
         const cl = { given: "", when: "", then: "" };
         let last = null;
@@ -19142,7 +20270,7 @@ function parseOpenSpec(dir, read, W) {
         const rawParts = [];
         const other = [];
         for (const l of sb) {
-          const b = l.match(RE_OS_CLAUSE);
+          const b = openSpecClause(l);
           if (b) {
             open = true;
             rawParts.push(b[1].toUpperCase() + " " + b[2].trim());
@@ -19159,7 +20287,7 @@ function parseOpenSpec(dir, read, W) {
             continue;
           }
           open = false;
-          other.push(l.replace(/\s+$/, ""));
+          other.push(l.trimEnd());
         }
         const prose = tidyLines(other);
         // A prose-only scenario becomes its criterion's text; prose beside clauses follows the criteria.
@@ -19179,6 +20307,59 @@ function parseOpenSpec(dir, read, W) {
   return model;
 }
 
+const RE_IMPORT_TASK_HEAD = /^(\s*)[-*+]\s+\[([ xX~\-/])\](\*)?/;
+// line.replace(/_Requirements:\s*(.+?)_(?=\s|$)/g, fn) — fn(match, list) — by a scan: the lazy list rescanned a long blank run
+// at each step, and each marker the rest of a line with no closing "_" (1.17 H). As the engine: the list runs from the first
+// non-blank to the first "_" followed by a blank or the end, never over a line terminator — else, when that "_" comes
+// right after the blanks, the list is their last one.
+function replaceRequirementsMarkers(s, fn) {
+  const open = "_Requirements:";
+  if (!s.includes(open)) return s;
+  const n = s.length;
+  const nextClose = new Int32Array(n + 2), nlt = new Int32Array(n + 1);
+  nextClose[n] = nextClose[n + 1] = n + 1;
+  nlt[n] = n;
+  for (let p = n - 1; p >= 0; p--) {
+    nlt[p] = isLtUnit(s[p]) ? p : nlt[p + 1];
+    nextClose[p] = s[p] === "_" && (p + 1 === n || isWsUnit(s[p + 1])) ? p : nextClose[p + 1];
+  }
+  let out = "", at = 0;
+  for (let i = s.indexOf(open); i !== -1;) {
+    const a = i + open.length;
+    let j = a;
+    while (j < n && isWsUnit(s[j])) j++;
+    let cs = -1, e = -1;
+    if (j < n && nextClose[j + 1] <= nlt[j]) { cs = j; e = nextClose[j + 1]; }
+    else if (j > a && !isLtUnit(s[j - 1]) && nextClose[j] === j) { cs = j - 1; e = j; }
+    if (cs === -1) { i = s.indexOf(open, i + 1); continue; }
+    out += s.slice(at, i) + fn(s.slice(i, e + 1), s.slice(cs, e));
+    at = e + 1;
+    i = s.indexOf(open, at);
+  }
+  return at ? out + s.slice(at) : s;
+}
+// s.replace(/_LABEL:\s*([^_\n]+)_/g, fn) — fn(match, list) — by a scan (the blanks before the list backtracked quadratically —
+// 1.17 H): the list runs from the first non-blank to the next "_" (never a line feed) — else, when that "_" comes right after
+// the blanks, the list is their last one (not a line feed).
+function replaceUnderscoreList(s, label, fn) {
+  const open = "_" + label + ":";
+  let out = "", at = 0;
+  for (let i = s.indexOf(open); i !== -1;) {
+    const a = i + open.length;
+    let j = a;
+    while (j < s.length && isWsUnit(s[j])) j++;
+    let b = j;
+    while (b < s.length && s[b] !== "_" && s[b] !== "\n") b++;
+    let cs = -1;
+    if (s[b] === "_" && b > j) cs = j;
+    else if (b === j && s[j] === "_" && j > a && s[j - 1] !== "\n") cs = j - 1;
+    if (cs === -1) { i = s.indexOf(open, i + 1); continue; }
+    out += s.slice(at, i) + fn(s.slice(i, b + 1), s.slice(cs, b));
+    at = b + 1;
+    i = s.indexOf(open, at);
+  }
+  return at ? out + s.slice(at) : s;
+}
 // tasks.md of any of the three tools → dev-spec tasks: every checkbox (outside code fences and HTML comments)
 // that is not a parent of numbered sub-tasks becomes `- [x|space] N.` numbered 1…K in order, keeping its
 // checkbox state, its [P]/[USn] tags and its indented sub-lines; a Kiro/OpenSpec parent ("2." with "2.1", "2.2")
@@ -19211,7 +20392,9 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
     }
     // Any one-character state is a task: Kiro marks one in progress `[-]` (also `[~]`, `[/]` elsewhere). Only x/X is
     // done — anything else imports as open, never dropped into the previous task's body.
-    const m = l.match(/^(\s*)[-*+]\s+\[([ xX~\-/])\](\*)?\s+(.*)$/);
+    const h = RE_IMPORT_TASK_HEAD.exec(l); // /^(\s*)[-*+]\s+\[([ xX~\-/])\](\*)?\s+(.*)$/, its text scanned (1.17 H)
+    const text = h && restAfterBlanks(l, h[0].length, true);
+    const m = text == null ? null : [l, h[1], h[2], h[3], text];
     if (m) {
       const rest = m[4];
       const idm = rest.match(/^(T\d+)\b[.:]?\s*(.*)$/) || rest.match(/^(\d+(?:\.\d+)*)\.?(?=\s)\s*(.*)$/);
@@ -19230,7 +20413,7 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
   let n = 0;
   let anyRefs = false;
   // taskNo: the task a reference belongs to; a line no task owns is reported by its line number instead.
-  const rewrite = (line, taskNo, lineNo) => line.replace(/_Requirements:\s*(.+?)_(?=\s|$)/g, (all, list) => {
+  const rewrite = (line, taskNo, lineNo) => replaceRequirementsMarkers(line, (all, list) => {
     anyRefs = true;
     const outIds = [];
     for (const ref of list.split(/[,;]/).map((s) => s.trim()).filter(Boolean)) {
@@ -19269,7 +20452,7 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
     }
     out.push(owner || !inert.has(i) ? rewrite(l, null, i + 1) : l); // owner here = a parent (see above)
   });
-  return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n"), count: n, anyRefs };
+  return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n", count: n, anyRefs }; // trimEnd: /\s*$/ is quadratic (1.17 F review)
 }
 
 // The scaffold's template tasks.md that spec_import keeps when the source has none: each _Requirements:_ keeps only the
@@ -19301,16 +20484,16 @@ function fitTemplateTasks(tasksText, reqText, planText, lng) {
     }
     if (/^\s*#{1,6}\s/.test(line) || /^\s*[-*+]\s+\[[ xX-]\]/.test(line)) acs = [];
     const fits = section ? trackKnown[section] : known;
-    return line
-      .replace(/_Requirements:\s*([^_\n]+)_/g, (m, ids) => {
-        const keep = ids.split(/[,;]/).map((s) => s.trim()).filter((id) => fits.has(id));
-        acs = acs.concat(keep);
-        return "_Requirements: " + (keep.length ? keep.join(", ") : section ? T.acPlaceholder(section) : I.taskAcPlaceholder) + "_";
-      })
-      .replace(/_Makes green:\s*([^_\n]+)_/g, () => {
-        const ids = [...new Set(acs.flatMap((ac) => testsFor.get(ac) || []))];
-        return "_Makes green: " + (ids.length ? ids.join(", ") : I.taskTestPlaceholder) + "_";
-      });
+    // /_Requirements:\s*([^_\n]+)_/g then /_Makes green:\s*([^_\n]+)_/g, by a scan (1.17 H)
+    const fitted = replaceUnderscoreList(line, "Requirements", (m, ids) => {
+      const keep = ids.split(/[,;]/).map((s) => s.trim()).filter((id) => fits.has(id));
+      acs = acs.concat(keep);
+      return "_Requirements: " + (keep.length ? keep.join(", ") : section ? T.acPlaceholder(section) : I.taskAcPlaceholder) + "_";
+    });
+    return replaceUnderscoreList(fitted, "Makes green", () => {
+      const ids = [...new Set(acs.flatMap((ac) => testsFor.get(ac) || []))];
+      return "_Makes green: " + (ids.length ? ids.join(", ") : I.taskTestPlaceholder) + "_";
+    });
   }).join("\n");
 }
 
@@ -19335,8 +20518,26 @@ function fitTemplateTasks(tasksText, reqText, planText, lng) {
 // A path naming a folder with several plans is refused (name the file). Nothing is dropped silently: what no mapping takes is
 // carried (design.md for a plan / ExecPlan, requirements.md for a PRD) or named in a warning.
 // ---------------------------------------------------------------------------
-const RE_PLAN_CHECKBOX = /^(\s*)[-*+]\s+\[([ xX~\-/])\]\s+(.*)$/;
-const RE_PLAN_ITEM = /^(\s*)(?:[-*+]|\d+[.)])\s+(?:\[([ xX~\-/])\]\s+)?(.*)$/;
+// /^(\s*)[-*+]\s+\[([ xX~\-/])\]\s+(.*)$/ → [line, indent, box, text] | null (restAfterBlanks for the text)
+const RE_PLAN_CHECKBOX_HEAD = /^(\s*)[-*+]\s+\[([ xX~\-/])\]/;
+function planCheckbox(l) {
+  const h = RE_PLAN_CHECKBOX_HEAD.exec(l);
+  const rest = h && restAfterBlanks(l, h[0].length, true);
+  return rest == null ? null : [l, h[1], h[2], rest];
+}
+// /^(\s*)(?:[-*+]|\d+[.)])\s+(?:\[([ xX~\-/])\]\s+)?(.*)$/ → [line, indent, box | undefined, text] | null
+const RE_PLAN_ITEM_HEAD = /^(\s*)(?:[-*+]|\d+[.)])/;
+const RE_PLAN_ITEM_BOX = /\[([ xX~\-/])\](?=\s)/y;
+function planItem(l) {
+  const h = RE_PLAN_ITEM_HEAD.exec(l);
+  if (!h || !isWsUnit(l[h[0].length])) return null;
+  let q = h[0].length;
+  while (q < l.length && isWsUnit(l[q])) q++;
+  RE_PLAN_ITEM_BOX.lastIndex = q;
+  const box = RE_PLAN_ITEM_BOX.exec(l);
+  const rest = restAfterBlanks(l, box ? q + 3 : h[0].length, true);
+  return rest == null ? null : [l, h[1], box ? box[1] : undefined, rest];
+}
 // A single backticked name reads as a file with one of these extensions (`package.json`); a name with a folder part needs none.
 const PLAN_FILE_EXT = new Set(["js", "mjs", "cjs", "jsx", "ts", "tsx", "mts", "cts", "py", "rb", "go", "rs", "java", "kt", "kts", "scala", "cs", "fs", "php",
   "swift", "m", "mm", "c", "h", "cc", "cpp", "hpp", "md", "mdx", "json", "jsonc", "yaml", "yml", "toml", "ini", "cfg", "conf", "css", "scss", "sass", "less",
@@ -19350,7 +20551,13 @@ const PLAN_BARE_FILES = /^(?:Dockerfile|Makefile|Procfile|Gemfile|Rakefile|Jenki
 function planPaths(text) {
   const out = [];
   const add = (raw, spanned) => {
-    const p = String(raw).trim().replace(/^\.\//, "").replace(/(?::\d+(?:[-:]\d+)*|#L\d+(?:-L?\d+)?)$/, "");
+    const p0 = String(raw).trim().replace(/^\.\//, "");
+    // .replace(/(?::\d+(?:[-:]\d+)*|#L\d+(?:-L?\d+)?)$/, "") — the leftmost of the two anchors, found without rescanning a
+    // long run of ":1" from each of its units (1.17 H): a "#L…" one can only start at the last '#'.
+    const h = p0.lastIndexOf("#"), c = colonLineAnchorAt(p0);
+    const hl = h !== -1 && /^#L\d+(?:-L?\d+)?$/.test(p0.slice(h)) ? h : -1;
+    const cut = c === -1 ? hl : hl === -1 ? c : Math.min(c, hl);
+    const p = cut === -1 ? p0 : p0.slice(0, cut);
     if (!p || p.length > 200 || /[\s,;<>|"'`*?\\]/.test(p) || /^(?:[a-z][a-z0-9+.-]*:|\/|~|@|\$|%)/i.test(p) || /(?:^|\/)\.\.(?:\/|$)/.test(p)) return;
     if (PLAN_NOT_FILES.has(p.toLowerCase())) return;
     const bare = p.replace(/\/+$/, "");
@@ -19397,7 +20604,9 @@ function planCommand(candidates) {
 // A command-only bullet ("Run `npm test`", "`npm test` passes") is a check to run, not a criterion.
 function planCommandOnly(text) {
   const t = String(text).replace(/\*\*|__/g, "").trim();
-  const m = t.match(/^(?:run|execute|corre|correr|executa|executar|ejecuta|ejecutar)?\s*:?\s*`([^`]+)`\s*(?:passes|succeeds|is green|should pass|passa|pasa)?\s*[.;]?$/i);
+  // \s*:?\s* → \s*(?::\s*)? and \s*(?:word)?\s* → \s*(?:word\s*)? (the same lines): blank runs meeting around an absent
+  // token backtracked quadratically (1.17 H).
+  const m = t.match(/^(?:run|execute|corre|correr|executa|executar|ejecuta|ejecutar)?\s*(?::\s*)?`([^`]+)`\s*(?:(?:passes|succeeds|is green|should pass|passa|pasa)\s*)?[.;]?$/i);
   return !!(m && RE_PLAN_RUNNER.test(m[1].trim().replace(/^\$\s+/, "")));
 }
 // A criterion as written in a plan → EARS when it already reads like one: a modal requirement (kept), Given/When/Then, or a
@@ -19444,7 +20653,7 @@ function planBlocks(lines, lo, hi) {
     }
     if (/^\s*#{1,6}\s/.test(l)) { cur = null; prevBlank = false; continue; }
     const blank = !l.trim();
-    const m = l.match(RE_PLAN_ITEM);
+    const m = planItem(l);
     const ind = indentOf(l);
     if (m && (!cur || ind <= cur.indent)) {
       cur = { i, indent: ind, content: l.length - l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").length, box: m[2] != null ? m[2] : null, text: m[3].trim(), body: [], code: new Set() };
@@ -19477,7 +20686,7 @@ function checkboxUnits(lines, lo, hi, skip) {
     if (skip && skip(i)) { cur = null; continue; }
     const f = l.match(RE_FENCE);
     if (f) { fence = f[1]; if (cur && indentOf(l) > cur.indent) { cur.body.push(i); cur.code.add(i); } else cur = null; continue; }
-    const m = l.match(RE_PLAN_CHECKBOX);
+    const m = planCheckbox(l);
     if (m) {
       cur = { i, indent: m[1].length, content: l.length - l.replace(/^\s*[-*+]\s+/, "").length, box: m[2], text: m[3].trim(), body: [], code: new Set() };
       units.push(cur);
@@ -19504,7 +20713,7 @@ function planTaskLines(lines, u, o) {
   if (o.verify) out.push(`  - _Verify: ${o.verify}_`);
   const base = u.content != null ? u.content : u.indent + 2;
   for (const b of u.body || []) {
-    const l = lines[b].replace(/\s+$/, "");
+    const l = lines[b].trimEnd();
     out.push(!l.trim() ? "" : "  " + l.slice(Math.min(indentOf(l), base)));
   }
   return out;
@@ -19568,14 +20777,16 @@ function planFrontMatter(lines) {
     const s = String(v).trim();
     if (/^"(?:[^"\\]|\\.)*"$/.test(s)) return s.slice(1, -1).replace(/\\(["\\/])/g, "$1").replace(/\\n/g, " ").replace(/\\t/g, " ");
     if (/^'(?:[^']|'')*'$/.test(s)) return s.slice(1, -1).replace(/''/g, "'");
-    return s.replace(/\s+#.*$/, "");
+    return stripHashComment(s); // s.replace(/\s+#.*$/, "") (1.17 H)
   };
   const data = Object.create(null); // a key named __proto__ is a plain key
   let list = null, item = null;
+  // The key: value / list entry patterns below read their text by headRest — \s*(.*)$ rescanned a long blank run before a
+  // line terminator (1.17 H).
   for (let i = 1; i < end; i++) {
     const l = lines[i];
     if (!l.trim() || /^\s*#/.test(l)) continue;
-    const top = l.match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
+    const top = headRest(l, /^([A-Za-z_][\w-]*):/, false); // /^([A-Za-z_][\w-]*):\s*(.*)$/
     if (top) {
       list = item = null;
       if (/^[|>][-+]?\s*$/.test(top[2])) { // a block scalar: the more-indented lines under it, folded into one line
@@ -19586,15 +20797,15 @@ function planFrontMatter(lines) {
       else data[top[1]] = unq(top[2]);
       continue;
     }
-    const entry = list && l.match(/^\s*-\s+(.*)$/);
+    const entry = list && headRest(l, /^\s*-/, true); // /^\s*-\s+(.*)$/
     if (entry) { // a list entry: a map ("- id: x") or a scalar
-      const kv = entry[1].match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
+      const kv = headRest(entry[1], /^([A-Za-z_][\w-]*):/, false);
       item = kv ? Object.create(null) : null;
       if (kv) item[kv[1]] = unq(kv[2]);
       list.push(item || unq(entry[1]));
       continue;
     }
-    const kv = item && l.match(/^\s+([A-Za-z_][\w-]*):\s*(.*)$/);
+    const kv = item && headRest(l, /^\s+([A-Za-z_][\w-]*):/, false); // /^\s+([A-Za-z_][\w-]*):\s*(.*)$/
     if (kv) item[kv[1]] = unq(kv[2]); // the entry's next key (null-prototype maps: any key is a plain key)
   }
   return { data, end: end + 1 };
@@ -19625,9 +20836,35 @@ function planStory(model, title, criteria) {
   return story;
 }
 // A plan / ExecPlan wrapped whole in one ```md fence (PLANS.md's own examples are) → its inside.
+// What /^\s*(`{3,}|~{3,})\s*(?:md|markdown)?\s*\r?\n([\s\S]*?)\r?\n\1\s*$/i took as the inside ($2), by a scan — that pattern
+// backtracked quadratically over a long fence run or blank run (1.17 H). The closing fence can only be the text's last
+// non-blank run (on a line of its own); the inside starts after the opening line's newline: the last one of the blanks after
+// "md" / "markdown" when the word is there, else the last one of the blanks after the fence (the engine's order), as long as
+// the inside does not run past the closing fence.
 function unwrapDocFence(text) {
-  const m = String(text).match(/^\s*(`{3,}|~{3,})\s*(?:md|markdown)?\s*\r?\n([\s\S]*?)\r?\n\1\s*$/i);
-  return m ? m[2] : text;
+  const s = String(text);
+  let f0 = 0;
+  while (f0 < s.length && isWsUnit(s[f0])) f0++;
+  const c = s[f0];
+  if (c !== "`" && c !== "~") return text;
+  let p1 = f0;
+  while (s[p1] === c) p1++;
+  const L = p1 - f0, T = stripEnd(s, isWsUnit).length, close = T - L - 1; // the closing fence's newline
+  if (L < 3 || close < p1 || s[close] !== "\n" || s.slice(T - L, T) !== c.repeat(L)) return text;
+  const bodyStart = (hi, lo) => { for (let x = hi - 1; x >= lo; x--) if (s[x] === "\n" && x + 1 <= close) return x + 1; return -1; };
+  let q1 = p1;
+  while (q1 < s.length && isWsUnit(s[q1])) q1++;
+  let bs = -1;
+  const word = /^(?:md|markdown)/i.exec(s.slice(q1, q1 + 8));
+  if (word) {
+    const w = q1 + word[0].length;
+    let q2 = w;
+    while (q2 < s.length && isWsUnit(s[q2])) q2++;
+    bs = bodyStart(q2, w);
+  }
+  if (bs === -1) bs = bodyStart(q1, p1);
+  if (bs === -1) return text;
+  return s.slice(bs, s[close - 1] === "\r" && close - 1 >= bs ? close - 1 : close);
 }
 
 const RE_PLAN_CRITERIA = /^(?:goals?|objectives?|acceptance(?:\s+criteria)?|success\s+criteria|requirements|definition\s+of\s+done|done\s+when|expected\s+(?:outcomes?|behaviou?r|results?)|verification|validation|objetivos?|metas?|crit[ée]rios\s+de\s+(?:aceita[çc][ãa]o|sucesso)|requisitos|defini[çc][ãa]o\s+de\s+(?:pronto|conclu[íi]do)|resultados?\s+esperados?|verifica[çc][ãa]o|valida[çc][ãa]o|criterios\s+de\s+(?:aceptaci[óo]n|[ée]xito)|definici[óo]n\s+de\s+(?:hecho|terminado)|verificaci[óo]n|validaci[óo]n)\b/i;
@@ -19827,7 +21064,7 @@ function parseExecPlan(dir, read, W, src) {
   hs.forEach((h, k) => {
     if (sec.kinds[k] !== "steps") return;
     const [lo, hi] = sec.direct(k);
-    const hasBoxes = lines.slice(lo, hi).some((l) => RE_PLAN_CHECKBOX.test(l));
+    const hasBoxes = lines.slice(lo, hi).some((l) => !!planCheckbox(l));
     const units = hasBoxes ? checkboxUnits(lines, lo, hi) : planBlocks(lines, lo, hi);
     units.forEach((u, n) => {
       if (!seen.has(norm(u.text))) return addUnit(u, `Concrete Steps ${n + 1}`, "## " + h.text);
@@ -19844,7 +21081,7 @@ function parseExecPlan(dir, read, W, src) {
       if (!what || /^\(?(?:none|n\/a|tbd|nenhuma|ninguna)(?:\s+yet)?\)?\.?$/i.test(what)) continue;
       const n = decisions.length + 1;
       model.mapping[`Decision Log ${n}`] = `D-${n}`;
-      decisions.push(`- **D-${n}** — ${what}`, ...it.body.map((b) => lines[b].replace(/\s+$/, "")).filter((l) => l.trim()).map((l) => "  " + l.trim()));
+      decisions.push(`- **D-${n}** — ${what}`, ...it.body.map((b) => lines[b].trimEnd()).filter((l) => l.trim()).map((l) => "  " + l.trim()));
     }
   }
   planStory(model, model.title || model.nameHint, criteria);
@@ -19860,8 +21097,74 @@ function parseExecPlan(dir, read, W, src) {
 }
 
 // bmad — BMAD-METHOD docs (v4 docs/…, v6 _bmad-output/…): see the block comment above.
-const RE_BMAD_STORY_HEAD = /^(?:story\s+)?(\d+)\.(\d+)\s*(?:[:.\-–—]\s*)?(.*)$/i;
-const RE_BMAD_FR = /^\s*(?:[-*+]|\d+[.)])?\s*(?:\*\*|__)?(N?FR)[-\s]?(\d+)(?:\*\*|__)?\s*[:.\-–—]\s*(?:\*\*|__)?\s*(.+)$/i;
+// 1.17 H — the heads below are read by a regex up to their separator, the text after it by a scan: their \s*…\s*(.*)$ tails
+// rescanned a long blank run from each blank they gave back.
+// /^(?:story\s+)?(\d+)\.(\d+)\s*(?:[:.\-–—]\s*)?(.*)$/i → [text, epic, story, title] | null
+const RE_BMAD_STORY_START = /^(?:story\s+)?(\d+)\.(\d+)/i;
+function bmadStoryHead(text) {
+  const h = RE_BMAD_STORY_START.exec(text);
+  const title = h && titleAfterDash(text, h[0].length);
+  return title == null ? null : [text, h[1], h[2], title];
+}
+// A PRD title without its "Product Requirements Document" / "(PRD)" / "PRD" words and the separator they leave at either end:
+// text.replace(/\s*(?:product requirements document|\(prd\)|prd)\s*/gi, " ").replace(/^\s*[:—–-]\s*|\s*[:—–-]\s*$/g, ""), by a
+// scan (a blank run was rescanned from each of its units). A word's blanks: the run before it (from where the last match
+// ended at most) and the one after it.
+const RE_PRD_WORDS = /product requirements document|\(prd\)|prd/gi;
+function bmadPrdTitle(text) {
+  let out = "", at = 0;
+  RE_PRD_WORDS.lastIndex = 0;
+  for (let m; (m = RE_PRD_WORDS.exec(text));) {
+    let p = m.index, e = p + m[0].length;
+    while (p > at && isWsUnit(text[p - 1])) p--;
+    while (e < text.length && isWsUnit(text[e])) e++;
+    out += text.slice(at, p) + " ";
+    at = RE_PRD_WORDS.lastIndex = e;
+  }
+  const s = out + text.slice(at);
+  const lead = /^\s*[:—–-]\s*/.exec(s);
+  const from = lead ? lead[0].length : 0;
+  const end = stripEnd(s, isWsUnit).length;
+  if (end <= from || !":—–-".includes(s[end - 1])) return s.slice(from);
+  let p = end - 1;
+  while (p > from && isWsUnit(s[p - 1])) p--;
+  return s.slice(from, p);
+}
+// /^story\s+(\d+)\.(\d+)\s*[:.\-–—]?\s*(.*)$/i → [text, epic, story, title] | null
+const RE_BMAD_EPIC_STORY_START = /^story\s+(\d+)\.(\d+)/i;
+function bmadEpicStory(text) {
+  const h = RE_BMAD_EPIC_STORY_START.exec(text);
+  const title = h && titleAfterDash(text, h[0].length);
+  return title == null ? null : [text, h[1], h[2], title];
+}
+// /^\s*(?:[-*+]|\d+[.)])?\s*(?:\*\*|__)?(N?FR)[-\s]?(\d+)(?:\*\*|__)?\s*[:.\-–—]\s*(?:\*\*|__)?\s*(.+)$/i → [line, kind, n, text] | null
+const RE_BMAD_FR_HEAD = /^\s*(?:(?:[-*+]|\d+[.)])\s*)?(?:\*\*|__)?(N?FR)[-\s]?(\d+)(?:\*\*|__)?\s*[:.\-–—]/i;
+function bmadFrLine(l) {
+  const h = RE_BMAD_FR_HEAD.exec(l);
+  if (!h) return null;
+  const text = boldThenText(l, h[0].length);
+  return text == null ? null : [l, h[1], h[2], text];
+}
+// /^#{1,6}\s+(N?FR)[-\s]?(\d+)\s*[:.\-–—]\s*(.+)$/i → [line, kind, n, text] | null
+const RE_BMAD_FR_HEADING = /^#{1,6}\s+(N?FR)[-\s]?(\d+)\s*[:.\-–—]/i;
+function bmadFrHeading(l) {
+  const h = RE_BMAD_FR_HEADING.exec(l);
+  const text = h && plusAfterBlanks(l, h[0].length);
+  return text == null ? null : [l, h[1], h[2], text];
+}
+// \s*[:.\-–—]?\s*(.*)$ (= \s*(?:[:.\-–—]\s*)?(.*)$) from i → the title | null
+function titleAfterDash(s, i) {
+  while (i < s.length && isWsUnit(s[i])) i++;
+  if (i < s.length && ":.-–—".includes(s[i])) i++;
+  return restAfterBlanks(s, i, false);
+}
+// \s*(?:\*\*|__)?\s*(.+)$ from p: with the bold marker first, then without it.
+function boldThenText(s, p) {
+  let w = p;
+  while (w < s.length && isWsUnit(s[w])) w++;
+  const b = s.startsWith("**", w) || s.startsWith("__", w) ? plusAfterBlanks(s, w + 2) : null;
+  return b != null ? b : plusAfterBlanks(s, p);
+}
 const RE_BMAD_WORKFLOW = /^(?:change log|changelog|status)$/i; // BMAD's own workflow records — named in a warning, not imported
 const RE_BMAD_PRD_DESIGN = /^(?:technical assumptions|user interface design goals)\b/i;
 function parseBmad(dir, read0, W, src) {
@@ -19879,7 +21182,7 @@ function parseBmad(dir, read0, W, src) {
   if (src.file) {
     const t = read(src.file);
     if (t == null) return null;
-    if (isStoryText(t) && !/^\s*(?:[-*+]\s*)?(?:\*\*)?N?FR-?\d+/im.test(t)) storyFiles = [src.file];
+    if (isStoryText(t) && !/^[^\S\n\r\u2028\u2029]*(?:[-*+]\s*)?(?:\*\*)?N?FR-?\d+/im.test(t)) storyFiles = [src.file];
     else { prdFiles = [src.file]; storyFiles = mdIn(path.join(dir, "stories")).filter((f) => isStoryText(read(f))); }
   } else {
     const prd = first(["prd.md", "PRD.md"]);
@@ -19903,7 +21206,7 @@ function parseBmad(dir, read0, W, src) {
   const designParts = [];
   // A story's criteria items ("1: text" / "1. text" / "- text"; a BDD block's bold title dropped) → [{ n, raw }].
   const acItems = (body) => mdListItems(body.map((l) => l.replace(/^(\s*)(\d+)\s*:\s/, "$1$2. ")), false).map((it) => ({
-    n: it.n, raw: it.text.replace(/^(?:\*\*|__)?AC\s*#?\s*(\d+)(?:\*\*|__)?\s*[:.\-–—]\s*/i, "").trim(),
+    n: it.n, raw: it.text.replace(/^(?:\*\*|__)?AC\s*(?:#\s*)?(\d+)(?:\*\*|__)?\s*[:.\-–—]\s*/i, "").trim(),
   }));
   const acEars = (raw) => {
     const t = raw.replace(/^(?:\*\*|__)[^*_]+(?:\*\*|__)\s*(?=(?:\*\*|__)?(?:given|when|dad[oa]|quando|cuando)\b)/i, "");
@@ -19920,7 +21223,7 @@ function parseBmad(dir, read0, W, src) {
     if (!isPrd && hs.length && hs[0].level === 1) used.add(hs[0].i); // epics.md's own title
     if (isPrd) {
       const h1 = hs.find((h) => h.level === 1);
-      if (h1) { used.add(h1.i); model.title = h1.text.replace(/\s*(?:product requirements document|\(prd\)|prd)\s*/gi, " ").replace(/^\s*[:—–-]\s*|\s*[:—–-]\s*$/g, "").trim() || null; }
+      if (h1) { used.add(h1.i); model.title = bmadPrdTitle(h1.text).trim() || null; }
       const sk = hs.findIndex((h) => /^(?:background context|vision|1\.\s*vision)\b/i.test(planHeadingText(h.text)));
       const [lo, hi] = sk !== -1 ? [hs[sk].i + 1, sk + 1 < hs.length ? hs[sk + 1].i : lines.length] : [h1 ? h1.i + 1 : 0, (hs.find((h) => h.level > 1) || { i: lines.length }).i];
       const at = [];
@@ -19933,8 +21236,8 @@ function parseBmad(dir, read0, W, src) {
         if (fence) { if (closesFence(l, fence)) fence = null; return; }
         const f = l.match(RE_FENCE);
         if (f) { fence = f[1]; return; }
-        const hm = l.match(/^#{1,6}\s+(N?FR)[-\s]?(\d+)\s*[:.\-–—]\s*(.+)$/i);
-        const m = hm || (!/^\s*#/.test(l) && l.match(RE_BMAD_FR));
+        const hm = bmadFrHeading(l);
+        const m = hm || (!/^\s*#/.test(l) && bmadFrLine(l));
         if (!m) return;
         const kind = m[1].toUpperCase();
         let txt2 = m[3].replace(/(?:\*\*|__)\s*$/, "").trim();
@@ -19956,12 +21259,14 @@ function parseBmad(dir, read0, W, src) {
     }
     // Stories: "### Story 1.1 Title" (v4 PRD epic sections), "### Story 1.1: Title" (v6 epics.md).
     hs.forEach((h, k) => {
-      const m = planHeadingText(h.text).match(/^story\s+(\d+)\.(\d+)\s*[:.\-–—]?\s*(.*)$/i);
+      const m = bmadEpicStory(planHeadingText(h.text));
       if (!m) return;
       const [lo, hi] = mdRange(lines, hs, k);
       markRange(used, h.i, hi);
       const body = lines.slice(lo, hi);
-      const acAt = body.findIndex((l) => /^\s*(?:#{1,6}\s+|\*\*|__)?\s*acceptance criteria/i.test(l));
+      // /^\s*(?:#{1,6}\s+|\*\*|__)?\s*acceptance criteria/i as \s*(?:(?:#{1,6}\s|\*\*|__)\s*)? (the same lines): blank runs meeting
+      // around an absent marker backtracked quadratically (1.17 H)
+      const acAt = body.findIndex((l) => /^\s*(?:(?:#{1,6}\s|\*\*|__)\s*)?acceptance criteria/i.test(l));
       const prose = tidyLines(body.slice(0, acAt === -1 ? body.length : acAt).filter((l) => !/^\s*#/.test(l)));
       const acs = acAt === -1 ? [] : acItems(body.slice(acAt + 1));
       const key = `${+m[1]}.${+m[2]}`;
@@ -19986,15 +21291,15 @@ function parseBmad(dir, read0, W, src) {
     const lines = stripHtmlComments(txt).split(/\r?\n/);
     const hs = mdHeadings(lines);
     const h1 = hs.find((h) => h.level === 1);
-    const m = h1 && planHeadingText(h1.text).match(RE_BMAD_STORY_HEAD);
+    const m = h1 && bmadStoryHead(planHeadingText(h1.text));
     if (!m) continue;
     const key = `${+m[1]}.${+m[2]}`;
     const st = { e: +m[1], s: +m[2], title: m[3].trim() || `Story ${key}`, prose: [], acs: [], tasks: null, design: [], from: toPosix(path.relative(src.root, file)) };
     const top = hs.filter((h) => h.level === 2);
     // Before the first section: v6's "Status: ready-for-dev" line (a workflow record); any other text → the story's design notes.
     const intro = lines.slice(h1.i + 1, top.length ? top[0].i : lines.length);
-    if (intro.some((l) => /^s*statuss*:/i.test(l))) addWorkflow("Status", key);
-    const introRest = tidyLines(intro.filter((l) => !/^s*statuss*:/i.test(l)));
+    if (intro.some((l) => /^\s*status\s*:/i.test(l))) addWorkflow("Status", key);
+    const introRest = tidyLines(intro.filter((l) => !/^\s*status\s*:/i.test(l)));
     if (introRest.length) st.design.push("", ...introRest);
     for (const h of top) {
       const k = hs.indexOf(h);
@@ -20003,7 +21308,7 @@ function parseBmad(dir, read0, W, src) {
       const body = lines.slice(lo, hi);
       if (/^(?:story|user story)$/i.test(t)) st.prose = tidyLines(body.filter((l) => !/^\s*#/.test(l)).map((l) => l.replace(/\*\*(as an?|i want|so that)\*\*/gi, "$1")));
       else if (/^acceptance criteria$/i.test(t)) st.acs = acItems(body);
-      else if (/^tasks?\s*(?:\/|&|and)?\s*(?:subtasks?)?$/i.test(t)) st.tasks = { lines, lo, hi };
+      else if (/^tasks?\s*(?:(?:\/|&|and)\s*)?(?:subtasks?)?$/i.test(t)) st.tasks = { lines, lo, hi };
       else if (RE_BMAD_WORKFLOW.test(t)) addWorkflow(t, key);
       else if (tidyLines(body).length) st.design.push("", `### ${t}`, ...tidyLines(body.map((l) => l.replace(/^(#{1,4})(\s)/, "#$1$2"))));
     }
@@ -20029,7 +21334,9 @@ function parseBmad(dir, read0, W, src) {
     if (!units.length) return;
     out.push("", `## US-${n}: ${st.title}`);
     units.forEach((u, j) => {
-      const refM = u.text.match(/\(\s*ACs?\s*[:#]?\s*([^)]*)\)/i);
+      // /\(\s*ACs?\s*[:#]?\s*([^)]*)\)/i, read up to the last ')' (no match can end later: each "(AC" rescanned the rest of a
+      // text with no ')' after it) with \s*(?:[:#]\s*)? (blank runs meeting with no ':' / '#' between them) — 1.17 H.
+      const refM = u.text.slice(0, u.text.lastIndexOf(")") + 1).match(/\(\s*ACs?\s*(?:[:#]\s*)?([^)]*)\)/i);
       // "(AC: 1, 3)", "(AC #2)", "(ACs: 1-3)" — a range is every number in it (bounded: a typo like 1-9999 is not expanded)
       const nums = refM ? (refM[1].match(/\d+\s*[-–]\s*\d+|\d+/g) || []).flatMap((x) => {
         const r = x.match(/^(\d+)\s*[-–]\s*(\d+)$/);
@@ -20049,14 +21356,1152 @@ function parseBmad(dir, read0, W, src) {
   else model.warnings.push(W.wNoTasks);
   if (workflow.size) model.warnings.push(P.wWorkflow([...workflow].map(([t, where]) => `${t} (${where.join(", ")})`).join(", ")));
   const arch = archFile ? read(archFile) : null;
-  const design = [arch != null ? arch.replace(/\s+$/, "") : null, ...(designParts.length ? ["", ...designParts] : [])].filter((x) => x != null);
+  const design = [arch != null ? arch.trimEnd() : null, ...(designParts.length ? ["", ...designParts] : [])].filter((x) => x != null);
   if (tidyLines(design).length) model.design = { text: tidyLines(design).join("\n"), file: archFile ? path.basename(archFile) : "Dev Notes" };
   else model.warnings.push(W.wNoDesign("architecture.md"));
   if (model.title) model.nameHint = model.title; // the product's name, not "docs"
   if (storyFiles.length === 1 && !prdFiles.length && ordered.length === 1) { model.sourceFile = storyFiles[0]; model.nameHint = ordered[0].title; }
   return model;
 }
-const C3_PARSERS = { plan: parsePlan, execplan: parseExecPlan, bmad: parseBmad };
+
+// ---------------------------------------------------------------------------
+// spec_import fluidplan (1.17 F) — a plan settled with fluidplan (github.com/morganhub/fluidplan, a Claude Code skill, MIT). The
+// formats were read at its commit 755d1b24ccb09aa8d3663774e0a83d99d24cdc4c (2026-09-26): engine/schema/plan.schema.json (plan
+// v2), references/schema.md + execution-plan.md, engine/public/js/model.js / export_plan.js / export_decisions.js (what PLAN.md
+// and DECISIONS.md hold) and engine/public/i18n/en.json + fr.json (their labels — a plan is written in English or French).
+// Nothing of fluidplan's is vendored: its files are only READ, and the few rules the import needs (verdicts, kept options,
+// templates, numbering by phase) are re-stated below.
+// Sources: a plan folder (<plansDir>/<id>/, default .fluidplan/<id>/ — plan.json, answers.json, state.json, rounds/<n>/, PLAN.md,
+// DECISIONS.md), its plan.json, its PLAN.md / DECISIONS.md (finalize writes them to the plan folder or to plan.json's `output`
+// paths), a plans folder holding ONE plan (several → refused, name one), or PLAN.md's text — DECISIONS.md may follow it
+// (spec_import {text}). The finalized artifacts win when present (PLAN.md: the tasks and their ticks; DECISIONS.md: the settled
+// decisions); plan.json + answers.json fill in the rest (each option's pros / cons / effort, the pages) or stand alone (the tasks
+// then follow fluidplan's own rules: the kept options, the templates, the reviewer's rewrites, the numbering by phase). Mapping:
+//   pages (themes) → user stories (without plan.json: PLAN.md's phases); each kept task's `acceptance` → that story's criteria
+//   (EARS when they read like one, else [NEEDS CLARIFICATION]); tasks → tasks.md under their phase headings, ticks kept, numbered
+//   1…K in PLAN.md's order — `files` create / modify → _Implements:_ (planPaths' filter: never a URL, an absolute / home path,
+//   '..' or a glob), delete → the task text, `verify` → one _Verify:_ per command, `after` → _Depends:_ (renumbered);
+//   accepted AND rejected decisions → decisions.md (D-1…, spec_decide's format: Context = why + importance / phase / proposal,
+//   Decision = the choice + the reviewer's remarks, Consequences = the chosen option's pros / cons / effort + the other options;
+//   _Affects:_ = the criteria its tasks carry) and design.md "## Decisions" + "## Alternatives & Trade-offs"; the working rules
+//   (accepted decisions without tasks) → tasks.md "## Global Constraints"; rejected decisions / items → requirements.md "## Out
+//   of Scope"; decisions still open (no answer, to change, a question) → requirements.md "## Open decisions" with
+//   [NEEDS CLARIFICATION] + a warning; the context, glossary, final check, visuals and any other section → design.md. The round
+//   history (rounds/, revision notes, the verdict history) is not imported — a warning says so.
+// ---------------------------------------------------------------------------
+const FP_PLAN_ID = /^[a-z0-9][a-z0-9_-]*$/; // a plan's id = its folder's name (fluidplan's engine/lib/config.mjs)
+const FP_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/; // a decision / page / task id (plan.schema.json $defs/id)
+const FP_OTHER = "__other"; // the "Another option" answer every choice offers
+const FP_SEC = {
+  context: /^(?:context|contexte)$/i,
+  rules: /^(?:working rules|r[èe]gles de travail)$/i,
+  loose: /^(?:cross-cutting tasks|t[âa]ches transverses)$/i,
+  finalCheck: /^(?:final check|v[ée]rification finale)$/i,
+  outOfScope: /^(?:out of scope|hors p[ée]rim[èe]tre)$/i,
+  kept: /^(?:accepted decisions|d[ée]cisions retenues)$/i,
+  rejected: /^(?:rejected decisions|d[ée]cisions [ée]cart[ée]es)$/i,
+  open: /^(?:still open|encore ouvertes)$/i,
+  glossary: /^(?:glossary|glossaire)$/i,
+};
+const RE_FP_STATE = /_\(([^()]*)\)_[ \t]*$/; // a task's / rule's "_(to change)_" mark: its decision is not settled
+const FP_LINE_MAX = 2000; // a heading / bullet longer than this is carried as text, never parsed
+const fpShort = (s) => String(s).length <= FP_LINE_MAX;
+const fpMap = (table, key) => (typeof key === "string" && own(table, key) ? table[key] : null); // never a prototype key
+// "<title> — execution plan" / "— plan d'exécution" (kind plan), "<title> — decisions" / "— décisions" (kind decisions) → the title,
+// else null. Suffix checks, no backtracking pattern (every pattern here stays linear).
+const FP_TITLE_SUFFIX = { plan: ["execution plan", "plan d'exécution", "plan d’exécution", "plan d'execution"], decisions: ["decisions", "décisions"] };
+function fpTitleOf(text, kind) {
+  const t = String(text || "").trim();
+  if (!fpShort(t)) return null;
+  const low = t.toLowerCase();
+  for (const s of FP_TITLE_SUFFIX[kind]) {
+    if (!low.endsWith(s)) continue;
+    const head = t.slice(0, t.length - s.length);
+    const before = head.trimEnd();
+    if (head === before || !/[—–-]$/.test(before)) continue;
+    const title = before.slice(0, -1);
+    if (/\s$/.test(title) && title.trim()) return title.trim();
+  }
+  return null;
+}
+// "### [ ] 1.1 <title>[ _(state)_] · <decision id>" → { box, num, title, fid } | null.
+function fpTaskHeading(line) {
+  if (!fpShort(line)) return null;
+  const m = line.match(/^###[ \t]+\[([ xX~\-/])\][ \t]+(\d+\.\d+)[ \t]+(.*)$/);
+  if (!m) return null;
+  const k = m[3].lastIndexOf("·");
+  if (k === -1) return null;
+  const title = m[3].slice(0, k), fid = m[3].slice(k + 1).trim();
+  return title.trim() && /\s$/.test(title) && FP_ID.test(fid) ? { box: m[1], num: m[2], title: title.trim(), fid } : null;
+}
+// "Phase 2 — Delivery (≈ 2 d)" → { n, title } | null.
+function fpPhaseHeading(text) {
+  if (!fpShort(text)) return null;
+  const m = String(text).match(/^phase[ \t]+(\d+)[ \t]+[—–-][ \t]+(.*)$/i);
+  if (!m) return null;
+  let title = m[2];
+  const meta = title.match(/\(([^()]*)\)$/);
+  if (meta && meta.index > 0 && /\s/.test(title[meta.index - 1])) title = title.slice(0, meta.index);
+  return title.trim() ? { n: +m[1], title: title.trim() } : null;
+}
+// An acceptance bullet → [line, text] | null — /^\s*[-*+]\s+(?:\[[ xX]\]\s+)?(.*)$/ with its text read by restAfterBlanks
+// (1.17 H): after the optional checkbox when it is there; a line terminator after the text → null either way.
+function fpAcceptanceItem(l) {
+  const h = /^\s*[-*+]/.exec(l);
+  if (!h || !isWsUnit(l[h[0].length])) return null;
+  let q = h[0].length;
+  while (q < l.length && isWsUnit(l[q])) q++;
+  const text = restAfterBlanks(l, /^\[[ xX]\]\s/.test(l.slice(q, q + 4)) ? q + 3 : h[0].length, true);
+  return text == null ? null : [l, text];
+}
+// "- **D3 · Logging** …" → [line, id, title, rest] | null — /^[-*][ \t]+\*\*([A-Za-z0-9][A-Za-z0-9_-]*)[ \t]+·[ \t]+(?![ \t])(.+?)\*\*(.*)$/
+// by a scan after its head: the title runs to the first "**" after it and nothing after it holds a line terminator (the lazy
+// title rescanned the rest of the line from each "**" — 1.17 H).
+const RE_FP_DEC_HEAD = /^[-*][ \t]+\*\*([A-Za-z0-9][A-Za-z0-9_-]*)[ \t]+·[ \t]+(?![ \t])/;
+function fpDecLine(l) {
+  const h = RE_FP_DEC_HEAD.exec(l);
+  if (!h) return null;
+  const ts = h[0].length, k = l.indexOf("**", ts + 1);
+  return k === -1 || RE_LINE_TERMINATOR.test(l.slice(ts)) ? null : [l, h[1], l.slice(ts, k), l.slice(k + 2)];
+}
+const FP_TASK_FIELDS = [["decision", /^d[ée]cision$/i], ["files", /^(?:files|fichiers)$/i], ["do", /^(?:do|faire)$/i],
+  ["acceptance", /^(?:acceptance criteria|crit[èe]res d['’]acceptation)$/i], ["verify", /^(?:verify|v[ée]rifier)$/i], ["after", /^(?:after|apr[èe]s)$/i],
+  ["remark", /^(?:remark|remarque)$/i], ["items", /^(?:items kept|[ée]l[ée]ments retenus)$/i]];
+const FP_DEC_FIELDS = [["importance", /^importance$/i], ["phase", /^phase$/i], ["choice", /^(?:choice|choix)$/i], ["why", /^(?:why|pourquoi)$/i],
+  ["proposal", /^(?:proposal|proposition)$/i], ["others", /^(?:other options|autres options)$/i], ["remarks", /^(?:remarks|remarques)$/i],
+  ["history", /^(?:history|historique)$/i], ["reason", /^(?:reason|raison)$/i]];
+const FP_OPS = { create: "create", "créer": "create", creer: "create", modify: "modify", modifier: "modify", delete: "delete", supprimer: "delete" };
+const FP_IMPORTANCE = { critical: "critical", critique: "critical", important: "important", minor: "minor", mineur: "minor", mineure: "minor" };
+const FP_SRC_LABELS = { en: { loose: "Cross-cutting tasks", rejected: "rejected" }, fr: { loose: "Tâches transverses", rejected: "écartée" } };
+const fpFilled = (s) => String(s == null ? "" : s).trim() !== "";
+// A line break as a markdown reader and the task scanner see one: LF, a lone CR, U+2028 / U+2029 (built from their code points:
+// written raw inside a regex literal they end the line — a syntax error).
+const FP_LS_PS = String.fromCharCode(0x2028, 0x2029);
+const RE_FP_BREAK = new RegExp("[\\n\\r" + FP_LS_PS + "]");
+const RE_FP_BREAKS = new RegExp("[\\n\\r" + FP_LS_PS + "]+", "g");
+const RE_FP_LINE_SPLIT = new RegExp("\\r\\n|[\\n\\r" + FP_LS_PS + "]");
+const RE_FP_VERIFY_BAD = new RegExp("[\\n\\r" + FP_LS_PS + "]|<!--|-->");
+// One line: every whitespace run holding a line break → one space (what /\s*\n\s*/g did — quadratic on a long space run
+// without a break, 80,000 spaces took 6 s; 1.17 F review), then trimmed. A lone CR / U+2028 / U+2029 is a line break too for a
+// markdown reader (and ends a task line for the scanners): folded like "\n".
+const fpOneLine = (s) => String(s == null ? "" : s).split(RE_FP_BREAK).map((x) => x.trim()).filter(Boolean).join(" ");
+const fpList = (v) => (Array.isArray(v) ? v : []);
+const fpStr = (v) => (typeof v === "string" ? v : v == null ? "" : String(v));
+// Imported free text never becomes markup a tool reads (1.17 F review) — each escape renders the same in a markdown reader:
+//   a comment opener / closer → `&lt;!--` / `--&gt;` (a title's `<!--` and a later `-->` hid the markers between them);
+//   a task / decision marker look-alike → its colon escaped, `_Verify\:` (taskMarkerSpans() needs the colon right after the
+//     label — a title `Clean up _Verify: rm -rf ~_` was a runnable _Verify:_; only fluidplan's own `verify` field makes one);
+//   an AC / T / EC / NFR / SC ID → `US-7\.AC-1`, `T\-01`, `NFR\-2` (extractAcIds & co. read the plain spelling only — a page
+//     intro's `US-7.AC-1` was a phantom criterion, a Do text's `T-01` a phantom test).
+// Linear: fixed alternatives after a one-character lookbehind. Idempotent (an escaped form never matches again).
+// codeOk (1.17 verification N3): the comment escapes skip inline code spans (commentInert's rule) — only for text written into
+// requirements.md as a whole line or after the importer's backtick-free prefix (a criterion, a story's prose, Out of Scope):
+// its comment readers see code spans. Elsewhere a value is joined to others on its line (a code span's pairing could shift) or
+// lands in design.md / decisions.md, read by blankHtmlComments (no code spans) — escaped everywhere. The ID / marker escapes
+// apply inside code spans too: extractAcIds and taskMarkerSpans read code spans (a backslash shows there — CommonMark's rule).
+const RE_FP_MARKER_LIKE = new RegExp("(?<=[_*])(" + [...TASK_MARKER_LABELS, "Kind", "Date", "Affects", "Supersedes", "Outcome"].join("|") + ")(?=:)", "giu");
+function fpInert(s, codeOk) {
+  const t = String(s == null ? "" : s);
+  return (codeOk ? inertOutsideCode(t, true) : t.replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;")).replace(RE_FP_MARKER_LIKE, "$1\\")
+    .replace(/(?<![A-Za-z0-9])(US-\d+)\.(?=AC-\d)/g, "$1\\.").replace(/(?<![A-Za-z0-9])(T|EC|NFR|SC)-(?=\d)/g, "$1\\-");
+}
+const fpV = (s) => fpInert(fpOneLine(s)); // a value written inside one line
+// A value written into a heading (a title): fpV with its whitespace runs folded — a markdown reader shows one space anyway, and the
+// heading readers downstream (the task scanner's /^#{1,6}\s+(.*?)\s*$/) are quadratic on a long space run (1.17 F review: an
+// 80,000-space plan title took 15 s).
+const fpHead = (s) => fpV(s).replace(/\s+/g, " ");
+const fpTitle = (s) => fpV(s).replace(/^\[/, "\\["); // a task title: never a leading [P] / [US2] / [shared] tag run
+// A line as a file holds it — never a heading, a task line or a checkpoint: one physical line (a CR / U+2028 / U+2029 folded,
+// as fpOneLine does), then the structural escapes (the task scanner's and a markdown reader's).
+function fpLine(l) {
+  const s = String(l).replace(RE_FP_BREAKS, " ");
+  if (/^\s{0,3}#{1,6}(?:\s|$)/.test(s)) return s.replace("#", "\\#");
+  if (taskLine(s)) return s.replace("[", "\\[");
+  if (RE_CHECKPOINT.test(s)) return s.replace("**", "\\*\\*");
+  return s;
+}
+// Imported prose, line for line, each written at the start of a line of requirements.md / design.md: fpInert outside fenced code
+// (+ fpLine's escapes when `structural` — requirements.md, where a heading or an ID-led line is structure); a fence it leaves open
+// is closed (it swallowed every line after it — the criteria, the decisions). The fence view is the readers' own (fenceStep):
+// the block starts outside any fence and is written whole lines at column 0.
+function fpProse(lines, structural, codeOk) {
+  const st = { fence: null };
+  const out = [];
+  for (const raw of lines) {
+    const l = String(raw).replace(RE_FP_BREAKS, " ");
+    if (fenceStep(st, l)) { out.push(l); continue; }
+    out.push(structural ? fpLine(fpInert(l, codeOk)) : fpInert(l, codeOk));
+  }
+  if (st.fence) out.push(" ".repeat(st.fence.indent) + st.fence.mark);
+  return out;
+}
+const fpCell = (s) => fpV(s).replace(/\|/g, "\\|") || "—";
+// A verdict as the exports print it (EN / FR) → fluidplan's code: pending · modify · explain · ko · ok (null: unknown).
+function fpVerdictOfText(s) {
+  const t = String(s || "").trim().toLowerCase();
+  if (/^(?:rejected|[ée]cart[ée]e)/.test(t)) return "ko";
+  if (/^(?:to change|[àa] modifier)/.test(t)) return "modify";
+  if (/^(?:question asked|question pos[ée]e)/.test(t)) return "explain";
+  if (/^(?:no answer|sans r[ée]ponse)/.test(t)) return "pending";
+  if (/^(?:accepted|retenue|mixed|nuanc[ée]e)/.test(t)) return "ok";
+  return null;
+}
+// ----- plan.json + answers.json (fluidplan's model.js rules, re-stated) -----
+const fpEdits = (a) => (a && isObj(a.edits) ? a.edits : {});
+const fpTextOf = (a, key, orig) => { const e = own(fpEdits(a), key) ? fpEdits(a)[key] : null; return typeof e === "string" && fpFilled(e) ? e : orig; };
+const fpHasEdits = (a, prefix) => Object.keys(fpEdits(a)).some((k) => k.startsWith(prefix) && fpFilled(fpEdits(a)[k]));
+function fpItemVerdict(a, id) {
+  const st = a && isObj(a.items) && own(a.items, id) && isObj(a.items[id]) ? a.items[id] : null;
+  const s = st && st.status;
+  if (!s) return "pending";
+  if (s === "modify" && !fpFilled(st.comment) && !fpHasEdits(a, `items/${id}/`)) return "pending";
+  return ["ok", "ko", "modify"].includes(s) ? s : "pending";
+}
+function fpVerdict(d, a) {
+  const s = a && a.status;
+  if (s === "explain") return fpFilled(a.comment) ? "explain" : "pending";
+  const items = fpList(d.items).filter(isObj);
+  if (items.length) {
+    const st = items.map((it) => fpItemVerdict(a, it.id));
+    if (st.includes("pending")) return "pending";
+    if (st.every((x) => x === "ok")) return "ok";
+    if (st.every((x) => x === "ko")) return "ko";
+    return "mixed";
+  }
+  if (!s) return "pending";
+  if (s === "modify" && !fpFilled(a.comment) && !fpHasEdits(a, "")) return "pending";
+  return ["ok", "ko", "modify"].includes(s) ? s : "pending";
+}
+// settled: ok (accepted, mixed) · ko (rejected) · open (no answer, or waiting for a revision)
+function fpStatus(d, a) {
+  const v = fpVerdict(d, a);
+  if (v === "ko") return "ko";
+  if (v === "pending" || v === "modify" || v === "explain" || fpList(d.items).some((it) => isObj(it) && fpItemVerdict(a, it.id) === "modify")) return "open";
+  return "ok";
+}
+const fpOptions = (d) => (isObj(d.control) ? fpList(d.control.options).filter((o) => isObj(o) && typeof o.id === "string") : []);
+function fpChoice(d, a) {
+  if (a && typeof a.choice === "string") return a.choice;
+  const r = fpOptions(d).find((o) => o.recommended === true);
+  return r ? r.id : null;
+}
+const fpChoices = (d, a) => (a && Array.isArray(a.choices) ? a.choices.filter((x) => typeof x === "string") : fpOptions(d).filter((o) => o.recommended === true).map((o) => o.id));
+const fpValue = (d, a) => (a && Number.isFinite(a.value) ? a.value : isObj(d.control) && Number.isFinite(d.control.default) ? d.control.default : null);
+const fpOptionLabel = (a, o) => fpOneLine(fpTextOf(a, `options/${o.id}/label`, o.label)); // a label (or its rewrite) is one line
+function fpOrderedPhases(plan, answerOf) {
+  const phases = fpList(plan.phases).filter((p) => isObj(p) && typeof p.id === "string");
+  let order = null;
+  for (const pg of fpList(plan.pages)) for (const d of isObj(pg) ? fpList(pg.decisions) : []) {
+    if (!order && isObj(d) && isObj(d.control) && d.control.kind === "order" && d.control.source === "phases") order = d;
+  }
+  const a = order ? answerOf(order.id) : null;
+  const byId = new Map(phases.map((p) => [p.id, p]));
+  const out = [], inOut = new Set();
+  const add = (p) => { if (p && !inOut.has(p)) { inOut.add(p); out.push(p); } };
+  for (const id of a && Array.isArray(a.order) ? a.order : []) add(byId.get(id));
+  for (const p of phases) add(p);
+  return out;
+}
+function fpControlSummary(plan, answerOf, d, a, P) {
+  const c = isObj(d.control) ? d.control : null;
+  if (!c) return "";
+  if (c.kind === "choice") {
+    const id = fpChoice(d, a);
+    if (!id) return "";
+    if (id === FP_OTHER) return P.otherOption;
+    const o = fpOptions(d).find((x) => x.id === id);
+    return o ? fpOptionLabel(a, o) : fpOneLine(id);
+  }
+  if (c.kind === "multi") { const ids = fpChoices(d, a); return fpOptions(d).filter((o) => ids.includes(o.id)).map((o) => fpOptionLabel(a, o)).join(", ") || "—"; }
+  if (c.kind === "number") { const v = fpValue(d, a); return v == null ? "" : `${v}${fpFilled(c.unit) ? " " + fpOneLine(c.unit) : ""}`; }
+  if (c.kind === "order") return fpOrderedPhases(plan, (id) => (id === d.id ? a : answerOf(id))).map((p, i) => `${i + 1}. ${fpOneLine(p.title)}`).join(" · ");
+  return "";
+}
+// The tasks an answer keeps: the decision's own, the chosen option's (the checked options'), the kept items' — templates filled
+// ({{value}} {{unit}} {{choice.id}} {{choice.label}} {{choices}}), the reviewer's rewrites of a title / the criteria applied.
+function fpDecisionTasks(d, a) {
+  const c = isObj(d.control) ? d.control : null;
+  const picked = [...fpList(d.tasks)];
+  const chosen = c && c.kind === "choice" ? fpOptions(d).find((x) => x.id === fpChoice(d, a)) : null;
+  if (chosen) picked.push(...fpList(chosen.tasks));
+  const ids = c && c.kind === "multi" ? fpChoices(d, a) : [];
+  if (c && c.kind === "multi") for (const o of fpOptions(d)) if (ids.includes(o.id)) picked.push(...fpList(o.tasks));
+  for (const it of fpList(d.items)) if (isObj(it) && fpItemVerdict(a, it.id) !== "ko") picked.push(...fpList(it.tasks));
+  const vars = {};
+  if (c && c.kind === "number") { vars.value = fpValue(d, a); vars.unit = fpOneLine(c.unit); }
+  if (c && c.kind === "choice") { vars["choice.id"] = chosen ? chosen.id : ""; vars["choice.label"] = chosen ? fpOptionLabel(a, chosen) : ""; }
+  if (c && c.kind === "multi") vars.choices = fpOptions(d).filter((o) => ids.includes(o.id)).map((o) => fpOptionLabel(a, o)).join(", ");
+  const fill = (s) => (typeof s === "string" ? s.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (m, k) => (own(vars, k) && vars[k] != null ? String(vars[k]) : m)) : s);
+  return picked.filter((t) => isObj(t) && typeof t.id === "string").map((t) => {
+    const acc = fpTextOf(a, `tasks/${t.id}/acceptance`, null);
+    return { ...t, title: fill(fpStr(fpTextOf(a, `tasks/${t.id}/title`, t.title))), do: fill(typeof t.do === "string" ? t.do : ""),
+      acceptance: (acc != null ? String(acc).split(/\r?\n/).map((s) => s.replace(/^\s*[-*]\s*/, "").trim()).filter(Boolean) : fpList(t.acceptance).filter((x) => typeof x === "string")).map(fill),
+      verify: fpList(t.verify).filter((x) => typeof x === "string").map(fill) };
+  });
+}
+// plan.json + answers.json + state.json → the normalized plan (see fpImportModel), the tasks numbered as PLAN.md numbers them:
+// by phase (the chosen order), then by `after`, then page order; "0.n" for a task without a known phase.
+function fpFromPlanJson(plan, answers, state, P, lang) {
+  const A = isObj(answers) ? answers : {};
+  const answerOf = (id) => (typeof id === "string" && own(A, id) && isObj(A[id]) ? A[id] : {});
+  const SL = FP_SRC_LABELS[lang] || FP_SRC_LABELS.en;
+  const fp = fpEmpty();
+  fp.title = fpFilled(plan.title) ? fpOneLine(plan.title) : null;
+  fp.subtitle = fpFilled(plan.subtitle) ? fpOneLine(plan.subtitle) : null; // 1.17 F review: carried (the summary, or design.md's Context)
+  fp.id = typeof plan.id === "string" && FP_PLAN_ID.test(plan.id) ? plan.id : null;
+  fp.context = typeof plan.context === "string" ? tidyLines(plan.context.split(/\r?\n/)) : [];
+  const srcPath = isObj(plan.source) && typeof plan.source.path === "string" ? plan.source.path : typeof plan.source === "string" ? plan.source : null;
+  fp.sourceDoc = fpFilled(srcPath) ? fpOneLine(srcPath) : null;
+  const st = isObj(state) ? state : {};
+  const hist = fpList(st.history).filter(isObj);
+  const stamp = [st.submitted_at, hist.length ? hist[hist.length - 1].submitted_at : null, st.opened_at].find((x) => typeof x === "string" && !isNaN(Date.parse(x)));
+  fp.date = stamp ? new Date(stamp) : null;
+  fp.round = Number.isInteger(st.round) ? st.round : null;
+  const phases = fpList(plan.phases).filter((p) => isObj(p) && typeof p.id === "string");
+  const phaseTitle = new Map(phases.map((p, i) => [p.id, `Phase ${i + 1} — ${fpOneLine(p.title)}`]));
+  const rows = [];
+  const seen = new Set();
+  fpList(plan.pages).forEach((pg, pi) => {
+    if (!isObj(pg)) return;
+    const pid = typeof pg.id === "string" ? pg.id : "page-" + (pi + 1);
+    fp.pages.set(pid, { title: fpFilled(pg.title) ? fpOneLine(pg.title) : fpOneLine(pid), intro: typeof pg.intro === "string" ? tidyLines(pg.intro.split(/\r?\n/)) : [], index: pi });
+    if (isObj(pg.visual) && pg.visual.kind) fp.visuals.push({ where: fp.pages.get(pid).title, kind: fpOneLine(pg.visual.kind), caption: fpStr(pg.visual.caption || pg.visual.alt) });
+    for (const d of fpList(pg.decisions)) {
+      if (!isObj(d) || typeof d.id !== "string" || !FP_ID.test(d.id) || seen.has(d.id)) continue;
+      seen.add(d.id);
+      rows.push({ pid, pi, d, a: answerOf(d.id) });
+      if (isObj(d.visual) && d.visual.kind) fp.visuals.push({ where: d.id, kind: fpOneLine(d.visual.kind), caption: fpStr(d.visual.caption || d.visual.alt) });
+    }
+  });
+  let pending = 0, revise = 0;
+  for (const { pid, d, a } of rows) {
+    const status = fpStatus(d, a);
+    const v = fpVerdict(d, a);
+    if (v === "pending") pending++;
+    else if (status === "open") revise++;
+    const chosenIds = isObj(d.control) && d.control.kind === "choice" ? [fpChoice(d, a)] : isObj(d.control) && d.control.kind === "multi" ? fpChoices(d, a) : [];
+    const dec = fpNewDecision(d.id, fpOneLine(d.title) || d.id, status);
+    Object.assign(dec, {
+      verdict: v, importance: fpMap(FP_IMPORTANCE, d.importance) || "important", phaseTitle: typeof d.phase === "string" ? phaseTitle.get(d.phase) || null : null,
+      choice: fpControlSummary(plan, answerOf, d, a, P) || null, why: fpFilled(d.why) ? fpOneLine(d.why) : null,
+      proposal: fpFilled(fpTextOf(a, "proposal", d.proposal)) ? fpOneLine(fpTextOf(a, "proposal", d.proposal)) : null, rewritten: fpFilled(fpEdits(a).proposal),
+      remarks: fpFilled(a.comment) ? [`“${fpOneLine(a.comment)}”`] : [], reason: status === "ko" && fpFilled(a.comment) ? `“${fpOneLine(a.comment)}”` : null,
+      dependsOn: fpList(d.depends_on).filter((x) => typeof x === "string"), learnMore: fpFilled(d.learn_more) ? fpOneLine(d.learn_more) : null,
+      facts: fpList(d.facts).filter((f) => isObj(f) && fpFilled(f.label)).map((f) => ({ label: fpOneLine(f.label), value: fpOneLine(f.value) })),
+      question: Number.isInteger(d.question) ? d.question : null, sourceRef: fpFilled(d.source_ref) ? fpOneLine(d.source_ref) : null,
+      pageId: pid, pageTitle: fp.pages.get(pid).title, stateText: P.verdict[v] || null,
+      options: fpOptions(d).map((o) => ({ label: fpOptionLabel(a, o), detail: fpTextOf(a, `options/${o.id}/detail`, fpStr(o.detail)), pros: fpList(o.pros).map(fpStr), cons: fpList(o.cons).map(fpStr),
+        effort: fpStr(o.effort), cost: fpStr(o.cost), chosen: chosenIds.includes(o.id) })),
+      items: fpList(d.items).filter(isObj).map((it) => ({ title: fpOneLine(it.title), tag: fpOneLine(it.tag), detail: fpOneLine(fpTextOf(a, `items/${it.id}/detail`, it.detail)),
+        verdict: fpItemVerdict(a, it.id), comment: a && isObj(a.items) && own(a.items, it.id) && isObj(a.items[it.id]) && fpFilled(a.items[it.id].comment) ? fpOneLine(a.items[it.id].comment) : "" })),
+    });
+    // 1.17 F review: what the reviewer and Claude said of it is carried — the revision note (Claude's, the latest round) in
+    // decisions.md's Context, and for a decision still open, its question / request and its unsettled items' remarks on the
+    // Open decisions line (they were dropped without a warning).
+    if (isObj(d.revision) && fpFilled(d.revision.note)) dec.revisionNote = P.revisionNote(Number.isInteger(d.revision.round) ? d.revision.round : "?", fpOneLine(d.revision.note));
+    if (status === "open") {
+      const note = [fpFilled(a.comment) ? `“${fpOneLine(a.comment)}”` : null,
+        ...dec.items.filter((it) => it.verdict === "modify" || it.verdict === "pending").map((it) => `${it.title} (${P.verdict[it.verdict]}${it.comment ? `: “${it.comment}”` : ""})`),
+        dec.revisionNote].filter(Boolean);
+      dec.openNote = note.length ? note.join(" · ") : null;
+    }
+    fp.decisions.set(d.id, dec);
+    fp.decisionOrder.push(d.id);
+    fp.decisionPage.set(d.id, pid);
+  }
+  if (pending || revise) fp.draft = { pending, revise };
+  // The tasks (for a plan with no PLAN.md): the kept ones, grouped and numbered as fluidplan's resolvePlanTasks does.
+  const entries = [];
+  for (const r of rows) {
+    if (fpVerdict(r.d, r.a) === "ko") continue;
+    for (const t of fpDecisionTasks(r.d, r.a)) entries.push({ ref: `${r.d.id}/${t.id}`, r, task: t, phaseId: typeof t.phase === "string" ? t.phase : typeof r.d.phase === "string" ? r.d.phase : null });
+  }
+  const byRef = new Map();
+  for (const e of entries) if (!byRef.has(e.ref)) byRef.set(e.ref, e);
+  const ordered = fpOrderedPhases(plan, answerOf);
+  const known = new Set(ordered.map((p) => p.id));
+  const afterOf = (e) => fpList(e.task.after).filter((x) => typeof x === "string").map((x) => (x.includes("/") ? x : `${e.r.d.id}/${x}`));
+  // fluidplan's order within a group: repeatedly the first entry (page order) whose in-group `after` are all placed — a cycle
+  // (nothing ready) places the first remaining one. Kahn's walk with a min-heap of ready positions: the same order, linear-log
+  // (the findIndex + splice loop was quadratic — a reversed `after` chain of 8,000 tasks took 9 s; 1.17 F review).
+  const sortGroup = (group) => {
+    const n = group.length;
+    const inGroup = new Set(group.map((e) => e.ref));
+    const need = new Array(n).fill(0);
+    const waiting = new Map(); // ref → positions waiting for it
+    group.forEach((e, i) => {
+      for (const x of new Set(afterOf(e))) {
+        if (!inGroup.has(x)) continue;
+        need[i]++;
+        if (!waiting.has(x)) waiting.set(x, []);
+        waiting.get(x).push(i);
+      }
+    });
+    const heap = [];
+    const push = (v) => { heap.push(v); for (let i = heap.length - 1; i > 0;) { const p = (i - 1) >> 1; if (heap[p] <= heap[i]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+    const pop = () => {
+      const top = heap[0], last = heap.pop();
+      if (heap.length) {
+        heap[0] = last;
+        for (let i = 0; ;) {
+          const l = 2 * i + 1, r = l + 1;
+          let m = i;
+          if (l < heap.length && heap[l] < heap[m]) m = l;
+          if (r < heap.length && heap[r] < heap[m]) m = r;
+          if (m === i) break;
+          [heap[m], heap[i]] = [heap[i], heap[m]];
+          i = m;
+        }
+      }
+      return top;
+    };
+    need.forEach((k, i) => { if (!k) push(i); });
+    const done = new Array(n).fill(false), placed = new Set(), out = [];
+    let low = 0;
+    while (out.length < n) {
+      let i = -1;
+      while (heap.length) { const c = pop(); if (!done[c]) { i = c; break; } }
+      if (i < 0) { while (done[low]) low++; i = low; } // a cycle: page order (fluidplan's check reports it)
+      done[i] = true;
+      out.push(group[i]);
+      const ref = group[i].ref;
+      if (!placed.has(ref)) { placed.add(ref); for (const j of waiting.get(ref) || []) if (--need[j] === 0 && !done[j]) push(j); }
+    }
+    return out;
+  };
+  const groups = [];
+  const byPhase = new Map(), looseEntries = [];
+  for (const e of entries) {
+    if (!e.phaseId || !known.has(e.phaseId)) { looseEntries.push(e); continue; }
+    if (!byPhase.has(e.phaseId)) byPhase.set(e.phaseId, []);
+    byPhase.get(e.phaseId).push(e);
+  }
+  const loose = sortGroup(looseEntries);
+  if (loose.length) groups.push({ heading: SL.loose, title: SL.loose, entries: loose, num: (k) => `0.${k + 1}` });
+  ordered.forEach((p, index) => {
+    const es = sortGroup(byPhase.get(p.id) || []);
+    const meta = [p.estimate, p.cost].filter((x) => typeof x === "string" && x.trim()).map(fpOneLine).join(" · ");
+    const title = `Phase ${index + 1} — ${fpOneLine(p.title)}`;
+    if (es.length) groups.push({ heading: title + (meta ? ` (${meta})` : ""), title, entries: es, num: (k) => `${index + 1}.${k + 1}` });
+  });
+  const numOf = new Map();
+  for (const g of groups) g.entries.forEach((e, k) => numOf.set(e.ref, g.num(k)));
+  const firstOf = new Set();
+  groups.forEach((g) => {
+    const gi = fp.groups.push({ heading: g.heading, title: g.title }) - 1;
+    g.entries.forEach((e) => {
+      const d = e.r.d, a = e.r.a, dec = fp.decisions.get(d.id);
+      const first = !firstOf.has(d.id);
+      firstOf.add(d.id);
+      const after = [], dangling = [];
+      for (const x of afterOf(e)) (numOf.has(x) ? after : dangling).push(numOf.has(x) ? numOf.get(x) : x);
+      fp.tasks.push({ num: numOf.get(e.ref), done: false, title: fpOneLine(e.task.title) || e.task.id, fid: d.id, group: gi, state: dec.status === "open" ? dec.verdict : null,
+        files: fpList(e.task.files).filter((f) => isObj(f) && typeof f.path === "string").map((f) => ({ path: f.path, op: fpMap(FP_OPS, f.op) || "modify" })),
+        doLines: e.task.do ? e.task.do.split(RE_FP_LINE_SPLIT) : [], acceptance: e.task.acceptance.map(fpOneLine).filter(Boolean), verify: e.task.verify, after, dangling,
+        remark: first && fpFilled(a.comment) ? `“${fpOneLine(a.comment)}”` : null,
+        // An item kept as PLAN.md lists it: its verdict when not OK and the reviewer's remark (1.17 F review: the remark was dropped).
+        items: first ? dec.items.filter((it) => it.verdict !== "ko").map((it) => `- ${it.title}${it.tag ? ` (${it.tag})` : ""}${it.detail ? ` — ${it.detail}` : ""}` +
+          (it.verdict !== "ok" ? ` (${P.verdict[it.verdict] || it.verdict}${it.comment ? `: “${it.comment}”` : ""})` : it.comment ? ` (“${it.comment}”)` : "")) : [],
+        extra: [], summary: dec.choice, critical: dec.importance === "critical" });
+    });
+  });
+  // Working rules (accepted decisions no kept task carries), out of scope (rejected decisions and items), final check, glossary.
+  const withTasks = new Set(entries.map((e) => e.r.d.id));
+  for (const { d } of rows) {
+    const dec = fp.decisions.get(d.id);
+    dec.hasTasks = withTasks.has(d.id);
+    // A rule has the shape PLAN.md's parser gives it (lines, state): fpImportModel reads r.lines (1.17 F review — a plan.json
+    // with an accepted decision and no task, a working rule, threw "Cannot read properties of undefined").
+    if (dec.status === "ok" && !dec.hasTasks) fp.rules.push({ fid: d.id, title: dec.title, rest: [dec.choice ? ` — ${dec.choice}` : "", dec.proposal ? `. ${dec.proposal}` : ""].join(""), state: null, remark: dec.remarks[0] || null, lines: [] });
+    if (dec.status === "ko") fp.outOfScope.push(`- **${d.id} · ${dec.title}** — ${SL.rejected}${dec.reason ? `: ${dec.reason}` : ""}`);
+    else for (const it of dec.items) if (it.verdict === "ko") fp.outOfScope.push(`- **${d.id}** / ${it.title} — ${SL.rejected}${it.comment ? `: “${it.comment}”` : ""}`);
+  }
+  const cmds = new Set();
+  for (const t of fp.tasks) for (const c of t.verify) cmds.add(c);
+  fp.finalCheck = [...cmds].map((c) => `- [ ] \`${fpOneLine(c)}\``);
+  fp.glossary = fpList(plan.glossary).filter((g) => isObj(g) && fpFilled(g.term)).sort((x, y) => fpStr(x.term).localeCompare(fpStr(y.term)))
+    .map((g) => `- **${fpOneLine(g.term)}**${fpList(g.aliases).length ? ` (${fpList(g.aliases).map(fpOneLine).join(", ")})` : ""} — ${fpOneLine(g.definition)}`);
+  return fp;
+}
+function fpEmpty() {
+  return { title: null, subtitle: null, id: null, context: [], sourceDoc: null, date: null, round: null, draft: null, groups: [], tasks: [], decisions: new Map(), decisionOrder: [],
+    decisionPage: new Map(), pages: new Map(), rules: [], outOfScope: [], finalCheck: [], glossary: [], visuals: [], extra: [] };
+}
+function fpNewDecision(fid, title, status) {
+  return { fid, title, status, verdict: status === "ko" ? "ko" : status === "open" ? "pending" : "ok", importance: null, phaseTitle: null, choice: null, why: null, proposal: null,
+    rewritten: false, remarks: [], reason: null, dependsOn: [], learnMore: null, facts: [], question: null, sourceRef: null, pageId: null, pageTitle: null, options: null,
+    othersText: null, items: [], itemsTable: [], extra: [], stateText: null, hasTasks: false, openNote: null, revisionNote: null };
+}
+// fluidplan's "To change" / "À modifier" (an item's verdict, in DECISIONS.md's items table or PLAN.md's "_(to change)_" mark).
+const RE_FP_TO_CHANGE = /^(?:to change|[àa] modifier)$/i;
+// DECISIONS.md's items table row "| Item | Detail | Opinion | Remark |" → its cells (a `\|` stays in its cell), else null.
+function fpTableCells(row) {
+  const t = String(row).trim();
+  if (!t.startsWith("|") || !fpShort(t)) return null;
+  const cells = [];
+  let cur = "";
+  for (let i = 1; i < t.length; i++) {
+    if (t[i] === "\\" && t[i + 1] === "|") { cur += "\\|"; i++; continue; }
+    if (t[i] === "|") { cells.push(cur.trim()); cur = ""; continue; }
+    cur += t[i];
+  }
+  if (cur.trim()) cells.push(cur.trim());
+  return cells;
+}
+// ----- PLAN.md / DECISIONS.md (fluidplan's exports, EN or FR) -----
+// The blockquote header: the DRAFT notice ({pending, revise}), the date ("Approved on 2026-09-25 at 14:02"), the round, the source
+// document and the plan's id (the "regenerate with `fluidplan export --plan <id>`" line).
+function fpHeader(lines, from, to) {
+  const out = { draft: null, date: null, round: null, source: null, id: null };
+  for (let i = from; i < to; i++) {
+    if (!/^\s*>/.test(lines[i])) continue;
+    const t = lines[i].replace(/^\s*>\s?/, "");
+    let m;
+    if (/\*\*(?:DRAFT|BROUILLON)\*\*/.test(t)) {
+      const n = t.match(/\((\d+)\D+(\d+)\D*\)/);
+      out.draft = { pending: n ? +n[1] : null, revise: n ? +n[2] : null };
+      continue;
+    }
+    if ((m = t.match(/fluidplan export --plan ([a-z0-9][a-z0-9_-]*)/))) out.id = m[1];
+    if (!out.date && (m = t.match(/(\d{4})-(\d{2})-(\d{2})(?:\D{1,12}?(\d{2}):(\d{2}))?/))) {
+      const d = new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 0, m[5] ? +m[5] : 0);
+      if (!isNaN(d.getTime())) out.date = d;
+    }
+    if (out.round == null && (m = t.match(/(?<![\p{L}])(?:round|tour)\s+(\d+)/iu))) out.round = +m[1];
+    if (!out.source && (m = t.match(/(?<![\p{L}])source\s?:\s*`([^`\n]+)`/iu))) out.source = m[1];
+  }
+  return out;
+}
+// "- Label: value" (FR "- Label : value") bullets and the lines under each (a Do block, the criteria, the items kept).
+function fpFields(body, table) {
+  const fields = [];
+  let cur = null;
+  for (const raw of body) {
+    const l = raw.trimEnd();
+    if (/^[-*]\s/.test(l)) {
+      const m = fpShort(l) ? l.match(/^[-*][ \t]+(?![ \t])([^:*`\n]+?)[ \t]?:(?:[ \t]+(.*))?$/) : null;
+      const key = m ? (table.find(([, re]) => re.test(m[1].trim())) || [null])[0] : null;
+      cur = { key, value: m && m[2] ? m[2].trim() : "", raw: l, lines: [] };
+      fields.push(cur);
+      continue;
+    }
+    if (cur) cur.lines.push(l);
+    else if (l.trim()) fields.push({ key: null, value: "", raw: l, lines: [] });
+  }
+  for (const f of fields) f.lines = tidyLines(f.lines);
+  return fields;
+}
+function fpTaskFromMd(th, body, group) {
+  let title = th.title;
+  let state = null;
+  const sm = title.match(RE_FP_STATE);
+  if (sm) { state = fpVerdictOfText(sm[1]); title = title.slice(0, sm.index).trimEnd(); }
+  const t = { num: th.num, done: /[xX]/.test(th.box), title, fid: th.fid, group, state: state === "ok" ? null : state, files: [], doLines: [], acceptance: [], verify: [], after: [], dangling: [],
+    remark: null, items: [], extra: [], summary: null, critical: false, decisionTitle: null };
+  for (const f of fpFields(body, FP_TASK_FIELDS)) {
+    const v = f.value;
+    if (f.key === "decision") {
+      const m = v.match(/^\*\*[^*]+\*\*\s*(.*)$/);
+      let rest = m ? m[1] : v;
+      if (/\s\[(?:critical|critique)\]$/i.test(rest)) { t.critical = true; rest = rest.replace(/\s\[[^\]]*\]$/, ""); }
+      const k = rest.indexOf(" — ");
+      t.decisionTitle = (k === -1 ? rest : rest.slice(0, k)).trim() || null;
+      t.summary = k === -1 ? null : rest.slice(k + 3).trim() || null;
+    } else if (f.key === "files") {
+      for (const m of v.matchAll(/`([^`\n]+)`(?:[ \t]*\(([^()\n]*)\))?/g)) t.files.push({ path: m[1].trim(), op: fpMap(FP_OPS, String(m[2] || "").trim().toLowerCase()) || "modify" });
+    } else if (f.key === "do") t.doLines = tidyLines([v, ...f.lines.map((l) => l.replace(/^ {2}/, ""))]);
+    else if (f.key === "acceptance") {
+      for (const l of f.lines) { const m = fpAcceptanceItem(l); if (m && m[1].trim()) t.acceptance.push(m[1].trim()); else if (l.trim() && t.acceptance.length) t.acceptance[t.acceptance.length - 1] += " " + l.trim(); }
+    } else if (f.key === "verify") { for (const m of v.matchAll(/`([^`\n]+)`/g)) t.verify.push(m[1]); }
+    else if (f.key === "after") t.after.push(...(v.match(/(?<!\d)\d+\.\d+/g) || [])); // (?<!\d): a digit run read from its start (1.17 H)
+    else if (f.key === "remark") t.remark = v || null;
+    else if (f.key === "items") t.items.push(...f.lines.filter((l) => l.trim()).map((l) => l.trim()));
+    else t.extra.push(f.raw.trim(), ...f.lines.filter((l) => l.trim()).map((l) => "  " + l.trim()));
+  }
+  // An item kept "_(to change)_" (PLAN.md's mark): its decision waits for a revision — not settled (1.17 F review).
+  t.itemsToChange = t.items.filter((l) => fpShort(l) && [...l.matchAll(/_\(([^()\n]*)\)_/g)].some((m) => fpVerdictOfText(m[1]) === "modify"));
+  return t;
+}
+function fpParsePlanMd(text, fp) {
+  const lines = stripHtmlComments(String(text)).split(/\r?\n/);
+  const hs = mdHeadings(lines);
+  const h1 = hs.find((h) => h.level === 1);
+  const m1 = h1 ? fpTitleOf(h1.text, "plan") : null;
+  if (h1) fp.title = fp.title || m1 || h1.text.trim();
+  const h2 = hs.find((h) => h.level === 2);
+  const header = fpHeader(lines, h1 ? h1.i + 1 : 0, h2 ? h2.i : lines.length);
+  const tasks = [], groups = [], rules = [], extra = [];
+  let context = null, finalCheck = null, outOfScope = null;
+  hs.forEach((h, k) => {
+    if (h.level !== 2) return;
+    const t = h.text.trim();
+    const [lo, hi] = mdRange(lines, hs, k);
+    const body = lines.slice(lo, hi);
+    if (FP_SEC.context.test(t)) { context = tidyLines(body); return; }
+    if (FP_SEC.finalCheck.test(t)) { finalCheck = tidyLines(body); return; }
+    if (FP_SEC.outOfScope.test(t)) { outOfScope = tidyLines(body); return; }
+    if (FP_SEC.rules.test(t)) {
+      let cur = null;
+      for (const l of body) {
+        const m = fpShort(l) ? fpDecLine(l) : null;
+        if (m) {
+          let rest = m[3];
+          let state = null;
+          const sm = rest.match(/_\(([^()]*)\)_/);
+          if (sm) { state = fpVerdictOfText(sm[1]); rest = rest.slice(0, sm.index).trimEnd() + rest.slice(sm.index + sm[0].length); }
+          cur = { fid: m[1], title: m[2].trim(), rest: rest.trimEnd(), state: state === "ok" ? null : state, remark: null, lines: [] };
+          rules.push(cur);
+        } else if (cur && /^\s+[-*]\s/.test(l)) {
+          const r = fpShort(l) ? l.trim().match(/^[-*][ \t]+(?![ \t])([^:]+?)[ \t]?:[ \t]*(.*)$/) : null;
+          if (r && /^(?:remark|remarque)$/i.test(r[1].trim())) cur.remark = r[2].trim();
+          else cur.lines.push(l.trim());
+        } else if (l.trim()) { cur = null; rules.push({ fid: null, raw: l.trim() }); }
+      }
+      return;
+    }
+    const pm = fpPhaseHeading(t);
+    if (pm || FP_SEC.loose.test(t)) {
+      const gi = groups.push({ heading: t, title: pm ? `Phase ${pm.n} — ${pm.title}` : t }) - 1;
+      const covered = new Set();
+      for (let j = k + 1; j < hs.length && hs[j].i < hi; j++) {
+        const th = hs[j].level === 3 ? fpTaskHeading(lines[hs[j].i]) : null;
+        if (!th) continue;
+        const [tlo, thi] = mdRange(lines, hs, j);
+        for (let q = hs[j].i; q < thi; q++) covered.add(q);
+        tasks.push(fpTaskFromMd(th, lines.slice(tlo, thi), gi));
+      }
+      const left = tidyLines(body.filter((_, r) => !covered.has(lo + r) && !/^_[^_].*_$/.test(body[r].trim()))); // "_Nothing kept in this phase._"
+      if (left.length) extra.push({ heading: "## " + t, lines: left });
+      return;
+    }
+    const b = tidyLines(body);
+    if (b.length) extra.push({ heading: "## " + t, lines: b });
+  });
+  return { looks: !!m1 || tasks.length > 0, header, tasks, groups, rules, context, finalCheck, outOfScope, extra };
+}
+function fpParseDecisionsMd(text, fp) {
+  const lines = stripHtmlComments(String(text)).split(/\r?\n/);
+  const hs = mdHeadings(lines);
+  const h1 = hs.find((h) => h.level === 1);
+  const m1 = h1 ? fpTitleOf(h1.text, "decisions") : null;
+  if (h1 && !fp.title) fp.title = m1 || h1.text.trim();
+  const h2 = hs.find((h) => h.level === 2);
+  const header = fpHeader(lines, h1 ? h1.i + 1 : 0, h2 ? h2.i : lines.length);
+  const decisions = [], extra = [];
+  let context = null, glossary = null;
+  hs.forEach((h, k) => {
+    if (h.level !== 2) return;
+    const t = h.text.trim();
+    const [lo, hi] = mdRange(lines, hs, k);
+    const body = lines.slice(lo, hi);
+    if (FP_SEC.context.test(t)) { context = tidyLines(body); return; }
+    if (FP_SEC.glossary.test(t)) { glossary = tidyLines(body); return; }
+    if (FP_SEC.kept.test(t) || FP_SEC.rejected.test(t)) {
+      const status = FP_SEC.kept.test(t) ? "ok" : "ko";
+      for (let j = k + 1; j < hs.length && hs[j].i < hi; j++) {
+        const dm = hs[j].level === 3 && fpShort(hs[j].text) ? hs[j].text.match(/^([A-Za-z0-9][A-Za-z0-9_-]*)[ \t]+·[ \t]+(.+)$/) : null;
+        if (!dm) continue;
+        const d = fpNewDecision(dm[1], dm[2].trim(), status);
+        const dBody = mdBody(lines, hs, j);
+        d.itemsTable = dBody.filter((l) => /^\s*\|/.test(l)).map((l) => l.trim()); // a list decision's items table (Item · Detail · Opinion · Remark)
+        // DECISIONS.md writes "- **Label:** value" (FR "- **Label :** value") — read as fpFields' "- Label: value".
+        for (const f of fpFields(dBody.filter((l) => !/^\s*\|/.test(l)).map((l) => l.replace(/^([-*]\s+)\*\*([^*]+?)\s?:\*\*/, "$1$2:")), FP_DEC_FIELDS)) {
+          const v = f.value;
+          if (f.key === "importance") d.importance = fpMap(FP_IMPORTANCE, v.toLowerCase());
+          else if (f.key === "phase") d.phaseTitle = v || null;
+          else if (f.key === "choice") d.choice = v || null;
+          else if (f.key === "why") d.why = v || null;
+          else if (f.key === "proposal") { const rw = v.match(/_\((?:rewritten|réécrite)\)_$/i); d.proposal = (rw ? v.slice(0, rw.index) : v).trim() || null; d.rewritten = !!rw; }
+          else if (f.key === "others") d.othersText = v || null;
+          else if (f.key === "remarks") { if (v) d.remarks.push(v); }
+          else if (f.key === "history") d.history = v || null;
+          else if (f.key === "reason") d.reason = v && v !== "—" ? v : null;
+          else d.extra.push(f.raw.trim(), ...f.lines.map((l) => l.trim()).filter(Boolean));
+        }
+        // A list decision kept with an item still "To change" is not settled — fluidplan lists it with the accepted ones (its
+        // verdict is "mixed") while it waits for a revision (1.17 F review: it was imported as settled).
+        const toChange = d.itemsTable.map(fpTableCells).filter((c) => c && c.length >= 3 && RE_FP_TO_CHANGE.test(c[2]));
+        if (status === "ok" && toChange.length) { d.status = "open"; d.verdict = "mixed"; d.itemsToChange = toChange.map((c) => ({ label: c[0], remark: c[3] || "" })); }
+        decisions.push(d);
+      }
+      return;
+    }
+    if (FP_SEC.open.test(t)) {
+      for (const l of body) {
+        const m = fpShort(l) ? fpDecLine(l) : null;
+        if (!m) continue;
+        const d = fpNewDecision(m[1], m[2].trim(), "open");
+        const rest = m[3].replace(/^\s*[—–-]\s*/, "").trim();
+        d.verdict = fpVerdictOfText(rest) || "pending";
+        d.stateText = rest || null;
+        decisions.push(d);
+      }
+      return;
+    }
+    const b = tidyLines(body);
+    if (b.length) extra.push({ heading: "## " + t, lines: b });
+  });
+  return { looks: !!m1 || decisions.length > 0, header, decisions, context, glossary, extra };
+}
+// A project's fluidplan.config.json (fluidplan's engine/lib/config.mjs): plansDir (default .fluidplan — inside the project only,
+// else null), outputDir (where finalize writes PLAN.md / DECISIONS.md, default "{plansDir}/{id}" — the plan folder), lang.
+function fpConfig(root, read) {
+  let cfg = null;
+  try { cfg = JSON.parse(read(path.join(root, "fluidplan.config.json")) || "null"); } catch { /* the defaults */ }
+  const str = (k) => (isObj(cfg) && typeof cfg[k] === "string" && cfg[k].trim() ? cfg[k].trim() : null);
+  const abs = path.resolve(root, str("plansDir") || ".fluidplan");
+  return { plansDir: isInsideDir(root, abs) ? abs : null, outputDir: str("outputDir"), lang: str("lang") };
+}
+const fpPlansDir = (root, read) => fpConfig(root, read).plansDir;
+// A fluidplan document's kind from its title: "plan" (PLAN.md), "decisions" (DECISIONS.md) or null.
+function fpDocKind(text) {
+  const lines = stripHtmlComments(String(text || "")).split(/\r?\n/);
+  const h1 = lines.find((l) => /^#[ \t]/.test(l));
+  const title = h1 ? h1.replace(/^#[ \t]+/, "") : "";
+  if (fpTitleOf(title, "decisions") != null) return "decisions";
+  if (fpTitleOf(title, "plan") != null || lines.some((l) => /^###[ \t]/.test(l) && fpTaskHeading(l))) return "plan";
+  return null;
+}
+// PLAN.md's text followed by DECISIONS.md's (one pasted document) → the two parts.
+function fpSplitDocs(text) {
+  const lines = String(text).split(/\r?\n/);
+  const at = lines.findIndex((l, i) => i > 0 && /^#[ \t]/.test(l) && fpTitleOf(l.replace(/^#[ \t]+/, ""), "decisions") != null);
+  if (at === -1 || fpDocKind(lines.slice(0, at).join("\n")) !== "plan") return null;
+  return { plan: lines.slice(0, at).join("\n"), decisions: lines.slice(at).join("\n") };
+}
+
+// fluidplan — see the block comment above.
+function parseFluidplan(dir, read, W, src) {
+  const P = i18n.msg(src.lang).importFluidplan;
+  const PP = i18n.msg(src.lang).importPlans;
+  const warnings = [];
+  const rel = (p) => toPosix(path.relative(src.root, p)) || ".";
+  const isDirL = (p) => { try { const st = fs.lstatSync(p); return st.isDirectory() && !st.isSymbolicLink(); } catch { return false; } };
+  const json = (file) => {
+    const t = read(file);
+    if (t == null) return null;
+    try { const v = JSON.parse(t); if (isObj(v)) return v; warnings.push(P.wBadJson(rel(file), "not an object")); } catch (e) { warnings.push(P.wBadJson(rel(file), String(e.message).slice(0, 120))); }
+    return null;
+  };
+  // Where the plan is: its folder (plan.json) and / or its finalized documents.
+  let planDir = null, planText = null, decText = null, sourceFile = null;
+  // A folder is listed only when its real path is inside the project (1.17 F review: a `.fluidplan` junction to a folder outside
+  // was listed, and the "several plans" refusal named what it held); a plan folder is never a link.
+  const realInside = (p) => { try { return isInsideDir(src.root, fs.realpathSync.native(p)); } catch { return false; } };
+  const planSubdirs = (d) => (realInside(d) ? safeReaddir(d).filter((n) => FP_PLAN_ID.test(n) && isDirL(path.join(d, n)) && realInside(path.join(d, n)) && fs.existsSync(path.join(d, n, "plan.json"))).sort() : []);
+  if (src.file && !/\.json$/i.test(src.file)) {
+    const text = read(src.file);
+    if (text == null) return null;
+    const both = fpSplitDocs(text);
+    const kind = both ? "plan" : fpDocKind(text);
+    if (!kind) return { error: src.inline ? P.notFluidplanText : P.notFluidplan(rel(src.file)) }; // inline text has no file to name
+    sourceFile = src.file;
+    if (both) { planText = both.plan; decText = both.decisions; } else if (kind === "plan") planText = text; else decText = text;
+    // The other document beside it (PLAN.md ↔ DECISIONS.md, PLAN_x.md ↔ DECISIONS_x.md), and plan.json: beside it, else the plan
+    // folder its "fluidplan export --plan <id>" line names.
+    const base = path.basename(src.file);
+    const swap = kind === "plan" ? base.replace(/plan/i, (m) => (m === "PLAN" ? "DECISIONS" : m === "Plan" ? "Decisions" : "decisions"))
+      : base.replace(/decisions/i, (m) => (m === "DECISIONS" ? "PLAN" : m === "Decisions" ? "Plan" : "plan"));
+    if (!both && swap !== base) {
+      const other = read(path.join(dir, swap));
+      if (other != null && fpDocKind(other) === (kind === "plan" ? "decisions" : "plan")) { if (kind === "plan") decText = other; else planText = other; }
+    }
+    if (read(path.join(dir, "plan.json")) != null) planDir = dir;
+    else {
+      const id = fpHeader(String(planText || decText).split(/\r?\n/), 0, 40).id;
+      const plans = id ? fpPlansDir(src.root, read) : null;
+      if (plans && read(path.join(plans, id, "plan.json")) != null) planDir = path.join(plans, id);
+    }
+  } else if (src.file) {
+    planDir = dir; // plan.json (or answers.json / state.json): its folder
+    sourceFile = dir;
+  } else if (fs.existsSync(path.join(dir, "plan.json"))) { planDir = dir; sourceFile = dir; }
+  else if (["PLAN.md", "DECISIONS.md"].some((n) => fs.existsSync(path.join(dir, n)))) {
+    planText = read(path.join(dir, "PLAN.md"));
+    decText = read(path.join(dir, "DECISIONS.md"));
+    sourceFile = dir;
+  } else {
+    // A plans folder (or the project root / a folder holding .fluidplan/): exactly one plan in it.
+    const bases = [dir, path.join(dir, ".fluidplan")];
+    if (fs.existsSync(path.join(dir, "fluidplan.config.json"))) { const pd = fpPlansDir(dir, read); if (pd && realInside(pd)) bases.push(pd); }
+    for (const b of bases) {
+      const found = planSubdirs(b);
+      if (found.length > 1) return { error: P.several(rel(b), found.join(", ")) };
+      if (found.length === 1) { planDir = path.join(b, found[0]); sourceFile = planDir; break; }
+    }
+    if (!planDir) return null;
+  }
+  let plan = null, answers = null, state = null;
+  const cfg = fpConfig(src.root, read);
+  if (planDir) {
+    plan = json(path.join(planDir, "plan.json"));
+    answers = json(path.join(planDir, "answers.json"));
+    state = json(path.join(planDir, "state.json"));
+    // The finalized documents: in the plan folder, else where fluidplan writes them (engine/lib/config.mjs outputPaths) — plan.json's
+    // `output`, else fluidplan.config.json's outputDir ("{plansDir}/{id}" by default; 1.17 F review: a finalized PLAN.md in
+    // `docs/fp/{id}` wasn't found, and its ticks were lost). Inside the project only (read() checks the real path too).
+    const planId = plan && typeof plan.id === "string" && FP_PLAN_ID.test(plan.id) ? plan.id : path.basename(planDir);
+    const outputOf = (key, name) => {
+      const inDir = read(path.join(planDir, name));
+      if (inDir != null) return inDir;
+      const o = plan && isObj(plan.output) && typeof plan.output[key] === "string" ? plan.output[key].trim() : "";
+      if (o) {
+        if (!/\.md$/i.test(o)) return null;
+        const abs = path.resolve(src.root, o);
+        return isInsideDir(src.root, abs) ? read(abs) : null;
+      }
+      if (!cfg.outputDir || (cfg.outputDir.includes("{plansDir}") && !cfg.plansDir)) return null;
+      const abs = path.resolve(src.root, cfg.outputDir.split("{plansDir}").join(cfg.plansDir || "").split("{id}").join(planId), name);
+      return isInsideDir(src.root, abs) ? read(abs) : null;
+    };
+    if (planText == null) { const t = outputOf("plan", "PLAN.md"); if (t != null && fpDocKind(t) === "plan") planText = t; }
+    if (decText == null) { const t = outputOf("decisions", "DECISIONS.md"); if (t != null && fpDocKind(t) === "decisions") decText = t; }
+    if (!plan && planText == null && decText == null) return warnings.length ? { error: warnings[0] } : null;
+    // Finalized (state.json) but no PLAN.md found: the tasks come from plan.json, unticked — said, never silently.
+    if (plan && planText == null && isObj(state) && state.status === "exported") warnings.push(P.wNoExport);
+  }
+  // plan.json's language (else fluidplan.config.json's): the headings it builds (a PLAN.md carries its own).
+  const lang = plan && (plan.lang === "fr" || plan.lang === "en") ? plan.lang : cfg.lang === "fr" ? "fr" : "en";
+  // The normalized plan: plan.json's view first (the pages, the options), then the finalized documents over it.
+  const fp = plan ? fpFromPlanJson(plan, answers, state, P, lang) : fpEmpty();
+  const fromJson = { decisions: fp.decisions, order: fp.decisionOrder };
+  if (planText != null) {
+    const pm = fpParsePlanMd(planText, fp);
+    fp.tasks = pm.tasks;
+    fp.groups = pm.groups;
+    fp.rules = pm.rules;
+    if (pm.context) fp.context = pm.context;
+    if (pm.finalCheck) fp.finalCheck = pm.finalCheck;
+    if (pm.outOfScope) fp.outOfScope = pm.outOfScope;
+    fp.extra.push(...pm.extra);
+    fp.draft = pm.header.draft;
+    fp.date = pm.header.date || fp.date;
+    fp.round = pm.header.round || fp.round;
+    fp.sourceDoc = pm.header.source || fp.sourceDoc;
+    fp.id = fp.id || pm.header.id;
+  }
+  if (decText != null) {
+    const dm = fpParseDecisionsMd(decText, fp);
+    if (!fp.context.length && dm.context) fp.context = dm.context;
+    if (dm.glossary) fp.glossary = dm.glossary;
+    fp.extra.push(...dm.extra);
+    if (planText == null) { fp.draft = dm.header.draft; fp.date = dm.header.date || fp.date; fp.round = dm.header.round || fp.round; fp.sourceDoc = dm.header.source || fp.sourceDoc; }
+    fp.id = fp.id || dm.header.id;
+    // DECISIONS.md's settled decisions win; plan.json adds what the export leaves out (every option's pros / cons / effort, the
+    // page, depends_on, learn_more, facts).
+    fp.decisions = new Map();
+    fp.decisionOrder = [];
+    for (const d of dm.decisions) {
+      const j = fromJson.decisions.get(d.fid);
+      if (j) {
+        for (const k of ["dependsOn", "learnMore", "facts", "question", "sourceRef", "pageId", "pageTitle", "items", "hasTasks", "revisionNote"]) d[k] = j[k];
+        if (!d.importance) d.importance = j.importance;
+        if (j.options && j.options.length) {
+          const picked = String(d.choice || "").split(", ").map((s) => s.trim());
+          d.options = j.options.map((o) => ({ ...o, chosen: d.choice ? picked.includes(o.label) || (o.chosen && !j.options.some((x) => picked.includes(x.label))) : o.chosen }));
+        }
+      }
+      if (!fp.decisions.has(d.fid)) { fp.decisions.set(d.fid, d); fp.decisionOrder.push(d.fid); }
+    }
+    for (const fid of fromJson.order) if (!fp.decisions.has(fid)) { fp.decisions.set(fid, fromJson.decisions.get(fid)); fp.decisionOrder.push(fid); }
+  } else if (!plan && planText != null) {
+    // PLAN.md alone: its decisions are what it names — the working rules, each task's "Decision:" line, the rejected ones.
+    const add = (fid, title, status) => {
+      if (!fp.decisions.has(fid)) { fp.decisions.set(fid, fpNewDecision(fid, title, status)); fp.decisionOrder.push(fid); }
+      return fp.decisions.get(fid);
+    };
+    for (const r of fp.rules) if (r.fid) { const d = add(r.fid, r.title, r.state ? "open" : "ok"); if (r.state) d.verdict = r.state; const s = r.rest.replace(/^\s*[—–-]\s*/, "").replace(/^\.\s*/, ""); if (s) d.choice = s; }
+    for (const t of fp.tasks) {
+      const d = add(t.fid, t.decisionTitle || t.fid, t.state ? "open" : "ok");
+      if (t.state) { d.status = "open"; d.verdict = t.state; }
+      if (t.summary && !d.choice) d.choice = t.summary;
+      if (t.critical) d.importance = "critical";
+      d.hasTasks = true;
+    }
+    for (const l of fp.outOfScope) {
+      const m = fpDecLine(l);
+      if (!m) continue;
+      const d = add(m[1], m[2].trim(), "ko");
+      d.status = "ko";
+      const r = m[3].replace(/^\s*[—–-]\s*/, "").match(/^[^:]*:\s*(.+)$/);
+      d.reason = r ? r[1].trim() : null;
+    }
+    if (fp.decisions.size) warnings.push(P.wNoDecisions);
+  }
+  // A decision a task or rule shows as not settled is open, whatever the source — a task keeping an item "_(to change)_" too
+  // (fluidplan prints no state on such a task: its decision's verdict is "mixed").
+  for (const t of fp.tasks) {
+    const d = fp.decisions.get(t.fid);
+    const toChange = t.itemsToChange && t.itemsToChange.length;
+    if (d && (t.state || toChange) && d.status === "ok") { d.status = "open"; d.verdict = t.state || "mixed"; }
+    if (d && toChange && d.status === "open" && !d.itemsToChangeMd) d.itemsToChangeMd = t.itemsToChange;
+  }
+  for (const r of fp.rules) { const d = r.fid ? fp.decisions.get(r.fid) : null; if (d && r.state && d.status === "ok") { d.status = "open"; d.verdict = r.state; } }
+  // What an open decision's line carries besides its state (1.17 F review — dropped before): plan.json's view already holds it
+  // (fpFromPlanJson); a decision read from the exports gets its remarks (DECISIONS.md's "Remarks:" — a "Still open" line
+  // quotes its own), its items not settled (plan.json's, else DECISIONS.md's table, else PLAN.md's marked lines) and the revision note.
+  for (const d of fp.decisions.values()) {
+    if (d.status !== "open" || d.openNote) continue;
+    const items = d.items.length ? d.items.filter((it) => it.verdict === "modify" || it.verdict === "pending").map((it) => `${it.title} (${P.verdict[it.verdict]}${it.comment ? `: “${it.comment}”` : ""})`)
+      : d.itemsToChange ? d.itemsToChange.map((it) => `${it.label} (${P.verdict.modify}${it.remark ? `: ${it.remark}` : ""})`)
+      : (d.itemsToChangeMd || []).map((l) => l.replace(/^[-*+]\s+/, ""));
+    const note = [...(d.stateText ? [] : d.remarks), ...items, d.revisionNote].filter(Boolean);
+    d.openNote = note.length ? note.join(" · ") : null;
+  }
+  if (!fp.title && !fp.tasks.length && !fp.decisions.size) return null;
+  const model = fpImportModel(fp, P, PP, W, src, warnings);
+  model.sourceFile = sourceFile;
+  model.nameHint = model.title || fp.id || path.basename(planDir || dir);
+  const roundsDir = planDir ? path.join(planDir, "rounds") : null;
+  if ((roundsDir && isDirL(roundsDir)) || (fp.round && fp.round > 1)) model.warnings.push(P.wRounds);
+  return model;
+}
+// The normalized plan → spec_import's model: stories + criteria, tasks.md (numbered here: its _Depends:_ name these numbers),
+// design.md, decisions.md, the Out of Scope / Open decisions sections, warnings and the mapping.
+function fpImportModel(fp, P, PP, W, src, warnings) {
+  const model = newImportModel();
+  // Every value below comes from the plan: written through fpV (one line) / fpProse (line for line) — never markup (1.17 F review).
+  model.title = fp.title ? fpHead(fp.title) : null;
+  const L = P.label;
+  // D-1… for the settled decisions (accepted and rejected), in the plan's order.
+  const dn = new Map();
+  for (const fid of fp.decisionOrder) {
+    const d = fp.decisions.get(fid);
+    if (d.status === "ok" || d.status === "ko") { dn.set(fid, "D-" + (dn.size + 1)); model.mapping["decision " + fid] = dn.get(fid); }
+  }
+  // Summary: the context's first paragraph (the rest goes to design.md), else plan.json's subtitle.
+  const at = [];
+  const first = firstParagraph(fp.context, at);
+  const atSet = new Set(at);
+  const ctxRest = tidyLines(fp.context.filter((_, i) => !atSet.has(i)));
+  const summary = first || fp.subtitle;
+  model.summary = summary ? fpLine(fpV(summary)) : null;
+  // Stories: the pages (themes), else PLAN.md's phase groups — each gathers its tasks' criteria; a criterion stated twice in one
+  // story is one AC, cited by every task stating it.
+  const stories = new Map();
+  const taskCrit = new Map(); // task index → [criterion objects]
+  fp.tasks.forEach((t, i) => {
+    if (!t.acceptance.length) return;
+    const pid = fp.decisionPage.get(t.fid);
+    const page = pid != null ? fp.pages.get(pid) : null;
+    const key = page ? "p:" + pid : "g:" + t.group;
+    if (!stories.has(key)) {
+      const g = fp.groups[t.group] || { title: fp.title || PP.planTitle };
+      stories.set(key, page ? { order: page.index, key: "page " + pid, title: fpHead(page.title), prose: fpProse(page.intro, true, true), crit: [], byText: new Map() }
+        : { order: 1e6 + t.group, key: g.title, title: fpHead(g.title), prose: [], crit: [], byText: new Map() });
+    }
+    const s = stories.get(key);
+    const list = [];
+    t.acceptance.forEach((raw0, m) => {
+      const raw = fpInert(fpOneLine(raw0), true); // requirements.md, after "N. **US-n.AC-m** — ": a code span's `<!--` stays
+      const norm = raw.replace(/\s+/g, " ").trim().toLowerCase();
+      let c = s.byText.get(norm);
+      if (!c) { c = { key: `task ${t.num} / acceptance ${m + 1}`, raw, ears: earsFromPlanText(raw), also: [] }; s.byText.set(norm, c); s.crit.push(c); }
+      else c.also.push(`task ${t.num} / acceptance ${m + 1}`);
+      if (!list.includes(c)) list.push(c);
+    });
+    taskCrit.set(i, list);
+  });
+  const ordered = [...stories.values()].sort((a, b) => a.order - b.order);
+  ordered.forEach((s, idx) => {
+    s.crit.forEach((c, j) => { c.id = `US-${idx + 1}.AC-${j + 1}`; for (const k of c.also) model.mapping[k] = c.id; });
+    model.stories.push({ printed: null, key: s.key, title: s.title, priority: null, prose: s.prose, quote: [], after: [], criteria: s.crit.map((c) => ({ key: c.key, raw: c.raw, ears: c.ears })) });
+  });
+  if (!model.stories.length) planStory(model, fp.title ? fpHead(fp.title) : PP.planTitle, []);
+  // The decisions' criteria (their _Affects:_) and the open decisions' ones.
+  const acsOf = new Map();
+  fp.tasks.forEach((t, i) => { for (const c of taskCrit.get(i) || []) { if (!acsOf.has(t.fid)) acsOf.set(t.fid, new Set()); acsOf.get(t.fid).add(c.id); } });
+  const acsList = (fid) => [...(acsOf.get(fid) || [])];
+  const stateOf = (d) => fpV(d.stateText || P.verdict[d.verdict] || P.verdict.pending);
+  const ref = (fid) => { const d = fp.decisions.get(fid); return dn.has(fid) ? `${dn.get(fid)} — ${d ? fpV(d.title) : fpV(fid)}` : `${fpV(fid)}${d ? " · " + fpV(d.title) : ""}`; };
+  // tasks.md
+  const numOf = new Map();
+  fp.tasks.forEach((t, i) => { if (!numOf.has(t.num)) numOf.set(t.num, i + 1); });
+  const ruleLines = [];
+  for (const r of fp.rules) {
+    if (!r.fid) { ruleLines.push(fpLine(fpInert(r.raw).replace(/^(?![-*]\s)/, "- "))); continue; }
+    const d = fp.decisions.get(r.fid);
+    if (r.state || (d && d.status === "open")) continue; // not settled: listed under Open decisions instead
+    ruleLines.push(fpLine(`- ${dn.get(r.fid) || fpV(r.fid)} · ${fpV(r.title)}${fpInert(r.rest)}`), ...(r.remark ? [`  - ${L.remark}: ${fpV(r.remark)}`] : []),
+      ...(r.lines || []).map((l) => fpLine("  " + fpInert(l))));
+  }
+  // The dependencies (fluidplan's `after`, renumbered), then the cycles among them broken (1.17 F review): an `after` cycle became
+  // mutual _Depends:_ — no task of it could ever start, doctor's task-deps failed and the tasks approval was refused. In each
+  // cycle (a strongly connected set, dependencyCycles) the edges against the plan's order — a task depending on a LATER one, the
+  // `after` fluidplan's own numbering had to break — are dropped, each named in a warning.
+  const depsOf = fp.tasks.map((t, i) => {
+    const deps = [];
+    for (const a of t.after) { const d = numOf.get(a); if (d != null && d !== i + 1 && !deps.includes(d)) deps.push(d); }
+    return deps;
+  });
+  const byNum = new Map(fp.tasks.map((_, i) => [i + 1, [i]]));
+  const cycles = fp.tasks.length ? dependencyCycles({ blocks: fp.tasks.map((_, i) => ({ number: i + 1, done: false })), byNum, specs: depsOf.map((numbers) => ({ numbers })) }, false) : [];
+  for (const cyc of cycles) {
+    const inCyc = new Set(cyc);
+    const dropped = [];
+    for (const i of cyc) {
+      const keep = depsOf[i - 1].filter((j) => !(inCyc.has(j) && j > i));
+      if (keep.length === depsOf[i - 1].length) continue;
+      for (const j of depsOf[i - 1]) if (!keep.includes(j)) dropped.push(`${fp.tasks[i - 1].num} → ${fp.tasks[j - 1].num}`);
+      depsOf[i - 1] = keep;
+    }
+    warnings.push(P.wCycle(cyc.map((i) => fp.tasks[i - 1].num).join(", "), dropped.join(", ")));
+  }
+  const out = [];
+  const keys = [];
+  let g = -1;
+  fp.tasks.forEach((t, i) => {
+    if (t.group !== g) { g = t.group; if (fp.groups[g]) out.push("", "## " + fpHead(fp.groups[g].heading)); }
+    const n = i + 1;
+    keys.push("task " + t.num);
+    const body = [];
+    const acs = (taskCrit.get(i) || []).map((c) => c.id);
+    if (acs.length) body.push(`  - _Requirements: ${acs.join(", ")}_`);
+    const impl = [], deletes = [], untraced = [];
+    for (const f of t.files) {
+      const p = f.path.includes("`") ? null : planPaths("`" + f.path + "`")[0]; // a backtick would split the span: "src/`x`.js" read as ".js"
+      const readable = p && taskMarkers({ text: "", body: [`- _Implements: ${p}_`], bodyCode: [] }).implements.join("\n") === p;
+      if (!readable) { untraced.push(f); warnings.push(P.wPath(t.num, fpOneLine(f.path))); continue; }
+      if (f.op === "delete") { if (!deletes.includes(p)) deletes.push(p); } else if (!impl.includes(p)) impl.push(p);
+    }
+    if (impl.length) body.push(`  - _Implements: ${impl.join(", ")}_`);
+    const badVerify = [];
+    for (const c of t.verify) {
+      const cmd = String(c).trim();
+      // Only fluidplan's `verify` field makes a _Verify:_ — and only a command the marker holds whole, on one line, opening or
+      // closing no HTML comment (a `<!--` in one command and a `-->` in the next hid the lines between).
+      const readable = cmd && !RE_FP_VERIFY_BAD.test(cmd) && taskMarkers({ text: "", body: [`- _Verify: ${cmd}_`], bodyCode: [] }).verify.join("\n") === cmd;
+      if (readable) { if (!body.includes(`  - _Verify: ${cmd}_`)) body.push(`  - _Verify: ${cmd}_`); } else { badVerify.push(cmd); warnings.push(P.wVerify(t.num, fpOneLine(cmd).slice(0, 120))); }
+    }
+    for (const a of t.after) { if (!numOf.has(a)) warnings.push(P.wAfter(t.num, fpOneLine(a))); }
+    for (const a of t.dangling || []) warnings.push(P.wAfter(t.num, fpOneLine(a)));
+    if (depsOf[i].length) body.push(`  - _Depends: ${depsOf[i].join(", ")}_`);
+    const dec = fp.decisions.get(t.fid);
+    const open = dec && dec.status === "open";
+    body.push(`  - ${L.decision}: ${ref(t.fid)}${!open && t.summary ? ` (${fpV(t.summary)})` : ""}${open ? ` — ${P.openMark(stateOf(dec))}` : ""}`);
+    if (deletes.length) body.push(`  - ${L.deletes}: ${deletes.map((p) => "`" + p + "`").join(", ")}`);
+    // A refused path is shown in a code span, inert (1.17 F review: one holding `_, _Verify:` made a marker of the line).
+    if (untraced.length) body.push(`  - ${L.untraced}: ${untraced.map((f) => "`" + fpV(f.path).replace(/`/g, "'") + "` (" + f.op + ")").join(", ")}`);
+    if (badVerify.length) body.push(`  - ${L.verify}: ${badVerify.map(fpV).join(" · ")}`);
+    if (t.doLines.length) {
+      const st = { fence: null };
+      const lines = t.doLines.map((l) => { fenceStep(st, l); return fpInert(l); });
+      if (st.fence) lines.push(st.fence.mark);
+      body.push(`  - ${L.do}: ${lines[0]}`, ...lines.slice(1).map((l) => (l.trim() ? "    " + l : "")));
+    }
+    if (t.remark) body.push(`  - ${L.remark}: ${fpV(t.remark)}`);
+    if (t.items.length) body.push(`  - ${L.itemsKept}:`, ...t.items.map((l) => "    " + fpInert(l)));
+    body.push(...t.extra.map((l) => "  " + fpInert(l.trim())));
+    // Line by line (a value holding a line break is one line; 1.17 F review: only an entry's first line was checked), a body line
+    // never reads as a task, a checkpoint or a heading of tasks.md.
+    out.push(`- [${t.done ? "x" : " "}] ${n}. ${fpTitle(t.title)}`, ...body.map(fpLine));
+  });
+  if (fp.tasks.length) {
+    const text = [...(ruleLines.length ? [P.constraints, "", ...ruleLines, ""] : []), ...out].join("\n").replace(/^\n+/, "");
+    model.tasks = { text, file: "PLAN.md", numbered: true };
+    model.taskKeys = keys;
+  } else warnings.push(P.wNoTasks);
+  // decisions.md — spec_decide's format (decisionEntryLines runs every text through safeSpecText; the title is ours to make safe).
+  const at0 = (fp.date && !isNaN(fp.date.getTime()) ? fp.date : new Date()).toISOString();
+  model.decisions = [];
+  const summaryLines = [];
+  const tradeRows = [];
+  for (const fid of fp.decisionOrder) {
+    const d = fp.decisions.get(fid);
+    if (!dn.has(fid)) continue;
+    const id = dn.get(fid);
+    const meta = [d.importance ? `${L.importance}: ${P.importance[d.importance] || d.importance}` : null, d.phaseTitle ? `${L.phase}: ${d.phaseTitle}` : null,
+      d.pageTitle ? `${L.page}: ${d.pageTitle}` : null, `${L.fluidplan} ${fid}`].filter(Boolean).join(" · ");
+    const noChoice = !d.choice && !d.items.length && !d.itemsTable.length;
+    const ctx = [d.why || meta, ...(d.why ? ["- " + meta] : [])];
+    if (d.proposal && !(noChoice && d.status === "ok")) ctx.push(`- ${L.proposal}: ${d.proposal}${d.rewritten ? ` _(${L.rewritten})_` : ""}`);
+    if (d.dependsOn.length) ctx.push(`- ${L.dependsOn}: ${d.dependsOn.map((x) => dn.get(x) || x).join(", ")}`);
+    if (d.question != null) ctx.push(`- ${L.question}: ${d.question}`);
+    if (d.sourceRef) ctx.push(`- ${L.sourceRef}: ${d.sourceRef}`);
+    for (const f of d.facts) ctx.push(`- ${f.label}: ${f.value}`);
+    if (d.learnMore) ctx.push(`- ${L.learnMore}: ${d.learnMore}`);
+    if (d.revisionNote) ctx.push(`- ${d.revisionNote}`);
+    const decision = [];
+    if (d.status === "ko") {
+      decision.push(P.rejected(d.reason));
+    } else {
+      const chosen = (d.options || []).filter((o) => o.chosen);
+      decision.push(d.choice ? d.choice + (chosen.length === 1 && chosen[0].detail ? ` — ${fpOneLine(chosen[0].detail)}` : "") : d.proposal ? `${d.proposal}${d.rewritten ? ` _(${L.rewritten})_` : ""}` : d.title);
+      if (d.items.length) decision.push(`- ${L.items}: ${d.items.map((it) => `${it.title} (${it.verdict === "ko" ? P.verdict.ko : it.verdict === "ok" ? "OK" : P.verdict[it.verdict] || it.verdict}${it.comment ? `: “${it.comment}”` : ""})`).join(" · ")}`);
+      else if (d.itemsTable.length) decision.push("", ...d.itemsTable);
+    }
+    for (const r of d.remarks) if (!(d.status === "ko" && d.reason && r.startsWith(d.reason))) decision.push(`- ${L.remarks}: ${r}`); // a rejection's reason is its remark
+    for (const x of d.extra) decision.push(x.startsWith("- ") || x.startsWith("|") ? x : "- " + x);
+    const cons = [];
+    const optText = (o) => [o.pros.length ? `${L.pros}: ${o.pros.join("; ")}` : null, o.cons.length ? `${L.cons}: ${o.cons.join("; ")}` : null,
+      o.effort ? `${L.effort}: ${o.effort}` : null, o.cost ? `${L.cost}: ${o.cost}` : null].filter(Boolean).join(" · ");
+    if (d.status === "ok" && d.options && d.options.length) {
+      for (const o of d.options.filter((x) => x.chosen)) { const t = optText(o); if (t) cons.push(`${o.label} — ${t}`); }
+      const others = d.options.filter((x) => !x.chosen);
+      if (others.length) cons.push(`- ${L.others}:`, ...others.map((o) => `  - ${o.label}${optText(o) ? ` — ${optText(o)}` : ""}`));
+    } else if (d.status === "ok" && d.othersText) cons.push(`- ${L.others}: ${d.othersText}`);
+    if (cons.length && cons[0].startsWith("- ")) cons[0] = cons[0].slice(2);
+    // The title: one line, inert (1.17 F review: a `<!--` in it reached the heading — the import bypasses decisionInput — and a
+    // later `-->` hid the entry's markers).
+    model.decisions.push({ id, title: fpHead(fpOneLine(d.title).replace(/\s+/g, " ").slice(0, DECISION_TITLE_MAX)), kind: "decision", at: at0, affects: d.status === "ok" ? acsList(fid) : [], supersedes: [],
+      context: ctx.join("\n"), decision: decision.join("\n"), consequences: cons.join("\n") || null });
+    summaryLines.push(`- **${id}** — ${fpV(d.title)}${d.status === "ko" ? `: ${P.rejectedMark}${d.reason ? ` — ${fpV(d.reason)}` : ""}` : d.choice ? `: ${fpV(d.choice)}` : ""}${d.importance === "critical" ? ` _(${P.importance.critical})_` : ""}`);
+    // Alternatives & Trade-offs: every option of a choice, the chosen one first; without plan.json, the choice + DECISIONS.md's others.
+    const label = `${id} ${d.title}`;
+    if (d.options && d.options.length > 1) {
+      for (const o of [...d.options.filter((x) => x.chosen), ...d.options.filter((x) => !x.chosen)]) {
+        tradeRows.push(`| ${fpCell(label)} | ${o.chosen ? `**${fpCell(o.label)}** (${P.chosen})` : fpCell(o.label)} | ${fpCell(o.pros.join("; "))} | ${fpCell(o.cons.join("; "))} | ${fpCell(o.effort)} |`);
+      }
+    } else if (d.othersText && d.choice) {
+      tradeRows.push(`| ${fpCell(label)} | **${fpCell(d.choice)}** (${P.chosen}) | — | — | — |`);
+      for (const piece of d.othersText.split(" · ")) { // "Redis (con: One more service to run)" — FR "(contre : …)"
+        const k = piece.search(/\((?:con|contre)[ \t]?:/i);
+        const cons = k === -1 ? "" : piece.slice(k).replace(/^\((?:con|contre)[ \t]?:[ \t]*/i, "").replace(/\)$/, "");
+        tradeRows.push(`| ${fpCell(label)} | ${fpCell(k === -1 ? piece : piece.slice(0, k))} | — | ${fpCell(cons)} | — |`);
+      }
+    }
+  }
+  // requirements.md: Out of Scope, Open decisions.
+  const scope = fp.outOfScope.length ? fpProse(fp.outOfScope, true, true)
+    : fp.decisionOrder.map((fid) => fp.decisions.get(fid)).filter((d) => d.status === "ko").map((d) => `- **${fpV(d.fid)} · ${fpV(d.title)}** — ${P.rejectedMark}${d.reason ? `: ${fpV(d.reason)}` : ""}`);
+  if (scope.length) model.extra.push({ heading: P.outOfScope, lines: scope });
+  const openD = fp.decisionOrder.map((fid) => fp.decisions.get(fid)).filter((d) => d.status === "open");
+  if (openD.length) {
+    model.extra.push({ heading: P.openDecisions, lines: openD.map((d) => fpLine(P.openLine(fpV(d.fid), fpV(d.title), stateOf(d), acsList(d.fid).join(", "), d.openNote ? fpV(d.openNote) : null))) });
+    warnings.push(P.wOpen(openD.map((d) => `${fpOneLine(d.fid)} (${stateOf(d)})`).join(", ")));
+  }
+  const rejected = fp.decisionOrder.map((fid) => fp.decisions.get(fid)).filter((d) => d.status === "ko");
+  if (rejected.length) warnings.push(P.wRejected(rejected.map((d) => `${d.fid} → ${dn.get(d.fid)}`).join(", ")));
+  if (fp.draft) warnings.push(P.wDraft(fp.draft.pending == null ? "?" : fp.draft.pending, fp.draft.revise == null ? "?" : fp.draft.revise));
+  // design.md
+  const design = [];
+  const section = (heading, lines) => { if (lines.length) design.push(...(design.length ? [""] : []), heading, "", ...lines); };
+  const sub = fp.subtitle && first ? [`${L.subtitle}: ${fpV(fp.subtitle)}`] : []; // the subtitle, when the summary is the context's
+  const ctxLines = fpProse(ctxRest, false);
+  section(P.context, [...sub, ...(sub.length && ctxLines.length ? [""] : []), ...ctxLines, ...(fp.sourceDoc ? [...(sub.length || ctxLines.length ? [""] : []), P.sourceDoc(fpV(fp.sourceDoc))] : [])]);
+  // A page no story carries (its tasks state no criterion, or it keeps none): its intro is said here (1.17 F review: dropped).
+  const storyPages = new Set([...stories.keys()].filter((k) => k.startsWith("p:")).map((k) => k.slice(2)));
+  const themes = [];
+  for (const [pid, pg] of fp.pages) if (!storyPages.has(pid) && pg.intro.length) themes.push(...(themes.length ? [""] : []), `### ${fpHead(pg.title)}`, "", ...fpProse(pg.intro, true));
+  section(P.themes, themes);
+  if (summaryLines.length) section(PP.decisionsHeading, [P.decisionsIntro, "", ...summaryLines]);
+  if (tradeRows.length) section(FP_TRADEOFFS_HEADING, [`| ${P.tradeoffsHead.join(" | ")} |`, "|" + P.tradeoffsHead.map(() => "---").join("|") + "|", ...tradeRows]);
+  if (!fp.tasks.length && ruleLines.length) section(P.constraints, ruleLines);
+  section(P.glossary, fpProse(fp.glossary, false));
+  section(P.finalCheck, fpProse(fp.finalCheck, false));
+  if (fp.visuals.length) {
+    section(P.visuals, fp.visuals.map((v) => `- ${fpV(v.where)}: ${fpV(v.kind)}${fpFilled(v.caption) ? ` — ${fpV(v.caption)}` : ""}`));
+    warnings.push(P.wVisuals(fp.visuals.map((v) => `${fpOneLine(v.where)} (${fpOneLine(v.kind)})`).join(", ")));
+  }
+  for (const x of fp.extra) section(fpHead(x.heading), fpProse(x.lines, false));
+  if (design.length) model.design = { text: design.join("\n"), file: "PLAN.md" };
+  else warnings.push(PP.wNoDesignLeft);
+  model.warnings.push(...warnings);
+  return model;
+}
+// Package A's core design section (1.17): the heading is written in English in every language (its synonym table reads it).
+const FP_TRADEOFFS_HEADING = "## Alternatives & Trade-offs";
+const C3_PARSERS = { plan: parsePlan, execplan: parseExecPlan, bmad: parseBmad, fluidplan: parseFluidplan };
 
 function importSpec(projectDir, tool, source, opts = {}) {
   // The language of the import's own text (warnings, design.md's Decisions heading…): explicit, else the project's configured one,
@@ -20115,13 +22560,15 @@ function importSpec(projectDir, tool, source, opts = {}) {
   } // inline (1.16 C4) or a path
   // C3 parsers also get the file named (a plan among several), the language and the real root: { file, lang, root }.
   const parse = own(C3_PARSERS, t) ? C3_PARSERS[t] : t === "kiro" ? parseKiro : t === "spec-kit" ? parseSpecKit : parseOpenSpec;
-  const model = parse(dir, read, W, { file: isFileSrc ? realSrc : null, lang: lang0, root: realRoot });
+  const model = parse(dir, read, W, { file: isFileSrc ? realSrc : null, lang: lang0, root: realRoot, inline }); // inline: no file to name (1.17 F review)
   if (!model) return { ok: false, error: W.nothing(IMPORT_TOOLS[t], rel) };
   if (model.error) return { ok: false, error: model.error }; // C3: a folder of several plans — name the file
   // C3: a single-document source shows its file; inline text (1.16 C4) has none — `source` null, `inline` true.
   const srcRel = inline ? null : model.sourceFile ? toPosix(path.relative(realRoot, model.sourceFile)) : rel;
 
-  const name = opts.name != null && String(opts.name).trim() ? String(opts.name).trim() : model.nameHint;
+  // The source's title never opens an HTML comment in the files' titles (1.17 F review); a name the caller gives is theirs. Even in a
+  // code span: the name reaches design.md / tasks.md too, whose decision-target reader (blankHtmlComments) sees no code spans.
+  const name = opts.name != null && String(opts.name).trim() ? String(opts.name).trim() : model.nameHint == null ? model.nameHint : String(model.nameHint).replace(/<!--/g, "&lt;!--");
   const f = resolveFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   if (fs.existsSync(f.dir)) return { ok: false, error: W.exists(f.slug) };
@@ -20149,13 +22596,17 @@ function importSpec(projectDir, tool, source, opts = {}) {
   const critMap = new Map(); // source criterion key → new AC ID
   const notEars = [];
   const noCriteria = [];
-  const req = [L.featureTitle(name), "", note, "", L.summary, model.summary || L.summaryPlaceholder, "", L.stories];
+  // Every imported line is written inert to HTML comments (commentInert — the parsers read their sources without comments, so a
+  // `<!--` left is an unclosed one): one criterion's `<!--` and a later `-->` (another criterion's, or the `<!-- <tool>: … -->`
+  // line under a converted one) hid the criteria between (1.17 F review, every importer). A block of imported lines closes a
+  // fence it leaves open (inertBlock) — it swallowed every criterion after it.
+  const req = [L.featureTitle(name), "", note, "", L.summary, model.summary ? commentInert(model.summary) : L.summaryPlaceholder, "", L.stories];
   model.stories.forEach((s, idx) => {
     const n = keepNumbers ? s.printed : idx + 1;
     mapping[s.key] = "US-" + n;
-    req.push("", L.story(n, s.priority, s.title));
-    if (s.prose.length) req.push(...s.prose);
-    if (s.quote.length) req.push(...s.quote.map((q) => "> " + q));
+    req.push("", L.story(n, s.priority, s.title == null ? s.title : commentInert(s.title)));
+    if (s.prose.length) req.push(...inertBlock(s.prose));
+    if (s.quote.length) req.push(...s.quote.map((q) => "> " + commentInert(q)));
     req.push("", L.criteria);
     const ids = [];
     s.criteria.forEach((c, j) => {
@@ -20164,16 +22615,16 @@ function importSpec(projectDir, tool, source, opts = {}) {
       mapping[c.key] = id;
       critMap.set(c.key, id);
       if (!c.ears) notEars.push(id);
-      req.push(`${j + 1}. **${id}** — ${c.ears || c.raw + " " + L.notEars}`);
+      req.push(`${j + 1}. **${id}** — ${commentInert(c.ears || c.raw + " " + L.notEars)}`);
       if (c.ears && c.ears !== c.raw) req.push("   " + L.original(IMPORT_TOOLS[t], c.raw.replace(/-->/g, "—>")));
     });
     if (!s.criteria.length) { req.push(L.noCriteria); noCriteria.push("US-" + n); }
-    if (s.after && s.after.length) req.push("", ...s.after); // a note after the criteria, a sub-section… verbatim
+    if (s.after && s.after.length) req.push("", ...inertBlock(s.after)); // a note after the criteria, a sub-section… verbatim
     acOf.set(n, ids);
   });
   // The recognised sections, then whatever no parser mapped (carried verbatim — never dropped silently).
   for (const x of [...model.extra, ...model.carried]) {
-    req.push("", x.heading || L[x.key] || L.importedNotes, ...x.lines.map((l) => l.replace(/\s+$/, "")));
+    req.push("", x.heading ? commentInert(x.heading) : L[x.key] || L.importedNotes, ...inertBlock(x.lines.map((l) => l.trimEnd())));
   }
   Object.assign(mapping, model.mapping);
   if (notEars.length) warnings.push(W.wNotEars(notEars.join(", ")));
@@ -20182,7 +22633,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
 
   const written = [];
   const put = (file, content) => { writeFileAtomic(path.join(cr.dir, file), content); if (!written.includes(file)) written.push(file); };
-  put("requirements.md", req.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n"));
+  put("requirements.md", req.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n"); // trimEnd: no /\s*$/ backtracking
   // A source with no criteria at all (an OpenSpec change of proposal.md + tasks.md): requirements.md defines no AC — said
   // once, so no one approves requirements that trace nothing (1.14 full review Pa4).
   if (!requirementAcIds(readIfExists(path.join(cr.dir, "requirements.md")) || "").size) warnings.push(W.wNoCriteriaAtAll);
@@ -20223,10 +22674,15 @@ function importSpec(projectDir, tool, source, opts = {}) {
     // The active tracks' mandatory sections, unless the imported design already has them.
     const blocks = cr.tracks.filter((x) => x !== "core").filter((x) => (x === "tdd" ? !RE_TESTABILITY.test(body) : !headingHasMarker(body, trackMarker(x))))
       .map((x) => trackDesignBlock(x, lng, { name, slug: cr.slug })).join("");
-    put("design.md", [i18n.msg(lng).tracks.designTitle(name), "", note, "", body, blocks].join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "\n"));
+    put("design.md", [i18n.msg(lng).tracks.designTitle(name), "", note, "", body, blocks].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n");
   }
 
-  if (model.tasks) {
+  if (model.tasks && model.tasks.numbered) {
+    // 1.17 F (fluidplan): the parser numbered its tasks itself — its _Depends:_ name those numbers, its _Requirements:_ the AC IDs
+    // the stories above got — so the text is written as it is (importTasks would renumber, and read a title's leading "10 " as an id).
+    model.taskKeys.forEach((k, j) => { mapping[k] = "task " + (j + 1); });
+    put("tasks.md", withPackTasks([L.tasksTitle(name), "", note, "", model.tasks.text].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n"));
+  } else if (model.tasks) {
     // _Requirements:_ references → new AC IDs: a criterion ("1.1"), a whole requirement/story ("2", "Requirement 2",
     // "US2") or an ID that is already dev-spec's. Anything else is kept as written and reported.
     const storyNo = (s) => { const idx = model.stories.findIndex((x) => x.printed === s); return idx === -1 ? null : keepNumbers ? s : idx + 1; };
@@ -20260,6 +22716,14 @@ function importSpec(projectDir, tool, source, opts = {}) {
       const fitted = withPackTasks(fitTemplateTasks(cur, readIfExists(reqFile) || "", readIfExists(path.join(cr.dir, "test-plan.md")), lng));
       if (fitted !== orig) writeFileAtomic(tp, fitted);
     }
+  }
+  // 1.17 F (fluidplan): the settled decisions → decisions.md, in spec_decide's format (its header, D-n entries — decisionLog reads
+  // them back). An _Affects:_ AC the requirements don't define (none should) is left out rather than written as a phantom.
+  if (Array.isArray(model.decisions) && model.decisions.length) {
+    const D = i18n.msg(lng).decisions;
+    const known = requirementAcIds(readIfExists(reqFile) || "");
+    const entries = model.decisions.map((e) => decisionEntryLines({ ...e, affects: e.affects.filter((id) => known.has(id)) }, D).join("\n"));
+    put(DECISIONS_FILE, D.header(name) + "\n" + note + "\n\n" + entries.join("\n\n") + "\n");
   }
   // Provenance on the scaffolded classification too (it was generated from the imported text).
   const clsFile = path.join(cr.dir, "classification.md");
@@ -20559,6 +23023,139 @@ const RE_RATE_LIMIT = /rate[\s-]?limit|throttl|limites? de (?:pedidos|taxa|solic
 const RE_ACCESS_DENIED = /unauth(?:enticated|ori[sz]ed)|forbidden|(?<!\d)40[13](?!\d)|\bden(?:y|ies|ied)\b|\breject|n[ãa]o (?:autenticad|autorizad)|no (?:autenticad|autorizad)|\brecus|\brejeit|\bdeneg|\brechaz/i;
 // +privacy: a data subject right written as a criterion (erasure / export / portability), EN/PT/ES.
 const RE_SUBJECT_RIGHTS = /erasure|delet|export|portab|apag|elimin|supres|borrar|borrad/i;
+// 1.17 A2 — the constraint nudge: the words that make consistency a design question, by concept (a queue, events, async work,
+// concurrency, transactions, retries) plus STRONG phrases that can only mean it (a message queue, an event bus, publishing an
+// event, a background job, concurrent writes, a race condition, a distributed transaction, a webhook, Kafka…). A weak word alone
+// is often something else — "click event", "Retry button", "Images load async", a statement listing "transactions" — so the
+// nudge needs two DISTINCT concepts or one strong phrase (A review 7). Whole words; English ones in every spec, the feature
+// language's own besides ("fila" is a queue in PT but a table row in ES, "cola" the reverse).
+const CONSTRAINT_KINDS = ["strong", "queue", "event", "async", "concurrency", "transaction", "retry"];
+const CONSTRAINT_SIGNALS = {
+  en: {
+    strong: "message[\\s-]+(?:queues?|brokers?|bus)|(?:job|task|work|delayed|dead[\\s-]+letter|retry)[\\s-]+queues?|event[\\s-]+(?:bus|buses|streams?|sourcing|stores?|brokers?)|event-driven" +
+      "|(?:domain|integration)[\\s-]+events?|publish(?:es|ed|ing)?\\s+(?:[^\\s.;:!?]+\\s+){0,3}?events?|background[\\s-]+(?:jobs?|workers?|tasks?|processing|process(?:es)?)" +
+      "|(?:queue|job)[\\s-]+workers?|(?:concurrent|simultaneous|parallel)[\\s-]+(?:writes?|updates?|edits?|modifications?|writers?|transactions?)|race[\\s-]+conditions?|lost[\\s-]+updates?" +
+      "|double[\\s-]+(?:bookings?|spend(?:ing)?|charg(?:e|es|ed|ing))|distributed[\\s-]+(?:transactions?|locks?)|two[\\s-]+phase[\\s-]+commit|webhooks?|pub/sub|kafka|rabbitmq|sqs|sagas?",
+    queue: "queue|queues|queued|enqueue|enqueues|enqueued|dequeue|dequeues|dequeued",
+    event: "event|events",
+    async: "async|asynchronous|asynchronously",
+    concurrency: "concurrent|concurrently|concurrency|simultaneous|simultaneously",
+    transaction: "transaction|transactions|transactional",
+    retry: "retry|retries|retried|redeliver|redelivery|redelivered",
+  },
+  pt: {
+    strong: "filas?\\s+de\\s+(?:mensagens|tarefas|trabalhos|jobs|eventos|processamento)|barramentos?\\s+de\\s+eventos|orientad[oa]s?\\s+a\\s+eventos|eventos?\\s+de\\s+dom[íi]nio" +
+      "|publica(?:r|m|do|da|dos|das)?\\s+(?:[^\\s.;:!?]+\\s+){0,3}?eventos?|(?:tarefas?|trabalhos?|jobs?|processamentos?|processos?)\\s+em\\s+segundo\\s+plano" +
+      "|(?:escritas|atualiza[çc][õo]es|edi[çc][õo]es|altera[çc][õo]es|grava[çc][õo]es)\\s+(?:concorrentes|simult[âa]neas|em\\s+paralelo)|condi[çc](?:[ãa]o|[õo]es)\\s+de\\s+corrida" +
+      "|transa[çc](?:[ãa]o|[õo]es)\\s+distribu[íi]das?|commit\\s+em\\s+duas\\s+fases|(?:reserva|cobran[çc]a)\\s+dupla|duplo\\s+(?:d[ée]bito|pagamento)",
+    queue: "fila|filas|enfileirad[oa]s?|enfileirar",
+    event: "evento|eventos",
+    async: "ass[íi]ncron[oa]s?|assincronamente",
+    concurrency: "concorrente|concorrentes|concorr[êe]ncia|simult[âa]ne[oa]s?|simultaneamente",
+    transaction: "transa[çc](?:[ãa]o|[õo]es)|transacional|transacionais",
+    retry: "reenvio|reenvios|reenviad[oa]s?|nova\\s+tentativa|novas\\s+tentativas|retentativas?",
+  },
+  es: {
+    strong: "colas?\\s+de\\s+(?:mensajes|tareas|trabajos|eventos|procesamiento)|bus(?:es)?\\s+de\\s+eventos|orientad[oa]s?\\s+a\\s+eventos|eventos?\\s+de\\s+dominio" +
+      "|publica(?:r|n|do|da|dos|das)?\\s+(?:[^\\s.;:!?]+\\s+){0,3}?eventos?|(?:tareas?|trabajos?|jobs?|procesamientos?|procesos?)\\s+en\\s+segundo\\s+plano" +
+      "|(?:escrituras|actualizaciones|ediciones|modificaciones)\\s+(?:concurrentes|simult[áa]neas|en\\s+paralelo)|condici(?:[óo]n|ones)\\s+de\\s+carrera" +
+      "|transacci(?:[óo]n|ones)\\s+distribuidas?|confirmaci[óo]n\\s+en\\s+dos\\s+fases|doble\\s+(?:reserva|cobro|cargo|pago)",
+    queue: "cola|colas|encolad[oa]s?|encolar",
+    event: "evento|eventos",
+    async: "as[íi]ncron[oa]s?|as[íi]ncronamente",
+    concurrency: "concurrente|concurrentes|concurrencia|simult[áa]ne[oa]s?|simult[áa]neamente",
+    transaction: "transacci[óo]n|transacciones|transaccional|transaccionales",
+    retry: "reintento|reintentos|reintentar|reintentad[oa]s?",
+  },
+};
+// One regex per language, a capture group per kind (strong first: "event bus" is one strong phrase, never the weak "event").
+const CONSTRAINT_RE = new Map();
+function constraintSignalRe(lang) {
+  const l = lang === "pt" || lang === "es" ? lang : "en";
+  if (!CONSTRAINT_RE.has(l)) {
+    const alt = (k) => CONSTRAINT_SIGNALS.en[k] + (l === "en" ? "" : "|" + CONSTRAINT_SIGNALS[l][k]);
+    CONSTRAINT_RE.set(l, new RegExp("(?<![\\p{L}\\p{N}_/-])(?:" + CONSTRAINT_KINDS.map((k) => "(" + alt(k) + ")").join("|") + ")(?![\\p{L}\\p{N}_/-])", "giu"));
+  }
+  return CONSTRAINT_RE.get(l);
+}
+// The answer (A review 7): multi-word phrases that state a consistency model, a delivery guarantee, idempotency or a locking
+// strategy — EN / PT / ES, in any spec. Never a bare "consistent" / "eventually" / "atomic" / "isolation" ("consistent UI styling",
+// "we will eventually add caching", "atomic design", "tenant isolation" answer nothing). ACID is matched upper-case only.
+const RE_CONSISTENCY_ANSWER = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
+  "eventual(?:ly)?[\\s-]+consisten(?:t|cy)", "strong(?:ly)?[\\s-]+consisten(?:t|cy)", "consistency[\\s-]+(?:models?|levels?|guarantees?)",
+  "read[\\s-]+your[\\s-]+(?:own[\\s-]+)?writes", "idempoten\\p{L}*", "at[\\s-]+(?:least|most)[\\s-]+once", "exactly[\\s-]+once", "isolation[\\s-]+levels?",
+  "(?:serializable|snapshot)[\\s-]+isolation", "read[\\s-]+committed", "repeatable[\\s-]+read",
+  "(?:optimistic|pessimistic)[\\s-]+(?:locking|locks?|concurrency)", "outbox(?:es)?", "dedup\\p{L}*", "atomicity", "atomically", "two[\\s-]+phase[\\s-]+commit",
+  "compare[\\s-]+and[\\s-]+(?:swap|set)",
+  "consist[êe]ncia[\\s-]+(?:eventual|forte|fraca)", "(?:eventualmente|fortemente)[\\s-]+consistentes?", "modelo[\\s-]+de[\\s-]+consist[êe]ncia",
+  "pelo[\\s-]+menos[\\s-]+uma[\\s-]+vez", "no[\\s-]+m[áa]ximo[\\s-]+uma[\\s-]+vez", "exatamente[\\s-]+uma[\\s-]+vez", "n[íi]vel[\\s-]+de[\\s-]+isolamento",
+  "bloqueio[\\s-]+(?:otimista|pessimista)", "concorr[êe]ncia[\\s-]+(?:otimista|pessimista)", "atomicidade", "atomicamente", "commit[\\s-]+em[\\s-]+duas[\\s-]+fases",
+  "consistencia[\\s-]+(?:eventual|fuerte|d[ée]bil)", "(?:eventualmente|fuertemente)[\\s-]+consistentes?", "modelo[\\s-]+de[\\s-]+consistencia",
+  "al[\\s-]+menos[\\s-]+una[\\s-]+vez", "(?:como[\\s-]+m[áa]ximo|a[\\s-]+lo[\\s-]+sumo)[\\s-]+una[\\s-]+vez", "exactamente[\\s-]+una[\\s-]+vez",
+  "nivel[\\s-]+de[\\s-]+aislamiento", "bloqueo[\\s-]+(?:optimista|pesimista)", "concurrencia[\\s-]+(?:optimista|pesimista)", "atomicidad", "at[óo]micamente",
+  "confirmaci[óo]n[\\s-]+en[\\s-]+dos[\\s-]+fases",
+].join("|") + ")(?![\\p{L}\\p{N}_])", "iu");
+const RE_ACID = /(?<![\p{L}\p{N}_])ACID(?![\p{L}\p{N}_])/u;
+const CONSTRAINT_MAX_WORDS = 3;
+// The user's own text of a spec file (A review 1) — never the tool's: its visible lines (scanTaskLines: comments and fenced code
+// out, inactive track sections dropped), minus every line that IS template text (glossUserParts over the line patterns the
+// glossary check builds — the built-in templates of every track combination in the feature's language, the track blocks, the
+// project's templates and track packs; a filled slot is the user's), minus a section still holding its `> **TODO**` sentinel
+// (a track section nobody wrote yet), with template [slots] and code spans blanked. → the parts, newline-joined.
+function userSpecText(text, tracks, sets) {
+  const rows = scanTaskLines(activeDesign(String(text || ""), tracks));
+  const skip = new Uint8Array(rows.length);
+  let start = 0, todo = false;
+  const close = (end) => { if (todo) for (let i = start; i < end; i++) skip[i] = 1; };
+  rows.forEach((r, i) => {
+    if (r.code) return;
+    if (/^#{1,6}\s/.test(r.vis)) { close(i); start = i; todo = false; } else if (RE_TODO_SENTINEL.test(r.vis)) todo = true;
+  });
+  close(rows.length);
+  const out = [];
+  let size = 0;
+  for (let i = 0; i < rows.length && size < 200000; i++) {
+    if (rows[i].code || skip[i] || !rows[i].vis.trim()) continue;
+    for (const part of glossUserParts(rows[i].vis.slice(0, 4000), sets)) {
+      const slots = part.includes("[") ? bracketPlaceholders(part, new Set()) : [];
+      const v = slots.reduce((a, p) => a.split(p).join(" "), part).replace(/`[^`\n]*`/g, " ");
+      out.push(v);
+      size += v.length;
+    }
+  }
+  return out.join("\n");
+}
+// → { code: "consistency-unstated", signals: [≤ 3 words, in order of appearance — one per concept, each strong phrase] } | null.
+// Reads the user's text of requirements.md and design.md (userSpecText — a pristine scaffold of any track, in any language, never
+// fires it, nor does a template criterion the spec keeps as written). Answered (A review 2) anywhere in that text — /clarify folds
+// the answer into requirements.md, and /grill asks in Phase 1 while design.md is still a template. Only for a plain feature (a
+// bugfix restores behaviour; a spike has no design) and not with +dist (its Consistency Model / Delivery & Idempotency sections
+// ask the same, 1.17 D).
+function constraintNudge(projectDir, dir, reqs, tracks, kind, lang) {
+  if (kind !== "feature" || tracks.includes("dist")) return null;
+  const lng = normalizeLang(lang || "en");
+  const sets = [glossBuiltinLines(lng), glossProjectLines(projectDir, lng)].filter(Boolean);
+  const text = userSpecText(reqs, tracks, sets) + "\n" + userSpecText(readIfExists(path.join(dir, "design.md")) || "", tracks, sets);
+  const signals = [];
+  const seen = new Set();
+  let strong = false;
+  for (const m of text.matchAll(constraintSignalRe(i18n.baseLang(lng)))) {
+    const k = CONSTRAINT_KINDS[m.slice(1).findIndex((g) => g !== undefined)];
+    const w = m[0].toLowerCase().replace(/\s+/g, " ");
+    const key = k === "strong" ? "strong:" + w.replace(/s$/, "") : k; // "webhook" and "webhooks" are one signal
+    if (k === "strong") strong = true;
+    if (!seen.has(key)) { seen.add(key); if (signals.length < CONSTRAINT_MAX_WORDS) signals.push(w); }
+    if (signals.length >= CONSTRAINT_MAX_WORDS && (strong || seen.size >= 2)) break;
+  }
+  if (!strong && seen.size < 2) return null;
+  if (RE_CONSISTENCY_ANSWER.test(text) || RE_ACID.test(text)) return null;
+  return { code: "consistency-unstated", signals };
+}
+// +dist (1.17 D): a criterion about duplicated / redelivered messages, and one about a dependency being down, EN/PT/ES.
+// (1.17 D review: + "arrives twice" / "duas vezes" / "dos veces", a redelivery; + "goes down", "unreachable", ES "está caído" — the
+// ES template's own word —, pt-BR "fora do ar", PT "em baixo" / "inacessível". Literal alternations: linear.)
+const RE_DIST_DELIVERY = /idempot|duplicat|duplica|dedup|exactly[ -]once|at[ -]least[ -]once|exatamente uma vez|pelo menos uma vez|exactamente una vez|al menos una vez|more than once|mais de uma vez|más de una vez|twice|duas vezes|dos veces|re-?deliver|reentreg/i;
+const RE_DIST_FAILURE = /unavailable|is down|goes down|went down|unreachable|timeout|timed out|times out|indispon[íi]ve|n[ãa]o est[áa] dispon[íi]vel|fora do ar|(?:est[áa]|estiver|fica|ficar) em baixo|inacess[íi]vel|no est[áa] disponible|est[áa] ca[íi]d[oa]|se cae|inalcanzable|tempo limite|tiempo de espera|partition|parti[çc][ãa]o|partici[óo]n/i;
 function clarify(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -20593,8 +23190,9 @@ function clarify(projectDir, name) {
   const drop = inactiveMarkerLines(reqs, tracks);
   const tbd = [];
   // Comments are blanked, not deleted: their newlines stay, so `i` is the real line — the same index `drop` and
-  // artifactReport's items use (stripping a multi-line comment shifted every TBD below it).
-  reqs.replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\r\n]/g, " ")).split(/\r?\n/).forEach((l, i) => { if (!drop.has(i) && /(?<![\p{L}])TBD(?![\p{L}])/u.test(l.slice(0, 2000))) tbd.push({ line: i + 1, text: "TBD" }); });
+  // artifactReport's items use (stripping a multi-line comment shifted every TBD below it). The comments: /<!--[\s\S]*?-->/g
+  // by replaceHtmlCommentSpans (1.17 H).
+  replaceHtmlCommentSpans(reqs, (m) => m.replace(/[^\r\n]/g, " ")).split(/\r?\n/).forEach((l, i) => { if (!drop.has(i) && /(?<![\p{L}])TBD(?![\p{L}])/u.test(l.slice(0, 2000))) tbd.push({ line: i + 1, text: "TBD" }); });
   const slots = [...active.items, ...tbd].sort((a, b) => a.line - b.line);
   if (slots.length) {
     const shown = slots.slice(0, 8).map((p) => `requirements.md:${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`);
@@ -20622,6 +23220,13 @@ function clarify(projectDir, name) {
   if (tracks.includes("sec") && !/secret|segredo|secreto|credential|credencia|token/i.test(reqs)) add(QP.secSecrets);
   if (tracks.includes("privacy") && !RE_SUBJECT_RIGHTS.test(reqs)) add(QP.privacyRights);
   if (tracks.includes("privacy") && !/retention|reten[çc][ãa]o|retenci[óo]n|conserva[çc][ãa]o|conservaci[óo]n/i.test(reqs)) add(QP.privacyRetention);
+  // 1.17 A2 — the constraint nudge (one question, bounded): the user's text of the spec names queues / events / concurrency /
+  // transactions (two concepts, or one strong phrase), and neither requirements.md nor design.md states a consistency model,
+  // a delivery guarantee or idempotency (A review 1 / 2 / 7).
+  const nudge = constraintNudge(projectDir, dir, reqs, tracks, (readJson(statePath(dir)).data || {}).kind || "feature", featureLang(projectDir, name));
+  if (nudge) add(fm.designWeigh.clarifyConsistency(nudge.signals.map((w) => `'${w}'`).join(", ")));
+  if (tracks.includes("dist") && !RE_DIST_DELIVERY.test(reqs)) add(QP.distDelivery); // 1.17 D
+  if (tracks.includes("dist") && !RE_DIST_FAILURE.test(reqs)) add(QP.distFailure);
   // 1.16 Q3 — the glossary: every word it says to avoid that requirements.md / design.md use (at most 10 questions, then one
   // pointing at doctor). No glossary → nothing asked.
   const gl = glossaryEntries(f.root);
@@ -20632,6 +23237,7 @@ function clarify(projectDir, name) {
 
   const res = { ok: true, feature: f.slug, tracks: trackLabel(tracks), gapCount: questions.length, questions, verdict: questions.length ? "needs-clarification" : "clear" };
   if (gh.length) res.glossary = gh.map((h) => ({ word: h.word, term: h.term, count: h.count, locations: h.locations })); // 1.16 Q3 (stable)
+  if (nudge) res.nudges = [nudge]; // 1.17 A2 (stable): [{ code: "consistency-unstated", signals }]
   // Past GLOSSARY_MAX_ENTRIES entries the rest is never read: said (stable counts + the localized note), never silent.
   if (gl && gl.truncated) Object.assign(res, { glossaryTruncated: { read: gl.entries.length, total: gl.total }, glossaryNote: Q.glossaryTruncated(gl.entries.length, gl.total) });
   return res;
@@ -20778,7 +23384,8 @@ module.exports = {
   // A track's mandatory design sections ([{ name, syn }] — saas / ai / sec / privacy; undefined for core / tdd).
   trackSections: (tr) => (Object.prototype.hasOwnProperty.call(TRACK_SECTIONS, tr) ? TRACK_SECTIONS[tr].map((s) => ({ name: s.name, syn: s.syn.slice() })) : undefined),
   // A track's classifier keywords (copies — the engine's tables stay private): { strong, weak }.
-  trackSignals: (tr) => (Object.prototype.hasOwnProperty.call(SIGNALS, tr) ? { strong: SIGNALS[tr].strong.slice(), weak: SIGNALS[tr].weak.slice(), context: (SIGNALS[tr].context || []).slice() } : undefined),
+  trackSignals: (tr) => (Object.prototype.hasOwnProperty.call(SIGNALS, tr) ? { strong: SIGNALS[tr].strong.slice(), weak: SIGNALS[tr].weak.slice(), generic: (SIGNALS[tr].generic || []).slice(), context: (SIGNALS[tr].context || []).slice() } : undefined),
+  signalConcept: (tr, kw) => (Object.prototype.hasOwnProperty.call(SIGNAL_CONCEPTS, tr) ? SIGNAL_CONCEPTS[tr].get(kw) || null : null), // 1.17 D review
 
   verifyPipeMasked, // a _Verify:_ command that pipes into another one (its exit code is the LAST command's) — `done --run`'s hint
 
@@ -20796,6 +23403,7 @@ module.exports = {
   csvCell, // one CSV field: quoted when it must be, a leading = + - @ / tab / CR neutralized with an apostrophe
   RTM_STATUSES, // the matrix's row status codes, best first
   earsSteps, // 1.16 E1 — one EARS criterion → its Gherkin steps [{kind: given|when|then, text}] + split (false: one Then, the whole text)
+  mdPlainText, // 1.17 verification N3 — markdown inline text → the plain text a reader sees (escapes / entities, outside code spans)
   EXPORT_FORMATS: Object.freeze(EXPORT_FORMATS.slice()), // the spec_export `format` enum (server.js reads it from here)
   TRACKERS: Object.freeze(TRACKERS.slice()), // 1.16 E2 — the tracker CSV formats (export --tracker)
   milestone, // 1.16 E3 — spec_milestone / `dev-spec milestone [add|rm|list]` (roadmap.json meta.milestones)

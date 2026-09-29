@@ -365,6 +365,73 @@ Details: `verification.md` (Red → green).
 
 ---
 
+## The micro-cycle inside a task
+
+Adapted from the `test-driven-development` skill of [obra/superpowers](https://github.com/obra/superpowers) (MIT),
+fitted to this plugin's spec-level rules. The spec sets the frame: Phase 3 plans the tests (T-IDs mapped to ACs),
+Phase 4 writes them failing, an `_Expect: fail_` task records their red run, and each task's `_Makes green:_` names
+the T-IDs it turns green. **Inside** a +tdd task you still work in the smallest loop — red-green-refactor, one
+behaviour at a time:
+
+1. **One behaviour.** Pick the next single thing a target test (T-xx) asserts — or the next step toward it. Not the
+   whole task at once.
+2. **The test first.** The planned test already exists (Phase 4) — or, for a step it doesn't pin down, write the small
+   unit test that drives it. A planned test keeps its T-ID in its name; a helper test inside the task is fine and adds
+   no T-ID to the plan.
+3. **Watch it fail — for the right reason.** Run it. The failure must be an assertion or "not implemented" — never a
+   typo, a missing import or a runner that didn't start ("Red for the Right Reason", above). If you can't say why it
+   failed, you don't have a test yet.
+4. **Minimal code.** Write only what makes that test pass — nothing it doesn't demand, no "while I'm here".
+5. **Watch it pass.** Run it, then the task's target tests. Nothing that was green may turn red.
+6. **Refactor only on green.** Names, duplication, structure — rerun after each change; behaviour stays the same.
+7. **Repeat** with the next behaviour until every T-ID in `_Makes green:_` is green; then run the full suite and
+   record the task's `_Verify:_` run (`spec_complete_task {evidence}` / `dev-spec done <f> <n> --run`).
+
+**Code written before its test is deleted and redone** — the code of a NEW behaviour: test first, then the code
+again, driven by the test. Not kept "as a reference", not "adapted": code already written shapes the test to fit it,
+and the test then proves the code does what it does, not what the AC asks. Code that already existed before the task
+— what a characterization or guard test pins — is not "written before its test": it is what that test describes.
+
+The micro-cycle never changes the plan: it adds no T-ID to `test-plan.md` on its own (a behaviour the plan misses is
+a spec gap — `/spec-converge`, `spec_append_tasks`), never edits a planned test's assertion to get green ("When a
+test is wrong", below), and the task's evidence is still its `_Verify:_` run.
+
+### Rationalizations → answers
+
+| The thought | The answer |
+|---|---|
+| "Too simple to test." | Simple code breaks too, and its test takes a minute. If the code is that simple, so is the test. |
+| "I'll test after." | A test written after the code passes on its first run — it proves the code does what it does, not what was asked. |
+| "Just this once." | Every skipped cycle says so. The exceptions are how the discipline erodes. |
+| "I'll keep the code as a reference while I write the test." | Delete it. You would bend the test to fit it. Rewrite it from the test. |
+| "Manual testing is enough." | A manual check isn't repeatable, doesn't guard the next change, and isn't evidence the engine records. |
+| "TDD slows me down." | Debugging untested code is slower: a cycle takes minutes, a regression found in production takes days. |
+| "This is hard to test." | Hard to test is hard to use — the design is telling you something: simplify the interface. |
+| "It's only a refactor." | Then the existing tests stay green before and after — run them. A behaviour change needs a new failing test. |
+| "I already know it works." | Then watching the test fail and pass costs seconds. Knowing is not evidence. |
+
+### Red flags — stop and restart the cycle
+
+For the test of a NEW behaviour — the one this step is about to add:
+
+- **The test passed on its first run.** It tests nothing new (or the code was already there): make it fail first —
+  by testing the behaviour that is still missing, never by breaking the code or bending the assertion.
+- **You can't explain why it failed.** The failure isn't the missing behaviour — fix the test until it fails for the
+  right reason.
+- **The test was written after the code.** Delete that new code, keep the test, watch it fail, write the code again.
+- Several behaviours in one step, a refactor while red, a test edited until it passes.
+
+**Green on its first run is expected — not a red flag — for:**
+
+- a **guard test**: behaviour that already works and must keep working — a bugfix's guard test (T-02) passes before
+  the fix too; never make it fail artificially and never list it under `_Makes green:_` ([bugfix.md](bugfix.md));
+- a **characterization test** of existing code: it pins what the code does today, before a refactor moves it —
+  characterization tests → refactor → still green ([improvement-specs.md](improvement-specs.md)); nothing is deleted;
+- a **planned T-ID an earlier task already turned green**: run it to confirm it stays green — its red run belongs to
+  the task that made it green.
+
+---
+
 ## Anti-Patterns to Reject
 
 | Anti-pattern | Why it's bad | Fix |
