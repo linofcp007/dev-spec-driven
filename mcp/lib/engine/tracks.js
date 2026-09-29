@@ -109,6 +109,12 @@ function trackLabel(tracks) {
 // a single weak match is reported as "possible" but does NOT auto-enable the track, which
 // cuts false positives like "user-agent" → +ai or "data model" → +ai). Multilingual EN/PT/ES
 // plus technical synonyms.
+// +api (1.19 verify 2): breaking compatibility as a verb — "must not break compatibility", "não pode quebrar a compatibilidade da API
+// pública", "no puede romper la compatibilidad": weak, one concept with the compatibility nouns (SIGNAL_CONCEPTS.api.compat) and a
+// hazard (SIGNAL_HAZARDS.api — the negation is the requirement), in the three languages alike.
+const API_BREAK_VERBS = ["break compatibility", "breaks compatibility", "breaking compatibility", "quebrar a compatibilidade",
+  "quebra a compatibilidade", "quebre a compatibilidade", "quebrem a compatibilidade", "quebrar compatibilidade", "romper la compatibilidad",
+  "rompa la compatibilidad", "rompe la compatibilidad", "rompan la compatibilidad", "romper compatibilidad"];
 const SIGNALS = {
   tdd: {
     strong: [
@@ -452,6 +458,7 @@ const SIGNALS = {
       "cursor-based pagination", "keyset pagination", "deprecation", "api gateway", "internal api", "api client",
       "api documentation", "api docs", "api reference", "content negotiation",
       "management api", "admin api", // (1.19 T review) an API named by its role — "Management API for tenants"
+      ...API_BREAK_VERBS, // (1.19 verify 2) breaking compatibility as a verb, EN / PT / ES
       // PT
       "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis", "mudança incompatível", "mudanças incompatíveis",
       "compatibilidade retroativa", "retrocompatível", "retrocompatíveis", "retrocompatibilidade", "compatível com versões anteriores",
@@ -479,9 +486,11 @@ const SIGNALS = {
   // to export" or "the log in form" is 'possible' at most. A dashboard is +ui's generic word only (never +obs: "a metrics
   // dashboard for sales" is a product screen); a monitoring / Grafana dashboard is +obs strong and shadows it.
   // CUES (1.19 T review — SIGNAL_CUES.ui, uiCueTier): a page type (a settings / admin / profile page, an admin panel…) and the
-  // frontend / UI / UX words count as GENERIC in a sentence that says the work is backend-only — a handler, an endpoint, the
+  // frontend / UI / UX words count as GENERIC in a CLAUSE that says the work is backend-only — a handler, an endpoint, the
   // backend, an API (never "API keys"), a data layer / repository / SQL, "the UI already exists" ("a PATCH handler that the
-  // settings page calls", "the profile page backend should return…"); an empty state is weak in a sentence about a state
+  // settings page calls", "the profile page backend should return…") — unless a negator governs the backend word ("no backend
+  // changes"), the page consumes it ("loads … from the CMS API") or the text says "frontend only" (1.19 verify 1; "the frontend
+  // team" names a team: generic); an empty state is weak in a sentence about a state
   // machine ("the empty state blocks sales"). "accessibility" alone is weak (a venue's wheelchair accessibility): it needs a
   // digital co-signal — WCAG, a screen reader, a page, a form… (WCAG / a11y / screen reader stay strong).
   ui: {
@@ -568,17 +577,23 @@ const SIGNALS = {
       "logs estruturados", "resposta a incidentes", "lançamento canário", "lançamento gradual", "lançamento progressivo", "plano de rollback",
       "plano de reversão", "painel de monitorização", "painel de monitoramento", "engenharia do caos", "injeção de falhas",
       "implantação canário", "implantação canária", "implantação gradual", "implantação progressiva", "reverter … implantação", "reverter … deploy",
+      // (1.19 verify 3) a health check endpoint, as in EN (PT / ES; the English noun too) — before the context words it shadows
+      "endpoint de verificação de saúde", "endpoint de verificação do estado", "endpoint de health check", "endpoint de healthcheck",
       // ES
       "observabilidad", "presupuesto de error", "rastreo distribuido", "trazas distribuidas", "logs estructurados",
       "registros estructurados", "respuesta a incidentes", "despliegue canario", "lanzamiento canario", "despliegue gradual",
       "despliegue progresivo", "plan de reversión", "plan de rollback", "panel de monitorización", "panel de monitoreo", "ingeniería del caos",
-      "inyección de fallos", "revertir … despliegue",
+      "inyección de fallos", "revertir … despliegue", "endpoint de comprobación de salud", "endpoint de comprobación de estado",
     ],
     weak: [
       "monitoring", "monitor", "alerts", "alerting", "alert", "postmortem", "post-mortem", "healthcheck", "liveness", "readiness", "uptime",
       "outage", "downtime", "rollback", "roll back", "rollout", "roll out", "canary", "telemetry", "instrumentation", "tracing", "APM",
       "error rate", "5xx", "on-call", "on call", "game day", "otel", "request id", "latency metrics", "request logs", "application logs",
       // PT
+      // (1.19 verify 3) the verbs "alertar" (PT / ES) and "avisar" (ES / PT) are the watch concept too: alone a hint, beside a
+      // technical target +obs ("Alertar a equipa de operações quando a tarefa agendada … falhar", "Avisar … cuando falle la tarea
+      // programada …"), a business watch stays 'possible' ("Avisar al encargado de la tienda cuando el stock baje")
+      "alertar", "avisar",
       "monitorização", "monitoramento", "monitorizar", "monitorar", "alertas", "alerta", "indisponibilidade", "reversão", "telemetria",
       "instrumentação", "rastreio", "taxa de erro", "tempo de inatividade", "plantão", "métricas de latência",
       // ES
@@ -664,7 +679,7 @@ const SIGNAL_CONCEPTS = {
       "backward compatibility", "backwards compatibility", "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis",
       "mudança incompatível", "mudanças incompatíveis", "compatibilidade retroativa", "retrocompatível", "retrocompatíveis",
       "retrocompatibilidade", "compatível com versões anteriores", "cambio incompatible", "cambios incompatibles",
-      "compatibilidad hacia atrás", "retrocompatible", "retrocompatibilidad"],
+      "compatibilidad hacia atrás", "retrocompatible", "retrocompatibilidad", ...API_BREAK_VERBS],
     client: ["sdk", "client library", "client libraries", "api client", "cliente da api", "cliente de la api"],
     etag: ["etag", "if-match", "if-none-match"],
     status: ["status code", "http status", "código de estado", "código de status"],
@@ -705,7 +720,7 @@ const SIGNAL_CONCEPTS = {
   // ("monitor stock levels and send alerts" is one hint, never the two that turned +obs on); the technical targets are one too.
   obs: conceptMap({
     // (an SLA too: "tickets breaching the SLA … alerts to the supervisor" is a help desk's words, one hint)
-    watch: ["monitoring", "monitor", "alerts", "alerting", "alert", "incident", "postmortem", "post-mortem", "sla", "monitorização",
+    watch: ["monitoring", "monitor", "alerts", "alerting", "alert", "incident", "postmortem", "post-mortem", "sla", "alertar", "avisar", "monitorização",
       "monitoramento", "monitorizar", "monitorar", "alertas", "alerta", "incidente", "monitorización", "monitoreo", "monitorear"],
     health: ["health check", "healthcheck", "liveness", "readiness", "verificação de saúde", "verificações de saúde",
       "comprobación de salud", "comprobaciones de salud"],
@@ -743,12 +758,12 @@ const SIGNAL_HAZARDS = {
     "entregado dos veces", "mensagens duplicadas", "eventos duplicados", "mensajes duplicados"]),
   // +api (1.19 T): "no breaking changes", "sem quebra de compatibilidade", "sin cambios incompatibles" state the contract concern.
   api: new Set(["breaking change", "breaking api change", "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis",
-    "mudança incompatível", "mudanças incompatíveis", "cambio incompatible", "cambios incompatibles"]),
+    "mudança incompatível", "mudanças incompatíveis", "cambio incompatible", "cambios incompatibles", ...API_BREAK_VERBS]),
   // +obs (1.19 T): "zero downtime", "without an outage", "sem indisponibilidade", "sin tiempo de inactividad" state the concern.
   obs: new Set(["downtime", "outage", "indisponibilidade", "tempo de inatividade", "caída del servicio", "tiempo de inactividad"]),
 };
 
-// CUES (1.19 T review) — a built-in keyword whose tier depends on the words around it: SIGNAL_CUES[track](hit, text, cased) → a new
+// CUES (1.19 T review) — a built-in keyword whose tier depends on the words around it: SIGNAL_CUES[track](hit, text, cased, lang) → a new
 // tier ("strong" / "weak" / "generic"), "none" (no signal at all) or null (unchanged). Built-in tracks only (a track pack's keywords
 // are its own). Every rule reads a BOUNDED window around the hit (its clause / sentence, ≤ CUE_SPAN characters each way) with
 // linear regexes — the classifier stays linear in the text.
@@ -769,6 +784,28 @@ function cueAfter(s, end, bound) {
   return s.slice(end, i);
 }
 const cueWords = (s) => s.match(/[\p{L}\p{N}'’-]+/gu) || [];
+// The hit's CLAUSE (1.19 verify 1): the text between the CUE_BOUNDARY characters around it (≤ CUE_SPAN each way) → {from, to} —
+// except that a colon after a short LABEL (≤ CUE_LABEL_WORDS words: "Profile page: the GET /me handler…", "Sin backend: nueva
+// página…") joins the label to the clause it introduces, in either direction (a label is the topic of what follows it).
+const CUE_LABEL_WORDS = 4;
+function cueClause(s, start, end) {
+  const from = Math.max(0, start - CUE_SPAN), to = Math.min(s.length, end + CUE_SPAN);
+  let a = start - 1;
+  while (a >= from && !CUE_BOUNDARY.test(s[a])) a--;
+  let b = end;
+  while (b < to && !CUE_BOUNDARY.test(s[b])) b++;
+  if (a >= from && s[a] === ":") { // the clause opens after a colon: a short label before it belongs to it
+    let p = a - 1;
+    while (p >= from && !CUE_BOUNDARY.test(s[p])) p--;
+    if (cueWords(s.slice(p + 1, a)).length <= CUE_LABEL_WORDS) a = p;
+  }
+  if (b < to && s[b] === ":" && cueWords(s.slice(a + 1, b)).length <= CUE_LABEL_WORDS) { // the clause IS a label: what it introduces joins
+    let q = b + 1;
+    while (q < to && !CUE_BOUNDARY.test(s[q])) q++;
+    b = q;
+  }
+  return { from: a + 1, to: b };
+}
 
 // +api — who owns the API (see SIGNALS.api). A third party named at the API phrase always makes it someone else's; a consumer verb
 // does unless the clause says the API is ours; an ownership-ambiguous name is strong only beside an own cue.
@@ -808,17 +845,29 @@ const API_NOT_OWNER = new Set(["it", "that", "there", "here", "what", "let", "he
 const RE_POSSESSIVE = /^(.+?)(?:['’]s|s['’])$/u;
 const RE_TITLECASE = /^\p{Lu}\p{Ll}/u;
 const RE_API_OWNER_AFTER = /^\s+(?:of|do|da|dos|das|de|del)(?:\s+(?:the|la|el|los|las|o|a|os|as))?\s+([\p{L}][\p{L}\p{N}-]*)/u;
+// (1.19 verify 2) an ALL-CAPS owner — an organisation's acronym ("the ECB's public API", "la API pública del BCE", "a API do INE") — is
+// a third party too; a technical acronym never names one ("the REST API of the CRM", "the public API of the SDK")
+const RE_API_ACRONYM = /^\p{Lu}{2,6}$/u;
+const API_TECH_ACRONYMS = new Set(["api", "apis", "rest", "http", "https", "json", "xml", "yaml", "soap", "rpc", "sdk", "cli", "crm", "erp", "cms",
+  "lms", "dms", "pos", "mvp", "ui", "ux", "gui", "spa", "pwa", "iot", "etl", "saas", "paas", "iaas", "sso", "jwt", "oauth", "oidc", "ldap",
+  "url", "uri", "sql", "db", "pdf", "csv", "qa", "ci", "cd", "ai", "ml", "llm", "sms", "mfa", "otp", "crud", "id", "ids", "app", "web", "os",
+  "ios", "kpi", "smtp", "ftp", "sftp", "tcp", "udp", "dns", "cdn", "vpn", "b2b", "b2c", "hr", "rh", "rrhh", "ti"]);
+// (1.19 verify 2) a past participle right after a determiner is an adjective, never an own verb: "Replace the deprecated Google
+// Places API calls", "the documented Stripe API"
+const API_DETERMINERS = new Set(["a", "an", "the", "this", "that", "these", "those", "its", "their", "his", "her", "any", "some", "every"]);
 function apiCueTier(h, text, cased) {
   const before = cueWords(cueBefore(cased, h.start, CUE_BOUNDARY));
   const lower = before.map((w) => w.toLowerCase());
   const last3 = before.slice(-3);
-  const owner = (w) => !API_NOT_OWNER.has(w.toLowerCase()) && (RE_TITLECASE.test(w) || API_THIRD_PARTY.has(w.toLowerCase()));
+  const owner = (w) => !API_NOT_OWNER.has(w.toLowerCase()) && (RE_TITLECASE.test(w) || API_THIRD_PARTY.has(w.toLowerCase()) ||
+    (RE_API_ACRONYM.test(w) && !API_TECH_ACRONYMS.has(w.toLowerCase())));
   // a third party named at the API phrase: "Stripe's REST API", "the provider's OpenAPI spec", "their API", "a API REST do Stripe"
   const possessed = last3.some((w) => { const m = RE_POSSESSIVE.exec(w); return !!m && owner(m[1]); }) || lower.slice(-3).includes("their");
   const post = RE_API_OWNER_AFTER.exec(cased.slice(h.end, Math.min(cased.length, h.end + 60)));
-  if (possessed || (post && owner(post[1]) && !/^\p{Lu}{2}/u.test(post[1]))) return "generic";
+  if (possessed || (post && owner(post[1]))) return "generic";
   const n = lower.length;
-  const own = lower.slice(-3).some((w) => API_OWN_WORDS.has(w)) || lower.some((w) => RE_API_OWN_VERB.test(w)) ||
+  const ownVerb = (w, i) => RE_API_OWN_VERB.test(w) && !(/ed$/.test(w) && i > 0 && API_DETERMINERS.has(lower[i - 1]));
+  const own = lower.slice(-3).some((w) => API_OWN_WORDS.has(w)) || lower.some(ownVerb) ||
     (n > 0 && lower[0] === "version") ||
     (n > 0 && RE_API_BUILD_VERB.test(lower[n - 1])) || (n > 1 && API_ARTICLES.has(lower[n - 1]) && RE_API_BUILD_VERB.test(lower[n - 2]));
   if (!own && !API_OWN_NAMES.has(h.kw)) {
@@ -846,14 +895,73 @@ const UI_PAGE_WORDS = new Set(["landing page", "settings page", "settings screen
   "página de gestão", "página de perfil", "ecrã de definições", "tela de configurações", "página de ajustes", "página de configuración",
   "panel de administración", "página de gestión", "pantalla de ajustes", "frontend", "front-end", "UI", "UX"]);
 const UI_EMPTY_STATE = new Set(["empty state", "estado vazio", "estado vacío"]);
-const RE_UI_BACKEND = /(?<![\p{L}\p{N}_])(?:(?:get|post|put|patch|delete)[^\S\n]+\/|(?:request handlers?|route handlers?|endpoints?|back-?end|data layer|repositor(?:y|ies)|sql|server-side|already exists?|já existe|ya existe|camada de dados|capa de datos)(?![\p{L}\p{N}_])|(?<!(?:chaves?|claves?)[^\S\n]+(?:de|da|del)[^\S\n]+)apis?(?![\p{L}\p{N}_])(?![^\S\n]+(?:keys?|tokens?)(?![\p{L}])))/u;
+const RE_UI_BACKEND = /(?<![\p{L}\p{N}_])(?:(?:get|post|put|patch|delete)[^\S\n]+(?:\/|(?:handlers?|endpoints?|routes?)(?![\p{L}\p{N}_]))|(?:request handlers?|route handlers?|endpoints?|back-?end|data layer|repositor(?:y|ies)|sql|server-side|already exists?|já existe|ya existe|camada de dados|capa de datos)(?![\p{L}\p{N}_])|(?<!(?:chaves?|claves?)[^\S\n]+(?:de|da|del)[^\S\n]+)apis?(?![\p{L}\p{N}_])(?![^\S\n]+(?:keys?|tokens?)(?![\p{L}])))/gu;
 const RE_UI_STATE_MACHINE = /(?<![\p{L}])(?:state[- ]machines?|state transitions?|máquinas? de estados?|transiç(?:ão|ões) de estados?|transici(?:ón|ones) de estados?)(?![\p{L}])/u;
-function uiCueTier(h, text) {
+// 1.19 verify 1 — the backend cue reads the page word's CLAUSE (cueClause), never the whole sentence ("Redesign the admin panel;
+// the backend team will add the endpoints later"), and a backend word does not count when
+// - a negator governs it (≤ UI_NEG_WINDOW words before it in the clause: "no backend changes", "does not touch the backend",
+//   "needs no API changes", "sem backend", "sin backend" — PT "no" is em + o, never a negator), or
+// - the page CONSUMES it: it follows the page word, a consumer verb between them ("The landing page loads its testimonials from
+//   the CMS API") — a backend word before the page ("a PATCH handler that the settings page calls") or right after it ("the
+//   profile page backend", "the admin page's API") still says the work is backend-only;
+// and nothing is demoted where the text says the work is frontend-only ("Frontend only, …", "Apenas frontend", "Solo frontend").
+// "the frontend team" / "a equipa de frontend" names a team, not UI work: generic.
+const UI_NEG_WINDOW = 4;
+const UI_NEGATORS = new Set(["no", "not", "without", "never", "nor", "none", "sem", "não", "nao", "nem", "nunca", "sin", "ni"]);
+const UI_CONSUMER_VERBS = new Set(["load", "loads", "loaded", "loading", "fetch", "fetches", "fetched", "fetching", "call", "calls", "called",
+  "calling", "consume", "consumes", "consumed", "consuming", "read", "reads", "reading", "pull", "pulls", "pulled", "pulling", "get", "gets",
+  "getting", "query", "queries", "queried", "querying", "use", "uses", "used", "using", "submit", "submits", "submitted", "submitting",
+  "send", "sends", "sending", "post", "posts", "posted", "posting",
+  "carrega", "carregam", "carregar", "busca", "buscam", "buscar", "chama", "chamam", "chamar", "consome", "consomem", "consumir", "lê",
+  "leem", "ler", "obtém", "obtêm", "obter", "usa", "usam", "usar", "utiliza", "utilizam", "utilizar", "envia", "enviam", "enviar", "consulta",
+  "consultam", "consultar",
+  "carga", "cargan", "cargar", "obtiene", "obtienen", "obtener", "llama", "llaman", "llamar", "consumen", "lee", "leen", "leer", "usan",
+  "envía", "envían", "consultan", "buscan"]);
+const UI_FRONTEND_WORDS = new Set(["frontend", "front-end"]);
+const RE_UI_TEAM_AFTER = /^[^\S\n]*(?:teams?|developers?|devs?|engineers?|squads?)(?![\p{L}])/u;
+const RE_UI_TEAM_BEFORE = /(?<![\p{L}])(?:equipas?|equipes?|equipos?)[^\S\n]+(?:de|do|del)[^\S\n]+$/u;
+const RE_UI_FRONTEND_ONLY = /(?<![\p{L}\p{N}_])(?:front-?end[- ]only|only[^\S\n]+(?:the[^\S\n]+)?front-?end|(?:apenas|só|somente|unicamente)[^\S\n]+(?:o[^\S\n]+)?front-?end|(?:solo|sólo|solamente|únicamente)[^\S\n]+(?:el[^\S\n]+)?front-?end)(?![\p{L}\p{N}_])/u;
+// one test per classified text, not per page word (the classifier stays linear in the text)
+let uiFrontendOnlyText = null;
+let uiFrontendOnlyAnswer = false;
+function uiFrontendOnly(text) {
+  if (text !== uiFrontendOnlyText) { uiFrontendOnlyText = text; uiFrontendOnlyAnswer = RE_UI_FRONTEND_ONLY.test(text); }
+  return uiFrontendOnlyAnswer;
+}
+function uiBackendInClause(h, text, lang) {
+  const c = cueClause(text, h.start, h.end);
+  const clause = text.slice(c.from, c.to);
+  const pt = i18n.baseLang(lang || "en") === "pt";
+  // where the first consumer verb after the page word ends (a backend word after it is consumed) — one pass over the clause
+  let consumedFrom = Infinity;
+  const RE_WORD = /[\p{L}\p{N}'’-]+/gu;
+  const tail = text.slice(h.end, c.to);
+  let w;
+  while ((w = RE_WORD.exec(tail)) !== null) if (UI_CONSUMER_VERBS.has(w[0].toLowerCase())) { consumedFrom = h.end + w.index + w[0].length; break; }
+  RE_UI_BACKEND.lastIndex = 0;
+  let m;
+  while ((m = RE_UI_BACKEND.exec(clause)) !== null) {
+    const at = c.from + m.index;
+    if (at < h.end && at + m[0].length > h.start) continue; // (never the hit itself)
+    // the words just before it (a bounded look-back: UI_NEG_WINDOW words fit in 80 characters but for very long words)
+    const before = cueWords(text.slice(Math.max(c.from, at - 80), at)).slice(-UI_NEG_WINDOW).map((x) => x.toLowerCase());
+    if (before.some((x) => (UI_NEGATORS.has(x) && !(pt && x === "no")) || /n['’]t$/.test(x))) continue;
+    if (at >= consumedFrom) continue;
+    return true;
+  }
+  return false;
+}
+// "the UI / the interface / the form already exists" speaks for its whole sentence (the backend words stay clause-bound: "the
+// endpoint already exists; redesign the settings page" is UI work)
+const RE_UI_ALREADY = /(?<![\p{L}\p{N}_])(?:ui|ux|user interface|interface|interfaz|front-?end|form|formulário|formulario)[^\S\n]+(?:itself[^\S\n]+|em si[^\S\n]+|en sí[^\S\n]+)?(?:already exists?|já existe|ya existe)(?![\p{L}\p{N}_])/u;
+function uiCueTier(h, text, cased, lang) {
   const isPage = UI_PAGE_WORDS.has(h.kw), isEmpty = UI_EMPTY_STATE.has(h.kw);
   if (!isPage && !isEmpty) return null;
-  const sentence = cueBefore(text, h.start, SENTENCE_BOUNDARY) + text.slice(h.start, h.end) + cueAfter(text, h.end, SENTENCE_BOUNDARY);
-  if (isPage) return RE_UI_BACKEND.test(sentence) ? "generic" : null;
-  return h.tier === "strong" && RE_UI_STATE_MACHINE.test(sentence) ? "weak" : null;
+  const sentence = () => cueBefore(text, h.start, SENTENCE_BOUNDARY) + text.slice(h.start, h.end) + cueAfter(text, h.end, SENTENCE_BOUNDARY);
+  if (isEmpty) return h.tier === "strong" && RE_UI_STATE_MACHINE.test(sentence()) ? "weak" : null;
+  if (UI_FRONTEND_WORDS.has(h.kw) && (RE_UI_TEAM_AFTER.test(text.slice(h.end, h.end + 20)) || RE_UI_TEAM_BEFORE.test(text.slice(Math.max(0, h.start - 20), h.start)))) return "generic";
+  if (uiFrontendOnly(text)) return null;
+  return uiBackendInClause(h, text, lang) || RE_UI_ALREADY.test(sentence()) ? "generic" : null;
 }
 
 // +obs — "customer service", "room service", "service level", "serviço ao cliente", "servicio al cliente" are no technical target.
@@ -1194,7 +1302,7 @@ function classify(description, opts = {}) {
   for (const h of hits) {
     if (shadowedHits.has(h)) continue;
     const cue = Object.prototype.hasOwnProperty.call(SIGNAL_CUES, h.track) && Object.prototype.hasOwnProperty.call(SIGNALS, h.track) ? SIGNAL_CUES[h.track] : null;
-    const tier = cue ? cue(h, text, cased) : null;
+    const tier = cue ? cue(h, text, cased, lang) : null;
     if (tier === "none") continue;
     counted.push(tier && tier !== h.tier ? Object.assign({}, h, { tier }) : h);
   }

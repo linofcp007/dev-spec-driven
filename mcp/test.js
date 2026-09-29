@@ -16434,6 +16434,27 @@ function endRun() {
       [step3, outside6].every((t) => !/pull request|\bPRs?\b|\bCI\b/.test(t)),
       "1.19 R review 6: PT / ES 'integração com o sistema existente' / 'integración con el sistema existente' name the Reuse section; extending a unit outside the task's files is NEEDS_CONTEXT or a converge task, never a silent edit (the scope guard named) — implementer, guide, protocol, /executeTask and the brief's rule in EN / PT / ES / pt-BR; one backlog name per refactor candidate (got " +
       js([sysGot, step3.length, outside6.length, rules6.map((r) => r.slice(-160))]) + ")");
+
+    // 1.19 verify 5 — a NEW backlog entry's note has the same cap as an appended one: one line, at most 2,000 characters; past it
+    // add is refused with a localized error and nothing is written (MCP and CLI — the CLI exits 1)
+    const bl5 = rDir("vf-backlog");
+    S.initProject(bl5, ["core"], "en");
+    const v5Long = await blAdd(bl5, "long-note", "y".repeat(2500));
+    const v5Max = await blAdd(bl5, "max-note", "z".repeat(2000));
+    const v5Lines = await blAdd(bl5, "lines-note", "first line\n\nsecond  line");
+    const v5Cli = spawnSync(process.execPath, [path.join(__dirname, "..", "cli", "dev-spec.js"), "backlog", "add", "cli-long", "w".repeat(2001), "--project", bl5],
+      { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } });
+    const v5Pt = await blAdd(blp, "nota-longa", "n".repeat(2001));
+    const v5List = S.backlog(bl5, "list").backlog, v5Rm = JSON.parse(fs.readFileSync(path.join(bl5, ".specs", "roadmap.json"), "utf8"));
+    ok(v5Long.ok === false && v5Long.error === "The note for 'long-note' passes 2000 characters — nothing was added to the backlog: shorten the note." &&
+      v5Max.ok === true && v5Lines.ok === true && (v5List.find((b) => b.name === "lines-note") || {}).note === "first line second line" &&
+      v5List.map((b) => b.name).join() === "max-note,lines-note" && (v5Rm.backlog || []).every((b) => b.note.length <= 2000) &&
+      v5Cli.status === 1 && /The note for 'cli-long' passes 2000 characters/.test(v5Cli.stdout + v5Cli.stderr) &&
+      v5Pt.ok === false && /A nota de 'nota-longa' passa de 2000 caracteres — nada foi acrescentado ao backlog: encurta a nota\./.test(v5Pt.error || "") &&
+      I.toPtBr(v5Pt.error) === I.msg("pt-BR").featureOps.backlogNoteLong("nota-longa", 2000) && /encurte a nota/.test(I.msg("pt-BR").featureOps.backlogNoteLong("x", 1)) &&
+      !S.backlog(blp, "list").backlog.some((b) => b.name === "nota-longa"),
+      "1.19 verify 5: backlog add of a NEW name with a 2,500-character note is refused (localized — EN / PT / pt-BR; the CLI exits 1), nothing written; 2,000 characters pass; a multi-line note is stored on one line (got " +
+      js([v5Long, v5Max.ok, v5Lines.ok, v5List, v5Cli.status, (v5Cli.stdout + v5Cli.stderr).slice(0, 200), v5Pt.error]) + ")");
   }
 
   // 1.19 package (T) — the +api, +ui and +obs tracks.
@@ -16974,6 +16995,14 @@ function endRun() {
       ["", "Patients fill a health check questionnaire before the visit; any adverse incident is reported to the doctor."], ["", "On-call schedule for the hospital's nurses with shift swaps."],
       ["", "Game day ticketing: open the box office two hours before kickoff."], ["", "Postmortem report for the pathology lab."], ["", "Otel reservations for the sales team's offsite."],
       ["", "Alertas de incidentes de seguridad física en la tienda para el gerente."], ["", "Customer service alerts: flag VIP tickets that wait more than an hour."],
+      // 1.19 verify 1: +ui was lost when the backend was negated or named in another clause; the page consuming an API is UI work
+      ["ui", "Frontend only, no backend changes: a new landing page with a hero section and a signup form."],
+      ["ui", "The redesign does not touch the backend: only the landing page, the header and the footer change."],
+      ["ui", "The settings page redesign needs no API changes."], ["ui", "Redesign the admin panel; the backend team will add the endpoints later."],
+      ["ui", "The landing page loads its testimonials from the CMS API."], ["ui", "Apenas frontend, sem backend: nova página de perfil com foto e biografia."],
+      ["ui", "Sin backend: nueva página de ajustes y panel de administración."],
+      ["", "Backend for the profile page: the GET /me handler must return the avatar URL and the locale."],
+      ["", "Profile page: the GET /me handler must also return the avatar URL."], ["", "A lógica fica no backend da página de definições."],
     ];
     const hardStats = T19.map((X) => {
       let tp = 0, fp = 0, pos = 0;
@@ -16988,6 +17017,67 @@ function endRun() {
     ok(HARD.length >= 60 && hardStats.every((x) => x.pos >= 10 && x.precision >= 0.9 && x.recall >= 0.85),
       `1.19 T review: precision / recall on ${HARD.length} of the reviewer's hardest EN / PT / ES texts ≥ 90% / 85% per track — ` +
       hardStats.map((x) => `+${x.tr} ${(x.precision * 100).toFixed(0)}% / ${(x.recall * 100).toFixed(0)}% (${x.pos} positives)`).join(", ") + " (got " + js(hardStats.flatMap((x) => x.wrong)) + ")");
+
+    // --- 1.19 verify 1: +ui — the backend cue reads the page word's CLAUSE (a short label before a colon joins what it introduces),
+    // a negated backend word and one the page consumes never demote it, "frontend only" demotes nothing, "the frontend team" is a
+    // team; the reviewer's backend-only texts stay off; the genericOnly note no longer offers "the frontend" as an anchor
+    const v1On = ["Frontend only, no backend changes: a new landing page with a hero section and a signup form.",
+      "The redesign does not touch the backend: only the landing page, the header and the footer change.", "The settings page redesign needs no API changes.",
+      "Redesign the admin panel; the backend team will add the endpoints later.", "The landing page loads its testimonials from the CMS API.",
+      "Apenas frontend, sem backend: nova página de perfil com foto e biografia.", "Sin backend: nueva página de ajustes y panel de administración.",
+      "O redesenho não mexe no backend: só muda a página de perfil e o cabeçalho.", "El rediseño no toca el backend: solo cambian la página de ajustes y la cabecera.",
+      "A página de definições carrega os dados da API de preferências.", "La página de ajustes carga los datos desde la API de preferencias.",
+      "Redesign the settings page; the endpoint already exists.", "Frontend-only change: the settings page gets a new layout; the PATCH endpoint already exists."];
+    const v1Off = [...backendUi, "Backend for the profile page: the GET /me handler must return the avatar URL and the locale.",
+      "Profile page: the GET /me handler must also return the avatar URL.", "Backend: the settings page calls the new PATCH /me/preferences endpoint.",
+      "Settings page: a PATCH handler saves the preferences; the form already exists.", "Settings page preferences are saved through a new handler; the UI already exists.",
+      "A lógica fica no backend da página de definições.", "Apenas backend: o endpoint da página de perfil passa a devolver também a morada de faturação.",
+      "Solo backend: el endpoint de la página de perfil devuelve también la dirección de facturación."];
+    const v1Team = cls(backendUi[0]), v1Note = v1Team.notes.find((n) => /Possible \+ui/.test(n)) || "";
+    ok(v1On.every((t) => onOf(t, "ui")) && v1Off.every((t) => !onOf(t, "ui")) && v1Team.signals.ui.includes("frontend") && !v1Team.tracks.includes("ui") &&
+      /only app-level words \('admin page', 'frontend'\)/.test(v1Note) && !/the frontend/.test(v1Note) &&
+      ["pt", "es"].every((l) => !/o frontend|el frontend/.test(I.msg(l).classify.genericOnly("ui", "'x'"))),
+      "1.19 verify 1: +ui — a negated backend ('no backend changes', 'does not touch the backend', 'needs no API changes', sem / sin backend), a backend in another clause, an API the page loads from and 'frontend only' keep the page words (EN / PT / ES); a backend word before / right after the page, a label ('Profile page: the GET /me handler…'), 'the UI already exists' and PT 'no backend' (em + o) still demote; 'the frontend team' is generic; the note offers no 'frontend' anchor (got " +
+      js([v1On.filter((t) => !onOf(t, "ui")), v1Off.filter((t) => onOf(t, "ui")), v1Team.signals.ui, v1Note]) + ")");
+
+    // --- 1.19 verify 2: +api — "the deprecated X API" is an adjective (no own verb), an ALL-CAPS organisation after / before the API
+    // phrase owns it (a technical acronym doesn't), and breaking compatibility as a verb is a compat anchor + hazard in EN / PT / ES
+    const v2Off = ["Replace the deprecated Google Places API calls with the new Places API version before they are shut down.",
+      "Obtener las tasas de cambio de la API pública del BCE cada mañana.", "Sync the ECB's public API rates into the ledger.", "Use the documented Stripe API version."];
+    const v2On = ["Expose the REST API of the CRM to partners.", "Deprecate the old public API and publish v2.",
+      "This change must not break the public API; existing clients keep working without changes.",
+      "Esta alteração não pode quebrar a compatibilidade da API pública com os clientes existentes.",
+      "Este cambio no puede romper la compatibilidad de la API pública con los clientes existentes.", "The public API must not break compatibility with existing clients."];
+    const v2Pt = cls(v2On[3]), v2Places = cls(v2Off[0]);
+    ok(v2Off.every((t) => !onOf(t, "api")) && v2Places.possible.some((p) => p.track === "api") && v2On.every((t) => onOf(t, "api")) &&
+      v2Pt.signals.api.includes("quebrar a compatibilidade") && !v2Pt.negated.api.length && S.signalConcept("api", "romper la compatibilidad") === "compat" &&
+      S.signalConcept("api", "break compatibility") === "compat",
+      "1.19 verify 2: +api — 'the deprecated … API' is no own cue, 'del BCE' / 'the ECB's' own the API ('of the CRM' doesn't), PT 'não pode quebrar a compatibilidade da API pública' is +api like EN / ES (a compat hazard, never negated) (got " +
+      js([v2Off.filter((t) => onOf(t, "api")), v2On.filter((t) => !onOf(t, "api")), v2Pt.signals.api, v2Pt.negated.api, v2Places.signals.api]) + ")");
+
+    // --- 1.19 verify 3: +obs recall — PT "alertar" / ES "avisar" are the watch concept (a technical target makes them +obs, a business
+    // target leaves a hint); a health check endpoint is strong in PT / ES as in EN
+    const v3On = ["Alertar a equipa de operações quando a tarefa agendada de cópias de segurança falhar.",
+      "Avisar al equipo de operaciones cuando falle la tarea programada de copias de seguridad.", "Adicionar um endpoint de verificação de saúde ao serviço de encomendas.",
+      "Añadir un endpoint de comprobación de salud.", "Criar um endpoint de verificação de saúde."];
+    const v3Off = ["Avisar al encargado de la tienda cuando el stock de un producto baje del mínimo.", "Alertar o gestor da loja quando o stock de um produto ficar abaixo do mínimo."];
+    ok(v3On.every((t) => onOf(t, "obs")) && v3Off.every((t) => { const r = cls(t); return !r.tracks.includes("obs") && r.possible.some((p) => p.track === "obs"); }) &&
+      ["alertar", "avisar"].every((k) => S.signalConcept("obs", k) === "watch" && S.trackSignals("obs").weak.includes(k)) &&
+      S.trackSignals("obs").strong.includes("endpoint de comprobación de salud"),
+      "1.19 verify 3: +obs — 'Alertar' / 'Avisar' + a scheduled job are +obs, + a store manager a hint only; 'endpoint de verificação de saúde' / 'endpoint de comprobación de salud' alone turn +obs on (got " +
+      js([v3On.filter((t) => !onOf(t, "obs")), v3Off.map((t) => cls(t).signals.obs)]) + ")");
+
+    // --- 1.19 verify 4: pt-BR — the [OBS] Alerting guidance, the observability.md heading and the +obs finish check: nobody is
+    // "chamado", no alert "liga" to a runbook (a phone call in Brazil); PT keeps its wording; idempotent
+    const v4Arg = { name: "x", tracks: ["core", "obs"], label: "core +obs", slug: "x", summary: "" };
+    const v4Br = [I.design(v4Arg, "pt-BR"), I.steeringStub("observability.md", "pt-BR"), S.msg("pt-BR").secPrivacy.finishChecks.obs.join("\n")].join("\n");
+    const v4Pt = I.design(v4Arg, "pt") + I.steeringStub("observability.md", "pt");
+    ok(/quem é acionado · cada alerta aponta para um runbook \(triagem, mitigação, verificação\) · o que vira um ticket e não aciona o plantão/.test(v4Br) &&
+      /## Alertas \(cada um com um link para o runbook\)/.test(v4Br) && /runbooks para os quais os alertas apontam existem/.test(v4Br) &&
+      !/(?<![\p{L}])(?:liga|ligam|ligação|ligações)(?![\p{L}])|quem é chamado|uma chamada/u.test(v4Br) && I.toPtBr(v4Br) === v4Br &&
+      /quem é chamado · cada chamada liga a um runbook/.test(v4Pt) && /## Alertas \(cada um liga a um runbook\)/.test(v4Pt),
+      "1.19 verify 4: pt-BR — '[OBS] Alerting' says 'quem é acionado · cada alerta aponta para um runbook … o que vira um ticket e não aciona o plantão', the steering heading 'Alertas (cada um com um link para o runbook)', the finish check 'os runbooks para os quais os alertas apontam'; no liga / ligação / chamada left; PT unchanged; idempotent (got " +
+      js(v4Br.split("\n").filter((l) => /runbook/.test(l))) + ")");
   }
 
   // Release hygiene: the three version fields agree.

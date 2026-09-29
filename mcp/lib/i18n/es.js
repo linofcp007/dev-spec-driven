@@ -1016,7 +1016,7 @@ const msg = {
       weakOnly: (list) => `Activo solo por señales débiles — compruébalo: ${list}.`,
       possible: (t, sig) => `Posible +${t} — señal débil '${sig}' (necesita corroboración; no se ha activado).`,
       genericOnly: (t, list) => `Posible +${t} — solo palabras comunes de aplicación (${list}): ninguna nombra ${({ api: "un contrato de API (una API pública, OpenAPI / GraphQL / gRPC, un cambio incompatible…)",
-        ui: "una cuestión de interfaz propia (un design system, la accesibilidad, el frontend, un componente de UI…)", obs: "una cuestión de operabilidad (un SLO, alertas, guardias, un runbook, un despliegue gradual…)" })[t] ||
+        ui: "una cuestión de interfaz propia (un design system, la accesibilidad, un componente de UI, un estado vacío o de carga…)", obs: "una cuestión de operabilidad (un SLO, alertas, guardias, un runbook, un despliegue gradual…)" })[t] ||
         "un segundo sistema (un broker, otro servicio, un webhook…)"}; no se ha activado.`,
       keptOff: (t, kw) => `+${t} se mantiene inactivo — '${kw}' apareció negado.`,
       onAlthough: (t, quoted, list) => `+${t} está ACTIVO aunque ${quoted} apareció negado — activado por: ${list}. Confirma que es intencionado.`,
@@ -1291,6 +1291,7 @@ const msg = {
       backlogAppended: (name) => `'${name}' ya está en el backlog — la nueva nota se añadió a su nota.`,
       backlogKept: (name) => `'${name}' ya está en el backlog con esa nota — nada cambió.`,
       backlogNoteFull: (name, max) => `'${name}' ya está en el backlog y su nota pasaría de ${max} caracteres — la nueva nota no se añadió: regístrala con otro nombre.`,
+      backlogNoteLong: (name, max) => `La nota de '${name}' pasa de ${max} caracteres — no se añadió nada al backlog: acorta la nota.`,
     },
     cliOutput: {
       words: { pass: "ok", warn: "aviso", fail: "falla", "gaps-found": "con lagunas", clear: "clara", "needs-clarification": "requiere aclaración", error: "error" },

@@ -287,12 +287,15 @@ a plain article ("REST API for the mobile app…", "add rate limiting to the pub
 "show the problem details of each ticket" stay weak. **Weak:** a breaking change, backward compatible / compatibility, an
 SDK, a client library, ETag, If-Match / If-None-Match, status codes, HTTP status, JSON Schema, request / response schema,
 cursor (keyset) pagination, deprecation, an API gateway, an internal / management / admin API, an API client, the API docs /
-reference, content negotiation (*quebra de compatibilidade, alteração incompatível, retrocompatível, código de estado / de
-status, paginação por cursor · cambio incompatible, retrocompatible, compatibilidad hacia atrás, paginación por cursor*).
+reference, content negotiation, breaking compatibility as a verb — "must not break compatibility" (*quebra de
+compatibilidade, quebrar a compatibilidade, alteração incompatível, retrocompatível, código de estado / de status, paginação
+por cursor · cambio incompatible, romper la compatibilidad, retrocompatible, compatibilidad hacia atrás, paginación por
+cursor*).
 **Generic** (only beside a strong or weak one): api, endpoint, route, request(s), pagination (*rota, requisição, paginação ·
 ruta, solicitud / petición http, paginación*). A breaking change is a **hazard**: "without breaking changes" counts.
 **Someone else's API is no contract of ours:** any API signal right after a third-party owner — "Stripe's REST API", "the
-payment provider's OpenAPI spec", "their Admin API version", *"a API REST do Stripe"*, *"la API REST del banco"* — or
+payment provider's OpenAPI spec", "their Admin API version", *"a API REST do Stripe"*, *"la API REST del banco"*, an
+organisation's acronym (*"la API pública del BCE"*, "the ECB's public API" — never a technical one: REST, CRM, SDK…) — or
 governed by a consumer verb ("call", "integrate with", "sync from", "through", "via", "fetch", "the Salesforce REST API";
 *integrar com, chamar, consultar · integrar con, llamar a, obtener*) counts as a generic word, unless the clause says the API
 is ours ("Expose our catalog to partners through a versioned REST API"). An API **key** is +sec's word, not a contract: "an
@@ -339,9 +342,14 @@ a picker, a confirm dialog, swipe, responsive, i18n / l10n / `RTL`, `CLS` / `INP
 inline errors / validation, a wireframe / mockup. **Generic** (only beside a strong or weak one): screen, page, form (the
 nouns — never "screening", "formed"), button, click, dialog, dashboard, menu, icon, widget, layout, theme (*ecrã, tela,
 página, formulário, botão, painel · pantalla, formulario, botón, tablero, cuadro de mando*). **Backend-only work is no UI
-work:** in a sentence that names a handler (`PATCH /…`), an endpoint, the backend, an API (not "API keys"), a data layer /
-repository / SQL or says the UI already exists, a page type and frontend / `UI` / `UX` count as generic words ("the profile
-page backend should return…", *"a interface já existe"*); an empty state in a sentence about a state machine is weak.
+work:** in a clause (up to `. ! ? ; :` — a short label before a colon belongs to what follows it) that names a handler
+(`PATCH /…`), an endpoint, the backend, an API (not "API keys"), a data layer / repository / SQL or says the UI already
+exists, a page type and frontend / `UI` / `UX` count as generic words ("the profile page backend should return…", *"a
+interface já existe"*) — but not when the backend word is negated ("Frontend only, no backend changes: a new landing
+page", "The settings page redesign needs no API changes", *"Sin backend: nueva página de ajustes"*), when the page consumes
+it ("The landing page loads its testimonials from the CMS API"), when it sits in another clause ("Redesign the admin panel;
+the backend team will add the endpoints later") or when the text says "frontend only" (*apenas frontend · solo frontend*);
+"the frontend team" names a team, not UI work. An empty state in a sentence about a state machine is weak.
 A **dashboard** is +ui's generic word only — a sales dashboard is a product screen, never +obs; a monitoring / Grafana
 dashboard is +obs. `a11y` is a +ui signal, but never a reserved pack name: a team's accessibility pack keeps it.
 
@@ -379,13 +387,16 @@ toggle, kill switch, a canary release / deployment / rollout, blue-green, progre
 dark launch, a rollback plan, automatic rollback, rolling back a deployment / release, liveness / readiness probe, a health
 (check) endpoint, synthetic / real user monitoring, chaos engineering, fault injection, zero(-)downtime, a monitoring /
 Grafana / Datadog / operational dashboard, log aggregation, error tracking (*observabilidade, orçamento de erro, rastreio
-distribuído, logs estruturados, lançamento / implantação canário / gradual, reverter a implantação, plano de rollback ·
-observabilidad, presupuesto de error, trazas distribuidas, despliegue canario, revertir el despliegue, plan de reversión*).
+distribuído, logs estruturados, lançamento / implantação canário / gradual, reverter a implantação, plano de rollback,
+endpoint de verificação de saúde · observabilidad, presupuesto de error, trazas distribuidas, despliegue canario, revertir el
+despliegue, plan de reversión, endpoint de comprobación de salud*).
 **Weak:** monitoring / monitor, alert(s) / alerting, a postmortem (these watch words are ONE concept — "monitor stock
 levels and send alerts to purchasing" is one hint, never +obs), liveness, readiness, uptime, outage, downtime, rollback,
 rollout, a bare canary, telemetry, instrumentation, tracing, `APM`, error rate, 5xx, on-call / on call, game day, a request
-ID, latency metrics, request logs (*monitorização, monitoramento, alertas, indisponibilidade, reversão, telemetria, plantão
-· monitoreo, monitorización, reversión, trazas, tasa de error, guardia*). **Generic:** metrics, logs / logging, latency, p99
+ID, latency metrics, request logs (*monitorização, monitoramento, alertas, alertar, avisar, indisponibilidade, reversão,
+telemetria, plantão · monitoreo, monitorización, alertar, avisar, reversión, trazas, tasa de error, guardia* — alertar /
+avisar are the watch concept too: "Avisar al equipo cuando falle la tarea programada" is +obs, "Avisar al encargado de la
+tienda cuando baje el stock" a hint). **Generic:** metrics, logs / logging, latency, p99
 / p95 / p50, deploy (*métricas, latência, implantação · latencia, despliegue*). **Context** (evidence only beside another
 +obs signal): an SLA, an incident (both part of the watch concept), a health check (*verificação de saúde · comprobación de
 salud*) — a help desk's SLA, a support incident or a clinical health check alone is no operability — and the **technical
