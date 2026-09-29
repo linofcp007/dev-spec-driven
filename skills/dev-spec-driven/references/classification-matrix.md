@@ -273,21 +273,30 @@ Turn on `+api` if **any** are true (see `api-design-patterns.md`):
 | Compatibility is a decision | Versioning, deprecation, "no breaking changes for existing clients" |
 | The contract fixes behaviour | Error bodies (problem+json, stable codes), pagination, Idempotency-Key, ETag / If-Match, rate-limit headers |
 
-Classifier signals — **strong:** public / REST / RESTful / HTTP / web / JSON / partner API, API-first, contract-first, OpenAPI,
-Swagger, GraphQL, gRPC, protobuf, protocol buffers, a proto file, API versioning / version, versioned API, API v1 / v2 / v3,
-a breaking API change, the API contract / spec / specification / design, API consumers, third-party / external developers,
-a developer portal, contract tests, consumer-driven contracts, (application/)problem+json, problem details, RFC 9457 / 7807,
-Idempotency-Key, rate limit headers, X-RateLimit, Retry-After, the Sunset / Deprecation header (*API pública, API REST,
-versionamento da API, contrato da API, programadores externos, portal do programador, teste de contrato · versionado de
-la API, contrato de la API, desarrolladores externos, portal de desarrolladores, prueba de contrato*). **Weak:** a
-breaking change, backward compatible / compatibility, an SDK, a client library, ETag, If-Match / If-None-Match, status
-codes, HTTP status, JSON Schema, request / response schema, cursor (keyset) pagination, deprecation, an API gateway, an
-internal API, an API client, the API docs / reference, content negotiation (*quebra de compatibilidade, alteração
-incompatível, retrocompatível, código de estado / de status, paginação por cursor · cambio incompatible, retrocompatible,
-compatibilidad hacia atrás, paginación por cursor*). **Generic** (only beside a strong or weak one): api, endpoint, route,
-request(s), pagination (*rota, requisição, paginação · ruta, solicitud / petición http, paginación*). A breaking change is
-a **hazard**: "without breaking changes" counts. An API **key** is +sec's word, not a contract: "an API key management
-page" is a UI, "call the Stripe API" consumes someone else's contract — both stay `core` with a *possible +api* note.
+Classifier signals — **strong:** RESTful, API-first, contract-first, OpenAPI, Swagger, GraphQL, gRPC, protobuf, protocol
+buffers, a proto file, API versioning, versioned API, API v1 / v2 / v3, a breaking API change, the API contract / spec /
+specification / design, API consumers, third-party / external developers, a developer portal, contract tests,
+consumer-driven contracts, (application/)problem+json, RFC 9457 / 7807, Idempotency-Key, rate limit headers, X-RateLimit
+(and `X-RateLimit-Limit` / `-Remaining` / `-Reset`, `RateLimit-*`), Retry-After, the Sunset / Deprecation header
+(*versionamento da API, contrato da API, programadores externos, portal do programador, teste de contrato · versionado de
+la API, contrato de la API, desarrolladores externos, portal de desarrolladores, prueba de contrato*). **Ownership-ambiguous
+— weak, strong when the API is ours:** a public / REST / HTTP / web / JSON / partner API, an API version, problem details
+(*API pública, API REST, versão da API · versión de la API*) — strong beside an own cue ("our", expose, publish, offer,
+provide, design, document, deprecate, "Build a REST API", *versionar*, *nuestra*) or when the name opens its clause or follows
+a plain article ("REST API for the mobile app…", "add rate limiting to the public API"); "Stripe REST API integration" or
+"show the problem details of each ticket" stay weak. **Weak:** a breaking change, backward compatible / compatibility, an
+SDK, a client library, ETag, If-Match / If-None-Match, status codes, HTTP status, JSON Schema, request / response schema,
+cursor (keyset) pagination, deprecation, an API gateway, an internal / management / admin API, an API client, the API docs /
+reference, content negotiation (*quebra de compatibilidade, alteração incompatível, retrocompatível, código de estado / de
+status, paginação por cursor · cambio incompatible, retrocompatible, compatibilidad hacia atrás, paginación por cursor*).
+**Generic** (only beside a strong or weak one): api, endpoint, route, request(s), pagination (*rota, requisição, paginação ·
+ruta, solicitud / petición http, paginación*). A breaking change is a **hazard**: "without breaking changes" counts.
+**Someone else's API is no contract of ours:** any API signal right after a third-party owner — "Stripe's REST API", "the
+payment provider's OpenAPI spec", "their Admin API version", *"a API REST do Stripe"*, *"la API REST del banco"* — or
+governed by a consumer verb ("call", "integrate with", "sync from", "through", "via", "fetch", "the Salesforce REST API";
+*integrar com, chamar, consultar · integrar con, llamar a, obtener*) counts as a generic word, unless the clause says the API
+is ours ("Expose our catalog to partners through a versioned REST API"). An API **key** is +sec's word, not a contract: "an
+API key management page" is a UI, "call the Stripe API" consumes someone else's contract — *possible +api* at most.
 
 Worked examples (what `spec_classify` answers):
 
@@ -299,7 +308,8 @@ Worked examples (what `spec_classify` answers):
 | Avoid breaking changes to the orders API for existing clients | `core +api` (weak-only) | breaking change (a hazard — not negated), api |
 | *Devolver os erros em formato problem+json com códigos estáveis* | `core +api` | problem+json |
 | *Definir el contrato gRPC del servicio de precios en protobuf* | `core +dist +api` | grpc, protobuf (+dist: gRPC, the pricing service) |
-| API key management page where admins create and revoke keys | `core`, *possible +api* | api (generic only) |
+| API key management page where admins create and revoke keys | `core +ui`, *possible +sec / +api* | api (generic only; management page → +ui) |
+| Integrate with the Salesforce REST API to sync contacts every hour | `core`, *possible +api* | rest api (someone else's API — generic) |
 | Call the Stripe API to charge the customer's card | `core +tdd`, *possible +api* | api (generic only; charge → +tdd) |
 | Bump the AWS SDK to v3 | `core`, *possible +api* | sdk |
 
@@ -315,18 +325,23 @@ Turn on `+ui` if **any** are true (see `ui-design-patterns.md`):
 | The states or the layout are the risk | Empty / loading / error states, responsive layout, right-to-left, Core Web Vitals |
 
 Classifier signals — **strong:** design system, design tokens, component library, UI component / kit, user interface,
-WCAG, accessibility, a11y, screen reader, keyboard navigation / accessible / only, focus order / trap / indicator
+WCAG, a11y, screen reader, keyboard navigation / accessible / only, focus order / trap / indicator
 / management, colour / color contrast, contrast ratio, alt text, `ARIA`, aria-label, reduced motion, responsive layout /
 design, mobile-first, dark mode, Storybook, Figma, Core Web Vitals, `LCP`, visual regression, skeleton screen, empty state,
 right-to-left, a landing / settings / admin / management / profile / account page, an admin panel (*sistema de design,
-acessibilidade, leitor de ecrã / de tela, navegação por teclado, modo escuro, interface do utilizador, página de definições,
-painel de administração · sistema de diseño, accesibilidad, lector de pantalla, modo oscuro, interfaz de usuario, página de
-ajustes, panel de administración*). **Weak:** frontend, `UI` / `UX` (capitals, one concept — "translate the UI into
-Spanish" alone is no UI work), a UI framework written with its capital (`React`, `Vue`,
+leitor de ecrã / de tela, navegação por teclado, modo escuro, interface do utilizador, página de definições,
+painel de administração · sistema de diseño, lector de pantalla, modo oscuro, interfaz de usuario, página de
+ajustes, panel de administración*). **Weak:** accessibility (*acessibilidade · accesibilidad* — alone it may be a venue's
+wheelchair access; with a page, a form or WCAG it is UI), frontend, `UI` / `UX` (capitals, one concept — "translate the UI
+into Spanish" alone is no UI work), a UI framework written with its capital (`React`, `Vue`,
 `Angular`, `Svelte` — one concept), CSS / Tailwind, a modal, dropdown, tooltip, navbar, sidebar, toast, carousel, spinner,
-responsive, i18n / l10n / `RTL`, `CLS` / `INP`, a loading / error state, form validation, a wireframe / mockup. **Generic**
-(only beside a strong or weak one): screen, page, form (the nouns — never "screening", "formed"), button, click, dialog,
-dashboard, menu, icon, widget, layout, theme (*ecrã, tela, página, formulário, botão, painel · pantalla, formulario, botón*).
+a picker, a confirm dialog, swipe, responsive, i18n / l10n / `RTL`, `CLS` / `INP`, a loading / error state, form validation,
+inline errors / validation, a wireframe / mockup. **Generic** (only beside a strong or weak one): screen, page, form (the
+nouns — never "screening", "formed"), button, click, dialog, dashboard, menu, icon, widget, layout, theme (*ecrã, tela,
+página, formulário, botão, painel · pantalla, formulario, botón, tablero, cuadro de mando*). **Backend-only work is no UI
+work:** in a sentence that names a handler (`PATCH /…`), an endpoint, the backend, an API (not "API keys"), a data layer /
+repository / SQL or says the UI already exists, a page type and frontend / `UI` / `UX` count as generic words ("the profile
+page backend should return…", *"a interface já existe"*); an empty state in a sentence about a state machine is weak.
 A **dashboard** is +ui's generic word only — a sales dashboard is a product screen, never +obs; a monitoring / Grafana
 dashboard is +obs. `a11y` is a +ui signal, but never a reserved pack name: a team's accessibility pack keeps it.
 
@@ -356,21 +371,32 @@ Turn on `+obs` if **any** are true (see `observability-patterns.md`):
 | It must be safe to ship and undo | Feature flags, a canary / progressive rollout, a rollback plan, zero-downtime deploys |
 | It must say when it is broken | Alerts with runbooks, PagerDuty / Opsgenie, health / readiness checks, incident response |
 
-Classifier signals — **strong:** observability, SLO / SLI, error budget, burn rate, OpenTelemetry / OTel, distributed
-tracing, runbook, on-call, PagerDuty, Opsgenie, Alertmanager, an alerting / alert rule, Prometheus, Grafana, Datadog, New
-Relic, Jaeger, Zipkin, Sentry, structured logging / logs, correlation / trace ID, context propagation, golden signals, MTTR,
-incident response, postmortem, feature flag / toggle, kill switch, a canary release / deployment / rollout, blue-green,
-progressive / gradual / staged / phased rollout, dark launch, a rollback plan, automatic rollback, liveness / readiness
-probe, synthetic / real user monitoring, chaos engineering, fault injection, game day, zero(-)downtime, a monitoring /
+Classifier signals — **strong:** observability, SLO / SLI, error budget, burn rate, OpenTelemetry / `OTel` (capitals), an
+OTel collector, distributed tracing, runbook, paging the on-call ("page the on-call engineer"), PagerDuty, Opsgenie,
+Alertmanager, an alerting / alert rule, Prometheus, Grafana, Datadog, New Relic, Jaeger, Zipkin, Sentry, structured logging
+/ logs, correlation / trace ID, `X-Request-ID`, context propagation, golden signals, MTTR, incident response, feature flag /
+toggle, kill switch, a canary release / deployment / rollout, blue-green, progressive / gradual / staged / phased rollout,
+dark launch, a rollback plan, automatic rollback, rolling back a deployment / release, liveness / readiness probe, a health
+(check) endpoint, synthetic / real user monitoring, chaos engineering, fault injection, zero(-)downtime, a monitoring /
 Grafana / Datadog / operational dashboard, log aggregation, error tracking (*observabilidade, orçamento de erro, rastreio
-distribuído, logs estruturados, lançamento canário, plano de rollback · observabilidad, presupuesto de error, trazas
-distribuidas, despliegue canario, plan de reversión*). **Weak:** monitoring, alerts / alerting, health check, liveness,
-readiness, uptime, SLA, incident, outage, downtime, rollback, rollout, a bare canary, telemetry, instrumentation, tracing,
-`APM`, error rate, 5xx, on call (*monitorização, alertas, incidente, indisponibilidade, reversão, telemetria · monitoreo,
-reversión, trazas, tasa de error, guardia*). **Generic:** metrics, logs / logging, latency, p99 / p95 / p50, monitor, deploy
-(*métricas, latência, implantação · latencia, despliegue*). Never a bare "log" ("log in"), "trace" or "dashboard" — a sales
-dashboard is a product screen (+ui's word). `observability` / `SLO` / `SLA` / `uptime` stay +saas signals too (a
-phrase may serve two tracks); the `observability.md` steering file serves both.
+distribuído, logs estruturados, lançamento / implantação canário / gradual, reverter a implantação, plano de rollback ·
+observabilidad, presupuesto de error, trazas distribuidas, despliegue canario, revertir el despliegue, plan de reversión*).
+**Weak:** monitoring / monitor, alert(s) / alerting, a postmortem (these watch words are ONE concept — "monitor stock
+levels and send alerts to purchasing" is one hint, never +obs), liveness, readiness, uptime, outage, downtime, rollback,
+rollout, a bare canary, telemetry, instrumentation, tracing, `APM`, error rate, 5xx, on-call / on call, game day, a request
+ID, latency metrics, request logs (*monitorização, monitoramento, alertas, indisponibilidade, reversão, telemetria, plantão
+· monitoreo, monitorización, reversión, trazas, tasa de error, guardia*). **Generic:** metrics, logs / logging, latency, p99
+/ p95 / p50, deploy (*métricas, latência, implantação · latencia, despliegue*). **Context** (evidence only beside another
++obs signal): an SLA, an incident (both part of the watch concept), a health check (*verificação de saúde · comprobación de
+salud*) — a help desk's SLA, a support incident or a clinical health check alone is no operability — and the **technical
+targets** (one concept): a service, servers, production, a cluster / Kubernetes / pod, a cron / batch / sync / import /
+backup job, a data / CI pipeline, an endpoint, the backend, the infrastructure, ops / DevOps / SRE, a status page, disk / CPU
+/ memory usage, queue depth, consumer lag (*serviço, servidor, em produção, tarefa agendada · servicio, en producción, tarea
+programada*) — "customer service" / "service level" are none. So "Monitor the ERP sync job and send alerts to ops" and
+"Alert the team when the nightly backup job hasn't completed" are +obs; "warehouse temperature monitoring … alerts go to the
+shift manager" is not. Never a bare "log" ("log in"), "trace" or "dashboard" — a sales dashboard is a product screen (+ui's
+word). `observability` / `SLO` / `SLA` / `uptime` stay +saas signals too (a phrase may serve two tracks); the
+`observability.md` steering file serves both.
 
 Worked examples (what `spec_classify` answers):
 
@@ -379,7 +405,8 @@ Worked examples (what `spec_classify` answers):
 | Define an SLO for checkout availability and alert on the error budget burn rate | `core +tdd +saas +obs` | slo, error budget, burn rate (checkout → +tdd, slo → +saas) |
 | Instrument the payments service with OpenTelemetry distributed tracing | `core +tdd +obs` | opentelemetry, distributed tracing |
 | Roll out the new pricing engine behind a feature flag with a canary release and automatic rollback | `core +tdd +obs` | feature flag, canary release, automatic rollback |
-| Add monitoring and alerts for the nightly import job | `core +obs` (weak-only) | monitoring, alerts |
+| Add monitoring and alerts for the nightly import job | `core +obs` (weak-only) | monitoring (+ alerts, one concept), import job (a technical target) |
+| Monitor stock levels and send alerts to the purchasing team when inventory is low | `core`, *possible +obs* | monitor (+ alerts, one concept — no technical target) |
 | Deploy the billing service without downtime and roll back on errors | `core +tdd +obs` (weak-only) | downtime (a hazard — not negated), roll back |
 | *Despliegue canario del nuevo motor de precios con plan de reversión* | `core +obs` | despliegue canario, plan de reversión |
 | Metrics dashboard for sales | `core`, *possible +ui / +obs* | dashboard, metrics (generic only) |

@@ -16797,6 +16797,197 @@ function endRun() {
       /## \[UI\] Estados da Interface/.test(brTexts) && /## \[OBS\] SLIs e SLOs/.test(brTexts) && /leitor de tela/.test(brTexts) && /Interface do Usuário/.test(brTexts),
       "1.19 T11: the pt-BR twins of the +api / +ui / +obs strings hold no European-only word (arquivo, tela, usuário, controle…), are idempotent and keep the markers and AC IDs (got " +
       js([(brTexts.match(EU) || [])[0]]) + ")");
+
+    // --- 1.19 T review 1: +obs — business monitoring / alerts, help-desk incidents and SLAs, a clinical health check are no operability:
+    // the watch words are ONE concept, SLA / incident / health check are context, on-call / game day / postmortem / a lower-case otel are
+    // weak; a technical target (a job, a service, ops…) backs a lone weak word; "customer service" is no target
+    const onOf = (t, tr) => cls(t).tracks.includes(tr);
+    const bizObs = ["Monitor stock levels and send alerts to the purchasing team when inventory is low.",
+      "Warehouse temperature monitoring: sensors report every minute and alerts go to the shift manager.", "Send price-drop alerts to shoppers and monitor competitor prices daily.",
+      "Monitorização dos níveis de stock e alertas ao responsável do armazém.", "Monitoramento da temperatura das câmaras frigoríficas com alertas por SMS.",
+      "Monitoreo del inventario y alertas al responsable del almacén.", "Monitorización de la temperatura de los camiones frigoríficos con alertas.",
+      "Support incident escalation: a ticket not answered within the SLA escalates to the team lead.", "O incidente de suporte deve ser atribuído a um agente em 2 horas, conforme o SLA de suporte.",
+      "Patients fill a health check questionnaire before the visit; any adverse incident is reported to the doctor.", "Alertas de incidentes de seguridad física en la tienda para el gerente.",
+      "Customer service alerts: flag VIP tickets that wait more than an hour.", "Incidencias de clientes con SLA de 24 horas y alertas al supervisor."];
+    const otherDomain = ["On-call schedule for the hospital's nurses with shift swaps.", "Game day ticketing: open the box office two hours before kickoff.",
+      "Postmortem report for the pathology lab.", "Otel reservations for the sales team's offsite."];
+    const stock = cls(bizObs[0]), desk = cls(bizObs[7]);
+    const opsObs = ["Monitor the ERP sync job and send alerts to ops when it fails.", "Alert the team when the nightly backup job hasn't completed by 6 am.",
+      "Monitorizar o serviço de pagamentos e alertar o plantão quando a taxa de erro subir.", "Monitoreo del servicio de búsqueda con alertas cuando la latencia supera 500 ms.",
+      "OTel instrumentation for the gateway.", "Page the on-call engineer when the queue backs up"];
+    ok(bizObs.every((t) => !onOf(t, "obs")) && otherDomain.every((t) => { const r = cls(t); return !r.tracks.includes("obs") && r.possible.some((p) => p.track === "obs"); }) &&
+      stock.possible.some((p) => p.track === "obs") && stock.signals.obs.length === 1 && !desk.signals.obs.length && opsObs.every((t) => onOf(t, "obs")) &&
+      ["monitoring", "monitor", "alerts", "alert", "incident", "sla", "postmortem", "alertas", "monitoreo"].every((k) => S.signalConcept("obs", k) === "watch") &&
+      S.signalConcept("obs", "sync job") === "target" && S.trackSignals("obs").context.includes("incident") && S.trackSignals("obs").weak.includes("on-call") && S.trackSignals("obs").strong.includes("OTel"),
+      "1.19 T review 1: +obs — business monitoring / alerts (EN / PT / ES), a help desk's incident + SLA, a clinical health check stay off (one 'watch' hint at most); on-call / game day / postmortem / Otel from other domains are 'possible' only; a watch word + a technical target (a job, a service, ops) and OTel / paging the on-call are +obs (got " +
+      js([bizObs.filter((t) => onOf(t, "obs")), otherDomain.map((t) => cls(t).tracks), stock.signals.obs, desk.signals.obs, opsObs.filter((t) => !onOf(t, "obs"))]) + ")");
+
+    // --- 1.19 T review 2: +api — consuming someone else's API is app-level ('possible' at most, EN / PT / ES); the ownership-ambiguous
+    // names are weak — strong beside an own cue or as the clause's own subject; a consumer verb counts only when it governs the API phrase
+    const consumed = ["Call Stripe's REST API to create payment intents and handle webhooks for payment confirmation.", "Integrate with the Salesforce REST API to sync contacts every hour.",
+      "Sync contacts from HubSpot's public API into our CRM table nightly.", "Replace our calls to Shopify's old GraphQL endpoint with their new Admin API version.",
+      "Generate a typed client from the payment provider's OpenAPI spec and use it in the checkout.", "Book the courier through the partner API.", "Send the order to the supplier's HTTP API.",
+      "Integrate the Google Maps JSON API.", "Use the Shopify API version 2024-04.", "Integrar com a API REST do Stripe para criar pagamentos.",
+      "Integrar con la API REST de Stripe para crear pagos.", "Llamar a la API REST del banco para consultar el saldo de las cuentas."];
+    const weakAmbig = ["Stripe REST API integration for subscriptions.", "The About dialog shows the app version and the API version it talks to.",
+      "Show the problem details for each support ticket in the agent view."];
+    const ownApi = ["Expose our product catalog to partners through a versioned REST API with OAuth2 client credentials.",
+      "Add CRUD endpoints for the products resource to our public REST API, with cursor pagination, versioned under /v2.", "Version the public API: ship v2 and deprecate v1 with a Sunset header",
+      "Add rate limiting to the public API", "REST API for the mobile app to list and filter orders.", "Criar uma API REST pública para parceiros, com versionamento e limites de pedidos.",
+      "SDK de JavaScript para nuestra API pública con reintentos automáticos.", "Management API for tenants: create, suspend and delete tenants through the internal API.",
+      "The order service calls the payment service over gRPC"];
+    const sfc = cls(consumed[1]);
+    ok(consumed.every((t) => { const r = cls(t); return !r.tracks.includes("api") && r.possible.some((p) => p.track === "api"); }) && weakAmbig.every((t) => !onOf(t, "api")) &&
+      ownApi.every((t) => onOf(t, "api")) && sfc.signals.api.includes("rest api") && S.trackSignals("api").weak.includes("rest api") && S.signalConcept("api", "public api") === "kind",
+      "1.19 T review 2: +api — calling / integrating with / syncing from someone else's API (a possessive owner, 'their', the <Name>, PT / ES 'do Stripe' / 'del banco', a governing consumer verb) is 'possible' at most; an ambiguous name without an owner cue stays weak; our own API — an own cue, the clause's subject, 'to the public API', an internal / management API, services calling each other over gRPC — is +api (got " +
+      js([consumed.filter((t) => onOf(t, "api")), weakAmbig.filter((t) => onOf(t, "api")), ownApi.filter((t) => !onOf(t, "api"))]) + ")");
+
+    // --- 1.19 T review 3: +ui — a page type in a backend-only sentence, an empty state in a state machine, a venue's accessibility are no UI
+    // work; the reviewer's negations still keep +ui off; a backend sentence of its own leaves the page's sentence alone
+    const backendUi = ["Build the data layer for the admin page (a SQL view and a repository method); the page itself is built by the frontend team.",
+      "Add a PATCH /me/preferences handler that the settings page calls to save preferences; the UI already exists.", "The profile page backend should return the user's avatar URL and display name.",
+      "Expose the admin page's API so the mobile app can fetch the same stats.", "Endpoint interno para o painel de administração obter estatísticas; a interface já existe.",
+      "Order state machine: an order moves from the empty state to draft to submitted; the empty state is created when a cart is opened.",
+      "State machine for the vending machine: states empty, ready, dispensing; the empty state blocks sales.", "Wheelchair accessibility of each venue and its entrances.",
+      "Acessibilidade das lojas físicas para cadeiras de rodas.", "Accesibilidad de los edificios: rampas y ascensores en cada sede.",
+      "Backend only, no UI changes: move the invoice PDF generation to a background worker.", "No frontend work: add a nightly job that purges soft-deleted accounts after 30 days.",
+      "Apenas backend, sem interface do utilizador: nova tarefa que apaga contas inativas.", "Sin interfaz de usuario: solo un proceso nocturno que borra cuentas inactivas."];
+    const realUi = ["Settings page for notifications. The backend exposes a PATCH endpoint.", "Página de configurações para gerir as chaves de API.",
+      "Management page for API keys: create, revoke and see the last-used date.", "The cart page should show an empty state with a call to action when there are no items.",
+      "Improve the accessibility of the signup form.", "Rever a acessibilidade do formulário de checkout: ordem de foco e leitor de ecrã.", "Mostrar un estado vacío en la pantalla de pedidos."];
+    const venue = cls(backendUi[7]);
+    ok(backendUi.every((t) => !onOf(t, "ui")) && realUi.every((t) => onOf(t, "ui")) && venue.possible.some((p) => p.track === "ui") &&
+      S.trackSignals("ui").weak.includes("accessibility") && S.trackSignals("ui").strong.includes("wcag") && cls(backendUi[1]).signals.ui.includes("settings page"),
+      "1.19 T review 3: +ui — a settings / admin / profile page named in a backend-only sentence (a handler, an endpoint, the backend, an API, a data layer, 'the UI already exists'), an empty state in a state machine and a venue's wheelchair accessibility (EN / PT / ES) stay off; 'no UI changes' / 'sem interface do utilizador' / 'Sin interfaz de usuario' too; API keys are no backend cue (got " +
+      js([backendUi.filter((t) => onOf(t, "ui")), realUi.filter((t) => !onOf(t, "ui")), venue.signals.ui]) + ")");
+
+    // --- 1.19 T review 4: a pack of ANOTHER name whose recorded marker is a built-in track's now ('webui' [UI], 'contracts' [API], 'ops' [OBS]):
+    // doctor and spec_upgrade explain it; add-track <track> adopts it (the built-in sections are appended although a heading carries the
+    // marker, the pack leaves the list and packMarkers); --remove drops it by its name
+    const mp = d("marker-legacy");
+    S.initProject(mp, ["core"], "en");
+    const markerFeature = (name, marker, lang) => {
+      const pdir = path.join(mp, ".specs", "tracks", name);
+      fs.mkdirSync(pdir, { recursive: true });
+      fs.writeFileSync(path.join(pdir, "track.json"), JSON.stringify({ name, marker, title: { en: "Pack " + name }, sections: [{ name: "Thing " + name, guidance: "Say how." }] }));
+      const f = S.createFeature(mp, "f-" + name, ["core"], "", undefined, lang || "en");
+      const sp = path.join(f.dir, ".state.json");
+      const st = JSON.parse(rd(sp));
+      st.tracks = ["core", name];
+      st.packMarkers = { [name]: "[" + marker + "]" };
+      fs.writeFileSync(sp, JSON.stringify(st, null, 2));
+      fs.appendFileSync(path.join(f.dir, "design.md"), "\n## [" + marker + "] Thing " + name + "\n- decided.\n");
+      return f;
+    };
+    const mWeb = markerFeature("webui", "UI"), mCon = markerFeature("contracts", "API"), mOps = markerFeature("ops", "OBS", "pt");
+    const mDoc = chk(S.specDoctor(mp, "f-webui"), "track-pack-missing"), mDocPt = chk(S.specDoctor(mp, "f-ops"), "track-pack-missing");
+    const mUp = S.specUpgrade(mp), mUpF = mUp.features.find((x) => x.name === "f-webui") || {};
+    const mAdopt = S.addTrack(mp, "f-webui", "ui");
+    const mWebSt = JSON.parse(rd(mWeb.dir, ".state.json")), mWebDesign = rd(mWeb.dir, "design.md");
+    const mUiDoc = chk(S.specDoctor(mp, "f-webui"), "ui-sections");
+    const mDrop = S.addTrack(mp, "f-contracts", "contracts", { remove: true });
+    ok(/\+webui \(a track pack from before 1\.19 — its marker \[UI\] is the built-in \+ui track's now/.test(mDoc.detail || "") && /dev-spec add-track f-webui ui/.test(mDoc.detail || "") &&
+      /o seu marcador \[OBS\] é agora o do track \+obs incluído/.test(mDocPt.detail || "") && js(mUpF.reservedMarkers) === js([{ name: "webui", marker: "[UI]", track: "ui" }]) &&
+      (mUpF.attention || []).includes("track-pack-reserved") && mUp.lines.some((l) => /Change the marker of its track pack\(s\) from before 1\.19 — \+webui \[UI\]/.test(l)) &&
+      mAdopt.ok && js(mAdopt.adopted) === js(["ui"]) && js(mAdopt.adoptedPacks) === js(["webui"]) && mWebDesign.includes("## [UI] Design System Usage") && mWebDesign.includes("## [UI] Thing webui") &&
+      !mWebSt.tracks.includes("webui") && !(mWebSt.packMarkers || {}).webui && mUiDoc.status === "fail" && !/:missing/.test(mUiDoc.detail) && !chk(S.specDoctor(mp, "f-webui"), "track-pack-missing").status &&
+      mDrop.ok && js(mDrop.removedTracks) === js(["contracts"]) && js(JSON.parse(rd(mCon.dir, ".state.json")).tracks) === js(["core"]) && mOps.ok,
+      "1.19 T review 4: a pre-1.19 pack of another name with a now-reserved marker ('webui' [UI]) — doctor says why (EN / PT) and spec_upgrade lists it (reservedMarkers, track-pack-reserved); add-track ui adopts it (the five [UI] sections appended beside the pack's heading, adopted / adoptedPacks, the pack's record gone, ui-sections 'unfilled' not 'missing'); add-track contracts --remove drops the pack (got " +
+      js([mDoc.detail, mDocPt.detail, mUpF.reservedMarkers, mAdopt.adopted, mAdopt.adoptedPacks, mUiDoc.detail, mDrop.error || mDrop.removedTracks]) + ")");
+
+    // --- 1.19 T review 5: the burn-rate guidance agrees with observability-patterns.md (the SRE workbook): 14.4× / 1 h and 6× / 6 h page,
+    // 1× / 3 days opens a ticket — in the observability.md stub (EN / PT / ES / pt-BR) and in references/steering-templates.md
+    const refDir = path.join(__dirname, "..", "skills", "dev-spec-driven", "references");
+    const obsGuide = fs.readFileSync(path.join(refDir, "observability-patterns.md"), "utf8"), stTpl = fs.readFileSync(path.join(refDir, "steering-templates.md"), "utf8");
+    const burn = { en: /the fast ones page \(e\.g\. 14\.4× over 1 h, 6× over 6 h\), the slow one \(e\.g\. 1× over 3 days\) opens a ticket/, pt: /os rápidos chamam \(ex\.: 14,4× em 1 h, 6× em 6 h\), o lento \(ex\.: 1× em 3 dias\) abre um ticket/,
+      es: /las rápidas avisan \(p\. ej\., 14,4× en 1 h, 6× en 6 h\), la lenta \(p\. ej\., 1× en 3 días\) abre un ticket/, "pt-BR": /os rápidos acionam o plantão \(ex\.: 14,4× em 1 h, 6× em 6 h\)/ };
+    ok(Object.entries(burn).every(([l, re]) => re.test(I.steeringStub("observability.md", l) || "")) && burn.en.test(stTpl) && !/6× over 6 h\) opens a ticket/.test(stTpl) &&
+      /\| \*\*Page\*\* \| 6 hours \| 30 minutes \| 6 \|/.test(obsGuide) && /\| \*\*Ticket\*\* \| 3 days \| 6 hours \| 1 \|/.test(obsGuide),
+      "1.19 T review 5: the observability.md stub (EN / PT / ES / pt-BR) and steering-templates.md say 6× over 6 h PAGES and 1× over 3 days opens a ticket, as observability-patterns.md's table does (got " +
+      js((I.steeringStub("observability.md", "en") || "").split("\n").filter((l) => /Burn-rate/.test(l))) + ")");
+
+    // --- 1.19 T review 7: pt-BR — the runbook gets a "link" (a "ligação" is a phone call in Brazil), the on-call person is "de plantão"
+    const brObs = { name: "x", tracks: ["core", "tdd", "obs"], label: "core +tdd +obs", slug: "x", summary: "" };
+    const brReq = I.requirements(brObs, "pt-BR"), brPlan = I.testPlan("x", "pt-BR", brObs.tracks);
+    const ac29 = brReq.split("\n").find((l) => l.includes("US-1.AC-29")) || "", t29 = brPlan.split("\n").find((l) => /US-1\.AC-29/.test(l) && /runbook/.test(l)) || "";
+    ok(/alertar a pessoa de plantão \(on-call\) com um link para o runbook/.test(ac29) && /dispara e aciona o plantão com o link para o runbook/.test(t29) &&
+      ![ac29, t29].some((l) => /ligação|pessoa de serviço/.test(l)) && I.toPtBr(brReq + brPlan) === brReq + brPlan && /ligação para o runbook/.test(I.requirements(brObs, "pt")),
+      "1.19 T review 7: pt-BR — US-1.AC-29 pages 'a pessoa de plantão' with 'um link para o runbook' and its test row 'aciona o plantão com o link'; no 'ligação' / 'pessoa de serviço' left; PT keeps its wording; idempotent (got " + js([ac29, t29]) + ")");
+
+    // --- 1.19 T review 8: recall — PT implantação canário / gradual, ES revertir el despliegue + comprobaciones de salud, PT verificação de saúde,
+    // a singular "alert" beside a job (alone: 'possible'), X-Request-ID, the X-RateLimit-* headers by name, form validation + inline errors
+    const lone = cls("Alert the team when the report is ready."), rl = cls("Return X-RateLimit-Remaining and X-RateLimit-Reset on every response.");
+    const recallT = ["Implantação canário do novo motor de recomendações para 5% dos utilizadores.", "Implantação gradual da nova versão com reversão automática.",
+      "Revertir el despliegue automáticamente si fallan las comprobaciones de salud.", "Reverter a implantação se a verificação de saúde falhar.",
+      "Alert the team when the nightly backup job hasn't completed by 6 am.", "Propagate the X-Request-ID header through all services and include it in every log line."];
+    ok(recallT.every((t) => onOf(t, "obs")) && !lone.tracks.includes("obs") && lone.possible.some((p) => p.track === "obs" && p.signal === "alert") &&
+      rl.tracks.includes("api") && rl.signals.api.includes("x-ratelimit-remaining") && onOf("Form validation for the signup form: email format, password strength and inline errors.", "ui") &&
+      onOf("Translate the UI into Spanish and German and add a language picker to the header.", "ui"),
+      "1.19 T review 8: recall — PT 'implantação canário / gradual', ES 'revertir el despliegue' / 'comprobaciones de salud', PT 'verificação de saúde', 'alert' + a nightly job, X-Request-ID are +obs ('alert the team' alone is 'possible'); X-RateLimit-Remaining / -Reset are +api; form validation + inline errors and the UI + a language picker are +ui (got " +
+      js([recallT.filter((t) => !onOf(t, "obs")), lone.possible, rl.signals.api]) + ")");
+
+    // --- 1.19 T review: precision / recall on the reviewer's hardest texts (EN / PT / ES — the false positives and misses of the review, their
+    // positives and hard negatives): ≥ 90% precision and ≥ 85% recall per track
+    const HARD = [
+      ["api", "Add CRUD endpoints for the products resource to our public REST API, with cursor pagination, versioned under /v2."],
+      ["api", "Our public API must return RFC 9457 problem details for every error and document all status codes in the OpenAPI spec."],
+      ["api", "Deprecate the legacy /v1/orders endpoints: add Sunset and Deprecation headers and a migration guide for API consumers."],
+      ["api", "Expose our product catalog to partners through a versioned REST API with OAuth2 client credentials."],
+      ["api", "Management API for tenants: create, suspend and delete tenants through the internal API."],
+      ["api", "Add rate limiting to the partner API: 1000 requests per hour per key, with X-RateLimit headers."],
+      ["api", "Return proper HTTP status codes from the internal API instead of 200 with an error field."],
+      ["api", "Endpoint REST para listar encomendas com paginação por cursor e versionamento da API."], ["api", "SDK de JavaScript para nuestra API pública con reintentos automáticos."],
+      ["api", "Versionado de la API: /v2 con cambios incompatibles documentados en OpenAPI."], ["api", "Criar uma API REST pública para parceiros, com versionamento e limites de pedidos."],
+      ["api", "Add an X-RateLimit-Remaining header to every response of our API."], ["api", "REST API for the mobile app to list and filter orders."],
+      ["api", "Nuestra API REST debe devolver errores con códigos de estado consistentes."],
+      ["", "Call Stripe's REST API to create payment intents and handle webhooks for payment confirmation."], ["", "Integrate with the Salesforce REST API to sync contacts every hour."],
+      ["", "Sync contacts from HubSpot's public API into our CRM table nightly."], ["", "Replace our calls to Shopify's old GraphQL endpoint with their new Admin API version."],
+      ["", "Generate a typed client from the payment provider's OpenAPI spec and use it in the checkout."], ["", "Integrar com a API REST do Stripe para criar pagamentos."],
+      ["", "Integrar con la API REST de Stripe para crear pagos."], ["", "Llamar a la API REST del banco para consultar el saldo de las cuentas."],
+      ["", "Book the courier through the partner API."], ["", "Send the order to the supplier's HTTP API."], ["", "Integrate the Google Maps JSON API."],
+      ["", "Use the Shopify API version 2024-04."], ["", "Show the problem details for each support ticket in the agent view."],
+      ["ui", "Settings page where users can change their notification preferences, email frequency and language."], ["ui", "Admin panel to manage coupons: list, create, disable, with search and filters."],
+      ["ui", "The cart page should show an empty state with a call to action when there are no items."], ["ui", "Form validation for the signup form: email format, password strength and inline errors."],
+      ["ui", "Translate the UI into Spanish and German and add a language picker to the header."],
+      ["ui", "Accessibility fixes: focus order in the checkout form, a visible focus indicator, screen reader announcements for errors."],
+      ["ui", "Management page for API keys: create, revoke and see the last-used date."], ["ui", "Página de configurações onde o utilizador altera o idioma e as notificações por email."],
+      ["ui", "Rever a acessibilidade do formulário de checkout: ordem de foco e leitor de ecrã."], ["ui", "Mostrar un estado vacío en la pantalla de pedidos."],
+      ["ui", "Improve the accessibility of the signup form."], ["ui", "Cancel subscription flow: a confirm dialog, a reason survey and a win-back offer screen."],
+      ["", "Build the data layer for the admin page (a SQL view and a repository method); the page itself is built by the frontend team."],
+      ["", "Add a PATCH /me/preferences handler that the settings page calls to save preferences; the UI already exists."],
+      ["", "The profile page backend should return the user's avatar URL and display name."], ["", "Endpoint interno para o painel de administração obter estatísticas; a interface já existe."],
+      ["", "Order state machine: an order moves from the empty state to draft to submitted; the empty state is created when a cart is opened."],
+      ["", "State machine for the vending machine: states empty, ready, dispensing; the empty state blocks sales."], ["", "Wheelchair accessibility information for each venue and its entrances."],
+      ["", "Accesibilidad de los edificios: rampas y ascensores en cada sede."], ["", "Backend only, no UI changes: move the invoice PDF generation to a background worker."],
+      ["", "Sin interfaz de usuario: solo un proceso nocturno que borra cuentas inactivas."], ["", "Apenas backend, sem interface do utilizador: nova tarefa que apaga contas inativas."],
+      ["obs", "Add latency metrics and request logs to the image resizing service."], ["obs", "Propagate the X-Request-ID header through all services and include it in every log line."],
+      ["obs", "Alert the team when the nightly backup job hasn't completed by 6 am."], ["obs", "Monitor the ERP sync job and send alerts to ops when it fails."],
+      ["obs", "Uptime monitoring for our public status page with alerts to Slack."], ["obs", "If the deploy fails its health checks, automatically roll back to the previous release."],
+      ["obs", "Implantação canário do novo motor de recomendações para 5% dos utilizadores."], ["obs", "Revertir el despliegue automáticamente si fallan las comprobaciones de salud."],
+      ["obs", "Monitorizar o serviço de pagamentos e alertar o plantão quando a taxa de erro subir."], ["obs", "Page the on-call engineer via PagerDuty when the checkout error rate exceeds 2% for 5 minutes."],
+      ["obs", "Monitoreo del servicio de búsqueda con alertas cuando la latencia supera 500 ms."], ["obs", "Rollout da nova versão da app para 10% dos utilizadores com monitorização da taxa de erro."],
+      ["", "Monitor stock levels and send alerts to the purchasing team when inventory is low."], ["", "Warehouse temperature monitoring: sensors report every minute and alerts go to the shift manager."],
+      ["", "Send price-drop alerts to shoppers and monitor competitor prices daily."], ["", "Monitorização dos níveis de stock e alertas ao responsável do armazém."],
+      ["", "Monitoramento da temperatura das câmaras frigoríficas com alertas por SMS."], ["", "Monitoreo del inventario y alertas al responsable del almacén."],
+      ["", "Monitorización de la temperatura de los camiones frigoríficos con alertas."], ["", "Support incident escalation: a ticket not answered within the SLA escalates to the team lead."],
+      ["", "O incidente de suporte deve ser atribuído a um agente em 2 horas, conforme o SLA de suporte."],
+      ["", "Patients fill a health check questionnaire before the visit; any adverse incident is reported to the doctor."], ["", "On-call schedule for the hospital's nurses with shift swaps."],
+      ["", "Game day ticketing: open the box office two hours before kickoff."], ["", "Postmortem report for the pathology lab."], ["", "Otel reservations for the sales team's offsite."],
+      ["", "Alertas de incidentes de seguridad física en la tienda para el gerente."], ["", "Customer service alerts: flag VIP tickets that wait more than an hour."],
+    ];
+    const hardStats = T19.map((X) => {
+      let tp = 0, fp = 0, pos = 0;
+      const wrong = [];
+      for (const [labels, t] of HARD) {
+        const want = labels.split(/[ ,]+/).includes(X.tr), on = onOf(t, X.tr);
+        if (want) pos++;
+        if (on && want) tp++; else if (on) { fp++; wrong.push("FP " + t); } else if (want) wrong.push("FN " + t);
+      }
+      return { tr: X.tr, precision: tp / (tp + fp || 1), recall: tp / (pos || 1), pos, wrong };
+    });
+    ok(HARD.length >= 60 && hardStats.every((x) => x.pos >= 10 && x.precision >= 0.9 && x.recall >= 0.85),
+      `1.19 T review: precision / recall on ${HARD.length} of the reviewer's hardest EN / PT / ES texts ≥ 90% / 85% per track — ` +
+      hardStats.map((x) => `+${x.tr} ${(x.precision * 100).toFixed(0)}% / ${(x.recall * 100).toFixed(0)}% (${x.pos} positives)`).join(", ") + " (got " + js(hardStats.flatMap((x) => x.wrong)) + ")");
   }
 
   // Release hygiene: the three version fields agree.
