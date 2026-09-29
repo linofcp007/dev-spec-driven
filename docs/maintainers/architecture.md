@@ -33,11 +33,13 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
                                roadmap writers, RE_AUTOGEN
   markdown.js                  comments (commentLines), fences (closesFence / fenceStep), headings, sections (extractSection),
                                AC / T-ID readers; the template corpus, the bracket scan, artifact / feature / chain placeholders
-  tracks.js                    the track registries (built-in + packs: allTracks, trackMarker…), parseTracks, detectTracks,
-                               TRACK_SECTIONS, the inactive-section readers; the Phase 0 classifier (SIGNALS, negation, the
-                               language guess); track packs (.specs/tracks/: load + validate, cached; render; spec_tracks) —
-                               the largest module (~2,700 lines since 1.19 — the three new tracks' signals and cues —,
-                               three concerns): a candidate for a later split into registries / classify / packs
+  tracks.js                    the track registries (built-in tables + the accessors that add packs: allTracks, trackMarker…),
+                               parseTracks, detectTracks, TRACK_SECTIONS, the inactive-section readers, and SIGNALS: one
+                               object per built-in track (tiers, concepts, hazards, cues) — the classifier's data (1.20)
+  classify.js                  the Phase 0 classifier (1.20): keyword machinery, negation, shadowing, CUE_KINDS (the generic
+                               cue mechanisms), guessLang; it derives SIGNAL_CONCEPTS / SIGNAL_HAZARDS / SIGNAL_CUES from SIGNALS
+  packs.js                     track packs (1.20): .specs/tracks/ load + validate (cached), ghost and legacy handling, render,
+                               spec_tracks
   templates.js                 project templates (.specs/templates/), their placeholder corpus, spec_templates
   scaffold.js                  spec_init, spec_create, the artifact skeletons, steering stubs, spec_add_track; scoped steering
                                (front matter, the brief's steering, custom names), steering amendments (1.16 Q1)
@@ -124,8 +126,8 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   `mcp/lib` source requires only Node core or a relative file. `__dirname` in a module is `mcp/lib/engine/` (the clone's
   root is three levels up: `approvalGuardDecision`'s cli path, `engineVersion`'s package.json).
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
-  costs ~0.65 ms before any compile (stat, realpath, open + read — the open is the expensive part) — the engine is 20
-  modules (+ 8 importers) of 400–2,700 lines (tracks.js the largest — the split candidate), not one per helper. Add to the module of the concept; a new file must earn
+  costs ~0.65 ms before any compile (stat, realpath, open + read — the open is the expensive part) — the engine is 22
+  modules (+ 8 importers) of 400–1,800 lines, not one per helper. Add to the module of the concept; a new file must earn
   its load cost. **The compile cache:** the facade (spec.js, first line) calls `module.enableCompileCache()` (Node ≥ 22.8;
   nothing on older ones): the compiled code of every module loaded after it is kept between processes in
   `NODE_COMPILE_CACHE` or `<os.tmpdir()>/node-compile-cache/<node version>/` (one file per module, ~1.4 MB for the engine;

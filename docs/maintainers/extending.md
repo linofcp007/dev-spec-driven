@@ -20,7 +20,7 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   prompt too (bump the exact command count in `mcp/test.js` and the README command lists). Never a Claude Code built-in
   name.
 - New track → a TEAM's track is a track pack (`.specs/tracks/<name>/`, no code — see Project-defined tracks); a BUILT-IN
-  one → The track model (registries and its classifier `SIGNALS`: `engine/tracks.js`; its builders in the
+  one → The track model (registries and its classifier `SIGNALS`: `engine/tracks.js`, the classifier code in `engine/classify.js`; its builders in the
   `i18n/<lang>.js` files). New artifact → the resource allowlist, the template allowlist
   (`TEMPLATE_ARTIFACTS`, `engine/templates.js`) and `templateCorpus()` (`engine/markdown.js`) if it has slots.
 - New import source → a parser module `engine/import/<tool>.js` (returns the import model — `newImportModel()`,

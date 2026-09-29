@@ -81,7 +81,7 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   docs; **generic**: api, endpoint, route, request (IRREGULAR_FORMS: the noun only, never "requested"), pagination.
   SIGNAL_CONCEPTS.api folds compatibility, ETag / If-Match, status codes, schemas, the client, the endpoint / route words;
   SIGNAL_HAZARDS.api: a breaking change is never negated ("without breaking changes"). **Ownership (1.19 T review —
-  `SIGNAL_CUES.api`, `apiCueTier`):** an API someone else owns is app-level for us — a hit after a third-party owner (`X's`
+  `SIGNALS.api.cues`, kind `ownership` — 1.20):** an API someone else owns is app-level for us — a hit after a third-party owner (`X's`
   with X Titlecase or a third-party noun: provider / supplier / partner / bank / carrier…, "their", PT / ES "do|da|de|del
   <Name|fornecedor|banco…>" after it) is GENERIC; so is one governed by a consumer verb (call, integrate with, sync, via,
   through, fetch, poll; integrar com, chamar, consultar; integrar con, llamar a, obtener — only link words, Titlecase names and
@@ -123,7 +123,7 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   `RTL` / `CLS` / `INP`, a loading / error state, form validation, inline errors; **generic**: screen, page, form
   (IRREGULAR_FORMS: the nouns only — "screening", "formed", "paged" are no signal), button, click, dialog, dashboard (ES
   tablero / cuadro de mando), menu, icon, widget, layout, theme. A dashboard is +ui's generic word only, never +obs's ("a
-  metrics dashboard for sales"). **Cues (1.19 T review — `SIGNAL_CUES.ui`, `uiCueTier`):** in a CLAUSE (`cueClause()`:
+  metrics dashboard for sales"). **Cues (1.19 T review — `SIGNALS.ui.cues`: kinds sentence, near, text, clause — 1.20):** in a CLAUSE (`cueClause()`:
   CUE_BOUNDARY . ! ? ; : or a line break — a colon after a short label, ≤ 4 words, joins the label to what it introduces:
   "Profile page: the GET /me handler…", "Sin backend: …") that says the work is backend-only (`RE_UI_BACKEND`: an HTTP method +
   path, a request / route handler, an endpoint, the backend, an API — never "API keys" / "chave de API" —, a data layer /
@@ -157,7 +157,7 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   Kubernetes / pod, a cron / batch / sync / import / backup job, a data / CI pipeline, an endpoint, the backend, the
   infrastructure, ops / DevOps / SRE, a status page, disk / CPU / memory usage, queue depth, consumer lag — never the bare
   business words: a sales pipeline, a production line, a job posting, a reefer container, a restaurant's server;
-  `SIGNAL_CUES.obs` drops "customer / room service", "service level"). SIGNAL_CONCEPTS.obs.**watch** = monitoring · monitor ·
+  `SIGNALS.obs.cues` (kind near) drops "customer / room service", "service level"). SIGNAL_CONCEPTS.obs.**watch** = monitoring · monitor ·
   alert(s) · alerting · incident · postmortem · SLA (+ PT / ES, and — 1.19 verify 3 — the verbs "alertar" / "avisar", weak; a
   health check endpoint is strong in PT / ES too: "endpoint de verificação de saúde", "endpoint de comprobación de salud"):
   business monitoring ("monitor stock levels and send alerts to
@@ -165,7 +165,10 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   a technical target is ("Monitor the ERP sync job and alert ops"). SIGNAL_HAZARDS.obs: downtime / an outage ("without
   downtime") is never negated. Shared: observability / SLO / SLA / uptime stay +saas signals (a phrase may serve two tracks),
   rollback +tdd weak. The tasks' telemetry task carries `_Emits metrics:_`. No logged 1.18 classify input turns +obs on.
-  **Cues** (`SIGNAL_CUES` — 1.19 T review): `SIGNAL_CUES[track](hit, text, cased)` → a new tier, "none" or null; built-in tracks
+  **Cues as data (1.20):** a built-in track's tiers, concepts, hazards and cues are its `SIGNALS` entry in `engine/tracks.js`;
+  tuning signals never edits `engine/classify.js`; a new cue MECHANISM is a `CUE_KINDS` entry there (rules: `{kind: near |
+  sentence | text | clause | ownership, on, ifTier?, then, …word lists / windows}`, regexes compiled on first use).
+  classify.js derives `SIGNAL_CUES[track](hit, text, cased)` → a new tier, "none" or null; built-in tracks
   only, applied after shadowing and before the context rule; each reads a bounded window (`CUE_SPAN` 200 characters of the
   hit's clause / sentence) with linear regexes.
   **The three tracks, measured (1.19 T):** a precision / recall corpus of 133 EN / PT / ES texts (positives and hard negatives —

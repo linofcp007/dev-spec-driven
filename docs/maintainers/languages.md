@@ -54,7 +54,7 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
 - **Adding a language:** a regional variant of an existing one derives from it, as pt-BR does from pt-PT (only the
   overrides). A new language adds a file `mcp/lib/i18n/<lang>.js` holding every table's block (`build`, `steering`,
   `evalsReadme`, `msg`, `quality`, `designWeigh`, `brief` — as `en.js` does), wires it into `i18n.js`'s `LOCALES`, adds it
-  to `LANGS` (`i18n/common.js`), extends the classifier `SIGNALS` (`engine/tracks.js`), `ROADMAP_I18N`
+  to `LANGS` (`i18n/common.js`), extends the classifier `SIGNALS` (`engine/tracks.js`; language guess in `engine/classify.js`), `ROADMAP_I18N`
   (`engine/roadmap-md.js`), the `TRACK_SECTIONS` synonyms (all four tables, `engine/tracks.js`), the stop gate's
   `stopGate.claims` / `negators` / `admissions`, the `RE_*` matchers and the `lang` enums of the MCP schemas, then adds
   a test asserting a localized scaffold round-trips.
