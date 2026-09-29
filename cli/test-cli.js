@@ -3423,7 +3423,7 @@ if (inSection("fftracks")) {
   const ck = r(["tracks", "check"]);
   let ckJ = {};
   try { ckJ = JSON.parse(r(["tracks", "check", "--json"]).out); } catch { /* stays {} */ }
-  ok(ls.code === 0 && /^Tracks — 9 built-in, 1 project pack\(s\) in \.specs\/tracks\/ \(1 valid\):/.test(ls.out) && /  ✎ a11y +\[A11Y\]  Accessibility — 2 section\(s\) · 3 signal\(s\) · steering\/a11y\.md/.test(ls.out) &&
+  ok(ls.code === 0 && /^Tracks — 10 built-in, 1 project pack\(s\) in \.specs\/tracks\/ \(1 valid\):/.test(ls.out) && /  ✎ a11y +\[A11Y\]  Accessibility — 2 section\(s\) · 3 signal\(s\) · steering\/a11y\.md/.test(ls.out) &&
     /  · sec +\[SEC\]  5 section\(s\)/.test(ls.out) && ck.code === 0 && /1 track pack\(s\) checked — 1 valid, 0 error\(s\), 0 warning\(s\)\./.test(ck.out) && ckJ.ok === true && ckJ.verdict === "pass",
     "feature F4: tracks (list) shows the built-in tracks and the pack; tracks check passes (exit 0; --json = spec_tracks' result) (got " + js(ls.out.slice(0, 400)) + ")");
   // classify / create / status / doctor with the pack.
@@ -4001,7 +4001,7 @@ if (inSection("p17d")) { // 1.17 package D (CLI tests) — the +dist track (dist
   const pk = run(["tracks", "init", "dist", "--project", pd]);
   const help = run(["help"]).out;
   const usage = run(["add-track", "--project", pd]).out;
-  ok(trk.code === 0 && /^Tracks — 9 incluídos/.test(trk.out) && /  · dist +\[DIST\]  5 secção/.test(trk.out) && pk.code === 1 && /reservado/.test(pk.out) && // the project speaks PT (init --lang pt)
+  ok(trk.code === 0 && /^Tracks — 10 incluídos/.test(trk.out) && /  · dist +\[DIST\]  5 secção/.test(trk.out) && pk.code === 1 && /reservado/.test(pk.out) && // the project speaks PT (init --lang pt)
     /core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy\/\+dist/.test(help) && /<tdd\|saas\|ai\|sec\|privacy\|dist[|>]/.test(usage),
     "1.17 D5 (CLI): tracks lists dist [DIST] (5 sections) among the built-in tracks; tracks init dist is refused (reserved); help and the add-track usage name +dist (got " + js([trk.out.split("\n").slice(0, 9), pk.out]) + ")");
   const kiro = path.join(pd, ".kiro", "specs", "signup");
@@ -4207,6 +4207,9 @@ if (inSection("p19t")) { // 1.19 package T (CLI tests) — the +api, +ui and +ob
     { tr: "ui", marker: "[UI]", classify: ["Build the settings page with the design system and WCAG 2.2 AA", "Criar a página de definições com o sistema de design e acessibilidade"],
       steering: "ui.md", steeringEs: /^# Estándares de Interfaz/, statusPt: /Secções da interface: ◐ Uso do Design System \(por preencher\)[^\n]*◐ Orçamento de Desempenho da Interface \(por preencher\)/,
       docEs: /✗ ui-sections — Uso del Design System:sin rellenar/, filledEs: /✓ ui-sections — las 5 rellenadas/, typo: "uii", statusKey: "uiSections" },
+    { tr: "obs", marker: "[OBS]", classify: ["Define an SLO for the checkout and page the on-call engineer with a runbook", "Definir um SLO e alertas de observabilidade para o serviço de faturação"],
+      steering: "observability.md", steeringEs: /^# Estándares de Observabilidad[\s\S]*## SLOs y Presupuestos de Error/, statusPt: /Secções de operabilidade: ◐ SLIs e SLOs \(por preencher\)[^\n]*◐ Saúde e Capacidade \(por preencher\)/,
+      docEs: /✗ obs-sections — SLIs y SLOs:sin rellenar/, filledEs: /✓ obs-sections — las 5 rellenadas/, typo: "obss", statusKey: "obsSections" },
   ];
   for (const X of C19) {
     const n0 = X.tr;

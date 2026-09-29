@@ -26,6 +26,8 @@ Review against the full chain, gating checks by the feature's active tracks:
   a version (the diff against the published contract is clean); errors are problem+json; creates honour Idempotency-Key.
 - **+ui** — built from design-system components and tokens (no one-off styles); every state of the design's state matrix
   handled; keyboard operable, labelled, sufficient contrast (the automated accessibility check clean); strings in the catalogue.
+- **+obs** — the metrics / logs / traces the design names are emitted (correlation ID, no personal data); each alert has a
+  runbook; the flag, the rollout steps and the rollback criteria as the design says; liveness never checks a dependency.
 - **Security** — injection, authz, data exposure — always.
 
 Run `trace_check` to confirm coverage. Report findings grouped by severity.

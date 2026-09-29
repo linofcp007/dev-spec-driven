@@ -19,7 +19,7 @@ steering files.
 | `structure.md` | `core` | ✅ always |
 | `testing-standards.md` | `+tdd` | when any feature uses the TDD track |
 | `scale.md` | `+saas` | when any feature uses the SaaS track |
-| `observability.md` | `+saas` (also useful for `+ai`) | when SaaS or AI track is used |
+| `observability.md` | `+saas`, `+obs` (also useful for `+ai`) | when the SaaS, operability or AI track is used |
 | `cost.md` | `+saas` | when the SaaS track is used |
 | `ai-strategy.md` | `+ai` | when the AI track is used |
 | `security.md` | `+sec` | when the security track is used |
@@ -295,7 +295,7 @@ Journeys where a regression is visible to users and threatens business outcomes:
 
 ---
 
-## `observability.md` (+saas, also useful for +ai)
+## `observability.md` (+saas, +obs, also useful for +ai)
 
 ```markdown
 # Observability Standards
@@ -324,7 +324,20 @@ for business sections > 50ms. Sampling 10% in prod; always sample errors.
 
 ## Dashboards
 Every feature: request rate, error rate, P50/P95/P99 latency, saturation of its main resource.
+
+## SLOs & Error Budgets
+- Per critical journey: the SLI, the SLO target and window: [checkout: 99.5% of valid requests < 800 ms, 28 days] · the error-budget policy (what stops when it is spent): [feature launches pause]
+- Burn-rate alerts: the fast one (e.g. 14.4× over 1 h) pages, the slow one (e.g. 6× over 6 h) opens a ticket.
+
+## Rollout & Rollback
+- Feature flags: an owner and a removal date each · canary / progressive steps and the metrics that gate them: [1% → 10% → 50% → 100%, gated on the SLO] · rollback criteria and target time: [error rate > baseline + 1 pt → roll back in < 5 min]
+
+## Health & Capacity
+- Liveness checks the process only, readiness its dependencies · capacity signals (saturation, queue depth, pool usage) with thresholds: [pool usage > 80% for 10 min]
 ```
+
+The per-feature SLOs, alerts, flags and rollout steps belong in the feature's `[OBS]` design sections; the reasoning (SLIs, burn
+rates, RED / USE, structured logs, tracing, runbooks, progressive delivery, operability tests): `references/observability-patterns.md`.
 
 ---
 
@@ -657,7 +670,7 @@ override when present — create-only, never over an existing file.
    a template full of placeholders is a liability.
 2. **First time a track activates:** add its steering file (e.g., first SaaS feature → `scale.md`,
    `observability.md`, `cost.md`; first AI feature → `ai-strategy.md`; first TDD feature →
-   `testing-standards.md`; first +sec feature → `security.md`; first +privacy feature → `privacy.md`; first +dist feature → `distributed.md`; first +api feature → `api.md`; first +ui feature → `ui.md`).
+   `testing-standards.md`; first +sec feature → `security.md`; first +privacy feature → `privacy.md`; first +dist feature → `distributed.md`; first +api feature → `api.md`; first +ui feature → `ui.md`; first +obs feature → `observability.md`).
 3. **At feature spec time:** the design phase reads the active-track files. If a design conflicts
    with a steering file (exceeds budget, breaks an SLA), raise it in review — never silently exceed.
    Area-specific rules go in a scoped file (`inclusion: fileMatch`) rather than bloating `tech.md`.

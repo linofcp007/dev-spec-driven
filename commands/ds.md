@@ -8,5 +8,5 @@ Use the **dev-spec-driven** skill. This is the short alias for `/spec`.
 Feature / request: $ARGUMENTS
 
 Begin at Phase 0 (Classification) — pick the mode (Vibe / Bounded / Spec; a defect → `/spec-bugfix`, a question → `/spec-spike`) and the composable track set
-(core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui) via `spec_classify`, then run the phased pipeline. If a `.specs/<feature>/`
+(core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs) via `spec_classify`, then run the phased pipeline. If a `.specs/<feature>/`
 already exists, run `spec_next_action` and resume from the step it names. Respond in the user's language (EN/PT/ES).

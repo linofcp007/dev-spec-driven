@@ -158,7 +158,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   languages it speaks. pt-BR is derived from pt on its first use (`defineDerivedLocale`), as before.
 
 ## The track model
-`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17), `+api` / `+ui` (1.19) are independent and
+`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17), `+api` / `+ui` / `+obs` (1.19) are independent and
 composable, chosen in Phase 0 by `spec_classify` (keyword heuristic with negation + confidence) and confirmed by the
 human. The track set drives which artifacts/sections/loops apply. See `references/classification-matrix.md`
 (GDPR / RGPD / LGPD / CCPA / HIPAA are +privacy signals, not +saas).
@@ -253,6 +253,26 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   `RTL` / `CLS` / `INP`, a loading / error state, form validation; **generic**: screen, page, form (IRREGULAR_FORMS: the nouns
   only — "screening", "formed", "paged" are no signal), button, click, dialog, dashboard, menu, icon, widget, layout, theme.
   A dashboard is +ui's generic word only, never +obs's ("a metrics dashboard for sales").
+- **+obs (1.19 T)** — the tenth built-in marker track `[OBS]` (observability & operability): TRACK_MARKER, `OBS_SECTIONS` (SLIs &
+  SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health & Capacity — no section is named "Observability", +saas's;
+  ordinary names `loose`), TRACK_STEERING **`observability.md`** — the +saas stub, extended with SLOs & error budgets, rollout &
+  rollback, health & capacity (no new steering file) —, US-1.AC-28..31, TRACK_ALIASES observability / o11y / monitoring / sre /
+  telemetry / opentelemetry. SIGNALS.obs — strong: SLO / SLI, error budget, burn rate, observability, OpenTelemetry, distributed
+  tracing, runbook, on-call, the tools (PagerDuty, Prometheus, Grafana, Datadog, Sentry…), structured logging, a correlation /
+  trace ID, incident response, feature flag / kill switch, a canary release / deployment (a bare "canary" is weak — "Canary
+  Islands"), blue-green / progressive / staged rollout, a rollback plan, liveness / readiness probes, fault injection, zero
+  downtime, a monitoring / Grafana dashboard (listed before "grafana": the longer phrase wins its place and shadows +ui's
+  "dashboard"); weak: monitoring, alerts, a health check, uptime, SLA, incident, outage, downtime, rollback, rollout, telemetry,
+  tracing, `APM`, error rate, 5xx, on call; **generic**: metrics, logs / logging, latency, p99 / p95 / p50, monitor, deploy —
+  never a bare "log" ("log in") or "trace". SIGNAL_HAZARDS.obs: downtime / an outage ("without downtime") is never negated.
+  Shared: observability / SLO / SLA / uptime stay +saas signals (a phrase may serve two tracks), rollback +tdd weak. The tasks'
+  telemetry task carries `_Emits metrics:_`. No logged 1.18 classify input turns +obs on.
+  **The three tracks, measured (1.19 T):** a precision / recall corpus of 133 EN / PT / ES texts (positives and hard negatives —
+  mcp/test.js 1.19 T8) — 100% / 100% for each track; the 1,783 classify inputs both suites log gave the same 1.18 track
+  decisions (only +api / +ui switched on beside them). The placeholder corpus (`templateCorpus()`, ≤ 2 optional tracks + all:
+  47 track sets now) renders 1,165 texts (1.18: 628); `templateSets()` builds in ~95 ms (1.18: ~70 ms) — T10 bounds it
+  relatively. Test helpers: `T19` in the 1.19 T block runs the same eight checks for each new track — a new built-in track adds
+  one entry there.
 - **Readers go through the accessors (1.15), never the constants.** The constants above are the BUILT-IN tables;
   `allTracks()` (VALID_TRACKS + the project's valid packs, in name order after the built-in ones), `optionalTracks()`,
   `markerTracks()`, `trackMarker(tr)`, `trackSectionTable(tr)`, `trackSteeringFiles(tr)`, `trackSignalTable(tr)` add the

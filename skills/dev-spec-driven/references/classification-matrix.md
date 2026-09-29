@@ -22,6 +22,7 @@ set determines which artifacts, design sections, and execution loop the feature 
 | **+dist** | 5 mandatory `[DIST]` sections (consistency model, cross-system writes, delivery & idempotency, concurrency, failure modes), 4 criteria, failure-injection tests, `distributed.md` | one write reaches more than one system, or delivery, idempotency, concurrency or partial failure matter |
 | **+api** | 5 mandatory `[API]` sections (API contract, versioning & compatibility, error model, pagination / idempotency / concurrency, rate limits & quotas), 4 criteria, contract tests + a breaking-change diff, `api.md` | other code depends on the API's contract — public, partner or internal: a versioned API, OpenAPI / GraphQL / gRPC, SDKs |
 | **+ui** | 5 mandatory `[UI]` sections (design-system usage, UI states, accessibility, responsiveness & i18n, UI performance budget), 4 criteria, accessibility + visual-regression tests, `ui.md` | a user-facing screen, component or flow: a design system, accessibility (WCAG), responsive layout, dark mode, a settings / admin page |
+| **+obs** | 5 mandatory `[OBS]` sections (SLIs & SLOs, telemetry, alerting & runbooks, rollout & rollback, health & capacity), 4 criteria, operability tests (an alert in a staged failure, a rollback drill, fault injection), `observability.md` | a service people depend on: SLOs, error budgets, alerting, on-call, runbooks, tracing, feature flags, a canary / progressive rollout |
 
 `core` is always on. The others are added independently based on the signals below.
 
@@ -41,7 +42,7 @@ is a draft for the human, who confirms Phase 0.
   model" is no +ai hint, `security` in "row-level security" no +sec one. A phrase may count for two tracks when it names
   both concerns: "message queue" is strong for +dist and weak for +saas (a queue is a +saas scaling hint too).
 - **Generic** signals (app-level words — +dist: queue, retry, consumer / producer, subscriber, publish … event, worker;
-  +api: api, endpoint, route, request, pagination; +ui: screen, page, form, button, dialog, dashboard, menu, icon) add to the score but never turn the track on alone: at least one strong
+  +api: api, endpoint, route, request, pagination; +ui: screen, page, form, button, dialog, dashboard, menu, icon; +obs: metrics, logs, latency, p99, monitor, deploy) add to the score but never turn the track on alone: at least one strong
   or weak signal of that track must be there. "Print queue: … retry failed prints" stays *possible* (a note names the app-level words). Words of **one
   concept** count once: retry · backoff · jitter, consumer · producer · subscriber, dedupe · deduplicate.
 - Auth words (`authentication`, `authorization`, `RBAC`, `MFA`) are **strong for +tdd and weak for +sec**: "login with a
@@ -54,7 +55,8 @@ is a draft for the human, who confirms Phase 0.
   keyword on a track that is ON anyway ("the system shall not hallucinate") comes back as a conflict note to review.
   A +dist **hazard** (lost update, oversell, race condition, duplicate delivery, write skew, split brain) is written
   negated by nature — "concurrent updates never oversell" — so its negation is the requirement: it counts. So is a +api
-  breaking change ("without breaking changes", "sem alterações incompatíveis", "sin cambios incompatibles").
+  breaking change ("without breaking changes", "sem alterações incompatíveis", "sin cambios incompatibles") and a +obs outage
+  ("without downtime", "sem indisponibilidade").
 
 ---
 
@@ -343,6 +345,47 @@ Worked examples (what `spec_classify` answers):
 | Log in form | `core`, *possible +ui* | form (generic only — "log" is no +obs word) |
 | Metrics dashboard for sales | `core`, *possible +ui* | dashboard (generic only) |
 
+## +obs signals (turn on the observability & operability track)
+
+Turn on `+obs` if **any** are true (see `observability-patterns.md`):
+
+| Signal | Example |
+|---|---|
+| Someone depends on it being up | An SLO, an error budget, a critical journey, an on-call rotation |
+| It must be watchable | Metrics, structured logs with a correlation ID, distributed tracing (OpenTelemetry) — named as the work |
+| It must be safe to ship and undo | Feature flags, a canary / progressive rollout, a rollback plan, zero-downtime deploys |
+| It must say when it is broken | Alerts with runbooks, PagerDuty / Opsgenie, health / readiness checks, incident response |
+
+Classifier signals — **strong:** observability, SLO / SLI, error budget, burn rate, OpenTelemetry / OTel, distributed
+tracing, runbook, on-call, PagerDuty, Opsgenie, Alertmanager, an alerting / alert rule, Prometheus, Grafana, Datadog, New
+Relic, Jaeger, Zipkin, Sentry, structured logging / logs, correlation / trace ID, context propagation, golden signals, MTTR,
+incident response, postmortem, feature flag / toggle, kill switch, a canary release / deployment / rollout, blue-green,
+progressive / gradual / staged / phased rollout, dark launch, a rollback plan, automatic rollback, liveness / readiness
+probe, synthetic / real user monitoring, chaos engineering, fault injection, game day, zero(-)downtime, a monitoring /
+Grafana / Datadog / operational dashboard, log aggregation, error tracking (*observabilidade, orçamento de erro, rastreio
+distribuído, logs estruturados, lançamento canário, plano de rollback · observabilidad, presupuesto de error, trazas
+distribuidas, despliegue canario, plan de reversión*). **Weak:** monitoring, alerts / alerting, health check, liveness,
+readiness, uptime, SLA, incident, outage, downtime, rollback, rollout, a bare canary, telemetry, instrumentation, tracing,
+`APM`, error rate, 5xx, on call (*monitorização, alertas, incidente, indisponibilidade, reversão, telemetria · monitoreo,
+reversión, trazas, tasa de error, guardia*). **Generic:** metrics, logs / logging, latency, p99 / p95 / p50, monitor, deploy
+(*métricas, latência, implantação · latencia, despliegue*). Never a bare "log" ("log in"), "trace" or "dashboard" — a sales
+dashboard is a product screen (+ui's word). `observability` / `SLO` / `SLA` / `uptime` stay +saas signals too (a
+phrase may serve two tracks); the `observability.md` steering file serves both.
+
+Worked examples (what `spec_classify` answers):
+
+| Description | Result | Signals |
+|---|---|---|
+| Define an SLO for checkout availability and alert on the error budget burn rate | `core +tdd +saas +obs` | slo, error budget, burn rate (checkout → +tdd, slo → +saas) |
+| Instrument the payments service with OpenTelemetry distributed tracing | `core +tdd +obs` | opentelemetry, distributed tracing |
+| Roll out the new pricing engine behind a feature flag with a canary release and automatic rollback | `core +tdd +obs` | feature flag, canary release, automatic rollback |
+| Add monitoring and alerts for the nightly import job | `core +obs` (weak-only) | monitoring, alerts |
+| Deploy the billing service without downtime and roll back on errors | `core +tdd +obs` (weak-only) | downtime (a hazard — not negated), roll back |
+| *Despliegue canario del nuevo motor de precios con plan de reversión* | `core +obs` | despliegue canario, plan de reversión |
+| Metrics dashboard for sales | `core`, *possible +ui / +obs* | dashboard, metrics (generic only) |
+| Send price alerts to users when a product gets cheaper | `core`, *possible +obs* | alerts |
+| Canary Islands shipping rates | `core`, *possible +obs* | canary (weak — never a release alone) |
+
 ---
 
 ## How tracks combine — what each artifact set looks like
@@ -364,10 +407,11 @@ Worked examples (what `spec_classify` answers):
 | `core +tdd +saas +dist` | a checkout across services: saga, outbox, idempotent consumers, failure-injection and property tests, load test |
 | `core +api` | design gains 5 `[API]` sections; `[API]` criteria US-1.AC-20..23; contract-first, error-model, idempotency / concurrency, compatibility-gate and contract-test tasks; `steering/api.md` |
 | `core +ui` | design gains 5 `[UI]` sections; `[UI]` criteria US-1.AC-24..27; design-system, UI-states, forms-and-keyboard, accessibility-check and responsiveness / performance tasks; `steering/ui.md` |
+| `core +obs` | design gains 5 `[OBS]` sections; `[OBS]` criteria US-1.AC-28..31; SLO / alert, telemetry (`_Emits metrics:_`), rollout, health-check and operability-test tasks; `steering/observability.md` |
 
 **Design sections are additive:** `+saas` adds its 5 mandatory sections, `+ai` its 10, `+sec` its 5, `+privacy`
-its 6, `+dist` its 5, `+api` its 5 and `+ui` its 5, on top of the base design. A blank mandatory section is never acceptable — an honest "not needed because X" is.
-The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`, `[UI]`) are English in every language and case-sensitive.
+its 6, `+dist` its 5, `+api` its 5, `+ui` its 5 and `+obs` its 5, on top of the base design. A blank mandatory section is never acceptable — an honest "not needed because X" is.
+The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`, `[UI]`, `[OBS]`) are English in every language and case-sensitive.
 
 **Execution loop is chosen per task by track:**
 - Deterministic task on `+tdd` → red → green → refactor → `spec_complete_task {evidence}`.
@@ -378,7 +422,8 @@ The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`, 
   rights verified end to end before "done"; `+dist` → the failure-injection tests (crash between commit and publish,
   duplicate delivery, concurrent updates, a dependency down) green before "done"; `+api` → the contract tests and the
   breaking-change diff against the published contract green before "done"; `+ui` → the automated accessibility check, the
-  manual keyboard / screen-reader pass and the performance budget before "done".
+  manual keyboard / screen-reader pass and the performance budget before "done"; `+obs` → an alert fired in a staged
+  failure, a rollback drill and the health checks with a dependency down before "done".
 
 ---
 
@@ -391,7 +436,7 @@ The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`, 
 Spec | Vibe
 
 ## Active Tracks
-core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api] [+ui]
+core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api] [+ui] [+obs]
 
 ## Signals
 - **+tdd:** [signal from table] — [why it applies] (omit section if track off)
@@ -402,6 +447,7 @@ core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api] [+ui]
 - **+dist:** [signal] — [why]
 - **+api:** [signal] — [why]
 - **+ui:** [signal] — [why]
+- **+obs:** [signal] — [why]
 
 ## Blast Radius
 [What breaks if this is wrong? Who is affected? Is it recoverable? How fast?]

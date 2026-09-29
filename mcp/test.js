@@ -6942,7 +6942,7 @@ function endRun() {
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
 
     // --- the track list itself
-    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy,dist,api,ui" && // 1.17 D: + dist; 1.19 T: + api, ui
+    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy,dist,api,ui,obs" && // 1.17 D: + dist; 1.19 T: + api, ui, obs
       S.TRACK_MARKER.sec === "[SEC]" && S.TRACK_MARKER.privacy === "[PRIVACY]" && S.trackLabel(S.normalizeTracks("privacy sec saas")) === "core +saas +sec +privacy",
       "A2: sec and privacy are valid, composable tracks with English-stable markers, labelled in track order");
     const typo = S.createFeature(a2("typo"), "Typo", "privcy");
@@ -12085,7 +12085,7 @@ function endRun() {
     const lst = payload(await call("spec_tracks", { projectDir: tp }));
     const chk = payload(await call("spec_tracks", { action: "check", projectDir: tp }));
     const a11yRow = (lst.packs || []).find((p) => p.name === "a11y");
-    ok(lst.ok && lst.builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui" && a11yRow && a11yRow.valid && a11yRow.marker === "[A11Y]" &&
+    ok(lst.ok && lst.builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs" && a11yRow && a11yRow.valid && a11yRow.marker === "[A11Y]" &&
       a11yRow.title === "Accessibility" && a11yRow.sections.length === 3 && a11yRow.steering === "accessibility.md" && chk.ok && chk.verdict === "pass" && chk.errors === 0,
       "feature F4: spec_tracks list shows the built-in tracks and the valid +a11y pack ([A11Y], 3 sections, steering); check passes (got " + js(a11yRow) + " / " + js(chk.problems) + ")");
 
@@ -14614,7 +14614,7 @@ function endRun() {
     const pChk = S.trackPacks(tp, "check");
     const probs = JSON.stringify(pChk);
     ok(!pDist.ok && /reserved/.test(pDist.error) && !pKafka.ok && /reserved/.test(pKafka.error) && /marker-reserved/.test(probs) &&
-      !S.parseTracks("events").tracks.includes("events") && S.trackPacks(tp, "list").builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui",
+      !S.parseTracks("events").tracks.includes("events") && S.trackPacks(tp, "list").builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs",
       "1.17 D12: a track pack named dist (or kafka) is refused, one with the marker DIST is invalid (marker-reserved); spec_tracks list names the built-in tracks (got " + js([pDist.error, pKafka.error, probs.slice(0, 300)]) + ")");
 
     // --- D13: project templates — the copied built-ins check clean; a design template with some [DIST] headings needs them all
@@ -15857,6 +15857,16 @@ function endRun() {
           /\| T-\d+ \| component \| property \| a form with invalid fields: every value kept, each error named in text, focus on the summary \| US-1\.AC-25 \|/],
         importAc: "WHEN the user opens the settings page THEN the system SHALL show it with the design system components and meet WCAG 2.2 AA",
         steeringHead: { en: /^# UI Standards/, pt: /^# Padrões de Interface/, es: /^# Estándares de Interfaz/, "pt-BR": /^# Padrões de Interface/ } },
+      { tr: "obs", marker: "[OBS]", token: "OBS", ids: ["28", "29", "30", "31"], steering: "observability.md", typo: "obss", alias: "monitoring", legacy: "sre",
+        sections: ["SLIs & SLOs", "Telemetry", "Alerting & Runbooks", "Rollout & Rollback", "Health & Capacity"],
+        title: { en: "Alerting & Runbooks", pt: "Alertas e Runbooks", es: "Alertas y Runbooks", "pt-BR": "Alertas e Runbooks" }, taskHead: "Story US-1 — Operability",
+        loose: ["## [OBS] Rollout & Rollback", "## Rollback", "Rollout & Rollback:missing"], prose: "### Retries [obs]\n- the delay, in [obs] units\n", infer: "## [OBS] Telemetry\n- metrics\n",
+        briefTask: /^\[US1\] Telemetry/, briefSection: "[OBS] SLIs & SLOs", matrixAc: "US-1.AC-30", matrixSection: "[OBS] Rollout & Rollback",
+        finish: /^\+obs: an alert fired/, statusKey: "obsSections",
+        plan: [/\| T-\d+ \| integration \| property \| every request emits the metric, a structured log line and a trace with one correlation ID; no personal data in the log \| US-1\.AC-28 \|/,
+          /\| T-\d+ \| integration \| example \| rollback drill: a canary whose error rate crosses the threshold stops the rollout and rolls back \| US-1\.AC-30 \|/],
+        importAc: "WHEN the checkout SLO burns its error budget THEN the system SHALL page the on-call engineer with a link to the runbook",
+        steeringHead: { en: /## SLOs & Error Budgets/, pt: /## SLOs e Orçamentos de Erro/, es: /## SLOs y Presupuestos de Error/, "pt-BR": /## SLOs e Orçamentos de Erro/ } },
     ];
     const SLOT = /\[(?!shared\]|US\d+\]|[ xX]\]|P\]|DIST\]|API\]|UI\]|OBS\]|NEEDS)[^\]\n]*\]/g;
 
@@ -16075,6 +16085,28 @@ function endRun() {
       ["", "Add a React Native push notification handler"], ["", "Update the page count in the PDF export"], ["", "Generate the monthly PDF report for the accountants"],
       ["", "Adicionar um botão para exportar as encomendas em CSV"], ["", "Formulário de login"], ["", "Gerar o relatório mensal em PDF"],
       ["", "Añadir un botón para exportar los pedidos a CSV"], ["", "Formulario de inicio de sesión"], ["", "Generar el informe mensual en PDF"],
+      // +obs — positives
+      ["obs", "Define an SLO for checkout availability and alert on the error budget burn rate"], ["obs", "Instrument the payments service with OpenTelemetry distributed tracing"],
+      ["obs", "Add structured logging with a correlation ID to the order service"], ["obs", "Roll out the new pricing engine behind a feature flag with a canary release and automatic rollback"],
+      ["obs", "Write runbooks for the on-call rotation and wire the alerts to PagerDuty"], ["obs", "Add liveness and readiness probes to the worker deployment"],
+      ["obs", "Grafana dashboard and Prometheus alerts for the queue depth"], ["obs", "Zero-downtime deployment of the billing service with a rollback plan"],
+      ["obs", "Page the on-call engineer when the queue backs up"], ["obs", "Add monitoring and alerts for the nightly import job"],
+      ["obs", "Progressive rollout of the new search, gated on the error rate"], ["obs", "Incident response: a postmortem template and severity levels"],
+      ["obs", "Capture front-end errors in Sentry with the release version"], ["obs", "Chaos engineering game day: kill a cache node and verify the fallback"],
+      ["obs", "Alert the on-call when the 5xx error rate exceeds 1%"], ["obs", "Roll it out as a canary and roll back when the error rate rises"],
+      ["obs", "Definir um SLO para a disponibilidade do checkout e alertas sobre o orçamento de erro"], ["obs", "Instrumentar o serviço de pagamentos com OpenTelemetry e rastreio distribuído"],
+      ["obs", "Logs estruturados com ID de correlação no serviço de encomendas"], ["obs", "Lançamento canário do novo motor de preços com plano de rollback"],
+      ["obs", "Adicionar monitorização e alertas ao processo de importação noturno"], ["obs", "Observabilidade do serviço de faturação: métricas, logs e traces"],
+      ["obs", "Definir un SLO para la disponibilidad del checkout y alertas sobre el presupuesto de errores"], ["obs", "Instrumentar el servicio de pagos con OpenTelemetry y trazas distribuidas"],
+      ["obs", "Logs estructurados con ID de correlación en el servicio de pedidos"], ["obs", "Despliegue canario del nuevo motor de precios con plan de reversión"],
+      ["obs", "Añadir monitorización y alertas al proceso de importación nocturno"],
+      // +obs — hard negatives
+      ["ui", "Show the user's activity logs in the account page"], ["", "Send price alerts to users when a product gets cheaper"],
+      ["", "Roll back the database transaction when the payment fails"], ["", "Incident report form for the hospital staff"], ["", "A heart rate monitor screen for the fitness app"],
+      ["", "Log the user's search terms for product analytics"], ["", "Canary Islands shipping rates"], ["", "Upgrade the logging library to the latest version"],
+      ["", "The latency of the search results is too high"], ["", "The doctor on call receives the patient's lab results"],
+      ["", "Enviar alertas de preço aos clientes quando um produto fica mais barato"], ["", "Reverter a transação quando o pagamento falha"],
+      ["", "Enviar alertas de precio a los clientes cuando un producto baja"], ["", "Formulario de incidencias para el personal del hospital"],
     ];
     for (const X of T19) {
       let tp = 0, fp = 0, fn = 0, pos = 0;
@@ -16104,6 +16136,55 @@ function endRun() {
       cls("A modal with a dropdown").notes.some((n) => /on from weak signals only/i.test(n)) && btn.notes.some((n) => /none names a UI concern of its own/.test(n) || /weak signal 'button'|app-level words \('button'\)/.test(n)),
       "1.19 T8: +ui — an API key management page is UI (not API); a button, the log in form (no +obs from 'log') and a sales dashboard are 'possible' at most; 'screening' / 'formed' are no screen / form; 'UI' (capitals) is an anchor — 'translate the UI' alone stays possible, UI + React turns it on, 'no UI' keeps it off (got " +
       js([keyPage.signals, btn.possible, login.signals.ui, sales.possible]) + ")");
+    const grafana = cls("A Grafana dashboard for the checkout"), obsSaas = cls("Add observability to the billing service"), noDown = cls("Deploy the billing service without downtime and roll back on errors");
+    ok(!sales.tracks.includes("obs") && sales.possible.some((p) => p.track === "obs") && grafana.tracks.includes("obs") && !(grafana.signals.ui || []).includes("dashboard") &&
+      obsSaas.tracks.includes("obs") && obsSaas.tracks.includes("saas") && noDown.tracks.includes("obs") && !noDown.negated.obs.length &&
+      !cls("Canary Islands shipping rates").tracks.includes("obs") && !cls("Send price alerts to users").tracks.includes("obs") && !cls("Log in form").signals.obs.length &&
+      cls("Roll it out as a canary and roll back when the error rate rises").tracks.includes("obs") && S.signalConcept("obs", "p99") === "latency",
+      "1.19 T8: +obs — a sales metrics dashboard is 'possible' at most (never +obs), a Grafana dashboard is +obs and no +ui dashboard; 'observability' serves +saas and +obs; 'without downtime' states the concern (a hazard); Canary Islands, price alerts and the log in form are no operability (got " +
+      js([sales.possible, grafana.signals, obsSaas.label, noDown.signals.obs, noDown.negated.obs]) + ")");
+
+    // --- 1.19 T9: every built-in track together — criteria in track order with unique IDs (US-1.AC-1..31), one T-ID per template AC,
+    // every template AC planned and tasked, one <track>-sections check per marker track
+    const all = d("all-tracks");
+    const every = S.createFeature(all, "Everything", S.OPTIONAL_TRACKS.slice(), "", undefined, "en");
+    const aReq = rd(every.dir, "requirements.md"), aPlan = rd(every.dir, "test-plan.md"), aTasks = S.parseTasks(rd(every.dir, "tasks.md"));
+    const acIds = [...aReq.matchAll(/\*\*(US-\d+\.AC-\d+)\*\*/g)].map((m) => m[1]);
+    const tIds = [...aPlan.matchAll(/^\| (T-\d+) \|/gm)].map((m) => m[1]);
+    const aTr = S.traceCheck(all, every.slug), aDoc = S.specDoctor(all, every.slug);
+    const order = ["[SaaS]", "[AI]", "[SEC]", "[PRIVACY]", "[DIST]", "[API]", "[UI]", "[OBS]"].map((m) => aReq.indexOf("#### " + m));
+    ok(every.ok && every.label === "core +tdd +saas +ai +sec +privacy +dist +api +ui +obs" && acIds.length === 32 && new Set(acIds).size === 32 && acIds.includes("US-1.AC-31") &&
+      tIds.length === 32 && new Set(tIds).size === 32 && new Set(aTasks.map((t) => t.number)).size === aTasks.length && order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])) &&
+      !aTr.uncoveredByTasks.length && !aTr.uncoveredByTests.length && !aTr.phantomAcsInTasks.length && !aTr.phantomTestsInTasks.length && !(aTr.testsNotMappedToTasks || []).length &&
+      ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs"].every((t) => chk(aDoc, t + "-sections").status === "fail"),
+      "1.19 T9: all ten tracks — 32 unique criteria (the [API] / [UI] / [OBS] blocks after [DIST], US-1.AC-20..31), 32 unique T-IDs, unique task numbers, every template AC planned and tasked, eight <track>-sections checks (got " +
+      js([every.label, acIds.length, tIds.length, order, aTr.uncoveredByTasks, aTr.uncoveredByTests]) + ")");
+
+    // --- 1.19 T10: the placeholder corpus stays bounded as tracks are added (every set of at most two optional tracks + all of them):
+    // its texts are counted and its render time is compared with one all-tracks scaffold (relative — no absolute milliseconds)
+    const EI = require("./lib/engine/index.js");
+    const renderAll = () => { for (const l of ["en", "pt", "es"]) { const a = { name: "x", tracks: S.VALID_TRACKS.slice(), label: "core", slug: "x", summary: "" };
+      I.classification(a, l); I.requirements(a, l); I.design(a, l); I.tasks(a, l); I.testPlan("x", l, a.tracks); I.checklist(a, l); } };
+    renderAll();
+    const ratios = [];
+    let texts = 0;
+    for (let k = 0; k < 3; k++) {
+      let t0 = process.hrtime.bigint(); for (let i = 0; i < 10; i++) renderAll(); const unit = Number(process.hrtime.bigint() - t0) / 10;
+      t0 = process.hrtime.bigint(); texts = EI.templateCorpus().length; ratios.push(Number(process.hrtime.bigint() - t0) / unit);
+    }
+    ratios.sort((a, b) => a - b);
+    ok(texts > 900 && texts <= 1400 && ratios[1] <= 60,
+      `1.19 T10: the template corpus renders ${texts} texts (≤ 1400) in ~${ratios[1].toFixed(0)}× one all-tracks scaffold (≤ 60×; 1.18: 628 texts, ~19×)`);
+
+    // --- 1.19 T11: the pt-BR twins of the new PT strings hold no European-only word, are idempotent and keep the markers / IDs
+    const aBr = { name: "ARGN", tracks: ["core", "tdd", "api", "ui", "obs"], label: "core +tdd +api +ui +obs", slug: "argn", summary: "" };
+    const brTexts = [...["requirements", "design", "tasks", "checklist"].map((b) => I[b](aBr, "pt-BR")), I.testPlan("ARGN", "pt-BR", aBr.tracks),
+      ...["api.md", "ui.md", "observability.md"].map((f) => I.steeringStub(f, "pt-BR")), ...["api", "ui", "obs"].flatMap((t) => S.msg("pt-BR").secPrivacy.finishChecks[t])].join("\n");
+    const EU = /(?<![\p{L}])(?:utilizador(?:es)?|registos?|partilhad[oa]s?|atómic[oa]s?|secç(?:ão|ões)|ficheiros?|ecrã|controlo)(?![\p{L}])|por omissão|em baixo/iu;
+    ok(!EU.test(brTexts) && I.toPtBr(brTexts) === brTexts && (brTexts.match(/US-1\.AC-(?:2\d|3[01])/g) || []).length >= 36 && /## \[API\] Contrato da API/.test(brTexts) &&
+      /## \[UI\] Estados da Interface/.test(brTexts) && /## \[OBS\] SLIs e SLOs/.test(brTexts) && /leitor de tela/.test(brTexts) && /Interface do Usuário/.test(brTexts),
+      "1.19 T11: the pt-BR twins of the +api / +ui / +obs strings hold no European-only word (arquivo, tela, usuário, controle…), are idempotent and keep the markers and AC IDs (got " +
+      js([(brTexts.match(EU) || [])[0]]) + ")");
   }
 
   // Release hygiene: the three version fields agree.

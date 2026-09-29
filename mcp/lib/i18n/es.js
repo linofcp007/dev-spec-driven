@@ -68,6 +68,9 @@ ${a.summary ? "## Resumen\n" + a.summary + "\n" : ""}`
       const uiAc = a.tracks.includes("ui")
         ? "\n\n#### [UI] Criterios de Aceptación (EARS)\n24. **US-1.AC-24** — CUANDO un usuario maneja [la vista] solo con el teclado, EL SISTEMA DEBE hacer cada acción alcanzable y operable en un orden de foco lógico, con un indicador de foco visible.\n25. **US-1.AC-25** — SI un formulario enviado tiene campos no válidos, ENTONCES EL SISTEMA DEBE conservar todos los valores introducidos, identificar cada error en texto junto a su campo y mover el foco a un resumen de errores.\n26. **US-1.AC-26** — MIENTRAS [la lista] no tenga elementos, EL SISTEMA DEBE mostrar un estado vacío que explica por qué y ofrece la siguiente acción.\n27. **US-1.AC-27** — SI la carga [de los datos] falla, ENTONCES EL SISTEMA DEBE mostrar un mensaje de error con una acción Reintentar y conservar el contenido ya mostrado."
         : "";
+      const obsAc = a.tracks.includes("obs")
+        ? "\n\n#### [OBS] Criterios de Aceptación (EARS)\n28. **US-1.AC-28** — EL SISTEMA DEBE emitir [la métrica de la petición] con la latencia, el resultado y un ID de correlación para cada [petición], y registrar cada error con ese ID de correlación y sin datos personales.\n29. **US-1.AC-29** — CUANDO la tasa de consumo del presupuesto de errores [del SLO] supere [14,4]× durante [una hora], EL SISTEMA DEBE avisar a la persona de guardia (on-call) con un enlace al runbook.\n30. **US-1.AC-30** — SI la tasa de error del canario supera [la referencia] en [N] puntos porcentuales, ENTONCES EL SISTEMA DEBE detener el despliegue y revertir automáticamente a la versión anterior.\n31. **US-1.AC-31** — MIENTRAS [una dependencia] no esté disponible, EL SISTEMA DEBE indicar que no está listo (comprobación de disponibilidad) sin dejar de estar vivo, y recuperarse sin reinicio cuando vuelva."
+        : "";
       return (
 `# Función: ${a.name}
 
@@ -88,7 +91,7 @@ Cada historia debe entregar valor autónomo si se lanza sola.
 1. **US-1.AC-1** — CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
 2. **US-1.AC-2** — MIENTRAS [estado], CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
 3. **US-1.AC-3** — SI [condición de error] ENTONCES EL SISTEMA DEBE [recuperación]
-4. **US-1.AC-4** — [ubicuo] EL SISTEMA DEBE [propiedad siempre verdadera]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}
+4. **US-1.AC-4** — [ubicuo] EL SISTEMA DEBE [propiedad siempre verdadera]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}
 
 ### US-2 (P2): [Título de la Historia]
 **Como** [rol], **quiero** [capacidad], **para que** [beneficio].
@@ -314,6 +317,29 @@ Tipos de entrada · límites de tamaño/cantidad · conteo de tokens por tipo ·
 ## [UI] Presupuesto de Rendimiento de la Interfaz
 > **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
 - Core Web Vitals en el percentil 75: LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 · el presupuesto de JS / imágenes de esta vista · cómo se mide (laboratorio + usuarios reales).
+`;
+      }
+      if (track === "obs") {
+        return `
+## [OBS] SLIs y SLOs
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Los recorridos de usuario que importan → sus SLIs (disponibilidad, latencia, corrección) · el SLO de cada uno en una ventana (p. ej., 99,5 % de las peticiones válidas por debajo de 800 ms, 28 días) · el presupuesto de errores y qué pasa cuando se agota · alertas por tasa de consumo (rápida y lenta).
+
+## [OBS] Telemetría
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Métricas (RED por endpoint / USE por recurso, un contador de negocio; cardinalidad de labels acotada) · logs estructurados con un ID de correlación / traza — sin datos personales · trazas con el contexto propagado entre llamadas y colas (OpenTelemetry) · las métricas que emite cada tarea.
+
+## [OBS] Alertas y Runbooks
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Cada alerta: el síntoma (un consumo del SLO, no una causa), el umbral, la severidad y a quién se avisa · cada aviso enlaza un runbook (triaje, mitigación, verificación) · qué es un ticket y no un aviso · dashboards por recorrido.
+
+## [OBS] Despliegue y Reversión
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Feature flags (quién es dueño de cada una, cuándo se retira) · los pasos del canario / despliegue progresivo y las métricas que deciden cada paso · criterios de reversión (p. ej., tasa de error por encima de la referencia) y cuánto tarda una reversión · migraciones reversibles (expand / contract).
+
+## [OBS] Salud y Capacidad
+> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
+- Comprobaciones de vida frente a disponibilidad (qué verifica cada una — nunca una dependencia en la de vida) · las señales de capacidad (saturación, profundidad de colas, uso de pools) y sus umbrales · la carga esperada y dónde está el primer cuello de botella.
 `;
       }
       return "";
@@ -544,6 +570,22 @@ ${phases}`
   - _Requirements: US-1.AC-24, US-1.AC-26, US-1.AC-27_
 `;
       }
+      if (a.track === "obs") {
+        return `
+## Historia US-1 — Operabilidad
+- [ ] ${id()}. [US1] SLIs, SLOs y alertas por tasa de consumo — definidos en código / configuración junto al servicio, cada alerta enlazada a su runbook
+  - _Requirements: US-1.AC-29_${greenLine(a.green, "US-1.AC-29")}
+- [ ] ${id()}. [US1] Telemetría — las métricas, los logs estructurados con el ID de correlación (sin datos personales) y los spans de traza que indica el diseño
+  - _Requirements: US-1.AC-28_${greenLine(a.green, "US-1.AC-28")}
+  - _Emits metrics: requests_total, request_duration_seconds, errors_total_
+- [ ] ${id()}. [US1] Despliegue — una feature flag y un canario / despliegue progresivo decidido por las métricas del SLO; reversión automática según los criterios de design.md
+  - _Requirements: US-1.AC-30_${greenLine(a.green, "US-1.AC-30")}
+- [ ] ${id()}. [US1] Comprobaciones de salud — endpoints de vida y de disponibilidad (una dependencia caída → no listo, sigue vivo); señales de capacidad con umbrales
+  - _Requirements: US-1.AC-31_${greenLine(a.green, "US-1.AC-31")}
+- [ ] ${id()}. [US1] Pruebas de operabilidad — inyección de fallos (una dependencia caída, una dependencia lenta), una alerta que salta en un fallo escenificado, un simulacro de reversión — ejecutables en local o en staging
+  - _Requirements: US-1.AC-28, US-1.AC-29, US-1.AC-30, US-1.AC-31_
+`;
+      }
       return "";
     },
 
@@ -656,7 +698,8 @@ ${a.summary || "[una línea: el bug a corregir]"}
           outboxCrash: "caída entre el commit en la BD y la publicación: el evento se entrega igualmente", duplicateDelivery: "el mismo mensaje entregado dos (o N) veces tiene exactamente un efecto",
           lostUpdate: "actualizaciones concurrentes del mismo registro: ninguna se pierde en silencio", dependencyDown: "una dependencia caída: degradar / reintentar con retroceso, la ruta crítica no se bloquea",
           contract: "contrato", problemJson: "prueba de contrato: una petición sin un campo obligatorio recibe 400 problem+json que lo nombra", idempotencyReplay: "una creación repetida con la misma Idempotency-Key tiene un solo efecto y devuelve la primera respuesta", staleEtag: "una actualización con un If-Match obsoleto recibe 412 y no cambia nada", breakingDiff: "comparación de cambios incompatibles: el contrato frente a la versión publicada no informa de ninguno",
-          component: "componente", visual: "visual", keyboardA11y: "recorrido solo con teclado + una comprobación automática de accesibilidad (axe): cada acción alcanzable, foco visible, ninguna violación", formErrors: "formulario con campos no válidos: los valores conservados, cada error nombrado en texto, el foco en el resumen", emptyState: "regresión visual de los estados de la vista: el estado vacío explica por qué y ofrece la siguiente acción", loadError: "carga fallida: un error con Reintentar, el contenido ya mostrado conservado" }, acs);
+          component: "componente", visual: "visual", keyboardA11y: "recorrido solo con teclado + una comprobación automática de accesibilidad (axe): cada acción alcanzable, foco visible, ninguna violación", formErrors: "formulario con campos no válidos: los valores conservados, cada error nombrado en texto, el foco en el resumen", emptyState: "regresión visual de los estados de la vista: el estado vacío explica por qué y ofrece la siguiente acción", loadError: "carga fallida: un error con Reintentar, el contenido ya mostrado conservado",
+          telemetry: "cada petición emite la métrica, una línea de log estructurada y una traza con un único ID de correlación; ningún dato personal en el log", burnAlert: "fallo escenificado que consume el presupuesto de errores: la alerta por tasa de consumo salta y avisa con el enlace al runbook", rollbackDrill: "simulacro de reversión: un canario con la tasa de error por encima del umbral detiene el despliegue y revierte", readiness: "inyección de fallos: una dependencia caída → la disponibilidad falla, la vida pasa, recuperación sin reinicio" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -782,6 +825,7 @@ funciona de extremo a extremo. Mantenlo concreto; cualquiera debería poder segu
       if (a.tracks.includes("dist")) items.push("DIST: 5 secciones obligatorias de diseño rellenadas (sin TODO) — cada escritura entre sistemas tiene su mitigación (outbox / inbox / saga) o un riesgo aceptado.", "DIST: consumidores idempotentes (inbox o una clave única en la transacción del efecto); reintentos con retroceso + jitter y una DLQ; nada no idempotente reintentado a ciegas.", "DIST: pruebas de inyección de fallos (caída entre el commit y la publicación, entrega duplicada, actualizaciones concurrentes, dependencia caída) en verde en una ejecución local.");
       if (a.tracks.includes("api")) items.push("API: 5 secciones obligatorias de diseño rellenadas (sin TODO) — el fichero del contrato (OpenAPI / .proto / esquema GraphQL) está en el repositorio y lo indica el marcador Implements de una tarea.", "API: errores en problem+json con códigos estables; las creaciones aceptan una Idempotency-Key; las actualizaciones respetan If-Match; los endpoints de listado paginan con un cursor estable.", "API: pruebas de contrato y la comparación de cambios incompatibles con la versión publicada en verde en una ejecución local; lo que se elimine queda obsoleto con una fecha de Sunset.");
       if (a.tracks.includes("ui")) items.push("UI: 5 secciones obligatorias de diseño rellenadas (sin TODO) — cada estado de la matriz de estados diseñado; los componentes nuevos entran por el design system.", "UI: WCAG 2.2 AA — la comprobación automática de accesibilidad limpia en una ejecución local, más una pasada manual con teclado y lector de pantalla con los hallazgos corregidos.", "UI: adaptable en cada breakpoint, cadenas en el catálogo (expansión del texto, RTL comprobados); LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 medidos.");
+      if (a.tracks.includes("obs")) items.push("OBS: 5 secciones obligatorias de diseño rellenadas (sin TODO) — cada SLO tiene un presupuesto de errores, cada alerta un runbook, los criterios de reversión son números.", "OBS: las métricas, los logs estructurados (ID de correlación, sin datos personales) y las trazas que indica el diseño se emiten — vistos, no supuestos.", "OBS: una alerta saltó en un fallo escenificado, un simulacro de reversión hecho y las comprobaciones de salud verificadas con una dependencia caída.");
       items.push("Doctor: `doctor` reporta readyToAdvance antes de cada gate.", "Todos los gates de fase aprobados (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Marca antes de dar la función por terminada.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -833,7 +877,7 @@ const steering = {
     "scale.md":
       "# Objetivos de Escala\n\n## Objetivos de Carga\n| Horizonte | Concurrentes | DAU | MAU | Pico RPS | Datos |\n|---|---|---|---|---|---|\n| Lanzamiento | | | | | |\n| 6 meses | | | | | |\n| 2 años | | | | | |\n\n## Objetivos de SLA\n| Clase de endpoint | P95 | P99 | Disponibilidad |\n|---|---|---|---|\n| Recorrido crítico | | | |\n\n## Recorridos Críticos de Usuario\n1. []\n\n## Umbrales de Escalado\n- []\n",
     "observability.md":
-      "# Estándares de Observabilidad\n\n## Logging\nJSON estructurado. Campos obligatorios: ts, level, service, trace_id, span_id, tenant_id?, user_id?, msg, event. Sin secrets/PII.\n\n## Métricas\nEstilo Prometheus snake_case + sufijo de unidad. Por función: conteo de solicitudes, histograma de duración, conteo de errores, un contador de negocio. Cuidado con la cardinalidad de labels.\n\n## Traces\nOpenTelemetry, contexto W3C. Muestrea 10% en prod, muestrea siempre los errores.\n\n## Alertas (cada una liga a un runbook)\n- P0 alerta inmediata (page) / P1 ≤15min / P2 slack / P3 digest.\n",
+      "# Estándares de Observabilidad\n\n## Logging\nJSON estructurado. Campos obligatorios: ts, level, service, trace_id, span_id, tenant_id?, user_id?, msg, event. Sin secrets/PII.\n\n## Métricas\nEstilo Prometheus snake_case + sufijo de unidad. Por función: conteo de solicitudes, histograma de duración, conteo de errores, un contador de negocio. Cuidado con la cardinalidad de labels.\n\n## Traces\nOpenTelemetry, contexto W3C. Muestrea 10% en prod, muestrea siempre los errores.\n\n## Alertas (cada una liga a un runbook)\n- P0 alerta inmediata (page) / P1 ≤15min / P2 slack / P3 digest.\n\n## SLOs y Presupuestos de Error\n- Por recorrido crítico: el SLI, el objetivo del SLO y su ventana · la política del presupuesto de errores (qué se detiene cuando se agota).\n- Alertas por tasa de consumo: la rápida (p. ej., 14,4× en 1 h) avisa, la lenta (p. ej., 6× en 6 h) abre un ticket.\n\n## Despliegue y Reversión\n- Feature flags: un dueño y una fecha de retirada cada una · pasos del canario / despliegue progresivo y las métricas que los deciden · criterios y un tiempo objetivo de reversión.\n\n## Salud y Capacidad\n- La comprobación de vida solo verifica el proceso, la de disponibilidad las dependencias · señales de capacidad (saturación, profundidad de colas, uso de pools) con umbrales.\n",
     "cost.md":
       "# Presupuesto de Coste\n\n## Presupuesto de Infraestructura\nObjetivo: < $XX/mes en el año 1.\n\n## Objetivo de Coste Por Usuario\nObjetivo: < $0,50 por MAU. Si se excede, para y optimiza.\n\n## Alertas de Coste\n- Diario > $100 slack / > $200 alerta inmediata (page).\n\n## Revisión de Coste Por Función\nCada Presupuesto de Coste en el design.md estima $/1000 usuarios/mes y señala rutas críticas de coste.\n",
     "ai-strategy.md":
@@ -935,7 +979,7 @@ const msg = {
       sameSlug: "El nombre nuevo da el mismo slug.",
       alreadyExists: (slug) => `'${slug}' ya existe.`,
       badAction: "la acción debe ser: remove | archive | rename | restore | flow",
-      badTrack: "el track debe ser: tdd | saas | ai | sec | privacy | dist | api | ui",
+      badTrack: "el track debe ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs",
       cycle: (chain) => `Dependencia circular: ${chain}`,
       nameRequired: "el nombre es obligatorio",
       noSpecs: (root) => `No hay .specs/ en ${root}`,
@@ -1863,9 +1907,10 @@ const msg = {
         "Concurrency": "Concurrencia", "Failure Modes": "Modos de Fallo",
         "API Contract": "Contrato de la API", "Versioning & Compatibility": "Versionado y Compatibilidad", "Error Model": "Modelo de Errores", "Pagination, Idempotency & Concurrency": "Paginación, Idempotencia y Concurrencia", "Rate Limits & Quotas": "Límites de Tasa y Cuotas",
         "Design System Usage": "Uso del Design System", "UI States": "Estados de la Interfaz", "Accessibility": "Accesibilidad", "Responsiveness & i18n": "Diseño Adaptable e i18n", "UI Performance Budget": "Presupuesto de Rendimiento de la Interfaz",
+        "SLIs & SLOs": "SLIs y SLOs", "Telemetry": "Telemetría", "Alerting & Runbooks": "Alertas y Runbooks", "Rollout & Rollback": "Despliegue y Reversión", "Health & Capacity": "Salud y Capacidad",
       },
-      allFilled: { sec: "las 5 rellenadas", privacy: "las 6 rellenadas", dist: "las 5 rellenadas", api: "las 5 rellenadas", ui: "las 5 rellenadas" },
-      statusSections: { sec: (list) => `Secciones de seguridad: ${list}`, privacy: (list) => `Secciones de privacidad: ${list}`, dist: (list) => `Secciones de consistencia de datos: ${list}`, api: (list) => `Secciones del contrato de la API: ${list}`, ui: (list) => `Secciones de la interfaz: ${list}` },
+      allFilled: { sec: "las 5 rellenadas", privacy: "las 6 rellenadas", dist: "las 5 rellenadas", api: "las 5 rellenadas", ui: "las 5 rellenadas", obs: "las 5 rellenadas" },
+      statusSections: { sec: (list) => `Secciones de seguridad: ${list}`, privacy: (list) => `Secciones de privacidad: ${list}`, dist: (list) => `Secciones de consistencia de datos: ${list}`, api: (list) => `Secciones del contrato de la API: ${list}`, ui: (list) => `Secciones de la interfaz: ${list}`, obs: (list) => `Secciones de operabilidad: ${list}` },
       finishChecks: {
         sec: ["+sec: SAST, auditoría de dependencias y análisis de secretos limpios en una ejecución local nueva; todas las pruebas de casos de abuso en verde.",
           "+sec: modelo de amenazas revisado contra el código final — ningún punto de entrada ni frontera de confianza nuevo sin mitigar."],
@@ -1877,6 +1922,8 @@ const msg = {
           "+api: el fichero del contrato coincide con el comportamiento entregado — cada código de estado, código de error y cabecera documentados es lo que devuelven los handlers; lo eliminado está obsoleto con su fecha de Sunset."],
         ui: ["+ui: la comprobación automática de accesibilidad limpia y la pasada con teclado / lector de pantalla hecha en la versión final; cada estado de la matriz de estados alcanzable y mostrado.",
           "+ui: el presupuesto de rendimiento medido en la versión final (LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1) y la regresión visual de los estados revisada."],
+        obs: ["+obs: una alerta saltó en un fallo escenificado y el simulacro de reversión se hizo en la versión final; los dashboards y runbooks que enlazan las alertas existen.",
+          "+obs: las métricas, los logs y las trazas que indica el diseño vistos emitiéndose desde la versión final — ningún dato personal en logs ni trazas."],
       },
       clarify: {
         secAccess: "Especifica qué recibe quien llama sin autenticación o sin autorización (SI … ENTONCES EL SISTEMA DEBE denegar …) y el nivel ASVS al que apunta la función.",
@@ -1982,7 +2029,7 @@ const msg = {
       initJson: (a) => `// Track pack +${a.name} — un track definido por el proyecto (dev-spec 1.15). Solo datos: nada de esta carpeta se ejecuta.
 // Guía: references/project-tracks.md · valídalo: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = el nombre de esta carpeta: ^[a-z][a-z0-9]{1,19}$, nunca un track de serie (core tdd saas ai sec privacy dist api ui).
+  // = el nombre de esta carpeta: ^[a-z][a-z0-9]{1,19}$, nunca un track de serie (core tdd saas ai sec privacy dist api ui obs).
   "name": "${a.name}",
   // El marcador estable (distingue mayúsculas) de sus secciones de diseño, criterios y bloque de tareas: [${a.token}].
   "marker": "${a.token}",

@@ -146,7 +146,7 @@ function xacNumbers(low, base) {
 // nums: [numbers in document order], numKey: "n unit|…" (sorted), neg: the response's polarity }.
 function acShape(text, lang) {
   const base = i18n.baseLang(normalizeLang(lang));
-  const low = stripSupersedes(String(text || "")).replace(RE_XAC_IDS, " ").replace(/\[(?:SaaS|AI|SEC|PRIVACY|DIST|API|UI)\]/g, " ")
+  const low = stripSupersedes(String(text || "")).replace(RE_XAC_IDS, " ").replace(/\[(?:SaaS|AI|SEC|PRIVACY|DIST|API|UI|OBS)\]/g, " ")
     .normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
   const sys = low.match(RE_XAC_SYS_MODAL);
   const m = sys ? null : low.match(RE_XAC_MODAL);

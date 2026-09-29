@@ -1,6 +1,6 @@
 # Project-defined tracks (track packs)
 
-Read on demand from `SKILL.md`. The built-in tracks are core, +tdd, +saas, +ai, +sec, +privacy, +dist, +api and +ui. A team that needs
+Read on demand from `SKILL.md`. The built-in tracks are core, +tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui and +obs. A team that needs
 its own domain rigor (+a11y, +mobile, +dbmigration, +compliance…) defines it as a **track pack**: a folder in
 `.specs/tracks/<name>/`. A valid pack behaves like a built-in *marker* track (+sec, +privacy) everywhere — it is
 classified, scaffolded, gated, traced, briefed, exported and removed the same way. Manage packs with `/spec-tracks`
@@ -27,8 +27,8 @@ by `check` and ignored. `dev-spec tracks init a11y` scaffolds all of it, comment
 
 | Key | Rule |
 |---|---|
-| `name` | The folder name: `^[a-z][a-z0-9]{1,19}$`. Never a built-in track (core tdd saas ai sec privacy dist api ui), a word people type for one (`security`, `gdpr`, `test`…), one of `none all any track tracks pack packs list init check`, a Windows device name or an `Object.prototype` key. |
-| `marker` | `^[A-Z][A-Z0-9]{1,11}$` (`"A11Y"` or `"[A11Y]"`). The stable, **case-sensitive** token of the pack's headings — `[A11Y]`. Never a built-in marker (SaaS / AI / SEC / PRIVACY / DIST / API / UI), a story / parallel tag (`US1`, `P1`, `SHARED`), a generic slot (`TODO`, `TBD`, `FIXME`…) or an ID prefix (`AC1`, `T2`…); unique across packs — two packs with one marker: the first by name keeps it, the other is refused. |
+| `name` | The folder name: `^[a-z][a-z0-9]{1,19}$`. Never a built-in track (core tdd saas ai sec privacy dist api ui obs), a word people type for one (`security`, `gdpr`, `test`…), one of `none all any track tracks pack packs list init check`, a Windows device name or an `Object.prototype` key. |
+| `marker` | `^[A-Z][A-Z0-9]{1,11}$` (`"A11Y"` or `"[A11Y]"`). The stable, **case-sensitive** token of the pack's headings — `[A11Y]`. Never a built-in marker (SaaS / AI / SEC / PRIVACY / DIST / API / UI / OBS), a story / parallel tag (`US1`, `P1`, `SHARED`), a generic slot (`TODO`, `TBD`, `FIXME`…) or an ID prefix (`AC1`, `T2`…); unique across packs — two packs with one marker: the first by name keeps it, the other is refused. |
 | `title` | `{ "en": "…", "pt"?: "…", "es"?: "…", "pt-BR"?: "…" }` (a plain string = its English). 2–80 characters, one line, no `[ ] < >` or backtick. Shown in the headings. |
 | `description` | Optional, one line, ≤ 300 characters (listed by `list`). |
 | `signals` | Optional `{ "strong"?: [...], "weak"?: [...], "context"?: [...] }` — classifier keywords, ≤ 50 per tier, 2–60 characters of letters / digits with inner spaces, `-`, `'`, `.`. |
@@ -161,11 +161,12 @@ template's T-01…T-05, `- [ ] A11Y: axe-core …` in checklist.md, and `.specs/
   reserved too, and the headings that carry it), `dev-spec add-track <feature> <new-name>`, then
   `dev-spec add-track <feature> <old-name> --remove`; or, for `dist`, adopt the built-in track instead:
   `dev-spec add-track <feature> dist` (the old record goes, the built-in sections are added).
-- **Names reserved since 1.19.** 1.19 adds the built-in `+api` and `+ui` tracks and reserves `api` / `ui` and their words
-  (`apis`, `rest`, `restful`, `openapi`, `swagger`, `graphql`, `grpc` · `frontend`, `ux`, `gui`, `wcag`) and the markers `API` / `UI`
+- **Names reserved since 1.19.** 1.19 adds the built-in `+api`, `+ui` and `+obs` tracks and reserves `api` / `ui` / `obs` and their
+  words (`apis`, `rest`, `restful`, `openapi`, `swagger`, `graphql`, `grpc` · `frontend`, `ux`, `gui`, `wcag` · `observability`, `o11y`,
+  `monitoring`, `sre`, `telemetry`, `opentelemetry`) and the markers `API` / `UI` / `OBS`
   — never `a11y` or `accessibility`: a team's accessibility pack (the example above) keeps its name. The same rule: such a pack from an earlier
   version is that feature's missing pack (doctor and `spec_upgrade` say "from before 1.19"), never the built-in track; rename
-  it, or adopt the built-in one with `dev-spec add-track <feature> api` (or `ui`).
+  it, or adopt the built-in one with `dev-spec add-track <feature> api` (or `ui`, `obs`).
 
 ## check — stable codes
 

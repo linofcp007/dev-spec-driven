@@ -69,6 +69,9 @@ ${a.summary ? "## Summary\n" + a.summary + "\n" : ""}`
       const uiAc = a.tracks.includes("ui")
         ? "\n\n#### [UI] Acceptance Criteria (EARS)\n24. **US-1.AC-24** — WHEN a user operates [the view] with the keyboard alone, THE SYSTEM SHALL make every action reachable and operable in a logical focus order, with a visible focus indicator.\n25. **US-1.AC-25** — IF a submitted form has invalid fields, THEN THE SYSTEM SHALL keep every value the user entered, identify each error in text next to its field and move focus to an error summary.\n26. **US-1.AC-26** — WHILE [the list] has no items, THE SYSTEM SHALL show an empty state that explains why and offers the next action.\n27. **US-1.AC-27** — IF loading [the data] fails, THEN THE SYSTEM SHALL show an error message with a Retry action and keep the content already shown."
         : "";
+      const obsAc = a.tracks.includes("obs")
+        ? "\n\n#### [OBS] Acceptance Criteria (EARS)\n28. **US-1.AC-28** — THE SYSTEM SHALL emit [the request metric] with its latency, outcome and a correlation ID for every [request], and log each error with that correlation ID and no personal data.\n29. **US-1.AC-29** — WHEN the error-budget burn rate of [the SLO] exceeds [14.4]× over [one hour], THE SYSTEM SHALL page the on-call engineer with a link to the runbook.\n30. **US-1.AC-30** — IF the canary's error rate exceeds [the baseline] by [N] percentage points, THEN THE SYSTEM SHALL stop the rollout and roll back to the previous version automatically.\n31. **US-1.AC-31** — WHILE [a dependency] is unavailable, THE SYSTEM SHALL report itself not ready (readiness check) while staying live, and recover without a restart once it is back."
+        : "";
       return (
 `# Feature: ${a.name}
 
@@ -89,7 +92,7 @@ Each story must deliver standalone value if shipped alone.
 1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
 2. **US-1.AC-2** — WHILE [state], WHEN [trigger] THE SYSTEM SHALL [behavior]
 3. **US-1.AC-3** — IF [error condition] THEN THE SYSTEM SHALL [recovery]
-4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}
+4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}
 
 ### US-2 (P2): [Story Title]
 **As a** [role], **I want** [capability], **so that** [benefit].
@@ -315,6 +318,29 @@ Input types · size/count limits · token counting per type · validation pipeli
 ## [UI] UI Performance Budget
 > **TODO** — replace with real values (remove this line when done).
 - Core Web Vitals at the 75th percentile: LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 · the JS / image weight budget of this view · how it is measured (lab + real users).
+`;
+      }
+      if (track === "obs") {
+        return `
+## [OBS] SLIs & SLOs
+> **TODO** — replace with real values (remove this line when done).
+- The user journeys that matter → their SLIs (availability, latency, correctness) · the SLO of each over a window (e.g. 99.5 % of valid requests under 800 ms, 28 days) · the error budget and what happens when it is spent · burn-rate alerts (fast and slow).
+
+## [OBS] Telemetry
+> **TODO** — replace with real values (remove this line when done).
+- Metrics (RED per endpoint / USE per resource, one business counter; bounded label cardinality) · structured logs with a correlation / trace ID — no personal data · traces with the context propagated across calls and queues (OpenTelemetry) · the metrics each task emits.
+
+## [OBS] Alerting & Runbooks
+> **TODO** — replace with real values (remove this line when done).
+- Each alert: the symptom (an SLO burn, not a cause), threshold, severity and who is paged · every page links a runbook (triage, mitigate, verify) · what is a ticket, not a page · dashboards per journey.
+
+## [OBS] Rollout & Rollback
+> **TODO** — replace with real values (remove this line when done).
+- Feature flags (who owns each, when it is removed) · the canary / progressive rollout steps and the metrics that gate each step · rollback criteria (e.g. an error rate above the baseline) and how long a rollback takes · migrations that can be rolled back (expand / contract).
+
+## [OBS] Health & Capacity
+> **TODO** — replace with real values (remove this line when done).
+- Liveness vs readiness checks (what each verifies — never a dependency in liveness) · the capacity signals (saturation, queue depth, pool usage) and their thresholds · the expected load and where the first bottleneck is.
 `;
       }
       return "";
@@ -548,6 +574,22 @@ ${phases}`
   - _Requirements: US-1.AC-24, US-1.AC-26, US-1.AC-27_
 `;
       }
+      if (a.track === "obs") {
+        return `
+## Story US-1 — Operability
+- [ ] ${id()}. [US1] SLIs, SLOs and burn-rate alerts — defined in code / config next to the service, each alert linked to its runbook
+  - _Requirements: US-1.AC-29_${greenLine(a.green, "US-1.AC-29")}
+- [ ] ${id()}. [US1] Telemetry — the metrics, structured logs with the correlation ID (no personal data) and trace spans the design names
+  - _Requirements: US-1.AC-28_${greenLine(a.green, "US-1.AC-28")}
+  - _Emits metrics: requests_total, request_duration_seconds, errors_total_
+- [ ] ${id()}. [US1] Rollout — a feature flag and a canary / progressive rollout gated on the SLO metrics; automatic rollback on the criteria in design.md
+  - _Requirements: US-1.AC-30_${greenLine(a.green, "US-1.AC-30")}
+- [ ] ${id()}. [US1] Health checks — liveness and readiness endpoints (a dependency down → not ready, still live); capacity signals with thresholds
+  - _Requirements: US-1.AC-31_${greenLine(a.green, "US-1.AC-31")}
+- [ ] ${id()}. [US1] Operability tests — fault injection (a dependency down, a slow dependency), an alert firing in a staged failure, a rollback drill — runnable locally or in staging
+  - _Requirements: US-1.AC-28, US-1.AC-29, US-1.AC-30, US-1.AC-31_
+`;
+      }
       return "";
     },
 
@@ -662,7 +704,10 @@ ${a.summary || "[one line: the bug being fixed]"}
           staleEtag: "an update with a stale If-Match gets 412 and changes nothing", breakingDiff: "breaking-change diff: the contract against the published version reports no breaking change",
           component: "component", visual: "visual", keyboardA11y: "keyboard-only walk-through + an automated accessibility check (axe): every action reachable, focus visible, no violation",
           formErrors: "a form with invalid fields: every value kept, each error named in text, focus on the summary", emptyState: "visual regression of the view's states: the empty state explains why and offers the next action",
-          loadError: "a failed load: an error with Retry, the content already shown kept" }, acs);
+          loadError: "a failed load: an error with Retry, the content already shown kept",
+          telemetry: "every request emits the metric, a structured log line and a trace with one correlation ID; no personal data in the log",
+          burnAlert: "a staged failure burns the error budget: the burn-rate alert fires and pages with the runbook link", rollbackDrill: "rollback drill: a canary whose error rate crosses the threshold stops the rollout and rolls back",
+          readiness: "fault injection: a dependency down → readiness fails, liveness passes, recovery without a restart" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -788,6 +833,7 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
       if (a.tracks.includes("dist")) items.push("DIST: 5 mandatory design sections filled (no TODO) — every cross-system write has its mitigation (outbox / inbox / saga) or an accepted risk.", "DIST: consumers idempotent (inbox or a unique key in the effect's transaction); retries with backoff + jitter and a DLQ; nothing non-idempotent retried blindly.", "DIST: failure-injection tests (crash between commit and publish, duplicate delivery, concurrent updates, dependency down) green on a local run.");
       if (a.tracks.includes("api")) items.push("API: 5 mandatory design sections filled (no TODO) — the contract file (OpenAPI / .proto / GraphQL schema) is in the repo and named by a task's Implements marker.", "API: errors are problem+json with stable codes; creates take an Idempotency-Key; updates honour If-Match; list endpoints page with a stable cursor.", "API: contract tests and the breaking-change diff against the published version green on a local run; anything removed is deprecated with a Sunset date.");
       if (a.tracks.includes("ui")) items.push("UI: 5 mandatory design sections filled (no TODO) — every state of the state matrix designed; new components entered through the design system.", "UI: WCAG 2.2 AA — the automated accessibility check clean on a local run, plus a manual keyboard and screen-reader pass with its findings fixed.", "UI: responsive at every breakpoint, strings in the catalogue (text expansion, RTL checked); LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 measured.");
+      if (a.tracks.includes("obs")) items.push("OBS: 5 mandatory design sections filled (no TODO) — each SLO has an error budget, each alert a runbook, the rollback criteria are numbers.", "OBS: the metrics, structured logs (correlation ID, no personal data) and traces the design names are emitted — seen, not assumed.", "OBS: an alert fired in a staged failure, a rollback drill done and the health checks verified with a dependency down.");
       items.push("Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Tick before calling the feature done.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -839,7 +885,7 @@ const steering = {
     "scale.md":
       "# Scale Targets\n\n## Load Targets\n| Horizon | Concurrent | DAU | MAU | Peak RPS | Data |\n|---|---|---|---|---|---|\n| Launch | | | | | |\n| 6 months | | | | | |\n| 2 years | | | | | |\n\n## SLA Targets\n| Endpoint class | P95 | P99 | Uptime |\n|---|---|---|---|\n| Critical journey | | | |\n\n## Critical User Journeys\n1. []\n\n## Escalation Thresholds\n- []\n",
     "observability.md":
-      "# Observability Standards\n\n## Logging\nStructured JSON. Required fields: ts, level, service, trace_id, span_id, tenant_id?, user_id?, msg, event. No secrets/PII.\n\n## Metrics\nPrometheus-style snake_case + unit suffix. Per feature: request count, duration histogram, error count, one business counter. Beware label cardinality.\n\n## Traces\nOpenTelemetry, W3C context. Sample 10% in prod, always sample errors.\n\n## Alerts (each links a runbook)\n- P0 page now / P1 ≤15min / P2 slack / P3 digest.\n",
+      "# Observability Standards\n\n## Logging\nStructured JSON. Required fields: ts, level, service, trace_id, span_id, tenant_id?, user_id?, msg, event. No secrets/PII.\n\n## Metrics\nPrometheus-style snake_case + unit suffix. Per feature: request count, duration histogram, error count, one business counter. Beware label cardinality.\n\n## Traces\nOpenTelemetry, W3C context. Sample 10% in prod, always sample errors.\n\n## Alerts (each links a runbook)\n- P0 page now / P1 ≤15min / P2 slack / P3 digest.\n\n## SLOs & Error Budgets\n- Per critical journey: the SLI, the SLO target and its window · the error-budget policy (what stops when it is spent).\n- Burn-rate alerts: the fast one (e.g. 14.4× over 1 h) pages, the slow one (e.g. 6× over 6 h) opens a ticket.\n\n## Rollout & Rollback\n- Feature flags: an owner and a removal date each · canary / progressive steps and the metrics that gate them · rollback criteria and a target time.\n\n## Health & Capacity\n- Liveness checks the process only, readiness its dependencies · capacity signals (saturation, queue depth, pool usage) with thresholds.\n",
     "cost.md":
       "# Cost Budget\n\n## Infrastructure Budget\nTarget: < $XX/month year 1.\n\n## Cost Per User Target\nTarget: < $0.50 per MAU. If exceeded, stop and optimize.\n\n## Cost Alerts\n- Daily > $100 slack / > $200 page.\n\n## Per-Feature Cost Review\nEach design.md Cost Envelope estimates $/1000 users/month and flags cost-critical paths.\n",
     "ai-strategy.md":
@@ -945,7 +991,7 @@ const msg = {
       sameSlug: "New name is the same slug.",
       alreadyExists: (slug) => `'${slug}' already exists.`,
       badAction: "action must be one of: remove | archive | rename | restore | flow",
-      badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api | ui",
+      badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api | ui | obs",
       cycle: (chain) => `Circular dependency: ${chain}`,
       nameRequired: "name required",
       noSpecs: (root) => `No .specs/ at ${root}`,
@@ -1939,8 +1985,8 @@ const msg = {
     secPrivacy: {
       // Display names of the [SEC] / [PRIVACY] design sections — merged into sectionNames after MSG (EN: the canonical names).
       sectionNames: {},
-      allFilled: { sec: "all 5 filled", privacy: "all 6 filled", dist: "all 5 filled", api: "all 5 filled", ui: "all 5 filled" }, // doctor's sec-sections / privacy-sections / dist-sections / api-sections pass detail
-      statusSections: { sec: (list) => `Security sections: ${list}`, privacy: (list) => `Privacy sections: ${list}`, dist: (list) => `Data consistency sections: ${list}`, api: (list) => `API contract sections: ${list}`, ui: (list) => `UI sections: ${list}` }, // `dev-spec status`
+      allFilled: { sec: "all 5 filled", privacy: "all 6 filled", dist: "all 5 filled", api: "all 5 filled", ui: "all 5 filled", obs: "all 5 filled" }, // doctor's sec-sections / privacy-sections / dist-sections / api-sections pass detail
+      statusSections: { sec: (list) => `Security sections: ${list}`, privacy: (list) => `Privacy sections: ${list}`, dist: (list) => `Data consistency sections: ${list}`, api: (list) => `API contract sections: ${list}`, ui: (list) => `UI sections: ${list}`, obs: (list) => `Operability sections: ${list}` }, // `dev-spec status`
       finishChecks: { // spec_finish `checks`: what only a fresh run or a human can confirm
         sec: ["+sec: SAST, dependency audit and secret scan clean on a fresh local run; every abuse-case test green.",
           "+sec: threat model re-checked against the final code — no new entry point or trust boundary left unmitigated."],
@@ -1952,6 +1998,8 @@ const msg = {
           "+api: the contract file matches the shipped behaviour — every documented status code, error code and header is what the handlers return; anything removed is deprecated with its Sunset date."],
         ui: ["+ui: the automated accessibility check clean and the keyboard / screen-reader pass done on the final build; every state of the state matrix reachable and shown.",
           "+ui: the performance budget measured on the final build (LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1) and the visual regression of the states reviewed."],
+        obs: ["+obs: an alert fired in a staged failure and the rollback drill done on the final build; the dashboards and runbooks the alerts link exist.",
+          "+obs: the metrics, logs and traces the design names seen emitting from the final build — no personal data in logs or traces."],
       },
       clarify: { // spec_clarify questions for the track (asked while requirements.md says nothing about them)
         secAccess: "Specify what an unauthenticated or unauthorized caller gets (IF … THEN THE SYSTEM SHALL deny …) and the ASVS level the feature targets.",
@@ -2066,7 +2114,7 @@ const msg = {
       initJson: (a) => `// Track pack +${a.name} — a project-defined track (dev-spec 1.15). Data only: nothing in this folder is run.
 // Guide: references/project-tracks.md · validate it: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy dist api ui).
+  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy dist api ui obs).
   "name": "${a.name}",
   // The stable, case-sensitive marker of its design sections, criteria and task block: [${a.token}].
   "marker": "${a.token}",

@@ -26,7 +26,7 @@ function __link(E) { ({ acIndex, commentLines, earsValidate, existsCached, extra
   readJson, readRoadmap, requirementAcIds, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription,
   templateBracketKeys, templateLangChain, testIndex, useTemplateScopeOf, writeIfAbsent } = E); }
 
-const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui"];
+const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
 // Adding a track: VALID_TRACKS + its classifier SIGNALS; a MARKER track (mandatory design sections under a stable
 // [Marker]) also needs TRACK_MARKER, a sections table in TRACK_SECTIONS, TRACK_STEERING and its i18n builders
@@ -34,7 +34,7 @@ const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "ap
 const OPTIONAL_TRACKS = VALID_TRACKS.filter((t) => t !== "core");
 // The steering files a track brings (spec_init / add_track write them, the task brief lists them).
 const TRACK_STEERING = { tdd: ["testing-standards.md"], saas: ["scale.md", "observability.md", "cost.md"], ai: ["ai-strategy.md"], sec: ["security.md"], privacy: ["privacy.md"],
-  dist: ["distributed.md"], api: ["api.md"], ui: ["ui.md"] };
+  dist: ["distributed.md"], api: ["api.md"], ui: ["ui.md"], obs: ["observability.md"] };
 
 // Track input from MCP or the CLI: an array or a string, EVERY element split on whitespace, commas and '+'
 // ("tdd,saas", "+saas +ai", ["tdd saas"]), case-insensitive, core implied. Unknown tokens are reported
@@ -68,7 +68,9 @@ const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd",
   // +api (1.19 T) — also names a pack can't take (a pre-1.19 pack of one of these names is the feature's missing pack: legacyPackName)
   apis: "api", rest: "api", restful: "api", openapi: "api", swagger: "api", graphql: "api", grpc: "api",
   // +ui (1.19 T) — never "a11y" / "accessibility": a team's accessibility pack (the example of references/project-tracks.md) keeps its name
-  frontend: "ui", "front-end": "ui", ux: "ui", gui: "ui", wcag: "ui" };
+  frontend: "ui", "front-end": "ui", ux: "ui", gui: "ui", wcag: "ui",
+  // +obs (1.19 T)
+  observability: "obs", o11y: "obs", monitoring: "obs", sre: "obs", telemetry: "obs", opentelemetry: "obs" };
 function suggestTrack(token) {
   // Own keys only: a plain-object lookup matched 'constructor' / '__proto__' and suggested Object itself.
   if (Object.prototype.hasOwnProperty.call(TRACK_ALIASES, token)) return TRACK_ALIASES[token];
@@ -497,6 +499,58 @@ const SIGNALS = {
       "pantalla", "formulario", "botón", "icono",
     ],
   },
+  // +obs (1.19 T): observability & operability — a feature the team can watch, alert on, roll out and roll back. STRONG: SLOs /
+  // SLIs / error budgets / burn rates, observability, OpenTelemetry, distributed tracing, runbooks, on-call, the alerting and
+  // monitoring tools (PagerDuty, Opsgenie, Prometheus, Grafana, Datadog, Sentry…), structured logging, correlation / trace IDs,
+  // incident response and postmortems, feature flags / kill switches, a canary release / blue-green / progressive / staged
+  // rollout, a rollback plan, liveness / readiness probes, synthetic monitoring, chaos engineering / fault injection, a monitoring
+  // dashboard. WEAK (anchors): monitoring, alerts, a health check, uptime, an SLA, an incident, an outage, downtime, a rollback, a
+  // rollout, a bare canary ("Canary Islands" is no release),
+  // telemetry, instrumentation, tracing, APM (capitals), an error rate, 5xx, on call (two words — a doctor on call is prose).
+  // GENERIC: metrics, logs / logging, latency, p99 / p95 / p50, monitor, deploy — every service has them: "a metrics dashboard for
+  // sales" or "store the import logs" is 'possible' at most. Never a bare "log" ("log in"), "trace" or "dashboard" (+ui's word).
+  // HAZARDS: "zero downtime", "without an outage" state the concern. Shared: observability / SLO / SLA / uptime are +saas strong
+  // too (the 1.14 +saas hint survives — a phrase may serve two tracks), rollback +tdd weak, latency / p95 / p99 +saas weak.
+  obs: {
+    strong: [
+      "observability", "slo", "sli", "error budget", "burn rate", "burn-rate", "opentelemetry", "otel", "distributed tracing", "runbook",
+      "on-call", "pagerduty", "opsgenie", "alertmanager", "alerting rule", "alert rule",
+      // (a longer phrase before its prefix: the first keyword matching at a place wins it — and shadows +ui's generic "dashboard")
+      "monitoring dashboard", "grafana dashboard", "datadog dashboard", "prometheus", "grafana", "datadog", "new relic",
+      "jaeger", "zipkin", "sentry", "structured logging", "structured logs", "correlation id", "trace id", "trace context",
+      "context propagation", "golden signals", "mttr", "mttd", "incident response", "postmortem", "post-mortem", "feature flag",
+      "feature toggle", "kill switch", "canary release", "canary deployment", "canary deploy", "canary rollout", "canary analysis", "blue-green", "progressive delivery", "progressive rollout", "gradual rollout",
+      "staged rollout", "phased rollout", "percentage rollout", "dark launch", "rollback plan", "automatic rollback", "liveness probe",
+      "readiness probe", "health check endpoint", "synthetic monitoring", "real user monitoring", "chaos engineering", "fault injection",
+      "game day", "zero-downtime", "zero downtime", "operational dashboard", "ops dashboard",
+      "log aggregation", "error tracking",
+      // PT
+      "observabilidade", "orçamento de erro", "rastreio distribuído", "rastreamento distribuído", "registos estruturados",
+      "logs estruturados", "resposta a incidentes", "lançamento canário", "lançamento gradual", "lançamento progressivo", "plano de rollback",
+      "plano de reversão", "painel de monitorização", "painel de monitoramento", "engenharia do caos", "injeção de falhas",
+      // ES
+      "observabilidad", "presupuesto de error", "rastreo distribuido", "trazas distribuidas", "logs estructurados",
+      "registros estructurados", "respuesta a incidentes", "despliegue canario", "lanzamiento canario", "despliegue gradual",
+      "despliegue progresivo", "plan de reversión", "plan de rollback", "panel de monitorización", "panel de monitoreo", "ingeniería del caos",
+      "inyección de fallos",
+    ],
+    weak: [
+      "monitoring", "alerts", "alerting", "health check", "healthcheck", "liveness", "readiness", "uptime", "sla", "incident", "outage",
+      "downtime", "rollback", "roll back", "rollout", "roll out", "canary", "telemetry", "instrumentation", "tracing", "APM", "error rate", "5xx",
+      "on call",
+      // PT
+      "monitorização", "monitoramento", "alertas", "incidente", "indisponibilidade", "reversão", "telemetria", "instrumentação", "rastreio",
+      "taxa de erro", "tempo de inatividade", "plantão",
+      // ES
+      "monitorización", "monitoreo", "caída del servicio", "reversión", "telemetría", "instrumentación", "trazas", "tasa de error",
+      "tiempo de inactividad", "guardia",
+    ],
+    generic: [
+      "metrics", "logs", "logging", "latency", "p99", "p95", "p50", "monitor", "deploy",
+      // PT / ES
+      "métricas", "latência", "latencia", "implantação", "despliegue",
+    ],
+  },
 };
 // One concept, one signal (1.17 D review) — a built-in track's weak / generic keywords that name the SAME concept count once:
 // "deduplicate … dedupe them", "producers and consumers", "retry … with jitter" are one hint each, never the two weak signals
@@ -577,6 +631,26 @@ const SIGNAL_CONCEPTS = {
     dashboard: ["dashboard", "painel"],
     icon: ["icon", "ícone", "icono"],
   }),
+  // +obs (1.19 T): alerting, monitoring, health checks, a rollback, a rollout, an outage, telemetry, tracing, error rates, on-call and
+  // availability are one concept each; the generic metrics / logs / latency / deploy words too.
+  obs: conceptMap({
+    alerting: ["alerts", "alerting", "alertas"],
+    monitoring: ["monitoring", "monitorização", "monitoramento", "monitorización", "monitoreo"],
+    health: ["health check", "healthcheck", "liveness", "readiness"],
+    rollback: ["rollback", "roll back", "reversão", "reversión"],
+    rollout: ["rollout", "roll out"],
+    outage: ["outage", "downtime", "indisponibilidade", "tempo de inatividade", "caída del servicio", "tiempo de inactividad"],
+    incident: ["incident", "incidente"],
+    telemetry: ["telemetry", "instrumentation", "telemetria", "instrumentação", "telemetría", "instrumentación"],
+    tracing: ["tracing", "rastreio", "trazas"],
+    errors: ["error rate", "5xx", "taxa de erro", "tasa de error"],
+    oncall: ["on call", "plantão", "guardia"],
+    availability: ["uptime", "sla"],
+    metrics: ["metrics", "métricas"],
+    logs: ["logs", "logging"],
+    latency: ["latency", "p99", "p95", "p50", "latência", "latencia"],
+    deploy: ["deploy", "implantação", "despliegue"],
+  }),
 };
 // HAZARDS (1.17 D review): a failure a requirement says must never happen — "concurrent updates never oversell", "no lost updates",
 // "they must not overwrite each other", "no duplicate deliveries". Written negated by nature, the negation is the requirement,
@@ -590,6 +664,8 @@ const SIGNAL_HAZARDS = {
   // +api (1.19 T): "no breaking changes", "sem quebra de compatibilidade", "sin cambios incompatibles" state the contract concern.
   api: new Set(["breaking change", "breaking api change", "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis",
     "mudança incompatível", "mudanças incompatíveis", "cambio incompatible", "cambios incompatibles"]),
+  // +obs (1.19 T): "zero downtime", "without an outage", "sem indisponibilidade", "sin tiempo de inactividad" state the concern.
+  obs: new Set(["downtime", "outage", "indisponibilidade", "tempo de inatividade", "caída del servicio", "tiempo de inactividad"]),
 };
 
 // Words that negate a signal when they appear just before the keyword (EN/PT/ES).
@@ -1056,7 +1132,7 @@ const RE_PACK_NAME = /^[a-z][a-z0-9]{1,19}$/;
 const RE_PACK_MARKER = /^[A-Z][A-Z0-9]{1,11}$/;
 // Bracket words the engine already reads — the built-in markers, the story / parallel tags ([US1] [P1] [shared]), the generic
 // slots ([TODO] [TBD] [FIXME]…) and ID prefixes — are never a pack marker.
-const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|DIST|API|UI|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
+const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|DIST|API|UI|OBS|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
 // A classifier keyword: letters / digits with inner spaces, hyphens, apostrophes and dots, 2–60 characters (a bounded class — linear).
 const RE_PACK_KEYWORD = /^[\p{L}\p{N}][\p{L}\p{N}' .’-]{0,58}[\p{L}\p{N}]$/u;
 const PACK_KEYS = new Set(["name", "marker", "title", "description", "signals", "sections", "steering", "$schema"]);
@@ -2007,7 +2083,7 @@ function headingHasMarker(md, marker) {
 
 // The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
 // language). MARKER_TRACKS drives every per-marker loop: detection, inactive sections/tasks, doctor, approve, status.
-const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]", api: "[API]", ui: "[UI]" };
+const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]", api: "[API]", ui: "[UI]", obs: "[OBS]" };
 const MARKER_TRACKS = Object.keys(TRACK_MARKER);
 // The AC IDs requirements.md defines as a track's criteria: under a heading carrying its marker ([SaaS] / [AI] — the
 // template's "#### [SaaS] Acceptance Criteria (EARS)", in any language) or with the marker in the criterion itself.
@@ -2221,9 +2297,28 @@ const UI_SECTIONS = [
     "presupuesto de rendimiento"],
   loose: ["front-end performance", "frontend performance", "core web vitals", "performance budget", "orçamento de desempenho", "presupuesto de rendimiento"] },
 ];
+// +obs (1.19 T) — observability & operability. No name is "Observability" (+saas's section); every ordinary name is `loose`
+// (marker-bound) — a core "## Rollback" or "## Alerts" note never stands in for a deleted [OBS] section; the full names stay strict.
+const OBS_SECTIONS = [
+  { name: "SLIs & SLOs", syn: ["slis & slos", "slis and slos", "sli & slo", "service level objectives", "slos", "slo", "error budget", "slis e slos",
+    "objetivos de nível de serviço", "slis y slos", "objetivos de nivel de servicio"],
+  loose: ["service level objectives", "slos", "slo", "error budget", "objetivos de nível de serviço", "objetivos de nivel de servicio"] },
+  { name: "Telemetry", syn: ["telemetry", "instrumentation", "metrics, logs & traces", "metrics, logs and traces", "telemetria", "instrumentação", "telemetría",
+    "instrumentación"],
+  loose: ["telemetry", "instrumentation", "metrics, logs & traces", "metrics, logs and traces", "telemetria", "instrumentação", "telemetría", "instrumentación"] },
+  { name: "Alerting & Runbooks", syn: ["alerting & runbooks", "alerting and runbooks", "alerting", "alerts", "runbooks", "alertas e runbooks", "alertas y runbooks",
+    "alertas"],
+  loose: ["alerting", "alerts", "runbooks", "alertas"] },
+  { name: "Rollout & Rollback", syn: ["rollout & rollback", "rollout and rollback", "rollout", "rollback", "release strategy", "lançamento e reversão", "rollout e rollback",
+    "despliegue y reversión", "rollout y rollback"],
+  loose: ["rollout", "rollback", "release strategy"] },
+  { name: "Health & Capacity", syn: ["health & capacity", "health and capacity", "health checks", "capacity", "saúde e capacidade", "verificações de saúde",
+    "capacidade", "salud y capacidad", "comprobaciones de salud", "capacidad"],
+  loose: ["health checks", "capacity", "verificações de saúde", "capacidade", "comprobaciones de salud", "capacidad"] },
+];
 // The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
 // check read (a marker track = a TRACK_MARKER entry + its table here).
-const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS, api: API_SECTIONS, ui: UI_SECTIONS };
+const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS, api: API_SECTIONS, ui: UI_SECTIONS, obs: OBS_SECTIONS };
 // [[track, sections, marker]] for the ACTIVE marker tracks, in track order.
 function activeSectionTracks(tracks) {
   return markerTracks().filter((t) => tracks.includes(t)).map((t) => [t, trackSectionTable(t), trackMarker(t)]); // + the track packs (1.15)
@@ -2256,4 +2351,4 @@ module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, p
   detectTracks, savedTracks, headingHasMarker, TRACK_MARKER, MARKER_TRACKS, trackAcIds, normTaskHeading, TASK_HEADINGS,
   trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
   inactiveMarkerLines, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
-  SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, TRACK_SECTIONS, activeSectionTracks, activeDesign, __link };
+  SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, OBS_SECTIONS, TRACK_SECTIONS, activeSectionTracks, activeDesign, __link };
