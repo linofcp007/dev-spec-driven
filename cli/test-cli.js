@@ -3966,7 +3966,8 @@ if (inSection("p17d")) { // 1.17 package D (CLI tests) — the +dist track (dist
   const en = run(["classify", "Create an endpoint that writes a user to Postgres and publishes a UserCreated event to Kafka for other services", "--project", pd]);
   const es = run(["classify", "Crear un endpoint que escribe un usuario en Postgres y publica un evento UserCreated en Kafka para otros servicios", "--project", pd]);
   const plain = run(["classify", "Create an endpoint that writes a user to Postgres and returns it", "--project", pd]);
-  ok(en.code === 0 && /^Tracks: core \+dist /.test(en.out) && /dist=high/.test(en.out) && /\+dist: ON \[high confidence\] — matched signals: kafka, publish … event, other services/.test(en.out) &&
+  // (1.17 D review: 'publish … event' is a generic signal now — listed after the weak 'other services')
+  ok(en.code === 0 && /^Tracks: core \+dist /.test(en.out) && /dist=high/.test(en.out) && /\+dist: ON \[high confidence\] — matched signals: kafka, other services, publish … event/.test(en.out) &&
     /^Tracks: core \+dist /.test(es.out) && /\+dist: ACTIVO/.test(es.out) && /^Tracks: core /.test(plain.out) && !/^Tracks: core \+dist/.test(plain.out),
     "1.17 D1 (CLI): classify turns +dist on for the user's example (EN / ES), with its confidence and signals; plain CRUD stays core (got " + js([en.out.split("\n")[0], es.out.split("\n")[0], plain.out.split("\n")[0]]) + ")");
   const ini = run(["init", "dist", "--lang", "pt", "--project", pd]);
@@ -4009,6 +4010,31 @@ if (inSection("p17d")) { // 1.17 package D (CLI tests) — the +dist track (dist
   const impDesign = fs.existsSync(path.join(pd, ".specs", "signup", "design.md")) ? rd(pd, ".specs", "signup", "design.md") : "";
   ok(imp.code === 0 && /\+dist/.test(imp.out) && /## \[DIST\] Cross-system Writes/.test(impDesign),
     "1.17 D6 (CLI): import kiro auto-classifies a Kafka-publishing spec as +dist and appends the [DIST] design sections (got " + js(imp.out.slice(0, 300)) + ")");
+
+  // 1.17 D review 1 (CLI): a 1.16 track pack named 'kafka' (reserved since) — doctor names it, upgrade flags it, add-track … --remove drops it
+  const lp = path.join(tmp, "p17d-legacy");
+  run(["init", "--lang", "en", "--project", lp]);
+  run(["create", "Orders", "core", "--lang", "en", "--project", lp]);
+  fs.mkdirSync(path.join(lp, ".specs", "tracks", "kafka"), { recursive: true });
+  fs.writeFileSync(path.join(lp, ".specs", "tracks", "kafka", "track.json"), JSON.stringify({ name: "kafka", marker: "KAFKA", title: { en: "Kafka" }, sections: [{ name: "Topic Catalog" }] }));
+  const lsp = path.join(lp, ".specs", "orders", ".state.json");
+  const lst = JSON.parse(rd(lsp));
+  lst.tracks = ["core", "kafka"];
+  lst.packMarkers = { kafka: "[KAFKA]" };
+  fs.writeFileSync(lsp, JSON.stringify(lst, null, 2));
+  const lDoc = run(["doctor", "orders", "--project", lp]).out;
+  const lUp = run(["upgrade", "--project", lp]).out;
+  const lRm = run(["add-track", "orders", "kafka", "--remove", "--project", lp]);
+  const lDoc2 = run(["doctor", "orders", "--project", lp]).out;
+  ok(/track-pack-missing — track pack\(s\) not available: \+kafka \(a track pack from before 1\.17 — 'kafka' is a reserved name now/.test(lDoc) &&
+    /Rename its track pack\(s\) from before 1\.17 — \+kafka/.test(lUp) && lRm.code === 0 && !/track-pack-missing/.test(lDoc2) &&
+    JSON.parse(rd(lsp)).tracks.join() === "core",
+    "1.17 D review 1 (CLI): a 1.16 'kafka' pack — doctor's track-pack-missing names the reserved name, upgrade asks to rename it, add-track orders kafka --remove drops it (got " +
+    js([lDoc.split("\n").filter((l) => /track-pack/.test(l)), lRm.out, lRm.code]) + ")");
+  // 1.17 D review 2 (CLI): app-level words alone never turn +dist on — the note names them
+  const pq = run(["classify", "Print queue: users send documents to the office printer queue and can retry failed prints", "--project", pd]);
+  ok(pq.code === 0 && !/^Tracks: core \+dist/.test(pq.out) && /Possible \+dist — only app-level words \('queue', 'retry'\)|Possível \+dist — só palavras comuns de aplicação \('queue', 'retry'\)/.test(pq.out),
+    "1.17 D review 2 (CLI): classify keeps a print queue with a retry off +dist and names the app-level words (got " + js(pq.out.split("\n").slice(0, 4)) + ")");
 }
 
 // 1.17 package (A): if (inSection("p17a")) { … }

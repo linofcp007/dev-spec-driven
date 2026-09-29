@@ -494,7 +494,7 @@ How to fill each item (not legal advice — the DPO or counsel decides): `refere
 
 ## Retry Policy (defaults)
 - Exponential backoff with jitter · max attempts: [5] · per-call timeout: [from the dependency's P99, e.g. 2 s]
-- Never retried: a non-idempotent call without a key, a validation error (4xx) · poison messages → DLQ after [5] attempts, with an alert.
+- Never retried: a non-idempotent call without a key, a validation error (a 4xx — but 408 and 429 are retriable, honouring Retry-After) · poison messages → DLQ after [5] attempts, with an alert.
 
 ## Locking Policy
 - Default: optimistic locking (a version column); pessimistic (SELECT … FOR UPDATE) only for short, hot sections · lock timeout: [2 s]

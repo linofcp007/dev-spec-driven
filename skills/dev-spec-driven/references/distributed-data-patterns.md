@@ -27,16 +27,18 @@ scale view of the same tools; this file does not repeat them), `test-patterns.md
 
 | Signal strength | Examples |
 |---|---|
-| **Strong** (one is enough) | Kafka, RabbitMQ, SQS, Kinesis, EventBridge, Debezium, message broker / queue / bus, event bus, event-driven, event sourcing, domain / integration event, CQRS, transactional outbox, outbox, idempotent consumer, dual write, eventual / strong consistency, distributed transaction / system / lock, two-phase commit, microservices, change data capture, exactly-once, saga pattern, compensating transaction, optimistic / pessimistic locking, isolation level, lost update, write skew, network partition, split brain, leader election · *fila de mensagens, consistência eventual, transação distribuída, microsserviços, bloqueio otimista* · *cola de mensajes, consistencia eventual, transacción distribuida, microservicios, bloqueo optimista* |
-| **Weak** (needs a second one) | queue, consumer, producer, subscriber, webhook, retry / retries, exponential backoff, idempotency, deduplication, race condition, replication, cache invalidation, at-least-once, pub/sub, "publish … event" (up to three words between: "publishes a UserCreated event"), other / downstream services, saga, `CDC` (upper case), dead letter, DLQ, circuit breaker · *consumidor, novas tentativas, condição de corrida, replicação, publica … evento, outros serviços* · *reintento, condición de carrera, replicación, publica … evento, otros servicios* |
-| **Corroborating only** | transaction, consistency, atomic · *transação, consistência, atómico* · *transacción, consistencia, atómico* — evidence only beside another `+dist` signal ("a transaction and a queue"); alone they are ordinary words ("a consistent UI") |
+| **Strong** (one is enough) | Kafka, RabbitMQ, SQS, Kinesis, EventBridge, Debezium, Google Pub/Sub, NATS, Apache Pulsar, Azure Event Hubs, Sidekiq, Temporal workflows, Celery tasks, a CDC pipeline, message broker / queue / bus, event-driven architecture, event sourcing, domain / integration event, CQRS, transactional outbox, outbox pattern, idempotent consumer, dual write, eventual / strong consistency, distributed transaction / system / lock, two-phase commit, microservices, change data capture, exactly-once, saga pattern, compensating transaction, optimistic / pessimistic locking, isolation level, lost update, write skew, network partition, split brain, read replica · *fila de mensagens, consistência eventual, transação distribuída, microsserviços, bloqueio otimista* · *cola de mensajes, consistencia eventual, transacción distribuida, microservicios, bloqueo optimista* |
+| **Weak** (needs a second one) | webhook, idempotency, at-least-once, duplicate delivery, other / another / downstream services, the payment / notification / order… service, exponential backoff, replication, cache invalidation, saga, `CDC` (upper case), dead letter, DLQ, circuit breaker, concurrent updates, event bus / stream, event-driven, leader election, Redis, a search index, gRPC · *outros serviços, serviço de pagamentos, replicação* · *otros servicios, servicio de pagos, replicación* |
+| **Generic** (only beside a strong or weak one) | queue, consumer, producer, subscriber, retry / retries, jitter, deduplication, race condition, pub/sub, "publish … event" / "send … message" (up to three words between: "publishes a UserCreated event"), outbox, worker, background job, oversell · *fila, consumidor, nova tentativa, publica … evento* · *cola, reintento, publica … mensaje* |
+| **Corroborating only** | transaction, consistency, atomic · *transação, consistência, atómico* · *transacción, consistencia, atómico* — evidence only beside another `+dist` signal ("a transaction and a webhook"); alone they are ordinary words ("a consistent UI") |
 
 Never a signal alone: a bare "event" (a DOM click event, a calendar event, an analytics event), "lock" (an
-account lock after failed logins), "stream" (video streaming), "broker" (an insurance broker). "Publish an
-event" alone stays *possible* — an events app publishes events too. "CDC" is matched in upper case only and is
-weak (it is also a health agency). Shared words serve two tracks: `exactly-once` is also a `+tdd` strong signal,
-`idempotent` / `webhook` / `circuit breaker` / `dead letter` `+saas` strong ones, `queue` a `+saas` weak one —
-the "queue" inside "message queue" is a `+dist` phrase, no `+saas` hint.
+account lock after failed logins), "stream" (video streaming), "broker" (an insurance broker). Generic words are
+app-level: a print queue with a retry button, a farmers' market's producers and consumers, a newsletter's
+subscribers stay *possible* — they need a word that names a second system. Words of one concept count once
+(retry · backoff · jitter). "CDC" is matched in upper case only and is weak (it is also a health agency). Shared
+words serve two tracks: `exactly-once` is also a `+tdd` strong signal, `idempotent` / `webhook` / `circuit breaker` /
+`dead letter` `+saas` strong ones; "message queue" is `+dist` strong and a `+saas` weak hint.
 
 The canonical example turns it on in every language:
 
@@ -135,9 +137,11 @@ COMMIT;                                      -- both or neither
 Rules that keep it correct:
 
 - **The relay is at-least-once.** It can publish and crash before marking the row — the event is published
-  again. Consumers must be idempotent (next section). Use the outbox `id` as the message ID / key header.
-- **Ordering** only exists per key: publish with `aggregate_id` as the partition key so events of one user stay
-  in order; never promise a global order.
+  again. Consumers must be idempotent (next section). Send the outbox `id` as the **message ID in a header**
+  (`message-id`) — the consumers' deduplication key.
+- **Ordering** only exists per key: publish with `aggregate_id` as the **record key** (Kafka's partitioning key) so
+  events of one user stay in order; never promise a global order. The key and the message ID are different things:
+  the key groups a user's events on one partition, the header ID tells two deliveries of one event apart.
 - **Cleanup**: delete (or partition and drop) published rows after a retention window — days, not forever. An
   unbounded outbox becomes the slowest table in the database.
 - **Monitor the lag**: the age of the oldest unpublished row is the metric to alert on; a stuck relay looks
@@ -181,7 +185,10 @@ ack(message)                                 -- after the commit, never before
   inbox absorbs.
 - **Natural idempotency** is simpler when it exists: `INSERT … ON CONFLICT (user_id) DO NOTHING`, `UPDATE …
   SET status = 'paid' WHERE id = ? AND status = 'pending'`, "set" semantics instead of "add" (`balance = 120`,
-  not `balance = balance + 20` — or a ledger row keyed by the event ID).
+  not `balance = balance + 20` — or a ledger row keyed by the event ID). A plain "set" is idempotent but not
+  **order-safe**: an older message redelivered after a newer one sets the old value back. Guard it with the
+  event's version (`UPDATE … SET balance = :b, version = :v WHERE id = :id AND version < :v`) — a stale message
+  then updates 0 rows.
 - Keep processed IDs as long as a redelivery is possible (the broker's retention + replay window), then expire.
 - A consumer that calls an external API passes the message ID as the API's idempotency key.
 
@@ -229,8 +236,10 @@ Design each saga as a table:
 - **Exponential backoff with full jitter**: `sleep = random(0, min(cap, base * 2^attempt))`. Without jitter,
   every client retries at the same instant and the recovering dependency falls over again.
 - **A retry budget**, not only a max attempts: e.g. retries ≤ 10% of requests per client. Retries multiply load
-  across layers (3 layers × 3 retries = 27 calls for one request) — retry at one layer.
-- **Never retry** a non-idempotent call without an idempotency key; a validation / authorization error (4xx);
+  across layers: "3 retries" is 4 attempts, so 3 layers that each retry 3 times make 4³ = 64 calls for one request
+  — retry at one layer.
+- **Never retry** a non-idempotent call without an idempotency key; a validation / authorization error (4xx —
+  except **408** Request Timeout and **429** Too Many Requests, which are retriable: wait what `Retry-After` says);
   a request whose deadline has already passed.
 - **Circuit breaker** in front of a dependency that fails in bulk: fail fast while it is open, probe with a
   half-open call. Pair it with a degraded path (cached value, queued work, a feature switched off) — that is what
@@ -251,7 +260,10 @@ Design each saga as a table:
 
 - Store the key with the **result** (status + response) so a duplicate gets the same answer, not a 409.
 - A **unique constraint** is the last line of defence — application checks race; the database doesn't.
-- **UPSERT** (`INSERT … ON CONFLICT DO UPDATE` / `MERGE`) makes create-or-update idempotent in one statement.
+- **UPSERT** makes create-or-update idempotent in one statement — but only a real upsert is race-safe:
+  `INSERT … ON CONFLICT DO UPDATE` (Postgres, SQLite), `INSERT … ON DUPLICATE KEY UPDATE` (MySQL). `MERGE` is **not**
+  (Postgres, SQL Server): two concurrent MERGEs both see "no row" and both insert — one fails with a unique
+  violation. With MERGE (or a select-then-insert), catch the unique violation and retry the statement.
 - TTL: long enough to cover every retry window (client, broker, provider — webhooks retry for days), short enough
   to keep the table small; scope keys per tenant on +saas.
 
@@ -284,7 +296,7 @@ database. The isolation level decides which anomalies it allows:
 | Non-repeatable read | the same row read twice gives two values | **possible** | prevented | prevented |
 | Phantom | the same query returns new rows | **possible** | prevented in Postgres, possible in some engines | prevented |
 | **Lost update** | two read-modify-write cycles; the second overwrites the first | **possible** | detected in Postgres (serialization error), possible in MySQL | prevented |
-| **Write skew** | two transactions read overlapping data, write different rows, together break an invariant ("at least one doctor on call") | **possible** | **possible** | prevented |
+| **Write skew** | two transactions read overlapping data, write different rows, together break an invariant ("at least one doctor on call") | **possible** | **possible** — commits silently | prevented by true serializable (Postgres SSI, SQL Server, MySQL); **possible** under Oracle's SERIALIZABLE (snapshot isolation) |
 
 Most databases default to **read committed** (Postgres, SQL Server, Oracle) or repeatable read (MySQL InnoDB).
 Know the default, then decide per transaction:
@@ -292,8 +304,14 @@ Know the default, then decide per transaction:
 - **ACID is required** when an invariant spans rows that must change together (money moved between accounts, a
   reservation and its payment record, a uniqueness rule across rows): one transaction, and either a stronger
   isolation level or explicit locking for the read-modify-write.
-- Under **serializable** (or repeatable read in Postgres), the database aborts a conflicting transaction with a
-  serialization error: **retry the whole transaction** — the application must be written for it.
+- **Repeatable read in Postgres** aborts only a **write-write** conflict (two transactions updating the same row —
+  the lost update above). Write skew writes *different* rows, so it commits silently: an invariant that spans rows
+  needs **SERIALIZABLE** (Postgres SSI) or explicit locking (`SELECT … FOR UPDATE` on the rows the invariant reads,
+  or a row that stands for the invariant). Oracle's SERIALIZABLE is snapshot isolation — it still allows write skew;
+  lock explicitly there.
+- Under **serializable** (and on a write-write conflict under repeatable read in Postgres), the database aborts a
+  conflicting transaction with a serialization error: **retry the whole transaction** — the application must be
+  written for it.
 - A transaction must never wait on the network: no HTTP call, no publish, no email inside it (that is the dual
   write again, plus locks held for a network round trip).
 
@@ -445,7 +463,8 @@ A short, filled example of the five sections for the `POST /users` endpoint:
 - Postgres + welcome email: a consumer of UserCreated, not the endpoint.
 
 ## [DIST] Delivery & Idempotency
-- At-least-once. Event ID = outbox id, sent as the Kafka key header `event-id`.
+- At-least-once. Event ID = outbox id, sent in the Kafka record header `event-id` (the record key is the user id —
+  ordering, not deduplication).
 - POST /users takes an Idempotency-Key header (24 h, stored with the response); email is unique.
 - Consumers keep processed_messages (consumer, event_id) in the same transaction as their effect.
 - Relay retries: backoff 100 ms → 30 s with full jitter; a row older than 10 min alerts.
