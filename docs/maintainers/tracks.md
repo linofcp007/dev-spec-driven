@@ -167,7 +167,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   rollback +tdd weak. The tasks' telemetry task carries `_Emits metrics:_`. No logged 1.18 classify input turns +obs on.
   **Cues as data (1.20):** a built-in track's tiers, concepts, hazards and cues are its `SIGNALS` entry in `engine/tracks.js`;
   tuning signals never edits `engine/classify.js`; a new cue MECHANISM is a `CUE_KINDS` entry there (rules: `{kind: near |
-  sentence | text | clause | ownership, on, ifTier?, then, …word lists / windows}`, regexes compiled on first use).
+  sentence | text | clause | ownership | all (1.21: every sub-rule fires), on, ifTier?, then, …word lists / windows}`, regexes
+  compiled on first use).
   classify.js derives `SIGNAL_CUES[track](hit, text, cased)` → a new tier, "none" or null; built-in tracks
   only, applied after shadowing and before the context rule; each reads a bounded window (`CUE_SPAN` 200 characters of the
   hit's clause / sentence) with linear regexes.
@@ -185,6 +186,80 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   100% / 74.2% (the misses left are generic-word UIs: a confirm dialog, a toast, a login screen), +obs 90.6% / 93.5% → 91.2% /
   100% (the false positives left are coordinated negations: "not add feature flags or canary releases"); the reviewer's 205
   texts unchanged; 2,644 logged classify inputs and a 12,390-text keyword sweep give the seven older tracks' 1.18 decisions.
+- **1.21 F2a — the verification's remaining misses, as data where possible.** +ui: the everyday components a text names by
+  themselves are strong (confirm / confirmation dialog, confirmation modal, modal dialog / window, toast notification / message,
+  `snackbar` — one word: a "snack bar" is a food counter; PT / ES diálogo de confirmação / de confirmación, janela / ventana
+  modal, notificação / notificación toast); weak: popup / pop-up / banner (one concept), errors "next to / beside / below each
+  field" (*junto a / ao lado de / debajo de cada campo* — the `inline` concept), mobile-friendly (*adaptado ao telemóvel /
+  para celular, adaptada al móvil* — the `responsive` concept); a ui cue (kind `near`, first in the list): a widget word
+  (modal, dropdown, tooltip, toast, popup, banner, carousel, sidebar, navbar, spinner, picker, dialog) right after a display
+  verb + an article (+ one optional word) is strong — "Show a modal …", "display a tooltip", *"Mostrar um popup"* (alone it
+  stays an anchor: "the modal verbs", "modal split"). A login screen is NOT a page type (the T8 hard negatives "redirected
+  to the login page" / "Log in form" stay off) — the login texts turn on through their field errors. **The mixed case:** the
+  backend-only clause cue's `api` mention excludes a PUBLIC API (`notAfter` "public" / "public REST|HTTP|JSON|web", `notBefore`
+  "pública" / "REST pública") — a contract for outside consumers is never the backend of one page, so "Expose a public REST API
+  for the mobile app's settings screen" is +api +ui (+obs); "Expose the admin page's API …" still demotes. (The clause kind's
+  `notAfter` / `notBefore` are now PHRASE lists — fragments or sequences — with a left letter edge.) +api: a new cue kind
+  **`all`** (every sub-rule fires; its sub-rules are any other kind, their kinds checked at load time like the rules') — the
+  first api rule: the bare `api` (generic) with an own word ≤ 2 words before it (our / nosso / nossa / nuestro / nuestra) AND a
+  version in its sentence (v2, version 3, a new / major version, versioning, *versão 2, nova versão, versionamento · versión
+  2, nueva versión, versionado*) is strong — "Our webhooks API needs a v2 …"; it runs before the ownership rule (which decides
+  every other hit), and a third party's versioned API is untouched ("Call the Stripe API v2" — `api v2` is strong and the
+  ownership rule demotes it).
+- **1.21 F2a — coordinated negation (code, `coordinatedNegation()` in classify.js — every track).** A negation reaches every
+  item of the list it opens, in its clause: the items are the non-shadowed matches (overlapping matches are one item, across
+  tracks); consecutive items are linked by `listLink()` — a conjunction (or / nor / ou / nem / ni, ES o / u) with ≤ 1 other
+  word, or a comma with articles only that a conjunction must close later ("no X, Y or Z"; "Without feature flags, the canary
+  release…" is no list). Never across . ! ? ; : or a line break, a contrast word (`LIST_CONTRAST`: just / only / but / instead
+  / apenas / sino / solo …), **"and" / "e" / "y"** (a new predicate: "without downtime and roll back on errors", "don't store
+  PII and encrypt the rest") or a gap over `LIST_GAP_MAX` (80 characters, ≤ 4 words). A list opens at an item negated by a
+  negator BEFORE it (`negatedBefore()` — `isNegated()` is now `negatedBefore || negatedAfter`; a hit keeps `negBy` before /
+  after / list); a **hazard's** negation opens none ("without downtime" is its requirement), though a hazard inside a list
+  carries it on. `NEGATORS` gained the negative conjunctions nor / neither / nem / ni ("sem X nem Y", "ni X ni Y"), and a
+  negative conjunction after an item whose clause a negator opens negates that item too (`clauseNegated()` — "Não vamos usar
+  feature flags nem lançamento canário": the negator is three words back). Linear: each gap is read at most twice.
+  **Measured (1.21 F2):** the verifier's 146 texts: +api 100% / 96.3% → 100% / 100%, +ui 100% / 74.2% → 100% / 100%, +obs
+  91.2% / 100% → 100% / 100%; the reviewer's 205: +ui recall 87.0% → 88.9% (a banner), the rest unchanged; the 1.17 +dist
+  corpus unchanged (96.8% / 100%). On 37,881 inputs (the logged classify inputs of both suites — 1.19, the 1.19 fix, 1.20 —,
+  the corpora, every string literal of the test files and an 18-frame keyword sweep) the older tracks' decisions changed ONLY
+  where a coordinated list or a negative conjunction now reaches a keyword (the sweep's "not add retries or X" / "sem … nem X"
+  / "sin … ni X" frames, and the logged "sin datos personales ni autenticación": +tdd off); "No X, just …" and "Without X,
+  the …" frames change nothing. `1.21 F2a` in mcp/tests/04-tracks-builtin.js embeds the cases (+ a 40-text precision /
+  recall assertion, ≥ 95% per track).
+- **1.21 F2b — project-level signal overrides (`.specs/classifier.json`, classify.js).** A Phase 0 correction is learned:
+  `createFeature` on a NEW plain feature (not a bugfix / spike / import — `cls` is not given) with explicit `tracks` and a
+  non-empty summary compares the summary's classification (the suggestion classification.md records) with the chosen tracks
+  (`learnSignalOverrides(projectDir, clsR, t)`): a track suggested and left off → its driving words vote `off` (the strong
+  ones, else the anchors — generic words never drive a track); a track added that was not suggested → its lone weak / generic
+  word votes `strong`, two or more generic words vote `weak` each; the words come from the result's NON-enumerable `tiers`
+  (the matched tiers after the de-dupe — never in the JSON). A vote in the same direction counts up (`count`); an opposite one
+  starts over; an agreement (a suggestion kept / a hint left off) resets a pending (count < 2) record; a correction that
+  contradicts an APPLIED learned override drops it. A learned record applies at `SIGNAL_OVERRIDE_MIN` = 2; one set by hand
+  (`origin: "set"`) at once, and learning never changes it. Words follow the track-pack keyword rule (`RE_PACK_KEYWORD`,
+  2–60 characters — a gap keyword like "page … on-call" is never learnable). **The file** — `{"signals": [ … ]}`, one record
+  per line `{track, word, effect off|weak|strong, count, origin learned|set, lastAt}`, sorted by track and word (two branches
+  learning different words merge line by line), at most `SIGNAL_OVERRIDE_MAX` = 200 records (a full file evicts the oldest
+  pending learned one, never an active one), ≤ 64 KB, lstat'ed (a link / folder is `not-a-file`). A separate file, not
+  roadmap.json meta: it has its own merge story and a broken classifier.json never touches the roadmap's. Written only under
+  the roadmap lock (re-read from disk inside it); a file that doesn't parse, or holds ANY invalid / duplicate / over-bound
+  entry, is read without those entries (classify: `overridesWarning {code, entries?}` + a note) and NEVER rewritten — set /
+  forget / learning refuse (learning: `signalOverrides {error}` + a note; the create still succeeds). **Applied** by
+  `classify(…, {projectDir})` (spec_classify, CLI classify, spec_create, and now spec_import) as a layer over the tables
+  (`projectSignalLayer()` — active records of the tracks this call reads): `off` drops that track's keyword (case-insensitive
+  match with the table's spelling; its place stays free for a shorter keyword); `weak` / `strong` re-tier it before shadowing
+  and cues; a word no table of that track has is matched as a literal (`keywordRe(word, true)`, a pack's rule) at its tier.
+  Never silently: `overrides [{track, word, effect}]` (only those that changed THIS reading) + `classify.overridesApplied`;
+  spec_create adds `signalOverrides {learned, forgotten, capped?}` + `signals.learned*`. **No classifier.json → no layer,
+  byte-identical results** (no new key; a file of pending records only reads the same too). `explain: true` (spec_classify /
+  `classify --explain`) adds `explain {matches: [{track, keyword, text, base, tier (strong / weak / generic / context /
+  shadowed / none / unbacked), cue, override, negated, negation}], overrides: [… + active, applied], min}`. **Surfaces:**
+  `spec_tracks {action: "signals", op: list | set | forget, track, word, effect}` — an action of an existing tool, not a 39th
+  (the overrides tune the track registry this tool already manages; spec_classify stays read-only) — = `dev-spec signals [list
+  | set <track> <word> off|weak|strong | forget <track> <word>]` (exit 1 on a refusal; `--explain` is in `CLI_SWITCHES`).
+  Stable codes: effects, origins, problem codes `invalid-entry` · `duplicate` · `too-many`, file codes `invalid-json` ·
+  `invalid-shape` · `too-big` · `not-a-file` · `unreadable` · `invalid-entries`. Messages: `msg.classify` (overridesApplied,
+  overridesInvalid, explain*) and `msg.signals` (EN / PT / ES; pt-BR derived — the PT strings avoid the 2nd person). Tests:
+  `1.21 F2b` in mcp/tests/04-tracks.js, cli/tests/04-tracks-signals.js (MCP ↔ CLI parity).
 - **Readers go through the accessors (1.15), never the constants.** The constants above are the BUILT-IN tables;
   `allTracks()` (VALID_TRACKS + the project's valid packs, in name order after the built-in ones), `optionalTracks()`,
   `markerTracks()`, `trackMarker(tr)`, `trackSectionTable(tr)`, `trackSteeringFiles(tr)`, `trackSignalTable(tr)` add the
@@ -335,7 +410,12 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
 - **Negation never vetoes a track**, it annotates it. "the system shall not hallucinate" negates
   `hallucinat` on a feature that is unmistakably `+ai`. So when a track is on *and* has negated
   keywords, `classify` emits a conflict note ("+ai is ON although 'llm' appeared negated") for the
-  human who confirms Phase 0 — it must never silently drop a negation it computed.
+  human who confirms Phase 0 — it must never silently drop a negation it computed. A negation reaches every item of the
+  coordinated list it opens (1.21 F2 — "not add feature flags or canary releases", "nem … nem", "ni … ni"), never past
+  "and", a contrast word or an unclosed comma — see 1.21 F2a above before widening `listLink()`.
+- **Project signal overrides are the team's, never the engine's defaults.** A tuning that holds for everyone goes into
+  `SIGNALS` (tracks.js); `.specs/classifier.json` is one project's learned or hand-set layer — never read it without a
+  projectDir, never write it outside `writeSignalRecords()` (the roadmap lock, the never-rewrite-a-broken-file rule).
 - **Classifier language guess** (`guessLang`): STRONG PT/ES markers (weight 2: `não`, `uma`, `-ção`,
   `ñ`…) and WEAK ones (weight 1: `de`, `por`, `com`…) must beat the English function-word count —
   never add ambiguous words (`do`, `da`, `usa`, `los`, `no`, `.com`): they flipped English text to PT.

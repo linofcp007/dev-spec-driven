@@ -16,13 +16,13 @@ const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in pl
 let acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, extractTestIds, headingIndex,
   isInsideDir, isObj, MARKER_TRACKS, normalizeLang, parseTasks, planIdText, projectLang, PROTO_KEYS, RE_CUSTOM_STEERING,
   RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, readJson,
-  requirementAcIds, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription, templateBracketKeys,
+  requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription, templateBracketKeys,
   templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING, trackAcIds, trackMarker,
   trackTaskHeading, VALID_TRACKS, writeIfAbsent;
 function __link(E) { ({ acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, extractTestIds,
   headingIndex, isInsideDir, isObj, MARKER_TRACKS, normalizeLang, parseTasks, planIdText, projectLang, PROTO_KEYS,
   RE_CUSTOM_STEERING, RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists,
-  readJson, requirementAcIds, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription,
+  readJson, requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription,
   templateBracketKeys, templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING,
   trackAcIds, trackMarker, trackTaskHeading, VALID_TRACKS, writeIfAbsent } = E); }
 
@@ -843,6 +843,8 @@ function localizePackProblem(p, K) {
   return out;
 }
 function trackPacks(projectDir, action, opts = {}) {
+  // 1.21 F2 — the project's classifier signal overrides (.specs/classifier.json): an action of this tool, not a tool of its own
+  if (action != null && String(action).trim().toLowerCase() === "signals") return signalOverrides(projectDir, opts.op, opts);
   const pl = projectLang(projectDir);
   let lang = null;
   if (opts.lang != null && String(opts.lang).trim()) {

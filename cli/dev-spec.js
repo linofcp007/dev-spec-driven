@@ -12,7 +12,8 @@
  *   node cli/dev-spec.js <command> [args]   (or `dev-spec <command>` if on PATH)
  *
  * Commands:
- *   classify "<description>" [--name n]  Recommend tracks (multilingual; --name = the feature name as evidence)
+ *   classify "<description>" [--name n]  Recommend tracks (multilingual; --name = the feature name as evidence;
+ *                                      --explain: every keyword match + the project's signal overrides)
  *   init [tracks...] [--lang]           Scaffold .specs/steering for tracks (--lang → project default;
  *                                      --guard on|off|scope → guard mode: code edits ask while no approved tasks
  *                                      (scope: also a code file no open task names in _Implements:_);
@@ -25,6 +26,8 @@
  *                                      (any other name-like.md → front matter inclusion: always|fileMatch|manual)
  *   templates [list|init|check] [artifact] [--lang]  The project's own scaffolds in .specs/templates/ (exit 1 on a check error)
  *   tracks [list|init <name>|check] [name] [--lang]  The project's own tracks: .specs/tracks/<name>/ track packs (exit 1 on a check error)
+ *   signals [list | set <track> <word> off|weak|strong | forget <track> <word>]  The classifier's signal overrides of this
+ *                                      project (.specs/classifier.json — learned from Phase 0 corrections, or set by hand)
  *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
  *                                      --brownfield → + integration-plan.md; --flow design-first → design before requirements)
  *   bugfix "<name>" [--summary]         Scaffold the bugfix flow (bug.md + regression test plan)
@@ -407,15 +410,32 @@ function main() {
       return console.log(helpText());
 
     case "classify": {
-      if (!pos[0]) usage('dev-spec classify "<description>" [--name "<feature name>"] [--lang en|pt|pt-BR|es]');
-      const r = spec.classify(pos.join(" "), { name: flags.name, lang: flags.lang, projectDir }); // same args as spec_classify
+      if (!pos[0]) usage('dev-spec classify "<description>" [--name "<feature name>"] [--lang en|pt|pt-BR|es] [--explain]');
+      const r = spec.classify(pos.join(" "), { name: flags.name, lang: flags.lang, projectDir, explain: on("explain") }); // same args as spec_classify
       return out(r, (r) => {
         const T = cliText(r.lang); // the language the reasoning was written in
-        const conf = spec.msg(r.lang).classify.conf;
-        console.log(T.tracks(r.label, Object.keys(r.confidence).map((t) => t + "=" + (conf[r.confidence[t]] || r.confidence[t])).join(", "))); // + the project's track packs (1.15)
+        const C = spec.msg(r.lang).classify;
+        console.log(T.tracks(r.label, Object.keys(r.confidence).map((t) => t + "=" + (C.conf[r.confidence[t]] || r.confidence[t])).join(", "))); // + the project's track packs (1.15)
         console.log(r.reasoning);
         if (r.note) console.log(T.note(r.note));
+        if (r.explain) { // 1.21 F2: every keyword match and the project's signal overrides (.specs/classifier.json)
+          console.log(r.explain.matches.length ? C.explainHead : C.explainNone);
+          r.explain.matches.forEach((m) => console.log(C.explainMatch(m)));
+          if (!r.explain.overrides.length) console.log(C.explainNoOverrides);
+          else { console.log(C.explainOverridesHead(r.explain.overrides.length, r.explain.min)); r.explain.overrides.forEach((o) => console.log(C.explainOverride(o, r.explain.min))); }
+        }
       });
+    }
+
+    case "signals": {
+      // dev-spec signals [list | set <track> <word> off|weak|strong | forget <track> <word>] [--lang] — the project's classifier
+      // signal overrides in .specs/classifier.json (= spec_tracks {action: "signals", op, track, word, effect}); exit 1 on a refusal.
+      const syntax = "dev-spec signals [list | set <track> <word> off|weak|strong | forget <track> <word>] [--lang en|pt|pt-BR|es]";
+      const op = pos[0] == null ? "list" : String(pos[0]).trim().toLowerCase();
+      if ((op === "list" && pos.length > 1) || (op === "set" && pos.length !== 4) || (op === "forget" && pos.length !== 3)) usage(syntax);
+      const r = spec.trackPacks(projectDir, "signals", { op, track: pos[1], word: pos[2], effect: pos[3], lang: flags.lang });
+      if (!r.ok) return fail(r);
+      return out(r, (r) => r.lines.forEach((l) => console.log(l)));
     }
 
     case "init": {
@@ -1454,6 +1474,8 @@ function helpText() {
   return `dev-spec — universal spec-driven CLI (local, zero-dependency)
 
   classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs), multilingual
+                                  --explain: every keyword match (table tier → final tier, cue / override, negation) + the
+                                  project's signal overrides
   init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|pt-BR|es → project default)
                                   --guard on|off|scope: guard mode — Write/Edit on code files asks while no feature has approved, open tasks
                                   (scope: once tasks are approved, also a code file no open task names in _Implements:_ — test files excepted)
@@ -1476,6 +1498,10 @@ function helpText() {
   tracks [list|init <name>|check] [name] [--lang]   The project's own tracks: a pack .specs/tracks/<name>/ (track.json +
                                   fragments) is a marker track like +sec — classified, scaffolded, gated; init scaffolds
                                   one; check validates them (exit 1 on an error)
+  signals [list | set <track> <word> off|weak|strong | forget <track> <word>]   The classifier's signal overrides of this
+                                  project (.specs/classifier.json): create learns them from Phase 0 corrections (a word
+                                  that drove a suggestion you changed — applies after 2 consistent corrections); set one by
+                                  hand (applies at once), forget one (= spec_tracks {action: "signals"})
   create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike, --lang en|pt|pt-BR|es)
                                   --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase);
                                   --flow design-first: classification → design → requirements → … (starts from an architecture)

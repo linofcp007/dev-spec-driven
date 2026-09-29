@@ -9,13 +9,17 @@
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
+const fs = require("fs");
+const path = require("path");
 const i18n = require("../i18n.js");
 const { SIGNALS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let allTracks, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, readRoadmap, specsRoot, trackLabel,
-  trackSignalTable;
-function __link(E) { ({ allTracks, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, readRoadmap, specsRoot,
-  trackLabel, trackSignalTable } = E); }
+let allTracks, forgetCached, isObj, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, PACK_LIMITS, projectLang,
+  RE_PACK_KEYWORD, readIfExists, readRoadmap, roadmapBusyResult, specsRoot, trackLabel, trackSignalTable, withRoadmapLock,
+  writeFileAtomic;
+function __link(E) { ({ allTracks, forgetCached, isObj, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, PACK_LIMITS,
+  projectLang, RE_PACK_KEYWORD, readIfExists, readRoadmap, roadmapBusyResult, specsRoot, trackLabel, trackSignalTable,
+  withRoadmapLock, writeFileAtomic } = E); }
 
 // ---------------------------------------------------------------------------
 // Heuristic classifier (local, keyword based — no LLM, no cost)
@@ -118,14 +122,14 @@ const CUE_KINDS = {
   // governs it (one of `negators` ≤ `negWindow` words before it in the clause, or a word ending n't — PT "no" is em + o, never a
   // negator in a PT text, the classifier's rule) nor when it FOLLOWS the hit with a `consumers` verb between them (the hit consumes
   // it); the hit itself is never its own mention. mention: { words — fragments; requests: { methods, targets } — an HTTP method
-  // + a path (/…) or a target word; api: { words, notAfter (a sequence), notBefore } — an API word, never right after notAfter
-  // nor right before notBefore (an API key) }.
+  // + a path (/…) or a target word; api: { words, notAfter, notBefore — phrases (fragments or sequences) } — an API word, never
+  // right after a notAfter phrase nor right before a notBefore one (an API key; 1.21 F2: a public API) }.
   clause(rule) {
     const m = rule.mention, EDGE = "(?![\\p{L}\\p{N}_])";
     const alts = [];
     if (m.requests) alts.push(cueAlt(m.requests.methods) + CUE_SP + "(?:\\/|" + cueAlt(m.requests.targets) + EDGE + ")");
     if (m.words) alts.push(cueAlt(m.words) + EDGE);
-    if (m.api) alts.push("(?<!" + cueSequence(m.api.notAfter) + CUE_SP + ")" + cueAlt(m.api.words) + EDGE + "(?!" + CUE_SP + cueAlt(m.api.notBefore) + "(?![\\p{L}]))");
+    if (m.api) alts.push("(?<!(?<![\\p{L}])(?:" + cuePhrases(m.api.notAfter) + ")" + CUE_SP + ")" + cueAlt(m.api.words) + EDGE + "(?!" + CUE_SP + "(?:" + cuePhrases(m.api.notBefore) + ")(?![\\p{L}]))");
     const re = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + alts.join("|") + ")", "gu");
     const negators = new Set(rule.negators), consumers = new Set(rule.consumers), win = rule.negWindow;
     return (h, text, cased, lang) => {
@@ -216,14 +220,28 @@ const CUE_KINDS = {
       return j === 0 || articles.has(lower[j - 1]) ? "strong" : "keep";
     };
   },
+  // all (1.21 F2) — every rule of `rules` fires (each a rule of any other kind, without on / ifTier / then: the enclosing rule's
+  // apply): "our API" + a version in the sentence. Each sub-rule reads its own bounded window — still linear.
+  all(rule) {
+    const tests = rule.rules.map((r) => CUE_KINDS[r.kind](r));
+    return (h, text, cased, lang) => tests.every((t) => t(h, text, cased, lang) !== false);
+  },
 };
+// A rule's kind — and every sub-rule's kind (the `all` kind) — must be a CUE_KINDS entry.
+function checkCueKinds(r, track) {
+  if (!r || !Object.prototype.hasOwnProperty.call(CUE_KINDS, r.kind)) throw new Error("engine: SIGNALS." + track + ".cues — unknown kind " + (r && r.kind));
+  if (r.kind === "all") {
+    if (!Array.isArray(r.rules) || !r.rules.length) throw new Error("engine: SIGNALS." + track + ".cues — an 'all' rule needs rules");
+    r.rules.forEach((x) => checkCueKinds(x, track));
+  }
+}
 // A track's cue rules → its SIGNAL_CUES function: the rules are tried in order (a rule reads the keywords of its `on` — none: every
 // keyword — and, with `ifTier`, a hit of that tier only); the first that fires decides — "keep" is null (unchanged). A rule naming
 // an unknown kind is an error while the engine loads (a table typo never passes silently); its test — its regexes — is built on
 // its first use, never while the engine loads (every hook and CLI call is a fresh process that loads the engine).
 function cueRules(rules, track) {
   const compiled = rules.map((r) => {
-    if (!Object.prototype.hasOwnProperty.call(CUE_KINDS, r.kind)) throw new Error("engine: SIGNALS." + track + ".cues — unknown kind " + r.kind);
+    checkCueKinds(r, track);
     return { on: r.on ? new Set(r.on) : null, ifTier: r.ifTier || null, rule: r, test: null, then: r.then };
   });
   return function cues(h, text, cased, lang) {
@@ -246,8 +264,10 @@ const SIGNAL_CONCEPTS = signalLookup("concepts", conceptMap);
 const SIGNAL_HAZARDS = signalLookup("hazards", (list) => new Set(list));
 const SIGNAL_CUES = signalLookup("cues", cueRules);
 
-// Words that negate a signal when they appear just before the keyword (EN/PT/ES).
-const NEGATORS = ["no", "not", "without", "never", "skip", "exclude", "avoid", "omit", "dispensa", "prescinde", "sem", "não", "nao", "sin"];
+// Words that negate a signal when they appear just before the keyword (EN/PT/ES). 1.21 F2: the negative conjunctions too —
+// "nor" / "neither", PT "nem", ES "ni" ("sem X nem Y", "ni X ni Y": each item they introduce is negated).
+const NEGATORS = ["no", "not", "without", "never", "skip", "exclude", "avoid", "omit", "dispensa", "prescinde", "sem", "não", "nao", "sin",
+  "nor", "neither", "nem", "ni"];
 
 // Words that may sit between a negator and the keyword ("sem uso de IA", "without the use of any LLM").
 const NEG_FILLER = new Set(["uso", "use", "usage", "of", "de", "do", "da", "del", "the", "a", "an", "any", "qualquer", "nenhum", "nenhuma", "ningún", "ninguna", "ningun", "el", "la", "o"]);
@@ -333,6 +353,15 @@ function configuredLang(projectDir, lang) {
 }
 
 function isNegated(text, idx, kwLen, lang, cased) {
+  return negatedBefore(text, idx, lang, cased) || negatedAfter(text, idx, kwLen);
+}
+// "<keyword> ... not needed/required" shortly after.
+function negatedAfter(text, idx, kwLen) {
+  const after = text.slice(idx + (kwLen || 0), idx + (kwLen || 0) + 30).toLowerCase();
+  return NEG_AFTER.test(after);
+}
+// A negator BEFORE the match — the negation a coordinated list carries on to its next items (coordinatedNegation).
+function negatedBefore(text, idx, lang, cased) {
   // Negator token in the 1-2 words immediately before the match.
   const before = text.slice(Math.max(0, idx - 20), idx).toLowerCase();
   const tokens = before.split(/[^a-zà-ú-]+/).filter(Boolean);
@@ -353,10 +382,85 @@ function isNegated(text, idx, kwLen, lang, cased) {
   // Across fillers, "no" negates only before an ENGLISH filler ("no use of AI"): before a PT one it is the
   // contraction em+o — "Guia no uso do LLM" is a guide IN the use of the LLM, even when guessLang says 'en'.
   const noContraction = wide[k] === "no" && !NEG_FILLER_EN.has(wide[k + 1]);
-  if (k < wide.length - 1 && k >= 0 && negators.includes(wide[k]) && !noContraction) return true; // only across at least one filler word
-  // "<keyword> ... not needed/required" shortly after.
-  const after = text.slice(idx + (kwLen || 0), idx + (kwLen || 0) + 30).toLowerCase();
-  return NEG_AFTER.test(after);
+  return k < wide.length - 1 && k >= 0 && negators.includes(wide[k]) && !noContraction; // only across at least one filler word
+}
+
+// COORDINATED NEGATION (1.21 F2): a negation reaches every item of the coordinated list it opens, in its clause, for every track
+// — "We will not add feature flags or canary releases", "Não vamos usar feature flags nem lançamento canário", "No usaremos
+// feature flags ni despliegue canario", "without Kafka, RabbitMQ or SQS". The items are the matched keywords (every track;
+// overlapping matches are one item); two items are coordinated when the text between them is a LIST LINK: a conjunction (or /
+// nor / ou / nem / ni, ES o / u) with at most one other word ("or any", "nem outro"), or a comma with articles only — a
+// comma-joined item counts only once a conjunction closes the list later ("no X, Y or Z"; "Without feature flags, the canary
+// release…" is no list). Never across . ! ? ; : or a line break, "and" / "e" / "y" (often a new predicate: "without downtime and
+// roll back on errors"), a contrast word ("no X, just Y", "sem X, apenas Y", "not X but Y") or a longer gap; a hazard's negation
+// (its requirement: "without downtime") opens no list. A negative conjunction (nor / nem / ni) also negates the item BEFORE it
+// when a negator opens that item's clause ("Não vamos usar X nem Y" — the negator three words back). Linear: each gap between
+// two consecutive items is read at most twice, and bounded (LIST_GAP_MAX characters).
+const LIST_GAP_MAX = 80;
+const LIST_OR = new Set(["or", "nor", "ou", "nem", "ni"]);
+const LIST_OR_ES = new Set(["o", "u"]); // ES "or" (PT "o" is an article)
+const LIST_NEG = new Set(["nor", "nem", "ni"]);
+const LIST_AND = new Set(["and", "e", "y"]);
+const LIST_FILLER = new Set(["a", "an", "the", "any", "other", "some", "no", "not", "without", "never", "um", "uma", "o", "os", "as", "qualquer",
+  "nenhum", "nenhuma", "outro", "outra", "outros", "outras", "sem", "não", "nao", "un", "una", "unos", "unas", "el", "la", "los", "las", "ningún",
+  "ninguna", "ningun", "otro", "otra", "otros", "otras", "sin", "neither", "either"]);
+const LIST_CONTRAST = new Set(["but", "just", "only", "instead", "rather", "except", "besides", "although", "though", "while", "whereas", "yet",
+  "so", "then", "which", "that", "who", "because", "since", "when", "if", "unless", "until", "mas", "porém", "contudo", "apenas", "só",
+  "somente", "sim", "exceto", "salvo", "embora", "enquanto", "porque", "que", "quando", "se", "pero", "sino", "sólo", "solo", "solamente",
+  "excepto", "aunque", "mientras", "cuando", "si"]);
+const LIST_BOUNDARY = /[.!?;:\n]/;
+// The link between two consecutive items: "or" (a conjunction), "neg" (a negative one), "and", "comma" — or null (no list link).
+function listLink(text, from, to, es) {
+  if (to - from > LIST_GAP_MAX) return null;
+  const gap = text.slice(from, to);
+  if (LIST_BOUNDARY.test(gap)) return null;
+  const words = gap.match(/[\p{L}\p{N}'’-]+/gu) || [];
+  if (words.length > 4) return null;
+  let or = null, other = 0;
+  for (const w0 of words) {
+    const w = w0.toLowerCase();
+    // "and" / "e" / "y" end the list: often a new predicate ("without downtime and roll back on errors", "don't store PII and
+    // encrypt the rest") — the negation stops there
+    if (LIST_CONTRAST.has(w) || LIST_AND.has(w)) return null;
+    if (LIST_OR.has(w) || (es && LIST_OR_ES.has(w))) { if (!or || LIST_NEG.has(w)) or = LIST_NEG.has(w) ? "neg" : "or"; }
+    else if (!LIST_FILLER.has(w)) other++;
+  }
+  if (or) return other <= 1 ? or : null;
+  return gap.includes(",") && other === 0 ? "comma" : null;
+}
+// A negator opens the clause of the item at `start` (before it, back to . ! ? ; : or a line break, ≤ CUE_SPAN characters).
+function clauseNegated(text, start, lang) {
+  const pt = i18n.baseLang(lang) === "pt";
+  const words = cueWords(cueBefore(text, start, CUE_BOUNDARY));
+  return words.some((w0) => { const w = w0.toLowerCase(); return (NEGATORS.includes(w) && !(pt && w === "no")) || /n['’]t$/.test(w); });
+}
+// hits: the counted (non-shadowed) matches, each with `negBy` ("before" / "after" / null) — marks `neg` on the list items a negation
+// reaches (never a hazard: `hazard` stays un-negated, but it still carries the list on).
+function coordinatedNegation(hits, text, lang) {
+  if (hits.length < 2) return;
+  const es = i18n.baseLang(lang) === "es";
+  const sorted = hits.slice().sort((a, b) => a.start - b.start || b.end - a.end);
+  const items = [];
+  for (const h of sorted) {
+    const last = items[items.length - 1];
+    if (last && h.start < last.end) { last.hits.push(h); if (h.end > last.end) last.end = h.end; } else items.push({ start: h.start, end: h.end, hits: [h] });
+  }
+  // a hazard's negation is its requirement ("without downtime"), never a list's: it opens none
+  const opens = (it) => it.hits.some((h) => h.negBy === "before" && !h.hazard);
+  const mark = (it) => { for (const h of it.hits) if (!h.hazard) { h.neg = true; if (!h.negBy) h.negBy = "list"; } };
+  let active = false, pending = [];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (active) {
+      const l = listLink(text, items[i - 1].end, it.start, es);
+      if (l === "comma") { pending.push(it); continue; }
+      if (l) { pending.forEach(mark); pending = []; mark(it); continue; }
+      active = false; pending = []; // the list ended here: this item may open a new one
+    }
+    if (opens(it)) { active = true; continue; }
+    // "Não vamos usar X nem Y": a negative conjunction after an item whose clause a negator opens
+    if (i + 1 < items.length && listLink(text, it.end, items[i + 1].start, es) === "neg" && clauseNegated(text, it.start, lang)) { mark(it); active = true; }
+  }
 }
 
 // Signals are matched as WORDS, never as bare substrings. A plain `indexOf` fired 'claude' inside
@@ -519,18 +623,33 @@ function classify(description, opts = {}) {
   const active = new Set(["core"]);
   const matched = perTrack(() => ({ strong: [], weak: [], generic: [] }));
   const negated = perTrack(() => []);
-  const hits = []; // every counted match, in scan order: { track, tier, kw, start, end, neg }
+  const hits = []; // every match, in scan order: { track, tier, kw, start, end, neg, negBy, hazard, base, by }
+  // A match: negated by a negator BEFORE it (negBy "before" — a coordinated list carries it on), by a phrase after it ("after"),
+  // or not; a hazard is never negated (SIGNAL_HAZARDS) but still carries a list's negation on.
+  const newHit = (track, tier, kw, start, end, hazard, base, by) => {
+    const negBy = negatedBefore(text, start, lang, cased) ? "before" : negatedAfter(text, start, end - start) ? "after" : null;
+    return { track, tier, kw, start, end, neg: !hazard && !!negBy, negBy, hazard, base: base === undefined ? tier : base, by: by || null };
+  };
+  // The project's signal overrides (1.21 F2 — .specs/classifier.json, learned from Phase 0 corrections or set by hand): a layer over
+  // the tables — a word "off" is no signal of that track at all (its place stays free for another keyword), "weak" / "strong"
+  // re-tier it, and a word no table has is matched as a literal word (a track pack's rule) at its tier. Only with a projectDir.
+  const layer = opts.projectDir ? projectSignalLayer(opts.projectDir, OPT) : null;
+  const applied = new Map(); // override key → its record (an override that changed this text's reading)
 
   for (const track of OPT) {
     const table = trackSignalTable(track);
     const plain = !Object.prototype.hasOwnProperty.call(SIGNALS, track); // a track pack's keywords are literal words (1.17 D review)
     const hazards = Object.prototype.hasOwnProperty.call(SIGNAL_HAZARDS, track) ? SIGNAL_HAZARDS[track] : null; // (never negated)
+    const ov = layer ? layer.byTrack.get(track) : null;
+    const consumed = ov ? new Set() : null;
     // (tier `generic` — 1.17 D review — exists in the built-in +dist table only; see SIGNALS.dist)
     for (const tier of ["strong", "weak", "generic", "context"]) {
       for (const kw of table[tier] || []) {
         // A keyword written with upper-case letters ('STRIDE') is an acronym matched CASE-SENSITIVELY, on the original
         // text (C4): the lower-case word is something else (an array stride). `cased` is `text` before toLowerCase().
         const hay = kw === kw.toLowerCase() ? text : cased;
+        const rec = ov ? ov.get(kw.toLowerCase()) : undefined;
+        if (rec) consumed.add(kw.toLowerCase());
         // A text without the keyword's literal prefix can't match its regex — skipping it spares compiling ~300 unicode
         // regexes on every CLI run (a classify used to cost ~250 ms per process).
         if (!hay.includes(keywordLiteral(kw, plain))) continue;
@@ -539,8 +658,28 @@ function classify(description, opts = {}) {
         let m;
         while ((m = re.exec(hay)) !== null) {
           if (seenSpan[track].has(m.index)) continue;
+          if (rec && rec.effect === "off") { applied.set(signalKey(track, rec.word), rec); continue; }
           seenSpan[track].add(m.index);
-          hits.push({ track, tier, kw, start: m.index, end: m.index + m[0].length, neg: !(hazards && hazards.has(kw)) && isNegated(text, m.index, m[0].length, lang, cased) });
+          const t2 = rec ? rec.effect : tier;
+          if (t2 !== tier) applied.set(signalKey(track, rec.word), rec);
+          hits.push(newHit(track, t2, kw, m.index, m.index + m[0].length, !!(hazards && hazards.has(kw)), tier, t2 !== tier ? "override" : null));
+        }
+      }
+    }
+    // an override word no table keyword of this track has: a literal word at its tier (off: nothing to drop)
+    if (ov) {
+      for (const [lw, rec] of ov) {
+        if (consumed.has(lw) || rec.effect === "off") continue;
+        const hay = rec.word === lw ? text : cased;
+        if (!hay.includes(keywordLiteral(rec.word, true))) continue;
+        const re = keywordRe(rec.word, true);
+        re.lastIndex = 0;
+        let m;
+        while ((m = re.exec(hay)) !== null) {
+          if (seenSpan[track].has(m.index)) continue;
+          seenSpan[track].add(m.index);
+          applied.set(signalKey(track, rec.word), rec);
+          hits.push(newHit(track, rec.effect, rec.word, m.index, m.index + m[0].length, false, null, "override"));
         }
       }
     }
@@ -563,6 +702,9 @@ function classify(description, opts = {}) {
     for (; si < strongHits.length && strongHits[si].start < h.start; si++) if (strongHits[si].end > reach) reach = strongHits[si].end;
     if (reach >= h.end || (startsAt.get(h.start) || []).some((s) => s.end > h.end)) shadowedHits.add(h);
   }
+  // A negation reaches every item of the coordinated list it opens (1.21 F2 — coordinatedNegation): "not add feature flags or
+  // canary releases", "sem X nem Y", "ni X ni Y".
+  coordinatedNegation(hits.filter((h) => !shadowedHits.has(h)), text, lang);
   // CORROBORATING-only signals (tier `context`, C4 — 'permission' for +sec) are weak evidence only beside another
   // (non-negated) signal of their track ("RBAC permissions"); a negated one is noted only when the track has some other
   // signal. Alone they are no evidence at all: no signal, no "possible" note, no "kept off" note ("file permission bits").
@@ -571,16 +713,18 @@ function classify(description, opts = {}) {
   // app-level for us, "the settings page backend" is no UI work, "customer service" no technical target).
   const counted = [];
   for (const h of hits) {
-    if (shadowedHits.has(h)) continue;
+    if (shadowedHits.has(h)) { h.final = "shadowed"; continue; }
     const cue = Object.prototype.hasOwnProperty.call(SIGNAL_CUES, h.track) && Object.prototype.hasOwnProperty.call(SIGNALS, h.track) ? SIGNAL_CUES[h.track] : null;
     const tier = cue ? cue(h, text, cased, lang) : null;
-    if (tier === "none") continue;
-    counted.push(tier && tier !== h.tier ? Object.assign({}, h, { tier }) : h);
+    h.cue = !!tier && tier !== h.tier;
+    if (tier === "none") { h.final = "none"; continue; }
+    h.final = tier || h.tier;
+    counted.push(tier && tier !== h.tier ? Object.assign({}, h, { tier, src: h }) : h);
   }
   const own = (pred) => new Set(counted.filter((h) => h.tier !== "context" && pred(h)).map((h) => h.track));
   const backedBy = own((h) => !h.neg && h.tier !== "generic"), mentionedBy = own(() => true);
   for (const h of counted) {
-    if (h.tier === "context" && !(h.neg ? mentionedBy : backedBy).has(h.track)) continue;
+    if (h.tier === "context" && !(h.neg ? mentionedBy : backedBy).has(h.track)) { (h.src || h).final = "unbacked"; continue; }
     const tier = h.tier === "context" ? "weak" : h.tier;
     if (h.neg) { if (!negated[h.track].includes(h.kw)) negated[h.track].push(h.kw); }
     else if (!matched[h.track][tier].includes(h.kw)) matched[h.track][tier].push(h.kw);
@@ -663,8 +807,15 @@ function classify(description, opts = {}) {
     }
   }
 
+  // The project's overrides are never applied silently (1.21 F2): the ones that changed this reading are named (a note + the stable
+  // `overrides` list), and a classifier.json that can't be read is ignored with a warning — never a crash.
+  const overrides = [...applied.values()].map((r) => ({ track: r.track, word: r.word, effect: r.effect }));
+  if (overrides.length) notes.push(C.overridesApplied(overrides));
+  const warning = layer ? signalFileWarning(layer.rd) : null;
+  if (warning) notes.push(C.overridesInvalid(warning.code, warning.entries || 0));
+
   const tracks = allTracks().filter((t) => active.has(t));
-  return {
+  const res = {
     tracks,
     label: trackLabel(tracks),
     signals,
@@ -678,6 +829,23 @@ function classify(description, opts = {}) {
     lang, // the language notes/reasoning were written in (explicit, or guessed from the text)
     reasoning: buildReasoning(tracks, signals, confidence, negated, C, OPT),
   };
+  if (overrides.length) res.overrides = overrides;
+  if (warning) res.overridesWarning = warning;
+  // explain (1.21 F2 — spec_classify {explain} / classify --explain): every keyword match — its table tier, its final one (a cue, an
+  // override, shadowed, unbacked context), its negation — and the project's overrides with their state.
+  if (opts.explain) {
+    res.explain = {
+      matches: hits.slice().sort((a, b) => a.start - b.start || a.track.localeCompare(b.track)).map((h) => ({ track: h.track, keyword: h.kw,
+        text: cased.slice(h.start, h.end), base: h.base, tier: h.final || h.tier, cue: !!h.cue, override: h.by === "override" ? h.tier : null,
+        negated: h.neg, negation: h.neg ? h.negBy : null })),
+      overrides: layer ? layer.rd.records.map((r) => ({ track: r.track, word: r.word, effect: r.effect, count: r.count, origin: r.origin,
+        active: signalActive(r), applied: applied.has(signalKey(r.track, r.word)) })) : [],
+      min: SIGNAL_OVERRIDE_MIN,
+    };
+  }
+  // The tiers each track matched (after the de-dupe), for the Phase 0 learner (learnSignalOverrides) — not part of the result's JSON.
+  Object.defineProperty(res, "tiers", { value: matched, enumerable: false });
+  return res;
 }
 
 function buildReasoning(tracks, signals, confidence, negated, C, optional) {
@@ -696,9 +864,255 @@ function buildReasoning(tracks, signals, confidence, negated, C, optional) {
   return lines.join("\n");
 }
 
+// ---------------------------------------------------------------------------
+// Project-level signal overrides (1.21 F2) — .specs/classifier.json, learned from Phase 0 corrections
+// ---------------------------------------------------------------------------
+// When the human confirms Phase 0 with other tracks than the classifier suggested (spec_create {tracks} on a new feature with a
+// summary — the suggestion is the summary's classification, the one classification.md records), the words that DROVE the
+// suggestion are recorded: a track suggested and left off → its driving words (the strong ones, else the anchors) vote "off"; a
+// track added that was not suggested → its lone word votes "strong", two or more app-level words vote "weak" each (one anchor
+// is then enough). After SIGNAL_OVERRIDE_MIN consistent corrections a learned override applies in this project (classify with a
+// projectDir); an agreement or an opposite correction resets a pending one, a correction that contradicts an applied one drops
+// it. A word set by hand (`signals set`) applies at once and is never changed by learning. Never silently: classify names the
+// overrides that changed its reading (`overrides` + a note), spec_create names what it learned (`signalOverrides` + a note).
+// The file: one record per line, sorted by track and word (two branches learning different words merge cleanly); bounded
+// (SIGNAL_OVERRIDE_MAX records, SIGNAL_FILE_MAX_BYTES); words follow the track-pack keyword rule (literal, never a pattern);
+// a file that doesn't parse, or holds an invalid entry, is ignored for reading with a warning and never rewritten.
+const SIGNAL_FILE = "classifier.json";
+const SIGNAL_OVERRIDE_MIN = 2;
+const SIGNAL_OVERRIDE_MAX = 200;
+const SIGNAL_FILE_MAX_BYTES = 64 * 1024;
+const SIGNAL_EFFECTS = Object.freeze(["off", "weak", "strong"]);
+const SIGNAL_OPS = Object.freeze(["list", "set", "forget"]);
+const RE_SIGNAL_TRACK = /^[a-z][a-z0-9]{1,19}$/;
+const RE_LEADING_BOM = new RegExp("^" + String.fromCharCode(0xfeff));
+const signalKey = (track, word) => track + "\u0000" + String(word).toLowerCase();
+const signalActive = (r) => r.origin === "set" || r.count >= SIGNAL_OVERRIDE_MIN;
+// A word: the track-pack keyword rule (letters / digits with inner spaces, hyphens, apostrophes, dots; 2–60 characters) → the
+// word (spaces folded) or null.
+function signalWord(w) {
+  if (typeof w !== "string" || w.length > 4 * PACK_LIMITS.keywordLen) return null;
+  const t = w.trim().replace(/\s+/g, " ");
+  return t.length <= PACK_LIMITS.keywordLen && RE_PACK_KEYWORD.test(t) ? t : null;
+}
+function signalRecord(r) {
+  if (!isObj(r)) return null;
+  const track = typeof r.track === "string" ? r.track.trim().toLowerCase() : "";
+  const word = signalWord(r.word);
+  const effect = typeof r.effect === "string" ? r.effect.trim().toLowerCase() : "";
+  const origin = r.origin == null ? "learned" : r.origin;
+  const count = r.count == null ? 1 : r.count;
+  if (!RE_SIGNAL_TRACK.test(track) || track === "core" || !word || !SIGNAL_EFFECTS.includes(effect) || (origin !== "learned" && origin !== "set") ||
+    !Number.isSafeInteger(count) || count < 1) return null;
+  const lastAt = typeof r.lastAt === "string" && r.lastAt.length <= 40 && !Number.isNaN(Date.parse(r.lastAt)) ? r.lastAt : null;
+  return { track, word, effect, count, origin, lastAt };
+}
+// → { file, exists, records (valid, deduplicated, ≤ SIGNAL_OVERRIDE_MAX), problems [{index, code}], error (a code) | null }
+function readSignalOverrides(projectDir) {
+  const file = path.join(specsRoot(projectDir), SIGNAL_FILE);
+  const out = { file, exists: false, records: [], problems: [], error: null };
+  let st;
+  try { st = fs.lstatSync(file); } catch { return out; }
+  out.exists = true;
+  if (!st.isFile()) { out.error = "not-a-file"; return out; } // a folder, a link: never followed
+  if (st.size > SIGNAL_FILE_MAX_BYTES) { out.error = "too-big"; return out; }
+  const raw = readIfExists(file);
+  if (raw == null) { out.error = "unreadable"; return out; }
+  let j;
+  try { j = JSON.parse(raw.replace(RE_LEADING_BOM, "")); } catch { out.error = "invalid-json"; return out; }
+  if (!isObj(j) || !Array.isArray(j.signals)) { out.error = "invalid-shape"; return out; }
+  const seen = new Set();
+  j.signals.forEach((x, index) => {
+    if (out.records.length >= SIGNAL_OVERRIDE_MAX) { out.problems.push({ index, code: "too-many" }); return; }
+    const rec = signalRecord(x);
+    if (!rec) { out.problems.push({ index, code: "invalid-entry" }); return; }
+    const k = signalKey(rec.track, rec.word);
+    if (seen.has(k)) { out.problems.push({ index, code: "duplicate" }); return; }
+    seen.add(k);
+    out.records.push(rec);
+  });
+  return out;
+}
+const signalFileWarning = (rd) => (rd.error ? { code: rd.error } : rd.problems.length ? { code: "invalid-entries", entries: rd.problems.length } : null);
+// The classifier's view: the ACTIVE overrides of the tracks it reads (a missing pack's are kept in the file, unused) → { rd,
+// byTrack: Map(track → Map(lower-case word → record)) } — null when the project has no classifier.json (byte-identical results).
+function projectSignalLayer(projectDir, OPT) {
+  const rd = readSignalOverrides(projectDir);
+  if (!rd.exists) return null;
+  const byTrack = new Map();
+  for (const r of rd.records) {
+    if (!signalActive(r) || !OPT.includes(r.track)) continue;
+    if (!byTrack.has(r.track)) byTrack.set(r.track, new Map());
+    byTrack.get(r.track).set(r.word.toLowerCase(), r);
+  }
+  return { rd, byTrack };
+}
+function renderSignalFile(records) {
+  const k = (r) => [r.track, r.word.toLowerCase()];
+  const sorted = records.slice().sort((a, b) => { const x = k(a), y = k(b); return x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : x[1] < y[1] ? -1 : x[1] > y[1] ? 1 : 0; });
+  const line = (r) => JSON.stringify({ track: r.track, word: r.word, effect: r.effect, count: r.count, origin: r.origin, ...(r.lastAt ? { lastAt: r.lastAt } : {}) });
+  return "{\n  \"signals\": [" + (sorted.length ? "\n" + sorted.map((r) => "    " + line(r)).join(",\n") + "\n  " : "") + "]\n}\n";
+}
+// A read-modify-write of classifier.json under the roadmap lock (the project-level lock): re-read from disk, `mutate(records)` →
+// { changed, … }; written only when changed. A file that can't be read, or holds an invalid entry, is never rewritten (its
+// entries would be lost) → { ok: false, fileError }.
+function writeSignalRecords(projectDir, mutate) {
+  return withRoadmapLock(projectDir, () => {
+    const file = path.join(specsRoot(projectDir), SIGNAL_FILE);
+    forgetCached(file);
+    const rd = readSignalOverrides(projectDir);
+    const w = signalFileWarning(rd);
+    if (w) return { ok: false, fileError: w };
+    const records = rd.records.map((r) => Object.assign({}, r));
+    const out = mutate(records) || {};
+    if (out.changed) writeFileAtomic(file, renderSignalFile(records));
+    return Object.assign({ ok: true }, out);
+  }, (b) => roadmapBusyResult(projectDir, b));
+}
+// Learn from a Phase 0 correction: `cls` = the suggestion (classify's result for the new feature's name + summary), `confirmed` =
+// the tracks the human chose. → null (nothing to learn) | { learned [{track, word, effect, count, active}], forgotten [...], capped? }
+// | { error, busy? } (nothing recorded).
+function learnSignalOverrides(projectDir, cls, confirmed) {
+  if (!cls || !cls.tiers || !cls.signals) return null;
+  const S = new Set(cls.tracks), C = new Set(confirmed), appliedOv = cls.overrides || [];
+  const votes = [], contradicted = [], agreed = [];
+  for (const t of Object.keys(cls.signals)) {
+    const m = cls.tiers[t] || { strong: [], weak: [], generic: [] };
+    const sug = S.has(t), conf = C.has(t);
+    if (sug && !conf) { // suggested, left off: the words that turned it on (a strong one alone does; else the anchors)
+      for (const w of m.strong.length ? m.strong : m.weak) votes.push({ track: t, word: w, effect: "off" });
+      for (const o of appliedOv) if (o.track === t && o.effect !== "off") contradicted.push(o);
+    } else if (!sug && conf) { // added, not suggested: its lone word turns it on; two or more app-level words, each an anchor
+      const words = m.weak.concat(m.generic);
+      if (words.length === 1) votes.push({ track: t, word: words[0], effect: "strong" });
+      else if (!m.weak.length && m.generic.length >= 2) for (const w of m.generic) votes.push({ track: t, word: w, effect: "weak" });
+      for (const o of appliedOv) if (o.track === t && o.effect === "off") contradicted.push(o);
+    } else if (sug) for (const w of m.strong.concat(m.weak)) agreed.push({ track: t, word: w, off: true }); // agreed: on
+    else for (const w of m.weak.concat(m.generic)) agreed.push({ track: t, word: w, off: false }); // agreed: off
+  }
+  const valid = votes.map((v) => Object.assign({}, v, { word: signalWord(v.word) })).filter((v) => v.word);
+  const file = path.join(specsRoot(projectDir), SIGNAL_FILE);
+  if (!valid.length && (!fs.existsSync(file) || (!contradicted.length && !agreed.length))) return null;
+  const now = new Date().toISOString();
+  const r = writeSignalRecords(projectDir, (records) => {
+    const idx = new Map(records.map((x) => [signalKey(x.track, x.word), x]));
+    const learned = [], forgotten = [];
+    let changed = false, capped = 0;
+    const drop = (rec) => {
+      const i = records.indexOf(rec);
+      if (i < 0) return;
+      records.splice(i, 1);
+      idx.delete(signalKey(rec.track, rec.word));
+      forgotten.push({ track: rec.track, word: rec.word, effect: rec.effect });
+      changed = true;
+    };
+    for (const o of contradicted) { const rec = idx.get(signalKey(o.track, o.word)); if (rec && rec.origin === "learned") drop(rec); }
+    for (const a of agreed) {
+      const rec = idx.get(signalKey(a.track, a.word));
+      if (rec && rec.origin === "learned" && rec.count < SIGNAL_OVERRIDE_MIN && a.off === (rec.effect === "off")) drop(rec);
+    }
+    for (const v of valid) {
+      const k = signalKey(v.track, v.word);
+      let rec = idx.get(k);
+      if (rec && rec.origin === "set") continue; // a word set by hand is the team's explicit choice: learning never changes it
+      if (rec && (rec.effect === "off") === (v.effect === "off")) { // one more consistent correction
+        rec.count++;
+        rec.lastAt = now;
+        if (v.effect === "strong") rec.effect = "strong";
+      } else {
+        if (rec) drop(rec); // an opposite correction starts over
+        if (records.length >= SIGNAL_OVERRIDE_MAX) { // full: the oldest pending learned record makes room, never an active one
+          const pend = records.filter((x) => x.origin === "learned" && x.count < SIGNAL_OVERRIDE_MIN).sort((a, b) => String(a.lastAt || "").localeCompare(String(b.lastAt || "")))[0];
+          if (!pend) { capped++; continue; }
+          drop(pend);
+        }
+        rec = { track: v.track, word: v.word, effect: v.effect, count: 1, origin: "learned", lastAt: now };
+        records.push(rec);
+        idx.set(k, rec);
+      }
+      changed = true;
+      learned.push({ track: rec.track, word: rec.word, effect: rec.effect, count: rec.count, active: signalActive(rec) });
+    }
+    return { changed, learned, forgotten, capped };
+  });
+  if (!r.ok) return { error: r.fileError ? r.fileError.code : "busy", busy: !!r.busy };
+  if (!r.learned.length && !r.forgotten.length && !r.capped) return null;
+  return Object.assign({ learned: r.learned, forgotten: r.forgotten }, r.capped ? { capped: r.capped } : {});
+}
+// The localized note spec_create adds for what it learned (null when nothing).
+function signalLearnNote(L, lang) {
+  if (!L) return null;
+  const G = i18n.msg(lang).signals;
+  if (L.error) return G.learnFailed(L.error);
+  return [...L.learned.map((x) => (x.active ? G.learnedActive(x.track, x.word, x.effect, x.count) : G.learnedPending(x.track, x.word, x.effect, x.count, SIGNAL_OVERRIDE_MIN))),
+    ...L.forgotten.map((x) => G.learnedDropped(x.track, x.word, x.effect)), L.capped ? G.capped(SIGNAL_OVERRIDE_MAX) : null].filter(Boolean).join(" ");
+}
+// spec_tracks {action: "signals", op, track, word, effect} / `dev-spec signals [list | set <track> <word> off|weak|strong | forget
+// <track> <word>]` — the project's overrides: list them (active / pending, the file's problems), set one by hand (applies at once),
+// forget one.
+function signalOverrides(projectDir, op, opts = {}) {
+  const pl = projectLang(projectDir);
+  let lang = null;
+  if (opts.lang != null && String(opts.lang).trim()) {
+    lang = i18n.canonicalLang(String(opts.lang));
+    if (!lang) { const A = i18n.msg(pl).args; return { ok: false, error: A.invalid(A.item("lang", A.oneOf(i18n.LANGS.join(", ")), JSON.stringify(String(opts.lang)))) }; }
+  }
+  const lng = lang || pl;
+  const G = i18n.msg(lng).signals;
+  const act = op == null || !String(op).trim() ? "list" : String(op).trim().toLowerCase();
+  if (!SIGNAL_OPS.includes(act)) return { ok: false, error: G.badOp(String(op)) };
+  const rel = ".specs/" + SIGNAL_FILE;
+  const base = { action: "signals", op: act, file: rel };
+  if (act === "list") {
+    const rd = readSignalOverrides(projectDir);
+    const OPT = optionalTracks();
+    const overrides = rd.records.map((r) => Object.assign({}, r, { active: signalActive(r) }, OPT.includes(r.track) ? {} : { unknownTrack: true }));
+    const warning = signalFileWarning(rd);
+    const lines = [overrides.length ? G.listHead(rel, overrides.length, overrides.filter((o) => o.active).length, SIGNAL_OVERRIDE_MIN) : G.listNone(rel)];
+    for (const o of overrides) lines.push(G.listItem(o, SIGNAL_OVERRIDE_MIN));
+    if (warning) lines.push(G.fileWarning(rel, warning.code, warning.entries || 0));
+    for (const p of rd.problems) lines.push(G.problem(p.index, p.code));
+    return Object.assign({ ok: true }, base, { exists: rd.exists, min: SIGNAL_OVERRIDE_MIN, max: SIGNAL_OVERRIDE_MAX, overrides, problems: rd.problems },
+      warning ? { warning } : {}, { lines });
+  }
+  const track = opts.track != null ? String(opts.track).trim().toLowerCase().replace(/^\+/, "") : "";
+  if (!track) return { ok: false, error: G.needTrackWord(act) };
+  if (track === "core") return { ok: false, error: G.coreTrack };
+  const OPT = optionalTracks();
+  if (act === "set" ? !OPT.includes(track) : !RE_SIGNAL_TRACK.test(track)) return { ok: false, error: G.badTrack(track, OPT.join(", ")) };
+  const word = signalWord(opts.word);
+  if (!word) return { ok: false, error: opts.word == null || !String(opts.word).trim() ? G.needTrackWord(act) : G.badWord(String(opts.word).slice(0, 80)) };
+  const effect = opts.effect != null ? String(opts.effect).trim().toLowerCase() : "";
+  if (act === "set" && !SIGNAL_EFFECTS.includes(effect)) return { ok: false, error: G.badEffect(String(opts.effect == null ? "" : opts.effect)) };
+  if (!fs.existsSync(specsRoot(projectDir))) return { ok: false, error: i18n.msg(lng).err.noSpecs(projectDir) };
+  const k = signalKey(track, word);
+  const r = writeSignalRecords(projectDir, (records) => {
+    const i = records.findIndex((x) => signalKey(x.track, x.word) === k);
+    const prev = i >= 0 ? records[i] : null;
+    if (act === "forget") {
+      if (!prev) return { changed: false, removed: null };
+      records.splice(i, 1);
+      return { changed: true, removed: prev };
+    }
+    if (!prev && records.length >= SIGNAL_OVERRIDE_MAX) return { changed: false, full: true };
+    const rec = { track, word, effect, count: prev ? prev.count : 1, origin: "set", lastAt: new Date().toISOString() };
+    if (prev) records[i] = rec; else records.push(rec);
+    return { changed: true, override: rec, replaced: prev };
+  });
+  if (!r.ok) return r.busy ? r : { ok: false, error: G.fileWarning(rel, r.fileError.code, r.fileError.entries || 0), fileWarning: r.fileError };
+  if (act === "forget") {
+    if (!r.removed) return { ok: false, error: G.notFound(track, word), notFound: true };
+    return Object.assign({ ok: true }, base, { removed: r.removed, lines: [G.forgotten(r.removed.track, r.removed.word, r.removed.effect)] });
+  }
+  if (r.full) return { ok: false, error: G.capped(SIGNAL_OVERRIDE_MAX), full: true };
+  return Object.assign({ ok: true }, base, { override: Object.assign({}, r.override, { active: true }), replaced: r.replaced || null,
+    lines: [G.setDone(track, word, effect, r.replaced ? r.replaced.effect : null)] });
+}
+
 module.exports = { conceptMap, SIGNAL_CONCEPTS, SIGNAL_HAZARDS, SIGNAL_CUES, NEGATORS, NEG_FILLER, NEG_FILLER_EN, NEG_AFTER,
   W, PT_STRONG, PT_STRONG_CHARS, PT_WEAK, ES_STRONG, ES_STRONG_CHARS, ES_WEAK, EN_WORDS, CLAUSE_START, INF_WORDS, INF, PT_INF,
   ES_INF, PTES_INF, ES_NO_INF,
-  guessLang, configuredLang, isNegated, STEMS, VERB_STEMS, IRREGULAR_FORMS, KW_GAP, KW_GAP_RE, INFLECTION,
-  ACRONYM_INFLECTION, ADJ_SUFFIX, KW_RE, pluralize, KW_LITERAL, KW_CACHE_MAX, KW_PLAIN, keywordLiteral, keywordRe,
-  keywordPattern, PATH_HEADS, splitWordPairs, classify, buildReasoning, __link };
+  guessLang, configuredLang, isNegated, negatedBefore, negatedAfter, coordinatedNegation, listLink, STEMS, VERB_STEMS, IRREGULAR_FORMS,
+  KW_GAP, KW_GAP_RE, INFLECTION, ACRONYM_INFLECTION, ADJ_SUFFIX, KW_RE, pluralize, KW_LITERAL, KW_CACHE_MAX, KW_PLAIN, keywordLiteral,
+  keywordRe, keywordPattern, PATH_HEADS, splitWordPairs, classify, buildReasoning, SIGNAL_FILE, SIGNAL_OVERRIDE_MIN, SIGNAL_OVERRIDE_MAX,
+  SIGNAL_EFFECTS, SIGNAL_OPS, readSignalOverrides, learnSignalOverrides, signalLearnNote, signalOverrides, __link };

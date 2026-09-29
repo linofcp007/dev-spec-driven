@@ -16,12 +16,12 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs, evidenceMode,
   evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText, guardInput,
   guardLevel, headingHasMarker, headRest, implementsRel, isInsideDir, isObj, isPackTrack, isRecord, isSpikeDir,
-  legacyPackName, legacyPackMarkerTrack, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
+  learnSignalOverrides, legacyPackName, legacyPackMarkerTrack, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
   optionalTracks, own, packDesignBlock, packMarkersFor, packOf, packTaskBlock, parseTasks, parseTracks,
   placeholderReport, projectChecks, projectLang, quotedValue, RE_ACTIVE_TRACKS, RE_TESTABILITY, RE_WIN_RESERVED,
   readIfExists, readJson, readRoadmap, readState, requirementAcIds, resolveFeature, roadmapError, rolesSummary,
   safeReaddir, safeSpecText, scaffoldText, scanTaskLines, seedProjectLang, setApprovalGuard, setApprovalRoles,
-  setEvidenceMode, setGuard, setRoadmapLang, setStopCheck, slugify, specsRoot, SPIKE_FILE, spikeCreateInput,
+  setEvidenceMode, setGuard, setRoadmapLang, setStopCheck, signalLearnNote, slugify, specsRoot, SPIKE_FILE, spikeCreateInput,
   stampSpecVersion, stateFromFile, statePath, steeringGlobMatch, steeringScaffold, stopCheckEnabled, storeCreateFlow,
   stripHashComment, stripHtmlComments, taskBlocks, taskMarkers, textFingerprint, toPosix, trackAcIds, trackLabel,
   trackMarker, trackRunRe, trackSteeringFiles, trackSteeringStub, trackTaskHeading, trackTokens, unknownSteeringStub,
@@ -31,12 +31,12 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   checksInput, checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
   guardInput, guardLevel, headingHasMarker, headRest, implementsRel, isInsideDir, isObj, isPackTrack, isRecord,
-  isSpikeDir, legacyPackName, legacyPackMarkerTrack, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
+  isSpikeDir, learnSignalOverrides, legacyPackName, legacyPackMarkerTrack, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
   optionalTracks, own, packDesignBlock, packMarkersFor, packOf, packTaskBlock, parseTasks, parseTracks,
   placeholderReport, projectChecks, projectLang, quotedValue, RE_ACTIVE_TRACKS, RE_TESTABILITY, RE_WIN_RESERVED,
   readIfExists, readJson, readRoadmap, readState, requirementAcIds, resolveFeature, roadmapError, rolesSummary,
   safeReaddir, safeSpecText, scaffoldText, scanTaskLines, seedProjectLang, setApprovalGuard, setApprovalRoles,
-  setEvidenceMode, setGuard, setRoadmapLang, setStopCheck, slugify, specsRoot, SPIKE_FILE, spikeCreateInput,
+  setEvidenceMode, setGuard, setRoadmapLang, setStopCheck, signalLearnNote, slugify, specsRoot, SPIKE_FILE, spikeCreateInput,
   stampSpecVersion, stateFromFile, statePath, steeringGlobMatch, steeringScaffold, stopCheckEnabled, storeCreateFlow,
   stripHashComment, stripHtmlComments, taskBlocks, taskMarkers, textFingerprint, toPosix, trackAcIds, trackLabel,
   trackMarker, trackRunRe, trackSteeringFiles, trackSteeringStub, trackTaskHeading, trackTokens, unknownSteeringStub,
@@ -446,6 +446,8 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     : bugfix ? allTracks().filter((x) => x === "core" || x === "tdd" || (given && pt.tracks.includes(x)))
     : given ? pt.tracks
     : clsR.tracks;
+  // (1.21 F2) the human confirmed Phase 0 with tracks of their own for a new plain feature whose summary was classified here
+  const learnFrom = !existed && !bugfix && !spike && given && !cls && !!clsR && summary != null && !!String(summary).trim();
   const newTracks = existed ? t.filter((x) => !current.includes(x)) : [];
   const bugExtra = !existed && bugfix ? t.filter((x) => x !== "core" && x !== "tdd") : [];
   if (newTracks.length) {
@@ -502,8 +504,18 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
     if (fresh) { try { stampSpecVersion(projectDir); } catch { /* best-effort */ } }
     if (userLang && !stored) { try { if (seedProjectLang(projectDir, lng)) res.userDefaults = { lang: lng }; } catch { /* best-effort */ } } // 1.16 C2
+    // 1.21 F2 — a Phase 0 correction: a NEW plain feature whose summary the classifier read, created with other tracks than it
+    // suggested (the human's choice) → the words that drove the suggestion are recorded in .specs/classifier.json (never silently:
+    // `signalOverrides` + a note). Best-effort — a failure to record never fails the create.
+    let learnNote = null;
+    if (learnFrom) {
+      try {
+        const L = learnSignalOverrides(projectDir, clsR, t);
+        if (L) { res.signalOverrides = L; learnNote = signalLearnNote(L, lng); }
+      } catch { /* best-effort */ }
+    }
     maybeRefreshRoadmap(projectDir);
-    const notes = [kindNote, langNote, newTracks.length ? i18n.msg(lng).tracks.addedOnCreate(slug, newTracks.map((x) => "+" + x).join(", ")) : null].filter(Boolean);
+    const notes = [kindNote, langNote, newTracks.length ? i18n.msg(lng).tracks.addedOnCreate(slug, newTracks.map((x) => "+" + x).join(", ")) : null, learnNote].filter(Boolean);
     if (notes.length) res.note = notes.join(" ");
     // C3: the flow — named when created design-first, ignored (a bugfix …) or kept (an existing feature); `flow` only when design-first.
     const flowNote = flowInfo.store ? i18n.msg(lng).flow.created(flowOrderText(dir, t, flowInfo.store)) : flowInfo.note;

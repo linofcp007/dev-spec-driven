@@ -57,6 +57,18 @@ is a draft for the human, who confirms Phase 0.
   negated by nature — "concurrent updates never oversell" — so its negation is the requirement: it counts. So is a +api
   breaking change ("without breaking changes", "sem alterações incompatíveis", "sin cambios incompatibles") and a +obs outage
   ("without downtime", "sem indisponibilidade").
+- **A negation reaches the whole list it opens** (1.21), for every track: "We will not add feature flags or canary
+  releases", *"Não vamos usar feature flags nem lançamento canário"*, *"No usaremos feature flags ni despliegue canario"*,
+  "without Kafka, RabbitMQ or SQS", "neither … nor" — each item is negated. It stops at "and" (often a new predicate: "without
+  downtime and roll back on errors"), at a contrast word ("no feature flags, just a canary release" keeps the canary release)
+  and at a comma no "or" closes ("Without feature flags, the canary release is done by hand").
+- **This project's own corrections** (1.21): when the human confirms Phase 0 with other tracks than suggested — `spec_create`
+  with `tracks` and the same description as `summary` — the words that drove the suggestion are recorded in
+  `.specs/classifier.json`. After **two consistent corrections** a word the team keeps rejecting for a track stops turning it on
+  in this project (`off`), and a word the team keeps adding a track for becomes a `weak` / `strong` signal there; an agreement
+  resets a pending correction, a contrary choice drops an applied one. `spec_classify` names every override that changed its
+  reading (`overrides` + a note) and `{explain: true}` lists every match and override; `dev-spec signals` / `spec_tracks
+  {action: "signals"}` lists, sets (applies at once) or forgets them. Without the file nothing changes.
 
 ---
 
@@ -77,8 +89,9 @@ is a draft for the human, who confirms Phase 0.
 3. **Present for approval** the mode, the active track set, the signals that triggered each, and the
    blast radius. If the user disagrees, adjust the track set before requirements.
 4. **After approval**, `spec_init {tracks, lang}` if steering is missing, then
-   `spec_create {name, tracks, lang}` once — it seeds `classification.md` (format below), where you
-   record those decisions.
+   `spec_create {name, tracks, summary, lang}` once — it seeds `classification.md` (format below), where you
+   record those decisions. Pass the description you classified as `summary`: when the chosen tracks differ from the
+   suggestion, the correction is recorded for this project (see "This project's own corrections" above).
 
 When unsure whether a track applies, **turn it on**. Over-investing rigor on a feature that turns
 out simple costs a little time; under-investing on a feature that turns out critical costs an
@@ -298,7 +311,9 @@ payment provider's OpenAPI spec", "their Admin API version", *"a API REST do Str
 organisation's acronym (*"la API pública del BCE"*, "the ECB's public API" — never a technical one: REST, CRM, SDK…) — or
 governed by a consumer verb ("call", "integrate with", "sync from", "through", "via", "fetch", "the Salesforce REST API";
 *integrar com, chamar, consultar · integrar con, llamar a, obtener*) counts as a generic word, unless the clause says the API
-is ours ("Expose our catalog to partners through a versioned REST API"). An API **key** is +sec's word, not a contract: "an
+is ours ("Expose our catalog to partners through a versioned REST API"). **Our API + a new version** (1.21): a bare "API"
+right after "our" (*nossa · nuestra*, ≤ 2 words between) in a sentence that names a version (v2, version 3, a new / major
+version, versioning) is strong — "Our webhooks API needs a v2 …". An API **key** is +sec's word, not a contract: "an
 API key management page" is a UI, "call the Stripe API" consumes someone else's contract — *possible +api* at most.
 
 Worked examples (what `spec_classify` answers):
@@ -331,15 +346,19 @@ Classifier signals — **strong:** design system, design tokens, component libra
 WCAG, a11y, screen reader, keyboard navigation / accessible / only, focus order / trap / indicator
 / management, colour / color contrast, contrast ratio, alt text, `ARIA`, aria-label, reduced motion, responsive layout /
 design, mobile-first, dark mode, Storybook, Figma, Core Web Vitals, `LCP`, visual regression, skeleton screen, empty state,
-right-to-left, a landing / settings / admin / management / profile / account page, an admin panel (*sistema de design,
+right-to-left, a landing / settings / admin / management / profile / account page, an admin panel, a confirm dialog, a
+confirmation modal, a modal dialog / window, a toast notification, a snackbar (1.21 — *diálogo de confirmação, janela modal,
+notificação toast · diálogo de confirmación, ventana modal, notificación toast*) (*sistema de design,
 leitor de ecrã / de tela, navegação por teclado, modo escuro, interface do utilizador, página de definições,
 painel de administração · sistema de diseño, lector de pantalla, modo oscuro, interfaz de usuario, página de
 ajustes, panel de administración*). **Weak:** accessibility (*acessibilidade · accesibilidad* — alone it may be a venue's
 wheelchair access; with a page, a form or WCAG it is UI), frontend, `UI` / `UX` (capitals, one concept — "translate the UI
 into Spanish" alone is no UI work), a UI framework written with its capital (`React`, `Vue`,
 `Angular`, `Svelte` — one concept), CSS / Tailwind, a modal, dropdown, tooltip, navbar, sidebar, toast, carousel, spinner,
-a picker, a confirm dialog, swipe, responsive, i18n / l10n / `RTL`, `CLS` / `INP`, a loading / error state, form validation,
-inline errors / validation, a wireframe / mockup. **Generic** (only beside a strong or weak one): screen, page, form (the
+a picker, a popup / banner, swipe, responsive, mobile-friendly (*adaptado ao telemóvel · adaptada al móvil*), i18n / l10n /
+`RTL`, `CLS` / `INP`, a loading / error state, form validation, inline errors / validation — errors next to each field
+(*junto a cada campo*) —, a wireframe / mockup; a widget a display verb shows or opens is strong ("Show a modal …", "display a
+tooltip", *"Mostrar um popup"*). **Generic** (only beside a strong or weak one): screen, page, form (the
 nouns — never "screening", "formed"), button, click, dialog, dashboard, menu, icon, widget, layout, theme (*ecrã, tela,
 página, formulário, botão, painel · pantalla, formulario, botón, tablero, cuadro de mando*). **Backend-only work is no UI
 work:** in a clause (up to `. ! ? ; :` — a short label before a colon belongs to what follows it) that names a handler
@@ -349,7 +368,8 @@ interface já existe"*) — but not when the backend word is negated ("Frontend 
 page", "The settings page redesign needs no API changes", *"Sin backend: nueva página de ajustes"*), when the page consumes
 it ("The landing page loads its testimonials from the CMS API"), when it sits in another clause ("Redesign the admin panel;
 the backend team will add the endpoints later") or when the text says "frontend only" (*apenas frontend · solo frontend*);
-"the frontend team" names a team, not UI work. An empty state in a sentence about a state machine is weak.
+"the frontend team" names a team, not UI work. A **public** API is never a page's backend (1.21): "Expose a public REST API
+for the mobile app's settings screen" is +api and +ui. An empty state in a sentence about a state machine is weak.
 A **dashboard** is +ui's generic word only — a sales dashboard is a product screen, never +obs; a monitoring / Grafana
 dashboard is +obs. `a11y` is a +ui signal, but never a reserved pack name: a team's accessibility pack keeps it.
 

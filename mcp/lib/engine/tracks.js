@@ -885,6 +885,18 @@ const SIGNALS = {
     //   article + ≤ window.adjectives lower-case adjectives ("REST API for the mobile app", "Add rate limiting to the public API").
     // Verb lists hold one whole lower-case word per entry — a word or a regex fragment ("publish(?:es|ed|ing)?").
     cues: [
+      // (1.21 F2) our own API + a new version of it in the sentence is contract work: "Our webhooks API needs a v2 …", "A nossa API
+      // de webhooks precisa de uma v2", "Nuestra API de pagos necesita una nueva versión" — the bare word "api" (generic) is strong
+      // when an own word stands right before it (≤ 2 words between) AND the sentence names a version (v2, version 3, a new / major
+      // version, versioning). Tried before the ownership rule (which decides every other hit).
+      { kind: "all", on: ["api"], ifTier: "generic", then: "strong",
+        rules: [
+          { kind: "near", before: { words: [[["our", "nosso", "nossa", "nuestro", "nuestra"], { optional: "[\\p{L}\\p{N}-]+" }, { optional: "[\\p{L}\\p{N}-]+" }]],
+            chars: 40, edge: "letter" } },
+          { kind: "sentence", edge: "word", phrases: ["v[1-9][0-9]?", ["versions?", "[0-9]+"], ["new", { optional: "major" }, "versions?"],
+            ["major", "versions?"], "versioning", ["versão", "[0-9]+"], ["nova", "versão"], "versionamento", ["versión", "[0-9]+"],
+            ["nueva", "versión"], "versionado"] },
+        ] },
       {
         kind: "ownership",
         ambiguous: ["public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "problem details",
@@ -963,29 +975,43 @@ const SIGNALS = {
       "storybook", "figma", "core web vitals", "largest contentful paint", "cumulative layout shift", "interaction to next paint", "LCP",
       "visual regression", "skeleton screen", "skeleton loader", "empty state", "right-to-left", "landing page", "settings page",
       "settings screen", "admin page", "admin panel", "admin ui", "management page", "profile page", "account page",
+      // 1.21 F2: the everyday UI components a text names by themselves — a confirm dialog, a toast notification, a snackbar (one
+      // word: a "snack bar" is a food counter) — were anchors only ('possible' alone); they are UI work
+      "confirm dialog", "confirmation dialog", "confirmation modal", "confirm modal", "modal dialog", "modal window",
+      "toast notification", "toast message", "snackbar",
       // PT
       "sistema de design", "leitor de ecrã", "leitor de tela", "navegação por teclado", "contraste de cor", "texto alternativo", "movimento reduzido", "design responsivo", "layout responsivo", "modo escuro", "tema escuro",
       "interface do utilizador", "interface de utilizador", "interface do usuário", "interface de usuário", "componente de interface",
       "biblioteca de componentes", "regressão visual", "estado vazio", "página de definições", "página de configurações",
       "página de administração", "painel de administração", "página de gestão", "página de perfil", "ecrã de definições",
       "tela de configurações",
+      "diálogo de confirmação", "caixa de diálogo de confirmação", "janela de confirmação", "modal de confirmação", "janela modal",
+      "notificação toast", "notificações toast", "mensagem toast",
       // ES
       "sistema de diseño", "lector de pantalla", "navegación por teclado", "contraste de color", "movimiento reducido",
       "diseño responsivo", "diseño adaptable", "modo oscuro", "tema oscuro", "interfaz de usuario", "componente de interfaz", "regresión visual",
       "estado vacío", "página de ajustes", "página de configuración", "panel de administración", "página de gestión", "pantalla de ajustes",
+      "diálogo de confirmación", "cuadro de diálogo de confirmación", "ventana de confirmación", "modal de confirmación", "ventana modal",
+      "notificación toast", "notificaciones toast", "mensaje toast",
     ],
     weak: [
       "accessibility", // (1.19 T review) weak: "wheelchair accessibility of each venue" — with a page / form / WCAG it is +ui
       "frontend", "front-end", "UI", "UX", "React", "Vue", "Angular", "Svelte", "tailwind", "css", "stylesheet", "modal", "dropdown", "tooltip",
       "navbar", "sidebar", "toast", "carousel", "spinner", "responsive", "i18n", "l10n", "RTL", "CLS", "INP", "loading state", "error state",
       "form validation", "wireframe", "mockup",
-      // 1.19 T review: a picker ("a language picker"), a confirm dialog, a swipe gesture, inline form errors
-      "picker", "confirmation dialog", "confirm dialog", "swipeable", "swipe", "inline error", "inline validation",
+      // 1.19 T review: a picker ("a language picker"), a swipe gesture, inline form errors (a confirm dialog is strong since 1.21)
+      "picker", "swipeable", "swipe", "inline error", "inline validation",
+      // 1.21 F2: a pop-up; errors shown next to each field (inline validation, one concept); a mobile-friendly screen (responsive)
+      "popup", "pop-up", "banner", "next to each field", "beside each field", "below each field", "under each field", "mobile-friendly", "mobile friendly",
       // PT
       "acessibilidade", "responsivo", "responsiva", "estado de carregamento", "estado de erro", "validação de formulário",
       "validação inline", "erros inline",
+      "junto a cada campo", "junto de cada campo", "ao lado de cada campo", "por baixo de cada campo", "adaptado ao telemóvel",
+      "adaptada ao telemóvel", "adaptado para telemóvel", "adaptada para telemóvel", "adaptado para celular", "adaptada para celular",
       // ES
       "accesibilidad", "estado de carga", "estado de error", "validación de formulario", "validación inline", "errores inline",
+      "al lado de cada campo", "debajo de cada campo", "adaptada al móvil", "adaptado al móvil", "adaptada a móviles", "adaptado a móviles",
+      "adaptada para móvil", "adaptado para móvil",
     ],
     generic: [
       "screen", "page", "form", "button", "dialog", "dashboard", "menu", "icon", "widget", "click", "layout", "theme",
@@ -1005,12 +1031,16 @@ const SIGNALS = {
       vitals: ["CLS", "INP"],
       states: ["loading state", "error state", "estado de carregamento", "estado de erro", "estado de carga", "estado de error"],
       formValidation: ["form validation", "validação de formulário", "validación de formulario"],
-      responsive: ["responsive", "responsivo", "responsiva"],
+      responsive: ["responsive", "responsivo", "responsiva", "mobile-friendly", "mobile friendly", "adaptado ao telemóvel", "adaptada ao telemóvel",
+        "adaptado para telemóvel", "adaptada para telemóvel", "adaptado para celular", "adaptada para celular", "adaptada al móvil",
+        "adaptado al móvil", "adaptada a móviles", "adaptado a móviles", "adaptada para móvil", "adaptado para móvil"],
       design: ["wireframe", "mockup"],
       a11y: ["accessibility", "acessibilidade", "accesibilidad"],
       gesture: ["swipe", "swipeable"],
-      dialog: ["confirmation dialog", "confirm dialog"],
-      inline: ["inline error", "inline validation", "validação inline", "erros inline", "validación inline", "errores inline"],
+      popup: ["popup", "pop-up", "banner"],
+      inline: ["inline error", "inline validation", "validação inline", "erros inline", "validación inline", "errores inline",
+        "next to each field", "beside each field", "below each field", "under each field", "junto a cada campo", "junto de cada campo",
+        "ao lado de cada campo", "por baixo de cada campo", "al lado de cada campo", "debajo de cada campo"],
       screen: ["screen", "page", "ecrã", "tela", "página", "pantalla"],
       form: ["form", "formulário", "formulario"],
       button: ["button", "botão", "botón", "click"],
@@ -1019,6 +1049,13 @@ const SIGNALS = {
     },
     // CUES (1.19 T review, verify 1) — rules tried in order, the first that fires decides (generic kinds in classify.js):
     cues: [
+      // (1.21 F2) a widget a display verb shows or opens is UI work: "Show a modal …", "display a tooltip", "open the date picker",
+      // "Mostrar um popup", "muestra un spinner" — strong (alone the widget word stays an anchor: "modal split", "the modal verbs")
+      { kind: "near", on: ["modal", "dropdown", "tooltip", "toast", "popup", "pop-up", "banner", "carousel", "sidebar", "navbar", "spinner", "picker", "dialog"],
+        then: "strong",
+        before: { words: [[["show", "shows", "showing", "display", "displays", "displaying", "open", "opens", "opening", "render", "renders",
+          "mostrar", "mostra", "mostram", "exibir", "exibe", "exibem", "abrir", "abre", "abrem", "muestra", "muestran", "abren"],
+        ["a", "an", "the", "um", "uma", "o", "un", "una", "el", "la"], { optional: "[\\p{L}-]+" }]], chars: 40, edge: "letter" } },
       // an empty state in a sentence about a state machine is a flow state, not a UI state ("the empty state blocks sales"): weak
       { kind: "sentence", on: ["empty state", "estado vazio", "estado vacío"], ifTier: "strong", then: "weak", edge: "letter",
         phrases: ["state[- ]machines?", "state transitions?", "máquinas? de estados?", "transiç(?:ão|ões) de estados?",
@@ -1047,7 +1084,10 @@ const SIGNALS = {
           words: ["request handlers?", "route handlers?", "endpoints?", "back-?end", "data layer", "repositor(?:y|ies)", "sql",
             "server-side", "already exists?", "já existe", "ya existe", "camada de dados", "capa de datos"],
           requests: { methods: ["get", "post", "put", "patch", "delete"], targets: ["handlers?", "endpoints?", "routes?"] },
-          api: { words: ["apis?"], notAfter: [["chaves?", "claves?"], ["de", "da", "del"]], notBefore: ["keys?", "tokens?"] },
+          // (never an API key / token; 1.21 F2: never a PUBLIC API — a contract for outside consumers, not the backend of one page:
+          // "Expose a public REST API for the mobile app's settings screen" builds the screen's consumer too, the mixed case)
+          api: { words: ["apis?"], notAfter: [[["chaves?", "claves?"], ["de", "da", "del"]], "public", ["public", ["rest", "http", "json", "web"]]],
+            notBefore: ["keys?", "tokens?", "públicas?", [["rest", "http", "json", "web"], "públicas?"]] },
         },
         negators: ["no", "not", "without", "never", "nor", "none", "sem", "não", "nao", "nem", "nunca", "sin", "ni"],
         negWindow: 4,

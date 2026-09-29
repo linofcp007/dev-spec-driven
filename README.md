@@ -411,7 +411,7 @@ The same engine from any terminal (`node cli/dev-spec.js <command>`, or `dev-spe
 prints the raw result, and `help` lists every flag:
 
 ```text
-classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
+classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
 create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
@@ -851,7 +851,7 @@ O mesmo motor em qualquer terminal (`node cli/dev-spec.js <comando>`, ou `dev-sp
 mostra o resultado em bruto e `help` lista todas as opções:
 
 ```text
-classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
+classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
 create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
@@ -1296,7 +1296,7 @@ El mismo motor desde cualquier terminal (`node cli/dev-spec.js <comando>`, o `de
 `--json` muestra el resultado en bruto y `help` lista todas las opciones:
 
 ```text
-classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
+classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
 create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
