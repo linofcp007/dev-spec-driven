@@ -339,7 +339,7 @@ Every feature: request rate, error rate, P50/P95/P99 latency, saturation of its 
 
 ## SLOs & Error Budgets
 - Per critical journey: the SLI, the SLO target and window: [checkout: 99.5% of valid requests < 800 ms, 28 days] · the error-budget policy (what stops when it is spent): [feature launches pause]
-- Burn-rate alerts: the fast one (e.g. 14.4× over 1 h) pages, the slow one (e.g. 6× over 6 h) opens a ticket.
+- Burn-rate alerts: the fast ones page (e.g. 14.4× over 1 h, 6× over 6 h), the slow one (e.g. 1× over 3 days) opens a ticket.
 
 ## Rollout & Rollback
 - Feature flags: an owner and a removal date each · canary / progressive steps and the metrics that gate them: [1% → 10% → 50% → 100%, gated on the SLO] · rollback criteria and target time: [error rate > baseline + 1 pt → roll back in < 5 min]

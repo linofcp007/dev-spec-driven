@@ -20,7 +20,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText, flowPhaseIndex,
   FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority, hasSuccessCriteria,
   headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord, isSpikeDir, isTestCodePath,
-  legacyPackName, loadRoadmap, malformedMarkers, missingPackTracks, packReservedSince, normalizeLang, outsideCodeTemplates,
+  legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, missingPackTracks, packReservedSince, normalizeLang, outsideCodeTemplates,
   overlapDoctorDetail, own, packOf, packRegistry, packTitle, packTracks, parseTasks, pendingGateList, PHASE_FILE,
   phaseActive, phaseContent, phaseFile, PHASES, placeholderSummary, planFileScopes, planIdText, projectLang,
   RE_CODE_TID, RE_CONSTITUTION_CHECK, readIfExists, readJson, readRoadmap, readState, realRootOf, redPhaseHint,
@@ -41,7 +41,7 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   expectsFail, extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText,
   flowPhaseIndex, FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority,
   hasSuccessCriteria, headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord,
-  isSpikeDir, isTestCodePath, legacyPackName, loadRoadmap, malformedMarkers, missingPackTracks, packReservedSince, normalizeLang,
+  isSpikeDir, isTestCodePath, legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, missingPackTracks, packReservedSince, normalizeLang,
   outsideCodeTemplates, overlapDoctorDetail, own, packOf, packRegistry, packTitle, packTracks, parseTasks,
   pendingGateList, PHASE_FILE, phaseActive, phaseContent, phaseFile, PHASES, placeholderSummary, planFileScopes,
   planIdText, projectLang, RE_CODE_TID, RE_CONSTITUTION_CHECK, readIfExists, readJson, readRoadmap, readState,
@@ -635,6 +635,9 @@ function specDoctor(projectDir, name, opts = {}) {
     add("track-pack-missing", "warn", fm.trackPacks.missing(missingPacks.map((n) => {
       // 1.17 D review: a pre-1.17 pack whose name is reserved now — why, and the way out (for 'dist': the built-in track is NOT on)
       if (legacyPackName(st, n)) return fm.trackPacks.missingReserved(n, slug, VALID_TRACKS.includes(n), packReservedSince(n));
+      // 1.19 T review: a pack whose marker is a built-in track's now ('webui' with [UI]) — why, and the two ways out
+      const bt = legacyPackMarkerTrack(st, n);
+      if (bt) return fm.trackPacks.missingReservedMarker(n, st.packMarkers[n], bt, slug, packReservedSince(bt));
       const e = reg.entries.find((x) => x.name === n);
       return e ? fm.trackPacks.missingInvalid(n, [...new Set(reg.problems.filter((x) => x.pack === n && x.severity === "error").map((x) => x.code))].join(", ") || "invalid")
         : fm.trackPacks.missingAbsent(n);

@@ -61,6 +61,8 @@ const PTBR_OVERRIDES = [
   ["o controlador pára para revisão", "o controlador faz uma pausa para revisão"],
   ["— lê de outra forma", "— lê de outra forma"], // cmd.exe "reads it differently": a 3rd person after a parenthetical dash
   ["; aceita uma lista", "; aceita uma lista"], // a glob syntax note: "accepts a list"
+  // +obs (1.19 T review): in Brazil a "ligação" is a phone call — the runbook gets a link, the on-call person is "de plantão"
+  ["dispara e chama com a ligação ao runbook", "dispara e aciona o plantão com o link para o runbook"],
 ];
 
 // 1. The European progressive a + infinitive → the Brazilian gerund. correr = a process running → rodando.
@@ -119,6 +121,9 @@ const PTBR_PHRASES = {
   // section synonyms (spec.js PRIVACY_SECTIONS) read the Brazilian headings
   "subcontratantes ulteriores": "suboperadores", "conservação e eliminação": "retenção e eliminação",
   "a aipd": "o RIPD", "da aipd": "do RIPD", "na aipd": "no RIPD", "à aipd": "ao RIPD", "pela aipd": "pelo RIPD", "uma aipd": "um RIPD",
+  // +obs (1.19 T review): the on-call person is "de plantão", and a runbook gets a link (a "ligação" is a phone call in Brazil)
+  "pessoa de serviço": "pessoa de plantão", "uma ligação para o runbook": "um link para o runbook", "a ligação ao runbook": "o link para o runbook",
+  "os rápidos chamam": "os rápidos acionam o plantão",
 };
 // "põe X a verde" (make X pass) → "faz X passar"; "postos a verde" → "deixados verdes"; a leftover "a verde" → "verde(s)".
 const PTBR_GREEN_VERB = { põe: ["faz", "passar"], põem: ["fazem", "passar"], pôr: ["fazer", "passar"], pondo: ["fazendo", "passar"],
