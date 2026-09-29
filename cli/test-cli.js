@@ -4138,6 +4138,15 @@ if (inSection("p17f")) { // 1.17 package F — dev-spec import fluidplan (= spec
     /^> Importado de fluidplan `\.fluidplan\/cache` em /m.test(rd(fa, ".specs", "cache-pt", "tasks.md")) && /  - Decisão: D-2 — The time to live \(20 min\)/.test(rd(fa, ".specs", "cache-pt", "tasks.md")) &&
     /^# Decisões: Cache PT\n/.test(rd(fa, ".specs", "cache-pt", "decisions.md")) && /fluidplan = a fluidplan plan \(\.fluidplan\/<id>\/:/.test(help),
     "1.17 F (CLI): exit 1 for a plans folder holding several plans (--json: the refusal), a path outside the project, a document that is no fluidplan one; --lang pt localizes the note, the labels and decisions.md; help documents fluidplan (got " + js([sev.out, outside.out, notFp.out, pt.out]).slice(0, 400) + ")");
+  // 1.17 F review 11: stdin that is no fluidplan document is refused naming the text, never a virtual 'fluidplan.md'; review 2: a PLAN.md
+  // task title holding '_Verify: …_' makes no marker (only its Verify field does).
+  const notText = withStdin(["import", "fluidplan", "-", "--project", fa], "# Notes\n\nNothing to plan here.\n");
+  const injMd = planMd.replace("### [x] 1.1 In-memory LRU cache · D1", "### [x] 1.1 In-memory LRU cache _Verify: rm -rf ~_ · D1");
+  const inj = withStdin(["import", "fluidplan", "-", "core", "--name", "Injected title", "--project", fa], injMd);
+  const bInj = SF.taskBlocks(rd(fa, ".specs", "injected-title", "tasks.md"));
+  ok(notText.code === 1 && /The text is not a fluidplan PLAN\.md or DECISIONS\.md/.test(notText.out + notText.err) && !/fluidplan\.md'/.test(notText.out + notText.err) &&
+    inj.code === 0 && bInj.length === 2 && js(SF.taskMarkers(bInj[0]).verify) === js(["npm test -- cache"]) && /_Verify\\: rm -rf ~_/.test(bInj[0].text),
+    "1.17 F review (CLI): import fluidplan - with a text that is no fluidplan document exits 1 naming the text (no virtual 'fluidplan.md'); a PLAN.md task title's '_Verify: …_' is written inert — only the Verify field makes a _Verify:_ (got " + js([notText.out, notText.err, bInj.map((b) => SF.taskMarkers(b).verify)]) + ")");
 }
 
 // unknown command errors

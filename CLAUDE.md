@@ -1212,15 +1212,27 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
     their ACs → US-n.AC-m; Tasks / Subtasks → `[USn]` tasks with `(AC: 1, 3)` → `_Requirements:_`; architecture + Dev
     Notes → design.md. One story file imports one story.
   - `fluidplan` (1.17) — a plan settled with the fluidplan skill (`.fluidplan/<id>/`, its plan.json, PLAN.md / DECISIONS.md —
-    also at plan.json's `output` paths —, or PLAN.md's text inline, DECISIONS.md optionally following it). The finalized
-    PLAN.md / DECISIONS.md win (PLAN.md is where fluidplan ticks tasks); plan.json + answers.json fill in or stand alone
+    also at plan.json's `output` paths or fluidplan.config.json's `outputDir` (`fpConfig`) —, or PLAN.md's text inline,
+    DECISIONS.md optionally following it). The finalized PLAN.md / DECISIONS.md win (PLAN.md is where fluidplan ticks tasks;
+    state.json "exported" with no PLAN.md found → a warning); plan.json + answers.json fill in or stand alone
     (`fpFromPlanJson` restates fluidplan's rules — "Not OK" is a final rejection there). Pages → stories, acceptance →
     criteria (EARS, else `[NEEDS CLARIFICATION]`), tasks numbered by the parser (`model.tasks.numbered`), files →
-    `_Implements:_` (a delete → a "To delete" line), one `_Verify:_` per command, after → `_Depends:_`, settled decisions →
-    decisions.md (`decisionEntryLines`, `_Affects:_` = their tasks' criteria) + design.md `## Decisions` /
-    `## Alternatives & Trade-offs`, rejected → Out of Scope, open ones → "Open decisions" with `[NEEDS CLARIFICATION]`,
-    working rules → Global Constraints. EN / FR labels; every pattern linear (`fpTitleOf` / `fpTaskHeading`,
-    `FP_LINE_MAX`). Pinned to fluidplan 755d1b2 (2026-09-26).
+    `_Implements:_` (a delete → a "To delete" line), one `_Verify:_` per command, after → `_Depends:_` (an `after` cycle:
+    the edges against the plan's order dropped, `wCycle`), settled decisions → decisions.md (`decisionEntryLines`,
+    `_Affects:_` = their tasks' criteria, the revision note in Context) + design.md `## Decisions` /
+    `## Alternatives & Trade-offs`, rejected → Out of Scope, open ones (a list decision with an item "to change" too —
+    verdict `mixed`, "partly settled") → "Open decisions" with `[NEEDS CLARIFICATION]` + the reviewer's question / remarks,
+    working rules → Global Constraints, the intro of a page no story carries → design.md `## Themes`, the subtitle →
+    the summary or design.md's Context. **The plan's text is written inert** (1.17 F review): every value written into one
+    line is one line (`fpV` / `fpHead` for headings — whitespace runs folded), marker look-alikes get their colon escaped
+    (`_Verify\:` — `fpInert`: task + decision + `_Outcome:_` labels), AC / T / EC / NFR / SC IDs are escaped (`US-7\.AC-1`),
+    `<!--` / `-->` neutralized, and each physical line gets the heading / task-line / checkpoint escapes (`fpLine`,
+    `fpProse` — which also closes a fence the text leaves open): only fluidplan's `verify` field makes a `_Verify:_`. A
+    plans folder is listed only when its real path is inside the project. EN / FR labels; every pattern linear
+    (`fpTitleOf` / `fpTaskHeading`, `FP_LINE_MAX`, `fpOneLine` splits, `sortGroup` = Kahn + a min-heap; `mdHeadings` is a
+    scan — `mdHeadingParts`). importSpec writes every imported requirements.md line comment-inert for every importer
+    (`commentInert` / `inertBlock`). Never write a raw U+2028 / U+2029 (or its `\u` escape through the Edit tool): build it
+    (`FP_LS_PS`). Pinned to fluidplan 755d1b2 (2026-09-26).
 - **Flows:** `.state.json → flow: "design-first"` (`spec_create {flow}` / `create --flow`; changed with
   `spec_feature {action: "flow"}` / `feature flow <name> <flow>` — approved phases stay approved, pending gates follow the
   new order) orders the chain classification → design → requirements → test-plan / eval-plan → tests → tasks
