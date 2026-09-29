@@ -20,7 +20,8 @@ let acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceho
   RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile, replaceHtmlCommentSpans,
   savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter, stripEnd, stripEnds,
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
-  templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS;
+  templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isDirSafe, isImplementsGlob, isInsideDir, isTestCodePath, SCAN_IGNORE, toPosix;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingIndex, headingLeadRe, inactiveMarkerLines, isGenericSlot, isObj, isRecord,
@@ -29,7 +30,8 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHea
   RE_SUCCESS_CRITERIA, RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile,
   replaceHtmlCommentSpans, savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter,
   stripEnd, stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
-  templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS } = E); }
+  templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isDirSafe, isImplementsGlob, isInsideDir, isTestCodePath, SCAN_IGNORE, toPosix } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.16 Q — spec quality: steering amendments (Q1) · cross-feature acceptance criteria (Q2) · the glossary (Q3)
@@ -742,10 +744,29 @@ const RISKS_SYN = ["risks", "risk", "known risks", "key risks", "main risks", "o
   "avaliação de riscos", "avaliacao de riscos", "matriz de riscos", "registo de riscos", "registro de riscos",
   "riesgos", "riesgo", "riesgos conocidos", "principales riesgos", "análisis de riesgos", "analisis de riesgos", "evaluación de riesgos",
   "evaluacion de riesgos", "matriz de riesgos", "registro de riesgos"];
-// [id, synonyms, the fewest entries that count as weighed]: a decision needs at least two options; one honest line about the
-// risks (a table row, a bullet, or "no material risk, because X") is enough.
-const DESIGN_WEIGH = [["design-tradeoffs", TRADEOFFS_SYN, 2], ["design-risks", RISKS_SYN, 0]];
+// 1.19 R1 — every design names what it REUSES: the core "Reuse & Integration" section (the existing modules / components /
+// helpers / services it uses, what it extends, what is new and why nothing existing fits, where the new code lives). Found by
+// weighSection() like the two above; "Integration points" is the brownfield habit (and integration-plan.md's own heading — a
+// brownfield feature's filled Integration Points stand in for a missing or empty design section, designReuseFallback()).
+// Never a bare "integration" (Integration tests…) nor "existing" alone.
+const REUSE_SYN = ["reuse", "code reuse", "reuse of existing code", "reused components", "reused code", "reusing existing code",
+  "existing components", "existing code", "existing modules", "existing services", "existing helpers", "existing building blocks",
+  "integration points", "integration with existing code", "integration with the existing system", "integration with the existing code",
+  "reutilização", "reutilizacao", "reaproveitamento", "reúso", "reuso", "componentes existentes", "código existente", "codigo existente",
+  "módulos existentes", "modulos existentes", "serviços existentes", "servicos existentes", "pontos de integração", "pontos de integracao",
+  "integração com o existente", "integracao com o existente", "integração com o código existente", "integracao com o codigo existente",
+  "reutilización", "reutilizacion", "aprovechamiento", "servicios existentes", "puntos de integración",
+  "puntos de integracion", "integración con lo existente", "integracion con lo existente", "integración con el código existente",
+  "integracion con el codigo existente"];
+// [id, synonyms, the fewest entries that count as weighed, the approval stamp the check needs]: a decision needs at least two
+// options; one honest line about the risks (a table row, a bullet, or "no material risk, because X") is enough, and so is one
+// about reuse ("Greenfield: nothing to reuse yet"). The stamp (R1): a design approval made before a check existed never has it,
+// and is never flagged by that check — `weigh` (1.17: trade-offs, risks), `reuse` (1.19). A 1.17 / 1.18 approval (weigh
+// without reuse) is still held to the trade-offs and risks, never to the reuse section.
+const DESIGN_WEIGH = [["design-tradeoffs", TRADEOFFS_SYN, 2, "weigh"], ["design-risks", RISKS_SYN, 0, "weigh"], ["design-reuse", REUSE_SYN, 0, "reuse"]];
 const DESIGN_WEIGH_IDS = new Set(DESIGN_WEIGH.map(([id]) => id));
+// The release each stamp arrived with (the "approved before X" note) — approvePhase stamps every key here on a design approval.
+const DESIGN_WEIGH_STAMPS = { weigh: "1.17", reuse: "1.19" };
 // A weigh heading NAMES its section (A review 6): after the heading lead (numbering, an emoji, a marker) the synonym is the whole
 // heading, or it is followed by a separator ( : , ; ( [ / & + | — – . or a spaced hyphen) or a connector word (and / or / vs / for /
 // of … e / ou / de … y / o / en …) — never a modifier: "## Risk-based rate limiting", "## Options parser", "## Riskiest
@@ -820,21 +841,165 @@ function designWeighState(design, syn, min) {
   if (!b.entries && b.proseWords >= (min ? WEIGH_PROSE_WORDS : 1)) return { status: "filled", entries: 0, prose: true };
   return { status: "few", entries: b.entries };
 }
-// The two doctor checks over an (active) design → [{ id, status: pass | warn, detail, state, entries }]. opts.legacy (A review 3):
-// the design was approved before 1.17 (its approval carries no `weigh`) — what would warn passes, with a note: the sections are
-// asked of a design from its next approval on, never of one already signed off (a finished feature following the advice would
-// re-open its re-review, changed-since-approval, stale finish and execution sign-off).
+// 1.19 R1 — a brownfield feature's integration-plan.md: its filled "Integration Points" (the existing components / modules the
+// feature touches — REUSE_SYN names that heading) answer the reuse question when the design has no Reuse & Integration section
+// or leaves it empty. A design section still holding its template slots stays a warn (the placeholder gate owns it).
+function designReuseFallback(integrationPlan) {
+  if (integrationPlan == null) return null;
+  const st = designWeighState(integrationPlan, REUSE_SYN, 0);
+  return st.status === "filled" ? st : null;
+}
+// The doctor checks over an (active) design → [{ id, status: pass | warn, detail, state, entries }] — design-tradeoffs,
+// design-risks, design-reuse (DESIGN_WEIGH order). A design approved before a check existed (A review 3; R1) — what that check
+// would warn passes, with a note: the sections are asked of a design from its next approval on, never of one already signed off
+// (a finished feature following the advice would re-open its re-review, changed-since-approval, stale finish and execution
+// sign-off). opts.approval = the design approval record (approvals.design) — each check reads its own stamp (`weigh` / `reuse`);
+// opts.legacy = true (the 1.17 form) treats every check as approved before it. opts.integrationPlan = integration-plan.md's text
+// (designReuseFallback — state "integration").
 function designWeighChecks(design, lang, opts = {}) {
   const W = i18n.msg(lang).designWeigh;
-  return DESIGN_WEIGH.map(([id, syn, min]) => {
-    const st = designWeighState(design, syn, min);
+  const approval = isRecord(opts.approval) ? opts.approval : null;
+  return DESIGN_WEIGH.map(([id, syn, min, stamp]) => {
+    let st = designWeighState(design, syn, min);
+    if (id === "design-reuse" && (st.status === "missing" || st.status === "empty")) {
+      const fb = designReuseFallback(opts.integrationPlan);
+      if (fb) st = { status: "integration", entries: fb.entries };
+    }
     const detail = W[id][st.status](st.entries, min);
-    if (st.status !== "filled" && opts.legacy) return { id, status: "pass", detail: W.legacyApproval(detail), state: st.status, entries: st.entries, legacy: true };
+    if (st.status === "integration") return { id, status: "pass", detail, state: st.status, entries: st.entries };
+    const legacy = opts.legacy === true || (approval != null && approval[stamp] !== true);
+    if (st.status !== "filled" && legacy) return { id, status: "pass", detail: W.legacyApproval(detail, DESIGN_WEIGH_STAMPS[stamp]), state: st.status, entries: st.entries, legacy: true };
     return { id, status: st.status === "filled" ? "pass" : "warn", detail, state: st.status, entries: st.entries };
   });
 }
 // A design approval made before 1.17 (A review 3): an approval record without the `weigh` stamp approvePhase adds since 1.17.
-const designApprovedBeforeWeigh = (approvals) => isRecord(approvals && approvals.design) && approvals.design.weigh !== true;
+// With a stamp name (R1): made before that stamp's check existed — `reuse` for the 1.19 design-reuse check.
+const designApprovedBeforeWeigh = (approvals, stamp = "weigh") => isRecord(approvals && approvals.design) && approvals.design[stamp] !== true;
+
+// 1.19 R2 — the task brief's "Reuse" section: search before you write, starting where the plan points. Two bounded parts:
+// the design's Reuse & Integration entries that name this task's files (the file, a sibling in its folder, a folder above it),
+// its folders or its acceptance criteria; and the existing source files in the folders of its _Implements:_ targets (names
+// only) — where a duplicate would most likely hide. Read-only: one readdir per folder, never a walk, never a file's content.
+const BRIEF_REUSE_MAX_ENTRIES = 8; // design entries quoted…
+const BRIEF_REUSE_CHARS = 1500; // …and their size
+const BRIEF_REUSE_MAX_FILES = 15; // nearby source files listed
+const BRIEF_REUSE_MAX_DIRS = 5; // folders read (the task's targets' own)
+const BRIEF_REUSE_DIR_ENTRIES = 1000; // directory entries looked at per folder
+// A path-like token of an entry ("src/lib/money.ts", "src/features/checkout/") — every repetition starts with its '/', and a
+// match starts only at a token boundary (the look-behind): a long run with no '/' is tried once, never from each character.
+const RE_REUSE_PATH = /(?<![\p{L}\p{N}_.@~-])[\p{L}\p{N}_.@~-]+(?:\/[\p{L}\p{N}_.@~-]+)+\/?/gu;
+// The section's units: a table's data rows (its header and separator skipped), the outermost list items (a deeper line joins
+// its item), every other paragraph line. Comments and fenced code never count; a unit still holding a template slot is none.
+function reuseUnits(body) {
+  const units = [];
+  let inTable = false, top = null;
+  for (const l of stripFencedCode(stripHtmlComments(body || "")).split(/\r?\n/)) {
+    if (!l.trim()) { inTable = false; continue; }
+    if (/^\s*\|/.test(l)) {
+      if (!inTable) { inTable = true; continue; } // the header row
+      if (!/^[\s|:-]+$/.test(l)) units.push(l.trim()); // the separator row skipped
+      continue;
+    }
+    inTable = false;
+    const li = l.match(/^( *)(?:[-*+]|\d+[.)])\s+\S/);
+    if (li && top != null && li[1].length > top && units.length) { units[units.length - 1] += " " + l.trim(); continue; }
+    if (li) top = li[1].length;
+    units.push(l.trim());
+  }
+  return units.filter((u) => /[\p{L}\p{N}]/u.test(u) && !genericUnit(u) && !placeholderReport(u).length);
+}
+// The task's targets as the design would name them: file keys, their folders (a folder target is its own), the literal folder
+// of a glob; basenames of 5+ characters for an entry that names a file without its path.
+function reuseTargets(projectDir, implementsList) {
+  const keys = new Set(), dirs = new Set(), bases = new Set(), rels = [];
+  for (const ref of implementsList || []) {
+    let rel = implementsRel(ref);
+    if (!rel) continue;
+    if (isImplementsGlob(rel)) { // src/**/*.ts → its literal folder, src
+      const segs = rel.split("/");
+      rel = segs.slice(0, segs.findIndex((seg) => isImplementsGlob(seg))).join("/");
+      if (rel) { dirs.add(implementsKey(rel)); rels.push({ rel, folder: true }); }
+      continue;
+    }
+    const key = implementsKey(rel);
+    const folder = /\/\s*`?\s*$/.test(String(ref).replace(/\\/g, "/")) || isDirSafe(path.resolve(projectDir, rel));
+    keys.add(key);
+    if (folder) dirs.add(key);
+    else {
+      const d = path.posix.dirname(key);
+      if (d !== ".") dirs.add(d);
+      const b = path.posix.basename(key);
+      if (b.length >= 5) bases.add(b);
+    }
+    rels.push({ rel, folder });
+  }
+  return { keys, dirs, bases, rels };
+}
+function reuseEntryMatches(unit, t, acRe) {
+  if (acRe && acRe.test(unit)) return true;
+  for (const m of unit.matchAll(RE_REUSE_PATH)) {
+    const k = implementsKey(m[0]);
+    if (!k) continue;
+    if (t.keys.has(k) || t.dirs.has(k)) return true; // the task's file, or its folder
+    const d = path.posix.dirname(k);
+    if (d !== "." && t.dirs.has(d)) return true; // a sibling in the task's folder
+    for (const f of t.keys) if (f.startsWith(k + "/")) return true; // a folder above the task's file
+  }
+  if (!t.bases.size) return false;
+  const low = FOLD_CASE ? unit.toLowerCase() : unit;
+  for (const b of t.bases) { // a file named without its path: word-bounded, not the tail of another path
+    for (let i = low.indexOf(b); i !== -1; i = low.indexOf(b, i + 1)) {
+      const before = low[i - 1], after = low[i + b.length];
+      if ((before === undefined || !/[\p{L}\p{N}_./-]/u.test(before)) && (after === undefined || !/[\p{L}\p{N}_]/u.test(after))) return true;
+    }
+  }
+  return false;
+}
+// The existing source files (GUARD_CODE_EXT) next to the task's targets — the target folder itself, else the target file's
+// folder — its own files left out; dot files and ignored folders (SCAN_IGNORE: node_modules, .specs…) never read; a folder the
+// plan creates doesn't exist yet and lists nothing. Non-test files first, then by path.
+function reuseNearbyFiles(projectDir, t) {
+  const root = path.resolve(projectDir);
+  const folders = [];
+  for (const { rel, folder } of t.rels) {
+    const abs = path.resolve(root, rel);
+    if ((abs === root && !folder) || !isInsideDir(root, abs)) continue;
+    const dir = folder ? abs : path.dirname(abs);
+    const relDir = toPosix(path.relative(root, dir));
+    if (relDir && relDir.split("/").some((seg) => SCAN_IGNORE.has(seg) || seg.startsWith("."))) continue;
+    if (!folders.includes(dir) && folders.length < BRIEF_REUSE_MAX_DIRS && isDirSafe(dir)) folders.push(dir);
+  }
+  const found = [];
+  for (const dir of folders) {
+    let ents = [];
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }).slice(0, BRIEF_REUSE_DIR_ENTRIES); } catch { continue; }
+    for (const e of ents) {
+      if (!e.isFile() || e.name.startsWith(".") || !GUARD_CODE_EXT.has(path.extname(e.name).toLowerCase())) continue;
+      const rel = toPosix(path.relative(root, path.join(dir, e.name)));
+      if (t.keys.has(implementsKey(rel)) || found.includes(rel)) continue;
+      found.push(rel);
+    }
+  }
+  found.sort((a, b) => (isTestCodePath(a) - isTestCodePath(b)) || (a < b ? -1 : a > b ? 1 : 0));
+  return { files: found.slice(0, BRIEF_REUSE_MAX_FILES), more: Math.max(0, found.length - BRIEF_REUSE_MAX_FILES) };
+}
+// → { state (the design section's: missing · template · empty · filled — designWeighState), total (its real entries), entries
+// (the ones naming this task, bounded), omitted (matching ones left out for size), files, more (nearby files beyond the cap) }.
+function briefReuse(projectDir, design, implementsList, acIds) {
+  const body = design == null ? null : weighSection(design, REUSE_SYN);
+  const state = design == null ? "missing" : designWeighState(design, REUSE_SYN, 0).status;
+  const t = reuseTargets(projectDir, implementsList);
+  const acRe = (acIds || []).length ? new RegExp("(?<![\\p{L}\\p{N}_.-])(?:" + acIds.map(escRe).join("|") + ")(?!\\d)", "u") : null;
+  const units = state === "filled" && body != null ? reuseUnits(body) : [];
+  const entries = [];
+  let omitted = 0, budget = BRIEF_REUSE_CHARS;
+  for (const u of units) {
+    if (!reuseEntryMatches(u, t, acRe)) continue;
+    if (entries.length < BRIEF_REUSE_MAX_ENTRIES && u.length <= budget) { entries.push(u); budget -= u.length; } else omitted++;
+  }
+  const near = reuseNearbyFiles(projectDir, t);
+  return { state, total: units.length, entries, omitted, files: near.files, more: near.more };
+}
 
 // ---------------------------------------------------------------------------
 // Clarify — surface ambiguities/gaps in requirements before designing
@@ -1078,6 +1243,8 @@ module.exports = { XAC_DUPLICATE, XAC_CONFLICT, XAC_TRIGGER, XAC_RESPONSE, XAC_M
   glossBuiltinLines, glossProjectLines, glossSpans, glossUserParts, glossaryHits, briefGlossary, TRADEOFFS_SYN,
   RISKS_SYN, DESIGN_WEIGH, DESIGN_WEIGH_IDS, RE_WEIGH_HEADING_REST, weighHeadingMatches, weighSection, genericUnit,
   designBody, designEntries, WEIGH_PROSE_WORDS, designWeighState, designWeighChecks, designApprovedBeforeWeigh,
+  REUSE_SYN, DESIGN_WEIGH_STAMPS, designReuseFallback, BRIEF_REUSE_MAX_ENTRIES, BRIEF_REUSE_CHARS, BRIEF_REUSE_MAX_FILES,
+  BRIEF_REUSE_MAX_DIRS, BRIEF_REUSE_DIR_ENTRIES, RE_REUSE_PATH, reuseUnits, reuseTargets, reuseEntryMatches, reuseNearbyFiles, briefReuse,
   RE_RATE_LIMIT, RE_ACCESS_DENIED, RE_SUBJECT_RIGHTS, CONSTRAINT_KINDS, CONSTRAINT_SIGNALS, CONSTRAINT_RE,
   constraintSignalRe, RE_CONSISTENCY_ANSWER, RE_ACID, CONSTRAINT_MAX_WORDS, userSpecText, constraintNudge,
   RE_DIST_DELIVERY, RE_DIST_FAILURE, clarify, __link };

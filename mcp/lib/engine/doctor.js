@@ -76,12 +76,14 @@ function designSaveCheck(projectDir, name) {
   }
   let constitution = null; // null = not checked (bugfix)
   let weigh = null; // 1.17 A1: {tradeoffs, risks} = designWeighState's status codes (null for a bugfix) — notes, never unclean
+  let reuse = null; // 1.19 R1: the Reuse & Integration section's state (null for a bugfix) — a note, never unclean
   const notes = [];
   if (kind !== "bugfix") {
     const active = activeDesign(design, tracks);
     constitution = extractSection(active, CONSTITUTION_SYN) == null ? "missing" : sectionFilled(active, CONSTITUTION_SYN) ? "filled" : "unfilled";
-    const wc = designWeighChecks(active, lng);
+    const wc = designWeighChecks(active, lng, { integrationPlan: readIfExists(path.join(f.dir, "integration-plan.md")) });
     weigh = { tradeoffs: wc[0].state, risks: wc[1].state };
+    reuse = wc[2].state;
     // A section still holding its template slots is the placeholders line's; missing / empty / too few options get a ▲ note.
     for (const c of wc) if (c.status === "warn" && c.state !== "template") notes.push("  ▲ " + c.detail);
   }
@@ -96,7 +98,7 @@ function designSaveCheck(projectDir, name) {
       (placeholders.length > 3 ? ", " + fm.gates.more(placeholders.length - 3) : "")));
   }
   const text = clean ? [D.clean(trackLabel(tracks), constitution != null), ...notes].join("\n") : [D.head(f.slug, trackLabel(tracks)), ...lines, ...notes, D.hint(f.slug)].join("\n");
-  return { ok: true, feature: f.slug, tracks: trackLabel(tracks), kind, sections, constitution, weigh, placeholders, clean, text };
+  return { ok: true, feature: f.slug, tracks: trackLabel(tracks), kind, sections, constitution, weigh, reuse, placeholders, clean, text };
 }
 
 // 1.16 C2 — the user's defaults, the environment variables DEV_SPEC_<KEY>, read as FALLBACKS only: a project's own roadmap.json
@@ -601,12 +603,15 @@ function specDoctor(projectDir, name, opts = {}) {
   else if (kind !== "bugfix") {
     add("mermaid", /```mermaid/.test(design) ? "pass" : "warn", /```mermaid/.test(design) ? m.mermaidOk : m.mermaidMissing);
     add("constitution-check", RE_CONSTITUTION_CHECK.test(design) ? "pass" : "warn", RE_CONSTITUTION_CHECK.test(design) ? m.constitutionOk : m.constitutionMissing);
-    // 1.17 A1 — design-tradeoffs / design-risks: warns only (never a fail, never an approval check). Not while design.md is
-    // still a LATER phase's template (nothing is being designed yet — the placeholders check already says so). A design approved
-    // before 1.17 (no `weigh` stamp) is never flagged: a pass with a note (A review 3).
+    // 1.17 A1 — design-tradeoffs / design-risks, 1.19 R1 — design-reuse: warns only (never a fail, never an approval check).
+    // Not while design.md is still a LATER phase's template (nothing is being designed yet — the placeholders check already says
+    // so). A design approved before a check existed (its approval lacks that check's stamp — `weigh` 1.17, `reuse` 1.19) is
+    // never flagged by it: a pass with a note (A review 3). A brownfield feature's filled integration-plan.md → Integration
+    // Points answers a missing / empty Reuse & Integration section.
     if (!ph.later.some((r) => r.file === "design.md")) {
-      const legacy = designApprovedBeforeWeigh(readState(projectDir, slug).approvals);
-      for (const c of designWeighChecks(activeDesign(design, tracks), lng, { legacy })) add(c.id, c.status, c.detail);
+      const approvals = readState(projectDir, slug).approvals;
+      const opts = { approval: approvals && approvals.design, integrationPlan: readIfExists(path.join(dir, "integration-plan.md")) };
+      for (const c of designWeighChecks(activeDesign(design, tracks), lng, opts)) add(c.id, c.status, c.detail);
     }
   }
 

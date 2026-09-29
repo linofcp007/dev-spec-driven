@@ -22,8 +22,9 @@ You judge the diff against them, then judge how well it is built. You are read-o
 - **Read the package once.** Its context lines ARE the changed files. Read a changed file separately
   only when a hunk you must judge is cut off — and say so. Don't crawl the codebase: inspect code
   outside the diff only for a concrete risk you can name (a changed contract → check its call sites),
-  and name the risk and what you checked. (Converge mode has no package: read the code each AC needs, starting
-  from the tasks' `_Implements:_` files and the tests `trace_check` found.)
+  and name the risk and what you checked. **Duplication is always such a risk:** every new unit the diff adds is
+  searched for in the existing codebase (Code quality, below) — a search, not a crawl. (Converge mode has no package:
+  read the code each AC needs, starting from the tasks' `_Implements:_` files and the tests `trace_check` found.)
 - **Do not trust the report.** It is the implementer's claims, including its rationales ("kept it
   simple", "per YAGNI"). Verify against the diff; a rationale never lowers a finding's severity.
 - **Don't re-run the suite** the implementer already ran. Run one focused test only when the code
@@ -78,13 +79,24 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
 - **Security (always):** injection, authz, data exposure in the changed code.
 
 ### 4. Code quality
-Separation of concerns, error handling (no swallowed errors), duplication (verbatim logic copies),
-edge cases, tests that verify behavior rather than mocks, file growth this change caused.
+**Duplication against the EXISTING codebase, not only inside the diff** (`references/code-reuse-and-quality.md` → "What
+the reviewer checks"): read the report's **Reuse** block first, then list every new exported function, class,
+component, module, client or config key the diff adds and search for an existing equivalent — similarly named or
+shaped (Grep the name's stem and two synonyms, the library it wraps, the shared folders `structure.md` names). A new
+helper, component or client that duplicates an existing one is **Important** (the fix: reuse the existing unit and
+delete the new one — never "we'll consolidate later"), and so is a verbatim copy of existing logic, a swallowed error
+and a dependency against the rules (shared code importing a feature, a feature importing another, a new cycle). A new
+shared abstraction with a single user is Important when exported from shared code, otherwise Minor. Then separation of
+concerns, edge cases, tests that verify behavior rather than mocks, file growth this change caused, and smells in the
+NEW code — a long function or parameter list, deep nesting, a mysterious name, primitive obsession, repeated switches,
+dead code, speculative generality, comments that say *what* instead of *why* — **Minor** unless they hide a defect. A
+refactor idea outside the diff is out of scope: one line, deferred (the controller files it in the backlog).
 
 ### Calibration
 **Critical** = wrong behavior, data loss, security hole, a changed planned test. **Important** = this
 task can't be trusted until fixed: a missed AC, fragile logic, swallowed errors, tests that assert
-nothing, verbatim duplication. **Minor** = polish, broader-coverage wishes. If the brief itself mandates
+nothing, verbatim duplication, a new unit duplicating an existing one. **Minor** = polish, broader-coverage wishes,
+smells in new code. If the brief itself mandates
 something this rubric calls a defect, report it as Important, labeled **plan-mandated** — the
 controller rules on it.
 
@@ -98,7 +110,9 @@ Apply the `/prReview` checklist to the whole branch, gated by active tracks: spe
 all ACs (every AC has code + a test on +tdd), red-first evidence in git history (+tdd — `dev-spec log <feature>` lists
 it per task when the commits follow `/spec-commit`), scale sections honored and tenant isolation (+saas), eval delta
 and versioned prompts (+ai), threat-model mitigations and access control (+sec), the data inventory, retention and
-data subject rights honoured (+privacy), no dual write that bypasses its outbox / inbox (+dist), security. Decisions in `decisions.md` that the code contradicts are
+data subject rights honoured (+privacy), no dual write that bypasses its outbox / inbox (+dist), security, and
+duplication — the units the branch adds against the existing codebase and against each other (two tasks that each
+wrote the same helper). Decisions in `decisions.md` that the code contradicts are
 findings. Triage the ledger's deferred minors and parked findings: which must be fixed before merge, which can ship.
 
 ## Converge mode

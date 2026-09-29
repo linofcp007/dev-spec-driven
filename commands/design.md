@@ -15,6 +15,15 @@ likelihood · impact · mitigation · owner; technical, delivery, data, business
 list fewer than 2 options — a warning, never a refusal; their leftover template placeholders refuse the approval like
 any other section's.
 
+**Every design names what it reuses:** fill **Reuse & Integration** — the existing modules, components, helpers and
+services this feature reuses (with their paths), what it extends, what is new and why nothing existing fits, and where
+the new code lives (module boundaries: what it exposes, what it may import — features depend on shared code, never the
+reverse). Search before writing it (`references/code-reuse-and-quality.md`: by concept and synonyms, the shared folders
+`steering/structure.md` names, `.specs/SPECS.md`); a greenfield project says so in one line. `spec_doctor` warns
+`design-reuse` when it is missing, empty or still the template (a brownfield feature's filled `integration-plan.md` →
+Integration Points counts) — a warning, never a refusal. Name the existing files a task extends in its `_Implements:_`:
+the task brief quotes the section's entries for that task.
+
 Re-read steering + approved requirements, scan the codebase for patterns to match, then write
 `design.md`. Include the base sections (overview, architecture with ≥1 Mermaid diagram, data
 models, API contracts, security, error handling, testing strategy, **Constitution Check** against each

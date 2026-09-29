@@ -5211,8 +5211,10 @@ function endRun() {
     ok(/^Design check on design\.md \(metrics \[core \+saas\]\):/.test(dz1) && /\[SaaS\] sections: Performance Budget:unfilled; Scale Design:unfilled/.test(dz1) &&
       /Constitution Check: not filled in/.test(dz1) && /\d+ template placeholder\(s\) left: L\d+ /.test(dz1) && /\/spec-doctor metrics/.test(dz1) && !/Roadmap updated/.test(dz1),
       "hook on design.md (EN template): unfilled [SaaS] sections, the Constitution Check and the placeholders, with a doctor hint");
-    // 1.17 A1: a filled design weighs its choices too — without these two sections the save check adds a ▲ note each.
+    // 1.17 A1: a filled design weighs its choices too — without these two sections the save check adds a ▲ note each (1.19 R1: and it
+    // names what it reuses — Reuse & Integration).
     const cleanDesign = "# Design: Metrics\n\n## Overview\nPush counters to Prometheus.\n\n```mermaid\nflowchart LR\n  A-->B\n```\n\n" +
+      "## Reuse & Integration\n- Reuse the existing metrics client (src/lib/metrics.ts).\n\n" +
       "## Alternatives & Trade-offs\n- Push to a gateway — simple, but a single point of failure.\n- Scrape an endpoint — chosen: no extra hop.\n\n## Risks\n- Cardinality blow-up — medium — label allow-list.\n\n" +
       "## Constitution Check\n- Principle 1: idempotent writes — respected.\n\n" +
       ["Performance Budget", "Scale Design", "Multi-tenancy", "Observability", "Cost Envelope"].map((s) => `## [SaaS] ${s}\nConcrete content for ${s}.\n`).join("\n");
@@ -14981,7 +14983,7 @@ function endRun() {
       js(gSaveFew.weigh) === js({ tradeoffs: "few", risks: "filled" }) && gSaveFew.clean === true && /\n  ▲ Alternatives & Trade-offs lists 1 option/.test(gSaveFew.text) &&
       weigh(gDocDel) === "warn,warn" && /^no Alternatives & Trade-offs section/.test(chk(gDocDel, "design-tradeoffs").detail) && /^no Risks section/.test(chk(gDocDel, "design-risks").detail) &&
       gDocDel.readyToAdvance === true && gDocDel.checks.every((c) => c.status !== "fail") &&
-      js(gSaveDel.weigh) === js({ tradeoffs: "missing", risks: "missing" }) && (gSaveDel.text.match(/▲/g) || []).length === 2 &&
+      js(gSaveDel.weigh) === js({ tradeoffs: "missing", risks: "missing" }) && (gSaveDel.text.match(/▲ no (?:Alternatives|Risks)/g) || []).length === 2 && // (+ design-reuse's ▲, 1.19 R1)
       gApDel.ok === true && !gApDel.forced,
       "1.17 A1: template sections refuse the design approval on placeholders only; filled → design-tradeoffs / design-risks pass (MCP too, right after constitution-check); one option → warn 'few'; deleted → two warns, readyToAdvance, the approval goes through unforced; the design-save check notes them with ▲ (got " +
       js([gApT.failing, weigh(gDocT), weigh(gDocF), chk(gDocFew, "design-tradeoffs").detail, gSaveFew.weigh, weigh(gDocDel), gSaveDel.weigh, gApDel.ok]) + ")");
@@ -15040,7 +15042,7 @@ function endRun() {
     const codes = (r) => (r.problems || []).filter((x) => /design/.test(x.file)).map((x) => x.code + ":" + x.severity);
     ok(dmDoc.verdict === "pass" && weigh(dmDoc) === "pass,pass" && chk(dmDoc, "design-tradeoffs").detail === "4 option(s) weighed" && !chk(dmDoc, "changed-since-approval").id &&
       dmCl.nudges === undefined && dmCl.questions.length === 1 &&
-      !codes(tpOk).length && js(codes(tpBad)) === js(["tradeoffs-missing:warn", "risks-missing:warn"]) && tpBad.verdict === "warn",
+      !codes(tpOk).length && js(codes(tpBad)) === js(["tradeoffs-missing:warn", "risks-missing:warn", "reuse-missing:warn"]) && tpBad.verdict === "warn", // (+ reuse-missing, 1.19 R1)
       "1.17 A1: examples/demo-project stays doctor PASS (design-tradeoffs 4 options, design-risks pass, design approval fingerprint current), no nudge; templates check warns tradeoffs-missing / risks-missing on a design template without them — not on the built-in one (got " +
       js([dmDoc.verdict, weigh(dmDoc), dmCl.questions, codes(tpOk), codes(tpBad)]) + ")");
 
@@ -15165,7 +15167,7 @@ function endRun() {
     ok(weigh(rv3Legacy) === "pass,pass" && /^design approved before 1\.17 — asked only from its next approval \(no Alternatives & Trade-offs section/.test(chk(rv3Legacy, "design-tradeoffs").detail) &&
       /^design approved before 1\.17/.test(chk(rv3Legacy, "design-risks").detail) &&
       rv3Ap.ok === true && rv3St.approvals.design.weigh === true && rv3St.approvalHistory[rv3St.approvalHistory.length - 1].weigh === true && rv3St.approvals.requirements.weigh === undefined &&
-      weigh(rv3Doc) === "warn,warn" && js(rv3Up.doctor.warnings) === js(["design-tradeoffs", "design-risks"]) && !rv3Up.attention.includes("warnings") &&
+      weigh(rv3Doc) === "warn,warn" && js(rv3Up.doctor.warnings) === js(["design-tradeoffs", "design-risks", "design-reuse"]) && !rv3Up.attention.includes("warnings") && // (+ design-reuse, 1.19 R1)
       /^design aprovado antes da 1\.17 — só é exigido/.test(W3.msg("pt").designWeigh.legacyApproval("x")) && /^diseño aprobado antes de la 1\.17/.test(W3.msg("es").designWeigh.legacyApproval("x")) &&
       /^design aprovado antes da 1\.17/.test(W3.msg("pt-BR").designWeigh.legacyApproval("x")),
       "1.17 A review 3: a pre-1.17 design approval → design-tradeoffs / design-risks pass with 'approved before 1.17' (EN / PT / ES / pt-BR); a 1.17 design approval carries weigh: true (approval + history, not on other phases) and warns; spec_upgrade lists them under doctor.warnings without the 'warnings' attention (got " +
@@ -15823,6 +15825,330 @@ function endRun() {
   }
 
   // 1.19 package (R) — reuse and clean code.
+  {
+    const js = (v) => JSON.stringify(v);
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const I = require("./lib/i18n.js");
+    const rRd = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const rDir = (n) => path.join(tmp, "p19r-" + n);
+    const chk = (d, id) => (d.checks || []).find((c) => c.id === id) || {};
+    const reuseSt = (d) => chk(d, "design-reuse").status || "-";
+    const st3 = (d) => ["design-tradeoffs", "design-risks", "design-reuse"].map((id) => chk(d, id).status || "-").join(",");
+    const wDesign = (f, text) => fs.writeFileSync(path.join(f.dir, "design.md"), text);
+    const readSt = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    const writeSt = (f, s) => fs.writeFileSync(path.join(f.dir, ".state.json"), JSON.stringify(s, null, 2));
+    const cut = (t, from, to) => t.slice(t.indexOf(from), t.indexOf(to));
+    const REQ = "# Feature: Orders\n\n## Summary\nPlace an order.\n\n## User Stories\n### US-1 (P1): Place an order\nAs a buyer I want to order.\n**Independent Test:** place one order.\n\n" +
+      "#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN the buyer submits a cart THE SYSTEM SHALL store the order.\n" +
+      "2. **US-1.AC-2** — IF the cart is empty THEN THE SYSTEM SHALL reject it.\n\n## Success Criteria\n- **SC-001** — 95% of orders placed in under 2 s.\n\n" +
+      "## Edge Cases & Error Handling\n- **EC-1** — WHEN stock runs out THE SYSTEM SHALL refuse the order.\n\n## Non-Functional Requirements\n- **NFR-1** — p95 < 2 s.\n\n## Out of Scope\n- Refunds.\n";
+    const ALT = "## Alternatives & Trade-offs\n| Decision | Option | Pros | Cons | Cost if wrong | Chosen |\n|---|---|---|---|---|---|\n" +
+      "| Storage | One table | Simple | Wide rows | A migration later | ✓ |\n| Storage | Two tables | Normalized | A join per read | Slower reads | ✗ |\n\n";
+    const RISKS = "## Risks\n| Risk | Likelihood | Impact | Mitigation | Owner |\n|---|---|---|---|---|\n| Lost order on a crash | low | high | One transaction per order | backend |\n\n";
+    const REUSE = "## Reuse & Integration\n| Kind | What | Where (path) | Why / notes |\n|---|---|---|---|\n" +
+      "| Reuse | `withRetry` | `src/lib/http/retry.ts` | the same backoff as the rest of the app |\n" +
+      "| Extend | `Money` | `src/lib/money.ts` | adds allocate(); existing callers unchanged |\n" +
+      "| New | the order store | `src/orders/store.ts` | nothing stores orders yet (searched store, repository, persist) |\n\n" +
+      "**Module boundaries:** src/orders/ imports src/lib/, never the reverse.\n\n";
+    const design = (reuse) => "# Design: Orders\n\n## Overview\nOrders are stored.\n\n## Architecture\n```mermaid\ngraph TD\n  A[API] --> S[Store]\n```\n\n" + reuse + ALT +
+      "## Data Models\nOrder {id, total}.\n\n## Testing Strategy\nUnit tests.\n\n" + RISKS + "## Constitution Check\n- [x] Small functions — complies.\n\n## Complexity Tracking\nNone.\n";
+
+    // R1 — a fresh scaffold, EN / PT / ES / pt-BR: Reuse & Integration between Architecture and Alternatives & Trade-offs, holding
+    // template slots the placeholder lookup knows (the corpus renders them) — and no design-reuse check while design.md is a later
+    // phase's template.
+    const H = {
+      en: ["## Architecture", "## Reuse & Integration", "## Alternatives & Trade-offs", "[existing module, component, helper or service]", "[its path]"],
+      pt: ["## Arquitetura", "## Reutilização e Integração", "## Alternativas e Compromissos", "[módulo, componente, helper ou serviço existente]", "[o seu caminho]"],
+      es: ["## Arquitectura", "## Reutilización e Integración", "## Alternativas y Compensaciones", "[módulo, componente, helper o servicio existente]", "[su ruta]"],
+      "pt-BR": ["## Arquitetura", "## Reutilização e Integração", "## Alternativas e Compromissos", "[módulo, componente, helper ou serviço existente]", "[o seu caminho]"],
+    };
+    const fresh = Object.keys(H).map((lang) => {
+      const p = rDir("fresh-" + lang);
+      S.initProject(p, ["core"], lang);
+      const f = S.createFeature(p, "Orders", ["core", "tdd", "saas"], "", undefined, lang);
+      const t = fs.readFileSync(path.join(f.dir, "design.md"), "utf8");
+      const at = H[lang].slice(0, 3).map((h) => t.indexOf(h + "\n"));
+      const slots = S.featurePlaceholders(p, f.slug, "design.md").items.map((x) => x.text);
+      const good = at.every((i) => i >= 0) && at[0] < at[1] && at[1] < at[2] && slots.includes(H[lang][3]) && slots.includes(H[lang][4]) &&
+        reuseSt(S.specDoctor(p, f.slug)) === "-";
+      return { lang, good, at, slots: slots.filter((s) => s === H[lang][3] || s === H[lang][4]) };
+    });
+    ok(fresh.every((r) => r.good),
+      "1.19 R1: a fresh design.md (EN / PT / ES / pt-BR, +tdd +saas) has Reuse & Integration between Architecture and Alternatives & Trade-offs, its slots read as template placeholders; while design.md is a later phase's template doctor adds no design-reuse check (got " + js(fresh) + ")");
+
+    // R1 — the gate: the section still template → the design approval is refused on `placeholders` (like every template section);
+    // filled → pass; empty → warn; one line of prose ("greenfield") → pass; deleted → warn only (readyToAdvance, the approval goes
+    // through unforced) and the approval is stamped `reuse: true` — a 1.19 approval keeps the warn.
+    const gp = rDir("gate");
+    S.initProject(gp, ["core"], "en");
+    const gf = S.createFeature(gp, "Orders", ["core"]);
+    fs.writeFileSync(path.join(gf.dir, "requirements.md"), REQ);
+    approveBefore(gp, gf.slug, "design");
+    const tpl = fs.readFileSync(path.join(gf.dir, "design.md"), "utf8");
+    const tplReuse = cut(tpl, "## Reuse & Integration", "## Alternatives & Trade-offs");
+    wDesign(gf, design(tplReuse));
+    const gDocT = S.specDoctor(gp, gf.slug);
+    const gApT = S.approvePhase(gp, gf.slug, "design", "t");
+    wDesign(gf, design(REUSE));
+    const gDocF = S.specDoctor(gp, gf.slug);
+    const gMcp = payload(await call("spec_doctor", { projectDir: gp, name: gf.slug }));
+    wDesign(gf, design("## Reuse & Integration\n\n"));
+    const gDocE = S.specDoctor(gp, gf.slug);
+    wDesign(gf, design("## Reuse & Integration\nGreenfield: nothing to reuse yet — the first module of the app.\n\n"));
+    const gDocP = S.specDoctor(gp, gf.slug);
+    wDesign(gf, design(""));
+    const gDocDel = S.specDoctor(gp, gf.slug);
+    const gSave = S.designSaveCheck(gp, gf.slug);
+    const gAp = S.approvePhase(gp, gf.slug, "design", "t");
+    const gSt = readSt(gf);
+    const gDocAfter = S.specDoctor(gp, gf.slug);
+    ok(gApT.ok === false && js(gApT.failing) === js(["placeholders"]) && /\[existing module, component, helper or service\]/.test(gApT.checks[0].detail) &&
+      reuseSt(gDocT) === "warn" && /^Reuse & Integration is still the template/.test(chk(gDocT, "design-reuse").detail) &&
+      st3(gDocF) === "pass,pass,pass" && chk(gDocF, "design-reuse").detail === "3 item(s) named (reused / extended / new)" &&
+      st3(gMcp) === "pass,pass,pass" && gMcp.checks.findIndex((c) => c.id === "design-reuse") === gMcp.checks.findIndex((c) => c.id === "design-risks") + 1 &&
+      reuseSt(gDocE) === "warn" && /^Reuse & Integration is empty/.test(chk(gDocE, "design-reuse").detail) &&
+      reuseSt(gDocP) === "pass" && /^written \(no row or bullet/.test(chk(gDocP, "design-reuse").detail) &&
+      reuseSt(gDocDel) === "warn" && /^no Reuse & Integration section/.test(chk(gDocDel, "design-reuse").detail) && gDocDel.readyToAdvance === true &&
+      gDocDel.checks.every((c) => c.status !== "fail") && gSave.reuse === "missing" && gSave.clean === true && /\n  ▲ no Reuse & Integration section/.test(gSave.text) &&
+      gAp.ok === true && !gAp.forced && gSt.approvals.design.reuse === true && gSt.approvals.design.weigh === true &&
+      gSt.approvalHistory[gSt.approvalHistory.length - 1].reuse === true && gSt.approvals.requirements.reuse === undefined && reuseSt(gDocAfter) === "warn",
+      "1.19 R1: the Reuse & Integration slots refuse the design approval on placeholders only; filled → design-reuse passes (MCP too, right after design-risks); empty → warn; a line of prose ('greenfield') passes; deleted → warn, readyToAdvance, the approval goes through unforced and stamps reuse: true (approval + history, design only) — the 1.19 approval keeps the warn; the design-save check notes it with ▲ (got " +
+      js([gApT.failing, reuseSt(gDocT), st3(gDocF), chk(gDocF, "design-reuse").detail, reuseSt(gDocE), reuseSt(gDocP), reuseSt(gDocDel), gSave.reuse, gAp.ok, gSt.approvals.design, reuseSt(gDocAfter)]) + ")");
+
+    // R1 — the stamp scheme: a design approval without `reuse` (made by 1.17 / 1.18: `weigh` only) is never flagged by design-reuse
+    // (a pass with 'approved before 1.19') while design-tradeoffs still warns for it; without `weigh` either (pre-1.17) nothing warns.
+    // spec_upgrade lists a 1.19 design-reuse warn under doctor.warnings but never counts it toward `attention`.
+    const lSt = readSt(gf);
+    delete lSt.approvals.design.reuse;
+    writeSt(gf, lSt);
+    wDesign(gf, design("").replace(ALT, ""));
+    const l17 = S.specDoctor(gp, gf.slug);
+    delete lSt.approvals.design.weigh;
+    writeSt(gf, lSt);
+    const lPre = S.specDoctor(gp, gf.slug);
+    const dm = rDir("demo");
+    fs.cpSync(path.join(root, "examples", "demo-project"), dm, { recursive: true });
+    const dmDoc = S.specDoctor(dm, "api-keys");
+    const dmAp = S.approvePhase(dm, "api-keys", "design", "t");
+    const dmUp = S.specUpgrade(dm).features.find((x) => x.name === "api-keys");
+    ok(st3(l17) === "warn,pass,pass" && /^design approved before 1\.19 — asked only from its next approval \(no Reuse & Integration section/.test(chk(l17, "design-reuse").detail) &&
+      st3(lPre) === "pass,pass,pass" && /^design approved before 1\.17/.test(chk(lPre, "design-tradeoffs").detail) && /^design approved before 1\.19/.test(chk(lPre, "design-reuse").detail) &&
+      /^design aprovado antes da 1\.19 — só é exigido/.test(I.msg("pt").designWeigh.legacyApproval("x", "1.19")) && /^diseño aprobado antes de la 1\.19/.test(I.msg("es").designWeigh.legacyApproval("x", "1.19")) &&
+      /^design aprovado antes da 1\.19/.test(I.msg("pt-BR").designWeigh.legacyApproval("x", "1.19")) && /antes de la 1\.17/.test(I.msg("es").designWeigh.legacyApproval("x")) &&
+      reuseSt(dmDoc) === "pass" && dmAp.ok === true && dmUp.doctor.warnings.includes("design-reuse") && !dmUp.attention.includes("warnings"),
+      "1.19 R1: a 1.17 / 1.18 design approval (weigh, no reuse) → design-reuse passes with 'approved before 1.19' while design-tradeoffs still warns; an unstamped (pre-1.17) one → all three pass (EN / PT / ES / pt-BR notes); spec_upgrade lists a 1.19 design-reuse warn under doctor.warnings without the 'warnings' attention (got " +
+      js([st3(l17), chk(l17, "design-reuse").detail, st3(lPre), reuseSt(dmDoc), dmAp.ok, dmUp.doctor.warnings, dmUp.attention]) + ")");
+
+    // R1 — exempt: a bugfix (bug.md stands in for its design) and a spike (its own doctor).
+    const ep = rDir("exempt");
+    S.initProject(ep, ["core"], "en");
+    const bf = S.createFeature(ep, "Crash on save", ["tdd"], "", undefined, "en", "bugfix");
+    wDesign(bf, "# Design: Crash on save\n\n## Notes\nThe fix stays inside the save handler.\n");
+    const sp = S.createFeature(ep, "Queue spike", undefined, "Kafka or RabbitMQ?", undefined, "en", "spike");
+    const bDoc = S.specDoctor(ep, bf.slug), sDoc = S.specDoctor(ep, sp.slug);
+    ok(reuseSt(bDoc) === "-" && S.designSaveCheck(ep, bf.slug).reuse === null && reuseSt(sDoc) === "-" && sDoc.ok !== false,
+      "1.19 R1: a bugfix and a spike are exempt (no design-reuse check; the bugfix's design-save check reports reuse: null) (got " + js([reuseSt(bDoc), reuseSt(sDoc)]) + ")");
+
+    // R1 — hand-written headings (EN / PT / ES / pt-BR synonyms — the heading must NAME the section, never a modifier), localized
+    // details, and a brownfield feature's integration-plan.md → Integration Points standing in for a missing section.
+    const hp = rDir("hand");
+    S.initProject(hp, ["core"], "en");
+    const hand = (sec) => "# Design\n\n## Overview\nx.\n\n## Architecture\n```mermaid\ngraph TD\n  A-->B\n```\n\n" + sec + "\n## Constitution Check\n- [x] ok\n";
+    const cases = [["en", "## Reuse and integration\n- Reuse `src/lib/http.ts` as is.\n", "pass"],
+      ["en", "## Existing components: what we build on\n- `src/components/Button.tsx` as is.\n", "pass"],
+      ["en", "## Integration Points\n- The order service (`src/orders/service.ts`).\n", "pass"],
+      ["en", "## Code reuse\nGreenfield: nothing to reuse yet.\n", "pass"],
+      ["en", "## Reuse-based caching\n- A cache in front of the store.\n", "warn"],
+      ["en", "## Existing code paths\n- The checkout flow.\n", "warn"],
+      ["pt", "## Reutilização e integração\n- Reutilizar `src/lib/http.ts` tal como está.\n", "pass"],
+      ["pt", "## Pontos de Integração\n- O serviço de encomendas.\n", "pass"],
+      ["pt-BR", "## Reúso\n- `src/lib/http.ts` como está.\n", "pass"],
+      ["es", "## Componentes existentes\n- `src/lib/http.ts` tal cual.\n", "pass"],
+      ["es", "## Reutilización e Integración\n- Reutilizar `src/lib/http.ts` tal cual.\n", "pass"],
+      ["pt-BR", "", "warn"]];
+    const handGot = cases.map(([lang, sec], i) => {
+      const f = S.createFeature(hp, "Hand " + i, ["core"], "", undefined, lang);
+      wDesign(f, hand(sec));
+      const d = S.specDoctor(hp, f.slug);
+      return [lang, reuseSt(d), chk(d, "design-reuse").detail];
+    });
+    const bp = rDir("brownfield");
+    S.initProject(bp, ["core"], "en");
+    const bw = S.createFeature(bp, "Orders", ["core"], "", undefined, "en", undefined, { brownfield: true });
+    fs.writeFileSync(path.join(bw.dir, "requirements.md"), REQ);
+    approveBefore(bp, bw.slug, "design"); // the design is the current phase: its template section is checked (a warn)
+    wDesign(bw, design(""));
+    const bwTpl = S.specDoctor(bp, bw.slug);
+    fs.writeFileSync(path.join(bw.dir, "integration-plan.md"), "# Integration Plan: Orders\n\n## Integration Points\n- `src/orders/service.ts` — the order service this feature extends.\n" +
+      "- `src/lib/db.ts` — the shared database client, reused as is.\n\n## Required Modifications\n- The service gains a store() method.\n\n## Sequencing\n- Phase 1: the store.\n\n" +
+      "## Risks & Mitigations\n- None.\n\n## Affected Files (best estimate)\n- src/orders/service.ts → store()\n");
+    const bwDoc = S.specDoctor(bp, bw.slug);
+    const bwSave = S.designSaveCheck(bp, bw.slug);
+    wDesign(bw, design(tplReuse));
+    const bwT = S.specDoctor(bp, bw.slug);
+    ok(handGot.every((g, i) => g[1] === cases[i][2]) && handGot[6][2] === "1 item(ns) indicado(s) (reutilizado / estendido / novo)" &&
+      handGot[9][2] === "1 elemento(s) indicado(s) (reutilizado / extendido / nuevo)" && /^sem seção Reutilização e Integração — indique/.test(handGot[11][2]) &&
+      reuseSt(bwTpl) === "warn" && /^no Reuse & Integration section/.test(chk(bwTpl, "design-reuse").detail) &&
+      reuseSt(bwDoc) === "pass" && chk(bwDoc, "design-reuse").detail === "covered by integration-plan.md → Integration Points (2 item(s))" &&
+      bwSave.reuse === "integration" && !/▲ no Reuse/.test(bwSave.text) && reuseSt(bwT) === "warn",
+      "1.19 R1: hand-written Reuse and integration / Existing components: … / Integration Points / Code reuse / Reutilização e integração / Pontos de Integração / Reúso / Componentes existentes / Reutilización e Integración pass (localized details), 'Reuse-based caching' and 'Existing code paths' don't name the section; a brownfield feature's filled integration-plan.md → Integration Points covers a missing section (the template plan doesn't), a template section still warns (got " +
+      js([handGot, reuseSt(bwTpl), chk(bwDoc, "design-reuse").detail, bwSave.reuse, reuseSt(bwT)]) + ")");
+
+    // R1 — templates check: a project design template without the section warns reuse-missing (localized), a synonym heading
+    // doesn't, and the built-in template never does.
+    const tp = rDir("tpl");
+    S.initProject(tp, ["core"], "en");
+    S.templates(tp, "init", { artifact: "design" });
+    const tpOk = S.templates(tp, "check");
+    const tplDesign = (reuse) => "# Design: {{name}}\n\n## Overview\n[How it works]\n\n" + reuse + "## Alternatives & Trade-offs\n- [option A]\n- [option B]\n\n## Risks\n- [what could go wrong]\n\n## Constitution Check\n- [ ] [Principle 1] — complies\n";
+    fs.writeFileSync(path.join(tp, ".specs", "templates", "design.md"), tplDesign(""));
+    const tpBad = S.templates(tp, "check");
+    fs.writeFileSync(path.join(tp, ".specs", "templates", "design.md"), tplDesign("## Existing components\n- [what this feature reuses]\n\n"));
+    const tpSyn = S.templates(tp, "check");
+    const tpPt = rDir("tpl-pt");
+    S.initProject(tpPt, ["core"], "pt");
+    fs.mkdirSync(path.join(tpPt, ".specs", "templates"), { recursive: true });
+    fs.writeFileSync(path.join(tpPt, ".specs", "templates", "design.md"), tplDesign(""));
+    const tpPtR = S.templates(tpPt, "check");
+    const codes = (r) => (r.problems || []).filter((x) => /design/.test(x.file)).map((x) => x.code + ":" + x.severity);
+    const ptMsg = ((tpPtR.problems || []).find((x) => x.code === "reuse-missing") || {}).message || "";
+    ok(!codes(tpOk).length && codes(tpBad).includes("reuse-missing:warn") && !codes(tpSyn).includes("reuse-missing:warn") && tpBad.verdict === "warn" &&
+      /^sem secção Reutilização e Integração — o doctor avisa \(design-reuse\)/.test(ptMsg),
+      "1.19 R1: templates check warns reuse-missing on a design template without Reuse & Integration (PT message too), not on one with a synonym heading, never on the built-in one (got " +
+      js([codes(tpOk), codes(tpBad), codes(tpSyn), ptMsg]) + ")");
+
+    // R2 — the brief's Reuse section: the design's entries that name the task's file / a sibling / its folder / its ACs (a table row's
+    // cells joined), the existing source files next to its own (non-test first, its own file, dot files, docs and ignored folders
+    // out); the Reuse & Integration section is no longer quoted whole under "Design context"; write:true keeps refs.reuse.
+    const rp = rDir("brief");
+    S.initProject(rp, ["core"], "en");
+    const rf = S.createFeature(rp, "Orders", ["core"]);
+    fs.writeFileSync(path.join(rf.dir, "requirements.md"), REQ);
+    const REUSE2 = "## Reuse & Integration\n| Kind | What | Where (path) | Why / notes |\n|---|---|---|---|\n" +
+      "| Reuse | the order repository | `src/orders/repo.ts` | reads and writes orders already |\n" +
+      "| Extend | `Money` | `src/lib/money.ts` | adds allocate() |\n" +
+      "| New | the cart validator | `src/cart/validate.ts` | nothing validates carts (searched validate, check, schema) |\n" +
+      "- US-1.AC-2 — an empty cart: reuse `ValidationError` from src/lib/errors.ts\n\n";
+    wDesign(rf, design(REUSE2));
+    fs.writeFileSync(path.join(rf.dir, "tasks.md"), "# Tasks\n\n## Story US-1 (P1)\n" +
+      "- [ ] 1. [US1] Store the order\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/orders/api.ts_\n" +
+      "- [ ] 2. [US1] Reject an empty cart\n  - _Requirements: US-1.AC-2_\n  - _Implements: src/cart/validate.ts_\n" +
+      "- [ ] 3. [US1] Document the order endpoint\n  - _Requirements: US-1.AC-1_\n" +
+      "- [ ] 4. [US1] Many helpers\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/many/_\n" +
+      "- [ ] 5. [US1] Vendored\n  - _Requirements: US-1.AC-1_\n  - _Implements: node_modules/lib/x.js_\n");
+    const put = (rel, s = "x") => { const p = path.join(rp, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    for (const n of ["api.ts", "repo.ts", "helpers.ts", "api.test.ts", "README.md", ".hidden.ts"]) put("src/orders/" + n);
+    for (let i = 0; i < 30; i++) put("src/many/m" + String(i).padStart(2, "0") + ".ts");
+    put("src/many/node_modules/y.js");
+    put("node_modules/lib/x.js");
+    put("node_modules/lib/z.js");
+    const b1 = S.taskBrief(rp, rf.slug, 1), b2 = S.taskBrief(rp, rf.slug, 2), b3 = S.taskBrief(rp, rf.slug, 3), b4 = S.taskBrief(rp, rf.slug, 4), b5 = S.taskBrief(rp, rf.slug, 5);
+    const sec = (b) => (b.brief.split("## Reuse — search before you write")[1] || "").split("\n## ")[0];
+    const b1W = S.taskBrief(rp, rf.slug, 1, { write: true });
+    const b1Mcp = payload(await call("spec_task_brief", { projectDir: rp, name: rf.slug, number: 1, write: true }));
+    const b1File = fs.readFileSync(b1W.paths.brief, "utf8");
+    ok(js(b1.reuse.entries) === js(["| Reuse | the order repository | `src/orders/repo.ts` | reads and writes orders already |"]) && b1.reuse.total === 4 &&
+      js(b1.reuse.files) === js(["src/orders/helpers.ts", "src/orders/repo.ts", "src/orders/api.test.ts"]) && b1.reuse.state === "filled" &&
+      /\n- Reuse · the order repository · `src\/orders\/repo\.ts` · reads and writes orders already\n/.test(sec(b1)) && /\n- `src\/orders\/helpers\.ts`\n/.test(sec(b1)) &&
+      /search the codebase by concept and synonyms \(references\/code-reuse-and-quality\.md\)/.test(sec(b1)) && !b1.designSections.includes("Reuse & Integration") &&
+      b2.reuse.entries.length === 2 && /US-1\.AC-2 — an empty cart/.test(b2.reuse.entries[1]) && !b2.reuse.files.length &&
+      !b3.reuse.entries.length && b3.reuse.total === 4 && /lists 4 item\(s\), none naming this task's files or criteria/.test(sec(b3)) &&
+      b4.reuse.files.length === 15 && b4.reuse.more === 15 && b4.reuse.files[0] === "src/many/m00.ts" && /…and 15 more in the same folder\(s\)\./.test(sec(b4)) &&
+      !b5.reuse.files.length &&
+      b1W.reuse === undefined && js(b1W.refs.reuse) === js({ entries: 1, files: ["src/orders/helpers.ts", "src/orders/repo.ts", "src/orders/api.test.ts"] }) &&
+      js(b1Mcp.refs.reuse) === js(b1W.refs.reuse) && b1Mcp.reuse === undefined && /## Reuse — search before you write/.test(b1File),
+      "1.19 R2: the brief's Reuse section quotes the design's entries naming the task (a sibling file, its own file, its AC; a table row's cells joined by ' · '), says when none does, and lists the existing source files next to its own (non-test first; its own file, dot files, docs, node_modules out; ≤ 15 + 'more'); the section leaves Design context; write:true (MCP too) keeps refs.reuse {entries, files} (got " +
+      js([b1.reuse, b2.reuse.entries, b3.reuse, b4.reuse.more, b5.reuse, b1W.refs, b1.designSections]) + ")");
+
+    // R2 — bounded: at most 8 entries (the rest counted in `omitted`), a 200,000-character line with no '/' is read once (the path
+    // token only starts at a token boundary), the brief is localized (PT).
+    const many = "## Reuse & Integration\n" + Array.from({ length: 12 }, (_, i) => `- Reuse \`src/orders/r${i}.ts\` — helper ${i}.\n`).join("") + "- " + "a".repeat(200000) + "\n\n";
+    wDesign(rf, design(many));
+    const t0 = Date.now();
+    const bMany = S.taskBrief(rp, rf.slug, 1);
+    const manyMs = Date.now() - t0;
+    const ptp = rDir("brief-pt");
+    S.initProject(ptp, ["core"], "pt");
+    const ptf = S.createFeature(ptp, "Encomendas", ["core"], "", undefined, "pt");
+    wDesign(ptf, design("## Reutilização e Integração\n- Reutilizar o repositório (`src/orders/repo.ts`).\n\n"));
+    fs.writeFileSync(path.join(ptf.dir, "tasks.md"), "# Tarefas\n\n## História US-1 (P1)\n- [ ] 1. [US1] Guardar a encomenda\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/orders/api.ts_\n");
+    const bPt = S.taskBrief(ptp, ptf.slug, 1);
+    ok(bMany.reuse.entries.length === 8 && bMany.reuse.omitted === 4 && /4 more matching item\(s\) — read them in design\.md/.test(bMany.brief) && manyMs < 3000 &&
+      /## Reutilização — pesquisar antes de escrever\nProcura no código, pelo conceito e por sinónimos/.test(bPt.brief) && /As entradas de Reutilização e Integração do design para esta tarefa/.test(bPt.brief),
+      "1.19 R2: the Reuse section is bounded (8 entries, the rest counted), a 200,000-character slash-less line stays fast, and the brief speaks the feature's language (PT) (got " +
+      js([bMany.reuse.entries.length, bMany.reuse.omitted, manyMs, (bPt.brief.split("## Reutiliza")[1] || "").slice(0, 160)]) + ")");
+
+    // R3 — the prose: the implementer searches before it writes (a hard step) and reports a Reuse block; the reviewer checks new code
+    // against the EXISTING codebase (a duplicate is Important); the controller files refactor candidates in the backlog; /executeTask,
+    // red-flags, /design, AGENTS.md and SKILL.md (≤ 540 lines) say so — and none of the new text steers toward PRs or CI.
+    const impl = rRd("agents", "spec-implementer.md"), rev = rRd("agents", "spec-reviewer.md"), sub = rRd("skills", "dev-spec-driven", "references", "subagent-execution.md");
+    const exec = rRd("commands", "executeTask.md"), flags = rRd("skills", "dev-spec-driven", "references", "red-flags.md"), skill = rRd("skills", "dev-spec-driven", "SKILL.md");
+    const dcmd = rRd("commands", "design.md"), agentsMd = rRd("AGENTS.md"), guide = rRd("skills", "dev-spec-driven", "references", "code-reuse-and-quality.md");
+    const implSearch = cut(impl, "3. **Search before you write**", "4. If anything is unclear");
+    const implReuse = cut(impl, "- **Reuse** — a `### Reuse` block", "- Files changed; commits");
+    const revQuality = cut(rev, "### 4. Code quality", "### Calibration");
+    const subRefactor = cut(sub, "**Refactor candidates are filed", "## Parallel mode");
+    const execReuse = cut(exec, "**Search before you write**", "**Can't run the");
+    ok(/concept and at least three synonyms/.test(implSearch) && /brief's \*\*Reuse\*\* section/.test(implSearch) && /\*\*reuse\*\*, else \*\*extend\*\*/.test(implSearch) &&
+      /copy-paste/.test(implSearch) && /rule of three/.test(implSearch) && /No new helper, component or client without the search/.test(impl) && /filed, not done/.test(impl) &&
+      ["### Reuse", "Reused:", "Extended:", "Created:", "searched:", "Duplicated on purpose:", "Refactor candidates:"].every((w) => implReuse.includes(w)) &&
+      /Duplication against the EXISTING codebase, not only inside the diff/.test(revQuality) && /duplicates an existing one is \*\*Important\*\*/.test(revQuality) &&
+      /Grep the name's stem and two synonyms/.test(revQuality) && /report's \*\*Reuse\*\* block/.test(revQuality) && /\*\*Minor\*\* unless they hide a defect/.test(revQuality) &&
+      /Duplication is always such a risk/.test(rev) && /a new unit duplicating an existing one/.test(rev) &&
+      /spec_backlog \{action: "add", name: "refactor-<topic>"/.test(subRefactor) && /Task 3: refactor candidate filed/.test(sub) && /check the report has its \*\*Reuse\*\* block/.test(sub) &&
+      /refactor:/.test(execReuse) && /duplicate in the existing codebase/.test(exec) &&
+      /"I'll write a quick helper" \| Search first/.test(flags) && /"I'll copy this function and tweak it"/.test(flags) && /rule of three/.test(flags) &&
+      /\*\*Reuse & Integration\*\*/.test(skill) && /design-reuse/.test(skill) && /code-reuse-and-quality\.md/.test(skill) && /\*\*Search before you write:\*\*/.test(skill) &&
+      skill.split("\n").length <= 540 && /\*\*Every design names what it reuses:\*\*/.test(dcmd) && /design-reuse/.test(dcmd) &&
+      /\*\*Reuse & Integration\*\*/.test(agentsMd) && /design-reuse/.test(agentsMd) && /Search before you write/.test(agentsMd) && /design-reuse/.test(guide) &&
+      [implSearch, implReuse, revQuality, subRefactor, execReuse].every((t) => t.length > 100 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
+      "1.19 R3: spec-implementer searches before it writes (a hard step: concept + synonyms, reuse → extend → create, no copy-paste) and reports a Reuse block; spec-reviewer checks every new unit against the existing codebase (a duplicate is Important, smells Minor); the controller files refactor candidates in the backlog (subagent-execution.md, /executeTask); red-flags, /design, AGENTS.md and SKILL.md (≤ 540 lines) name them; no PR / CI steering in the new text (got " +
+      js([implSearch.length, implReuse.length, revQuality.length, subRefactor.length, execReuse.length, skill.split("\n").length]) + ")");
+
+    // R4 — steering: structure.md gains Module Boundaries and Shared Code slots, the constitution's example principles a reuse rule
+    // (EN / PT / ES / pt-BR) — slots, so a fresh stub still reads as a template.
+    const steerWant = { en: ["## Module Boundaries", "## Shared Code", "[e.g., Search before you write: extend an existing module before adding a new one.]"],
+      pt: ["## Fronteiras de Módulos", "## Código Partilhado", "[ex.: Pesquisar antes de escrever: estender um módulo existente antes de criar um novo.]"],
+      es: ["## Límites de Módulos", "## Código Compartido", "[p.ej., Buscar antes de escribir: extender un módulo existente antes de crear uno nuevo.]"],
+      "pt-BR": ["## Fronteiras de Módulos", "## Código Compartilhado", "[ex.: Pesquisar antes de escrever: estender um módulo existente antes de criar um novo.]"] };
+    const steerGot = Object.entries(steerWant).map(([l, [a, b, c]]) => {
+      const s = I.steeringStub("structure.md", l), k = I.steeringStub("constitution.md", l);
+      const slots = S.placeholderReport(s).map((x) => x.text);
+      return [l, s.indexOf(a + "\n") > s.indexOf("## Layout") && s.indexOf(b + "\n") > s.indexOf(a) && k.includes(c) && slots.length >= 3];
+    });
+    ok(steerGot.every((g) => g[1]),
+      "1.19 R4: the structure.md stub has Module Boundaries and Shared Code (slots) after Layout and the constitution stub a 'search before you write' example principle — EN / PT / ES / pt-BR (got " + js(steerGot) + ")");
+
+    // The demo and the eval fixtures stay clean for this check: the demo's api-keys design was approved before 1.19 (a pass with the
+    // note, no warning — examples/README.md pastes it); the fixtures' designs name what they reuse, so approving them (as the
+    // behavioural fixtures do) keeps design-reuse passing on its own merits.
+    const fxBad = [];
+    for (const [lang, feat] of [["en", "csv-export"], ["es", "exportar-csv"]]) {
+      const d = rDir("fx-" + lang);
+      S.initProject(d, ["core"], lang);
+      S.createFeature(d, feat, ["core"], "x", undefined, lang);
+      fs.cpSync(path.join(root, "evals", "fixtures", "specs-" + lang, feat), path.join(d, ".specs", feat), { recursive: true });
+      approveBefore(d, feat, "design");
+      const ap = S.approvePhase(d, feat, "design", "t");
+      const doc = S.specDoctor(d, feat);
+      if (!ap.ok || reuseSt(doc) !== "pass" || /approved before/.test(chk(doc, "design-reuse").detail || "")) fxBad.push(lang + ": " + ap.ok + " " + reuseSt(doc) + " " + chk(doc, "design-reuse").detail);
+    }
+    const fxRoot = path.join(tmp, "a3-eval-fixtures"); // the behavioural fixtures built above (when bash is here)
+    let fxSeen = 0;
+    for (const c of fs.existsSync(fxRoot) ? fs.readdirSync(fxRoot) : []) {
+      const d = path.join(fxRoot, c);
+      if (!fs.existsSync(path.join(d, ".specs"))) continue;
+      for (const f of S.listFeatures(d).features || []) {
+        const st = S.readState(d, f.name);
+        if (!st.approvals || !st.approvals.design) continue;
+        fxSeen++;
+        if (reuseSt(S.specDoctor(d, f.name)) !== "pass") fxBad.push(c + "/" + f.name);
+      }
+    }
+    ok(dmDoc.verdict === "pass" && /^design approved before 1\.19/.test(chk(dmDoc, "design-reuse").detail) && !dmDoc.checks.some((c) => c.status === "warn") && !fxBad.length,
+      "1.19 R1: examples/demo-project stays doctor PASS with no warning (its pre-1.19 design approval → design-reuse passes with the note); evals/fixtures specs-en / specs-es designs pass design-reuse once approved, and so do the " + fxSeen + " approved design(s) of the built behavioural fixtures (got " +
+      js([dmDoc.verdict, chk(dmDoc, "design-reuse").detail, fxBad]) + ")");
+  }
 
   // 1.19 package (T) — the +api, +ui and +obs tracks.
 

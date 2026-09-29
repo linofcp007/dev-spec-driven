@@ -283,6 +283,19 @@ graph TD
     B -->|query| C[(Database)]
 \`\`\`
 
+## Reuse & Integration
+<!-- Search before you write (references/code-reuse-and-quality.md): what this feature takes from the codebase before
+     it adds anything. One row per unit, with its path. Reuse = an existing module, component, helper or service used
+     as is; Extend = an existing unit this feature changes (its callers keep working); New = nothing existing fits —
+     say what was searched and why. A greenfield project says so in one line. -->
+| Kind | What | Where (path) | Why / notes |
+|---|---|---|---|
+| Reuse | [existing module, component, helper or service] | [its path] | [what it already does for this feature] |
+| Extend | [existing unit this feature changes] | [its path] | [the change — existing callers keep working] |
+| New | [new unit] | [where it will live] | [why nothing existing fits — what was searched] |
+
+**Module boundaries:** [where the new code lives, what it exposes and what it may import — features depend on shared code, never the reverse]
+
 ## Alternatives & Trade-offs
 <!-- The options weighed for each key decision — e.g. strong vs eventual consistency, monolith vs service, sync vs
      async, optimistic vs pessimistic locking. At least two per decision (one option alone was never weighed), what
@@ -738,13 +751,13 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
 // ===========================================================================
 const steering = {
     "constitution.md":
-      "# Constitution\n\nNon-negotiable principles every feature must obey. Keep these few, concrete, and testable.\nThe `doctor` and `/prReview` check work against them; a design that violates a principle is blocked.\n\n## Principles\n1. [e.g., Every write is idempotent or explicitly justified.]\n2. [e.g., No PII in logs; user IDs are pseudonymized.]\n3. [e.g., No breaking API change without a versioned migration path.]\n4. [e.g., Errors fail closed (deny) on the security path.]\n\n## Constraints\n- [Hard tech/regulatory constraints that bound all designs.]\n\n## Decision Rules\n- [How to break ties — e.g., 'prefer boring/proven over clever'.]\n",
+      "# Constitution\n\nNon-negotiable principles every feature must obey. Keep these few, concrete, and testable.\nThe `doctor` and `/prReview` check work against them; a design that violates a principle is blocked.\n\n## Principles\n1. [e.g., Every write is idempotent or explicitly justified.]\n2. [e.g., No PII in logs; user IDs are pseudonymized.]\n3. [e.g., No breaking API change without a versioned migration path.]\n4. [e.g., Errors fail closed (deny) on the security path.]\n5. [e.g., Search before you write: extend an existing module before adding a new one.]\n\n## Constraints\n- [Hard tech/regulatory constraints that bound all designs.]\n\n## Decision Rules\n- [How to break ties — e.g., 'prefer boring/proven over clever'.]\n",
     "product.md":
       "# Product\n\n## Vision\n[One sentence: what is this product and who is it for?]\n\n## Target Users\n- Primary: [who uses this daily?]\n- Secondary: [who else touches it?]\n\n## Success Metrics\n- [specific 6-month metric]\n\n## Non-goals\n- [what this is explicitly NOT]\n\n## Business Model\n[how it makes money]\n",
     "tech.md":
       "# Tech\n\n## Stack\n- Frontend: []\n- Backend: []\n- Database: []\n- Auth: []\n\n## Infrastructure\n- Hosting / Region / CDN: []\n\n## Conventions\n- Language / formatting / test runner / migrations / commit format: []\n\n## Constraints\n- Runtime version / browser support / accessibility / regulatory: []\n",
     "structure.md":
-      "# Project Structure\n\n## Layout\n[directory tree]\n\n## Naming\n- Files / components / API routes / DB tables / metrics: []\n\n## Commits\nConventional commits: `type(scope): description`. Types: feat|fix|refactor|test|docs|chore|style|perf\n\n## Branches & Reviews\n- main + feature/<name>; reviews required for merges to main.\n",
+      "# Project Structure\n\n## Layout\n[directory tree]\n\n## Module Boundaries\n- What each module exposes and what it may import: [e.g., each feature exposes one entry point; features/* import lib/*, never each other; lib/* imports no feature; no cycles]\n\n## Shared Code\n- Where shared helpers and components live: [e.g., src/lib/ for helpers and clients, src/components/ for UI] — search there before adding one; code moves in on its second or third real use.\n\n## Naming\n- Files / components / API routes / DB tables / metrics: []\n\n## Commits\nConventional commits: `type(scope): description`. Types: feat|fix|refactor|test|docs|chore|style|perf\n\n## Branches & Reviews\n- main + feature/<name>; reviews required for merges to main.\n",
     "testing-standards.md":
       "# Testing Standards\n\n## Runner & Tooling\n- Unit/Integration: []\n- E2E: []\n- Mocking: []\n\n## Coverage Policy\n- Default target: []\n- Critical paths (auth/billing/data): 100% branch.\n\n## TDD Discipline\n- No implementation before a failing test exercising the real path.\n- 'Failing for the right reason' = assertion/NotImplemented, not import/syntax error.\n",
     "scale.md":
@@ -1907,6 +1920,7 @@ const msg = {
         "constitution-missing": "no Constitution Check section — doctor warns on every feature scaffolded from it.",
         "tradeoffs-missing": "no Alternatives & Trade-offs section — doctor warns (design-tradeoffs) on every feature scaffolded from it.",
         "risks-missing": "no Risks section — doctor warns (design-risks) on every feature scaffolded from it.",
+        "reuse-missing": "no Reuse & Integration section — doctor warns (design-reuse) on every feature scaffolded from it.",
         "no-criteria": "no acceptance criterion (a US-n.AC-m line with SHALL) — nothing for EARS, trace_check or the test plan to follow.",
         "ac-duplicate": (ids) => `duplicate AC IDs: ${ids} — doctor fails on every feature scaffolded from it.`,
         "phantom-ac": (ids, file) => `cites AC IDs ${file} does not define: ${ids} — trace_check reports them as phantoms.`,
@@ -2739,7 +2753,17 @@ const designWeigh = {
       empty: () => "Risks is empty — an honest 'no material risk, because X' is fine; blank is not",
       few: () => "Risks lists no risk",
     },
-    legacyApproval: (d) => `design approved before 1.17 — asked only from its next approval (${d})`,
+    // 1.19 R1 — the Reuse & Integration section (states as above, plus `integration`: a brownfield feature's integration-plan.md
+    // → Integration Points stands in for it).
+    "design-reuse": {
+      filled: (n) => (n ? `${n} item(s) named (reused / extended / new)` : "written (no row or bullet — 'greenfield: nothing to reuse yet' counts)"),
+      missing: () => "no Reuse & Integration section — name the existing modules, components, helpers or services this feature reuses or extends (with their paths), what is new and why nothing existing fits, and where the new code lives",
+      template: () => "Reuse & Integration is still the template — replace its placeholders with what this feature really reuses, extends and adds (or say it is greenfield)",
+      empty: () => "Reuse & Integration is empty — name what is reused or extended, or say in a line why nothing is (greenfield); blank is not",
+      few: () => "Reuse & Integration names nothing",
+      integration: (n) => `covered by integration-plan.md → Integration Points${n ? ` (${n} item(s))` : ""}`,
+    },
+    legacyApproval: (d, v = "1.17") => `design approved before ${v} — asked only from its next approval (${d})`,
     clarifyConsistency: (words) => `The spec mentions ${words}, but neither the requirements nor the design say anything about consistency or idempotency (the answer goes in the design's Alternatives & Trade-offs / Risks, or in a requirement): what must succeed or fail together (atomicity, isolation level), who else writes the same data concurrently, strong or eventual consistency (how stale is acceptable), and the delivery guarantee and idempotency of anything asynchronous?`,
   };
 
@@ -2765,6 +2789,14 @@ const brief = {
     evals: "## Evals affected",
     metrics: "## Metrics to emit",
     files: "## Files (_Implements:_)",
+    // 1.19 R2 — search before you write: the design's Reuse & Integration entries for this task, and the files next to its own
+    reuse: "## Reuse — search before you write",
+    reuseRule: "Before writing any helper, component, client, validator or formatter, search the codebase by concept and synonyms (references/code-reuse-and-quality.md): reuse, then extend, then create. Your report's **Reuse** block says what you reused, extended or created, and why.",
+    reuseEntries: "The design's Reuse & Integration entries for this task — reuse or extend these before writing anything new:",
+    reuseOmitted: (n) => `${n} more matching item(s) — read them in design.md (Reuse & Integration).`,
+    reuseNoMatch: (n) => `The design's Reuse & Integration lists ${n} item(s), none naming this task's files or criteria — read it before creating anything new.`,
+    reuseFiles: "Existing source files next to this task's files — look here first:",
+    reuseFilesMore: (n) => `…and ${n} more in the same folder(s).`,
     design: "## Design context",
     designToc: (p) => `Full design: \`${p}\` — sections:`,
     designOmitted: "Relevant but not included (size) — read them in design.md:",

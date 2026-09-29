@@ -283,6 +283,20 @@ graph TD
     B -->|query| C[(Base de Dados)]
 \`\`\`
 
+## Reutilização e Integração
+<!-- Pesquisar antes de escrever (references/code-reuse-and-quality.md): o que esta feature aproveita do código existente
+     antes de acrescentar alguma coisa. Uma linha por unidade, com o caminho. Reutilizar = um módulo, componente, helper
+     ou serviço existente usado tal como está; Estender = uma unidade existente que esta feature altera (quem já a usa
+     continua a funcionar); Novo = nada do que existe serve — o que foi pesquisado e a razão. Num projeto novo, basta
+     uma linha que o diga. -->
+| Tipo | O quê | Onde (caminho) | Porquê / notas |
+|---|---|---|---|
+| Reutilizar | [módulo, componente, helper ou serviço existente] | [o seu caminho] | [o que já faz por esta feature] |
+| Estender | [unidade existente que esta feature altera] | [o seu caminho] | [a alteração — quem já a usa continua a funcionar] |
+| Novo | [nova unidade] | [onde vai ficar] | [a razão de nada do que existe servir — o que foi pesquisado] |
+
+**Fronteiras de módulos:** [onde fica o código novo, o que expõe e o que pode importar — as features dependem do código partilhado, nunca o inverso]
+
 ## Alternativas e Compromissos
 <!-- As opções ponderadas para cada decisão-chave — p.ex. consistência forte vs eventual, monólito vs serviço, síncrono
      vs assíncrono, bloqueio otimista vs pessimista. Pelo menos duas por decisão (uma opção sozinha nunca foi
@@ -736,13 +750,13 @@ funciona de ponta a ponta. Mantém-no concreto; qualquer pessoa deve conseguir s
 // ===========================================================================
 const steering = {
     "constitution.md":
-      "# Constituição\n\nPrincípios inegociáveis que toda a feature deve cumprir. Mantém-nos poucos, concretos e testáveis.\nO `doctor` e o `/prReview` verificam contra eles; um design que viole um princípio é bloqueado.\n\n## Princípios\n1. [ex.: Toda a escrita é idempotente ou explicitamente justificada.]\n2. [ex.: Sem PII nos logs; os IDs de utilizador são pseudonimizados.]\n3. [ex.: Sem alteração de API com quebra sem um caminho de migração versionado.]\n4. [ex.: Os erros falham fechados (negar) no caminho de segurança.]\n\n## Restrições\n- [Restrições técnicas/regulatórias rígidas que limitam todos os designs.]\n\n## Regras de Decisão\n- [Como desempatar — ex.: 'preferir o aborrecido/comprovado ao engenhoso'.]\n",
+      "# Constituição\n\nPrincípios inegociáveis que toda a feature deve cumprir. Mantém-nos poucos, concretos e testáveis.\nO `doctor` e o `/prReview` verificam contra eles; um design que viole um princípio é bloqueado.\n\n## Princípios\n1. [ex.: Toda a escrita é idempotente ou explicitamente justificada.]\n2. [ex.: Sem PII nos logs; os IDs de utilizador são pseudonimizados.]\n3. [ex.: Sem alteração de API com quebra sem um caminho de migração versionado.]\n4. [ex.: Os erros falham fechados (negar) no caminho de segurança.]\n5. [ex.: Pesquisar antes de escrever: estender um módulo existente antes de criar um novo.]\n\n## Restrições\n- [Restrições técnicas/regulatórias rígidas que limitam todos os designs.]\n\n## Regras de Decisão\n- [Como desempatar — ex.: 'preferir o aborrecido/comprovado ao engenhoso'.]\n",
     "product.md":
       "# Produto\n\n## Visão\n[Uma frase: o que é este produto e para quem é?]\n\n## Utilizadores-Alvo\n- Primário: [quem usa isto diariamente?]\n- Secundário: [quem mais lhe toca?]\n\n## Métricas de Sucesso\n- [métrica específica a 6 meses]\n\n## Não-objetivos\n- [o que isto explicitamente NÃO é]\n\n## Modelo de Negócio\n[como gera receita]\n",
     "tech.md":
       "# Tecnologia\n\n## Stack\n- Frontend: []\n- Backend: []\n- Base de Dados: []\n- Auth: []\n\n## Infraestrutura\n- Hosting / Região / CDN: []\n\n## Convenções\n- Linguagem / formatação / test runner / migrações / formato de commit: []\n\n## Restrições\n- Versão de runtime / suporte de browser / acessibilidade / regulatório: []\n",
     "structure.md":
-      "# Estrutura do Projeto\n\n## Layout\n[árvore de diretórios]\n\n## Nomenclatura\n- Ficheiros / componentes / rotas de API / tabelas de BD / métricas: []\n\n## Commits\nConventional commits: `type(scope): description`. Tipos: feat|fix|refactor|test|docs|chore|style|perf\n\n## Branches e Revisões\n- main + feature/<nome>; revisões obrigatórias para merges para main.\n",
+      "# Estrutura do Projeto\n\n## Layout\n[árvore de diretórios]\n\n## Fronteiras de Módulos\n- O que cada módulo expõe e o que pode importar: [ex.: cada feature expõe um único ponto de entrada; features/* importam lib/*, nunca umas das outras; lib/* não importa nenhuma feature; sem ciclos]\n\n## Código Partilhado\n- Onde ficam os helpers e componentes partilhados: [ex.: src/lib/ para helpers e clientes, src/components/ para a UI] — procurar aí antes de acrescentar um; o código entra lá ao segundo ou terceiro uso real.\n\n## Nomenclatura\n- Ficheiros / componentes / rotas de API / tabelas de BD / métricas: []\n\n## Commits\nConventional commits: `type(scope): description`. Tipos: feat|fix|refactor|test|docs|chore|style|perf\n\n## Branches e Revisões\n- main + feature/<nome>; revisões obrigatórias para merges para main.\n",
     "testing-standards.md":
       "# Padrões de Teste\n\n## Runner e Ferramentas\n- Unit/Integração: []\n- E2E: []\n- Mocking: []\n\n## Política de Cobertura\n- Alvo por defeito: []\n- Caminhos críticos (auth/faturação/dados): 100% de ramos.\n\n## Disciplina TDD\n- Sem implementação antes de um teste a falhar que exercite o caminho real.\n- 'Falhar pela razão certa' = assertion/NotImplemented, não erro de import/sintaxe.\n",
     "scale.md":
@@ -1832,6 +1846,7 @@ const msg = {
         "constitution-missing": "sem secção Verificação da Constituição (Constitution Check) — o doctor avisa em todas as features criadas a partir dele.",
         "tradeoffs-missing": "sem secção Alternativas e Compromissos — o doctor avisa (design-tradeoffs) em todas as features criadas a partir dele.",
         "risks-missing": "sem secção Riscos — o doctor avisa (design-risks) em todas as features criadas a partir dele.",
+        "reuse-missing": "sem secção Reutilização e Integração — o doctor avisa (design-reuse) em todas as features criadas a partir dele.",
         "no-criteria": "nenhum critério de aceitação (uma linha US-n.AC-m com DEVE) — nada para o EARS, o trace_check ou o plano de testes seguirem.",
         "ac-duplicate": (ids) => `IDs de AC duplicados: ${ids} — o doctor falha em todas as features criadas a partir dele.`,
         "phantom-ac": (ids, file) => `cita IDs de AC que ${file} não define: ${ids} — o trace_check reporta-os como fantasmas.`,
@@ -2617,7 +2632,17 @@ const designWeigh = {
       empty: () => "Riscos está vazia — um honesto 'nenhum risco relevante, porque X' serve; em branco não",
       few: () => "Riscos não lista nenhum risco",
     },
-    legacyApproval: (d) => `design aprovado antes da 1.17 — só é exigido a partir da próxima aprovação (${d})`,
+    // 1.19 R1 — a secção Reutilização e Integração (os estados acima, mais `integration`: o integration-plan.md de uma feature
+    // brownfield → Pontos de Integração substitui-a).
+    "design-reuse": {
+      filled: (n) => (n ? `${n} item(ns) indicado(s) (reutilizado / estendido / novo)` : "escrita (sem linha nem item — 'projeto novo: ainda nada a reutilizar' conta)"),
+      missing: () => "sem secção Reutilização e Integração — indica os módulos, componentes, helpers ou serviços existentes que esta feature reutiliza ou estende (com os caminhos), o que é novo e a razão de nada do que existe servir, e onde fica o código novo",
+      template: () => "Reutilização e Integração ainda é o template — substitui os placeholders pelo que esta feature realmente reutiliza ou estende, e pelo que é novo (ou indica que é um projeto novo)",
+      empty: () => "Reutilização e Integração está vazia — indica o que é reutilizado ou estendido, ou numa linha a razão de nada o ser (projeto novo); em branco não",
+      few: () => "Reutilização e Integração não indica nada",
+      integration: (n) => `coberta pelo integration-plan.md → Pontos de Integração${n ? ` (${n} item(ns))` : ""}`,
+    },
+    legacyApproval: (d, v = "1.17") => `design aprovado antes da ${v} — só é exigido a partir da próxima aprovação (${d})`,
     clarifyConsistency: (words) => `A spec menciona ${words}, mas nem os requisitos nem o design dizem nada sobre consistência ou idempotência (a resposta vai para as secções Alternativas e Compromissos / Riscos do design, ou para um requisito): o que tem de ter sucesso ou falhar em conjunto (atomicidade, nível de isolamento), quem mais escreve os mesmos dados ao mesmo tempo, consistência forte ou eventual (que desatualização é aceitável), e a garantia de entrega e a idempotência de tudo o que for assíncrono?`,
   };
 
@@ -2643,6 +2668,14 @@ const brief = {
     evals: "## Evals afetadas",
     metrics: "## Métricas a emitir",
     files: "## Ficheiros (_Implements:_)",
+    // 1.19 R2 — pesquisar antes de escrever: as entradas de Reutilização e Integração do design para esta tarefa, e os ficheiros ao lado dos seus
+    reuse: "## Reutilização — pesquisar antes de escrever",
+    reuseRule: "Procura no código, pelo conceito e por sinónimos (references/code-reuse-and-quality.md), antes de escrever qualquer helper, componente, cliente, validador ou formatador: primeiro reutilizar, depois estender, só então criar. O bloco **Reuse** do teu relatório diz o que foi reutilizado, estendido ou criado, e porquê.",
+    reuseEntries: "As entradas de Reutilização e Integração do design para esta tarefa — reutilizar ou estender isto antes de escrever algo novo:",
+    reuseOmitted: (n) => `Mais ${n} item(ns) correspondem — lê-os no design.md (Reutilização e Integração).`,
+    reuseNoMatch: (n) => `A secção Reutilização e Integração do design lista ${n} item(ns), nenhum com os ficheiros ou os critérios desta tarefa — lê-a antes de criar algo novo.`,
+    reuseFiles: "Ficheiros de código existentes ao lado dos desta tarefa — procura aqui primeiro:",
+    reuseFilesMore: (n) => `…e mais ${n} na(s) mesma(s) pasta(s).`,
     design: "## Contexto de design",
     designToc: (p) => `Design completo: \`${p}\` — secções:`,
     designOmitted: "Relevantes mas não incluídas (tamanho) — lê-as no design.md:",

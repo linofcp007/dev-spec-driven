@@ -10,6 +10,15 @@ graph TD
     CLI -->|toCsv| CSV[src/csv.js]
 ```
 
+## Reutilización e Integración
+| Tipo | Qué | Dónde (ruta) | Por qué / notas |
+|---|---|---|---|
+| Reutilizar | `listOrders()` — el almacén de pedidos | `src/orders.js` | el listado por defecto ya lee los pedidos con él; la exportación lee la misma lista |
+| Extender | el manejo de argumentos de la CLI | `src/cli.js` | una rama `--csv` junto al listado por defecto, que no cambia |
+| Nuevo | `toCsv()` — el serializador | `src/csv.js` | la aplicación no tiene ningún helper de CSV ni de entrecomillado (buscado `csv`, `serialize`, `quote`, `escape` en src/); solo el núcleo de Node |
+
+**Límites de módulos:** `src/csv.js` es una función pura (pedidos de entrada, texto de salida) y no importa nada; `src/cli.js` la conecta al almacén.
+
 ## Alternativas y Compensaciones
 | Decisión | Opción | Pros | Contras | Coste si falla | Elegida |
 |---|---|---|---|---|---|

@@ -46,6 +46,14 @@ is open again, its evidence turns stale (a re-tick needs a NEW run — `stale-ev
 `.state.json → unticks` records it; a finished or signed-off feature must be finished and signed off again once the
 task is done.
 
+**Search before you write** (every task, every track — `references/code-reuse-and-quality.md`): before adding any
+helper, component, client, validator or formatter, look for one that exists — the design's **Reuse & Integration**
+section (the brief's **Reuse** section quotes its entries for the task and lists the files next to the task's own),
+then the codebase by concept and synonyms, the shared folders `structure.md` names. Reuse, else extend (existing
+callers unchanged), else create — local to the feature until a second or third use; never copy-paste. A refactor you
+notice outside the task is **filed, not done**: `spec_backlog {action: "add", name: "refactor-<topic>", note: "refactor:
+<smell> in <files>"}` (CLI `dev-spec backlog add …`).
+
 **Can't run the `_Verify:_` command yourself** (no shell, no runtime in this session)? **Do not tick the task** — not
 bare, not with a note, never with an exit code nobody saw. Name the command and ask the user to run it and paste the
 output (or to run `dev-spec done <feature> <n> --run`); record exactly what they report
@@ -61,7 +69,10 @@ then per task `spec_task_brief {write:true}` → dispatch the `dev-spec-driven:s
 report paths → write the diff to `.execution/task-N-review.diff` → dispatch the `dev-spec-driven:spec-reviewer` agent →
 fix loop (max 5 rounds) → `spec_complete_task` only after a clean review, with the evidence from the implementer's
 report (the SubagentStop hook sends back a DONE whose report lacks each `_Verify:_` command with the exit code the task
-needs — 0, or non-zero on an `_Expect: fail_` task). Keep
+needs — 0, or non-zero on an `_Expect: fail_` task). The report carries a **Reuse** block (searched, reused, extended,
+created and why); the reviewer checks every new unit for a duplicate in the existing codebase (a duplicate is
+Important); file the report's *Refactor candidates* and the reviewer's out-of-scope refactor ideas in the backlog
+(`spec_backlog add`, a `refactor:` note) — never in the task. Keep
 the ledger. Stop at every `**Checkpoint:**` for human review, and go back to the right phase for any finding that would change an
 AC, the design or a planned test. Tasks the brief flags `inlineOnly` (+ai prompt/eval) run inline. If the
 host has no subagent tool, say so and run inline. Independent `[P]` tasks may run concurrently in separate

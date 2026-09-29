@@ -10,6 +10,15 @@ graph TD
     CLI -->|toCsv| CSV[src/csv.js]
 ```
 
+## Reuse & Integration
+| Kind | What | Where (path) | Why / notes |
+|---|---|---|---|
+| Reuse | `listOrders()` — the order store | `src/orders.js` | the default listing already reads the orders through it; the export reads the same list |
+| Extend | the CLI's argument handling | `src/cli.js` | a `--csv` branch beside the default listing, which stays unchanged |
+| New | `toCsv()` — the serializer | `src/csv.js` | no CSV or quoting helper exists in the app (searched `csv`, `serialize`, `quote`, `escape` in src/); Node core only |
+
+**Module boundaries:** `src/csv.js` is a pure function (orders in, text out) and imports nothing; `src/cli.js` wires it to the store.
+
 ## Alternatives & Trade-offs
 | Decision | Option | Pros | Cons | Cost if wrong | Chosen |
 |---|---|---|---|---|---|

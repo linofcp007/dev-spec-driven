@@ -58,8 +58,8 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
                                spec_approve (force, waivers, revoke, roles, the fast-forward); .history/ snapshots, spec_impact
   doctor.js                    spec_doctor, spec_next_action, the design.md save check; spec_list / spec_status, the status line,
                                the plan-mode bridge, the DEV_SPEC_* defaults
-  quality.js                   cross-feature ACs (Q2), the glossary (Q3), design trade-offs / risks (A1), the constraint
-                               nudge (A2), spec_clarify
+  quality.js                   cross-feature ACs (Q2), the glossary (Q3), design trade-offs / risks (A1) and reuse (1.19 R1),
+                               the brief's Reuse section (R2), the constraint nudge (A2), spec_clarify
   finish.js                    spec_finish and the drift baseline (spec_drift); remove / rename / archive / restore;
                                _Supersedes:_ and .specs/SPECS.md; spec_metrics (+ retro.md)
   roadmap-md.js                ROADMAP.md / .html (roadmapData), forecasts, cross-feature overlaps
@@ -1615,6 +1615,48 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   T-ID an earlier task already turned green pass on their first run by design — never forced red, nothing deleted. The
   reviewer flags production behaviour that no test exercises (a target T-ID, committed in Phase 4, or a helper test in
   the diff) — never "no test in the diff" (review 5).
+
+## Reuse & Integration and clean code (1.19 R)
+- **The section** — the core design builder (every plain feature, EN / PT / ES; pt-BR derived) scaffolds `## Reuse &
+  Integration` between Architecture and Alternatives & Trade-offs: a Kind · What · Where (path) · Why table (Reuse / Extend /
+  New rows) + a `**Module boundaries:**` line — slots, so the placeholder corpus knows them and a fresh design's approval is
+  refused on `placeholders` like every template section. Guide: `references/code-reuse-and-quality.md`.
+- **Doctor `design-reuse`** (WARN only, CHECK_PHASE 2, never in `approvalChecks`) is the third `DESIGN_WEIGH` entry
+  (`engine/quality.js`: `[id, synonyms, min, stamp]`) — the 1.17 A pattern exactly: `designWeighState` over `weighSection(…,
+  REUSE_SYN)` → missing · template · empty · filled (min 0: any row / item / line of prose — "greenfield: nothing to reuse"
+  counts); skipped for a bugfix, a spike and a later-phase template design; `designSaveCheck` returns `reuse` (its state) + a ▲
+  note (never unclean); `templates check` warns `reuse-missing`; spec_upgrade lists it but never counts it toward `attention`
+  (`DESIGN_WEIGH_IDS`). `REUSE_SYN`: Reuse (& / and Integration…), Code reuse, Existing components / code / modules /
+  services / helpers, Integration points, PT Reutilização / Reaproveitamento / Reúso / Componentes existentes / Pontos de
+  integração, ES Reutilización / Aprovechamiento / Componentes existentes / Puntos de integración… — never a bare
+  "Integration" or "Existing" (the heading must NAME the section: `weighHeadingMatches`). **Brownfield:** when the design's
+  section is missing or empty and `integration-plan.md` → Integration Points (a REUSE_SYN heading) is filled, the check passes
+  with state `integration` (`designReuseFallback`); a template section still warns.
+- **The stamp scheme** — `approvePhase` stamps a design approval (and its history record) `weigh: true` (1.17) AND `reuse:
+  true` (1.19). Each DESIGN_WEIGH check names the stamp it needs; `designWeighChecks(design, lang, {approval, integrationPlan})`
+  treats a check as legacy when the design approval lacks its stamp → a pass with `designWeigh.legacyApproval(detail,
+  DESIGN_WEIGH_STAMPS[stamp])` ("approved before 1.19"). So a 1.17 / 1.18 approval (weigh only) is still held to trade-offs /
+  risks, never to reuse; an unstamped one to none. `opts.legacy: true` (the 1.17 form) still makes every check legacy. A new
+  design check → a new stamp key (additive: an older engine reading the state keeps its own rules).
+- **The brief (R2)** — `briefReuse(projectDir, design, implements, acIds)` (quality.js) → `{state, total, entries, omitted, files,
+  more}`: the section's units (`reuseUnits`: table data rows, outermost list items with their deeper lines, prose lines; a unit
+  holding a template slot is none) that name the task — its file, a sibling in its folder, the folder, a folder above it
+  (`RE_REUSE_PATH` path tokens through `implementsKey`; the look-behind makes a long slash-less run linear), a ≥ 5-character
+  basename word-bounded, or one of its AC IDs — ≤ 8 entries / 1,500 characters; and the existing source files
+  (`GUARD_CODE_EXT`, one `readdirSync` per folder, ≤ 5 folders × 1,000 entries, dot files / SCAN_IGNORE folders / the task's
+  own files out, non-test first) next to its `_Implements:_` targets, ≤ 15 + `more`. `taskBrief` renders it after Files
+  (`BRIEF.reuse*`, i18n) when there is an entry, a section to point at (`reuseNoMatch`) or a file; the Reuse & Integration
+  section itself leaves the "Design context" quotes. Result `reuse`; with `write: true` only `refs.reuse {entries: <count>,
+  files}`.
+- **Prose (R3)** — agents/spec-implementer.md: "Search before you write" is Before-you-begin step 3 (a hard step: the brief's
+  Reuse section, concept + three synonyms, shared folders, `.specs/SPECS.md`; reuse → extend → create, the rule of three, no
+  copy-paste) + a hard rule + the report's `### Reuse` block (Reused / Extended / Created + searched / Duplicated on purpose /
+  Refactor candidates); agents/spec-reviewer.md: Code quality = duplication against the EXISTING codebase (a new unit
+  duplicating one is Important), the guide's smells Minor; the controller files refactor candidates with `spec_backlog add`
+  (`refactor:` note) — subagent-execution.md, /executeTask; red-flags rows; SKILL.md, AGENTS.md, /design. No engine gate reads
+  the Reuse block (R5: prose only — the SubagentStop gate is unchanged).
+- **Steering (R4)** — the `structure.md` stub gains Module Boundaries and Shared Code slots, the constitution stub a fifth
+  example principle ("Search before you write: extend an existing module before adding a new one") — EN / PT / ES.
 
 ## Conventions & gotchas
 - **Every name-taking op resolves its folder through `resolveFeature()` / `existingFeature()`** —
