@@ -9,6 +9,15 @@ it is not Bounded mode either: Bounded (a short design in chat for a contained c
 has no reproduction, root cause or regression test — a real defect needs all three.
 Adapted from the `systematic-debugging` skill of [obra/superpowers](https://github.com/obra/superpowers) (MIT).
 
+**Prefill what you already know (1.21)** — in the same `spec_create` call, not by reading the four scaffolds back and
+rewriting them: `reproduction` → `bug.md → Reproduction`, `rootCause` → `bug.md → Root Cause` (only once you have
+the evidence), `condition` / `behaviour` → `US-1.AC-1` (`IF <condition> THEN THE SYSTEM SHALL <behaviour>`, localized;
+`behaviour` also fills `bug.md → Expected`). CLI: `--reproduction`, `--root-cause`, `--condition`, `--behaviour`. A
+text left out stays a slot; `prefilled` / `prefillSkipped` say where each landed (an existing file or a project
+template is never touched). `includeBody: true` returns every created scaffold (`bodies`), so what's left is edited
+without a Read. The gates don't change: a prefilled Root Cause counts only as real prose (no slot, no `> **TODO**`,
+not only `[brackets]`), and the human still approves `bug.md` before any fix.
+
 ## The iron law
 
 **No fix before the root cause is known.** `spec_doctor` fails the `root-cause` check until
@@ -60,11 +69,13 @@ The engine enforces it at every step, not only in doctor:
 3. **Failing regression test** (task 3). Write `T-01` so it reproduces the bug and watch it fail *for the
    right reason* (the wrong behaviour, not a typo or a missing import). The scaffold marks task 3 **`_Expect: fail_`**
    with a `_Verify: [command that runs T-01]_` slot — fill in the real command (and add guard test `T-02`):
-   its failing run is then the recorded proof (`dev-spec done <f> 3 --run` while the test fails; a passing run is
+   its failing run is then the recorded proof (`node "<clone>/cli/dev-spec.js" done <f> 3 --run` while the test
+   fails — the line the tool's note prints, path resolved; a passing run is
    refused — `unexpected-pass`, the test doesn't reproduce the bug yet; so is a failure whose output shows the test
    never ran, such as a missing test file or module — `couldNotRun`). Paste the red output in the report. This
    is the proof the fix fixes *this* bug. **No shell to run it?** Ask the user to run the test and paste the output
-   — don't write the fix on a red you haven't seen.
+   — don't write the fix on a red you haven't seen, and don't send a subagent (or a tool search) to find a shell:
+   stop and ask.
 4. **Fix** (task 4). One change that removes the root cause — not a bundle of "while I'm here"
    improvements. Run `T-01`, `T-02` and the full suite (`_Verify:_` records the evidence). Consider
    defence in depth: should the invalid value also be rejected at the boundary where it entered?

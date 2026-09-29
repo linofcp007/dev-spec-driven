@@ -101,7 +101,7 @@ ok(fr.code === 1 && /\$ node -e "process\.exit\(0\)" {3}\(test\)/.test(fr.out) &
   /✗ project checks without a passing run since the last task activity: lint \(latest run failed \(exit 2\)\)/.test(fr.out) && !/test \(no run/.test(fr.out) && fcB5.test.exitCode === 0 && fcB5.lint.exitCode === 2 &&
   frJ.code === 1 && frJr && frJr.recordedChecks.length === 2 && frJr.suiteChecks.find((c) => c.name === "test").status === "pass" && /\$ node -e/.test(frJ.stderr) && !/\$ node -e/.test(frJ.stdout) &&
   /Registada\(s\) 2 execução\(ões\) de verificações do projeto/.test(frPt.out) && /verificações do projeto sem uma execução bem-sucedida .*: lint \(a última execução falhou \(exit 2\)\)/.test(frPt.out) &&
-  frNone.code === 1 && /no project checks to run \(roadmap\.json meta\.checks\) — set them: dev-spec init --check test="npm test"/.test(frNone.out),
+  frNone.code === 1 && /no project checks to run \(roadmap\.json meta\.checks\) — set them: node "[^"]*dev-spec\.js" init --check test="npm test"/.test(frNone.out),
   "finish --run runs each meta.checks command and records it (a failure stays the suite-evidence blocker); --json keeps stdout one document; PT; without meta.checks it runs nothing and exits 1 (got " +
   JSON.stringify([fr.out.slice(0, 300), frNone.out.slice(0, 120)]) + ")");
 const pp = path.join(tmp, "b5-finish-pipe");

@@ -402,7 +402,55 @@ function integrationPlanMd(name, lang) {
   return i18n.integrationPlan(name, lang);
 }
 
+// 1.21 F3 — spec_create {kind: "bugfix"} prefill. What the agent already knows goes straight into the scaffold — bug.md →
+// Reproduction / Root Cause / Expected and requirements.md US-1.AC-1's IF <condition> THEN THE SYSTEM SHALL <behaviour> — so
+// it doesn't read the four scaffolds back and rewrite them (the 1.19 eval traces). A text left out stays the template's slot.
+// Nothing about the gates changes: the root-cause gate reads bug.md as ever (bugSectionFilled — real prose outside brackets,
+// no slot, no > **TODO**), and the human still approves bug.md before any fix. condition / behaviour are ONE line (whitespace
+// folded; a leading IF / trailing THEN and a leading THE SYSTEM SHALL — EN / PT / ES — are dropped: the builder writes them);
+// reproduction / rootCause keep their lines, through safeSpecText (a heading or an HTML comment in them can't open a section).
+const BUG_PREFILL = ["reproduction", "rootCause", "condition", "behaviour"];
+const BUG_PREFILL_FILES = { reproduction: ["bug.md"], rootCause: ["bug.md"], condition: ["requirements.md"], behaviour: ["requirements.md", "bug.md"] };
+const BUG_TEXT_MAX = 20000, BUG_LINE_MAX = 500;
+const RE_BUG_IF_LEAD = /^(?:if|se|si)\s+/i;
+const RE_BUG_THEN_TAIL = /[,;]?\s+(?:then|então|entao|entonces)$/i;
+const RE_BUG_SHALL_LEAD = /^(?:(?:then|então|entao|entonces)\s+)?(?:(?:the system|o sistema|el sistema)\s+(?:shall|must|deve|debe)|shall|deve|debe)\s+/i;
+function bugCreateInput(opts, M) {
+  const A = M.args;
+  const texts = {};
+  for (const k of BUG_PREFILL) {
+    const v = opts[k];
+    if (v == null || (typeof v === "string" && !v.trim())) continue;
+    if (typeof v !== "string") return { error: A.invalid(A.item(k, A.type.string, JSON.stringify(v))) };
+    if (k === "condition" || k === "behaviour") {
+      let s = v.replace(/\s+/g, " ").trim();
+      if (s.length > BUG_LINE_MAX) return { error: M.bugPrefill.oneLine(k, BUG_LINE_MAX) };
+      s = (k === "condition" ? s.replace(RE_BUG_IF_LEAD, "").replace(RE_BUG_THEN_TAIL, "") : s.replace(RE_BUG_SHALL_LEAD, "")).replace(/<!--/g, "&lt;!--").trim();
+      if (s) texts[k] = s;
+    } else {
+      if (v.length > BUG_TEXT_MAX) return { error: M.decisions.tooLong(k, BUG_TEXT_MAX) };
+      const s = safeSpecText(v.trim());
+      if (s) texts[k] = s;
+    }
+  }
+  return { texts };
+}
+// includeBody (1.21 F3): the body of every feature-folder artifact the call created ("design.md (+sections)" → design.md), so
+// the agent edits what's left without reading the files back. Steering and nested files (evals/, prompts/) stay out.
+function createdBodies(dir, created) {
+  const bodies = {};
+  for (const entry of created || []) {
+    const m = /^([\w.-]+\.md)(?:\s|$)/.exec(String(entry));
+    if (!m || Object.prototype.hasOwnProperty.call(bodies, m[1])) continue;
+    const t = readIfExists(path.join(dir, m[1]));
+    if (t != null) bodies[m[1]] = t;
+  }
+  return bodies;
+}
+
 // opts.brownfield: the feature lands in an existing codebase — also scaffold integration-plan.md.
+// opts.reproduction / rootCause / condition / behaviour: a bugfix's prefill (1.21 F3, bugCreateInput); opts.includeBody: return
+// the created artifacts' bodies (`bodies`).
 function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts = {}) {
   const f = resolveFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -432,6 +480,13 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   if (!spike && askedKind !== "spike" && opts && ["question", "timebox"].some((k) => opts[k] != null && String(opts[k]).trim())) {
     return { ok: false, error: i18n.msg(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir))).spike.spikeOnly(opts.question != null && String(opts.question).trim() ? "question" : "timebox") };
   }
+  // 1.21 F3 — the bugfix prefill: validated before anything is written; on a feature or spike it is refused (unless the caller
+  // asked for a bugfix and the folder already has another kind — the kindKept note says so, the inputs are unused).
+  const bugMsg = () => i18n.msg(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir)));
+  const bugGiven = opts ? BUG_PREFILL.filter((k) => opts[k] != null && String(opts[k]).trim()) : [];
+  if (!bugfix && askedKind !== "bugfix" && bugGiven.length) return { ok: false, error: bugMsg().bugPrefill.bugOnly(bugGiven[0]) };
+  const bugIn = bugfix && bugGiven.length ? bugCreateInput(opts, bugMsg()) : { texts: {} };
+  if (bugIn.error) return { ok: false, error: bugIn.error };
   // An EXISTING feature keeps every track it has, plus the new ones asked for — those go through the same
   // path as spec_add_track below (a re-run never drops a track and never re-classifies). A bugfix is always
   // test-first (the regression test is its proof), plus any track it is given — on a NEW bugfix those go
@@ -509,6 +564,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     const flowNote = flowInfo.store ? i18n.msg(lng).flow.created(flowOrderText(dir, t, flowInfo.store)) : flowInfo.note;
     if (flowNote) res.note = res.note ? res.note + " " + flowNote : flowNote;
     if (flowInfo.flow === "design-first") res.flow = "design-first";
+    if (opts && opts.includeBody === true) res.bodies = createdBodies(dir, created); // 1.21 F3
     return res;
   };
 
@@ -528,13 +584,33 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   if (opts && opts.brownfield) put("integration-plan.md", scaf("integration-plan", () => integrationPlanMd(name, lng))); // create-only, like every artifact
 
   if (bugfix) {
-    put("bug.md", scaf("bug", () => i18n.bugReport({ name, summary }, lng)));
-    put("requirements.md", scaf("bug-requirements", () => i18n.bugRequirements({ name, summary }, lng)));
+    const bt = bugIn.texts; // 1.21 F3: the prefill (built-in scaffolds only — a project template is written as it says)
+    put("bug.md", scaf("bug", () => i18n.bugReport({ name, summary, ...bt }, lng)));
+    put("requirements.md", scaf("bug-requirements", () => i18n.bugRequirements({ name, summary, ...bt }, lng)));
     put("test-plan.md", scaf("bug-test-plan", () => i18n.bugTestPlan(name, lng)));
     ensureDir(path.join(dir, "tests", "unit"));
     ensureDir(path.join(dir, "tests", "integration"));
     put("tasks.md", scaf("bug-tasks", () => i18n.bugTasks(name, lng)));
-    return finish({ ok: true, slug, dir, kind: "bugfix", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
+    const res = finish({ ok: true, slug, dir, kind: "bugfix", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
+    const given = Object.keys(bt);
+    if (res.ok === false || !given.length) return res;
+    // Where each text landed: a file this call created from the built-in builder. An existing file (create-only) or one a
+    // project template supplied never gets it — prefillSkipped names them, and the note asks the agent to write them in.
+    const landed = (file) => created.includes(file) && !fromTemplates[file];
+    const prefilled = {}, prefillSkipped = {};
+    for (const k of given) {
+      for (const file of BUG_PREFILL_FILES[k]) {
+        const into = landed(file) ? prefilled : prefillSkipped;
+        (into[file] = into[file] || []).push(k);
+      }
+    }
+    res.prefilled = prefilled;
+    if (Object.keys(prefillSkipped).length) {
+      res.prefillSkipped = prefillSkipped;
+      const note = bugMsg().bugPrefill.skipped(Object.entries(prefillSkipped).map(([file, ks]) => `${ks.join(", ")} (${file})`).join("; "));
+      res.note = res.note ? res.note + " " + note : note;
+    }
+    return res;
   }
 
   // A project template (.specs/templates/) replaces the built-in one; design / requirements / tasks still get the active
@@ -1016,7 +1092,7 @@ function removeTrack(projectDir, name, track) {
 module.exports = { steeringFilesForTracks, initProject, scaffoldSteeringFile, RE_CUSTOM_STEERING, PROTO_KEYS,
   customSteeringError, customSteeringStub, steeringFrontMatter, BRIEF_STEERING_BUDGET, briefSteering,
   steeringPlaceholders, classificationMd, requirementsMd, trackDesignBlock, designMd, tasksMd, testPlanMd, evalPlanMd,
-  loadTestMd, SAMPLE_GOLDEN, SAMPLE_ADVERSARIAL, quickstartMd, checklistMd, integrationPlanMd, createFeature,
+  loadTestMd, SAMPLE_GOLDEN, SAMPLE_ADVERSARIAL, quickstartMd, checklistMd, integrationPlanMd, BUG_PREFILL, bugCreateInput, createdBodies, createFeature,
   pruneBacklog, STEERING_GOVERNED, safeSteeringName, STEERING_MAX_PATTERNS, governingSteering, steeringTargetsMatch,
   featureImplementsTargets, steeringFingerprints, steeringChanges, steeringChangeText, steeringImpact,
   steeringImpactLines, applyTracks, testPlanTracks, trackTemplateAcs, scaffoldTestPlan, trackTaskBlock,

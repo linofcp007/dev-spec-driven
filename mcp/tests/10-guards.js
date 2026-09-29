@@ -669,7 +669,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     S.finishFeature(p3, "login", { evidence: [{ name: "test", command: "npm test", exitCode: 0 }] });
     const na3c = S.nextAction(p3, "login");
     ok(fin3.readyToFinish && na3a.step === "finished" && na3b.step === "verify" && JSON.stringify(na3b.suite) === '[{"name":"test","status":"before-last-tick"}]' &&
-      /project checks have no passing run since the last task activity: test \(ran before the last task activity\)/.test(na3b.recommendation) && /dev-spec finish login --run/.test(na3b.recommendation) &&
+      /project checks have no passing run since the last task activity: test \(ran before the last task activity\)/.test(na3b.recommendation) && /node "[^"]*dev-spec\.js" finish login --run/.test(na3b.recommendation) &&
       !/Nothing left to do/.test(na3b.recommendation) && fin3b.readyToFinish === false && na3c.step === "finished" && na3c.suite === undefined,
       "full review Gb3: a finished feature whose project checks have no passing run since the last task activity → step verify naming the checks (suite: [{name, status}]) — never 'finished, nothing left to do' while spec_finish refuses (got " +
       JSON.stringify([na3a.step, na3b.step, na3b.suite, na3c.step]) + ")");

@@ -661,7 +661,7 @@ function exportSpecs(projectDir, opts = {}) {
   // A feature folder named 'exports' from before the name was reserved: never drop documents into someone's spec.
   if (["requirements.md", ".state.json"].some((n) => fs.existsSync(path.join(exDir, n)))) return { ...res, ok: false, error: i18n.msg(doc.lang).stakeholderExport.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
   if (!isGeneratedOrAbsent(file)) return { ...res, ok: false, skipped: true, error: i18n.msg(doc.lang).err.notGenerated(".specs/" + EXPORT_DIR + "/" + base + "." + ext) };
-  writeFileAtomic(file, content);
+  writeFileAtomic(file, i18n.portableCli(content)); // committed: `dev-spec`, never a machine path (1.21 F3)
   return { ...res, wrote: true, bytes: Buffer.byteLength(content, "utf8") };
 }
 // spec_export {format: "gherkin"} (1.16 E1): a feature → .specs/exports/<slug>.feature ({content | wrote, file, bytes,
@@ -700,7 +700,7 @@ function exportGherkin(projectDir, opts, pl) {
   if (["requirements.md", ".state.json"].some((n) => fs.existsSync(path.join(exDir, n)))) return { ...res, ok: false, error: i18n.msg(lang).stakeholderExport.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
   const hand = docs.find((d) => !isGeneratedOrAbsent(d.file));
   if (hand) return { ...res, ok: false, skipped: true, error: i18n.msg(lang).err.notGenerated(".specs/" + EXPORT_DIR + "/" + path.basename(hand.file)) };
-  for (const d of docs) writeFileAtomic(d.file, d.content);
+  for (const d of docs) writeFileAtomic(d.file, i18n.portableCli(d.content));
   const bytes = (d) => Buffer.byteLength(d.content, "utf8");
   if (res.scope === "feature") return { ...res, wrote: true, bytes: bytes(docs[0]) };
   return { ...res, wrote: docs.length > 0, files: docs.map((d) => d.file),
@@ -1290,7 +1290,7 @@ function changelog(projectDir, opts = {}) {
     const bad = roadmapError(projectDir);
     if (bad) return { ok: false, error: bad };
     if (!isGeneratedOrAbsent(file)) return { ok: false, skipped: true, error: M.err.notGenerated(fileName) };
-    writeFileAtomic(file, markdown);
+    writeFileAtomic(file, i18n.portableCli(markdown));
     if (ms) return { ok: true }; // a milestone's notes leave the project's meta.changelogAt alone
     const rm = readRoadmap(projectDir);
     rm.meta = rm.meta || {};

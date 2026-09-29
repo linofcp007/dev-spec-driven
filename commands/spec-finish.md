@@ -20,14 +20,17 @@ Feature: $ARGUMENTS
    report lists for the active tracks (+saas load test and observability, +ai cost and safety, +sec security scans
    and the threat model re-checked, +privacy data subject rights and retention, +dist failure-injection tests, +api contract tests and the breaking-change diff, +ui accessibility checks and the performance budget, +obs an alert in a staged failure and a rollback drill, bugfix: the reproduction no longer
    reproduces). With project checks set, record them: run each configured command and pass the results as
-   `spec_finish {name, evidence: [{name, command, exitCode, summary}]}` — or `dev-spec finish <feature> --run`
+   `spec_finish {name, evidence: [{name, command, exitCode, summary}]}` — or `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" finish <feature> --run`
    (`--timeout <seconds>` optional), which runs and records them; a check that could not run (no shell, a signal,
    the timeout) records nothing. Show the commands and their output. No evidence, no "done" — and no shell to run
-   them? Ask the user to run them and paste the output; never record a run nobody made.
+   them? Ask the user to run them (the runnable line above) and paste the output; never record a run nobody made,
+   and never send a subagent to look for a shell.
 3. Show the merge title and summary generated from the spec chain
-   (`.specs/<feature>/.execution/merge-summary.md`) and ask the user to approve the `execution` phase
-   (`spec_approve`) — its gate is this report's blockers, so it is refused while the feature isn't ready (only an
-   explicit `force` records it, flagged as forced; `spec_metrics` reads `finished` from it or from the written finish). A written finish of a **ready** feature also records the **drift baseline** (a hash of every
+   (`.specs/<feature>/.execution/merge-summary.md`), then ask the user **explicitly** whether they sign off the
+   `execution` phase — and call `spec_approve {phase: "execution"}` only on their yes. **A green run is evidence, not
+   the sign-off:** never tell them "once you paste a passing run, I'll approve execution" — after the run, show it and
+   ask. The gate is this report's blockers, so it is refused while the feature isn't ready (only an explicit `force`
+   records it, flagged as forced; `spec_metrics` reads `finished` from it or from the written finish). A written finish of a **ready** feature also records the **drift baseline** (a hash of every
    file its `_Implements:_` markers name) — `/spec-drift` compares against it later; re-run `finish --write` after
    last-minute code changes so the baseline matches what ships. Every **forced approval** is listed in the merge
    summary ("Waived gates") with its failing checks and its waiver — the reason and expiry recorded with

@@ -234,8 +234,25 @@ flows, the bugfix kind.
   bug requirements/test plan/tasks (always +tdd), `specDoctor` swaps the design checks for
   `reproduction` (warn) and `root-cause` (**fail** until filled — the iron law, enforced at execution by
   `bugfixGate()`).
+- **Bugfix prefill (1.21 F3)** — `spec_create {kind: "bugfix", reproduction, rootCause, condition, behaviour}` (CLI
+  `--reproduction`, `--root-cause`, `--condition`, `--behaviour`): `bugCreateInput()` (engine/scaffold.js) validates them
+  BEFORE anything is written (strings; condition / behaviour one line ≤ 500 characters, whitespace folded, a leading
+  IF / SE / SI, a trailing THEN / ENTÃO / ENTONCES and a leading THE SYSTEM SHALL / O SISTEMA DEVE / EL SISTEMA DEBE
+  dropped; reproduction / rootCause ≤ 20,000 through `safeSpecText`); on a feature or a spike → `bugPrefill.bugOnly`. The
+  EN / PT / ES builders take them (`a.reproduction || <the > **TODO** slot>`, …): bug.md → Reproduction / Root Cause /
+  Expected (behaviour), requirements.md → US-1.AC-1 `IF <condition> THEN THE SYSTEM SHALL <behaviour>` (localized). A
+  text left out stays the slot; with no prefill the scaffold is byte-identical to 1.20. Only a file this call created from
+  the built-in builder gets it: `prefilled` {file: [inputs]}; an existing file or a project template's → `prefillSkipped` +
+  a localized note. The gates are untouched: `bugSectionFilled()` still decides whether a (prefilled) Root Cause is
+  written — real prose outside brackets, no slot, no `> **TODO**`. `includeBody: true` (any kind; CLI `--include-body`)
+  returns `bodies` {file: text} for the feature-folder `.md` files the call created (`createdBodies()`).
 - **`spec_finish`** builds a merge title + summary (`mergeTitle`/`mergeSummary`, `.execution/merge-summary.md`)
-  from the spec chain; it never merges, pushes or approves. **No PRs:** the owner's cost rule extends to
+  from the spec chain; it never merges, pushes or approves. The title is `commitTitle(prefix, text)` (engine/finish.js,
+  1.21 F3): the WHOLE line ≤ 72 characters (`COMMIT_TITLE_MAX`; the text keeps at least 24); `shortTitle()` cuts the
+  first sentence at its last `,` `;` `—` `–` that fits (from a third of the budget on — no ellipsis there), else at a word
+  with `…`; the spike's `docs(<slug>): spike <outcome> — …` title too. A green run is evidence, not the `execution`
+  sign-off: /spec-finish, SKILL.md and the spec_finish / spec_approve descriptions say to ask for an explicit yes
+  first. **No PRs:** the owner's cost rule extends to
   pull requests — the plugin integrates by local merge only and must never steer users to open a PR or
   run CI (a test asserts no command/skill/agent text does).
 - **Global Constraints** heading synonyms: `RE_GLOBAL_CONSTRAINTS` (EN/PT/ES); placeholder bullets are

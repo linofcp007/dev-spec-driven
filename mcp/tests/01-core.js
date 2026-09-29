@@ -622,10 +622,21 @@ exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, require, __dirna
   ok(["spec-init", "spec-status", "spec-doctor", "spec-commit"].every((c) => fs.existsSync(path.join(root, "commands", c + ".md"))) &&
     !["init", "status", "doctor", "commit"].some((c) => fs.existsSync(path.join(root, "commands", c + ".md"))),
     "commands that collided with Claude Code built-ins are renamed spec-*");
+  // 1.21 F3: SKILL.md is loaded whole when the skill fires (the 1.19 eval run: ~17.5k → ~38k tokens of context), so it keeps
+  // the rules an agent needs at decision time and points to the lookup material (tool catalog, per-track checklists,
+  // supporting workflows, the reference index) — a WORD cap now (≤ 5,000; 7,968 in 1.19), not the 540-line one. Every
+  // reference it or references/index.md cites exists, and every reference file is reachable from one of them.
+  const refDir = path.join(root, "skills", "dev-spec-driven", "references");
   const skillNow = fs.readFileSync(path.join(root, "skills", "dev-spec-driven", "SKILL.md"), "utf8");
-  const refsCited = [...new Set([...skillNow.matchAll(/references\/([\w-]+\.md)/g)].map((m) => m[1]))];
-  ok(refsCited.length > 15 && refsCited.every((r) => fs.existsSync(path.join(root, "skills", "dev-spec-driven", "references", r))) && skillNow.split("\n").length <= 540,
-    `every reference SKILL.md cites exists (${refsCited.length}) and SKILL.md stays compact`);
+  const refIndex = fs.readFileSync(path.join(refDir, "index.md"), "utf8");
+  const refsOf = (t) => [...new Set([...t.matchAll(/references\/([\w-]+\.md)/g)].map((m) => m[1]))];
+  const refsCited = refsOf(skillNow);
+  const refsReached = new Set([...refsCited, ...refsOf(refIndex), "index.md"]);
+  const refsOrphan = fs.readdirSync(refDir).filter((f) => f.endsWith(".md") && !refsReached.has(f));
+  const skillWords = skillNow.split(/\s+/).filter(Boolean).length;
+  ok(refsCited.length > 15 && [...refsReached].every((r) => fs.existsSync(path.join(refDir, r))) && !refsOrphan.length && skillWords <= 5000 &&
+    ["index.md", "tool-catalog.md", "track-checklists.md", "workflows.md"].every((r) => refsCited.includes(r)),
+    `1.21 F3: SKILL.md ≤ 5,000 words and every reference it or references/index.md cites exists; none is orphaned; it points to index / tool-catalog / track-checklists / workflows (got ${JSON.stringify({ words: skillWords, cited: refsCited.length, orphan: refsOrphan })})`);
 
   // --- review round 3 regressions ---
   const enNeg = ["Do the export; no auth", "Export page for da Vinci museum; no auth, no payment", "Static page on example.com with no billing",

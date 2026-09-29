@@ -28,6 +28,8 @@
  *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
  *                                      --brownfield → + integration-plan.md; --flow design-first → design before requirements)
  *   bugfix "<name>" [--summary]         Scaffold the bugfix flow (bug.md + regression test plan)
+ *                                      [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] prefill
+ *                                      bug.md + the regression criterion; [--include-body] (--json: the scaffolds' bodies)
  *   spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]  Scaffold a spike: spike.md (question · timebox · options ·
  *                                      evidence · decision go/no-go/pivot) + investigation tasks (= create --kind spike)
  *   decide <feature> --title "…" --decision "…"  Append a D-n entry to decisions.md ([--context] [--consequences]
@@ -187,6 +189,8 @@ VALUE_FLAGS.add("flow"); // create --flow design-first · feature flow <name> --
 ["question", "timebox", "title", "decision", "context", "consequences", "affects", "supersedes"].forEach((k) => VALUE_FLAGS.add(k));
 VALUE_FLAGS.add("depends"); // 1.14 F3: append-tasks --depends 3,5 (repeatable) = spec_append_tasks {tasks: [{depends}]}
 ["reason", "expires"].forEach((k) => VALUE_FLAGS.add(k)); // 1.16 U: undone --reason · approve --revoke --reason · approve --force --reason --expires (= spec_complete_task {undo, reason}, spec_approve {revoke, reason, expires})
+// 1.21 F3: bugfix <name> --reproduction "…" --root-cause "…" --condition "…" --behaviour "…" (= spec_create's bugfix prefill)
+["reproduction", "root-cause", "condition", "behaviour"].forEach((k) => VALUE_FLAGS.add(k));
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -478,7 +482,9 @@ function main() {
       const tracks = tr.length ? tr : undefined; // none → engine: keep existing / classify new
       // the engine classifies a new feature in its language (the explicit --lang, else the project's) — same as spec_create
       const r = spec.createFeature(projectDir, name, tracks, flags.summary, undefined, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind,
-        { brownfield: on("brownfield"), flow: flags.flow, question: flags.question, timebox: flags.timebox }); // = spec_create {brownfield, flow, question, timebox}
+        { brownfield: on("brownfield"), flow: flags.flow, question: flags.question, timebox: flags.timebox, // = spec_create {brownfield, flow, question, timebox,
+          reproduction: flags.reproduction, rootCause: flags["root-cause"], condition: flags.condition, behaviour: flags.behaviour, // the bugfix prefill (1.21 F3)
+          includeBody: boolFlag("include-body") === true }); // … includeBody} — the bodies are in the --json result
       if (!r.ok) return fail(r);
       return out(r, (r) => { const T = cliText(r.lang); console.log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : "")); });
     }
@@ -1480,6 +1486,8 @@ function helpText() {
                                   --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase);
                                   --flow design-first: classification → design → requirements → … (starts from an architecture)
   bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
+                                  --reproduction "…" --root-cause "…" --condition "…" --behaviour "…" prefill bug.md and the
+                                  IF … THEN criterion (a text left out stays a slot); --include-body: the bodies in --json
   spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]   Scaffold a spike (investigate → decide): spike.md — question,
                                   timebox, options, evidence, decision (go / no-go / pivot) — + investigation tasks; no
                                   requirements/design gates (= create --kind spike; prototype code stays outside .specs/)

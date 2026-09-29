@@ -548,7 +548,7 @@ function writeRoadmapFile(projectDir, lang, data, name, render) {
     if (!saved.ok) return saved;
   }
   const d = data || roadmapData(projectDir);
-  writeFileAtomic(file, render(projectDir, lang || roadmapChromeLang(projectDir), d));
+  writeFileAtomic(file, i18n.portableCli(render(projectDir, lang || roadmapChromeLang(projectDir), d))); // committed: `dev-spec`, never a machine path (1.21 F3)
   const rmv = d.rmv;
   return { ok: true, file, overallPercent: rmv.overallPercent, complete: rmv.complete, total: rmv.total };
 }

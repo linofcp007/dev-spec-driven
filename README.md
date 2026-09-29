@@ -140,7 +140,9 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   list each unverified task with a localized reason. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — a light spec for a defect: reproduce → **root cause with evidence** → failing
   regression test → fix → verify. `doctor` fails until the root cause is written, and the tasks after the
-  root-cause task can't be completed before that.
+  root-cause task can't be completed before that. What you already know goes in with the scaffold
+  (`spec_create {kind: "bugfix", reproduction, rootCause, condition, behaviour, includeBody}` / `--reproduction`,
+  `--root-cause`, `--condition`, `--behaviour`) — no read-back and rewrite of the four files.
 - **`/spec-finish`** — blocks on doctor failures, an artifact changed since its approval, placeholders
   anywhere in the chain, open or unverified tasks and pending gates; lists the checks to run fresh and
   builds a merge summary from the spec (ACs, tasks with their evidence, root cause/fix). Then merge
@@ -408,7 +410,8 @@ New in 1.16: `/spec-statusline`, `/spec-milestone`.
 ### The `dev-spec` CLI
 
 The same engine from any terminal (`node cli/dev-spec.js <command>`, or `dev-spec` on PATH); `--json`
-prints the raw result, and `help` lists every flag:
+prints the raw result, and `help` lists every flag. A plugin install puts no `dev-spec` on PATH, so every message that tells you to run the CLI prints the runnable line,
+`node "<clone>/cli/dev-spec.js" …` with the path resolved (committed files such as `ROADMAP.md` keep `dev-spec`):
 
 ```text
 classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
@@ -562,7 +565,9 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — uma spec leve para um defeito: reproduzir → **causa raiz com evidência** → teste de
   regressão a falhar → correção → verificação. O `doctor` falha até a causa raiz estar escrita, e as tarefas
-  depois da tarefa da causa raiz não podem ser concluídas antes disso.
+  depois da tarefa da causa raiz não podem ser concluídas antes disso. O que já sabes entra com o scaffold
+  (`spec_create {kind: "bugfix", reproduction, rootCause, condition, behaviour, includeBody}` / `--reproduction`,
+  `--root-cause`, `--condition`, `--behaviour`) — sem reler e reescrever os quatro ficheiros.
 - **`/spec-finish`** — bloqueia com falhas do doctor, um artefacto alterado depois da aprovação, placeholders
   em qualquer ponto da cadeia, tarefas abertas ou por verificar e gates pendentes; lista as verificações a
   correr de novo e constrói um resumo de merge a partir da spec. Depois fazes o merge localmente ou manténs o
@@ -848,7 +853,8 @@ Novos na 1.16: `/spec-statusline`, `/spec-milestone`.
 ### A CLI `dev-spec`
 
 O mesmo motor em qualquer terminal (`node cli/dev-spec.js <comando>`, ou `dev-spec` no PATH); `--json`
-mostra o resultado em bruto e `help` lista todas as opções:
+mostra o resultado em bruto e `help` lista todas as opções. Uma instalação como plugin não põe `dev-spec` no PATH, por isso cada mensagem que manda correr a CLI mostra a linha
+executável, `node "<clone>/cli/dev-spec.js" …` com o caminho resolvido (ficheiros versionados como o `ROADMAP.md` mantêm `dev-spec`):
 
 ```text
 classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
@@ -1004,7 +1010,9 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   motivo. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — una spec ligera para un defecto: reproducir → **causa raíz con evidencia** → prueba de
   regresión en rojo → corrección → verificación. El `doctor` falla hasta que la causa raíz esté escrita, y
-  las tareas posteriores a la de la causa raíz no se pueden completar antes.
+  las tareas posteriores a la de la causa raíz no se pueden completar antes. Lo que ya sabes entra con el
+  scaffold (`spec_create {kind: "bugfix", reproduction, rootCause, condition, behaviour, includeBody}` /
+  `--reproduction`, `--root-cause`, `--condition`, `--behaviour`) — sin releer y reescribir los cuatro archivos.
 - **`/spec-finish`** — bloquea con fallos del doctor, un artefacto cambiado tras su aprobación, placeholders en
   cualquier punto de la cadena, tareas abiertas o sin verificar y gates pendientes; lista las comprobaciones a
   repetir y construye un resumen de merge desde la spec. Después haces el merge en local o conservas la rama —
@@ -1293,7 +1301,8 @@ Nuevos en la 1.16: `/spec-statusline`, `/spec-milestone`.
 ### La CLI `dev-spec`
 
 El mismo motor desde cualquier terminal (`node cli/dev-spec.js <comando>`, o `dev-spec` en el PATH);
-`--json` muestra el resultado en bruto y `help` lista todas las opciones:
+`--json` muestra el resultado en bruto y `help` lista todas las opciones. Una instalación como plugin no pone `dev-spec` en el PATH, así que cada mensaje que pide ejecutar la CLI muestra la
+línea ejecutable, `node "<clone>/cli/dev-spec.js" …` con la ruta resuelta (los archivos versionados como `ROADMAP.md` mantienen `dev-spec`):
 
 ```text
 classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]

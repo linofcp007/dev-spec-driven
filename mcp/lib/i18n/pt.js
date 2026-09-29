@@ -8,7 +8,7 @@
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests } = require("./common.js"); // load time
+const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests } = require("./common.js"); // load time
 // The assembled tables — call-time use only; mcp/lib/i18n.js links them once every language has loaded.
 let BUILD, MSG;
 function __link(T) { ({ BUILD, MSG } = T); }
@@ -615,14 +615,14 @@ ${phases}`
 ${a.summary || "[uma linha: o que está partido, para quem, desde quando]"}
 
 ## Reprodução
-> **TODO** — passos, input e ambiente exatos que o reproduzem sempre.
+${a.reproduction || "> **TODO** — passos, input e ambiente exatos que o reproduzem sempre."}
 
 ## Esperado vs Atual
-- **Esperado:** [comportamento correto]
+- **Esperado:** ${a.behaviour || "[comportamento correto]"}
 - **Atual:** [o que acontece — mensagem de erro, output, linhas de log]
 
 ## Causa Raiz
-> **TODO** — a causa, com evidência (stack trace, log, asserção a falhar, a alteração que a introduziu). Não "provavelmente".
+${a.rootCause || "> **TODO** — a causa, com evidência (stack trace, log, asserção a falhar, a alteração que a introduziu). Não \"provavelmente\"."}
 
 ## Correção
 [O que muda e porque é que elimina a causa raiz — uma correção, não um pacote.]
@@ -644,7 +644,7 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 **Teste Independente:** o teste de regressão T-01 reproduz o bug antes da correção e passa depois.
 
 #### Critérios de Aceitação (EARS)
-1. **US-1.AC-1** — SE [a condição que provoca o bug] ENTÃO O SISTEMA DEVE [o comportamento correto]
+1. **US-1.AC-1** — SE ${a.condition || "[a condição que provoca o bug]"} ENTÃO O SISTEMA DEVE ${a.behaviour || "[o comportamento correto]"}
 2. **US-1.AC-2** — O SISTEMA DEVE manter [o comportamento vizinho que já funcionava] inalterado
 
 ## Critérios de Sucesso
@@ -938,7 +938,7 @@ const msg = {
     },
     evidence: {
       failed: (n, code) => `Tarefa ${n}: a verificação falhou (exit ${code}) — não a marco como feita.`,
-      missing: (n, slug) => `A tarefa ${n} tem um comando _Verify:_ mas não foi registada evidência — passa a evidência (comando, exit code, resumo) ou corre: dev-spec done ${slug} ${n} --run`,
+      missing: (n, slug) => `A tarefa ${n} tem um comando _Verify:_ mas não foi registada evidência — passa a evidência (comando, exit code, resumo) ou corre: ${DEV_SPEC} done ${slug} ${n} --run`,
       ran: (cmd, code) => `corrido: ${cmd} → exit ${code}`,
       failedTicked: (n, code) => `A tarefa ${n} já está marcada, mas a nova verificação falhou (exit ${code}) — ficou registado; passa a contar como não verificada até se registar uma execução com sucesso.`,
       badExit: (v) => `O exitCode tem de ser um inteiro (recebido '${v}').`,
@@ -972,12 +972,18 @@ const msg = {
     },
     kindKept: (kept, asked) => `Esta feature já é do tipo '${kept}' — mantive-o (pediste '${asked}'). Cria outra para um tipo diferente.`,
     langKept: (kept, asked) => `Esta feature já está em '${kept}' — mantive-a (pediste '${asked}'). Uma feature, uma língua.`,
+    // 1.21 F3 — spec_create {kind: "bugfix"}: pré-preenchimento (reproduction · rootCause · condition · behaviour — nomes em inglês).
+    bugPrefill: {
+      bugOnly: (key) => `${key} é um dado de bugfix — passa kind: "bugfix" (preenche o bug.md e o critério de regressão).`,
+      oneLine: (key, max) => `${key} tem de ser uma só linha com até ${max} caracteres (vai para o critério EARS).`,
+      skipped: (list) => `Não foi pré-preenchido — ${list}: o ficheiro já existia ou veio de um template do projeto (só cria); escreve esses textos nele.`,
+    },
     err: {
       noUsableName: (name) => `O nome de feature '${name}' não tem caracteres utilizáveis (a-z, 0-9) para nome de pasta.`,
       reserved: (slug) => `'${slug}' é um nome reservado — escolhe outro nome para a feature.`,
       reservedWin: (slug) => `'${slug}' é um nome reservado no Windows — escolhe outro nome para a feature.`,
       notFound: (slug, root) => `Feature '${slug}' não encontrada em ${root}`,
-      archivedHint: (slug) => `— está arquivada (.specs/_archive/${slug}): restaura-a primeiro (dev-spec feature restore ${slug}).`,
+      archivedHint: (slug) => `— está arquivada (.specs/_archive/${slug}): restaura-a primeiro (${DEV_SPEC} feature restore ${slug}).`,
       invalidJson: (rel, detail) => `${rel} não é JSON válido (${detail}) — corrige-o à mão; não o vou sobrescrever.`,
       tasksMissing: (slug) => `tasks.md não encontrado para '${slug}'`,
       requirementsMissing: (slug) => `requirements.md não encontrado para '${slug}'`,
@@ -1084,18 +1090,18 @@ const msg = {
       implement: (n, text, slug) => `Implementa a tarefa #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `Todas as tarefas feitas — fecha a feature com /spec-finish ${slug} (spec_finish): relatório de prontidão + resumo do merge.`,
       breakIntoTasks: (slug) => `Divide o design em tarefas — /createTask ${slug}.`,
-      drifted: (slug, day, n, total, files) => `'${slug}' foi fechada a ${day}, mas ${n} de ${total} ficheiro(s) de implementação mudaram desde então: ${files} (dev-spec drift ${slug}). Decide: a spec está agora errada → /spec-impact ${slug} (ou uma feature nova com _Supersedes:_); o código está errado → corrige-o (/spec-bugfix); inofensivo → volta a correr /spec-finish ${slug} para uma baseline nova.`,
+      drifted: (slug, day, n, total, files) => `'${slug}' foi fechada a ${day}, mas ${n} de ${total} ficheiro(s) de implementação mudaram desde então: ${files} (${DEV_SPEC} drift ${slug}). Decide: a spec está agora errada → /spec-impact ${slug} (ou uma feature nova com _Supersedes:_); o código está errado → corrige-o (/spec-bugfix); inofensivo → volta a correr /spec-finish ${slug} para uma baseline nova.`,
       finished: (slug, day, total, signOff) => `'${slug}' está fechada (${day}) — os ${total} ficheiro(s) de implementação não mudaram desde então.` +
         (!signOff ? ` Nada mais a fazer aqui — /spec-drift ${slug} verifica-a depois de alterações futuras.`
           : signOff.why ? ` A aprovação final (execution, ${signOff.at}) foi registada antes destas alterações: ${signOff.why} — volta a confirmá-la: /approve ${slug} execution${signOff.role ? " --role " + signOff.role : ""}.`
             : ` Falta a aprovação final${signOff.missing ? ` — ${signOff.missing}${signOff.signed ? ` (já validaram: ${signOff.signed})` : ""}` : ""}: /approve ${slug} execution${signOff.role ? " --role " + signOff.role : ""}.`),
-      verifySuite: (slug, list) => `'${slug}' está fechada, mas as verificações do projeto não têm uma execução bem-sucedida desde a última atividade nas tarefas: ${list} — o /spec-finish recusa e o gate de fim de turno devolve um "feito" até passarem. Corre-as e regista as execuções: dev-spec finish ${slug} --run (ou spec_finish {evidence: [{name, command, exitCode}]}).`,
-      verifyDuplicate: (slug, list, n) => `Todas as tarefas estão marcadas, mas nem todas estão verificadas: ${list} — há duas tarefas com o número ${n}, por isso uma execução registada para a #${n} só chega à primeira (dev-spec done ${slug} ${n} responde por ela). Renumera as tarefas em .specs/${slug}/tasks.md para que cada número seja único (doctor: duplicate-tasks), volta a aprovar a fase tasks (/approve ${slug} tasks) e regista depois a execução de cada tarefa renumerada.`,
+      verifySuite: (slug, list) => `'${slug}' está fechada, mas as verificações do projeto não têm uma execução bem-sucedida desde a última atividade nas tarefas: ${list} — o /spec-finish recusa e o gate de fim de turno devolve um "feito" até passarem. Corre-as e regista as execuções: ${DEV_SPEC} finish ${slug} --run (ou spec_finish {evidence: [{name, command, exitCode}]}).`,
+      verifyDuplicate: (slug, list, n) => `Todas as tarefas estão marcadas, mas nem todas estão verificadas: ${list} — há duas tarefas com o número ${n}, por isso uma execução registada para a #${n} só chega à primeira (${DEV_SPEC} done ${slug} ${n} responde por ela). Renumera as tarefas em .specs/${slug}/tasks.md para que cada número seja único (doctor: duplicate-tasks), volta a aprovar a fase tasks (/approve ${slug} tasks) e regista depois a execução de cada tarefa renumerada.`,
       signOffWhy: { approvals: (list) => `aprovação de ${list}`, changeRequests: (list) => `pedido de alteração ${list}`, join: "; " },
       refinish: (slug, day, why) => `'${slug}' foi fechada a ${day}, mas mudou desde então (${why}) e as tarefas estão todas feitas — volta a fechá-la: /spec-finish ${slug} (spec_finish {write: true}) renova o relatório de prontidão, o resumo do merge e a baseline de drift; depois volta a dar a aprovação final: /approve ${slug} execution.`,
       driftedStale: (why) => `Também mudou desde esse fecho (${why}): decidas o que decidires, volta a fechá-la depois — /spec-finish (spec_finish {write: true}) regista a baseline nova.`,
       verify: (slug, list, n, runnable) => `Todas as tarefas estão marcadas, mas nem todas estão verificadas: ${list} — o /spec-finish e a aprovação final recusam até cada uma ter uma execução com sucesso. ` +
-        (runnable ? `Volta a correr o comando _Verify:_ da tarefa ${n} e regista o resultado: dev-spec done ${slug} ${n} --run` : `Regista uma execução com sucesso da tarefa ${n}: spec_complete_task {name: "${slug}", number: ${n}, evidence: {command, exitCode: 0}} (dev-spec done ${slug} ${n} --cmd "<comando>" --exit 0)`) +
+        (runnable ? `Volta a correr o comando _Verify:_ da tarefa ${n} e regista o resultado: ${DEV_SPEC} done ${slug} ${n} --run` : `Regista uma execução com sucesso da tarefa ${n}: spec_complete_task {name: "${slug}", number: ${n}, evidence: {command, exitCode: 0}} (${DEV_SPEC} done ${slug} ${n} --cmd "<comando>" --exit 0)`) +
         "; uma execução que falha quer dizer que o código tem de ser corrigido primeiro.",
     },
     clarify: {
@@ -1123,19 +1129,19 @@ const msg = {
       roadmapUpdated: (pct, complete, total) => `Roadmap atualizado → ${pct}% (${complete}/${total} features).`,
       sessionHeader: "dev-spec-driven — features em .specs/:",
       sessionLine: (name, tracks, phase, done, total) => `  • ${name} [${tracks}] — ${phase} (${done}/${total} tarefas)`,
-      sessionMore: (n) => `  … +${n} feature(s) — /spec-status (ou dev-spec list) mostra todas`,
+      sessionMore: (n) => `  … +${n} feature(s) — /spec-status (ou ${DEV_SPEC} list) mostra todas`,
     },
 
     evidenceGate: {
       noContent: "A evidência precisa de um comando (com o exit code) ou de um resumo — um exit code sozinho não prova nada.",
-      manualOnRunnable: (n, slug) => `Tarefa ${n}: ficou registada uma nota, mas o comando _Verify:_ não foi corrido — continua não verificada até se registar uma execução com sucesso: dev-spec done ${slug} ${n} --run`,
+      manualOnRunnable: (n, slug) => `Tarefa ${n}: ficou registada uma nota, mas o comando _Verify:_ não foi corrido — continua não verificada até se registar uma execução com sucesso: ${DEV_SPEC} done ${slug} ${n} --run`,
       redPhaseTestWord: "o teste",
-      redPhaseVerify: (n, slug, test) => `A tarefa ${n} escreve um teste que tem de FALHAR (a fase vermelha), por isso um _Verify:_ que tem de passar nunca passa nela. Marca a tarefa ${n} com _Expect: fail_ — uma execução que FALHE passa a ser a prova (${test} falha antes da correção) e uma que passe é recusada: dev-spec done ${slug} ${n} --run. Ou passa o comando para a tarefa que o põe a verde (a correção — o _Verify:_ dela prova então a correção).`,
+      redPhaseVerify: (n, slug, test) => `A tarefa ${n} escreve um teste que tem de FALHAR (a fase vermelha), por isso um _Verify:_ que tem de passar nunca passa nela. Marca a tarefa ${n} com _Expect: fail_ — uma execução que FALHE passa a ser a prova (${test} falha antes da correção) e uma que passe é recusada: ${DEV_SPEC} done ${slug} ${n} --run. Ou passa o comando para a tarefa que o põe a verde (a correção — o _Verify:_ dela prova então a correção).`,
       failedRun: (n, code, slug, runnable) => `Tarefa ${n}: a última execução registada falhou (exit ${code}) — uma nota não muda isso; continua não verificada até se registar uma execução com sucesso ` +
-        (runnable ? `do comando _Verify:_: dev-spec done ${slug} ${n} --run` : "(um comando com exit code 0)."),
+        (runnable ? `do comando _Verify:_: ${DEV_SPEC} done ${slug} ${n} --run` : "(um comando com exit code 0)."),
       duplicateNumber: (n) => `Tarefa ${n}: outra tarefa também usa o número ${n} e a evidência registada é dessa — esta continua não verificada; renumera as tarefas e depois regista a evidência desta.`,
       staleEvidence: (n, slug, runnable) => `Tarefa ${n}: a evidência registada é de outra tarefa ou de um comando _Verify:_ anterior — continua não verificada até se registar ` +
-        (runnable ? `uma execução desta: dev-spec done ${slug} ${n} --run` : "a evidência desta."),
+        (runnable ? `uma execução desta: ${DEV_SPEC} done ${slug} ${n} --run` : "a evidência desta."),
       reason: { "no-evidence": "sem evidência", "failed-run": "a última execução falhou", "manual-note-on-runnable-verify": "só uma nota, comando _Verify:_ por correr", "duplicate-number": "número partilhado com outra tarefa",
         "stale-evidence": "evidência de outra tarefa ou de outro comando _Verify:_",
         "unexpected-pass": "a execução passou, mas o _Expect: fail_ precisa de uma execução vermelha",
@@ -1143,13 +1149,13 @@ const msg = {
       duplicateTasks: (list) => `números de tarefa repetidos: ${list} — o complete/brief escolhem a primeira por fazer; renumera-as`,
     },
     observed: {
-      on: "Modo de evidência OBSERVADO — uma tarefa cujo _Verify:_ tem um comando só fica verificada com uma execução com sucesso que o harness viu (no Claude Code, o hook de observação do plugin guarda cada execução Bash de um comando _Verify:_ ou de uma verificação do projeto) ou que o dev-spec done --run / finish --run fez; a execução de uma verificação do projeto também (roadmap.json meta.evidence). Um cliente só MCP não tem esse hook: regista as execuções dele com dev-spec done <feature> <n> --run.",
+      on: "Modo de evidência OBSERVADO — uma tarefa cujo _Verify:_ tem um comando só fica verificada com uma execução com sucesso que o harness viu (no Claude Code, o hook de observação do plugin guarda cada execução Bash de um comando _Verify:_ ou de uma verificação do projeto) ou que o dev-spec done --run / finish --run fez; a execução de uma verificação do projeto também (roadmap.json meta.evidence). Um cliente só MCP não tem esse hook: regista as execuções dele com " + DEV_SPEC + " done <feature> <n> --run.",
       off: "Modo de evidência REPORTADO — as execuções que um agente reporta verificam tal como são dadas (roadmap.json meta.evidence); cada registo continua a dizer se o harness a observou.",
       badValue: (v) => `--evidence aceita reported ou observed (recebido '${v}').`,
       badInput: (v) => `evidence tem de ser "reported" ou "observed" (recebido '${v}').`,
-      unobservedRedNote: (n, slug) => `A tarefa ${n} está marcada _Expect: fail_: a sua prova é a execução VERMELHA, e o harness nunca a viu — este projeto só verifica execuções observadas (roadmap.json meta.evidence: observed). Refaz a execução vermelha onde seja observada: põe a correção de lado (git stash), corre o comando _Verify:_ com a ferramenta Bash no Claude Code ou com dev-spec done ${slug} ${n} --run (tem de falhar), depois repõe a correção e regista a execução bem-sucedida.`,
-      unobservedNote: (n, slug) => `Tarefa ${n}: a execução ficou registada, mas o harness nunca a viu — este projeto só verifica um comando _Verify:_ com uma execução observada (roadmap.json meta.evidence: observed). Corre o comando com a ferramenta Bash no Claude Code e volta a registá-lo, ou deixa a CLI corrê-lo: dev-spec done ${slug} ${n} --run`,
-      neverObserved: "Nenhuma execução foi alguma vez observada neste projeto: só o Claude Code com o plugin dev-spec-driven as guarda (hooks/observe-hook.js) — um cliente só MCP não tem hook: regista as execuções com dev-spec done <feature> <n> --run (ou volta atrás: dev-spec init --evidence reported).",
+      unobservedRedNote: (n, slug) => `A tarefa ${n} está marcada _Expect: fail_: a sua prova é a execução VERMELHA, e o harness nunca a viu — este projeto só verifica execuções observadas (roadmap.json meta.evidence: observed). Refaz a execução vermelha onde seja observada: põe a correção de lado (git stash), corre o comando _Verify:_ com a ferramenta Bash no Claude Code ou com ${DEV_SPEC} done ${slug} ${n} --run (tem de falhar), depois repõe a correção e regista a execução bem-sucedida.`,
+      unobservedNote: (n, slug) => `Tarefa ${n}: a execução ficou registada, mas o harness nunca a viu — este projeto só verifica um comando _Verify:_ com uma execução observada (roadmap.json meta.evidence: observed). Corre o comando com a ferramenta Bash no Claude Code e volta a registá-lo, ou deixa a CLI corrê-lo: ${DEV_SPEC} done ${slug} ${n} --run`,
+      neverObserved: "Nenhuma execução foi alguma vez observada neste projeto: só o Claude Code com o plugin dev-spec-driven as guarda (hooks/observe-hook.js) — um cliente só MCP não tem hook: regista as execuções com " + DEV_SPEC + " done <feature> <n> --run (ou volta atrás: " + DEV_SPEC + " init --evidence reported).",
       naHint: "Este projeto só verifica execuções que o harness viu (roadmap.json meta.evidence: observed): corre o comando com a ferramenta Bash no Claude Code, ou pela CLI (--run).",
     },
     taskDone: {
@@ -1288,7 +1294,7 @@ const msg = {
     featureOps: {
       removeNeedsConfirm: (slug, n) => `Remover '${slug}' apaga .specs/${slug}/ de vez (${n} ficheiro(s)). Nada foi apagado — passa confirm: true para a apagar, ou arquiva-a (reversível).`,
       backlogNotFound: (name, known) => `'${name}' não está no backlog${known ? ` (backlog: ${known})` : " (o backlog está vazio)"}.`,
-      backlogIsFeature: (name, slug) => `'${name}' já tem uma spec (.specs/${slug}/) — o backlog é para features ainda sem spec (estado: dev-spec status ${slug}).`,
+      backlogIsFeature: (name, slug) => `'${name}' já tem uma spec (.specs/${slug}/) — o backlog é para features ainda sem spec (estado: ${DEV_SPEC} status ${slug}).`,
       backlogAppended: (name) => `'${name}' já está no backlog — a nova nota foi acrescentada à sua nota.`,
       backlogKept: (name) => `'${name}' já está no backlog com essa nota — nada mudou.`,
       backlogNoteFull: (name, max) => `'${name}' já está no backlog e a sua nota passaria de ${max} caracteres — a nova nota não foi acrescentada: regista-a com outro nome.`,
@@ -1341,16 +1347,16 @@ const msg = {
       archived: (f, dest) => `'${f}' arquivada → .specs/${dest} ✓`,
       removed: (f) => `'${f}' removida ✓`,
       wouldRemove: (slug, dir, n, entries) => `Isto apagaria '${slug}' de vez: ${dir} (${n} ficheiro(s): ${entries})`,
-      confirmHint: (slug) => `Nada foi apagado. Volta a correr com --yes para confirmar — ou arquiva-a: dev-spec feature archive ${slug}`,
+      confirmHint: (slug) => `Nada foi apagado. Volta a correr com --yes para confirmar — ou arquiva-a: ${DEV_SPEC} feature archive ${slug}`,
       missingValue: (flag) => `falta o valor de --${flag}`,
-      unknownFlag: (flag, suggestion) => `opção desconhecida ${flag}` + (suggestion ? ` — será ${suggestion}?` : ".") + " As opções estão em `dev-spec help`.",
+      unknownFlag: (flag, suggestion) => `opção desconhecida ${flag}` + (suggestion ? ` — será ${suggestion}?` : ".") + " As opções estão em `" + DEV_SPEC + " help`.",
       unknownRules: (tool, known) => `ferramenta desconhecida '${tool}'. Conhecidas: ${known}`,
       scaleSections: (list) => `Secções de escala: ${list}`,
       aiSections: (list) => `Secções de IA: ${list}`,
       dependsOn: (f, deps, order, unknown) => `${f} depende de: ${deps || "(nenhuma)"}` + (order != null ? `  ordem=${order}` : "") + (unknown ? `  ⚠ dependências desconhecidas: ${unknown}` : ""),
       trackNow: (f, tracks) => `'${f}' agora [${tracks}]`,
       usage: (syntax) => `uso: ${syntax}`,
-      unknownCommand: (c) => `comando desconhecido '${c}'. Corre \`dev-spec help\`.`,
+      unknownCommand: (c) => `comando desconhecido '${c}'. Corre \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `cliente desconhecido '${c}'. Conhecidos: ${known}`,
     },
 
@@ -1382,10 +1388,10 @@ const msg = {
       fillPlaceholders: (n, first) => `${n} placeholder(s) do template por preencher (primeiro: ${first})`,
       fillHint: {
         "classification.md": (slug) => `confirma os tracks e escreve o raio de impacto e as etiquetas de conformidade (/classify ${slug}), depois /approve ${slug} classification`,
-        "requirements.md": (slug) => `verifica-o com /clarify ${slug} e ears_validate (dev-spec ears ${slug})`,
+        "requirements.md": (slug) => `verifica-o com /clarify ${slug} e ears_validate (${DEV_SPEC} ears ${slug})`,
         "bug.md": (slug) => `escreve a Reprodução e a Causa Raiz com evidência (/spec-doctor ${slug})`,
         "design.md": (slug) => `corre /spec-doctor ${slug} (secções obrigatórias, Verificação da Constituição)`,
-        "test-plan.md": (slug) => `verifica a cobertura dos ACs com trace_check (dev-spec trace ${slug})`,
+        "test-plan.md": (slug) => `verifica a cobertura dos ACs com trace_check (${DEV_SPEC} trace ${slug})`,
         "eval-plan.md": (slug) => `define os limiares e a baseline, depois /spec-doctor ${slug}`,
         "tasks.md": (slug) => `divide o design em tarefas reais (/createTask ${slug}), depois trace_check`,
         default: (slug) => `/spec-doctor ${slug}`,
@@ -1526,7 +1532,7 @@ const msg = {
       reopenTasks: "reopen aplica-se a requirements, design, test-plan e eval-plan — uma alteração ao tasks.md revê-se e volta a aprovar-se; não reabre nada.",
       retireTests: {
         retireHint: (list, slug, phase, offer) => `Testes removidos que tarefas ainda põem a verde — ${list}: não refaças essas tarefas; tira o T-ID do _Makes green:_ delas ou aponta-o para o teste que o substitui.` +
-          (offer ? ` --reopen regista o pedido de alteração sem as desmarcar (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+          (offer ? ` --reopen regista o pedido de alteração sem as desmarcar (${DEV_SPEC} impact ${slug} --phase ${phase} --reopen).` : ""),
         retireNote: (list) => `Testes removidos não se refazem — ainda nomeados em _Makes green:_: ${list}: tira o T-ID dessas tarefas, ou aponta-o para o teste que o substitui.`,
         recordedRetire: (n, list, slug, phase) => `Pedido de alteração #${n} registado — nada desmarcado: as tarefas de um teste removido não se refazem. Ainda nomeados em _Makes green:_: ${list}: tira o T-ID dessas tarefas, ou aponta-o para o teste que o substitui; depois volta a aprovar: /approve ${slug} ${phase}.`,
       },
@@ -1543,16 +1549,16 @@ const msg = {
       reopened: (list, slug, phase) => `Reabertas ${list}: desmarcadas, com a evidência marcada como desatualizada — refaz-as com evidência nova e volta a aprovar: /approve ${slug} ${phase}.`,
       retireItem: (id, tasks, tests) => `${id} → ${[tasks.length ? "tarefas " + tasks.join(", ") : "", tests.length ? "testes " + tests.join(", ") : ""].filter(Boolean).join(" · ")}`,
       retireHint: (list, slug, phase, offer) => `Critérios removidos ainda citados — ${list}: não refaças essas tarefas; apaga-as (e as linhas de teste) ou aponta-as para o critério que o substitui.` +
-        (offer ? ` --reopen regista o pedido de alteração sem as desmarcar (dev-spec impact ${slug} --phase ${phase} --reopen).` : ""),
+        (offer ? ` --reopen regista o pedido de alteração sem as desmarcar (${DEV_SPEC} impact ${slug} --phase ${phase} --reopen).` : ""),
       retireNote: (list) => `Critérios removidos não se refazem — ainda citados: ${list}: apaga essas tarefas e linhas de teste, ou aponta-as para o critério que o substitui.`,
       recordedRetire: (n, list, slug, phase) => `Pedido de alteração #${n} registado — nada desmarcado: as tarefas de um critério removido não se refazem. Ainda citados: ${list}: apaga essas tarefas e linhas de teste, ou aponta-as para o critério que o substitui; depois volta a aprovar: /approve ${slug} ${phase}.`,
       recordedOnly: (n, slug, phase) => `Pedido de alteração #${n} registado — nenhuma tarefa concluída foi afetada. Revê-o e volta a aprovar: /approve ${slug} ${phase}.`,
-      reopenHint: (slug, phase) => `Para desmarcar as tarefas concluídas afetadas e marcar a evidência como desatualizada: dev-spec impact ${slug} --phase ${phase} --reopen (spec_impact {reopen: true}).`,
-      nextHint: (slug, phases) => `Vê primeiro o que a edição afeta com spec_impact (${phases.map((p) => `dev-spec impact ${slug} --phase ${p}`).join(" · ")}).`,
-      doctorChanged: (list, slug, phases) => `alterado(s) após a aprovação: ${list} — vê o que a edição afeta com spec_impact (${phases.map((p) => `dev-spec impact ${slug} --phase ${p}`).join(" · ")}) e volta a aprovar`,
+      reopenHint: (slug, phase) => `Para desmarcar as tarefas concluídas afetadas e marcar a evidência como desatualizada: ${DEV_SPEC} impact ${slug} --phase ${phase} --reopen (spec_impact {reopen: true}).`,
+      nextHint: (slug, phases) => `Vê primeiro o que a edição afeta com spec_impact (${phases.map((p) => `${DEV_SPEC} impact ${slug} --phase ${p}`).join(" · ")}).`,
+      doctorChanged: (list, slug, phases) => `alterado(s) após a aprovação: ${list} — vê o que a edição afeta com spec_impact (${phases.map((p) => `${DEV_SPEC} impact ${slug} --phase ${p}`).join(" · ")}) e volta a aprovar`,
       doctorChangedPlain: (list, slug) => `alterado(s) após a aprovação: ${list} — revê e volta a aprovar (/approve ${slug} <fase>)`,
       staleNote: (n, slug, runnable) => `Tarefa ${n}: a evidência é anterior a uma alteração da spec (o spec_impact reabriu-a) — continua não verificada até se registar ` +
-        (runnable ? `uma nova execução com sucesso: dev-spec done ${slug} ${n} --run` : "evidência nova."),
+        (runnable ? `uma nova execução com sucesso: ${DEV_SPEC} done ${slug} ${n} --run` : "evidência nova."),
       head: (slug, phase, date, snap) => `Impacto: ${slug} · ${phase} — face à aprovação de ${date} (${snap})`,
       headFp: (slug, phase, changed) => `Impacto: ${slug} · ${phase} — só impressão digital: ${changed ? "alterado desde a aprovação" : "sem alterações desde a aprovação"}`,
       headNone: (slug, phase, changed) => `Impacto: ${slug} · ${phase} — sem impressão digital registada: ${changed ? "alterado desde a aprovação (um ficheiro criado depois dela)" : "não é possível dizer se mudou"}`,
@@ -1572,7 +1578,7 @@ const msg = {
       reReview: (slug, phase, roles) => `revê a alteração e volta a aprovar: /approve ${slug} ${phase}` + (roles && roles.length ? ` --role ${roles[0]} (cada papel valida o novo conteúdo: ${roles.join(", ")})` : ""),
     },
     metrics: {
-      writeNeedsName: "write precisa do nome de uma feature — a retrospetiva é por feature (spec_metrics {name, write: true} / dev-spec metrics <feature> --write).",
+      writeNeedsName: "write precisa do nome de uma feature — a retrospetiva é por feature (spec_metrics {name, write: true} / " + DEV_SPEC + " metrics <feature> --write).",
       retroWritten: (p) => `Retrospetiva → ${p} (pré-preenchida com as métricas — o resto é contigo).`,
       retroExists: (p) => `${p} já existe — não foi alterado (uma retrospetiva nunca é substituída).`,
       unknown: "desconhecida",
@@ -1687,7 +1693,7 @@ const msg = {
       prunedIncomplete: (slug, pct, list) => `'${slug}' não estava completa (${pct}%), mas ${list} dependia(m) dela: o roadmap deixa de a(s) mostrar bloqueada(s) por ela — restaura-a, ou volta a declarar a dependência com spec_depend, se ainda precisa(m) desse trabalho`,
     },
     drift: {
-      none: "Nenhuma feature fechada tem ainda uma baseline de drift — spec_finish {write: true} (dev-spec finish <feature> --write) regista uma quando a feature está pronta para fechar.",
+      none: "Nenhuma feature fechada tem ainda uma baseline de drift — spec_finish {write: true} (" + DEV_SPEC + " finish <feature> --write) regista uma quando a feature está pronta para fechar.",
       clean: (f, n, d, archived) => `  ✓ ${f}${archived ? " (arquivada)" : ""}: ${n} ficheiro(s) de implementação sem alterações desde o fecho (${d})`,
       drifted: (f, n, total, d, archived) => `  ⚠ ${f}${archived ? " (arquivada)" : ""}: ${n} de ${total} ficheiro(s) de implementação alterado(s) desde o fecho (${d})`,
       changed: (list) => `      alterados: ${list}`,
@@ -1695,21 +1701,21 @@ const msg = {
       nowPresent: (list) => `      agora presentes (em falta no fecho): ${list}`,
       reopened: (list) => `  · reabertas depois do fecho (há tarefas por fazer — verificadas quando voltarem a fechar): ${list}`,
       unbaselined: (list) => `  · ainda sem baseline de fecho: ${list}`,
-      stale: (f, d, why, archived) => `  ↻ ${f}${archived ? " (arquivada)" : ""}: mudou desde o fecho (${d}) — ${why}; a baseline já não a cobre: ${archived ? `restaura-a (dev-spec feature restore ${f}), volta a fechá-la (dev-spec finish ${f} --write) e arquiva-a de novo` : `volta a fechá-la (dev-spec finish ${f} --write)`}`,
+      stale: (f, d, why, archived) => `  ↻ ${f}${archived ? " (arquivada)" : ""}: mudou desde o fecho (${d}) — ${why}; a baseline já não a cobre: ${archived ? `restaura-a (${DEV_SPEC} feature restore ${f}), volta a fechá-la (${DEV_SPEC} finish ${f} --write) e arquiva-a de novo` : `volta a fechá-la (${DEV_SPEC} finish ${f} --write)`}`,
       staleWhy: {
         changeRequests: (list) => `pedido de alteração ${list}`,
         approvals: (list) => `reaprovado: ${list}`,
         newFiles: (n, list) => `${n} ficheiro(s) de implementação fora da baseline: ${list}`,
       },
-      hookLine: (f, n) => `  ⚠ ${f}: ${n} ficheiro(s) de implementação alterado(s) desde o fecho — corre dev-spec drift ${f}`,
-      baselineRecorded: (n, missing) => `Baseline de drift registada: ${n} ficheiro(s) de implementação${missing ? ` (${missing} em falta)` : ""} — dev-spec drift mostra o que mudar depois deste fecho.`,
+      hookLine: (f, n) => `  ⚠ ${f}: ${n} ficheiro(s) de implementação alterado(s) desde o fecho — corre ${DEV_SPEC} drift ${f}`,
+      baselineRecorded: (n, missing) => `Baseline de drift registada: ${n} ficheiro(s) de implementação${missing ? ` (${missing} em falta)` : ""} — ${DEV_SPEC} drift mostra o que mudar depois deste fecho.`,
       baselineReplaced: (n, day, list) => `Substituída a baseline de ${day}, na qual ${n} ficheiro(s) tinham mudado: ${list} — a nova baseline aceita-os tal como estão agora.`,
     },
 
     guardMode: {
       ask: (pending, stale) => "dev-spec guard: nenhuma tarefa aprovada cobre alterações de código neste momento — aprova as tarefas de uma feature (spec_approve) ou confirma para continuar." +
         (pending ? ` Features com tarefas por aprovar: ${pending}.` : "") +
-        (stale ? ` Tarefas alteradas depois da aprovação (revê e volta a aprovar a fase tasks): ${stale}.` : "") + " (O modo guarda está ligado — dev-spec init --guard off desliga-o.)",
+        (stale ? ` Tarefas alteradas depois da aprovação (revê e volta a aprovar a fase tasks): ${stale}.` : "") + " (O modo guarda está ligado — " + DEV_SPEC + " init --guard off desliga-o.)",
       forced: (list) => `dev-spec guard: as alterações de código só estão cobertas por uma aprovação FORÇADA das tarefas (${list}) — as verificações falhavam quando foi aprovada.`,
       on: "Modo guarda LIGADO — Write/Edit em ficheiros de código fora de .specs/ pede confirmação enquanto nenhuma feature tiver tarefas aprovadas por concluir (roadmap.json meta.guard). Os ficheiros de teste são permitidos enquanto o plano de testes de uma feature por concluir estiver aprovado (a Fase 4 escreve os testes a falhar antes do gate das tarefas), e todos os ficheiros de código enquanto um spike estiver em curso (o seu protótipo).",
       off: "Modo guarda DESLIGADO — as alterações de código não são controladas.",
@@ -1743,7 +1749,7 @@ const msg = {
           (a.force ? " — FORÇADA (--force)" : "");
       },
       ask: (list, force) => `dev-spec approval guard: o agente quer ${list}.` + (force ? " ⚠ FORCE: as verificações da fase são ignoradas — um gate que falha ficaria registado como aprovado mesmo assim." : "") +
-        " As aprovações são tuas — confirma só se aprovares isto. (meta.approvalGuard: ask — dev-spec init --approval-guard deny recusa de vez as aprovações dos agentes.)",
+        " As aprovações são tuas — confirma só se aprovares isto. (meta.approvalGuard: ask — " + DEV_SPEC + " init --approval-guard deny recusa de vez as aprovações dos agentes.)",
       deny: (list, command) => `dev-spec approval guard: recusado — as aprovações são da pessoa, e um agente não pode ${list}. ` +
         (command ? `Pede ao utilizador que o execute ele próprio, no seu terminal ou no Claude Code com o prefixo ! (o comando é executado como o utilizador, não pela tua chamada de ferramenta): ${command}` : "Pede ao utilizador que faça ele próprio essa alteração, no seu editor ou terminal") +
         " — e espera por ele. Não tentes outra via (a ferramenta MCP, a CLI, um script ou uma edição dos ficheiros de .specs/). (meta.approvalGuard: deny.)",
@@ -1793,11 +1799,11 @@ const msg = {
         approve: (list, slug) => `Aprova o(s) gate(s) pendente(s), por ordem: ${list} — /approve ${slug} <fase>`,
         reReview: (list, cmds) => `Revê o que mudou depois da aprovação: ${list}` + (cmds ? ` — vê primeiro a diferença: ${cmds}` : "") + "; depois volta a aprovar",
         reapprove: (list) => `Volta a aprovar para começar o histórico de alterações (o spec_impact ainda não consegue comparar estas): ${list}`,
-        verify: (list, slug) => `Regista uma execução bem-sucedida das tarefas marcadas que não a têm: ${list} — dev-spec done ${slug} <n> --run`,
-        drift: (n, slug) => `Decide sobre a deriva: ${n} ficheiro(s) de implementação alterado(s) desde o fecho — dev-spec drift ${slug}`,
+        verify: (list, slug) => `Regista uma execução bem-sucedida das tarefas marcadas que não a têm: ${list} — ${DEV_SPEC} done ${slug} <n> --run`,
+        drift: (n, slug) => `Decide sobre a deriva: ${n} ficheiro(s) de implementação alterado(s) desde o fecho — ${DEV_SPEC} drift ${slug}`,
         stale: (slug) => `Mudou depois do fecho — volta a fechá-la: /spec-finish ${slug}`,
-        packReserved: (list, slug, since) => `Muda o nome do(s) seu(s) track pack(s) anterior(es) à ${since || "1.17"} — ${list}: o nome é agora reservado, por isso o track está inativo (detalhes: dev-spec doctor ${slug}, verificação track-pack-missing)`,
-        packMarkerReserved: (list, slug, since, tracks) => `Muda o marcador do(s) seu(s) track pack(s) anterior(es) à ${since || "1.19"} — ${list}: o marcador é agora o de um track incluído, por isso o pack está inativo; ou usa o track incluído: dev-spec add-track ${slug} ${tracks} (detalhes: dev-spec doctor ${slug}, verificação track-pack-missing)`,
+        packReserved: (list, slug, since) => `Muda o nome do(s) seu(s) track pack(s) anterior(es) à ${since || "1.17"} — ${list}: o nome é agora reservado, por isso o track está inativo (detalhes: ${DEV_SPEC} doctor ${slug}, verificação track-pack-missing)`,
+        packMarkerReserved: (list, slug, since, tracks) => `Muda o marcador do(s) seu(s) track pack(s) anterior(es) à ${since || "1.19"} — ${list}: o marcador é agora o de um track incluído, por isso o pack está inativo; ou usa o track incluído: ${DEV_SPEC} add-track ${slug} ${tracks} (detalhes: ${DEV_SPEC} doctor ${slug}, verificação track-pack-missing)`,
         critic: (files) => `Revê-a com o agente spec-critic (só leitura), fase a fase: ${files || "—"}`,
         converge: (files) => "Corre a passagem de convergência do spec-reviewer (as tarefas feitas face aos seus ACs)" + (files ? `, depois o agente spec-critic sobre ${files}` : ""),
         none: "Não precisa de revisão da spec — todas as tarefas estão feitas",
@@ -1805,7 +1811,7 @@ const msg = {
         warnings: (list) => `Avisos: ${list}`,
       },
       reason: { "no-fingerprint": "aprovada antes das impressões digitais de conteúdo", changed: "alterada depois da aprovação", missing: "o ficheiro não existe", untracked: "uma aprovação de design de bugfix da 1.12 — o bug.md nunca foi seguido", "snapshot-missing": "o ficheiro do snapshot desapareceu" },
-      planHead: "O apply mudaria (spec_upgrade {apply: true} · dev-spec upgrade --apply) — nunca um artefacto, uma aprovação ou uma marcação:",
+      planHead: "O apply mudaria (spec_upgrade {apply: true} · " + DEV_SPEC + " upgrade --apply) — nunca um artefacto, uma aprovação ou uma marcação:",
       migHead: "Migrações aplicadas — nenhum artefacto editado, nada aprovado, marcado ou apagado:",
       migStamp: (from, to) => `meta.specVersion: ${from || "nenhuma"} → ${to}`,
       migTracks: (list) => `tracks guardados no .state.json: ${list}`,
@@ -1817,10 +1823,10 @@ const msg = {
       migErrors: (list) => `não migrado: ${list} — corrige e volta a correr o upgrade (o meta.specVersion fica como está até lá)`,
       nothing: "Nada a migrar — .specs/ já está em dia; nada foi alterado.",
       upToDate: "Nada a migrar — a lista acima é o que as regras atuais assinalam.",
-      applyHint: "Nada foi alterado. Revê a lista e depois aplica as migrações seguras: dev-spec upgrade --apply (spec_upgrade {apply: true}).",
+      applyHint: "Nada foi alterado. Revê a lista e depois aplica as migrações seguras: " + DEV_SPEC + " upgrade --apply (spec_upgrade {apply: true}).",
       reportAt: (file) => `Relatório: ${file} — uma checklist para ir cumprindo (/spec-upgrade).`,
       reportKept: (file) => `${file} existe e não foi gerado pelo dev-spec — ficou intacto (relatório não escrito).`,
-      hookLine: (from) => `⬆ .specs/ foi criado com um dev-spec mais antigo (${from || "anterior à 1.13"}) — corre /spec-upgrade (dev-spec upgrade) para rever o que ainda não está implementado (ou pede simplesmente para atualizar as specs)`,
+      hookLine: (from) => `⬆ .specs/ foi criado com um dev-spec mais antigo (${from || "anterior à 1.13"}) — corre /spec-upgrade (${DEV_SPEC} upgrade) para rever o que ainda não está implementado (ou pede simplesmente para atualizar as specs)`,
       md: {
         title: (proj) => `dev-spec upgrade — ${proj}`,
         autogen: "AUTO-GERADO por dev-spec — marca as caixas à medida que avanças; o spec_upgrade {apply: true} (dev-spec upgrade --apply) escreve-o quando migra alguma coisa.",
@@ -1834,7 +1840,7 @@ const msg = {
     promptsResources: {
       preamble: (agentsMd, refsDir) => `Nota para o agente: se não houver uma skill dev-spec-driven disponível nesta ferramenta, segue o fluxo do AGENTS.md do plugin (${agentsMd}) e usa as ferramentas MCP spec-driven (spec_*, ears_validate, trace_check); os ficheiros references/… citados abaixo estão em ${refsDir}.`,
       argDesc: (hint) => (hint ? `Argumentos (opcionais): ${hint}` : "Não precisa de argumentos (texto livre opcional)."),
-      cliHead: (n) => `${n} prompt(s) — um por comando do plugin; dev-spec prompts <nome> [--args "…"] mostra um:`,
+      cliHead: (n) => `${n} prompt(s) — um por comando do plugin; ${DEV_SPEC} prompts <nome> [--args "…"] mostra um:`,
       res: {
         roadmap: "O roadmap do projeto (.specs/ROADMAP.md): a fase, o progresso e as dependências de cada feature.",
         roadmapFromJson: "O roadmap do projeto, gerado a partir de .specs/roadmap.json (ainda sem ROADMAP.md escrito).",
@@ -1897,13 +1903,13 @@ const msg = {
         },
       },
       planBridge: {
-        byText: "dev-spec: o utilizador aprovou este plano. Para o acompanhar como spec (critérios EARS, tarefas rastreadas, gates de evidência), sugerir /spec-import — spec_import {tool: \"plan\", text: <o markdown do plano aprovado>} (CLI: dev-spec import plan - < plan.md). O plano gravado em ~/.claude/plans está fora do projeto: importar o texto. Numa alteração rápida não é preciso; importar só com o OK do utilizador.",
-        byPath: (rel) => `dev-spec: o utilizador aprovou este plano. Para o acompanhar como spec (critérios EARS, tarefas rastreadas, gates de evidência), sugerir /spec-import — spec_import {tool: "plan", path: "${rel}"} (CLI: dev-spec import plan ${rel}). Numa alteração rápida não é preciso; importar só com o OK do utilizador.`,
+        byText: "dev-spec: o utilizador aprovou este plano. Para o acompanhar como spec (critérios EARS, tarefas rastreadas, gates de evidência), sugerir /spec-import — spec_import {tool: \"plan\", text: <o markdown do plano aprovado>} (CLI: " + DEV_SPEC + " import plan - < plan.md). O plano gravado em ~/.claude/plans está fora do projeto: importar o texto. Numa alteração rápida não é preciso; importar só com o OK do utilizador.",
+        byPath: (rel) => `dev-spec: o utilizador aprovou este plano. Para o acompanhar como spec (critérios EARS, tarefas rastreadas, gates de evidência), sugerir /spec-import — spec_import {tool: "plan", path: "${rel}"} (CLI: ${DEV_SPEC} import plan ${rel}). Numa alteração rápida não é preciso; importar só com o OK do utilizador.`,
       },
       importText: {
         label: "(texto)",
         note: (tool, date) => `> Importado de ${tool} (texto) em ${date}.`,
-        orText: "Ou passa o markdown como `text` em vez de `path` (spec_import {tool, text}; CLI: dev-spec import <tool> - < plano.md).",
+        orText: "Ou passa o markdown como `text` em vez de `path` (spec_import {tool, text}; CLI: " + DEV_SPEC + " import <tool> - < plano.md).",
         textOnly: (tool, list) => `\`text\` importa um único documento — ferramenta ${list}; '${tool}' lê uma pasta: indica o \`path\`.`,
         pathAndText: "Indica `path` ou `text`, não os dois.",
         empty: (tool) => `O texto ${tool} está vazio — nada para importar.`,
@@ -1975,7 +1981,7 @@ const msg = {
       unknownArtifact: (a, list) => `Template desconhecido '${a}' — um de: ${list}, ou steering/<ficheiro>.md.`,
       writeFailed: (rel, why) => `Não foi possível escrever ${rel} (${why}).`,
       writeOutside: (rel) => `Recusei escrever ${rel}: a pasta é uma ligação para fora do projeto.`,
-      legacyFeature: ".specs/templates/ é a pasta de uma feature criada antes de existirem templates do projeto (tem um .state.json) — continua a ser essa feature e nunca é lida como templates. Muda-lhe o nome (dev-spec feature rename templates <novo-nome>, ou spec_feature rename) para usares templates do projeto.",
+      legacyFeature: ".specs/templates/ é a pasta de uma feature criada antes de existirem templates do projeto (tem um .state.json) — continua a ser essa feature e nunca é lida como templates. Muda-lhe o nome (" + DEV_SPEC + " feature rename templates <novo-nome>, ou spec_feature rename) para usares templates do projeto.",
       builtIn: "de base",
       override: "do projeto",
       listHead: (lang, n) => `Templates para features em '${lang}' — ${n} template(s) do projeto em .specs/templates/ (um ficheiro em <lang>/ prevalece sobre um partilhado):`,
@@ -1983,7 +1989,7 @@ const msg = {
       initDone: (n) => `${n} template(s) de base copiado(s) para .specs/templates/ — edita-os; os novos scaffolds passam a usá-los:`,
       initKept: (list) => `Mantidos (já existiam — nunca são substituídos): ${list}`,
       initNothing: "Nada copiado — todos os templates pedidos já estão em .specs/templates/.",
-      checkNone: "Nenhum template do projeto para verificar — .specs/templates/ não tem nenhum (`dev-spec templates init` copia os de base).",
+      checkNone: "Nenhum template do projeto para verificar — .specs/templates/ não tem nenhum (`" + DEV_SPEC + " templates init` copia os de base).",
       checkHead: (n, errors, warnings) => `${n} ficheiro(s) de template verificado(s) — ${errors} erro(s), ${warnings} aviso(s).`,
       appends: (file, list) => `${file}: o motor acrescenta ele próprio as secções ${list} (o template não tem os respetivos títulos).`,
       problems: {
@@ -2025,29 +2031,29 @@ const msg = {
       steeringStub: (title, name) => `# ${title}\n\n<!-- As normas de ${title} da equipa: todas as features +${name} as seguem (o spec_task_brief cita este ficheiro). -->\n- [fill me in]\n`,
       allFilled: (marker) => `todas as secções ${marker} preenchidas`,
       statusSections: (marker, list) => `Secções ${marker}: ${list}`,
-      missing: (list) => `track pack(s) indisponível(eis): ${list} — o track fica inativo nesta feature até o pack voltar (dev-spec tracks check).`,
+      missing: (list) => `track pack(s) indisponível(eis): ${list} — o track fica inativo nesta feature até o pack voltar (${DEV_SPEC} tracks check).`,
       missingAbsent: (name) => `+${name} (não há .specs/tracks/${name}/ neste projeto)`,
       missingInvalid: (name, codes) => `+${name} (o pack é inválido: ${codes})`,
-      missingReserved: (name, slug, builtIn, since) => `+${name} (um track pack anterior à ${since || "1.17"} — '${name}' é agora um nome reservado${builtIn ? `, e o track +${name} incluído NÃO se aplica a esta feature` : ""}: muda o nome de .specs/tracks/${name}/ (e do marcador, se também estiver reservado) e depois dev-spec add-track ${slug} <novo-nome> e dev-spec add-track ${slug} ${name} --remove${builtIn ? `; para usar o track incluído em vez dele: dev-spec add-track ${slug} ${name}` : ""})`,
-      missingReservedMarker: (name, marker, track, slug, since) => `+${name} (um track pack anterior à ${since || "1.19"} — o seu marcador ${marker} é agora o do track +${track} incluído, por isso o pack é ignorado e as suas secções ${marker} não contam como as do +${track}: muda o marcador em .specs/tracks/${name}/track.json e nos títulos ${marker} desta feature; para usar o track incluído em vez dele: dev-spec add-track ${slug} ${track} (as secções dele são acrescentadas e o pack sai desta feature); para retirar o pack: dev-spec add-track ${slug} ${name} --remove)`,
+      missingReserved: (name, slug, builtIn, since) => `+${name} (um track pack anterior à ${since || "1.17"} — '${name}' é agora um nome reservado${builtIn ? `, e o track +${name} incluído NÃO se aplica a esta feature` : ""}: muda o nome de .specs/tracks/${name}/ (e do marcador, se também estiver reservado) e depois ${DEV_SPEC} add-track ${slug} <novo-nome> e ${DEV_SPEC} add-track ${slug} ${name} --remove${builtIn ? `; para usar o track incluído em vez dele: ${DEV_SPEC} add-track ${slug} ${name}` : ""})`,
+      missingReservedMarker: (name, marker, track, slug, since) => `+${name} (um track pack anterior à ${since || "1.19"} — o seu marcador ${marker} é agora o do track +${track} incluído, por isso o pack é ignorado e as suas secções ${marker} não contam como as do +${track}: muda o marcador em .specs/tracks/${name}/track.json e nos títulos ${marker} desta feature; para usar o track incluído em vez dele: ${DEV_SPEC} add-track ${slug} ${track} (as secções dele são acrescentadas e o pack sai desta feature); para retirar o pack: ${DEV_SPEC} add-track ${slug} ${name} --remove)`,
       badAction: (a) => `Ação de tracks desconhecida '${a}' — uma de: list, init, check.`,
-      nameRequired: "o tracks init precisa de um nome — dev-spec tracks init <nome> (spec_tracks {action: \"init\", name}).",
+      nameRequired: "o tracks init precisa de um nome — " + DEV_SPEC + " tracks init <nome> (spec_tracks {action: \"init\", name}).",
       unknownPack: (n, list) => `Não há track nem track pack '${n}' — os packs do projeto: ${list}.`,
-      legacyFeature: ".specs/tracks/ é a pasta de uma feature criada antes de existirem track packs (tem um .state.json) — continua a ser essa feature e nunca é lida como packs. Muda-lhe o nome (dev-spec feature rename tracks <novo-nome>, ou spec_feature rename) para usar track packs.",
+      legacyFeature: ".specs/tracks/ é a pasta de uma feature criada antes de existirem track packs (tem um .state.json) — continua a ser essa feature e nunca é lida como packs. Muda-lhe o nome (" + DEV_SPEC + " feature rename tracks <novo-nome>, ou spec_feature rename) para usar track packs.",
       writeFailed: (rel, why) => `Não foi possível escrever ${rel} (${why}).`,
       writeOutside: (rel) => `Recusei escrever ${rel}: a pasta é uma ligação para fora do projeto.`,
       builtIn: "incluído",
       sectionCount: (n) => `${n} secção(ões)`,
       signalCount: (n) => `${n} sinal(is)`,
-      invalid: (n) => `inválido (${n} erro(s)) — ignorado; detalhes: dev-spec tracks check`,
-      noPacks: "Não há track packs em .specs/tracks/ — o `dev-spec tracks init <nome>` cria um.",
+      invalid: (n) => `inválido (${n} erro(s)) — ignorado; detalhes: ${DEV_SPEC} tracks check`,
+      noPacks: "Não há track packs em .specs/tracks/ — o `" + DEV_SPEC + " tracks init <nome>` cria um.",
       listHead: (builtIn, packs, valid) => `Tracks — ${builtIn} incluídos, ${packs} pack(s) do projeto em .specs/tracks/ (${valid} válido(s)):`,
-      checkNone: "Não há track packs a verificar — .specs/tracks/ não tem nenhum (o `dev-spec tracks init <nome>` cria um).",
+      checkNone: "Não há track packs a verificar — .specs/tracks/ não tem nenhum (o `" + DEV_SPEC + " tracks init <nome>` cria um).",
       checkHead: (n, valid, errors, warnings) => `${n} track pack(s) verificado(s) — ${valid} válido(s), ${errors} erro(s), ${warnings} aviso(s).`,
       initDone: (name, n) => `Track pack +${name} criado (${n} ficheiro(s)) — edita-os; a partir de agora é um track válido:`,
       initKept: (list) => `Mantidos (já existiam — nunca são substituídos): ${list}`,
       initNothing: (name) => `Nada escrito — todos os ficheiros do pack +${name} já existem.`,
-      initNext: (name) => `A seguir: verificar com dev-spec tracks check e usar com dev-spec add-track <feature> ${name} (spec_add_track) ou ao criar uma feature.`,
+      initNext: (name) => `A seguir: verificar com ${DEV_SPEC} tracks check e usar com ${DEV_SPEC} add-track <feature> ${name} (spec_add_track) ou ao criar uma feature.`,
       initJson: (a) => `// Track pack +${a.name} — um track definido pelo projeto (dev-spec 1.15). Só dados: nada nesta pasta é executado.
 // Guia: references/project-tracks.md · validação: dev-spec tracks check (spec_tracks {action: "check"}).
 {
@@ -2260,7 +2266,7 @@ const msg = {
       archivedLabel: "arquivadas",
       line: (name, date, done, total, eta, status, feats, archived) => `${name} — ${date} · ${done}/${total} feature(s) feitas · ETA ${eta || "—"} · ${status} · ${feats || "—"}${archived ? ` (arquivadas: ${archived})` : ""}`,
       head: (n, today) => `${n} marco(s) — hoje ${today}:`,
-      none: "Ainda sem marcos — adiciona um: dev-spec milestone add <nome> <AAAA-MM-DD> <features…> (spec_milestone {action: \"add\", name, date, features}).",
+      none: "Ainda sem marcos — adiciona um: " + DEV_SPEC + " milestone add <nome> <AAAA-MM-DD> <features…> (spec_milestone {action: \"add\", name, date, features}).",
       added: (name, date, list) => `Marco '${name}' adicionado — ${date}: ${list}`,
       updated: (name, date, list) => `Marco '${name}' atualizado — ${date}: ${list}`,
       removed: (name) => `Marco '${name}' removido.`,
@@ -2277,7 +2283,7 @@ const msg = {
       badDate: (v) => `date: '${v}' não é um dia no formato AAAA-MM-DD (p. ex. 2026-10-31).`,
       noFeatures: "Indica pelo menos uma feature do marco (features).",
       unknownFeatures: (list) => `Cada feature do marco tem de ser uma feature ativa existente — não encontrada(s): ${list}`,
-      tooMany: (max) => `no máximo ${max} marcos — remove um primeiro (dev-spec milestone rm <nome>).`,
+      tooMany: (max) => `no máximo ${max} marcos — remove um primeiro (${DEV_SPEC} milestone rm <nome>).`,
       tooManyFeatures: (max) => `no máximo ${max} features por marco.`,
       notFound: (name, list) => `Não existe o marco '${name}' (marcos: ${list}).`,
       badStored: (rel) => `${rel} → meta.milestones não é uma lista de {name, date, features} como o milestone add os escreve (um nome válido, um dia AAAA-MM-DD real, uma entrada por nome) — corrige-o à mão; recuso alterá-lo.`,
@@ -2318,24 +2324,24 @@ const msg = {
       ffWhyRefused: (ids, lines, slug, phase) => `o gate recusa-a — verificações a falhar: ${ids}.\n${lines}\nCorrige-as (detalhes: /spec-doctor ${slug}) e volta a correr o avanço rápido (retoma em '${phase}').`,
       ffWhyRoles: (missing) => `validada, mas fica à espera dos outros papéis (${missing}) — as fases seguintes não podem ser aprovadas antes dela.`,
       ffWhyRole: (roles, slug, phase, through, given) => (given ? `'${given}' não é um papel que valida '${phase}' (papéis: ${roles})` : `'${phase}' é validada por papel (${roles})`) +
-        ` — nada foi registado para '${phase}'. Volta a correr o avanço rápido com o papel com que validas: /spec-ff ${slug} --role <papel> (CLI: dev-spec approve ${slug} --through ${through} --role <papel>); o avanço rápido retoma em '${phase}'.`,
-      ffHint: (slug, list, role) => `Todos os artefactos de planeamento até às tasks estão preenchidos e passam o seu gate — avanço rápido: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: dev-spec approve ${slug} --through tasks${role ? " --role " + role : ""}) aprova ${list} por ordem, cada uma pelo seu próprio gate.`,
+        ` — nada foi registado para '${phase}'. Volta a correr o avanço rápido com o papel com que validas: /spec-ff ${slug} --role <papel> (CLI: ${DEV_SPEC} approve ${slug} --through ${through} --role <papel>); o avanço rápido retoma em '${phase}'.`,
+      ffHint: (slug, list, role) => `Todos os artefactos de planeamento até às tasks estão preenchidos e passam o seu gate — avanço rápido: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through tasks${role ? " --role " + role : ""}) aprova ${list} por ordem, cada uma pelo seu próprio gate.`,
       batch: (n) => `  aprovações em lote (avanço rápido): ${n}`,
     },
 
     undo: {
       unticked: (n, slug, runnable, stale) => `A tarefa ${n} voltou a ficar aberta (desmarcada).` +
-        (stale ? ` A evidência registada deixou de contar — voltar a marcá-la exige ${runnable ? `uma nova execução do seu comando _Verify:_: dev-spec done ${slug} ${n} --run` : "nova evidência"}.` : ""),
+        (stale ? ` A evidência registada deixou de contar — voltar a marcá-la exige ${runnable ? `uma nova execução do seu comando _Verify:_: ${DEV_SPEC} done ${slug} ${n} --run` : "nova evidência"}.` : ""),
       alreadyOpen: (n) => `A tarefa ${n} não está marcada — nada a desfazer.`,
-      redKept: (n, slug, day) => `A execução vermelha de ${day} (a prova do _Expect: fail_) mantém-se: voltar a marcá-la exige uma nova execução do seu comando _Verify:_ — com a correção feita, uma execução com sucesso conta como a correção que deixa o teste verde: dev-spec done ${slug} ${n} --run.`,
+      redKept: (n, slug, day) => `A execução vermelha de ${day} (a prova do _Expect: fail_) mantém-se: voltar a marcá-la exige uma nova execução do seu comando _Verify:_ — com a correção feita, uma execução com sucesso conta como a correção que deixa o teste verde: ${DEV_SPEC} done ${slug} ${n} --run.`,
       duplicateTicked: (n, list) => `Várias tarefas marcadas partilham o número ${n} (${list}) — o undo não consegue saber qual das marcações foi o engano. Renumera-as primeiro para que cada número seja único (doctor: duplicate-tasks); depois, desfaz a que foi marcada por engano. Nada foi alterado.`,
       duplicateItem: (line, text) => `linha ${line}: "${text}"`,
       reopened: (slug) => `'${slug}' já estava concluída ou validada — quando a tarefa voltar a estar feita, conclui-a de novo (/spec-finish ${slug}) e volta a validar a execução (/approve ${slug} execution).`,
       noEvidence: "undo não aceita evidência — só desmarca a tarefa (regista a nova execução quando a voltares a marcar).",
-      reasonNeedsUndo: "reason acompanha undo (spec_complete_task {undo: true, reason} / dev-spec undone <feature> <n> --reason \"…\") — ao marcar uma tarefa regista-se evidência.",
+      reasonNeedsUndo: "reason acompanha undo (spec_complete_task {undo: true, reason} / " + DEV_SPEC + " undone <feature> <n> --reason \"…\") — ao marcar uma tarefa regista-se evidência.",
       badReason: (max) => `reason tem de ser texto (uma linha, no máximo ${max} caracteres).`,
       staleNote: (n, slug, runnable) => `Tarefa ${n}: foi desmarcada depois de esta evidência ser registada — continua não verificada até se registar ` +
-        (runnable ? `uma nova execução: dev-spec done ${slug} ${n} --run` : "nova evidência."),
+        (runnable ? `uma nova execução: ${DEV_SPEC} done ${slug} ${n} --run` : "nova evidência."),
       label: "desmarcada depois de esta evidência ser registada",
       cliDone: (n, done, total) => `Tarefa ${n} desmarcada. ${done}/${total}`,
       cliAlready: (n, done, total) => `A tarefa ${n} não estava marcada. ${done}/${total}`,
@@ -2364,7 +2370,7 @@ const msg = {
       roadmapItem: (phase, reason, expires, expired) => `${phase} (${[reason ? `exceção: ${reason}` : "exceção", expires ? (expired ? `EXPIROU a ${expires}` : `até ${expires}`) : null].filter(Boolean).join(", ")})`,
       prHeading: "## Gates dispensados (aprovações forçadas)",
       prLine: (phase, failing, reason, expires, expired) => `- ${phase} — forçada apesar de: ${failing || "—"} · ${reason ? `motivo: ${reason}` : "sem motivo registado"}${expires ? ` · ${expired ? "EXPIROU a" : "válida até"} ${expires}` : ""}`,
-      finishWarn: (list, slug) => `exceções expiradas em aprovações forçadas: ${list} — volta a aprovar essas fases sem force; para renovar a exceção: dev-spec approve ${slug} <fase> --force --reason "…" --expires 30d`,
+      finishWarn: (list, slug) => `exceções expiradas em aprovações forçadas: ${list} — volta a aprovar essas fases sem force; para renovar a exceção: ${DEV_SPEC} approve ${slug} <fase> --force --reason "…" --expires 30d`,
     },
 
     forecast: {
@@ -2379,8 +2385,8 @@ const msg = {
       overlap: {
         attentionActive: (other, files) => `planeia os mesmos ficheiros que ${other}: ${files} — ordena-as (spec_depend) ou declara _Supersedes:_ se uma substitui o comportamento da outra`,
         attentionFinished: (other, files) => `planeia ficheiros da baseline de fecho de ${other}: ${files} — declara _Supersedes: ${other}/US-n.AC-m_ onde substitui esse comportamento, ou o spec_drift assinala ${other} depois do merge`,
-        doctorActive: (list, slug) => `há tarefas por fazer que planeiam os mesmos ficheiros que outra feature ativa — ${list}: ambas mexem neles no merge e uma deriva sem aviso. Ordena as duas (spec_depend {name: "${slug}", add: ["<outra>"]} · dev-spec depend ${slug} <outra>) ou, onde uma substitui o comportamento da outra, declara _Supersedes: <outra>/US-n.AC-m_`,
-        doctorFinished: (list, slug) => `há tarefas por fazer que planeiam ficheiros que uma feature fechada registou na sua baseline de drift — ${list}: depois do merge, o spec_drift assinala-a. Declara _Supersedes: <feature>/US-n.AC-m_ nos critérios de ${slug} que substituem o comportamento dela, faz ${slug} depender dela onde assenta nela (spec_depend {name: "${slug}", add: ["<feature>"]} · dev-spec depend ${slug} --add <feature>), ou volta a fechá-la depois do merge (spec_finish)`,
+        doctorActive: (list, slug) => `há tarefas por fazer que planeiam os mesmos ficheiros que outra feature ativa — ${list}: ambas mexem neles no merge e uma deriva sem aviso. Ordena as duas (spec_depend {name: "${slug}", add: ["<outra>"]} · ${DEV_SPEC} depend ${slug} <outra>) ou, onde uma substitui o comportamento da outra, declara _Supersedes: <outra>/US-n.AC-m_`,
+        doctorFinished: (list, slug) => `há tarefas por fazer que planeiam ficheiros que uma feature fechada registou na sua baseline de drift — ${list}: depois do merge, o spec_drift assinala-a. Declara _Supersedes: <feature>/US-n.AC-m_ nos critérios de ${slug} que substituem o comportamento dela, faz ${slug} depender dela onde assenta nela (spec_depend {name: "${slug}", add: ["<feature>"]} · ${DEV_SPEC} depend ${slug} --add <feature>), ou volta a fechá-la depois do merge (spec_finish)`,
         hookLine: (n, list) => `⚠ ${n} sobreposição(ões) de ficheiros entre features: ${list} — corre /spec-doctor nelas (ordena-as com /depend, ou declara _Supersedes:_)`,
         cliHead: (n) => `⚠ ${n} sobreposição(ões) de ficheiros entre features:`,
         cliActive: (a, b, files) => `  ${a} ↔ ${b}: ${files}`,
@@ -2395,18 +2401,18 @@ const msg = {
       passTicked: (n) => `A tarefa ${n} está marcada, mas espera que o seu teste FALHE (_Expect: fail_) e esta execução passou (exit 0) sem nenhuma execução vermelha registada antes — o teste não testa nada: registado; a tarefa passa a contar como não verificada até ser registada uma execução a falhar (vermelha).`,
       cantRun: (n, code, ticked) => `Tarefa ${n}: exit ${code} significa que o próprio comando não pôde correr (não encontrado / não executável) — isso não é um teste vermelho (_Expect: fail_). Corrige o comando _Verify:_ e regista depois a execução a falhar. ` + (ticked ? "Registado; a tarefa passa a contar como não verificada." : "Não a marco como feita."),
       passAfterRed: (n, day) => `Tarefa ${n}: o teste passa agora — é o esperado depois da correção; a execução vermelha registada em ${day} continua a ser a prova (_Expect: fail_).`,
-      unexpectedPassNote: (n, slug) => `A tarefa ${n} espera que o seu teste FALHE (_Expect: fail_), mas a última execução passou sem nenhuma execução vermelha antes — continua não verificada até ser registada uma execução a falhar: dev-spec done ${slug} ${n} --run`,
+      unexpectedPassNote: (n, slug) => `A tarefa ${n} espera que o seu teste FALHE (_Expect: fail_), mas a última execução passou sem nenhuma execução vermelha antes — continua não verificada até ser registada uma execução a falhar: ${DEV_SPEC} done ${slug} ${n} --run`,
       redRecorded: (n, code) => `  ✓ execução vermelha registada para a tarefa ${n} (exit ${code}) — o teste falha antes da correção, como o _Expect: fail_ espera.`,
       shellNotRed: (cmd) => `a shell por omissão do Windows (cmd.exe) não conseguiu correr \`${cmd}\` tal como está escrito — isso não é um teste vermelho (_Expect: fail_). Nada foi registado; a tarefa continua aberta.`,
       cantRunOutput: (n, code, what, ticked) => `Tarefa ${n}: a execução saiu com exit ${code}, mas o output mostra que o teste nunca foi executado (${what}) — isso não é um teste vermelho (_Expect: fail_): um ficheiro de teste, módulo ou script em falta não é a razão certa. Escreve o teste para que falhe numa asserção (ou "não implementado") e regista essa execução. ` + (ticked ? "Registado; a tarefa passa a contar como não verificada." : "Não a marco como feita."),
       notRed: (cmd, what) => `\`${cmd}\` falhou, mas o output mostra que o teste nunca foi executado (${what}) — isso não é um teste vermelho (_Expect: fail_): um ficheiro de teste, módulo ou script em falta não é a razão certa. Nada foi registado; a tarefa continua aberta. Escreve o teste para que falhe numa asserção (ou "não implementado"); depois, repete o done --run.`,
       prRed: "a execução vermelha esperada (_Expect: fail_)",
       prRedKept: (code, day) => `execução vermelha antes da correção: exit ${code}${day ? " em " + day : ""}`,
-      doctorMissing: (list) => `T-IDs postos a verde por tarefas feitas sem uma execução vermelha registada: ${list} — um teste que nunca falhou não prova nada. Marca a tarefa que o escreve com _Expect: fail_ e regista a execução a falhar antes da correção (dev-spec done <feature> <n> --run).`,
+      doctorMissing: (list) => `T-IDs postos a verde por tarefas feitas sem uma execução vermelha registada: ${list} — um teste que nunca falhou não prova nada. Marca a tarefa que o escreve com _Expect: fail_ e regista a execução a falhar antes da correção (${DEV_SPEC} done <feature> <n> --run).`,
       doctorOk: (n) => `todos os T-IDs postos a verde por tarefas feitas (${n}) têm uma execução vermelha registada`,
       briefExpect: "**Resultado esperado: FALHA** (_Expect: fail_) — a execução tem de terminar com um exit diferente de zero: o teste falha pela razão certa antes da correção (uma asserção / não implementado — não um erro de escrita, um import em falta ou um comando que não corre). Uma execução que passe é recusada: significaria que o teste não testa nada.",
       dodExpect: "A execução do _Verify:_ tem de FALHAR (exit diferente de zero) pela razão certa — põe no relatório o comando, o exit code e a falha; fica registada como a execução vermelha da tarefa.",
-      naVerify: (n, slug) => `A tarefa ${n} tem _Expect: fail_: a prova é uma execução que FALHA (o teste vermelho antes da correção) — uma execução que passa não conta. Regista a execução vermelha (dev-spec done ${slug} ${n} --run enquanto o teste falha — antes da correção, ou com a correção guardada num stash), ou tira o _Expect: fail_ se a tarefa não for um teste vermelho.`,
+      naVerify: (n, slug) => `A tarefa ${n} tem _Expect: fail_: a prova é uma execução que FALHA (o teste vermelho antes da correção) — uma execução que passa não conta. Regista a execução vermelha (${DEV_SPEC} done ${slug} ${n} --run enquanto o teste falha — antes da correção, ou com a correção guardada num stash), ou tira o _Expect: fail_ se a tarefa não for um teste vermelho.`,
     },
     projectChecks: {
       badInput: 'checks tem de ser um objeto nome → comando (ex.: {"test": "npm test"}); um comando vazio remove essa verificação.',
@@ -2416,24 +2422,24 @@ const msg = {
       badStored: (rel) => `${rel} → meta.checks não é um objeto de nome → comando (texto) — corrige-o à mão; não o vou alterar.`,
       initLine: (list) => `Verificações do projeto (meta.checks): ${list}`,
       evidenceNotList: "evidence tem de ser uma lista de execuções de verificações: [{name, command, exitCode, summary}].",
-      noChecks: 'não há verificações do projeto configuradas (roadmap.json meta.checks) — nada para registar. Define-as primeiro: spec_init {checks: {"test": "npm test"}} (CLI: dev-spec init --check test="npm test").',
+      noChecks: 'não há verificações do projeto configuradas (roadmap.json meta.checks) — nada para registar. Define-as primeiro: spec_init {checks: {"test": "npm test"}} (CLI: ' + DEV_SPEC + ' init --check test="npm test").',
       evidenceItem: (i, why) => `evidence[${i}]: ${why}`,
       itemNotObject: "cada execução tem de ser um objeto {name, command, exitCode, summary}",
       unknownCheck: (name, list) => `'${name}' não é uma verificação do projeto — uma de: ${list}`,
       needsCommand: "falta o comando que correu",
       needsExit: "falta o exit code (um inteiro)",
       status: (i) => ({ "no-run": "nenhuma execução registada", failed: `a última execução falhou (exit ${i.exitCode})`, changed: "o comando mudou desde a execução", "before-last-tick": "correu antes da última atividade nas tarefas", "code-changed": "os ficheiros de implementação mudaram desde a execução", unobserved: "a execução não foi observada pelo harness" })[i.status] || i.status,
-      blocker: (list, slug) => `verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: ${list} — corre-as: dev-spec finish ${slug} --run (ou regista as execuções com spec_finish {evidence})`,
-      doctorWarn: (list, slug) => `todas as tarefas estão feitas, mas há verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: ${list} — o spec_finish recusa até passarem: dev-spec finish ${slug} --run`,
+      blocker: (list, slug) => `verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: ${list} — corre-as: ${DEV_SPEC} finish ${slug} --run (ou regista as execuções com spec_finish {evidence})`,
+      doctorWarn: (list, slug) => `todas as tarefas estão feitas, mas há verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: ${list} — o spec_finish recusa até passarem: ${DEV_SPEC} finish ${slug} --run`,
       doctorOk: (n) => `todas as verificações do projeto (${n}) têm uma execução bem-sucedida desde a última atividade nas tarefas`,
       invalidStored: (list) => `roadmap.json meta.checks: entradas inválidas ignoradas (${list}) — cada uma tem de ser "nome": "comando numa linha"`,
       prChecks: "## Verificações do projeto",
       prNoRun: "nenhuma execução registada",
       briefDod: (list) => `Corre as verificações do projeto e põe no relatório cada comando, o exit code e as últimas linhas do output — nada do que passava antes desta tarefa pode falhar depois dela: ${list}.`,
       briefDodRed: (list) => `Corre as verificações do projeto e põe no relatório cada comando, o exit code e as últimas linhas do output — as únicas falhas permitidas são os novos testes vermelhos desta tarefa; tudo o que passava antes tem de continuar a passar: ${list}.`,
-      naFinish: (slug, list) => `Há verificações do projeto configuradas (${list}): para fechar a feature é preciso uma execução bem-sucedida de cada uma desde a última atividade nas tarefas — dev-spec finish ${slug} --run corre-as e regista-as (ou corre-as tu e regista cada uma com spec_finish {evidence: [{name, command, exitCode, summary}]}).`,
+      naFinish: (slug, list) => `Há verificações do projeto configuradas (${list}): para fechar a feature é preciso uma execução bem-sucedida de cada uma desde a última atividade nas tarefas — ${DEV_SPEC} finish ${slug} --run corre-as e regista-as (ou corre-as tu e regista cada uma com spec_finish {evidence: [{name, command, exitCode, summary}]}).`,
       recorded: (n) => `Registada(s) ${n} execução(ões) de verificações do projeto em .state.json → finishChecks.`,
-      noneToRun: 'não há verificações do projeto para correr (roadmap.json meta.checks) — define-as: dev-spec init --check test="npm test" [--check lint="npm run lint"]',
+      noneToRun: 'não há verificações do projeto para correr (roadmap.json meta.checks) — define-as: ' + DEV_SPEC + ' init --check test="npm test" [--check lint="npm run lint"]',
       badArg: (v) => `--check espera nome=comando (recebido '${v}') — um comando vazio (nome=) remove essa verificação`,
       posixOnWindows: (name, cmd, kinds) => `a verificação do projeto '${name}' (\`${cmd}\`) usa sintaxe de shell POSIX (${kinds.map((k) => ({ "single-quotes": "plicas '…'", variable: "$VARIAVEIS" })[k] || k).join(", ")}) que o cmd.exe — a shell por omissão do --run no Windows — lê de outra forma, muitas vezes sem falhar. Nada foi executado. Volta a correr com --shell bash (Git Bash; ou define DEV_SPEC_SHELL=bash) — ou --shell cmd para a correr no cmd.exe mesmo assim.`,
     },
@@ -2463,7 +2469,7 @@ const msg = {
       testNotCommitted: (n, tests, taskC, files) => `red-first: a tarefa ${n} (que põe ${tests} a verde) tem commit (${taskC}), mas nenhum commit lido toca num ficheiro de teste que nomeie ${tests} (${files}) — faz primeiro o commit do teste.`,
       redFirstStatus: (n, tests, status) => `red-first: tarefa ${n} (${tests}) — ` + ({ ok: "o teste teve commit primeiro ✓", "no-test-file": "ainda nenhum ficheiro de teste o nomeia (nada para comparar)", "no-task-commit": "ainda nenhum commit cita a tarefa", "outside-window": "impossível saber: a janela do log está cheia (--max N)" })[status],
       conventions: (slug) => `Nenhum commit cita uma tarefa de '${slug}'. Convenções: nomeia a feature e a tarefa — "Part of .specs/${slug}/ task #N." (o que o /spec-commit escreve) — ou os IDs que cobre: "Makes T-01 green", US-1.AC-2.`,
-      noGit: "o git não está disponível aqui, ou isto não é um repositório git com commits — o dev-spec log lê o `git log`. Ou passa um log pelo stdin: git log --name-only --relative | dev-spec log <feature> -",
+      noGit: "o git não está disponível aqui, ou isto não é um repositório git com commits — o dev-spec log lê o `git log`. Ou passa um log pelo stdin: git log --name-only --relative | " + DEV_SPEC + " log <feature> -",
     },
 
     stopGate: {
@@ -2523,7 +2529,7 @@ const msg = {
     },
     scopeGuard: {
       on: "Modo guarda SCOPE (âmbito) — Write/Edit num ficheiro de código fora de .specs/ pede confirmação, a menos que uma tarefa por concluir de uma feature aprovada o nomeie em _Implements:_ (o ficheiro, a sua pasta ou um glob; ficheiros de teste excetuados), e pede-a em todas as alterações de código enquanto nenhuma feature tiver tarefas aprovadas por concluir (roadmap.json meta.guard: \"scope\"). Os ficheiros de teste são permitidos enquanto o plano de testes de uma feature por concluir estiver aprovado (a Fase 4 escreve os testes a falhar antes do gate das tarefas), e todos os ficheiros de código enquanto um spike estiver em curso (o seu protótipo).",
-      ask: (file, features, hint) => `dev-spec guard (scope): ${file} não está no plano — nenhuma tarefa por concluir de ${features} o nomeia em _Implements:_. ${hint} (O modo guarda está em scope — dev-spec init --guard on permite todos os ficheiros de código enquanto houver tarefas aprovadas; --guard off desliga-o.)`,
+      ask: (file, features, hint) => `dev-spec guard (scope): ${file} não está no plano — nenhuma tarefa por concluir de ${features} o nomeia em _Implements:_. ${hint} (O modo guarda está em scope — ${DEV_SPEC} init --guard on permite todos os ficheiros de código enquanto houver tarefas aprovadas; --guard off desliga-o.)`,
       hint: {
         "same-folder": (n, slug, ref) => `Acrescenta-o ao _Implements:_ da tarefa ${n} (${slug} — mesma pasta que ${ref}) e volta a aprovar a fase tasks, ou planeia a alteração com /spec-converge (spec_append_tasks).`,
         nearby: (n, slug, ref) => `Acrescenta-o ao _Implements:_ da tarefa ${n} (${slug} — planeia ${ref}, ali perto) e volta a aprovar a fase tasks, ou planeia a alteração com /spec-converge (spec_append_tasks).`,
@@ -2627,16 +2633,16 @@ _Outcome: [go | no-go | pivot]_
         timeboxDecided: "decidido — o timebox está fechado",
       },
       next: {
-        missing: (slug) => `falta o spike.md — volta a criá-lo: dev-spec spike "${slug}" (só cria: o que existe é mantido).`,
+        missing: (slug) => `falta o spike.md — volta a criá-lo: ${DEV_SPEC} spike "${slug}" (só cria: o que existe é mantido).`,
         fillQuestion: (slug) => `Escreve a pergunta a que este spike responde (e o timebox) em spike.md → Pergunta / Timebox — /spec-spike ${slug}.`,
-        investigate: (n, text, slug) => `Investiga — tarefa #${n}: ${text}. O código de protótipo fica fora de .specs/ (liga-o em spike.md → Evidência); marca-a: dev-spec done ${slug} ${n}.`,
+        investigate: (n, text, slug) => `Investiga — tarefa #${n}: ${text}. O código de protótipo fica fora de .specs/ (liga-o em spike.md → Evidência); marca-a: ${DEV_SPEC} done ${slug} ${n}.`,
         decide: (slug) => `Regista a decisão em spike.md → Decisão — go / no-go / pivot, a justificação e a linha _Outcome:_ — e regista-a no log: /spec-decide ${slug} (spec_decide).`,
         outcome: (slug) => `Indica o resultado em spike.md → Decisão: uma linha _Outcome: go_, _Outcome: no-go_ ou _Outcome: pivot_ (/spec-spike ${slug}).`,
         timeboxPassed: (d) => `O timebox terminou a ${d}: decide com a evidência que tens.`,
-        goCreateFirst: (slug, name, summary) => `Decisão: go. Especifica a feature real — spec_create {name: "${name}", summary: ${JSON.stringify(summary)}} (dev-spec create "${name}" --summary ${JSON.stringify(summary)}) — e depois arquiva o spike: /feature archive ${slug}.`,
-        goArchiveFirst: (slug, name, summary) => `Decisão: go. Arquiva primeiro o spike — /feature archive ${slug} (liberta o nome) — e depois especifica a feature real: spec_create {name: "${name}", summary: ${JSON.stringify(summary)}} (dev-spec create "${name}" --summary ${JSON.stringify(summary)}).`,
+        goCreateFirst: (slug, name, summary) => `Decisão: go. Especifica a feature real — spec_create {name: "${name}", summary: ${JSON.stringify(summary)}} (${DEV_SPEC} create "${name}" --summary ${JSON.stringify(summary)}) — e depois arquiva o spike: /feature archive ${slug}.`,
+        goArchiveFirst: (slug, name, summary) => `Decisão: go. Arquiva primeiro o spike — /feature archive ${slug} (liberta o nome) — e depois especifica a feature real: spec_create {name: "${name}", summary: ${JSON.stringify(summary)}} (${DEV_SPEC} create "${name}" --summary ${JSON.stringify(summary)}).`,
         noGo: (slug, reason) => `Decisão: no-go${reason ? ` — ${reason}` : ""}. Arquiva o spike com o seu motivo (fica em spike.md → Decisão): /feature archive ${slug}.`,
-        pivot: (slug, reason) => `Decisão: pivot${reason ? ` — ${reason}` : ""}. Começa um novo spike para a nova direção (dev-spec spike "<nova pergunta>") — ou especifica a feature se a resposta já for clara — e depois arquiva este: /feature archive ${slug}.`,
+        pivot: (slug, reason) => `Decisão: pivot${reason ? ` — ${reason}` : ""}. Começa um novo spike para a nova direção (${DEV_SPEC} spike "<nova pergunta>") — ou especifica a feature se a resposta já for clara — e depois arquiva este: /feature archive ${slug}.`,
       },
       finish: {
         ready: (slug) => `o spike '${slug}' está pronto para fechar — a decisão está registada. Age sobre ela (o spec_next_action diz como).`,
@@ -2660,10 +2666,10 @@ _Outcome: [go | no-go | pivot]_
     },
 
     flow: {
-      required: (slug, known) => `fluxo em falta — um de: ${known} (spec_feature {action: "flow", name: "${slug}", flow}; CLI: dev-spec feature flow ${slug} <flow>).`,
+      required: (slug, known) => `fluxo em falta — um de: ${known} (spec_feature {action: "flow", name: "${slug}", flow}; CLI: ${DEV_SPEC} feature flow ${slug} <flow>).`,
       kindRefused: (slug, kind) => `'${slug}' é um ${kind}, que segue a sua própria ordem de fases fixa — o fluxo só se aplica a features.`,
       kindIgnored: (kind) => `fluxo ignorado: um ${kind} segue a sua própria ordem de fases fixa (o fluxo só se aplica a features).`,
-      kept: (slug, cur, asked) => `fluxo mantido: '${slug}' segue ${cur} (pedido: ${asked}) — muda-o com spec_feature {action: "flow"} (CLI: dev-spec feature flow ${slug} ${asked}).`,
+      kept: (slug, cur, asked) => `fluxo mantido: '${slug}' segue ${cur} (pedido: ${asked}) — muda-o com spec_feature {action: "flow"} (CLI: ${DEV_SPEC} feature flow ${slug} ${asked}).`,
       set: (slug, flow, prev, order) => `'${slug}' segue agora o fluxo ${flow} (antes: ${prev}) — ordem das fases: ${order}.`,
       same: (slug, flow, order) => `'${slug}' já segue o fluxo ${flow} — ordem das fases: ${order}.`,
       approvedStay: (list) => `As fases já aprovadas continuam aprovadas: ${list}.`,
@@ -2736,8 +2742,8 @@ _Outcome: [go | no-go | pivot]_
 const quality = {
     steeringChange: { modified: "alterado", removed: "removido" },
     steeringItem: (phase, day, files) => `${phase} (aprovado em ${day}): ${files}`,
-    steeringDoctor: (items, slug) => `steering alterado depois da aprovação — ${items}: revê à luz do steering alterado e volta a aprovar (dev-spec impact ${slug} --phase steering; sem feature lista todas as afetadas).`,
-    naSteering: (phases, files, slug) => `Nota: o steering mudou depois da aprovação de ${phases} (${files}) — revê à luz dele e volta a aprovar se continuar válido (dev-spec impact ${slug} --phase steering).`,
+    steeringDoctor: (items, slug) => `steering alterado depois da aprovação — ${items}: revê à luz do steering alterado e volta a aprovar (${DEV_SPEC} impact ${slug} --phase steering; sem feature lista todas as afetadas).`,
+    naSteering: (phases, files, slug) => `Nota: o steering mudou depois da aprovação de ${phases} (${files}) — revê à luz dele e volta a aprovar se continuar válido (${DEV_SPEC} impact ${slug} --phase steering).`,
     impactNeedsName: (phases) => `nome em falta — só a fase 'steering' funciona para o projeto todo (sem feature). Fases: ${phases}.`,
     impactNoReopen: "o reopen não se aplica à fase 'steering' — nada é desmarcado: revê as features listadas e volta a aprovar os requisitos / o design.",
     impactHead: (n, feature) => (feature
