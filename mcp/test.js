@@ -15712,7 +15712,7 @@ function endRun() {
     const small = mk("p17h-small");
     reads(small).forEach((f) => safe(f)); // warm up
     const base = reads(small).map((f) => timed(f).ms).reduce((a, b) => a + b, 0);
-    const bound = 5 * Math.max(base, 100) + 3000;
+    const bound = 10 * Math.max(base, 100) + 6000; // linear stays far below; the quadratic scanners took minutes (Node 18 in Docker is ~2x slower)
 
     // L1 — the spec artifacts every tool reads: tasks.md (the task scanner), design.md / requirements.md headings, decisions.md,
     // a long fence / backtick run, a TODO sentinel after a long blank run, a table separator row with a long blank run.
@@ -15726,7 +15726,7 @@ function endRun() {
     const bigRuns = reads(big).map((f) => timed(f));
     const bigMs = bigRuns.reduce((a, x) => a + x.ms, 0);
     ok(bigRuns.every((x) => !x.r.threw) && bigMs < bound,
-      "1.17 linear headings: status / doctor / trace (+ matrix) / EARS / clarify / next action / brief / export / catalog on a feature whose headings, task lines, markers, fences and table rows hold 100,000-character runs (and line terminators after them) run within 5 × the small feature's time + 3 s — the task scanner's heading pattern alone took minutes (got " + js({ base, big: bigMs, each: bigRuns.map((x) => x.ms), threw: bigRuns.filter((x) => x.r.threw).map((x) => x.r.error) }) + ")");
+      "1.17 linear headings: status / doctor / trace (+ matrix) / EARS / clarify / next action / brief / export / catalog on a feature whose headings, task lines, markers, fences and table rows hold 100,000-character runs (and line terminators after them) run within 10 × the small feature's time + 6 s — the task scanner's heading pattern alone took minutes (got " + js({ base, big: bigMs, each: bigRuns.map((x) => x.ms), threw: bigRuns.filter((x) => x.r.threw).map((x) => x.r.error) }) + ")");
     const tb = S.taskBlocks("## Phase" + sp(N) + "one  \n\n- [ ] 1. a\n- [ ] 2. b" + LS + "c\n");
     const dl = S.decisionLog("## D-1 — Title" + sp(N) + "##\n- _Kind:" + sp(N) + "discovery_\n");
     ok(tb.length === 1 && tb[0].phase === "Phase" + sp(N) + "one" && S.markdownToHtml("## Title" + sp(N) + "##\n") === "<h2>Title</h2>" &&
