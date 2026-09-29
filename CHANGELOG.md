@@ -3,6 +3,42 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.18.0] — 2026-09-29
+
+A pure refactor: the engine as modules. No behaviour change — same tools, commands, results and files.
+
+### Changed
+- `mcp/lib/spec.js` (23,469 lines) is now a facade over `mcp/lib/engine/`: 20 modules by concept (text and paths, files and
+  locks, state, markdown, tracks and the classifier, templates, scaffolding, tasks, evidence, trace, gates and approvals,
+  doctor and next_action, quality, finish and the catalog, the roadmap, decisions, exports, guards, upgrade, the codebase
+  scan) plus one importer per source tool in `engine/import/`. The public object is unchanged (same keys, order, types and
+  arities; every operation in one read-cache scope; mutators under the feature lock), and the moved code is byte-identical.
+- The module rule: a value needed while a module loads comes through an acyclic `require` (marked `// load time`); every
+  other cross-module name is bound at call time by `__link` (`engine/index.js` merges the modules' exports — a name
+  defined twice throws); per-call state lives on one object, `CTX` (`engine/ctx.js`), mutated in place.
+- `mcp/lib/i18n.js` is a facade over `i18n/en.js`, `pt.js`, `es.js`, `common.js` and `pt-br.js`; each language loads on
+  first use (pt-BR is still derived lazily). Load time, measured (Windows, Node 24, p50 of 40 interleaved fresh
+  processes, 1.17 → 1.18): 36 files instead of 3 cost ~0.65 ms each before any compile, so the facade turns on Node's
+  module compile cache (Node ≥ 22.8 — one file per module in `<os.tmpdir()>/node-compile-cache` or `NODE_COMPILE_CACHE`,
+  off with `NODE_DISABLE_COMPILE_CACHE=1`; the first process after an update writes it, 45–60 ms once) and `pt-br.js`
+  loads only when pt-BR is read — the guard hook 220 → 238 ms (+8%), `dev-spec status` 211 → 224 (+6%), SessionStart
+  345 → 364 (+5%), the observe hook 167 → 156, the stop hook on a "done" claim 252 → 231 (its claim scan no longer derives
+  pt-BR's messages); without those two the split cost 10–18% (guard 260, status 243, stop 284).
+- On a SLOW file system the extra files cost more: a clone on a Docker Desktop bind mount, a network drive or WSL's
+  `/mnt/c` loads the engine in ~0.4–1.7 s instead of ~0.2 s. Keep the plugin on a local disk (Claude Code installs
+  plugins there). `npm run test:docker` now copies the repo into each container before running the suites (a local
+  disk, as installed); `--mounted` runs from the bind mount.
+- Proof: a differential harness ran the 1.17.0 engine and the new one side by side — 897,053 comparisons (pure functions
+  over 13,996 corpus strings, every i18n table leaf in four locales, lockstep project scenarios in EN / PT / ES / pt-BR,
+  every importer, 57 CLI commands, an MCP session, the hooks with 72 malformed payloads) — 0 differences.
+
+### Tests
+- `node mcp/test.js` 1447 assertions (was 1442), `node cli/test-cli.js` 455 (unchanged): the source guards scan every
+  `mcp/lib` file, and a new guard checks the module list and that `mcp/lib` requires only Node core or relative files;
+  the module rule itself is checked from the sources (each module's `let` list = its `__link` destructure, every name
+  exported by a module, none shadowing the `__link` parameter; the load-time requires acyclic and marked), and the load
+  time (the compile cache on, no pt-BR in an English process, the stop gate's claim scan deriving nothing).
+
 ## [1.17.0] — 2026-09-29
 
 Engineering judgement in the spec: a seventh track for distributed systems and data consistency (the dual-write problem,

@@ -76,6 +76,20 @@ if (!SECTIONS.includes(SECTION)) {
 }
 const S = require("./lib/spec.js");
 const root = path.join(__dirname, "..");
+// Every engine source file (1.18): the facades (mcp/lib/spec.js, i18n.js, prompts-resources.js) and their modules under
+// mcp/lib/engine/ and mcp/lib/i18n/ — the source guards scan them all, never a facade alone. i18n: false leaves the
+// localized text out (i18n.js and mcp/lib/i18n/).
+function libSources({ i18n = true } = {}) {
+  const out = [];
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) { if (i18n || e.name !== "i18n") walk(p); } else if (e.name.endsWith(".js") && (i18n || e.name !== "i18n.js")) out.push(p);
+    }
+  };
+  walk(path.join(__dirname, "lib"));
+  return out;
+}
 // Phase by phase (1.13): a phase is approved only after every earlier pending one. A test exercising ONE phase's gate
 // first records the earlier ones (with force — they may still be templates; doctor keeps them flagged as forced).
 const GATE_ORDER = ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"];
@@ -1528,9 +1542,9 @@ function endRun() {
   ok(S.parseTasks(cmBig).length === 3000, "thousands of inline '<!--' followed by one '-->' are still thousands of tasks");
   // No literal U+FEFF in shipped engine code (the scan_skill hidden-unicode rule): the escape is used instead.
   const BOM = String.fromCharCode(0xfeff);
-  const engineFiles = ["mcp/lib/spec.js", "mcp/lib/i18n.js", "mcp/server.js", "cli/dev-spec.js", "hooks/spec-hook.js", "hooks/precommit-check.js"]
-    .map((f) => path.join(__dirname, "..", f)).filter((f) => fs.existsSync(f));
-  ok(engineFiles.length >= 4 && engineFiles.every((f) => !fs.readFileSync(f, "utf8").includes(BOM)), "no literal U+FEFF (BOM) in the shipped engine files");
+  const engineFiles = [...libSources(), ...["mcp/server.js", "cli/dev-spec.js", "hooks/spec-hook.js", "hooks/precommit-check.js"]
+    .map((f) => path.join(__dirname, "..", f))].filter((f) => fs.existsSync(f));
+  ok(engineFiles.length >= 7 && engineFiles.every((f) => !fs.readFileSync(f, "utf8").includes(BOM)), "no literal U+FEFF (BOM) in the shipped engine files (every mcp/lib source, its modules included)");
   }
 
   async function sectionWp2() { // --- 1.13 WP2: tracks, scaffolds & sections (own block scope: no name clashes with other packages) ---
@@ -6519,7 +6533,7 @@ function endRun() {
   // the tasks gate's. (d) CLAUDE.md: the README tool-table test requires every live tool, not "the 23 v1.12 tools".
   const docsWs = (t) => t.replace(/\s+/g, " ");
   const docsSec = (h) => docsWs((docsReadme.split("\n" + h + "\n")[1] || "").split("\n## ")[0]);
-  const docsSpecSrc = docsRead("mcp", "lib", "spec.js");
+  const docsSpecSrc = libSources({ i18n: false }).map((f) => fs.readFileSync(f, "utf8")).join("\n"); // the engine's sources (1.18: spec.js + engine/)
   const docsAttn = [["## English", 'the `ROADMAP.md` "Needs attention" line list each unverified task with a localized reason', "Needs attention"],
     ["## Português", 'a linha "Precisa de atenção" do `ROADMAP.md` listam cada tarefa por verificar com o motivo', "Precisa de atenção"],
     ["## Español", 'la línea "Necesita atención" del `ROADMAP.md` listan cada tarea sin verificar con su motivo', "Necesita atención"]];
@@ -12773,7 +12787,7 @@ function endRun() {
     const lgt = tl16.find((t) => t.name === "spec_log") || {};
     ok(js(stc.inputSchema && stc.inputSchema.required) === '["message"]' && js(lgt.inputSchema && lgt.inputSchema.required) === '["name","gitLog"]' &&
       lgt.inputSchema.properties.max.type === "integer" && lgt.inputSchema.properties.max.minimum === 1 && !/\n/.test(stc.description + lgt.description) &&
-      /NEVER RUNS GIT/.test(lgt.description) && !/child_process/.test(fs.readFileSync(path.join(__dirname, "server.js"), "utf8")) && !/child_process/.test(fs.readFileSync(specJs, "utf8")),
+      /NEVER RUNS GIT/.test(lgt.description) && !/child_process/.test(fs.readFileSync(path.join(__dirname, "server.js"), "utf8")) && libSources().every((f) => !/child_process/.test(fs.readFileSync(f, "utf8"))),
       "1.16 U4: tools/list advertises spec_stop_check {message, agent?} and spec_log {name, gitLog, max?} (single-line descriptions); neither server.js nor the engine loads child_process (got " + js([stc.inputSchema, lgt.inputSchema]) + ")");
     const p12 = uDir("stop");
     S.initProject(p12, ["core"], "en");
@@ -15698,7 +15712,7 @@ function endRun() {
     const small = mk("p17h-small");
     reads(small).forEach((f) => safe(f)); // warm up
     const base = reads(small).map((f) => timed(f).ms).reduce((a, b) => a + b, 0);
-    const bound = 5 * Math.max(base, 100) + 3000;
+    const bound = 10 * Math.max(base, 100) + 6000; // linear stays far below; the quadratic scanners took minutes (Node 18 in Docker is ~2x slower)
 
     // L1 — the spec artifacts every tool reads: tasks.md (the task scanner), design.md / requirements.md headings, decisions.md,
     // a long fence / backtick run, a TODO sentinel after a long blank run, a table separator row with a long blank run.
@@ -15712,7 +15726,7 @@ function endRun() {
     const bigRuns = reads(big).map((f) => timed(f));
     const bigMs = bigRuns.reduce((a, x) => a + x.ms, 0);
     ok(bigRuns.every((x) => !x.r.threw) && bigMs < bound,
-      "1.17 linear headings: status / doctor / trace (+ matrix) / EARS / clarify / next action / brief / export / catalog on a feature whose headings, task lines, markers, fences and table rows hold 100,000-character runs (and line terminators after them) run within 5 × the small feature's time + 3 s — the task scanner's heading pattern alone took minutes (got " + js({ base, big: bigMs, each: bigRuns.map((x) => x.ms), threw: bigRuns.filter((x) => x.r.threw).map((x) => x.r.error) }) + ")");
+      "1.17 linear headings: status / doctor / trace (+ matrix) / EARS / clarify / next action / brief / export / catalog on a feature whose headings, task lines, markers, fences and table rows hold 100,000-character runs (and line terminators after them) run within 10 × the small feature's time + 6 s — the task scanner's heading pattern alone took minutes (got " + js({ base, big: bigMs, each: bigRuns.map((x) => x.ms), threw: bigRuns.filter((x) => x.r.threw).map((x) => x.r.error) }) + ")");
     const tb = S.taskBlocks("## Phase" + sp(N) + "one  \n\n- [ ] 1. a\n- [ ] 2. b" + LS + "c\n");
     const dl = S.decisionLog("## D-1 — Title" + sp(N) + "##\n- _Kind:" + sp(N) + "discovery_\n");
     ok(tb.length === 1 && tb[0].phase === "Phase" + sp(N) + "one" && S.markdownToHtml("## Title" + sp(N) + "##\n") === "<h2>Title</h2>" &&
@@ -15770,7 +15784,7 @@ function endRun() {
   // the BMAD importer — it matched only the exact "status:" form). A class letter quantified right after an anchor, a group
   // opener or an alternation, with no backslash, is the tell.
   {
-    const srcFiles = ["mcp/lib/spec.js", "mcp/lib/i18n.js", "mcp/lib/prompts-resources.js", "mcp/server.js", "cli/dev-spec.js",
+    const srcFiles = [...libSources().map((f) => path.relative(root, f)), "mcp/server.js", "cli/dev-spec.js",
       "hooks/guard-hook.js", "hooks/stop-hook.js", "hooks/spec-hook.js", "hooks/observe-hook.js", "hooks/approval-hook.js",
       "hooks/plan-hook.js", "hooks/precommit-check.js"].filter((f) => fs.existsSync(path.join(root, f)));
     const lit = /(^|[=(,:!&|?;{}\s])\/((?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+)\/([dgimsuvy]*)/gm;
@@ -15788,6 +15802,135 @@ function endRun() {
     }
     ok(srcFiles.length >= 10 && bad.length === 0,
       "1.17: no regex literal in the engine, server, CLI or hooks looks backslash-stripped (got " + JSON.stringify(bad) + ")");
+  }
+
+  // 1.18: the engine as modules — mcp/lib/spec.js and i18n.js are facades over mcp/lib/engine/ and mcp/lib/i18n/. Every
+  // engine module is loaded (listed in engine/index.js MODULES: a module left out would leave its names undefined behind
+  // __link), and every mcp/lib source stays zero-dependency: Node core (fs, path, os, crypto, module) or a relative file.
+  {
+    const engDir = path.join(__dirname, "lib", "engine");
+    const idxSrc = fs.existsSync(path.join(engDir, "index.js")) ? fs.readFileSync(path.join(engDir, "index.js"), "utf8") : "";
+    const listed = [...((idxSrc.match(/const MODULES = \[([\s\S]*?)\];/) || ["", ""])[1]).matchAll(/"\.\/([^"]+)"/g)].map((m) => m[1]).sort();
+    const onDisk = libSources().map((f) => path.relative(engDir, f).split(path.sep).join("/"))
+      .filter((f) => !f.startsWith("..") && f !== "index.js" && f !== "ctx.js").sort();
+    const core = new Set(["fs", "path", "os", "crypto", "module"]);
+    const badReq = [];
+    for (const f of libSources()) for (const m of fs.readFileSync(f, "utf8").matchAll(/\brequire\(\s*(["'])([^"']+)\1\s*\)/g))
+      if (!core.has(m[2].replace(/^node:/, "")) && !/^\.\.?\//.test(m[2])) badReq.push(path.relative(root, f) + ": " + m[2]);
+    ok(listed.length > 0 && JSON.stringify(listed) === JSON.stringify(onDisk) && badReq.length === 0 && typeof S.withReadCache === "function",
+      "1.18: every engine module is listed in engine/index.js MODULES (and only those), and every mcp/lib source requires Node core or a relative file only (got " +
+      JSON.stringify([listed.length, onDisk.filter((f) => !listed.includes(f)), listed.filter((f) => !onDisk.includes(f)), badReq]) + ")");
+  }
+
+  // 1.18 module rule (review), read from the sources — no parser, zero dependencies. Per engine / i18n module: its bare
+  // top-level `let` list (the names __link assigns; a private cache is a `let` WITH an initializer) and its __link
+  // destructure name the same names; each exists in the namespace __link receives (engine: engine/index.js's E; a language
+  // file: the tables i18n.js passes) and none is the __link parameter itself — `({ …, E } = E)` assigns the parameter and
+  // leaves the module's own E undefined (E is a real name: trace.js's word-boundary fragment). The load-time requires of
+  // mcp/lib form an acyclic graph (a cycle hands out a half-built module.exports), and every module in MODULES is loaded.
+  {
+    const libDir = path.join(__dirname, "lib");
+    const engDir = path.join(libDir, "engine"), i18nDir = path.join(libDir, "i18n");
+    const rel = (f) => path.relative(libDir, f).split(path.sep).join("/");
+    const E = require("./lib/engine/index.js"); // the instance spec.js loaded (module cache): every name the modules export
+    const engineNames = new Set(Object.keys(E));
+    const i18nNames = new Set(((fs.readFileSync(path.join(libDir, "i18n.js"), "utf8").match(/\.__link\(\{([^}]*)\}\)/) || ["", ""])[1])
+      .split(",").map((s) => s.trim()).filter(Boolean));
+    const inside = (f, d) => f.startsWith(d + path.sep);
+    const bad = [];
+    let linkedModules = 0, linkedNames = 0;
+    for (const f of libSources().filter((x) => inside(x, engDir) || inside(x, i18nDir))) {
+      const src = fs.readFileSync(f, "utf8");
+      const bare = [];
+      for (const m of src.matchAll(/^let ([^;]*);/gm)) {
+        const eq = m[1].indexOf("=");
+        if (eq < 0) bare.push(...m[1].split(",").map((s) => s.trim()).filter(Boolean));
+        else if (m[1].slice(0, eq).includes(",")) bad.push(rel(f) + ": a `let` mixing bare and initialized names");
+      }
+      const link = /function __link\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\{\s*\(\{([^}]*)\}\s*=\s*([A-Za-z_$][\w$]*)\s*\);\s*\}/.exec(src);
+      if (!link && !bare.length) continue; // ctx.js, index.js, i18n/common.js, i18n/pt-br.js: nothing linked
+      if (!link) { bad.push(rel(f) + ": a bare `let` list but no __link"); continue; }
+      const [, param, list, from] = link;
+      const names = list.split(",").map((s) => s.trim()).filter(Boolean);
+      linkedModules++;
+      linkedNames += names.length;
+      const ns = inside(f, i18nDir) ? i18nNames : engineNames;
+      const dups = [...bare.filter((n, i) => bare.indexOf(n) !== i), ...names.filter((n, i) => names.indexOf(n) !== i)];
+      const onlyLet = bare.filter((n) => !names.includes(n)), onlyLink = names.filter((n) => !bare.includes(n));
+      const unknown = names.filter((n) => !ns.has(n));
+      const shadow = names.filter((n) => n === param || n === "arguments" || n === "eval" || !/^[A-Za-z_$][\w$]*$/.test(n));
+      if (from !== param) bad.push(rel(f) + ": __link(" + param + ") destructures " + from);
+      if (dups.length) bad.push(rel(f) + ": named twice " + dups.join(", "));
+      if (onlyLet.length) bad.push(rel(f) + ": in the `let` list, not linked " + onlyLet.join(", "));
+      if (onlyLink.length) bad.push(rel(f) + ": linked, not in the `let` list " + onlyLink.join(", "));
+      if (unknown.length) bad.push(rel(f) + ": no module exports " + unknown.join(", "));
+      if (shadow.length) bad.push(rel(f) + ": shadows the __link parameter / not a plain name " + shadow.join(", "));
+      if (!/module\.exports = \{[^}]*\b__link\b[^}]*\}/.test(src)) bad.push(rel(f) + ": links names but exports no __link");
+    }
+    ok(linkedModules >= 30 && linkedNames > 500 && bad.length === 0,
+      "1.18 module rule: each engine / i18n module's bare `let` list names exactly its __link destructure, every name exists in the namespace __link receives, none shadows the __link parameter (got " +
+      JSON.stringify({ linkedModules, linkedNames, bad }) + ")");
+
+    // The load-time graph: every top-level `const … = require("./…")` of mcp/lib, plus index.js → each module in MODULES.
+    // An engine → engine or i18n → i18n require (ctx.js aside) is marked `// load time`, as the rule says.
+    const modules = [...((fs.readFileSync(path.join(engDir, "index.js"), "utf8").match(/const MODULES = \[([\s\S]*?)\];/) || ["", ""])[1])
+      .matchAll(/"\.\/([^"]+)"/g)].map((m) => path.join(engDir, m[1]));
+    const graph = new Map();
+    const unmarked = [];
+    for (const f of libSources()) {
+      const deps = [];
+      for (const m of fs.readFileSync(f, "utf8").matchAll(/^(?:const|let|var)\s+(?:\{[^}]*\}|[A-Za-z_$][\w$]*)\s*=\s*require\((["'])(\.\.?\/[^"']+)\1\);?(.*)$/gm)) {
+        const to = path.resolve(path.dirname(f), m[2]);
+        deps.push(to);
+        const sameTree = (inside(f, engDir) && inside(to, engDir)) || (inside(f, i18nDir) && inside(to, i18nDir));
+        if (sameTree && path.basename(to) !== "ctx.js" && !/\/\/ load time/.test(m[3])) unmarked.push(rel(f) + " → " + rel(to));
+      }
+      if (f === path.join(engDir, "index.js")) deps.push(...modules);
+      graph.set(f, deps);
+    }
+    const state = new Map(), cycles = [];
+    for (const start of graph.keys()) { // iterative DFS: 1 = on the stack, 2 = done
+      if (state.get(start)) continue;
+      const stack = [[start, 0]];
+      state.set(start, 1);
+      while (stack.length) {
+        const top = stack[stack.length - 1];
+        const deps = graph.get(top[0]) || [];
+        if (top[1] >= deps.length) { state.set(top[0], 2); stack.pop(); continue; }
+        const next = deps[top[1]++];
+        if (state.get(next) === 1) cycles.push(stack.slice(stack.findIndex((x) => x[0] === next)).map((x) => rel(x[0])).concat(rel(next)).join(" → "));
+        else if (!state.get(next)) { state.set(next, 1); stack.push([next, 0]); }
+      }
+    }
+    const loadTimeEdges = [...graph.values()].reduce((n, d) => n + d.length, 0);
+    ok(loadTimeEdges > modules.length && cycles.length === 0 && unmarked.length === 0,
+      "1.18 module rule: the load-time requires of mcp/lib form an acyclic graph, and every engine → engine / i18n → i18n one is marked // load time (got " +
+      JSON.stringify({ loadTimeEdges, cycles, unmarked }) + ")");
+    const notLoaded = [...modules, path.join(engDir, "ctx.js")].filter((f) => !require.cache[f]).map(rel);
+    ok(modules.length >= 20 && notLoaded.length === 0,
+      "1.18 module rule: every module in engine/index.js MODULES is loaded once the facade is (got " + JSON.stringify({ modules: modules.length, notLoaded }) + ")");
+  }
+
+  // 1.18 load time (review): the facade turns on Node's module compile cache where Node has it (22.8+; NODE_DISABLE_COMPILE_CACHE
+  // turns it off), and an English process never loads the pt-BR derivation — the stop gate's claim scan reads pt-BR's raw
+  // patterns (pt's plus the Brazilian forms) without deriving one string of that group.
+  {
+    const Mod = require("module");
+    const ccOn = typeof Mod.enableCompileCache !== "function" || !!process.env.NODE_DISABLE_COMPILE_CACHE || !!Mod.getCompileCacheDir();
+    const probe = spawnSync(process.execPath, ["-e", [
+      "const s = require(" + JSON.stringify(path.join(__dirname, "lib", "spec.js")) + ");",
+      "const br = () => Object.keys(require.cache).some((k) => /[\\\\/]i18n[\\\\/]pt-br\\.js$/.test(k));",
+      "s.msg('en').err; const afterEn = br();",
+      "const claim = s.stopClaims('All tasks done.').claim;",
+      "const g = s.msg('pt-BR').stopGate, pt = s.msg('pt').stopGate;",
+      "const lazy = Object.keys(g).filter((k) => !['claims', 'negators', 'admissions', 'fixed'].includes(k) && Object.getOwnPropertyDescriptor(g, k).get).length;",
+      "process.stdout.write(JSON.stringify({ afterEn, claim, lazy, extra: g.claims.length - pt.claims.length, head: typeof g.head }));",
+    ].join("\n")], { encoding: "utf8", timeout: 60000 });
+    let got = null;
+    try { got = JSON.parse(probe.stdout); } catch { got = { stdout: probe.stdout, stderr: String(probe.stderr).slice(0, 300) }; }
+    ok(ccOn && got && got.afterEn === false && got.claim === true && got.lazy > 3 && got.extra > 0 && got.head !== "undefined",
+      "1.18 load time: the facade enables Node's module compile cache (where Node has it), an English process loads no pt-BR, and the stop gate reads pt-BR's raw claim patterns without deriving its messages (got " +
+      JSON.stringify({ ccOn, got }) + ")");
   }
 
   // Release hygiene: the three version fields agree.

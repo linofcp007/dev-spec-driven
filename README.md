@@ -214,6 +214,11 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
 
+### New in 1.18
+
+- **The engine as modules** — `mcp/lib/spec.js` is a facade over `mcp/lib/engine/` (20 modules by concept plus one
+  importer per source tool), `i18n.js` over one file per language; a pure refactor, proven behaviour-identical.
+
 ### New in 1.17
 
 - **+dist — distributed systems & data consistency** — a seventh track that switches on for queues, events published to
@@ -620,6 +625,12 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabalho, aprovações forçadas, pedidos de
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
+
+### Novidades da 1.18
+
+- **O motor em módulos** — `mcp/lib/spec.js` passa a fachada sobre `mcp/lib/engine/` (20 módulos por conceito e um
+  importador por ferramenta de origem), o `i18n.js` sobre um ficheiro por língua; um refactor puro, com comportamento
+  comprovadamente idêntico.
 
 ### Novidades da 1.17
 
@@ -1045,6 +1056,12 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
 
+### Novedades de la 1.18
+
+- **El motor en módulos** — `mcp/lib/spec.js` pasa a ser una fachada sobre `mcp/lib/engine/` (20 módulos por concepto y un
+  importador por herramienta de origen), `i18n.js` sobre un archivo por idioma; un refactor puro, con comportamiento
+  demostradamente idéntico.
+
 ### Novedades de la 1.17
 
 - **+dist — sistemas distribuidos y consistencia de datos** — un séptimo track que se activa con colas, eventos publicados
@@ -1289,8 +1306,10 @@ dev-spec-driven/                      ← plugin root
 ├── mcp/
 │   ├── server.js                     ← local stdio MCP server (38 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
-│   ├── lib/spec.js                   ← the spec engine (classify, scaffold, lint, trace, doctor, gates, impact, roadmap, scan, import)
-│   ├── lib/i18n.js                   ← localized content (artifact + steering builders, messages)
+│   ├── lib/spec.js                   ← the spec engine's facade (the one object the server, CLI and hooks require)
+│   ├── lib/engine/                   ← the engine, one module per concern (classify, scaffold, lint, trace, doctor, gates, impact, roadmap, scan, import/)
+│   ├── lib/i18n.js                   ← localized content's facade (artifact + steering builders, messages)
+│   ├── lib/i18n/                     ← each language's text (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)
 │   └── test.js                       ← smoke test (node mcp/test.js — must end `0 failed`)

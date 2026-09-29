@@ -28,7 +28,7 @@ const fs = require("fs");
 const path = require("path");
 
 const MAX_INPUT = 4 * 1024 * 1024; // a larger payload is ignored (Claude Code truncates Bash output long before this)
-const MAX_COMMAND = 4000; // no _Verify:_ / project-check command is longer (spec.js OBSERVED_MAX_COMMAND)
+const MAX_COMMAND = 4000; // no _Verify:_ / project-check command is longer (the engine's OBSERVED_MAX_COMMAND, engine/evidence.js)
 const MAX_FEATURES = 200; // feature folders pre-filtered, at most
 const MAX_TASKS_BYTES = 2 * 1024 * 1024; // a tasks.md past this is skipped
 const BOM = String.fromCharCode(0xfeff);
@@ -42,7 +42,7 @@ function finish() {
   process.exit(0);
 }
 
-// The same key the engine compares (spec.js flatCommand): backticks dropped, whitespace runs flattened.
+// The same key the engine compares (flatCommand, engine/evidence.js): backticks dropped, whitespace runs flattened.
 const flat = (s) => String(s == null ? "" : s).replace(/`/g, "").replace(/\s+/g, " ").trim();
 
 // The hooks run in EVERY project: only a .specs/ that dev-spec owns (roadmap.json, steering/, a generated ROADMAP.md, or a

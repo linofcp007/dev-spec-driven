@@ -11,10 +11,11 @@ please respect them in every change:
 
 ## Architecture in one line
 
-`mcp/lib/spec.js` is the single engine. It's exposed three ways — the **MCP server** (`mcp/server.js`: tools, plus
-prompts and resources from `mcp/lib/prompts-resources.js`), the universal **`dev-spec` CLI** (`cli/dev-spec.js`), and
-the Claude Code **skill + commands + hooks**. When you add an operation, add it to `spec.js` first, then wire it into
-all three and add a test. A new command in `commands/` is automatically an MCP prompt too.
+`mcp/lib/spec.js` is the single engine's facade — the logic lives in `mcp/lib/engine/`, one module per concern. It's
+exposed three ways — the **MCP server** (`mcp/server.js`: tools, plus prompts and resources from
+`mcp/lib/prompts-resources.js`), the universal **`dev-spec` CLI** (`cli/dev-spec.js`), and the Claude Code **skill +
+commands + hooks**. When you add an operation, add it to the engine module of its concern and to the facade's object in
+`spec.js` first, then wire it into all three and add a test. A new command in `commands/` is automatically an MCP prompt too.
 
 Full maintainer notes (conventions, gotchas, the track model, multilingual rules) are in
 **[CLAUDE.md](./CLAUDE.md)** — read it before changing the engine.
