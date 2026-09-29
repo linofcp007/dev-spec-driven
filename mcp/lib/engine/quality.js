@@ -21,7 +21,7 @@ let acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceho
   savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter, stripEnd, stripEnds,
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
-  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isDirSafe, isImplementsGlob, isInsideDir, isTestCodePath, SCAN_IGNORE, toPosix;
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingIndex, headingLeadRe, inactiveMarkerLines, isGenericSlot, isObj, isRecord,
@@ -31,7 +31,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHea
   replaceHtmlCommentSpans, savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter,
   stripEnd, stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
-  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isDirSafe, isImplementsGlob, isInsideDir, isTestCodePath, SCAN_IGNORE, toPosix } = E); }
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.16 Q — spec quality: steering amendments (Q1) · cross-feature acceptance criteria (Q2) · the glossary (Q3)
@@ -755,9 +755,10 @@ const REUSE_SYN = ["reuse", "code reuse", "reuse of existing code", "reused comp
   "reutilização", "reutilizacao", "reaproveitamento", "reúso", "reuso", "componentes existentes", "código existente", "codigo existente",
   "módulos existentes", "modulos existentes", "serviços existentes", "servicos existentes", "pontos de integração", "pontos de integracao",
   "integração com o existente", "integracao com o existente", "integração com o código existente", "integracao com o codigo existente",
+  "integração com o sistema existente", "integracao com o sistema existente", // R review 6: the EN "… with the existing system"'s twins
   "reutilización", "reutilizacion", "aprovechamiento", "servicios existentes", "puntos de integración",
   "puntos de integracion", "integración con lo existente", "integracion con lo existente", "integración con el código existente",
-  "integracion con el codigo existente"];
+  "integracion con el codigo existente", "integración con el sistema existente", "integracion con el sistema existente"];
 // [id, synonyms, the fewest entries that count as weighed, the approval stamp the check needs]: a decision needs at least two
 // options; one honest line about the risks (a table row, a bullet, or "no material risk, because X") is enough, and so is one
 // about reuse ("Greenfield: nothing to reuse yet"). The stamp (R1): a design approval made before a check existed never has it,
@@ -783,14 +784,23 @@ function weighHeadingMatches(line, syns) {
 // A weigh section's body (up to the next heading of its level or above) or null. An unmarked heading wins over one carrying a
 // track marker ("## [DIST] Risks" is a track's section, the core one is the design's own); fenced code never holds a heading.
 function weighSection(md, syns) {
+  const h = weighSectionHead(md, syns);
+  return h ? h.body : null;
+}
+// The section weighSection reads → { level, title (atxHeading's trimmed text — designSections' title for a `##` one), body }
+// or null. (R review 2: the brief leaves THIS section — never another one a synonym names — out of "Design context", and only
+// when its Reuse part quotes all of it.)
+function weighSectionHead(md, syns) {
   const lines = String(md || "").split(/\r?\n/);
-  const heads = headingIndex(lines).filter((i) => weighHeadingMatches(lines[i], syns));
+  const index = headingIndex(lines);
+  const heads = index.filter((i) => weighHeadingMatches(lines[i], syns));
   if (!heads.length) return null;
   const MARKERS = markerTracks().map((t) => trackMarker(t));
   const start = heads.find((i) => !MARKERS.some((mk) => lines[i].includes(mk))) ?? heads[0];
   const level = (i) => (lines[i].match(/^(#{1,6})\s/) || ["", "######"])[1].length;
-  const end = headingIndex(lines).find((i) => i > start && level(i) <= level(start));
-  return lines.slice(start + 1, end == null ? lines.length : end).join("\n");
+  const end = index.find((i) => i > start && level(i) <= level(start));
+  const h = atxHeading(lines[start]);
+  return { level: level(start), title: h ? h.text : "", body: lines.slice(start + 1, end == null ? lines.length : end).join("\n") };
 }
 // A unit's text is a generic slot word (TODO, TBD, TBC, FIXME, "…", "a definir" — isGenericSlot), trailing punctuation aside.
 const genericUnit = (s) => isGenericSlot(stripEnd(String(s).replace(/[*_`]+/g, "").trim(), unitIn(".:;!?"))); // /[.:;!?]+$/
@@ -879,12 +889,17 @@ const designApprovedBeforeWeigh = (approvals, stamp = "weigh") => isRecord(appro
 // 1.19 R2 — the task brief's "Reuse" section: search before you write, starting where the plan points. Two bounded parts:
 // the design's Reuse & Integration entries that name this task's files (the file, a sibling in its folder, a folder above it),
 // its folders or its acceptance criteria; and the existing source files in the folders of its _Implements:_ targets (names
-// only) — where a duplicate would most likely hide. Read-only: one readdir per folder, never a walk, never a file's content.
+// only) — where a duplicate would most likely hide. Read-only: one bounded directory read per folder, never a walk, never a
+// file's content. The paths come from spec text, so only a reference INSIDE the project reaches the file system, decided on its
+// text first (R review 1): a network path (isNetworkPath — `//host/share/x.ts`: a stat opens an SMB connection to the host the
+// spec names, hanging on an unreachable one and, on Windows, sending the user's NTLM credentials), an absolute path elsewhere or
+// a `..` out of the project names nothing here. Inside, nothing is followed through a link (R review 3): each segment below the
+// project root is lstat'ed, and a symlink or a junction on the way (it may lead out of the project, or to a share) stops there.
 const BRIEF_REUSE_MAX_ENTRIES = 8; // design entries quoted…
 const BRIEF_REUSE_CHARS = 1500; // …and their size
 const BRIEF_REUSE_MAX_FILES = 15; // nearby source files listed
 const BRIEF_REUSE_MAX_DIRS = 5; // folders read (the task's targets' own)
-const BRIEF_REUSE_DIR_ENTRIES = 1000; // directory entries looked at per folder
+const BRIEF_REUSE_DIR_ENTRIES = 1000; // directory entries read per folder (a bigger folder: `more` is a lower bound — `truncated`)
 // A path-like token of an entry ("src/lib/money.ts", "src/features/checkout/") — every repetition starts with its '/', and a
 // match starts only at a token boundary (the look-behind): a long run with no '/' is tried once, never from each character.
 const RE_REUSE_PATH = /(?<![\p{L}\p{N}_.@~-])[\p{L}\p{N}_.@~-]+(?:\/[\p{L}\p{N}_.@~-]+)+\/?/gu;
@@ -908,22 +923,54 @@ function reuseUnits(body) {
   }
   return units.filter((u) => /[\p{L}\p{N}]/u.test(u) && !genericUnit(u) && !placeholderReport(u).length);
 }
+// An _Implements:_ reference's project-relative spelling (forward slashes) when it lies inside the project — decided on the
+// TEXT, never an fs call — else null: a network path, an absolute path elsewhere, a `..` out of the project, the root itself.
+function reuseInsideRel(root, rel) {
+  if (isNetworkPath(rel)) return null;
+  const abs = path.resolve(root, rel);
+  return abs !== root && isInsideDir(root, abs) ? toPosix(path.relative(root, abs)) : null;
+}
+// What a project-relative path is on disk, reached WITHOUT following a link: "dir" · "file" · "other" · "missing" · "link" (a
+// symlink or a junction — lstat reports both — on the way or at the end: never followed). Iterative, one lstat per segment and
+// call (`memo`, shared by the brief's references); it stops at the first segment that is no folder.
+function reuseProbe(root, rel, memo) {
+  const segs = rel.split("/");
+  let cur = "";
+  for (let i = 0; i < segs.length; i++) {
+    cur = i ? cur + "/" + segs[i] : segs[i];
+    let kind = memo.get(cur);
+    if (kind === undefined) {
+      try {
+        const st = fs.lstatSync(path.join(root, cur));
+        kind = st.isSymbolicLink() ? "link" : st.isDirectory() ? "dir" : st.isFile() ? "file" : "other";
+      } catch { kind = "missing"; }
+      memo.set(cur, kind);
+    }
+    if (i === segs.length - 1) return kind;
+    if (kind !== "dir") return kind === "link" ? "link" : "missing"; // a file, or nothing, where a folder should be
+  }
+  return "missing";
+}
 // The task's targets as the design would name them: file keys, their folders (a folder target is its own), the literal folder
-// of a glob; basenames of 5+ characters for an entry that names a file without its path.
+// of a glob; basenames of 5+ characters for an entry that names a file without its path. Only references inside the project
+// (reuseInsideRel), keyed by their project-relative spelling — an absolute path into the project matches the design's relative one.
 function reuseTargets(projectDir, implementsList) {
-  const keys = new Set(), dirs = new Set(), bases = new Set(), rels = [];
+  const root = path.resolve(projectDir);
+  const keys = new Set(), dirs = new Set(), bases = new Set(), rels = [], memo = new Map();
   for (const ref of implementsList || []) {
     let rel = implementsRel(ref);
     if (!rel) continue;
-    if (isImplementsGlob(rel)) { // src/**/*.ts → its literal folder, src
+    const glob = isImplementsGlob(rel);
+    if (glob) { // src/**/*.ts → its literal folder, src
       const segs = rel.split("/");
       rel = segs.slice(0, segs.findIndex((seg) => isImplementsGlob(seg))).join("/");
-      if (rel) { dirs.add(implementsKey(rel)); rels.push({ rel, folder: true }); }
-      continue;
+      if (!rel) continue;
     }
-    const key = implementsKey(rel);
-    const folder = /\/\s*`?\s*$/.test(String(ref).replace(/\\/g, "/")) || isDirSafe(path.resolve(projectDir, rel));
-    keys.add(key);
+    rel = reuseInsideRel(root, rel);
+    if (rel == null) continue; // outside the project, or a network path: no fs call, no target
+    const key = FOLD_CASE ? rel.toLowerCase() : rel;
+    const folder = glob || /\/\s*`?\s*$/.test(String(ref).replace(/\\/g, "/")) || reuseProbe(root, rel, memo) === "dir";
+    if (!glob) keys.add(key);
     if (folder) dirs.add(key);
     else {
       const d = path.posix.dirname(key);
@@ -933,7 +980,7 @@ function reuseTargets(projectDir, implementsList) {
     }
     rels.push({ rel, folder });
   }
-  return { keys, dirs, bases, rels };
+  return { root, keys, dirs, bases, rels, memo };
 }
 function reuseEntryMatches(unit, t, acRe) {
   if (acRe && acRe.test(unit)) return true;
@@ -955,36 +1002,78 @@ function reuseEntryMatches(unit, t, acRe) {
   }
   return false;
 }
+// A folder's first `max` entries (Dirents, in the file system's order) and whether it holds more: opendir reads them in
+// batches, so a 100,000-entry folder costs what its first `max` do (readdirSync read them all, then sliced). null: unreadable.
+function readDirBounded(dir, max) {
+  let d;
+  try { d = fs.opendirSync(dir, { bufferSize: 128 }); } catch { return null; }
+  const entries = [];
+  let truncated = false;
+  try {
+    for (let e = d.readSync(); e !== null; e = d.readSync()) {
+      if (entries.length >= max) { truncated = true; break; }
+      entries.push(e);
+    }
+  } catch { /* the entries read so far stand */ }
+  try { d.closeSync(); } catch { /* already closed */ }
+  return { entries, truncated };
+}
 // The existing source files (GUARD_CODE_EXT) next to the task's targets — the target folder itself, else the target file's
-// folder — its own files left out; dot files and ignored folders (SCAN_IGNORE: node_modules, .specs…) never read; a folder the
-// plan creates doesn't exist yet and lists nothing. Non-test files first, then by path.
-function reuseNearbyFiles(projectDir, t) {
-  const root = path.resolve(projectDir);
+// folder (a top-level file's: the project root) — its own files left out; dot files and ignored folders (SCAN_IGNORE:
+// node_modules, .specs…) never read; a folder the plan creates doesn't exist yet and lists nothing; one reached through a link
+// is never read (reuseProbe). Non-test files first, then by path. `more` counts the files found beyond the cap; `truncated`: a
+// folder held more than BRIEF_REUSE_DIR_ENTRIES entries, so `more` is a lower bound (R review 4).
+function reuseNearbyFiles(t) {
   const folders = [];
   for (const { rel, folder } of t.rels) {
-    const abs = path.resolve(root, rel);
-    if ((abs === root && !folder) || !isInsideDir(root, abs)) continue;
-    const dir = folder ? abs : path.dirname(abs);
-    const relDir = toPosix(path.relative(root, dir));
+    if (folders.length >= BRIEF_REUSE_MAX_DIRS) break;
+    const up = path.posix.dirname(rel);
+    const relDir = folder ? rel : up === "." ? "" : up;
+    if (folders.includes(relDir)) continue;
     if (relDir && relDir.split("/").some((seg) => SCAN_IGNORE.has(seg) || seg.startsWith("."))) continue;
-    if (!folders.includes(dir) && folders.length < BRIEF_REUSE_MAX_DIRS && isDirSafe(dir)) folders.push(dir);
+    if (!relDir || reuseProbe(t.root, relDir, t.memo) === "dir") folders.push(relDir);
   }
-  const found = [];
-  for (const dir of folders) {
-    let ents = [];
-    try { ents = fs.readdirSync(dir, { withFileTypes: true }).slice(0, BRIEF_REUSE_DIR_ENTRIES); } catch { continue; }
-    for (const e of ents) {
+  const found = new Set();
+  let truncated = false;
+  for (const relDir of folders) {
+    const r = readDirBounded(relDir ? path.join(t.root, relDir) : t.root, BRIEF_REUSE_DIR_ENTRIES);
+    if (!r) continue;
+    if (r.truncated) truncated = true;
+    for (const e of r.entries) {
       if (!e.isFile() || e.name.startsWith(".") || !GUARD_CODE_EXT.has(path.extname(e.name).toLowerCase())) continue;
-      const rel = toPosix(path.relative(root, path.join(dir, e.name)));
-      if (t.keys.has(implementsKey(rel)) || found.includes(rel)) continue;
-      found.push(rel);
+      const rel = relDir ? relDir + "/" + e.name : e.name;
+      if (!t.keys.has(FOLD_CASE ? rel.toLowerCase() : rel)) found.add(rel);
     }
   }
-  found.sort((a, b) => (isTestCodePath(a) - isTestCodePath(b)) || (a < b ? -1 : a > b ? 1 : 0));
-  return { files: found.slice(0, BRIEF_REUSE_MAX_FILES), more: Math.max(0, found.length - BRIEF_REUSE_MAX_FILES) };
+  // The first BRIEF_REUSE_MAX_FILES in (non-test first, then path) order: walked in path order, a test file is asked for only
+  // until that many non-test files are found — never isTestCodePath over a whole 1,000-entry folder.
+  const all = [...found].sort();
+  const code = [], tests = [];
+  for (const f of all) {
+    if (code.length >= BRIEF_REUSE_MAX_FILES) break;
+    if (!isTestCodePath(f)) code.push(f);
+    else if (tests.length < BRIEF_REUSE_MAX_FILES) tests.push(f);
+  }
+  const files = code.concat(tests).slice(0, BRIEF_REUSE_MAX_FILES);
+  return { files, more: Math.max(0, all.length - BRIEF_REUSE_MAX_FILES), truncated };
+}
+// R review 2 — the design section the brief's Reuse part stands in for, left out of "Design context": weighSection's pick, a `##`
+// heading (designSections splits on those), and only when the Reuse part quotes ALL of it — every entry of the very body Design
+// context would show, in order, none omitted — and it holds no fenced code (an entry never carries one). null otherwise: the
+// section then goes through the needle selection like any other, so a 1.18 design's "## Integration Points" (a handler with its
+// contract bullets) is quoted whole as in 1.18, and another section a synonym names ("Existing code") is never touched.
+function reuseQuotedSection(sections, design, reuse) {
+  if (!reuse || !reuse.entries.length || reuse.omitted) return null;
+  const head = weighSectionHead(design || "", REUSE_SYN);
+  if (!head || head.level !== 2) return null;
+  const s = sections.find((x) => x.title === head.title);
+  if (!s || stripFencedCode(s.body) !== s.body) return null;
+  const units = reuseUnits(s.body);
+  return units.length === reuse.entries.length && units.every((u, i) => u === reuse.entries[i]) ? s : null;
 }
 // → { state (the design section's: missing · template · empty · filled — designWeighState), total (its real entries), entries
-// (the ones naming this task, bounded), omitted (matching ones left out for size), files, more (nearby files beyond the cap) }.
+// (the ones naming this task, bounded), omitted (matching ones left out for size), files, more (nearby files beyond the cap),
+// truncated (only when true: a folder was read up to its cap — `more` is "at least") }.
 function briefReuse(projectDir, design, implementsList, acIds) {
   const body = design == null ? null : weighSection(design, REUSE_SYN);
   const state = design == null ? "missing" : designWeighState(design, REUSE_SYN, 0).status;
@@ -997,8 +1086,8 @@ function briefReuse(projectDir, design, implementsList, acIds) {
     if (!reuseEntryMatches(u, t, acRe)) continue;
     if (entries.length < BRIEF_REUSE_MAX_ENTRIES && u.length <= budget) { entries.push(u); budget -= u.length; } else omitted++;
   }
-  const near = reuseNearbyFiles(projectDir, t);
-  return { state, total: units.length, entries, omitted, files: near.files, more: near.more };
+  const near = reuseNearbyFiles(t);
+  return { state, total: units.length, entries, omitted, files: near.files, more: near.more, ...(near.truncated ? { truncated: true } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1241,10 +1330,11 @@ module.exports = { XAC_DUPLICATE, XAC_CONFLICT, XAC_TRIGGER, XAC_RESPONSE, XAC_M
   RE_GLOSSARY_ITEM, escRe, foldTerm, glossaryEntries, glossaryEntry, RE_WORD_BEFORE, RE_WORD_AFTER, wordListRe,
   GLOSS_TEMPLATE_LINES, glossLineKey, glossPatternSegs, glossVisibleLines, glossAddLines, glossNewSet,
   glossBuiltinLines, glossProjectLines, glossSpans, glossUserParts, glossaryHits, briefGlossary, TRADEOFFS_SYN,
-  RISKS_SYN, DESIGN_WEIGH, DESIGN_WEIGH_IDS, RE_WEIGH_HEADING_REST, weighHeadingMatches, weighSection, genericUnit,
+  RISKS_SYN, DESIGN_WEIGH, DESIGN_WEIGH_IDS, RE_WEIGH_HEADING_REST, weighHeadingMatches, weighSection, weighSectionHead, genericUnit,
   designBody, designEntries, WEIGH_PROSE_WORDS, designWeighState, designWeighChecks, designApprovedBeforeWeigh,
   REUSE_SYN, DESIGN_WEIGH_STAMPS, designReuseFallback, BRIEF_REUSE_MAX_ENTRIES, BRIEF_REUSE_CHARS, BRIEF_REUSE_MAX_FILES,
-  BRIEF_REUSE_MAX_DIRS, BRIEF_REUSE_DIR_ENTRIES, RE_REUSE_PATH, reuseUnits, reuseTargets, reuseEntryMatches, reuseNearbyFiles, briefReuse,
+  BRIEF_REUSE_MAX_DIRS, BRIEF_REUSE_DIR_ENTRIES, RE_REUSE_PATH, reuseUnits, reuseInsideRel, reuseProbe, reuseTargets, reuseEntryMatches,
+  readDirBounded, reuseNearbyFiles, reuseQuotedSection, briefReuse,
   RE_RATE_LIMIT, RE_ACCESS_DENIED, RE_SUBJECT_RIGHTS, CONSTRAINT_KINDS, CONSTRAINT_SIGNALS, CONSTRAINT_RE,
   constraintSignalRe, RE_CONSISTENCY_ANSWER, RE_ACID, CONSTRAINT_MAX_WORDS, userSpecText, constraintNudge,
   RE_DIST_DELIVERY, RE_DIST_FAILURE, clarify, __link };

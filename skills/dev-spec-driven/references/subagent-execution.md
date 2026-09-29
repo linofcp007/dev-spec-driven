@@ -125,7 +125,10 @@ command (`spec_complete_task` records the run you pass it, and refuses a failed 
   missing for a task that added code: resume the implementer), then build the review package, dispatch the reviewer.
 - **DONE_WITH_CONCERNS** → read the concerns; correctness/scope concerns get resolved before review,
   observations get noted.
-- **NEEDS_CONTEXT** → supply it and resume the same implementer.
+- **NEEDS_CONTEXT** → supply it and resume the same implementer. One the implementer raises to **extend a unit outside
+  the task's files** (`_Implements:_`) is a plan question: add a converge task for it (`spec_append_tasks` with that file
+  in `_Implements:_` — the human approves the changed tasks) and run it first, or tell the implementer to go ahead (with
+  `meta.guard: "scope"` the edit then asks the user) or to create locally — never let it edit that file silently.
 - **BLOCKED** → context problem: more context, same model. Needs more reasoning: re-dispatch one tier
   up. Too big: split it (ledger a ruling). **The spec is wrong** (a test that can't be right, an AC that
   contradicts the design): stop — this is a phase problem, not an implementation one.
@@ -179,7 +182,9 @@ refused by the engine: that task is not done. Never tick a task with open Critic
 duplicate, a tangled file the implementer noticed), and so do the reviewer's out-of-scope refactor ideas: file each
 one in the roadmap backlog — `spec_backlog {action: "add", name: "refactor-<topic>", note: "refactor: <smell> in <files>
 — <the refactoring> — found in <feature> task N"}` (CLI `dev-spec backlog add refactor-<topic> "refactor: …"`) — and
-ledger `Task N: refactor candidate filed: refactor-<topic>`. A candidate becomes an improvement spec later
+ledger `Task N: refactor candidate filed: refactor-<topic>`. One name per candidate (the topic, not the area): an `add`
+of a name already in the backlog appends its note to that entry (`exists: true`, `appended`) — right for the same
+candidate found again, wrong for a different one. A candidate becomes an improvement spec later
 (`references/improvement-specs.md`: characterization tests first, the refactor on green); one the task can't be done
 without is a preparatory task — `/spec-converge` and the human's approval, not the current diff.
 

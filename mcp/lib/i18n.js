@@ -126,7 +126,8 @@ function renderBrief(d, lang) {
     if (r.omitted) push(t.reuseOmitted(r.omitted));
     if (!r.entries.length && r.total) push("", t.reuseNoMatch(r.total));
     if (r.files.length) push("", t.reuseFiles, ...r.files.map((f) => "- `" + f + "`"));
-    if (r.more) push(t.reuseFilesMore(r.more));
+    // R review 4: a folder read up to its cap (`truncated`) makes the count a lower bound — "at least N more", or "possibly more"
+    if (r.files.length && (r.more || r.truncated)) push(t.reuseFilesMore(r.more, !!r.truncated));
   }
   const verify = d.verify || [];
   if (verify.length) push("", t.verification, ...verify.map((c) => "- `" + c + "`"));

@@ -114,6 +114,19 @@ genuinely common — as its own refactor, not inside a feature task.
 **Don't reuse by copy-paste.** A copied block forks the knowledge: the bug fixed in one copy lives on in the other.
 If you duplicate on purpose (see "Duplication" below), say so in the report and why.
 
+**Extending a unit outside the task's files.** A task changes the files its `_Implements:_` names — the plan puts an
+existing unit to extend there (the Tasks row above), and a preparatory change stays in those files. When the unit to
+extend lies **outside** them, it is never edited silently:
+
+- in subagent execution the implementer reports **NEEDS_CONTEXT** naming the unit and the change; the controller adds a
+  converge task for it (`spec_append_tasks` with that file in `_Implements:_` — a changed plan, approved again like any
+  other) or tells the implementer to go ahead; working inline, you do the same through `/spec-converge`;
+- when the task can be done without it (create locally — the rule of three), do that and name the extension in the
+  report's **Reuse** block, so it is filed as a refactor candidate.
+
+The scope guard enforces it: with `meta.guard: "scope"`, an edit to a code file no open approved task names asks the
+user for permission — a subagent that hits the prompt mid-task stalls the loop until someone answers.
+
 ---
 
 ## Module boundaries
@@ -281,7 +294,8 @@ ambiguous (did the feature break the test, or the refactor?).
 
 What a task **may** include: the small **preparatory** refactor the task itself needs, in the files its
 `_Implements:_` already names, behaviour-preserving, on green, in its own commit — Kent Beck's "make the change
-easy, then make the easy change".
+easy, then make the easy change". A preparatory change to a file outside them is a plan change (above: "Extending a
+unit outside the task's files").
 
 Everything else is **filed, not done**:
 
@@ -345,7 +359,11 @@ ship with a "we'll consolidate later".
 - **One entry per candidate**, in the roadmap backlog (`dev-spec backlog add "refactor-<topic>" "refactor: <note>"`,
   `spec_backlog {action: "add", name, note}`): the smell, the files, the evidence (a count, a metric, the feature that
   tripped over it), and the refactoring you'd apply. The `refactor:` prefix tells a refactor candidate from a planned
-  feature in ROADMAP.md.
+  feature in ROADMAP.md. Give each candidate its **own name** (`refactor-pricing-switches`, `refactor-pricing-rounding`
+  — the topic, not the area): an `add` with a name already in the backlog keeps that entry and appends the new note to
+  its note (`exists: true`, `appended` — one line, at most 2,000 characters; past it the add is refused), so the same
+  candidate found twice gathers its evidence in one entry, while two different candidates under one name would read as
+  one.
 - **Prioritise by pain, not by ugliness**: code that changes often and hurts every time comes first. Change
   frequency is cheap to measure:
 

@@ -50,9 +50,11 @@ task is done.
 helper, component, client, validator or formatter, look for one that exists — the design's **Reuse & Integration**
 section (the brief's **Reuse** section quotes its entries for the task and lists the files next to the task's own),
 then the codebase by concept and synonyms, the shared folders `structure.md` names. Reuse, else extend (existing
-callers unchanged), else create — local to the feature until a second or third use; never copy-paste. A refactor you
-notice outside the task is **filed, not done**: `spec_backlog {action: "add", name: "refactor-<topic>", note: "refactor:
-<smell> in <files>"}` (CLI `dev-spec backlog add …`).
+callers unchanged, in the task's own `_Implements:_` files — a unit outside them is a plan change: a converge task via
+`spec_append_tasks`, never a silent edit; the scope guard asks before such an edit), else create — local to the feature
+until a second or third use; never copy-paste. A refactor you notice outside the task is **filed, not done**:
+`spec_backlog {action: "add", name: "refactor-<topic>", note: "refactor: <smell> in <files>"}` (CLI `dev-spec backlog
+add …`) — one name per candidate: an existing name gets the new note appended to its entry.
 
 **Can't run the `_Verify:_` command yourself** (no shell, no runtime in this session)? **Do not tick the task** — not
 bare, not with a note, never with an exit code nobody saw. Name the command and ask the user to run it and paste the

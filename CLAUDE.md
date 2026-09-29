@@ -1698,8 +1698,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   counts); skipped for a bugfix, a spike and a later-phase template design; `designSaveCheck` returns `reuse` (its state) + a ▲
   note (never unclean); `templates check` warns `reuse-missing`; spec_upgrade lists it but never counts it toward `attention`
   (`DESIGN_WEIGH_IDS`). `REUSE_SYN`: Reuse (& / and Integration…), Code reuse, Existing components / code / modules /
-  services / helpers, Integration points, PT Reutilização / Reaproveitamento / Reúso / Componentes existentes / Pontos de
-  integração, ES Reutilización / Aprovechamiento / Componentes existentes / Puntos de integración… — never a bare
+  services / helpers, Integration points, Integration with the existing system / code, PT Reutilização / Reaproveitamento /
+  Reúso / Componentes existentes / Pontos de integração / Integração com o sistema existente, ES Reutilización /
+  Aprovechamiento / Componentes existentes / Puntos de integración / Integración con el sistema existente… — never a bare
   "Integration" or "Existing" (the heading must NAME the section: `weighHeadingMatches`). **Brownfield:** when the design's
   section is missing or empty and `integration-plan.md` → Integration Points (a REUSE_SYN heading) is filled, the check passes
   with state `integration` (`designReuseFallback`); a template section still warns.
@@ -1710,22 +1711,49 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   risks, never to reuse; an unstamped one to none. `opts.legacy: true` (the 1.17 form) still makes every check legacy. A new
   design check → a new stamp key (additive: an older engine reading the state keeps its own rules).
 - **The brief (R2)** — `briefReuse(projectDir, design, implements, acIds)` (quality.js) → `{state, total, entries, omitted, files,
-  more}`: the section's units (`reuseUnits`: table data rows, outermost list items with their deeper lines, prose lines; a unit
-  holding a template slot is none) that name the task — its file, a sibling in its folder, the folder, a folder above it
-  (`RE_REUSE_PATH` path tokens through `implementsKey`; the look-behind makes a long slash-less run linear), a ≥ 5-character
-  basename word-bounded, or one of its AC IDs — ≤ 8 entries / 1,500 characters; and the existing source files
-  (`GUARD_CODE_EXT`, one `readdirSync` per folder, ≤ 5 folders × 1,000 entries, dot files / SCAN_IGNORE folders / the task's
-  own files out, non-test first) next to its `_Implements:_` targets, ≤ 15 + `more`. `taskBrief` renders it after Files
-  (`BRIEF.reuse*`, i18n) when there is an entry, a section to point at (`reuseNoMatch`) or a file; the Reuse & Integration
-  section itself leaves the "Design context" quotes. Result `reuse`; with `write: true` only `refs.reuse {entries: <count>,
-  files}`.
+  more, truncated?}`: the section's units (`reuseUnits`: table data rows, outermost list items with their deeper lines, prose
+  lines; a unit holding a template slot is none) that name the task — its file, a sibling in its folder, the folder, a folder
+  above it (`RE_REUSE_PATH` path tokens through `implementsKey`; the look-behind makes a long slash-less run linear), a
+  ≥ 5-character basename word-bounded, or one of its AC IDs — ≤ 8 entries / 1,500 characters; and the existing source files
+  (`GUARD_CODE_EXT`, dot files / SCAN_IGNORE folders / the task's own files out) next to its `_Implements:_` targets: ≤ 5
+  folders, each read by ONE bounded `opendirSync` of at most 1,000 entries (`readDirBounded` — a 100,000-entry folder costs
+  what its first 1,000 do), a `Set` of names, then the first 15 in (non-test, path) order — `isTestCodePath` asked only until
+  15 non-test files are found — + `more`; `truncated: true` (only then present) when a folder held more entries, so `more` is a
+  lower bound ("…and at least N more", "possibly more" when none is counted — `reuseFilesMore(n, atLeast)`). `taskBrief`
+  renders it after Files (`BRIEF.reuse*`, i18n) when there is an entry, a section to point at (`reuseNoMatch`) or a file.
+  Result `reuse`; with `write: true` only `refs.reuse {entries: <count>, files}`.
+- **Paths from spec text (R review 1 / 3)** — `reuseTargets` keeps only a reference INSIDE the project, decided on its TEXT
+  before any fs call (`reuseInsideRel`): a network path (`isNetworkPath` — the 1.19 code stat'ed `//host/share/x.ts` and
+  opened an SMB connection to the host a spec named: 4.7–7.2 s on an unreachable one, NTLM credentials on Windows), an
+  absolute path elsewhere, a `..` out of the project or the root itself names nothing (no target, no entry match); an absolute
+  path into the project reads as its relative spelling. Inside, `reuseProbe` lstat's each segment below the project root
+  (memoized per call, iterative) and a symlink or a junction on the way stops it — never followed, so a link out of the project
+  (or to a share) lists nothing; stricter than templates / import's realpath check (a link that stays inside isn't listed
+  either: the list is a hint, and following a link could reach a share).
+- **Design context (R review 2)** — only the ONE section weighSection picks (`weighSectionHead` → {level, title, body}) can
+  leave the brief's "Design context", and only when the Reuse section quotes ALL of it (`reuseQuotedSection`: a `##` heading,
+  every unit of the body Design context would show, in order, none omitted, no fenced code). Every other section — an
+  "Integration Points" beside it, "Existing code", a 1.18 design's contract section whose bullets aren't entries of their own —
+  keeps the 1.18 needle rule (the r19 exclusion of every REUSE_SYN heading dropped whole sections; mcp/test.js "1.19 R review
+  2" diffs it against a copy of the 1.18 rule). `_Emits metrics:_` also pulls an +obs feature's `[OBS] Telemetry` section
+  (marker + the Telemetry synonyms, `trackSectionTable("obs")`), beside the `[SaaS] Observability` rule (T review 6).
+- **Backlog names (R review 5)** — `spec_backlog add` of a name already in the backlog (case-insensitive) keeps its entry and
+  spelling and APPENDS a new note to its note (`BACKLOG_NOTE_SEP` " · ", one line; a note it already holds, or none, changes
+  nothing; the whole note ≤ `BACKLOG_NOTE_MAX` 2,000 characters — past it add is refused, nothing written) → `exists: true`,
+  `appended`, a localized `note` (`featureOps.backlogAppended` / `backlogKept` / `backlogNoteFull`); the CLI prints that note
+  instead of "✓ added". It answered "✓ added" and kept the old note, so a second refactor candidate filed as the same
+  `refactor-<topic>` was lost; the prose asks for one name per candidate.
 - **Prose (R3)** — agents/spec-implementer.md: "Search before you write" is Before-you-begin step 3 (a hard step: the brief's
   Reuse section, concept + three synonyms, shared folders, `.specs/SPECS.md`; reuse → extend → create, the rule of three, no
   copy-paste) + a hard rule + the report's `### Reuse` block (Reused / Extended / Created + searched / Duplicated on purpose /
   Refactor candidates); agents/spec-reviewer.md: Code quality = duplication against the EXISTING codebase (a new unit
   duplicating one is Important), the guide's smells Minor; the controller files refactor candidates with `spec_backlog add`
   (`refactor:` note) — subagent-execution.md, /executeTask; red-flags rows; SKILL.md, AGENTS.md, /design. No engine gate reads
-  the Reuse block (R5: prose only — the SubagentStop gate is unchanged).
+  the Reuse block (R5: prose only — the SubagentStop gate is unchanged). Extending a unit OUTSIDE the task's `_Implements:_`
+  files is never a silent edit (R review 6): NEEDS_CONTEXT → a converge task (`spec_append_tasks`, re-approved) or the
+  controller's go-ahead, or create locally and name it in the report — the scope guard (`meta.guard: "scope"`) would otherwise
+  stop a subagent mid-task on a permission prompt; spec-implementer step 3 + hard rule, the guide ("Extending a unit outside
+  the task's files"), subagent-execution.md (NEEDS_CONTEXT), /executeTask and the brief's `reuseRule` (EN / PT / ES).
 - **Steering (R4)** — the `structure.md` stub gains Module Boundaries and Shared Code slots, the constitution stub a fifth
   example principle ("Search before you write: extend an existing module before adding a new one") — EN / PT / ES.
 

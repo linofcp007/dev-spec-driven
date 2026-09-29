@@ -4262,6 +4262,19 @@ if (inSection("p19r")) { // 1.19 package R — Reuse & Integration, search befor
     pTpl.code === 0 && /sem secção Reutilização e Integração — o doctor avisa \(design-reuse\)/.test(pTpl.out),
     "1.19 R1 (CLI, PT): doctor's design-reuse detail is Portuguese; templates check warns (exit 0) on a design template without Reutilização e Integração (got " +
     js([pDoc.out.split("\n").filter((l) => /design-reuse/.test(l)), pTpl.code, pTpl.out.slice(0, 400)]) + ")");
+
+  // R review 5 (CLI): `backlog add` of a name already in the backlog says so and appends the new note (it printed "✓ added" and kept
+  // the old note); --json carries exists / appended; the same note again changes nothing; PT project → PT line.
+  const b1 = run(["backlog", "add", "refactor-pricing", "refactor: Repeated Switches in pricing.ts", "--project", rp]);
+  const b2 = run(["backlog", "add", "refactor-pricing", "refactor: rounding copied in cart.ts", "--project", rp]);
+  const b3 = jsonOf(run(["backlog", "add", "refactor-pricing", "refactor: rounding copied in cart.ts", "--json", "--project", rp]));
+  const bP = (run(["backlog", "add", "refactor-precos", "refactor: a", "--project", pp]), run(["backlog", "add", "refactor-precos", "refactor: b", "--project", pp]));
+  ok(b1.code === 0 && /✓ 'refactor-pricing' added to the backlog/.test(b1.out) && b2.code === 0 && !/added to the backlog/.test(b2.out) &&
+    /'refactor-pricing' is already in the backlog — the new note was appended to its note\./.test(b2.out) &&
+    /  - refactor-pricing — refactor: Repeated Switches in pricing\.ts · refactor: rounding copied in cart\.ts\n/.test(b2.out) &&
+    b3.exists === true && b3.appended === false && /nothing changed/.test(b3.note || "") && bP.code === 0 && /já está no backlog — a nova nota foi acrescentada/.test(bP.out),
+    "1.19 R review 5 (CLI): backlog add of an existing name prints the engine's note (appended / nothing changed) instead of '✓ added', the entry keeps both notes; --json has exists / appended; PT line (got " +
+    js([b1.out, b2.out, b3, bP.out]) + ")");
 }
 
 // 1.19 package (T): if (inSection("p19t")) { … }

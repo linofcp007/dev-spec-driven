@@ -775,7 +775,9 @@ function main() {
       if (!r.ok) return fail(r); // e.g. rm of a name that isn't in the backlog
       const T = projectText();
       return out(r, (r) => {
-        if (action === "add") console.log(T.backlogAdded(String(pos[1]).trim()));
+        // 1.19 R review 5: a name already in the backlog — its note was appended to (or already held it): the engine's localized note
+        if (action === "add" && r.exists) console.log(r.note);
+        else if (action === "add") console.log(T.backlogAdded(String(pos[1]).trim()));
         else if (action === "rm" || action === "remove") console.log(T.backlogRemoved(String(pos[1]).trim()));
         console.log(T.backlogHead(r.backlog.length));
         r.backlog.forEach((b) => console.log("  - " + b.name + (b.note ? " — " + b.note : "")));

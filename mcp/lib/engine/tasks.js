@@ -23,7 +23,7 @@ let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDeci
   ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, REUSE_SYN, weighHeadingMatches;
+  briefReuse, reuseQuotedSection, trackSectionTable;
 function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
@@ -34,7 +34,7 @@ function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, b
   REPRO_SYN, ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, REUSE_SYN, weighHeadingMatches } = E); }
+  briefReuse, reuseQuotedSection, trackSectionTable } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
 // scanner — so status/next/phase can never count a task that complete/brief/finish don't see.
@@ -1262,13 +1262,25 @@ function taskBrief(projectDir, name, number, opts = {}) {
   // A task proving a +sec / +privacy criterion reads that track's design sections (threat model, authz, retention…).
   // … and a track pack's (1.15) — its sections are the rigor its criteria were written for.
   const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
+  // 1.19 R2 — search before you write: the design's Reuse & Integration entries naming this task's files / folders / ACs, and the
+  // existing source files next to its _Implements:_ targets (names only; bounded).
+  const reuse = briefReuse(projectDir, designText, mk.implements, acIds);
+  const reuseShown = reuse.entries.length > 0 || reuse.total > 0 || reuse.files.length > 0;
+  // … and the design section it quotes leaves "Design context" only when the Reuse section quotes ALL of it (R review 2 —
+  // reuseQuotedSection): every other section, whatever its heading, keeps the 1.18 selection below.
+  const reuseSection = reuseQuotedSection(sections, designText, reuse);
+  // A task emitting metrics reads the design's observability: a section named like [SaaS] Observability (any track, as in 1.18) and,
+  // on an +obs feature, its [OBS] Telemetry section (T review 6 — a task citing a core AC reached no [OBS] section).
+  const obsMarker = tracks.includes("obs") ? trackMarker("obs") : null;
+  const obsTelemetry = obsMarker ? ((trackSectionTable("obs") || []).find((x) => x.name === "Telemetry") || { syn: [] }).syn : [];
   const want = (s) => {
-    if (weighHeadingMatches("## " + s.title, REUSE_SYN)) return false; // 1.19 R2: its entries for this task are the Reuse section's
+    if (s === reuseSection) return false;
     const hay = s.title + "\n" + s.body;
     if (needles.some((x) => hay.includes(x))) return true;
     const title = s.title.toLowerCase();
     const syn = (list, nm) => list.find((x) => x.name === nm).syn.some((y) => title.includes(y));
     if (mk["emits metrics"].length && syn(SAAS_SECTIONS, "Observability")) return true;
+    if (mk["emits metrics"].length && obsTelemetry.length && s.title.includes(obsMarker) && obsTelemetry.some((y) => title.includes(y))) return true;
     if (mk["affects evals"].length && (syn(AI_SECTIONS, "Prompt Architecture") || syn(AI_SECTIONS, "Eval Strategy"))) return true;
     if (trackMarks.some((m) => s.title.includes(m))) return true; // the case-sensitive marker (C4)
     return false;
@@ -1280,11 +1292,6 @@ function taskBrief(projectDir, name, number, opts = {}) {
     if (s.body.length <= budget) { included.push(s); budget -= s.body.length; }
     else omitted.push(s.title);
   }
-
-  // 1.19 R2 — search before you write: the design's Reuse & Integration entries naming this task's files / folders / ACs, and the
-  // existing source files next to its _Implements:_ targets (names only; bounded).
-  const reuse = briefReuse(projectDir, designText, mk.implements, acIds);
-  const reuseShown = reuse.entries.length > 0 || reuse.total > 0 || reuse.files.length > 0;
 
   // Steering: the default files (as before) + front-matter scoped ones (always / fileMatch on _Implements:_ paths).
   const steer = briefSteering(root, tracks, mk.implements);
