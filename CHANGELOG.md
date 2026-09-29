@@ -17,15 +17,23 @@ A pure refactor: the engine as modules. No behaviour change — same tools, comm
   other cross-module name is bound at call time by `__link` (`engine/index.js` merges the modules' exports — a name
   defined twice throws); per-call state lives on one object, `CTX` (`engine/ctx.js`), mutated in place.
 - `mcp/lib/i18n.js` is a facade over `i18n/en.js`, `pt.js`, `es.js`, `common.js` and `pt-br.js`; each language loads on
-  first use (pt-BR is still derived lazily). Loading the engine costs the same as in 1.17 (a hook's cold start within
-  noise).
+  first use (pt-BR is still derived lazily). Load time, measured (Windows, Node 24, p50 of 40 interleaved fresh
+  processes, 1.17 → 1.18): 36 files instead of 3 cost ~0.65 ms each before any compile, so the facade turns on Node's
+  module compile cache (Node ≥ 22.8 — one file per module in `<os.tmpdir()>/node-compile-cache` or `NODE_COMPILE_CACHE`,
+  off with `NODE_DISABLE_COMPILE_CACHE=1`; the first process after an update writes it, 45–60 ms once) and `pt-br.js`
+  loads only when pt-BR is read — the guard hook 220 → 238 ms (+8%), `dev-spec status` 211 → 224 (+6%), SessionStart
+  345 → 364 (+5%), the observe hook 167 → 156, the stop hook on a "done" claim 252 → 231 (its claim scan no longer derives
+  pt-BR's messages); without those two the split cost 10–18% (guard 260, status 243, stop 284).
 - Proof: a differential harness ran the 1.17.0 engine and the new one side by side — 897,053 comparisons (pure functions
   over 13,996 corpus strings, every i18n table leaf in four locales, lockstep project scenarios in EN / PT / ES / pt-BR,
   every importer, 57 CLI commands, an MCP session, the hooks with 72 malformed payloads) — 0 differences.
 
 ### Tests
-- `node mcp/test.js` 1443 assertions (was 1442), `node cli/test-cli.js` 455 (unchanged): the source guards scan every
-  `mcp/lib` file, and a new guard checks the module list and that `mcp/lib` requires only Node core or relative files.
+- `node mcp/test.js` 1447 assertions (was 1442), `node cli/test-cli.js` 455 (unchanged): the source guards scan every
+  `mcp/lib` file, and a new guard checks the module list and that `mcp/lib` requires only Node core or relative files;
+  the module rule itself is checked from the sources (each module's `let` list = its `__link` destructure, every name
+  exported by a module, none shadowing the `__link` parameter; the load-time requires acyclic and marked), and the load
+  time (the compile cache on, no pt-BR in an English process, the stop gate's claim scan deriving nothing).
 
 ## [1.17.0] — 2026-09-29
 

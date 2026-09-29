@@ -27,7 +27,10 @@
  */
 
 const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests } = require("./i18n/common.js");
-const { toPtBr, derivePtBr, defineDerivedLocale, PTBR_STOP_EXTRA } = require("./i18n/pt-br.js");
+// The pt-BR derivation (i18n/pt-br.js) loads on its first use — a table's "pt-BR" entry, toPtBr, derivePtBr: a process
+// that never meets pt-BR (most hooks) doesn't load it.
+let PTBR = null;
+const ptbr = () => PTBR || (PTBR = require("./i18n/pt-br.js"));
 
 // Artifact builders, one set per language (i18n/<lang>.js `build`).
 const BUILD = {};
@@ -168,13 +171,15 @@ function renderBrief(d, lang) {
   return out.join("\n");
 }
 
-// pt-BR (1.14 D1) — every table's pt-BR twin, derived lazily from pt (i18n/pt-br.js).
+// pt-BR (1.14 D1) — every table's pt-BR twin, derived lazily from pt (i18n/pt-br.js, loaded by the first read of one).
+const defineDerivedLocale = (table, raw, patch) => Object.defineProperty(table, "pt-BR", { enumerable: true, configurable: true,
+  get() { ptbr().defineDerivedLocale(table, raw, patch); return table["pt-BR"]; } });
 defineDerivedLocale(BUILD);
 defineDerivedLocale(STEERING);
 defineDerivedLocale(EVALS_README);
 defineDerivedLocale(BRIEF);
 defineDerivedLocale(MSG, { stopGate: { claims: true, negators: true, admissions: true, fixed: true } }, {
-  stopGate: (m, pt) => Object.assign(m, { claims: [...pt.claims, ...PTBR_STOP_EXTRA.claims], admissions: [...pt.admissions, ...PTBR_STOP_EXTRA.admissions] }),
+  stopGate: { claims: (v) => [...v, ...ptbr().PTBR_STOP_EXTRA.claims], admissions: (v) => [...v, ...ptbr().PTBR_STOP_EXTRA.admissions] },
 });
 
 
@@ -190,8 +195,8 @@ module.exports = {
   normalizeLang,
   canonicalLang,
   baseLang,
-  toPtBr, // (text, masks?) European → Brazilian Portuguese (the pt-BR derivation, 1.14 D1)
-  derivePtBr: (value, raw) => derivePtBr(value, raw || null, null, value), // a pt table (spec.js's roadmap chrome) → its pt-BR twin
+  toPtBr: (text, masks) => ptbr().toPtBr(text, masks), // (text, masks?) European → Brazilian Portuguese (the pt-BR derivation, 1.14 D1)
+  derivePtBr: (value, raw) => ptbr().derivePtBr(value, raw || null, null, value), // a pt table (spec.js's roadmap chrome) → its pt-BR twin
   // artifact builders
   classification: (a, lang) => L(lang).classification(a),
   requirements: (a, lang) => L(lang).requirements(a),
