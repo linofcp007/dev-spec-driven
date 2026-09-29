@@ -217,6 +217,16 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
 
+### New in 1.19
+
+- **Reuse before writing** — every design names what it reuses, extends or adds and where it lives (a Reuse & Integration
+  section); each task brief lists the design's entries and the existing files next to the task's; the implementer searches
+  before writing and reports what it reused; the reviewer checks duplication against the whole codebase; refactor
+  candidates go to the backlog.
+- **Three more tracks** — `+api` (contracts, versioning, errors, pagination / idempotency / concurrency, rate limits),
+  `+ui` (design system, UI states, WCAG 2.2 accessibility, responsiveness & i18n, a performance budget) and `+obs` (SLOs,
+  telemetry, alerting & runbooks, rollout & rollback, health & capacity), each with a guide in `references/`.
+
 ### New in 1.18
 
 - **The engine as modules** — `mcp/lib/spec.js` is a facade over `mcp/lib/engine/` (20 modules by concept plus one
@@ -631,6 +641,17 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabalho, aprovações forçadas, pedidos de
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
+
+### Novidades da 1.19
+
+- **Reutilizar antes de escrever** — todo o design diz o que reutiliza, estende ou acrescenta e onde vive (uma secção
+  Reuse & Integration); o brief de cada tarefa lista as entradas do design e os ficheiros existentes junto aos da tarefa;
+  o implementador procura antes de escrever e reporta o que reutilizou; o revisor verifica duplicação contra todo o código;
+  os candidatos a refactorização vão para o backlog.
+- **Mais três tracks** — `+api` (contratos, versionamento, erros, paginação / idempotência / concorrência, limites de
+  pedidos), `+ui` (design system, estados da interface, acessibilidade WCAG 2.2, responsividade e i18n, um orçamento de
+  desempenho) e `+obs` (SLOs, telemetria, alertas e runbooks, rollout e rollback, saúde e capacidade), cada um com um guia
+  em `references/`.
 
 ### Novidades da 1.18
 
@@ -1064,6 +1085,17 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabajo, aprobaciones forzadas, solicitudes de
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
+
+### Novedades de la 1.19
+
+- **Reutilizar antes de escribir** — todo diseño dice qué reutiliza, extiende o añade y dónde vive (una sección Reuse &
+  Integration); el brief de cada tarea lista las entradas del diseño y los archivos existentes junto a los de la tarea; el
+  implementador busca antes de escribir e informa de lo que reutilizó; el revisor comprueba la duplicación contra todo el
+  código; los candidatos a refactorización van al backlog.
+- **Tres tracks más** — `+api` (contratos, versionado, errores, paginación / idempotencia / concurrencia, límites de
+  peticiones), `+ui` (design system, estados de la interfaz, accesibilidad WCAG 2.2, responsividad e i18n, un presupuesto
+  de rendimiento) y `+obs` (SLOs, telemetría, alertas y runbooks, rollout y rollback, salud y capacidad), cada uno con una
+  guía en `references/`.
 
 ### Novedades de la 1.18
 
