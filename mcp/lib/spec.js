@@ -7,11 +7,27 @@
  * Operates on a project's `.specs/` directory. The MCP server (server.js)
  * exposes these functions as tools; this module holds all the logic so it can
  * be unit-tested in isolation (see mcp/test.js).
+ *
+ * 1.18: being split into mcp/lib/engine/ (one module per concern; the rule is in engine/index.js). What is still below
+ * hands its names to the extracted modules with engine.link() (they reach it at call time).
  */
 
 const fs = require("fs");
 const path = require("path");
 const i18n = require("./i18n.js");
+const { CTX } = require("./engine/ctx.js"); // the shared per-call state (mutated in place)
+const engine = require("./engine/index.js");
+const { artifactMatches, atxHeading, blankFacts, BOM_CHAR, codeSpans, ensureDir, ensureLockIgnore, errs,
+  existingFeature, existsCached, featureBusyResult, featureDirs, featureLang, featureLocked, fingerprintMatches,
+  FOLD_CASE, forgetCached, headPlus, headRest, insideDirAlias, invalidateReadCache, isBacktickUnit, isDirSafe,
+  isFeatureFolder, isInsideDir, isLtUnit, isNetworkPath, isObj, isSlashUnit, isWsUnit, jsonRel, lastLtIndex,
+  legacySlugify, locateFeatures, LOCK_FILE, LOCK_IGNORE_LINES, moveDirOrBusy, networkPathInside, normalizeLang, own,
+  PHASE_FILE, phaseFile, PHASES, plusAfterBlanks, projectLang, quotedValue, RE_LINE_TERMINATOR, RE_WIN_RESERVED,
+  readCacheKey, readContained, readDirCached, readIfExists, readJson, readState, replaceCodeSpans,
+  replaceHtmlCommentSpans, reservedSlug, resolveFeature, resolveProjectDir, restAfterBlanks, roadmapBusyResult,
+  safeReaddir, sha1Hex, shapeError, slugify, specsDirOf, specsFileContained, specsRoot, stateFromFile, statePath,
+  stripEnd, stripEnds, stripHashComment, stripStart, textFingerprint, toPosix, uncheckTasks, unitIn, withFeatureLock,
+  withinRoot, withMoveLock, withReadCache, withRoadmapLock, writeFileAtomic, writeIfAbsent, wsOrUnitIn } = engine.E;
 
 const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
@@ -22,778 +38,6 @@ const OPTIONAL_TRACKS = VALID_TRACKS.filter((t) => t !== "core");
 // The steering files a track brings (spec_init / add_track write them, the task brief lists them).
 const TRACK_STEERING = { tdd: ["testing-standards.md"], saas: ["scale.md", "observability.md", "cost.md"], ai: ["ai-strategy.md"], sec: ["security.md"], privacy: ["privacy.md"],
   dist: ["distributed.md"] };
-
-// Language resolution. The project's language is the single source of truth, persisted in
-// .specs/roadmap.json meta.lang (seeded by spec_init); each feature may override it via
-// .specs/<feature>/.state.json lang. spec.js resolves the lang and hands it to i18n builders.
-const normalizeLang = i18n.normalizeLang;
-function projectLang(projectDir) {
-  return normalizeLang(roadmapLang(projectDir)); // roadmapLang reads meta.lang (hoisted below)
-}
-function featureLang(projectDir, name) {
-  const st = readState(projectDir, name); // readState is hoisted below
-  return normalizeLang(st.lang || projectLang(projectDir));
-}
-// Localized engine errors: the feature's language when there is one, else the project's.
-function errs(projectDir, slug) {
-  return i18n.msg(slug ? featureLang(projectDir, slug) : projectLang(projectDir)).err;
-}
-
-// ---------------------------------------------------------------------------
-// Linear text scans (1.17 H). Regexes such as /^#{1,6}\s+(.*?)\s*$/, /\/+$/ or /\s*\r?\n\s*/g backtracked quadratically
-// (or worse) on a line holding a long run of one character — a heading with 100,000 spaces stalled the MCP server or a
-// hook. Each scan here returns byte for byte what the regex it replaces returned; the pattern is quoted beside each use.
-// "Whitespace" is JavaScript's \s (= what String.prototype.trim removes), one UTF-16 unit at a time.
-// ---------------------------------------------------------------------------
-
-function isWsUnit(c) {
-  if (c === undefined) return false;
-  const u = c.charCodeAt(0);
-  return u === 32 || (u >= 9 && u <= 13) || u === 0xa0 || u === 0x1680 || (u >= 0x2000 && u <= 0x200a) || u === 0x2028 || u === 0x2029
-    || u === 0x202f || u === 0x205f || u === 0x3000 || u === 0xfeff;
-}
-// A line terminator — what `.` never matches and `$` (with the m flag) stops before.
-const RE_LINE_TERMINATOR = /[\n\r\u2028\u2029]/;
-const isLtUnit = (c) => c === "\n" || c === "\r" || c === "\u2028" || c === "\u2029";
-function lastLtIndex(s) {
-  for (let i = s.length - 1; i >= 0; i--) if (isLtUnit(s[i])) return i;
-  return -1;
-}
-// s without a trailing " # comment" — s.replace(/\s+#.*$/, ""): the first whitespace run followed by a '#' with no line
-// terminator after it, and everything from that run on.
-function stripHashComment(s) {
-  const lastLt = lastLtIndex(s);
-  for (let i = 0; i < s.length; i++) {
-    if (!isWsUnit(s[i])) continue;
-    const r = i;
-    while (i < s.length && isWsUnit(s[i])) i++;
-    if (s[i] === "#" && i > lastLt) return s.slice(0, r);
-  }
-  return s;
-}
-// 'x' / "x" (then whitespace and an optional # comment) → x, else null — s.match(/^(["'])(.*?)\1\s*(?:#.*)?$/)[2].
-function quotedValue(s) {
-  const q = s[0];
-  if (q !== '"' && q !== "'") return null;
-  const lastLt = lastLtIndex(s);
-  const tail = new Array(s.length + 1); // tail[p]: from p on, whitespace then an optional '#' comment, to the end
-  tail[s.length] = true;
-  for (let p = s.length - 1; p >= 0; p--) tail[p] = isWsUnit(s[p]) ? tail[p + 1] : s[p] === "#" && p > lastLt;
-  for (let c = 1; c < s.length; c++) {
-    if (isLtUnit(s[c])) return null;
-    if (s[c] === q && tail[c + 1]) return s.slice(1, c);
-  }
-  return null;
-}
-// Unit predicates for stripEnd / stripStart: the units of `chars`, optionally with whitespace.
-const unitIn = (chars) => (c) => chars.includes(c);
-const wsOrUnitIn = (chars) => (c) => isWsUnit(c) || chars.includes(c);
-const isSlashUnit = (c) => c === "/";
-const isBacktickUnit = (c) => c === "`";
-// s without its trailing run of units `test` accepts — s.replace(/[set]+$/, "") (unanchored, that regex rescanned the run
-// from each of its units).
-function stripEnd(s, test) {
-  let hi = s.length;
-  while (hi > 0 && test(s[hi - 1])) hi--;
-  return hi === s.length ? s : s.slice(0, hi);
-}
-function stripStart(s, test) {
-  let lo = 0;
-  while (lo < s.length && test(s[lo])) lo++;
-  return lo ? s.slice(lo) : s;
-}
-// s.replace(/^[lead]+|[trail]+$/g, "") — a string made of the units alone comes back empty, as with the regex.
-function stripEnds(s, lead, trail = lead) {
-  return stripEnd(stripStart(s, lead), trail);
-}
-// A line's text after its blanks: `\s+(.*)$` at p (needBlank) or `\s*(.*)$` → the text, or null when a line terminator
-// follows the text (no shorter blank run reads then either — the greedy pattern rescanned the text from each blank it gave
-// back).
-function restAfterBlanks(s, p, needBlank) {
-  if (needBlank && !isWsUnit(s[p])) return null;
-  let q = p;
-  while (q < s.length && isWsUnit(s[q])) q++;
-  const rest = s.slice(q);
-  return RE_LINE_TERMINATOR.test(rest) ? null : rest;
-}
-// `\s*(.+)$` at p → the text | null: the rest after the blanks — only blanks left: the last one (no line terminator), as the
-// engine giving back \s* read it.
-function plusAfterBlanks(s, p) {
-  let q = p;
-  while (q < s.length && isWsUnit(s[q])) q++;
-  if (q < s.length) return RE_LINE_TERMINATOR.test(s.slice(q)) ? null : s.slice(q);
-  return q > p && !isLtUnit(s[q - 1]) ? s[q - 1] : null;
-}
-// s.match(/^HEAD\s+(.*)$/) (needBlank) or /^HEAD\s*(.*)$/ as [line, …HEAD's groups, text] | null — `head` is the anchored
-// part before the blanks, read by the regex engine, the text by restAfterBlanks.
-function headRest(s, head, needBlank) {
-  const h = head.exec(s);
-  const rest = h && restAfterBlanks(s, h[0].length, needBlank);
-  if (rest == null) return null;
-  const m = Array.from(h);
-  m[0] = s;
-  m.push(rest);
-  return m;
-}
-// s.match(/^HEAD\s*(.+)$/) as [line, …HEAD's groups, text] | null (the text by plusAfterBlanks).
-function headPlus(s, head) {
-  const h = head.exec(s);
-  const text = h && plusAfterBlanks(s, h[0].length);
-  if (text == null) return null;
-  const m = Array.from(h);
-  m[0] = s;
-  m.push(text);
-  return m;
-}
-// s.replace(/<!--[\s\S]*?-->/g, fn): each "<!--" to the first "-->" after it; an opener with none after it ends the scan
-// (the pattern rescanned the rest of the text from each such opener).
-function replaceHtmlCommentSpans(s, fn) {
-  let out = "", at = 0;
-  for (let i = s.indexOf("<!--"); i !== -1;) {
-    const j = s.indexOf("-->", i + 4);
-    if (j === -1) break;
-    out += s.slice(at, i) + fn(s.slice(i, j + 3));
-    at = j + 3;
-    i = s.indexOf("<!--", at);
-  }
-  return at ? out + s.slice(at) : s;
-}
-// The code spans of s — what /(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g matched, read from the backtick runs: an opener is the
-// rest of a run (the whole run first), its closer the first later run of exactly its length; bodyMax bounds the body as
-// the export's [^`][\s\S]{0,4000}?[^`] does (4002). → [{ index, end, tick, body }]. The pattern rescanned the text from
-// each unit of a long backtick run.
-function codeSpans(s, bodyMax = Infinity) {
-  const runs = [];
-  for (let i = s.indexOf("`"); i !== -1;) {
-    let e = i;
-    while (s[e] === "`") e++;
-    runs.push([i, e - i]);
-    i = s.indexOf("`", e);
-  }
-  const byLen = new Map(); // run length → indices of the runs of that length, in order
-  runs.forEach(([, len], k) => { if (!byLen.has(len)) byLen.set(len, []); byLen.get(len).push(k); });
-  const firstAfter = (list, k) => { // the first index in list greater than k, or -1
-    let lo = 0, hi = list.length;
-    while (lo < hi) { const mid = (lo + hi) >> 1; if (list[mid] > k) hi = mid; else lo = mid + 1; }
-    return lo < list.length ? list[lo] : -1;
-  };
-  const out = [];
-  for (let k = 0; k < runs.length; k++) {
-    const e = runs[k][0] + runs[k][1];
-    for (let L = runs[k][1]; L >= 1; L--) {
-      const j = byLen.has(L) ? firstAfter(byLen.get(L), k) : -1;
-      if (j === -1 || runs[j][0] - e > bodyMax) continue;
-      out.push({ index: e - L, end: runs[j][0] + L, tick: "`".repeat(L), body: s.slice(e, runs[j][0]) });
-      k = j;
-      break;
-    }
-  }
-  return out;
-}
-// s.replace(<that code-span pattern>, fn) — fn(match, tick, body).
-function replaceCodeSpans(s, fn, bodyMax) {
-  let out = "", at = 0;
-  for (const m of codeSpans(s, bodyMax)) {
-    out += s.slice(at, m.index) + fn(s.slice(m.index, m.end), m.tick, m.body);
-    at = m.end;
-  }
-  return at ? out + s.slice(at) : s;
-}
-// An ATX heading line → { level, text } | null, as /^(#{min,max})\s+(.*?)\s*$/ read it (text trimmed at the end). closing:
-// a closing sequence led by whitespace goes too — /^(#{min,max})\s+(.*?)(?:\s+#+)?\s*$/. raw: the text is the whole rest —
-// /^(#{min,max})\s+(.*)$/. The text never holds a line terminator (`.` stops there): a line whose would is no heading.
-function atxHeading(line, min = 1, max = 6, mode = "trim") {
-  const s = String(line);
-  let level = 0;
-  while (s[level] === "#") level++;
-  if (level < min || level > max || !isWsUnit(s[level])) return null;
-  let lo = level + 1;
-  while (lo < s.length && isWsUnit(s[lo])) lo++;
-  let hi = s.length;
-  if (mode !== "raw") {
-    while (hi > lo && isWsUnit(s[hi - 1])) hi--;
-    if (mode === "closing" && s[hi - 1] === "#") {
-      let h0 = hi - 1;
-      while (h0 > lo && s[h0 - 1] === "#") h0--;
-      let w0 = h0;
-      while (w0 > lo && isWsUnit(s[w0 - 1])) w0--;
-      if (w0 > lo && w0 < h0) hi = w0;
-    }
-  }
-  const text = s.slice(lo, hi);
-  return RE_LINE_TERMINATOR.test(text) ? null : { level, text };
-}
-
-// ---------------------------------------------------------------------------
-// Paths & small fs helpers
-// ---------------------------------------------------------------------------
-
-function resolveProjectDir(arg) {
-  const usable = (v) => v != null && String(v).trim() && !/^\$\{[^}]*\}$/.test(String(v).trim()) ? String(v).trim() : null;
-  const dir = usable(arg) || usable(process.env.SPEC_PROJECT_DIR) || usable(process.env.CLAUDE_PROJECT_DIR) || process.cwd();
-  return path.resolve(dir);
-}
-
-function specsRoot(projectDir) {
-  // Always use `.specs/` at the project root.
-  const root = path.join(projectDir, ".specs");
-  // The project this engine call works in: its .specs/templates/ join the placeholder corpus (projectTemplateSets).
-  if (READ_CACHE) TEMPLATE_SCOPE_ROOT = root;
-  return root;
-}
-
-function ensureDir(p) {
-  forgetCached(p, { dir: true });
-  fs.mkdirSync(p, { recursive: true });
-}
-
-function writeIfAbsent(file, content) {
-  forgetCached(file);
-  ensureDir(path.dirname(file));
-  try {
-    fs.writeFileSync(file, content, { encoding: "utf8", flag: "wx" }); // atomic "create only" — never clobbers
-    return true;
-  } catch (e) {
-    if (e.code === "EEXIST") return false;
-    throw e;
-  }
-}
-
-// Replace a file without a torn intermediate state: a concurrent reader (hook + MCP tool) sees the old
-// content or the new one, never an empty/half-written file.
-// The temp file NEVER outlives the call: when the rename and the plain-write fallback both fail (a read-only or
-// locked target on Windows, a folder where the file should be) the error is thrown with the temp file already
-// removed — the best-effort roadmap/catalog refreshes and the hook swallow it, and they used to leave one
-// full-size `<file>.<pid>.<ts>.tmp` in the committed .specs/ per call. On Windows a brief lock (a scanner, an
-// indexer, a preview pane) is retried a few times first.
-const RENAME_RETRY_MS = [5, 15, 40];
-const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
-function writeFileAtomic(file, content) {
-  forgetCached(file);
-  ensureDir(path.dirname(file));
-  const tmp = file + "." + process.pid + "." + Date.now() + ".tmp";
-  let moved = false;
-  try {
-    fs.writeFileSync(tmp, content, "utf8");
-    for (let attempt = 0; ; attempt++) {
-      try {
-        fs.renameSync(tmp, file);
-        moved = true;
-        break;
-      } catch (e) {
-        if (process.platform !== "win32" || attempt >= RENAME_RETRY_MS.length || !RENAME_RETRY_CODES.has(e.code)) break;
-        sleepSync(RENAME_RETRY_MS[attempt]);
-      }
-    }
-    if (!moved) fs.writeFileSync(file, content, "utf8"); // still locked / read-only: a plain write (may throw)
-  } finally {
-    if (!moved) try { fs.unlinkSync(tmp); } catch { /* never created, or already gone */ }
-  }
-}
-
-// Synchronous sleep (the engine is synchronous end to end): blocks this thread only, no busy loop.
-const SLEEP_CELL = new Int32Array(new SharedArrayBuffer(4));
-function sleepSync(ms) {
-  Atomics.wait(SLEEP_CELL, 0, 0, ms);
-}
-
-// Cross-process lock for a feature's read-modify-write. Two MCP servers (two editors on one repo) or an MCP server
-// and `dev-spec done` completing tasks of the same feature at the same moment each read tasks.md + .state.json,
-// changed their copy and wrote the whole file back — the last writer won, so a tick or an evidence record was
-// silently lost while both calls answered ok. The mutators of a feature (featureLocked — spec_create re-run on an existing
-// feature included — and the folder moves, withMoveLock) now hold
-// `.specs/<feature>/.lock` (created with O_EXCL) for the whole read → check → write, and waiters retry for up to
-// LOCK_WAIT_MS before answering a localized "busy" error. A lock left by a crashed process is reclaimed: its pid is
-// gone (same host), or it is older than LOCK_STALE_MS (LOCK_MAX_HOLD_MS while its holder still runs). Re-entrant in
-// one process. Where the lock can't be created at all (a read-only folder) the operation runs unlocked, as before.
-// Every acquisition writes a random `token` into the lock's note: a stale lock is removed only while the file there is
-// still the one judged stale (reclaimStaleLock), and a holder removes only the lock carrying its own token (releaseLock).
-// Both used to unlink whatever sat at the path: a waiter whose stale verdict came from a lock released a moment earlier
-// (a failed stat read as "stale", or a pid probe answering ESRCH for the holder that had just finished) deleted the NEXT
-// holder's fresh lock, two processes ran the read-modify-write at once, and ticks / evidence / backlog items were lost
-// while every call answered ok.
-const LOCK_FILE = ".lock";
-const LOCK_WAIT_MS = 10000;
-const LOCK_STALE_MS = 2 * 60 * 1000;
-const LOCK_MAX_HOLD_MS = 10 * 60 * 1000;
-const LOCK_RECLAIM_SUFFIX = ".reclaim"; // `<lock>.reclaim`: held (O_EXCL) for the few microseconds of one reclaim
-const LOCK_RECLAIM_STALE_MS = 30 * 1000; // a reclaim guard this old was left by a process that died holding it
-// A lock with no readable note (empty, or not JSON) this old is stale: the note is written into place with the lock
-// (acquireLockFile), so only a process killed inside the O_EXCL fallback's microsecond window, or a foreign file, leaves one
-// — it used to block the feature for LOCK_STALE_MS.
-const LOCK_NOTELESS_STALE_MS = 5 * 1000;
-// A lock taken while this process already holds another (a folder move's roadmap lock inside its feature lock) waits only
-// for what is left of the outer acquisition's budget — at least this much — never a second full DEV_SPEC_LOCK_WAIT_MS.
-const LOCK_NESTED_MIN_MS = 500;
-let LOCK_DEADLINE = null; // the acquisition deadline of the outermost lock this process is inside (null: none)
-const HELD_LOCKS = new Map(); // lock key → this process's acquisition { token, ino, mtimeMs } (re-entrant, and what release checks)
-// The lock file as it is now: its note (raw text, null when it can't be read — a directory, a file being deleted) and
-// the stat that identifies it. null: gone, or it changed while being read (the caller just retries).
-function lockSnapshot(lock) {
-  let st, raw = null, st2;
-  try { st = fs.statSync(lock); } catch { return null; }
-  try { raw = fs.readFileSync(lock, "utf8"); } catch { /* a directory, being deleted, not ours */ }
-  try { st2 = fs.statSync(lock); } catch { return null; }
-  if (st2.ino !== st.ino || st2.mtimeMs !== st.mtimeMs || st2.size !== st.size) return null; // replaced / rewritten meanwhile
-  return { raw, ino: st.ino, mtimeMs: st.mtimeMs, size: st.size };
-}
-const sameLockSnapshot = (a, b) => !!a && !!b && a.raw === b.raw && a.ino === b.ino && a.mtimeMs === b.mtimeMs && a.size === b.size;
-// → the snapshot of a lock judged stale, or null: held by a live process, still being written — or gone / unreadable
-// meanwhile, which is never "stale" (the lock was just released, or Windows is still deleting it): the caller retries
-// the create instead of unlinking a path another process may have locked in between.
-function staleLock(lock) {
-  const snap = lockSnapshot(lock);
-  if (!snap) return null;
-  const age = Date.now() - snap.mtimeMs;
-  let info = null;
-  try { info = JSON.parse(snap.raw); } catch { /* being written, or not ours */ }
-  let stale = age > LOCK_STALE_MS || (!isObj(info) && snap.raw != null && age > LOCK_NOTELESS_STALE_MS);
-  if (isObj(info) && info.host === require("os").hostname() && Number.isSafeInteger(info.pid) && info.pid > 0 && info.pid !== process.pid) {
-    try {
-      process.kill(info.pid, 0); // signal 0: an existence probe, nothing is sent
-      stale = age > LOCK_MAX_HOLD_MS;
-    } catch (e) {
-      if (e.code === "ESRCH") stale = true; // its holder is gone (this very note: reclaimStaleLock re-checks it)
-    }
-  }
-  return stale ? snap : null;
-}
-// Remove the stale lock `snap` describes — atomically with respect to every other waiter: under `<lock>.reclaim` (O_EXCL),
-// and only while the file at the path is still that same lock (note + stat). → "removed" (retry the create at once) |
-// "changed" (another process took it over or reclaimed it first) | "busy" (another waiter is reclaiming it) | "failed"
-// (it can't be removed: a handle without delete sharing, a read-only folder, a directory named .lock) — all but
-// "removed" wait like a held lock, so an undeletable one ends in the busy answer at the deadline, never a spin.
-function reclaimStaleLock(lock, snap) {
-  const guard = lock + LOCK_RECLAIM_SUFFIX;
-  let gfd;
-  try {
-    gfd = fs.openSync(guard, "wx");
-  } catch (e) {
-    if (e.code !== "EEXIST") return "failed";
-    // A guard is held for microseconds: an old one was left by a process that died holding it — cleared for the next try.
-    try { if (Date.now() - fs.statSync(guard).mtimeMs > LOCK_RECLAIM_STALE_MS) fs.unlinkSync(guard); } catch { /* gone, or not removable */ }
-    return "busy";
-  }
-  try {
-    try { fs.closeSync(gfd); } catch { /* ignore */ }
-    if (!sameLockSnapshot(lockSnapshot(lock), snap)) return "changed";
-    try { fs.unlinkSync(lock); return "removed"; } catch { return "failed"; }
-  } finally {
-    try { fs.unlinkSync(guard); } catch { /* ignore */ }
-  }
-}
-// Remove `lock` only when it is this acquisition's own (`mine`: its note's token — or, when the note could not be
-// written, the file's identity): one taken over meanwhile (reclaimed after LOCK_MAX_HOLD_MS, or created at a folder's
-// old path after the folder moved) belongs to its new holder.
-function releaseLock(lock, mine) {
-  if (!mine) return;
-  const now = lockSnapshot(lock);
-  if (!now) return;
-  let info = null;
-  try { info = JSON.parse(now.raw); } catch { /* no note */ }
-  const own = mine.token ? isObj(info) && info.token === mine.token : now.size === 0 && now.ino === mine.ino && now.mtimeMs === mine.mtimeMs;
-  if (own) try { fs.unlinkSync(lock); } catch { /* ignore */ }
-}
-// → fn()'s result, or opts.onBusy({ stuck }) when the lock stayed held for opts.waitMs (default: DEV_SPEC_LOCK_WAIT_MS from
-// the environment when it is an integer ≥ 0 — a slow network file system may want more — else LOCK_WAIT_MS). `stuck`:
-// the lock was stale but could not be removed (the busy error then says so — delete it by hand).
-function lockWaitMs() {
-  const v = String(process.env.DEV_SPEC_LOCK_WAIT_MS || "").trim();
-  return /^\d{1,7}$/.test(v) ? Number(v) : LOCK_WAIT_MS;
-}
-function withFeatureLock(dir, fn, opts = {}) {
-  return withLockFile(path.join(dir, LOCK_FILE), fn, opts);
-}
-// The lock itself, on any lock file (a feature's .lock, the project's .specs/.roadmap.lock).
-function withLockFile(lock, fn, opts = {}) {
-  const key = readCacheKey(lock);
-  if (HELD_LOCKS.has(key)) return fn();
-  ensureLockIgnore(specsDirOf(path.dirname(lock))); // before the lock exists: one left by a killed process is never committable
-  const waitMs = Number.isSafeInteger(opts.waitMs) && opts.waitMs >= 0 ? opts.waitMs : lockWaitMs();
-  const now0 = Date.now();
-  // Nested (this process already inside another lock): what is left of the outer acquisition's budget, at least
-  // LOCK_NESTED_MIN_MS — the two waits together stay one budget (they could take twice DEV_SPEC_LOCK_WAIT_MS).
-  const deadline = LOCK_DEADLINE == null ? now0 + waitMs : Math.min(now0 + waitMs, Math.max(LOCK_DEADLINE, now0 + Math.min(LOCK_NESTED_MIN_MS, waitMs)));
-  // The note (and its token) is ready BEFORE the lock exists, so the lock is never there without it.
-  const mine = { token: require("crypto").randomBytes(12).toString("hex"), ino: null, mtimeMs: null };
-  const note = JSON.stringify({ pid: process.pid, host: require("os").hostname(), at: new Date().toISOString(), token: mine.token });
-  let acquired = false;
-  let delay = 5;
-  let denied = 0; // consecutive EPERM/EACCES: Windows answers that for a lock being deleted — or the folder is read-only
-  let stuck = false; // the last stale lock seen could not be removed
-  while (!acquired) {
-    try {
-      acquired = acquireLockFile(lock, note, mine);
-    } catch (e) {
-      if (e.code === "EEXIST") {
-        denied = 0;
-        const snap = staleLock(lock);
-        if (snap) {
-          const r = reclaimStaleLock(lock, snap);
-          if (r === "removed") { stuck = false; continue; } // retry the create at once
-          stuck = r === "failed";
-        } else stuck = false;
-        // Otherwise it waits like a held lock — a stale lock that can't be removed included: the deadline and the sleep
-        // below always run (a `continue` here spun at 100% CPU forever on an undeletable one, freezing the MCP server).
-      } else if ((e.code === "EPERM" || e.code === "EACCES" || e.code === "EBUSY") && ++denied < 10) {
-        /* transient on Windows: retry below */
-      } else {
-        // No lock possible here (the folder vanished while we waited — removed / renamed / archived — or is read-only, or an
-        // odd file system): run unlocked, as before, but on FRESH reads — the caller's pre-lock check ("the feature exists")
-        // is stale once its folder moved, and a write from it recreated a zombie .specs/<old>/ (it now answers not-found).
-        invalidateReadCache();
-        return fn();
-      }
-      if (Date.now() >= deadline) return opts.onBusy ? opts.onBusy({ stuck }) : { ok: false, busy: true, ...(stuck ? { stuck: true } : {}) };
-      sleepSync(delay);
-      delay = Math.min(delay * 2, 50);
-    }
-  }
-  HELD_LOCKS.set(key, mine);
-  const outerDeadline = LOCK_DEADLINE;
-  if (outerDeadline == null) LOCK_DEADLINE = deadline;
-  try {
-    // Anything read before the lock may predate another process's write: the whole read cache (a feature's files), or
-    // only what opts.forget names (the roadmap lock: roadmap.json).
-    if (typeof opts.forget === "function") opts.forget(); else invalidateReadCache();
-    return fn();
-  } finally {
-    LOCK_DEADLINE = outerDeadline;
-    HELD_LOCKS.delete(key);
-    releaseLock(lock, mine); // only our own: after a folder move the old path is empty — or another process's lock
-  }
-}
-// Create `lock` holding `note` — atomically: the note goes to a temp file (named like writeFileAtomic's, so the maintained
-// .specs/.gitignore covers it) that is hard-linked into place — linkSync fails with EEXIST exactly like an O_EXCL create —
-// then the temp name is dropped. The lock is never there without its note: a process killed between the O_EXCL create and
-// the note's write left an EMPTY lock that blocked the feature for LOCK_STALE_MS. Where hard links are unavailable (FAT, some
-// network shares) → the O_EXCL create + write (staleLock treats a noteless lock older than LOCK_NOTELESS_STALE_MS as stale).
-// → true, or throws what the create threw (EEXIST: held; ENOENT: no folder; EPERM/EACCES: being deleted, or read-only).
-function acquireLockFile(lock, note, mine) {
-  const tmp = lock + "." + process.pid + "." + Date.now() + "." + Math.floor(Math.random() * 1e6) + ".tmp";
-  let linked = false;
-  try {
-    fs.writeFileSync(tmp, note, { encoding: "utf8", flag: "wx" });
-    fs.linkSync(tmp, lock);
-    linked = true;
-  } catch (e) {
-    if (e.code === "EEXIST" || e.code === "ENOENT") throw e; // held (or a temp name taken: retried) / no folder: the caller decides
-    // no hard links here, or the temp file couldn't be written: the O_EXCL create below throws the real reason
-  } finally {
-    try { fs.unlinkSync(tmp); } catch { /* never created */ }
-  }
-  if (linked) {
-    try { const st = fs.statSync(lock); mine.ino = st.ino; mine.mtimeMs = st.mtimeMs; } catch { /* ignore */ }
-    return true;
-  }
-  const fd = fs.openSync(lock, "wx");
-  try {
-    fs.writeSync(fd, note);
-  } catch {
-    mine.token = null; // the lock holds without its note: release recognises it by its identity instead
-  }
-  try { const st = fs.fstatSync(fd); mine.ino = st.ino; mine.mtimeMs = st.mtimeMs; } catch { /* ignore */ }
-  try { fs.closeSync(fd); } catch { /* ignore */ }
-  return true;
-}
-// A feature mutator (projectDir, name, …) run under that feature's lock; `when(args)` limits it to the calls that
-// write (impact --reopen, finish --write, brief --write, metrics --write — a derived file written into the feature folder
-// is a write too: resolved before a rename / archive / remove and written after it, it recreated a zombie .specs/<old>/).
-// An unknown feature runs straight through: fn reports it (spec_create of a NEW feature too — there is no folder to lock
-// yet; re-run on an existing one, it adds tracks like spec_add_track, locked).
-function featureLocked(fn, when) {
-  const run = function (projectDir, name) {
-    const args = arguments;
-    if (when && !when(args)) return fn.apply(this, args);
-    const f = existingFeature(projectDir, name);
-    if (!f.ok) return fn.apply(this, args);
-    return withFeatureLock(f.dir, () => fn.apply(this, args), { onBusy: (b) => featureBusyResult(projectDir, f.slug, null, b) });
-  };
-  Object.defineProperty(run, "name", { value: fn.name });
-  return run;
-}
-// The localized busy answer; b.stuck (a stale lock that could not be removed) → says so and names the file to delete.
-const featureBusyResult = (projectDir, slug, rel, b) => {
-  const E = errs(projectDir, slug);
-  return b && b.stuck ? { ok: false, busy: true, stuck: true, error: E.lockStuck(rel || `.specs/${slug}/${LOCK_FILE}`) }
-    : { ok: false, busy: true, error: E.featureBusy(slug, rel) };
-};
-// A feature folder that moves or goes (rename / archive / restore / remove) under the lock its mutators hold: it waits for
-// a running tick, approval or track change to finish (or answers busy) instead of moving the folder away mid-write — the
-// writer's next write (writeFileAtomic → ensureDir) recreated a zombie .specs/<old>/ beside the moved spec, and progress
-// and spec split between two folders. The lock file travels with the folder; `release(newDir)` drops it at the NEW place
-// once the whole operation is done (left there, it kept the renamed / archived feature "busy" for as long as its holder
-// ran). A folder is never moved while another process holds its lock.
-function withMoveLock(projectDir, dir, slug, rel, fn) {
-  const oldKey = readCacheKey(path.join(dir, LOCK_FILE));
-  return withFeatureLock(dir, () => {
-    const mine = HELD_LOCKS.get(oldKey); // undefined when no lock could be taken here (run unlocked): nothing to release
-    let moved = null;
-    try {
-      // Held at its new place from the move on (re-entrant there too, like the old one).
-      return fn((to) => { moved = to; if (mine) HELD_LOCKS.set(readCacheKey(path.join(to, LOCK_FILE)), mine); });
-    } finally {
-      if (moved) {
-        HELD_LOCKS.delete(readCacheKey(path.join(moved, LOCK_FILE)));
-        releaseLock(path.join(moved, LOCK_FILE), mine); // the lock this process carried there — only its own token
-      }
-    }
-  }, { onBusy: (b) => featureBusyResult(projectDir, slug, rel, b) });
-}
-// fs.renameSync of a folder, retried on Windows: a scanner, an indexer or a lock waiter reading a file inside answers
-// EPERM / EACCES / EBUSY for a moment. The feature lock is already held, so it waits longer than a file's rename (~1.4 s —
-// 60 ms answered a raw EPERM under contention); still refused → the caller's localized "folder in use" (moveDirOrBusy).
-const DIR_RENAME_RETRY_MS = [10, 20, 40, 80, 120, 180, 250, 300, 400];
-function renameDirSync(from, to) {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return fs.renameSync(from, to);
-    } catch (e) {
-      if (process.platform !== "win32" || attempt >= DIR_RENAME_RETRY_MS.length || !RENAME_RETRY_CODES.has(e.code)) throw e;
-      sleepSync(DIR_RENAME_RETRY_MS[attempt]);
-    }
-  }
-}
-// renameDirSync → null, or the localized "folder in use" result when the folder stayed locked by another program
-// (EPERM / EACCES / EBUSY after the retries) — never a raw, untranslated EPERM. Anything else is thrown as before.
-function moveDirOrBusy(projectDir, slug, from, to) {
-  try {
-    renameDirSync(from, to);
-    return null;
-  } catch (e) {
-    if (!RENAME_RETRY_CODES.has(e.code)) throw e;
-    const rel = path.relative(path.resolve(projectDir), from).split(path.sep).join("/");
-    return { ok: false, busy: true, inUse: true, error: errs(projectDir, slug).folderInUse(rel) };
-  }
-}
-
-// roadmap.json's read-modify-writes — depend, backlog, the backlog / dependency prunes of create / restore / archive /
-// rename / remove, init's lang and guard, roadmap --lang — under ONE project lock, .specs/.roadmap.lock (the feature
-// lock's O_EXCL file, wait, stale-reclaim and busy answer). Each process read roadmap.json, changed its copy and wrote it
-// back: the last writer won, silently dropping the other's dependency (a blocked feature then read as ready), backlog item
-// or meta.guard while both answered ok. Lock order: a feature lock first, then this one — never the other way round.
-const ROADMAP_LOCK_FILE = ".roadmap.lock";
-// The engine's transient files — the feature and roadmap locks and their reclaim guards — are git-ignored by
-// `.specs/.gitignore` (unanchored names: they match in every feature folder, _archive/ included). A lock left by a killed
-// process (Ctrl-C, a closed session, a crash) showed in `git status`, `git add -A` committed it, and on every clone its
-// checkout mtime made the feature "busy" for LOCK_STALE_MS — then the reclaim deleted a tracked file and dirtied the tree.
-// Ensured before any lock file is created (withLockFile) and by spec_init / spec_create; an existing .specs/.gitignore
-// only gains the lines it lacks (its own lines and line endings are kept). Best-effort: it never creates .specs/ itself and
-// never fails the operation (a read-only folder just stays as it is).
-// Also the temp files a killed process leaves: writeFileAtomic's `<file>.<pid>.<ts>.tmp` and acquireLockFile's
-// `<lock>.<pid>.<ts>.<n>.tmp` (git listed them as untracked), and the tombstone a failed remove leaves (`.removing-*/`).
-const LOCK_IGNORE_LINES = [LOCK_FILE, LOCK_FILE + LOCK_RECLAIM_SUFFIX, ROADMAP_LOCK_FILE, ROADMAP_LOCK_FILE + LOCK_RECLAIM_SUFFIX,
-  "*.[0-9]*.[0-9]*.tmp", ".removing-*/"];
-function ensureLockIgnore(specsDir) {
-  if (!specsDir) return;
-  const file = path.join(specsDir, ".gitignore");
-  try {
-    let cur = null;
-    try { cur = fs.readFileSync(file, "utf8"); } catch (e) { if (e.code !== "ENOENT") return; } // a folder there, unreadable: left alone
-    if (cur == null) {
-      fs.writeFileSync(file, LOCK_IGNORE_LINES.join("\n") + "\n", { encoding: "utf8", flag: "wx" }); // ENOENT without .specs/: nothing created
-    } else {
-      const have = new Set(cur.replace(/^\uFEFF/, "").split(/\r?\n/).map((l) => l.trim()));
-      const missing = LOCK_IGNORE_LINES.filter((l) => !have.has(l));
-      if (!missing.length) return;
-      const eol = /\r\n/.test(cur) ? "\r\n" : "\n";
-      fs.appendFileSync(file, (cur === "" || /\n$/.test(cur) ? "" : eol) + missing.join(eol) + eol, "utf8");
-    }
-    forgetCached(file);
-  } catch { /* best-effort: read-only, or another process wrote it first */ }
-}
-// The `.specs` folder a lock sits in or under (.specs/, .specs/<feature>/, .specs/_archive/<feature>/) — null elsewhere.
-function specsDirOf(dir) {
-  let d = path.resolve(dir);
-  for (let i = 0; i < 3; i++) {
-    if (path.basename(d) === ".specs") return d;
-    const up = path.dirname(d);
-    if (up === d) return null;
-    d = up;
-  }
-  return null;
-}
-const roadmapBusyResult = (projectDir, b) => {
-  const E = i18n.msg(projectLang(projectDir)).err;
-  return b && b.stuck ? { ok: false, busy: true, stuck: true, error: E.lockStuck(".specs/" + ROADMAP_LOCK_FILE) } : { ok: false, busy: true, error: E.roadmapBusy };
-};
-function withRoadmapLock(projectDir, fn, onBusy) {
-  return withLockFile(path.join(specsRoot(projectDir), ROADMAP_LOCK_FILE), fn,
-    { onBusy: onBusy || ((b) => roadmapBusyResult(projectDir, b)), forget: () => forgetCached(roadmapPath(projectDir)) });
-}
-
-// JSON state (.specs/roadmap.json, .specs/<feature>/.state.json). A file that EXISTS but doesn't parse
-// is never treated as empty — the next write would silently erase deps/backlog/approvals/lang. A
-// leading BOM (Windows editors) is tolerated.
-function readJson(file) {
-  const raw = readIfExists(file);
-  if (raw == null) return { exists: false, data: null, error: null };
-  try {
-    return { exists: true, data: JSON.parse(raw.replace(/^\uFEFF/, "")), error: null };
-  } catch (e) {
-    const rel = jsonRel(file);
-    return { exists: true, data: null, error: `${rel} is not valid JSON (${e.message}) — fix it by hand; refusing to overwrite it.`, errorRel: rel, errorDetail: e.message };
-  }
-}
-
-const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-// ".specs/roadmap.json" / "<feature>/.state.json" — the same relative name readJson() reports.
-function jsonRel(file) {
-  return path.relative(path.dirname(path.dirname(file)), file).split(path.sep).join("/"); // same on every OS
-}
-// Localized "valid JSON, wrong shape" error from [code, key?] problems (codes = i18n jsonShape keys).
-function shapeError(lang, rel, problems) {
-  const S = i18n.msg(lang).jsonShape;
-  return S.invalid(rel, problems.map(([code, key]) => (typeof S[code] === "function" ? S[code](key) : S[code])).join("; "));
-}
-
-// One read per file per computation: the roadmap refresh (run by every mutator and the hook) and the checks (doctor,
-// next_action, trace, the catalog) read each feature's artifacts and .state.json from many helpers — the same file up to
-// six times, and on Windows a read costs ~1 ms (the scanner opens every file). withReadCache(fn) serves repeats from
-// memory while fn runs, and only then: the cache lives for ONE call (never across MCP calls — nothing can go stale
-// between them). Inside it every engine write keeps it true: writeFileAtomic / writeIfAbsent / ensureDir drop the entry
-// of what they write (and the "exists" answers of its folders), and a raw write — a moved or removed folder, an in-place
-// edit — clears the whole cache (invalidateReadCache). Nested scopes share the outer one. Keys are resolved paths,
-// case-folded where the file system folds case, so two spellings of one file can't hold two different texts.
-// The same scope memoizes the folder listings walkProject reads and the files each _Implements:_ glob matches
-// (globFiles): trace_check runs several times in one call (finish → trace + doctor → trace; next_action; approve's
-// checks) and a `**` glob walks the whole tree. A written file drops every listing above it and every glob whose walk
-// could see it (forgetCached); a created folder alone adds no file, so it leaves the globs alone.
-let READ_CACHE = null; // Map(key → text | null | boolean | Dirent[]), only while a withReadCache scope runs
-let GLOB_CACHE = null; // Map(key → { base, allowDir, result }) — globFiles results, same scope
-let XAC_MEMO = null; // 1.16 Q2: { root, table } — crossFeatureAcs' criteria table, same scope (dropped by any engine write)
-function withReadCache(fn) {
-  if (READ_CACHE) return fn();
-  READ_CACHE = new Map();
-  GLOB_CACHE = new Map();
-  XAC_MEMO = null;
-  TEMPLATE_SCOPE_ROOT = null; // the call's project (specsRoot) and its parsed templates live as long as the scope
-  TEMPLATE_MEMO = null;
-  PACK_MEMO = null; // … and its track packs (1.15)
-  GHOST_MARKERS = null;
-  try {
-    return fn();
-  } finally {
-    READ_CACHE = null;
-    GLOB_CACHE = null;
-    XAC_MEMO = null;
-    TEMPLATE_SCOPE_ROOT = null;
-    TEMPLATE_MEMO = null;
-    PACK_MEMO = null;
-    GHOST_MARKERS = null;
-  }
-}
-const readCacheKey = (p) => { const r = path.resolve(String(p)); return FOLD_CASE ? r.toLowerCase() : r; };
-const EXISTS_KEY = "\u0000exists:";
-const DIR_KEY = "\u0000dir:";
-// A spec file whose CONTENT is copied out — decisions.md (appended and rewritten), the export's documents, the release notes —
-// must be a regular file whose real path stays inside the project's .specs/: a committed symlink out (decisions.md ->
-// ~/.ssh/id_rsa) is never followed (the specs:// resources refuse it the same way). Absent → true (nothing to follow).
-// Within a read-cache scope the verdict is memoized per file and the root's real path per root (1.16 Q review: the cross-feature
-// criteria and supersededByIndex read every requirements.md in one call — two real-path walks per file were a third of it).
-const CONTAINED_KEY = "\u0000contained:";
-function specsFileContained(projectDir, file) {
-  const k = READ_CACHE ? CONTAINED_KEY + readCacheKey(file) : null;
-  if (k !== null && READ_CACHE.has(k)) return READ_CACHE.get(k);
-  const v = specsFileContainedNow(projectDir, file);
-  if (k !== null) READ_CACHE.set(k, v);
-  return v;
-}
-function specsFileContainedNow(projectDir, file) {
-  let st;
-  try { st = fs.lstatSync(file); } catch { return true; }
-  if (st.isSymbolicLink() || !st.isFile()) return false;
-  try {
-    const root = specsRoot(projectDir);
-    const rk = READ_CACHE ? CONTAINED_KEY + "root:" + readCacheKey(root) : null;
-    let realRoot = rk !== null ? READ_CACHE.get(rk) : undefined;
-    if (realRoot === undefined) { realRoot = fs.realpathSync.native(root); if (rk !== null) READ_CACHE.set(rk, realRoot); }
-    const real = fs.realpathSync.native(file);
-    return real !== realRoot && withinRoot(realRoot, real);
-  } catch {
-    return false;
-  }
-}
-// readIfExists for such a file: null when it is not contained (skipped, as if absent).
-function readContained(projectDir, file) {
-  return specsFileContained(projectDir, file) ? readIfExists(file) : null;
-}
-function readIfExists(file) {
-  const k = READ_CACHE ? readCacheKey(file) : null;
-  if (k !== null && READ_CACHE.has(k)) return READ_CACHE.get(k);
-  let text;
-  try {
-    text = fs.readFileSync(file, "utf8");
-  } catch {
-    text = null;
-  }
-  if (k !== null) READ_CACHE.set(k, text);
-  return text;
-}
-// fs.existsSync, served from the same scope (the per-feature file probes of listFeatures / detectPhase / detectTracks).
-function existsCached(p) {
-  if (!READ_CACHE) return fs.existsSync(p);
-  const k = EXISTS_KEY + readCacheKey(p);
-  if (READ_CACHE.has(k)) return READ_CACHE.get(k);
-  const v = fs.existsSync(p);
-  READ_CACHE.set(k, v);
-  return v;
-}
-// fs.readdirSync(d, { withFileTypes: true }) sorted by name, served from the same scope (walkProject); null = unreadable.
-function readDirCached(d) {
-  const k = READ_CACHE ? DIR_KEY + readCacheKey(d) : null;
-  if (k !== null && READ_CACHE.has(k)) return READ_CACHE.get(k);
-  let entries = null;
-  try {
-    entries = fs.readdirSync(d, { withFileTypes: true });
-    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  } catch {
-    entries = null;
-  }
-  if (k !== null) READ_CACHE.set(k, entries);
-  return entries;
-}
-// `file` is about to be written (or created, with its folders): its text, the "exists" answers and listings of it and of
-// every folder above it are dropped — and every cached glob whose walk could reach it. opts.dir: `file` is a folder being
-// created (ensureDir) — an empty folder changes no glob's matches.
-function forgetCached(file, opts = {}) {
-  if (!READ_CACHE) return;
-  let k = readCacheKey(file);
-  READ_CACHE.delete(k);
-  READ_CACHE.delete(CONTAINED_KEY + k);
-  XAC_MEMO = null; // 1.16 Q2: any write may change a criterion, a state or a template — the cross-feature table is rebuilt
-  // A write under .specs/templates/ (templates init) changes the project's template corpus.
-  if (TEMPLATE_MEMO && (k === TEMPLATE_MEMO.tdirKey || k.startsWith(TEMPLATE_MEMO.tdirKey + path.sep))) TEMPLATE_MEMO = null;
-  // … and a write under .specs/tracks/ (tracks init) changes the project's track packs (1.15).
-  if (PACK_MEMO && (k === PACK_MEMO.dirKey || k.startsWith(PACK_MEMO.dirKey + path.sep))) PACK_MEMO = null;
-  for (;;) {
-    READ_CACHE.delete(EXISTS_KEY + k);
-    READ_CACHE.delete(DIR_KEY + k);
-    const up = path.dirname(k);
-    if (up === k) break;
-    k = up;
-  }
-  if (!opts.dir && GLOB_CACHE && GLOB_CACHE.size) {
-    const abs = readCacheKey(file);
-    for (const [gk, e] of GLOB_CACHE) if (e.base !== null && globWalkReaches(e, abs)) GLOB_CACHE.delete(gk);
-  }
-}
-// Could the walk of a cached glob (from e.base, entering e.allowDir's folders) reach the file `abs` (both readCacheKey
-// forms)? Only a hidden folder on the way (.specs, where the engine writes) proves it can't — anything else is "yes",
-// so a cached result is dropped rather than risked.
-function globWalkReaches(e, abs) {
-  const rel = path.relative(e.base, abs);
-  if (rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel)) return false;
-  return rel.split(path.sep).slice(0, -1).every((n) => !n.startsWith(".") || (e.allowDir && e.allowDir(n)));
-}
-// A write the per-file bookkeeping can't follow (a folder moved or removed, a file edited in place): forget everything.
-function invalidateReadCache() {
-  if (READ_CACHE) READ_CACHE.clear();
-  if (GLOB_CACHE) GLOB_CACHE.clear();
-  TEMPLATE_MEMO = null;
-  PACK_MEMO = null;
-  XAC_MEMO = null;
-}
 
 // The text minus its HTML comments (commentLines' reading: a "<!--" in fenced code or an inline code span is text, one
 // that never closes is text). A comment spanning lines takes its line breaks with it, as the old regex did.
@@ -910,73 +154,6 @@ function clarificationMarkers(md) {
   let m;
   while ((m = re.exec(text)) !== null) out.push((m[1] || "").trim());
   return out;
-}
-
-function slugify(name) {
-  if (name == null) return ""; // never "undefined" — a missing name must not become a folder
-  return String(name)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // transliterate: "Autenticação" → "autenticacao" (not "autentica-o")
-    .trim()
-    .toLowerCase()
-    .replace(/['"]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+/, "")
-    .slice(0, 64)
-    .replace(/-+$/, "");
-}
-
-// Pre-1.11 slug (accents dropped as separators). Only used to keep finding folders created back then.
-function legacySlugify(name) {
-  if (name == null) return "";
-  return String(name).trim().toLowerCase().replace(/['"]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+/, "").slice(0, 64).replace(/-+$/, "");
-}
-
-// Windows reserves these device names in every directory (`.specs\nul\` is unusable from most tools).
-const RE_WIN_RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/;
-const RESERVED_SLUGS = new Set(["steering", "exports", "templates", "tracks"]); // folders under .specs/ that are not features (1.14: exports/ holds spec_export's documents, templates/ the project's templates; 1.15: tracks/ the project's track packs)
-// Is this folder name under `root` (.specs/ or .specs/_archive/) reserved? "steering" always; "templates" / "exports" (1.14) and
-// "tracks" (1.15 — the track packs) unless that folder is a FEATURE created before them — it holds a .state.json: it stays a feature (listed,
-// reachable, renameable) and is never read as templates (templateFileList), so an upgrade never turns a filled spec into
-// every new feature's scaffold.
-function reservedSlug(name, root) {
-  const s = String(name).toLowerCase();
-  if (!RESERVED_SLUGS.has(s)) return false;
-  return !((s === "templates" || s === "exports" || s === "tracks") && root && existsCached(statePath(path.join(root, s))));
-}
-
-// Every name-taking operation resolves its folder HERE. An empty slug ("日本語", "...", undefined) used to
-// make path.join(root, "") === .specs itself, so `spec_feature remove` wiped every spec.
-function resolveFeature(projectDir, name) {
-  const root = specsRoot(projectDir);
-  const slug = slugify(name);
-  const E = () => errs(projectDir); // only on a refusal: the project language costs a roadmap.json read
-  if (!slug) return { ok: false, slug, root, error: E().noUsableName(name == null ? "" : name) };
-  if (reservedSlug(slug, root)) return { ok: false, slug, root, error: E().reserved(slug) };
-  // Windows device names: refuse new ones, but an existing folder of that name (created on another OS)
-  // must stay reachable so it can be renamed away. Check the real listing — on Windows existsSync("con")
-  // can report the device.
-  if (RE_WIN_RESERVED.test(slug) && !safeReaddir(root).includes(slug)) return { ok: false, slug, root, error: E().reservedWin(slug) };
-  const dir = path.join(root, slug);
-  if (!existsCached(dir)) {
-    const legacy = legacySlugify(name);
-    if (legacy && legacy !== slug && !reservedSlug(legacy, root) && existsCached(path.join(root, legacy))) {
-      return { ok: true, slug: legacy, dir: path.join(root, legacy), root };
-    }
-  }
-  return { ok: true, slug, dir, root };
-}
-// resolveFeature + "must exist".
-function existingFeature(projectDir, name) {
-  const f = resolveFeature(projectDir, name);
-  if (f.ok && !existsCached(f.dir)) {
-    // An archived feature is not an active one — but "not found" alone sent the user nowhere (drift's finish-it-again line
-    // for an archived feature used to end right here): name the archive and the restore.
-    const E = errs(projectDir);
-    const arch = locateFeatures(projectDir, name).find((x) => x.archived);
-    return { ...f, ok: false, error: E.notFound(f.slug, f.root) + (arch ? " " + E.archivedHint(arch.slug) : "") };
-  }
-  return f;
 }
 
 // Track input from MCP or the CLI: an array or a string, EVERY element split on whitespace, commas and '+'
@@ -3975,8 +3152,6 @@ function steeringScaffold(projectDir, file, lang, tracks, builtIn) {
 }
 
 // --- the project's templates as template corpus (placeholder detection) ---
-let TEMPLATE_SCOPE_ROOT = null; // the .specs/ folder of the current engine call (specsRoot), reset per read-cache scope
-let TEMPLATE_MEMO = null; // { root, tdirKey, sets } — this call's parsed project templates
 const TEMPLATE_PARSE_CACHE = new Map(); // abs key → { text, parsed } across calls (bounded)
 // "describe {{name}} here" → ["describe ", " here"] (null without a known variable, or with under 3 literal characters —
 // `[{{name}}]` alone would match every bracket).
@@ -4034,11 +3209,11 @@ function buildProjectTemplateSets(root) {
 }
 // The current call's project template sets, or null (no project known, or no template in it).
 function projectTemplateSets() {
-  const root = TEMPLATE_SCOPE_ROOT;
+  const root = CTX.TEMPLATE_SCOPE_ROOT;
   if (!root) return null;
-  if (TEMPLATE_MEMO && TEMPLATE_MEMO.root === root) return TEMPLATE_MEMO.sets;
+  if (CTX.TEMPLATE_MEMO && CTX.TEMPLATE_MEMO.root === root) return CTX.TEMPLATE_MEMO.sets;
   const sets = buildProjectTemplateSets(root);
-  if (READ_CACHE) TEMPLATE_MEMO = { root, tdirKey: readCacheKey(path.join(root, TEMPLATES_DIR)), sets };
+  if (CTX.READ_CACHE) CTX.TEMPLATE_MEMO = { root, tdirKey: readCacheKey(path.join(root, TEMPLATES_DIR)), sets };
   return sets;
 }
 // Is this placeholder key (placeholderKey) / task description / bug-report slot one of the project's templates'?
@@ -4052,9 +3227,9 @@ function projectTemplateHas(kind, key) {
 }
 // A feature dir's .specs/ as the scope's project when none is known yet (a direct detectPhase / artifactReport call).
 function useTemplateScopeOf(dir) {
-  if (TEMPLATE_SCOPE_ROOT || !READ_CACHE || !dir) return;
+  if (CTX.TEMPLATE_SCOPE_ROOT || !CTX.READ_CACHE || !dir) return;
   const s = specsDirOf(dir);
-  if (s) TEMPLATE_SCOPE_ROOT = s;
+  if (s) CTX.TEMPLATE_SCOPE_ROOT = s;
 }
 
 // --- spec_templates {action: list | init | check, artifact?, lang?} — `dev-spec templates [list|init|check] [artifact]` ---
@@ -4785,19 +3960,18 @@ function loadTrackPacks(root) {
   return reg;
 }
 
-let PACK_MEMO = null; // { root, dirKey, reg } — the current call's track packs (withReadCache scope)
 let PACK_LOADING = false;
 const NO_PACKS = Object.freeze({ packs: [], names: [], byName: new Map(), byToken: new Map(), problems: [], entries: [], legacy: false, corpus: null, dir: null });
 // The track packs of the project the current engine call works in (TEMPLATE_SCOPE_ROOT) — none outside a call's scope or while
 // the packs themselves load (a reader of the registries never sees a half-built one).
 function packRegistry() {
-  const root = TEMPLATE_SCOPE_ROOT;
+  const root = CTX.TEMPLATE_SCOPE_ROOT;
   if (!root || PACK_LOADING) return NO_PACKS;
-  if (PACK_MEMO && PACK_MEMO.root === root) return PACK_MEMO.reg;
+  if (CTX.PACK_MEMO && CTX.PACK_MEMO.root === root) return CTX.PACK_MEMO.reg;
   PACK_LOADING = true;
   let reg;
   try { reg = loadTrackPacks(root); } catch { reg = NO_PACKS; } finally { PACK_LOADING = false; }
-  if (READ_CACHE) PACK_MEMO = { root, dirKey: readCacheKey(path.join(root, TRACK_PACKS_DIR)), reg };
+  if (CTX.READ_CACHE) CTX.PACK_MEMO = { root, dirKey: readCacheKey(path.join(root, TRACK_PACKS_DIR)), reg };
   return reg;
 }
 // --- the registries: built-in tables + the project's valid packs (in name order, after the built-in ones) ---
@@ -4813,9 +3987,8 @@ function trackSteeringFiles(tr) { if (Object.prototype.hasOwnProperty.call(TRACK
 function trackSignalTable(tr) { if (Object.prototype.hasOwnProperty.call(SIGNALS, tr)) return SIGNALS[tr]; const p = packOf(tr); return p ? p.signals : { strong: [], weak: [] }; }
 // `[A11Y]` — exactly, markers are case-sensitive tokens — is a pack's stable marker, never a template slot (a lower-case
 // `[role]` stays the template's slot even beside a ROLE pack). Never while the process-wide built-in corpus is built.
-let BUILTIN_CORPUS_BUILD = 0;
 function isPackMarkerBracket(inner) {
-  if (BUILTIN_CORPUS_BUILD) return false;
+  if (CTX.BUILTIN_CORPUS_BUILD) return false;
   const reg = packRegistry();
   return reg.packs.length > 0 && reg.byToken.has(String(inner).trim());
 }
@@ -4831,9 +4004,8 @@ function packMarkersFor(tracks) {
 // feature's .state.json packMarkers — EVERY recorded pack that is no valid pack now, whether the feature still lists it or turned
 // it off before the pack went (F4 review R1: an off-then-deleted pack's sections came back to life); a marker that is a valid
 // pack's or reserved is never one. Dropped with the read-cache scope.
-let GHOST_MARKERS = null;
 function noteGhostPacks(st) {
-  if (!READ_CACHE || !isObj(st) || !isObj(st.packMarkers)) return;
+  if (!CTX.READ_CACHE || !isObj(st) || !isObj(st.packMarkers)) return;
   const valid = allTracks();
   for (const n of Object.keys(st.packMarkers)) {
     const m = st.packMarkers[n];
@@ -4841,11 +4013,11 @@ function noteGhostPacks(st) {
     if (typeof m !== "string" || !RE_PACK_NAME.test(n) || (valid.includes(n) && !legacyPackName(st, n))) continue;
     const token = m.length > 2 && m.startsWith("[") && m.endsWith("]") ? m.slice(1, -1) : "";
     if (!RE_PACK_MARKER.test(token) || RE_PACK_MARKER_RESERVED.test(token) || packRegistry().byToken.has(token)) continue;
-    if (!GHOST_MARKERS) GHOST_MARKERS = new Map();
-    GHOST_MARKERS.set(n, m);
+    if (!CTX.GHOST_MARKERS) CTX.GHOST_MARKERS = new Map();
+    CTX.GHOST_MARKERS.set(n, m);
   }
 }
-const ghostMarkers = () => (GHOST_MARKERS ? [...GHOST_MARKERS] : []);
+const ghostMarkers = () => (CTX.GHOST_MARKERS ? [...CTX.GHOST_MARKERS] : []);
 // A saved (non-built-in) track name that is a track pack's: a valid pack now, or one recorded in the state's packMarkers (a pack the
 // feature used) — never a reserved word (F4 review R6: a hand-typed "gdpr" / "security" / a typo is no pack; the list then falls
 // back to the files as in 1.14) — except a pre-1.17 pack of a name reserved since (legacyPackName, 1.17 D review).
@@ -5233,10 +4405,6 @@ function initTrackPack(projectDir, name, lang, lng) {
   return { ok: true, action: "init", name: n, marker: "[" + token + "]", dir, lang: lng, created, kept, lines };
 }
 
-// ---------------------------------------------------------------------------
-// Introspection: list / status / tasks
-// ---------------------------------------------------------------------------
-
 // The feature's active tracks — the ONE source every tool uses (status, doctor, add_track, roadmap,
 // next_action, brief…). Since 1.13 they are persisted in .state.json `tracks` (create / add_track /
 // add_track --remove write them). Older features fall back to their files; there a [SaaS]/[AI] marker only
@@ -5366,20 +4534,9 @@ function detectPhase(dir, tracks) {
   return "empty";
 }
 
-// A folder name a feature command can address (current or pre-1.11 slug). `.obsidian`, `My Notes/` are not
-// features: they used to list as 0% features that no command could reach or remove. A case-only difference
-// ("Billing/") is addressable on a case-insensitive filesystem (Windows, macOS): 'billing' resolves to it, so
-// it stays listed — but only when it IS the folder that slug reaches (never beside a real "billing/").
-function isFeatureFolder(name, root) {
-  if (name.startsWith(".") || name.startsWith("_") || reservedSlug(name, root)) return false;
-  if (slugify(name) === name) return true;
-  if (!root || slugify(name) !== name.toLowerCase()) return false;
-  try {
-    return fs.realpathSync.native(path.join(root, name.toLowerCase())) === fs.realpathSync.native(path.join(root, name));
-  } catch {
-    return false;
-  }
-}
+// ---------------------------------------------------------------------------
+// Introspection: list / status / tasks
+// ---------------------------------------------------------------------------
 
 function listFeatures(projectDir) {
   const root = specsRoot(projectDir);
@@ -5471,14 +4628,6 @@ function statusFeature(projectDir, name) {
     ...(Object.keys(packSections).length ? { packSections } : {}),
     ...(missingPacks.length ? { missingPacks } : {}), // saved track packs the project lacks now (inactive — doctor: track-pack-missing)
   };
-}
-
-function safeReaddir(p) {
-  try {
-    return fs.readdirSync(p);
-  } catch {
-    return [];
-  }
 }
 
 function nextTask(projectDir, name, opts = {}) {
@@ -6999,17 +6148,6 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
     truncated: s.truncated,
   };
 }
-
-// Is `p` the root itself or inside it? path.relative, not `root + sep`: a drive root (C:\, or Q:\ from subst) already
-// ends in a separator, and another drive comes back absolute.
-function withinRoot(root, p) {
-  const rel = path.relative(root, p);
-  return rel === "" || (rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel));
-}
-
-// ---------------------------------------------------------------------------
-// spec_task_brief — a self-contained brief for ONE task (subagent-driven execution)
-// ---------------------------------------------------------------------------
 
 // Tasks as BLOCKS: the task line plus its sub-lines (markers, sub-steps), the phase heading it sits
 // under and the **Checkpoint:** that closes its section. This is the ONE task scanner: parseTasks() (the
@@ -8546,6 +7684,10 @@ function untickedSince(evidence, block, dup, reason) {
   return isRecord(own) && own.stale === true && own.staleBy === "undo";
 }
 
+// ---------------------------------------------------------------------------
+// spec_task_brief — a self-contained brief for ONE task (subagent-driven execution)
+// ---------------------------------------------------------------------------
+
 // +ai prompt work (touches prompts/, or an _Affects evals:_ task about a prompt) stays with the controller.
 function isPromptTask(block, mk, tracks) {
   return tracks.includes("ai") && (mk.implements.some((f) => /(^|[\\/])prompts[\\/]/.test(f)) ||
@@ -9042,76 +8184,6 @@ function finishFeature(projectDir, name, opts = {}) {
   if (opts.includeBody != null ? !!opts.includeBody : !write) res.mergeSummary = mergeSummary;
   return res;
 }
-
-// ---------------------------------------------------------------------------
-// State & approval gates (.state.json)
-// ---------------------------------------------------------------------------
-
-const PHASES = ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"];
-
-function statePath(dir) {
-  return path.join(dir, ".state.json");
-}
-
-function readState(projectDir, name) {
-  const f = resolveFeature(projectDir, name);
-  if (!f.ok) return { approvals: {} };
-  return stateFromFile(projectDir, statePath(f.dir));
-}
-// The same read + shape check for a state file at a known path (an archived feature's .state.json too).
-function stateFromFile(projectDir, file) {
-  const j = readJson(file);
-  if (j.error) return { approvals: {}, invalid: i18n.msg(projectLang(projectDir)).err.invalidJson(j.errorRel, j.errorDetail) };
-  // Valid JSON of the wrong shape is refused like unparseable JSON — an `approvals` ARRAY silently dropped
-  // every approval on the next write. Readers get the valid parts (lang kept); mutators check `invalid`.
-  const problems = [];
-  if (j.exists && !isObj(j.data)) problems.push(["topLevel"]);
-  const s = isObj(j.data) ? j.data : {};
-  for (const [key, ok] of [["approvals", isObj], ["evidence", isObj], ["tracks", Array.isArray], ["finishChecks", isObj], ["signoffs", isObj]]) { // finishChecks: project check runs; signoffs: role sign-offs
-    if (s[key] !== undefined && !ok(s[key])) { problems.push([key]); delete s[key]; }
-  }
-  // The change history (approvePhase / spec_impact append to these lists): a non-list would be replaced by the next append.
-  for (const key of ["approvalHistory", "changes", "unticks"]) if (s[key] !== undefined && !Array.isArray(s[key])) { problems.push([key]); delete s[key]; } // unticks: 1.16 U1 (undone ticks)
-  s.approvals = s.approvals || {};
-  if (problems.length) s.invalid = shapeError(typeof s.lang === "string" ? s.lang : projectLang(projectDir), jsonRel(file), problems);
-  return s;
-}
-
-// The artifact each approvable phase signs off, and a content fingerprint recorded at approval so a
-// later edit is detected by CONTENT, not mtime (ticking a task checkbox is progress, not a spec edit).
-const PHASE_FILE = { classification: "classification.md", requirements: "requirements.md", design: "design.md", "test-plan": "test-plan.md", "eval-plan": "eval-plan.md", tasks: "tasks.md" };
-function artifactFingerprint(file, phase) {
-  const raw = readIfExists(file);
-  return raw == null ? null : textFingerprint(raw, phase);
-}
-// The same fingerprint from text (an approval snapshot is compared by it too).
-// A leading BOM is encoding, not content (like CRLF): an editor or Windows PowerShell 5.1 re-saving an approved
-// artifact as "UTF-8 with BOM" must not read as changed-since-approval (it blocked spec_finish while spec_impact
-// showed nothing changed).
-function textFingerprint(raw, phase) {
-  return sha1Hex(fingerprintText(raw, phase));
-}
-function fingerprintText(raw, phase) {
-  const text = String(raw).replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
-  return phase === "tasks" ? uncheckTasks(text) : text;
-}
-const sha1Hex = (text) => require("crypto").createHash("sha1").update(text).digest("hex");
-// Does this text still match a fingerprint an approval recorded? An approval recorded before the BOM was ignored
-// hashed the file with its BOM: that fingerprint still matches the same content (with or without the BOM now).
-function fingerprintMatches(raw, phase, stored) {
-  if (raw == null || typeof stored !== "string" || !stored) return false;
-  const text = fingerprintText(raw, phase);
-  return sha1Hex(text) === stored || sha1Hex(BOM_CHAR + text) === stored;
-}
-const BOM_CHAR = String.fromCharCode(0xfeff);
-const artifactMatches = (file, phase, stored) => fingerprintMatches(readIfExists(file), phase, stored);
-// Checkbox state is not content. The indent is read within its line ([^\S\n\r\u2028\u2029], not \s): from each line start of a
-// long blank run \s* rescanned the whole run (1.17 H) — the lines above keep their text either way ($1 puts it back).
-const uncheckTasks = (text) => text.replace(/^([^\S\n\r\u2028\u2029]*-\s*\[)[xX](\])/gm, "$1 $2");
-// The artifact a phase's approval signs off: a bugfix has no design of its own — its design approval signs off bug.md
-// (the Root Cause the gate checks). approvePhase records it as `file` on the approval, so changedSinceApproval
-// compares the right file (an approval without `file` signed off PHASE_FILE's, as before).
-const phaseFile = (phase, kind) => (phase === "design" && kind === "bugfix" ? "bug.md" : PHASE_FILE[phase]);
 
 // An approval is a GATE, not a stamp: the checks of the phase being approved run first (approvalChecks) and a
 // failure refuses it — unless opts.force, which records it anyway with `forced: true` and the failing check ids
@@ -10145,10 +9217,6 @@ function impactLines(r) {
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// 1.16 Q — spec quality: steering amendments (Q1) · cross-feature acceptance criteria (Q2) · the glossary (Q3)
-// ---------------------------------------------------------------------------
-
 // --- Q1: steering amendments ---
 // A requirements / design approval records `steering` {file: fingerprint} (on approvals[phase] and its history record): the
 // steering files that governed it — constitution.md, the active tracks' steering files (a track pack's too), every file whose
@@ -10292,6 +9360,10 @@ function steeringImpactLines(r) {
   if (r.hint) out.push("  → " + r.hint);
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// 1.16 Q — spec quality: steering amendments (Q1) · cross-feature acceptance criteria (Q2) · the glossary (Q3)
+// ---------------------------------------------------------------------------
 
 // --- Q2: cross-feature acceptance criteria — near-duplicates and likely conflicts ---
 // A deterministic heuristic over the ACTIVE plain features' criteria (bugfixes restate the behaviour they restore; spikes have
@@ -10545,7 +9617,7 @@ function xacFeatureRows(projectDir, s, state, tracks, tmplOf) {
 }
 function xacTable(projectDir) {
   const root = dirKey(specsRoot(projectDir));
-  if (READ_CACHE && XAC_MEMO && XAC_MEMO.root === root) return XAC_MEMO.table;
+  if (CTX.READ_CACHE && CTX.XAC_MEMO && CTX.XAC_MEMO.root === root) return CTX.XAC_MEMO.table;
   let tmpl = null; // the template criteria (built-in + this project's), read on the first criterion
   const tmplOf = () => {
     if (!tmpl) { const b = builtinTemplateAcs(), p = projectTemplateAcs(projectDir); tmpl = { skel: new Set([...b.skel, ...p.skel]), shapes: b.shapes.concat(p.shapes) }; }
@@ -10601,7 +9673,7 @@ function xacTable(projectDir) {
   // The whole table from the last call, while nothing changed (no _Supersedes:_ anywhere — its retirements read other states).
   const tableKey = anySup || feats.some((f) => !f.cacheable) ? null : root + "\n" + ctx + "\nghosts:" + ghosts + "\n" + feats.map((f) => f.ck + "|" + f.reqSig + "|" + f.stateSig).join("\n");
   if (tableKey && XAC_TABLE_CACHE && XAC_TABLE_CACHE.key === tableKey) {
-    if (READ_CACHE) XAC_MEMO = { root, table: XAC_TABLE_CACHE.table };
+    if (CTX.READ_CACHE) CTX.XAC_MEMO = { root, table: XAC_TABLE_CACHE.table };
     return XAC_TABLE_CACHE.table;
   }
   const sup = anySup ? supersededByIndex(projectDir) : null;
@@ -10626,7 +9698,7 @@ function xacTable(projectDir) {
     for (const w of c.prefix) { const post = index.get(w); if (post) post.push(i); else index.set(w, [i]); }
   });
   const table = { crit, index, truncated };
-  if (READ_CACHE) XAC_MEMO = { root, table };
+  if (CTX.READ_CACHE) CTX.XAC_MEMO = { root, table };
   XAC_TABLE_CACHE = tableKey ? { key: tableKey, table } : null;
   return table;
 }
@@ -11508,14 +10580,14 @@ function manageFeature(projectDir, action, name, arg, opts = {}) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// spec_add_track — turn a track on (additive, never overwrites) or off (non-destructive) for a feature
-// ---------------------------------------------------------------------------
-
 // The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
 // language). MARKER_TRACKS drives every per-marker loop: detection, inactive sections/tasks, doctor, approve, status.
 const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]" };
 const MARKER_TRACKS = Object.keys(TRACK_MARKER);
+
+// ---------------------------------------------------------------------------
+// spec_add_track — turn a track on (additive, never overwrites) or off (non-destructive) for a feature
+// ---------------------------------------------------------------------------
 
 // The ONE code path that turns tracks ON for an existing feature — spec_add_track, and spec_create re-run on
 // an existing feature with new tracks: missing artifacts, the track's design sections, its steering files, its
@@ -12556,10 +11628,6 @@ CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
 Object.assign(CHECK_PHASE, { glossary: 1, "cross-feature-acs": 1, "steering-changed-since-approval": 2 }); // 1.16 Q (warns only)
 Object.assign(CHECK_PHASE, { "design-tradeoffs": 2, "design-risks": 2 }); // 1.17 A1 (warns only)
 
-// ---------------------------------------------------------------------------
-// spec_doctor — one health-check that decides "ready to advance?"
-// ---------------------------------------------------------------------------
-
 // Each mandatory section is matched by a heading containing ANY synonym (EN/PT/ES), so specs can
 // be written fully in the user's language — headings included.
 const SAAS_SECTIONS = [
@@ -12952,14 +12020,14 @@ function templateSets() {
   if (TEMPLATE_SETS) return TEMPLATE_SETS;
   const brackets = new Set(LEGACY_TEMPLATE_PLACEHOLDERS), code = new Set();
   const seen = new Set();
-  BUILTIN_CORPUS_BUILD++; // a process-wide cache: the current call's track packs never shape it (isPackMarkerBracket)
+  CTX.BUILTIN_CORPUS_BUILD++; // a process-wide cache: the current call's track packs never shape it (isPackMarkerBracket)
   try {
     for (const t of new Set(templateCorpus())) {
       const k = templateBracketKeys(t, seen);
       k.brackets.forEach((x) => brackets.add(x));
       k.code.forEach((x) => code.add(x));
     }
-  } finally { BUILTIN_CORPUS_BUILD--; }
+  } finally { CTX.BUILTIN_CORPUS_BUILD--; }
   return (TEMPLATE_SETS = { brackets, code });
 }
 // pt-BR (1.14 D1) renders every pt template through i18n.toPtBr, whose rules never cross a line: its slots are exactly the
@@ -12969,7 +12037,7 @@ let TEMPLATE_SETS_BR = null;
 function templateSetsBr() {
   if (TEMPLATE_SETS_BR) return TEMPLATE_SETS_BR;
   const base = templateSets(), brackets = new Set(), code = new Set(), seen = new Set(), done = new Set();
-  BUILTIN_CORPUS_BUILD++;
+  CTX.BUILTIN_CORPUS_BUILD++;
   try {
     for (const t of new Set(templateCorpus(["pt"]))) for (const [, line] of visibleLines(t)) {
       if (!line.includes("[") || done.has(line)) continue;
@@ -12980,7 +12048,7 @@ function templateSetsBr() {
       k.brackets.forEach((x) => { if (!base.brackets.has(x)) brackets.add(x); });
       k.code.forEach((x) => { if (!base.code.has(x)) code.add(x); });
     }
-  } finally { BUILTIN_CORPUS_BUILD--; }
+  } finally { CTX.BUILTIN_CORPUS_BUILD--; }
   return (TEMPLATE_SETS_BR = { brackets, code });
 }
 // …and the slots of the project's own templates (.specs/templates/ — projectTemplateHas, 1.14).
@@ -13564,6 +12632,10 @@ const RE_NFR = /non-functional|nfr|performance|security|n[ãa]o[- ]funcional|no 
 const RE_EDGE_CASES = /edge case|error handling|casos? limite|casos? l[íi]mite|tratamento de erro|manejo de error/i;
 // The +tdd design block heading, localized (used by addTrack to avoid re-appending it).
 const RE_TESTABILITY = /##\s*(testability notes|notas de testabilidade|notas de testabilidad)/i;
+
+// ---------------------------------------------------------------------------
+// spec_doctor — one health-check that decides "ready to advance?"
+// ---------------------------------------------------------------------------
 
 // opts.scan: a scanTestCode() result to reuse for the tests-in-code check (spec_finish walks the project once). opts.lean: the
 // caller reads only the failing checks and the verdict — the warn-only cross-feature-acs check is skipped once the verdict is
@@ -14930,36 +14002,6 @@ function overlapDoctorDetail(pairs, slug, lang) {
 // ---------------------------------------------------------------------------
 // Living catalog (.specs/SPECS.md) · _Supersedes:_ · restore · drift since finish
 // ---------------------------------------------------------------------------
-
-const isDirSafe = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
-
-// Every feature folder, active first, then archived (.specs/_archive/<slug>/) — the same addressability rule as
-// listFeatures, without its per-feature phase work (the SessionStart drift check runs on this). → [{ slug, dir, archived }]
-function featureDirs(projectDir) {
-  const root = specsRoot(projectDir);
-  const dirsIn = (base) => {
-    try {
-      return fs.readdirSync(base, { withFileTypes: true }).filter((d) => d.isDirectory() && isFeatureFolder(d.name, base)).map((d) => d.name).sort();
-    } catch {
-      return [];
-    }
-  };
-  const archRoot = path.join(root, "_archive");
-  return dirsIn(root).map((n) => ({ slug: n, dir: path.join(root, n), archived: false }))
-    .concat(dirsIn(archRoot).map((n) => ({ slug: n, dir: path.join(archRoot, n), archived: true })));
-}
-
-// The existing folders a name reaches — active and/or archived (current or pre-1.11 slug). → [{ slug, dir, archived }]
-function locateFeatures(projectDir, name) {
-  const root = specsRoot(projectDir);
-  const slugs = [...new Set([slugify(name), legacySlugify(name)])].filter((s) => s && !reservedSlug(s, root));
-  const out = [];
-  for (const [base, archived] of [[root, false], [path.join(root, "_archive"), true]]) {
-    const s = slugs.find((x) => isFeatureFolder(x, base) && isDirSafe(path.join(base, x)));
-    if (s) out.push({ slug: s, dir: path.join(base, s), archived });
-  }
-  return out;
-}
 
 // `_Supersedes: <feature>/US-n.AC-m[, …]_` — English-stable, on a criterion of requirements.md (its line or a sub-line):
 // that criterion replaces an AC of an earlier feature, active or archived. Read like the task markers: HTML comments
@@ -18697,9 +17739,6 @@ const SCAN_READ_BYTES = 200000;
 const SCAN_ROUTE_CAP = 200; // routes listed — candidateEndpoints still counts every one found
 const SCAN_LIST_CAP = 100; // entrypoints / migrations listed (env names: twice that)
 const COVERAGE_CAP = 20000; // files walked by coverage()
-// Windows and macOS file systems are case-insensitive: `_Implements: SRC/App.js_` names src/app.js there.
-const FOLD_CASE = process.platform === "win32" || process.platform === "darwin";
-const toPosix = (p) => String(p).split(path.sep).join("/");
 
 // Bounded, read-only, alphabetical walk (hidden dirs and SCAN_IGNORE skipped; symlinks never followed — a link
 // out of the project is not read). onFile(rel, full, name) gets a forward-slash path relative to the root.
@@ -19261,11 +18300,11 @@ function projectGlob(pattern, root) {
 function globFiles(projectDir, pattern, opts = {}) {
   const root = path.resolve(projectDir);
   const cap = opts.cap || COVERAGE_CAP;
-  const key = GLOB_CACHE ? [readCacheKey(root), String(pattern), opts.first ? 1 : 0, cap].join("\u0000") : null;
+  const key = CTX.GLOB_CACHE ? [readCacheKey(root), String(pattern), opts.first ? 1 : 0, cap].join("\u0000") : null;
   const copy = (r) => ({ files: r.files.slice(), outside: r.outside, truncated: r.truncated });
-  if (key !== null && GLOB_CACHE.has(key)) return copy(GLOB_CACHE.get(key).result);
+  if (key !== null && CTX.GLOB_CACHE.has(key)) return copy(CTX.GLOB_CACHE.get(key).result);
   const done = (result, base, allowDir) => {
-    if (key !== null) GLOB_CACHE.set(key, { base: base == null ? null : readCacheKey(base), allowDir, result: copy(result) });
+    if (key !== null) CTX.GLOB_CACHE.set(key, { base: base == null ? null : readCacheKey(base), allowDir, result: copy(result) });
     return result;
   };
   const g = projectGlob(pattern, root);
@@ -19454,7 +18493,6 @@ function coverage(projectDir) {
 const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec", plan: "plan", execplan: "ExecPlan", bmad: "BMAD", fluidplan: "fluidplan" }; // C3: + plan · execplan · bmad; 1.17 F: + fluidplan
 const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 const TEXT_IMPORT_TOOLS = ["plan", "execplan", "fluidplan"]; // 1.16 C4: the single-document sources spec_import {text} accepts (1.17 F: a fluidplan PLAN.md, DECISIONS.md after it)
-const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 // An imported line never opens an HTML comment (1.17 F review): every parser reads its source without its comments, so a `<!--`
 // left in the text was an unclosed one — plain text there, but in the files written it paired with a later `-->` (the
 // `<!-- <tool>: … -->` line under a converted criterion) and hid every criterion between.
@@ -19488,67 +18526,6 @@ function inertBlock(lines) {
   const out = lines.map((l) => (fenceStep(st, l) ? l : commentInert(l)));
   if (st.fence) out.push(" ".repeat(st.fence.indent) + st.fence.mark);
   return out;
-}
-
-function isInsideDir(root, p) {
-  const f = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
-  const r = f(root.endsWith(path.sep) ? root : root + path.sep);
-  return f(p) === f(root) || f(p).startsWith(r);
-}
-
-// The real path of p even when it doesn't exist yet: the real path (fs.realpathSync.native — 8.3 short names, junctions
-// and symlinks resolved) of its nearest EXISTING ancestor, plus the segments below it. null when nothing resolves.
-function realPathLoose(p) {
-  let cur = path.resolve(p);
-  const rest = [];
-  for (let i = 0; i < 256; i++) {
-    try {
-      return path.join(fs.realpathSync.native(cur), ...rest);
-    } catch (e) {
-      if (!e || (e.code !== "ENOENT" && e.code !== "ENOTDIR")) return null; // EACCES, ELOOP…: no answer
-    }
-    const up = path.dirname(cur);
-    if (up === cur) return null;
-    rest.unshift(path.basename(cur));
-    cur = up;
-  }
-  return null;
-}
-// A network path in its plain UNC spelling (`\\?\UNC\host\share\…` and `\\.\UNC\…` → `\\host\share\…`), for a text comparison.
-function plainUnc(p) {
-  const s = String(p);
-  const m = /^[\\/]{2}[?.][\\/]UNC[\\/]/i.exec(s);
-  return m ? "\\\\" + s.slice(m[0].length) : s;
-}
-// Is network path p inside network folder root — decided on the TEXT alone, never a stat or realpath (1.16 verify NEW-3)?
-// Both are read as Windows paths (a UNC path is one): `\\?\UNC\` = `\\`, / = \, `..` resolved, case folded (SMB host and share
-// names are case-insensitive). A local root or p → false. → the relative path ("" for root itself) | null.
-function networkPathInside(root, p) {
-  if (typeof root !== "string" || typeof p !== "string" || !isNetworkPath(root) || !isNetworkPath(p)) return null;
-  const W = path.win32;
-  const r = W.resolve(plainUnc(root)), q = W.resolve(plainUnc(p));
-  if (!isNetworkPath(r) || !isNetworkPath(q)) return null;
-  const rl = r.toLowerCase().replace(/\\+$/, ""), ql = q.toLowerCase();
-  return ql === rl || ql.startsWith(rl + "\\") ? W.relative(r, q) : null;
-}
-// p spelled under root when it lies inside root — as text, or through an alias of either (an 8.3 short name
-// `C:\Users\ADMINI~1\…`, a junction, a symlink); null when it is outside. The text comparison answers first; the real
-// paths are read only when it says "outside" (the guard hook calls this on every edit). Never throws.
-// A NETWORK path on either side (isNetworkPath — an agent's Write to `\\host\share\a.js`, an absolute `_Implements:_`) is decided
-// on the text alone (1.16 verify NEW-3): a realpath / stat of it opens an SMB connection to the host it names before the permission
-// prompt — hanging on an unreachable host, and on Windows sending the user's NTLM credentials. Inside only under the same
-// `\\host\share\…` prefix as root (a project living on a share stays guarded), the `\\?\UNC\` spelling read as the plain one.
-function insideDirAlias(root, p) {
-  if (isInsideDir(root, p)) return p;
-  if (isNetworkPath(root) || isNetworkPath(p)) {
-    const rel = networkPathInside(root, p);
-    return rel == null ? null : rel ? path.join(root, rel) : root;
-  }
-  try {
-    const rr = realPathLoose(root), rp = realPathLoose(p);
-    if (rr && rp && isInsideDir(rr, rp)) return path.join(root, path.relative(rr, rp));
-  } catch { /* the text answer stands */ }
-  return null;
 }
 
 // Headings outside fenced code: [{ i, level, text }].
@@ -19974,15 +18951,6 @@ function parseKiro(dir, read, W) {
 // Acceptance Scenarios, Edge Cases, FR-xxx, Key Entities, SC-xxx), plan.md (→ design.md), tasks.md (T001 [P] [US1]).
 // Template guidance sections (Execution Flow, Quick Guidelines, checklists) are the tool's own, never imported.
 const SPECKIT_GUIDANCE = /^(?:execution flow|quick guidelines|review & acceptance checklist|execution status)\b/i;
-// Per-position facts for the scans below: nnw[i] the first non-blank ≥ i, nlt[i] the first line terminator ≥ i (n: none),
-// and tws(p) — "\s* then $ (m flag)" reads at p: the blank run at p reaches the end or holds a line terminator.
-function blankFacts(s) {
-  const n = s.length;
-  const nnw = new Int32Array(n + 1), nlt = new Int32Array(n + 1);
-  nnw[n] = n; nlt[n] = n;
-  for (let i = n - 1; i >= 0; i--) { nnw[i] = isWsUnit(s[i]) ? nnw[i + 1] : i; nlt[i] = isLtUnit(s[i]) ? i : nlt[i + 1]; }
-  return { n, nnw, nlt, tws: (p) => nnw[p] === n || nlt[p] < nnw[p] };
-}
 // spec-kit's summary — $1 of /^\*\*Input\*\*:\s*(?:User description:\s*)?"?(.+?)"?\s*$/im, by a scan (the lazy text before
 // "?\s*$ rescanned a long blank run at each step — 1.17 H). The choices in the engine's order; the text runs to the first
 // place where `"?`, blanks and a line end follow.
@@ -22761,26 +21729,6 @@ const STATUS_TEST_FILES = 20; // test files the status line reads for Phase 4's 
 // Approve-gate checks the doctor only WARNS about (spec_doctor: success-criteria, priorities, reproduction, constitution-check) —
 // a forced approval failing only these is no `fix` for next_action, so none for the status line either.
 const STATUS_DOCTOR_WARNS = new Set(["success-criteria", "priorities", "reproduction", "constitution-check"]);
-// A network path — UNC `\\host\share`, `//host/share`, `\\?\UNC\host\share`, `\\.\UNC\…` — opens an SMB/WebDAV connection to
-// whatever host it names (on Windows the redirector sends the user's NTLM credentials) and, the engine being synchronous, blocks
-// until an unreachable host times out (a status line hung 7 minutes on a payload cwd `\\192.0.2.1\share`). The MCP server
-// refuses such a projectDir before any fs call; the status line and hooks/plan-hook.js skip such a candidate folder. Local:
-// the extended/device forms of a drive path (`\\?\C:\…`, `\\.\C:\…`) and WSL's own hosts (`\\wsl$\…`, `\\wsl.localhost\…`).
-// Other device paths (`\\.\pipe\…`, `\\?\Volume{…}\…`) are no project folder either. (A drive letter mapped to a share can't be
-// told apart without I/O.)
-function isNetworkPath(p) {
-  const s = String(p).trim();
-  if (!/^[\\/]{2}/.test(s)) return false;
-  let rest = s.slice(2);
-  if (/^[?.][\\/]/.test(rest)) {
-    rest = rest.slice(2);
-    if (/^[A-Za-z]:(?:[\\/]|$)/.test(rest)) return false; // \\?\C:\… — a local drive
-    if (!/^UNC[\\/]/i.test(rest)) return true; // \\.\pipe\…, \\?\Volume{…}, \\?\GLOBALROOT\… — not a project folder
-    rest = rest.slice(4);
-  }
-  const host = rest.split(/[\\/]/)[0].toLowerCase();
-  return host !== "wsl$" && host !== "wsl.localhost";
-}
 // A folder whose .specs/ dev-spec owns: roadmap.json, steering/, or a feature folder with its .state.json (the hooks' rule).
 function isDevSpecDir(dir) {
   const root = path.join(dir, ".specs");
@@ -23242,6 +22190,208 @@ function clarify(projectDir, name) {
   if (gl && gl.truncated) Object.assign(res, { glossaryTruncated: { read: gl.entries.length, total: gl.total }, glossaryNote: Q.glossaryTruncated(gl.entries.length, gl.total) });
   return res;
 }
+
+// The names still defined here, for the extracted modules (call time).
+engine.link({ VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, stripHtmlComments, commentLines, stripFencedCode,
+  requirementAcIds, planIdText, clarificationMarkers, trackTokens, parseTracks, normalizeTracks, TRACK_ALIASES,
+  suggestTrack, unknownTracksError, trackLabel, SIGNALS, conceptMap, SIGNAL_CONCEPTS, SIGNAL_HAZARDS, NEGATORS,
+  NEG_FILLER, NEG_FILLER_EN, NEG_AFTER, W, PT_STRONG, PT_STRONG_CHARS, PT_WEAK, ES_STRONG, ES_STRONG_CHARS, ES_WEAK,
+  EN_WORDS, CLAUSE_START, INF_WORDS, INF, PT_INF, ES_INF, PTES_INF, ES_NO_INF, guessLang, configuredLang, isNegated,
+  STEMS, VERB_STEMS, IRREGULAR_FORMS, KW_GAP, KW_GAP_RE, INFLECTION, ACRONYM_INFLECTION, ADJ_SUFFIX, KW_RE, pluralize,
+  KW_LITERAL, KW_CACHE_MAX, KW_PLAIN, keywordLiteral, keywordRe, keywordPattern, PATH_HEADS, splitWordPairs, classify,
+  buildReasoning, steeringFilesForTracks, initProject, scaffoldSteeringFile, RE_CUSTOM_STEERING, PROTO_KEYS,
+  customSteeringError, customSteeringStub, steeringFrontMatter, GLOB_MAX_ALTS, globNorm, steeringGlobMatch, globMatcher,
+  isImplementsGlob, globAlternatives, globDpMatch, BRIEF_STEERING_BUDGET, briefSteering, steeringPlaceholders,
+  guardEnabled, guardCheck, designSaveCheck, setGuard, APPROVAL_GUARD_LEVELS, RE_APPROVAL_MCP, APPROVAL_SHELL_TOOLS,
+  APPROVAL_COMMAND_MAX, APPROVAL_SHELL_DEPTH, APPROVAL_LEX_DEPTH, CLI_SWITCHES, APPROVAL_WRAPPERS, APPROVAL_SUBCOMMANDS,
+  APPROVAL_OPTION_VALUES, APPROVAL_SHELLS, APPROVAL_PS_SHELLS, APPROVAL_STDIN_SHELLS, approvalShellMode,
+  RE_DEVSPEC_WORD, RE_APPROVAL_VAR_WORD, RE_APPROVAL_CANDIDATE, approvalCandidate, RE_ROADMAP_FILE, RE_SPECS_DIR,
+  APPROVAL_WRITERS_ANY, APPROVAL_REMOVERS, APPROVAL_MOVERS, APPROVAL_WRITERS_TARGET, APPROVAL_WRITERS_INPLACE,
+  RE_DEST_OPTION, approvalGuardInput, RE_RAW_APPROVAL_GUARD, rawApprovalGuard, approvalGuardLevel, setApprovalGuard,
+  lowersApprovalGuard, ANSI_C_ESCAPES, ansiCEscape, PS_ESCAPES, shellCommandWords, programAt, stdinShellMode,
+  shellLexList, shellSubstitutionsIn, approvalProgram, devSpecWordAt, roadmapWriteAction, approvalStr, approvalTruthy,
+  guardRank, guardName, initGuardDowns, initRolesInput, initChecksInput, cliApprovalAction, shellApprovalActions,
+  approvalExtras, mcpApprovalAction, approvalCommand, approvalGuardDecision, STOP_RECENT_HOURS, STOP_MESSAGE_MAX,
+  STOP_MAX_FEATURES, STOP_TASKS_SHOWN, STOP_REPORT_MAX, STOP_WINDOW, userOptionRaw, boolWord, userDefaults,
+  newProjectLang, userDefaultsApplied, seedProjectLang, guardLevel, guardInput, stopCheckEnabled, setStopCheck,
+  stopPatterns, STOP_CLAUSE_SPAN, stopClauseStart, RE_ES_NO_NEXT, RE_ES_SE_NEXT, stopNegates, stopPastFailure,
+  stopProse, stopClaims, stopActivity, stopTaskLabel, stopCheck, implementerStopCheck, scopeGuardDecision,
+  classificationMd, requirementsMd, trackDesignBlock, designMd, tasksMd, testPlanMd, evalPlanMd, loadTestMd,
+  SAMPLE_GOLDEN, SAMPLE_ADVERSARIAL, quickstartMd, checklistMd, integrationPlanMd, createFeature, pruneBacklog,
+  TEMPLATES_DIR, TEMPLATE_ARTIFACTS, TEMPLATE_CHAIN, TEMPLATE_VARS, RE_TEMPLATE_VAR, RE_TEMPLATE_KNOWN_VAR,
+  RE_TEMPLATE_KNOWN_VAR_G, templateRel, steeringTemplateName, templateKey, templateKeyList, readTemplateFile,
+  templateFileList, templateLangChain, templateOverride, templateVars, renderTemplate, trackRequirementsBlock,
+  trackIdMap, trackTestRowsBlock, withTrackBlocks, scaffoldText, steeringScaffold, TEMPLATE_PARSE_CACHE,
+  templateWildcard, wildcardMatch, setOrWildcard, parseTemplateText, buildProjectTemplateSets, projectTemplateSets,
+  projectTemplateHas, useTemplateScopeOf, builtInTemplate, allTemplateKeys, templates, listTemplates, initTemplates,
+  checkTemplateText, checkTemplates, TRACK_PACKS_DIR, PACK_JSON, PACK_FRAGMENTS, PACK_LIMITS, RE_PACK_NAME,
+  RE_PACK_MARKER, RE_PACK_MARKER_RESERVED, RE_PACK_KEYWORD, PACK_KEYS, PACK_SECTION_KEYS, PACK_TIERS,
+  PACK_RESERVED_WORDS, packReservedName, RE_PACK_ITEM, RE_TABLE_SEPARATOR, packTextOk, packGuidanceOk,
+  stripJsonComments, packScan, readPackItem, packListItems, packTableRows, RE_PACK_VAR, RE_PACK_GUIDANCE_VAR,
+  packSectionKey, coreDesignHeadingKeys, packVarRefs, parsePackFragment, packLocalized, PACK_CACHE, loadPack,
+  loadPackScan, loadTrackPacks, NO_PACKS, packRegistry, packTracks, packOf, isPackTrack, allTracks, optionalTracks,
+  markerTracks, trackMarker, trackSectionTable, trackSteeringFiles, trackSignalTable, isPackMarkerBracket,
+  packMarkersFor, noteGhostPacks, ghostMarkers, savedPackName, legacyPackName, missingPackTracks, packLocal, packTitle,
+  packFragment, packSubst, packCtx, packSubstBasic, packDesignBlock, packRequirementsBlock, insertPackRequirements,
+  packPlanRows, packTaskBlock, packTestRowsBlock, packChecklistBlock, packSteeringStub, trackSteeringStub,
+  RE_PACK_WILD_VAR, RE_PACK_WILD_VAR_G, PACK_CORPUS_CACHE, packCorpusSets, localizePackProblem, trackPacks,
+  listTrackPacks, checkTrackPacks, initTrackPack, detectTracks, savedTracks, headingHasMarker, phaseActive,
+  testsGateDue, parseTasks, taskDescription, templateTaskSet, isBugStep, isPlaceholderTask, detectPhase, listFeatures,
+  statusFeature, nextTask, parallelBatch, RE_DEP_TOKEN, taskDependsSpec, taskDepGraph, stuckTasks, taskSchedule,
+  dependencyCycles, taskWaves, openDependenciesOf, briefDependencies, taskDepsBlockedNote, taskDepsWaitList,
+  taskDepsIssues, taskDepsCheck, RE_ROOT_CAUSE_TASK, bugfixGate, rootCauseTaskIndex, blockPosition, taskNumber,
+  completeTask, UNDO_REASON_MAX, reasonInput, untickTask, VAGUE_WORDS, VAGUE_RE, VAGUE_RE_ALL, RE_LIST_ITEM,
+  RE_NUMBERED, RE_BLOCK_BREAK, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, B, E, RE_MODAL_EN, RE_MODAL_CAPS,
+  RE_MODAL_SYSTEM, RE_LIST_DEFINES_AC, RE_MODAL, RE_MODAL_LOOSE, RE_AC_SHAPE, RE_AC_HEADING, RE_EARS_CAPS,
+  RE_EARS_KEYWORD, RE_UBIQUITOUS, RE_STABLE_ID, RE_LEAD_DEFINES_AC, RE_CELL_AC, criterionBlocks, earsFeature,
+  earsUnlinted, earsValidate, extractAcIds, extractTestIds, traceCheck, TRACE_INFO_FIELDS, TRACE_GAP_ORDER,
+  TRACE_VERDICT_KINDS, TRACE_TASK_KINDS, TRACE_PLAN_KINDS, traceGaps, traceGapLines, TRACE_WARNING_ORDER,
+  TRACE_SECONDARY_KINDS, traceWarnings, traceWarningLines, RE_SECONDARY_ID, RE_SECONDARY_ID_LINE, idKey, secondaryIds,
+  secondaryDefinitions, traceSecondary, tableCells, testPlanEntries, RE_CODE_TID, CODE_TRACE_CAP, CODE_TRACE_READ_CAP,
+  CODE_TRACE_FILES_PER_ID, TEST_EXTRA_EXT, RE_TEST_NAME_EXTRA, isTestCodePath, tKey, specFeatureDirs, scanTestCode,
+  allPlannedTestKeys, RE_FILE_COLUMN, pathUnder, pathNames, scannableTestPath, nonCodeArtifactPath, codePathToken,
+  planFileScopes, fileCellTokens, outsideCodeTemplates, otherPlanTestFiles, traceTestCode, RE_TASK_LINE_HEAD, taskLine,
+  RE_CHECKPOINT, COMMENT_MASK, RE_TASK_FENCE_OPEN, RE_PARA_BREAK, scanTaskLines, fenceLine, indentOf, hasOutsideCode,
+  backtickRuns, TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, taskBlocks, scanTaskBlocks, resolveTask, duplicateTaskNumbers,
+  taskProse, RE_RED_PHASE_TASK, redPhaseTask, redPhaseHint, tasksProseText, TASK_MARKER_LABELS, RE_TASK_MARKER_OPEN,
+  MARKER_CLOSE_PUNCT, taskMarkerSpans, taskMarkerValues, withoutTaskMarkers, WHOLE_VALUE_MARKERS, taskMarkers,
+  RE_MARKER_WORD, MARKER_WORD_LABEL, malformedMarkers, RE_GLOBAL_CONSTRAINTS, globalConstraints, normalizeEvidence,
+  evidenceIssue, taskStamp, verifyStamp, isRecord, evidenceRecords, ownRecord, ownEvidence, taskEvidenceIssue,
+  taskVerification, EVIDENCE_HISTORY, EVIDENCE_OTHERS, recordEvidence, storeEvidence, runOf, stateEvidence,
+  verificationStatus, RE_COUNT_KW, RE_COUNT_LINE, summarizeRunOutput, RE_CMD_SHELL_FAILURE, windowsShellFailure,
+  RE_WSL_LAUNCHER_DIR, isWslLauncher, resolveRunShell, posixShellSyntax, verifyPipeMasked, POSIX_SHELLS, PWSH_SHELLS,
+  SHELL_WRAPPERS, WRAPPER_ARG_OPTS, lexShell, programName, setPipefail, shellScript, pipeMaskedIn, verifyPipes,
+  expectsFail, CANT_RUN_EXIT, CANT_RUN_OUTPUT, RE_ASSERTION_RAN, couldNotRunOutput, cantRunRecord, isRedRun, redProof,
+  expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps, gitEvidence, OBSERVED_LOG,
+  OBSERVED_MAX_BYTES, OBSERVED_WINDOW_MS, OBSERVED_MAX_COMMAND, OBSERVED_MAX_FEATURES, EVIDENCE_MODES, flatCommand,
+  evidenceMode, evidenceSince, evidenceRule, evidenceModeInput, setEvidenceMode, observedLogFile, readObservedLog,
+  observedRun, observedAny, observedStamp, observedProof, verifyCommandSet, observeRun, appendObserved, trimObservedLog,
+  lastTaskActivity, CHECK_NAME_RE, CHECKS_MAX, validCheckName, validCheckCmd, projectChecks, checksInput,
+  checksPlanError, writeChecks, recordFinishChecks, suiteStatus, suiteCodeStamp, suiteLabel, commitTag,
+  suiteSummaryLines, b5DoctorChecks, GITLOG_MAX_COMMITS, parseGitLog, taskCommits, unverifiedLabel, specChangedSince,
+  untickedSince, isPromptTask, RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections, BRIEF_DESIGN_BUDGET,
+  taskBrief, sectionFirstParagraph, oneLine, codeSpan, shortTitle, finishFeature, approvePhase, WAIVER_MAX_DAYS,
+  waiverInput, waiverView, forcedApprovalList, waiverSummaryLines, waiverResult, waiverExpiredCheck, strictestWaiver,
+  legacySeeds, revokeApproval, RE_ROLE, normRole, parseRoleList, validateApprovalRoles, parseApprovalRolesText,
+  approvalRolesOf, approvalRolesFrom, rolesSummary, setApprovalRoles, approvalRole, phaseContent, sameContent,
+  approvalRoleRecords, roleSignOffs, recordRoleSignOff, dropRoleSignOffs, roleSignOffResult, roleGateView, roleLabel,
+  roleWaitList, reReviewRoles, fastForwardPlan, approveStepExtras, approveThrough, HISTORY_DIR, IMPACT_PHASES,
+  RE_REQ_REF, RE_OTHER_REQ_REF, RE_TEST_REF, RE_DEFINES_REQ_ID, normWs, refsIn, shortDigest, isApprovalRecord,
+  legacyRecord, writeSnapshot, historyText, latestSnapshot, designBaseline, snapshotPhases, requirementIndex,
+  diffEntries, sectionEntries, taskEntries, plannedTestEntries, activeTaskBlocks, impactReport, impactLines,
+  STEERING_GOVERNED, safeSteeringName, STEERING_MAX_PATTERNS, governingSteering, steeringTargetsMatch,
+  featureImplementsTargets, steeringFingerprints, steeringChanges, steeringChangeText, steeringImpact,
+  steeringImpactLines, XAC_DUPLICATE, XAC_CONFLICT, XAC_TRIGGER, XAC_RESPONSE, XAC_MIN_WORDS, XAC_MAX_CRITERIA,
+  XAC_MAX_COMPARISONS, XAC_MAX_PAIRS, XAC_STOP, XAC_MODALS, RE_XAC_SYS_MODAL, RE_XAC_MODAL, XAC_TRIGGER_NEG, RE_XAC_NT,
+  RE_XAC_CANNOT, RE_XAC_NEG, RE_XAC_IDS, xacNumber, xacStem, xacWords, RE_XAC_NUM, xacNumbers, acShape, xacClauseSim,
+  xacOpposed, acSkeleton, templateShapeTable, builtinTemplateAcs, projectTemplateAcs, jaccard, XAC_FEATURE_CACHE,
+  XAC_FEATURE_CACHE_MAX, XAC_RACY_MS, xacStatSig, xacContextSig, xacFeatureRows, xacTable, crossFeatureAcs,
+  crossFeatureAcsOf, comparePair, crossAcItem, crossAcDoctorDetail, renderCrossAcsMd, GLOSSARY_FILE,
+  GLOSSARY_MAX_ENTRIES, GLOSSARY_MAX_AVOID, GLOSSARY_MAX_HITS, GLOSSARY_BRIEF_MAX, GLOSSARY_BRIEF_CHARS,
+  RE_GLOSSARY_ITEM, escRe, foldTerm, glossaryEntries, glossaryEntry, RE_WORD_BEFORE, RE_WORD_AFTER, wordListRe,
+  GLOSS_TEMPLATE_LINES, glossLineKey, glossPatternSegs, glossVisibleLines, glossAddLines, glossNewSet,
+  glossBuiltinLines, glossProjectLines, glossSpans, glossUserParts, glossaryHits, briefGlossary, METRIC_PHASES, timeOf,
+  round1, round2, isoOf, hoursFrom, featureMetrics, stats, metrics, fmtHours, metricsLines, pruneRoadmapRefs,
+  milestoneResult, pruneRoadmapRefsLocked, removeFeature, TOMBSTONE_PREFIX, TOMBSTONE_SWEEP_AGE_MS, sweepTombstones,
+  removeFeatureLocked, archiveFeature, archiveFeatureLocked, renameFeature, renameFeatureLocked, renamePlan,
+  renameSupersedesRefs, removePreview, manageFeature, TRACK_MARKER, MARKER_TRACKS, applyTracks, testPlanTracks,
+  trackTemplateAcs, scaffoldTestPlan, trackTaskBlock, trackAcIds, normTaskHeading, TASK_HEADINGS, trackTaskHeadings,
+  trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines, inactiveMarkerLines,
+  RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, updateActiveTracks, removeTracks, inactiveArtifacts,
+  addTrack, removeTrack, RE_NEW_TASK_TAGS, RE_THEMATIC_BREAK, unwrapCodeSpan, newTaskSpec, appendTasks, nextAction,
+  gateWalk, gateArtifacts, pendingGateList, FLOWS, DESIGN_FIRST_PHASES, flowOfState, featureFlow, phaseOrder, flowIndex,
+  flowPhaseIndex, checkPhaseIndex, positionPhase, parseFlow, flowOrderText, setFeatureFlow, setFeatureFlowLocked,
+  createFlow, storeCreateFlow, CHECK_PHASE, SAAS_SECTIONS, AI_SECTIONS, SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS,
+  TRACK_SECTIONS, activeSectionTracks, headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe,
+  RE_SYN_INFLECTION, headingMatches, extractSection, RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState,
+  RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER, RE_LIST_CHECKBOX, placeholderKey, isGenericSlot,
+  unknownSteeringStub, LEGACY_TEMPLATE_PLACEHOLDERS, templateCorpus, templateBracketKeys, templateSets, templateSetsBr,
+  isTemplatePlaceholder, isCodeSlot, visibleLines, placeholderReport, bracketPlaceholders, scanBrackets, artifactState,
+  headingsOnly, PHASE_INDEX, chainArtifacts, RE_MANUAL_VERIFY, artifactReport, featurePlaceholders, placeholderSummary,
+  chainPlaceholders, changedSinceApproval, realLines, hasSuccessCriteria, hasPriority, acDuplicates, sectionFilled,
+  bugSectionFilled, hasProseOutsideBrackets, bugPlaceholders, RE_TODO_SENTINEL_LINE, bugTemplateSlots, CONSTITUTION_SYN,
+  TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH, DESIGN_WEIGH_IDS, RE_WEIGH_HEADING_REST, weighHeadingMatches, weighSection,
+  genericUnit, designBody, designEntries, WEIGH_PROSE_WORDS, designWeighState, designWeighChecks,
+  designApprovedBeforeWeigh, approvalChecks, RE_CONSTITUTION_CHECK, RE_SUCCESS_CRITERIA, RE_INDEPENDENT_TEST,
+  RE_OUT_OF_SCOPE, RE_NFR, RE_EDGE_CASES, RE_TESTABILITY, specDoctor, PLANNING_CEILING, PHASE_PERCENT, phasePercent,
+  featurePercent, roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, setDependency,
+  dependencyUnlocked, roadmap, flatText, addBacklog, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked,
+  BACKLOG_ACTIONS, backlog, progressBar, mid, ROADMAP_I18N, i18nLang, htmlEsc, cleanTaskText, activeDesign, roadmapData,
+  buildAttention, roadmapTaskText, roadmapPhaseName, renderRoadmapMd, renderRoadmapHtml, roadmapLang, roadmapChromeLang,
+  setRoadmapLang, RE_AUTOGEN, isGeneratedOrAbsent, writeRoadmapMd, writeRoadmapHtml, writeRoadmapFile,
+  maybeRefreshRoadmap, roadmapReport, SIZE_POINTS, RE_SIZE_VALUE, FORECAST_WINDOW_DAYS, FORECAST_MIN_TASKS,
+  FORECAST_SPREAD, FC_DAY_MS, taskSize, taskCompletedAt, fcDay, fcWeekend, fcIso, fcWorkingDays, fcAddWorkingDays,
+  velocityOf, forecastInput, forecastData, featureVelocity, roadmapExtras, etaText, velocityText, roadmapTailLines,
+  OVERLAP_MAX_KEYS, OVERLAP_MAX_GLOB_CHECKS, OVERLAP_MAX_REF_LEN, OVERLAP_MAX_GLOB_WORK, OVERLAP_MAX_PAIRS,
+  OVERLAP_FILES_SHOWN, featureOverlaps, overlapFiles, overlapAttention, overlapDoctorDetail, SUP_NL, RE_SUPERSEDES_SRC,
+  RE_SUPERSEDES_OPEN_SRC, stripSupersedes, blockLines, lineMap, criterionAc, supersedesMarkers, dirKey,
+  resolveSupersedes, supersedesTrace, supersedesWarnings, day, acOneLine, catalogData, renderCatalogMd, catalog,
+  maybeRefreshCatalog, DECISIONS_FILE, DECISION_TITLE_MAX, DECISION_TEXT_MAX, RE_DECISION_HEAD_START, isBlankUnit,
+  decisionHead, stripClosingHashes, underscoreMarkerLine, RE_DECISION_MARKER_HEAD, decisionMarker, DECISION_LABELS,
+  RE_DECISION_LABEL, BRIEF_DECISIONS_MAX, BRIEF_DECISIONS_CHARS, RE_LEADING_BOM, blankHtmlComments, splitRefs,
+  normDecisionId, decisionLabelKey, decisionLog, retiredDecisions, decisionSectionKeys, decisionTargets, resolveAffect,
+  trimBlanksEnd, safeSpecText, decisionInput, decisionEntryLines, decide, decisionsTrace, affectsWarnings,
+  decisionDoctorChecks, briefDecisions, decisionSummaryLines, catalogDecisions, SPIKE_FILE, SPIKE_SYN, RE_OUTCOME_HEAD,
+  outcomeMarker, OUTCOME_SYN, normOutcome, spikeProse, spikeFilled, spikeOutcome, spikeParagraph, validIsoDay,
+  spikeTimebox, todayIso, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeSeed, spikeDoctor, spikeNextAction,
+  spikeFinish, EXPORT_DIR, EXPORT_FORMATS, SUMMARY_SYN, SUCCESS_SYN, expItem, RE_EXP_RULE, RE_EXP_BLOCK, RE_EXP_SEP,
+  expInline, RE_MD_ESCAPE, MD_ENTITIES, mdPlainText, nextPlainStop, expFence, expCells, expTable, expList, expBlocks,
+  markdownToHtml, shiftHeadings, squeezeBlankLines, artifactBody, sectionText, specTitle, titledSlug, mdCell, utcStamp,
+  italic, exportAcLine, exportStories, requirementSections, exportFeatureDoc, exportProjectDoc, exportMd, EXPORT_CSS,
+  EXPORT_JS, exportHtml, exportSpecs, exportGherkin, RTM_STATUSES, RTM_KIND_ORDER, RTM_TEXT_MAX, acNums,
+  supersededByIndex, shippedSupersedeKeys, featureShipped, rtmEvidence, buildTraceMatrix, traceMatrix, RE_CSV_FORMULA,
+  csvCell, csvRecord, RTM_CSV_COLS, rtmTaskWords, rtmEvidenceWords, matrixCsv, RTM_ICON, rtmCell, rtmTextCell,
+  rtmMarkdown, rtmProjectMarkdown, GHERKIN_DIALECT, GHERKIN_BLOCK_KINDS, GHERKIN_STEP_KINDS, ghRiskyLine, GHERKIN_COND,
+  GHERKIN_THEN, RE_GH_KEYWORD, RE_GH_MODAL, RE_GH_DET, ghMask, ghStripEmphasis, GHERKIN_LANG_KEYWORDS, earsSteps,
+  ghLine, ghTag, gherkinFeatureTags, gherkinFeature, gherkinBase, TRACKERS, TRACKER_LABELS_MAX, TRACKER_SUMMARY_MAX,
+  TRACKER_STATUS, trackerRecords, trackerCsv, isoTime, oneLiner, releaseAcs, changelogData, renderReleaseNotes,
+  changelog, MILESTONE_ACTIONS, MILESTONE_STATUSES, MILESTONE_MAX, MILESTONE_FEATURES_MAX, RE_MILESTONE_NAME,
+  RE_ISO_DAY, milestoneName, milestoneKey, milestoneFileKey, strList, slugList, milestoneStore, milestoneInvalidInfo,
+  findMilestone, milestoneStatuses, milestoneAttention, MILESTONE_ICON, milestoneLine, milestonesNow, milestone,
+  milestonesFollow, archiveRecord, reinsertDep, archivedFeature, restoreFeature, restoreFeatureLocked, fileHash,
+  projectFile, realRootOf, BASELINE_CAP, baselineFiles, recordFinishBaseline, staleFinish, changesSince,
+  revokedSinceList, executionSignOffStale, signOffWhyText, staleFinishText, drift, baselineDrift, engineVersion,
+  parseSemver, compareSemver, stampOf, specVersionStatus, stampSpecVersion, missingIgnoreLines, lastRecord, upgradePlan,
+  applyUpgradePlan, NOT_STARTED_PHASES, shortDetail, upgradeFeature, specUpgrade, upgradeItems, upgradeMigrationLines,
+  upgradeLines, renderUpgradeMd, SCAN_IGNORE, CODE_EXT, GUARD_CODE_EXT, SCAN_READ_CAP, SCAN_READ_BYTES, SCAN_ROUTE_CAP,
+  SCAN_LIST_CAP, COVERAGE_CAP, WALK_STOP, walkProject, TEST_DIRS, RE_TEST_NAME, isTestFile, JS_EXT, FRONTEND_EXT,
+  JS_ROUTE_OWNERS, RE_JS_OWNER_SUFFIX, RE_JS_ROUTE, RE_JS_ROUTE_CHAIN, RE_JS_ROUTE_OPEN, RE_JS_LEAD_STRING,
+  RE_JS_CHAIN_VERB, RE_JS_IMPORT, RE_JS_CLIENT_IMPORT, RE_JS_CLIENT_DEF, JS_GENERIC_OWNERS, RE_NEST_ROUTE, RE_NEST_CTRL,
+  RE_NEXT_APP, RE_NEXT_PAGES, RE_NEXT_EXPORT, RE_PY_ROUTE, RE_PY_METHODS, PY_ROUTE_OWNERS, RE_PY_OWNER_SUFFIX,
+  RE_PY_APP_DEF, RE_PY_PREFIX_DEF, RE_PY_PREFIX_ARG, RE_PY_WEB_IMPORT, RE_DJANGO_ROUTE, RE_SPRING, RE_ASP_ATTR,
+  RE_ASP_ROUTE_ATTR, RE_ASP_MAP, RE_RUBY_VERB, RE_RAILS_RES, RE_LARAVEL, RE_LARAVEL_CHAIN, RE_SYMFONY, RE_GO_HANDLE,
+  RE_GO_UPPER, RE_GO_TITLE, GO_CLIENTS, RE_SLASH_COMMENT_LINE, RE_HASH_COMMENT_LINE, AMBIGUOUS_FRAMEWORK,
+  SCAN_JOIN_LINES, joinOpenCall, normRoutePath, joinRoute, springPaths, scanRoutes, RE_ENV_READS, ENV_EXAMPLE_FILES,
+  envNamesIn, MIGRATION_DIRS, isMigrationFile, PY_ENTRY, NODE_ROOT_ENTRY, entryKind, normEntry, NODE_FRAMEWORKS,
+  NODE_TEST_RUNNERS, scanCodebase, implementsRefs, projectGlob, globFiles, globFolderNames, implementsPath, isDigitUnit,
+  stripHashLineAnchor, colonLineAnchorAt, implementsRel, implementsKey, implementsTargets, coverage, IMPORT_TOOLS,
+  IMPORT_MAX_BYTES, TEXT_IMPORT_TOOLS, commentInert, inertOutsideCode, inertBlock, mdHeadings, isWs, mdHeadingParts,
+  mdRange, mdBody, markRange, unusedLines, RE_MD_HR, firstParagraph, mdListItems, leftoverExtras, trimClause, tidyLines,
+  lcFirst, IRREGULAR_VERBS, baseVerb, earsThen, earsFromClauses, clauseScanner, GWT, gwtMatch, earsFromGwt, KIRO_COND,
+  kiroCondMatch, RE_KIRO_REQ_TITLE, RE_KIRO_INTRO, RE_KIRO_REQS, RE_KIRO_STORY_HEAD, kiroStoryHeading, earsFromKiro,
+  titleFromStory, wantClause, newImportModel, parseKiro, SPECKIT_GUIDANCE, specKitInput, RE_SPECKIT_PRIORITY,
+  specKitStoryHeading, renamedRequirementNames, parseSpecKit, RE_OS_CLAUSE_HEAD, openSpecClause, parseOpenSpec,
+  RE_IMPORT_TASK_HEAD, replaceRequirementsMarkers, replaceUnderscoreList, importTasks, fitTemplateTasks,
+  RE_PLAN_CHECKBOX_HEAD, planCheckbox, RE_PLAN_ITEM_HEAD, RE_PLAN_ITEM_BOX, planItem, PLAN_FILE_EXT, PLAN_NOT_FILES,
+  PLAN_BARE_FILES, planPaths, PLAN_TOKEN_LEAD, PLAN_TOKEN_TRAIL, planTokenTrim, RE_PLAN_RUNNER, RE_PLAN_CHECK,
+  planCommand, planCommandOnly, PLAN_COND, earsFromPlanText, planBlocks, checkboxUnits, markUnit, unitProse, unitCode,
+  planTaskLines, planDone, planHeadingText, planSections, headingUnit, unusedMarkdown, planFrontMatter, singleDoc,
+  markEmptyHeadings, planStory, unwrapDocFence, RE_PLAN_CRITERIA, RE_PLAN_STEPS, RE_PLAN_APPROACH, RE_PLAN_SUMMARY,
+  parsePlan, RE_EXEC_SECTION, parseExecPlan, RE_BMAD_STORY_START, bmadStoryHead, RE_PRD_WORDS, bmadPrdTitle,
+  RE_BMAD_EPIC_STORY_START, bmadEpicStory, RE_BMAD_FR_HEAD, bmadFrLine, RE_BMAD_FR_HEADING, bmadFrHeading,
+  titleAfterDash, boldThenText, RE_BMAD_WORKFLOW, RE_BMAD_PRD_DESIGN, parseBmad, FP_PLAN_ID, FP_ID, FP_OTHER, FP_SEC,
+  RE_FP_STATE, FP_LINE_MAX, fpShort, fpMap, FP_TITLE_SUFFIX, fpTitleOf, fpTaskHeading, fpPhaseHeading, fpAcceptanceItem,
+  RE_FP_DEC_HEAD, fpDecLine, FP_TASK_FIELDS, FP_DEC_FIELDS, FP_OPS, FP_IMPORTANCE, FP_SRC_LABELS, fpFilled, FP_LS_PS,
+  RE_FP_BREAK, RE_FP_BREAKS, RE_FP_LINE_SPLIT, RE_FP_VERIFY_BAD, fpOneLine, fpList, fpStr, RE_FP_MARKER_LIKE, fpInert,
+  fpV, fpHead, fpTitle, fpLine, fpProse, fpCell, fpVerdictOfText, fpEdits, fpTextOf, fpHasEdits, fpItemVerdict,
+  fpVerdict, fpStatus, fpOptions, fpChoice, fpChoices, fpValue, fpOptionLabel, fpOrderedPhases, fpControlSummary,
+  fpDecisionTasks, fpFromPlanJson, fpEmpty, fpNewDecision, RE_FP_TO_CHANGE, fpTableCells, fpHeader, fpFields,
+  fpTaskFromMd, fpParsePlanMd, fpParseDecisionsMd, fpConfig, fpPlansDir, fpDocKind, fpSplitDocs, parseFluidplan,
+  fpImportModel, FP_TRADEOFFS_HEADING, C3_PARSERS, importSpec, STATUS_MAX_FEATURES, STATUS_MAX_UP, STATUS_TEST_FILES,
+  STATUS_DOCTOR_WARNS, isDevSpecDir, statusLineProject, statusActivity, statusTestsGate, statusNext, statusLine,
+  planBridge, RE_RATE_LIMIT, RE_ACCESS_DENIED, RE_SUBJECT_RIGHTS, CONSTRAINT_KINDS, CONSTRAINT_SIGNALS, CONSTRAINT_RE,
+  constraintSignalRe, RE_CONSISTENCY_ANSWER, RE_ACID, CONSTRAINT_MAX_WORDS, userSpecText, constraintNudge,
+  RE_DIST_DELIVERY, RE_DIST_FAILURE, clarify });
 
 module.exports = {
   CLI_SWITCHES, // the CLI's boolean switches — ONE list (cli/dev-spec.js BOOL_FLAGS, the approval hook's lexer)
