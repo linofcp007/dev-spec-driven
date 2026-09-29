@@ -56,13 +56,11 @@ IDs (`US-1.AC-1`, `SC-001`), test IDs (`T-01`), task markers (`_Requirements:_`,
 the section markers `[SaaS]` `[AI]` `[SEC]` `[PRIVACY]` `[DIST]` (case-sensitive: `[sec]` is no marker) and the
 `[NEEDS CLARIFICATION:]` marker. EARS keywords may be localized (they're detected in all three).
 
-If the user mixes languages or asks to switch, follow their lead. When unsure, match the language of
-their most recent message.
+If the user mixes languages or asks to switch, follow their lead; when unsure, match their most recent message.
 
 ## Core Principles
 
-1. **No implementation without approval.** Each phase produces an artifact the developer reviews.
-   Misunderstandings get caught early, when they're cheap.
+1. **No implementation without approval.** The developer reviews each phase's artifact — mistakes caught early are cheap.
 2. **Right rigor for the job.** Tracks compose per feature. Don't TDD a copy change; don't ship a
    payment path on vibes.
 3. **Traceability end-to-end.** Code → tasks → (tests/evals) → design → requirements → need. Every
@@ -102,9 +100,8 @@ the `references/` templates. No MCP connection (e.g. claude.ai)? Write the files
 ## First Things First: Mode, then Tracks
 
 ### Vibe Mode — Just Build It
-Use when the user says "just do it", "quick fix", "nothing fancy"; the task is a trivial fix, small
-tweak, copy change, or single-file change; it's < ~30 min; or they already know exactly what they
-want. Skip all artifacts and tracks. Solve the problem. If it grows complex, offer to switch.
+Use when the user says "just do it", "quick fix", "nothing fancy"; the task is a trivial fix, a copy change or a
+single-file change under ~30 min; or they know exactly what they want. Skip all artifacts; if it grows, offer to switch.
 
 ### Bounded Mode — Short Design, Explicit Yes
 A well-scoped change to a flow that **already exists in this repo** (a new flag, a small endpoint, a one-file
@@ -251,14 +248,15 @@ testable and specific — no "fast", "user-friendly"; use concrete values. Full 
 ## Phase 2: Design (`/design`)
 
 Convert approved requirements into a technical blueprint (on a design-first feature this phase comes before
-Phase 1). Re-read steering + requirements, scan the existing codebase for patterns to match, then write `design.md`.
+Phase 1). Re-read steering + requirements, scan the codebase for patterns to match and code to reuse, then write `design.md`.
 
-**Base sections (always):** Overview · Architecture (≥1 Mermaid diagram) · **Alternatives & Trade-offs** (≥ 2 options per key
-decision — pros, cons, cost of being wrong, the one chosen and why) · Data Models · API Contracts · Security · Error Handling ·
-Testing Strategy · **Risks** (likelihood · impact · mitigation · owner) · **Constitution Check** (each principle of
-`steering/constitution.md` — a gate, re-checked after any change) · **Complexity Tracking** (justify what breaks a principle or
-adds non-obvious complexity; empty is good). Doctor warns `design-tradeoffs` / `design-risks` (never blocks). `spec_create`
-always scaffolds `quickstart.md` (a manual acceptance scenario) and `checklist.md` — fill both; optionally `research.md`.
+**Base sections (always):** Overview · Architecture (≥1 Mermaid diagram) · **Reuse & Integration** (existing modules /
+components / helpers reused or extended, with paths; what is new and why; where it lives) · **Alternatives & Trade-offs**
+(≥ 2 options per key decision — pros, cons, cost of being wrong, the one chosen and why) · Data Models · API Contracts ·
+Security · Error Handling · Testing Strategy · **Risks** (likelihood · impact · mitigation · owner) · **Constitution Check**
+(each principle of `steering/constitution.md` — a gate, re-checked after any change) · **Complexity Tracking** (justify what
+breaks a principle; empty is good). Doctor warns `design-tradeoffs` / `design-risks` / `design-reuse` (never blocks).
+`spec_create` always scaffolds `quickstart.md` (a manual acceptance scenario) and `checklist.md` — fill both; optionally `research.md`.
 
 **+tdd adds:** Testability Notes (seams, determinism, side effects to isolate, test-data strategy).
 
@@ -357,9 +355,11 @@ every planned T-ID should map to a task). Keep task numbers unique and replace e
 
 ## Phase 6: Execute (`/executeTask`)
 
-Before any code, re-read steering, requirements, design, (test/eval plans), and tasks; summarize
-your understanding to confirm alignment. Then work tasks **in order** — the next is `spec_next_task`'s: the first open
-task whose `_Depends:_` are all done — choosing the loop per task:
+Before any code, re-read steering, requirements, design, (test/eval plans), and tasks; summarize your understanding to
+confirm alignment. **Search before you write:** the design's Reuse & Integration, the brief's Reuse section, the codebase by
+concept and synonyms — reuse, else extend, else create; a refactor outside the task goes to the backlog (`refactor:` note).
+Then work tasks **in order** — the next is `spec_next_task`'s: the first open task whose `_Depends:_` are all done —
+choosing the loop per task:
 
 - **core task (no +tdd):** announce → implement per design → run existing tests and the task's
   `_Verify:_` → `spec_complete_task {evidence}` → report.
@@ -533,7 +533,7 @@ MCP clients get them as MCP prompts. Full table: `references/tooling-reference.m
 - `references/review-feedback.md` — handling review comments against the spec · `references/red-flags.md` — the rationalizations that precede skipping each phase
 - `references/subagent-execution.md` — Phase 6 with subagents: brief → implementer → reviewer → fix loop, ledger, checkpoints, the SubagentStop gate, model selection, converge mode
 - `references/example-spec.md` — end-to-end example, `core +tdd` auth · `references/example-spec-combined.md` — `core +tdd +saas +ai`
-- `references/test-patterns.md` — naming, T-IDs in test names, `_Expect: fail_`, AAA, table-driven and property-based tests, anti-patterns
+- `references/test-patterns.md` — naming, T-IDs in test names, `_Expect: fail_`, AAA, table-driven and property-based tests, anti-patterns · `references/code-reuse-and-quality.md` — search before you write, reuse / extend / create, module boundaries, code smells, the refactor backlog
 - +saas: `references/scale-design-template.md` (the 5 sections, filled) · `references/saas-patterns.md` (caching, queues, rate limiting, idempotency, multi-tenancy) · `references/load-testing-patterns.md` (k6/Artillery)
 - +ai: `references/mandatory-ai-design-sections.md` (the 10 sections, filled) · `references/eval-suite-patterns.md` · `references/prompt-engineering-patterns.md` · `references/ai-cost-modeling.md` · `references/ai-safety-patterns.md` · `references/model-provider-guide.md`
 - +sec: `references/security-track.md` (STRIDE, ASVS, OWASP Top 10, abuse cases, local security testing) · +privacy: `references/privacy-track.md` (GDPR / RGPD sections, data subject rights, retention, DPIA — not legal advice) · +dist: `references/distributed-data-patterns.md` (dual writes, outbox / inbox, sagas, retries, idempotency, isolation levels, locking, CAP / PACELC)

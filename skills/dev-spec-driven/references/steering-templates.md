@@ -97,6 +97,7 @@ Each design's Constitution Check answers to them; a design that violates a princ
 2. [e.g., No PII in logs; user IDs are pseudonymized.]
 3. [e.g., No breaking API change without a versioned migration path.]
 4. [e.g., Errors fail closed (deny) on the security path.]
+5. [e.g., Search before you write: extend an existing module before adding a new one.]
 
 ## Constraints
 - [Hard tech/regulatory constraints that bound all designs.]
@@ -205,6 +206,17 @@ src/
 ├── lib/                      # Truly shared utilities (auth, db client, logger)
 └── workers/                  # Background job handlers
 \`\`\`
+
+## Module Boundaries
+- **Public surface:** each feature exposes one entry point (`features/<feature>/index.ts`); its internals are not
+  imported from outside
+- **Dependency direction:** `features/*` import `lib/*` and `components/*` — never each other; `lib/*` imports no
+  feature; no cycles (checked by dependency-cruiser as a project check)
+
+## Shared Code
+- **Where it lives:** `src/lib/` (http client, logger, money, dates, validation), `src/components/` (the design
+  system) — search there before adding a helper or a component
+- **Promotion:** code moves into `lib/` on its second or third real use, feature-agnostic, with its own tests
 
 ## Naming
 - **Files:** kebab-case (`user-settings.tsx`)

@@ -26,8 +26,8 @@ and the review), [red-flags.md](red-flags.md) ("while I'm here I'll also refacto
 | Phase | What to do |
 |---|---|
 | Steering | `structure.md` says where shared code lives and the dependency rules; the constitution states the principle ("search before adding a helper; shared code lives in `src/lib/`") |
-| Design | a short **Reuse** paragraph: the existing modules, components and helpers this feature uses or extends, and anything new it adds to shared code — with the reason |
-| Tasks | `_Implements:_` names the existing files a task extends, not only the new ones |
+| Design | the **Reuse & Integration** section every plain feature's `design.md` is scaffolded with: the existing modules, components and helpers this feature uses or extends (with their paths), what is new and why nothing existing fits, and where the new code lives — `spec_doctor` warns `design-reuse` while it is missing, empty or still the template (a brownfield feature's filled `integration-plan.md` → Integration Points counts; a design approved before 1.19 is never flagged) |
+| Tasks | `_Implements:_` names the existing files a task extends, not only the new ones — the task brief's **Reuse** section quotes the design's entries for those files (or the task's criteria) and lists the existing source files next to them |
 | Implementation | search first; reuse or extend; report what was reused, extended or created, and why (below) |
 | Review | new code compared with the **existing codebase**: a new helper that duplicates one is a finding (below) |
 | Afterwards | smells outside the task go to the refactor-candidate backlog, never into the task |
@@ -286,7 +286,7 @@ easy, then make the easy change".
 Everything else is **filed, not done**:
 
 ```text
-dev-spec backlog add "refactor-pricing-rules" "Repeated Switches: price type switched on in 4 files (pricing.ts, invoice.ts, quote.ts, cart.ts); add Replace Conditional with Polymorphism; found in feature checkout-v2 task 5"
+dev-spec backlog add "refactor-pricing-rules" "refactor: Repeated Switches — price type switched on in 4 files (pricing.ts, invoice.ts, quote.ts, cart.ts); add Replace Conditional with Polymorphism; found in feature checkout-v2 task 5"
 ```
 
 A backlog entry later becomes an **improvement spec** ([improvement-specs.md](improvement-specs.md)): its own
@@ -309,11 +309,12 @@ report) — also when nothing was reused, because the search itself is the evide
 - Created: `src/features/checkout/tax-rounding.ts` because no rounding helper handles per-line rounding
   (searched: "round", "rounding", "banker", "toFixed" in src/; nearest: `lib/money.ts#round` — whole-amount only).
 - Duplicated on purpose: none.
-- Refactor candidates filed: `refactor-pricing-rules` (backlog) — Repeated Switches in 4 files.
+- Refactor candidates: Repeated Switches — the price type switched on in 4 files (pricing.ts, invoice.ts, quote.ts, cart.ts).
 ```
 
 The controller and the reviewer read it before the diff: it says where to look for a duplicate the implementer
-may have missed.
+may have missed. The controller files each refactor candidate in the backlog (`spec_backlog add`, a `refactor:` note —
+below) and ledgers it; the implementer never does the refactor in the task.
 
 ## What the reviewer checks
 
@@ -341,9 +342,10 @@ ship with a "we'll consolidate later".
 
 ## The refactor-candidate backlog
 
-- **One entry per candidate**, in the roadmap backlog (`dev-spec backlog add "<name>" "<note>"`, `spec_backlog`):
-  the smell, the files, the evidence (a count, a metric, the feature that tripped over it), and the refactoring
-  you'd apply.
+- **One entry per candidate**, in the roadmap backlog (`dev-spec backlog add "refactor-<topic>" "refactor: <note>"`,
+  `spec_backlog {action: "add", name, note}`): the smell, the files, the evidence (a count, a metric, the feature that
+  tripped over it), and the refactoring you'd apply. The `refactor:` prefix tells a refactor candidate from a planned
+  feature in ROADMAP.md.
 - **Prioritise by pain, not by ugliness**: code that changes often and hurts every time comes first. Change
   frequency is cheap to measure:
 

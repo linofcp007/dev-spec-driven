@@ -17,7 +17,7 @@ let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValid
   isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock, packCorpusSets, packOf,
   packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText, projectLang, PROTO_KEYS,
   RE_ACTIVE_TRACKS, RE_CONSTITUTION_CHECK, RE_CUSTOM_STEERING, RE_TESTABILITY, RE_TODO_SENTINEL, RE_WIN_RESERVED,
-  readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, RISKS_SYN, ROOT_CAUSE_SYN, slugify,
+  readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, REUSE_SYN, RISKS_SYN, ROOT_CAUSE_SYN, slugify,
   specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription, taskMarkerValues,
   tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel, trackMarker,
   trackSectionTable, trackTaskBlock, trackTaskHeading, trackTemplateAcs, TRADEOFFS_SYN, weighSection, writeIfAbsent;
@@ -26,7 +26,7 @@ function __link(E) { ({ acDuplicates, artifactState, bugSectionFilled, customSte
   isInsideDir, isObj, isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock,
   packCorpusSets, packOf, packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText,
   projectLang, PROTO_KEYS, RE_ACTIVE_TRACKS, RE_CONSTITUTION_CHECK, RE_CUSTOM_STEERING, RE_TESTABILITY,
-  RE_TODO_SENTINEL, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, RISKS_SYN,
+  RE_TODO_SENTINEL, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, REUSE_SYN, RISKS_SYN,
   ROOT_CAUSE_SYN, slugify, specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription,
   taskMarkerValues, tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel,
   trackMarker, trackSectionTable, trackTaskBlock, trackTaskHeading, trackTemplateAcs, TRADEOFFS_SYN, weighSection,
@@ -532,6 +532,8 @@ function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
     // 1.17 A1: no Alternatives & Trade-offs / Risks heading — doctor would warn on every feature scaffolded from it.
     if (weighSection(rendered, TRADEOFFS_SYN) == null) add("warn", "tradeoffs-missing", P["tradeoffs-missing"]);
     if (weighSection(rendered, RISKS_SYN) == null) add("warn", "risks-missing", P["risks-missing"]);
+    // 1.19 R1: no Reuse & Integration heading — doctor would warn (design-reuse) on every feature scaffolded from it.
+    if (weighSection(rendered, REUSE_SYN) == null) add("warn", "reuse-missing", P["reuse-missing"]);
     for (const tr of markerTracks()) { // + the track packs (1.15)
       const marker = trackMarker(tr);
       if (!headingHasMarker(raw, marker)) continue; // no heading of the track: the engine appends its whole block
