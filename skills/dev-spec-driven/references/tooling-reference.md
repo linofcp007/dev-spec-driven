@@ -17,7 +17,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_templates` | The team's own scaffolds in `.specs/templates/`: `list` (built-in vs project per artifact) · `init` (copy the built-in ones to edit) · `check` (validate them) |
 | `spec_tracks` | The team's own tracks (1.15): packs in `.specs/tracks/<name>/` — `list` (built-in + packs, valid or not) · `init <name>` (a commented example pack) · `check` (stable codes, verdict) — see `references/project-tracks.md` |
 | `spec_create` | Scaffold a feature for its tracks (tracks + lang persisted in `.state.json`); `kind: "bugfix"` → the bugfix flow, `kind: "spike"` (+ `question`, `timebox`) → a spike; `brownfield: true` → + `integration-plan.md`; `flow: "design-first"` |
-| `spec_import` | Import a Kiro / spec-kit / OpenSpec spec, a plan (Claude Code plan mode / Cursor), a Codex ExecPlan or BMAD docs (path inside the project — or, for a plan / ExecPlan, its markdown as `text`: plan mode keeps plans in `~/.claude/plans`) as a NEW feature — IDs remapped (`mapping`), `warnings` listed, source untouched |
+| `spec_import` | Import a Kiro / spec-kit / OpenSpec spec, a plan (Claude Code plan mode / Cursor), a Codex ExecPlan, BMAD docs or a fluidplan plan (path inside the project — or, for a plan / ExecPlan / fluidplan PLAN.md, its markdown as `text`: plan mode keeps plans in `~/.claude/plans`) as a NEW feature — IDs remapped (`mapping`), `warnings` listed, source untouched; a fluidplan plan's settled decisions → `decisions.md` |
 | `spec_list` | List all features with track set, phase, and task progress |
 | `spec_status` | One feature: kind (feature / bugfix / spike), flow, phase, artifacts, tasks (with `verified`), each active track's sections present vs filled (`secSections`, `privacySections` …), eval state |
 | `spec_next_action` | "You are here → do this next": one `step`, phase by phase (re-review → for the first unapproved phase: fill → fix → approve, the next phase only after that approval → fix → implement → verify → finish → finished / drift; a spike: fill → implement → decide → promote / archive / pivot) + `changedSinceApproval`; suggests `/spec-ff` when every planning artifact passes its gate |
@@ -136,8 +136,8 @@ steering <file> [--lang]                 templates [list|init|check] [artifact] 
 tracks [list|init <name>|check] [name] [--lang]
 create "<name>" [tracks...] [--summary] [--kind feature|bugfix|spike] [--lang] [--brownfield] [--flow design-first]
 bugfix "<name>" [--summary]              spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]
-import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [--tracks …]
-import <plan|execplan> - | --text "<markdown>"   (the document from stdin / inline — a plan outside the project)
+import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--lang] [--tracks …]
+import <plan|execplan|fluidplan> - | --text "<markdown>"   (the document from stdin / inline — a plan outside the project)
 list · status [feature]                  doctor <feature> · clarify <feature>
 ears <feature|path> | --text "…" | -     trace <feature> [--code] [--matrix | --csv]
 next <feature> [--batch] [--max N] [--waves]    brief <feature> [n] [--write] [--include-brief]
@@ -338,7 +338,7 @@ marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chr
 | `/scan` | brownfield | Inventory an existing codebase (uses `spec_scan`) |
 | `/reverse` | brownfield | Reverse-engineer steering + specs from existing code |
 | `/coverage` | brownfield | Spec coverage of existing code via `_Implements:_` (uses `spec_coverage`) |
-| `/spec-import` | brownfield | Import a Kiro / spec-kit / OpenSpec spec, a plan, a Codex ExecPlan or BMAD docs as a new feature (uses `spec_import`) |
+| `/spec-import` | brownfield | Import a Kiro / spec-kit / OpenSpec spec, a plan, a Codex ExecPlan, BMAD docs or a fluidplan plan as a new feature (uses `spec_import`) |
 | `/spec-bugfix` | bugfix | Reproduce → root cause (with evidence) → approval → failing regression test (`_Expect: fail_`) → fix → verify (uses `spec_create {kind:"bugfix"}`) |
 | `/spec-finish` | close | Blockers + warnings + fresh checks + a merge summary from the spec chain; then merge locally / keep (uses `spec_finish`) |
 | `/spec-drift` | after | Implementing files changed since finish, and what to do about it (uses `spec_drift`) |

@@ -91,8 +91,8 @@
  *   backlog [add|rm|remove <name> [note]]  Planned-but-unspecced features
  *   scan [path] [--cap N]              Brownfield: inventory an existing codebase (routes, tests, entrypoints, env names, migrations)
  *   coverage                           Brownfield: % of code files named in _Implements:_ (per folder)
- *   import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [--tracks …]  Import another tool's spec / a plan as a NEW feature
- *   import <plan|execplan> - | --text "<markdown>"   … a plan from stdin or inline (Claude Code keeps plans in ~/.claude/plans)
+ *   import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--lang] [--tracks …]  Import another tool's spec / a plan as a NEW feature
+ *   import <plan|execplan|fluidplan> - | --text "<markdown>"   … a plan from stdin or inline (Claude Code keeps plans in ~/.claude/plans)
  *   statusline [--print-config]        One line for Claude Code's status line (reads its session JSON on stdin; prints nothing
  *                                      outside a dev-spec project; exit 0 always); --print-config prints the settings.json snippet
  *   evals <feature> [--dry-run ...]    Run the local eval harness (+ai)
@@ -983,11 +983,11 @@ function main() {
     }
 
     case "import": {
-      // dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--lang] [--tracks …] — the same engine call as
+      // dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--lang] [--tracks …] — the same engine call as
       // spec_import: <path> resolves against the project root and must stay inside it.
-      // 1.16 C4: `import plan|execplan -` reads the document's markdown from stdin, `--text "<markdown>"` takes it inline
+      // 1.16 C4: `import plan|execplan|fluidplan -` reads the document's markdown from stdin, `--text "<markdown>"` takes it inline
       // (= spec_import {tool, text} — a plan kept outside the project, e.g. Claude Code's ~/.claude/plans).
-      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy] · import <plan|execplan> - | --text \"<markdown>\"";
+      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy] · import <plan|execplan|fluidplan> - | --text \"<markdown>\"";
       const fromStdin = pos[1] === "-";
       const hasText = typeof flags.text === "string";
       if (!pos[0] || (!pos[1] && !hasText) || (fromStdin && hasText)) usage(usageLine);
@@ -1578,11 +1578,12 @@ function helpText() {
   scan [path]                     Brownfield: inventory an existing codebase (stack, frameworks, routes with file:line,
                                   tests, entrypoints, env var names, migrations)
   coverage                        Brownfield: % of code files named in any _Implements:_ (active + archived features), per folder
-  import <kiro|spec-kit|openspec|plan|execplan|bmad> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
+  import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
                                   tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|pt-BR|es · --tracks tdd,saas,ai,sec,privacy
                                   plan = Claude Code plan mode / Cursor .cursor/plans, execplan = a Codex ExecPlan (PLANS.md),
-                                  bmad = BMAD-METHOD docs (prd.md + docs/stories/)
-  import <plan|execplan> - | --text "<markdown>"   The same from the document's text: - reads stdin (dev-spec import plan - < plan.md),
+                                  bmad = BMAD-METHOD docs (prd.md + docs/stories/), fluidplan = a fluidplan plan (.fluidplan/<id>/:
+                                  plan.json + answers.json, PLAN.md + DECISIONS.md → tasks, criteria, decisions.md)
+  import <plan|execplan|fluidplan> - | --text "<markdown>"   The same from the document's text: - reads stdin (dev-spec import plan - < plan.md),
                                   --text takes it inline — for a plan outside the project (Claude Code keeps plans in ~/.claude/plans)
   statusline [--print-config]     One line for Claude Code's status line: the most active feature, its tasks, unverified ticks, the next
                                   step (reads the session JSON on stdin; nothing outside a dev-spec project; exit 0 always);
@@ -1602,7 +1603,7 @@ function helpText() {
          --brownfield / --flow design-first (create)  --flow (feature flow)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
          --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
-         --text "<markdown>" (import plan|execplan)  --print-config (statusline)
+         --text "<markdown>" (import plan|execplan|fluidplan)  --print-config (statusline)
          --guard on|off|scope / --stop-check on|off / --approval-guard off|ask|deny / --evidence reported|observed (init)  --message "…" / --agent <type> (stop-check)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).

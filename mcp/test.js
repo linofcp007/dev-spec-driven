@@ -1937,7 +1937,7 @@ function endRun() {
     ok(rPhase.ok && rPhase.approved === "design" && rLang.ok && rLang.lang === "pt" && rKind.ok && rKind.kind === "bugfix" &&
       rBl.ok && rBl.backlog.some((b) => b.name === "Later thing") && rBlList.ok && rBlList.backlog.length === 1 &&
       body(rFeat).needsConfirm === true && !/one of/.test(errText(rFeat)) && !/one of/.test(errText(rImp)) &&
-      rTool.result.isError && /tool must be one of: kiro, spec-kit, openspec, plan, execplan, bmad \(got "Kiro"\)/.test(errText(rTool)) && // 1.14 C3: + plan · execplan · bmad
+      rTool.result.isError && /tool must be one of: kiro, spec-kit, openspec, plan, execplan, bmad, fluidplan \(got "Kiro"\)/.test(errText(rTool)) && // 1.14 C3: + plan · execplan · bmad; 1.17 F: + fluidplan
       rBadPh.result.isError && /phase must be one of: .* \(got "Desing"\)/.test(errText(rBadPh)),
       "MCP enums are case-insensitive where the engine folds them (phase ' Design ', lang 'PT', kind 'Bugfix', backlog 'ADD'/'LIST', feature 'Remove', impact 'DESIGN'); spec_import's tool stays exact; a typo is still refused as given");
     const rNested =await call("spec_complete_task", { name: "arg-check", number: 2, evidence: { command: "npm test", exitCode: "0" }, projectDir: w3 });
@@ -9564,7 +9564,7 @@ function endRun() {
       "C3 bmad v6 (_bmad-output/planning-artifacts): '#### FR-1: name' + its paragraph → FR-1, epics.md stories with bold Given/When/Then criteria → EARS (got " + JSON.stringify(b6).slice(0, 300) + ")");
     const noBmad = c3Safe(() => S.importSpec(ie, "bmad", ".agent"));
     const badTool = await c3Call("spec_import", { tool: "Plan", path: "x.md", projectDir: ib });
-    ok(!noBmad.ok && /No BMAD spec files found/.test(noBmad.error) && badTool.isError && /tool must be one of: kiro, spec-kit, openspec, plan, execplan, bmad \(got "Plan"\)/.test(badTool.body.error),
+    ok(!noBmad.ok && /No BMAD spec files found/.test(noBmad.error) && badTool.isError && /tool must be one of: kiro, spec-kit, openspec, plan, execplan, bmad, fluidplan \(got "Plan"\)/.test(badTool.body.error), // 1.17 F: + fluidplan
       "C3 spec_import: a folder with no BMAD docs is refused; the tool enum lists the six formats and stays exact ('Plan' refused)");
 
     // --- C3.2 design-first flow
@@ -13218,7 +13218,7 @@ function endRun() {
       await call16({ tool: "plan", text: 42, projectDir: pb }), await call16({ tool: "plan", text: "<!-- only a comment -->\n", projectDir: pb }),
       await call16({ tool: "plan", path: "~/.claude/plans/x.md", projectDir: pb })];
     ok(!ic[0].isError && ic[0].body.feature === "dark-mode-mcp" && ic[0].body.inline === true && ic.slice(1).every((r) => r.isError) &&
-      /`text` imports a single document — tool plan, execplan; 'kiro' reads a folder/.test(ic[1].body.error) && /either `path` or `text`, not both/.test(ic[2].body.error) &&
+      /`text` imports a single document — tool plan, execplan, fluidplan; 'kiro' reads a folder/.test(ic[1].body.error) && /either `path` or `text`, not both/.test(ic[2].body.error) &&
       /Missing required argument\(s\): path/.test(ic[3].body.error) && /text/.test(ic[4].body.error) && /The plan text is empty/.test(ic[5].body.error) &&
       /outside the project/.test(ic[6].body.error) && /pass its markdown as `text`/.test(ic[6].body.error) && !fs.existsSync(path.join(pb, ".specs", "x")),
       "1.16 C4: spec_import {tool: 'plan', text} over MCP; text for a folder tool, path + text, neither, a non-string, an empty text are refused; a plan outside the project names the text way (got " +
@@ -14372,6 +14372,228 @@ function endRun() {
   // 1.17 package (A) — design trade-offs / risks, /grill constraint questions, the TDD micro-cycle.
 
   // 1.17 package (F) — spec_import fluidplan.
+  { // Fixtures in fluidplan's real formats (github.com/morganhub/fluidplan @ 755d1b24): plan.json v2 + answers.json + state.json, and the
+    // PLAN.md / DECISIONS.md its finalize writes (the texts below are what its export_plan.js / export_decisions.js produce for them).
+    const js = (v) => JSON.stringify(v);
+    const fpCall = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); let body; try { body = JSON.parse(res.result.content[0].text); } catch { body = { ok: false, error: res.result.content[0].text }; } return { isError: !!res.result.isError, body }; };
+    const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, typeof s === "string" ? s : JSON.stringify(s, null, 2)); };
+    const rd = (root, ...p) => { try { return fs.readFileSync(path.join(root, ...p), "utf8"); } catch { return ""; } };
+    const safe = (fn) => { try { return fn(); } catch (e) { return { ok: false, threw: true, error: "THREW: " + e.message }; } };
+    const plan = {
+      version: 2, id: "reminders", title: "E-mail reminders", lang: "en", source: { kind: "md", path: "docs/reminders.md" },
+      context: "Send an e-mail reminder before a task is due.\n\nThe app is an Express API with a SQLite database.",
+      phases: [{ id: "p1", title: "Data", estimate: "≈ 1 d" }, { id: "p2", title: "Delivery", estimate: "≈ 2 d" }],
+      glossary: [{ term: "Offset", definition: "How long before the due date the reminder goes out." }],
+      pages: [
+        { id: "model", section: "1 · Data", title: "Storing reminders", intro: "Where the reminder settings live.", decisions: [
+          { id: "D1", title: "Where to store the offset", importance: "critical", phase: "p1", why: "A wrong place means migrating every task later.",
+            proposal: "A column on the tasks table.",
+            control: { kind: "choice", options: [
+              { id: "column", label: "A column on tasks", recommended: true, pros: ["One query"], cons: ["A schema change"], effort: "S",
+                tasks: [{ id: "migration", title: "Add the remind_before column", files: [{ path: "src/db/migrations/002_remind.sql", op: "create" }, { path: "src/db/legacy_reminders.js", op: "delete" }],
+                  acceptance: ["When a task is created without an offset, the system stores 30 minutes", "The migration runs twice without error"],
+                  verify: ["npm test -- migrate", "node src/db/migrate.js --dry-run"] }] },
+              { id: "table", label: "A reminders table", pros: ["Several reminders per task"], cons: ["A join on every read"], effort: "M" }] },
+            tasks: [{ id: "model", title: "Expose remindBefore in the task model", files: [{ path: "src/models/task.js", op: "modify" }, { path: "/etc/reminders.conf", op: "modify" }],
+              acceptance: ["The API SHALL return remindBefore on every task"], verify: ["npm test -- task"], after: ["migration"] }] }] },
+        { id: "delivery", section: "2 · Delivery", title: "Sending the e-mails", decisions: [
+          { id: "D2", title: "How to send", importance: "important", phase: "p2", why: "Deliverability decides whether reminders arrive.",
+            control: { kind: "choice", options: [
+              { id: "smtp", label: "SMTP", recommended: true, pros: ["No vendor"], cons: ["Deliverability is ours"], effort: "M",
+                tasks: [{ id: "mailer", title: "Mailer module", files: [{ path: "src/mail/mailer.js", op: "create" }], acceptance: ["If the SMTP server is down, the mailer retries 3 times"],
+                  verify: ["npm test -- mailer"], after: ["D1/model"] }] },
+              { id: "api", label: "A mail API", pros: ["Deliverability"], cons: ["A vendor"], effort: "S" }] } },
+          { id: "D3", title: "Digest or one e-mail per task", importance: "minor", proposal: "One e-mail per task." },
+          { id: "D4", title: "SMS as well", importance: "important", why: "Some users never read e-mails.", proposal: "Add SMS reminders.",
+            tasks: [{ id: "sms", title: "SMS sender", files: [{ path: "src/sms.js", op: "create" }] }] }] }],
+    };
+    const answersDone = { D1: { status: "ok", edits: { proposal: "A remind_before column on tasks." } }, D2: { status: "ok", comment: "Use the existing SMTP relay" }, D3: { status: "ok" }, D4: { status: "ko", comment: "Not now" } };
+    const MARK = "<!-- generated by fluidplan: regenerated on export, edits are overwritten -->";
+    const head = (kind) => [MARK, `# E-mail reminders — ${kind}`, "", "> Approved on 2026-09-25 at 14:02, round 1 · source: `docs/reminders.md` · generated by fluidplan"];
+    const planMd = [...head("execution plan"), "> Do not edit by hand before execution: regenerate with `fluidplan export --plan reminders`. During execution, tick tasks as you go.", "",
+      "## Context", "", "Send an e-mail reminder before a task is due.", "", "The app is an Express API with a SQLite database.", "",
+      "## Working rules", "", "- **D3 · Digest or one e-mail per task**. One e-mail per task.", "",
+      "## Phase 1 — Data (≈ 1 d)", "", "### [x] 1.1 Add the remind_before column · D1", "", "- Decision: **D1** Where to store the offset — A column on tasks [critical]",
+      "- Files: `src/db/migrations/002_remind.sql` (create), `src/db/legacy_reminders.js` (delete)", "- Acceptance criteria:", "  - [x] When a task is created without an offset, the system stores 30 minutes",
+      "  - [x] The migration runs twice without error", "- Verify: `npm test -- migrate` · `node src/db/migrate.js --dry-run`", "",
+      "### [ ] 1.2 Expose remindBefore in the task model · D1", "", "- Decision: **D1** Where to store the offset — A column on tasks [critical]",
+      "- Files: `src/models/task.js` (modify), `/etc/reminders.conf` (modify)", "- Acceptance criteria:", "  - [ ] The API SHALL return remindBefore on every task", "- Verify: `npm test -- task`", "- After: 1.1", "",
+      "## Phase 2 — Delivery (≈ 2 d)", "", "### [ ] 2.1 Mailer module · D2", "", "- Decision: **D2** How to send — SMTP", "- Files: `src/mail/mailer.js` (create)", "- Acceptance criteria:",
+      "  - [ ] If the SMTP server is down, the mailer retries 3 times", "- Verify: `npm test -- mailer`", "- After: 1.2", "- Remark: “Use the existing SMTP relay”", "",
+      "## Final check", "", "- [ ] `npm test -- task`", "- [ ] `npm test -- migrate`", "- [ ] `node src/db/migrate.js --dry-run`", "- [ ] `npm test -- mailer`", "",
+      "## Out of scope", "", "- **D4 · SMS as well** — rejected: “Not now”", ""].join("\n");
+    const decMd = [...head("decisions"), "> Tally: 3 accepted, 0 to change, 0 questions, 1 rejected, 0 without an answer (4 decisions).", "",
+      "## Context", "", "Send an e-mail reminder before a task is due.", "", "The app is an Express API with a SQLite database.", "", "## Accepted decisions", "",
+      "### D1 · Where to store the offset", "", "- **Importance:** Critical", "- **Phase:** Phase 1 — Data", "- **Choice:** A column on tasks", "- **Why:** A wrong place means migrating every task later.",
+      "- **Proposal:** A remind_before column on tasks. _(rewritten)_", "- **Other options:** A reminders table (con: A join on every read)", "",
+      "### D2 · How to send", "", "- **Importance:** Important", "- **Phase:** Phase 2 — Delivery", "- **Choice:** SMTP", "- **Why:** Deliverability decides whether reminders arrive.",
+      "- **Other options:** A mail API (con: A vendor)", "- **Remarks:** “Use the existing SMTP relay” (round 1)", "",
+      "### D3 · Digest or one e-mail per task", "", "- **Importance:** Minor", "- **Proposal:** One e-mail per task.", "",
+      "## Rejected decisions", "", "### D4 · SMS as well", "", "- **Proposal:** Add SMS reminders.", "- **Why:** Some users never read e-mails.", "- **Reason:** “Not now”", "- **Remarks:** “Not now” (round 1)", "",
+      "## Glossary", "", "- **Offset** — How long before the due date the reminder goes out.", ""].join("\n");
+
+    // --- F1: a finalized plan folder (plan.json + answers.json + state.json + rounds/ + PLAN.md with task 1.1 ticked + DECISIONS.md)
+    const fa = path.join(tmp, "p17f-a");
+    S.initProject(fa, ["core"], "en");
+    put(fa, ".fluidplan/reminders/plan.json", plan);
+    put(fa, ".fluidplan/reminders/answers.json", answersDone);
+    put(fa, ".fluidplan/reminders/state.json", { round: 1, status: "exported", opened_at: null, submitted_at: "2026-09-25T12:00:00.000Z", history: [] });
+    put(fa, ".fluidplan/reminders/rounds/1/answers.json", answersDone);
+    put(fa, ".fluidplan/reminders/PLAN.md", planMd);
+    put(fa, ".fluidplan/reminders/DECISIONS.md", decMd);
+    put(fa, "src/db/migrations/002_remind.sql", "ALTER TABLE tasks ADD remind_before INTEGER DEFAULT 30;\n"); // task 1.1 is ticked: its file exists
+    const f1 =await fpCall("spec_import", { tool: "fluidplan", path: ".fluidplan/reminders", tracks: ["core"], projectDir: fa });
+    const b1 = f1.body;
+    const fdir = (root, slug, file) => rd(root, ".specs", slug, file);
+    const req1 = fdir(fa, "e-mail-reminders", "requirements.md"), tasks1 = fdir(fa, "e-mail-reminders", "tasks.md");
+    const des1 = fdir(fa, "e-mail-reminders", "design.md"), dec1 = fdir(fa, "e-mail-reminders", "decisions.md");
+    ok(!f1.isError && b1.ok && b1.feature === "e-mail-reminders" && b1.tool === "fluidplan" && b1.toolName === "fluidplan" && b1.source === ".fluidplan/reminders" &&
+      b1.imported.includes("decisions.md") && b1.mapping["page model"] === "US-1" && b1.mapping["page delivery"] === "US-2" && b1.mapping["task 1.1 / acceptance 1"] === "US-1.AC-1" &&
+      b1.mapping["task 1.2 / acceptance 1"] === "US-1.AC-3" && b1.mapping["task 1.1"] === "task 1" && b1.mapping["task 2.1"] === "task 3" && b1.mapping["decision D4"] === "D-4" &&
+      /^> Imported from fluidplan `\.fluidplan\/reminders` on \d{4}-\d{2}-\d{2}\.$/m.test(req1) && /^## Summary\nSend an e-mail reminder before a task is due\.$/m.test(req1) &&
+      /### US-1: Storing reminders\nWhere the reminder settings live\./.test(req1) && /### US-2: Sending the e-mails/.test(req1) &&
+      /1\. \*\*US-1\.AC-1\*\* — WHEN a task is created without an offset, THE SYSTEM SHALL store 30 minutes\n/.test(req1) &&
+      /2\. \*\*US-1\.AC-2\*\* — The migration runs twice without error \[NEEDS CLARIFICATION/.test(req1) && /3\. \*\*US-1\.AC-3\*\* — The API SHALL return remindBefore on every task\n/.test(req1) &&
+      /1\. \*\*US-2\.AC-1\*\* — IF the SMTP server is down, THEN THE SYSTEM SHALL ensure that the mailer retries 3 times/.test(req1) &&
+      /## Out of Scope\n- \*\*D4 · SMS as well\*\* — rejected: “Not now”/.test(req1) && b1.warnings.some((w) => /not converted to EARS[^\n]*US-1\.AC-2/.test(w)),
+      "1.17 F1: spec_import fluidplan (a finalized plan folder) → a NEW feature named after the plan; pages → US-1 / US-2, each task's acceptance → criteria (EARS when they read like one, else [NEEDS CLARIFICATION] + the warning), the context's first paragraph → the summary, the rejected decision → Out of Scope, the note names the folder (got " + js(b1).slice(0, 400) + ")");
+    ok(/## Global Constraints\n\n- D-3 · Digest or one e-mail per task\. One e-mail per task\.\n/.test(tasks1) &&
+      /## Phase 1 — Data \(≈ 1 d\)\n- \[x\] 1\. Add the remind_before column\n  - _Requirements: US-1\.AC-1, US-1\.AC-2_\n  - _Implements: src\/db\/migrations\/002_remind\.sql_\n  - _Verify: npm test -- migrate_\n  - _Verify: node src\/db\/migrate\.js --dry-run_\n  - Decision: D-1 — Where to store the offset \(A column on tasks\)\n  - To delete: `src\/db\/legacy_reminders\.js`\n/.test(tasks1) &&
+      /- \[ \] 2\. Expose remindBefore in the task model\n  - _Requirements: US-1\.AC-3_\n  - _Implements: src\/models\/task\.js_\n  - _Verify: npm test -- task_\n  - _Depends: 1_\n[^\n]*\n  - Files outside _Implements:_: `\/etc\/reminders\.conf` \(modify\)/.test(tasks1) &&
+      /## Phase 2 — Delivery \(≈ 2 d\)\n- \[ \] 3\. Mailer module\n  - _Requirements: US-2\.AC-1_\n  - _Implements: src\/mail\/mailer\.js_\n  - _Verify: npm test -- mailer_\n  - _Depends: 2_\n  - Decision: D-2 — How to send \(SMTP\)\n  - Remark: “Use the existing SMTP relay”/.test(tasks1) &&
+      !/SMS sender|  - _Implements: [^\n]*(?:\/etc|legacy)/.test(tasks1) && b1.warnings.some((w) => /task 1\.2: '\/etc\/reminders\.conf' is not a project-relative path/.test(w)),
+      "1.17 F1: tasks → tasks.md under their phase headings, ticks kept, numbered 1…3 — files create / modify → _Implements:_ (a delete in the task text, an absolute path refused with a warning), one _Verify:_ per verify command, after → _Depends:_ renumbered (1.1 → 1, 1.2 → 2); the working rule → Global Constraints; the rejected decision's task never imported");
+    const blocks1 = S.taskBlocks(tasks1);
+    const nx1 = await fpCall("spec_next_task", { name: "e-mail-reminders", projectDir: fa });
+    ok(blocks1.length === 3 && js(blocks1.map((b) => S.taskMarkers(b).verify)) === js([["npm test -- migrate", "node src/db/migrate.js --dry-run"], ["npm test -- task"], ["npm test -- mailer"]]) &&
+      js(blocks1.map((b) => S.taskDependsSpec(b).numbers)) === js([[], [1], [2]]) && js(blocks1.map((b) => S.taskMarkers(b).implements)) === js([["src/db/migrations/002_remind.sql"], ["src/models/task.js"], ["src/mail/mailer.js"]]) &&
+      !nx1.isError && nx1.body.next && nx1.body.next.number === 2,
+      "1.17 F1: the markers read back through the engine (taskMarkers / taskDependsSpec) and spec_next_task follows the imported _Depends:_ — task 2 next (1 done) (got " + js([blocks1.map((b) => S.taskMarkers(b)), nx1.body]).slice(0, 300) + ")");
+    const log1 = S.decisionLog(dec1);
+    const d1 = log1[0] || {}, d4 = log1[3] || {};
+    const doc1 = S.specDoctor(fa, "e-mail-reminders");
+    const tr1 = S.traceCheck(fa, "e-mail-reminders");
+    ok(log1.length === 4 && js(log1.map((e) => [e.id, e.kind, e.title])) === js([["D-1", "decision", "Where to store the offset"], ["D-2", "decision", "How to send"], ["D-3", "decision", "Digest or one e-mail per task"], ["D-4", "decision", "SMS as well"]]) &&
+      /^# Decisions: E-mail reminders\n/.test(dec1) && js(d1.affects) === js(["US-1.AC-1", "US-1.AC-2", "US-1.AC-3"]) && d1.date === new Date(2026, 8, 25, 14, 2).toISOString() &&
+      /^A wrong place means migrating every task later\.\n- Importance: critical · Phase: Phase 1 — Data · Theme: Storing reminders · fluidplan decision D1\n- Proposal: A remind_before column on tasks\. _\(rewritten by the reviewer\)_$/.test(d1.context) &&
+      d1.decision === "A column on tasks" && /^A column on tasks — pros: One query · cons: A schema change · effort: S\n- Other options:\n  - A reminders table — pros: Several reminders per task · cons: A join on every read · effort: M$/.test(d1.consequences) &&
+      /^Rejected — not part of this feature: “Not now”$/.test(d4.decision) && js(d4.affects) === js([]) && /Remarks: “Use the existing SMTP relay” \(round 1\)/.test((log1[1] || {}).decision || "") &&
+      !doc1.checks.some((c) => /^decision-affects/.test(c.id)) && tr1.verdict === "pass" && js(tr1.phantomAffects) === js([]) && tr1.coveredByTasks === 4,
+      "1.17 F1: accepted AND rejected decisions → decisions.md in spec_decide's format — decisionLog reads D-1…D-4 back (kind, the plan's date, _Affects:_ = the criteria its tasks carry; Context = why + importance / phase / theme / the rewritten proposal; Decision = the choice + remarks; Consequences = the chosen option's pros / cons / effort + the other options from plan.json); doctor has no decision-affects warning, trace_check passes with no phantom _Affects:_ (got " + js([log1, doc1.checks.filter((c) => c.status !== "pass").map((c) => c.id), tr1.verdict]).slice(0, 500) + ")");
+    ok(/## Decisions\n\nThe context, choice and consequences of each decision are in decisions\.md\.\n\n- \*\*D-1\*\* — Where to store the offset: A column on tasks _\(critical\)_\n- \*\*D-2\*\* — How to send: SMTP\n- \*\*D-3\*\* — Digest or one e-mail per task\n- \*\*D-4\*\* — SMS as well: rejected — “Not now”/.test(des1) &&
+      /## Alternatives & Trade-offs\n\n\| Decision \| Option \| Pros \| Cons \| Effort \|\n\|---\|---\|---\|---\|---\|\n\| D-1 Where to store the offset \| \*\*A column on tasks\*\* \(chosen\) \| One query \| A schema change \| S \|\n\| D-1 Where to store the offset \| A reminders table \| Several reminders per task \| A join on every read \| M \|/.test(des1) &&
+      /## Context\n\nThe app is an Express API with a SQLite database\.\n\nSource document: `docs\/reminders\.md`/.test(des1) && /## Glossary\n\n- \*\*Offset\*\* — How long before/.test(des1) &&
+      /## Final check\n\n- \[ \] `npm test -- task`/.test(des1) && b1.warnings.some((w) => /round history \(rounds\/, the revision notes/.test(w)) &&
+      rd(fa, ".fluidplan", "reminders", "PLAN.md") === planMd && rd(fa, ".fluidplan", "reminders", "DECISIONS.md") === decMd && js(JSON.parse(rd(fa, ".fluidplan", "reminders", "plan.json"))) === js(plan),
+      "1.17 F1: design.md — ## Decisions (D-n + choice), ## Alternatives & Trade-offs (every option: pros / cons / effort, the chosen one first), the rest of the context + the source document, the glossary and the final check; the round history named in a warning; the source files untouched");
+
+    // --- F2: a plan in progress (plan.json + answers.json, no PLAN.md): D1 'To change', D3 without an answer, D4 'Not OK'
+    const fb = path.join(tmp, "p17f-b");
+    S.initProject(fb, ["core"], "en");
+    put(fb, ".fluidplan/reminders/plan.json", plan);
+    put(fb, ".fluidplan/reminders/answers.json", { D1: { status: "modify", comment: "What about a table?" }, D2: { status: "ok" }, D4: { status: "ko", comment: "Not now" } });
+    put(fb, ".fluidplan/reminders/state.json", { round: 1, status: "submitted", submitted_at: "2026-09-26T09:00:00.000Z", history: [] });
+    const f2 = safe(() => S.importSpec(fb, "fluidplan", ".fluidplan/reminders/plan.json", { tracks: ["core"] }));
+    const req2 = fdir(fb, "e-mail-reminders", "requirements.md"), tasks2 = fdir(fb, "e-mail-reminders", "tasks.md"), log2 = S.decisionLog(fdir(fb, "e-mail-reminders", "decisions.md"));
+    const doc2 = f2.ok ? S.specDoctor(fb, f2.feature) : { checks: [] };
+    const cl2 = (doc2.checks.find((c) => c.id === "clarifications") || {});
+    ok(f2.ok && f2.source === ".fluidplan/reminders" && js(log2.map((e) => [e.id, e.title])) === js([["D-1", "How to send"], ["D-2", "SMS as well"]]) &&
+      f2.mapping["decision D2"] === "D-1" && !("decision D1" in f2.mapping) && f2.mapping["task 1.2"] === "task 2" &&
+      /## Open decisions\n- \[NEEDS CLARIFICATION\] \*\*D1 · Where to store the offset\*\* — to change \(the criteria it drives: US-1\.AC-1, US-1\.AC-2, US-1\.AC-3\): settle it in fluidplan/.test(req2) &&
+      /- \[NEEDS CLARIFICATION\] \*\*D3 · Digest or one e-mail per task\*\* — no answer/.test(req2) && /## Out of Scope\n- \*\*D4 · SMS as well\*\* — rejected: “Not now”/.test(req2) &&
+      f2.warnings.some((w) => /decisions still open in fluidplan[^\n]*D1 \(to change\), D3 \(no answer\)/.test(w)) && f2.warnings.some((w) => /not settled \(DRAFT: 1 decision\(s\) without an answer, 1 to rework\)/.test(w)) &&
+      f2.warnings.some((w) => /rejected in fluidplan \(Not OK\)[^\n]*D4 → D-2/.test(w)) && cl2.status === "fail" &&
+      /- \[ \] 1\. Add the remind_before column\n  - _Requirements: US-1\.AC-1, US-1\.AC-2_\n[\s\S]*  - Decision: D1 · Where to store the offset — still open in fluidplan \(to change\)\n  - To delete: `src\/db\/legacy_reminders\.js`\n  - Remark: “What about a table\?”/.test(tasks2) &&
+      /- \[ \] 2\. Expose remindBefore[^\n]*\n[\s\S]*  - _Depends: 1_/.test(tasks2) && /- \[ \] 3\. Mailer module\n[\s\S]*  - _Depends: 2_\n  - Decision: D-1 — How to send \(SMTP\)/.test(tasks2) && !/SMS sender/.test(tasks2) && !/Global Constraints/.test(tasks2),
+      "1.17 F2: plan.json + answers.json alone — the tasks follow fluidplan's rules (the recommended option's tasks, numbering by phase, after → _Depends:_, all open); decisions still open (to change, no answer) get no decisions.md entry but an Open decisions line with [NEEDS CLARIFICATION] (doctor's clarifications fails) + the DRAFT and open warnings; Not OK is a rejection: recorded as D-2, Out of Scope, its task dropped (got " + js(f2).slice(0, 400) + ")");
+
+    // --- F3: refusals — a plans folder with two plans, a path outside, a link out of the project, a non-fluidplan document, a second import, an empty folder
+    put(fb, ".fluidplan/other/plan.json", { ...plan, id: "other", title: "Other plan" });
+    const several = await fpCall("spec_import", { tool: "fluidplan", path: ".fluidplan", projectDir: fb });
+    const out = safe(() => S.importSpec(fb, "fluidplan", "../p17f-a/.fluidplan/reminders"));
+    const outside = path.join(tmp, "p17f-outside", "plan");
+    put(path.dirname(outside), "plan/plan.json", { ...plan, id: "plan", title: "Linked plan" });
+    let linked = false;
+    try { fs.symlinkSync(outside, path.join(fb, "linked-plan"), "junction"); linked = true; } catch { /* no link rights: skipped */ }
+    const viaLink = linked ? safe(() => S.importSpec(fb, "fluidplan", "linked-plan")) : null;
+    put(fb, "notes/readme.md", "# Notes\n\nNothing to plan here.\n");
+    const notFp = safe(() => S.importSpec(fb, "fluidplan", "notes/readme.md"));
+    fs.mkdirSync(path.join(fb, "empty"), { recursive: true });
+    const empty = safe(() => S.importSpec(fb, "fluidplan", "empty"));
+    const again = await fpCall("spec_import", { tool: "fluidplan", path: ".fluidplan/reminders", projectDir: fb });
+    ok(several.isError && /'\.fluidplan' holds several fluidplan plans \(other, reminders\) — pass the one to import/.test(several.body.error) &&
+      !out.ok && /outside the project/.test(out.error) && (!linked || (!viaLink.ok && /outside the project/.test(viaLink.error) && !fs.existsSync(path.join(fb, ".specs", "linked-plan")))) &&
+      !notFp.ok && /'notes\/readme\.md' is not a fluidplan PLAN\.md or DECISIONS\.md/.test(notFp.error) && !empty.ok && /No fluidplan spec files found in 'empty'/.test(empty.error) &&
+      again.isError && /already exists/.test(again.body.error) && !fs.existsSync(path.join(fb, ".specs", "other-plan")),
+      "1.17 F3: refused — a plans folder holding several plans (named: pass one), a path outside the project, a link to a plan outside it" + (linked ? "" : " (link not creatable here: skipped)") + ", a Markdown file that is no fluidplan document, a folder with nothing to import, an existing feature (got " + js([several.body.error, out.error, viaLink && viaLink.error, notFp.error, empty.error]).slice(0, 400) + ")");
+
+    // --- F4: PLAN.md alone (moved to docs/ by plan.json's `output`, the plan folder elsewhere) and PLAN_x.md + DECISIONS_x.md side by side
+    const fc = path.join(tmp, "p17f-c");
+    S.initProject(fc, ["core"], "en");
+    put(fc, "docs/PLAN_reminders.md", planMd.replace("regenerate with `fluidplan export --plan reminders`", "regenerate with `fluidplan export --plan gone`"));
+    const f4 = safe(() => S.importSpec(fc, "fluidplan", "docs/PLAN_reminders.md", { tracks: ["core"], name: "Plan alone" }));
+    const req4 = fdir(fc, "plan-alone", "requirements.md"), log4 = S.decisionLog(fdir(fc, "plan-alone", "decisions.md"));
+    put(fc, "out/PLAN_rem.md", planMd);
+    put(fc, "out/DECISIONS_rem.md", decMd);
+    const f4b = safe(() => S.importSpec(fc, "fluidplan", "out/PLAN_rem.md", { tracks: ["core"], name: "Plan and decisions" }));
+    const log4b = S.decisionLog(fdir(fc, "plan-and-decisions", "decisions.md"));
+    ok(f4.ok && f4.source === "docs/PLAN_reminders.md" && f4.mapping["Phase 1 — Data"] === "US-1" && f4.mapping["Phase 2 — Delivery"] === "US-2" && /### US-1: Phase 1 — Data/.test(req4) &&
+      f4.warnings.some((w) => /no DECISIONS\.md and no plan\.json beside PLAN\.md/.test(w)) &&
+      js(log4.map((e) => [e.id, e.title])) === js([["D-1", "Digest or one e-mail per task"], ["D-2", "Where to store the offset"], ["D-3", "How to send"], ["D-4", "SMS as well"]]) &&
+      (log4[1] || {}).decision === "A column on tasks" && /Importance: critical/.test((log4[1] || {}).context || "") && /^Rejected — not part of this feature: “Not now”$/.test((log4[3] || {}).decision || "") &&
+      f4b.ok && log4b.length === 4 && /pros: One query|con: A join on every read/.test(((log4b[0] || {}).consequences) || "") && !f4b.warnings.some((w) => /no DECISIONS\.md/.test(w)),
+      "1.17 F4: a PLAN.md alone → stories per phase, decisions.md from what PLAN.md names (the working rule, each task's Decision line with its [critical], the rejected one) + a warning; PLAN_x.md finds its DECISIONS_x.md beside it (got " + js([f4, log4b]).slice(0, 400) + ")");
+
+    // --- F5: a French plan (fluidplan's fr labels) imported into a Portuguese feature, and the inline text (PLAN.md + DECISIONS.md) over MCP
+    const fd = path.join(tmp, "p17f-d");
+    S.initProject(fd, ["core"], "pt");
+    const frPlan = ["<!-- generated by fluidplan: regenerated on export, edits are overwritten -->", "# Cache de sessions — plan d'exécution", "",
+      "> Validé le 2026-09-25 à 14:02, tour 2 · généré par fluidplan", "> Ne pas modifier à la main avant l'exécution : régénérer avec `fluidplan export --plan cache`. Pendant l'exécution, cocher les tâches au fil de l'eau.", "",
+      "## Contexte", "", "Mettre en cache les sessions de l'API.", "", "## Règles de travail", "", "- **D3 · Journalisation**. Journaliser les échecs du cache.", "",
+      "## Phase 1 — Fondations (≈ 1 j)", "", "### [ ] 1.1 Interface commune du cache · D1", "", "- Décision : **D1** Le moteur de cache — Mémoire du processus [critique]",
+      "- Fichiers : `src/cache/index.js` (créer), `src/cache/old.js` (supprimer)", "- Critères d'acceptation :", "  - [ ] Quand une clé expire, le cache la supprime", "- Vérifier : `npm test -- cache`", "",
+      "### [ ] 1.2 Durée de vie de 20 min · D2", "", "- Décision : **D2** La durée de vie — 20 min", "- Faire : Régler l'expiration à 20 min.", "- Après : 1.1", "- Remarque : « Plus court en recette »", "",
+      "## Hors périmètre", "", "- **D4** / Profil — écartée : « plus tard »", ""].join("\n");
+    put(fd, "fp/PLAN.md", frPlan);
+    const f5 = safe(() => S.importSpec(fd, "fluidplan", "fp", { tracks: ["core"] }));
+    const tasks5 = fdir(fd, f5.feature || "x", "tasks.md"), req5 = fdir(fd, f5.feature || "x", "requirements.md");
+    const log5 = S.decisionLog(fdir(fd, f5.feature || "x", "decisions.md"));
+    ok(f5.ok && f5.lang === "pt" && f5.feature === "cache-de-sessions" && /^> Importado de fluidplan `fp` em \d{4}-\d{2}-\d{2}\.$/m.test(tasks5) &&
+      /## Restrições Globais\n\n- D-1 · Journalisation\. Journaliser les échecs du cache\./.test(tasks5) &&
+      /- \[ \] 1\. Interface commune du cache\n  - _Requirements: US-1\.AC-1_\n  - _Implements: src\/cache\/index\.js_\n  - _Verify: npm test -- cache_\n  - Decisão: D-2 — Le moteur de cache \(Mémoire du processus\)\n  - A apagar: `src\/cache\/old\.js`/.test(tasks5) &&
+      /- \[ \] 2\. Durée de vie de 20 min\n  - _Depends: 1_\n  - Decisão: D-3 — La durée de vie \(20 min\)\n  - Fazer: Régler l'expiration à 20 min\.\n  - Observação: « Plus court en recette »/.test(tasks5) &&
+      /## Fora de Âmbito\n- \*\*D4\*\* \/ Profil — écartée : « plus tard »/.test(req5) && /### US-1: Phase 1 — Fondations/.test(req5) &&
+      /^# Decisões: Cache de sessions\n/.test(fdir(fd, f5.feature || "x", "decisions.md")) && /\*\*Contexto:\*\* /.test(fdir(fd, f5.feature || "x", "decisions.md")) && log5.length === 3 &&
+      f5.warnings.some((w) => /histórico de revisões do fluidplan/.test(w)),
+      "1.17 F5: a French PLAN.md (Règles de travail, Décision :, Fichiers : … (supprimer), Critères d'acceptation, Après, Remarque, Hors périmètre) imported into a PT project — PT headings, labels and note, decisions.md with the PT header and labels, read back by decisionLog (got " + js([f5, log5]).slice(0, 400) + ")");
+    const fi = await fpCall("spec_import", { tool: "fluidplan", text: planMd + "\n" + decMd, name: "Inline reminders", tracks: ["core"], projectDir: fb });
+    const logI = S.decisionLog(fdir(fb, "inline-reminders", "decisions.md"));
+    const fiBoth = await fpCall("spec_import", { tool: "fluidplan", text: planMd, path: "x", projectDir: fb });
+    ok(!fi.isError && fi.body.inline === true && fi.body.source === null && logI.length === 4 && (logI[0] || {}).title === "Where to store the offset" &&
+      /^> Imported from fluidplan \(inline text\) on /m.test(fdir(fb, "inline-reminders", "tasks.md")) && fi.body.mapping["task 1.2"] === "task 2" &&
+      fiBoth.isError && /either `path` or `text`, not both/.test(fiBoth.body.error),
+      "1.17 F5: spec_import {tool: 'fluidplan', text} — a pasted PLAN.md followed by its DECISIONS.md: the same mapping (decisions.md from the DECISIONS part), inline: true, source: null; path + text refused (got " + js(fi.body).slice(0, 300) + ")");
+
+    // --- F6: what can't become a marker — a verify command with '_ ', a '..' / URL / glob path, an `after` naming a task the plan doesn't keep
+    const fe = path.join(tmp, "p17f-e");
+    S.initProject(fe, ["core"], "en");
+    put(fe, ".fluidplan/edge/plan.json", { version: 2, id: "edge", title: "Edge cases", phases: [{ id: "p1", title: "Only" }], pages: [{ id: "pg", title: "Page", decisions: [
+      { id: "D1", title: "Keep", phase: "p1", tasks: [
+        { id: "a", title: "10 retries max", files: [{ path: "../up.js" }, { path: "https://example.com/x.js" }, { path: "src/**/*.js" }, { path: "src/ok.js" }],
+          verify: ["echo a_ b", "npm test"], after: ["D2/gone"], acceptance: ["When the queue is full, the system rejects the job"] },
+        { id: "b", title: "Second", do: "Step one.\n- [ ] 3. not a task\n```sh\nnpm run x", after: ["a"] }] },
+      { id: "D2", title: "Dropped", phase: "p1", tasks: [{ id: "gone", title: "Gone" }] }] }] });
+    put(fe, ".fluidplan/edge/answers.json", { D1: { status: "ok" }, D2: { status: "ko" } });
+    const f6 = safe(() => S.importSpec(fe, "fluidplan", ".fluidplan/edge", { tracks: ["core"] }));
+    const tasks6 = fdir(fe, "edge-cases", "tasks.md");
+    const b6 = S.taskBlocks(tasks6);
+    ok(f6.ok && b6.length === 2 && b6[0].text === "10 retries max" && b6[0].number === 1 && js(S.taskMarkers(b6[0]).implements) === js(["src/ok.js"]) && js(S.taskMarkers(b6[0]).verify) === js(["npm test"]) &&
+      !S.taskDependsSpec(b6[0]).declared && js(S.taskDependsSpec(b6[1]).numbers) === js([1]) && /Verify \(no marker\): echo a_ b/.test(tasks6) &&
+      ["'../up.js'", "'https://example.com/x.js'", "'src/\\*\\*/\\*\\.js'"].every((p) => f6.warnings.some((w) => new RegExp("task 1\\.1: " + p + " is not a project-relative path").test(w))) &&
+      f6.warnings.some((w) => /task 1\.1: the verify command 'echo a_ b' can't be written as a _Verify:_ marker/.test(w)) && f6.warnings.some((w) => /task 1\.1: after 'D2\/gone' names no task the plan keeps/.test(w)) &&
+      /  - Do: Step one\.\n    - \\\[ \] 3\. not a task\n    ```sh\n    npm run x\n    ```\n/.test(tasks6),
+      "1.17 F6: a title opening with a number stays the title (tasks are numbered by the importer itself); '..', URL and glob paths and a verify command with '_ ' never become markers (each warned, kept in the text); an after naming a rejected decision's task is warned, not a _Depends:_; a Do text can't fake a task line and its unclosed fence is closed (got " + js([f6.warnings, tasks6]).slice(0, 600) + ")");
+  }
 
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");

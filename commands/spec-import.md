@@ -1,6 +1,6 @@
 ---
-description: Import a spec written for Kiro, spec-kit or OpenSpec — or a plan (Claude Code plan mode, Cursor, Codex ExecPlan) or BMAD docs — as a new dev-spec feature (IDs remapped, source untouched). PT - importa uma spec do Kiro, spec-kit, OpenSpec, um plano ou docs BMAD. ES - importa una spec de Kiro, spec-kit, OpenSpec, un plan o docs BMAD.
-argument-hint: "[kiro|spec-kit|openspec|plan|execplan|bmad] [path, or the plan's text] [--name n] [--tracks tdd,saas] [--lang pt]"
+description: Import a spec written for Kiro, spec-kit or OpenSpec — or a plan (Claude Code plan mode, Cursor, Codex ExecPlan, fluidplan) or BMAD docs — as a new dev-spec feature (IDs remapped, source untouched). PT - importa uma spec do Kiro, spec-kit, OpenSpec, um plano (também do fluidplan) ou docs BMAD. ES - importa una spec de Kiro, spec-kit, OpenSpec, un plan (también de fluidplan) o docs BMAD.
+argument-hint: "[kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan] [path, or the plan's text] [--name n] [--tracks tdd,saas] [--lang pt]"
 ---
 
 Use the **dev-spec-driven** skill, import from other tools (`references/brownfield.md` → Import).
@@ -8,8 +8,8 @@ Use the **dev-spec-driven** skill, import from other tools (`references/brownfie
 Args: $ARGUMENTS
 
 Call the `spec_import` MCP tool `{tool, path, name?, tracks?, lang?}` (CLI
-`dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad> <path> [--name n] [--tracks tdd,saas] [--lang pt]`) — or, for
-a plan / ExecPlan, `{tool, text, …}` with the document's markdown instead of `path` (CLI `dev-spec import plan - < plan.md`
+`dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--tracks tdd,saas] [--lang pt]`) — or, for
+a plan / ExecPlan / fluidplan PLAN.md, `{tool, text, …}` with the document's markdown instead of `path` (CLI `dev-spec import plan - < plan.md`
 reads stdin, `--text "…"` takes it inline):
 
 - `tool` — `kiro` (`.kiro/specs/<name>/`; a Portuguese / Spanish one too — `### Requisito N`, `## Introdução` /
@@ -17,13 +17,14 @@ reads stdin, `--text "…"` takes it inline):
   (`openspec/specs/<capability>/`, or a change folder `openspec/changes/<id>/`), `plan` (a Markdown plan: Claude Code
   plan mode or a Cursor plan `.cursor/plans/*.plan.md`), `execplan` (a Codex ExecPlan written per `PLANS.md`) or
   `bmad` (BMAD-METHOD docs: `docs/prd.md` or a sharded `docs/prd/`, `docs/stories/*.md`, `docs/architecture.md`;
-  v6 `_bmad-output/planning-artifacts/`; or one story file);
+  v6 `_bmad-output/planning-artifacts/`; or one story file) or `fluidplan` (a plan settled with the fluidplan skill: its
+  folder `.fluidplan/<id>/`, its `plan.json`, or its `PLAN.md` / `DECISIONS.md`);
 - `path` — the spec folder (or a file in it), **inside the project**; the source is only read, never modified. For a
   plan / ExecPlan pass the file itself when its folder holds several. Claude Code plan mode saves plans under
   `plansDirectory` — by default `~/.claude/plans`, **outside the project**: pass the plan's markdown as `text` instead
   (the plan you just approved is in the conversation; the plugin's ExitPlanMode hook reminds you), copy the plan into the
   project, or point `plansDirectory` at a folder inside it;
-- `text` — `plan` / `execplan` only, never with `path`: the document itself. Same mapping, same guarantees; the note
+- `text` — `plan` / `execplan` / `fluidplan` only, never with `path`: the document itself (fluidplan: its `PLAN.md`, `DECISIONS.md` may follow it). Same mapping, same guarantees; the note
   reads "Imported from plan (inline text)", the result has `inline: true` and `source: null`;
 - `name` — defaults to the source folder name (spec-kit's number prefix dropped); a plan / ExecPlan takes its title,
   BMAD the PRD's title (one story file: the story's title); an existing feature with that slug is an error (import
@@ -48,6 +49,12 @@ references are rewritten; tasks are renumbered 1…K keeping their checkbox stat
   `FR1` / `NFR1` → `FR-1` / `NFR-1`; Tasks / Subtasks → tasks tagged `[USn]` (a subtask is a task of its own) with
   `(AC: 1, 3)` → `_Requirements:_`; architecture.md + Technical Assumptions + each story's Dev Notes → `design.md`;
   BMAD's Status / Change Log records are named in a warning, not imported.
+- **fluidplan** — the finalized `PLAN.md` / `DECISIONS.md` win, `plan.json` + `answers.json` fill in the rest (or stand
+  alone). Pages (themes) → user stories; each task's acceptance → criteria; tasks → `tasks.md` under their phase headings
+  (ticks kept) with `files` → `_Implements:_`, `verify` → one `_Verify:_` per command, `after` → `_Depends:_`; accepted and
+  rejected decisions → `decisions.md` (D-1…) + `design.md` Decisions / Alternatives & Trade-offs; working rules → Global
+  Constraints; decisions still open → requirements.md "Open decisions" with `[NEEDS CLARIFICATION]` — tell the user to
+  settle them (in fluidplan, or with `spec_clarify`) before approving.
 
 Show the user: the files written, the **ID mapping** (`mapping`: old → new) and every **warning** (criteria
 not in EARS form, stories without criteria, carried or skipped sections, unresolved task references). Then treat
