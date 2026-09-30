@@ -135,8 +135,8 @@ It holds everything a pack can: a commented `track.json` (marker `MOBILE`, title
 context signals — `iOS` and `Android` case-sensitive —, five sections with EN / PT / ES names, synonyms and guidance:
 Offline & Sync · Platform Versions & Rollout · Device Capabilities & Permissions · Performance & Battery · Push
 Notifications, and the steering file `mobile.md`), the five fragments (five EARS criteria, a task block using `{{ac1}}…`
-and `{{t1}}…`, five test rows, checklist items, the steering stub) and `pt/` / `es/` folders with the criteria, tasks and
-checklist in those languages. A `core +tdd +mobile` feature gets US-1.AC-5..9, the five `[MOBILE]` sections gating the
+and `{{t1}}…`, five test rows, checklist items, the steering stub) and `pt/` / `es/` folders with all five fragments —
+criteria, tasks, test rows, checklist and steering stub — in those languages (a pt-BR feature reads `pt/`). A `core +tdd +mobile` feature gets US-1.AC-5..9, the five `[MOBILE]` sections gating the
 design, the task block, the test rows T-06…T-10 and `.specs/steering/mobile.md`.
 
 ## How the engine treats a pack

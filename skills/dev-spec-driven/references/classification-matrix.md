@@ -62,7 +62,12 @@ is a draft for the human, who confirms Phase 0.
   releases", *"Não vamos usar feature flags nem lançamento canário"*, *"No usaremos feature flags ni despliegue canario"*,
   "without Kafka, RabbitMQ or SQS", "neither … nor" — each item is negated. It stops at "and" (often a new predicate: "without
   downtime and roll back on errors"), at a contrast word ("no feature flags, just a canary release" keeps the canary release)
-  and at a comma no "or" closes ("Without feature flags, the canary release is done by hand").
+  and at a comma no "or" closes ("Without feature flags, the canary release is done by hand"); a comma after the list's
+  closing "or" ends it too ("Without an LLM or embeddings, the checkout or a subscription page is the priority" keeps +tdd).
+  A negator followed by another verb negates that VERB, not its objects — the requirement is about them, like a hazard:
+  "The system must not lose payments nor duplicate invoices", *"Não pode perder pagamentos nem reembolsos"*, *"No puede
+  perder pagos ni reembolsos"* keep +tdd. Only the verbs whose object IS what is excluded carry it on (use / add / need /
+  include / implement — *usar, adicionar, precisar · usar, añadir, necesitar*).
 - **This project's own corrections** (1.21): when the human confirms Phase 0 with other tracks than suggested — `spec_create`
   with `tracks` and the same description as `summary` — the words that drove the suggestion are recorded in
   `.specs/classifier.json`. After **two consistent corrections** a word the team keeps rejecting for a track stops turning it on
@@ -456,25 +461,27 @@ Turn on `+data` if **any** are true (see `data-pipeline-patterns.md`):
 | The data's quality is the feature's job | Data-quality checks, quarantined rows, schema evolution / data contracts, lineage |
 | History has to be (re)computed | A backfill of past partitions, late-arriving data, slowly changing dimensions, idempotent re-runs |
 
-Classifier signals — **strong:** ETL / ELT, a data pipeline / ingestion pipeline / batch pipeline, a data warehouse / lake /
-lakehouse / mart, data quality, a data contract, data lineage, a data catalog, a data mesh, data / analytics engineering,
+Classifier signals — **strong:** ETL, an ELT pipeline / job / tool / process ("ELT teachers" teach English), a data pipeline /
+ingestion pipeline / batch pipeline, a data warehouse / lake / lakehouse / mart, data quality, a data contract, data lineage, a data catalog, a data mesh, data / analytics engineering,
 schema evolution, a schema registry, schema drift, a backfill job, a historical backfill, a slowly changing dimension, a star
 / snowflake schema, a fact / dimension table, dimensional modelling, OLAP, dbt models / tests / runs / jobs, an Airflow DAG,
 Apache Airflow / Spark / Iceberg / Hudi, PySpark, a Spark job, Dagster, Databricks, BigQuery, Amazon Redshift, a Snowflake
 warehouse / table, Delta Lake, Iceberg tables, Parquet files, Fivetran, Airbyte, data ingestion, data freshness, a freshness
-check / SLA, late-arriving data, an incremental load / model, a medallion architecture, data observability, a quarantine
+SLA, late-arriving data, an incremental load / model, a medallion architecture, data observability, a quarantine
 table (*pipeline de dados, armazém de dados, lago de dados, qualidade de dados, linhagem de dados, evolução do esquema,
-ingestão de dados, esquema em estrela, tabela de factos / fatos, carga incremental · pipeline de datos, almacén de datos, lago
+ingestão de dados, esquema em estrela, tabela de factos / fatos, carga incremental de dados · pipeline de datos, almacén de datos, lago
 de datos, calidad de datos, linaje de datos, evolución del esquema, ingesta de datos, tabla de hechos, datos que llegan
-tarde*). **Weak** (anchors): a backfill, a warehouse, `Snowflake` / `Redshift` / `Airflow` (capitals — a snowflake icon, a
+tarde*). **Weak** (anchors): a backfill, a warehouse, a lakehouse, a freshness check, `Snowflake` / `Redshift` / `Airflow` (capitals — a snowflake icon, a
 galaxy's redshift, a vent's airflow are no signal), dbt, `SCD`, lineage, ingestion, change data capture / a CDC pipeline
 (also +dist's), Parquet / Avro, a streaming pipeline, batch processing, a data platform / product, data governance,
-business intelligence / `BI` / Power BI / Looker / Tableau / Metabase (one concept), duplicate rows, stale data, a
-uniqueness check (*linhagem, ingestão, processamento em lote, governança de dados · linaje, ingesta, procesamiento por
-lotes*). **Generic:** analytics, a dataset, a partition, a transformation, a batch / nightly job, ingest, upsert, a
-materialized view, a data / analytics engineer (a role names no pipeline work). **Context** (evidence only beside a strong
-or weak +data signal, one concept): table, column, row, SQL, query, schema (*tabela, coluna, linhas · tabla, columna,
-filas*) — "the warehouse … the orders table" is two hints, "migrate the users table" none. **Hazards:** duplicate rows,
+business intelligence / a BI tool, dashboard or report / Power BI / Looker / Tableau / Metabase (one concept — `BI` alone is no
+signal: *o número do BI* is the Portuguese ID card), duplicate rows, stale data, a uniqueness check (*linhagem, ingestão,
+processamento em lote, governança de dados, carga incremental, ferramenta / relatório de BI · linaje, ingesta, procesamiento
+por lotes, informe de BI*). **Generic:** analytics, a dataset, a partition, a transformation, a batch / nightly job, ingest, upsert, a
+materialized view, a data / analytics engineer (a role names no pipeline work). **Context** (evidence only beside a STRONG
++data signal, one concept — a table, a column or a query is on every screen, so it never backs a lone anchor): table,
+column, row, SQL, query, schema (*tabela, coluna, linhas · tabla, columna, filas*) — "migrate the users table", "a horse's
+lineage in a table", "React Query never shows stale data" name no pipeline. **Hazards:** duplicate rows,
 stale data, schema drift ("without duplicate rows" states the concern).
 
 **Cues** (the words around a keyword): a warehouse in a sentence about the building (stock, inventory, shelves, picking,
@@ -482,7 +489,11 @@ pallets, shipping, temperature, shifts…) is no signal — one about data (a ta
 a schema, partitions) stays an anchor; a backfill in a schema migration ("add a currency column; backfill existing
 rows") is app-level, one about partitions, a pipeline, the warehouse or history an anchor; data moved into / out of
 `Snowflake` / `Redshift` ("into Snowflake", "from Redshift") is the product — strong; DBT therapy, an Airflow reading,
-a galaxy's Redshift are none. Shared phrases: an ETL job / data pipeline is also +obs's technical target, a CDC pipeline
+a galaxy's Redshift are none; so are the everyday senses — a lakehouse to rent, a kitchen's freshness check, a training
+plan's *carga incremental*, a horse's lineage, the ingestion of water or a medication, parquet flooring — while a lakehouse,
+a freshness check or a lineage in a sentence about data (tables, metrics, dashboards, a pipeline, the raw zone…) is strong. A
+warehouse's sentence about data never counts a table, a column or a query ("Show stock levels per warehouse in a table" is
+the building). Shared phrases: an ETL job / data pipeline is also +obs's technical target, a CDC pipeline
 +dist's strong phrase, data retention +privacy's (a phrase may serve two tracks). `analytics` is never a reserved pack
 name — a team's product-analytics pack (a tracking plan) keeps it.
 
@@ -492,13 +503,17 @@ Worked examples (what `spec_classify` answers):
 |---|---|---|
 | Build an ETL pipeline that loads the orders from Postgres into BigQuery every night | `core +data` | etl, bigquery |
 | A nightly job that recomputes the loyalty points in the warehouse | `core +data` (weak-only) | warehouse, nightly job |
-| Backfill the last 90 days of the events table partitions | `core +data` (weak-only) | backfill, partition (+ table) |
+| Backfill the last 90 days of the events table partitions | `core +data` (weak-only) | backfill, partition |
 | Stream changes from Postgres to the data warehouse with a CDC pipeline | `core +dist +data` | data warehouse, CDC pipeline |
 | *Verificações de qualidade de dados na ingestão: as linhas com chaves nulas ficam em quarentena* | `core +data` | qualidade de dados |
 | Migrate the orders table to add a currency column; backfill existing rows with EUR | `core +tdd`, *possible +data* | backfill (a migration's — app-level) |
 | Analytics events for the signup funnel | `core`, *possible +data* | analytics (generic only) |
 | Warehouse temperature monitoring: sensors report every minute | `core` | warehouse (the building — no signal) |
 | Export orders as CSV · Import a CSV of contacts · Migrate the users table | `core` | — |
+| Track the lineage of every dashboard metric back to its source tables | `core +data` | lineage (strong — about metrics), table |
+| Guests can book a lakehouse or a cabin for the weekend · ELT teachers assign reading exercises | `core` | — (the everyday senses) |
+| Show stock levels per warehouse in a table so pickers know which shelf to restock | `core`, *possible +ui* | picker — warehouse: the building, no signal |
+| Prevent duplicate rows in the users table when the signup form is double-submitted | `core`, *possible +ui / +data* | form, duplicate rows (a table backs no anchor) |
 
 ---
 

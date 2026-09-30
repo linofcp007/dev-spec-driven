@@ -1278,39 +1278,51 @@ const SIGNALS = {
   // "export orders as CSV" and "migrate the users table" stay core ('possible' at most). CONTEXT (corroborating only — one concept):
   // table, column, rows, SQL, query, schema — "a nightly job that loads the orders table into the warehouse" is +data, "migrate the
   // users table" is not. HAZARDS: duplicate rows, stale data, schema drift ("without duplicate rows" states the concern).
+  // 1.21 review B3 — words that mean something else in everyday text are tied to a data phrase or read by a cue: ELT only as a
+  // pipeline / job / tool / process ("ELT teachers" teach English); a bare lakehouse is an anchor (a lakehouse to rent), strong in a
+  // sentence about data; a freshness check is an anchor (a kitchen's produce crate); PT / ES "carga incremental" an anchor (a
+  // training plan's load); BI only with its tool / dashboard / report ("o número do BI" is the Portuguese ID card); and the context
+  // words back a STRONG signal only (contextBackedBy) — a table, a column or a query is on every screen ("in a table", "React Query"):
+  // beside a lone anchor (a horse's lineage, SCD patient records, medication ingestion, duplicate rows in the users table) they are
+  // no second hint.
   data: {
     strong: [
-      "etl", "elt", "data pipeline", "ingestion pipeline", "batch pipeline", "data warehouse", "data warehousing", "data lakehouse", "lakehouse",
+      "etl", "elt pipeline", "elt job", "elt tool", "elt process", "elt workflow", "pipeline elt", "processo elt", "proceso elt",
+      "data pipeline", "ingestion pipeline", "batch pipeline", "data warehouse", "data warehousing", "data lakehouse",
       "data lake", "data mart", "data quality", "data-quality", "data contract", "data lineage", "data catalog", "data catalogue", "data mesh",
       "data engineering", "analytics engineering", "schema evolution", "schema registry", "schema drift",
       "backfill job", "historical backfill", "slowly changing dimension", "star schema", "snowflake schema", "fact table", "dimension table",
       "dimensional model", "dimensional modelling", "olap", "dbt model", "dbt project", "dbt test", "dbt run", "dbt job",
       "dbt cloud", "apache airflow", "airflow dag", "dagster", "apache spark", "pyspark", "spark job", "spark sql", "spark streaming",
       "databricks", "bigquery", "amazon redshift", "Snowflake warehouse", "Snowflake table", "delta lake", "apache iceberg",
-      "iceberg table", "apache hudi", "parquet file", "fivetran", "airbyte", "data ingestion", "data freshness", "freshness check",
+      "iceberg table", "apache hudi", "parquet file", "fivetran", "airbyte", "data ingestion", "data freshness",
       "freshness sla", "late-arriving data", "late arriving data", "incremental load", "incremental model", "medallion architecture",
       "data observability", "great expectations suite", "quarantine table",
       // PT (the plural of a phrase's first word is generated only for "de" / non-ASCII phrases — "armazéns" is listed)
       "pipeline de dados", "armazém de dados", "armazéns de dados", "lago de dados", "qualidade de dados", "qualidade dos dados",
       "contrato de dados", "linhagem de dados", "linhagem dos dados", "catálogo de dados", "engenharia de dados",
       "evolução do esquema", "evolução de esquema", "evolução dos esquemas", "ingestão de dados", "frescura dos dados", "atualidade dos dados",
-      "esquema em estrela", "tabela de factos", "tabela de fatos", "tabela de dimensão", "carga incremental", "dados que chegam atrasados",
+      "esquema em estrela", "tabela de factos", "tabela de fatos", "tabela de dimensão", "carga incremental de dados", "carga incremental dos dados",
+      "dados que chegam atrasados",
       // ES
       "pipeline de datos", "canalización de datos", "almacén de datos", "almacenes de datos", "lago de datos", "calidad de datos",
       "calidad de los datos", "contrato de datos", "linaje de datos", "linaje de los datos", "catálogo de datos", "ingeniería de datos",
       "evolución del esquema", "evolución de esquema", "ingesta de datos", "frescura de los datos",
       "frescura de datos", "esquema en estrella", "tabla de hechos", "tabla de dimensiones", "datos que llegan tarde", "datos tardíos",
+      "carga incremental de datos", "carga incremental de los datos",
     ],
     weak: [
-      "backfill", "warehouse", "Snowflake", "Redshift", "Airflow", "dbt", "SCD", "lineage", "ingestion", "change data capture", "CDC pipeline",
-      "parquet", "avro", "streaming pipeline", "batch processing", "data platform", "data governance", "data product", "business intelligence",
-      "BI", "power bi", "looker", "tableau", "metabase", "duplicate rows", "stale data", "uniqueness check", "uniqueness test",
-      // PT
-      "linhagem", "ingestão", "processamento em lote", "plataforma de dados", "governação de dados",
+      "backfill", "warehouse", "lakehouse", "Snowflake", "Redshift", "Airflow", "dbt", "SCD", "lineage", "ingestion", "change data capture",
+      "CDC pipeline", "parquet", "avro", "streaming pipeline", "batch processing", "data platform", "data governance", "data product",
+      "freshness check", "business intelligence", "BI tool", "BI dashboard", "BI report", "BI platform", "BI team", "power bi", "looker",
+      "tableau", "metabase", "duplicate rows", "stale data", "uniqueness check", "uniqueness test",
+      // PT ("carga incremental" — PT and ES alike)
+      "linhagem", "ingestão", "processamento em lote", "plataforma de dados", "governação de dados", "carga incremental",
       "governança de dados", "inteligência de negócio", "produto de dados", "linhas duplicadas", "dados desatualizados",
+      "ferramenta de BI", "relatório de BI", "painel de BI", "dashboard de BI",
       // ES
       "linaje", "ingesta", "procesamiento por lotes", "plataforma de datos", "gobierno de datos", "gobernanza de datos",
-      "inteligencia de negocio", "producto de datos", "filas duplicadas", "datos obsoletos",
+      "inteligencia de negocio", "producto de datos", "filas duplicadas", "datos obsoletos", "herramienta de BI", "informe de BI", "panel de BI",
     ],
     generic: [
       // a role names no pipeline work of its own: "the data engineer wants a new column in the users table" (listed before "analytics":
@@ -1325,12 +1337,16 @@ const SIGNALS = {
     // CONTEXT: the words of the tables a pipeline reads and writes — evidence only beside another (non-negated) strong / weak +data
     // signal, and one concept (concepts.sql): "the warehouse … the orders table" is two hints, "table … rows … columns" one.
     context: ["table", "column", "row", "sql", "query", "queries", "schema", "tabela", "coluna", "linhas", "tabla", "columna", "filas"],
+    // 1.21 review B3: the context words back a STRONG +data signal only, never a lone anchor (classify.js — backedBy)
+    contextBackedBy: "strong",
     concepts: {
       sql: ["table", "column", "row", "sql", "query", "queries", "schema", "tabela", "coluna", "linhas", "tabla", "columna", "filas"],
       role: ["data engineer", "analytics engineer", "engenheiro de dados", "ingeniero de datos"],
       ingest: ["ingestion", "ingest", "ingestão", "ingesta"],
       lineage: ["lineage", "linhagem", "linaje"],
-      bi: ["business intelligence", "BI", "power bi", "looker", "tableau", "metabase", "inteligência de negócio", "inteligencia de negocio"],
+      bi: ["business intelligence", "BI tool", "BI dashboard", "BI report", "BI platform", "BI team", "power bi", "looker", "tableau", "metabase",
+        "inteligência de negócio", "inteligencia de negocio", "ferramenta de BI", "relatório de BI", "painel de BI", "dashboard de BI",
+        "herramienta de BI", "informe de BI", "panel de BI"],
       batch: ["batch job", "nightly job", "batch processing", "processamento em lote", "procesamiento por lotes",
         "tarefa noturna", "processo noturno", "job noturno", "tarea nocturna", "proceso nocturno"],
       files: ["parquet", "avro"],
@@ -1350,10 +1366,11 @@ const SIGNALS = {
     hazards: ["duplicate rows", "linhas duplicadas", "filas duplicadas", "stale data", "dados desatualizados", "datos obsoletos", "schema drift"],
     // CUES — rules tried in order, the first that fires decides (generic kinds in classify.js):
     cues: [
-      // a warehouse in a sentence about data (a table, a query, a load, dbt, a pipeline, a schema…) stays an anchor …
+      // a warehouse in a sentence about data (SQL, a load, dbt, a pipeline, a schema…) stays an anchor … — never for a table, a column or
+      // a query, which a stock screen shows too (1.21 review B4: "Show stock levels per warehouse in a table …" reaches the next rule)
       { kind: "sentence", on: ["warehouse"], then: "keep", edge: "letter",
-        phrases: ["tables?", "quer(?:y|ies)", "sql", "load(?:s|ed|ing)?[^\\S\\n]+into", "snapshots?", "schemas?", "dbt", "pipelines?", "etl", "elt",
-          "columns?", "partitions?", "ingest\\p{L}*", "analytics", "bi"] },
+        phrases: ["sql", "load(?:s|ed|ing)?[^\\S\\n]+into", "snapshots?", "schemas?", "dbt", "pipelines?", "etl", "elt",
+          "partitions?", "ingest\\p{L}*", "analytics", "bi"] },
       // … one about the building (stock, inventory, shelves, picking, pallets, shipping, temperature, shifts…) is no signal at all
       { kind: "sentence", on: ["warehouse"], then: "none", edge: "letter",
         phrases: ["stock", "inventor(?:y|ies)", "shel(?:f|ves)", "picking", "pick list", "forklifts?", "pallets?", "shipping", "shipments?",
@@ -1379,6 +1396,42 @@ const SIGNALS = {
       { kind: "near", on: ["dbt"], then: "none",
         after: { words: ["therapy", "therapists?", "skills?", "diar(?:y|ies)", "sessions?", "groups?", "programm?e?s?"], chars: 24 },
         before: { words: ["dialectical behaviou?r therapy", "dialectical"], chars: 40, edge: "letter" } },
+      // 1.21 review B3 — the everyday senses first (the first rule that fires decides): a lakehouse to rent, a kitchen's freshness check,
+      // a training plan's "carga incremental", a horse's lineage, the ingestion of water or a medication, parquet flooring — no signal …
+      { kind: "sentence", on: ["lakehouse"], then: "none", edge: "letter",
+        phrases: ["book\\p{L}*", "rent\\p{L}*", "cabins?", "cottages?", "chalets?", "guests?", "weekends?", "nights?", "stays?", "holidays?",
+          "vacations?", "reservations?", "deposits?", "bedrooms?", "airbnb", "reservas?", "alug\\p{L}*", "hóspedes", "fim de semana", "noites?",
+          "férias", "cabanas?", "quartos?", "alquil\\p{L}*", "huéspedes", "fin de semana", "noches?", "vacaciones", "cabañas?", "habitaciones?"] },
+      { kind: "sentence", on: ["freshness check"], then: "none", edge: "letter",
+        phrases: ["produce", "foods?", "fruits?", "vegetables?", "meat", "fish", "milk", "dairy", "bread", "crates?", "fridges?", "refrigerat\\p{L}*",
+          "kitchens?", "perishables?", "groceries", "grocery"] },
+      { kind: "sentence", on: ["carga incremental"], then: "none", edge: "letter",
+        phrases: ["treinos?", "entrenamientos?", "atletas?", "ginásios?", "gimnasios?", "exercícios?", "ejercicios?", "musculaç\\p{L}*",
+          "musculaci\\p{L}*", "corridas?", "repetiç\\p{L}*", "repeticiones", "estruturas?", "estructuras?", "vigas?", "pontes?", "puentes?"] },
+      { kind: "sentence", on: ["lineage", "linhagem", "linaje"], then: "none", edge: "letter",
+        phrases: ["horses?", "dogs?", "cats?", "breed\\p{L}*", "pedigrees?", "cattle", "livestock", "famil(?:y|ies)", "ancestors?", "ancestry",
+          "genealog\\p{L}*", "royal", "dynast\\p{L}*", "cavalos?", "cães", "cão", "gatos?", "raças?", "gado", "família", "famílias", "antepassados?",
+          "caballos?", "perros?", "razas?", "ganado", "familias?", "antepasados?"] },
+      { kind: "sentence", on: ["ingestion", "ingestão", "ingesta"], then: "none", edge: "letter",
+        phrases: ["medicat\\p{L}*", "medicines?", "drugs?", "pills?", "doses?", "water", "foods?", "calories", "meals?", "nutri\\p{L}*", "intake",
+          "fluids?", "alcohol", "caffeine", "sugar", "vitamins?", "supplements?", "água", "alimentos?", "calorias", "refeiç\\p{L}*", "medicaç\\p{L}*",
+          "medicamentos?", "comprimidos?", "líquidos?", "açúcar", "vitaminas?", "suplementos?", "álcool", "agua", "calorías", "comidas?",
+          "medicaci\\p{L}*", "pastillas?", "dosis", "azúcar"] },
+      { kind: "sentence", on: ["parquet"], then: "none", edge: "letter",
+        phrases: ["floor\\p{L}*", "laminate", "oak", "tiles?", "carpets?", "planks?", "hardwood", "varnish\\p{L}*", "square (?:feet|meters|metres)",
+          "pavimentos?", "soalho", "pisos?", "madeira", "flutuante", "suelos?", "tarima", "laminado", "madera", "baldosas?", "alfombras?"] },
+      // … and the data senses: a lakehouse, a freshness check or a lineage in a sentence about data is data work (strong)
+      { kind: "sentence", on: ["lakehouse"], then: "strong", edge: "letter",
+        phrases: ["tables?", "raw (?:zones?|layers?|data)", "bronze", "medallion", "delta", "iceberg", "hudi", "parquet", "spark", "databricks",
+          "catalogs?", "retention", "storage", "partitions?", "pipelines?", "ingest\\p{L}*", "schemas?", "sql", "quer(?:y|ies)", "etl", "elt", "dbt",
+          "data", "dados", "datos", "tabelas?", "tablas?", "retenção", "retención", "armazenamento", "almacenamiento"] },
+      { kind: "sentence", on: ["freshness check"], then: "strong", edge: "letter",
+        phrases: ["tables?", "pipelines?", "models?", "datasets?", "sources?", "warehouse", "dbt", "partitions?", "loads?", "feeds?", "jobs?", "dags?",
+          "data", "sla"] },
+      { kind: "sentence", on: ["lineage", "linhagem", "linaje"], then: "strong", edge: "letter",
+        phrases: ["metrics?", "dashboards?", "columns?", "datasets?", "source tables?", "pipelines?", "models?", "reports?", "fields?", "kpis?",
+          "métricas?", "indicadores?", "colunas?", "conjuntos? de dados", "tabelas de origem", "painéis?", "relatórios?", "campos?",
+          "columnas?", "conjuntos? de datos", "tablas de origen", "informes?", "cuadros? de mando"] },
     ],
   },
 };

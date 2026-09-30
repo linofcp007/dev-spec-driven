@@ -261,7 +261,8 @@ function headingMatches(line, syns, inflect) {
 // `### Processors`). Without that, deleting a `[PRIVACY]` heading let a core heading like "## Processors and queues"
 // satisfy "Processors & International Transfers" and doctor passed a section nobody wrote. The other synonyms are
 // unambiguous and keep the unmarked fallback anywhere (hand-written and PT/ES designs without markers, the reference
-// templates' "## Observability" / "## Section 1: Model Strategy").
+// templates' "## Observability" / "## Section 1: Model Strategy") — except inside ANOTHER track's section (1.21 review B5: an
+// unmarked heading whose nearest marked enclosing heading carries another marker belongs to that section).
 function extractSection(md, synonyms, marker, loose) {
   const syns = (Array.isArray(synonyms) ? synonyms : [synonyms]).map((s) => s.toLowerCase());
   const looseSet = new Set((loose || []).map((s) => s.toLowerCase()));
@@ -282,11 +283,33 @@ function extractSection(md, synonyms, marker, loose) {
     return false;
   };
   const MARKERS = markerTracks().map((t) => trackMarker(t)); // + the track packs' (1.15)
+  // 1.21 review B5 — the mirror of inTrackContext: the nearest enclosing heading that carries a marker carries ANOTHER track's — the
+  // heading is part of that track's section ("## [PRIVACY] Lawful Basis" → "### Data quality (LGPD art. 6, V)" never stands in for a
+  // deleted [DATA] Data Quality). Tried last (only on a heading whose name matches); every heading's context marker comes from ONE
+  // linear pass (a stack of the enclosing headings), on first use.
+  let ctxOf = null;
+  const inOtherTrackContext = (i) => {
+    if (!ctxOf) {
+      ctxOf = new Map();
+      const stack = [];
+      for (const h of heads) {
+        const lv = level(h);
+        while (stack.length && stack[stack.length - 1].lv >= lv) stack.pop();
+        const top = stack[stack.length - 1];
+        const ctx = top ? top.own || top.ctx : null;
+        ctxOf.set(h, ctx);
+        stack.push({ lv, own: MARKERS.find((x) => lines[h].includes(x)) || null, ctx });
+      }
+    }
+    const m = ctxOf.get(i);
+    return !!m && m !== marker;
+  };
   let start = -1;
   if (marker) start = heads.find((i) => lines[i].includes(marker) && matches(i));
   if (start == null || start === -1) {
     const other = marker ? MARKERS.filter((m) => m !== marker) : [];
-    start = heads.find((i) => (matches(i, strict) || (marker && looseSet.size && matches(i) && inTrackContext(i))) && !other.some((m) => lines[i].includes(m)));
+    start = heads.find((i) => (matches(i, strict) || (marker && looseSet.size && matches(i) && inTrackContext(i))) && !other.some((m) => lines[i].includes(m)) &&
+      !(marker && inOtherTrackContext(i)));
   }
   if (start == null || start === -1) return null;
   const end = heads.find((i) => i > start && level(i) <= level(start));
