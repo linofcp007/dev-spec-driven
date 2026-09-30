@@ -13,13 +13,15 @@ joins the built-in tracks. 38 MCP tools, 54 commands, eleven built-in tracks (wa
 - **Feature sizes** — `spec_create {size: xs|s|m|l}` / `create --size` (`spec_classify` suggests one: `suggestedSize`,
   `sizeReason`, `sizeNote`). At **S** a feature scaffolds one story (a WHEN and an IF…THEN criterion plus its tracks'),
   one core task and no classification.md; the core design sections merge into "Decisions, reuse & risks"; a track's
-  *extended* sections may be absent or one `n/a — <reason>` line (the table in `references/track-checklists.md`). **M** /
+  *extended* sections may be absent or one `n/a — <reason>` line (the table in `references/track-checklists.md`), and
+  `spec_clarify` asks no edge-case or NFR questions. **M** /
   **L** keep the full chain. At XS / S next_action offers to approve the whole plan in one call (`approve --through`,
   `fastForward`) — with +tdd or +ai it ends before Phase 4, which needs the failing tests or eval sets first.
 - **XS is a change** — `kind: "change"` (or size xs on a plain feature) writes ONE `change.md` holding its criteria and
   tasks: two approvals (the plan and the execution sign-off), at most 3 criteria or tasks (doctor `change-scope`), no
-  tracks. Its criteria and its tasks are read apart, so traceability, EARS, the plan gate, the pre-commit check,
-  `spec_impact` (criteria by ID, tasks by number, `--reopen`), exports, the matrix and release notes treat it as a
+  tracks. Its criteria and its tasks are read apart, so traceability, EARS, the plan gate, the pre-commit and save hooks,
+  `spec_impact` (criteria by ID, tasks by number, `--reopen`), `spec_clarify` (only a change's own questions),
+  `spec_decide --affects` (a `change.md` section), approvals by role, exports, the matrix and release notes treat it as a
   change. An XS bugfix skips the first two steps and keeps the root-cause gate.
 - **Overlapping track sections merge** on a sized feature — `[SaaS] Observability` is covered by +obs's Telemetry and
   Alerting, `[SaaS] Performance Budget` by its SLIs & SLOs; the covered section reads `covered` (with `by`) and its
@@ -46,8 +48,11 @@ joins the built-in tracks. 38 MCP tools, 54 commands, eleven built-in tracks (wa
 ### Added — classifier
 - A negation that governs a list reaches every item ("no payments or subscriptions", "sem pagamentos nem subscrições",
   "sin pagos ni suscripciones", "we will not add X or Y"); a list ends at its closing "or" / "nem" / "ni", at "and" / "e" /
-  "y", at a contrast ("no X, just Y") and at a new clause. A negated verb is a requirement, not an exclusion: "the system
-  must not lose payments nor duplicate invoices" keeps +tdd. +ui recognises confirm dialogs, toasts, snackbars,
+  "y", at a contrast ("no X, just Y") and at a new clause. A negated verb is read by what it negates: a modal's ("the
+  system must not lose payments nor duplicate invoices", "the service must not leak personal data", "não pode perder
+  pagamentos") is a requirement and keeps its track; a plan's or an adoption verb's ("we will not integrate Kafka or
+  RabbitMQ", "não queremos usar LLM nem embeddings", "no es necesario Kafka ni RabbitMQ") excludes the whole list.
+  +ui recognises confirm dialogs, toasts, snackbars,
   field-level errors and mobile-friendly screens; +api reads "our API needs a v2" as contract work; a public API for a
   screen is +api +ui.
 - **Project signal overrides** — `spec_create` learns from your Phase 0 corrections (a track you reject or add; an
@@ -62,8 +67,9 @@ joins the built-in tracks. 38 MCP tools, 54 commands, eleven built-in tracks (wa
   `references/data-pipeline-patterns.md`. Doctor `data-sections`, status, finish checks, brief / matrix / Gherkin,
   add_track, import, project templates, spec_tracks; EN / PT / ES / pt-BR. It turns on from data phrases (ETL / ELT
   pipelines, a data warehouse or lakehouse, dbt, Airflow, CDC, lineage of data, freshness SLAs) — never from everyday
-  words (a lakehouse to rent, parquet flooring, the Portuguese BI card, a horse's lineage, a stock warehouse), and a
-  table or a query only corroborates a strong data signal.
+  words (a lakehouse to rent, parquet flooring, the Portuguese BI card, a horse's lineage, a stock warehouse); a table or
+  a query never backs an everyday word — "a BI dashboard over the orders table" is +data, "duplicate rows in the users
+  table" is not; BI phrases match at a sentence start or in title case ("Relatório de BI", "BI Dashboard").
 - **Example track pack +mobile** — `examples/track-packs/mobile/` (offline & sync, platform versions & rollout, device
   permissions, performance & battery, push notifications; EN / PT / ES): copy it to `.specs/tracks/mobile/` to start.
 
@@ -91,11 +97,11 @@ joins the built-in tracks. 38 MCP tools, 54 commands, eleven built-in tracks (wa
   <feature> data` adopts the built-in track, or rename the pack and re-add it.
 
 ### Tests
-- `node mcp/test.js` 1635 assertions (was 1544), `node cli/test-cli.js` 505 (was 480): sizes
+- `node mcp/test.js` 1642 assertions (was 1544), `node cli/test-cli.js` 508 (was 480): sizes
   and the change kind end to end (the no-size scaffolds pinned by hash in EN / PT / ES), the merge driver (six 3-way cases,
   sign-offs, a real two-branch git merge, `--check`), elicitation over a fake MCP client (accept / decline / cancel /
   error / timeout, force, batch), coordinated negation and signal overrides (a precision / recall assertion per track),
-  +data (96 EN / PT / ES texts, 100% / 100%) and the +mobile example pack, the eval fixes, and one regression per review
+  +data (115 EN / PT / ES texts, 100% / 100%) and the +mobile example pack, the eval fixes, and one regression per review
   finding.
 
 ## [1.20.0] — 2026-09-30
