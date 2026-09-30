@@ -139,7 +139,7 @@ AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(1651 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(1652 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
 `node cli/test-cli.js` adds 508 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior — in the file of its
