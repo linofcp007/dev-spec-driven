@@ -211,11 +211,12 @@ function handle(raw) {
     }
 
     try {
-      // The EARS lines of a criteria file — requirements.md, or a change's change.md (1.21 F5: its criteria AND its tasks) — or null.
+      // The EARS lines of a criteria file — requirements.md, or a change's change.md (1.21 F5: its criteria AND its tasks; the
+      // criteria view alone is linted — a task line is no criterion, the engine's own rule) — or null.
       const earsText = (fileName) => {
         const text = fs.readFileSync(filePath, "utf8");
         const lang = spec.featureLang(pdir, feature);
-        const r = spec.earsValidate(text, lang); // issue messages in the spec's language
+        const r = spec.earsValidate(fileName === "change.md" ? spec.changeViews(text).criteria : text, lang); // issue messages in the spec's language
         if (!r.ok) return null;
         const errs = r.issues.filter((i) => i.severity === "error");
         const warns = r.issues.filter((i) => i.severity === "warn");

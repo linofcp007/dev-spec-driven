@@ -69,6 +69,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   supersedesWarnings, taskBlocks, taskBrief, taskCommits, taskDependsSpec, taskMarkers, taskSchedule, taskSize,
   taskWaves, TEMPLATE_ARTIFACTS, templateBracketKeys, templateKey, templates, templateSets, traceCheck, traceGapLines,
   traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks, FEATURE_SIZES, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS,
+  changeViews,
   userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, windowsShellFailure, withFeatureLock, withinRoot,
   withReadCache, writeRoadmapHtml, writeRoadmapMd } = engine;
 
@@ -303,6 +304,7 @@ module.exports = {
   FEATURE_SIZES, // ["xs", "s", "m", "l"] — spec_create {size}
   TRACK_OVERLAPS, // [{drop: [track, section], by: [[track, section]…]}]
   TRACK_TASK_OVERLAPS, // [{drop: [track, position], by: track}]
+  changeViews, // (change.md text) → { criteria, tasks }: its criteria without the task blocks / the task blocks alone, line for line (1.21 review C1)
 };
 
 // Every engine entry point is ONE call with ONE read-cache scope (withReadCache): an MCP tool call, a CLI command, a

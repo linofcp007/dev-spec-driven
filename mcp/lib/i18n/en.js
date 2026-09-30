@@ -1207,8 +1207,10 @@ const msg = {
     sizes: {
       spikeNoSize: "A spike is timeboxed, not sized — create it without a size (its timebox bounds it).",
       changeSize: (size) => `kind "change" is size xs — for size ${size} create a feature: spec_create {kind: "feature", size: "${size}"}.`,
-      changeTracks: (list) => `A change (size xs) is core-only — ${list} make it a feature of size s: spec_create {size: "s", tracks} (a short design with the tracks' sections, a task per criterion).`,
+      changeTracks: (list) => `A change (size xs) is core-only — a track (${list}) makes it a feature of size s: spec_create {size: "s", tracks} (a short design with the tracks' sections, a task per criterion).`,
       changeNoTracks: (slug) => `'${slug}' is a change (size xs, core-only) — a track makes it a feature: create one of size s (spec_create {size: "s", tracks}) and archive this change (spec_feature {action: "archive"}).`,
+      // 1.21 review C9 — spec_create on an EXISTING change named with tracks: nothing is added, never silently
+      tracksIgnored: (list, slug) => `Tracks not added — ${list}: '${slug}' is a change (size xs, core-only); a track makes it a feature — create one of size s (spec_create {size: "s", tracks}) and archive this change (spec_feature {action: "archive"}).`,
       changeCreated: (slug) => `'${slug}' is a change (size xs): ONE file, .specs/${slug}/change.md — its summary, 1–3 EARS criteria, the approach and 1–3 tasks with _Verify:_. Fill it, then approve the plan in one call (spec_approve {name: "${slug}", through: "tasks"}); after the tasks, spec_finish and the execution sign-off.`,
       sizeKept: (kept, asked) => `This feature's size is ${kept} — kept it (asked for ${asked}): a size is chosen once, when the feature is created.`,
       noGate: (phase, slug) => `'${slug}' is a change: its only approvals are the plan (phase tasks — change.md) and the execution sign-off — there is no ${phase} phase to approve.`,
@@ -1217,10 +1219,12 @@ const msg = {
       approvePlan: (slug) => `Review & approve the plan (change.md: its criteria, approach and tasks) — spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug}).`,
       // P3 — size XS / S: the whole plan filled, then ONE approval call (each gate still runs, in order)
       planFastForward: (slug, size, list) => `Size ${size}: fill the whole plan first — ${list} — then approve it in one call: spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug}; CLI: ${DEV_SPEC} approve ${slug} --through tasks). Each phase's gate still runs, in order; the first that refuses stops it and says why.`,
+      // 1.21 review C3 — the Phase 4 tests gate (+tdd / +ai) needs work that comes AFTER the plan: the one call ends before it
+      planFastForwardTests: (slug, size, list, through, what) => `Size ${size}: fill the whole plan first — ${list} — then approve it through ${through} in one call: spec_approve {name: "${slug}", through: "${through}"} (/spec-ff ${slug} ${through}; CLI: ${DEV_SPEC} approve ${slug} --through ${through}). Each phase's gate still runs, in order. Then Phase 4, whose gate needs work that comes after the plan: ${({ tdd: "write the failing tests", ai: "write the eval harness and the feature's own eval sets", both: "write the failing tests and the feature's own eval sets" })[what] || "write the failing tests"} (/writeTests ${slug}), approve tests (/approve ${slug} tests), then the tasks (/approve ${slug} tasks).`,
       templateApproved: (list) => `only the template's guidance left in: ${list} — the design was approved before 1.21's stricter rule, so this warns; its next approval asks for your own text there (or one line "n/a — <why it does not apply>")`,
       sectionsPassSized: (filled, covered, optional) => `filled: ${filled}` + (covered ? ` · covered by another track's section: ${covered}` : "") + (optional ? ` · optional at this size, left out: ${optional}` : ""),
       extendedComment: (marker, names) => `Size s: the other ${marker} sections — ${names} — are optional at this size. Add one when it applies (it must be filled then), or answer it in one line: "n/a — <why it does not apply>".`,
-      coveredComment: (label) => `This section also answers ${label} — both tracks are on, so one section holds it (a ${label} section of its own counts too).`,
+      coveredComment: (label) => `This section also answers ${label} — both tracks are on, so one section holds it (its own ${label} section counts too).`,
       // spec_classify's size suggestion (a reason code → the sentence)
       suggest: {
         "trivial-change": "Suggested size xs — a trivial change (a typo, a copy or config tweak, a one-line fix): a change, one change.md, two approvals.",
@@ -1253,7 +1257,7 @@ const msg = {
       invalidJson: (rel, detail) => `${rel} is not valid JSON (${detail}) — fix it by hand; refusing to overwrite it.`,
       tasksMissing: (slug) => `tasks.md not found for '${slug}'`,
       requirementsMissing: (slug) => `requirements.md not found for '${slug}'`,
-      taskNotFound: (n) => `Task ${n} not found in tasks.md`,
+      taskNotFound: (n, file = "tasks.md") => `Task ${n} not found in ${file}`,
       featureBusy: (slug, rel) => `Another dev-spec process is updating '${slug}' right now (${rel || `.specs/${slug}/.lock`}) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.`,
       roadmapBusy: "Another dev-spec process is updating .specs/roadmap.json right now (.specs/.roadmap.lock) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.",
       folderInUse: (rel) => `The folder ${rel} is in use by another program (an editor, a file indexer or antivirus, a terminal opened inside it) — nothing was moved or deleted; close it and try again.`,
@@ -1353,7 +1357,7 @@ const msg = {
       acDup: (list) => `duplicate AC IDs: ${list}`,
       acUnique: "AC IDs unique",
       earsDetail: (n, e, w) => `criteria=${n}, errors=${e}, warnings=${w}`,
-      earsNoCriteria: (ids) => `requirements.md cites AC IDs (${ids}) but no criterion was linted — EARS checks an AC written as a list item, heading or line that starts with its ID, or as a table row under an Acceptance Criteria heading`,
+      earsNoCriteria: (ids, file = "requirements.md") => `${file} cites AC IDs (${ids}) but no criterion was linted — EARS checks an AC written as a list item, heading or line that starts with its ID, or as a table row under an Acceptance Criteria heading`,
       designMissing: "design.md missing",
       mermaidOk: "has a diagram",
       mermaidMissing: "no mermaid diagram found",
@@ -1480,6 +1484,8 @@ const msg = {
       bugfixNeedsTdd: "A bugfix is always test-first — +tdd can't be removed from it.",
       notActive: (list) => `Not active: ${list} — nothing to remove.`,
       removed: (list, slug) => `Removed ${list} from the active tracks. No file was deleted — the inactive artifacts stay in place and count again if you re-add the track. Re-run /spec-doctor ${slug}.`,
+      // 1.21 review C7 — a sized design's section the removed track covered, written back (heading + TODO + guidance)
+      restoredSections: (list) => `The removed track covered these sections of the remaining tracks — added back to design.md, to be filled: ${list}.`,
       addedOnCreate: (slug, list) => `'${slug}' already existed: added ${list} (artifacts, design sections, steering, tasks) — nothing was overwritten.`,
       designTitle: (name) => `# Design: ${name}`,
       acPlaceholder: (tr) => `[the +${tr} criterion this task proves]`,
@@ -1812,13 +1818,13 @@ const msg = {
       badVerify: (i) => `Task ${i}: _Verify:_ must be a single-line command.`,
       placeholderVerify: (i, v) => `Task ${i}: '${v}' reads as a placeholder, not a command (a _Verify:_ in [brackets] is ignored) — give the real command (for a shell test, 'test …' instead of '[ … ]').`,
       unstorable: (i, marker) => `Task ${i}: its ${marker} would not read back from tasks.md as given — keep markers out of the task text, ',' and ';' out of paths, and '_ ' out of paths and commands.`,
-      phantom: (list) => `Unknown acceptance criteria (not in requirements.md): ${list}. Nothing was written — fix the IDs or add the criteria first.`,
+      phantom: (list, file = "requirements.md") => `Unknown acceptance criteria (not in ${file}): ${list}. Nothing was written — fix the IDs or add the criteria first.`,
       badHeading: "heading must be one line of text.",
       constraintsHeading: (h) => `'${h}' holds the constraints every task respects, not tasks — pick a phase heading. Nothing was written.`,
       inactiveHeading: (h, track) => `'${h}' is the task section of the inactive ${track} track — re-add the track or pick another heading. Nothing was written.`,
       unsafe: (n) => `Couldn't append safely: ${n ? `task ${n} would not read back as written` : "existing tasks would change"} (an unclosed comment or code fence near the end of the phase?). Nothing was written.`,
-      reapprove: (slug) => `tasks.md changed after its approval — review the new tasks, then re-approve: /approve ${slug} tasks.`,
-      appended: (heading, created) => `Appended to tasks.md → '${heading}'${created ? " (new phase)" : ""}:`,
+      reapprove: (slug, file = "tasks.md") => `${file} changed after its approval — review the new tasks, then re-approve: /approve ${slug} tasks.`,
+      appended: (heading, created, file = "tasks.md") => `Appended to ${file} → '${heading}'${created ? " (new phase)" : ""}:`,
       oneTaskPerCall: "append-tasks takes one --task per call — run it again for the next task (spec_append_tasks takes a list).",
       oneValue: (flag) => `append-tasks takes --${flag} once per call — ${flag === "verify" ? "join the checks into one command (a && b)" : "give a single value"}. Nothing was written.`,
       badSize: (i, v) => `Task ${i}: size must be one of XS, S, M, L, XL (got '${v}').`,
@@ -1861,6 +1867,8 @@ const msg = {
     impact: {
       badPhase: (p, known) => `Unknown phase '${p}' for spec_impact. Known: ${known}.`,
       reopenTasks: "reopen applies to requirements, design, test-plan and eval-plan — a change to tasks.md is reviewed and re-approved; it reopens nothing.",
+      // 1.21 review C4 — a change: ONE approved artifact (change.md, its plan — phase tasks) holds its criteria and its tasks
+      changePhase: (phase, slug) => `'${slug}' is a change: its criteria and its tasks are one file, change.md, approved as the plan (phase tasks) — there is no ${phase} phase. spec_impact {name: "${slug}"} (phase tasks, the default) diffs both: the criteria by ID, the tasks by number.`,
       // --phase test-plan: a REMOVED planned test — its tasks still name its T-ID in _Makes green:_.
       retireTests: {
         retireHint: (list, slug, phase, offer) => `Removed tests still made green by tasks — ${list}: don't redo those tasks; drop the T-ID from their _Makes green:_ or point it at the test that replaces it.` +
@@ -2576,11 +2584,11 @@ const msg = {
     // Stakeholder export (spec_export / `dev-spec export`): the chrome of the generated document — the spec text is the user's.
     stakeholderExport: {
       autogen: "AUTO-GENERATED by dev-spec — do not edit by hand. Regenerate: spec_export (dev-spec export).",
-      kicker: { feature: "Feature specification", bugfix: "Bugfix specification", project: "Project specification" },
+      kicker: { feature: "Feature specification", bugfix: "Bugfix specification", change: "Change specification", project: "Project specification" },
       projectTitle: (proj) => `${proj} — specification overview`,
       generated: (date) => `generated ${date} from the project's specs (.specs/)`,
       meta: { id: "Feature", kind: "Kind", tracks: "Tracks", phase: "Phase", progress: "Progress", status: "Status", lang: "Language", overall: "Overall progress" },
-      kind: { feature: "feature", bugfix: "bugfix" },
+      kind: { feature: "feature", bugfix: "bugfix", change: "change (size xs)" },
       progress: (done, total, pct) => `${done}/${total} tasks done · ${pct}%`,
       overall: (pct, complete, total, done, tasks) => `${pct}% · ${complete}/${total} features complete · ${done}/${tasks} tasks done`,
       sections: {
@@ -2592,6 +2600,8 @@ const msg = {
       taskStatus: { done: "✅ done", open: "☐ open" },
       verification: { verified: "verified", nothing: "nothing to verify", open: "—", unverified: (why) => "⚠ not verified" + (why ? ` (${why})` : "") },
       phases: { classification: "Classification", requirements: "Requirements", design: "Design", "test-plan": "Test plan", "eval-plan": "Eval plan", tests: "Tests (Phase 4)", tasks: "Tasks", execution: "Execution sign-off" },
+      planPhase: "Plan (change.md)", // a change's tasks phase: its whole plan (1.21 review C5)
+      criteria: "Acceptance criteria",
       forced: (ids) => `approved with --force (failing: ${ids})`,
       changedSince: "changed since this approval — to be re-reviewed",
       pending: "awaiting approval",
@@ -2648,6 +2658,10 @@ const msg = {
       projectLegend: "Requirement IDs (AC / EC / NFR / SC) per feature, by traceability status — each feature's export has its matrix.",
       approvedLine: (at, by, forced) => `Requirements approved ${at} by ${by}${forced ? " (with --force)" : ""}.`,
       notApproved: "Requirements not approved yet.",
+      // 1.21 review C5 — a change: its criteria are signed off with its plan (change.md, phase tasks)
+      planApprovedLine: (at, by, forced) => `Plan (change.md) approved ${at} by ${by}${forced ? " (with --force)" : ""}.`,
+      planNotApproved: "Plan (change.md) not approved yet.",
+      changedSincePlan: "changed since the plan approval",
       none: "No requirement IDs yet.",
       cli: {
         head: (feature, tracks, c) => `Traceability matrix — ${feature} (${tracks}): ${c.rows} requirement(s) · ${c.verified} verified · ${c.implemented} implemented · ${c.planned} planned · ${c.untraced} untraced`,
@@ -2655,6 +2669,8 @@ const msg = {
         codeLegend: "tests: ✓ named in a test file · ✗ in no test file · ○ run outside test code",
         approved: (at, by, forced) => `requirements approved ${at} by ${by}${forced ? " (forced)" : ""}`,
         notApproved: "requirements not approved yet",
+        planApproved: (at, by, forced) => `plan (change.md) approved ${at} by ${by}${forced ? " (forced)" : ""}`,
+        planNotApproved: "plan (change.md) not approved yet",
         notes: { template: "template", superseded: (list) => `superseded by ${list}`, changed: "changed since approval" },
       },
     },
@@ -2778,6 +2794,8 @@ const msg = {
       ffWhyRole: (roles, slug, phase, through, given) => (given ? `'${given}' is not a role that signs off '${phase}' (roles: ${roles})` : `'${phase}' is signed off per role (${roles})`) +
         ` — nothing was recorded for '${phase}'. Run the fast-forward again as the role you sign for: /spec-ff ${slug} --role <role> (CLI: ${DEV_SPEC} approve ${slug} --through ${through} --role <role>); it resumes at '${phase}'.`,
       ffHint: (slug, list, role) => `Every planning artifact through tasks is filled and passes its gate — fast-forward: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through tasks${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate.`,
+      // 1.21 review C3 — a size xs / s plan whose Phase 4 tests gate is still ahead: the call ends before it
+      ffHintTests: (slug, list, through, role) => `Every planning artifact through ${through} is filled and passes its gate — fast-forward: /spec-ff ${slug} ${through}${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through ${through}${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate. Then Phase 4: write the failing tests / eval sets (/writeTests ${slug}), approve tests, then the tasks.`,
       batch: (n) => `  batch approvals (fast-forward): ${n}`,
     },
 
@@ -2976,7 +2994,7 @@ const msg = {
       taskLine: (slug, list) => `  - ${slug}: ${list}`,
       suiteLine: (slug, list) => `  - ${slug}: project checks without a passing run since the last task activity: ${list}`,
       more: (n) => `+${n} more`,
-      todoTasks: (slug, n) => `Record the evidence before claiming it: read each listed task's _Verify:_ command in .specs/${slug}/tasks.md (task ${n} first), run it on the final code only if it is safe to run, and record that run with spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
+      todoTasks: (slug, n, file = "tasks.md") => `Record the evidence before claiming it: read each listed task's _Verify:_ command in .specs/${slug}/${file} (task ${n} first), run it on the final code only if it is safe to run, and record that run with spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
       todoSuite: (slug) => `Project checks for ${slug} have no passing run: read them in .specs/roadmap.json (meta.checks), run them only if they are safe to run, and record the runs with spec_finish {evidence}.`,
       plainly: "Or say plainly which of these are not verified.",
       implementer: {

@@ -249,9 +249,11 @@ flows, the bugfix kind.
 
 ## Right-sized rigor — sizes, the change kind, the stricter filled rule (1.21 F5)
 The 1.20 friction audit measured a typo paying ~70% of a public API's slot cost; a feature's **size** now decides its
-scaffold and its approvals. **No size = the 1.20 scaffolds and rules exactly** (every builder takes `a.size` undefined —
-mcp/tests/06-gates-sizes.js pins the sha1 of every no-size builder output of the pre-1.21 track combinations) and
-`spec_upgrade` never assigns one. What holds at EVERY size: EARS on every criterion, trace, the evidence gate, the bugfix
+scaffold and its approvals. **No size = the 1.20 scaffolds byte for byte** (every builder takes `a.size` undefined —
+mcp/tests/06-gates-sizes.js pins the sha1 of every no-size builder output of the pre-1.21 track combinations), no size key
+in the state, and `spec_upgrade` never assigns one; the 1.20 gates too, **except the stricter filled rule** (below — a track
+section holding only the template's guidance), which applies at every size and without one: a design approved before 1.21
+only warns, its next approval asks. What holds at EVERY size: EARS on every criterion, trace, the evidence gate, the bugfix
 iron law, phase order, the finish / execution gate, every track criterion scaffolded.
 - **Input.** `spec_create {size: xs | s | m | l}` / `create --size` (`sizeInput()`, state.js — case-folded; the MCP enum; a
   new feature only: an existing one keeps its size, `sizes.sizeKept` note). Stored as `.state.json → size` only when given
@@ -274,7 +276,30 @@ iron law, phase order, the finish / execution gate, every track criterion scaffo
   never ratcheted silently: "create it as a feature of size s"), traceability, task-deps. Doctor: no design / SC /
   priorities checks for a change, `change-scope` instead (CHECK_PHASE 1). next_action: fill change.md (`fillHint`) →
   approve the plan (`sizes.approvePlan`, `spec_approve {through: "tasks"}`) → implement → finish. `changedSinceApproval`
-  compares change.md (reported as `change.md`). `spec_add_track` refuses a change (`sizes.changeNoTracks`). Hooks: the
+  compares change.md (reported as `change.md`).
+  **The two views (1.21 review C1).** Read whole, change.md made a task's `_Requirements: US-1.AC-7_` a DEFINED criterion
+  and every criterion "covered" by its own definition — trace_check could never fail. `changeViews(text)` (tasks.js, over the
+  ONE task scanner — `scanTaskBlocks(text, ownLines)` marks every line a task block holds) → `{criteria, tasks}`, line for line
+  (the other lines blanked: line numbers still point into change.md). `criteriaText(dir)` / `tasksIdText(dir)` read
+  requirements.md / tasks.md, or a change's views. Every reader of a change's criteria goes through them: trace_check (required
+  ACs from the criteria view, cited ACs / `_Implements:_` from the tasks view), `earsFeature`, doctor's `ears` / `ac-uniqueness`
+  / `secondary-trace`, `changeScope`, the plan gate (EARS, `earsNoCriteria(ids, "change.md")`, duplicates), the matrix, the
+  brief, spec_append_tasks' phantom check, decisions' `_Affects:_` targets, spec_impact and the exports; the pre-commit
+  validator lints `spec.changeViews(text).criteria` (a facade key). Clarification markers and placeholders still read the whole
+  file. A task's text never defines an AC; the tasks-phase gate of a change refuses an uncovered or a phantom AC.
+  **spec_impact on a change (C4):** the default phase is `tasks` (another phase → `impact.changePhase`); the criteria view is
+  diffed by stable ID as requirements (`added` / `modified` / `removed` / `impacted` / `retire` / `affectedTasks`), the tasks by
+  number in `tasks` {added, modified, removed}; `--reopen` works (a changed criterion unticks the DONE tasks citing it, their
+  evidence stale; the change request is recorded with phase `tasks`, and trace's `removedAcs` reads those for a change).
+  next_action's re-review hint names `--phase tasks` (`snapshotPhases`: phaseFile("tasks", "change") = change.md).
+  **Exports and the matrix (C5)** carry the real kind (`stakeholderExport.kind.change` / `kicker.change`): a change renders
+  its summary, its criteria sections (the view — the task blocks out), ONE Tasks table, no design, the approvals row
+  `planPhase` ("Plan (change.md)") with "changed since" / "awaiting approval" through the kind-aware helpers; the project
+  export shows its Acceptance criteria section instead of stories; the matrix reads `approvals.tasks` and its snapshot
+  (`rtm.planApprovedLine` / `planNotApproved` / `changedSincePlan`, CLI `rtm.cli.planApproved`). **An existing change named
+  with tracks (C9)** keeps its core-only set: `tracksIgnored` + `sizes.tracksIgnored` (a spike's create returns
+  `tracksIgnored` too). Messages name the kind's file: `err.taskNotFound(n, file)`, `appendTasks.reapprove / appended /
+  phantom`, the stop gate's `todoTasks(slug, n, file)`. `spec_add_track` refuses a change (`sizes.changeNoTracks`). Hooks: the
   save hook runs EARS + trace on change.md, the pre-commit validator both (a mirror with change.md + .state.json), the
   observe hook's pre-filter reads change.md too; the resources allowlist and the roadmap links know it.
 - **An XS bugfix** (`kind: "bugfix", size: "xs"`): `bugTasks(name, lang, "xs")` drops the reproduce / root-cause tasks
@@ -293,21 +318,38 @@ iron law, phase order, the finish / execution gate, every track criterion scaffo
   row, Reuse & Integration one example row, Error Handling points at the IF…THEN criteria (P5 / P6), and `TRACK_OVERLAPS` /
   `TRACK_TASK_OVERLAPS` (tracks.js — DATA) write a section / task two active tracks both ask for once (a comment on the
   covering section). `spec_add_track` on a sized feature appends the size's blocks. The checklist's counts follow the size
-  (`a.sectionCounts`), and with +obs the +saas telemetry line is dropped.
+  (`a.sectionCounts`), and with +obs the +saas telemetry line is dropped. **+api / +dist have no overlap entry (1.21 review
+  C8):** `[API] Pagination, Idempotency & Concurrency` asks about the API's callers (cursors, an Idempotency-Key, If-Match /
+  412, 202 + a status resource) — `[DIST]` Delivery & Idempotency / Concurrency are about messages and locks; both stay.
+  **Removing a covering track (C7):** `removeTracks()` → `restoreCoveredSections()` appends (write-if-missing, like
+  add_track) the remaining tracks' sections the removed one covered — heading, `> **TODO**`, guidance from
+  `trackDesignBlock` — when their verdict now fails (an optional extended section at size s stays out): `restoredSections`
+  + `tracks.restoredSections`.
 - **P3 — the plan in one call.** At size xs / s next_action's fill step names every planning artifact through `tasks` still a
-  template (`sizes.planFastForward`) and returns `fastForward {through: "tasks", phases, role: null}` from the start; the
+  template (`sizes.planFastForward`) and returns `fastForward {through, phases, role: null}` from the start; the
   pending phase's own fix step still comes first, then the rest of the plan is filled, then the fast-forward. Each gate runs.
+  **The call ends before Phase 4 (1.21 review C3):** `planFastForwardEnd()` (gates.js) — with the `tests` gate due (+tdd /
+  +ai — `testsGateDue`) and still ahead, `through` is the last planning phase before it (test-plan / eval-plan): its gate needs
+  the written failing tests / the feature's eval sets, work that comes after the plan (a call through tasks stopped at `tests`
+  every time). The fill text is then `sizes.planFastForwardTests` (… through test-plan, then /writeTests, approve tests, then
+  tasks); the approve step's fast-forward (`approveStepExtras`) tries `through: tasks` first, else that end
+  (`governance.ffHintTests`) — never a fast-forward its gates would refuse.
 - **Track sections — the gate (markdown.js).** `sectionState(design, sections, marker, {size, lang})` → missing · unfilled ·
   **template** (every visible line of the section is a line of a track design block as the scaffold writes it —
   `sectionOwnLines()`: the built-in blocks EN / PT / ES, pt-BR's for a pt-BR feature, the project's packs'; exact lines,
-  bullet folded) · filled; a sized feature also **na** (ONE own line `n/a — <reason>` with ≥ `NA_REASON_WORDS` (4) words —
-  `RE_NA_LEAD`: n/a, not applicable, não se aplica, no aplica…) · **na-short**, and rows carry `tier`.
+  bullet folded; fenced code is the user's own — its content lines count, its fence lines don't, and no built-in block holds a
+  fence (1.21 review C2: a section answered by a ```json schema / OpenAPI ```yaml / ```mermaid diagram read "template" and failed
+  an unsized design that passed in 1.20); a pack guidance line holding `{{name}}` / `{{slug}}` is a LINEAR wildcard
+  (`wildcardMatch`, C6 — the scaffold filled the feature's name in) · filled; a sized feature also **na** (ONE own line
+  `n/a — <reason>` with ≥ `NA_REASON_WORDS` (4) words — `RE_NA_LEAD`: n/a, not applicable, não se aplica, no aplica…) ·
+  **na-short**, and rows carry `tier`.
   `trackSectionReport(design, tracks, {size, lang})` adds **covered** (+ `by`) for a TRACK_OVERLAPS section left out while
   a covering one is there (sized features only). `sectionVerdict(row, {size, approved})`: filled / na / covered pass;
   missing fails (passes for an extended section at size s); **template fails a new approval — a warn in doctor on a design
   approved already** (`sizes.templateApproved`: never a phase failed retroactively; its next approval asks); unfilled and
-  na-short fail. The five readers — doctor `<track>-sections`, the design approval, `designSaveCheck`, `spec_status` (a sized
-  feature's rows add `status` / `tier` / `by`), the roadmap's attention — all go through the report. **Backward
+  na-short fail. The five readers — doctor `<track>-sections`, the design approval, `designSaveCheck`, `spec_status` (every
+  row carries `status` — 1.21 review C10: the CLI status said "unfilled" where doctor said "only the template's guidance"; a
+  sized feature's rows add `tier` / `by`), the roadmap's attention — all go through the report. **Backward
   compatibility:** an existing design that deleted the TODO line and kept the guidance bullet still passes a phase approved
   before — doctor warns, finish (doctor fails only) and next_action are unaffected; editing it means a re-approval, which
   applies the stricter rule.

@@ -21,7 +21,7 @@ let acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceho
   savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter, stripEnd, stripEnds,
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
-  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix;
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingIndex, headingLeadRe, inactiveMarkerLines, isGenericSlot, isObj, isRecord,
@@ -31,7 +31,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHea
   replaceHtmlCommentSpans, savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter,
   stripEnd, stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
-  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix } = E); }
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.16 Q — spec quality: steering amendments (Q1) · cross-feature acceptance criteria (Q2) · the glossary (Q3)
@@ -266,8 +266,9 @@ function xacContextSig(projectDir) {
 // One feature's compared criteria (template criteria, slots, short ones left out) → { rows: [{ id, key, text, shape, near }],
 // hasSup }. tmplOf() gives the template criteria (built on first use).
 function xacFeatureRows(projectDir, s, state, tracks, tmplOf) {
-  const raw = readContained(projectDir, path.join(s.dir, "requirements.md"));
-  if (!raw) return { rows: [], hasSup: false };
+  const full = readContained(projectDir, path.join(s.dir, "requirements.md"));
+  if (!full) return { rows: [], hasSup: false };
+  const raw = state.kind === "change" ? changeViews(full).criteria : full; // a change's criteria: change.md without its task blocks (1.21 review C1)
   const lng = typeof state.lang === "string" ? state.lang : projectLang(projectDir);
   const rows = [];
   for (const e of acIndex(activeDesign(raw, tracks)).values()) {

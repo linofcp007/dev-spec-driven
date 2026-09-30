@@ -29,7 +29,7 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus, suiteSummaryLines,
   taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines, trackLabel,
   unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject, withMoveLock,
-  withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap;
+  withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews;
 function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
@@ -45,7 +45,7 @@ function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport, bugS
   spikeFinish, spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus,
   suiteSummaryLines, taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines,
   trackLabel, unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject,
-  withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap } = E); }
+  withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews } = E); }
 
 // ---------------------------------------------------------------------------
 // spec_finish — close a feature LOCALLY: readiness report + a merge summary generated from the spec chain
@@ -940,8 +940,10 @@ function catalogData(projectDir) {
   const cache = new Map();
   const srcs = featureDirs(projectDir).map((s) => {
     const tracks = detectTracks(s.dir);
-    const reqRaw = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
-    return { ...s, tracks, phase: detectPhase(s.dir, tracks), reqRaw, state: stateFromFile(projectDir, statePath(s.dir)) };
+    const state = stateFromFile(projectDir, statePath(s.dir));
+    const reqFull = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
+    const reqRaw = state.kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without its task blocks (1.21 review C1)
+    return { ...s, tracks, phase: detectPhase(s.dir, tracks), reqRaw, state };
   });
   // Superseded ACs, keyed by the target folder (dirKey: case-folded where the file system is) + ID → the
   // "<feature>/<AC>" that replaces them. 1.15: only a SHIPPED declaring feature (featureShipped) retires the AC; one still in

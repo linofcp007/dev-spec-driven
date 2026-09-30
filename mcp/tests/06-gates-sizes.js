@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
+exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => {
   const i18n = require("./lib/i18n.js");
   const rd = (dir, f) => fs.readFileSync(path.join(dir, f), "utf8");
   const wr = (dir, f, t) => fs.writeFileSync(path.join(dir, f), t);
@@ -122,15 +122,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
         heads.length === 2 + 2 + 3 && !/^## \[SaaS\] (?:Performance Budget|Orçamento|Presupuesto|Observab)/m.test(des), /US-1\.AC-2\b/.test(req) && !/US-1\.AC-3\b|US-2\.AC-1/.test(req) &&
         /US-1\.AC-5\b/.test(req) && /US-1\.AC-31\b/.test(req), tb.length === 1 + 2 + 2 + 4 && tb.map((b) => b.number).join() === "1,2,3,4,5,6,7,8,9",
         ["requirements.md", "design.md", "tasks.md", "test-plan.md"].every((f) => S.artifactState({ file: path.join(s.dir, f) }) === "placeholder"),
-        chk(doc, "placeholders").status === "fail" && doc.readyToAdvance === false, na.step === "fill" && !!na.fastForward && na.fastForward.through === "tasks" &&
-        na.fastForward.phases.join() === "requirements,design,test-plan,tests,tasks", S.approvePhase(p, s.slug, "design", "t").failing.includes("placeholders")];
+        chk(doc, "placeholders").status === "fail" && doc.readyToAdvance === false, na.step === "fill" && !!na.fastForward && na.fastForward.through === "test-plan" &&
+        na.fastForward.phases.join() === "requirements,design,test-plan", S.approvePhase(p, s.slug, "design", "t").failing.includes("placeholders")]; // (+tdd: the one call ends before Phase 4 — 1.21 review C3)
       const sOk = sConds.every(Boolean);
       if (!sOk) got.push({ lang, sConds, heads, tb: tb.length });
       // size m — +api +dist +saas +obs +tdd: the full chain, the overlaps and the superseded core sections left out
       const m = S.createFeature(p, "Medium " + lang, ["core", "tdd", "saas", "api", "dist", "obs"], "", undefined, lang, undefined, { size: "m" });
       const mdes = rd(m.dir, "design.md"), mtasks = rd(m.dir, "tasks.md");
       const mOk = m.ok && has(m.dir, "classification.md") && !MERGED.test(mdes) && !APICON.test(mdes) && !ERRH.test(mdes) && !TESTS.test(mdes) && SECCONS.test(mdes) &&
-        !/^## \[API\] (?:Pagination|Paginação|Paginación)/m.test(mdes) && /^## \[DIST\]/m.test(mdes) && (mdes.match(/<!-- [^\n]*\[(?:SaaS|API)\] /g) || []).length === 3 &&
+        /^## \[API\] (?:Pagination|Paginação|Paginación)/m.test(mdes) && /^## \[DIST\]/m.test(mdes) && (mdes.match(/<!-- [^\n]*\[(?:SaaS|API)\] /g) || []).length === 2 && // (1.21 review C8: +api / +dist keep both)
         !/Emit metrics, add dashboard|Emitir métricas, adicionar dashboard|Emitir métricas, añadir dashboard/.test(mtasks) && /US-2\.AC-1/.test(rd(m.dir, "requirements.md")) &&
         S.artifactState({ file: path.join(m.dir, "design.md") }) === "placeholder" && S.traceCheck(p, m.slug).uncoveredByTasks.length === 0;
       // size xs — a change: ONE change.md, placeholder, its plan approval refused while it is the template
@@ -144,7 +144,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
       got.push({ lang, sOk, mOk, xOk, bOk });
       allOk = allOk && sOk && mOk && xOk && bOk;
     }
-    ok(allOk, "1.21 F5: every size scaffolds in EN / PT / ES / pt-BR — s: one story (AC-1 WHEN, AC-2 IF…THEN + every track criterion), no classification.md, the merged 'Decisions, reuse & risks', only the core-tier track sections, [SaaS] Performance Budget / Observability left to [OBS], a track task per criterion (9 tasks), every artifact 'placeholder', next_action fill + fastForward through tasks; m: the full chain with [API] Pagination left to [DIST], the core API Contracts / Error Handling / Testing Strategy left out, no duplicate +saas telemetry task, trace covered; xs: ONE change.md; an XS bugfix: two tasks (got " +
+    ok(allOk, "1.21 F5: every size scaffolds in EN / PT / ES / pt-BR — s: one story (AC-1 WHEN, AC-2 IF…THEN + every track criterion), no classification.md, the merged 'Decisions, reuse & risks', only the core-tier track sections, [SaaS] Performance Budget / Observability left to [OBS], a track task per criterion (9 tasks), every artifact 'placeholder', next_action fill + fastForward through test-plan (+tdd: Phase 4 after the plan); m: the full chain with [API] Pagination kept beside [DIST], the core API Contracts / Error Handling / Testing Strategy left out, no duplicate +saas telemetry task, trace covered; xs: ONE change.md; an XS bugfix: two tasks (got " +
       JSON.stringify(got) + ")");
   }
 
@@ -369,5 +369,246 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
       change.created.join() === "change.md" && cls.suggestedSize === "xs" && cls.sizeReason === "trivial-change",
       "1.21 F5: MCP — spec_create advertises size (xs · s · m · l, case-folded: 'S') and kind 'change'; the call scaffolds exactly what the engine does (ES, size s); kind change writes one change.md; spec_classify returns suggestedSize / sizeReason (got " +
       JSON.stringify({ size: viaMcp.size, err: viaMcp.error, change: change.created, cls: [cls.suggestedSize, cls.sizeReason] }) + ")");
+  }
+
+  // --- 1.21 review C — right-sized rigor (F5), the independent review's findings ---
+  const CHANGE_HEAD = "# Change: footer\n\n## Summary\nFix the footer text and its year.\n\n## Acceptance Criteria (EARS)\n" +
+    "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer text \"Copyright\".\n" +
+    "2. **US-1.AC-2** — WHEN the footer renders THE SYSTEM SHALL show the year 2026.\n\n## Approach\nTwo strings in templates/footer.html.\n\n## Tasks\n";
+  const changeTask = (n, reqs, extra = "") => `- [ ] ${n}. [US1] Fix string ${n}${extra}\n  - _Requirements: ${reqs}_\n  - _Verify: node -e "process.exit(0)"_\n`;
+  const OK_RUN = { command: 'node -e "process.exit(0)"', exitCode: 0, summary: "ok" };
+
+  { // C1 — a change's traceability can fail: change.md is read as two views, its criteria WITHOUT the task blocks and the task
+    // blocks alone — a task's _Requirements:_ reference never defines a criterion, and a criterion never covers itself
+    const p = fresh("c1");
+    const c = S.createFeature(p, "Footer", undefined, "x", undefined, "en", "change");
+    wr(c.dir, "change.md", CHANGE_HEAD + changeTask(1, "US-1.AC-1")); // (a) AC-2 cited by no task
+    const tr1 = S.traceCheck(p, c.slug);
+    const doc1 = chk(S.specDoctor(p, c.slug), "traceability");
+    const ap1 = S.approvePhase(p, c.slug, null, "t", { through: "tasks" });
+    wr(c.dir, "change.md", CHANGE_HEAD.replace(/2\. \*\*US-1\.AC-2\*\*[^\n]*\n/, "") + changeTask(1, "US-1.AC-1, US-1.AC-7")); // (b) a phantom US-1.AC-7
+    const tr2 = S.traceCheck(p, c.slug);
+    const scope2 = chk(S.specDoctor(p, c.slug), "change-scope");
+    const ap2 = S.approvePhase(p, c.slug, null, "t", { through: "tasks" });
+    const mx2 = S.traceMatrix(p, c.slug);
+    // (c) a task line that reads like a criterion (a modal verb) is never linted as one; the views keep every line number
+    const modal = CHANGE_HEAD + changeTask(1, "US-1.AC-1", " — THE SYSTEM SHALL render it") + changeTask(2, "US-1.AC-2");
+    wr(c.dir, "change.md", modal);
+    const v = S.changeViews(modal);
+    const ears = S.earsFeature(p, c.slug);
+    const tr3 = S.traceCheck(p, c.slug);
+    const ap3 = S.approvePhase(p, c.slug, null, "t", { through: "tasks" });
+    const n = modal.split("\n").length;
+    ok(tr1.verdict === "gaps-found" && tr1.uncoveredByTasks.join() === "US-1.AC-2" && tr1.totalAcs === 2 && doc1.status === "fail" && ap1.ok === false && ap1.failing.includes("traceability") &&
+      tr2.verdict === "gaps-found" && tr2.phantomAcsInTasks.join() === "US-1.AC-7" && tr2.totalAcs === 1 && /XS: 1 criteria/.test(scope2.detail) && ap2.ok === false && ap2.failing.includes("traceability") &&
+      mx2.rows.map((r) => r.id).join() === "US-1.AC-1" &&
+      v.criteria.split("\n").length === n && v.tasks.split("\n").length === n && !/- \[ \] \d/.test(v.criteria) && !/US-1\.AC-1\*\*/.test(v.tasks) && /- \[ \] 2\. /.test(v.tasks) &&
+      ears.summary.criteriaDetected === 2 && ears.issues.length === 0 && tr3.verdict === "pass" && ap3.ok,
+      "1.21 review C1: a change's traceability can fail — AC-2 cited by no task: trace gaps-found, doctor fails, the plan approval refuses (traceability); a task citing a phantom US-1.AC-7: a phantom gap, change-scope counts 1 criterion (not 2), refused, the matrix has one row; changeViews keeps every line (the criteria without the task blocks, the task blocks alone); a task with a modal verb is never linted as a criterion (EARS: 2 criteria, no issue); written right, trace passes and the plan is approved (got " +
+      JSON.stringify({ tr1: [tr1.verdict, tr1.uncoveredByTasks], ap1: ap1.failing, tr2: [tr2.phantomAcsInTasks, tr2.totalAcs], scope2: scope2.detail, ears: ears.summary, tr3: tr3.verdict, ap3: ap3.failing || ap3.ok }) + ")");
+    // the pre-commit validator traces the STAGED change.md (a mirror with .state.json): a staged phantom blocks, never "traceability clean"
+    const { spawnSync } = require("child_process");
+    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) console.log("  skip - git not available: 1.21 review C1 pre-commit not run");
+    else {
+      const repo = fresh("c1-git");
+      const g = S.createFeature(repo, "Footer", undefined, "x", undefined, "en", "change");
+      wr(g.dir, "change.md", CHANGE_HEAD.replace(/2\. \*\*US-1\.AC-2\*\*[^\n]*\n/, "") + changeTask(1, "US-1.AC-1, US-1.AC-7"));
+      const git = (...a) => spawnSync("git", a, { cwd: repo, encoding: "utf8" });
+      git("init", "-q");
+      git("add", "-A");
+      const pc = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "precommit-check.js")], { cwd: repo, encoding: "utf8" });
+      ok(pc.status === 1 && /change\.md: 1 phantom AC\/test reference\(s\)[^\n]*US-1\.AC-7/.test(pc.stdout) && !/traceability clean|all \d+ ACs covered/i.test(pc.stdout),
+        "1.21 review C1: the pre-commit validator blocks a staged change.md whose task cites a phantom AC (it printed 'traceability clean') (got " + JSON.stringify([pc.status, pc.stdout.slice(0, 400), String(pc.stderr).slice(0, 300)]) + ")");
+    }
+  }
+
+  { // C2 — fenced code the user wrote is the user's answer: a section holding only a ```json / ```yaml / ```mermaid block is filled
+    // (unsized: the 1.20 verdict; sized too) — "template" only when what remains is exactly the template's own lines
+    const fenced = [];
+    for (const l of ["en", "pt", "es", "pt-BR"]) for (const t of S.VALID_TRACKS) if (/```|~~~/.test(i18n.trackDesignBlock(t, l))) fenced.push(l + ":" + t);
+    const p = fresh("c2");
+    const got = [];
+    for (const size of [undefined, "m", "s"]) {
+      const f = S.createFeature(p, "Data " + (size || "none"), ["core", "data"], "", undefined, "en", undefined, size ? { size } : undefined);
+      const filled = rd(f.dir, "design.md").split("\n").map((x) => (/^> \*\*TODO\*\*/.test(x) ? "Decided for this feature: the concrete answer written here." : x)).join("\n");
+      const put = (body) => { wr(f.dir, "design.md", filled.replace(/(## \[DATA\] Data Contracts & Schema Evolution\n)[\s\S]*?(?=\n## |\n<!--)/, "$1" + body)); return chk(S.specDoctor(p, f.slug), "data-sections"); };
+      const row = { size: size || "none" };
+      row.json = put("```json\n{ \"type\": \"object\", \"required\": [\"id\"] }\n```\n").status;
+      row.yaml = put("```yaml\nopenapi: 3.1.0\ninfo:\n  title: orders\n```\n").status;
+      row.mermaid = put("```mermaid\nerDiagram\n  ORDER ||--o{ LINE : has\n```\n").status;
+      row.emptyFence = put("```json\n```\n").status; // an empty block answers nothing
+      put("```json\n{ \"type\": \"object\" }\n```\n");
+      row.approve = S.approvePhase(p, f.slug, "design", "t", { force: false }).failing || [];
+      got.push(row);
+    }
+    ok(!fenced.length && got.every((r) => r.json === "pass" && r.yaml === "pass" && r.mermaid === "pass" && r.emptyFence === "fail" && !r.approve.includes("data-sections")),
+      "1.21 review C2: a [DATA] Data Contracts section answered only by a ```json schema, an OpenAPI ```yaml or a ```mermaid diagram is the user's own content — pass, unsized (as in 1.20) and sized (m, s), and the design approval doesn't refuse it on data-sections; an empty fence answers nothing; no built-in track block holds a fence (got " +
+      JSON.stringify({ fenced, got }) + ")");
+  }
+
+  { // C3 — the plan in one call at size s with +tdd / +ai ends BEFORE Phase 4 (its gate needs the written failing tests / eval sets)
+    const p = fresh("c3");
+    const s = S.createFeature(p, "Export csv", ["core", "tdd", "sec"], "add a CSV export button", undefined, "en", undefined, { size: "s" });
+    const na0 = S.nextAction(p, s.slug);
+    ["requirements.md", "design.md", "test-plan.md", "tasks.md"].forEach((f) => fill(s.dir, f));
+    const na1 = S.nextAction(p, s.slug);
+    const ff = S.approvePhase(p, s.slug, null, "t", { through: (na1.fastForward || {}).through || "tasks" });
+    const na2 = S.nextAction(p, s.slug);
+    writeTests(p, s.dir, s.slug);
+    const tests = S.approvePhase(p, s.slug, "tests", "t");
+    const tasks = S.approvePhase(p, s.slug, "tasks", "t");
+    const ai = S.nextAction(p, S.createFeature(p, "Summaries", ["core", "ai"], "", undefined, "en", undefined, { size: "s" }).slug);
+    const plain = S.nextAction(p, S.createFeature(p, "Button", ["core", "ui"], "", undefined, "en", undefined, { size: "s" }).slug);
+    const bug = S.nextAction(p, S.createFeature(p, "Crash", undefined, "", undefined, "en", "bugfix", { size: "xs" }).slug);
+    const pt = S.nextAction(p, S.createFeature(p, "Exportar", ["core", "tdd"], "", undefined, "pt", undefined, { size: "s" }).slug);
+    const es = S.nextAction(p, S.createFeature(p, "Exportar es", ["core", "tdd"], "", undefined, "es", undefined, { size: "s" }).slug);
+    ok(na0.step === "fill" && na0.fastForward.through === "test-plan" && na0.fastForward.phases.join() === "requirements,design,test-plan" &&
+      /approve it through test-plan in one call: spec_approve \{name: "export-csv", through: "test-plan"\}/.test(na0.recommendation) && /write the failing tests \(\/writeTests export-csv\), approve tests/.test(na0.recommendation) &&
+      na1.step === "approve" && na1.fastForward && na1.fastForward.through === "test-plan" && /\/spec-ff export-csv test-plan/.test(na1.recommendation) &&
+      ff.ok && ff.approved.join() === "requirements,design,test-plan" && na2.step === "fix" && /\/writeTests export-csv/.test(na2.recommendation) && !na2.fastForward &&
+      tests.ok && tasks.ok && ai.fastForward.through === "eval-plan" && plain.fastForward.through === "tasks" && bug.fastForward.through === "tasks" &&
+      /aprová-lo até test-plan numa só chamada/.test(pt.recommendation) && /escrever os testes que falham/.test(pt.recommendation) &&
+      /apruébalo hasta test-plan en una sola llamada/.test(es.recommendation) && /escribe las pruebas que fallan/.test(es.recommendation),
+      "1.21 review C3: size s with +tdd — next_action's fastForward ends at test-plan (requirements → design → test-plan; the text: then /writeTests, approve tests, then the tasks), the approve step names /spec-ff <f> test-plan, the call is approved whole, then Phase 4 (write the tests), tests and tasks; +ai ends at eval-plan; no +tdd / +ai and an XS bugfix still end at tasks; PT / ES localized (got " +
+      JSON.stringify({ na0: na0.fastForward, na1: [na1.step, na1.fastForward], ff: ff.approved || ff.failing, na2: na2.step, tests: tests.failing || tests.ok, tasks: tasks.failing || tasks.ok, ai: ai.fastForward, plain: plain.fastForward, bug: bug.fastForward }) + ")");
+  }
+
+  { // C4 — spec_impact works on a change: the default phase is tasks; its criteria diffed by ID, its tasks by number; --reopen works
+    const p = fresh("c4");
+    const c = S.createFeature(p, "Footer", undefined, "x", undefined, "en", "change");
+    wr(c.dir, "change.md", CHANGE_HEAD + changeTask(1, "US-1.AC-1") + changeTask(2, "US-1.AC-2"));
+    const ap = S.approvePhase(p, c.slug, null, "t", { through: "tasks" });
+    const tick = S.completeTask(p, c.slug, 1, OK_RUN);
+    wr(c.dir, "change.md", rd(c.dir, "change.md").replace("the footer text \"Copyright\"", "the footer text \"Copyright 2026 Acme\""));
+    const imp = S.impactReport(p, c.slug, {});
+    const lines = S.impactLines(imp).join("\n");
+    const viaMcp = payload(await rpc("tools/call", { name: "spec_impact", arguments: { projectDir: p, name: c.slug } }));
+    const wrong = S.impactReport(p, c.slug, { phase: "requirements" });
+    const na = S.nextAction(p, c.slug);
+    const re = S.impactReport(p, c.slug, { reopen: true });
+    const st = stateOf(c.dir);
+    const after = rd(c.dir, "change.md");
+    ok(ap.ok && tick.ok && imp.ok && imp.phase === "tasks" && imp.file === "change.md" && imp.changed === true && imp.modified.map((m) => m.id).join() === "US-1.AC-1" &&
+      imp.tasks && imp.tasks.modified.length === 0 && imp.affectedTasks.map((t) => t.number).join() === "1" && /--phase tasks --reopen/.test(imp.hint || "") &&
+      /~ US-1\.AC-1/.test(lines) && /Impact: footer · tasks/.test(lines) && viaMcp.phase === "tasks" && viaMcp.modified.map((m) => m.id).join() === "US-1.AC-1" &&
+      wrong.ok === false && wrong.change === true && /one file, change\.md/.test(wrong.error) &&
+      na.step === "re-review" && /impact footer --phase tasks/.test(na.recommendation) &&
+      re.ok && re.reopened.join() === "1" && /^- \[ \] 1\. /m.test(after) && /US-1\.AC-1\*\* — WHEN any page renders/.test(after) && /## Approach/.test(after) &&
+      st.evidence["1"].stale === true && st.changes.length === 1 && st.changes[0].phase === "tasks" && st.changes[0].modified.join() === "US-1.AC-1",
+      "1.21 review C4: spec_impact on a change — the default phase is tasks (change.md): the edited AC-1 is 'modified' (by stable ID), its done task #1 affected, the hint names --phase tasks --reopen (MCP = engine); another phase is refused (change: true); next_action's re-review names --phase tasks; --reopen unticks #1 in change.md (its criteria untouched), marks its evidence stale and records the change request (phase tasks) (got " +
+      JSON.stringify({ imp: [imp.phase, imp.error, (imp.modified || []).map((m) => m.id), imp.hint], wrong: wrong.error, na: na.recommendation, re: [re.reopened, re.error], ch: st.changes }).slice(0, 1600) + ")");
+  }
+
+  { // C5 — the export and the matrix read a change as a change: its kind, its criteria once (no tasks inside), one Tasks table, no
+    // design; changed-since / awaiting-approval rows from the kind-aware helpers; the matrix reads the plan's approval
+    const p = fresh("c5");
+    const c = S.createFeature(p, "Footer", undefined, "x", undefined, "en", "change");
+    wr(c.dir, "change.md", CHANGE_HEAD + changeTask(1, "US-1.AC-1") + changeTask(2, "US-1.AC-2"));
+    const md0 = S.exportSpecs(p, { name: c.slug, format: "md" }).content;
+    S.approvePhase(p, c.slug, null, "t", { through: "tasks" });
+    const mx1 = S.traceMatrix(p, c.slug);
+    wr(c.dir, "change.md", rd(c.dir, "change.md").replace("the year 2026", "the year 2027"));
+    const md1 = S.exportSpecs(p, { name: c.slug, format: "md" }).content;
+    const mx2 = S.traceMatrix(p, c.slug);
+    const proj = S.exportSpecs(p, { format: "md" }).content;
+    const pt = S.createFeature(p, "Rodape", undefined, "x", undefined, "pt", "change");
+    const mdPt = S.exportSpecs(p, { name: pt.slug, format: "md" }).content;
+    const count = (s, re) => (s.match(re) || []).length;
+    ok(/\*\*Kind:\*\* change \(size xs\)/.test(md0) && /_Change specification · /.test(md0) && !/^## Design/m.test(md0) && count(md0, /^## Tasks$/gm) === 1 &&
+      /^## Acceptance Criteria \(EARS\)\n\n1\. \*\*US-1\.AC-1\*\*/m.test(md0) && !/_Requirements:/.test(md0) && /\| Plan \(change\.md\) \| — \| — \| awaiting approval \|/.test(md0) &&
+      /Plan \(change\.md\) not approved yet\./.test(md0) && mx1.kind === "change" && mx1.approval && mx1.approval.baseline === "snapshot" && mx1.approval.changed === false &&
+      /\| Plan \(change\.md\) \| t \| [^|]+ \| changed since this approval/.test(md1) && /Plan \(change\.md\) approved /.test(md1) && mx2.approval.changed === true &&
+      mx2.rows.find((r) => r.id === "US-1.AC-2").approval.changed === true && mx2.rows.find((r) => r.id === "US-1.AC-1").approval.changed === false && /changed since the plan approval/.test(md1) &&
+      /change \(size xs\) · core/.test(proj) && /### Acceptance criteria/.test(proj) && /\*\*Tipo:\*\* alteração \(tamanho xs\)/.test(mdPt),
+      "1.21 review C5: a change's export — Kind 'change (size xs)', its criteria once (no task lines), ONE Tasks table, no design section, the plan's row awaiting approval then 'changed since this approval' after an edit; the matrix reads the plan approval (snapshot, per-row changed) and says so; the project export lists its acceptance criteria; PT localized (got " +
+      JSON.stringify({ md0: md0.slice(0, 900), mx1: mx1.approval, mx2: mx2.approval }).slice(0, 1800) + ")");
+  }
+
+  { // C6 — a track pack's guidance line holding {{name}} / {{slug}} is still the template once the scaffold filled the feature's name in
+    const p = fresh("c6");
+    const pd = path.join(p, ".specs", "tracks", "kbd");
+    fs.mkdirSync(pd, { recursive: true });
+    fs.writeFileSync(path.join(pd, "track.json"), JSON.stringify({ name: "kbd", marker: "KBD", title: "Keyboard", sections: [{ name: "Keyboard Map", guidance: "The keyboard map of {{name}} ({{slug}}, {{marker}})." }] }));
+    const f = S.createFeature(p, "Search box", ["kbd"], "x", undefined, "en");
+    const noTodo = rd(f.dir, "design.md").split("\n").filter((x) => !/^> \*\*TODO\*\*/.test(x)).join("\n");
+    wr(f.dir, "design.md", noTodo);
+    const tmpl = chk(S.specDoctor(p, f.slug), "kbd-sections");
+    wr(f.dir, "design.md", noTodo.replace("The keyboard map of Search box (search-box, [KBD]).", "Tab moves through the results; Enter opens one; Escape clears the box."));
+    const own = chk(S.specDoctor(p, f.slug), "kbd-sections");
+    ok(/The keyboard map of Search box \(search-box, \[KBD\]\)\./.test(noTodo) && tmpl.status === "fail" && /Keyboard Map:only the template's guidance/.test(tmpl.detail) && own.status === "pass",
+      "1.21 review C6: a pack section whose guidance holds {{name}} / {{slug}} (filled in by the scaffold) reads 'only the template's guidance' while untouched (a linear wildcard, never a regex from template text); the user's own line fills it (got " +
+      JSON.stringify([tmpl.status, tmpl.detail, own.status]) + ")");
+  }
+
+  { // C7 — removing a covering track writes back the sections of the remaining tracks it covered (sized designs)
+    const p = fresh("c7");
+    const m = S.createFeature(p, "Obs", ["core", "saas", "obs"], "", undefined, "en", undefined, { size: "m" });
+    const before = chk(S.specDoctor(p, m.slug), "saas-sections");
+    const r = S.addTrack(p, m.slug, "obs", { remove: true });
+    const des = rd(m.dir, "design.md");
+    const after = chk(S.specDoctor(p, m.slug), "saas-sections");
+    const again = S.addTrack(p, m.slug, "obs", { remove: true });
+    const u = S.createFeature(p, "Obs plain", ["core", "saas", "obs"], "", undefined, "en");
+    const ur = S.addTrack(p, u.slug, "obs", { remove: true });
+    const pt = S.createFeature(p, "Obs pt", ["core", "saas", "obs"], "", undefined, "pt", undefined, { size: "m" });
+    const rp = S.addTrack(p, pt.slug, "obs", { remove: true });
+    ok(!/Performance Budget:missing|Observability:missing/.test(before.detail) && r.ok && JSON.stringify(r.restoredSections) === JSON.stringify(["[SaaS] Performance Budget", "[SaaS] Observability"]) &&
+      /added back to design\.md, to be filled: \[SaaS\] Performance Budget, \[SaaS\] Observability/.test(r.note) &&
+      (des.match(/^## \[SaaS\] Performance Budget\n> \*\*TODO\*\*/gm) || []).length === 1 && (des.match(/^## \[SaaS\] Observability\n> \*\*TODO\*\*/gm) || []).length === 1 &&
+      after.status === "fail" && /Performance Budget:unfilled/.test(after.detail) && !/:missing/.test(after.detail) && !again.restoredSections && !ur.restoredSections &&
+      rp.restoredSections && rp.restoredSections.length === 2 && /voltaram ao design\.md/.test(rp.note),
+      "1.21 review C7: removing +obs from a size m +saas +obs feature appends the [SaaS] Performance Budget / Observability sections it covered (heading + TODO + guidance, write-if-missing) — restoredSections + a note (EN / PT); doctor then asks to fill them (unfilled, never 'missing' with nothing to restore them); a second remove and an unsized feature restore nothing (got " +
+      JSON.stringify({ before: before.detail, r: [r.restoredSections, r.note], after: after.detail, rp: rp.restoredSections }) + ")");
+  }
+
+  { // C8 — +api / +dist have no overlap: [API] Pagination, Idempotency & Concurrency is scaffolded and judged on its own
+    const p = fresh("c8");
+    const m = S.createFeature(p, "Orders api", ["core", "api", "dist"], "", undefined, "en", undefined, { size: "m" });
+    const filled = rd(m.dir, "design.md").split("\n").map((x) => (/^> \*\*TODO\*\*/.test(x) ? "Decided for this feature: the concrete answer written here." : x)).join("\n");
+    wr(m.dir, "design.md", filled.replace(/## \[API\] Pagination, Idempotency & Concurrency\n[\s\S]*?(?=\n## )/, ""));
+    const gone = chk(S.specDoctor(p, m.slug), "api-sections");
+    ok(/^## \[API\] Pagination, Idempotency & Concurrency$/m.test(filled) && !S.TRACK_OVERLAPS.some((o) => o.drop[0] === "api") && gone.status === "fail" &&
+      /Pagination, Idempotency & Concurrency:missing/.test(gone.detail),
+      "1.21 review C8: at size m with +api +dist the [API] Pagination, Idempotency & Concurrency section is scaffolded (If-Match / 412 and 202 are asked nowhere else) and, deleted, it is missing — never 'covered' by [DIST] (got " + JSON.stringify(gone.detail) + ")");
+  }
+
+  { // C9 — spec_create on an EXISTING change with tracks: nothing added, never silently (tracksIgnored + a note), MCP = engine
+    const p = fresh("c9");
+    const c = S.createFeature(p, "Footer typo", undefined, "x", undefined, "en", "change");
+    const again = S.createFeature(p, "Footer typo", ["core", "saas"], "", undefined, "en");
+    const viaMcp = payload(await rpc("tools/call", { name: "spec_create", arguments: { projectDir: p, name: "Footer typo", tracks: ["core", "sec"] } }));
+    const plain = S.createFeature(p, "Footer typo", undefined, "", undefined, "en");
+    ok(c.ok && again.ok && JSON.stringify(again.tracksIgnored) === JSON.stringify(["saas"]) && /Tracks not added — \+saas: 'footer-typo' is a change/.test(again.note) &&
+      viaMcp.ok && JSON.stringify(viaMcp.tracksIgnored) === JSON.stringify(["sec"]) && stateOf(c.dir).tracks.join() === "core" && !has(c.dir, "design.md") && plain.ok && !plain.tracksIgnored,
+      "1.21 review C9: spec_create on an existing change naming tracks adds none and says so — tracksIgnored + a localized note (MCP and engine); without tracks nothing is said (got " +
+      JSON.stringify({ again: [again.tracksIgnored, again.note], mcp: viaMcp.tracksIgnored }) + ")");
+  }
+
+  { // C10 — messages name the kind's real file; status and doctor agree on an unsized feature; spec_templates knows `change`; wording
+    const p = fresh("c10");
+    const c = S.createFeature(p, "Footer", undefined, "x", undefined, "en", "change");
+    wr(c.dir, "change.md", CHANGE_HEAD + changeTask(1, "US-1.AC-1") + changeTask(2, "US-1.AC-2"));
+    S.approvePhase(p, c.slug, null, "t", { through: "tasks" });
+    const nf = S.completeTask(p, c.slug, 9, OK_RUN);
+    const app = S.appendTasks(p, c.slug, [{ text: "Third string", requirements: ["US-1.AC-1"], verify: 'node -e "process.exit(0)"' }]);
+    const phantom = S.appendTasks(p, c.slug, [{ text: "Fourth", requirements: ["US-1.AC-9"] }]);
+    S.completeTask(p, c.slug, 1); // ticked with no evidence
+    const stop = S.stopCheck(p, { message: "Done — all tests pass and everything is verified." });
+    const mid = S.createFeature(p, "Mid", undefined, "x", undefined, "en", "change");
+    wr(mid.dir, "change.md", "# Change: mid\n\n## Summary\nOne fix.\n\n## Acceptance Criteria (EARS)\nThe footer behaviour of US-1.AC-1 changes.\n\n## Approach\nOne line.\n\n## Tasks\n" + changeTask(1, "US-1.AC-1"));
+    const earsMid = chk(S.specDoctor(p, mid.slug), "ears");
+    const u = S.createFeature(p, "Login", ["core", "sec"], "", undefined, "en");
+    wr(u.dir, "design.md", rd(u.dir, "design.md").split("\n").filter((x) => !/^> \*\*TODO\*\*/.test(x)).join("\n"));
+    const row = S.statusFeature(p, u.slug).secSections.find((x) => x.section === "Threat Model");
+    const tpl = list.result.tools.find((t) => t.name === "spec_templates");
+    const E = S.msg("en");
+    ok(nf.ok === false && /Task 9 not found in change\.md/.test(nf.error) && app.ok && app.file === "change.md" && /^change\.md changed after its approval/.test(app.note) &&
+      phantom.ok === false && /not in change\.md/.test(phantom.error) && stop.block === true && /\.specs\/footer\/change\.md \(task 1 first\)/.test(stop.reason) &&
+      earsMid.status === "fail" && /^change\.md cites AC IDs \(US-1\.AC-1\)/.test(earsMid.detail) &&
+      row.status === "template" && row.filled === false && /\| change \|/.test(tpl.inputSchema.properties.artifact.description) && /spike-tasks or change \(change\.md/.test(tpl.description) &&
+      /a track \(\+sec\) makes it a feature of size s/.test(E.sizes.changeTracks("+sec")) && !/\ba \[/.test(E.sizes.coveredComment("[SaaS] Observability")) &&
+      /um track \(\+sec\) faz dela/.test(S.msg("pt").sizes.changeTracks("+sec")) && /un track \(\+sec\) lo convierte/.test(S.msg("es").sizes.changeTracks("+sec")),
+      "1.21 review C10: a change's messages name change.md — task not found, append-tasks (file, 'change.md changed after its approval', phantom 'not in change.md'), the stop gate ('read … .specs/<f>/change.md'), EARS 'change.md cites AC IDs'; spec_status gives an unsized row its status ('template', as doctor); spec_templates lists 'change'; 'a track (+sec) makes it' (EN / PT / ES) (got " +
+      JSON.stringify({ nf: nf.error, app: [app.file, app.note], phantom: phantom.error, stop: String(stop.reason).slice(0, 300), ears: earsMid.detail, row }).slice(0, 1600) + ")");
   }
 };

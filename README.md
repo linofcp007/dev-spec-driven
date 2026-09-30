@@ -56,7 +56,8 @@ chosen tracks are stored with the feature, and a track can be added or turned of
 
 **Sizes (1.21) — the rigor follows the change.** Phase 0 also suggests a size (`spec_create {size}`): **xs** is a
 *change* — one `change.md` (summary, 1–3 EARS criteria, approach, tasks with `_Verify:_`) and two approvals; **s** is
-one story whose whole plan is approved in one call, with each track's core sections only; **m / l** keep the full chain,
+one story whose whole plan is approved in one call (with +tdd / +ai up to the test / eval plan — the failing tests
+come next, then the tasks), with each track's core sections only; **m / l** keep the full chain,
 with the sections two tracks both ask for written once. EARS, traceability, the evidence gate and the finish gate hold
 at every size; a design section counts as filled only with your own text. No size keeps the previous scaffold.
 
@@ -436,7 +437,7 @@ prints the raw result, and `help` lists every flag. A plugin install puts no `de
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
-create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
@@ -500,7 +501,8 @@ um track mais tarde.
 
 **Tamanhos (1.21) — o rigor acompanha a alteração.** A Fase 0 também sugere um tamanho (`spec_create {size}`): **xs** é
 uma *alteração* — um só `change.md` (resumo, 1–3 critérios EARS, abordagem, tarefas com `_Verify:_`) e duas aprovações;
-**s** é uma história cujo plano inteiro é aprovado numa só chamada, só com as secções core de cada track; **m / l**
+**s** é uma história cujo plano inteiro é aprovado numa só chamada (com +tdd / +ai até ao plano de testes / de avaliação —
+a seguir vêm os testes que falham e depois as tarefas), só com as secções core de cada track; **m / l**
 mantêm a cadeia completa, com as secções que dois tracks pedem escritas uma só vez. EARS, rastreabilidade, o gate de
 evidência e o de fecho valem em todos os tamanhos; uma secção de design só conta como preenchida com texto próprio. Sem
 tamanho, fica o scaffold anterior.
@@ -903,7 +905,7 @@ executável, `node "<clone>/cli/dev-spec.js" …` com o caminho resolvido (fiche
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
-create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
@@ -967,7 +969,8 @@ adelante.
 
 **Tamaños (1.21) — el rigor sigue al cambio.** La Fase 0 también sugiere un tamaño (`spec_create {size}`): **xs** es
 un *cambio* — un solo `change.md` (resumen, 1–3 criterios EARS, enfoque, tareas con `_Verify:_`) y dos aprobaciones;
-**s** es una historia cuyo plan entero se aprueba en una sola llamada, solo con las secciones core de cada track;
+**s** es una historia cuyo plan entero se aprueba en una sola llamada (con +tdd / +ai hasta el plan de pruebas / de
+evaluación — después llegan las pruebas que fallan y luego las tareas), solo con las secciones core de cada track;
 **m / l** mantienen la cadena completa, con las secciones que piden dos tracks escritas una sola vez. EARS, la
 trazabilidad, el gate de evidencia y el de cierre valen en todos los tamaños; una sección de diseño solo cuenta como
 rellenada con texto propio. Sin tamaño, se mantiene el scaffold anterior.
@@ -1375,7 +1378,7 @@ línea ejecutable, `node "<clone>/cli/dev-spec.js" …` con la ruta resuelta (lo
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
-create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>

@@ -121,7 +121,8 @@ trackers, release notes, milestones).
   a `<script>` in a criterion is shown as text), keeps link targets only for http(s) / mailto, turns an image into its alt
   text, and loads no font, script or stylesheet URL (a test asserts it); roadmap palette, system light/dark + toggle,
   print rules. Approvals are flagged "changed since" by content fingerprint only — a file date is no evidence (as in
-  finish). A story written as its own `## US-n` section appears once, under the stories.
+  finish). A change (1.21 review C5) exports as itself: its kind label, its criteria (change.md without the task blocks),
+  one Tasks table, no design, the plan's approval row (`planPhase`); the project export lists its criteria, not stories. A story written as its own `## US-n` section appears once, under the stories.
 - **`spec_changelog`** reads the spec data only (no model, no git log). Added = features that shipped since `since`
   (finish `{write}` recorded their baseline, or their execution sign-off was approved) with their user-story ACs (template
   criteria left out); Changed = ACs superseded by a feature shipped since then + change requests (`changes`) recorded since
