@@ -418,11 +418,11 @@ const TRACK_OVERLAPS = [
   { drop: ["saas", "Performance Budget"], by: [["obs", "SLIs & SLOs"]] },
   { drop: ["api", "Pagination, Idempotency & Concurrency"], by: [["dist", "Delivery & Idempotency"], ["dist", "Concurrency"]] },
 ];
-// The template TASKS two tracks both scaffold (DATA): with the `by` track on, a sized scaffold leaves out the task at 1-based
-// `drop` position of the other track's template block (its criteria stay cited by that block's other tasks).
 // +data (1.21 F4) has no overlap entry: its sections (schema evolution, data quality, backfills, lineage, retention & cost) ask
 // what no other track's do — [DIST] Delivery & Idempotency is about messages, not re-running a partition; [PRIVACY] retention is
 // about personal data, not storage tiers and query cost.
+// The template TASKS two tracks both scaffold (DATA): with the `by` track on, a sized scaffold leaves out the task at 1-based
+// `drop` position of the other track's template block (its criteria stay cited by that block's other tasks).
 const TRACK_TASK_OVERLAPS = [
   { drop: ["saas", 1], by: "obs" }, // "Emit metrics, add dashboard, configure alerts" — +obs's telemetry / alerting tasks do it
 ];
