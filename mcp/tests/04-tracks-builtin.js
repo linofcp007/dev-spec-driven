@@ -14,7 +14,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
 
     // --- the track list itself
-    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy,dist,api,ui,obs" && // 1.17 D: + dist; 1.19 T: + api, ui, obs
+    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs,data" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy,dist,api,ui,obs,data" && // 1.17 D: + dist; 1.19 T: + api, ui, obs; 1.21 F4: + data
       S.TRACK_MARKER.sec === "[SEC]" && S.TRACK_MARKER.privacy === "[PRIVACY]" && S.trackLabel(S.normalizeTracks("privacy sec saas")) === "core +saas +sec +privacy",
       "A2: sec and privacy are valid, composable tracks with English-stable markers, labelled in track order");
     const typo = S.createFeature(a2("typo"), "Typo", "privcy");
@@ -497,7 +497,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const pChk = S.trackPacks(tp, "check");
     const probs = JSON.stringify(pChk);
     ok(!pDist.ok && /reserved/.test(pDist.error) && !pKafka.ok && /reserved/.test(pKafka.error) && /marker-reserved/.test(probs) &&
-      !S.parseTracks("events").tracks.includes("events") && S.trackPacks(tp, "list").builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs",
+      !S.parseTracks("events").tracks.includes("events") && S.trackPacks(tp, "list").builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs,data",
       "1.17 D12: a track pack named dist (or kafka) is refused, one with the marker DIST is invalid (marker-reserved); spec_tracks list names the built-in tracks (got " + js([pDist.error, pKafka.error, probs.slice(0, 300)]) + ")");
 
     // --- D13: project templates — the copied built-ins check clean; a design template with some [DIST] headings needs them all
@@ -1120,12 +1120,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const acIds = [...aReq.matchAll(/\*\*(US-\d+\.AC-\d+)\*\*/g)].map((m) => m[1]);
     const tIds = [...aPlan.matchAll(/^\| (T-\d+) \|/gm)].map((m) => m[1]);
     const aTr = S.traceCheck(all, every.slug), aDoc = S.specDoctor(all, every.slug);
-    const order = ["[SaaS]", "[AI]", "[SEC]", "[PRIVACY]", "[DIST]", "[API]", "[UI]", "[OBS]"].map((m) => aReq.indexOf("#### " + m));
-    ok(every.ok && every.label === "core +tdd +saas +ai +sec +privacy +dist +api +ui +obs" && acIds.length === 32 && new Set(acIds).size === 32 && acIds.includes("US-1.AC-31") &&
-      tIds.length === 32 && new Set(tIds).size === 32 && new Set(aTasks.map((t) => t.number)).size === aTasks.length && order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])) &&
+    // (1.21 F4: + [DATA], US-1.AC-32..35 — eleven tracks, 36 criteria and T-IDs, nine <track>-sections checks)
+    const order = ["[SaaS]", "[AI]", "[SEC]", "[PRIVACY]", "[DIST]", "[API]", "[UI]", "[OBS]", "[DATA]"].map((m) => aReq.indexOf("#### " + m));
+    ok(every.ok && every.label === "core +tdd +saas +ai +sec +privacy +dist +api +ui +obs +data" && acIds.length === 36 && new Set(acIds).size === 36 && acIds.includes("US-1.AC-35") &&
+      tIds.length === 36 && new Set(tIds).size === 36 && new Set(aTasks.map((t) => t.number)).size === aTasks.length && order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])) &&
       !aTr.uncoveredByTasks.length && !aTr.uncoveredByTests.length && !aTr.phantomAcsInTasks.length && !aTr.phantomTestsInTasks.length && !(aTr.testsNotMappedToTasks || []).length &&
-      ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs"].every((t) => chk(aDoc, t + "-sections").status === "fail"),
-      "1.19 T9: all ten tracks — 32 unique criteria (the [API] / [UI] / [OBS] blocks after [DIST], US-1.AC-20..31), 32 unique T-IDs, unique task numbers, every template AC planned and tasked, eight <track>-sections checks (got " +
+      ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"].every((t) => chk(aDoc, t + "-sections").status === "fail"),
+      "1.19 T9: every built-in track — 36 unique criteria (the [API] / [UI] / [OBS] / [DATA] blocks after [DIST], US-1.AC-20..35), 36 unique T-IDs, unique task numbers, every template AC planned and tasked, nine <track>-sections checks (got " +
       js([every.label, acIds.length, tIds.length, order, aTr.uncoveredByTasks, aTr.uncoveredByTests]) + ")");
 
     // --- 1.19 T10: the placeholder corpus stays bounded as tracks are added (every set of at most two optional tracks + all of them):

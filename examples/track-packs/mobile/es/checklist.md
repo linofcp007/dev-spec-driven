@@ -1,0 +1,3 @@
+- Probado en las versiones más antiguas soportadas de iOS y Android y en un dispositivo de gama baja
+- Recorrido en modo avión hecho; un conflicto de sincronización ensayado en dos dispositivos
+- Ficha de la tienda, etiquetas de privacidad (App Store, seguridad de los datos de Google Play) y el plan de despliegue escalonado listos

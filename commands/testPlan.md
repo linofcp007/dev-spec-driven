@@ -24,7 +24,9 @@ commit and the publish, the same message twice (a `property` row), concurrent up
 `property` row), a stale If-Match (412) and the breaking-change diff (`references/api-design-patterns.md`); on +ui a keyboard-only walk-through with an
 automated accessibility check, the form-error behaviour (a `property` row), visual regression of the view's states and the
 failed-load state (`references/ui-design-patterns.md`); on +obs the telemetry of every request (a `property` row), an alert firing in a
-staged failure, a rollback drill and fault injection on a dependency (`references/observability-patterns.md`). Cover edge cases (`EC-n`), NFRs and success criteria (`SC-nnn`) too — `trace_check` warns about the ones no
+staged failure, a rollback drill and fault injection on a dependency (`references/observability-patterns.md`); on +data the data-quality checks on fixture batches and an
+idempotent re-run / backfill of a partition (`property` rows), a stale partition firing the freshness alert and the schema-change
+compatibility check (`references/data-pipeline-patterns.md`). Cover edge cases (`EC-n`), NFRs and success criteria (`SC-nnn`) too — `trace_check` warns about the ones no
 row covers. The Coverage Check must show every AC appears in ≥1 test. Write `test-plan.md` (no template
 placeholders left — the test-plan gate refuses them) and present for approval — no test code yet. See
 `references/test-patterns.md` (Property-Based Tests; Test IDs in test names).

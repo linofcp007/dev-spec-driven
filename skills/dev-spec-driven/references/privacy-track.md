@@ -151,4 +151,5 @@ current list at cnpd.pt). In Spain the equivalent pair is the **AEPD** and the L
 (LOPDGDD). Record the authority that applies in `steering/privacy.md`.
 
 See also: `security-track.md` (Art. 32 security of processing), `ai-safety-patterns.md` (personal data
-sent to model providers), `steering-templates.md`.
+sent to model providers), `data-pipeline-patterns.md` (personal data in a warehouse: retention per layer, erasure across
+derived tables and SCD history), `steering-templates.md`.

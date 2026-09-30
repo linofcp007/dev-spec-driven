@@ -36,7 +36,8 @@ write → outbox / inbox / saga, or an accepted risk), delivery & idempotency, c
 compatibility, error model, pagination / idempotency / concurrency, rate limits & quotas (+api — `references/api-design-patterns.md`); the 5 `[UI]` sections — design-system
 usage, UI states (a state matrix per view), accessibility (WCAG 2.2 AA), responsiveness & i18n, UI performance budget (+ui —
 `references/ui-design-patterns.md`); the 5 `[OBS]` sections — SLIs & SLOs, telemetry, alerting & runbooks, rollout & rollback,
-health & capacity (+obs — `references/observability-patterns.md`). No mandatory section may be blank — an honest "not needed because X" is
+health & capacity (+obs — `references/observability-patterns.md`); the 5 `[DATA]` sections — data contracts & schema evolution,
+data quality, pipeline idempotency & backfills, lineage & ownership, retention & cost (+data — `references/data-pipeline-patterns.md`). No mandatory section may be blank — an honest "not needed because X" is
 acceptable; remove each `> **TODO**` sentinel and template placeholder as you fill it (saving `design.md` reports what
 is still open, and the design approval is refused while a track section, the Constitution Check or a placeholder is
 unfilled). Keep the markers `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]` exactly (English, case-sensitive). In an

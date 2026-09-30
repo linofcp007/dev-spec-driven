@@ -1,0 +1,14 @@
+<!-- O bloco de tarefas de uma feature +mobile em português. -->
+- [ ] Armazenamento offline e fila de sincronização de {{name}} — alterações reenviadas ao reconectar, conflitos resolvidos como desenhado
+  - _Requirements: {{ac1}}, {{ac2}}_
+  - _Makes green: {{t1}}, {{t2}}_
+- [ ] Bloqueio por versão mínima e o pedido de atualização; o lançamento faseado nas lojas com os critérios para o parar
+  - _Requirements: {{ac3}}_
+  - _Makes green: {{t3}}_
+- [ ] Fluxos de permissões — a justificação primeiro, os caminhos de recusa e de revogação
+  - _Requirements: {{ac4}}_
+  - _Makes green: {{t4}}_
+- [ ] Notificações push — a ligação profunda, a opção de saída, sem dados pessoais no ecrã de bloqueio
+  - _Requirements: {{ac5}}_
+  - _Makes green: {{t5}}_
+- [ ] Execução na matriz de dispositivos — o iOS mais antigo suportado e um Android de gama baixa: arranque a frio, memória e bateria medidos face ao orçamento

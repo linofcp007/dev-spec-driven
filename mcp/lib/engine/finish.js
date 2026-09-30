@@ -174,7 +174,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (kind === "bugfix") checks.push(F.checkBug);
   if (tracks.includes("saas")) checks.push(F.checkLoad, F.checkObs);
   if (tracks.includes("ai")) checks.push(F.checkCost, F.checkSafety);
-  for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs"]) if (tracks.includes(tr)) checks.push(...i18n.msg(lng).secPrivacy.finishChecks[tr]);
+  for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs", "data"]) if (tracks.includes(tr)) checks.push(...i18n.msg(lng).secPrivacy.finishChecks[tr]);
 
   // Merge summary from the spec chain (usable as the merge commit message).
   const reqs = readIfExists(path.join(dir, "requirements.md")) || "";

@@ -1261,7 +1261,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const needles = [...acIds, ...testIds, ...impFiles, ...impFiles.map((f) => path.posix.basename(f)).filter((b) => b.length >= 5)];
   // A task proving a +sec / +privacy criterion reads that track's design sections (threat model, authz, retention…).
   // … and a track pack's (1.15) — its sections are the rigor its criteria were written for.
-  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
+  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
   // 1.19 R2 — search before you write: the design's Reuse & Integration entries naming this task's files / folders / ACs, and the
   // existing source files next to its _Implements:_ targets (names only; bounded).
   const reuse = briefReuse(projectDir, designText, mk.implements, acIds);

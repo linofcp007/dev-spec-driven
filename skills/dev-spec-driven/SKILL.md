@@ -6,7 +6,7 @@ description: >
   before coding, fix a reported bug (root cause and a failing regression test first), adopt specs in an
   existing codebase, manage a feature roadmap, or update existing specs after a dev-spec-driven update.
   Tracks: +tdd, +saas (scale, cost), +ai (evals, prompts), +sec, +privacy, +dist,
-  +api, +ui, +obs. Triggers: "spec this", "plan this feature", "implementation plan", "break into tasks",
+  +api, +ui, +obs, +data. Triggers: "spec this", "plan this feature", "implementation plan", "break into tasks",
   "tests first", "fix this bug", "update the specs"; PT "especificar", "plano de implementação",
   "dividir em tarefas", "antes de começar a programar", "corrige este bug", "atualizar as specs"; ES
   "especificar", "plan de implementación", "dividir en tareas", "antes de empezar a programar", "arregla
@@ -31,6 +31,7 @@ and **scale the rigor to the feature**, not the other way around — one pipelin
 | **+api** | 5 mandatory `[API]` sections for a contract other code depends on (versioning, error model, rate limits…) |
 | **+ui** | 5 mandatory `[UI]` sections for a user-facing screen (UI states, WCAG 2.2 AA accessibility, i18n…) |
 | **+obs** | 5 mandatory `[OBS]` sections for a service people depend on (SLOs, alerting & runbooks, rollout…) |
+| **+data** | 5 mandatory `[DATA]` sections for a data pipeline (contracts, data quality, idempotent re-runs & backfills…) |
 | **+your own** | A project track pack in `.specs/tracks/<name>/` (`/spec-tracks`, `references/project-tracks.md`) |
 
 What each active track adds at every phase — criteria, design sections, tests, task markers, done checks:
@@ -51,7 +52,7 @@ project default > en): artifacts, steering stubs and tool messages then come out
 don't translate the scaffold. Keep the **structural tokens** as they are in every language: AC/SC IDs (`US-1.AC-1`,
 `SC-001`), test IDs (`T-01`), task markers (`_Requirements:_`, `_Makes green:_`, `_Implements:_`, `_Verify:_`,
 `_Expect:_`, `_Size:_`, `_Depends:_`), tags (`[US1]`, `[shared]`, `[P]`), track names, the section markers `[SaaS]`
-`[AI]` `[SEC]` `[PRIVACY]` `[DIST]` `[API]` `[UI]` `[OBS]` (case-sensitive: `[sec]` is no marker) and
+`[AI]` `[SEC]` `[PRIVACY]` `[DIST]` `[API]` `[UI]` `[OBS]` `[DATA]` (case-sensitive: `[sec]` is no marker) and
 `[NEEDS CLARIFICATION:]`. EARS keywords may be localized. If the user switches language, follow them.
 
 ## Core Principles
@@ -62,7 +63,7 @@ don't translate the scaffold. Keep the **structural tokens** as they are in ever
 2. **Right rigor for the job.** Tracks compose per feature. Don't TDD a copy change; don't ship a payment path on vibes.
 3. **Traceability end-to-end.** Code → tasks → (tests/evals) → design → requirements → need. Every acceptance
    criterion has a stable ID that later artifacts reference.
-4. **The mandatory sections are mandatory.** On +saas, +ai, +sec, +privacy, +dist, +api, +ui and +obs the track's design
+4. **The mandatory sections are mandatory.** On +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs and +data the track's design
    sections cannot be blank. An honest "not needed because X" is fine; an empty section means "I didn't think about
    it" — the source of every 3AM incident, every breach and every surprise bill.
 5. **Everything is local.** The bundled MCP server runs on your machine. No GitHub Actions, no cloud runners, no
@@ -174,7 +175,8 @@ Decide the mode, then the track set. This is fast (5–10 min) and saves days of
    boundary, who-may-do-what, secrets) · `+privacy` if it collects, stores, shares, profiles or deletes personal data ·
    `+dist` if one write reaches more than one system or delivery, idempotency, concurrency or partial failures matter ·
    `+api` if other code depends on the API's contract · `+ui` if it adds or changes a user-facing screen or flow ·
-   `+obs` if people depend on it staying up (SLOs, alerting, on-call, rollout). **When unsure, turn the track on.**
+   `+obs` if people depend on it staying up (SLOs, alerting, on-call, rollout) · `+data` if it moves data between stores on a
+   schedule or a stream and owns its quality (ETL, a warehouse, backfills). **When unsure, turn the track on.**
    One auth word alone only makes `+sec` "possible"; the classifier's notes say so.
 3. **Present for approval:** mode, active tracks, the signals, blast radius, and (per track) hot-path / autonomy /
    volume / compliance. If the user disagrees with the track set, adjust it now.
@@ -229,7 +231,7 @@ Security · Error Handling · Testing Strategy · **Risks** (likelihood · impac
 breaks a principle; empty is good). Doctor warns `design-tradeoffs` / `design-risks` / `design-reuse` (never blocks).
 `spec_create` always scaffolds `quickstart.md` (a manual acceptance scenario) and `checklist.md` — fill both; optionally
 `research.md`. **Each active track adds its mandatory sections** (+tdd Testability Notes; +saas 5, +ai 10, +sec 5,
-+privacy 6, +dist / +api / +ui / +obs 5 each) — what goes in each: `references/track-checklists.md`.
++privacy 6, +dist / +api / +ui / +obs / +data 5 each) — what goes in each: `references/track-checklists.md`.
 
 Design principles: simplicity over cleverness, consistency with the codebase, known patterns over novelty. Present for
 approval before proceeding.

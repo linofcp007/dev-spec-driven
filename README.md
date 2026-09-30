@@ -45,6 +45,7 @@ feature and composes exactly the rigor it needs:
 | **+api** | API contracts: the contract file (OpenAPI / proto / GraphQL schema), versioning & compatibility (what is breaking, deprecation), problem+json errors with stable codes, pagination / idempotency / concurrency (Idempotency-Key, ETag / If-Match), rate limits & quotas |
 | **+ui** | User interfaces: design-system usage, the UI states every view needs (loading / empty / error / offline…), accessibility (WCAG 2.2 AA), responsiveness & i18n, a performance budget (Core Web Vitals) |
 | **+obs** | Observability & operability: SLIs & SLOs with error budgets and burn-rate alerts, telemetry (metrics, structured logs, traces), alerting & runbooks, rollout & rollback (feature flags, canary), health & capacity |
+| **+data** | Data pipelines & data quality: data contracts & schema evolution, data-quality checks (a bad row quarantined, never loaded), idempotent re-runs & backfills (late-arriving data), lineage & ownership (freshness SLAs), retention & cost |
 
 Tracks **combine**. A Stripe webhook in a multi-tenant SaaS that also summarizes invoices with an
 LLM is `core +tdd +saas +ai`; a signup form that stores personal data is `+privacy` (GDPR, RGPD and HIPAA
@@ -280,6 +281,8 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   criteria, `## [A11Y]` design sections, tasks and test rows, and doctor / the design approval refuse until its sections
   are filled. It is data only (nothing runs; links out of `.specs/` are ignored); a bad pack is reported by `check` and
   ignored. Guide: `skills/dev-spec-driven/references/project-tracks.md`.
+  An example to start from: `examples/track-packs/mobile` (+mobile — offline & sync, OS versions & store rollout, permissions,
+  performance & battery, push notifications; EN / PT / ES) — copy it to `.specs/tracks/mobile/` and run `dev-spec tracks check`.
 
 ### New in 1.14
 
@@ -473,6 +476,7 @@ funcionalidade e compõe exatamente o rigor necessário:
 | **+api** | Contratos de API: o ficheiro do contrato (OpenAPI / proto / esquema GraphQL), versionamento e compatibilidade (o que é incompatível, descontinuação), erros problem+json com códigos estáveis, paginação / idempotência / concorrência (Idempotency-Key, ETag / If-Match), limites de taxa e quotas |
 | **+ui** | Interfaces: uso do design system, os estados de cada vista (a carregar / vazio / erro / offline…), acessibilidade (WCAG 2.2 AA), design responsivo e i18n, um orçamento de desempenho (Core Web Vitals) |
 | **+obs** | Observabilidade e operabilidade: SLIs e SLOs com orçamento de erro e alertas por taxa de consumo, telemetria (métricas, logs estruturados, traces), alertas e runbooks, lançamento e reversão (feature flags, canário), saúde e capacidade |
+| **+data** | Pipelines e qualidade de dados: contratos de dados e evolução do esquema, verificações de qualidade (uma linha errada vai para quarentena, nunca é carregada), reexecuções idempotentes e backfills (dados que chegam atrasados), linhagem e responsáveis (SLAs de atualidade), retenção e custo |
 
 Os tracks **combinam-se**. Um webhook do Stripe num SaaS multi-inquilino que também resume faturas
 com um LLM é `core +tdd +saas +ai`; um formulário de registo que guarda dados pessoais é `+privacy` (o RGPD, o GDPR e
@@ -721,6 +725,8 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   secções `## [A11Y]` do design, as tarefas e as linhas de teste, e o doctor / a aprovação do design recusam até as
   secções estarem preenchidas. São só dados (nada é executado; ligações para fora de `.specs/` são ignoradas); um pack
   inválido é reportado pelo `check` e ignorado. Guia: `skills/dev-spec-driven/references/project-tracks.md`.
+  Um exemplo para começar: `examples/track-packs/mobile` (+mobile — offline e sincronização, versões e lançamento nas lojas,
+  permissões, desempenho e bateria, notificações push; EN / PT / ES) — copie-o para `.specs/tracks/mobile/` e corra `dev-spec tracks check`.
 
 ### Novidades da 1.14
 
@@ -923,6 +929,7 @@ compone exactamente el rigor necesario:
 | **+api** | Contratos de API: el fichero del contrato (OpenAPI / proto / esquema GraphQL), versionado y compatibilidad (qué es incompatible, obsolescencia), errores problem+json con códigos estables, paginación / idempotencia / concurrencia (Idempotency-Key, ETag / If-Match), límites de tasa y cuotas |
 | **+ui** | Interfaces: uso del design system, los estados de cada vista (cargando / vacío / error / sin conexión…), accesibilidad (WCAG 2.2 AA), diseño adaptable e i18n, un presupuesto de rendimiento (Core Web Vitals) |
 | **+obs** | Observabilidad y operabilidad: SLIs y SLOs con presupuesto de errores y alertas por tasa de consumo, telemetría (métricas, logs estructurados, trazas), alertas y runbooks, despliegue y reversión (feature flags, canario), salud y capacidad |
+| **+data** | Pipelines y calidad de datos: contratos de datos y evolución del esquema, comprobaciones de calidad (una fila errónea va a cuarentena, nunca se carga), reejecuciones idempotentes y backfills (datos que llegan tarde), linaje y responsables (SLAs de frescura), retención y coste |
 
 Los tracks **se combinan**. Un webhook de Stripe en un SaaS multiinquilino que además resume
 facturas con un LLM es `core +tdd +saas +ai`; un formulario de registro que guarda datos personales es `+privacy` (el
@@ -1176,6 +1183,8 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   las secciones `## [A11Y]` del diseño, las tareas y las filas de prueba, y doctor / la aprobación del diseño se niegan
   hasta que las secciones estén rellenadas. Son solo datos (nada se ejecuta; los enlaces fuera de `.specs/` se ignoran);
   un pack no válido lo informa `check` y se ignora. Guía: `skills/dev-spec-driven/references/project-tracks.md`.
+  Un ejemplo para empezar: `examples/track-packs/mobile` (+mobile — sin conexión y sincronización, versiones y despliegue en
+  las tiendas, permisos, rendimiento y batería, notificaciones push; EN / PT / ES) — cópielo en `.specs/tracks/mobile/` y ejecute `dev-spec tracks check`.
 
 ### Novedades de la 1.14
 

@@ -28,7 +28,7 @@ the whole library.
 
 **Writing the spec**
 - `references/ears-guide.md` — full EARS syntax, all 5 patterns
-- `references/steering-templates.md` — all 15 steering-file templates (incl. `distributed.md`, `api.md`, `ui.md` and
+- `references/steering-templates.md` — all 16 steering-file templates (incl. `distributed.md`, `api.md`, `ui.md`, `data.md` and
   the optional `glossary.md`), scoped steering (front matter inclusion modes), project templates in `.specs/templates/`
 - `references/example-spec.md` — end-to-end example, `core +tdd` auth · `references/example-spec-combined.md` —
   `core +tdd +saas +ai`
@@ -61,3 +61,6 @@ the whole library.
   performance budgets)
 - +obs: `references/observability-patterns.md` (SLOs and burn-rate alerts, telemetry, runbooks, feature flags,
   progressive delivery, operability tests)
+- +data: `references/data-pipeline-patterns.md` (data contracts and schema evolution, quality checks and quarantine,
+  idempotent loads, backfills, late-arriving data, partitioning, facts / dimensions / SCD types, lineage, freshness SLAs,
+  retention and cost, testing pipelines)

@@ -72,6 +72,9 @@ ${a.summary ? "## Summary\n" + a.summary + "\n" : ""}`
       const obsAc = a.tracks.includes("obs")
         ? "\n\n#### [OBS] Acceptance Criteria (EARS)\n28. **US-1.AC-28** — THE SYSTEM SHALL emit [the request metric] with its latency, outcome and a correlation ID for every [request], and log each error with that correlation ID and no personal data.\n29. **US-1.AC-29** — WHEN the error-budget burn rate of [the SLO] exceeds [14.4]× over [one hour], THE SYSTEM SHALL page the on-call engineer with a link to the runbook.\n30. **US-1.AC-30** — IF the canary's error rate exceeds [the baseline] by [N] percentage points, THEN THE SYSTEM SHALL stop the rollout and roll back to the previous version automatically.\n31. **US-1.AC-31** — WHILE [a dependency] is unavailable, THE SYSTEM SHALL report itself not ready (readiness check) while staying live, and recover without a restart once it is back."
         : "";
+      const dataAc = a.tracks.includes("data") // +data (1.21 F4)
+        ? "\n\n#### [DATA] Acceptance Criteria (EARS)\n32. **US-1.AC-32** — WHEN a batch contains a row that violates [a data-quality rule], THE SYSTEM SHALL quarantine that row with the rule it failed and SHALL NOT load it into [the target table].\n33. **US-1.AC-33** — IF the job is re-run for a partition that was already loaded, THEN THE SYSTEM SHALL produce the same result as a single run, with no duplicate and no missing rows (an idempotent re-run and backfill).\n34. **US-1.AC-34** — IF the newest data in [the table] is older than [its freshness SLA], THEN THE SYSTEM SHALL alert [the owner] and mark the table stale for its consumers.\n35. **US-1.AC-35** — WHEN the schema of [the source] changes, THE SYSTEM SHALL accept an additive, backward-compatible change and SHALL reject a breaking change (a removed or renamed column, a narrowed type) before any row reaches [the consumers]."
+        : "";
       return (
 `# Feature: ${a.name}
 
@@ -92,7 +95,7 @@ Each story must deliver standalone value if shipped alone.
 1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
 2. **US-1.AC-2** — WHILE [state], WHEN [trigger] THE SYSTEM SHALL [behavior]
 3. **US-1.AC-3** — IF [error condition] THEN THE SYSTEM SHALL [recovery]
-4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}
+4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}${dataAc}
 
 ### US-2 (P2): [Story Title]
 **As a** [role], **I want** [capability], **so that** [benefit].
@@ -341,6 +344,29 @@ Input types · size/count limits · token counting per type · validation pipeli
 ## [OBS] Health & Capacity
 > **TODO** — replace with real values (remove this line when done).
 - Liveness vs readiness checks (what each verifies — never a dependency in liveness) · the capacity signals (saturation, queue depth, pool usage) and their thresholds · the expected load and where the first bottleneck is.
+`;
+      }
+      if (track === "data") {
+        return `
+## [DATA] Data Contracts & Schema Evolution
+> **TODO** — replace with real values (remove this line when done).
+- Each dataset produced or consumed: its producer, its consumers and the contract's owner · the schema (columns, types, nullability, keys, units) and where it lives (a schema file, a dbt model's YAML, a registry) · the compatibility rule (additive changes only; a removed or renamed column → a new version with a deprecation window) · how a breaking change is caught before it ships.
+
+## [DATA] Data Quality
+> **TODO** — replace with real values (remove this line when done).
+- The checks per dataset: not-null keys, uniqueness, accepted values and ranges, referential integrity, row-count and volume anomalies, freshness · where each runs (at ingestion, after each transformation, before publishing) · what a failure does (quarantine the rows, stop the load, alert the owner) — no bad row reaches a consumer silently.
+
+## [DATA] Pipeline Idempotency & Backfills
+> **TODO** — replace with real values (remove this line when done).
+- The unit of work (a partition: a day, an hour, a batch ID) and how a re-run replaces it (overwrite the partition or MERGE on a key — never a blind append) · late-arriving data: the lookback window and how late rows are merged · the backfill procedure (range, parallelism, cost, a dry run, who approves it) · large volumes: references/distributed-data-patterns.md.
+
+## [DATA] Lineage & Ownership
+> **TODO** — replace with real values (remove this line when done).
+- Sources → transformations → consumers (a lineage diagram or the dbt DAG) · the owner of each dataset and who is told when it breaks · the freshness SLA consumers rely on · the history each table keeps (slowly changing dimensions: type 1 overwrites, type 2 keeps versions).
+
+## [DATA] Retention & Cost
+> **TODO** — replace with real values (remove this line when done).
+- Retention per dataset and storage tier (the raw zone vs the curated one; hot / warm / cold) — personal data follows references/privacy-track.md · partitioning and clustering so a query scans only what it needs · the expected storage and query cost per month and the alert when it drifts.
 `;
       }
       return "";
@@ -603,6 +629,21 @@ ${phases}`
   - _Requirements: US-1.AC-28, US-1.AC-29, US-1.AC-30, US-1.AC-31_
 `;
       }
+      if (a.track === "data") {
+        return `
+## Story US-1 — Data Pipeline
+- [ ] ${id()}. [US1] Data contract first — each dataset's schema (columns, types, nullability, keys), owner and compatibility rule in the repo, reviewed before the transformations
+  - _Requirements: US-1.AC-35_${greenLine(a.green, "US-1.AC-35")}
+- [ ] ${id()}. [US1] Data-quality checks — not-null, unique, accepted ranges, row counts and freshness at ingestion and before publishing; a failing row quarantined with its rule, never loaded
+  - _Requirements: US-1.AC-32, US-1.AC-34_${greenLine(a.green, "US-1.AC-32", "US-1.AC-34")}
+- [ ] ${id()}. [US1] Idempotent loads — each run replaces its partition (overwrite or MERGE on a key, never a blind append); late-arriving rows merged within the lookback window
+  - _Requirements: US-1.AC-33_${greenLine(a.green, "US-1.AC-33")}
+- [ ] ${id()}. [US1] Backfill — the procedure for a date range (parallelism, cost, a dry run), rehearsed on one partition and compared with a single run
+  - _Requirements: US-1.AC-33_
+- [ ] ${id()}. [US1] Lineage, ownership and retention — sources → transformations → consumers documented, an owner per dataset, the retention and partitioning from design.md applied
+  - _Requirements: US-1.AC-32, US-1.AC-33, US-1.AC-34, US-1.AC-35_
+`;
+      }
       return "";
     },
 
@@ -720,7 +761,11 @@ ${a.summary || "[one line: the bug being fixed]"}
           loadError: "a failed load: an error with Retry, the content already shown kept",
           telemetry: "every request emits the metric, a structured log line and a trace with one correlation ID; no personal data in the log",
           burnAlert: "a staged failure burns the error budget: the burn-rate alert fires and pages with the runbook link", rollbackDrill: "rollback drill: a canary whose error rate crosses the threshold stops the rollout and rolls back",
-          readiness: "fault injection: a dependency down → readiness fails, liveness passes, recovery without a restart" }, acs);
+          readiness: "fault injection: a dependency down → readiness fails, liveness passes, recovery without a restart",
+          dataQuality: "data-quality checks on fixture batches: a null key, a duplicate and an out-of-range row are quarantined with their rule, the valid rows load",
+          idempotentRerun: "a partition re-run or backfilled twice leaves the same rows as one run — no duplicate, no gap",
+          freshness: "a partition older than the freshness SLA: the freshness check fails and alerts the owner",
+          schemaChange: "schema-change compatibility: an added optional column passes, a removed / renamed column or a narrowed type is rejected before the load" }, acs);
       return (
 `# Test Plan: ${name}
 
@@ -847,6 +892,7 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
       if (a.tracks.includes("api")) items.push("API: 5 mandatory design sections filled (no TODO) — the contract file (OpenAPI / .proto / GraphQL schema) is in the repo and named by a task's Implements marker.", "API: errors are problem+json with stable codes; creates take an Idempotency-Key; updates honour If-Match; list endpoints page with a stable cursor.", "API: contract tests and the breaking-change diff against the published version green on a local run; anything removed is deprecated with a Sunset date.");
       if (a.tracks.includes("ui")) items.push("UI: 5 mandatory design sections filled (no TODO) — every state of the state matrix designed; new components entered through the design system.", "UI: WCAG 2.2 AA — the automated accessibility check clean on a local run, plus a manual keyboard and screen-reader pass with its findings fixed.", "UI: responsive at every breakpoint, strings in the catalogue (text expansion, RTL checked); LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 measured.");
       if (a.tracks.includes("obs")) items.push("OBS: 5 mandatory design sections filled (no TODO) — each SLO has an error budget, each alert a runbook, the rollback criteria are numbers.", "OBS: the metrics, structured logs (correlation ID, no personal data) and traces the design names are emitted — seen, not assumed.", "OBS: an alert fired in a staged failure, a rollback drill done and the health checks verified with a dependency down.");
+      if (a.tracks.includes("data")) items.push("DATA: 5 mandatory design sections filled (no TODO) — every dataset has a schema, an owner and a compatibility rule; every check says what a failure does.", "DATA: the data-quality checks run at ingestion and before publishing — a bad row quarantined, never loaded; the freshness alert reaches the owner.", "DATA: a partition re-run and a backfill rehearsed on real-sized data give the same rows as one run; retention and partitioning applied as designed.");
       items.push("Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Tick before calling the feature done.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -916,6 +962,9 @@ const steering = {
     // 1.19 T — +ui: the team's defaults for the design system, the states, accessibility, responsiveness / i18n and the performance budget.
     "ui.md":
       "# UI Standards\n\n## Design System\n- Components: [library / Storybook URL] · tokens: [colour, spacing, type — where they live] · a new component enters the system first (documented, reviewed), never as a one-off.\n\n## States\n- Every view designs: loading · empty · error (with Retry) · partial · offline · permission denied · success.\n- Forms: inline errors + a summary, values kept on an error, the submit button never the only feedback.\n\n## Accessibility\n- Target: WCAG 2.2 AA · keyboard operable, visible focus · every control named · contrast 4.5:1 (text) / 3:1 (UI) · targets ≥ 24×24 px · prefers-reduced-motion honoured.\n- Checks: [axe / Lighthouse command] on every local run · a manual keyboard + screen-reader pass ([NVDA / VoiceOver]) per feature.\n\n## Responsiveness & i18n\n- Breakpoints: [360 / 768 / 1280 px] · text expansion +30–40 % · RTL: [yes / no] · dates, numbers and currency through the locale.\n\n## Performance Budget\n- Core Web Vitals (p75): LCP ≤ 2.5 s · INP ≤ 200 ms · CLS ≤ 0.1 · JS per route ≤ [170 KB gz] · measured by: [Lighthouse locally / RUM].\n",
+    // 1.21 F4 — +data: the team's defaults for data contracts, quality checks, idempotent loads and backfills, lineage, retention and cost.
+    "data.md":
+      "# Data Pipeline Standards\n\n## Contracts & Schemas\n- Where schemas live: [dbt YAML | a schema registry | schemas/] · compatibility: additive changes only; a breaking change ships as a new version with [N weeks] of deprecation.\n- Naming: [snake_case] tables and columns · timestamps in UTC · the layers: [raw → staging → marts].\n\n## Data Quality\n- Every dataset: not-null and unique keys, accepted values and ranges, row-count anomaly checks · they run at ingestion and before publishing · a failure: [quarantine the rows | stop the load] and alert the owner.\n- Tool: [dbt tests | Great Expectations | SQL checks] · command: [command].\n\n## Idempotency & Backfills\n- Every job re-runnable for a partition: overwrite the partition or MERGE on a key — never a blind append · late-arriving data: a lookback window of [N days].\n- Backfills: a dry run first · at most [N] partitions in parallel · the cost estimated and approved by [role].\n\n## Lineage & Ownership\n- Every dataset has an owner and a freshness SLA · lineage lives in: [dbt docs | the data catalog] · consumers hear of a breaking change [N days] ahead.\n\n## Retention & Cost\n- Retention per layer: raw [N days] · curated [N months] — personal data per privacy.md · partitioned by [date], clustered by [key] · cost budget: [$ per month], with an alert at [N] %.\n",
     // 1.16 Q3 — the glossary (steering_scaffold glossary.md; init never creates it). `_Avoid:_` is English-stable in every language.
     "glossary.md":
       "# Glossary\n\n<!-- The product's ubiquitous language: one entry per domain term — the word the specs use, what it means here, and the\n     words NOT to use for it. spec_clarify asks about every avoided word found in a feature's requirements.md / design.md,\n     spec_doctor warns (check `glossary`) and spec_task_brief quotes the entries a task's criteria use.\n     One entry per line (keep the `_Avoid:_` marker in English), e.g.:\n     - **Customer** — a person or company with a signed contract. _Avoid: client, user_ -->\n\n- **[Term]** — [what it means in this product]. _Avoid: [word], [word]_\n",
@@ -1010,7 +1059,7 @@ const msg = {
       sameSlug: "New name is the same slug.",
       alreadyExists: (slug) => `'${slug}' already exists.`,
       badAction: "action must be one of: remove | archive | rename | restore | flow",
-      badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api | ui | obs",
+      badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
       cycle: (chain) => `Circular dependency: ${chain}`,
       nameRequired: "name required",
       noSpecs: (root) => `No .specs/ at ${root}`,
@@ -1034,7 +1083,8 @@ const msg = {
       possible: (t, sig) => `Possible +${t} — weak signal '${sig}' (needs corroboration; not auto-enabled).`,
       // (1.19 T) what an anchor names, per track — +dist's wording unchanged
       genericOnly: (t, list) => `Possible +${t} — only app-level words (${list}): none names ${({ api: "an API contract (a public API, OpenAPI / GraphQL / gRPC, a breaking change…)",
-        ui: "a UI concern of its own (a design system, accessibility, a UI component, an empty or loading state…)", obs: "an operability concern (an SLO, alerting, on-call, a runbook, a rollout…)" })[t] ||
+        ui: "a UI concern of its own (a design system, accessibility, a UI component, an empty or loading state…)", obs: "an operability concern (an SLO, alerting, on-call, a runbook, a rollout…)",
+        data: "a data pipeline concern (a warehouse, an ETL / ELT job, data-quality checks, a backfill, lineage…)" })[t] ||
         "a second system (a broker, another service, a webhook…)"}; not auto-enabled.`,
       keptOff: (t, kw) => `+${t} kept off — '${kw}' appeared negated.`,
       onAlthough: (t, quoted, list) => `+${t} is ON although ${quoted} appeared negated — enabled by: ${list}. Confirm this is intentional.`,
@@ -2084,8 +2134,9 @@ const msg = {
     secPrivacy: {
       // Display names of the [SEC] / [PRIVACY] design sections — merged into sectionNames after MSG (EN: the canonical names).
       sectionNames: {},
-      allFilled: { sec: "all 5 filled", privacy: "all 6 filled", dist: "all 5 filled", api: "all 5 filled", ui: "all 5 filled", obs: "all 5 filled" }, // doctor's sec-sections / privacy-sections / dist-sections / api-sections pass detail
-      statusSections: { sec: (list) => `Security sections: ${list}`, privacy: (list) => `Privacy sections: ${list}`, dist: (list) => `Data consistency sections: ${list}`, api: (list) => `API contract sections: ${list}`, ui: (list) => `UI sections: ${list}`, obs: (list) => `Operability sections: ${list}` }, // `dev-spec status`
+      allFilled: { sec: "all 5 filled", privacy: "all 6 filled", dist: "all 5 filled", api: "all 5 filled", ui: "all 5 filled", obs: "all 5 filled", data: "all 5 filled" }, // doctor's sec-sections / privacy-sections / dist-sections / api-sections pass detail
+      statusSections: { sec: (list) => `Security sections: ${list}`, privacy: (list) => `Privacy sections: ${list}`, dist: (list) => `Data consistency sections: ${list}`, api: (list) => `API contract sections: ${list}`, ui: (list) => `UI sections: ${list}`, obs: (list) => `Operability sections: ${list}`,
+        data: (list) => `Data pipeline sections: ${list}` }, // `dev-spec status`
       finishChecks: { // spec_finish `checks`: what only a fresh run or a human can confirm
         sec: ["+sec: SAST, dependency audit and secret scan clean on a fresh local run; every abuse-case test green.",
           "+sec: threat model re-checked against the final code — no new entry point or trust boundary left unmitigated."],
@@ -2099,6 +2150,8 @@ const msg = {
           "+ui: the performance budget measured on the final build (LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1) and the visual regression of the states reviewed."],
         obs: ["+obs: an alert fired in a staged failure and the rollback drill done on the final build; the dashboards and runbooks the alerts link exist.",
           "+obs: the metrics, logs and traces the design names seen emitting from the final build — no personal data in logs or traces."],
+        data: ["+data: the data-quality checks, a partition re-run and a backfill rehearsal green on a fresh run against real-sized data — the same rows as one run, bad rows quarantined.",
+          "+data: every dataset the final code writes matches its contract (schema, owner, freshness SLA) and the lineage, retention and partitioning in design.md."],
       },
       clarify: { // spec_clarify questions for the track (asked while requirements.md says nothing about them)
         secAccess: "Specify what an unauthenticated or unauthorized caller gets (IF … THEN THE SYSTEM SHALL deny …) and the ASVS level the feature targets.",
@@ -2216,7 +2269,7 @@ const msg = {
       initJson: (a) => `// Track pack +${a.name} — a project-defined track (dev-spec 1.15). Data only: nothing in this folder is run.
 // Guide: references/project-tracks.md · validate it: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy dist api ui obs).
+  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy dist api ui obs data).
   "name": "${a.name}",
   // The stable, case-sensitive marker of its design sections, criteria and task block: [${a.token}].
   "marker": "${a.token}",
