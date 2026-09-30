@@ -441,8 +441,9 @@ function listLink(text, from, to, es) {
 // subscription", "must not lose payments", "never overwrites the ledger" — the verb is the requirement), a wished verb ("We don't want to
 // lose payments") or a hazard ("don't want duplicate payments", "pagamentos duplicados"), a relative clause ("Users who don't pay…",
 // "Utilizadores que não pagam…"), a condition ("If we don't add rate limiting…", "…unless the admin asks"), a nominal negator inside a
-// negated predicate ("We won't ship without a canary release": the canary release is required), and expose / embed of a protected head
-// ("must not embed OAuth client secrets", "must not expose GraphQL introspection", "Logs must not expose personal data" — PROTECTED_HEADS).
+// negated predicate ("We won't ship without a canary release": the canary release is required), and a negated verb whose object's head
+// is data to protect ("must not embed OAuth client secrets", "must not expose GraphQL introspection", "The email doesn't include personal
+// data" — PROTECTED_HEADS, whatever the verb and the subject).
 // negationKind() → "exclude" | "require" | "none" (a verb negation or anything unsure); words: lower-case, the negator at j, the item at end.
 const GOVERN_MAX = 5;
 const GOVERN_BOUNDARY = /[.!?;:,\n]/;
@@ -472,7 +473,7 @@ const GOVERN_ADOPT = new Set([
   "offering", "provide", "provides", "providing", "ship", "ships", "create", "creates", "creating", "necessary", "involve", "involves",
   "involving", "envolve", "envolvem", "implica", "implicam", "involucra", "involucran",
   // 1.21 verify R2 — enabling, installing, embedding, exposing: "must not enable feature flags", "should not bundle Kafka", "must not
-  // expose GraphQL" exclude the technology (expose / embed: not for a +sec / +privacy keyword — GOVERN_EXPOSE)
+  // expose GraphQL" exclude the technology (never data to protect — PROTECTED_HEADS)
   "enable", "enables", "enabling", "activate", "activates", "activating", "turn", "install", "installs", "installing", "embed", "embeds",
   "embedding", "bundle", "bundles", "bundling", "expose", "exposes", "exposing",
   // PT
@@ -506,13 +507,16 @@ const GOVERN_ADOPT = new Set([
   "precisará", "precisarão", "necessitará", "necessitarão", "utilizarão", "terão", "disponibilizará", "incorporarão", "introduzirá",
   "exporá", "acrescentará",
 ]);
-// The adoption verbs whose object may be data to PROTECT: expose / embed of a protected head noun (PROTECTED_HEADS — a secret, a key, a
-// token, credentials, a password, personal data, PII, introspection, internals, stack traces + PT / ES) is the requirement, never an
-// exclusion: "The frontend must not embed OAuth client secrets" keeps +tdd, "The API must not expose GraphQL introspection" keeps +api;
-// "We must not expose GraphQL" excludes it (1.21 verify N3 — by the phrase's head noun, never by the keyword's track).
+// DATA TO PROTECT: a negated verb whose object's head noun is protected (PROTECTED_HEADS — a secret, a key, a token, credentials, a
+// password, a card number, personal data, PII, introspection, internals, stack traces + PT / ES) states the requirement, never an
+// exclusion — whatever the verb (include / contain / send / show / return / log / store / expose / embed / use…) and the subject: "The
+// frontend must not embed OAuth client secrets" keeps +tdd, "The API must not expose GraphQL introspection" keeps +api, "The email doesn't
+// include personal data" keeps +privacy, "The URL does not include the session token" keeps +tdd; "We must not expose GraphQL" excludes it
+// (1.21 verify N3, generalised in verify P3 — by the phrase's head noun, never by the keyword's track: protectedHead()). The N3 verbs,
+// expose / embed (GOVERN_EXPOSE), read any protected word in the phrase as before ("must not expose the secrets manager" keeps +sec).
 const GOVERN_EXPOSE = new Set(["expose", "exposes", "exposing", "embed", "embeds", "embedding", "expor", "expõe", "expomos", "exporemos", "exponer",
   "expone", "exponemos", "expondremos", "incrustar", "incrusta", "incrustamos", "incorporar", "incorpora", "incorporamos", "incorporaremos"]);
-const PROTECTED_HEADS = /(?<![\p{L}])(?:secrets?|keys?|tokens?|credentials?|passwords?|passphrases?|personal data|pii|introspection|internals|stack traces?|segredos?|chaves?|credenciais|credencial|senhas?|palavras?-passe|dados pessoais|secretos?|claves?|credenciales|contraseñas?|datos personales|introspe(?:c)?ção|introspecci[óo]n)(?![\p{L}])/iu;
+const PROTECTED_HEADS = /(?<![\p{L}])(?:secrets?|keys?|tokens?|credentials?|passwords?|passphrases?|card numbers?|personal data|pii|introspection|internals|stack traces?|segredos?|chaves?|credenciais|credencial|senhas?|palavras?-passe|n[úu]meros? d[oe] cart[ãa]o|dados pessoais|secretos?|claves?|credenciales|contraseñas?|n[úu]meros? de tarjeta|datos personales|introspe(?:c)?ção|introspecci[óo]n)(?![\p{L}])/iu;
 // The negators that negate a noun phrase (EN "no" too; ES "no" negates a verb)
 const NOMINAL_NEGATORS = new Set(["without", "sem", "sin", "nor", "neither", "nem", "ni", "skip", "exclude", "avoid", "omit", "dispensa", "prescinde"]);
 // A hazard's modifier: the negated phrase is the concern, never an exclusion ("We don't want duplicate payments", "Não queremos pagamentos
@@ -551,14 +555,21 @@ const PTES_GOVERN_WORDS = new Set(["sem", "sin", "não", "nao", "nunca", "jamás
   "querem", "querer", "pretendemos", "pretendo", "pretende", "pretendem", "pretender", "planeamos", "planeio", "planeia", "planejamos", "planeja",
   "planejam", "tencionamos", "tenciona", "quiero", "quiere", "quieren", "pensamos", "pienso", "piensa", "piensan", "planeo", "planea", "planean"]);
 // opts: contrast (the negator opens its segment after a comma, or EN "not" opens the sentence — "Postgres, not MongoDB": nominal),
-// protectedHead (a function, called only for an expose / embed verb: the object phrase has a PROTECTED_HEADS noun — the verb is then
-// no adoption verb). Linear in end - j.
+// protectedHead (a function of `loose` — an expose / embed verb in the stretch —, called at most once and only for a VERB negation — a
+// verbal negator, or an adoption verb after a nominal one: "without exposing secrets", "No need for personal data" —: the object phrase
+// has a protected head, so the negation is the requirement: "require"). Linear in end - j.
 function negationKind(words, j, end, lang, opts = {}) {
   const base = i18n.baseLang(lang);
   let ptes = base === "pt" || base === "es";
   const w = words[j];
   if (PTES_GOVERN_WORDS.has(w)) ptes = true;
   const nominal = NOMINAL_NEGATORS.has(w) || (w === "no" && base !== "es") || !!opts.contrast;
+  let guard;
+  const guarded = () => {
+    if (guard === undefined) guard = !!(opts.protectedHead && opts.protectedHead(words.slice(j + 1, end).some((x) => GOVERN_EXPOSE.has(x))));
+    return guard;
+  };
+  if (!nominal && guarded()) return "require"; // 1.21 verify P3: "The email doesn't include personal data", "O email não inclui…"
   let deontic = false, aux = false;
   if (/n['’]t$/.test(w)) { if (NT_DEONTIC.has(w.replace(/n['’]t$/, ""))) deontic = true; else aux = true; }
   else if (w === "cannot" || NEVER_WORDS.has(w)) deontic = true; // "never" states how the system behaves (NEVER_WORDS)
@@ -571,7 +582,10 @@ function negationKind(words, j, end, lang, opts = {}) {
   for (let i = j + 1; i < stop; i++) {
     const x = words[i];
     if (passWord(x)) { prevTo = x === "to"; continue; }
-    if (GOVERN_ADOPT.has(x) && !(GOVERN_EXPOSE.has(x) && opts.protectedHead && opts.protectedHead())) { adopted = true; prevTo = false; continue; }
+    if (GOVERN_ADOPT.has(x)) {
+      if (guarded()) return "require"; // a verb after a nominal negator: "without exposing secrets", "El correo no incluye datos personales"
+      adopted = true; prevTo = false; continue;
+    }
     if (!adopted && GOVERN_DEONTIC.has(x)) { deontic = true; prevTo = false; continue; }
     if (!adopted && GOVERN_AUX.has(x)) { aux = true; if (GOVERN_WANT.has(x)) want = true; if (PTES_GOVERN_WORDS.has(x)) ptes = true; prevTo = false; continue; }
     // any other word is a verb or a noun that ends the negated phrase — or ONE modifier right before the keyword after an adoption
@@ -625,11 +639,27 @@ function negationBlocked(text, words, j, end, pt) {
   const next = (after.match(/[\p{L}\p{N}'’-]+/u) || [""])[0].toLowerCase();
   return HAZARD_MODS.has(next);
 }
-// The object phrase of an expose / embed verb has a protected head: the item and up to four words after it (to a preposition)
-function protectedHead(text, start, end) {
+// The negated verb's object phrase has a protected HEAD: the item and up to four words after it (to a preposition). A protected word is
+// no head when it only modifies another noun (1.21 verify P3 — now that any verb reads it): an EN compound's head after it ("token cost",
+// "secrets manager", "credential stuffing" — PROTECTED_MODIFIED), a PT / ES head before it, linked by de / do / da ("custo de tokens",
+// "gestão de segredos"; "token de acesso", "chave de API", "dados pessoais" are data to protect), and the words that only look like it
+// (design tokens, an idempotency key, a primary / foreign key — NOT_PROTECTED). `loose` (an expose / embed verb, N3): any protected word.
+const PROTECTED_MODIFIED = new Set(["cost", "costs", "manager", "managers", "management", "stuffing", "usage", "count", "limit", "limits",
+  "budget"]);
+const NOT_PROTECTED = /(?<![\p{L}])(?:design tokens?|idempotency[- ]keys?|primary keys?|foreign keys?)(?![\p{L}])/giu;
+const PROTECTED_HEADS_ALL = new RegExp(PROTECTED_HEADS.source, "giu");
+const RE_HEAD_INITIAL = /(?:^|\s)(?:de|do|da|dos|das|del)\s/i;
+function protectedHead(text, start, end, loose) {
   const after = (cueAfter(text, end, GOVERN_BOUNDARY).match(/[\p{L}\p{N}'’-]+/gu) || []).slice(0, 4);
   const cut = after.findIndex((x) => GOVERN_PREP.has(x.toLowerCase()));
-  return PROTECTED_HEADS.test(text.slice(start, end) + " " + (cut < 0 ? after : after.slice(0, cut)).join(" "));
+  const phrase = text.slice(start, end) + " " + (cut < 0 ? after : after.slice(0, cut)).join(" ");
+  if (loose) return PROTECTED_HEADS.test(phrase);
+  const p = phrase.replace(NOT_PROTECTED, " ");
+  for (const m of p.matchAll(PROTECTED_HEADS_ALL)) {
+    const next = (p.slice(m.index + m[0].length).match(/[\p{L}\p{N}'’-]+/u) || [""])[0].toLowerCase();
+    if (!PROTECTED_MODIFIED.has(next) && !RE_HEAD_INITIAL.test(p.slice(0, m.index))) return true;
+  }
+  return false;
 }
 // WHOSE ADOPTION IS NEGATED (1.21 verify P1) — a verbal negation of an adoption verb excludes only when its SUBJECT is the one
 // designing: the first person ("We don't use Kafka", "Não usamos Kafka", "No usaremos ningún LLM"), the system being built ("The
@@ -852,7 +882,7 @@ function negationOf(text, start, end, lang, cased) {
   if (w === "no" && j + 1 < words.length && NEG_FILLER.has(words[j + 1]) && !NEG_FILLER_EN.has(words[j + 1])) return null;
   if (negationBlocked(text, words, j, end, pt)) return null;
   const contrast = j === 0 && (seg.afterComma || (w === "not" && seg.sentenceStart));
-  const k = negationKind(words, j, words.length, lang, { contrast, protectedHead: () => protectedHead(text, start, end) });
+  const k = negationKind(words, j, words.length, lang, { contrast, protectedHead: (loose) => protectedHead(text, start, end, loose) });
   if (k !== "exclude") return null;
   // (1.21 verify P1) a role's / a plan's negated adoption is an access or entitlement rule: the track stays
   const from = subjectDecides(words, j, lang, contrast);
@@ -877,7 +907,7 @@ function conjExcluded(text, start, end, lang) {
   const contrast = j === 0 && (seg.afterComma || (words[j] === "not" && seg.sentenceStart));
   // (a verb negation — "require" — is continued by the conjunction; a noun phrase — "Sem integração externa nem X" — keeps it; a role's
   // or a plan's negated adoption — "Guests can't use the checkout nor the cart" — keeps the track: 1.21 verify P1)
-  if (negationKind(words, j, words.length, lang, { contrast, protectedHead: () => protectedHead(text, start, end) }) === "require") return false;
+  if (negationKind(words, j, words.length, lang, { contrast, protectedHead: (loose) => protectedHead(text, start, end, loose) }) === "require") return false;
   const from = subjectDecides(words, j, lang, contrast);
   return !(from >= 0 && subjectKeeps(text, start, words, j, from, pt));
 }

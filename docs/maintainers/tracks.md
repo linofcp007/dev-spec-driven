@@ -327,10 +327,19 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   the negation's own stretch, not ended by a then — "If we don't add rate limiting, the API will be abused", *"Se não
   adicionarmos…", "Si no añadimos…"*; `RE_COND_AFTER` "…unless the admin asks", *a menos que, salvo que*), a nominal negator
   inside a negated predicate ("We won't ship without a canary release", "Nobody should access the admin API without SSO": a
-  double negation — never for nor / nem / ni, which continue one); expose / embed of a protected HEAD noun (`PROTECTED_HEADS`:
-  secrets, keys, tokens, credentials, passwords, personal data, PII, introspection, internals, stack traces + PT / ES — by the
-  phrase's head, never by the keyword's track: "The frontend must not embed OAuth client secrets" keeps +tdd, "The API must not
-  expose GraphQL introspection" keeps +api, "Logs must not expose personal data" +privacy). Its readers: every match's
+  double negation — never for nor / nem / ni, which continue one); a negated VERB whose object's head noun is data to protect
+  (`PROTECTED_HEADS`: secrets, keys, tokens, credentials, passwords, card numbers, personal data, PII, introspection, internals,
+  stack traces + PT / ES — by the phrase's head, never by the keyword's track; 1.21 verify N3 for expose / embed, generalised in
+  verify P3 to ANY verb and any subject — include / contain / send / show / return / log / store / use…, a verbal negator or an
+  adoption verb after a nominal one: `negationKind()` asks `protectedHead()` once and answers "require"): "The frontend must not
+  embed OAuth client secrets" keeps +tdd, "The API must not expose GraphQL introspection" keeps +api, "The email doesn't include
+  personal data", *"O email não inclui dados pessoais", "El correo no incluye datos personales"* keep +privacy, "The URL does
+  not include the session token" keeps +tdd; a nominal "no personal data" with no verb still excludes. For any verb but the N3
+  ones (`GOVERN_EXPOSE` expose / embed, which read any protected word as before) a protected word must be the HEAD: not an EN
+  compound's modifier (`PROTECTED_MODIFIED`: "token cost", "secrets manager", "credential stuffing"), not after a PT / ES head
+  linked by de / do / da ("custo de tokens", *"gestão de segredos"*; *"token de acesso", "chave de API"* are data to protect),
+  and not a look-alike (`NOT_PROTECTED`: design tokens, an idempotency key, a primary / foreign key) — "We won't use design
+  tokens", "We don't use a secrets manager" still exclude. Its readers: every match's
   `negatorBefore()` (the look-back — a cheap precheck, `RE_NEG_NEAR`, skips a match with no negator in reach), the list
   opening (`negationGoverns()`), and `conjExcluded()` — a nor / nem / ni item no list carries keeps its negation unless its
   clause's other negator negates a VERB ("Não pode perder pagamentos nem reembolsos", "sem perder dados nem reembolsos", "does
@@ -455,6 +464,17 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   changed against 0ed99a5 — the three component frames (957 / 861 / 957) and the two future-tense frames (949 / 957) exclude X,
   and the new cases; no logged input or literal changed, and the modal, plural and bare-plural frames keep X. Every corpus
   100% / 100%. 50 / 100 / 200 KB: ≤ 0.14 / 0.28 / 0.56 s.
+  **Measured (1.21 verify P3):** the verifier's 994 sentences (+ p6 / p6b): 11 decisions changed against 9ea21e7, each a
+  protected object now KEEPING its track ("The email / receipt / export doesn't include personal data", "The webhook payload
+  won't include personal data" +privacy, "The URL does not include the session token" +tdd, *"O email não inclui dados
+  pessoais", "El correo no incluye datos personales"*, "The notification does not include PII", "The export must not include
+  personal data", "The API response will not include personal data", "The chatbot must not use personal data"); nothing lost a
+  track. The keyword differential (164,909 inputs, an 86-frame sweep: + "The email doesn't include X", "O email não inclui X",
+  "El correo no incluye X", "The URL does not include the X token", "Without exposing X"): 1,067 changed against 9ea21e7, NONE
+  losing a track — the token frame (738, by construction), the protected keywords themselves in the exclusion frames (password
+  / senha / contraseña, token(s), access / refresh token, API key, credential(s), secrets, personal data, PII + PT / ES: 314 —
+  a list such a keyword opens no longer carries its negation on: "We will not add personal data or canary releases" keeps
+  +obs too) and the new tests' texts (15); no logged input changed. Every corpus 100% / 100%. 200 KB: ≤ 0.61 s.
 - **1.21 F2b — project-level signal overrides (`.specs/classifier.json`, classify.js).** A Phase 0 correction is learned:
   `createFeature` on a NEW plain feature (not a bugfix / spike / import — `cls` is not given) with explicit `tracks` and a
   non-empty summary compares the summary's classification (the suggestion classification.md records) with the chosen tracks

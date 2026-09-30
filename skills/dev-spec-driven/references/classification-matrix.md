@@ -85,9 +85,11 @@ is a draft for the human, who confirms Phase 0.
   payments"); a hazard ("We don't want duplicate payments", *"Não queremos pagamentos duplicados"*); a people relative clause
   ("The admin who doesn't have MFA must enable it"); a condition ("If we don't add rate limiting, the API will be abused",
   *"Se não adicionarmos…", "Si no añadimos…"*, "…unless the admin asks"); a "without" inside a negated predicate ("We won't
-  ship without a canary release", "Nobody should access the admin API without SSO"); expose / embed of secrets, keys, tokens,
-  credentials, passwords, personal data or introspection ("The frontend must not embed OAuth client secrets", "The API must
-  not expose GraphQL introspection", "Logs must not expose personal data"). A preposition after another noun ends it too ("We
+  ship without a canary release", "Nobody should access the admin API without SSO"); any negated verb whose object is data to
+  protect — secrets, keys, tokens, credentials, passwords, card numbers, personal data, PII or introspection — whatever the
+  verb and the subject ("The frontend must not embed OAuth client secrets", "The API must not expose GraphQL introspection",
+  "The email doesn't include personal data", *"O email não inclui dados pessoais"*, "The URL does not include the session
+  token"): not handling that data is the requirement. A preposition after another noun ends it too ("We
   didn't add an LLM to the checkout" keeps +tdd). **Whose adoption:** a negated adoption verb excludes only when its subject
   is the one designing — the first person ("We don't use Kafka", *"Não usamos Kafka", "No usaremos ningún LLM"*), the system
   being built ("The service must not use Redis", "This feature does not require an LLM", *"O sistema não deve usar Redis"*)
