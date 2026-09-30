@@ -1531,6 +1531,54 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     ok(n3On.every(([tr, t]) => onOf(t, tr)) && n3Off.every(([tr, t]) => !onOf(t, tr)),
       "1.21 verify N3: 'don't want duplicate payments' (PT / ES) keeps +tdd; 'must not embed OAuth client secrets' keeps +tdd, 'must not expose GraphQL introspection' keeps +api, 'Logs must not expose personal data / passwords' keep theirs; 'must not expose GraphQL', 'must not embed LLMs', 'don't want Kafka or RabbitMQ' exclude (got " +
       js([n3On.filter(([tr, t]) => !onOf(t, tr)), n3Off.filter(([tr, t]) => onOf(t, tr))]) + ")");
+    // 1.21 verify P1: an adoption verb's negation excludes only when its SUBJECT is the one designing (the first person, the system being
+    // built, or none); a role, a user group, a plan / tier / edition / account / tenant states an access or entitlement rule — the track
+    // stays (EN / PT / ES, can't = cannot, the permission modals and must / deve / debe alike); an unreadable subject keeps it too
+    const p1On = [["tdd", "Guests can't use the checkout."], ["tdd", "Guests cannot use the checkout."], ["obs", "Viewers can't add feature flags."],
+      ["obs", "Viewers cannot add feature flags."], ["saas", "Editors can't use webhooks."], ["saas", "Tenants on the free plan can't use webhooks."],
+      ["saas", "Tenants on the free plan cannot use webhooks."], ["ai", "Free users can't use the LLM assistant."], ["ai", "Free users may not use the LLM assistant."],
+      ["ai", "Users on the free plan must not use the LLM assistant."], ["tdd", "O utilizador convidado não pode usar o checkout."],
+      ["tdd", "El usuario invitado no puede usar el checkout."], ["obs", "Os editores não podem adicionar feature flags."],
+      ["obs", "Los editores no pueden añadir feature flags."], ["ai", "Os utilizadores gratuitos não podem usar o assistente LLM."],
+      ["ai", "Los usuarios gratuitos no pueden usar el asistente LLM."], ["ai", "Um utilizador sem subscrição não pode usar o assistente LLM."],
+      ["tdd", "Convidados não podem usar o checkout."], ["tdd", "Los invitados no pueden usar el checkout."]];
+    const p1Plan = [["ai", "The Starter plan doesn't include the LLM assistant."], ["ai", "O plano Starter não inclui o assistente LLM."],
+      ["ai", "El plan Starter no incluye el asistente LLM."], ["ai", "Trial accounts do not include the LLM assistant."],
+      ["ai", "As contas de teste não incluem o assistente LLM."], ["ai", "Las cuentas de prueba no incluyen el asistente LLM."],
+      ["saas", "The free plan does not include webhooks."], ["saas", "O plano gratuito não inclui webhooks."], ["saas", "El plan gratuito no incluye webhooks."],
+      ["tdd", "The basic plan doesn't support subscriptions."], ["tdd", "O plano básico não suporta subscrições."], ["saas", "The free plan has no webhooks."],
+      ["saas", "The free tier does not include webhooks or the LLM assistant."], ["ai", "The free tier does not include webhooks or the LLM assistant."]];
+    const p1Off = [["dist", "The service must not use Redis or Kafka."], ["ai", "This feature does not require an LLM."], ["dist", "We don't use Kafka."],
+      ["dist", "O sistema não deve usar Redis nem Kafka."], ["dist", "El servicio no debe usar Redis ni Kafka."], ["dist", "We don't need a message queue for this."],
+      ["ai", "Não é necessário um LLM."], ["ai", "No se necesita un LLM."], ["dist", "We decided not to use Kafka."], ["ai", "We avoid using an LLM."],
+      ["obs", "Sem necessidade de feature flags."], ["ai", "Não vamos usar nenhum LLM."], ["ai", "No usaremos ningún LLM."], ["saas", "We won't be adding webhooks."],
+      ["obs", "We chose not to add feature flags."], ["ai", "The MVP has no LLM and no vector database."], ["tdd", "This version will not have subscriptions."],
+      ["dist", "Decidimos não usar Kafka."], ["dist", "Decidimos no usar Kafka."], ["dist", "We're not going to use Kafka or RabbitMQ."],
+      ["dist", "There is no need for Kafka or RabbitMQ."], ["dist", "Do not use Kafka."], ["dist", "Não usar Kafka."], ["dist", "We plan not to use Kafka."]];
+    ok(p1On.every(([tr, t]) => onOf(t, tr)) && p1Plan.every(([tr, t]) => onOf(t, tr)) && p1Off.every(([tr, t]) => !onOf(t, tr)),
+      "1.21 verify P1: a role's / a user group's negated adoption keeps the track — 'Guests can't / cannot use the checkout', 'Viewers can't add feature flags', 'Tenants on the free plan can't use webhooks', 'Free users may not use the LLM assistant', 'Users on the free plan must not use…' (PT / ES too); a plan's / an account's — 'The Starter plan doesn't include the LLM assistant', 'The free plan does not include / has no webhooks', 'Trial accounts do not include…' (PT / ES); the designing subject or none still excludes — 'The service must not use Redis', 'This feature does not require an LLM', 'We don't use Kafka', 'O sistema não deve usar', 'No usaremos ningún LLM', 'Decidimos não usar Kafka', 'Do not use Kafka' (got " +
+      js([p1On.filter(([tr, t]) => !onOf(t, tr)), p1Plan.filter(([tr, t]) => !onOf(t, tr)), p1Off.filter(([tr, t]) => onOf(t, tr))]) + ")");
+    // can't and cannot read the same, with any subject
+    const p1Pairs = [["Guests can't use the checkout.", "Guests cannot use the checkout."], ["The service can't use Kafka.", "The service cannot use Kafka."],
+      ["We can't use an LLM here.", "We cannot use an LLM here."], ["Free users can't use the LLM assistant.", "Free users cannot use the LLM assistant."],
+      ["Editors can't add feature flags or canary releases.", "Editors cannot add feature flags or canary releases."]];
+    const p1PairsR = p1Pairs.map(([a, b]) => [cls(a).label, cls(b).label]);
+    ok(p1PairsR.every(([a, b]) => a === b) && p1PairsR[0][0].includes("tdd") && !p1PairsR[1][0].includes("dist") && !p1PairsR[2][0].includes("ai") &&
+      p1PairsR[4][0].includes("obs"),
+      "1.21 verify P1: can't and cannot classify alike — a role subject keeps ('Guests can't / cannot use the checkout' +tdd, 'Editors can't / cannot add feature flags' +obs), the designing subject excludes ('The service can't / cannot use Kafka', 'We can't / cannot use an LLM') (got " + js(p1PairsR) + ")");
+    // the subject: the nearest listed word back to the clause start, past a prepositional phrase and a relative clause; a design noun that
+    // is an earlier verb's object leaves a role further back; after a comma with no subject the sentence's earlier words are read; an EN
+    // "no" after the verb negates its noun for certain (only a role keeps)
+    const p1Subj = [["dist", false, "The service for free users must not use Kafka."], ["saas", true, "Users of the service can't use webhooks."],
+      ["tdd", true, "Guests who open the page can't use the checkout."], ["tdd", true, "We must ensure guests can't use the checkout."],
+      ["tdd", true, "Guests can view the page but can't use the checkout."], ["tdd", true, "Free users, however, can't use the checkout."],
+      ["dist", false, "For the MVP, don't use Kafka."], ["dist", false, "The first version of the app doesn't use Kafka."], ["dist", false, "Our team plans not to use Kafka."],
+      ["ai", false, "A página do utilizador não usa LLM."], ["dist", false, "The export must not use Kafka."], ["saas", true, "Users export data but can't use webhooks."],
+      ["tdd", false, "WHEN the month has no invoices THE SYSTEM SHALL return a header-only CSV."], ["tdd", true, "A user who has no subscription cannot use the LLM assistant."],
+      ["dist", false, "The team doesn't use Kafka."], ["dist", false, "El equipo no usará Kafka."], ["ai", true, "The support team can't use the LLM assistant."]];
+    ok(p1Subj.every(([tr, on, t]) => onOf(t, tr) === on),
+      "1.21 verify P1: the subject reading — 'The service for free users must not use Kafka' excludes (the users are a complement), 'Users of the service can't use webhooks', 'Guests who open the page…', 'We must ensure guests can't…', 'Guests can view the page but can't…', 'Free users, however, can't…' keep; 'For the MVP, don't use Kafka', 'Our team plans not to use Kafka', 'The team doesn't use Kafka', 'The export must not use Kafka' exclude ('the support team' keeps); 'WHEN the month has no invoices' excludes, 'A user who has no subscription cannot use…' keeps (got " +
+      js(p1Subj.filter(([tr, on, t]) => onOf(t, tr) !== on)) + ")");
     // 1.21 review B2: a comma after the list's closing conjunction — or one before an article (a new clause's subject) — ends the list
     const b2 = [["tdd", "ai", "Without an LLM or embeddings, the checkout or a subscription page is the priority."],
       ["saas", "dist", "Without Kafka or RabbitMQ, the webhook or a nightly retry job handles delivery."],
@@ -1586,7 +1634,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       ["api", "Design a versioned REST API for partners with an OpenAPI document."], ["", "Fetch exchange rates from the ECB's API every morning."],
       ["ui", "Painel de administração para gerir utilizadores: pesquisa, filtros e desativação em massa."], ["", "Monitor stock levels and send alerts to the purchasing team."],
       // 1.21 verify R2: a modal + an enabling / exposing verb excludes an +obs / +api technology (hard negatives)
-      ...r2Off.filter(([tr]) => tr === "obs" || tr === "api").map(([, t]) => ["", t])];
+      ...r2Off.filter(([tr]) => tr === "obs" || tr === "api").map(([, t]) => ["", t]),
+      // 1.21 verify P1: a role's negated adoption keeps +obs (EN / PT / ES); the designing subject's excludes it (hard negatives)
+      ...p1On.filter(([tr]) => tr === "obs").map(([, t]) => ["obs", t]), ...p1Off.filter(([tr]) => tr === "obs").map(([, t]) => ["", t])];
     const f2 = ["api", "ui", "obs"].map((tr) => {
       let tp = 0, fp = 0, pos = 0;
       const wrong = [];

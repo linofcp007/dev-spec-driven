@@ -270,7 +270,9 @@ const SIGNAL_EVERYDAY = signalLookup("everydayAnchors", (list) => new Set(list))
 const NEGATORS = ["no", "not", "without", "never", "skip", "exclude", "avoid", "omit", "dispensa", "prescinde", "sem", "não", "nao", "sin",
   "nor", "neither", "nem", "ni",
   // 1.21 verify R1: PT / ES "never" ("Nunca usaremos Kafka", "Jamás usaremos Kafka"; "jamais" is PT too)
-  "nunca", "jamás", "jamas", "jamais"];
+  "nunca", "jamás", "jamas", "jamais",
+  // 1.21 verify P1: "cannot" reads as "can't" ("Guests cannot use the checkout" = "Guests can't use the checkout")
+  "cannot"];
 
 // Words that may sit between a negator and the keyword ("sem uso de IA", "without the use of any LLM").
 const NEG_FILLER = new Set(["uso", "use", "usage", "of", "de", "do", "da", "del", "the", "a", "an", "any", "qualquer", "nenhum", "nenhuma", "ningún", "ninguna", "ningun", "el", "la", "o"]);
@@ -432,7 +434,9 @@ function listLink(text, from, to, es) {
 //       create / adopt / enable / install / embed / bundle / expose, "necessary" + PT / ES) or a PLAN / an INTENTION (GOVERN_AUX: will /
 //       do / going to, vamos / iremos · GOVERN_WANT: plan / intend / want, pretendemos / planeamos / queremos, tenemos previsto…)
 //       governs it, optionally with an article / a quantifier / one modifier — "We will not add an LLM", "We don't use managed Kafka",
-//       "Não queremos Kafka", "No es necesario Kafka", "must not use X" (whatever the modal).
+//       "Não queremos Kafka", "No es necesario Kafka", "must not use X" (whatever the modal) — and its SUBJECT is the one designing
+//       (the first person, the system being built, or none): a role's / a plan's is an access or entitlement rule, the track stays
+//       ("Guests can't use the checkout", "The free plan does not include webhooks" — 1.21 verify P1, subjectKeeps()).
 // Never an exclusion: an auxiliary or a modal + any other verb ("The report does not show the LLM cost", "Users who do not pay the
 // subscription", "must not lose payments", "never overwrites the ledger" — the verb is the requirement), a wished verb ("We don't want to
 // lose payments") or a hazard ("don't want duplicate payments", "pagamentos duplicados"), a relative clause ("Users who don't pay…",
@@ -617,6 +621,164 @@ function protectedHead(text, start, end) {
   const cut = after.findIndex((x) => GOVERN_PREP.has(x.toLowerCase()));
   return PROTECTED_HEADS.test(text.slice(start, end) + " " + (cut < 0 ? after : after.slice(0, cut)).join(" "));
 }
+// WHOSE ADOPTION IS NEGATED (1.21 verify P1) — a verbal negation of an adoption verb excludes only when its SUBJECT is the one
+// designing: the first person ("We don't use Kafka", "Não usamos Kafka", "No usaremos ningún LLM"), the system being built ("The
+// service must not use Redis", "This feature does not require an LLM", "O sistema não deve usar Redis") or none at all (an imperative, an
+// infinitive, "Não é necessário um LLM", "No se necesita un LLM"). Any other subject — a role, a user group, a plan / tier / edition /
+// account / tenant — states an access or entitlement rule, and the track stays: "Guests can't use the checkout", "Free users may not use
+// the LLM assistant", "The Starter plan doesn't include the LLM assistant", "Os editores não podem adicionar feature flags", "Las
+// cuentas de prueba no incluyen el asistente LLM". A subject that can't be read (a noun in neither list) keeps the track too. The
+// subject (subjectOf) is the nearest listed noun back to the clause start (the comma-free stretch), past a prepositional phrase
+// ("Tenants ON the free plan", "Um utilizador SEM subscrição") and a relative clause ("Guests WHO open the page"); an EN "no" after an
+// adoption verb negates its noun for certain — only a role keeps it ("The free plan has no webhooks"; "The MVP has no LLM" excludes).
+// "cannot" reads as "can't" (NEGATORS). Linear in the stretch (one pass back, bounded look-backs; the sentence's earlier words ≤ 24).
+const FIRST_PERSON = new Set(["we", "i", "us", "our", "ours", "ourselves", "let's", "lets", "nós", "nossa", "nosso", "nossas", "nossos",
+  "eu", "nosotros", "nosotras", "nuestro", "nuestra", "nuestros", "nuestras", "yo"]);
+const ROLE_SUBJECTS = new Set([
+  "user", "users", "guest", "guests", "visitor", "visitors", "viewer", "viewers", "editor", "editors", "admin", "admins", "administrator",
+  "administrators", "member", "members", "customer", "customers", "client", "clients", "tenant", "tenants", "account", "accounts", "plan",
+  "plans", "tier", "tiers", "edition", "editions", "subscriber", "subscribers", "subscription", "subscriptions", "license", "licenses",
+  "licence", "licences", "seat", "seats", "owner", "owners", "operator", "operators", "staff", "employee", "employees", "manager",
+  "managers", "role", "roles", "anyone", "everyone", "nobody", "people", "person", "buyer", "buyers", "seller", "sellers", "merchant",
+  "merchants", "vendor", "vendors", "partner", "partners", "reseller", "resellers", "affiliate", "affiliates", "student", "students",
+  "teacher", "teachers", "patient", "patients", "doctor", "doctors", "driver", "drivers", "rider", "riders", "author", "authors", "reader",
+  "readers", "contributor", "contributors", "moderator", "moderators", "reviewer", "reviewers", "approver", "approvers", "workspace",
+  "workspaces", "organization", "organizations", "organisation", "organisations", "org", "orgs", "household", "households", "family",
+  "families",
+  // PT
+  "utilizador", "utilizadores", "usuário", "usuários", "convidado", "convidados", "convidada", "convidadas", "visitante", "visitantes",
+  "editores", "administrador", "administradores", "membro", "membros", "cliente", "clientes", "inquilino", "inquilinos", "conta", "contas",
+  "plano", "planos", "escalão", "escalões", "nível", "níveis", "edição", "edições", "assinante", "assinantes", "subscritor", "subscritores",
+  "assinatura", "assinaturas", "subscrição", "subscrições", "licença", "licenças", "funcionário", "funcionários", "gestor", "gestores",
+  "perfil", "perfis", "papel", "papéis", "operador", "operadores", "leitor", "leitores", "autor", "autores", "aluno", "alunos", "professor",
+  "professores", "paciente", "pacientes", "doente", "doentes", "médico", "médicos", "motorista", "motoristas", "comprador", "compradores",
+  "vendedor", "vendedores", "lojista", "lojistas", "parceiro", "parceiros", "revendedor", "revendedores", "moderador", "moderadores",
+  "colaborador", "colaboradores", "pessoa", "pessoas", "ninguém", "organização", "organizações",
+  // ES
+  "usuario", "usuarios", "usuaria", "usuarias", "invitado", "invitados", "invitada", "invitadas", "miembro", "miembros", "cuenta",
+  "cuentas", "planes", "nivel", "niveles", "edición", "ediciones", "suscriptor", "suscriptores", "suscripción", "suscripciones", "licencia",
+  "licencias", "empleado", "empleados", "perfiles", "rol", "roles", "lector", "lectores", "alumno", "alumnos", "estudiante", "estudiantes",
+  "profesores", "conductor", "conductores", "socio", "socios", "persona", "personas", "nadie", "organización", "organizaciones",
+]);
+const DESIGN_SUBJECTS = new Set([
+  "system", "systems", "service", "services", "app", "apps", "application", "applications", "api", "apis", "backend", "frontend", "server",
+  "servers", "platform", "product", "solution", "feature", "features", "module", "modules", "component", "components", "mvp", "version",
+  "versions", "release", "releases", "v1", "v2", "v3", "design", "architecture", "implementation", "integration", "job", "jobs", "worker",
+  "workers", "pipeline", "pipelines", "bot", "chatbot", "engine", "dashboard", "dashboards", "reports", "page", "pages", "screen",
+  "screens", "ui", "website", "site", "portal", "widget", "form", "script", "scripts", "tool", "library", "sdk", "cli", "prototype",
+  "project", "code", "codebase", "stack", "infrastructure", "infra", "microservice", "microservices", "function", "functions", "endpoint",
+  "endpoints", "handler", "handlers", "database", "cache", "checkout", "cart", "webhook", "webhooks", "logs", "logging", "assistant", "it",
+  "this", "phase", "iteration", "milestone", "poc", "pilot", "spec",
+  // PT
+  "sistema", "sistemas", "serviço", "serviços", "aplicação", "aplicações", "aplicativo", "funcionalidade", "funcionalidades", "módulo",
+  "módulos", "componente", "componentes", "versão", "versões", "desenho", "arquitetura", "arquitectura", "implementação", "integração",
+  "página", "páginas", "ecrã", "ecrãs", "tela", "telas", "relatório", "relatórios", "painel", "painéis", "plataforma", "produto", "solução",
+  "servidor", "projeto", "projecto", "código", "protótipo", "ferramenta", "biblioteca", "motor", "assistente", "formulário", "carrinho",
+  "isto", "fase", "iteração",
+  // ES
+  "servicio", "servicios", "aplicación", "aplicaciones", "función", "funciones", "funcionalidad", "funcionalidades", "versión", "versiones",
+  "diseño", "implementación", "integración", "pantalla", "pantallas", "informe", "informes", "reporte", "reportes", "panel", "paneles",
+  "producto", "solución", "proyecto", "prototipo", "herramienta", "librería", "formulario", "carrito", "esto", "iteración",
+]);
+// a noun that is a verb too, or the team (a user group once modified: "the support team") — a design subject only right after an
+// article or a possessive ("The export must not use…", "The team / A equipa / El equipo won't use Kafka"; "Users export data…")
+const DESIGN_VERBISH = new Set(["export", "exports", "import", "imports", "sync", "report", "search", "login", "signup", "upload",
+  "download", "process", "flow", "flows", "log", "team", "equipa", "equipo"]);
+// the words that are no subject: articles, determiners, conjunctions, discourse adverbs (and any EN -ly / PT / ES -mente adverb)
+const SUBJECT_SKIP = new Set(["the", "a", "an", "these", "those", "any", "all", "some", "each", "every", "both", "only", "also", "still",
+  "currently", "really", "simply", "just", "even", "yet", "therefore", "so", "then", "however", "thus", "already", "always", "please",
+  "and", "but", "or", "now", "today", "here", "there", "that", "which", "o", "os", "as", "um", "uma", "uns", "umas", "este", "esta",
+  "estes", "estas", "esse", "essa", "esses", "essas", "todos", "todas", "cada", "só", "apenas", "também", "ainda", "já", "portanto",
+  "então", "e", "mas", "ou", "porém", "contudo", "agora", "hoje", "aqui", "que", "el", "la", "los", "las", "un", "una", "unos", "unas",
+  "estos", "ese", "esa", "esos", "esas", "solo", "sólo", "también", "todavía", "aún", "ya", "entonces", "y", "pero", "ahora", "hoy", "aquí",
+  "se", "lo"]);
+const SUBJECT_ARTICLES = new Set(["the", "a", "an", "this", "these", "those", "o", "os", "as", "um", "uma", "este", "esta", "estes",
+  "estas", "el", "la", "los", "las", "un", "una", "estos"]);
+// a preposition (or a nominal negator) before a listed noun makes it a complement: the subject is further back
+const SUBJECT_PREP = new Set(["of", "on", "in", "for", "with", "without", "from", "at", "by", "under", "de", "do", "da", "dos", "das", "em",
+  "na", "nas", "com", "sem", "para", "por", "pelo", "pela", "pelos", "pelas", "del", "en", "con", "sin", "al"]);
+// the relative pronouns: a listed noun after one is inside a relative clause ("Guests who open the page") — "that" / "que" only right
+// after a listed noun ("Guests that open…"; "ensure that guests…" is a complement clause)
+const SUBJECT_REL = new Set(["who", "whom", "whose", "which", "quem", "quien", "quienes", "cuyo", "cuya", "cuyos", "cuyas", "cujo", "cuja"]);
+// a PT / ES first-person plural verb ("usamos", "vamos", "decidimos", "incluímos" — in any text: a short one may read as EN) — never
+// an adjective or a noun in -mos
+const MOS_WORDS = new Set(["últimos", "próximos", "mínimos", "máximos", "íntimos", "ótimos", "óptimos", "legítimos", "extremos", "supremos",
+  "ramos", "termos", "demos", "memos", "promos", "primos", "mismos", "mesmos"]);
+// the EN first person contracted: we're, we'll, we've, we'd, i'm, i'll, i've, i'd
+const RE_FIRST_PERSON_NT = /^(?:we|i)['’](?:re|ll|ve|d|m)$/;
+const firstPerson = (x) => FIRST_PERSON.has(x) || RE_FIRST_PERSON_NT.test(x);
+const firstPersonVerb = (x) => x.length > 4 && /[aeiíé]mos$/.test(x) && !MOS_WORDS.has(x);
+const subjectSkip = (x) => SUBJECT_SKIP.has(x) || GOVERN_AUX.has(x) || GOVERN_DEONTIC.has(x) || GOVERN_ADOPT.has(x) || NEVER_WORDS.has(x) ||
+  NEGATORS.includes(x) || /n['’]t$/.test(x) || x === "cannot" || (x.length > 4 && /(?:ly|mente)$/.test(x));
+// the listed noun at words[i]: "role" | "design" | null ("plan" / "plans" before "not" / "to" is the verb: "We plan not to use Kafka")
+function subjectNoun(words, i) {
+  const x = words[i];
+  if (DESIGN_SUBJECTS.has(x)) return "design";
+  if (DESIGN_VERBISH.has(x)) return i > 0 && (SUBJECT_ARTICLES.has(words[i - 1]) || firstPerson(words[i - 1])) ? "design" : null;
+  if (!ROLE_SUBJECTS.has(x)) return null;
+  return (x === "plan" || x === "plans") && (words[i + 1] === "not" || words[i + 1] === "to") ? null : "role";
+}
+// → "design" | "role" | "none" (no subject word) | "unknown" (content words, none listed); words[0 … j) is the stretch before the verb.
+// The nearest listed word decides — but a design noun may be an earlier verb's object ("Guests can view the page but can't use the
+// checkout"): a role further back still keeps (when in doubt, keep); a noun right before another listed one is its modifier ("the admin
+// page").
+function subjectOf(words, j) {
+  let content = false, design = false;
+  for (let i = j - 1; i >= 0; i--) {
+    const x = words[i];
+    if (firstPerson(x) || firstPersonVerb(x)) return "design";
+    let kind = subjectNoun(words, i);
+    if (kind && !SUBJECT_ARTICLES.has(x) && i + 1 < j && subjectNoun(words, i + 1)) kind = null;
+    if (!kind) { if (!subjectSkip(x)) content = true; continue; }
+    content = true;
+    // a complement? [prep][article?][modifiers…][noun] — an article ends the phrase; a relative pronoun up to 6 words back (before another
+    // listed word) puts the noun in a relative clause
+    let p = i - 1, article = false, skip = -1;
+    for (let n = 0; p >= 0 && n < 6; p--, n++) {
+      const y = words[p];
+      if (!article && n < 4 && SUBJECT_PREP.has(y)) { skip = p; break; }
+      if (SUBJECT_REL.has(y) || ((y === "that" || y === "que") && p > 0 && subjectNoun(words, p - 1))) { skip = p; break; }
+      if (firstPerson(y) || (!SUBJECT_ARTICLES.has(y) && subjectNoun(words, p))) break;
+      if (SUBJECT_ARTICLES.has(y)) article = true;
+    }
+    if (skip >= 0) { i = skip; continue; } // the loop's i-- resumes before the preposition / the relative pronoun
+    if (kind === "role") return "role";
+    design = true;
+  }
+  return design ? "design" : content ? "unknown" : "none";
+}
+// Does the subject keep the negated adoption's track (a role, a plan, or an unreadable subject)? words / j as negationOf's, the subject
+// before words[from]; after a comma with no subject in its stretch ("Guests, however, can't use the checkout") the sentence's earlier
+// words are read — a role there keeps. An EN "no" after the verb (from < j) negates its noun for certain: only a role keeps ("The free
+// plan has no webhooks"; "WHEN the month has no invoices" still excludes).
+function subjectKeeps(text, start, words, j, from) {
+  for (let i = j + 1; i < words.length; i++) if (firstPersonVerb(words[i])) return false; // "não usamos", "no usaremos"
+  const s = subjectOf(words, from);
+  if (s === "role" || (s === "unknown" && from === j)) return true;
+  if (s === "unknown") return false;
+  if (s === "design") return false;
+  const seg = cueBefore(text, start, GOVERN_BOUNDARY);
+  const at = start - seg.length - 1;
+  if (at < 0 || text[at] !== ",") return false;
+  const earlier = govWords(text, at, /[.!?;:\n]/);
+  return subjectOf(earlier.slice(-24), Math.min(earlier.length, 24)) === "role";
+}
+// Is the negator at words[j] verbal — an adoption verb's negation whose subject decides (not a nominal "no X" / "sem X" / "without X",
+// nor a contrast) — or an EN "no" right after an adoption verb ("The free plan has no webhooks": the verb's subject decides)?
+function subjectDecides(words, j, lang, contrast) {
+  const w = words[j];
+  // (a contraction opening its stretch after a comma is still verbal: "Guests, however, can't use the checkout")
+  if (contrast && !(/n['’]t$/.test(w) || w === "cannot")) return -1;
+  if (w === "no" && i18n.baseLang(lang) !== "es") {
+    // a verb right after it: an ES "no" in a short text read as EN ("Los invitados no pueden usar el checkout"), "no longer uses"
+    let k = j + 1;
+    while (k < words.length && GOVERN_NEUTRAL.has(words[k])) k++;
+    const v = words[k];
+    if (v && (GOVERN_DEONTIC.has(v) || GOVERN_AUX.has(v) || GOVERN_ADOPT.has(v))) return j;
+    return j > 0 && GOVERN_ADOPT.has(words[j - 1]) ? j - 1 : -1;
+  }
+  return NOMINAL_NEGATORS.has(w) ? -1 : j;
+}
 // The negation that EXCLUDES the item at start … end — { word, conj } — or null. The nearest negator ≤ GOVERN_MAX words back in the
 // item's comma-free stretch (contractions whole): a negative conjunction with only fillers between (a list's own link); any other one
 // when it is no relative / condition / double negation / hazard (negationBlocked) and negationKind says "exclude". A PT "no" after a
@@ -642,7 +804,10 @@ function negationOf(text, start, end, lang, cased) {
   if (negationBlocked(text, words, j, end, pt)) return null;
   const contrast = j === 0 && (seg.afterComma || (w === "not" && seg.sentenceStart));
   const k = negationKind(words, j, words.length, lang, { contrast, protectedHead: () => protectedHead(text, start, end) });
-  return k === "exclude" ? { word: w, conj: false } : null;
+  if (k !== "exclude") return null;
+  // (1.21 verify P1) a role's / a plan's negated adoption is an access or entitlement rule: the track stays
+  const from = subjectDecides(words, j, lang, contrast);
+  return from >= 0 && subjectKeeps(text, start, words, j, from) ? null : { word: w, conj: false };
 }
 function negationGoverns(text, start, end, lang) {
   return negationOf(text, start, end, lang) !== null;
@@ -661,8 +826,11 @@ function conjExcluded(text, start, end, lang) {
   if (j < 0) return true;
   if (negationBlocked(text, words, j, end, pt)) return false;
   const contrast = j === 0 && (seg.afterComma || (words[j] === "not" && seg.sentenceStart));
-  // (a verb negation — "require" — is continued by the conjunction; a noun phrase — "Sem integração externa nem X" — keeps it)
-  return negationKind(words, j, words.length, lang, { contrast, protectedHead: () => protectedHead(text, start, end) }) !== "require";
+  // (a verb negation — "require" — is continued by the conjunction; a noun phrase — "Sem integração externa nem X" — keeps it; a role's
+  // or a plan's negated adoption — "Guests can't use the checkout nor the cart" — keeps the track: 1.21 verify P1)
+  if (negationKind(words, j, words.length, lang, { contrast, protectedHead: () => protectedHead(text, start, end) }) === "require") return false;
+  const from = subjectDecides(words, j, lang, contrast);
+  return !(from >= 0 && subjectKeeps(text, start, words, j, from));
 }
 // The article a new clause's subject starts with (1.21 review B2): a comma followed by one is no list continuation — "Without an LLM
 // or embeddings, the checkout or a subscription page is the priority".
