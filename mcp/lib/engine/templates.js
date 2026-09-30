@@ -72,9 +72,10 @@ const TEMPLATE_ARTIFACTS = Object.freeze({
   checklist: "checklist.md", "integration-plan": "integration-plan.md",
   bug: "bug.md", "bug-requirements": "requirements.md", "bug-test-plan": "test-plan.md", "bug-tasks": "tasks.md",
   spike: "spike.md", "spike-tasks": "tasks.md", // 1.14 C2 — the spike kind's scaffolds
+  change: "change.md", // 1.21 F5 — a change's one file (kind change, size xs)
 });
 // The chain artifacts a gate reads — a template of theirs with no slot at all scaffolds an approvable file (check warns).
-const TEMPLATE_CHAIN = new Set(["requirements", "design", "test-plan", "eval-plan", "tasks", "bug", "bug-requirements", "bug-test-plan", "bug-tasks"]);
+const TEMPLATE_CHAIN = new Set(["requirements", "design", "test-plan", "eval-plan", "tasks", "bug", "bug-requirements", "bug-test-plan", "bug-tasks", "change"]);
 const TEMPLATE_VARS = ["name", "slug", "summary", "tracks", "lang", "date"];
 const RE_TEMPLATE_VAR = /\{\{\s*([A-Za-z_][\w-]*)\s*\}\}/g;
 const RE_TEMPLATE_KNOWN_VAR = new RegExp("\\{\\{\\s*(?:" + TEMPLATE_VARS.join("|") + ")\\s*\\}\\}", "i");

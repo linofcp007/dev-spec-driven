@@ -16,14 +16,14 @@ const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 const { MARKER_TRACKS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature, extractAcIds,
+let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature, extractAcIds,
   featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket,
-  markerTracks, OPTIONAL_TRACKS, packRegistry, parseTasks, projectTemplateHas, readIfExists, replaceCodeSpans,
-  stripSupersedes, taskDescription, trackLabel, trackMarker, useTemplateScopeOf, VALID_TRACKS;
-function __link(E) { ({ atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature,
+  markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists, replaceCodeSpans,
+  stripSupersedes, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf, VALID_TRACKS;
+function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature,
   extractAcIds, featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf,
-  isPackMarkerBracket, markerTracks, OPTIONAL_TRACKS, packRegistry, parseTasks, projectTemplateHas, readIfExists,
-  replaceCodeSpans, stripSupersedes, taskDescription, trackLabel, trackMarker, useTemplateScopeOf, VALID_TRACKS } = E); }
+  isPackMarkerBracket, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists,
+  replaceCodeSpans, stripSupersedes, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf, VALID_TRACKS } = E); }
 
 // The text minus its HTML comments (commentLines' reading: a "<!--" in fenced code or an inline code span is text, one
 // that never closes is text). A comment spanning lines takes its line breaks with it, as the old regex did.
@@ -298,14 +298,109 @@ function extractSection(md, synonyms, marker, loose) {
 const RE_TODO_SENTINEL = /^[^\S\n\r\u2028\u2029]*>\s*\*\*TODO\*\*/m;
 const ROOT_CAUSE_SYN = ["root cause", "causa raiz", "causa raíz"];
 const REPRO_SYN = ["reproduction", "reprodução", "reproducao", "reproducción", "reproduccion"];
-function sectionState(design, sections, marker) {
+// A track's mandatory sections → [{ section, status }] (+ `tier` "core" | "extended" on a SIZED feature). Statuses: missing ·
+// unfilled (the `> **TODO**` sentinel is still there, or nothing was written — blank is not an answer) · template (1.21 F5:
+// nothing but the template's own guidance lines — deleting the sentinel and keeping the scaffold's bullet used to pass) ·
+// filled; on a sized feature (opts.size) also na (the section's own text is ONE "n/a — <reason of ≥ 4 words>" line) and
+// na-short (an n/a with a shorter reason, or none). The verdict is sectionVerdict's; opts.lang adds that language's template
+// lines (pt-BR's derived ones).
+function sectionState(design, sections, marker, opts = {}) {
   return sections.map((sec) => {
+    const out = (status) => (opts.size ? { section: sec.name, status, tier: sec.tier === "extended" ? "extended" : "core" } : { section: sec.name, status });
     const body = extractSection(design, sec.syn, marker, sec.loose);
-    if (body == null) return { section: sec.name, status: "missing" };
-    // Unfilled = the scaffold sentinel is still there, or nothing real was written (blank is not an answer).
-    if (RE_TODO_SENTINEL.test(body) || !stripHtmlComments(body).trim()) return { section: sec.name, status: "unfilled" };
-    return { section: sec.name, status: "filled" };
+    if (body == null) return out("missing");
+    if (RE_TODO_SENTINEL.test(body) || !stripHtmlComments(body).trim()) return out("unfilled");
+    const own = sectionOwnLines(body, opts.lang);
+    if (!own.length) return out("template");
+    if (opts.size) { const na = naAnswer(own); if (na) return out(na); }
+    return out("filled");
   });
+}
+// 1.21 F5 — the section's lines the USER wrote: visible (comments and fenced code out), not blank, not a line of a track design
+// block as the scaffold writes it (the built-in tracks' in EN / PT / ES — pt-BR's too for a pt-BR feature — and this project's
+// track packs'): a key per line, whitespace folded, lower-cased, a list bullet or quote marker dropped. Exact lines only — a
+// guidance line the user edited is theirs.
+const sectionLineKey = (s) => String(s).replace(/^\s*(?:[-*+]|\d+[.)]|>)\s+/, "").replace(/\s+/g, " ").trim().toLowerCase();
+let SECTION_TEMPLATE_LINES = null; // process-wide: the built-in track blocks (EN / PT / ES)
+let SECTION_TEMPLATE_LINES_BR = null; // … their pt-BR twins, built on the first pt-BR feature
+const PACK_SECTION_LINES = new WeakMap(); // a call's pack registry → its packs' design-block lines (every language)
+function addSectionLines(set, text) {
+  for (const l of stripFencedCode(stripHtmlComments(String(text || ""))).split(/\r?\n/)) {
+    if (!l.trim() || /^#{1,6}\s/.test(l) || RE_TODO_SENTINEL.test(l)) continue;
+    set.add(sectionLineKey(l));
+  }
+}
+function sectionTemplateLines(lang) {
+  if (!SECTION_TEMPLATE_LINES) {
+    const set = new Set();
+    for (const l of i18n.BASE_LANGS) for (const tr of VALID_TRACKS) { try { addSectionLines(set, i18n.trackDesignBlock(tr, l)); } catch { /* a builder's trouble never breaks a gate */ } }
+    SECTION_TEMPLATE_LINES = set;
+  }
+  const sets = [SECTION_TEMPLATE_LINES];
+  if (lang === "pt-BR") {
+    if (!SECTION_TEMPLATE_LINES_BR) {
+      const set = new Set();
+      for (const tr of VALID_TRACKS) { try { addSectionLines(set, i18n.trackDesignBlock(tr, "pt-BR")); } catch { /* ignore */ } }
+      SECTION_TEMPLATE_LINES_BR = set;
+    }
+    sets.push(SECTION_TEMPLATE_LINES_BR);
+  }
+  const reg = packRegistry();
+  if (reg.packs.length) {
+    let set = PACK_SECTION_LINES.get(reg);
+    if (!set) {
+      set = new Set();
+      for (const p of reg.packs) for (const l of i18n.LANGS) { try { addSectionLines(set, packDesignBlock(p, l, {})); } catch { /* ignore */ } }
+      PACK_SECTION_LINES.set(reg, set);
+    }
+    sets.push(set);
+  }
+  return sets;
+}
+function sectionOwnLines(body, lang) {
+  const lines = stripFencedCode(stripHtmlComments(body)).split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return [];
+  const sets = sectionTemplateLines(lang);
+  return lines.filter((l) => { const k = sectionLineKey(l); return !sets.some((s) => s.has(k)); });
+}
+// "n/a — <why it does not apply>" (EN / PT / ES; any emphasis around the n/a): the section's own text is that ONE line → "na"
+// when the reason holds at least NA_REASON_WORDS words, "na-short" when it holds fewer; anything else → null.
+const RE_NA_LEAD = /^\s*(?:[-*+]\s+|>\s*)?(?:\*\*|__|\*|_)?(?:n\/a|n\.a\.|not applicable|does not apply|n[ãa]o se aplica|n[ãa]o aplic[áa]vel|no (?:se )?aplica|no aplicable)(?:\*\*|__|\*|_)?(?![\p{L}\p{N}])/iu;
+const NA_REASON_WORDS = 4;
+function naAnswer(own) {
+  if (own.length !== 1) return null;
+  const m = own[0].match(RE_NA_LEAD);
+  if (!m) return null;
+  const words = own[0].slice(m[0].length).match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || [];
+  return words.length >= NA_REASON_WORDS ? "na" : "na-short";
+}
+// 1.21 F5 — the active marker tracks' mandatory sections as every gate reads them (doctor `<track>-sections`, the design
+// approval, the design save check, status, the roadmap) → [[track, marker, rows]]. On a SIZED feature a section two active tracks
+// both ask for (TRACK_OVERLAPS) that the design leaves out is `covered` (+ `by`: the headings that answer it) once one of the
+// covering sections is there — the sized scaffold writes only those. opts: { size, lang }.
+function trackSectionReport(design, tracks, opts = {}) {
+  const out = activeSectionTracks(tracks).map(([tr, secs, mark]) => [tr, mark, sectionState(design, secs, mark, opts)]);
+  if (!opts.size) return out;
+  const rowsOf = (t) => (out.find(([x]) => x === t) || [])[2] || [];
+  for (const o of TRACK_OVERLAPS) {
+    if (![o.drop[0], ...o.by.map(([t]) => t)].every((t) => tracks.includes(t))) continue; // both tracks on
+    const row = rowsOf(o.drop[0]).find((s) => s.section === o.drop[1]);
+    if (!row || row.status !== "missing") continue;
+    const by = o.by.filter(([t, n]) => rowsOf(t).some((s) => s.section === n && s.status !== "missing"));
+    if (by.length) Object.assign(row, { status: "covered", by: by.map(([t, n]) => trackMarker(t) + " " + n) });
+  }
+  return out;
+}
+// One section row's verdict → "pass" | "warn" | "fail". Size S: an EXTENDED-tier section may be absent (the scaffold leaves it
+// out). "template" fails a new approval — opts.approved (the design is approved already): a warn, never a fail on a phase signed
+// off before the stricter rule (1.21). na / covered answer the section; unfilled and na-short never do.
+function sectionVerdict(row, opts = {}) {
+  switch (row.status) {
+    case "filled": case "na": case "covered": return "pass";
+    case "missing": return opts.size === "s" && row.tier === "extended" ? "pass" : "fail";
+    case "template": return opts.approved ? "warn" : "fail";
+    default: return "fail";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -482,6 +577,21 @@ function templateCorpus(langs) {
     }
     add(() => i18n.testPlan("x", l, VALID_TRACKS, ["US-1.AC-1"]));
     add(() => i18n.testPlan("x", l, ["core", "tdd"], [])); // requirements that define no AC yet: one generic row (Pa4)
+    // 1.21 F5 — the sized builders (s: one story, the merged weigh section; m / l: the trimmed core design) and the change's one
+    // file, the XS bugfix's tasks. Their slots differ from the unsized ones only in the core parts — the track blocks and criteria
+    // are the same texts — so core alone, core +tdd and every track render each of them.
+    for (const size of ["s", "m"]) {
+      for (const tracks of [["core"], ["core", "tdd"], VALID_TRACKS]) {
+        const a = { name: "x", tracks, label: trackLabel(tracks), slug: "x", summary: "", size };
+        add(() => i18n.requirements(a, l));
+        add(() => i18n.design(a, l));
+        add(() => i18n.tasks(a, l));
+        add(() => i18n.testPlan("x", l, tracks, undefined, size));
+        add(() => i18n.checklist({ ...a, sectionCounts: {} }, l));
+      }
+    }
+    add(() => i18n.change({ name: "x", summary: "" }, l));
+    add(() => i18n.bugTasks("x", l, "xs"));
     for (const tr of VALID_TRACKS) {
       add(() => i18n.trackDesignBlock(tr, l));
       add(() => M.tracks.taskBlock(tr, 1));
@@ -840,7 +950,8 @@ function bugTemplateSlots() {
 module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirementAcIds, planIdText, clarificationMarkers,
   templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
   headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, extractSection,
-  RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
+  RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionLineKey, sectionOwnLines, RE_NA_LEAD, NA_REASON_WORDS, naAnswer,
+  trackSectionReport, sectionVerdict, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
   RE_LIST_CHECKBOX, placeholderKey, isGenericSlot, unknownSteeringStub, LEGACY_TEMPLATE_PLACEHOLDERS, templateCorpus,
   templateBracketKeys, templateSets, templateSetsBr, CORPUS_FILE, CORPUS_SOURCES, corpusSourcesHash, renderCorpusData,
   builtinCorpusSource, isTemplatePlaceholder, isCodeSlot, visibleLines, placeholderReport,

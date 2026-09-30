@@ -187,7 +187,29 @@ const uncheckTasks = (text) => text.replace(/^([^\S\n\r\u2028\u2029]*-\s*\[)[xX]
 // The artifact a phase's approval signs off: a bugfix has no design of its own — its design approval signs off bug.md
 // (the Root Cause the gate checks). approvePhase records it as `file` on the approval, so changedSinceApproval
 // compares the right file (an approval without `file` signed off PHASE_FILE's, as before).
-const phaseFile = (phase, kind) => (phase === "design" && kind === "bugfix" ? "bug.md" : PHASE_FILE[phase]);
+// 1.21 F5: a change's plan approval (its `tasks` phase) signs off change.md — the one file of a change.
+const phaseFile = (phase, kind) => (phase === "design" && kind === "bugfix" ? "bug.md" : phase === "tasks" && kind === "change" ? "change.md" : PHASE_FILE[phase]);
+
+// 1.21 F5 — feature sizes: spec_create {size: xs | s | m | l} stored in .state.json `size` (a plain value — git's merge driver
+// needs no rule). xs = a change (one change.md) or an XS bugfix (no reproduce / root-cause tasks); s = one story, the track
+// sections of the "core" tier (TRACK_SECTIONS tier "extended" optional), the three weigh sections merged; m / l = the full chain
+// with the duplicate sections merged (TRACK_OVERLAPS, CORE_SUPERSEDED_BY). No size (every feature created before 1.21, and any
+// created without one) = the 1.20 rules and scaffolds exactly; spec_upgrade never assigns one.
+const FEATURE_SIZES = ["xs", "s", "m", "l"];
+// A size as given (MCP / CLI; case-folded) → { size } | { size: null } (not given) | { error }.
+function sizeInput(v, lng) {
+  if (v === undefined || v === null || (typeof v === "string" && !v.trim())) return { size: null };
+  const s = typeof v === "string" ? v.trim().toLowerCase() : null;
+  if (s && FEATURE_SIZES.includes(s)) return { size: s };
+  const A = i18n.msg(lng).args;
+  return { error: A.invalid(A.item("size", A.oneOf(FEATURE_SIZES.join(", ")), JSON.stringify(typeof v === "string" ? v : String(v)))) };
+}
+// A feature folder's size (its .state.json `size`, read-cached) → "xs" | "s" | "m" | "l" | null.
+function featureSize(dir) {
+  const st = readJson(statePath(dir)).data;
+  return isObj(st) && typeof st.size === "string" && FEATURE_SIZES.includes(st.size) ? st.size : null;
+}
+const isChangeDir = (dir) => { const st = readJson(statePath(dir)).data; return isObj(st) && st.kind === "change"; };
 
 // ---------------------------------------------------------------------------
 // Roadmap & feature dependencies (.specs/roadmap.json)
@@ -998,7 +1020,7 @@ function mergeConflictsCheck(projectDir, slug, state, lng) {
 module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, legacySlugify, RE_WIN_RESERVED,
   RESERVED_SLUGS, reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState,
   stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, sha1Hex, fingerprintMatches,
-  BOM_CHAR, artifactMatches, uncheckTasks, phaseFile, PLANNING_CEILING, PHASE_PERCENT, phasePercent, featurePercent,
+  BOM_CHAR, artifactMatches, uncheckTasks, phaseFile, FEATURE_SIZES, sizeInput, featureSize, isChangeDir, PLANNING_CEILING, PHASE_PERCENT, phasePercent, featurePercent,
   roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, setDependency, dependencyUnlocked,
   roadmap, flatText, addBacklog, BACKLOG_NOTE_MAX, BACKLOG_NOTE_SEP, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked, BACKLOG_ACTIONS, backlog,
   roadmapLang, roadmapChromeLang, setRoadmapLang, RE_AUTOGEN, isGeneratedOrAbsent, writeRoadmapMd, writeRoadmapHtml,

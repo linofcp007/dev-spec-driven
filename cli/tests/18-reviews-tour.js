@@ -28,7 +28,7 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   Sc4.initProject(pc4, ["core"], "en");
   const fPv = Sc4.createFeature(pc4, "Accounts", ["privacy"], "", undefined, "en");
   const dPv = path.join(fPv.dir, "design.md");
-  const filledPv = fs.readFileSync(dPv, "utf8").split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n")
+  const filledPv = fs.readFileSync(dPv, "utf8").split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n")
     .replace(/\[([^\]\n]*)\]/g, (m, x) => (/^(?:PRIVACY|SEC|SaaS|AI|x| )$/.test(x) ? m : "filled"));
   fs.writeFileSync(dPv, filledPv.replace(/## \[PRIVACY\] Processors & International Transfers\n/, "") + "\n## Processors and queues\nBullMQ workers.\n");
   const docPv = run(["doctor", fPv.slug, "--project", pc4]);

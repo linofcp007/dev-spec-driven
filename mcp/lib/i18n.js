@@ -26,7 +26,7 @@
  * are matched by the synonym tables (SAAS_SECTIONS/AI_SECTIONS/SEC_SECTIONS/PRIVACY_SECTIONS/DIST_SECTIONS) and RE_* matchers in the engine.
  */
 
-const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests, DEV_SPEC, DEV_SPEC_SCRIPT, cliPrefix, portableCli } = require("./i18n/common.js");
+const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests, DEV_SPEC, DEV_SPEC_SCRIPT, cliPrefix, portableCli, FEATURE_SIZES } = require("./i18n/common.js");
 // The pt-BR derivation (i18n/pt-br.js) loads on its first use — a table's "pt-BR" entry, toPtBr, derivePtBr: a process
 // that never meets pt-BR (most hooks) doesn't load it.
 let PTBR = null;
@@ -220,8 +220,10 @@ module.exports = {
   trackDesignBlock: (track, lang) => L(lang).trackDesignBlock(track),
   design: (a, lang) => L(lang).design(a),
   tasks: (a, lang) => L(lang).tasks(a),
-  testPlan: (name, lang, tracks, acs) => L(lang).testPlan(name, tracks, acs), // tracks: which template ACs get a planned test; acs: the real AC IDs instead (one generic row each)
-  templateAcIds: (tracks) => Object.keys(templateTests(tracks)), // the template AC IDs a test plan scaffolded for these tracks covers
+  testPlan: (name, lang, tracks, acs, size) => L(lang).testPlan(name, tracks, acs, size), // tracks: which template ACs get a planned test; acs: the real AC IDs instead (one generic row each); size (1.21 F5): S plans its two core criteria
+  templateAcIds: (tracks, size) => Object.keys(templateTests(tracks, size)), // the template AC IDs a test plan scaffolded for these tracks (and size) covers
+  change: (a, lang) => L(lang).change(a), // 1.21 F5: a change's one file (kind "change", size xs)
+  FEATURE_SIZES, // 1.21 F5: xs · s · m · l (i18n/common.js)
   evalPlan: (name, lang) => L(lang).evalPlan(name),
   loadTest: (name, lang) => L(lang).loadTest(name),
   quickstart: (name, lang) => L(lang).quickstart(name),
@@ -244,6 +246,6 @@ module.exports = {
   bugReport: (a, lang) => L(lang).bugReport(a),
   bugRequirements: (a, lang) => L(lang).bugRequirements(a),
   bugTestPlan: (name, lang) => L(lang).bugTestPlan(name),
-  bugTasks: (name, lang) => L(lang).bugTasks(name),
+  bugTasks: (name, lang, size) => L(lang).bugTasks(name, size), // size "xs" (1.21 F5): no reproduce / root-cause tasks — their gates hold them
   renderBrief,
 };

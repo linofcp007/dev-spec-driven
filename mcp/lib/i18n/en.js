@@ -7,7 +7,7 @@
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests } = require("./common.js"); // load time
+const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded } = require("./common.js"); // load time
 // The assembled tables — call-time use only; mcp/lib/i18n.js links them once every language has loaded.
 let BUILD, MSG;
 function __link(T) { ({ BUILD, MSG } = T); }
@@ -72,6 +72,36 @@ ${a.summary ? "## Summary\n" + a.summary + "\n" : ""}`
       const obsAc = a.tracks.includes("obs")
         ? "\n\n#### [OBS] Acceptance Criteria (EARS)\n28. **US-1.AC-28** — THE SYSTEM SHALL emit [the request metric] with its latency, outcome and a correlation ID for every [request], and log each error with that correlation ID and no personal data.\n29. **US-1.AC-29** — WHEN the error-budget burn rate of [the SLO] exceeds [14.4]× over [one hour], THE SYSTEM SHALL page the on-call engineer with a link to the runbook.\n30. **US-1.AC-30** — IF the canary's error rate exceeds [the baseline] by [N] percentage points, THEN THE SYSTEM SHALL stop the rollout and roll back to the previous version automatically.\n31. **US-1.AC-31** — WHILE [a dependency] is unavailable, THE SYSTEM SHALL report itself not ready (readiness check) while staying live, and recover without a restart once it is back."
         : "";
+      // 1.21 F5 — size S: one story, two core criteria (WHEN · IF…THEN), every track criterion kept; no US-2, edge-case, NFR or
+      // assumptions block (the IF…THEN criterion is the error path). M / L / no size: the full template below.
+      if (a.size === "s") {
+        return (
+`# Feature: ${a.name}
+
+## Summary
+${a.summary || "[1-2 sentences: what this does and why it matters]"}
+
+## User Story
+
+### US-1 (P1 — MVP): [Story Title]
+**As a** [role], **I want** [capability], **so that** [benefit].
+**Independent Test:** Can be fully tested by [specific action] and delivers [specific value].
+
+#### Acceptance Criteria (EARS)
+1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
+2. **US-1.AC-2** — IF [error condition] THEN THE SYSTEM SHALL [recovery]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}
+
+## Success Criteria (measurable, technology-agnostic)
+- **SC-001** — [e.g., 90% of users complete [task] in under [N] seconds]
+
+## Out of Scope
+- [What this feature does NOT include]
+
+<!-- Size S: one story. Every AC contains SHALL and is testable; keep stable AC IDs. Mark any ambiguity inline with a
+     bracketed marker like  [NEEDS CLARIFICATION: which provider?] . A second story, edge cases or NFRs mean size m. -->
+`
+        );
+      }
       return (
 `# Feature: ${a.name}
 
@@ -348,6 +378,7 @@ Input types · size/count limits · token counting per type · validation pipeli
 
     design(a) {
       const extra = ["tdd", ...MARKER_TRACK_ORDER].filter((t) => a.tracks.includes(t)).map((t) => BUILD.en.trackDesignBlock(t)).join("");
+      if (a.size) return BUILD.en.sizedDesign(a, extra);
       return (
 `# Design: ${a.name}
 
@@ -432,12 +463,101 @@ ${extra}
       );
     },
 
+    // 1.21 F5 — the design of a SIZED feature (a.size s | m | l; xs is a change, no design). Every size: Complexity Tracking
+    // without the example row the placeholder gate refused, Error Handling pointing at the IF…THEN criteria (never asked twice),
+    // and a core section a track's own sections supersede left out (CORE_SUPERSEDED_BY). M / L: Reuse & Integration with one
+    // example row. S: the three weigh sections merged into ONE "Decisions, reuse & risks" section (designWeighChecks reads it),
+    // no Data Models / API Contracts / Security Considerations / Testing Strategy examples. The track blocks (`extra`) are the
+    // full ones — the engine keeps a size's tiers and drops the sections another active track covers (engine/scaffold.js).
+    sizedDesign(a, extra) {
+      const s = a.size === "s";
+      const out = [`# Design: ${a.name}`, "", "## Overview", "[How this integrates with the existing system. Key decisions and rationale.]", "",
+        "## Architecture", "```mermaid", "graph TD", "    A[Component] -->|action| B[Component]", "    B -->|query| C[(Database)]", "```", ""];
+      if (s) {
+        out.push("## Decisions, reuse & risks",
+          "<!-- One short answer each. What this reuses (with its path) — or \"nothing to reuse\"; the option chosen, the one",
+          "     rejected and why — or \"no alternative worth weighing\"; what could go wrong and how it is caught — or \"no material",
+          "     risk, because X\". Blank is not an answer. -->",
+          "- **Reuse:** [existing module or helper reused, with its path — or nothing to reuse]",
+          "- **Decision:** [the option chosen, the one rejected and why]",
+          "- **Risk:** [what could go wrong and how it is caught — or no material risk, because …]", "");
+      } else {
+        out.push("## Reuse & Integration",
+          "<!-- Search before you write (references/code-reuse-and-quality.md): what this feature takes from the codebase before",
+          "     it adds anything. One row per unit, with its path — Reuse (used as is), Extend (changed; its callers keep working)",
+          "     or New (nothing existing fits — say what was searched). A greenfield project says so in one line. -->",
+          "| Kind | What | Where (path) | Why / notes |", "|---|---|---|---|",
+          "| [Reuse / Extend / New] | [the unit] | [its path] | [why — for New: what was searched] |", "",
+          "**Module boundaries:** [where the new code lives, what it exposes and what it may import — features depend on shared code, never the reverse]", "",
+          "## Alternatives & Trade-offs",
+          "<!-- The options weighed for each key decision — e.g. strong vs eventual consistency, monolith vs service, sync vs",
+          "     async, optimistic vs pessimistic locking. At least two per decision (one option alone was never weighed), what",
+          "     choosing wrong would cost, the one chosen and why. One row per option. -->",
+          "| Decision | Option | Pros | Cons | Cost if wrong | Chosen |", "|---|---|---|---|---|---|",
+          "| [key decision] | [option A] | [pros] | [cons] | [cost of being wrong] | [✓ — why] |",
+          "| [key decision] | [option B] | [pros] | [cons] | [cost of being wrong] | [✗ — why not] |", "",
+          "## Data Models", "```typescript", "interface Entity {", "  id: string;", "  // fields with comments explaining purpose", "}", "```", "");
+        if (!coreSuperseded(a, "apiContracts")) out.push("## API Contracts", "### POST /api/resource", "- **Request:** `{ field: type }`", "- **Response (200):** `{ field: type }`",
+          "- **Errors:** 400 (validation), 401 (auth), 404 (not found)", "");
+        if (!coreSuperseded(a, "securityConsiderations")) out.push("## Security Considerations", "[Auth, validation, data exposure risks]", "");
+      }
+      if (!coreSuperseded(a, "errorHandling")) out.push("## Error Handling",
+        "Each IF…THEN criterion in requirements.md already names a failure and its recovery — add here only what spans them (retries, fallbacks, the messages users see), or leave it at that.", "");
+      if (!s && !coreSuperseded(a, "testingStrategy")) out.push("## Testing Strategy", "- Unit / Integration / E2E: [what each covers]", "");
+      if (!s) out.push("## Risks",
+        "<!-- What could make this design wrong or the delivery late — technical, delivery, data, business. One row per risk;",
+        "     an honest \"no material risk, because X\" is fine — blank is not. -->",
+        "| Risk | Likelihood | Impact | Mitigation | Owner |", "|---|---|---|---|---|",
+        "| [what could go wrong] | [low / medium / high] | [low / medium / high] | [how we prevent or detect it] | [who watches it] |", "");
+      out.push("## Constitution Check", "Verify this design against each principle in `steering/constitution.md`. GATE: must pass before",
+        "implementation; re-check after any design change.", "- [ ] [Principle 1] — complies", "- [ ] [Principle 2] — complies",
+        "(If a principle cannot be met, do NOT silently break it — record it in Complexity Tracking below.)", "",
+        "## Complexity Tracking", "Justify anything that violates a constitution principle or adds non-obvious complexity. Empty is good.",
+        "| What | Why it's needed | Simpler alternative rejected because |", "|---|---|---|");
+      return out.join("\n") + "\n" + extra + `
+<!-- Tracks active: ${a.label} · size ${a.size}. Mandatory track sections above must have real content — an honest
+     "n/a — <why it does not apply>" is fine; blank or the template's guidance line is not. -->
+`;
+    },
+
     tasks(a) {
       const green = a.tracks.includes("tdd") ? templateTests(a.tracks) : null; // each template test made green by one task
       const evalMarker = a.tracks.includes("ai") ? "\n  - _Affects evals: golden (maintain baseline)_" : "";
       const metricMarker = a.tracks.includes("saas") ? "\n  - _Emits metrics: req_duration_ms{feature=" + a.slug + "}_" : "";
       let n = 0;
       const id = () => ++n;
+      // 1.21 F5 — size S: one core task (US-1's two criteria), then the track blocks (the engine keeps, per track, the tasks
+      // that implement a criterion — engine/scaffold.js trimTrackTasks); no setup / foundational / US-2 / polish phases.
+      if (a.size === "s") {
+        const green1 = a.tracks.includes("tdd") ? templateTests(a.tracks, "s") : null;
+        let body =
+`## Story US-1 (P1 — MVP)
+- [ ] ${id()}. [US1] [Core behavior for US-1]
+  - _Requirements: US-1.AC-1, US-1.AC-2_${greenLine(green1, "US-1.AC-1", "US-1.AC-2")}${metricMarker}${evalMarker}
+  - _Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_
+**Checkpoint:** US-1 is fully functional and independently testable/shippable.
+`;
+        for (const t of MARKER_TRACK_ORDER) {
+          if (!a.tracks.includes(t)) continue;
+          const block = BUILD.en.trackTasks({ track: t, start: n + 1, green: green1 });
+          body += block;
+          n += (block.match(/^- \[ \] \d+\./gm) || []).length;
+        }
+        return (
+`# Tasks: ${a.name}
+
+<!-- Tracks: ${a.label} · size s. One story; every task carries _Requirements:_ (TDD tasks _Makes green:_) and a
+     _Verify: <command>_ — spec_complete_task records its result as the task's evidence. Use _Implements: path_ to tie a
+     task to a real source file. -->
+
+## Global Constraints
+<!-- Exact values every task must respect, copied verbatim from the spec/steering — spec_task_brief inlines this section
+     into every task brief. -->
+- [e.g. Node >= 20 · no new runtime dependencies · API field names in snake_case]
+
+${body}`
+        );
+      }
       let phases =
 `## Phase: Setup
 - [ ] ${id()}. [shared][P] [project/dev setup if needed — deps, scaffolding]
@@ -674,7 +794,33 @@ ${a.summary || "[one line: the bug being fixed]"}
 `;
     },
 
-    bugTasks(name) {
+    bugTasks(name, size) {
+      // 1.21 F5 — an XS bugfix: no "reproduce" / "root cause" tasks — the requirements gate already needs bug.md → Reproduction
+      // (check `reproduction`) and the design gate its Root Cause (`root-cause`), both before the tasks can be approved; the
+      // execution gate (bugfixGate) still lets only task 1 through while Root Cause is empty. The iron law holds.
+      if (size === "xs") {
+        return `# Tasks: ${name}
+
+<!-- XS bugfix: bug.md → Reproduction and Root Cause are written and approved first (the requirements and design gates).
+     Task 1 is red by design (its test must FAIL): its _Verify:_ runs T-01 and _Expect: fail_ makes that failing run the
+     proof (a passing run is refused). The must-pass suite belongs on the fix task (2).
+     T-02 guards behavior that already works — green before and after the fix, so it is in no task's _Makes green:_. -->
+
+## Global Constraints
+- [exact values the fix must respect — versions, limits, formats]
+
+## Phase: Fix
+- [ ] 1. [US1] Write regression test T-01 and watch it fail for the right reason (paste the output); add guard test T-02 (it passes already)
+  - _Requirements: US-1.AC-1_
+  - _Verify: [command that runs T-01]_
+  - _Expect: fail_
+- [ ] 2. [US1] Fix the root cause — one change, not a bundle; guard test T-02 stays green
+  - _Requirements: US-1.AC-1, US-1.AC-2_
+  - _Makes green: T-01_
+  - _Verify: [full test suite command]_
+**Checkpoint:** the bug no longer reproduces and the full suite is green.
+`;
+      }
       return `# Tasks: ${name}
 
 <!-- Bugfix order is fixed: reproduce → root cause → failing regression test → fix → verify.
@@ -703,7 +849,7 @@ ${a.summary || "[one line: the bug being fixed]"}
 `;
     },
 
-    testPlan(name, tracks, acs) {
+    testPlan(name, tracks, acs, size) {
       const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
         { integration: "integration", load: "load", behavior: "[behavior]", acSlot: "[the AC IDs this test covers]", recovery: "[error condition → recovery]", property: "[always-true property]",
           tenant: "tenant A never reads tenant B's records", latency: "P95 latency within the performance budget",
@@ -720,7 +866,7 @@ ${a.summary || "[one line: the bug being fixed]"}
           loadError: "a failed load: an error with Retry, the content already shown kept",
           telemetry: "every request emits the metric, a structured log line and a trace with one correlation ID; no personal data in the log",
           burnAlert: "a staged failure burns the error budget: the burn-rate alert fires and pages with the runbook link", rollbackDrill: "rollback drill: a canary whose error rate crosses the threshold stops the rollout and rolls back",
-          readiness: "fault injection: a dependency down → readiness fails, liveness passes, recovery without a restart" }, acs);
+          readiness: "fault injection: a dependency down → readiness fails, liveness passes, recovery without a restart" }, acs, size);
       return (
 `# Test Plan: ${name}
 
@@ -804,6 +950,31 @@ Measured P50/P95/P99 ≤ budget at target throughput, error rate < [0.1]%.
       );
     },
 
+    // 1.21 F5 — a change (kind "change", size xs): ONE file holds the whole plan — summary, 1–3 EARS criteria, the approach and
+    // 1–3 tasks with _Verify:_. The engine reads it as the feature's requirements AND tasks (engine/files.js specAlias).
+    change(a) {
+      return `# Change: ${a.name}
+
+## Summary
+${a.summary || "[one line: what changes and why]"}
+
+## Acceptance Criteria (EARS)
+1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
+
+## Approach
+[the change in one or two lines — what it touches and why that is all of it]
+
+## Tasks
+- [ ] 1. [US1] [the change]
+  - _Requirements: US-1.AC-1_
+  - _Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_
+
+<!-- A change (size xs): 1–3 acceptance criteria and 1–3 tasks, core only — no classification, design, quickstart or
+     checklist. Two approvals: the plan (this file — spec_approve {through: "tasks"}) and the execution sign-off. More
+     criteria or tasks, or a track (+tdd, +sec …), make it a feature of size s: spec_create {size: "s"}. -->
+`;
+    },
+
     quickstart(name) {
       return (
 `# Quickstart: ${name}
@@ -838,15 +1009,18 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
         "Design: at least one Mermaid diagram; security + error handling covered.",
         "Traceability: every AC maps to a task (run `trace`).",
       ];
+      // 1.21 F5: a sized feature's section counts (a.sectionCounts — the size's tiers, the overlaps merged) and, with +obs on, the
+      // +saas line without the telemetry +obs already checks (one line, not two). No size: the counts and lines as ever.
+      const cnt = (t, n) => (a.sectionCounts && a.sectionCounts[t] != null ? a.sectionCounts[t] : n);
       if (a.tracks.includes("tdd")) items.push("TDD: all planned tests written and red for the right reason before code.", "TDD: test commits land before implementation commits.");
-      if (a.tracks.includes("saas")) items.push("SaaS: 5 mandatory design sections filled (no TODO).", "SaaS: tenant isolation enforced (`WHERE tenant_id = ?`).", "SaaS: metrics/logs/alerts emitted; load test meets budget (hot path).");
-      if (a.tracks.includes("ai")) items.push("AI: 10 mandatory design sections filled (no TODO).", "AI: golden ≥ threshold, adversarial safety 100%, regression maintained.", "AI: prompts versioned in prompts/vN.md; cost within budget.");
-      if (a.tracks.includes("sec")) items.push("SEC: 5 mandatory design sections filled (no TODO) — threat model reviewed.", "SEC: authentication + object-level authorization enforced, deny by default; no secret in code or logs.", "SEC: SAST, dependency audit and abuse-case tests clean on a local run.");
-      if (a.tracks.includes("privacy")) items.push("PRIVACY: 6 mandatory design sections filled (no TODO) — DPIA decision recorded.", "PRIVACY: access/export and erasure work end to end, across every store and processor.", "PRIVACY: retention job scheduled; privacy notice and records of processing updated.");
-      if (a.tracks.includes("dist")) items.push("DIST: 5 mandatory design sections filled (no TODO) — every cross-system write has its mitigation (outbox / inbox / saga) or an accepted risk.", "DIST: consumers idempotent (inbox or a unique key in the effect's transaction); retries with backoff + jitter and a DLQ; nothing non-idempotent retried blindly.", "DIST: failure-injection tests (crash between commit and publish, duplicate delivery, concurrent updates, dependency down) green on a local run.");
-      if (a.tracks.includes("api")) items.push("API: 5 mandatory design sections filled (no TODO) — the contract file (OpenAPI / .proto / GraphQL schema) is in the repo and named by a task's Implements marker.", "API: errors are problem+json with stable codes; creates take an Idempotency-Key; updates honour If-Match; list endpoints page with a stable cursor.", "API: contract tests and the breaking-change diff against the published version green on a local run; anything removed is deprecated with a Sunset date.");
-      if (a.tracks.includes("ui")) items.push("UI: 5 mandatory design sections filled (no TODO) — every state of the state matrix designed; new components entered through the design system.", "UI: WCAG 2.2 AA — the automated accessibility check clean on a local run, plus a manual keyboard and screen-reader pass with its findings fixed.", "UI: responsive at every breakpoint, strings in the catalogue (text expansion, RTL checked); LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 measured.");
-      if (a.tracks.includes("obs")) items.push("OBS: 5 mandatory design sections filled (no TODO) — each SLO has an error budget, each alert a runbook, the rollback criteria are numbers.", "OBS: the metrics, structured logs (correlation ID, no personal data) and traces the design names are emitted — seen, not assumed.", "OBS: an alert fired in a staged failure, a rollback drill done and the health checks verified with a dependency down.");
+      if (a.tracks.includes("saas")) items.push("SaaS: " + cnt("saas", 5) + " mandatory design sections filled (no TODO).", "SaaS: tenant isolation enforced (`WHERE tenant_id = ?`).", a.size && a.tracks.includes("obs") ? "SaaS: load test meets budget (hot path)." : "SaaS: metrics/logs/alerts emitted; load test meets budget (hot path).");
+      if (a.tracks.includes("ai")) items.push("AI: " + cnt("ai", 10) + " mandatory design sections filled (no TODO).", "AI: golden ≥ threshold, adversarial safety 100%, regression maintained.", "AI: prompts versioned in prompts/vN.md; cost within budget.");
+      if (a.tracks.includes("sec")) items.push("SEC: " + cnt("sec", 5) + " mandatory design sections filled (no TODO) — threat model reviewed.", "SEC: authentication + object-level authorization enforced, deny by default; no secret in code or logs.", "SEC: SAST, dependency audit and abuse-case tests clean on a local run.");
+      if (a.tracks.includes("privacy")) items.push("PRIVACY: " + cnt("privacy", 6) + " mandatory design sections filled (no TODO) — DPIA decision recorded.", "PRIVACY: access/export and erasure work end to end, across every store and processor.", "PRIVACY: retention job scheduled; privacy notice and records of processing updated.");
+      if (a.tracks.includes("dist")) items.push("DIST: " + cnt("dist", 5) + " mandatory design sections filled (no TODO) — every cross-system write has its mitigation (outbox / inbox / saga) or an accepted risk.", "DIST: consumers idempotent (inbox or a unique key in the effect's transaction); retries with backoff + jitter and a DLQ; nothing non-idempotent retried blindly.", "DIST: failure-injection tests (crash between commit and publish, duplicate delivery, concurrent updates, dependency down) green on a local run.");
+      if (a.tracks.includes("api")) items.push("API: " + cnt("api", 5) + " mandatory design sections filled (no TODO) — the contract file (OpenAPI / .proto / GraphQL schema) is in the repo and named by a task's Implements marker.", "API: errors are problem+json with stable codes; creates take an Idempotency-Key; updates honour If-Match; list endpoints page with a stable cursor.", "API: contract tests and the breaking-change diff against the published version green on a local run; anything removed is deprecated with a Sunset date.");
+      if (a.tracks.includes("ui")) items.push("UI: " + cnt("ui", 5) + " mandatory design sections filled (no TODO) — every state of the state matrix designed; new components entered through the design system.", "UI: WCAG 2.2 AA — the automated accessibility check clean on a local run, plus a manual keyboard and screen-reader pass with its findings fixed.", "UI: responsive at every breakpoint, strings in the catalogue (text expansion, RTL checked); LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 measured.");
+      if (a.tracks.includes("obs")) items.push("OBS: " + cnt("obs", 5) + " mandatory design sections filled (no TODO) — each SLO has an error budget, each alert a runbook, the rollback criteria are numbers.", "OBS: the metrics, structured logs (correlation ID, no personal data) and traces the design names are emitted — seen, not assumed.", "OBS: an alert fired in a staged failure, a rollback drill done and the health checks verified with a dependency down.");
       items.push("Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Tick before calling the feature done.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -980,6 +1154,37 @@ const msg = {
       changedByDate: (list, slug) => `judged by file date only (approved before content fingerprints — a clone or copy resets file dates, so this may be no edit at all): ${list} — re-review, then re-approve to track it by content (/approve ${slug} <phase>)`,
       untrackedApproval: (list, slug) => `approved before change tracking — nothing about the signed-off file was recorded, so an edit can't be detected: ${list} — re-approve to start tracking it (/approve ${slug} design)`,
     },
+    // 1.21 F5 — right-sized rigor: feature sizes (spec_create {size}), the change kind (size xs, one change.md), the size's rules.
+    sizes: {
+      spikeNoSize: "A spike is timeboxed, not sized — create it without a size (its timebox bounds it).",
+      changeSize: (size) => `kind "change" is size xs — for size ${size} create a feature: spec_create {kind: "feature", size: "${size}"}.`,
+      changeTracks: (list) => `A change (size xs) is core-only — ${list} make it a feature of size s: spec_create {size: "s", tracks} (a short design with the tracks' sections, a task per criterion).`,
+      changeNoTracks: (slug) => `'${slug}' is a change (size xs, core-only) — a track makes it a feature: create one of size s (spec_create {size: "s", tracks}) and archive this change (spec_feature {action: "archive"}).`,
+      changeCreated: (slug) => `'${slug}' is a change (size xs): ONE file, .specs/${slug}/change.md — its summary, 1–3 EARS criteria, the approach and 1–3 tasks with _Verify:_. Fill it, then approve the plan in one call (spec_approve {name: "${slug}", through: "tasks"}); after the tasks, spec_finish and the execution sign-off.`,
+      sizeKept: (kept, asked) => `This feature's size is ${kept} — kept it (asked for ${asked}): a size is chosen once, when the feature is created.`,
+      noGate: (phase, slug) => `'${slug}' is a change: its only approvals are the plan (phase tasks — change.md) and the execution sign-off — there is no ${phase} phase to approve.`,
+      scope: (acs, tasks, maxAcs, maxTasks, extra) => `a change is XS — 1–${maxAcs} acceptance criteria and 1–${maxTasks} tasks, core only; change.md has ${acs} criteria and ${tasks} task(s)${extra ? ` and the track(s) ${extra}` : ""} — create it as a feature of size s instead (spec_create {size: "s"}) and archive this change`,
+      scopeOk: (acs, tasks) => `XS: ${acs} criteria, ${tasks} task(s)`,
+      approvePlan: (slug) => `Review & approve the plan (change.md: its criteria, approach and tasks) — spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug}).`,
+      // P3 — size XS / S: the whole plan filled, then ONE approval call (each gate still runs, in order)
+      planFastForward: (slug, size, list) => `Size ${size}: fill the whole plan first — ${list} — then approve it in one call: spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug}; CLI: ${DEV_SPEC} approve ${slug} --through tasks). Each phase's gate still runs, in order; the first that refuses stops it and says why.`,
+      templateApproved: (list) => `only the template's guidance left in: ${list} — the design was approved before 1.21's stricter rule, so this warns; its next approval asks for your own text there (or one line "n/a — <why it does not apply>")`,
+      sectionsPassSized: (filled, covered, optional) => `filled: ${filled}` + (covered ? ` · covered by another track's section: ${covered}` : "") + (optional ? ` · optional at this size, left out: ${optional}` : ""),
+      extendedComment: (marker, names) => `Size s: the other ${marker} sections — ${names} — are optional at this size. Add one when it applies (it must be filled then), or answer it in one line: "n/a — <why it does not apply>".`,
+      coveredComment: (label) => `This section also answers ${label} — both tracks are on, so one section holds it (a ${label} section of its own counts too).`,
+      // spec_classify's size suggestion (a reason code → the sentence)
+      suggest: {
+        "trivial-change": "Suggested size xs — a trivial change (a typo, a copy or config tweak, a one-line fix): a change, one change.md, two approvals.",
+        "single-unit": "Suggested size s — one unit of work (one endpoint, screen, button, field…) with at most one track that has design sections: one story, the core-tier track sections, the plan approved in one call.",
+        "several-tracks": "Suggested size l — three or more tracks with design sections: the full chain.",
+        "public-api": "Suggested size l — a public API (outside consumers, a contract to keep): the full chain.",
+        "cross-system": "Suggested size l — it crosses systems (+dist with another track, or several services): the full chain.",
+        default: "Suggested size m — a feature with its full chain (the duplicate track sections merged).",
+      },
+      optionalMark: "optional at this size",
+      coveredMark: "covered by another track",
+      suggestTail: "Confirm it or pick another in Phase 0 — spec_create {size: xs | s | m | l}; no size keeps the pre-1.21 scaffold.",
+    },
     kindKept: (kept, asked) => `'${kept}' is already the kind of this feature — kept it (asked for '${asked}'). Start a new one for a different kind.`,
     langKept: (kept, asked) => `This feature is already in '${kept}' — kept it (asked for '${asked}'). One feature, one language.`,
     // 1.21 F3 — spec_create {kind: "bugfix"} prefill: reproduction · rootCause · condition · behaviour (the input names stay English).
@@ -1070,7 +1275,8 @@ const msg = {
       fileWarning: (rel, code, n) => `${rel} ${code === "invalid-entries" ? `holds ${n} invalid entr${n === 1 ? "y" : "ies"} — they are ignored, and the file is never rewritten until you fix or remove them by hand` : `is ignored and never rewritten — ${({ "invalid-json": "it is not valid JSON", "invalid-shape": "it holds no \"signals\" list", "too-big": "it is too big (64 KB at most)", "not-a-file": "it is not a regular file", unreadable: "it can't be read" })[code] || code}; fix it by hand or delete it`}.`,
       problem: (i, code) => `  entry ${i + 1}: ${({ "invalid-entry": "invalid (track, word, effect off|weak|strong, count ≥ 1, origin learned|set)", duplicate: "a duplicate of an earlier entry", "too-many": "beyond the 200-override bound" })[code] || code}`,
     },
-    sectionStatus: { missing: "missing", unfilled: "unfilled" },
+    // (1.21 F5: template = only the scaffold's guidance left · na-short = an n/a without a reason of ≥ 4 words)
+    sectionStatus: { missing: "missing", unfilled: "unfilled", template: "only the template's guidance", "na-short": "n/a without a reason (4+ words)" },
     sectionNames: {},
     precommit: {
       header: "dev-spec-driven pre-commit:",
@@ -1455,6 +1661,7 @@ const msg = {
         "test-plan.md": (slug) => `check the AC coverage with trace_check (${DEV_SPEC} trace ${slug})`,
         "eval-plan.md": (slug) => `set the thresholds and the baseline, then /spec-doctor ${slug}`,
         "tasks.md": (slug) => `break the design into real tasks (/createTask ${slug}), then trace_check`,
+        "change.md": (slug) => `write its summary, 1–3 EARS criteria, the approach and 1–3 tasks each with a _Verify:_ command, then approve the plan in one call — spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug})`,
         default: (slug) => `/spec-doctor ${slug}`,
       },
       approveClassification: (slug) => `Confirm & approve the classification — /approve ${slug} classification.`,
@@ -2008,7 +2215,7 @@ const msg = {
           "classification.md": "Classification (tracks)", "requirements.md": "Requirements (EARS)", "design.md": "Technical design", "test-plan.md": "Test plan",
           "eval-plan.md": "Eval plan", "load-test.md": "Load test plan", "tasks.md": "Tasks", "bug.md": "Bug report (reproduction · root cause · fix)",
           "quickstart.md": "Quickstart", "checklist.md": "Checklist", "integration-plan.md": "Integration plan", "retro.md": "Retrospective",
-          "spike.md": "Spike (question · evidence · decision)", "decisions.md": "Decision log", // 1.14 C2
+          "spike.md": "Spike (question · evidence · decision)", "decisions.md": "Decision log", "change.md": "Change (criteria · approach · tasks)", // 1.14 C2 · 1.21 F5
         },
         tplFeature: (list) => `A feature's spec artifact: .specs/{slug}/{artifact} — {artifact} is one of ${list}.`,
         tplSteering: "A steering file: .specs/steering/{file} (a .md file).",

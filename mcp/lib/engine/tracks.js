@@ -248,31 +248,31 @@ const SAAS_SECTIONS = [
   { name: "Multi-tenancy", syn: ["multi-tenancy", "multitenancy", "multi-inquilino", "multiinquilino", "multi inquilino", "multitenant", "modelo multi-inquilino", "modelo multiinquilino", "modelo de multi-inquilino",
     // pt-BR (full review Pb4 / Pb7): the Brazilian word for tenant — its scaffold writes "Modelo Multilocatário"
     "multilocatário", "multilocatario", "multi-locatário", "multi-locatario", "modelo multilocatário", "modelo multilocatario", "modelo multi-locatário"] },
-  { name: "Observability", syn: ["observability", "observabilidade", "observabilidad"] },
-  { name: "Cost Envelope", syn: ["cost envelope", "envelope de custo", "orçamento de custo", "sobre de coste", "presupuesto de coste"] },
+  { name: "Observability", syn: ["observability", "observabilidade", "observabilidad"], tier: "extended" },
+  { name: "Cost Envelope", syn: ["cost envelope", "envelope de custo", "orçamento de custo", "sobre de coste", "presupuesto de coste"], tier: "extended" },
 ];
 const AI_SECTIONS = [
   { name: "Model Strategy", syn: ["model strategy", "estratégia de modelo", "estrategia de modelo"] },
   { name: "Prompt Architecture", syn: ["prompt architecture", "arquitetura de prompt", "arquitectura de prompt"] },
   { name: "Token Economics", syn: ["token economics", "economia de tokens", "economía de tokens"] },
-  { name: "Latency Budget", syn: ["latency budget", "orçamento de latência", "presupuesto de latencia"] },
+  { name: "Latency Budget", syn: ["latency budget", "orçamento de latência", "presupuesto de latencia"], tier: "extended" },
   { name: "Eval Strategy", syn: ["eval strategy", "estratégia de eval", "estrategia de eval", "estratégia de avaliação", "estrategia de evaluación"] },
   { name: "Safety & Abuse", syn: ["safety & abuse", "safety and abuse", "segurança e abuso", "seguridad y abuso"] },
   { name: "Fallback & Degradation", syn: ["fallback", "degradação", "degradación"] },
-  { name: "Observability for AI", syn: ["observability for ai", "observabilidade de ai", "observabilidade de ia", "observabilidad de ia"] },
-  { name: "Model Lifecycle", syn: ["model lifecycle", "ciclo de vida do modelo", "ciclo de vida del modelo"] },
-  { name: "Multi-modality", syn: ["multi-modality", "multimodality", "multimodalidade", "multimodalidad"] },
+  { name: "Observability for AI", syn: ["observability for ai", "observabilidade de ai", "observabilidade de ia", "observabilidad de ia"], tier: "extended" },
+  { name: "Model Lifecycle", syn: ["model lifecycle", "ciclo de vida do modelo", "ciclo de vida del modelo"], tier: "extended" },
+  { name: "Multi-modality", syn: ["multi-modality", "multimodality", "multimodalidade", "multimodalidad"], tier: "extended" },
 ];
 // +sec (1.14) — never a bare "security" synonym: the core design's own "Security Considerations" is not a [SEC] section.
 const SEC_SECTIONS = [
   { name: "Threat Model", syn: ["threat model", "modelo de ameaças", "modelo de ameacas", "modelação de ameaças", "modelacao de ameacas", "modelo de amenazas", "modelado de amenazas"] },
-  { name: "Security Requirements", syn: ["security requirements", "requisitos de segurança", "requisitos de seguranca", "requisitos de seguridad"] },
+  { name: "Security Requirements", syn: ["security requirements", "requisitos de segurança", "requisitos de seguranca", "requisitos de seguridad"], tier: "extended" },
   { name: "Authentication & Authorization", syn: ["authentication & authorization", "authentication and authorization", "authn & authz", "authn/authz",
     "autenticação e autorização", "autenticacao e autorizacao", "autenticación y autorización", "autenticacion y autorizacion"] },
   { name: "Secrets & Key Management", syn: ["secrets & key management", "secrets and key management", "secrets management", "secret management", "key management",
     "gestão de segredos", "gestao de segredos", "gestão de chaves", "gestión de secretos", "gestion de secretos", "gestión de claves",
-    "gerenciamento de segredos", "gerenciamento de chaves"] }, // pt-BR (full review Pb4)
-  { name: "Security Testing", syn: ["security testing", "security tests", "testes de segurança", "testes de seguranca", "pruebas de seguridad"] },
+    "gerenciamento de segredos", "gerenciamento de chaves"], tier: "extended" }, // pt-BR (full review Pb4)
+  { name: "Security Testing", syn: ["security testing", "security tests", "testes de segurança", "testes de seguranca", "pruebas de seguridad"], tier: "extended" },
 ];
 // +privacy (1.14) — GDPR / RGPD. `loose` (C4, see extractSection): the synonyms that are ordinary design words — they
 // count only on a [PRIVACY] heading or under one, never on a core heading ("## Processors and queues", "## Retention").
@@ -290,11 +290,11 @@ const PRIVACY_SECTIONS = [
   { name: "Processors & International Transfers", syn: ["processors & international transfers", "processors and international transfers", "processors", "sub-processors",
     "international transfers", "subcontratantes", "transferências internacionais", "transferencias internacionais", "encargados del tratamiento", "transferencias internacionales",
     "operadores e transferências internacionais", "operadores e transferencias internacionais", "operadores", "suboperadores"],
-  loose: ["processors", "sub-processors", "operadores", "suboperadores"] },
+  loose: ["processors", "sub-processors", "operadores", "suboperadores"], tier: "extended" },
   // pt-BR / LGPD (full review Pb4 / Pb7): the RIPD (Relatório de Impacto à Proteção de Dados), art. 38.
   { name: "DPIA", syn: ["dpia", "data protection impact assessment", "aipd", "avaliação de impacto", "avaliacao de impacto", "eipd", "evaluación de impacto", "evaluacion de impacto",
     "ripd", "relatório de impacto à proteção de dados", "relatorio de impacto a protecao de dados", "relatório de impacto", "relatorio de impacto"],
-    loose: ["avaliação de impacto", "avaliacao de impacto", "evaluación de impacto", "evaluacion de impacto", "relatório de impacto", "relatorio de impacto"] },
+    loose: ["avaliação de impacto", "avaliacao de impacto", "evaluación de impacto", "evaluacion de impacto", "relatório de impacto", "relatorio de impacto"], tier: "extended" },
 ];
 // +dist (1.17 D) — distributed systems and data consistency. `loose`: the synonyms that are ordinary design words (a core
 // "## Concurrency", "## Failure modes", "## Idempotency", "## Consistency") — they name a [DIST] section only on a heading
@@ -311,13 +311,13 @@ const DIST_SECTIONS = [
   loose: ["idempotency", "delivery guarantees", "message delivery", "idempotência", "idempotencia", "garantias de entrega", "garantías de entrega"] },
   { name: "Concurrency", syn: ["concurrency control", "concurrency", "controlo de concorrência", "controle de concorrência", "controle de concorrencia",
     "concorrência", "concorrencia", "control de concurrencia", "concurrencia"],
-  loose: ["concurrency", "concorrência", "concorrencia", "concurrencia"] },
+  loose: ["concurrency", "concorrência", "concorrencia", "concurrencia"], tier: "extended" },
   // 1.17 D review: the section's own names (Failure Modes / Failure Handling — the core design's heading is "Error Handling")
   // are strict, as every other [DIST] section's are — a marker-less hand-written design with all five headings passes; the
   // singular is loose.
   { name: "Failure Modes", syn: ["failure modes", "failure mode", "failure handling", "modos de falha", "modo de falha", "modos de fallo", "modo de fallo",
     "modos de falla", "modo de falla"],
-  loose: ["failure mode", "modo de falha", "modo de fallo", "modo de falla"] },
+  loose: ["failure mode", "modo de falha", "modo de fallo", "modo de falla"], tier: "extended" },
 ];
 // +api (1.19 T) — API contracts. The core design already has "## API Contracts" (PT / ES "Contratos de API") and "## Error
 // Handling": every ordinary name here is `loose` — it names an [API] section only on a heading carrying the marker or nested
@@ -335,17 +335,17 @@ const API_SECTIONS = [
   loose: ["error format", "api errors", "errors", "formato de erros", "erros da api", "erros", "formato de errores", "errores de la api", "errores"] },
   { name: "Pagination, Idempotency & Concurrency", syn: ["pagination, idempotency & concurrency", "pagination, idempotency and concurrency", "pagination",
     "paginação, idempotência e concorrência", "paginação", "paginación, idempotencia y concurrencia", "paginación"],
-  loose: ["pagination", "paginação", "paginación"] },
+  loose: ["pagination", "paginação", "paginación"], tier: "extended" },
   { name: "Rate Limits & Quotas", syn: ["rate limits & quotas", "rate limits and quotas", "rate limits", "rate limiting", "quotas",
     "limites de taxa e quotas", "limites de taxa e cotas", "limites de taxa", "cotas", "límites de tasa y cuotas", "límites de tasa", "cuotas"],
-  loose: ["rate limits", "rate limiting", "quotas", "limites de taxa", "cotas", "límites de tasa", "cuotas"] },
+  loose: ["rate limits", "rate limiting", "quotas", "limites de taxa", "cotas", "límites de tasa", "cuotas"], tier: "extended" },
 ];
 // +ui (1.19 T) — user-facing UI. Every ordinary name is `loose` (marker-bound): a core "## Accessibility" or "## States" note, or
 // +saas's "## [SaaS] Performance Budget", never stands in for a deleted [UI] section; the full names stay strict.
 const UI_SECTIONS = [
   { name: "Design System Usage", syn: ["design system usage", "design system", "component inventory", "uso do design system", "sistema de design",
     "inventário de componentes", "uso del design system", "sistema de diseño", "inventario de componentes"],
-  loose: ["design system", "component inventory", "sistema de design", "inventário de componentes", "sistema de diseño", "inventario de componentes"] },
+  loose: ["design system", "component inventory", "sistema de design", "inventário de componentes", "sistema de diseño", "inventario de componentes"], tier: "extended" },
   { name: "UI States", syn: ["ui states", "view states", "states", "estados da interface", "estados da ui", "estados de la interfaz", "estados de la ui", "estados"],
   loose: ["view states", "states", "estados"] },
   { name: "Accessibility", syn: ["accessibility", "a11y", "acessibilidade", "accesibilidad"], loose: ["accessibility", "a11y", "acessibilidade", "accesibilidad"] },
@@ -353,11 +353,11 @@ const UI_SECTIONS = [
     "internationalisation", "i18n", "design responsivo e i18n", "design responsivo", "responsividade", "internacionalização", "diseño adaptable e i18n",
     "diseño adaptable", "diseño responsivo", "internacionalización"],
   loose: ["responsiveness", "responsive design", "internationalization", "internationalisation", "i18n", "design responsivo", "responsividade",
-    "internacionalização", "diseño adaptable", "diseño responsivo", "internacionalización"] },
+    "internacionalização", "diseño adaptable", "diseño responsivo", "internacionalización"], tier: "extended" },
   { name: "UI Performance Budget", syn: ["ui performance budget", "web performance budget", "front-end performance", "frontend performance", "core web vitals",
     "performance budget", "orçamento de desempenho da interface", "orçamento de desempenho", "presupuesto de rendimiento de la interfaz",
     "presupuesto de rendimiento"],
-  loose: ["front-end performance", "frontend performance", "core web vitals", "performance budget", "orçamento de desempenho", "presupuesto de rendimiento"] },
+  loose: ["front-end performance", "frontend performance", "core web vitals", "performance budget", "orçamento de desempenho", "presupuesto de rendimiento"], tier: "extended" },
 ];
 // +obs (1.19 T) — observability & operability. No name is "Observability" (+saas's section); every ordinary name is `loose`
 // (marker-bound) — a core "## Rollback" or "## Alerts" note never stands in for a deleted [OBS] section; the full names stay strict.
@@ -370,17 +370,33 @@ const OBS_SECTIONS = [
   loose: ["telemetry", "instrumentation", "metrics, logs & traces", "metrics, logs and traces", "telemetria", "instrumentação", "telemetría", "instrumentación"] },
   { name: "Alerting & Runbooks", syn: ["alerting & runbooks", "alerting and runbooks", "alerting", "alerts", "runbooks", "alertas e runbooks", "alertas y runbooks",
     "alertas"],
-  loose: ["alerting", "alerts", "runbooks", "alertas"] },
+  loose: ["alerting", "alerts", "runbooks", "alertas"], tier: "extended" },
   { name: "Rollout & Rollback", syn: ["rollout & rollback", "rollout and rollback", "rollout", "rollback", "release strategy", "lançamento e reversão", "rollout e rollback",
     "despliegue y reversión", "rollout y rollback"],
   loose: ["rollout", "rollback", "release strategy"] },
   { name: "Health & Capacity", syn: ["health & capacity", "health and capacity", "health checks", "capacity", "saúde e capacidade", "verificações de saúde",
     "capacidade", "salud y capacidad", "comprobaciones de salud", "capacidad"],
-  loose: ["health checks", "capacity", "verificações de saúde", "capacidade", "comprobaciones de salud", "capacidad"] },
+  loose: ["health checks", "capacity", "verificações de saúde", "capacidade", "comprobaciones de salud", "capacidad"], tier: "extended" },
 ];
 // The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
 // check read (a marker track = a TRACK_MARKER entry + its table here).
 const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS, api: API_SECTIONS, ui: UI_SECTIONS, obs: OBS_SECTIONS };
+// A section's `tier` (1.21 F5 — DATA in the tables above): "core" (absent = core) is mandatory at every size; "extended" is
+// optional at size S — absent, or answered by one "n/a — <reason>" line (sectionVerdict). A track pack's sections are all core.
+// 1.21 F5 P4 — sections two tracks both scaffold (DATA): when both tracks are on, a SIZED scaffold writes only the covering
+// section(s) (`by`, [track, section name]) and the gate reads the dropped one (`drop`) as answered by them — status "covered"
+// (trackSectionReport); a design that still holds the dropped heading is judged on it as ever. No size: never applied. A new
+// built-in track adds its pairs here, no code.
+const TRACK_OVERLAPS = [
+  { drop: ["saas", "Observability"], by: [["obs", "Telemetry"], ["obs", "Alerting & Runbooks"]] },
+  { drop: ["saas", "Performance Budget"], by: [["obs", "SLIs & SLOs"]] },
+  { drop: ["api", "Pagination, Idempotency & Concurrency"], by: [["dist", "Delivery & Idempotency"], ["dist", "Concurrency"]] },
+];
+// The template TASKS two tracks both scaffold (DATA): with the `by` track on, a sized scaffold leaves out the task at 1-based
+// `drop` position of the other track's template block (its criteria stay cited by that block's other tasks).
+const TRACK_TASK_OVERLAPS = [
+  { drop: ["saas", 1], by: "obs" }, // "Emit metrics, add dashboard, configure alerts" — +obs's telemetry / alerting tasks do it
+];
 // [[track, sections, marker]] for the ACTIVE marker tracks, in track order.
 function activeSectionTracks(tracks) {
   return markerTracks().filter((t) => tracks.includes(t)).map((t) => [t, trackSectionTable(t), trackMarker(t)]); // + the track packs (1.15)
@@ -1227,4 +1243,4 @@ module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, p
   trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
   inactiveMarkerLines, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
   SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, OBS_SECTIONS, TRACK_SECTIONS,
-  activeSectionTracks, activeDesign, __link };
+  TRACK_OVERLAPS, TRACK_TASK_OVERLAPS, activeSectionTracks, activeDesign, __link };

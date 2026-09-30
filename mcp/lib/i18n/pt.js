@@ -8,7 +8,7 @@
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests } = require("./common.js"); // load time
+const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded } = require("./common.js"); // load time
 // The assembled tables — call-time use only; mcp/lib/i18n.js links them once every language has loaded.
 let BUILD, MSG;
 function __link(T) { ({ BUILD, MSG } = T); }
@@ -72,6 +72,35 @@ ${a.summary ? "## Resumo\n" + a.summary + "\n" : ""}`
       const obsAc = a.tracks.includes("obs")
         ? "\n\n#### [OBS] Critérios de Aceitação (EARS)\n28. **US-1.AC-28** — O SISTEMA DEVE emitir [a métrica do pedido] com a latência, o resultado e um ID de correlação para cada [pedido], e registar cada erro com esse ID de correlação e sem dados pessoais.\n29. **US-1.AC-29** — QUANDO a taxa de consumo do orçamento de erro [do SLO] exceder [14,4]× durante [uma hora], O SISTEMA DEVE alertar a pessoa de serviço (on-call) com uma ligação para o runbook.\n30. **US-1.AC-30** — SE a taxa de erro do canário exceder [a referência] em [N] pontos percentuais, ENTÃO O SISTEMA DEVE parar o rollout e reverter automaticamente para a versão anterior.\n31. **US-1.AC-31** — ENQUANTO [uma dependência] estiver indisponível, O SISTEMA DEVE indicar que não está pronto (verificação de prontidão) sem deixar de estar vivo, e recuperar sem reinício quando ela voltar."
         : "";
+      // 1.21 F5 — tamanho S (o EN é a referência): uma história, dois critérios core (QUANDO · SE…ENTÃO), todos os das tracks.
+      if (a.size === "s") {
+        return (
+`# Feature: ${a.name}
+
+## Resumo
+${a.summary || "[1-2 frases: o que faz e porque importa]"}
+
+## História de Utilizador
+
+### US-1 (P1 — MVP): [Título da História]
+**Como** [papel], **quero** [capacidade], **para que** [benefício].
+**Teste Independente:** Pode ser totalmente testada através de [ação específica] e entrega [valor específico].
+
+#### Critérios de Aceitação (EARS)
+1. **US-1.AC-1** — QUANDO [gatilho] O SISTEMA DEVE [comportamento]
+2. **US-1.AC-2** — SE [condição de erro] ENTÃO O SISTEMA DEVE [recuperação]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}
+
+## Critérios de Sucesso (mensuráveis, agnósticos à tecnologia)
+- **SC-001** — [ex.: 90% dos utilizadores completam [tarefa] em menos de [N] segundos]
+
+## Fora de Âmbito
+- [O que esta feature NÃO inclui]
+
+<!-- Tamanho S: uma história. Cada AC contém DEVE e é testável; mantém IDs de AC estáveis. Marca qualquer ambiguidade inline
+     com um marcador como  [NEEDS CLARIFICATION: que fornecedor?] . Uma segunda história, casos limite ou NFR = tamanho m. -->
+`
+        );
+      }
       return (
 `# Feature: ${a.name}
 
@@ -348,6 +377,7 @@ Tipos de entrada · limites de tamanho/quantidade · contagem de tokens por tipo
 
     design(a) {
       const extra = ["tdd", ...MARKER_TRACK_ORDER].filter((t) => a.tracks.includes(t)).map((t) => BUILD.pt.trackDesignBlock(t)).join("");
+      if (a.size) return BUILD.pt.sizedDesign(a, extra);
       return (
 `# Design: ${a.name}
 
@@ -433,12 +463,95 @@ ${extra}
       );
     },
 
+    // 1.21 F5 — o design de uma feature COM TAMANHO (o EN é a referência: as mesmas secções e slots).
+    sizedDesign(a, extra) {
+      const s = a.size === "s";
+      const out = [`# Design: ${a.name}`, "", "## Visão Geral", "[Como isto se integra com o sistema existente. Decisões-chave e fundamentação.]", "",
+        "## Arquitetura", "```mermaid", "graph TD", "    A[Componente] -->|ação| B[Componente]", "    B -->|query| C[(Base de Dados)]", "```", ""];
+      if (s) {
+        out.push("## Decisões, reutilização e riscos",
+          "<!-- Uma resposta curta a cada. O que isto reutiliza (com o caminho) — ou \"nada a reutilizar\"; a opção escolhida, a",
+          "     rejeitada e porquê — ou \"nenhuma alternativa a ponderar\"; o que pode correr mal e como se deteta — ou \"nenhum",
+          "     risco relevante, porque X\". Em branco não é resposta. -->",
+          "- **Reutilização:** [módulo ou helper existente reutilizado, com o caminho — ou nada a reutilizar]",
+          "- **Decisão:** [a opção escolhida, a rejeitada e porquê]",
+          "- **Risco:** [o que pode correr mal e como se deteta — ou nenhum risco relevante, porque …]", "");
+      } else {
+        out.push("## Reutilização e Integração",
+          "<!-- Pesquisar antes de escrever (references/code-reuse-and-quality.md): o que esta feature aproveita do código existente",
+          "     antes de acrescentar alguma coisa. Uma linha por unidade, com o caminho — Reutilizar (tal como está), Estender (alterada;",
+          "     quem já a usa continua a funcionar) ou Novo (nada do que existe serve — o que foi pesquisado). Num projeto novo, basta uma linha que o diga. -->",
+          "| Tipo | O quê | Onde (caminho) | Porquê / notas |", "|---|---|---|---|",
+          "| [Reutilizar / Estender / Novo] | [a unidade] | [o seu caminho] | [porquê — num Novo: o que foi pesquisado] |", "",
+          "**Fronteiras de módulos:** [onde fica o código novo, o que expõe e o que pode importar — as features dependem do código partilhado, nunca o inverso]", "",
+          "## Alternativas e Compromissos",
+          "<!-- As opções ponderadas para cada decisão-chave — p.ex. consistência forte vs eventual, monólito vs serviço, síncrono",
+          "     vs assíncrono, bloqueio otimista vs pessimista. Pelo menos duas por decisão (uma opção sozinha nunca foi",
+          "     ponderada), o que custaria escolher mal, a escolhida e porquê. Uma linha por opção. -->",
+          "| Decisão | Opção | Prós | Contras | Custo se errada | Escolhida |", "|---|---|---|---|---|---|",
+          "| [decisão-chave] | [opção A] | [prós] | [contras] | [custo de errar] | [✓ — porquê] |",
+          "| [decisão-chave] | [opção B] | [prós] | [contras] | [custo de errar] | [✗ — motivo da rejeição] |", "",
+          "## Modelos de Dados", "```typescript", "interface Entity {", "  id: string;", "  // campos com comentários a explicar o propósito", "}", "```", "");
+        if (!coreSuperseded(a, "apiContracts")) out.push("## Contratos de API", "### POST /api/resource", "- **Request:** `{ field: type }`", "- **Response (200):** `{ field: type }`",
+          "- **Errors:** 400 (validação), 401 (auth), 404 (não encontrado)", "");
+        if (!coreSuperseded(a, "securityConsiderations")) out.push("## Considerações de Segurança", "[Auth, validação, riscos de exposição de dados]", "");
+      }
+      if (!coreSuperseded(a, "errorHandling")) out.push("## Tratamento de Erros",
+        "Cada critério SE…ENTÃO em requirements.md já nomeia uma falha e a sua recuperação — acrescenta aqui só o que é comum a vários (tentativas, alternativas, as mensagens que o utilizador vê), ou nada mais.", "");
+      if (!s && !coreSuperseded(a, "testingStrategy")) out.push("## Estratégia de Testes", "- Unit / Integração / E2E: [o que cada um cobre]", "");
+      if (!s) out.push("## Riscos",
+        "<!-- O que pode tornar este design errado ou atrasar a entrega — técnico, entrega, dados, negócio. Uma linha por risco;",
+        "     um honesto \"nenhum risco relevante, porque X\" serve — em branco não. -->",
+        "| Risco | Probabilidade | Impacto | Mitigação | Responsável |", "|---|---|---|---|---|",
+        "| [o que pode falhar] | [baixa / média / alta] | [baixo / médio / alto] | [como o evitamos ou detetamos] | [quem o acompanha] |", "");
+      out.push("## Verificação da Constituição", "Verifica este design contra cada princípio em `steering/constitution.md`. GATE: tem de passar antes",
+        "da implementação; volta a verificar após qualquer alteração de design.", "- [ ] [Princípio 1] — cumpre", "- [ ] [Princípio 2] — cumpre",
+        "(Se um princípio não puder ser cumprido, NÃO o quebres em silêncio — regista-o em Rastreio de Complexidade abaixo.)", "",
+        "## Rastreio de Complexidade", "Justifica tudo o que viole um princípio da constituição ou acrescente complexidade não-óbvia. Vazio é bom.",
+        "| O quê | Porque é preciso | Alternativa mais simples rejeitada porque |", "|---|---|---|");
+      return out.join("\n") + "\n" + extra + `
+<!-- Tracks ativos: ${a.label} · tamanho ${a.size}. As secções obrigatórias dos tracks acima têm de ter conteúdo real — um
+     honesto "n/a — <porque não se aplica>" serve; em branco, ou só a linha de orientação do modelo, não. -->
+`;
+    },
+
     tasks(a) {
       const green = a.tracks.includes("tdd") ? templateTests(a.tracks) : null;
       const evalMarker = a.tracks.includes("ai") ? "\n  - _Affects evals: golden (maintain baseline)_" : "";
       const metricMarker = a.tracks.includes("saas") ? "\n  - _Emits metrics: req_duration_ms{feature=" + a.slug + "}_" : "";
       let n = 0;
       const id = () => ++n;
+      // 1.21 F5 — tamanho S (o EN é a referência): uma tarefa core (os dois critérios de US-1) e os blocos dos tracks.
+      if (a.size === "s") {
+        const green1 = a.tracks.includes("tdd") ? templateTests(a.tracks, "s") : null;
+        let body =
+`## História US-1 (P1 — MVP)
+- [ ] ${id()}. [US1] [Comportamento central para US-1]
+  - _Requirements: US-1.AC-1, US-1.AC-2_${greenLine(green1, "US-1.AC-1", "US-1.AC-2")}${metricMarker}${evalMarker}
+  - _Verify: [comando que o prova, ex.: npm test -- caminho/ficheiro.test.js]_
+**Checkpoint:** US-1 está totalmente funcional e testável/lançável de forma independente.
+`;
+        for (const t of MARKER_TRACK_ORDER) {
+          if (!a.tracks.includes(t)) continue;
+          const block = BUILD.pt.trackTasks({ track: t, start: n + 1, green: green1 });
+          body += block;
+          n += (block.match(/^- \[ \] \d+\./gm) || []).length;
+        }
+        return (
+`# Tasks: ${a.name}
+
+<!-- Tracks: ${a.label} · tamanho s. Uma história; cada tarefa leva _Requirements:_ (as TDD _Makes green:_) e um
+     _Verify: <comando>_ — o spec_complete_task regista o resultado como evidência da tarefa. Usa _Implements: caminho_
+     para ligar uma tarefa a um ficheiro de código real. -->
+
+## Restrições Globais
+<!-- Valores exatos que todas as tarefas têm de respeitar, copiados literalmente da spec/steering — o spec_task_brief
+     inclui esta secção em cada brief de tarefa. -->
+- [ex.: Node >= 20 · sem dependências de runtime novas · campos da API em snake_case]
+
+${body}`
+        );
+      }
       let phases =
 `## Fase: Setup
 - [ ] ${id()}. [shared][P] [setup de projeto/dev se necessário — deps, scaffolding]
@@ -672,7 +785,32 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 `;
     },
 
-    bugTasks(name) {
+    bugTasks(name, size) {
+      // 1.21 F5 — um bugfix XS (o EN é a referência): sem as tarefas "reproduzir" / "causa raiz" — os gates já as exigem.
+      if (size === "xs") {
+        return `# Tasks: ${name}
+
+<!-- Bugfix XS: bug.md → Reprodução e Causa Raiz são escritas e aprovadas primeiro (os gates dos requisitos e do design).
+     A tarefa 1 é vermelha por natureza (o teste tem de FALHAR): o _Verify:_ dela executa o T-01 e, com o _Expect: fail_,
+     essa execução a falhar é a prova (uma que passe é recusada). A suite que tem de passar vai na tarefa da correção (2).
+     O T-02 protege comportamento que já funciona — verde antes e depois da correção, por isso não entra no _Makes green:_
+     de nenhuma tarefa. -->
+
+## Restrições Globais
+- [valores exatos que a correção tem de respeitar — versões, limites, formatos]
+
+## Fase: Correção
+- [ ] 1. [US1] Escrever o teste de regressão T-01 e vê-lo falhar pela razão certa (colar o output); acrescentar o teste de proteção T-02 (já passa)
+  - _Requirements: US-1.AC-1_
+  - _Verify: [comando que executa o T-01]_
+  - _Expect: fail_
+- [ ] 2. [US1] Corrigir a causa raiz — uma alteração, não um pacote; o teste de proteção T-02 continua verde
+  - _Requirements: US-1.AC-1, US-1.AC-2_
+  - _Makes green: T-01_
+  - _Verify: [comando da suite de testes completa]_
+**Checkpoint:** o bug deixa de se reproduzir e a suite completa está verde.
+`;
+      }
       return `# Tasks: ${name}
 
 <!-- A ordem de um bugfix é fixa: reproduzir → causa raiz → teste de regressão a falhar → corrigir → verificar.
@@ -702,7 +840,7 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 `;
     },
 
-    testPlan(name, tracks, acs) {
+    testPlan(name, tracks, acs, size) {
       const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
         { integration: "integração", load: "carga", behavior: "[comportamento]", acSlot: "[os IDs de AC que este teste cobre]", recovery: "[condição de erro → recuperação]", property: "[propriedade sempre verdadeira]",
           tenant: "o inquilino A nunca lê registos do inquilino B", latency: "latência P95 dentro do orçamento de desempenho",
@@ -714,7 +852,7 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
           lostUpdate: "atualizações concorrentes do mesmo registo: nenhuma se perde em silêncio", dependencyDown: "uma dependência indisponível: degradar / repetir com recuo, o caminho crítico não fica bloqueado",
           contract: "contrato", problemJson: "teste de contrato: um pedido sem um campo obrigatório recebe 400 problem+json que o indica", idempotencyReplay: "uma criação repetida com a mesma Idempotency-Key tem um só efeito e devolve a primeira resposta", staleEtag: "uma atualização com um If-Match desatualizado recebe 412 e não altera nada", breakingDiff: "comparação de alterações incompatíveis: o contrato face à versão publicada não reporta nenhuma",
           component: "componente", visual: "visual", keyboardA11y: "percurso só com teclado + uma verificação automática de acessibilidade (axe): cada ação alcançável, foco visível, nenhuma violação", formErrors: "formulário com campos inválidos: os valores mantidos, cada erro nomeado em texto, o foco no resumo", emptyState: "regressão visual dos estados da vista: o estado vazio explica porquê e oferece a próxima ação", loadError: "carregamento falhado: um erro com Tentar de novo, o conteúdo já mostrado mantido",
-          telemetry: "cada pedido emite a métrica, uma linha de log estruturada e um trace com um só ID de correlação; nenhum dado pessoal no log", burnAlert: "falha encenada que consome o orçamento de erro: o alerta por taxa de consumo dispara e chama com a ligação ao runbook", rollbackDrill: "ensaio de reversão: um canário com a taxa de erro acima do limiar para o rollout e reverte", readiness: "injeção de falhas: uma dependência indisponível → a prontidão falha, a vida passa, recuperação sem reinício" }, acs);
+          telemetry: "cada pedido emite a métrica, uma linha de log estruturada e um trace com um só ID de correlação; nenhum dado pessoal no log", burnAlert: "falha encenada que consome o orçamento de erro: o alerta por taxa de consumo dispara e chama com a ligação ao runbook", rollbackDrill: "ensaio de reversão: um canário com a taxa de erro acima do limiar para o rollout e reverte", readiness: "injeção de falhas: uma dependência indisponível → a prontidão falha, a vida passa, recuperação sem reinício" }, acs, size);
       return (
 `# Test Plan: ${name}
 
@@ -798,6 +936,30 @@ P50/P95/P99 medidos ≤ orçamento ao throughput alvo, taxa de erro < [0.1]%.
       );
     },
 
+    // 1.21 F5 — uma alteração (kind "change", tamanho xs): UM ficheiro com todo o plano (o EN é a referência).
+    change(a) {
+      return `# Alteração: ${a.name}
+
+## Resumo
+${a.summary || "[uma linha: o que muda e porquê]"}
+
+## Critérios de Aceitação (EARS)
+1. **US-1.AC-1** — QUANDO [gatilho] O SISTEMA DEVE [comportamento]
+
+## Abordagem
+[a alteração numa ou duas linhas — o que toca e porque é só isso]
+
+## Tarefas
+- [ ] 1. [US1] [a alteração]
+  - _Requirements: US-1.AC-1_
+  - _Verify: [comando que o prova, ex.: npm test -- caminho/ficheiro.test.js]_
+
+<!-- Uma alteração (tamanho xs): 1–3 critérios de aceitação e 1–3 tarefas, só core — sem classificação, design, quickstart
+     nem checklist. Duas aprovações: o plano (este ficheiro — spec_approve {through: "tasks"}) e o fecho da execução. Mais
+     critérios ou tarefas, ou um track (+tdd, +sec …), fazem dela uma feature de tamanho s: spec_create {size: "s"}. -->
+`;
+    },
+
     quickstart(name) {
       return (
 `# Quickstart: ${name}
@@ -826,6 +988,9 @@ funciona de ponta a ponta. Mantém-no concreto; qualquer pessoa deve conseguir s
     },
 
     checklist(a) {
+      // 1.21 F5 (o EN é a referência): as contagens de uma feature com tamanho (a.sectionCounts) e, com +obs, a linha +saas sem a
+      // telemetria que o +obs já verifica. Sem tamanho: as contagens e as linhas de sempre.
+      const cnt = (t, n) => (a.sectionCounts && a.sectionCounts[t] != null ? a.sectionCounts[t] : n);
       const items = [
         "Requisitos: cada AC é testável, tem ID estável, sem termos vagos (corre `ears`).",
         "Design: respeita a constituição do projeto (nenhum princípio violado).",
@@ -833,14 +998,14 @@ funciona de ponta a ponta. Mantém-no concreto; qualquer pessoa deve conseguir s
         "Rastreabilidade: cada AC mapeia para uma tarefa (corre `trace`).",
       ];
       if (a.tracks.includes("tdd")) items.push("TDD: todos os testes planeados escritos e a vermelho pela razão certa antes do código.", "TDD: commits de teste entram antes dos commits de implementação.");
-      if (a.tracks.includes("saas")) items.push("SaaS: 5 secções obrigatórias de design preenchidas (sem TODO).", "SaaS: isolamento de inquilino garantido (`WHERE tenant_id = ?`).", "SaaS: métricas/logs/alertas emitidos; teste de carga cumpre o orçamento (caminho crítico).");
-      if (a.tracks.includes("ai")) items.push("IA: 10 secções obrigatórias de design preenchidas (sem TODO).", "IA: golden ≥ limiar, segurança adversarial 100%, regressão mantida.", "IA: prompts versionados em prompts/vN.md; custo dentro do orçamento.");
-      if (a.tracks.includes("sec")) items.push("SEC: 5 secções obrigatórias de design preenchidas (sem TODO) — modelo de ameaças revisto.", "SEC: autenticação + autorização ao nível do objeto impostas, negar por omissão; nenhum segredo no código ou nos logs.", "SEC: SAST, auditoria de dependências e testes de casos de abuso limpos numa execução local.");
-      if (a.tracks.includes("privacy")) items.push("PRIVACIDADE: 6 secções obrigatórias de design preenchidas (sem TODO) — decisão sobre a AIPD registada.", "PRIVACIDADE: acesso/exportação e apagamento funcionam de ponta a ponta, em todos os repositórios e subcontratantes.", "PRIVACIDADE: processo de conservação agendado; política de privacidade e registo das atividades de tratamento atualizados.");
-      if (a.tracks.includes("dist")) items.push("DIST: 5 secções obrigatórias de design preenchidas (sem TODO) — cada escrita entre sistemas tem a sua mitigação (outbox / inbox / saga) ou um risco assumido.", "DIST: consumidores idempotentes (inbox ou uma chave única na transação do efeito); novas tentativas com recuo + jitter e uma DLQ; nada não idempotente repetido às cegas.", "DIST: testes de injeção de falhas (falha entre o commit e a publicação, entrega duplicada, atualizações concorrentes, dependência indisponível) a verde numa execução local.");
-      if (a.tracks.includes("api")) items.push("API: 5 secções obrigatórias de design preenchidas (sem TODO) — o ficheiro do contrato (OpenAPI / .proto / esquema GraphQL) está no repositório e é indicado pelo marcador Implements de uma tarefa.", "API: erros em problem+json com códigos estáveis; as criações aceitam uma Idempotency-Key; as atualizações respeitam If-Match; os endpoints de listagem paginam com um cursor estável.", "API: testes de contrato e a comparação de alterações incompatíveis com a versão publicada a verde numa execução local; o que for removido é descontinuado com uma data de Sunset.");
-      if (a.tracks.includes("ui")) items.push("UI: 5 secções obrigatórias de design preenchidas (sem TODO) — cada estado da matriz de estados desenhado; componentes novos entram pelo design system.", "UI: WCAG 2.2 AA — a verificação automática de acessibilidade limpa numa execução local, mais uma passagem manual com teclado e leitor de ecrã com as conclusões corrigidas.", "UI: responsivo em cada breakpoint, strings no catálogo (expansão do texto, RTL verificados); LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 medidos.");
-      if (a.tracks.includes("obs")) items.push("OBS: 5 secções obrigatórias de design preenchidas (sem TODO) — cada SLO tem um orçamento de erro, cada alerta um runbook, os critérios de reversão são números.", "OBS: as métricas, os logs estruturados (ID de correlação, sem dados pessoais) e os traces que o design indica são emitidos — vistos, não presumidos.", "OBS: um alerta disparou numa falha encenada, um ensaio de reversão feito e as verificações de saúde confirmadas com uma dependência indisponível.");
+      if (a.tracks.includes("saas")) items.push("SaaS: " + cnt("saas", 5) + " secções obrigatórias de design preenchidas (sem TODO).", "SaaS: isolamento de inquilino garantido (`WHERE tenant_id = ?`).", a.size && a.tracks.includes("obs") ? "SaaS: teste de carga cumpre o orçamento (caminho crítico)." : "SaaS: métricas/logs/alertas emitidos; teste de carga cumpre o orçamento (caminho crítico).");
+      if (a.tracks.includes("ai")) items.push("IA: " + cnt("ai", 10) + " secções obrigatórias de design preenchidas (sem TODO).", "IA: golden ≥ limiar, segurança adversarial 100%, regressão mantida.", "IA: prompts versionados em prompts/vN.md; custo dentro do orçamento.");
+      if (a.tracks.includes("sec")) items.push("SEC: " + cnt("sec", 5) + " secções obrigatórias de design preenchidas (sem TODO) — modelo de ameaças revisto.", "SEC: autenticação + autorização ao nível do objeto impostas, negar por omissão; nenhum segredo no código ou nos logs.", "SEC: SAST, auditoria de dependências e testes de casos de abuso limpos numa execução local.");
+      if (a.tracks.includes("privacy")) items.push("PRIVACIDADE: " + cnt("privacy", 6) + " secções obrigatórias de design preenchidas (sem TODO) — decisão sobre a AIPD registada.", "PRIVACIDADE: acesso/exportação e apagamento funcionam de ponta a ponta, em todos os repositórios e subcontratantes.", "PRIVACIDADE: processo de conservação agendado; política de privacidade e registo das atividades de tratamento atualizados.");
+      if (a.tracks.includes("dist")) items.push("DIST: " + cnt("dist", 5) + " secções obrigatórias de design preenchidas (sem TODO) — cada escrita entre sistemas tem a sua mitigação (outbox / inbox / saga) ou um risco assumido.", "DIST: consumidores idempotentes (inbox ou uma chave única na transação do efeito); novas tentativas com recuo + jitter e uma DLQ; nada não idempotente repetido às cegas.", "DIST: testes de injeção de falhas (falha entre o commit e a publicação, entrega duplicada, atualizações concorrentes, dependência indisponível) a verde numa execução local.");
+      if (a.tracks.includes("api")) items.push("API: " + cnt("api", 5) + " secções obrigatórias de design preenchidas (sem TODO) — o ficheiro do contrato (OpenAPI / .proto / esquema GraphQL) está no repositório e é indicado pelo marcador Implements de uma tarefa.", "API: erros em problem+json com códigos estáveis; as criações aceitam uma Idempotency-Key; as atualizações respeitam If-Match; os endpoints de listagem paginam com um cursor estável.", "API: testes de contrato e a comparação de alterações incompatíveis com a versão publicada a verde numa execução local; o que for removido é descontinuado com uma data de Sunset.");
+      if (a.tracks.includes("ui")) items.push("UI: " + cnt("ui", 5) + " secções obrigatórias de design preenchidas (sem TODO) — cada estado da matriz de estados desenhado; componentes novos entram pelo design system.", "UI: WCAG 2.2 AA — a verificação automática de acessibilidade limpa numa execução local, mais uma passagem manual com teclado e leitor de ecrã com as conclusões corrigidas.", "UI: responsivo em cada breakpoint, strings no catálogo (expansão do texto, RTL verificados); LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 medidos.");
+      if (a.tracks.includes("obs")) items.push("OBS: " + cnt("obs", 5) + " secções obrigatórias de design preenchidas (sem TODO) — cada SLO tem um orçamento de erro, cada alerta um runbook, os critérios de reversão são números.", "OBS: as métricas, os logs estruturados (ID de correlação, sem dados pessoais) e os traces que o design indica são emitidos — vistos, não presumidos.", "OBS: um alerta disparou numa falha encenada, um ensaio de reversão feito e as verificações de saúde confirmadas com uma dependência indisponível.");
       items.push("Doctor: `doctor` reporta readyToAdvance antes de cada gate.", "Todos os gates de fase aprovados (`approve`).");
       return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Marca antes de dar a feature por concluída.\n\n" +
         items.map((i) => "- [ ] " + i).join("\n") + "\n";
@@ -970,6 +1135,35 @@ const msg = {
       changedByDate: (list, slug) => `avaliado só pela data do ficheiro (aprovado antes das impressões digitais de conteúdo — um clone ou uma cópia repõe as datas, por isso pode nem ser uma edição): ${list} — revê e volta a aprovar para o seguir pelo conteúdo (/approve ${slug} <fase>)`,
       untrackedApproval: (list, slug) => `aprovado antes do registo de alterações — nada do ficheiro aprovado ficou registado, por isso uma edição não pode ser detetada: ${list} — volta a aprovar para o começar a seguir (/approve ${slug} design)`,
     },
+    // 1.21 F5 — rigor à medida (o EN é a referência): tamanhos (spec_create {size}), a alteração (tamanho xs, um change.md).
+    sizes: {
+      spikeNoSize: "Um spike tem prazo, não tamanho — cria-se sem tamanho (o prazo limita-o).",
+      changeSize: (size) => `kind "change" é tamanho xs — para o tamanho ${size} cria-se uma feature: spec_create {kind: "feature", size: "${size}"}.`,
+      changeTracks: (list) => `Uma alteração (tamanho xs) é só core — ${list} fazem dela uma feature de tamanho s: spec_create {size: "s", tracks} (um design curto com as secções dos tracks, uma tarefa por critério).`,
+      changeNoTracks: (slug) => `'${slug}' é uma alteração (tamanho xs, só core) — um track faz dela uma feature: cria-se uma de tamanho s (spec_create {size: "s", tracks}) e arquiva-se esta alteração (spec_feature {action: "archive"}).`,
+      changeCreated: (slug) => `'${slug}' é uma alteração (tamanho xs): UM ficheiro, .specs/${slug}/change.md — o resumo, 1–3 critérios EARS, a abordagem e 1–3 tarefas com _Verify:_. Preenchê-lo e aprovar o plano numa só chamada (spec_approve {name: "${slug}", through: "tasks"}); depois das tarefas, spec_finish e o fecho da execução.`,
+      sizeKept: (kept, asked) => `O tamanho desta feature é ${kept} — mantido (pedido: ${asked}): o tamanho escolhe-se uma vez, ao criar a feature.`,
+      noGate: (phase, slug) => `'${slug}' é uma alteração: as únicas aprovações são o plano (fase tasks — change.md) e o fecho da execução — não há fase ${phase} para aprovar.`,
+      scope: (acs, tasks, maxAcs, maxTasks, extra) => `uma alteração é XS — 1–${maxAcs} critérios de aceitação e 1–${maxTasks} tarefas, só core; o change.md tem ${acs} critérios e ${tasks} tarefa(s)${extra ? ` e o(s) track(s) ${extra}` : ""} — cria-se como feature de tamanho s (spec_create {size: "s"}) e arquiva-se esta alteração`,
+      scopeOk: (acs, tasks) => `XS: ${acs} critérios, ${tasks} tarefa(s)`,
+      approvePlan: (slug) => `Rever e aprovar o plano (change.md: os critérios, a abordagem e as tarefas) — spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug}).`,
+      planFastForward: (slug, size, list) => `Tamanho ${size}: preencher primeiro o plano inteiro — ${list} — e depois aprová-lo numa só chamada: spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug}; CLI: ${DEV_SPEC} approve ${slug} --through tasks). O gate de cada fase continua a correr, por ordem; o primeiro que recusa para tudo e diz porquê.`,
+      templateApproved: (list) => `só a orientação do modelo em: ${list} — o design foi aprovado antes da regra mais estrita do 1.21, por isso é um aviso; a próxima aprovação pede texto próprio aí (ou uma linha "n/a — <porque não se aplica>")`,
+      sectionsPassSized: (filled, covered, optional) => `preenchidas: ${filled}` + (covered ? ` · cobertas pela secção de outro track: ${covered}` : "") + (optional ? ` · opcionais neste tamanho, deixadas de fora: ${optional}` : ""),
+      extendedComment: (marker, names) => `Tamanho s: as outras secções ${marker} — ${names} — são opcionais neste tamanho. Acrescenta-se uma quando se aplica (e aí tem de ficar preenchida), ou responde-se numa linha: "n/a — <porque não se aplica>".`,
+      coveredComment: (label) => `Esta secção também responde a ${label} — os dois tracks estão ativos, por isso uma secção chega (uma secção ${label} própria também conta).`,
+      suggest: {
+        "trivial-change": "Tamanho sugerido xs — uma alteração trivial (uma gralha, um texto ou uma configuração, uma correção de uma linha): uma alteração, um change.md, duas aprovações.",
+        "single-unit": "Tamanho sugerido s — uma unidade de trabalho (um endpoint, ecrã, botão, campo…) com no máximo um track com secções de design: uma história, as secções core dos tracks, o plano aprovado numa só chamada.",
+        "several-tracks": "Tamanho sugerido l — três ou mais tracks com secções de design: a cadeia completa.",
+        "public-api": "Tamanho sugerido l — uma API pública (consumidores externos, um contrato a manter): a cadeia completa.",
+        "cross-system": "Tamanho sugerido l — atravessa sistemas (+dist com outro track, ou vários serviços): a cadeia completa.",
+        default: "Tamanho sugerido m — uma feature com a cadeia completa (as secções repetidas dos tracks fundidas).",
+      },
+      optionalMark: "opcional neste tamanho",
+      coveredMark: "coberta por outro track",
+      suggestTail: "Confirmar ou escolher outro na Fase 0 — spec_create {size: xs | s | m | l}; sem tamanho fica o scaffold anterior ao 1.21.",
+    },
     kindKept: (kept, asked) => `Esta feature já é do tipo '${kept}' — mantive-o (pediste '${asked}'). Cria outra para um tipo diferente.`,
     langKept: (kept, asked) => `Esta feature já está em '${kept}' — mantive-a (pediste '${asked}'). Uma feature, uma língua.`,
     // 1.21 F3 — spec_create {kind: "bugfix"}: pré-preenchimento (reproduction · rootCause · condition · behaviour — nomes em inglês).
@@ -1059,7 +1253,7 @@ const msg = {
       fileWarning: (rel, code, n) => `${rel} ${code === "invalid-entries" ? `tem ${n} entrada(s) inválida(s) — são ignoradas, e o ficheiro nunca é reescrito até serem corrigidas ou removidas à mão` : `é ignorado e nunca reescrito — ${({ "invalid-json": "não é JSON válido", "invalid-shape": "não tem uma lista \"signals\"", "too-big": "é grande demais (64 KB no máximo)", "not-a-file": "não é um ficheiro normal", unreadable: "não pode ser lido" })[code] || code}; é preciso corrigi-lo à mão ou apagá-lo`}.`,
       problem: (i, code) => `  entrada ${i + 1}: ${({ "invalid-entry": "inválida (track, word, effect off|weak|strong, count ≥ 1, origin learned|set)", duplicate: "repete uma entrada anterior", "too-many": "além do limite de 200 ajustes" })[code] || code}`,
     },
-    sectionStatus: { missing: "em falta", unfilled: "por preencher" },
+    sectionStatus: { missing: "em falta", unfilled: "por preencher", template: "só a orientação do modelo", "na-short": "n/a sem uma razão (4+ palavras)" },
     sectionNames: {
       "Performance Budget": "Orçamento de Desempenho", "Scale Design": "Design de Escala", "Multi-tenancy": "Modelo Multi-inquilino",
       "Observability": "Observabilidade", "Cost Envelope": "Envelope de Custo", "Model Strategy": "Estratégia de Modelo",
@@ -1427,6 +1621,7 @@ const msg = {
         "test-plan.md": (slug) => `verifica a cobertura dos ACs com trace_check (${DEV_SPEC} trace ${slug})`,
         "eval-plan.md": (slug) => `define os limiares e a baseline, depois /spec-doctor ${slug}`,
         "tasks.md": (slug) => `divide o design em tarefas reais (/createTask ${slug}), depois trace_check`,
+        "change.md": (slug) => `escrever o resumo, 1–3 critérios EARS, a abordagem e 1–3 tarefas, cada uma com um comando _Verify:_, e depois aprovar o plano numa só chamada — spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug})`,
         default: (slug) => `/spec-doctor ${slug}`,
       },
       approveClassification: (slug) => `Confirma e aprova a classificação — /approve ${slug} classification.`,
@@ -1918,7 +2113,7 @@ const msg = {
           "classification.md": "Classificação (tracks)", "requirements.md": "Requisitos (EARS)", "design.md": "Design técnico", "test-plan.md": "Plano de testes",
           "eval-plan.md": "Plano de evals", "load-test.md": "Plano de testes de carga", "tasks.md": "Tasks", "bug.md": "Relatório do bug (reprodução · causa raiz · correção)",
           "quickstart.md": "Quickstart", "checklist.md": "Checklist", "integration-plan.md": "Plano de integração", "retro.md": "Retrospetiva",
-          "spike.md": "Spike (pergunta · evidência · decisão)", "decisions.md": "Registo de decisões", // 1.14 C2
+          "spike.md": "Spike (pergunta · evidência · decisão)", "decisions.md": "Registo de decisões", "change.md": "Alteração (critérios · abordagem · tarefas)", // 1.14 C2 · 1.21 F5
         },
         tplFeature: (list) => `Um artefacto da spec de uma feature: .specs/{slug}/{artifact} — {artifact} é um de ${list}.`,
         tplSteering: "Um ficheiro de steering: .specs/steering/{file} (um ficheiro .md).",

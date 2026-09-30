@@ -202,36 +202,53 @@ function handle(raw) {
     }
 
     try {
-      if (base === "requirements.md") {
+      // The EARS lines of a criteria file — requirements.md, or a change's change.md (1.21 F5: its criteria AND its tasks) — or null.
+      const earsText = (fileName) => {
         const text = fs.readFileSync(filePath, "utf8");
         const lang = spec.featureLang(pdir, feature);
         const r = spec.earsValidate(text, lang); // issue messages in the spec's language
-        if (!r.ok) process.exit(0);
+        if (!r.ok) return null;
         const errs = r.issues.filter((i) => i.severity === "error");
         const warns = r.issues.filter((i) => i.severity === "warn");
         // Template placeholders anywhere in the file (Summary, stories, SC/NFR — not only criteria): never "all clean"
         // while any remain. The gates' own view: a removed track's [SaaS]/[AI] criteria are inactive.
-        const ph = (spec.featurePlaceholders(pdir, feature, "requirements.md") || { items: [] }).items;
+        const ph = (spec.featurePlaceholders(pdir, feature, fileName) || { items: [] }).items;
         const G = spec.msg(lang).gates;
         const phLine = ph.length ? G.hookPlaceholders(ph.length, ph.slice(0, 3).map((p) => `L${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`).join(", ") + (ph.length > 3 ? ", " + G.more(ph.length - 3) : "")) : null;
-        if (!errs.length && !warns.length) return emit("PostToolUse", phLine || h.earsClean(r.summary.criteriaDetected));
+        if (!errs.length && !warns.length) return phLine || h.earsClean(r.summary.criteriaDetected);
         // The severity label `dev-spec ears` prints (cliOutput.words: aviso / erro · aviso / error); EN keeps warn / error.
         const words = (spec.msg(lang).cliOutput && spec.msg(lang).cliOutput.words) || {};
         const top = [...errs, ...warns].slice(0, 6).map((i) => `  L${i.line} [${words[i.severity] || i.severity}] ${i.msg}`);
-        return emit("PostToolUse", h.earsIssues(errs.length, warns.length, top.join("\n"), errs.length > 0) + (phLine ? "\n" + phLine : ""));
-      }
-
-      if (base === "tasks.md") {
+        return h.earsIssues(errs.length, warns.length, top.join("\n"), errs.length > 0) + (phLine ? "\n" + phLine : "");
+      };
+      // The trace lines of a feature's tasks — tasks.md, or a change's change.md — or null.
+      const traceText = () => {
         const tr = spec.traceCheck(pdir, feature);
-        if (!tr.ok) process.exit(0);
+        if (!tr.ok) return null;
         // Every gap kind the engine reports, with its IDs (a hand-picked subset used to leave an empty "- ").
         const lang = spec.featureLang(pdir, feature);
         const parts = spec.traceGapLines(tr, lang);
         // Then the warnings (uncovered / phantom EC·NFR·SC) — listed, never blocking. No test-code scan here: hooks stay fast.
         const warns = spec.traceWarningLines(tr, lang);
         const warnText = warns.length ? "\n" + spec.msg(lang).deepTrace.warningsHead + "\n" + warns.map((w) => "  ▲ " + w).join("\n") : "";
-        if (tr.verdict === "pass") return emit("PostToolUse", [h.traceOk(tr.totalAcs), ...parts.map((p) => "  - " + p)].join("\n") + warnText);
-        return emit("PostToolUse", h.traceGaps(feature, (parts.length ? parts : [tr.verdict]).join("\n  - ")) + warnText);
+        if (tr.verdict === "pass") return [h.traceOk(tr.totalAcs), ...parts.map((p) => "  - " + p)].join("\n") + warnText;
+        return h.traceGaps(feature, (parts.length ? parts : [tr.verdict]).join("\n  - ")) + warnText;
+      };
+      if (base === "requirements.md") {
+        const t = earsText("requirements.md");
+        if (t == null) process.exit(0);
+        return emit("PostToolUse", t);
+      }
+
+      if (base === "tasks.md") {
+        const t = traceText();
+        if (t == null) process.exit(0);
+        return emit("PostToolUse", t);
+      }
+
+      if (base === "change.md") { // 1.21 F5 — a change: its one file holds the criteria and the tasks
+        const t = [earsText("change.md"), traceText()].filter(Boolean);
+        if (t.length) return emit("PostToolUse", t.join("\n"));
       }
 
       if (base === "design.md") {

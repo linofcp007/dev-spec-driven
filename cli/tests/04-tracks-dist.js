@@ -26,12 +26,12 @@ exports.run = ({ ok, run, tmp }) => {
   run(["approve", "publicar-eventos", "requirements", "--force", "--project", pd]);
   const appr = run(["approve", "publicar-eventos", "design", "--project", pd]);
   const des = path.join(pd, ".specs", "publicar-eventos", "design.md");
-  fs.writeFileSync(des, rd(des).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+  fs.writeFileSync(des, rd(des).split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
   const doc2 = run(["doctor", "publicar-eventos", "--project", pd]).out;
   const sj = JSON.parse(run(["status", "publicar-eventos", "--json", "--project", pd]).out);
   ok(doc.code === 1 && /✗ dist-sections — Modelo de Consistencia:sin rellenar/.test(doc.out) && appr.code === 1 && /dist-sections/.test(appr.out) &&
     /✓ dist-sections — las 5 rellenadas/.test(doc2) && sj.distSections.length === 5 && sj.distSections.every((s) => s.filled) && sj.secSections === null,
-    "1.17 D3 (CLI): doctor exits 1 with dist-sections failing and approve design is refused naming it; once the TODO lines are gone the check passes (--json: distSections) (got " + js([doc.out.split("\n").filter((l) => /dist-sections/.test(l)), appr.out.slice(0, 200)]) + ")");
+    "1.17 D3 (CLI): doctor exits 1 with dist-sections failing and approve design is refused naming it; once each TODO line is answered the check passes (--json: distSections) (got " + js([doc.out.split("\n").filter((l) => /dist-sections/.test(l)), appr.out.slice(0, 200)]) + ")");
   run(["create", "Plain", "core", "--lang", "en", "--project", pd]);
   const typo = run(["add-track", "plain", "distt", "--project", pd]);
   const add = run(["add-track", "plain", "+dist", "--project", pd]);

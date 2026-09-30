@@ -49,7 +49,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const kindOk13 = run(["create", "Zed", "--kind", "Bugfix", "--project", b13]);
   let zedKind = null;
   try { zedKind = JSON.parse(fs.readFileSync(path.join(b13, ".specs", "zed", ".state.json"), "utf8")).kind; } catch { /* missing */ }
-  ok(kind13.code === 1 && /kind must be one of: feature, bugfix, spike \(got "bugfx"\)/.test(kind13.out) && kindOk13.code === 0 && zedKind === "bugfix",
+  ok(kind13.code === 1 && /kind must be one of: feature, bugfix, spike, change \(got "bugfx"\)/.test(kind13.out) && kindOk13.code === 0 && zedKind === "bugfix",
     "create --kind bugfx exits 1 and scaffolds nothing (a typo can no longer fix the kind for good); --kind Bugfix works");
   const bl13 = run(["backlog", "delete", "Pay", "--project", b13]);
   // (1.14 full review S7: the list now names rm's alias remove — the spec_backlog enum.)

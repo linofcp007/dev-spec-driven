@@ -154,13 +154,16 @@ function mentioned(pdir, key) {
     return false;
   }
   for (const d of dirs) {
-    const file = path.join(root, d.name, "tasks.md");
-    try {
-      if (fs.statSync(file).size > MAX_TASKS_BYTES) continue;
-      const text = flat(fs.readFileSync(file, "utf8"));
-      // The " && " join of a task's commands (how done --run reports them) is never written whole: every part is (review R6).
-      if (text.includes(key) || (parts.length > 1 && parts.every((x) => text.includes(x)))) return true;
-    } catch { /* no tasks.md */ }
+    // tasks.md — or a change's change.md, which holds its tasks (1.21 F5)
+    for (const name of ["tasks.md", "change.md"]) {
+      const file = path.join(root, d.name, name);
+      try {
+        if (fs.statSync(file).size > MAX_TASKS_BYTES) continue;
+        const text = flat(fs.readFileSync(file, "utf8"));
+        // The " && " join of a task's commands (how done --run reports them) is never written whole: every part is (review R6).
+        if (text.includes(key) || (parts.length > 1 && parts.every((x) => text.includes(x)))) return true;
+      } catch { /* no such file */ }
+    }
   }
   return false;
 }

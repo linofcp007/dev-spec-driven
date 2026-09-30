@@ -602,6 +602,15 @@ function glossBuiltinLines(lang) {
     put(() => i18n.design(a, base));
   }
   for (const tr of VALID_TRACKS) put(() => i18n.trackDesignBlock(tr, base));
+  // 1.21 F5 — the sized scaffolds' own lines (S's one story, the merged weigh section, the Error Handling pointer) and a change
+  for (const size of ["s", "m"]) {
+    for (const tracks of [["core"], VALID_TRACKS]) {
+      const a = { name: "x", tracks, label: trackLabel(tracks), slug: "x", summary: "", size };
+      put(() => i18n.requirements(a, base));
+      put(() => i18n.design(a, base));
+    }
+  }
+  put(() => i18n.change({ name: "x", summary: "" }, base));
   put(() => i18n.bugRequirements({ name: "x" }, base));
   put(() => i18n.bugReport({ name: "x" }, base));
   const lines = new Set();
@@ -866,11 +875,18 @@ function designReuseFallback(integrationPlan) {
 // sign-off). opts.approval = the design approval record (approvals.design) — each check reads its own stamp (`weigh` / `reuse`);
 // opts.legacy = true (the 1.17 form) treats every check as approved before it. opts.integrationPlan = integration-plan.md's text
 // (designReuseFallback — state "integration").
+// 1.21 F5 — a SIZE S design merges the three into ONE section, "Decisions, reuse & risks" (the sized builders write it): a
+// design with none of the three sections of its own and that merged one has each check read it — one entry or a line of prose
+// answers each (min 0: "nothing to reuse", "no alternative worth weighing", "no material risk" are answers).
+const WEIGH_MERGED_SYN = ["decisions, reuse & risks", "decisions, reuse and risks", "decisões, reutilização e riscos", "decisoes, reutilizacao e riscos",
+  "decisiones, reutilización y riesgos", "decisiones, reutilizacion y riesgos"];
 function designWeighChecks(design, lang, opts = {}) {
   const W = i18n.msg(lang).designWeigh;
   const approval = isRecord(opts.approval) ? opts.approval : null;
+  const merged = weighSection(design || "", WEIGH_MERGED_SYN) != null;
   return DESIGN_WEIGH.map(([id, syn, min, stamp]) => {
-    let st = designWeighState(design, syn, min);
+    const own = !merged || weighSection(design || "", syn) != null;
+    let st = own ? designWeighState(design, syn, min) : designWeighState(design, WEIGH_MERGED_SYN, 0);
     if (id === "design-reuse" && (st.status === "missing" || st.status === "empty")) {
       const fb = designReuseFallback(opts.integrationPlan);
       if (fb) st = { status: "integration", entries: fb.entries };

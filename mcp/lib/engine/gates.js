@@ -23,7 +23,9 @@ let acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, ar
   ROOT_CAUSE_SYN, SAMPLE_GOLDEN, sectionState, specChangedSince, spikePhase, statePath, STEERING_GOVERNED,
   steeringFingerprints, steeringImpact, steeringImpactLines, stripFencedCode, stripHtmlComments, taskBlocks,
   taskDepsCheck, taskMarkers, taskVerification, testIndex, textFingerprint, timeOf, todayIso, traceCheck, traceGapLines,
-  uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic, writeRoadmap;
+  uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic, writeRoadmap,
+  featureSize, trackSectionReport, sectionVerdict,
+  CHANGE_FILE, requirementAcIds;
 function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, artifactReport,
   artifactState, bugPlaceholders, clarificationMarkers, criterionBlocks, designSections, detectTracks,
   duplicateTaskNumbers, earsUnlinted, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection,
@@ -35,7 +37,9 @@ function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks,
   statePath, STEERING_GOVERNED, steeringFingerprints, steeringImpact, steeringImpactLines, stripFencedCode,
   stripHtmlComments, taskBlocks, taskDepsCheck, taskMarkers, taskVerification, testIndex, textFingerprint, timeOf,
   todayIso, traceCheck, traceGapLines, uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic,
-  writeRoadmap } = E); }
+  writeRoadmap,
+  featureSize, trackSectionReport, sectionVerdict,
+  CHANGE_FILE, requirementAcIds } = E); }
 
 // Phases that only exist for a track: an inactive track's artifact (kept on disk after add_track --remove)
 // is not a gate, not a phase and not a "changed since approval".
@@ -105,6 +109,8 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   const wv = waiverInput(opts, lng);
   if (wv.error) return { ok: false, error: wv.error };
   if (state.kind === "spike" && p !== "execution") return { ok: false, spike: true, error: i18n.msg(lng).spike.noGate(p, f.slug) }; // 1.14 C2
+  // 1.21 F5: a change has two approvals — the plan (phase `tasks`: its change.md) and the execution sign-off
+  if (state.kind === "change" && p !== "tasks" && p !== "execution") return { ok: false, change: true, error: i18n.msg(lng).sizes.noGate(p, f.slug) };
   const G = i18n.msg(lng).gates;
   const tracks = detectTracks(f.dir);
   const gate = approvalChecks(projectDir, f.slug, f.dir, p, tracks, state.kind || "feature", lng);
@@ -140,7 +146,8 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (file && file !== PHASE_FILE[p]) {
     entry.file = file;
     // A bugfix's design.md holds only track sections ([SaaS]/[AI]) the gate checked too: an edit to it still counts.
-    design = readIfExists(path.join(f.dir, PHASE_FILE[p]));
+    // (1.21 F5: a change's plan signs off change.md alone — its tasks.md IS change.md, nothing else to fingerprint)
+    design = state.kind === "change" ? null : readIfExists(path.join(f.dir, PHASE_FILE[p]));
     if (design != null) entry.designFingerprint = textFingerprint(design, p);
   }
   if (failing.length) { entry.forced = true; entry.failing = failing; } // a clean re-approval replaces it
@@ -1150,6 +1157,7 @@ function impactLines(r) {
 // it was never a gate there; every other chain artifact that is missing is "fill it").
 function gateWalk(dir, tracks, kind) {
   if (kind === "spike") return []; // 1.14 C2: a spike has no approval chain (question → investigate → decide)
+  if (kind === "change") return ["tasks"]; // 1.21 F5: a change has ONE planning approval — the plan (change.md), phase `tasks`
   return phaseOrder(featureFlow(dir, kind)).filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && (ph !== "tests" || testsGateDue(dir, tracks, kind)) && // C3: the feature's flow orders the chain
     (ph !== "classification" || fs.existsSync(path.join(dir, "classification.md"))));
 }
@@ -1164,6 +1172,7 @@ function gateArtifacts(dir, tracks, kind, phase) {
 // refuses a phase while an EARLIER one is still in this list (a phase with nothing to approve never blocks a later one).
 function pendingGateList(dir, tracks, kind, approvals) {
   if (kind === "spike") return []; // 1.14 C2
+  if (kind === "change") return fs.existsSync(path.join(dir, CHANGE_FILE)) && !(approvals || {}).tasks ? ["tasks"] : []; // 1.21 F5: the plan
   const due = (ph) => (ph === "tests" ? testsGateDue(dir, tracks, kind) : fs.existsSync(path.join(dir, phaseFile(ph, kind))));
   return phaseOrder(featureFlow(dir, kind)).filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && due(ph) && !(approvals || {})[ph]); // C3: in the flow's order
 }
@@ -1275,6 +1284,21 @@ const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-crit
 CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
 Object.assign(CHECK_PHASE, { glossary: 1, "cross-feature-acs": 1, "steering-changed-since-approval": 2 }); // 1.16 Q (warns only)
 Object.assign(CHECK_PHASE, { "design-tradeoffs": 2, "design-risks": 2, "design-reuse": 2 }); // 1.17 A1, 1.19 R1 (warns only)
+CHECK_PHASE["change-scope"] = 1; // 1.21 F5: a change's size (1–3 criteria, 1–3 tasks, core only) — its plan, from the start
+
+// 1.21 F5 — a change stays XS: 1–3 acceptance criteria, 1–3 tasks, no optional track (a +track is a design's worth of sections).
+// Past that it is a feature of size s — never ratcheted silently: doctor fails `change-scope`, the plan approval refuses, and the
+// detail says so (a new feature, spec_create {size: "s"}; the change archived). → { ok, acs, tasks, tracks, detail }
+const CHANGE_MAX_ACS = 3, CHANGE_MAX_TASKS = 3;
+function changeScope(dir, tracks, lang) {
+  const text = readIfExists(path.join(dir, CHANGE_FILE)) || "";
+  const acs = requirementAcIds(text).size;
+  const tasks = parseTasks(text).length;
+  const extra = (tracks || []).filter((t) => t !== "core");
+  const ok = acs >= 1 && acs <= CHANGE_MAX_ACS && tasks >= 1 && tasks <= CHANGE_MAX_TASKS && !extra.length;
+  const S = i18n.msg(lang).sizes;
+  return { ok, acs, tasks, tracks: extra, detail: ok ? S.scopeOk(acs, tasks) : S.scope(acs, tasks, CHANGE_MAX_ACS, CHANGE_MAX_TASKS, extra.map((t) => "+" + t).join(", ")) };
+}
 
 // ---------------------------------------------------------------------------
 // Gates — the ONE view doctor / approve / next_action / finish / roadmap share of what a phase still lacks
@@ -1288,6 +1312,7 @@ const PHASE_INDEX = { empty: 0, classified: 0, requirements: 1, design: 2, "test
 // replaces the design — and its design.md joins only while it holds active track sections (detectPhase's rule).
 function chainArtifacts(dir, tracks, kind) {
   if (kind === "spike") return []; // 1.14 C2: spike.md is judged by the spike tools (spikeDoctor / spikeFinish), not the planning chain
+  if (kind === "change") return [{ file: CHANGE_FILE, phase: "tasks", idx: 1 }]; // 1.21 F5: the plan is the whole chain (current from the start)
   const out = [{ file: "requirements.md", phase: "requirements", idx: 1 }];
   if (kind === "bugfix") {
     out.push({ file: "bug.md", phase: "design", idx: 2 });
@@ -1334,12 +1359,13 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
       if (fs.existsSync(design) && !artifactMatches(design, ph, a.designFingerprint)) out.push(file);
       continue;
     }
-    const abs = path.join(dir, file);
+    const rel = kind === "change" ? phaseFile(ph, kind) : file; // 1.21 F5: a change's plan approval signed off change.md
+    const abs = path.join(dir, rel);
     if (!a || !fs.existsSync(abs) || !phaseActive(ph, tracks)) continue;
     if (a.fingerprint) {
-      if (!artifactMatches(abs, ph, a.fingerprint)) out.push(file);
+      if (!artifactMatches(abs, ph, a.fingerprint)) out.push(rel);
     } else if (a.at && ph !== "tasks") {
-      try { if (fs.statSync(abs).mtime.getTime() > new Date(a.at).getTime()) { out.push(file); byDate.push(file); } } catch { /* ignore */ }
+      try { if (fs.statSync(abs).mtime.getTime() > new Date(a.at).getTime()) { out.push(rel); byDate.push(rel); } } catch { /* ignore */ }
     }
   }
   return opts.detail ? { changed: out, byDate, untracked } : out;
@@ -1431,8 +1457,11 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
         need("constitution-check", sectionFilled(activeDesign(design, tracks), CONSTITUTION_SYN), G.constitutionUnfilled);
       }
       if (design != null) {
-        for (const [tr, secs, mark] of activeSectionTracks(tracks)) {
-          const bad = sectionState(design, secs, mark).filter((s) => s.status !== "filled");
+        // 1.21 F5: a NEW approval is held to the stricter rule — a section holding only the template's guidance is not filled —
+        // and a sized feature to its size (an optional extended section at S, a section another active track covers).
+        const size = featureSize(dir);
+        for (const [tr, , rows] of trackSectionReport(design, tracks, { size, lang })) {
+          const bad = rows.filter((s) => sectionVerdict(s, { size }) !== "pass");
           need(tr + "-sections", !bad.length, bad.map(label).join("; "));
         }
       }
@@ -1454,6 +1483,29 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
       noPlaceholders("eval-plan.md");
       break;
     case "tasks": {
+      if (kind === "change") { // 1.21 F5 — the plan of a change: ONE file holds its criteria and its tasks, one gate checks both
+        if (!exists(CHANGE_FILE)) return nothing(CHANGE_FILE);
+        const text = read(CHANGE_FILE);
+        const ev = earsValidate(text, lang);
+        const errs = (ev.issues || []).filter((i) => i.severity === "error");
+        need("ears", !errs.length, errs.slice(0, 3).map((i) => `L${i.line} ${i.msg}`).join("; "));
+        const unlinted = earsUnlinted(text, ev);
+        need("ears", !unlinted, unlinted ? m.earsNoCriteria(unlinted) : "");
+        noPlaceholders(CHANGE_FILE);
+        const mk = clarificationMarkers(text);
+        need("clarifications", !mk.length, m.clarificationsOpen(mk.length));
+        const dups = acDuplicates(text);
+        need("ac-uniqueness", !dups.length, m.acDup(dups.join(", ")));
+        need("placeholders", parseTasks(text).some((t) => !isPlaceholderTask(t.text)), G.noRealTasks);
+        const sc = changeScope(dir, tracks, lang);
+        need("change-scope", sc.ok, sc.detail);
+        const tr = traceCheck(projectDir, slug);
+        const kinds = ["uncoveredByTasks", "phantomAcsInTasks", "phantomTestsInTasks"];
+        need("traceability", kinds.every((k) => !(tr[k] || []).length), gaps(tr, kinds));
+        const deps = taskDepsCheck(taskBlocks(text || ""), lang);
+        if (deps) need("task-deps", deps.status !== "fail", deps.detail);
+        break;
+      }
       if (!exists("tasks.md")) return nothing("tasks.md");
       noPlaceholders("tasks.md");
       // No placeholder tasks: bracketed ones are in the report above; a list made ONLY of the scaffold's verbatim track
@@ -1526,6 +1578,6 @@ module.exports = { phaseActive, testsGateDue, detectPhase, approvePhase, WAIVER_
   sectionEntries, taskEntries, plannedTestEntries, activeTaskBlocks, impactReport, impactLines, gateWalk, gateArtifacts,
   pendingGateList, FLOWS, DESIGN_FIRST_PHASES, flowOfState, featureFlow, phaseOrder, flowIndex, flowPhaseIndex,
   checkPhaseIndex, positionPhase, parseFlow, flowOrderText, setFeatureFlow, setFeatureFlowLocked, createFlow,
-  storeCreateFlow, CHECK_PHASE, PHASE_INDEX, chainArtifacts, changedSinceApproval, realLines, hasSuccessCriteria,
+  storeCreateFlow, CHECK_PHASE, CHANGE_MAX_ACS, CHANGE_MAX_TASKS, changeScope, PHASE_INDEX, chainArtifacts, changedSinceApproval, realLines, hasSuccessCriteria,
   hasPriority, acDuplicates, sectionFilled, bugSectionFilled, CONSTITUTION_SYN, approvalChecks, RE_CONSTITUTION_CHECK,
   RE_SUCCESS_CRITERIA, RE_INDEPENDENT_TEST, RE_OUT_OF_SCOPE, RE_NFR, RE_EDGE_CASES, RE_TESTABILITY, __link };

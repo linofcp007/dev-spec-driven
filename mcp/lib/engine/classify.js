@@ -829,6 +829,10 @@ function classify(description, opts = {}) {
     lang, // the language notes/reasoning were written in (explicit, or guessed from the text)
     reasoning: buildReasoning(tracks, signals, confidence, negated, C, OPT),
   };
+  // 1.21 F5: the suggested size (a deterministic reading — stable `sizeReason`; the localized sentence in `sizeNote`, never in notes)
+  const sz = suggestSize(text, tracks);
+  const SZ = i18n.msg(lang).sizes;
+  Object.assign(res, { suggestedSize: sz.size, sizeReason: sz.reason, sizeNote: (SZ.suggest[sz.reason] || SZ.suggest.default) + " " + SZ.suggestTail });
   if (overrides.length) res.overrides = overrides;
   if (warning) res.overridesWarning = warning;
   // explain (1.21 F2 — spec_classify {explain} / classify --explain): every keyword match — its table tier, its final one (a cue, an
@@ -846,6 +850,33 @@ function classify(description, opts = {}) {
   // The tiers each track matched (after the de-dupe), for the Phase 0 learner (learnSignalOverrides) — not part of the result's JSON.
   Object.defineProperty(res, "tiers", { value: matched, enumerable: false });
   return res;
+}
+
+// 1.21 F5 — the size spec_classify suggests (spec_create {size}): a deterministic reading of the request — never the track count
+// alone (the 1.20 friction audit: the classifier under-calls tracks). → { size, reason } — reason (stable): trivial-change ·
+// several-tracks · public-api · cross-system · single-unit · default. The human confirms or overrides it in Phase 0; nothing
+// applies a size by itself (spec_create without one keeps the 1.20 scaffold).
+const B_ = "(?<![\\p{L}\\p{N}])", _B = "(?![\\p{L}\\p{N}])";
+const SIZE_TRIVIAL = new RegExp(B_ + "(?:typos?|misspell(?:ing|ed|ings)?|spelling (?:mistake|error)s?|wording|copy (?:change|tweak|edit|fix)|" +
+  "(?:change|update|fix|edit|correct) (?:the |a )?(?:text|label|copy|wording|caption|colou?r|footer text|button text)|rename (?:the |a )?(?:label|button|field|variable|file|column)|" +
+  "one[- ]line(?:r)? (?:fix|change)|(?:bump|upgrade|update) (?:the |a )?(?:version|dependency)|broken link|(?:update|fix) (?:the )?copyright|" +
+  "gralhas?|erros? (?:ortográfico|de digitação|de escrita|tipográfico)s?|(?:corrigir|mudar|alterar|atualizar) (?:o |a )?(?:texto|rótulo|legenda|etiqueta|cor|redação)|" +
+  "renomear (?:o |a )?(?:rótulo|botão|campo|ficheiro|arquivo)|(?:numa|uma|em uma) (?:só )?linha|link (?:partido|quebrado)|atualizar (?:a )?versão|" +
+  "erratas?|errores? (?:tipográfico|ortográfico|de escritura)s?|faltas? de ortografía|(?:corregir|cambiar|actualizar) (?:el |la )?(?:texto|etiqueta|color|redacción)|" +
+  "renombrar (?:el |la )?(?:etiqueta|botón|campo|archivo)|(?:en )?una (?:sola )?línea|enlace roto|actualizar (?:la )?versión)" + _B, "u");
+const SIZE_UNIT = new RegExp(B_ + "(?:a|an|one|single|um|uma|un|una|1)\\s+(?:[\\p{L}\\p{N}/-]+\\s+){0,3}?(?:endpoints?|button|screen|page|field|column|form|filter|" +
+  "report|export|checkbox|toggle|tab|dialog|modal|query|job|script|command|setting|link|email|notification|route|widget|" +
+  "botão|ecrã|tela|página|campo|coluna|formulário|filtro|relatório|exportação|botón|pantalla|columna|formulario|informe|exportación|ruta)" + _B, "u");
+const SIZE_CROSS = new RegExp(B_ + "(?:several|multiple|many|across) (?:services|systems|microservices)|(?:vários|varios|múltiplos|múltiples|entre) (?:serviços|sistemas|servicios|microsserviços|microservicios)" + _B, "u");
+const SIZE_PUBLIC = new RegExp(B_ + "(?:public|pública|publica|público|publico)" + _B, "u");
+function suggestSize(text, tracks) {
+  const markers = tracks.filter((t) => t !== "core" && t !== "tdd");
+  if (!markers.length && SIZE_TRIVIAL.test(text)) return { size: "xs", reason: "trivial-change" };
+  if (markers.length >= 3) return { size: "l", reason: "several-tracks" };
+  if (markers.includes("api") && SIZE_PUBLIC.test(text)) return { size: "l", reason: "public-api" };
+  if ((markers.includes("dist") && markers.length >= 2) || SIZE_CROSS.test(text)) return { size: "l", reason: "cross-system" };
+  if (markers.length <= 1 && SIZE_UNIT.test(text)) return { size: "s", reason: "single-unit" };
+  return { size: "m", reason: "default" };
 }
 
 function buildReasoning(tracks, signals, confidence, negated, C, optional) {

@@ -89,12 +89,26 @@ function signalTracks(tracks) {
   const builtIn = ["core", "tdd", ...MARKER_TRACK_ORDER];
   return ["tdd", ...MARKER_TRACK_ORDER, ...(tracks || []).filter((t) => typeof t === "string" && !builtIn.includes(t))];
 }
-function templateTests(tracks) {
+// 1.21 F5 — feature sizes (spec_create {size}): xs is the one-file change (change.md), s a one-story scaffold, m / l today's
+// chain with the duplicates merged. No size = the 1.20 scaffolds, byte for byte (every builder takes `a.size` undefined).
+const FEATURE_SIZES = ["xs", "s", "m", "l"];
+// The core template criteria of a size: S keeps one story with two criteria — AC-1 (WHEN) and AC-2 (IF…THEN, the error path);
+// the track criteria keep their numbers at every size (US-1.AC-5… — a gap after AC-2 is fine: IDs are stable, not contiguous).
+const SIZE_CORE_ACS = { s: ["US-1.AC-1", "US-1.AC-2"] };
+function coreTemplateAcs(size) {
+  return Object.prototype.hasOwnProperty.call(SIZE_CORE_ACS, size) ? SIZE_CORE_ACS[size] : TEMPLATE_ACS.core;
+}
+// Core design sections a track's own sections supersede on a SIZED scaffold (P4 — DATA: a track that owns a concern the core
+// design also asks about): the builders leave the core section out when one of its tracks is on. Keys = the core sections every
+// language's design builder names; values = the tracks that supersede them. A new built-in track adds its entry here.
+const CORE_SUPERSEDED_BY = { apiContracts: ["api"], errorHandling: ["api"], securityConsiderations: ["sec"], testingStrategy: ["tdd"] };
+const coreSuperseded = (a, key) => !!a.size && (CORE_SUPERSEDED_BY[key] || []).some((t) => (a.tracks || []).includes(t));
+function templateTests(tracks, size) {
   const ids = {};
   let n = 0;
   for (const t of Object.keys(TEMPLATE_ACS)) {
     if (t !== "core" && !(tracks || []).includes(t)) continue;
-    for (const ac of TEMPLATE_ACS[t]) ids[ac] = "T-" + String(++n).padStart(2, "0");
+    for (const ac of t === "core" ? coreTemplateAcs(size) : TEMPLATE_ACS[t]) ids[ac] = "T-" + String(++n).padStart(2, "0");
   }
   return ids;
 }
@@ -107,18 +121,20 @@ function greenLine(green, ...acs) {
 // ubiquitous AC-4 ("always-true property") and tenant isolation ("never") are invariants, the event-driven ones examples.
 // acs: the feature's REAL AC IDs (a test plan scaffolded after requirements.md was written — spec_add_track tdd): one
 // generic row each (T-01…, unit, example, [behavior]) instead of the template's, whose IDs the feature may not define.
-function templateTestRows(tracks, row, L, acs) {
+function templateTestRows(tracks, row, L, acs, size) {
   if (Array.isArray(acs) && acs.length) {
     return acs.map((ac, i) => row("T-" + String(i + 1).padStart(2, "0"), "unit", "example", L.behavior, ac, "tests/unit/...")).join("\n");
   }
   // An EMPTY list: requirements.md was written and defines no AC ID (an import without criteria) — one generic row whose
   // Covers cell is a slot, never the template's US-1.AC-1… rows (phantoms for trace_check). 1.14 full review Pa4.
   if (Array.isArray(acs)) return row("T-01", "unit", "example", L.behavior, L.acSlot, "tests/unit/...");
-  const T = templateTests(tracks);
+  const T = templateTests(tracks, size);
   const r = (ac, layer, desc, file, kind = "example") => row(T[ac], layer, kind, desc, ac, file);
-  const rows = [r("US-1.AC-1", "unit", L.behavior, "tests/unit/..."), r("US-1.AC-2", L.integration, L.behavior, "tests/integration/..."),
-    r("US-1.AC-3", "unit", L.recovery, "tests/unit/..."), r("US-1.AC-4", "unit", L.property, "tests/unit/...", "property"),
-    r("US-2.AC-1", L.integration, L.behavior, "tests/integration/...")];
+  // 1.21 F5: size S — its two core criteria (AC-2 is the IF…THEN error path there)
+  const rows = size === "s" ? [r("US-1.AC-1", "unit", L.behavior, "tests/unit/..."), r("US-1.AC-2", "unit", L.recovery, "tests/unit/...")]
+    : [r("US-1.AC-1", "unit", L.behavior, "tests/unit/..."), r("US-1.AC-2", L.integration, L.behavior, "tests/integration/..."),
+      r("US-1.AC-3", "unit", L.recovery, "tests/unit/..."), r("US-1.AC-4", "unit", L.property, "tests/unit/...", "property"),
+      r("US-2.AC-1", L.integration, L.behavior, "tests/integration/...")];
   if (T["US-1.AC-5"]) rows.push(r("US-1.AC-5", L.integration, L.tenant, "tests/integration/...", "property"), r("US-1.AC-6", L.load, L.latency, "load-test.md"));
   if (T["US-1.AC-7"]) rows.push(r("US-1.AC-7", "eval", L.golden, "evals/golden.json"), r("US-1.AC-8", "eval", L.injection, "evals/adversarial.json"),
     r("US-1.AC-9", L.integration, L.cost, "tests/integration/..."));
@@ -151,4 +167,4 @@ function templateTestRows(tracks, row, L, acs) {
 
 
 module.exports = { BASE_LANGS, LANGS, LANG_ALIASES, canonicalLang, normalizeLang, baseLang, TEMPLATE_ACS, MARKER_TRACK_ORDER, signalTracks, templateTests, greenLine, templateTestRows,
-  cliQuote, cliPrefix, DEV_SPEC_SCRIPT, DEV_SPEC, portableCli };
+  cliQuote, cliPrefix, DEV_SPEC_SCRIPT, DEV_SPEC, portableCli, FEATURE_SIZES, SIZE_CORE_ACS, coreTemplateAcs, CORE_SUPERSEDED_BY, coreSuperseded };
