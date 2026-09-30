@@ -510,7 +510,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
   {
     const srcFiles = [...libSources().map((f) => path.relative(root, f)), "mcp/server.js", "cli/dev-spec.js",
       "hooks/guard-hook.js", "hooks/stop-hook.js", "hooks/spec-hook.js", "hooks/observe-hook.js", "hooks/approval-hook.js",
-      "hooks/plan-hook.js", "hooks/precommit-check.js"].filter((f) => fs.existsSync(path.join(root, f)));
+      "hooks/plan-hook.js", "hooks/precommit-check.js", "scripts/build.js"].filter((f) => fs.existsSync(path.join(root, f)));
     const lit = /(^|[=(,:!&|?;{}\s])\/((?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+)\/([dgimsuvy]*)/gm;
     const stripped = /(^|[(|^?:])(?:s[*+?]|d[+*]|w[+*])|[^\\\p{L}](?:s[*+])(?:[\p{L}:$)]|$)/u;
     const bad = [];
@@ -655,5 +655,238 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     ok(ccOn && got && got.afterEn === false && got.claim === true && got.lazy > 3 && got.extra > 0 && got.head !== "undefined",
       "1.18 load time: the facade enables Node's module compile cache (where Node has it), an English process loads no pt-BR, and the stop gate reads pt-BR's raw claim patterns without deriving its messages (got " +
       JSON.stringify({ ccOn, got }) + ")");
+  }
+
+  // 1.20 build (scripts/build.js, `npm run build`): the committed, pre-generated placeholder corpus
+  // (mcp/lib/engine/corpus.generated.json) and the single-file engine bundle built on demand (`--bundle`, `dev-spec bundle` —
+  // never committed; built into tmp here). The child processes below run serialized functions (Function.prototype.toString)
+  // written to tmp — no escaped source in strings.
+  {
+    const B = require("../scripts/build.js");
+    const E = require("./lib/engine/index.js"); // this process's engine: the modules the facade loaded
+    const I = require("./lib/i18n.js");
+    const libDir = path.join(__dirname, "lib");
+    const js = JSON.stringify;
+    const sorted = (xs) => [...xs].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    const spawnJson = (args, env) => {
+      const r = spawnSync(process.execPath, args, { encoding: "utf8", timeout: 300000, env });
+      try { return JSON.parse(r.stdout); } catch { return { stdout: r.stdout, stderr: String(r.stderr).slice(0, 300) }; }
+    };
+    const script = (name, fn, args) => { const f = path.join(tmp, name); fs.writeFileSync(f, "\"use strict\";\n(" + fn.toString() + ")(" + args + ");\n"); return f; };
+
+    // The committed corpus is what a fresh build of these sources writes: a change to a file of CORPUS_SOURCES (a template, a
+    // track, a string, the readers the render runs through) or to package.json's version without a rebuild fails here.
+    const staleFiles = B.stale(E);
+    const buildJs = path.join(root, "scripts", "build.js");
+    const check = spawnSync(process.execPath, [buildJs, "--check"], { encoding: "utf8", timeout: 120000 });
+    const usage = [["--nope"], ["--check", "--bundle"], ["--bundle", "--out", "x.txt"]].map((a) => spawnSync(process.execPath, [buildJs, ...a], { encoding: "utf8", timeout: 60000 }).status);
+    ok(staleFiles.length === 0 && check.status === 0 && /corpus is up to date/.test(check.stdout) && usage.every((s) => s === 2),
+      "1.20 build: the committed corpus (mcp/lib/engine/corpus.generated.json) equals a fresh build of these sources — run npm run build; `build.js --check` says so (exit 0); an unknown argument, --check with --bundle, a --bundle --out that is no .js file exit 2 (stale: " +
+      js(staleFiles) + ", check " + check.status + " " + js(String(check.stdout).trim()) + ", usage " + js(usage) + ")");
+    const buildReq = [...fs.readFileSync(buildJs, "utf8").matchAll(/\brequire\(\s*(["'])([^"']+)\1\s*\)/g)].map((m) => m[2]);
+    const pkgScripts = require(path.join(root, "package.json")).scripts;
+    const ignored = fs.readFileSync(path.join(root, ".gitignore"), "utf8").split(/\r?\n/).includes("mcp/lib/spec.bundle.js");
+    ok(buildReq.length && buildReq.every((m) => ["fs", "path"].includes(m)) && pkgScripts.build === "node scripts/build.js" && pkgScripts["build:bundle"] === "node scripts/build.js --bundle" &&
+      ignored && !libSources().some((f) => path.basename(f) === "spec.bundle.js") && libSources().length >= 38,
+      "1.20 build: scripts/build.js is Node core only, wired as npm run build (the corpus) and npm run build:bundle; mcp/lib/spec.bundle.js is git-ignored (built on demand, never committed) and the source guards never read a bundle — they read the sources and scripts/build.js (got " +
+      js({ buildReq, ignored }) + ")");
+
+    // This process reads the committed corpus (its version and sources stamps match) and its sets are exactly the rendered ones.
+    const fresh = E.renderCorpusData();
+    const setsNow = E.templateSets(), brNow = E.templateSetsBr();
+    const pairs = [[setsNow.brackets, fresh.brackets], [setsNow.code, fresh.code], [brNow.brackets, fresh.bracketsBr], [brNow.code, fresh.codeBr],
+      [E.templateTaskSet(), fresh.tasks], [E.bugStepSet(), fresh.bugSteps]];
+    ok(E.builtinCorpusSource() === "file" && pairs.every(([s, l]) => js(sorted(s)) === js(l)) && fresh.brackets.length > 400 && fresh.tasks.length > 50 && fresh.bugSteps.length > 5,
+      "1.20 build: this process reads the committed corpus (source 'file' — its version and sources stamps match this engine) and every built-in set is exactly the rendered one: templateSets, templateSetsBr, templateTaskSet, the bug steps (got " +
+      js({ source: E.builtinCorpusSource(), sizes: pairs.map(([s, l]) => [s.size, l.length]) }) + ")");
+
+    // CORPUS_SOURCES — what the sources stamp hashes — lists every mcp/lib file whose functions run while the corpus renders (V8
+    // coverage of renderCorpusData, the counters reset once every language has loaded): a render that came to depend on another
+    // module would otherwise keep a stale corpus after an edit there.
+    const covChild = function (lib) {
+      const fs = require("fs"), path = require("path"), url = require("url"), v8 = require("v8");
+      const E = require(path.join(lib, "engine", "index.js")), I = require(path.join(lib, "i18n.js"));
+      for (const l of I.LANGS) I.msg(l); // every language's file loaded: load time is not the render
+      I.toPtBr("x");
+      v8.takeCoverage(); // written, and the counters reset
+      E.renderCorpusData();
+      v8.takeCoverage();
+      const dir = process.env.NODE_V8_COVERAGE;
+      const num = (f) => (f.match(/-(\d+)-(\d+)\.json$/) || ["", "0", "0"]).slice(1).map(Number);
+      const last = fs.readdirSync(dir).filter((f) => f.startsWith("coverage-")).sort((a, b) => num(a)[0] - num(b)[0] || num(a)[1] - num(b)[1]).pop();
+      const ran = new Set();
+      for (const s of JSON.parse(fs.readFileSync(path.join(dir, last), "utf8")).result) {
+        if (!s.url.startsWith("file:")) continue;
+        const rel = path.relative(lib, url.fileURLToPath(s.url));
+        if (rel.startsWith("..") || path.isAbsolute(rel)) continue;
+        if (s.functions.some((fn) => fn.ranges[0].startOffset > 0 && fn.ranges[0].count > 0)) ran.add(rel.split(path.sep).join("/"));
+      }
+      process.stdout.write(JSON.stringify([...ran].sort()));
+    };
+    const covDir = path.join(tmp, "p20-coverage");
+    fs.mkdirSync(covDir, { recursive: true });
+    const ran = spawnJson([script("p20-coverage.js", covChild, "process.argv[2]"), libDir], { ...process.env, NODE_V8_COVERAGE: covDir });
+    const unlisted = Array.isArray(ran) ? ran.filter((f) => !E.CORPUS_SOURCES.includes(f)) : null;
+    ok(Array.isArray(ran) && ran.length >= 8 && unlisted.length === 0 && E.CORPUS_SOURCES.every((f) => fs.existsSync(path.join(libDir, ...f.split("/")))),
+      "1.20 build: CORPUS_SOURCES (what the corpus's sources stamp hashes) lists every mcp/lib file whose functions run while the corpus renders — V8 coverage of renderCorpusData (got " +
+      js({ ran, unlisted }) + ")");
+
+    // A clone whose corpus can't be trusted renders it — never a wrong answer. A faithful copy elsewhere reads the file (the stamp
+    // is the sources, not their path); another version, a hand-edited template that wasn't rebuilt, a broken or a missing file
+    // → 'render'. Rendered, the corpus decides every fresh scaffold text (47 track sets × 4 languages × the feature, bugfix and
+    // steering builders) exactly as the committed one does.
+    const decideChild = function (lib, mode) {
+      const crypto = require("crypto"), path = require("path");
+      const S = require(path.join(lib, "spec.js")), I = require(path.join(lib, "i18n.js")), E = require(path.join(lib, "engine", "index.js"));
+      const out = { source: E.builtinCorpusSource() };
+      if (mode !== "source") out.probe = S.placeholderReport(I.requirements({ name: "x", tracks: ["core"], label: "core", slug: "x", summary: "" }, "en")).map((p) => p.text);
+      if (mode === "decide") {
+        const OPT = S.OPTIONAL_TRACKS;
+        const combos = [[], ...OPT.map((t) => [t]), ...OPT.flatMap((t, i) => OPT.slice(i + 1).map((u) => [t, u])), OPT].map((x) => ["core", ...x]);
+        const texts = [];
+        for (const l of I.LANGS) {
+          for (const tracks of combos) {
+            const a = { name: "Feature X", tracks, label: tracks.join(" +"), slug: "feature-x", summary: "" };
+            for (const b of ["classification", "requirements", "design", "tasks", "checklist"]) texts.push(I[b](a, l));
+            texts.push(I.testPlan("Feature X", l, tracks));
+          }
+          for (const b of ["evalPlan", "loadTest", "quickstart", "integrationPlan", "promptStub", "bugTestPlan", "bugTasks"]) texts.push(I[b]("Feature X", l));
+          texts.push(I.bugReport({ name: "Feature X" }, l), I.bugRequirements({ name: "Feature X" }, l));
+          for (const f of I.steeringKnownFiles()) texts.push(I.steeringStub(f, l));
+        }
+        const uniq = [...new Set(texts)];
+        const dec = uniq.map((x) => [S.placeholderReport(x), S.artifactState({ text: x }), S.parseTasks(x).map((k) => [S.isPlaceholderTask(k.text), E.isBugStep(k.text)])]);
+        Object.assign(out, { texts: uniq.length, placeholders: dec.reduce((n, d) => n + d[0].length, 0), hash: crypto.createHash("sha1").update(JSON.stringify(dec)).digest("hex") });
+      }
+      process.stdout.write(JSON.stringify(out));
+    };
+    const decideJs = script("p20-decide.js", decideChild, "process.argv[2], process.argv[3]");
+    const decide = (lib, mode) => spawnJson([decideJs, lib, mode], process.env);
+    const clone = path.join(tmp, "p20-clone"), cloneLib = path.join(clone, "mcp", "lib");
+    fs.mkdirSync(path.join(clone, "mcp"), { recursive: true });
+    fs.cpSync(libDir, cloneLib, { recursive: true, filter: (src) => path.basename(src) !== "spec.bundle.js" }); // (never a bundle built here)
+    const pkgPath = path.join(clone, "package.json"), pkgText = fs.readFileSync(path.join(root, "package.json"), "utf8");
+    const otherPkg = pkgText.replace(/"version":\s*"[^"]+"/, "\"version\": \"0.0.1\"");
+    fs.writeFileSync(pkgPath, pkgText);
+    const here = decide(libDir, "decide"), faithful = decide(cloneLib, "source");
+    fs.writeFileSync(pkgPath, otherPkg);
+    const otherVersion = decide(cloneLib, "source");
+    fs.writeFileSync(pkgPath, pkgText);
+    const enPath = path.join(cloneLib, "i18n", "en.js"), enText = fs.readFileSync(enPath, "utf8");
+    fs.writeFileSync(enPath, enText.replace("[why this is the minimum viable slice]", "[why this slice ships first]"));
+    const edited = decide(cloneLib, "probe");
+    fs.writeFileSync(enPath, enText);
+    const corpusPath = path.join(cloneLib, "engine", E.CORPUS_FILE);
+    fs.writeFileSync(corpusPath, "{");
+    const broken = decide(cloneLib, "source");
+    fs.rmSync(corpusPath);
+    const missing = decide(cloneLib, "decide");
+    ok(here.source === "file" && faithful.source === "file" && otherVersion.source === "render" && broken.source === "render",
+      "1.20 build: a copy of the clone elsewhere reads the committed corpus (the stamp is the sources, not their path); another package.json version or a broken corpus file → rendered (got " +
+      js([here.source, faithful.source, otherVersion.source, broken.source]) + ")");
+    ok(edited.source === "render" && Array.isArray(edited.probe) && edited.probe.includes("[why this slice ships first]") && !E.templateSets().brackets.has("why this slice ships first") &&
+      Array.isArray(here.probe) && here.probe.includes("[why this is the minimum viable slice]"),
+      "1.20 build: a template hand-edited in a clone that wasn't rebuilt changes the sources stamp — the corpus renders, and the new slot [why this slice ships first] reads as a placeholder (the committed corpus lacks it: trusted, a stale file would have called it the user's text) (got " +
+      js(edited) + ")");
+    ok(missing.source === "render" && here.texts > 1000 && missing.texts === here.texts && here.placeholders > 10000 && missing.placeholders === here.placeholders && missing.hash === here.hash,
+      "1.20 build: without its corpus file a clone renders the corpus and decides every fresh scaffold text — " + here.texts + " texts (47 track sets × 4 languages, the feature, bugfix and steering builders): placeholderReport, artifactState, isPlaceholderTask, isBugStep — exactly as the committed corpus does (" +
+      here.placeholders + " placeholders) (got " + js([here.source, here.hash, missing.source, missing.hash, missing.placeholders]) + ")");
+
+    // The bundle (built on demand — here into tmp, for this clone's mcp/lib): the same modules in one file — the modules'
+    // namespace, the corpus it embeds (source 'bundle'), their own paths (engineVersion's package.json, the approval guard's
+    // CLI path) — every module stamped with its size and mtime.
+    const bundleFile = path.join(tmp, "p20-bundle", "spec.bundle.js");
+    const built = B.writeBundle(bundleFile, { E });
+    const Bn = require(bundleFile);
+    const req2 = Bn.load(libDir);
+    const E2 = req2("./engine/index.js"), I2 = req2("./i18n.js");
+    const apPayload = { hook_event_name: "PreToolUse", tool_name: "mcp__spec-driven__spec_approve", tool_input: { name: "billing", phase: "design" } };
+    const apCmd = (X) => (X.approvalGuardDecision(apPayload, "deny", { lang: "en" }) || {}).command;
+    const stampsTrue = Bn.stamp.files.every(([rel, size, mtimeMs]) => { const st = fs.statSync(path.join(libDir, ...rel.split("/"))); return st.size === size && st.mtimeMs === mtimeMs; });
+    ok(built.modules === B.bundledFiles().length && js(Bn.stamp.files.map((f) => f[0])) === js(B.bundledFiles()) && stampsTrue && Bn.stamp.version === E.engineVersion() &&
+      E2 !== E && js(Object.keys(E2).sort()) === js(Object.keys(E).sort()) && E2.builtinCorpusSource() === "bundle" && js(sorted(E2.templateSets().brackets)) === js(fresh.brackets) &&
+      E2.engineVersion() === E.engineVersion() && typeof apCmd(E) === "string" && /dev-spec\.js/.test(apCmd(E)) && apCmd(E2) === apCmd(E) &&
+      I2.msg("pt").hook.sessionHeader === I.msg("pt").hook.sessionHeader,
+      "1.20 bundle: a bundle built on demand (scripts/build.js --bundle, into tmp) holds every engine and i18n module (" + built.modules + "), each stamped with its size and mtime — the modules' namespace, the corpus it embeds (source 'bundle'), and their own paths wherever the bundle file lives: engineVersion reads package.json, the approval guard names cli/dev-spec.js as on the modules (got " +
+      js({ modules: built.modules, version: Bn.stamp.version, stampsTrue, source: E2.builtinCorpusSource(), cmd: [apCmd(E), apCmd(E2)] }) + ")");
+
+    // The facade takes a bundle only with DEV_SPEC_BUNDLE=1 and only while it is current. On the clone (no bundle of its own):
+    // none → the modules; one built for it → the bundle (no engine module file loaded); unset or 0 → the modules; an invalid
+    // DEV_SPEC_BUNDLE_PATH (relative, not a .js file) is ignored (the default place), a valid one is taken; a module touched
+    // since the build (mtime), or edited to another size under the same mtime, another package.json version, a broken bundle
+    // → the modules, silently (nothing on stdout or stderr).
+    const facadeChild = function (lib) {
+      const S = require(require("path").join(lib, "spec.js"));
+      const keys = Object.keys(require.cache);
+      process.stdout.write(JSON.stringify({ bundles: keys.filter((k) => /bundle[^\\/]*\.js$/.test(k)).length, modules: keys.filter((k) => /[\\/]engine[\\/]/.test(k)).length,
+        brackets: S.templateSets().brackets.size, version: S.engineVersion() }));
+    };
+    const facadeJs = script("p20-facade.js", facadeChild, "process.argv[2]");
+    const facade = (v, bpath) => {
+      const env = { ...process.env };
+      if (v == null) delete env.DEV_SPEC_BUNDLE; else env.DEV_SPEC_BUNDLE = v;
+      if (bpath == null) delete env.DEV_SPEC_BUNDLE_PATH; else env.DEV_SPEC_BUNDLE_PATH = bpath;
+      const r = spawnSync(process.execPath, [facadeJs, cloneLib], { encoding: "utf8", timeout: 300000, env });
+      let o;
+      try { o = JSON.parse(r.stdout); } catch { o = { stdout: r.stdout }; }
+      o.use = o.modules === 0 && o.bundles === 1 ? "bundle" : o.modules > 20 ? "modules" : "?";
+      if (r.stderr) o.stderr = String(r.stderr).slice(0, 200);
+      return o;
+    };
+    const none = facade("1");
+    // one module's mtime set to a whole second BEFORE the build, so the test can put it back exactly (a Date carries whole ms only)
+    const scanPath = path.join(cloneLib, "engine", "scan.js"), scanText = fs.readFileSync(scanPath), t0 = Math.floor(Date.now() / 1000) - 60;
+    fs.utimesSync(scanPath, t0, t0);
+    B.writeBundle(path.join(cloneLib, "spec.bundle.js"), { lib: cloneLib, E });
+    const elsewhere = path.join(tmp, "p20-bundle-clone", "engine.bundle.js");
+    B.writeBundle(elsewhere, { lib: cloneLib, E });
+    const on = facade("1"), off = facade(null), zero = facade("0"), relPath = facade("1", "spec.bundle.js"), txtPath = facade("1", path.join(tmp, "x.txt"));
+    const atPath = facade("1", elsewhere);
+    fs.utimesSync(scanPath, t0, t0 + 5); // touched (a plugin update, an edit) since the build
+    const touched = facade("1");
+    fs.writeFileSync(scanPath, Buffer.concat([scanText, Buffer.from(" ")]));
+    fs.utimesSync(scanPath, t0, t0); // another size under the very mtime the bundle stamped
+    const resized = facade("1");
+    fs.writeFileSync(scanPath, scanText);
+    fs.utimesSync(scanPath, t0, t0);
+    const restored = facade("1");
+    fs.writeFileSync(pkgPath, otherPkg);
+    const otherVer = facade("1");
+    fs.writeFileSync(pkgPath, pkgText);
+    fs.writeFileSync(path.join(cloneLib, "spec.bundle.js"), fs.readFileSync(path.join(cloneLib, "spec.bundle.js"), "utf8").slice(0, 5000)); // cut short
+    const brokenB = facade("1");
+    const got = { none, on, off, zero, relPath, txtPath, atPath, touched, resized, restored, otherVer, brokenB };
+    const uses = Object.fromEntries(Object.entries(got).map(([k, v]) => [k, v.use]));
+    const want = { none: "modules", on: "bundle", off: "modules", zero: "modules", relPath: "bundle", txtPath: "bundle", atPath: "bundle", touched: "modules",
+      resized: "modules", restored: "bundle", otherVer: "modules", brokenB: "modules" };
+    ok(js(uses) === js(want) && Object.values(got).every((v) => !v.stderr && v.brackets === on.brackets) && otherVer.version === "0.0.1",
+      "1.20 bundle: the facade loads the engine from a bundle only with DEV_SPEC_BUNDLE=1 and while it is current — its version is package.json's and every module it holds keeps the size and mtime it was built from (one stat each); DEV_SPEC_BUNDLE_PATH is taken only as an absolute .js path; a missing, stale, other-version or broken bundle → the modules, silently (got " +
+      js({ uses, stderr: Object.entries(got).filter(([, v]) => v.stderr).map(([k, v]) => k + ": " + v.stderr) }) + ")");
+
+    // The MCP server on the bundle answers what it answers on the modules: the handshake, tools / prompts / resources, and
+    // read-only tool calls over one project (a PT feature and a bugfix among them).
+    const mp = path.join(tmp, "proj-p20-mcp");
+    S.initProject(mp, ["tdd"], "en");
+    S.createFeature(mp, "Billing", ["tdd", "saas"], "tenant billing");
+    S.createFeature(mp, "Relatórios", ["privacy"], "relatórios", undefined, "pt");
+    S.createFeature(mp, "Crash", ["core"], "it crashes", undefined, "en", "bugfix");
+    const reqs = [{ method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "t", version: "1" } } },
+      { method: "tools/list" }, { method: "prompts/list" }, { method: "resources/list" },
+      ...[["spec_list", {}], ["spec_status", { name: "billing" }], ["spec_doctor", { name: "relatorios" }], ["spec_doctor", { name: "crash" }],
+        ["spec_next_action", { name: "billing" }], ["trace_check", { name: "billing", matrix: true }], ["ears_validate", { name: "billing" }],
+        ["spec_classify", { description: "an llm assistant with tenant billing" }], ["spec_task_brief", { name: "billing" }], ["spec_catalog", {}]]
+        .map(([name, args]) => ({ method: "tools/call", params: { name, arguments: { projectDir: mp, ...args } } }))]
+      .map((r, i) => js({ jsonrpc: "2.0", id: i + 1, ...r })).join("\n") + "\n";
+    const serve = (bundle) => {
+      const env = { ...process.env, SPEC_PROJECT_DIR: mp };
+      if (bundle) Object.assign(env, { DEV_SPEC_BUNDLE: "1", DEV_SPEC_BUNDLE_PATH: bundleFile }); else delete env.DEV_SPEC_BUNDLE;
+      const r = spawnSync(process.execPath, [path.join(__dirname, "server.js")], { input: reqs, encoding: "utf8", env, timeout: 120000 });
+      return String(r.stdout || "").split(/\r?\n/).filter(Boolean);
+    };
+    const srvM = serve(false), srvB = serve(true);
+    const srvErr = srvM.filter((l) => /"isError":true|"error":\{/.test(l)).length;
+    ok(srvM.length === 14 && srvB.length === 14 && srvM.every((l, i) => l === srvB[i]) && srvErr === 0,
+      "1.20 bundle: the MCP server on the bundle (DEV_SPEC_BUNDLE=1, DEV_SPEC_BUNDLE_PATH) answers the handshake, tools / prompts / resources lists and ten read-only tool calls byte for byte as on the modules (got " +
+      js({ modules: srvM.length, bundle: srvB.length, errors: srvErr, differ: srvM.map((l, i) => (l === srvB[i] ? null : i + 1)).filter(Boolean) }) + ")");
   }
 };

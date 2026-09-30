@@ -1344,6 +1344,8 @@ const msg = {
       missingValue: (flag) => `falta el valor de --${flag}`,
       unknownFlag: (flag, suggestion) => `opción desconocida ${flag}` + (suggestion ? ` — ¿quizás ${suggestion}?` : ".") + " Las opciones están en `dev-spec help`.",
       unknownRules: (tool, known) => `herramienta desconocida '${tool}'. Conocidas: ${known}`,
+      bundleWrote: (file, n, kb) => `Escrito ${file} — el motor en un solo archivo (${n} módulos, ${kb} KB).`,
+      bundleUse: (custom) => `Define DEV_SPEC_BUNDLE=1${custom ? ` y DEV_SPEC_BUNDLE_PATH=${custom}` : ""} en el entorno con que arranca Claude Code / tu cliente MCP para usarlo. Vuelve a generarlo tras cada actualización del plugin: un bundle desactualizado se ignora (se cargan los módulos).`,
       scaleSections: (list) => `Secciones de escala: ${list}`,
       aiSections: (list) => `Secciones de IA: ${list}`,
       dependsOn: (f, deps, order, unknown) => `${f} depende de: ${deps || "(ninguna)"}` + (order != null ? `  orden=${order}` : "") + (unknown ? `  ⚠ dependencias desconocidas: ${unknown}` : ""),

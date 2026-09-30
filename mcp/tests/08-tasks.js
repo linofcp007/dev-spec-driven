@@ -337,9 +337,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
   ok(S.parseTasks(cmBig).length === 3000, "thousands of inline '<!--' followed by one '-->' are still thousands of tasks");
   // No literal U+FEFF in shipped engine code (the scan_skill hidden-unicode rule): the escape is used instead.
   const BOM = String.fromCharCode(0xfeff);
-  const engineFiles = [...libSources(), ...["mcp/server.js", "cli/dev-spec.js", "hooks/spec-hook.js", "hooks/precommit-check.js"]
+  const engineFiles = [...libSources(), ...["mcp/server.js", "cli/dev-spec.js", "hooks/spec-hook.js", "hooks/precommit-check.js", "scripts/build.js"]
     .map((f) => path.join(__dirname, "..", f))].filter((f) => fs.existsSync(f));
-  ok(engineFiles.length >= 7 && engineFiles.every((f) => !fs.readFileSync(f, "utf8").includes(BOM)), "no literal U+FEFF (BOM) in the shipped engine files (every mcp/lib source, its modules included)");
+  ok(engineFiles.length >= 8 && engineFiles.every((f) => !fs.readFileSync(f, "utf8").includes(BOM)), "no literal U+FEFF (BOM) in the shipped engine files (every mcp/lib source, its modules included, and scripts/build.js — the generated bundle's registry)");
   }
 
   // --- 1.13 WP7: spec_append_tasks (converge) — appended tasks work end to end, all-or-nothing, line-exact ---

@@ -20,8 +20,9 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
 
 ## Topic map
 Read the file BEFORE you change its area (a section name another note cites — "see Gates" — is listed here too):
-- **`docs/maintainers/architecture.md`** — before adding or splitting an engine module, changing what a surface requires or
-  touching the MCP / rule-file configs: Layout (the full tree) · The module rule (1.18) · Config paths.
+- **`docs/maintainers/architecture.md`** — before adding or splitting an engine module, changing what a surface requires,
+  the build (the committed corpus, the on-demand bundle), or touching the MCP / rule-file configs: Layout (the full tree) · The module rule
+  (1.18) · The build (1.20) · Config paths.
 - **`docs/maintainers/tracks.md`** — before changing the classifier, a built-in track (+tdd … +dist, +api, +ui, +obs) or
   track packs: The track model · Project-defined tracks (1.15) · Classifier gotchas.
 - **`docs/maintainers/languages.md`** — before adding or rewording ANY user-facing string, a translated heading or a
@@ -105,6 +106,11 @@ written by hand. IDs and markers stay English-stable (languages.md).
   backslashes, and the engine and these notes are full of them (regexes, Windows paths). Edit escape-bearing code and
   text with the Edit / Write tools or a Write'd script file (`String.fromCharCode(92)` when a script must build a
   backslash), and check the bytes after moving text.
+- **Changed templates / tracks / i18n — the corpus? Run `npm run build`** and commit the regenerated
+  `mcp/lib/engine/corpus.generated.json` (the built-in placeholder corpus). Precisely: after changing a file of
+  `CORPUS_SOURCES` — `mcp/lib/i18n.js`, `mcp/lib/i18n/*.js`, `engine/core.js` / `markdown.js` / `packs.js` / `tasks.js` /
+  `tracks.js` — or package.json's version; mcp/test.js fails until then. Never edit it by hand. The one-file engine
+  (`mcp/lib/spec.bundle.js`) is git-ignored and built on demand (`dev-spec bundle`) — never commit it (architecture.md → The build).
 
 ## Layout (brief — the full tree: docs/maintainers/architecture.md → Layout)
 ```
@@ -112,7 +118,9 @@ written by hand. IDs and markers stay English-stable (languages.md).
 mcp/server.js                  the MCP stdio server: tools, prompts, resources, argument validation
 mcp/servers.json               the plugin's MCP registration (plugin.json → mcpServers; never a root .mcp.json)
 mcp/lib/spec.js                the engine's FACADE — every surface requires it, never an engine module directly
-mcp/lib/engine/                ALL domain logic, one module per concern (index.js loads MODULES; ctx.js holds CTX; import/)
+mcp/lib/spec.bundle.js         GIT-IGNORED, built on demand (dev-spec bundle): the engine in one file — DEV_SPEC_BUNDLE=1 only
+mcp/lib/engine/                ALL domain logic, one module per concern (index.js loads MODULES; ctx.js holds CTX; import/;
+                               corpus.generated.json — GENERATED: the built-in placeholder corpus)
 mcp/lib/i18n.js · i18n/        the localized content: en.js · pt.js · es.js · common.js · pt-br.js (the derivation)
 mcp/lib/prompts-resources.js   MCP prompts (= commands/*.md) + specs:// resources
 cli/dev-spec.js                the universal CLI over the same facade (the same defaults as MCP)
@@ -121,7 +129,8 @@ commands/ · agents/            the slash commands (also the MCP prompts) · the
 skills/dev-spec-driven/        SKILL.md (the workflow — its source of truth) + references/ (read on demand)
 evals/                         plugin evals for `claude plugin eval` (maintainer-side, local only)
 mcp/test.js · cli/test-cli.js  the suites' entry points — their files: mcp/tests/ · cli/tests/ (NN-<area>…, + harness.js)
-scripts/                       test-runner.js (both suites' runner: --only, --list) · test-docker.js (both in Linux containers)
+scripts/                       build.js (npm run build: the corpus; --bundle) · test-runner.js (both suites' runner: --only,
+                               --list) · test-docker.js (both in Linux containers)
 docs/maintainers/              these notes by topic — NOT loaded automatically; the topic map above says when to read each
 AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions.md   rule files for other tools
 ```
@@ -138,5 +147,7 @@ it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates 
 Exact counts that change when a package adds a command, tool or template (54 command files, the tools/list length, the
 template keys, the resource list) are asserted in place — update them in the same change. The source guards (no literal
 U+FEFF, no `child_process`, no backslash-stripped regex literal, the roadmap's printed labels) read every `mcp/lib` source
-— the facades and all their modules (`libSources()` in mcp/tests/harness.js) — never a facade alone.
+— the facades and all their modules (`libSources()` in mcp/tests/harness.js) — never a facade alone; never a built bundle
+(its registry comes from scripts/build.js, which they read). Both suites run on the modules (the harnesses drop
+`DEV_SPEC_BUNDLE`); the bundle's tests build one into tmp.
 Linux containers (`npm run test:docker`), plugin evals and the cross-platform test rules: docs/maintainers/testing.md.

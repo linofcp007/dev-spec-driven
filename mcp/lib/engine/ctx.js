@@ -21,8 +21,9 @@ const CTX = {
   // packs.js — the project's track packs
   PACK_MEMO: null, // { root, dirKey, reg } — the current call's track packs (withReadCache scope)
   GHOST_MARKERS: null, // Map(name → "[TOKEN]") — the missing packs' markers noteGhostPacks records (packs.js), same scope
-  // markdown.js — > 0 while templateSets / templateSetsBr build the process-wide built-in corpus: isPackMarkerBracket
-  // (packs.js) then never reads a pack marker as stable (not per call: the corpus is built once per process)
+  // markdown.js — > 0 while renderTemplateSets / renderTemplateSetsBr render the process-wide built-in corpus (npm run build,
+  // or a process whose corpus.generated.json doesn't match its sources): isPackMarkerBracket (packs.js) then never reads a
+  // pack marker as stable (not per call: the corpus is rendered at most once per process)
   BUILTIN_CORPUS_BUILD: 0,
 };
 

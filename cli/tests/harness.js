@@ -22,6 +22,9 @@ const path = require("path");
 const { createRequire } = require("module");
 const { exitFlushed, rmTmpDir } = require("../../scripts/test-runner.js");
 
+// The suite runs the CLI on the engine's MODULES (1.20): a DEV_SPEC_BUNDLE the user set is dropped for its processes — the
+// bundle's own file (16-conventions-bundle) sets it for the runs it compares.
+delete process.env.DEV_SPEC_BUNDLE;
 const CLI_DIR = path.join(__dirname, ".."); // cli/ — where cli/test-cli.js lives: the tests' __dirname
 const CLI_TEST = path.join(CLI_DIR, "test-cli.js");
 const CLI = path.join(CLI_DIR, "dev-spec.js");

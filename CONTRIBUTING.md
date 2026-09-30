@@ -28,6 +28,7 @@ file goes into the topic map (`mcp/test.js` checks that the map and the folder a
 ## Developing
 
 ```bash
+npm run build           # regenerate the placeholder corpus after changing templates / tracks / i18n (see below)
 node mcp/test.js        # MCP server end-to-end (must end `0 failed`)
 node cli/test-cli.js    # universal CLI (must end `0 failed`)
 # or both:
@@ -46,6 +47,15 @@ Each suite is a folder of files, one per area: `mcp/tests/NN-<area>[-<topic>].js
 independent files in parallel processes and prints one total. **A new test goes into the file of its area** — see
 [docs/maintainers/testing.md](./docs/maintainers/testing.md) → The suites (the context a file receives, `deps` for a
 file that reads what another built, when to start a new file).
+
+**Run `npm run build` after changing templates, tracks or i18n strings** — precisely, a file the placeholder corpus is
+rendered from: `mcp/lib/i18n.js`, `mcp/lib/i18n/*.js`, `mcp/lib/engine/core.js`, `markdown.js`, `packs.js`, `tasks.js`,
+`tracks.js` — and after bumping the version, then commit the regenerated `mcp/lib/engine/corpus.generated.json` with your
+change (the built-in placeholder corpus, rendered once instead of in every hook and CLI process; never edit it by hand).
+`mcp/test.js` fails ("run npm run build") while it differs from a fresh build; `node scripts/build.js --check` says whether
+it is current without writing anything. On a merge conflict in it, take either side and rebuild. The one-file engine for slow
+file systems (`npm run build:bundle` / `dev-spec bundle` → `mcp/lib/spec.bundle.js`) is git-ignored and built by the user
+who wants it — never commit it. See [docs/maintainers/architecture.md](./docs/maintainers/architecture.md) → The build.
 
 `npm run test:docker` (`scripts/test-docker.js`) mounts the clone read-only, runs without network (only the first run
 pulls the images and builds a small cached image with git) and as an unprivileged user; `--image <name>`, `--suite
@@ -73,7 +83,8 @@ For +ai changes, `node mcp/evals/run-evals.js <feature> --dry-run` validates the
 
 - Keep `SKILL.md` the source of truth for the workflow; commands stay thin wrappers.
 - Update `CHANGELOG.md` and bump the version in `package.json`, `.claude-plugin/plugin.json` **and**
-  `.claude-plugin/marketplace.json` together (`mcp/test.js` fails if they disagree).
+  `.claude-plugin/marketplace.json` together (`mcp/test.js` fails if they disagree) — then `npm run build` (the corpus
+  carries the version).
 - Validate both manifests and make sure `npm test` is green:
   - `claude plugin validate .claude-plugin/plugin.json` — the plugin (manifest + its components); it passes with
     one expected warning, `CLAUDE.md at the plugin root is not loaded as project context` (CLAUDE.md is these

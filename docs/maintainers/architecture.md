@@ -18,7 +18,10 @@ evals/                         plugin evals for `claude plugin eval` — maintai
                                built from evals/fixtures/ — lib.sh + project trees — with this plugin's own CLI); evals/README.md
 mcp/server.js                  MCP stdio protocol (JSON-RPC 2.0, newline-delimited) + argument validation against each inputSchema
 mcp/lib/spec.js                the engine's FACADE (1.18): the one public object every surface requires (server, CLI, hooks, tests) —
-                               the same keys as ever, each operation in ONE read-cache scope, the mutators under the feature lock
+                               the same keys as ever, each operation in ONE read-cache scope, the mutators under the feature lock;
+                               it loads the engine from its modules, or from a current bundle with DEV_SPEC_BUNDLE=1 (The build)
+mcp/lib/spec.bundle.js         GIT-IGNORED, built on demand (dev-spec bundle / npm run build:bundle): the engine + i18n modules
+                               in ONE file, for a slow file system — never committed
 mcp/lib/engine/                ALL domain logic, one module per concern (the module rule: see Three surfaces over ONE engine):
   index.js                     the loader — MODULES in order → the namespace E (a name defined twice throws) → __link(E) for each
   ctx.js                       CTX, the shared per-call state (read cache, glob cache, the call's .specs/ root, template /
@@ -33,6 +36,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
                                roadmap writers, RE_AUTOGEN
   markdown.js                  comments (commentLines), fences (closesFence / fenceStep), headings, sections (extractSection),
                                AC / T-ID readers; the template corpus, the bracket scan, artifact / feature / chain placeholders
+  corpus.generated.json        GENERATED (npm run build, committed): the built-in placeholder corpus markdown.js reads (The build)
   tracks.js                    the track registries (built-in tables + the accessors that add packs: allTracks, trackMarker…),
                                parseTracks, detectTracks, TRACK_SECTIONS, the inactive-section readers, and SIGNALS: one
                                object per built-in track (tiers, concepts, hazards, cues) — the classifier's data (1.20)
@@ -80,6 +84,7 @@ mcp/tests/                     its files, one per area: NN-<area>[-<topic>].js (
 cli/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; also prints MCP configs, rule files and prompts)
 cli/test-cli.js                the CLI suite's entry point — `node cli/test-cli.js` (never a top-level bin/, see below)
 cli/tests/                     its files: NN-<area>-<topic>.js (NN = the same area numbers as mcp/tests/) + harness.js
+scripts/build.js               `npm run build`: the committed corpus (--check: exit 1 when stale) · --bundle [--out]: the bundle
 scripts/test-runner.js         the runner both suites share: files → chains (deps) → parallel processes, --only / --list
 scripts/test-docker.js         both suites in Linux containers — `npm run test:docker` (local Docker, never hosted CI)
 hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|MultiEdit|NotebookEdit) + approval-hook.js
@@ -123,7 +128,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
 - **Shared mutable state lives in `engine/ctx.js`:** ONE object, `CTX`, mutated in place and never re-bound (a destructured
   copy would go stale) — the read cache and everything else one engine call scopes (`CTX.READ_CACHE`, `CTX.GLOB_CACHE`,
   `CTX.XAC_MEMO`, `CTX.TEMPLATE_SCOPE_ROOT`, `CTX.TEMPLATE_MEMO`, `CTX.PACK_MEMO`, `CTX.GHOST_MARKERS`, reset by
-  `withReadCache`; `CTX.BUILTIN_CORPUS_BUILD` while the built-in corpus is built). A module's own lazy caches (`TEMPLATE_SETS`,
+  `withReadCache`; `CTX.BUILTIN_CORPUS_BUILD` while the built-in corpus renders). A module's own lazy caches (`TEMPLATE_SETS`,
   `PACK_CACHE`, `KW_RE`, `STOP_PATTERNS`, `ENGINE_VERSION`…) stay private `let` / `const` in that module; a `let` another
   module reads moves into `CTX`.
 - **A new module** goes into `MODULES` (index.js) — `mcp/test.js` checks the list matches the files, and that every
@@ -140,7 +145,9 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   add small files — and the first process after an update writes it (45–60 ms more, once). Measured for 1.18 (Windows,
   Node 24, p50 of 40 interleaved fresh processes; 1.17 → the first split → with the cache and the lazy pt-BR below): guard
   hook 220 → 260 → 238 ms, `dev-spec status` 211 → 243 → 224, SessionStart 345 → 380 → 364, the stop hook on a "done"
-  claim 252 → 284 → 231. Measure the same way: interleave the variants, fresh processes, p50 + spread — never one run.
+  claim 252 → 284 → 231. Measure the same way: interleave the variants, fresh processes, p50 + spread — never one run. A
+  slow file system multiplies the per-file cost (tens of ms a file on a Docker Desktop bind mount): there the answer is the
+  one-file bundle the user builds (The build), never fewer, larger modules.
 - **i18n** follows the same shape: `i18n/en.js` / `pt.js` / `es.js` require `i18n/common.js` at load time and reach the
   assembled `BUILD` / `MSG` through `__link` from `i18n.js`. The tables hold their `en` · `pt` · `es` keys from the start,
   in that order; a language's file loads on the FIRST read of any table's entry for it (`loadLocale`: its blocks replace
@@ -149,6 +156,71 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   itself loads only then (a table's `pt-BR` entry, `toPtBr`, `derivePtBr` — `ptbr()` in i18n.js). A group with raw entries
   (MSG `stopGate`: the claim patterns) is derived entry by entry, so the stop gate's claim scan reads pt-BR's patterns
   without a single toPtBr (its first call compiles the pt-BR word maps: ~17 ms).
+
+## The build (1.20) — the committed corpus, the on-demand bundle, and when to rebuild
+`scripts/build.js` (Node core only) builds two things from the sources:
+- **`npm run build`** (no argument) writes the COMMITTED placeholder corpus `mcp/lib/engine/corpus.generated.json`;
+  `node scripts/build.js --check` writes nothing and exits 1 while it is stale. Deterministic — the same sources give the same
+  bytes (sorted lists, no dates, LF; a CRLF or BOM checkout hashes the same).
+- **`npm run build:bundle`** (`--bundle [--out <file.js>]`), also **`dev-spec bundle [--out <file.js>]`** (a plugin install has
+  no npm), writes the one-file engine — by default `mcp/lib/spec.bundle.js`, which is **git-ignored and never committed** (2.7 MB,
+  stale after every engine change: it would bloat the history and conflict on every parallel merge, for an opt-in gain on slow
+  file systems only). The user who wants it builds it, once after each plugin update.
+- **When to rebuild the corpus — precisely:** after changing a file of `CORPUS_SOURCES` — `mcp/lib/i18n.js`,
+  `mcp/lib/i18n/*.js` (every template, string, pt-BR rule), `engine/core.js`, `engine/markdown.js`, `engine/packs.js`,
+  `engine/tasks.js`, `engine/tracks.js` (a track) — or `package.json`'s version. Any other engine file needs no rebuild.
+  mcp/test.js ("1.20 build") fails with "run npm run build" until the regenerated file is committed; nothing at runtime goes
+  wrong meanwhile (below), it only goes slower. On a merge conflict in the file, take either side and run `npm run build`.
+- **The corpus.** The built-in part of the placeholder corpus (docs/maintainers/gates-and-approvals.md → Gates) —
+  `templateSets()`, `templateSetsBr()`, `templateTaskSet()`, the bug steps (`bugStepSet()`) — is the same in every process of
+  one engine, and rendering it (1,165 texts plus pt-BR's twins through toPtBr: ~200 ms) was the largest slice of a hook or
+  CLI call (1.19's SessionStart was ~20% slower than 1.18's for it). The build renders it ONCE with the engine's own
+  functions (`renderCorpusData()`: the sets' members, sorted) into the JSON file, stamped `version` (package.json) and
+  `sources` — a sha1 over `CORPUS_SOURCES` (markdown.js): the eleven mcp/lib files the render runs through. On the first
+  placeholder question a process reads the file (one `JSON.parse`, ~38 KB) and uses it only while `version` is
+  `engineVersion()` and `sources` is the hash of those files NOW (re-read: ~2 ms natively); otherwise — a clone hand-edited
+  and not rebuilt, a missing or broken file — it renders exactly as before: never a wrong answer, only a slower one
+  (`builtinCorpusSource()`: `file` · `bundle` · `render`). mcp/test.js proves `CORPUS_SOURCES` with V8 coverage (every
+  mcp/lib file whose functions run during `renderCorpusData()` is listed — a render that starts to depend on another module
+  makes that test name it), and that a rendered corpus decides every fresh scaffold text exactly as the committed one. The
+  per-project part (the project's templates, its track packs — `projectTemplateHas`, `packCorpusSets`) stays per call. Only
+  `.has()` is ever asked of these sets. A new builder or artifact goes into `templateCorpus()` as before — then rebuild.
+- **The bundle.** Each engine and i18n module (`engine/**`, `i18n.js`, `i18n/*` — not the facade spec.js, not
+  prompts-resources.js) is its source VERBATIM inside `function (exports, require, module, __filename, __dirname)`, run by a
+  small module registry (`moduleRegistry()` in scripts/build.js, emitted with `Function.prototype.toString`). The bundle
+  exports `{ stamp: { version, files: [[rel, size, mtimeMs]…] }, load(root) }`: the facade passes its own folder as `root`,
+  so every module keeps its ORIGINAL `__filename` / `__dirname` (mcp/lib/…) wherever the bundle file lives — `engineVersion()`'s
+  package.json and the approval guard's CLI path read the same files. A relative require resolves inside the registry
+  (cached before the module runs, dropped if it throws — Node's semantics), a bare one (Node core) goes to Node: the load
+  order, the load-time DAG and `__link` are unchanged. Every module starts `"use strict";` (the build refuses one that
+  doesn't — the bundle is strict). The corpus rides along, rendered from these very sources: inside the bundle
+  `module.bundle` carries it (no sources hash then; under Node's own loader `module.bundle` is undefined).
+- **Which engine a process loads (the facade, `loadEngine()`).** The modules, by default. A bundle ONLY with
+  `DEV_SPEC_BUNDLE=1` (`1` / `true` / `yes` / `on`) — `DEV_SPEC_BUNDLE_PATH` names another file (taken only as an absolute path
+  to a `.js` file, else ignored: the default place) — and only while it is CURRENT: its version stamp is package.json's and
+  every module it holds still has the size and mtime it was built with — one `stat` per module, no read (38 stats: ~1 ms
+  natively, ~95 ms on a Docker Desktop bind mount, where one open + read costs more). A `git pull` / plugin update, even to
+  the same version, changes the files' mtimes: the old bundle is never run. Missing, broken, stale or of another version →
+  the modules, silently (hooks and the status line print nothing about it). Compare in the environment that built it: a
+  bundle built on the host and read through a bind mount may see other mtime precision — it is then simply ignored; build it
+  where it runs (`dev-spec bundle --out /tmp/…` in a container with a read-only mount). Opt-in because natively it gains
+  little (and loses without Node's compile cache, Node < 22.8). The MCP server takes it like every process.
+- **Guards.** `libSources()` (the source guards' file list) leaves `spec.bundle.js` out (a user-built one in mcp/lib); the
+  guards read scripts/build.js, where the registry is written. Both suites run on the modules (the harnesses drop
+  `DEV_SPEC_BUNDLE`). The tests BUILD a bundle into tmp: mcp/tests/16-conventions.js ("1.20 bundle": the namespace, the
+  embedded corpus, the modules' paths, every stamp true; on a copy of the clone — none, current, unset / 0, a relative or
+  non-.js `DEV_SPEC_BUNDLE_PATH`, one elsewhere, a module touched or resized under the same mtime and put back, another
+  version, a broken bundle; the MCP server's handshake, lists and ten tool calls byte for byte) and
+  cli/tests/16-conventions-bundle.js (`dev-spec bundle --out`, then one session — 39 CLI commands and 7 hook events — on the
+  modules and on that bundle: the same output, exit codes and `.specs/` tree).
+- **Measured** (p50 of interleaved fresh processes, a 6-feature EN / PT / ES project, on a machine shared with other test
+  runs — the spread is wide, the ratios held run after run; 1.20 base → the corpus file → + the bundle with its staleness
+  check). Windows, Node 24: the SessionStart hook 431 → 301 → 304 ms (CPU 608 → 311 → 296 ms); a cold `require(spec.js)`
+  180 → 173 → 126 ms (the bundle without the compile cache: slower than the modules). Docker Desktop bind mount (the clone
+  mounted read-only, the bundle built into the container's /tmp), node:24-alpine: `require` 637 → 692 → 238 ms, SessionStart
+  1,278 → 914 → 557 ms — the check itself ~96 ms of it; node:18-alpine 742 → 665 → 367 and 1,353 → 1,073 → 697 ms. Rendering
+  the corpus in-process: ~95 ms (templateSets) + ~90 ms (templateSetsBr, the first bracket the EN / PT / ES sets don't know)
+  + ~15 ms (templateTaskSet — toPtBr in an English process); reading the file: ~2 ms plus the stamp.
 
 ## Config paths: committable (relative) vs. host-installed (absolute)
 Two distinct distribution targets, deliberately kept separate — never conflate them:

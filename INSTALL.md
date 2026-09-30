@@ -103,6 +103,27 @@ server at another machine. A project that lives on a share can still be the serv
 
 ---
 
+## A slow file system (Docker bind mount, network drive, WSL on `/mnt/c`)
+
+Every hook and CLI call is a fresh Node process that loads the engine — about 36 files. When the plugin's clone sits on
+a slow file system (a Docker Desktop bind mount, a network drive, WSL reading a Windows folder), each file can cost tens
+of milliseconds. Build the engine as ONE file, then tell the plugin to load it:
+
+```bash
+node "<plugin clone>/cli/dev-spec.js" bundle     # writes <plugin clone>/mcp/lib/spec.bundle.js (git-ignored; npm run build:bundle does the same)
+# a read-only clone (a container's mount): write it elsewhere and point at it
+node "<plugin clone>/cli/dev-spec.js" bundle --out /tmp/dev-spec/spec.bundle.js
+```
+
+Then set `DEV_SPEC_BUNDLE=1` (and, with `--out`, `DEV_SPEC_BUNDLE_PATH=<that absolute path>`) in the environment Claude
+Code or your MCP client starts with — your shell profile, or the server's `env` in an MCP config. Same code, same results;
+on a Docker Desktop bind mount loading the engine went from about 0.65 s to 0.25 s per call. **Build it once after each
+plugin update**, in the environment that runs it (inside the container, for a container): a bundle whose version or files
+no longer match the installed plugin — an update, even to the same version, or an edit — is ignored and the modules load
+as usual, silently. On a local disk it makes little difference: leave it unset there.
+
+---
+
 ## Validate the plugin manifest
 
 ```powershell

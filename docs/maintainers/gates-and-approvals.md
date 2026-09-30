@@ -7,7 +7,9 @@ flows, the bugfix kind.
 ## Gates (1.13) — an approval is a gate, not a stamp
 - **Placeholders — a lookup, never a guess from the shape.** `placeholderReport()` reports a bracket only when
   its normalized text (`placeholderKey()`: case, spacing and `…`/`...` ignored) is one a scaffold actually writes —
-  `templateSets()`, built lazily once per process from `templateCorpus()` (every i18n builder, EN/PT/ES, every track
+  `templateSets()`, rendered from `templateCorpus()` by `npm run build` into `engine/corpus.generated.json` and read once per
+  process (rendered at runtime when that file's stamp doesn't match the sources — architecture.md → The build) (every i18n
+  builder, EN/PT/ES, every track
   combination and kind, the track/import task slots `acPlaceholder` / `taskAcPlaceholder`, the steering and custom
   stubs, init's `[fill me in]`) **plus** `LEGACY_TEMPLATE_PLACEHOLDERS` (the 1.12.1 templates' bracket texts, a static
   list extracted once from `main:mcp/lib/i18n.js` — a 1.12 spec still holds them) **plus** `isGenericSlot()` (TODO
@@ -19,8 +21,9 @@ flows, the bugfix kind.
   still reports the `[N]` left inside it. Syntax is skipped whole (links, reference links, footnotes, callouts, wiki
   links, glued indexing `x[0]`, checkboxes) and so are stable tags/IDs, `[NEEDS CLARIFICATION]` and the legacy
   `[none beyond core]`; code spans are opaque except a template's own code-span slot (`` `[path]` ``, `templateSets().code`);
-  comments and fences are skipped. **When you add or reword a template bracket, nothing else is needed** (the corpus
-  renders it); a NEW builder or artifact-writing message must be added to `templateCorpus()` — the test "every fresh
+  comments and fences are skipped. **When you add or reword a template bracket, run `npm run build`** (the corpus renders
+  it; the suite fails until the committed file is rebuilt); a NEW builder or artifact-writing message must be added to
+  `templateCorpus()` (then rebuild) — the test "every fresh
   scaffold artifact reads 'placeholder'" catches a miss. `artifactState()` = missing / placeholder / filled.
   **bug.md is evidence** (`bugPlaceholders()`, used by `artifactReport` and `bugSectionFilled()`): its Reproduction /
   Root Cause quote `[object Object]`, `[WARN]`, `[A-Z]`, `[Error: …]` — a template text there counts only when it IS one

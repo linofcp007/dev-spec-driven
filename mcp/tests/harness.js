@@ -35,17 +35,23 @@ const { exitFlushed, rmTmpDir } = require("../../scripts/test-runner.js");
 
 const MCP_DIR = path.join(__dirname, ".."); // mcp/ — where mcp/test.js lives: the tests' __dirname
 const MCP_TEST = path.join(MCP_DIR, "test.js");
+// The suites run on the engine's MODULES (1.20): a DEV_SPEC_BUNDLE the user set is dropped for this process and its children
+// — the bundle's own tests set it for the processes they start.
+delete process.env.DEV_SPEC_BUNDLE;
 const S = require("../lib/spec.js");
 const root = path.join(MCP_DIR, "..");
 // Every engine source file (1.18): the facades (mcp/lib/spec.js, i18n.js, prompts-resources.js) and their modules under
 // mcp/lib/engine/ and mcp/lib/i18n/ — the source guards scan them all, never a facade alone. i18n: false leaves the
-// localized text out (i18n.js and mcp/lib/i18n/).
+// localized text out (i18n.js and mcp/lib/i18n/). Not the GENERATED spec.bundle.js (1.20, npm run build): it is those very
+// sources verbatim plus the registry scripts/build.js emits — the guards scan scripts/build.js, and a test holds the bundle
+// equal to a fresh build (scanning its copy would only report every finding twice).
 function libSources({ i18n = true } = {}) {
   const out = [];
   const walk = (d) => {
     for (const e of fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const p = path.join(d, e.name);
-      if (e.isDirectory()) { if (i18n || e.name !== "i18n") walk(p); } else if (e.name.endsWith(".js") && (i18n || e.name !== "i18n.js")) out.push(p);
+      if (e.isDirectory()) { if (i18n || e.name !== "i18n") walk(p); }
+      else if (e.name.endsWith(".js") && e.name !== "spec.bundle.js" && (i18n || e.name !== "i18n.js")) out.push(p);
     }
   };
   walk(path.join(MCP_DIR, "lib"));

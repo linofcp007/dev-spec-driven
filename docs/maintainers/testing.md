@@ -46,7 +46,21 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   — never rely on file order. Timing-bound assertions share the machine with the other processes: bound them relative to
   a baseline measured in the same test (as the 1.17 H checks do), not with a figure tuned on an idle machine.
 - **The source guards follow the layout:** the U+FEFF guard reads mcp/test.js, scripts/test-runner.js and every file of
-  mcp/tests/.
+  mcp/tests/. The engine guards (U+FEFF, backslash-stripped regex literals) also read scripts/build.js — a bundle's
+  registry comes from it — and `libSources()` leaves a user-built `mcp/lib/spec.bundle.js` out (the sources verbatim: it
+  would only report every finding twice).
+- **The corpus and the bundle (1.20).** Run `npm run build` after changing a file of `CORPUS_SOURCES` (`mcp/lib/i18n.js`,
+  `mcp/lib/i18n/*.js`, `engine/core.js` / `markdown.js` / `packs.js` / `tasks.js` / `tracks.js`) or the version, and BEFORE
+  the suites: mcp/tests/16-conventions.js ("1.20 build") fails while the committed `corpus.generated.json` differs from a
+  fresh build (architecture.md → The build). The bundle is never committed: its tests BUILD one into tmp (`writeBundle()` /
+  `dev-spec bundle --out`) and point `DEV_SPEC_BUNDLE_PATH` at it. Both suites run on the engine's modules — the harnesses drop
+  `DEV_SPEC_BUNDLE` for their processes; the bundle's own tests set it for the children they start: 16-conventions ("1.20
+  bundle": the namespace, the embedded corpus, the modules' paths, the stamps; the facade's choice on a copy of the clone —
+  none, current, unset / 0, an invalid or another `DEV_SPEC_BUNDLE_PATH`, a module touched or resized and put back, another
+  version, a broken bundle; the MCP server on it; "1.20 build": a copy of the clone with a missing, broken, hand-edited or
+  other-version corpus renders it and decides every fresh scaffold text alike, and V8 coverage proves `CORPUS_SOURCES`) and
+  cli/tests/16-conventions-bundle.js (`dev-spec bundle`, then one session — 39 CLI commands, 7 hook events — in two fresh
+  projects, modules vs bundle: the same output, exit codes and `.specs/` tree).
 
 ## Tests (continued)
 - **Linux, locally:** `npm run test:docker` (`scripts/test-docker.js`, zero-dep) runs both suites in

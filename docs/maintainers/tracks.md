@@ -175,7 +175,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   mcp/test.js 1.19 T8) — 100% / 100% for each track; the 1,783 classify inputs both suites log gave the same 1.18 track
   decisions (only +api / +ui switched on beside them). The placeholder corpus (`templateCorpus()`, ≤ 2 optional tracks + all:
   47 track sets now) renders 1,165 texts (1.18: 628); `templateSets()` builds in ~95 ms (1.18: ~70 ms) — T10 bounds it
-  relatively. Test helpers: `T19` in the 1.19 T block runs the same eight checks for each new track — a new built-in track adds
+  relatively; since 1.20 `npm run build` renders it once into `engine/corpus.generated.json` and a process reads that
+  (architecture.md → The build) — a new built-in track means a rebuild. Test helpers: `T19` in the 1.19 T block runs the same eight checks for each new track — a new built-in track adds
   one entry there. **1.19 T review:** on the reviewer's independent 205-text EN / PT / ES corpus precision / recall went +api
   70.4% / 95.0% → 100% / 100%, +ui 86.0% / 79.6% → 100% / 87.0% (the misses left are sales dashboards — a dashboard is +ui's
   generic word by design — and a downtime banner), +obs 68.6% / 82.8% → 100% / 100%; `1.19 T review` in mcp/test.js embeds 78

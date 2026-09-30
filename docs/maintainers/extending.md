@@ -40,4 +40,9 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
 - Any generated/returned user-facing text → put the strings in the i18n tables for every language — the same key in
   `mcp/lib/i18n/en.js`, `pt.js` and `es.js` (pt-BR inherits PT unless it needs its own wording, `i18n/pt-br.js`) — and
   resolve the lang via `featureLang()`/`projectLang()`; keep IDs/markers English-stable.
+- A change to a file of `CORPUS_SOURCES` — `mcp/lib/i18n.js`, `mcp/lib/i18n/*.js` (a template, a string), `engine/core.js`,
+  `markdown.js`, `packs.js`, `tasks.js`, `tracks.js` (a track) — or to package.json's version → `npm run build`, and commit
+  the regenerated `mcp/lib/engine/corpus.generated.json` with it (architecture.md → The build; mcp/test.js fails until you
+  do). A module that the corpus render starts to run through goes into `CORPUS_SOURCES` (the V8-coverage test names it).
+  Never commit `mcp/lib/spec.bundle.js` (git-ignored, built on demand).
 - Keep `SKILL.md` the source of truth for the workflow; commands stay thin.
