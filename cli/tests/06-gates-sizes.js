@@ -125,4 +125,39 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
     /Threat Model:only the template's guidance/.test(qDoc.out),
     "1.21 review C3 / C9 / C10 (CLI): next-action on size s +tdd names --through test-plan then /writeTests; create on an existing change with a track prints 'Tracks not added'; append-tasks / undone name change.md; help lists --kind …|change and --size; status on an unsized feature says 'only the template's guidance', as doctor (got " +
     JSON.stringify({ na: qNa.out.slice(0, 300), again: qAgain.out.slice(0, 200), app: qApp.out.slice(0, 200), nf: qNf.out, st: qSt.out.split("\n").filter((l) => /Threat/.test(l)) }) + ")");
+
+  // --- 1.21 verify (CLI) — the change kind at the seams ---
+  const v = path.join(tmp, "p121-verify");
+  const vInit = run(["init", "--roles", "tasks=tech+qa", "--project", v]);
+  const ONE = "# Change: footer\n\n## Summary\nFix the footer text.\n\n## Acceptance Criteria (EARS)\n" +
+    "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer text \"Copyright\".\n\n## Approach\nOne string in templates/footer.html.\n\n## Tasks\n" +
+    "- [ ] 1. [US1] Fix the footer string\n  - _Requirements: US-1.AC-1_\n  - _Verify: node -e \"process.exit(0)\"_\n";
+  run(["create", "Footer", "--kind", "change", "--project", v]);
+  fs.writeFileSync(path.join(v, ".specs", "footer", "change.md"), ONE);
+  // V4: tech's sign-off of change.md counts — next-action asks for qa only, doctor calls nothing stale
+  const vTech = run(["approve", "footer", "tasks", "--role", "tech", "--project", v]);
+  const vNa = run(["next-action", "footer", "--project", v]);
+  const vDoc = run(["doctor", "footer", "--project", v]);
+  ok(vInit.code === 0 && vTech.code === 0 && /missing role: qa \(signed: tech\)/.test(vNa.out) && !/tech, qa/.test(vNa.out) && !/no longer count/.test(vDoc.out),
+    "1.21 verify V4 (CLI): init --roles tasks=tech+qa, a change signed by tech — next-action asks for qa alone, doctor calls no sign-off stale (got " +
+    JSON.stringify({ tech: vTech.code, na: vNa.out.slice(0, 300), doc: vDoc.out.split("\n").filter((l) => /role|sign/i.test(l)) }) + ")");
+
+  // V6: `clarify` on a change = spec_clarify — clear once written; the template's slots named change.md:<line>
+  const vClear = run(["clarify", "footer", "--json", "--project", v]);
+  run(["create", "Header", "--kind", "change", "--project", v]);
+  const vTmpl = run(["clarify", "header", "--project", v]);
+  ok(JSON.stringify(JSON.parse(vClear.out)) === JSON.stringify(S.clarify(v, "footer")) && JSON.parse(vClear.out).verdict === "clear" &&
+    /change\.md:13 \[the change\]/.test(vTmpl.out) && !/requirements\.md|Success Criteria|edge cases|non-functional/i.test(vTmpl.out),
+    "1.21 verify V6 (CLI): clarify on a change prints what spec_clarify returns — clear once written; a template's slots named change.md:<line>, no feature-only question (got " +
+    JSON.stringify({ clear: vClear.out.slice(0, 200), tmpl: vTmpl.out }).slice(0, 900) + ")");
+
+  // V7: the save hook on change.md names change.md and the plan, never requirements.md or the design
+  fs.writeFileSync(path.join(v, ".specs", "header", "change.md"), ONE.replace("THE SYSTEM SHALL show", "the footer shows").replace("Fix the footer text.", "[one line: what changes and why]"));
+  const vHook = spawnSync(process.execPath, [path.join(hookDir, "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Write", cwd: v,
+    tool_input: { file_path: path.join(v, ".specs", "header", "change.md") } }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: v, SPEC_PROJECT_DIR: v } });
+  const vCtx = (() => { try { return JSON.parse(vHook.stdout).hookSpecificOutput.additionalContext; } catch { return vHook.stdout; } })();
+  ok(vHook.status === 0 && /EARS check on change\.md — 1 error/.test(vCtx) && /Fix the errors before approving the plan\./.test(vCtx) &&
+    /left in change\.md \([^)]*\) — replace them before approving the plan\./.test(vCtx) && !/requirements\.md|design/.test(vCtx),
+    "1.21 verify V7 (CLI, save hook): saving a change.md with an EARS error and a slot says 'EARS check on change.md … before approving the plan' and 'left in change.md … approving the plan' — never requirements.md or the design (got " +
+    JSON.stringify(String(vCtx).slice(0, 600)) + ")");
 };

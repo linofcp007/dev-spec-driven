@@ -1329,6 +1329,7 @@ const msg = {
       steeringOk: "steering essencial presente (incl. constituição)",
       requirementsMissing: "requirements.md em falta",
       clarificationsOpen: (n) => `${n} [NEEDS CLARIFICATION] por resolver — resolve antes do design`,
+      clarificationsOpenPlan: (n) => `${n} [NEEDS CLARIFICATION] por resolver no change.md — resolve antes de aprovar o plano`,
       clarificationsNone: "nenhum por resolver",
       scPresent: "presente",
       scMissing: "sem critérios de sucesso mensuráveis SC-###",
@@ -1397,11 +1398,16 @@ const msg = {
       rateLimit: "Especifica os limites de taxa (por utilizador / por inquilino / global).",
       aiQuality: "Especifica o alvo de qualidade de output e o comportamento de recusa para o caminho de IA.",
       aiCost: "Especifica um teto de custo por pedido ($/tokens).",
+      changeSummary: "Escreve o Resumo da alteração no change.md: o que muda e porquê, numa linha.",
+      changeCriteria: "Escreve 1–3 critérios de aceitação EARS no change.md (1. **US-1.AC-1** — QUANDO … O SISTEMA DEVE …).",
+      changeApproach: "Escreve a Abordagem no change.md: o que a alteração toca (e nada mais).",
+      changeScope: (detail) => `Mantém-na uma alteração, ou torna-a uma feature: ${detail}.`,
     },
     hook: {
       earsClean: (n) => `Verificação EARS: ${n} critérios, tudo limpo ✓`,
-      earsIssues: (errs, warns, top, hasErr) =>
-        `Verificação EARS em requirements.md — ${errs} erro(s), ${warns} aviso(s):\n${top}` + (hasErr ? "\nCorrige os erros antes de avançar para o design." : ""),
+      earsIssues: (errs, warns, top, hasErr, file = "requirements.md") =>
+        `Verificação EARS em ${file} — ${errs} erro(s), ${warns} aviso(s):\n${top}` +
+        (hasErr ? (file === "change.md" ? "\nCorrige os erros antes de aprovar o plano." : "\nCorrige os erros antes de avançar para o design.") : ""),
       traceOk: (n) => `Rastreabilidade: todos os ${n} ACs cobertos por tarefas ✓`,
       traceGaps: (feature, parts) => `Lacunas de rastreabilidade em ${feature}:\n  - ${parts}`,
       roadmapUpdated: (pct, complete, total) => `Roadmap atualizado → ${pct}% (${complete}/${total} features).`,
@@ -1689,7 +1695,7 @@ const msg = {
       evalSetsMissing: "o evals/golden.json não existe ou não tem itens de eval ({\"items\": […]}) — escreve primeiro o conjunto golden desta feature",
       testsGateChecks: (ids) => `(o gate de aprovação verifica isto: ${ids})`,
       clarifyPlaceholders: (file, n, list) => `Substitui os ${n} placeholder(s)/TBD do template em ${file}: ${list}`,
-      hookPlaceholders: (n, list) => `Placeholders do template: ${n} por preencher em requirements.md (${list}) — substitui-os antes de aprovar os requisitos.`,
+      hookPlaceholders: (n, list, file = "requirements.md") => `Placeholders do template: ${n} por preencher em ${file} (${list}) — substitui-os antes de aprovar ${file === "change.md" ? "o plano" : "os requisitos"}.`,
     },
 
     brownfield: {
@@ -2897,6 +2903,7 @@ const msg = {
       badText: (field) => `${field} tem de ser texto.`,
       tooLong: (field, max) => `${field} é demasiado longo (no máximo ${max} caracteres).`,
       badKind: (v) => `kind tem de ser decision ou discovery (recebido: ${v}).`,
+      badAffectsChange: (list) => `referência(s) _Affects:_ desconhecida(s): ${list} — uma alteração refere um AC ID que o seu change.md define, ou um título de secção do change.md (Resumo, Critérios de Aceitação, Abordagem, Tarefas). Nada foi escrito.`,
       badAffects: (list) => `referência(s) _Affects:_ desconhecida(s): ${list} — um AC ID tem de estar definido em requirements.md, um T-ID planeado em test-plan.md, um ID EC/NFR/SC escrito em requirements.md; qualquer outra tem de ser um título de secção do design.md (bug.md / design.md num bugfix, spike.md num spike). Nada foi escrito.`,
       badSupersedes: (list) => `_Supersedes:_ tem de indicar decisões que já estão neste registo (D-n): ${list}. Nada foi escrito.`,
       unsafeFile: (rel) => `${rel} não é um ficheiro normal dentro de .specs/ (é uma ligação simbólica, ou aponta para fora do projeto) — substitui-o primeiro por um ficheiro normal. Nada foi escrito.`,

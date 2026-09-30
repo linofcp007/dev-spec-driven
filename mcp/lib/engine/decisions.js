@@ -20,7 +20,7 @@ let activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, dupl
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText;
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE;
 function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers,
   ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
@@ -29,7 +29,7 @@ function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText } = E); }
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) · the spike kind (investigate → decide)
@@ -191,7 +191,8 @@ function decisionSectionKeys(text) {
 function decisionTargets(dir, kind) {
   const read = (x) => readIfExists(path.join(dir, x)) || "";
   const req = criteriaText(dir) || ""; // a change: its criteria without the task blocks (1.21 review C1)
-  const files = kind === "spike" ? [SPIKE_FILE] : kind === "bugfix" ? ["bug.md", "design.md"] : ["design.md"];
+  // (1.21 verify V7: a change has no design — its own sections, change.md's Summary / Acceptance Criteria / Approach / Tasks)
+  const files = kind === "spike" ? [SPIKE_FILE] : kind === "bugfix" ? ["bug.md", "design.md"] : kind === "change" ? [CHANGE_FILE] : ["design.md"];
   const sections = new Map(); // key → { title, file }
   for (const file of files) {
     const lines = blankHtmlComments(read(file)).split(/\r?\n/);
@@ -324,7 +325,7 @@ function decide(projectDir, name, input) {
   const targets = decisionTargets(dir, kind);
   const resolved = inp.affects.map((r) => resolveAffect(r, targets));
   const unknown = resolved.filter((r) => !r.ok).map((r) => r.ref);
-  if (unknown.length) return { ok: false, unknownAffects: unknown, error: D.badAffects(unknown.join(", ")) };
+  if (unknown.length) return { ok: false, unknownAffects: unknown, error: (kind === "change" ? D.badAffectsChange : D.badAffects)(unknown.join(", ")) };
   const n = Math.max(0, ...log.map((e) => e.n)) + 1;
   const entry = { id: "D-" + n, title: inp.title, kind: inp.kind, at: new Date().toISOString(), affects: [...new Set(resolved.map((r) => r.ref))],
     supersedes: [...new Set(sup.map((x) => x.id))], context: inp.context, decision: inp.decision, consequences: inp.consequences };

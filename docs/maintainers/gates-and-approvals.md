@@ -299,7 +299,18 @@ iron law, phase order, the finish / execution gate, every track criterion scaffo
   (`rtm.planApprovedLine` / `planNotApproved` / `changedSincePlan`, CLI `rtm.cli.planApproved`). **An existing change named
   with tracks (C9)** keeps its core-only set: `tracksIgnored` + `sizes.tracksIgnored` (a spike's create returns
   `tracksIgnored` too). Messages name the kind's file: `err.taskNotFound(n, file)`, `appendTasks.reapprove / appended /
-  phantom`, the stop gate's `todoTasks(slug, n, file)`. `spec_add_track` refuses a change (`sizes.changeNoTracks`). Hooks: the
+  phantom`, the stop gate's `todoTasks(slug, n, file)`.
+  **The verification pass (1.21 verify).** V4: `phaseContent()` gives a change's plan ONE fingerprint (change.md) — it read
+  tasks.md, the alias of that very file, as a second `designFingerprint` no approval of a change records, so every role
+  sign-off of a change read stale (`signoffsComplete` never fired); `snapshotPhases` skips the bugfix-only design.md branch for
+  a change too. V6: `clarify()` (quality.js) asks what the kind / size's doctor asks — a change (`clarifyChange()`): its
+  criteria view, [NEEDS CLARIFICATION] anywhere in change.md, vague terms, slots named `change.md:<line>`, Summary / Approach
+  written (`clarify.changeSummary` / `changeApproach`), criteria present (`changeCriteria`), `change-scope` (`changeScope`) —
+  never stories, SC, P1, edge cases, out of scope, NFRs, IF…THEN or a track's questions; size s: no edge-case / NFR question;
+  the glossary reads change.md for a change. V7: the save hook names the file (`hook.earsIssues(…, file)`,
+  `gates.hookPlaceholders(…, file)`: "before approving the plan"), doctor / the plan gate's `doctor.clarificationsOpenPlan`,
+  the gherkin `# Source:` and the tracker's task line name change.md, and `spec_decide --affects` takes a change.md section
+  heading (`decisionTargets`: change.md for a change; refusal `decisions.badAffectsChange`). `spec_add_track` refuses a change (`sizes.changeNoTracks`). Hooks: the
   save hook runs EARS + trace on change.md, the pre-commit validator both (a mirror with change.md + .state.json), the
   observe hook's pre-filter reads change.md too; the resources allowlist and the roadmap links know it.
 - **An XS bugfix** (`kind: "bugfix", size: "xs"`): `bugTasks(name, lang, "xs")` drops the reproduce / root-cause tasks

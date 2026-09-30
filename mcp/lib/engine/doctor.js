@@ -617,7 +617,7 @@ function specDoctor(projectDir, name, opts = {}) {
       unlinted ? m.earsNoCriteria(unlinted, isChange ? CHANGE_FILE : undefined) : m.earsDetail(nCrit, nErr, e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0));
     // Clarifications gate — design is blocked while any [NEEDS CLARIFICATION] remains.
     const markers = clarificationMarkers(reqsFull);
-    add("clarifications", markers.length ? "fail" : "pass", markers.length ? m.clarificationsOpen(markers.length) : m.clarificationsNone);
+    add("clarifications", markers.length ? "fail" : "pass", markers.length ? (isChange ? m.clarificationsOpenPlan : m.clarificationsOpen)(markers.length) : m.clarificationsNone); // a change has no design (1.21 verify V7)
     // Spec-Kit-style structure — only REAL lines count: the template's P1 legend and placeholder SC-001 don't. (1.21 F5: a change
     // — one change.md, 1–3 criteria — has no stories to prioritize nor success criteria of its own: its scope check instead.)
     const reqsActive = activeDesign(reqs, tracks);

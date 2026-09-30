@@ -1349,6 +1349,7 @@ const msg = {
       steeringOk: "core steering present (incl. constitution)",
       requirementsMissing: "requirements.md missing",
       clarificationsOpen: (n) => `${n} unresolved [NEEDS CLARIFICATION] — resolve before design`,
+      clarificationsOpenPlan: (n) => `${n} unresolved [NEEDS CLARIFICATION] in change.md — resolve before approving the plan`, // a change (1.21 verify V7)
       clarificationsNone: "none open",
       scPresent: "present",
       scMissing: "no measurable SC-### success criteria",
@@ -1424,11 +1425,17 @@ const msg = {
       rateLimit: "Specify rate limits (per-user / per-tenant / global).",
       aiQuality: "Specify output-quality target and refusal behavior for the AI path.",
       aiCost: "Specify a cost ceiling per request ($/tokens).",
+      // 1.21 verify V6 — a change (one change.md) is asked only what its doctor checks
+      changeSummary: "Write the change's Summary in change.md: what changes and why, in one line.",
+      changeCriteria: "Write 1–3 EARS acceptance criteria in change.md (1. **US-1.AC-1** — WHEN … THE SYSTEM SHALL …).",
+      changeApproach: "Write the Approach in change.md: what the change touches, and why that is all of it.",
+      changeScope: (detail) => `Keep it a change, or make it a feature: ${detail}.`,
     },
     hook: {
       earsClean: (n) => `EARS check: ${n} criteria, all clean ✓`,
-      earsIssues: (errs, warns, top, hasErr) =>
-        `EARS check on requirements.md — ${errs} error(s), ${warns} warning(s):\n${top}` + (hasErr ? "\nFix the errors before advancing to design." : ""),
+      earsIssues: (errs, warns, top, hasErr, file = "requirements.md") =>
+        `EARS check on ${file} — ${errs} error(s), ${warns} warning(s):\n${top}` +
+        (hasErr ? (file === "change.md" ? "\nFix the errors before approving the plan." : "\nFix the errors before advancing to design.") : ""),
       traceOk: (n) => `Traceability: all ${n} ACs covered by tasks ✓`,
       traceGaps: (feature, parts) => `Traceability gaps in ${feature}:\n  - ${parts}`,
       roadmapUpdated: (pct, complete, total) => `Roadmap updated → ${pct}% (${complete}/${total} features).`,
@@ -1735,7 +1742,7 @@ const msg = {
       evalSetsMissing: "evals/golden.json is missing or holds no eval items ({\"items\": […]}) — write this feature's golden set first",
       testsGateChecks: (ids) => `(the approve gate checks this: ${ids})`,
       clarifyPlaceholders: (file, n, list) => `Replace the ${n} template placeholder(s)/TBD in ${file}: ${list}`,
-      hookPlaceholders: (n, list) => `Template placeholders: ${n} left in requirements.md (${list}) — replace them before approving the requirements.`,
+      hookPlaceholders: (n, list, file = "requirements.md") => `Template placeholders: ${n} left in ${file} (${list}) — replace them before approving the ${file === "change.md" ? "plan" : "requirements"}.`,
     },
 
     // Brownfield depth: scan / coverage CLI lines and the integration-plan doctor check.
@@ -3050,6 +3057,7 @@ const msg = {
       badText: (field) => `${field} must be text.`,
       tooLong: (field, max) => `${field} is too long (at most ${max} characters).`,
       badKind: (v) => `kind must be decision or discovery (got ${v}).`,
+      badAffectsChange: (list) => `unknown _Affects:_ reference(s): ${list} — a change names an AC ID its change.md defines, or a section heading of change.md (Summary, Acceptance Criteria, Approach, Tasks). Nothing was written.`, // 1.21 verify V7
       badAffects: (list) => `unknown _Affects:_ reference(s): ${list} — an AC ID must be defined in requirements.md, a T-ID planned in test-plan.md, an EC/NFR/SC ID written in requirements.md; anything else must be a section heading of design.md (bug.md / design.md for a bugfix, spike.md for a spike). Nothing was written.`,
       badSupersedes: (list) => `_Supersedes:_ must name decisions already in this log (D-n): ${list}. Nothing was written.`,
       unsafeFile: (rel) => `${rel} is not a regular file inside .specs/ (a symbolic link, or it resolves outside the project) — replace it with a plain file first. Nothing was written.`,
