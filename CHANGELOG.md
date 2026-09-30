@@ -53,7 +53,10 @@ joins the built-in tracks. 38 MCP tools, 54 commands, eleven built-in tracks (wa
   feature flags", "não queremos usar LLM nem embeddings", "nunca usaremos Kafka"; anything else keeps the track for you to
   confirm in Phase 0: a modal's or an auxiliary's verb ("the system must not lose payments nor duplicate invoices", "the
   report does not show the LLM cost"), a condition ("if we don't add rate limiting…"), a relative clause, a hazard ("we
-  don't want duplicate payments"), and "without" after a negated verb ("we won't ship without a canary release").
+  don't want duplicate payments"), "without" after a negated verb ("we won't ship without a canary release"), and an
+  access or entitlement rule — a role's, a user group's or a plan's ("guests can't use the checkout", "the free plan does
+  not include webhooks", "os editores não podem adicionar feature flags"): only the one designing — we, the system, or
+  no subject at all — excludes ("the service must not use Redis", "do not use Kafka"); "cannot" reads like "can't".
   +ui recognises confirm dialogs, toasts, snackbars,
   field-level errors and mobile-friendly screens; +api reads "our API needs a v2" as contract work; a public API for a
   screen is +api +ui.
@@ -100,7 +103,7 @@ joins the built-in tracks. 38 MCP tools, 54 commands, eleven built-in tracks (wa
   <feature> data` adopts the built-in track, or rename the pack and re-add it.
 
 ### Tests
-- `node mcp/test.js` 1648 assertions (was 1544), `node cli/test-cli.js` 508 (was 480): sizes
+- `node mcp/test.js` 1651 assertions (was 1544), `node cli/test-cli.js` 508 (was 480): sizes
   and the change kind end to end (the no-size scaffolds pinned by hash in EN / PT / ES), the merge driver (six 3-way cases,
   sign-offs, a real two-branch git merge, `--check`), elicitation over a fake MCP client (accept / decline / cancel /
   error / timeout, force, batch), coordinated negation and signal overrides (a precision / recall assertion per track),
