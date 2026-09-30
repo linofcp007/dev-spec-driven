@@ -310,8 +310,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   useless", *"Sem pagamentos o checkout…"*, "Without Kafka the webhook…" keep the checkout / the webhook); or a list it opened
   carries it on; (b) an ADOPTION verb (`GOVERN_ADOPT`: use / add / need / include / implement / integrate / deploy / run / offer
   / provide / ship / create / adopt / involve / enable / activate / install / embed / bundle / expose, "necessary", *falta* + PT
-  / ES forms — whatever the modal: "must not use X", "should not enable feature flags", "must not expose GraphQL") or a PLAN /
-  an INTENTION (`GOVERN_AUX` will / do / going to, *vamos / iremos* · `GOVERN_WANT` plan / intend / want, *queremos,
+  / ES forms, the 3rd-person future too — *no añadirá, não incluirá* (1.21 verify P2) — whatever the modal: "must not use
+  X", "should not enable feature flags", "must not expose GraphQL") or a PLAN / an INTENTION (`GOVERN_AUX` will / do / going to, *vamos / iremos* · `GOVERN_WANT` plan / intend / want, *queremos,
   pretendemos, planeamos · queremos, pensamos*…) governs it, optionally with an article / a quantifier / one modifier: "We don't
   use Kafka", "We will not add an LLM", "This feature doesn't need an LLM", "We do not plan to use Kafka", "We no longer use
   Kafka", "No need for Kafka", *"Não queremos Kafka", "No es necesario Kafka", "Nunca usaremos Kafka"* (contractions whole:
@@ -359,7 +359,15 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   should, *pode / deve · puede / debe*): the track stays — "Guests can't use the checkout", "Free users may not use the LLM
   assistant", "Users on the free plan must not use the LLM assistant", "The Starter plan doesn't include the LLM assistant",
   *"Os editores não podem adicionar feature flags", "Las cuentas de prueba no incluyen el asistente LLM"*. A subject in
-  neither list keeps the track too (the conservative default). The subject (`subjectOf()`): the nearest listed word back to
+  neither list keeps the track too (the conservative default) — except a COMPONENT (1.21 verify P2, `componentAt()`): the nearest
+  other noun, no complement, with a singular definite article, demonstrative or possessive ≤ 3 modifiers back (`SINGULAR_DETS_EN`
+  the / this / our / its — a noun in -s after them is a plural —, `SINGULAR_DETS` o / este / esta / nosso / nossa / el / la /
+  nuestro / nuestra, PT "a" in a PT text) is a part of what is being designed: after a PLAIN verbal negation (`plainNegation()`:
+  an auxiliary or a present / future verb — does not, won't, *não usa, não vai usar, no usa, no usará*) it excludes ("The
+  importer does not need Kafka", "The new search won't use embeddings", *"O agendador não usa Kafka", "El programador de tareas
+  no usa Kafka"*); after a modal (can't / cannot / may not / must not, *não pode / não deve, no puede / no debe*) it keeps, and
+  so do a bare or -s plural ("Suppliers don't use the checkout", "The importers…"), an EN "a" and a role (checked first: "The
+  mobile client"). The subject (`subjectOf()`): the nearest listed word back to
   the clause start (the comma-free stretch), past a prepositional phrase ("Tenants ON the free plan", "The service FOR free
   users", *"Um utilizador SEM subscrição"* — an article ends the phrase: "At launch the app…") and a relative clause ("Guests
   WHO open the page", "Guests THAT…"); a listed noun right before another is its modifier ("the admin page"); a design noun
@@ -438,6 +446,15 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   request never charges twice" +tdd: "the request" is no designing subject) and the new tests' texts (43 — "The service /
   We cannot use X" now exclude like can't); the designing-subject frames change nothing. Against 1.20 58,839. Every corpus
   100% / 100%. 50 / 100 / 200 KB: ≤ 0.15 / 0.23 / 0.51 s.
+  **Measured (1.21 verify P2):** the verifier's 950 sentences (+ p5ex / p5keep / p5c): 13 decisions changed against 0ed99a5,
+  each a component's plain negation now excluding (The importer / scheduler / uploader / notifier / crawler / gateway /
+  newsletter, "The new search", *O importador, El importador, O agendador, El programador de tareas*) or the future "La versión
+  2 no añadirá suscripciones"; every p5keep and n4a – n4d decision unchanged. The keyword differential (156,001 inputs, an
+  81-frame sweep: + "The importer does not need X", "El importador no necesita X", "O agendador não usa X", "The importer can't
+  use X", "Suppliers don't use X", "The importers don't use X", "La versión 2 no añadirá X", "O MVP não incluirá X"): 4,695
+  changed against 0ed99a5 — the three component frames (957 / 861 / 957) and the two future-tense frames (949 / 957) exclude X,
+  and the new cases; no logged input or literal changed, and the modal, plural and bare-plural frames keep X. Every corpus
+  100% / 100%. 50 / 100 / 200 KB: ≤ 0.14 / 0.28 / 0.56 s.
 - **1.21 F2b — project-level signal overrides (`.specs/classifier.json`, classify.js).** A Phase 0 correction is learned:
   `createFeature` on a NEW plain feature (not a bugfix / spike / import — `cls` is not given) with explicit `tracks` and a
   non-empty summary compares the summary's classification (the suggestion classification.md records) with the chosen tracks
@@ -634,7 +651,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   and a negated adoption excludes only for a designing subject (the first person, the system, none): a role's or a plan's is an
   access / entitlement rule ("Guests can't use the checkout", "The free plan does not include webhooks" — 1.21 verify P1,
   `subjectKeeps()`) — see 1.21 F2a above before widening `listLink()`, `GOVERN_ADOPT`, `GOVERN_AUX` or the subject lists
-  (`ROLE_SUBJECTS` / `DESIGN_SUBJECTS`: a word in neither keeps the track), and prove it with the differential (1.20 / the 1.21
+  (`ROLE_SUBJECTS` / `DESIGN_SUBJECTS`: a word in neither keeps the track, unless it is a singular component after a plain
+  negation — 1.21 verify P2, `componentAt()`), and prove it with the differential (1.20 / the 1.21
   base / the last release candidate / the change), the verifier's sentence sets and every B / V / R / N / P case in
   04-tracks-builtin.js.
 - **Project signal overrides are the team's, never the engine's defaults.** A tuning that holds for everyone goes into

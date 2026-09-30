@@ -495,6 +495,16 @@ const GOVERN_ADOPT = new Set([
   "desplegamos", "desplegaremos", "ofrecer", "ofrece", "ofrecemos", "ofreceremos", "proporcionar", "proporciona", "proporcionamos",
   "proporcionaremos", "crear", "crea", "creamos", "crearemos", "activar", "activa", "activamos", "activaremos", "instalamos", "instalaremos",
   "incrustar", "incrusta", "incrustamos", "exponer", "expone", "exponemos", "expondremos", "habilitar", "introduce", "introducimos",
+  // 1.21 verify P2 — the 3rd-person future of the verbs above ("La versión 2 no añadirá suscripciones", "O MVP não incluirá X"): ES
+  "añadirá", "añadirán", "agregará", "agregarán", "incluirán", "integrará", "integrarán", "implementará", "implementarán", "adoptará",
+  "adoptarán", "desplegará", "desplegarán", "ofrecerá", "ofrecerán", "proporcionará", "proporcionarán", "creará", "crearán", "activará",
+  "activarán", "instalará", "instalarán", "soportará", "soportarán", "necesitarán", "requerirán", "usarán", "utilizarán", "tendrán",
+  "habilitará", "habilitarán", "expondrá", "incorporará", "introducirá", "dependerá",
+  // PT ("incluirá" is PT and ES)
+  "adicionará", "adicionarão", "incluirá", "incluirão", "integrarão", "implementarão", "adotará", "adotarão", "implantará", "implantarão",
+  "oferecerá", "oferecerão", "fornecerá", "fornecerão", "criará", "criarão", "ativará", "ativarão", "instalarão", "suportará", "suportarão",
+  "precisará", "precisarão", "necessitará", "necessitarão", "utilizarão", "terão", "disponibilizará", "incorporarão", "introduzirá",
+  "exporá", "acrescentará",
 ]);
 // The adoption verbs whose object may be data to PROTECT: expose / embed of a protected head noun (PROTECTED_HEADS — a secret, a key, a
 // token, credentials, a password, personal data, PII, introspection, internals, stack traces + PT / ES) is the requirement, never an
@@ -627,7 +637,8 @@ function protectedHead(text, start, end) {
 // infinitive, "Não é necessário um LLM", "No se necesita un LLM"). Any other subject — a role, a user group, a plan / tier / edition /
 // account / tenant — states an access or entitlement rule, and the track stays: "Guests can't use the checkout", "Free users may not use
 // the LLM assistant", "The Starter plan doesn't include the LLM assistant", "Os editores não podem adicionar feature flags", "Las
-// cuentas de prueba no incluyen el asistente LLM". A subject that can't be read (a noun in neither list) keeps the track too. The
+// cuentas de prueba no incluyen el asistente LLM". A subject that can't be read (a noun in neither list) keeps the track too — but a
+// component (a singular noun after the / this / our, o / este / o nosso, el / este / nuestro) after a plain negation excludes (P2). The
 // subject (subjectOf) is the nearest listed noun back to the clause start (the comma-free stretch), past a prepositional phrase
 // ("Tenants ON the free plan", "Um utilizador SEM subscrição") and a relative clause ("Guests WHO open the page"); an EN "no" after an
 // adoption verb negates its noun for certain — only a role keeps it ("The free plan has no webhooks"; "The MVP has no LLM" excludes).
@@ -718,50 +729,88 @@ function subjectNoun(words, i) {
   if (!ROLE_SUBJECTS.has(x)) return null;
   return (x === "plan" || x === "plans") && (words[i + 1] === "not" || words[i + 1] === "to") ? null : "role";
 }
-// → "design" | "role" | "none" (no subject word) | "unknown" (content words, none listed); words[0 … j) is the stretch before the verb.
-// The nearest listed word decides — but a design noun may be an earlier verb's object ("Guests can view the page but can't use the
-// checkout"): a role further back still keeps (when in doubt, keep); a noun right before another listed one is its modifier ("the admin
-// page").
-function subjectOf(words, j) {
-  let content = false, design = false;
+// a candidate subject at words[i] is a complement — [prep][modifiers…][noun]; an article disables the preposition test — or inside a
+// relative clause (a relative pronoun up to 6 words back, before another listed word): the index to resume before, or -1 (a subject)
+function complementAt(words, i) {
+  let article = false;
+  for (let p = i - 1, n = 0; p >= 0 && n < 6; p--, n++) {
+    const y = words[p];
+    if (!article && n < 4 && SUBJECT_PREP.has(y)) return p;
+    if (SUBJECT_REL.has(y) || ((y === "that" || y === "que") && p > 0 && subjectNoun(words, p - 1))) return p;
+    if (firstPerson(y) || (!SUBJECT_ARTICLES.has(y) && subjectNoun(words, p))) return -1;
+    if (SUBJECT_ARTICLES.has(y)) article = true;
+  }
+  return -1;
+}
+// 1.21 verify P2 — a COMPONENT of what is being designed: a noun in no list with a singular definite article, demonstrative or possessive
+// ≤ 3 modifiers back ("The importer", "The new search", "El programador de tareas", "O agendador"; PT "a" only in a PT text — EN "a" is
+// indefinite); an EN noun in -s after the / this / our / its is a plural ("The drivers"), and a bare plural has no determiner at all
+const SINGULAR_DETS_EN = new Set(["the", "this", "our", "its"]);
+const SINGULAR_DETS = new Set(["o", "este", "esta", "nosso", "nossa", "el", "la", "nuestro", "nuestra"]);
+function componentAt(words, i, pt) {
+  const x = words[i];
+  for (let p = i - 1, n = 0; p >= 0 && n <= 3; p--, n++) {
+    const y = words[p];
+    if (SINGULAR_DETS_EN.has(y)) return !(x.length > 3 && /[^su]s$/.test(x));
+    if (SINGULAR_DETS.has(y) || (pt && y === "a")) return true;
+    if (subjectSkip(y) || SUBJECT_PREP.has(y) || SUBJECT_REL.has(y) || firstPerson(y) || subjectNoun(words, p)) return false;
+  }
+  return false;
+}
+// → "design" | "role" | "component" | "none" (no subject word) | "unknown" (content words, none listed); words[0 … j) is the stretch
+// before the verb. The nearest listed word decides — but a design noun may be an earlier verb's object ("Guests can view the page but
+// can't use the checkout"): a role further back still keeps (when in doubt, keep); a noun right before another listed one is its
+// modifier ("the admin page"). With no listed word, the nearest other noun that is no complement may be a component (componentAt).
+function subjectOf(words, j, pt) {
+  let content = false, design = false, head = false, component = false;
   for (let i = j - 1; i >= 0; i--) {
     const x = words[i];
     if (firstPerson(x) || firstPersonVerb(x)) return "design";
     let kind = subjectNoun(words, i);
     if (kind && !SUBJECT_ARTICLES.has(x) && i + 1 < j && subjectNoun(words, i + 1)) kind = null;
-    if (!kind) { if (!subjectSkip(x)) content = true; continue; }
-    content = true;
-    // a complement? [prep][article?][modifiers…][noun] — an article ends the phrase; a relative pronoun up to 6 words back (before another
-    // listed word) puts the noun in a relative clause
-    let p = i - 1, article = false, skip = -1;
-    for (let n = 0; p >= 0 && n < 6; p--, n++) {
-      const y = words[p];
-      if (!article && n < 4 && SUBJECT_PREP.has(y)) { skip = p; break; }
-      if (SUBJECT_REL.has(y) || ((y === "that" || y === "que") && p > 0 && subjectNoun(words, p - 1))) { skip = p; break; }
-      if (firstPerson(y) || (!SUBJECT_ARTICLES.has(y) && subjectNoun(words, p))) break;
-      if (SUBJECT_ARTICLES.has(y)) article = true;
+    if (!kind) {
+      if (subjectSkip(x)) continue;
+      content = true;
+      if (!head) { // the nearest other noun: past a complement; its determiner read once
+        const skip = complementAt(words, i);
+        if (skip >= 0) { i = skip; continue; }
+        head = true;
+        component = componentAt(words, i, pt);
+      }
+      continue;
     }
+    content = true;
+    const skip = complementAt(words, i);
     if (skip >= 0) { i = skip; continue; } // the loop's i-- resumes before the preposition / the relative pronoun
     if (kind === "role") return "role";
     design = true;
   }
-  return design ? "design" : content ? "unknown" : "none";
+  return design ? "design" : component ? "component" : content ? "unknown" : "none";
+}
+// a plain verbal negation — an auxiliary or a present / future verb (does not / won't / will not, não usa / não vai usar / no usará),
+// never a modal (can't / cannot / may not / must not, não pode / não deve, no puede / no debe)
+function plainNegation(words, j) {
+  const w = words[j];
+  if (w === "cannot") return false;
+  if (/n['’]t$/.test(w)) return !NT_DEONTIC.has(w.replace(/n['’]t$/, ""));
+  if (j > 0 && GOVERN_DEONTIC.has(words[j - 1])) return false;
+  return !(j + 1 < words.length && GOVERN_DEONTIC.has(words[j + 1]));
 }
 // Does the subject keep the negated adoption's track (a role, a plan, or an unreadable subject)? words / j as negationOf's, the subject
 // before words[from]; after a comma with no subject in its stretch ("Guests, however, can't use the checkout") the sentence's earlier
 // words are read — a role there keeps. An EN "no" after the verb (from < j) negates its noun for certain: only a role keeps ("The free
-// plan has no webhooks"; "WHEN the month has no invoices" still excludes).
-function subjectKeeps(text, start, words, j, from) {
+// plan has no webhooks"; "WHEN the month has no invoices" still excludes). A component (1.21 verify P2) excludes after a plain verbal
+// negation ("The importer does not need Kafka", "El importador no necesita Kafka") and keeps after a modal, like an unread subject.
+function subjectKeeps(text, start, words, j, from, pt) {
   for (let i = j + 1; i < words.length; i++) if (firstPersonVerb(words[i])) return false; // "não usamos", "no usaremos"
-  const s = subjectOf(words, from);
-  if (s === "role" || (s === "unknown" && from === j)) return true;
-  if (s === "unknown") return false;
-  if (s === "design") return false;
+  const s = subjectOf(words, from, pt || words[j] === "não" || words[j] === "nao");
+  if (s === "role" || ((s === "unknown" || (s === "component" && !plainNegation(words, j))) && from === j)) return true;
+  if (s !== "none") return false; // design, a component after a plain negation, or an EN "no" after the verb (from < j)
   const seg = cueBefore(text, start, GOVERN_BOUNDARY);
   const at = start - seg.length - 1;
   if (at < 0 || text[at] !== ",") return false;
   const earlier = govWords(text, at, /[.!?;:\n]/);
-  return subjectOf(earlier.slice(-24), Math.min(earlier.length, 24)) === "role";
+  return subjectOf(earlier.slice(-24), Math.min(earlier.length, 24), pt) === "role";
 }
 // Is the negator at words[j] verbal — an adoption verb's negation whose subject decides (not a nominal "no X" / "sem X" / "without X",
 // nor a contrast) — or an EN "no" right after an adoption verb ("The free plan has no webhooks": the verb's subject decides)?
@@ -807,7 +856,7 @@ function negationOf(text, start, end, lang, cased) {
   if (k !== "exclude") return null;
   // (1.21 verify P1) a role's / a plan's negated adoption is an access or entitlement rule: the track stays
   const from = subjectDecides(words, j, lang, contrast);
-  return from >= 0 && subjectKeeps(text, start, words, j, from) ? null : { word: w, conj: false };
+  return from >= 0 && subjectKeeps(text, start, words, j, from, pt) ? null : { word: w, conj: false };
 }
 function negationGoverns(text, start, end, lang) {
   return negationOf(text, start, end, lang) !== null;
@@ -830,7 +879,7 @@ function conjExcluded(text, start, end, lang) {
   // or a plan's negated adoption — "Guests can't use the checkout nor the cart" — keeps the track: 1.21 verify P1)
   if (negationKind(words, j, words.length, lang, { contrast, protectedHead: () => protectedHead(text, start, end) }) === "require") return false;
   const from = subjectDecides(words, j, lang, contrast);
-  return !(from >= 0 && subjectKeeps(text, start, words, j, from));
+  return !(from >= 0 && subjectKeeps(text, start, words, j, from, pt));
 }
 // The article a new clause's subject starts with (1.21 review B2): a comma followed by one is no list continuation — "Without an LLM
 // or embeddings, the checkout or a subscription page is the priority".

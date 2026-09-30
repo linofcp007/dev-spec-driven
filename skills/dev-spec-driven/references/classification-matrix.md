@@ -95,7 +95,10 @@ is a draft for the human, who confirms Phase 0.
   account states an access or entitlement rule and keeps the track: "Guests can't (or cannot) use the checkout" +tdd, "Free
   users may not use the LLM assistant" +ai, "Tenants on the free plan can't use webhooks" +saas, "The Starter plan doesn't
   include the LLM assistant", "The free plan has no webhooks", *"Os editores não podem adicionar feature flags", "Las cuentas
-  de prueba no incluyen el asistente LLM"*. A subject that is neither keeps the track too — when in doubt, keep.
+  de prueba no incluyen el asistente LLM"*. A subject that is neither keeps the track too — when in doubt, keep — except a
+  component of what is being built: a singular noun after the / this / our, *o / este / o nosso, el / este / nuestro* with a
+  plain negation ("The importer does not need Kafka", *"O agendador não usa Kafka", "El importador no necesita Kafka"*)
+  excludes; with can't / may not, *não pode, no puede*, or as a plural ("Suppliers don't use the checkout") it keeps.
 - **This project's own corrections** (1.21): when the human confirms Phase 0 with other tracks than suggested — `spec_create`
   with `tracks` and the same description as `summary` — the words that drove the suggestion are recorded in
   `.specs/classifier.json`. After **two consistent corrections** a word the team keeps rejecting for a track stops turning it on
