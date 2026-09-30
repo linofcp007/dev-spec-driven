@@ -117,4 +117,19 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   ok(/tests in code: 2\/2 planned T-ID\(s\) named in 2 test file\(s\)/.test(trPg.out) && !/T-09/.test(trPg.out) && gatePg.code === 0 && !/forced/i.test(gatePg.out),
     "1.21.1 languages (review 2): trace --code and approve tests on a +tdd pgTAP feature — test/sql/users.sql and tests/001_users.sql, named in the plan's File column, are read (2/2, approved unforced); the unnamed tests/fixtures/seed.sql is not (got " +
     JSON.stringify([trPg.out.split("\n").filter((l) => /tests in code|T-09/.test(l)), gatePg.out.slice(0, 160)]) + ")");
+
+  // 1.21.1 languages (review 3): a plan whose File column names the common `tests/` folder no longer makes seed data a test
+  // — tests/fixtures/seed.sql holding ('T-01','refund') is not directly in tests/, so it is not read: 0/1 and the gate refuses.
+  const fx3 = path.join(tmp, "l121-r3-folder");
+  run(["init", "core", "tdd", "--project", fx3]);
+  run(["create", "Refunds", "core", "tdd", "--project", fx3]);
+  fs.writeFileSync(path.join(fx3, ".specs", "refunds", "test-plan.md"), "# Test Plan\n\n| Test ID | Kind | Covers | File |\n|---|---|---|---|\n| T-01 | example | US-1.AC-1 | `tests/` |\n");
+  fs.mkdirSync(path.join(fx3, "tests", "fixtures"), { recursive: true });
+  fs.writeFileSync(path.join(fx3, "tests", "fixtures", "seed.sql"), "insert into refunds values ('T-01','refund');\n");
+  run(["approve", "refunds", "--through", "test-plan", "--force", "--project", fx3]);
+  const trFx3 = run(["trace", "refunds", "--code", "--project", fx3]);
+  const gateFx3 = run(["approve", "refunds", "tests", "--project", fx3]);
+  ok(/tests in code: 0\/1 planned T-ID\(s\) named in 0 test file\(s\)/.test(trFx3.out) && gateFx3.code === 1 && /tests-in-code/.test(gateFx3.out) && /T-01/.test(gateFx3.out),
+    "1.21.1 languages (review 3): trace --code and approve tests with a plan naming `tests/` — tests/fixtures/seed.sql (a fixture holding 'T-01') is no test: 0/1, the gate refuses naming T-01 (got " +
+    JSON.stringify([trFx3.out.split("\n").filter((l) => /tests in code/.test(l)), gateFx3.code, gateFx3.out.slice(0, 200)]) + ")");
 };

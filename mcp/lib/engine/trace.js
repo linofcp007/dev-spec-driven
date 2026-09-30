@@ -661,10 +661,12 @@ function specFeatureDirs(projectDir) {
 // (isTestFixture: tests/fixtures/seed.sql) — is not read, nor counted (unless a plan names it: below); when more test files than CODE_TRACE_READ_CAP are
 // found, the ones NAMED like a test (testNamed) are read first, in walk order (below the cap nothing changes: every one,
 // in walk order); each is read up to SCAN_READ_BYTES characters (readFileHead: one bounded read — never the whole file).
-// 1.21.1 review 2: a fixture some feature's test plan NAMES in its File column — the file, or a folder holding it, as a
-// concrete path (planFileScopes' scopes, pathNames) — is read like any test: pgTAP's test/sql/users.sql and a numbered
-// tests/001_users.sql are tests, not seed data, once a plan says so. An unnamed fixture stays skipped.
-// → { tids: Map(key → { id, files }), acs: Map(acId → { id, files }), scanned, truncated }
+// 1.21.1 review 2: a fixture some feature's test plan CLAIMS in its File column (fixtureClaim: the file itself, or the
+// folder that directly holds it) is read like any test: pgTAP's test/sql/users.sql and a numbered tests/001_users.sql are
+// tests, not seed data, once a plan says so. An unclaimed fixture stays skipped — review 3: `tests/` claims
+// tests/001_users.sql, never tests/fixtures/seed.sql (a plan naming the common `tests/` made seed data a test). The files
+// read that way are returned in `fixtures`: traceTestCode counts their T-IDs only for the plan rows that claim them.
+// → { tids: Map(key → { id, files }), acs: Map(acId → { id, files }), fixtures: Set(rel), scanned, truncated }
 function scanTestCode(projectDir) {
   const root = path.resolve(projectDir);
   const tids = new Map();
@@ -686,11 +688,14 @@ function scanTestCode(projectDir) {
       }
       planPaths = [...all];
     }
-    return planPaths.some((p) => pathNames(rel, p));
+    return planPaths.some((p) => fixtureClaim(rel, p));
   };
   const cands = []; // the test files found, in walk order: { rel, full }
+  const fixtures = new Set(); // the fixtures a plan claims (read as tests)
   const onFile = (rel, full) => {
-    if (isCodeFile(rel) && isTestCodePath(rel) && (!isTestFixture(rel) || planNamed(rel))) cands.push({ rel, full });
+    if (!isCodeFile(rel) || !isTestCodePath(rel)) return;
+    if (isTestFixture(rel)) { if (!planNamed(rel)) return; fixtures.add(rel); }
+    cands.push({ rel, full });
   };
   const walk = walkProject(root, CODE_TRACE_CAP, onFile);
   let left = CODE_TRACE_CAP - walk.total;
@@ -721,7 +726,20 @@ function scanTestCode(projectDir) {
     }
     for (const id of extractAcIds(txt)) note(acs, id, id, rel);
   }
-  return { tids, acs, scanned, truncated: truncated || readCapped };
+  return { tids, acs, fixtures, scanned, truncated: truncated || readCapped };
+}
+// 1.21.1 review 3 — does the File cell path `p` claim the test FIXTURE `rel` (isTestFixture: a .sql / .ipynb in a test
+// folder named like no test)? Only the file itself (`test/sql/users.sql`, or its trailing whole segments, as pathNames
+// matches a file) or the folder that DIRECTLY holds it (`db/tests/pgtap/` → db/tests/pgtap/users.sql; `tests/` →
+// tests/001_users.sql, never tests/fixtures/seed.sql). A path without an extension, or ending in `/`, is a folder.
+function fixtureClaim(rel, p) {
+  const fold = (s) => (FOLD_CASE ? s.toLowerCase() : s);
+  const q = stripEnd(fold(p), isSlashUnit); // /\/+$/
+  if (q === "") return false;
+  const r = fold(rel);
+  const folder = p.endsWith("/") || !path.posix.extname(q);
+  const target = folder ? r.slice(0, Math.max(0, r.lastIndexOf("/"))) : r;
+  return ("/" + target).endsWith("/" + q);
 }
 // Every T-ID any feature's test plan lists (archived features too — their tests may still be in the tree), by key.
 function allPlannedTestKeys(projectDir) {
@@ -872,7 +890,8 @@ function otherPlanTestFiles(projectDir, ownDir) {
 // in its File column while this plan doesn't (1.14 full review Pa5); and a planned T-ID whose plan row's File
 // column names a concrete test path counts only in that file / under that folder (pathNames: written from the project
 // root, the feature folder, a package folder, or a bare file name) — otherwise another feature's test with the same
-// number would pass it. Without a File path the match is by number across the project.
+// number would pass it. Without a File path the match is by number across the project — never in a test fixture a plan
+// claims (1.21.1 review 3: such a file counts only for the rows of this plan that claim it — fixtureClaim).
 //   testsInCode       { T-ID: [test files …] } — every T-ID found in files that count, keyed by this plan's spelling
 //   plannedNotInCode  this plan's T-IDs that no counting test file names (those checked outside test code left out)
 //   plannedOutsideCode  this plan's T-IDs whose every row's File column names only non-code artifacts (load-test.md,
@@ -906,11 +925,17 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
     return foreignMemo.get(rel);
   };
   const counts = (rel) => mine(rel) && !foreign(rel);
+  // 1.21.1 review 3 — a fixture read as a test (scanTestCode's `fixtures`: some plan claims it) counts ONLY for this plan's
+  // rows that claim it themselves (fixtureClaim over the row's own File paths): never for a row without a File cell, nor
+  // for another feature whose plan never named it — seed data holding 'T-01' passed a feature's tests gate that way.
+  const fx = s.fixtures instanceof Set ? s.fixtures : new Set();
+  const ownPaths = [...new Set([...scopes.values()].flat())];
+  const fixtureFor = (k, rel) => planned.has(k) && scopes.has(k) && scopes.get(k).some((p) => fixtureClaim(rel, p));
   const everyPlan = allPlannedTestKeys(projectDir);
   const testsInCode = {};
   const found = new Set();
   for (const [k, e] of s.tids) {
-    const files = e.files.filter((rel) => counts(rel) && (!planned.has(k) || inScope(k, rel)));
+    const files = e.files.filter((rel) => counts(rel) && (fx.has(rel) ? fixtureFor(k, rel) : !planned.has(k) || inScope(k, rel)));
     if (!files.length) continue;
     found.add(k);
     testsInCode[planned.get(k) || e.id] = files.slice(0, CODE_TRACE_FILES_PER_ID);
@@ -921,7 +946,7 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
     plannedNotInCode: [...planned].filter(([k]) => !found.has(k) && !outside.has(k)).map(([, id]) => id),
     plannedOutsideCode: [...planned].filter(([k]) => outside.has(k)).map(([, id]) => id),
     inCodeNotInPlan: [...s.tids].filter(([k]) => found.has(k) && !planned.has(k) && !everyPlan.has(k)).map(([, e]) => e.id),
-    acsInTests: [...requiredAcs].filter((id) => s.acs.has(id) && s.acs.get(id).files.some(counts)),
+    acsInTests: [...requiredAcs].filter((id) => s.acs.has(id) && s.acs.get(id).files.some((rel) => counts(rel) && (!fx.has(rel) || ownPaths.some((p) => fixtureClaim(rel, p))))),
     scanned: s.scanned,
     truncated: s.truncated,
   };

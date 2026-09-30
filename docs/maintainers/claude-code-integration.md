@@ -34,7 +34,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   no). `GUARD_CODE_EXT` = `CODE_EXT` + `TEST_EXTRA_EXT`, the extension-only allow-list trace's `plannedOutsideCode` and
   the reuse check read. The scan, coverage and the test-code scan also set test fixtures apart (`isTestFixture`: a `.sql` /
   `.ipynb` in a test folder not named like a test is data — 1.21.1 review; the test-code scan still reads one a test plan's
-  File column names — review 2); the guard still asks before editing one. Until 1.21.1 the scan's `CODE_EXT` was a short list and the guard kept its own broad one — a
+  File column names — the file, or the folder directly holding it: review 2 / 3); the guard still asks before editing one. Until 1.21.1 the scan's `CODE_EXT` was a short list and the guard kept its own broad one — a
   PowerShell project scanned empty and its tests gate never passed. It is an allow-list, so the docs say "a broad list of
   languages", never "any source file"; add a language to `CODE_EXT` (and to the guard test — mcp/tests/16-conventions.js
   — and, when its tests have a naming convention, to `RE_TEST_NAME` + the `isTestFile` matrix in mcp/tests/13-imports.js)

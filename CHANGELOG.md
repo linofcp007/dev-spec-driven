@@ -33,7 +33,7 @@ PowerShell projects — and every language outside the old short list — work e
   `args.cmd` needs a folder part.
 
 ### Tests
-- `node mcp/test.js` 1679 assertions (was 1653), `node cli/test-cli.js` 521 (was 508): a PowerShell project end to
+- `node mcp/test.js` 1680 assertions (was 1653), `node cli/test-cli.js` 522 (was 508): a PowerShell project end to
   end on MCP and the CLI (scan, coverage, the +tdd tests gate over a Pester file, guard and scope guard), the test-file
   matrix of every language with its negatives, T-IDs found in each language's test files, SQL fixtures past the read
   cap, `--shell pwsh` / `powershell` runs and the POSIX refusal, the could-not-run vs red readings of real pwsh 7 / 5.1

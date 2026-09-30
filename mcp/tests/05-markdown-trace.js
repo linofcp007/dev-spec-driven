@@ -1367,5 +1367,39 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     ok(!!scAcc.tids.get("T-1") && !!scAcc.tids.get("T-2") && !scAcc.tids.get("T-3") && scAcc.scanned === 3,
       "1.21.1 languages (review 2): the test-code scan reads 200,000 CHARACTERS of a file, not bytes — T-01 behind 150,000 'é' (300 KB) and T-02 behind 90,000 emoji are found; T-03 behind 200,000 'é' is past the cap (got " +
       js([[...scAcc.tids.keys()], scAcc.scanned]) + ")");
+
+    // 1.21.1 review 3: a plan naming a FOLDER made fixture data a test — tests/fixtures/seed.sql holds ('T-01','refund') and
+    // no real test does: (1) Alpha's plan names `tests/` → T-01 "in code" via seed.sql, the tests gate passed; (2) Alpha's
+    // T-01 has no File cell and Beta's plan names `tests/` (or `tests/fixtures/`) → Alpha's T-01 counted via seed.sql;
+    // (3) nobody names the folder → not in code. A fixture is read only when a plan names the FILE or the folder that
+    // DIRECTLY holds it, and its T-IDs count only for the rows that claim it.
+    const planOf = (rows) => "# Test Plan\n\n| Test ID | Kind | Covers | File |\n|---|---|---|---|\n" + rows.map(([id, f]) => "| " + id + " | example | US-1.AC-1 | " + f + " |\n").join("");
+    const fxCase = async (name, alphaRows, betaRows, extra) => {
+      const d = path.join(tmp, "proj-121-r3-" + name);
+      S.initProject(d, ["core", "tdd"], "en");
+      const a = S.createFeature(d, "Alpha", ["core", "tdd"], "", undefined, "en");
+      put(a.dir, "test-plan.md", planOf(alphaRows));
+      let b = null;
+      if (betaRows) { b = S.createFeature(d, "Beta", ["core", "tdd"], "", undefined, "en"); put(b.dir, "test-plan.md", planOf(betaRows)); }
+      put(d, "tests/fixtures/seed.sql", "insert into refunds values ('T-01','refund');\n");
+      if (extra) extra(d);
+      approveBefore(d, a.slug, "tests");
+      const tr = payload(await rpc("tools/call", { name: "trace_check", arguments: { projectDir: d, name: a.slug, code: true } })).code || {};
+      const gate = S.approvePhase(d, a.slug, "tests");
+      const beta = b ? (S.traceCheck(d, b.slug, { code: true }).code || {}) : null;
+      return { tr, gate, beta, scan: S.scanTestCode(d) };
+    };
+    const c1 = await fxCase("folder", [["T-01", "`tests/`"]]);
+    const c2 = await fxCase("other", [["T-01", ""]], [["T-01", "`tests/`"]]);
+    const c2b = await fxCase("other-direct", [["T-01", ""]], [["T-01", "`tests/fixtures/`"]]);
+    const c3 = await fxCase("none", [["T-01", ""]]);
+    // the B layouts through a folder: `tests/` claims its direct child tests/001_users.sql (T-01), not the seed below it
+    const c4 = await fxCase("direct", [["T-01", "`tests/`"]], null, (d) => put(d, "tests/001_users.sql", "SELECT plan(1);\nSELECT has_table('refunds', 'T-01 the refunds table exists');\n"));
+    const notIn = (c) => js(c.tr.plannedNotInCode) === '["T-01"]' && !c.tr.testsInCode["T-01"] && c.gate.refused === true && js(c.gate.failing) === '["tests-in-code"]';
+    ok(notIn(c1) && !c1.scan.fixtures.has("tests/fixtures/seed.sql") && notIn(c2) && notIn(c2b) && c2b.scan.fixtures.has("tests/fixtures/seed.sql") &&
+      js(c2b.beta.testsInCode["T-01"]) === '["tests/fixtures/seed.sql"]' && notIn(c3) &&
+      js(c4.tr.testsInCode["T-01"]) === '["tests/001_users.sql"]' && js(c4.tr.plannedNotInCode) === "[]" && c4.gate.ok === true && !c4.gate.forced,
+      "1.21.1 languages (review 3): fixture data is no test through a folder — (1) Alpha's plan naming `tests/` leaves tests/fixtures/seed.sql unread (T-01 not in code, the tests gate refuses); (2) Beta's plan naming `tests/`, or `tests/fixtures/` (seed.sql then read — for Beta's own row only), never counts it for Alpha's File-less T-01; (3) nobody names it: not in code; `tests/` still claims its direct child tests/001_users.sql (T-01 found, the gate passes unforced) (got " +
+      js([c1, c2, c2b, c3, c4].map((c) => [c.tr.plannedNotInCode, c.tr.testsInCode, c.gate.ok, c.gate.failing, [...c.scan.fixtures], c.beta && c.beta.testsInCode])) + ")");
   }
 };

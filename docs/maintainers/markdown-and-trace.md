@@ -54,10 +54,16 @@ matrix.
   `TEST_DATA_EXT` file (`.sql`, `.ipynb`) in a test folder whose NAME follows no convention (`testNamed()`, + pgTAP's
   `test_*.sql` / `*_test.sql`) is data: the scan, coverage and the test-code scan skip it (1,600 `tests/fixtures/*.sql`
   exhausted the read cap; a 'T-01' in a seed counted as the test); guard mode still asks before editing one — unless a
-  plan claims it (review 2): the test-code scan reads a fixture some feature's test plan names in its File column, the file
-  or a folder holding it, as a concrete path (every plan's `planFileScopes().scopes`, `pathNames()`) — pgTAP's
-  `test/sql/users.sql`, a numbered `tests/001_users.sql`; `scannableTestPath()` keeps such a path as a scope (it no longer
-  drops fixtures, which made a plan naming one warn forever). The test-code
+  plan claims it (review 2): the test-code scan reads a fixture some feature's test plan claims in its File column
+  (`fixtureClaim()` over every plan's `planFileScopes().scopes`) — pgTAP's `test/sql/users.sql`, a numbered
+  `tests/001_users.sql`; `scannableTestPath()` keeps such a path as a scope (it no longer drops fixtures, which made a plan
+  naming one warn forever). Review 3 narrowed the claim: the FILE itself (its trailing whole segments, as `pathNames`
+  matches a file) or the folder that DIRECTLY holds it — `db/tests/pgtap/` claims `db/tests/pgtap/users.sql`, `tests/`
+  claims `tests/001_users.sql` but never `tests/fixtures/seed.sql` (any folder holding it made seed data a test through
+  the common `tests/` entry). The files read that way come back as `scanTestCode().fixtures`, and `traceTestCode` counts
+  their T-IDs only for this plan's rows that claim the file themselves (never a row without a File cell, never another
+  feature whose plan doesn't name it — the project-wide by-number match skips them), their AC IDs only when this plan
+  claims the file. The test-code
   scan collects its candidates, reads them all in walk order below `CODE_TRACE_READ_CAP`, above it the test-NAMED ones
   first, and reads each through `readFileHead()` (files.js — the first `SCAN_READ_BYTES` CHARACTERS, as the slice it replaced:
   one bounded read of up to 4 bytes a character, decoded, then sliced — review 2: a byte cap lost a T-ID behind 150,000
