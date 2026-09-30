@@ -73,9 +73,17 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   refuses, before anything runs, a pwsh / powershell script holding `$…` or a backtick outside single quotes (double-quoted
   or bare — the shell expands them first: `exit $LASTEXITCODE` became a bare `exit` → 0, a failing check recorded as
   passing). It lexes POSIX (single quotes literal, `\` escapes, `;` `&` `|` `(` `)` / line breaks end a command) over ONE
-  program / option tracker shared with posixShellSyntax (`pwshTracker()`: the program after `VAR=` prefixes and env / exec
-  / command / nohup / time wrappers). Stable codes `variable` · `backtick`; messages `taskDone.pwshInPosix`,
-  `projectChecks.pwshInPosix` (single quotes, or `--shell pwsh` with the bare script). After a failed
+  program / option tracker shared with posixShellSyntax (`pwshTracker()`: the program after `VAR=` prefixes and the
+  wrappers — `wrapperStep()`, review 2: `SHELL_WRAPPERS` env / command / exec / nohup / time / busybox / wsl / sudo / doas /
+  nice / ionice / timeout / setsid / stdbuf, the approval guard's list minus its launchers, with each one's value options
+  (`WRAPPER_OPTION_VALUES`: `sudo -u root`, `nice -n 10`, `timeout -s KILL`) and positionals (`timeout 60`); shellScript
+  — hence verifyPipeMasked — and runsPwsh skip them the same way). Review 2 also: a redirection outside quotes (`>
+  "$OUT"`, `2> "$ERR"`, `&>`, `2>&1`, its fd number) and its target word are the outer shell's, a `#` starting a word
+  outside quotes comments out the line, and a POSIX shell's own `-c` script (`bash -c "pwsh -c \"$x\""`, `bash -c 'pwsh -c
+  "$x"'` — the value lexShell / shellScript read) is scanned in turn, 3 levels deep at most. `pwsh -c "Invoke-Pester -Path
+  $PWD/tests"` is still refused (the shell does expand `$PWD`; single quotes say what was meant). Stable codes `variable`
+  · `backtick`; messages `taskDone.pwshInPosix`, `projectChecks.pwshInPosix` (single quotes, or `--shell pwsh` with the
+  bare script). After a failed
   run the `taskDone.shellHint` (retry with `--shell bash`) is printed only when `windowsShellFailure(output, code)` says
   cmd.exe itself failed (exit 9009, "is not recognized as an internal or external command", its syntax errors, "cannot
   find the path specified" — EN/PT/ES wording) — never for a check that ran and failed.
@@ -168,7 +176,11 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   1.21.1 review found no "Container failed" there, and the red proof was recorded), "[-] Discovery in … failed", Pester 3 /
   4's "[-] Error occurred in Describe block" / "… in test script". Such a line with no sign a test ran is could-not-run ON
   ITS OWN (kind `test`, the line as the text — a test file that doesn't parse used to be a red proof, 1.21.0 too), and
-  `summarizeRunOutput` keeps it like a count line. A red run whose message
+  `summarizeRunOutput` keeps it like a count line — and (review 2) when the lines it keeps show no run, it also keeps the
+  FIRST line `RE_ASSERTION_RAN` reads, trimmed last: a mixed Pester run (one block's BeforeAll failed, another block's test
+  failed on its assertion) lost its "[-] Greeter.T-01 … 121ms" line, so the stored summary — re-read by completeTask
+  (`done --run` and `spec_complete_task` alike) and cantRunRecord — said "never ran" and the red proof was refused; a
+  thrown message quoting "[-] Describe Foo failed" was the same case. A red run whose message
   quotes "Cannot find module" or "is not recognized" (the Pester function under test not written yet) is still red. Output is
   read with its ANSI colour / hyperlink codes dropped (`stripAnsi` — pwsh 7 colours captured output; `summarizeRunOutput`
   drops them too) — `spec_complete_task` refuses and records a run whose

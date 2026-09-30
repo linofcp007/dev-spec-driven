@@ -53,10 +53,15 @@ matrix.
   `src/test_utils.c`, `lib/DevSpec.hs` are code; in a test folder they are tests). **Fixtures:** `isTestFixture()` — a
   `TEST_DATA_EXT` file (`.sql`, `.ipynb`) in a test folder whose NAME follows no convention (`testNamed()`, + pgTAP's
   `test_*.sql` / `*_test.sql`) is data: the scan, coverage and the test-code scan skip it (1,600 `tests/fixtures/*.sql`
-  exhausted the read cap; a 'T-01' in a seed counted as the test); guard mode still asks before editing one. The test-code
+  exhausted the read cap; a 'T-01' in a seed counted as the test); guard mode still asks before editing one — unless a
+  plan claims it (review 2): the test-code scan reads a fixture some feature's test plan names in its File column, the file
+  or a folder holding it, as a concrete path (every plan's `planFileScopes().scopes`, `pathNames()`) — pgTAP's
+  `test/sql/users.sql`, a numbered `tests/001_users.sql`; `scannableTestPath()` keeps such a path as a scope (it no longer
+  drops fixtures, which made a plan naming one warn forever). The test-code
   scan collects its candidates, reads them all in walk order below `CODE_TRACE_READ_CAP`, above it the test-NAMED ones
-  first, and reads each through `readFileHead()` (files.js — at most `SCAN_READ_BYTES` from disk, never the whole file
-  then a slice; the brownfield scan and the status line's tests gate too). Until 1.21.1 the scan read only the scanner's
+  first, and reads each through `readFileHead()` (files.js — the first `SCAN_READ_BYTES` CHARACTERS, as the slice it replaced:
+  one bounded read of up to 4 bytes a character, decoded, then sliced — review 2: a byte cap lost a T-ID behind 150,000
+  'é'; never the whole file then a slice; the brownfield scan and the status line's tests gate too). Until 1.21.1 the scan read only the scanner's
   short `CODE_EXT` and a PowerShell project's tests gate never passed. The scan (`scanTestCode()`) is bounded and read-only; a plan row whose File column names a
   concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts; a test file
   ANOTHER feature's plan (active or archived) names in its File column — and this feature's plan does not — never counts

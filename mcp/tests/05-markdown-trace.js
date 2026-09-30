@@ -1332,5 +1332,40 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
       mcpTr.ok && js(mcpTr.code.plannedNotInCode) === "[]" && mcpTr.code.scanned === 3 && gate2.ok === true && !gate2.forced,
       "1.21.1 languages: a +tdd PowerShell feature — trace_check {code} and the tests gate (approve tests) name T-01…T-03 missing, then only the Bats one once tests/Greeter.Tests.ps1 and src/Greeter/Greeter.Tests.ps1 name theirs; with the .bats suite the gate passes unforced (MCP trace_check: 3 test files read) (got " +
       js([before.plannedNotInCode, before.plannedOutsideCode, gate0.error, mid.plannedNotInCode, mcpTr.code, gate2.ok, gate2.error]) + ")");
+
+    // 1.21.1 review 2 (B): pgTAP tests named like no test — test/sql/users.sql, a numbered tests/001_users.sql — are read once
+    // a feature's test plan names them (the file, or its folder) in its File column; an unnamed tests/fixtures/seed.sql stays
+    // a fixture (skipped). Before: the scan skipped them as fixtures, the plan's scope pointed at them → missing forever.
+    const pg = path.join(tmp, "proj-121-pgtap-plan");
+    S.initProject(pg, ["core", "tdd"], "en");
+    const fp = S.createFeature(pg, "Users schema", ["core", "tdd"], "", undefined, "en");
+    put(fp.dir, "test-plan.md", "# Test Plan\n\n| Test ID | Kind | Covers | File |\n|---|---|---|---|\n| T-01 | example | US-1.AC-1 | `test/sql/users.sql` |\n" +
+      "| T-02 | example | US-1.AC-1 | `tests/001_users.sql` |\n| T-03 | example | US-1.AC-1 | `db/tests/pgtap/` |\n");
+    put(pg, "test/sql/users.sql", "BEGIN;\nSELECT plan(1);\nSELECT has_table('users', 'T-01 the users table exists');\nSELECT * FROM finish();\nROLLBACK;\n");
+    put(pg, "tests/001_users.sql", "SELECT plan(1);\nSELECT col_not_null('users', 'email', 'T-02 email is required');\n");
+    put(pg, "db/tests/pgtap/roles.sql", "SELECT plan(1);\nSELECT has_role('app', 'T-03 the app role exists');\n");
+    put(pg, "tests/fixtures/seed.sql", "insert into users values ('T-04');\n"); // named by no plan: a fixture
+    approveBefore(pg, fp.slug, "tests");
+    const scPg = S.scanTestCode(pg);
+    const pgTr = payload(await rpc("tools/call", { name: "trace_check", arguments: { projectDir: pg, name: fp.slug, code: true } }));
+    const pgGate = S.approvePhase(pg, fp.slug, "tests");
+    ok(js(((scPg.tids.get("T-1") || {}).files)) === '["test/sql/users.sql"]' && js(((scPg.tids.get("T-2") || {}).files)) === '["tests/001_users.sql"]' &&
+      js(((scPg.tids.get("T-3") || {}).files)) === '["db/tests/pgtap/roles.sql"]' && !scPg.tids.get("T-4") && scPg.scanned === 3 &&
+      pgTr.ok && js(pgTr.code.plannedNotInCode) === "[]" && pgGate.ok === true && !pgGate.forced,
+      "1.21.1 languages (review 2): a +tdd plan naming pgTAP's test/sql/users.sql, tests/001_users.sql and the folder db/tests/pgtap/ in its File column — the scan reads those three (T-01…T-03 found, 3 files read), never the unnamed tests/fixtures/seed.sql (T-04 not seen); MCP trace_check {code} misses nothing and the tests gate passes unforced (got " +
+      js([[...scPg.tids.keys()], scPg.scanned, pgTr.code, pgGate.ok, pgGate.error]) + ")");
+
+    // 1.21.1 review 2 (D): readFileHead caps CHARACTERS, as the slice it replaced did — 150,000 'é' (300,000 bytes) or 90,000
+    // astral characters (180,000 UTF-16 units, 360,000 bytes) before a T-ID stay inside the 200,000-character head.
+    const acc = path.join(tmp, "proj-121-accents");
+    const eAcute = String.fromCharCode(0xe9);
+    const astral = String.fromCharCode(0xd83d, 0xde00);
+    put(acc, "tests/accents.test.js", "// " + eAcute.repeat(150000) + "\ntest(\"T-01 after the accents\", () => {});\n");
+    put(acc, "tests/emoji.test.js", "// " + astral.repeat(90000) + "\ntest(\"T-02 after the emoji\", () => {});\n");
+    put(acc, "tests/long.test.js", "// " + eAcute.repeat(200000) + "\ntest(\"T-03 past the cap\", () => {});\n");
+    const scAcc = S.scanTestCode(acc);
+    ok(!!scAcc.tids.get("T-1") && !!scAcc.tids.get("T-2") && !scAcc.tids.get("T-3") && scAcc.scanned === 3,
+      "1.21.1 languages (review 2): the test-code scan reads 200,000 CHARACTERS of a file, not bytes — T-01 behind 150,000 'é' (300 KB) and T-02 behind 90,000 emoji are found; T-03 behind 200,000 'é' is past the cap (got " +
+      js([[...scAcc.tids.keys()], scAcc.scanned]) + ")");
   }
 };

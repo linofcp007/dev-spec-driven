@@ -115,10 +115,11 @@ task that makes it green with `_Makes green:_`, and `dev-spec log` finds commits
   `*_test.clj`, `*Tests.m` …). A shell / C / C++ `test_*` file and an hspec `*Spec.hs` count in a test folder only, and a
   name that merely ends in "test" or "spec" (`latest.sh`, `inspect.lua`, `DevSpec.hs`) or starts with it outside one
   (`scripts/test_data.sh`, `src/test_utils.c`) is code. Data in a test folder is no test: a `.sql` / `.ipynb` there is
-  read only when NAMED like a test (pgTAP's `test_*.sql` / `*_test.sql`) — `tests/fixtures/seed.sql` is a fixture.
+  read only when NAMED like a test (pgTAP's `test_*.sql` / `*_test.sql`) or named by a test plan's File column (the file
+  or its folder: `test/sql/users.sql`, `tests/001_users.sql`) — an unnamed `tests/fixtures/seed.sql` is a fixture.
   `node_modules/`, build output and hidden folders are skipped. `.specs/` is skipped
   too, **except** each feature's own `.specs/<feature>/tests/` (the folder `+tdd` scaffolds). The walk
-  is bounded: each file is read up to 200 KB, at most 1,500 files — past that, the files named like a test first (the
+  is bounded: each file is read up to 200,000 characters, at most 1,500 files — past that, the files named like a test first (the
   result says `truncated` when it stopped at its cap).
 - T-IDs are per feature — every plan starts at T-01 — so **fill the plan's File column**: when a row
   names a concrete test file or folder (`tests/unit/login.test.ts`, `tests/auth/`), only that file — or a

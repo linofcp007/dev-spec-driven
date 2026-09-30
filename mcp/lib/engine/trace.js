@@ -658,9 +658,12 @@ function specFeatureDirs(projectDir) {
 // scaffold for the failing tests), within the same caps; the rest of .specs/ stays skipped. Project-level (not per
 // feature), so doctor / finish reuse it; traceTestCode decides which files count for a feature.
 // 1.21.1 review: a test FIXTURE — data-like code (.sql, .ipynb) in a test folder whose name follows no test convention
-// (isTestFixture: tests/fixtures/seed.sql) — is never read, nor counted; when more test files than CODE_TRACE_READ_CAP are
+// (isTestFixture: tests/fixtures/seed.sql) — is not read, nor counted (unless a plan names it: below); when more test files than CODE_TRACE_READ_CAP are
 // found, the ones NAMED like a test (testNamed) are read first, in walk order (below the cap nothing changes: every one,
-// in walk order); each is read up to SCAN_READ_BYTES from disk (readFileHead — never the whole file).
+// in walk order); each is read up to SCAN_READ_BYTES characters (readFileHead: one bounded read — never the whole file).
+// 1.21.1 review 2: a fixture some feature's test plan NAMES in its File column — the file, or a folder holding it, as a
+// concrete path (planFileScopes' scopes, pathNames) — is read like any test: pgTAP's test/sql/users.sql and a numbered
+// tests/001_users.sql are tests, not seed data, once a plan says so. An unnamed fixture stays skipped.
 // → { tids: Map(key → { id, files }), acs: Map(acId → { id, files }), scanned, truncated }
 function scanTestCode(projectDir) {
   const root = path.resolve(projectDir);
@@ -673,9 +676,21 @@ function scanTestCode(projectDir) {
     const e = map.get(key);
     if (!e.files.includes(rel)) e.files.push(rel);
   };
+  let planPaths = null; // every concrete File-column path of every feature's test plan — read once, on the first fixture
+  const planNamed = (rel) => {
+    if (planPaths === null) {
+      const all = new Set();
+      for (const d of specFeatureDirs(projectDir)) {
+        const plan = readIfExists(path.join(d, "test-plan.md"));
+        if (plan != null) for (const ps of planFileScopes(planIdText(plan)).scopes.values()) ps.forEach((p) => all.add(p));
+      }
+      planPaths = [...all];
+    }
+    return planPaths.some((p) => pathNames(rel, p));
+  };
   const cands = []; // the test files found, in walk order: { rel, full }
   const onFile = (rel, full) => {
-    if (isCodeFile(rel) && isTestCodePath(rel) && !isTestFixture(rel)) cands.push({ rel, full });
+    if (isCodeFile(rel) && isTestCodePath(rel) && (!isTestFixture(rel) || planNamed(rel))) cands.push({ rel, full });
   };
   const walk = walkProject(root, CODE_TRACE_CAP, onFile);
   let left = CODE_TRACE_CAP - walk.total;
@@ -741,8 +756,9 @@ function pathNames(rel, p) {
 function scannableTestPath(t) {
   if (t.endsWith("/")) return true;
   const ext = path.posix.extname(t).toLowerCase();
-  // code in any language, or a test-only extension (.bats, Perl's .t) — never a test fixture the scan skips (seed.sql)
-  return ext === "" || (GUARD_CODE_EXT.has(ext) && !isTestFixture(t));
+  // code in any language, or a test-only extension (.bats, Perl's .t) — a .sql / .ipynb fixture too: the plan naming it
+  // is what makes scanTestCode read it (1.21.1 review 2: pgTAP's test/sql/users.sql)
+  return ext === "" || GUARD_CODE_EXT.has(ext);
 }
 // A File cell token naming a non-code artifact — a document or data file, never source in any language (GUARD_CODE_EXT):
 // `load-test.md`, `evals/golden.json`, `tests/load/plan.md`, a Gherkin `.feature` or a JMeter `.jmx`. The test-code scan

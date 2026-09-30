@@ -137,7 +137,9 @@ green (the fix), not to this one.
   were found"…) — while a test that ran and failed stays red even when its message quotes one of those (Pester's
   `[-] <test> 12ms`, "Expected …, but got …"): `spec_complete_task` refuses a run whose
   `summary` shows it (`couldNotRun: "output"`), `dev-spec done --run` refuses it with nothing recorded, and an older
-  record of that kind is no red proof. Whenever cmd.exe is the shell (the Windows default, or `--shell cmd`), a line
+  record of that kind is no red proof. A Pester block that failed before its tests ("[-] Describe … failed", "BeforeAll \
+  AfterAll failed: 1") is could-not-run only when no test ran: in a mixed run (another block's test failed on its
+  assertion) keep that test's `[-] <test> 12ms` line in the `summary` you record — `done --run` keeps it. Whenever cmd.exe is the shell (the Windows default, or `--shell cmd`), a line
   cmd.exe itself could not run is refused by `done --run` with nothing recorded — and whenever PowerShell runs the line
   (`--shell pwsh` / `powershell`, or a `pwsh` program in it), so is PowerShell's own parse error (`couldNotRun: "pwsh"`:
   Windows PowerShell 5.1 has no `&&`).
@@ -188,7 +190,8 @@ no pipefail).
   - **A POSIX shell (`/bin/sh` elsewhere, `--shell bash`):** single quotes when the script holds `$` —
     `pwsh -NoProfile -Command 'npm test; exit $LASTEXITCODE'`. The shell would expand `$LASTEXITCODE` inside double quotes
     to nothing (a bare `exit` → 0: a failing check recorded as passing), so a double-quoted pwsh script holding `$` or a
-    backtick is refused there before anything runs.
+    backtick is refused there before anything runs — behind `sudo`, `timeout 60`, `nice -n 10` … too, and inside a
+    `bash -c "…"` script. What is the shell's own is fine: a redirection (`> "$OUT"`, `2>&1`) and a `# comment`.
   - A script with no `$` or backtick (`pwsh -NoProfile -Command "Invoke-Pester -Path tests -CI"`) runs the same under all
     three.
 - **Test names:** Pester runs `*.Tests.ps1` files — tests/, or beside the code (`src/Greeter/Greeter.Tests.ps1`) — and

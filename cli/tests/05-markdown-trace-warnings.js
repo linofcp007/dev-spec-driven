@@ -99,4 +99,22 @@ exports.run = ({ ok, run, tmp, CLI }) => {
     /tests in code: 2\/2 planned T-ID\(s\) named in 2 test file\(s\)/.test(trAfter.out) && gateAfter.code === 0 && !/forced/i.test(gateAfter.out),
     "1.21.1 languages: trace --code and approve tests on a +tdd PowerShell feature — 0/2 and refused (T-01, T-02) until tests/Greeter.Tests.ps1 and src/Greeter/Greeter.Tests.ps1 name them, then 2/2 and approved unforced (got " +
     JSON.stringify([trBefore.out.split("\n").filter((l) => /tests in code/.test(l)), gateBefore.out.slice(0, 160), trAfter.out.split("\n").filter((l) => /tests in code/.test(l)), gateAfter.out.slice(0, 120)]) + ")");
+
+  // 1.21.1 languages (review 2): pgTAP files named like no test (test/sql/users.sql, tests/001_users.sql) are read once the
+  // plan's File column names them — trace --code 2/2 and the tests gate passes; before, the scan skipped them as fixtures.
+  const pg = path.join(tmp, "l121-pgtap");
+  const putPg = (rel, s) => { const p = path.join(pg, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+  run(["init", "core", "tdd", "--project", pg]);
+  run(["create", "Users schema", "core", "tdd", "--project", pg]);
+  putPg(".specs/users-schema/test-plan.md", "# Test Plan\n\n| Test ID | Kind | Covers | File |\n|---|---|---|---|\n| T-01 | example | US-1.AC-1 | `test/sql/users.sql` |\n" +
+    "| T-02 | example | US-1.AC-1 | `tests/001_users.sql` |\n");
+  putPg("test/sql/users.sql", "BEGIN;\nSELECT plan(1);\nSELECT has_table('users', 'T-01 the users table exists');\nSELECT * FROM finish();\nROLLBACK;\n");
+  putPg("tests/001_users.sql", "SELECT plan(1);\nSELECT col_not_null('users', 'email', 'T-02 email is required');\n");
+  putPg("tests/fixtures/seed.sql", "insert into users values ('T-09');\n");
+  run(["approve", "users-schema", "--through", "test-plan", "--force", "--project", pg]);
+  const trPg = run(["trace", "users-schema", "--code", "--project", pg]);
+  const gatePg = run(["approve", "users-schema", "tests", "--project", pg]);
+  ok(/tests in code: 2\/2 planned T-ID\(s\) named in 2 test file\(s\)/.test(trPg.out) && !/T-09/.test(trPg.out) && gatePg.code === 0 && !/forced/i.test(gatePg.out),
+    "1.21.1 languages (review 2): trace --code and approve tests on a +tdd pgTAP feature — test/sql/users.sql and tests/001_users.sql, named in the plan's File column, are read (2/2, approved unforced); the unnamed tests/fixtures/seed.sql is not (got " +
+    JSON.stringify([trPg.out.split("\n").filter((l) => /tests in code|T-09/.test(l)), gatePg.out.slice(0, 160)]) + ")");
 };

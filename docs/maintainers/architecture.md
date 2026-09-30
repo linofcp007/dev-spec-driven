@@ -31,7 +31,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
   core.js                      linear text scans (1.17 H), own-key lookup, blank facts; linear glob matching; the _Implements:_
                                readers (implementsPath / Rel / Key, implementsTargets, globFiles)
   files.js                     paths, create-only / atomic writes, JSON reads, the read cache (withReadCache), readFileHead (a
-                               file's first N bytes in one bounded read — the code scans, 1.21.1), path containment
+                               file's first N characters in one bounded read — the code scans, 1.21.1), path containment
                                (drive roots, 8.3 names, junctions, network paths); the feature and roadmap locks, folder moves
                                under the lock, the .specs/.gitignore lock lines
   state.js                     language resolution, the feature resolver (resolveFeature / existingFeature), .state.json,

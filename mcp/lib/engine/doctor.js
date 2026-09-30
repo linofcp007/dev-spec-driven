@@ -976,7 +976,7 @@ function statusTestsGate(pdir, dir, tracks) {
       !SCAN_IGNORE.has(segs[segs.length - 1]) && isTestCodePath(segs.join("/"))) {
       try {
         if (fs.lstatSync(abs).isFile()) {
-          const head = readFileHead(abs, SCAN_READ_BYTES); // at most SCAN_READ_BYTES from disk (1.21.1 review)
+          const head = readFileHead(abs, SCAN_READ_BYTES); // the first SCAN_READ_BYTES characters, one bounded read (1.21.1 review)
           if (head != null) {
             keys = new Set();
             for (const m of head.matchAll(RE_CODE_TID)) keys.add(tKey(m[1] || m[2] || m[3]));

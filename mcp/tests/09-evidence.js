@@ -1177,4 +1177,92 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
       "1.21.1 languages (review): every new could-not-run, assertion, Pester and parse pattern (" + pats.length + ") and couldNotRunOutput / pwshParseFailure / summarizeRunOutput / posixPwshScript / posixShellSyntax / runsPwsh stay linear on " +
       inputs.length + " hostile 200 KB inputs (each within 1.5 s; the pt/es 'not recognized' pattern took 58 s before) (got " + js({ worst, slow: slow.slice(0, 5), fnSlow: fnSlow.slice(0, 5) }) + ")");
   }
+
+  // 1.21.1 languages (review 2) — a mixed Pester run's summary keeps the sign a test ran; posixPwshScript's redirections,
+  // comments, wrappers with options and nested POSIX scripts.
+  {
+    const js = (v) => JSON.stringify(v);
+    const ESC = String.fromCharCode(27), BS = String.fromCharCode(92);
+    const red = (s) => ESC + "[91m" + s + ESC + "[0m";
+    // A. A real red Pester run where ANOTHER block's BeforeAll failed (outputs as Pester 6.2.0 / 5.9.1 print them, paths
+    // shortened): the summary kept the NOT_RUN line and the tail but dropped "[-] Greeter.T-01 … 121ms", so the stored summary
+    // read "never ran" — the red proof refused. Now it keeps the first line that shows a test ran. E: a test whose thrown
+    // message quotes "[-] Describe Foo failed" is the same case.
+    const stack = (n) => Array.from({ length: n }, (_, i) => " at Invoke-Step" + i + ", C:/p/Pester/Pester.psm1: line " + (100 + i));
+    const MIXED = {
+      pester6: ["Running tests from 2 files.", "[-] Describe Broken failed",
+        " FileNotFoundException: The specified module 'NoSuchModuleXyz' was not loaded because no valid module file was found in any module directory.",
+        " at <ScriptBlock>, C:/p/tests/A.Tests.ps1:2", "[-] Greeter.T-01 greets by name 121ms", " Expected strings to be the same, but they were different.",
+        " Expected length: 10", " Actual length:   5", " Strings differ at index 5.", " Expected: 'Hello, Ana'", " But was:  'Hello'", "            -----^",
+        " at It 'T-01 greets by name' { 'Hello' | Should -Be 'Hello, Ana' }, C:/p/tests/B.Tests.ps1:2", "Tests completed in 967ms",
+        "Tests Passed: 0, Failed: 2, Skipped: 0, Inconclusive: 0, NotRun: 0", "BeforeAll " + BS + " AfterAll failed: 1", "  - Broken"].join("\n"),
+      pester5: ["Starting discovery in 2 files.", "Discovery found 2 tests in 193ms.", "Running tests.",
+        red("[-] Greeter.T-01 greets by name") + ESC + "[90m 161ms (132ms|30ms)" + ESC + "[0m", red(" Expected strings to be the same, but they were different."),
+        ...stack(30), red("[-] Describe Broken failed"), red(" FileNotFoundException: The specified module 'NoSuchModuleXyz' was not loaded."), ...stack(12),
+        "Tests completed in 988ms", ESC + "[97mTests Passed: 0, " + ESC + "[0m" + ESC + "[91mFailed: 2, " + ESC + "[0m" + "Skipped: 0, Inconclusive: 0, NotRun: 0",
+        red("BeforeAll " + BS + " AfterAll failed: 1"), red("  - Broken")].join("\r\n"),
+      quoted: ["[-] Quoter.T-05 quotes 38ms", " RuntimeException: line one", " [-] Describe Foo failed", " line three", " at <ScriptBlock>, C:/p/tests/Q.Tests.ps1:2",
+        "Tests completed in 754ms", "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0"].join("\n"),
+    };
+    const sums = Object.fromEntries(Object.entries(MIXED).map(([k, s]) => [k, S.summarizeRunOutput(s)]));
+    const aWrong = Object.keys(MIXED).filter((k) => S.couldNotRunOutput(MIXED[k]) !== null || S.couldNotRunOutput(sums[k]) !== null || sums[k].length > 500);
+    // still refused: the same run with no test that ran (the block's BeforeAll failed, nothing else) — its summary too
+    const onlyBlock = ["[-] Describe Broken failed", " FileNotFoundException: x", ...stack(20), "Tests completed in 500ms",
+      "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0", "BeforeAll " + BS + " AfterAll failed: 1", "  - Broken"].join("\n");
+    ok(!aWrong.length && /\[-\] Greeter\.T-01 greets by name 121ms/.test(sums.pester6) && /\[-\] Greeter\.T-01 greets by name 161ms/.test(sums.pester5) &&
+      /\[-\] Quoter\.T-05 quotes 38ms/.test(sums.quoted) && /BeforeAll \\ AfterAll failed: 1/.test(sums.pester6) &&
+      /^test:/.test(((r) => (r ? r.kind + ":" : ""))(S.couldNotRunOutput(S.summarizeRunOutput(onlyBlock)))),
+      "1.21.1 languages (review 2): a mixed Pester run — one block's BeforeAll failed, another block's test failed on its assertion (Pester 6 and a coloured Pester 5 with 30 stack lines between), or a thrown message quoting '[-] Describe Foo failed' — is red, and its summary keeps the '[-] <test> 121ms' line (≤ 500 characters) so the summary reads red too; a run where only the block failed is still could-not-run, summary included (wrong: " +
+      js([aWrong, sums]) + ")");
+
+    // …and wherever a stored summary is re-read: spec_complete_task (MCP) on an _Expect: fail_ task records each as the red
+    // proof — the CLI's summary or the agent's own copy of the output; the block-only run is refused (couldNotRun: output).
+    const pm = path.join(tmp, "proj-121-mixed-pester");
+    S.initProject(pm, ["core"], "en");
+    const fm = S.createFeature(pm, "Mixed", ["core"], "", undefined, "en");
+    const PCMD = "Invoke-Pester -Path tests -CI";
+    fs.writeFileSync(path.join(fm.dir, "tasks.md"), [1, 2, 3, 4, 5].map((n) => "- [ ] " + n + ". [US1] Write test T-0" + n + " and watch it fail\n  - _Verify: " + PCMD + "_\n  - _Expect: fail_\n").join(""));
+    const mc = async (n, summary) => payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { projectDir: pm, name: fm.slug, number: n, evidence: { command: PCMD, exitCode: 3, summary } } }));
+    const r1 = await mc(1, sums.pester6);
+    const r2 = await mc(2, sums.pester5);
+    const r3 = await mc(3, MIXED.pester6); // the output itself as the summary (≤ 2,000 characters are kept)
+    const r4 = await mc(4, sums.quoted);
+    const r5 = await mc(5, S.summarizeRunOutput(onlyBlock));
+    ok([r1, r2, r3, r4].every((r) => r.ok === true && r.redRecorded === true) && r5.ok === false && r5.couldNotRun === "output",
+      "1.21.1 languages (review 2): MCP spec_complete_task on _Expect: fail_ tasks records a mixed Pester run's summary (Pester 6, coloured Pester 5, the raw output, the quoted '[-] Describe' message) as the red proof; the block-only run is still refused (couldNotRun: output) (got " +
+      js([r1, r2, r3, r4].map((r) => [r.ok, r.redRecorded, r.couldNotRun, (r.error || "").slice(0, 120)]).concat([[r5.ok, r5.couldNotRun]])) + ")");
+
+    // C. posixPwshScript (a POSIX shell running pwsh): a redirection's target (`> "$OUT"`, `2> "$ERR"`, `&>`) and a comment
+    // (`# $x`) are the outer shell's — never flagged; a wrapper with its options and positionals (sudo -u root, timeout 60,
+    // nice -n 10, doas, nohup time) before pwsh no longer hides its script; a POSIX shell's own -c script is read in turn
+    // (`bash -c "pwsh -c \"$x\""`, `bash -c 'pwsh -c "$x"'`). A `$PWD` in the script is still refused (accepted: rewrite it).
+    const pp = (c) => S.posixPwshScript(c).join("+");
+    const PP = [
+      ['pwsh -c "1+1" > "$OUT"', ""], ['pwsh -c "1+1" 2> "$ERR"', ""], ['pwsh -c "1+1" &> "$OUT"', ""], ['pwsh -c "1+1" 2>&1 | tee "$LOG"', ""],
+      ['pwsh -c "exit 0" # $comment', ""], ['pwsh -c "exit 0" #$comment', ""], ['echo "#" "$HOME"', ""],
+      ['pwsh -NoProfile 2>/dev/null -Command "exit $x"', "variable"], ['pwsh -c "Write-Output a#b $x"', "variable"],
+      ['sudo pwsh -c "$x"', "variable"], ['sudo -u root pwsh -c "$x"', "variable"], ['timeout 60 pwsh -c "$x"', "variable"], ['timeout -s KILL 60 pwsh -c "$x"', "variable"],
+      ['nice -n 10 pwsh -c "$x"', "variable"], ['nohup time pwsh -c "$x"', "variable"], ['doas -u me pwsh -c "$x"', "variable"], ["sudo pwsh -c 'exit $x'", ""],
+      ['bash -c "pwsh -c ' + BS + '"$x' + BS + '""', "variable"], ["bash -c 'pwsh -c \"$x\"'", "variable"], ["sh -c 'sudo pwsh -c \"exit $LASTEXITCODE\"'", "variable"],
+      ["bash -c 'pwsh -c \"exit 0\" > \"$OUT\"'", ""], ["bash -c 'pwsh -c '\"'\"'exit $x'\"'\"''", ""], ["sh -c 'echo $HOME'", ""],
+      ['pwsh -c "Invoke-Pester -Path $PWD/tests"', "variable"],
+    ];
+    const ppWrong = PP.filter(([c, want]) => pp(c) !== want).map(([c]) => c + " → " + pp(c));
+    const RP = [["sudo -u root pwsh -c x", true], ["timeout 60 pwsh -c x", true], ["nice -n 5 powershell -c x", true], ["sudo echo pwsh", false], ["timeout 60 npm test", false]];
+    const rpWrong = RP.filter(([c, want]) => S.runsPwsh(c) !== want).map(([c]) => c);
+    const VP = [['sudo bash -c "npm test | tee x"', true], ['timeout 60 sh -c "a | b"', true], ['env -u X bash -c "a | b"', true], ['sudo -u root bash -c "a | b"', true],
+      ['nice -n 10 bash -c "a || b"', false]];
+    const vpWrong = VP.filter(([c, want]) => S.verifyPipeMasked(c) !== want).map(([c]) => c);
+    // …and linear: 200,000 characters of wrappers, options, redirections, fd numbers, comments or nested shells
+    const N = 200000;
+    const HOSTILE = ["sudo ".repeat(N / 5) + 'pwsh -c "$x"', "timeout " + "-s ".repeat(N / 3) + 'pwsh -c "$x"', 'pwsh -c "x" ' + "> ".repeat(N / 2), 'pwsh -c "x" ' + "2".repeat(N) + ">",
+      "# ".repeat(N / 2), ("bash -c '").repeat(N / 9), ("sh -c " + BS + '"').repeat(N / 8), 'pwsh -c "' + "$".repeat(N) + '"', ("pwsh -c " + '"$x" ; ').repeat(N / 16)];
+    const slowC = [];
+    for (const [name, fn] of [["posixPwshScript", S.posixPwshScript], ["runsPwsh", S.runsPwsh], ["verifyPipeMasked", S.verifyPipeMasked], ["posixShellSyntax", S.posixShellSyntax]]) {
+      for (const s of HOSTILE) { const t0 = Date.now(); fn(s); const ms = Date.now() - t0; if (ms > 1500) slowC.push(name + " @ " + js(s.slice(0, 24)) + " " + ms + " ms"); }
+    }
+    ok(!ppWrong.length && !rpWrong.length && !vpWrong.length && !slowC.length,
+      "1.21.1 languages (review 2): posixPwshScript leaves a redirection's target, an fd number and a comment to the outer shell, reads pwsh's script behind sudo / doas / timeout / nice / nohup / time and their options, and follows a POSIX shell's -c script (bash -c \"pwsh -c \\\"$x\\\"\" is refused); runsPwsh and verifyPipeMasked skip the same wrappers; all linear on 200,000-character inputs (wrong: " +
+      js([ppWrong, rpWrong, vpWrong, slowC]) + ")");
+  }
 };

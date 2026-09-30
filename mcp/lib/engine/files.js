@@ -539,13 +539,16 @@ function readIfExists(file) {
   const a = changeAlias(file);
   return a ? readRaw(a) : null;
 }
-// 1.21.1 review — the first maxBytes of a file, UTF-8 decoded, from ONE bounded read of the disk: never the whole file then a
-// slice (a 177 MB tests/fixtures/db.sql cost every trace / doctor / finish / approve 249 ms and 179 MB). The brownfield scan,
-// the test-code scan and the status line's tests gate read code this way. A multi-byte character cut at the limit decodes as
-// U+FFFD. null when the file can't be read. Uncached (not the read cache): these readers visit each file once per call.
+// 1.21.1 review — the first maxChars characters of a file, UTF-8 decoded, from ONE bounded read of the disk: never the whole
+// file then a slice (a 177 MB tests/fixtures/db.sql cost every trace / doctor / finish / approve 249 ms and 179 MB). The
+// brownfield scan, the test-code scan and the status line's tests gate read code this way. The cap is in CHARACTERS (UTF-16
+// units), as the slice it replaced was — review 2: a byte cap lost a T-ID behind 150,000 accented letters. So it reads up to
+// 4 bytes a character (a unit is at most 3 UTF-8 bytes; a surrogate pair is 4 bytes for 2 units), decodes, then slices.
+// null when the file can't be read. Uncached (not the read cache): these readers visit each file once per call.
 let HEAD_BUF = null; // one scratch buffer, reused (the reads are synchronous)
-function readFileHead(file, maxBytes) {
-  const max = Math.max(1, Math.floor(maxBytes) || 1);
+function readFileHead(file, maxChars) {
+  const chars = Math.max(1, Math.floor(maxChars) || 1);
+  const max = chars * 4;
   if (!HEAD_BUF || HEAD_BUF.length < max) HEAD_BUF = Buffer.allocUnsafe(max);
   let fd = null;
   try {
@@ -556,7 +559,8 @@ function readFileHead(file, maxBytes) {
       if (r <= 0) break;
       n += r;
     }
-    return HEAD_BUF.toString("utf8", 0, n);
+    const text = HEAD_BUF.toString("utf8", 0, n);
+    return text.length > chars ? text.slice(0, chars) : text;
   } catch {
     return null;
   } finally {
