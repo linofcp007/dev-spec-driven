@@ -204,23 +204,38 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   core "## Ownership", +privacy's "[PRIVACY] Retention & Deletion" or +saas's Cost Envelope never stand in for a deleted
   [DATA] section, and a [DATA] Retention heading never satisfies +privacy's. TRACK_ALIASES (reserved pack names): etl, elt,
   pipeline(s), warehouse, datawarehouse, lakehouse, dbt, dataquality, dataeng — **never `analytics`** (a team's product-analytics
-  pack — a tracking plan — keeps its name). SIGNALS.data — strong: ETL / ELT, a data / ingestion / batch pipeline, a data
-  warehouse / lake / lakehouse / mart, data quality, a data contract / lineage / catalog / mesh, data / analytics engineering,
+  pack — a tracking plan — keeps its name). SIGNALS.data — strong: ETL, an ELT pipeline / job / tool (1.21 review B3), a data / ingestion / batch pipeline,
+  a data warehouse / lake / lakehouse / mart, data quality, a data contract / lineage / catalog / mesh, data / analytics engineering,
   schema evolution / registry / drift, a backfill job, a historical backfill, a slowly changing dimension, a star / snowflake
   schema, fact / dimension tables, dimensional modelling, OLAP, dbt model / project / test / run / job / cloud, Apache Airflow /
   an Airflow DAG, Dagster, Apache Spark / PySpark / a Spark job / Spark SQL / Spark streaming, Databricks, BigQuery, Amazon
   Redshift, a `Snowflake warehouse` / `Snowflake table` (capitals), Delta Lake, Iceberg / Hudi, a Parquet file, Fivetran,
-  Airbyte, data ingestion / freshness, a freshness check / SLA, late-arriving data, an incremental load / model, a medallion
-  architecture, data observability, a quarantine table (+ PT / ES); weak (anchors): a backfill, a warehouse, `Snowflake` /
+  Airbyte, data ingestion / freshness, a freshness SLA, late-arriving data, an incremental load / model, a medallion
+  architecture, data observability, a quarantine table (+ PT / ES); weak (anchors): a backfill, a warehouse, a lakehouse, a freshness check, *carga incremental*, `Snowflake` /
   `Redshift` / `Airflow` (capitals), dbt, `SCD`, lineage, ingestion, change data capture / a CDC pipeline (+dist's strong phrase
   too — a phrase may serve two tracks), Parquet / Avro, a streaming pipeline, batch processing, a data platform / product, data
-  governance, BI and its tools (one concept), duplicate rows, stale data, a uniqueness check; **generic**: analytics, a dataset,
+  governance, BI tools / dashboards / reports and the named tools (one concept — never a bare `BI`), duplicate rows, stale data, a uniqueness check; **generic**: analytics, a dataset,
   a partition, a transformation, a batch / nightly job, ingest, upsert, a materialized view, a data / analytics engineer (a
   role — listed before "analytics": the first keyword matching at a place wins it); **context** (one concept `sql`): table,
-  column, row, SQL, query / queries, schema (+ PT / ES) — "the warehouse … the orders table" is two hints, "migrate the users
-  table" none; hazards: duplicate rows, stale data, schema drift. **Cues** (`SIGNALS.data.cues`): a warehouse in a SENTENCE
-  with data words (tables, queries, SQL, "load … into", snapshots, schemas, dbt, pipelines, ETL / ELT, columns, partitions,
-  ingest…, analytics, BI) → keep; with the building's words (stock, inventory, shelves, picking, pallets, shipping, deliveries,
+  column, row, SQL, query / queries, schema (+ PT / ES) — "migrate the users table" names no pipeline; hazards: duplicate rows,
+  stale data, schema drift. **1.21 review B3 — `contextBackedBy: "strong"`** (a per-track table key classify.js's `backedBy`
+  reads): +data's context words back a STRONG signal only, never a lone anchor — a table, a column or a query is on every
+  screen ("in a table", "React Query"), and a lone anchor + "the users table" turned +data on for a horse's lineage, SCD
+  patients, medication ingestion, duplicate rows in the users table (the decision only moves for a lone anchor + a context
+  word: two anchors or an anchor + a generic word were on anyway). The everyday-sense words are tied to data phrases: `ELT`
+  only as an ELT pipeline / job / tool / process / workflow (*pipeline / processo / proceso ELT*) — "ELT teachers"; a bare
+  lakehouse, a freshness check and PT / ES *carga incremental* are anchors (strong: data lakehouse, freshness SLA, *carga
+  incremental de dados / datos*); `BI` only with its tool / dashboard / report / platform / team (*ferramenta / relatório /
+  painel / dashboard de BI · herramienta / informe / panel de BI*) — *o número do BI* is the Portuguese ID card. Cues for the
+  everyday senses FIRST (the first rule that fires decides): a lakehouse among lodging words, a freshness check among food
+  words, *carga incremental* in a training plan or a structure, a lineage among animals / families, ingestion of water / a
+  medication / calories, parquet among flooring words → none; then a lakehouse, a freshness check or a lineage in a sentence
+  about data (tables, the raw zone, Delta / Iceberg, metrics, dashboards, source tables, a pipeline…) → strong ("Track the
+  lineage of every dashboard metric back to its source tables" — it relied on lineage + tables before). **Cues**
+  (`SIGNALS.data.cues`): a warehouse in a SENTENCE with data words (SQL, "load … into", snapshots, schemas, dbt, pipelines,
+  ETL / ELT, partitions, ingest…, analytics, BI — never tables / columns / queries since the 1.21 review, B4: the keep rule
+  came first and "Show stock levels per warehouse in a table" kept the anchor) → keep; with the building's words (stock,
+  inventory, shelves, picking, pallets, shipping, deliveries,
   temperature, staff, shifts, trucks, goods, aisles, a loading dock, robots, parcels…) → none; a backfill in a sentence with
   partitions / a pipeline / the warehouse / dbt / a DAG / history → keep, with a schema migration's words (migrat…, column(s),
   nullable, alter table, default value) → generic; "into / in / to / from / via / no / na / para / en / desde / hacia" +
@@ -234,6 +249,11 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   Guide: `references/data-pipeline-patterns.md`. The EXAMPLE track pack `examples/track-packs/mobile/` (+mobile — a data-only
   pack, not a built-in track; `mobile` / `MOBILE` are no reserved names) is what references/project-tracks.md tells a team to
   copy to `.specs/tracks/mobile/` to start; 04-tracks-data.js copies it into a project and runs `tracks check` + a create.
+  Its `pt/` and `es/` folders hold all five fragments (the 1.21 review B6 added test-plan.md and steering.md — PT / ES features
+  got English rows and steering); pt-BR reads `pt/` (the folder chain — a pack fragment is never passed through toPtBr).
+  **Measured (1.21 review):** the 72-text corpus + the review's 24 (17 everyday texts, 7 data senses) — 96 texts, 100% /
+  100%; the differential below (1.21 review B) found no +data decision changed outside a lone anchor + a context word, the
+  tied words and the warehouse / stock sentences.
 - **1.21 F2a — the verification's remaining misses, as data where possible.** +ui: the everyday components a text names by
   themselves are strong (confirm / confirmation dialog, confirmation modal, modal dialog / window, toast notification / message,
   `snackbar` — one word: a "snack bar" is a food counter; PT / ES diálogo de confirmação / de confirmación, janela / ventana
@@ -264,8 +284,28 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   negator BEFORE it (`negatedBefore()` — `isNegated()` is now `negatedBefore || negatedAfter`; a hit keeps `negBy` before /
   after / list); a **hazard's** negation opens none ("without downtime" is its requirement), though a hazard inside a list
   carries it on. `NEGATORS` gained the negative conjunctions nor / neither / nem / ni ("sem X nem Y", "ni X ni Y"), and a
-  negative conjunction after an item whose clause a negator opens negates that item too (`clauseNegated()` — "Não vamos usar
-  feature flags nem lançamento canário": the negator is three words back). Linear: each gap is read at most twice.
+  negative conjunction after an item a negator governs negates that item too ("Não vamos usar feature flags nem lançamento
+  canário": the negator is three words back). Linear: each gap is read at most twice.
+  **1.21 review B — only an EXCLUSION opens a list.** B1: 1.21 read "O sistema não pode perder pagamentos nem duplicar
+  faturas" / "must not lose payments nor duplicate invoices" / "No puede perder pagos ni reembolsos" as exclusions (+tdd off):
+  any negator earlier in the clause marked the item before a nor / nem / ni, and "nem" two words back negated a verb's object.
+  Now (a) a list opens, and the conjunction's item before it is marked, only where the negator GOVERNS the item
+  (`negationGoverns()` — between them only fillers / articles, `GOVERN_AUX` auxiliaries and modals, `GOVERN_ADOPT` the verbs
+  whose object IS what is excluded: use / add / need / include / implement / have / rely on… + PT / ES, `GOVERN_NEUTRAL`
+  modifiers and prepositions: new / more / external / for / on…; a NOMINAL negator — no, without, sem, sin — may also pass one
+  other word that is no verb form, "without real-time X", never "without losing X" / "sem perder X"; a VERBAL one — not /
+  never / não / n't / ES "no", or any negator an auxiliary or an adoption verb follows — passes nothing else): "must not lose
+  X" negates the VERB, its object stays negated as in 1.20 but opens no list — the negation is the requirement, like a
+  hazard's; (b) a negative conjunction negates only the word right after it (`negatorBefore()` skips a nor / nem / ni two
+  tokens back: "nem duplicar faturas"), and — `conj` on the hit — that negation is kept only while a list carries it: when
+  the clause's last other negator negates a verb (`negatedVerb()` — an auxiliary then a lexical verb, a verbal negator then
+  one, or a nominal one before a verb form; never after an adoption verb, never with only a correlative "nem … nem"), "Não
+  pode perder pagamentos nem reembolsos" / "sem perder dados nem reembolsos" leave the item un-negated; a correlative's
+  negation reaches the keywords inside its phrase ("Nem iniciar sessão …": 'sessão'). The words are read without a quote's
+  apostrophes ("'not add X or Y'"). B2: once a conjunction has closed the list a later comma ends it, and a comma before an
+  article (`LIST_ARTICLES` the / a / an, o / os / as / um / uma, el / la / los / las / un / una — a new clause's subject) is no
+  continuation: "Without an LLM or embeddings, the checkout or a subscription page is the priority" keeps +tdd (1.21: the
+  checkout joined the list). Measured below (1.21 review B).
   **Measured (1.21 F2):** the verifier's 146 texts: +api 100% / 96.3% → 100% / 100%, +ui 100% / 74.2% → 100% / 100%, +obs
   91.2% / 100% → 100% / 100%; the reviewer's 205: +ui recall 87.0% → 88.9% (a banner), the rest unchanged; the 1.17 +dist
   corpus unchanged (96.8% / 100%). On 37,881 inputs (the logged classify inputs of both suites — 1.19, the 1.19 fix, 1.20 —,
@@ -274,6 +314,19 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   / "sin … ni X" frames, and the logged "sin datos personales ni autenticación": +tdd off); "No X, just …" and "Without X,
   the …" frames change nothing. `1.21 F2a` in mcp/tests/04-tracks-builtin.js embeds the cases (+ a 40-text precision /
   recall assertion, ≥ 95% per track).
+  **Measured (1.21 review B — B1 … B4):** a three-way differential (1.20 at c2ade64, 1.21 at 427cd05, the fix) over 66,621
+  distinct inputs — the 2,249 classify inputs both 1.21 suites log, 9,254 string literals of both suites' test files in the
+  three trees, the reviewer's texts, and a 31-frame sweep of every built-in keyword (55,115: the F2 frames plus "must not lose
+  X nor …", "não pode perder X nem …", "No puede perder X ni …", "Sem perder X nem …", "Without X, the checkout or …",
+  "Without Kafka or RabbitMQ, the X or …", "Sem LLM nem embeddings, o X ou …", "Store the X in the users table", "Show X
+  per warehouse so pickers…", "No new X or …", "The export must not use X or …", "Nem X nem …"). 15,239 decisions differ
+  from 1.21, ALL in those families: the B1 / B2 frames (12,063 back to 1.20's decision; the 3,176 neither version had are a
+  1.21 intended change — a negated LLM / Kafka, a new +ui / +data keyword — combined with the fixed part), a lone +data
+  anchor + a table, a stock sentence, the tied words (elt, BI, lakehouse, carga incremental, freshness check) and the
+  correlative "Nem X nem …" now reaching the keywords inside X; the logged inputs changed only for the +data self-match
+  sweep's five tied words ("We need elt here"), the literals only for the new tests and one test message ("ni autenticación'
+  (+tdd off)": "ni" two words back no longer negates "tdd"). +data on the 72 + 24 corpus: 73.8% / 100% → 100% / 100%; the
+  +dist (45), 1.19 T8 (133), 1.19 T review (88) and F2a (40) corpora unchanged at 100% / 100%.
 - **1.21 F2b — project-level signal overrides (`.specs/classifier.json`, classify.js).** A Phase 0 correction is learned:
   `createFeature` on a NEW plain feature (not a bugfix / spike / import — `cls` is not given) with explicit `tracks` and a
   non-empty summary compares the summary's classification (the suggestion classification.md records) with the chosen tracks
@@ -322,7 +375,11 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   that are ordinary design words (Processors, Retention, Conservação, Data inventory, Avaliação de impacto…):
   `extractSection(md, syn, marker, loose)` accepts them only on a heading carrying `[PRIVACY]` or on an unmarked heading
   nested under one (`inTrackContext`) — a core `## Processors and queues` must never satisfy a deleted `[PRIVACY]`
-  section. The strict synonyms keep the unmarked fallback anywhere (hand-written and marker-less PT/ES designs).
+  section. The strict synonyms keep the unmarked fallback anywhere (hand-written and marker-less PT/ES designs) — except
+  inside ANOTHER track's section (1.21 review B5, `inOtherTrackContext`, the mirror: the nearest enclosing heading that
+  carries a marker carries another track's — built-in or a pack's): "### Qualidade dos dados (LGPD art. 6º, V)" under
+  "## [PRIVACY] Fundamento de Licitude e Finalidade" is +privacy's text, never the deleted `[DATA] Qualidade dos Dados`; an
+  unmarked top-level "## Data Quality" still satisfies it. Only for a track section (a `marker`), never a core one.
 - **Markers are case-sensitive tokens** everywhere (`headingHasMarker`, `inactiveMarkerLines`, `trackAcIds`,
   `extractSection`, the brief): `### Timeout [sec]` is prose, never +sec. `RE_STABLE_BRACKET` lists `SEC` / `PRIVACY`.
 - **Signal tiers** (`SIGNALS[track]`): `strong` (turns a track on alone), `weak` (score 1 — two weak ones, or a strong
@@ -460,7 +517,9 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   keywords, `classify` emits a conflict note ("+ai is ON although 'llm' appeared negated") for the
   human who confirms Phase 0 — it must never silently drop a negation it computed. A negation reaches every item of the
   coordinated list it opens (1.21 F2 — "not add feature flags or canary releases", "nem … nem", "ni … ni"), never past
-  "and", a contrast word or an unclosed comma — see 1.21 F2a above before widening `listLink()`.
+  "and", a contrast word, an unclosed comma or a comma after the closing "or" — and only an EXCLUSION opens one: a negator
+  followed by another verb ("must not lose X or Y", "não pode perder X nem Y") negates the verb, the requirement is about X and
+  Y (1.21 review B1) — see 1.21 F2a above before widening `listLink()` or `GOVERN_ADOPT`.
 - **Project signal overrides are the team's, never the engine's defaults.** A tuning that holds for everyone goes into
   `SIGNALS` (tracks.js); `.specs/classifier.json` is one project's learned or hand-set layer — never read it without a
   projectDir, never write it outside `writeSignalRecords()` (the roadmap lock, the never-rewrite-a-broken-file rule).

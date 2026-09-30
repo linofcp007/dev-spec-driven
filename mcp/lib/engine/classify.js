@@ -362,6 +362,10 @@ function negatedAfter(text, idx, kwLen) {
 }
 // A negator BEFORE the match — the negation a coordinated list carries on to its next items (coordinatedNegation).
 function negatedBefore(text, idx, lang, cased) {
+  return negatorBefore(text, idx, lang, cased) !== null;
+}
+// The negator that negates the match at idx from BEFORE it (the word, lower-case) — or null.
+function negatorBefore(text, idx, lang, cased) {
   // Negator token in the 1-2 words immediately before the match.
   const before = text.slice(Math.max(0, idx - 20), idx).toLowerCase();
   const tokens = before.split(/[^a-zà-ú-]+/).filter(Boolean);
@@ -373,7 +377,13 @@ function negatedBefore(text, idx, lang, cased) {
   const prevCased = ((cased || "").slice(Math.max(0, idx - 20), idx).split(/[^\p{L}-]+/u).filter(Boolean).slice(-2)[0]) || "";
   const contraction = tokens[tokens.length - 1] === "no" && /(?:ad|id)[oa]s?$/.test(prev) &&
     (pt || (prev.length >= 6 && prevCased === prevCased.toLowerCase()));
-  if (!contraction && tokens.slice(-2).some((w) => negators.includes(w))) return true;
+  if (!contraction) {
+    const t1 = tokens[tokens.length - 1], t2 = tokens[tokens.length - 2];
+    if (t1 && negators.includes(t1)) return t1;
+    // 1.21 review B1: a negative conjunction (nor / nem / ni) negates the word right after it only — "nem duplicar faturas",
+    // "nor duplicate invoices" negate the verb (a second predicate), never its object
+    if (t2 && negators.includes(t2) && !LIST_NEG.has(t2)) return t2;
+  }
   // "sem uso de IA", "sin uso de IA", "no use of AI", "without the use of any AI": a negator a few filler words
   // back still negates — weak signals included (a lone 'ia' used to come back as "Possible +ai").
   const wide = text.slice(Math.max(0, idx - 40), idx).toLowerCase().split(/[^a-zà-ú-]+/).filter(Boolean);
@@ -382,7 +392,7 @@ function negatedBefore(text, idx, lang, cased) {
   // Across fillers, "no" negates only before an ENGLISH filler ("no use of AI"): before a PT one it is the
   // contraction em+o — "Guia no uso do LLM" is a guide IN the use of the LLM, even when guessLang says 'en'.
   const noContraction = wide[k] === "no" && !NEG_FILLER_EN.has(wide[k + 1]);
-  return k < wide.length - 1 && k >= 0 && negators.includes(wide[k]) && !noContraction; // only across at least one filler word
+  return k < wide.length - 1 && k >= 0 && negators.includes(wide[k]) && !noContraction ? wide[k] : null; // only across at least one filler word
 }
 
 // COORDINATED NEGATION (1.21 F2): a negation reaches every item of the coordinated list it opens, in its clause, for every track
@@ -394,8 +404,10 @@ function negatedBefore(text, idx, lang, cased) {
 // release…" is no list). Never across . ! ? ; : or a line break, "and" / "e" / "y" (often a new predicate: "without downtime and
 // roll back on errors"), a contrast word ("no X, just Y", "sem X, apenas Y", "not X but Y") or a longer gap; a hazard's negation
 // (its requirement: "without downtime") opens no list. A negative conjunction (nor / nem / ni) also negates the item BEFORE it
-// when a negator opens that item's clause ("Não vamos usar X nem Y" — the negator three words back). Linear: each gap between
-// two consecutive items is read at most twice, and bounded (LIST_GAP_MAX characters).
+// when a negator GOVERNS that item ("Não vamos usar X nem Y" — the negator three words back). 1.21 review: a list opens only at an
+// item its negator governs (negationGoverns — "must not lose payments or refunds" negates the verb: no list; B1); a comma after
+// the list's closing conjunction, or one before an article, ends it (B2: "Without an LLM or embeddings, the checkout or …"). Linear:
+// each gap between two consecutive items is read at most twice, and bounded (LIST_GAP_MAX characters).
 const LIST_GAP_MAX = 80;
 const LIST_OR = new Set(["or", "nor", "ou", "nem", "ni"]);
 const LIST_OR_ES = new Set(["o", "u"]); // ES "or" (PT "o" is an article)
@@ -428,16 +440,87 @@ function listLink(text, from, to, es) {
   if (or) return other <= 1 ? or : null;
   return gap.includes(",") && other === 0 ? "comma" : null;
 }
-// A negator opens the clause of the item at `start` (before it, back to . ! ? ; : or a line break, ≤ CUE_SPAN characters).
-function clauseNegated(text, start, lang) {
-  const pt = i18n.baseLang(lang) === "pt";
-  const words = cueWords(cueBefore(text, start, CUE_BOUNDARY));
-  return words.some((w0) => { const w = w0.toLowerCase(); return (NEGATORS.includes(w) && !(pt && w === "no")) || /n['’]t$/.test(w); });
+// Does a negator GOVERN the item at `start` (1.21 review B1)? Only when nothing but these words stand between them, in the same
+// clause and comma-free stretch: fillers and articles ("no X", "sem o X", "without the use of any X"), auxiliaries and modals
+// (GOVERN_AUX), the verbs whose object IS what the negation excludes — use / add / need / include / implement… (GOVERN_ADOPT: "will
+// not add X", "Não vamos usar X", "No usaremos X", "must not use X") — and a modifier or a preposition (GOVERN_NEUTRAL: "no new X").
+// Another verb ends the search: a negator followed by it negates that VERB ("must not lose X", "não pode perder X", "no debe perder
+// X") — the negation is the requirement about X, like a hazard's, never an exclusion of X, so it opens no list. A VERBAL negation (not
+// / never / não / n't, ES "no" — or any negator an auxiliary or an adoption verb follows: "No puede perder X") passes nothing else; a
+// NOMINAL one (no, without, sem, sin, avoid… before a noun phrase) one modifier of its own ("without real-time X") — never a verb
+// form (-ing, a PT / ES infinitive or gerund: "without losing X", "sem perder X"). A bounded look-back (≤ GOVERN_MAX words, ≤
+// CUE_SPAN characters).
+const GOVERN_MAX = 5;
+const GOVERN_BOUNDARY = /[.!?;:,\n]/;
+const GOVERN_AUX = new Set([
+  "will", "would", "shall", "should", "must", "can", "could", "may", "might", "do", "does", "did", "be", "is", "are", "was", "were", "been",
+  "going", "vamos", "vai", "vão", "iremos", "irá", "irão", "será", "serão", "é", "são", "ser", "pode", "podem", "podemos", "poderá", "deve",
+  "devem", "devemos", "deverá", "va", "van", "es", "son", "debe", "deben", "debemos", "deberá", "puede", "pueden", "podrá",
+]);
+const GOVERN_ADOPT = new Set([
+  "need", "needs", "needed", "require", "requires", "required", "use", "uses", "using", "add", "adds", "adding", "build", "builds", "building",
+  "include", "includes", "including", "introduce", "introduces", "introducing", "implement", "implements", "implementing", "support",
+  "supports", "supporting", "have", "has", "having", "want", "adopt", "adopting", "rely", "relying", "depend", "depends", "depending", "set",
+  // PT
+  "precisa", "precisam", "precisamos", "precisar", "preciso", "necessita", "necessitam", "necessitamos", "necessitar", "usar", "usa", "usam",
+  "usamos", "usará", "usarão", "usaremos", "utilizar", "utiliza", "utilizam", "utilizamos", "utilizará", "utilizaremos", "adicionar",
+  "adiciona", "adicionamos", "adicionaremos", "acrescentar", "acrescentamos", "incluir", "inclui", "incluem", "incluímos", "incluiremos",
+  "implementar", "implementamos", "implementaremos", "introduzir", "ter", "tem", "têm", "temos", "terá", "teremos", "haver", "há", "haverá",
+  "suportar", "suporta", "depender", "depende", "dependemos", "recorrer",
+  // ES
+  "necesita", "necesitan", "necesitamos", "necesitará", "necesitar", "usan", "usará", "utilizan", "añadir", "añade", "añadimos",
+  "añadiremos", "agregar", "agrega", "agregamos", "agregaremos", "incluye", "incluimos", "introducir", "tener", "tiene", "tienen", "tenemos",
+  "tendrá", "tendremos", "hay", "habrá", "haber", "requiere", "requieren", "requerirá", "recurrir", "soportar", "soporta",
+]);
+const GOVERN_NEUTRAL = new Set(["on", "for", "to", "up", "yet", "new", "more", "extra", "additional", "external", "separate", "third-party", "ao",
+  "novo", "nova", "novos", "novas", "mais", "adicional", "adicionais", "nuevo", "nueva", "nuevos", "nuevas", "más", "adicionales"]);
+const VERBAL_NEGATORS = new Set(["not", "never", "não", "nao"]);
+const isNegatorWord = (w, pt) => (NEGATORS.includes(w) && !(pt && w === "no")) || /n['’]t$/.test(w);
+const verbalNegator = (w, es) => VERBAL_NEGATORS.has(w) || /n['’]t$/.test(w) || (es && w === "no");
+const verbForm = (w, ptes) => (w.length > 4 && /ing$/.test(w)) || (ptes && /(?:[aei]r|ndo)$/.test(w));
+// the clause's words before `start`, lower-case, a quote's apostrophes dropped ("'not add X or Y'")
+const govWords = (text, start, bound) => cueWords(cueBefore(text, start, bound)).map((w) => w.toLowerCase().replace(/^['’]+|['’]+$/g, "")).filter(Boolean);
+function negationGoverns(text, start, lang) {
+  const base = i18n.baseLang(lang), pt = base === "pt", es = base === "es";
+  const words = govWords(text, start, GOVERN_BOUNDARY);
+  let other = 0, verbal = false;
+  for (let i = words.length - 1, n = 0; i >= 0 && n <= GOVERN_MAX; i--, n++) {
+    const w = words[i];
+    // (a negative conjunction governs only the phrase right after it, as in negatorBefore)
+    if (isNegatorWord(w, pt)) return other === 0 || !(verbal || verbalNegator(w, es) || LIST_NEG.has(w));
+    if (NEG_FILLER.has(w) || LIST_FILLER.has(w) || GOVERN_NEUTRAL.has(w)) continue;
+    if (GOVERN_AUX.has(w) || GOVERN_ADOPT.has(w)) { verbal = true; continue; }
+    if (++other > 1 || verbForm(w, pt || es)) return false;
+  }
+  return false;
 }
+// Does the clause's negator (the last one before `start` that is no negative conjunction) negate a VERB — the requirement a
+// negative conjunction then continues ("Não pode perder pagamentos nem reembolsos", "must not lose data nor refunds", "sem perder
+// dados nem reembolsos")? Not when an adoption verb follows it (its object is excluded: "Não vamos usar filas nem Kafka"), nor for a
+// nominal negator before a noun ("Sem filas nem Kafka"), nor with none but the correlative "nem … nem" / "ni … ni".
+function negatedVerb(text, start, lang) {
+  const base = i18n.baseLang(lang), pt = base === "pt", es = base === "es";
+  const words = govWords(text, start, CUE_BOUNDARY);
+  let j = words.length - 1;
+  while (j >= 0 && !(isNegatorWord(words[j], pt) && !LIST_NEG.has(words[j]))) j--;
+  if (j < 0) return false;
+  let verbal = verbalNegator(words[j], es);
+  for (let i = j + 1; i < words.length && i <= j + GOVERN_MAX + 1; i++) {
+    const w = words[i];
+    if (LIST_NEG.has(w) || GOVERN_ADOPT.has(w)) return false;
+    if (NEG_FILLER.has(w) || LIST_FILLER.has(w) || GOVERN_NEUTRAL.has(w)) continue;
+    if (GOVERN_AUX.has(w)) { verbal = true; continue; }
+    return verbal || verbForm(w, pt || es);
+  }
+  return false;
+}
+// The article a new clause's subject starts with (1.21 review B2): a comma followed by one is no list continuation — "Without an LLM
+// or embeddings, the checkout or a subscription page is the priority".
+const LIST_ARTICLES = new Set(["the", "a", "an", "o", "os", "as", "um", "uma", "el", "la", "los", "las", "un", "una"]);
 // hits: the counted (non-shadowed) matches, each with `negBy` ("before" / "after" / null) — marks `neg` on the list items a negation
 // reaches (never a hazard: `hazard` stays un-negated, but it still carries the list on).
 function coordinatedNegation(hits, text, lang) {
-  if (hits.length < 2) return;
+  if (hits.length < 2 && !(hits.length && hits[0].conj)) return;
   const es = i18n.baseLang(lang) === "es";
   const sorted = hits.slice().sort((a, b) => a.start - b.start || b.end - a.end);
   const items = [];
@@ -445,21 +528,35 @@ function coordinatedNegation(hits, text, lang) {
     const last = items[items.length - 1];
     if (last && h.start < last.end) { last.hits.push(h); if (h.end > last.end) last.end = h.end; } else items.push({ start: h.start, end: h.end, hits: [h] });
   }
-  // a hazard's negation is its requirement ("without downtime"), never a list's: it opens none
-  const opens = (it) => it.hits.some((h) => h.negBy === "before" && !h.hazard);
+  // a negative conjunction negates the whole phrase it precedes — the keywords inside it too ("nem iniciar sessão": 'sessão')
+  for (const it of items) {
+    if (!it.hits.some((h) => h.conj && h.start === it.start)) continue;
+    for (const h of it.hits) if (!h.negBy && !h.hazard) { h.neg = true; h.negBy = "before"; h.conj = true; }
+  }
+  // a hazard's negation is its requirement ("without downtime"), never a list's: it opens none — nor does a negator that governs a
+  // verb, not the item (1.21 review B1: "must not lose payments or refunds")
+  const opens = (it) => it.hits.some((h) => h.negBy === "before" && !h.hazard) && negationGoverns(text, it.start, lang);
   const mark = (it) => { for (const h of it.hits) if (!h.hazard) { h.neg = true; if (!h.negBy) h.negBy = "list"; } };
-  let active = false, pending = [];
+  // the gap's first word is an article (1.21 review B2)
+  const articleFirst = (from, to) => { const w = cueWords(text.slice(from, to))[0]; return !!w && LIST_ARTICLES.has(w.toLowerCase()); };
+  // closed: a conjunction has closed the list — a later comma ends it (a list has one closing conjunction — 1.21 review B2)
+  let active = false, closed = false, pending = [];
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     if (active) {
       const l = listLink(text, items[i - 1].end, it.start, es);
-      if (l === "comma") { pending.push(it); continue; }
-      if (l) { pending.forEach(mark); pending = []; mark(it); continue; }
-      active = false; pending = []; // the list ended here: this item may open a new one
+      if (l === "comma" && !closed && !articleFirst(items[i - 1].end, it.start)) { pending.push(it); continue; }
+      if (l && l !== "comma") { pending.forEach(mark); pending = []; mark(it); closed = true; continue; }
+      active = false; closed = false; pending = []; // the list ended here: this item may open a new one
+    } else if (it.hits.some((h) => h.conj) && negatedVerb(text, it.start, lang)) {
+      // 1.21 review B1: a negative conjunction no list carries, in a clause whose negator negates a verb ("Não pode perder pagamentos
+      // nem reembolsos", "No puede perder pagos ni reembolsos"), continues that requirement, not a list of exclusions: its item is not
+      // negated either
+      for (const h of it.hits) if (h.conj) { h.neg = false; h.negBy = null; h.conj = false; }
     }
     if (opens(it)) { active = true; continue; }
-    // "Não vamos usar X nem Y": a negative conjunction after an item whose clause a negator opens
-    if (i + 1 < items.length && listLink(text, it.end, items[i + 1].start, es) === "neg" && clauseNegated(text, it.start, lang)) { mark(it); active = true; }
+    // "Não vamos usar X nem Y": a negative conjunction after an item a negator governs (the negator three words back)
+    if (i + 1 < items.length && listLink(text, it.end, items[i + 1].start, es) === "neg" && negationGoverns(text, it.start, lang)) { mark(it); active = true; }
   }
 }
 
@@ -626,9 +723,11 @@ function classify(description, opts = {}) {
   const hits = []; // every match, in scan order: { track, tier, kw, start, end, neg, negBy, hazard, base, by }
   // A match: negated by a negator BEFORE it (negBy "before" — a coordinated list carries it on), by a phrase after it ("after"),
   // or not; a hazard is never negated (SIGNAL_HAZARDS) but still carries a list's negation on.
+  // conj: negated by a negative conjunction right before it (nor / nem / ni) — coordinatedNegation keeps that negation only in a list.
   const newHit = (track, tier, kw, start, end, hazard, base, by) => {
-    const negBy = negatedBefore(text, start, lang, cased) ? "before" : negatedAfter(text, start, end - start) ? "after" : null;
-    return { track, tier, kw, start, end, neg: !hazard && !!negBy, negBy, hazard, base: base === undefined ? tier : base, by: by || null };
+    const nb = negatorBefore(text, start, lang, cased);
+    const negBy = nb ? "before" : negatedAfter(text, start, end - start) ? "after" : null;
+    return { track, tier, kw, start, end, neg: !hazard && !!negBy, negBy, hazard, base: base === undefined ? tier : base, by: by || null, conj: !!nb && LIST_NEG.has(nb) };
   };
   // The project's signal overrides (1.21 F2 — .specs/classifier.json, learned from Phase 0 corrections or set by hand): a layer over
   // the tables — a word "off" is no signal of that track at all (its place stays free for another keyword), "weak" / "strong"
@@ -722,7 +821,10 @@ function classify(description, opts = {}) {
     counted.push(tier && tier !== h.tier ? Object.assign({}, h, { tier, src: h }) : h);
   }
   const own = (pred) => new Set(counted.filter((h) => h.tier !== "context" && pred(h)).map((h) => h.track));
-  const backedBy = own((h) => !h.neg && h.tier !== "generic"), mentionedBy = own(() => true);
+  // (1.21 review B3) a track whose table says `contextBackedBy: "strong"` (+data: a table / a column / a query is on every screen) has
+  // its context words backed by a strong signal only, never by a lone anchor
+  const strongOnly = (t) => Object.prototype.hasOwnProperty.call(SIGNALS, t) && SIGNALS[t].contextBackedBy === "strong";
+  const backedBy = own((h) => !h.neg && (strongOnly(h.track) ? h.tier === "strong" : h.tier !== "generic")), mentionedBy = own(() => true);
   for (const h of counted) {
     if (h.tier === "context" && !(h.neg ? mentionedBy : backedBy).has(h.track)) { (h.src || h).final = "unbacked"; continue; }
     const tier = h.tier === "context" ? "weak" : h.tier;

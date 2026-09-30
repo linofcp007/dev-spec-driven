@@ -117,6 +117,38 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
       "1.21 F4: a lower-case '[data]' is prose (no +data inferred), a '[DATA]' heading infers it; a core '## Ownership' / '## Retention' and +privacy's '[PRIVACY] Retention & Deletion' never satisfy a deleted [DATA] section; [DATA] is a stable bracket (got " +
       js([csTracks, csInferred, lzDoc.detail]) + ")");
 
+    // --- 1.21 review B5: a strict [DATA] name nested under ANOTHER track's section is part of that section — "### Qualidade dos dados (LGPD art.
+    // 6º, V)" under "## [PRIVACY] Fundamento de Licitude e Finalidade" never stands in for a deleted "## [DATA] Qualidade dos Dados" (EN / PT /
+    // pt-BR / ES); an unmarked top-level heading still does (a strict synonym, by design)
+    const nested = [];
+    for (const [lang, head, note] of [["en", "Data quality", "(GDPR art. 5(1)(d))"], ["pt", "Qualidade dos dados", "(RGPD art. 5.º)"],
+      ["pt-BR", "Qualidade dos dados", "(LGPD art. 6º, V)"], ["es", "Calidad de los datos", "(RGPD art. 5)"]]) {
+      const p = d("nested-" + lang);
+      const f = S.createFeature(p, "Nested " + lang, ["privacy", "data"], "", undefined, lang);
+      const dp = path.join(f.dir, "design.md");
+      dropTodo(dp);
+      const lines = rd(dp).split("\n");
+      const di = lines.indexOf("## [DATA] " + title[lang]);
+      let de = di + 1;
+      while (de < lines.length && !/^#{1,2}\s/.test(lines[de])) de++;
+      lines.splice(di, de - di);
+      const pi = lines.findIndex((l, i) => l.startsWith("## [PRIVACY] ") && i > lines.findIndex((x) => x.startsWith("## [PRIVACY] ")));
+      let pe = pi + 1;
+      while (pe < lines.length && !/^#{1,2}\s/.test(lines[pe])) pe++;
+      lines.splice(pe, 0, "### " + head + " " + note, "Accurate and up to date: the subject corrects them in the profile.", "");
+      fs.writeFileSync(dp, lines.join("\n"));
+      const under = chk(S.specDoctor(p, f.slug), "data-sections");
+      fs.writeFileSync(dp, lines.join("\n").replace("### " + head + " " + note, "## " + head));
+      const top = chk(S.specDoctor(p, f.slug), "data-sections");
+      if (!(under.status === "fail" && under.detail.includes(title[lang]) && top.status === "pass")) nested.push([lang, lines[pi], under.status, under.detail, top.status, top.detail]);
+    }
+    // (every track: +sec's strict "Threat Model" under "## [DIST] Failure Modes" is +dist's text; top-level or under [SEC] it is +sec's)
+    const secUnder = S.extractSection("# F\n\n## [DIST] Failure Modes\n- x\n### Threat Model\n- STRIDE done\n\n## Other\n", ["threat model"], "[SEC]");
+    const secTop = S.extractSection("# F\n\n## Threat Model\n- STRIDE\n", ["threat model"], "[SEC]"), secOwn = S.extractSection("# F\n\n## [SEC] Security\n### Threat Model\n- STRIDE\n", ["threat model"], "[SEC]");
+    ok(!nested.length && secUnder === null && /STRIDE/.test(secTop || "") && /STRIDE/.test(secOwn || ""),
+      "1.21 review B5: a [DATA] section's strict name on a heading nested under another track's section ([PRIVACY]) never satisfies the deleted [DATA] section (EN / PT / pt-BR / ES); an unmarked top-level heading still does; the same for every track ([SEC] under [DIST]) (got " +
+      js([nested, secUnder, secTop, secOwn]) + ")");
+
     // --- a track pack named 'data' (or 'etl'), recorded by a feature before 1.21, is that feature's MISSING pack — never the built-in track; doctor and
     // spec_upgrade say "from before 1.21"; add-track data adopts the built-in one, --remove drops the alias pack
     const lp = d("legacy");
@@ -200,6 +232,22 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
   }
 
   { // 1.21 F4 — the +data classifier: precision / recall on EN / PT / ES texts (positives and hard negatives), the cues, and the older tracks untouched
+    // 1.21 review B3 / B4: the reviewer's everyday texts — a lakehouse to rent, ELT teachers, a kitchen's freshness check, parquet flooring, SCD
+    // patients, medication / water / calorie ingestion, duplicate rows in the users table, React Query's stale data, the Portuguese BI (ID card),
+    // a training plan's "carga incremental", a horse's lineage, a stock screen per warehouse "in a table" — and their data senses
+    const B3_OFF = ["Guests can book a lakehouse or a cabin for the weekend and pay a deposit online.", "ELT teachers can assign graded reading exercises to their classes.",
+      "Kitchen staff log a freshness check for each produce crate at delivery.", "Sell parquet and laminate flooring; show the price per square metre in a table.",
+      "Store SCD patient records in the patients table.", "Track medication ingestion times per patient in a table.",
+      "Prevent duplicate rows in the users table when the signup form is double-submitted.", "Use React Query so the dashboard never shows stale data after a mutation.",
+      "Registar a ingestão diária de água de cada utente numa tabela.", "Validar o número do BI e o NIF na tabela de clientes.",
+      "Plano de treino com carga incremental semanal para cada atleta.", "Mostrar a linhagem de cada cavalo numa tabela.",
+      "Registrar la ingesta diaria de calorías de cada paciente en una tabla.", "Mostrar el linaje de cada caballo en una tabla.",
+      "Plan de entrenamiento con carga incremental semanal para cada atleta.",
+      "Show stock levels per warehouse so pickers know which shelf to restock.", "Show stock levels per warehouse in a table so pickers know which shelf to restock."];
+    const B3_ON = ["The raw zone of the lakehouse keeps 30 days of events in Delta tables.", "Replace the vendor's ELT tool with our own ELT job that loads the raw events every hour.",
+      "Add a freshness check on the orders table so the owner knows when the nightly load is late.",
+      "The finance team's BI dashboard reads the monthly revenue from the warehouse snapshots.", "Carga incremental de dados das encomendas para o armazém de dados.",
+      "Mostrar a linhagem de cada métrica do painel até às tabelas de origem.", "Write the clickstream as Parquet partitioned by day."];
     const CORPUS = [
       // positives — EN
       ["data", "Build an ETL pipeline that loads the orders from Postgres into BigQuery every night."], ["data", "A nightly job that recomputes the loyalty points in the warehouse."],
@@ -244,6 +292,8 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
       ["", "Exportar as encomendas em CSV."], ["", "Migrar a tabela de utilizadores para acrescentar uma coluna."], ["", "Importar um CSV de contactos."], ["", "Sincronizar o stock entre os armazéns."],
       ["", "Painel de vendas por região."], ["", "Exportar los pedidos a CSV."], ["", "Migrar la tabla de usuarios para añadir una columna."], ["", "Importar un CSV de contactos."],
       ["", "Sincronizar el stock entre los almacenes."], ["", "Informe mensual de ventas en PDF."],
+      // 1.21 review B3 / B4 — words that mean something else in everyday text (hard negatives) and their data senses (positives)
+      ...B3_OFF.map((t) => ["", t]), ...B3_ON.map((t) => ["data", t]),
     ];
     let tp = 0, fp = 0, pos = 0;
     const wrong = [];
@@ -255,6 +305,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
     const precision = tp / (tp + fp || 1), recall = tp / (pos || 1);
     ok(CORPUS.length >= 40 && pos >= 20 && precision >= 0.9 && recall >= 0.85,
       `1.21 F4: +data precision ${(precision * 100).toFixed(0)}% / recall ${(recall * 100).toFixed(0)}% on ${CORPUS.length} EN / PT / ES texts, ${pos} positives (≥ 90% / 85%) (wrong: ` + js(wrong) + ")");
+    // 1.21 review B3: every everyday text is off (+ui stays on for React Query), every data sense on; a table / a query backs no lone anchor
+    // (a strong signal only); ELT, a freshness check, BI and "carga incremental" count only as data phrases; B4: a stock screen per
+    // warehouse is the building — "in a table" no longer keeps the warehouse
+    const b3Off = B3_OFF.filter((t) => onOf(t, "data")), b3On = B3_ON.filter((t) => !onOf(t, "data"));
+    const rq = cls(B3_OFF[7]), scd = cls(B3_OFF[4]), orders = cls("Load the orders table into the warehouse every night with a Spark job.");
+    ok(!b3Off.length && !b3On.length && rq.tracks.includes("ui") && !scd.tracks.includes("data") && scd.possible.some((p) => p.track === "data") &&
+      orders.signals.data.includes("table") && !S.trackSignals("data").strong.includes("elt") && !S.trackSignals("data").weak.includes("BI") && S.trackSignals("data").weak.includes("lakehouse"),
+      "1.21 review B3: +data turns on from data phrases only — a lakehouse to rent, ELT teachers, a kitchen's freshness check, parquet flooring, SCD patients, medication / water / calorie ingestion, duplicate rows in the users table, React Query's stale data (+ui only), the Portuguese BI, a training plan's carga incremental, a horse's lineage (EN / PT / ES) stay off; their data senses turn it on; a table backs a strong signal only (got " +
+      js([b3Off, b3On, rq.label, scd.possible, orders.signals.data]) + ")");
+    const b4 = [cls(B3_OFF[15]), cls(B3_OFF[16])];
+    ok(b4.every((r) => !r.tracks.includes("data") && !(r.signals.data || []).length) && cls("Load the Stripe payouts into the warehouse tables every hour with Fivetran.").tracks.includes("data"),
+      "1.21 review B4: a warehouse in a sentence about stock is the building even with 'in a table' (no +data signal at all) — the keep rule no longer lists tables / columns / queries (got " + js(b4.map((r) => r.signals.data)) + ")");
 
     // the cues: a warehouse in a sentence about the building is no signal, one about data an anchor; a migration's backfill is app-level,
     // a pipeline's an anchor; "into Snowflake" is the product; DBT therapy, a vent's airflow, a galaxy's redshift are no signal; a role alone
@@ -315,6 +377,27 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
       c.tracks.includes("mobile"),
       "1.21 F4: examples/track-packs/mobile copied into .specs/tracks/mobile/ is a valid pack (tracks check: pass, 0 errors, 0 warnings — [MOBILE], 5 sections, steering mobile.md); a +tdd +mobile feature gets US-1.AC-5..9, five [MOBILE] sections, the task block, test rows and checklist items, and mobile-sections gates the design until filled; PT / ES features read pt/ and es/; the classifier turns +mobile on; 'mobile' is no reserved name (got " +
       js([chkM.verdict, chkM.problems, row, doc.checks.filter((x) => x.status === "fail").map((x) => x.id), after.detail, c.label]) + ")");
+    // 1.21 review B6: the pack is localized whole — a PT / pt-BR / ES +tdd +mobile feature (a fresh project each: the steering file is the
+    // first feature's) gets its test rows and steering/mobile.md in its language (pt-BR reads pt/, the folder chain); check stays clean
+    const locRows = { pt: [/## \[MOBILE\] Matriz de Rastreabilidade/, /\| T-\d+ \| e2e \| example \| modo de avião: as ações principais continuam disponíveis/],
+      "pt-BR": [/## \[MOBILE\] Matriz de Rastreabilidade/, /\| T-\d+ \| integração \| property \| dois dispositivos editam o mesmo registo offline/],
+      es: [/## \[MOBILE\] Matriz de Trazabilidad/, /\| T-\d+ \| e2e \| example \| modo avión: las acciones principales siguen disponibles/] };
+    const locSteer = { pt: /^# Padrões Móveis/, "pt-BR": /^# Padrões Móveis/, es: /^# Estándares Móviles/ };
+    const loc = [];
+    for (const lang of ["pt", "pt-BR", "es"]) {
+      const lp = path.join(tmp, "p21-mobile-" + lang);
+      S.initProject(lp, ["core"], lang);
+      fs.cpSync(src, path.join(lp, ".specs", "tracks", "mobile"), { recursive: true });
+      const lc = S.trackPacks(lp, "check");
+      const lf = S.createFeature(lp, "App " + lang, ["tdd", "mobile"], "", undefined, lang);
+      const lPlan = rd(lf.dir, "test-plan.md"), lSteer = rd(lp, ".specs", "steering", "mobile.md"), lTr = S.traceCheck(lp, lf.slug);
+      if (!(lc.verdict === "pass" && lc.errors === 0 && lc.warnings === 0 && locRows[lang].every((re) => re.test(lPlan)) && locSteer[lang].test(lSteer) &&
+        !/airplane mode|Mobile Standards/.test(lPlan + lSteer) && !lTr.uncoveredByTests.length && !lTr.uncoveredByTasks.length))
+        loc.push([lang, lc.verdict, lc.problems, lPlan.split("\n").filter((l) => /US-1\.AC-[5-9] /.test(l)), lSteer.split("\n")[0]]);
+    }
+    ok(!loc.length && ["pt", "es"].every((l) => ["test-plan.md", "steering.md", "requirements.md", "tasks.md", "checklist.md"].every((fr) => fs.existsSync(path.join(src, l, fr)))),
+      "1.21 review B6: the +mobile example pack is localized whole — pt/ and es/ hold test-plan.md and steering.md too; PT / pt-BR (pt/) / ES features get their [MOBILE] test rows and steering/mobile.md in their language; tracks check stays clean (got " +
+      js(loc) + ")");
     // the guide and the README point to it
     const guide = fs.readFileSync(path.join(__dirname, "..", "skills", "dev-spec-driven", "references", "project-tracks.md"), "utf8");
     const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");

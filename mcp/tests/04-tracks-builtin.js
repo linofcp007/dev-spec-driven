@@ -1437,6 +1437,32 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       cls(coordOff[6][1]).negated.tdd.includes("autenticación") && S.classify("Sem uso de IA nem LLM.").negated.ai.includes("llm") && !onOf("Sem uso de IA nem LLM.", "ai"),
       "1.21 F2a: a negation reaches every item of the coordinated list it opens, for every track — 'not add feature flags or canary releases', PT 'nem', ES 'ni', 'Without Kafka, RabbitMQ or SQS', 'Neither … nor', ES 'sin datos personales ni autenticación' (+tdd off); never past 'just', an 'and' or an unclosed comma; 'without downtime' (a hazard) opens no list (got " +
       js([coordOff.filter(([tr, t]) => onOf(t, tr)), coordOn.filter(([tr, t]) => !onOf(t, tr)), neg3.map((r) => [r.negated.obs, r.signals.obs])]) + ")");
+    // 1.21 review B1: a negator followed by another verb negates that VERB, never its objects — "must not lose X nor Y" is a requirement
+    // about X and Y (like a hazard), so no list opens and the negative conjunction after it negates nothing; the verbs whose object IS
+    // what is excluded (use / add / need…) still carry the list on
+    const b1On = ["O sistema não pode perder pagamentos nem duplicar faturas.", "El sistema no debe perder pagos ni duplicar facturas.",
+      "The system must not lose payments nor duplicate invoices.",
+      "Reconciliação noturna do extrato bancário com a contabilidade. Não pode perder pagamentos nem reembolsos.",
+      "Conciliación nocturna del extracto bancario con la contabilidad. No puede perder pagos ni reembolsos.",
+      "The ledger must never lose payments or refunds.", "O sistema não pode perder dados nem reembolsos.", "Sem perder dados nem reembolsos no fecho do mês.",
+      "The system must not lose data nor refunds."];
+    const b1Off = [["tdd", "The export must not use payments or subscriptions."], ["tdd", "Não precisamos de filas nem de pagamentos."],
+      ["obs", "Não vamos usar filas nem lançamento canário."], ["obs", "Nem iniciar sessão nem lançamento canário."], ["tdd", "Nem iniciar sessão nem pagamentos."],
+      ["obs", "1.21 F2a: 'not add feature flags or canary releases', 'Without Kafka, RabbitMQ or SQS', done"]];
+    ok(b1On.every((t) => onOf(t, "tdd")) && b1Off.every(([tr, t]) => !onOf(t, tr)) && !onOf("1.21 F2a: 'not add feature flags or canary releases', 'Without Kafka, RabbitMQ or SQS', done", "dist") &&
+      cls(b1On[2]).negated.tdd.includes("payment") && !cls(b1On[3]).negated.tdd.length,
+      "1.21 review B1: a negated verb never turns its objects into exclusions — 'must not lose payments nor duplicate invoices', PT 'não pode perder … nem', ES 'no debe / no puede perder … ni', 'must never lose payments or refunds' keep +tdd; 'must not use', 'Não precisamos de', 'Não vamos usar', 'Nem … nem' and a quoted \"'not add X or Y'\" still negate the whole list (got " +
+      js([b1On.filter((t) => !onOf(t, "tdd")), b1Off.filter(([tr, t]) => onOf(t, tr))]) + ")");
+    // 1.21 review B2: a comma after the list's closing conjunction — or one before an article (a new clause's subject) — ends the list
+    const b2 = [["tdd", "ai", "Without an LLM or embeddings, the checkout or a subscription page is the priority."],
+      ["saas", "dist", "Without Kafka or RabbitMQ, the webhook or a nightly retry job handles delivery."],
+      ["tdd", "ai", "Sem LLM nem embeddings, o checkout ou a subscrição são a prioridade."], ["tdd", "ai", "Sin LLM ni embeddings, el checkout o la suscripción son la prioridad."],
+      ["tdd", "ai", "No LLM, the checkout or the subscription flow first."]];
+    const b2r = b2.map(([on, off, t]) => [on, off, cls(t)]);
+    ok(b2r.every(([on, off, r]) => r.tracks.includes(on) && !r.signals[on].some((k) => r.negated[on].includes(k)) && (off === "dist" ? r.negated.dist.length === 2 : !r.tracks.includes(off))) &&
+      coordOff.every(([tr, t]) => !onOf(t, tr)),
+      "1.21 review B2: a list has one closing conjunction — 'Without an LLM or embeddings, the checkout or a subscription page…' (EN / PT / ES) keeps +tdd (the LLM and embeddings stay negated), 'Without Kafka or RabbitMQ, the webhook or a nightly retry job…' keeps the webhook; 'Without Kafka, RabbitMQ or SQS' still negates all three (got " +
+      js(b2r.map(([, , r]) => [r.label, r.negated])) + ")");
     // +ui everyday words: a confirm dialog / toast notification / snackbar is UI work; a widget a display verb shows is strong; errors
     // next to each field and a mobile-friendly screen are anchors; a "snack bar", "the modal verbs", a login FORM alone stay off
     const uiOn = ["Show a confirm dialog before a user deletes a project, with the project name typed to confirm.",

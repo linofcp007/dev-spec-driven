@@ -12,7 +12,7 @@ Call the `spec_add_track` MCP tool `{name, track}` (CLI `dev-spec add-track <fea
 **additive and never overwrites**: it scaffolds only the missing artifacts for the new track (test-plan.md +
 tests/ for +tdd; eval-plan.md + prompts/ + evals/ for +ai; load-test.md for +saas), appends that track's
 mandatory `design.md` sections (`[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]` / `[API]` / `[UI]` / `[OBS]` / `[DATA]`) and template tasks if they aren't
-already there, adds its steering files (`security.md` for +sec, `privacy.md` for +privacy, `distributed.md` for +dist, `api.md` for +api, `ui.md` for +ui, `observability.md` for +obs), updates
+already there, adds its steering files (`security.md` for +sec, `privacy.md` for +privacy, `distributed.md` for +dist, `api.md` for +api, `ui.md` for +ui, `observability.md` for +obs, `data.md` for +data), updates
 `classification.md`'s Active Tracks line and persists the track set in `.state.json`. Use it when a feature grew into
 needing tests, scale, AI, security, privacy, data-consistency, API-contract, UI or operability work after it was first created. After running it, report which files
 were added, tell the user to fill the new design sections and tasks (the design gate refuses unfilled track sections)

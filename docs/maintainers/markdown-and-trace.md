@@ -13,7 +13,9 @@ matrix.
 - **Mandatory sections**: `extractSection(md, syn, marker)` prefers the heading carrying the track
   marker (`[SaaS]`/`[AI]`), skips fenced code, **never matches the H1 title** (it carries the feature name)
   and requires the synonym to START the heading (after marker / numbering / "Section N:" / an emoji), word-bounded; a
-  track section also accepts an English inflection of its name (s / es / ing — "Threat Modeling").
+  track section also accepts an English inflection of its name (s / es / ing — "Threat Modeling"). The unmarked fallback
+  never takes a heading carrying another track's marker, nor (1.21 review B5 — `inOtherTrackContext`) one nested under a
+  heading that does (the nearest marked ancestor decides): "### Data quality" under "## [PRIVACY] …" is +privacy's text.
   "Unfilled" = the `> **TODO**` sentinel is still there OR the body is empty. `spec_status` reports each
   section as present + filled (CLI ✓ filled · ◐ unfilled · ✗ missing; a sized feature's ○ optional, ✓ covered).
   **1.21 F5:** "template" = every visible line is a line of a track design block as the scaffold wrote it
