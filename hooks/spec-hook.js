@@ -224,12 +224,13 @@ function handle(raw) {
         // while any remain. The gates' own view: a removed track's [SaaS]/[AI] criteria are inactive.
         const ph = (spec.featurePlaceholders(pdir, feature, fileName) || { items: [] }).items;
         const G = spec.msg(lang).gates;
-        const phLine = ph.length ? G.hookPlaceholders(ph.length, ph.slice(0, 3).map((p) => `L${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`).join(", ") + (ph.length > 3 ? ", " + G.more(ph.length - 3) : "")) : null;
+        // (1.21 verify V7: named after the file saved — a change's change.md is approved as the plan, it has no design)
+        const phLine = ph.length ? G.hookPlaceholders(ph.length, ph.slice(0, 3).map((p) => `L${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`).join(", ") + (ph.length > 3 ? ", " + G.more(ph.length - 3) : ""), fileName) : null;
         if (!errs.length && !warns.length) return phLine || h.earsClean(r.summary.criteriaDetected);
         // The severity label `dev-spec ears` prints (cliOutput.words: aviso / erro · aviso / error); EN keeps warn / error.
         const words = (spec.msg(lang).cliOutput && spec.msg(lang).cliOutput.words) || {};
         const top = [...errs, ...warns].slice(0, 6).map((i) => `  L${i.line} [${words[i.severity] || i.severity}] ${i.msg}`);
-        return h.earsIssues(errs.length, warns.length, top.join("\n"), errs.length > 0) + (phLine ? "\n" + phLine : "");
+        return h.earsIssues(errs.length, warns.length, top.join("\n"), errs.length > 0, fileName) + (phLine ? "\n" + phLine : "");
       };
       // The trace lines of a feature's tasks — tasks.md, or a change's change.md — or null.
       const traceText = () => {

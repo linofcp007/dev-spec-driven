@@ -469,7 +469,9 @@ function phaseContent(dir, phase, kind) {
   const file = phaseFile(phase, kind);
   const raw = file ? readIfExists(path.join(dir, file)) : null;
   const c = { fingerprint: raw != null ? textFingerprint(raw, phase) : null, designFingerprint: null };
-  if (file && file !== PHASE_FILE[phase]) {
+  // (1.21 verify V4: a change's plan signs off change.md ALONE — approvePhase records no designFingerprint for it; reading
+  // tasks.md here, the alias of that very change.md, gave every role sign-off a second fingerprint no record carries: stale forever)
+  if (file && file !== PHASE_FILE[phase] && kind !== "change") {
     const d = readIfExists(path.join(dir, PHASE_FILE[phase]));
     if (d != null) c.designFingerprint = textFingerprint(d, phase);
   }
@@ -838,7 +840,7 @@ function snapshotPhases(dir, state, changedFiles) {
     const snap = latestSnapshot(dir, state, p);
     if (!snap) return false;
     if (changedFiles.includes(phaseFile(p, kind))) return true;
-    return phaseFile(p, kind) !== PHASE_FILE[p] && changedFiles.includes(PHASE_FILE[p]) && !!designBaseline(dir, snap, state.approvals[p]);
+    return kind !== "change" && phaseFile(p, kind) !== PHASE_FILE[p] && changedFiles.includes(PHASE_FILE[p]) && !!designBaseline(dir, snap, state.approvals[p]); // (a change: change.md alone)
   });
 }
 
@@ -1544,7 +1546,7 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
         need("ears", !unlinted, unlinted ? m.earsNoCriteria(unlinted, CHANGE_FILE) : "");
         noPlaceholders(CHANGE_FILE);
         const mk = clarificationMarkers(text);
-        need("clarifications", !mk.length, m.clarificationsOpen(mk.length));
+        need("clarifications", !mk.length, m.clarificationsOpenPlan(mk.length)); // (1.21 verify V7: no design to resolve them before)
         const dups = acDuplicates(crit);
         need("ac-uniqueness", !dups.length, m.acDup(dups.join(", ")));
         need("placeholders", parseTasks(text).some((t) => !isPlaceholderTask(t.text)), G.noRealTasks);

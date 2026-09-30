@@ -1328,6 +1328,7 @@ const msg = {
       steeringOk: "steering esencial presente (incl. constitución)",
       requirementsMissing: "falta requirements.md",
       clarificationsOpen: (n) => `${n} [NEEDS CLARIFICATION] sin resolver — resuelve antes del diseño`,
+      clarificationsOpenPlan: (n) => `${n} [NEEDS CLARIFICATION] sin resolver en change.md — resuelve antes de aprobar el plan`,
       clarificationsNone: "ninguno sin resolver",
       scPresent: "presente",
       scMissing: "sin criterios de éxito medibles SC-###",
@@ -1396,11 +1397,16 @@ const msg = {
       rateLimit: "Especifica los límites de tasa (por usuario / por inquilino / global).",
       aiQuality: "Especifica el objetivo de calidad de salida y el comportamiento de rechazo para la ruta de IA.",
       aiCost: "Especifica un techo de coste por solicitud ($/tokens).",
+      changeSummary: "Escribe el Resumen del cambio en change.md: qué cambia y por qué, en una línea.",
+      changeCriteria: "Escribe 1–3 criterios de aceptación EARS en change.md (1. **US-1.AC-1** — CUANDO … EL SISTEMA DEBE …).",
+      changeApproach: "Escribe el Enfoque en change.md: qué toca el cambio, y por qué eso es todo.",
+      changeScope: (detail) => `Mantenlo como cambio, o conviértelo en una función: ${detail}.`,
     },
     hook: {
       earsClean: (n) => `Verificación EARS: ${n} criterios, todo limpio ✓`,
-      earsIssues: (errs, warns, top, hasErr) =>
-        `Verificación EARS en requirements.md — ${errs} error(es), ${warns} aviso(s):\n${top}` + (hasErr ? "\nCorrige los errores antes de avanzar al diseño." : ""),
+      earsIssues: (errs, warns, top, hasErr, file = "requirements.md") =>
+        `Verificación EARS en ${file} — ${errs} error(es), ${warns} aviso(s):\n${top}` +
+        (hasErr ? (file === "change.md" ? "\nCorrige los errores antes de aprobar el plan." : "\nCorrige los errores antes de avanzar al diseño.") : ""),
       traceOk: (n) => `Trazabilidad: los ${n} ACs cubiertos por tareas ✓`,
       traceGaps: (feature, parts) => `Lagunas de trazabilidad en ${feature}:\n  - ${parts}`,
       roadmapUpdated: (pct, complete, total) => `Roadmap actualizado → ${pct}% (${complete}/${total} funciones).`,
@@ -1688,7 +1694,7 @@ const msg = {
       evalSetsMissing: "evals/golden.json no existe o no tiene ítems de eval ({\"items\": […]}) — escribe primero el conjunto golden de esta función",
       testsGateChecks: (ids) => `(el gate de aprobación comprueba esto: ${ids})`,
       clarifyPlaceholders: (file, n, list) => `Sustituye los ${n} placeholder(s)/TBD de la plantilla en ${file}: ${list}`,
-      hookPlaceholders: (n, list) => `Placeholders de la plantilla: ${n} sin rellenar en requirements.md (${list}) — sustitúyelos antes de aprobar los requisitos.`,
+      hookPlaceholders: (n, list, file = "requirements.md") => `Placeholders de la plantilla: ${n} sin rellenar en ${file} (${list}) — sustitúyelos antes de aprobar ${file === "change.md" ? "el plan" : "los requisitos"}.`,
     },
 
     brownfield: {
@@ -2896,6 +2902,7 @@ const msg = {
       badText: (field) => `${field} debe ser texto.`,
       tooLong: (field, max) => `${field} es demasiado largo (como máximo ${max} caracteres).`,
       badKind: (v) => `kind debe ser decision o discovery (recibido: ${v}).`,
+      badAffectsChange: (list) => `referencia(s) _Affects:_ desconocida(s): ${list} — un cambio nombra un AC ID que su change.md define, o un título de sección de change.md (Resumen, Criterios de Aceptación, Enfoque, Tareas). No se escribió nada.`,
       badAffects: (list) => `referencia(s) _Affects:_ desconocida(s): ${list} — un AC ID debe estar definido en requirements.md, un T-ID planificado en test-plan.md, un ID EC/NFR/SC escrito en requirements.md; cualquier otra debe ser un título de sección de design.md (bug.md / design.md en un bugfix, spike.md en un spike). No se escribió nada.`,
       badSupersedes: (list) => `_Supersedes:_ debe indicar decisiones que ya están en este registro (D-n): ${list}. No se escribió nada.`,
       unsafeFile: (rel) => `${rel} no es un archivo normal dentro de .specs/ (es un enlace simbólico, o apunta fuera del proyecto) — sustitúyelo primero por un archivo normal. No se escribió nada.`,

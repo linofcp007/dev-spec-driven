@@ -952,7 +952,7 @@ function gherkinFeature(projectDir, f, opts = {}) {
   const idx = requirementIndex(reqs);
   const mx = buildTraceMatrix(projectDir, f, { supBy: opts.supBy });
   const byTrack = markerTracks().filter((tr) => tracks.includes(tr)).map((tr) => ({ tag: ghTag(tr), acs: trackAcIds(reqs, tr) }));
-  const lines = [`# language: ${i18n.baseLang(lang)}`, `# ${G.autogen}`, `# ${G.source(".specs/" + slug + "/requirements.md")}`];
+  const lines = [`# language: ${i18n.baseLang(lang)}`, `# ${G.autogen}`, `# ${G.source(".specs/" + slug + "/" + (state.kind === "change" ? CHANGE_FILE : "requirements.md"))}`]; // a change: its one file (1.21 verify V7)
   const ftags = gherkinFeatureTags(tracks, state.kind);
   if (ftags.length) lines.push(ftags.join(" "));
   // Gherkin is plain text: markdown escapes and entities are written as the characters a reader sees (mdPlainText — 1.17
@@ -1087,7 +1087,7 @@ function trackerRecords(projectDir, f, lang, supBy) {
     const occ = (seen.get(String(b.number)) || 0) + 1;
     seen.set(String(b.number), occ);
     return { key: `${slug}/#${b.number}${occ > 1 ? ` (${occ})` : ""}`, parent, type: parent === slug ? "task" : "subtask", summary: `#${b.number} ${ghLine(mdPlainText(withoutTaskMarkers(cleanTaskText(b.text)))) || ghLine(b.text)}`,
-      description: prose.map((l) => l.trim()).filter(Boolean).join("\n") + "\n\n" + T.taskLine(".specs/" + slug + "/tasks.md", b.number),
+      description: prose.map((l) => l.trim()).filter(Boolean).join("\n") + "\n\n" + T.taskLine(".specs/" + slug + "/" + (kind === "change" ? CHANGE_FILE : "tasks.md"), b.number), // a change: its one file (1.21 verify V7)
       status: b.done ? "done" : "open", labels: cap(base.concat([...extractAcIds(prose.join("\n"))])), estimate: size ? SIZE_POINTS[size] : null };
   });
   // Each story's tasks right after it, then the feature-level ones — parents always before their children.
@@ -1211,8 +1211,10 @@ function changelogData(projectDir, since, only) {
       const ids = (k) => (Array.isArray(c[k]) ? c[k].filter((x) => typeof x === "string" || typeof x === "number").map(String) : []);
       const cr = { feature: s.slug, n: i + 1, at: new Date(timeOf(c.at)).toISOString(), phase: typeof c.phase === "string" ? c.phase : "requirements",
         added: ids("added"), modified: ids("modified"), removed: ids("removed"), reopened: Array.isArray(c.reopened) ? c.reopened.filter((n) => Number.isSafeInteger(n)) : [] };
-      if (cr.phase === "requirements") { // the current text of the requirement IDs it added or modified
-        const idx = requirementIndex(readContained(projectDir, path.join(s.dir, "requirements.md")) || "");
+      const chg = s.st.kind === "change"; // a change's criteria change with its plan (phase tasks; 1.21 review C4) — its criteria view
+      if (cr.phase === "requirements" || (chg && cr.phase === "tasks")) { // the current text of the requirement IDs it added or modified
+        const raw = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
+        const idx = requirementIndex(chg ? changeViews(raw).criteria : raw);
         cr.acs = [...cr.added, ...cr.modified].filter((id) => idx.has(id)).map((id) => ({ id, text: acOneLine(idx.get(id).text, id) }));
       }
       if (s.archived) cr.archived = true;

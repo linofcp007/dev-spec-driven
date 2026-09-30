@@ -611,4 +611,93 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       "1.21 review C10: a change's messages name change.md — task not found, append-tasks (file, 'change.md changed after its approval', phantom 'not in change.md'), the stop gate ('read … .specs/<f>/change.md'), EARS 'change.md cites AC IDs'; spec_status gives an unsized row its status ('template', as doctor); spec_templates lists 'change'; 'a track (+sec) makes it' (EN / PT / ES) (got " +
       JSON.stringify({ nf: nf.error, app: [app.file, app.note], phantom: phantom.error, stop: String(stop.reason).slice(0, 300), ears: earsMid.detail, row }).slice(0, 1600) + ")");
   }
+
+  // --- 1.21 verify — the verification pass on the merged 1.21 (the change kind at the seams) ---
+  const CHANGE_ONE = "# Change: footer\n\n## Summary\nFix the footer text.\n\n## Acceptance Criteria (EARS)\n" +
+    "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer text \"Copyright\".\n\n## Approach\nOne string in templates/footer.html.\n\n## Tasks\n" +
+    "- [ ] 1. [US1] Fix the footer string\n  - _Requirements: US-1.AC-1_\n  - _Verify: node -e \"process.exit(0)\"_\n";
+
+  { // V4 — a change with roles on `tasks`: a role's sign-off of change.md counts (phaseContent read tasks.md — the alias of that
+    // very change.md — as a second fingerprint no record carries, so every sign-off read stale and signoffsComplete never fired)
+    const p = fresh("v4");
+    S.initProject(p, ["core"], "en", { approvalRoles: { tasks: ["tech", "qa"] } });
+    const c = S.createFeature(p, "Footer", undefined, "x", undefined, "en", "change");
+    wr(c.dir, "change.md", CHANGE_ONE);
+    const tech = S.approvePhase(p, c.slug, "tasks", "t", { role: "tech" });
+    const na1 = S.nextAction(p, c.slug);
+    const doc1 = S.specDoctor(p, c.slug);
+    S.writeRoadmapMd(p);
+    const roadmap = rd(path.join(p, ".specs"), "ROADMAP.md");
+    // the merged-branches case: qa's sign-off recorded apart (same content) — every role signed, the phase not approved
+    const st = stateOf(c.dir);
+    st.signoffs.tasks.qa = { ...st.signoffs.tasks.tech, by: "q" };
+    wr(c.dir, ".state.json", JSON.stringify(st, null, 2));
+    const na2 = S.nextAction(p, c.slug);
+    const doc2 = S.specDoctor(p, c.slug);
+    const qa = S.approvePhase(p, c.slug, "tasks", "q", { role: "qa" });
+    ok(tech.ok && tech.pending === true && JSON.stringify(na1.missingRoles) === JSON.stringify(["qa"]) && JSON.stringify(doc1.pendingRoles.tasks.missing) === JSON.stringify(["qa"]) &&
+      doc1.pendingRoles.tasks.stale.length === 0 && !/no longer count/.test(JSON.stringify(doc1.checks)) && /awaiting role sign-off: tasks \(qa\)$/m.test(roadmap) &&
+      na2.signoffsComplete === true && /Every role has signed off 'tasks' \(tech, qa\)/.test(na2.recommendation) && doc2.nextGate && doc2.nextGate.signoffsComplete === true &&
+      qa.ok && qa.approved === "tasks",
+      "1.21 verify V4: a change with roles on tasks — tech's sign-off of change.md counts (missing: qa only, nothing stale, doctor / ROADMAP.md agree); with qa's recorded apart every role has signed (signoffsComplete, next_action and doctor), and qa's sign-off approves the plan (got " +
+      JSON.stringify({ na1: na1.missingRoles, pr: doc1.pendingRoles, na2: [na2.signoffsComplete, na2.recommendation.slice(0, 160)], qa: qa.error || qa.approved }) + ")");
+  }
+
+  { // V6 — spec_clarify asks what the kind / size's doctor asks: a change its criteria view, own sections, EARS and markers (named
+    // change.md, the right line); a size s feature no edge cases / NFRs (they mean size m); MCP = engine
+    const p = fresh("v6");
+    const c = S.createFeature(p, "Footer", undefined, "x", undefined, "en", "change");
+    wr(c.dir, "change.md", CHANGE_ONE);
+    const done = S.clarify(p, c.slug);
+    const viaMcp = payload(await rpc("tools/call", { name: "spec_clarify", arguments: { projectDir: p, name: c.slug } }));
+    const tmpl = S.clarify(p, S.createFeature(p, "Template", undefined, "x", undefined, "en", "change").slug);
+    const gaps = S.createFeature(p, "Gaps", undefined, "x", undefined, "en", "change");
+    wr(gaps.dir, "change.md", CHANGE_ONE.replace("Fix the footer text.", "").replace("One string in templates/footer.html.", "").replace("the footer text \"Copyright\"", "a fast footer [NEEDS CLARIFICATION: which text?]"));
+    const g = S.clarify(p, gaps.slug);
+    const pt = S.createFeature(p, "Rodape", undefined, "x", undefined, "pt", "change");
+    wr(pt.dir, "change.md", "# Alteração: rodapé\n\n## Resumo\n\n## Critérios de Aceitação (EARS)\n1. **US-1.AC-1** — QUANDO a página abre O SISTEMA DEVE mostrar \"Copyright\".\n\n## Abordagem\nUma linha.\n\n## Tarefas\n- [ ] 1. [US1] Corrigir\n  - _Requirements: US-1.AC-1_\n");
+    const gp = S.clarify(p, pt.slug);
+    const sz = S.createFeature(p, "Small", ["core"], "", undefined, "en", undefined, { size: "s" });
+    fill(sz.dir, "requirements.md");
+    wr(sz.dir, "requirements.md", rd(sz.dir, "requirements.md").replace(/<!--[\s\S]*?-->\s*/g, "")); // filled: the template's comment removed too
+    const small = S.clarify(p, sz.slug);
+    const un = S.createFeature(p, "Unsized", ["core"], "", undefined, "en");
+    wr(un.dir, "requirements.md", rd(sz.dir, "requirements.md"));
+    const unsized = S.clarify(p, un.slug);
+    const E = S.msg("en").clarify;
+    const featureOnly = [E.addSuccessCriteria, E.prioritize, E.independentTest, E.edgeCases, E.outOfScope, E.nfr, E.unwanted];
+    ok(done.verdict === "clear" && done.questions.length === 0 && JSON.stringify(viaMcp.questions) === JSON.stringify(done.questions) &&
+      tmpl.questions.length === 1 && /change\.md:7 \[trigger\]/.test(tmpl.questions[0]) && /change\.md:13 \[the change\]/.test(tmpl.questions[0]) && !/requirements\.md/.test(JSON.stringify(tmpl)) &&
+      g.questions.includes(E.changeSummary) && g.questions.includes(E.changeApproach) && g.questions.some((x) => /Resolve \[NEEDS CLARIFICATION\]: which text\?/.test(x)) &&
+      g.questions.some((x) => /Quantify the vague term on line 7/.test(x)) && !g.questions.some((x) => featureOnly.includes(x)) &&
+      gp.questions.includes(S.msg("pt").clarify.changeSummary) && gp.questions.length === 1 &&
+      small.verdict === "clear" && !small.questions.includes(E.edgeCases) && !small.questions.includes(E.nfr) && unsized.questions.includes(E.edgeCases) && unsized.questions.includes(E.nfr),
+      "1.21 verify V6: spec_clarify on a change asks only its own — clear once written (MCP = engine), the template's slots named change.md:<line> (the task line too), a missing Summary / Approach, its markers and vague terms (line into change.md), never stories / SC / P1 / edge cases / out of scope / NFRs / IF…THEN (PT localized); a filled size s feature is clear — no edge-case / NFR question — while the same text unsized is asked both (got " +
+      JSON.stringify({ done: done.questions, tmpl: tmpl.questions, g: g.questions, gp: gp.questions, small: small.questions, unsized: unsized.questions }).slice(0, 1800) + ")");
+  }
+
+  { // V7 — a change's messages name change.md and never its design: doctor's clarifications, the gherkin / tracker sources, decide
+    // --affects (a change.md section is a target; the refusal names change.md)
+    const p = fresh("v7");
+    const c = S.createFeature(p, "Footer", undefined, "x", undefined, "en", "change");
+    wr(c.dir, "change.md", CHANGE_ONE);
+    const gh = S.exportSpecs(p, { name: c.slug, format: "gherkin" }).content;
+    const jira = S.exportSpecs(p, { name: c.slug, format: "jira" }).content;
+    const dOk = S.decide(p, c.slug, { title: "One string", decision: "keep it in footer.html", affects: ["Approach", "US-1.AC-1", "Summary"] });
+    const dBad = S.decide(p, c.slug, { title: "x", decision: "y", affects: ["Data Model"] });
+    const tr = S.traceCheck(p, c.slug);
+    wr(c.dir, "change.md", CHANGE_ONE.replace("One string in templates/footer.html.", "One string [NEEDS CLARIFICATION: which file?]."));
+    const cl = chk(S.specDoctor(p, c.slug), "clarifications");
+    const ap = S.approvePhase(p, c.slug, null, "t", { through: "tasks" });
+    const apCl = (ap.checks || []).find((x) => x.id === "clarifications") || {};
+    const pt = S.msg("pt"), es = S.msg("es");
+    ok(/^# Source: \.specs\/footer\/change\.md — /m.test(gh) && /dev-spec task #1 — \.specs\/footer\/change\.md/.test(jira) && !/tasks\.md|requirements\.md/.test(gh + jira) &&
+      dOk.ok && dOk.affects.join() === "Approach,US-1.AC-1,Summary" && dBad.ok === false && /a section heading of change\.md \(Summary, Acceptance Criteria, Approach, Tasks\)/.test(dBad.error) &&
+      !/design\.md/.test(dBad.error) && (tr.phantomAffects || []).length === 0 &&
+      cl.status === "fail" && /in change\.md — resolve before approving the plan/.test(cl.detail) && !/design/.test(cl.detail) && ap.ok === false && /approving the plan/.test(apCl.detail || "") &&
+      /em change\.md — [\s\S]*aprovar o plano/.test(pt.hook.earsIssues(1, 0, "L1", true, "change.md")) && /antes de aprobar el plan/.test(es.gates.hookPlaceholders(1, "L1 [x]", "change.md")) &&
+      /before advancing to design/.test(S.msg("en").hook.earsIssues(1, 0, "L1", true)) && /in requirements\.md/.test(S.msg("en").gates.hookPlaceholders(1, "L1 [x]")),
+      "1.21 verify V7: a change names change.md — gherkin '# Source: .specs/<f>/change.md', the tracker's 'dev-spec task #1 — .specs/<f>/change.md', decide --affects takes a change.md section (Approach, Summary) and its refusal names change.md's sections; doctor's and the plan gate's clarifications say 'before approving the plan', never design; the save hook's EARS / placeholder lines (EN / PT / ES) name the file, requirements.md keeps its wording (got " +
+      JSON.stringify({ gh: gh.split("\n")[2], dOk: dOk.error || dOk.affects, dBad: dBad.error, cl: cl.detail, ap: apCl.detail }).slice(0, 1400) + ")");
+  }
 };
