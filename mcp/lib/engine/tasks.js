@@ -23,7 +23,7 @@ let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDeci
   ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, reuseQuotedSection, trackSectionTable;
+  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE;
 function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
@@ -34,7 +34,7 @@ function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, b
   REPRO_SYN, ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, reuseQuotedSection, trackSectionTable } = E); }
+  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
 // scanner — so status/next/phase can never count a task that complete/brief/finish don't see.
@@ -453,7 +453,7 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   // is never ticked, "1.1" is not task 1, and a duplicated number resolves to its first OPEN task.
   const blocks = taskBlocks(text);
   const task = resolveTask(blocks, n);
-  if (!task) return { ok: false, error: E.taskNotFound(n) };
+  if (!task) return { ok: false, error: E.taskNotFound(n, tasksFileName(f.dir)) };
   const dup = blocks.filter((b) => b.number === n).length > 1;
   const lng = featureLang(projectDir, f.slug);
   const EV = i18n.msg(lng).evidence;
@@ -624,7 +624,7 @@ function untickTask(projectDir, name, number, opts = {}) {
   if (reason.error) return { ok: false, error: reason.error };
   const blocks = taskBlocks(text);
   const same = blocks.filter((b) => b.number === n);
-  if (!same.length) return { ok: false, error: E.taskNotFound(n) };
+  if (!same.length) return { ok: false, error: E.taskNotFound(n, tasksFileName(f.dir)) };
   // 1.16 U review 2: several TICKED tasks share the number — undo can't know which tick was the mistake (done ticks the first
   // OPEN one, so "the first ticked" was usually the right tick of another task: its proof went stale). Refused, nothing
   // changed; duplicateTicked + tasks [{number, line, text}] are stable. Renumber them first (doctor warns duplicate-tasks).
@@ -847,13 +847,16 @@ function taskBlocks(tasksText) {
   TASK_BLOCKS_MEMO.set(key, blocks);
   return blocks.map((b) => ({ ...b, body: b.body.slice(), bodyCode: b.bodyCode.slice() }));
 }
-function scanTaskBlocks(tasksText) {
+// ownLines (changeViews only): an array filled with true at every line index a task block holds — its task line, its body
+// lines and the fenced code it owns.
+function scanTaskBlocks(tasksText, ownLines) {
   const blocks = [];
   let phase = null;
   let cur = null;
   let open = []; // tasks of the current section still waiting for their checkpoint
   let prevBlank = false;
   let owner = null; // the task a fenced block belongs to (null = a free-standing block)
+  const hold = (i) => { if (ownLines) ownLines[i] = true; };
   scanTaskLines(tasksText).forEach((ln, i) => {
     const line = ln.vis;
     if (ln.code) {
@@ -861,6 +864,7 @@ function scanTaskBlocks(tasksText) {
       // it) — flagged in bodyCode: an example's _Verify:_ / _Implements:_ / IDs are never the task's own (taskProse).
       if (ln.fenceOpen) owner = cur && line.trim() && (/^\s/.test(line) || !prevBlank) ? cur : null;
       if (owner && line.trim()) { owner.body.push(line.trim()); owner.bodyCode.push(owner.body.length - 1); }
+      if (owner) hold(i);
       if (!owner) cur = null;
       prevBlank = !line.trim();
       return;
@@ -896,8 +900,10 @@ function scanTaskBlocks(tasksText) {
       };
       blocks.push(cur);
       open.push(cur);
+      hold(i);
     } else if (cur && line.trim() && (/^\s/.test(line) || !prevBlank)) {
       cur.body.push(line.trim()); // indented sub-line, or a lazy continuation right under the task
+      hold(i);
     } else if (line.trim()) {
       cur = null; // un-indented prose after a blank line is not part of the task
     }
@@ -954,6 +960,33 @@ function redPhaseHint(block, slug, lang) {
 // AC/T IDs and _Implements:_ from it, so a fenced example is never coverage nor a planned file.
 function tasksProseText(tasksText) {
   return scanTaskLines(tasksText).map((l) => (l.code ? "" : l.vis)).join("\n");
+}
+
+// 1.21 review C1 — a CHANGE keeps its criteria AND its tasks in ONE file, change.md (read through the requirements.md /
+// tasks.md alias): read whole, a task's `_Requirements: US-1.AC-7_` counted as a DEFINED criterion and every AC as covered by
+// its own definition — trace_check could never fail. Two views of the text, line for line (the other lines blanked, so a line
+// number still points into change.md): `criteria` = the file WITHOUT its task blocks (what EARS, trace's required ACs, the scope
+// check, the matrix and spec_impact read as the change's criteria), `tasks` = ONLY its task blocks (taskBlocks' own lines — the
+// task line, its body, the fenced code it owns): what trace reads as the tasks.
+function changeViews(text) {
+  const src = String(text == null ? "" : text);
+  const lines = src.split("\n");
+  const own = new Array(lines.length).fill(false);
+  scanTaskBlocks(src, own);
+  return { criteria: lines.map((l, i) => (own[i] ? "" : l)).join("\n"), tasks: lines.map((l, i) => (own[i] ? l : "")).join("\n") };
+}
+// A feature's criteria text as every reader of its criteria reads it: requirements.md, or — a change — its change.md without the
+// task blocks (changeViews). null when there is none.
+function criteriaText(dir) {
+  const text = readIfExists(path.join(dir, "requirements.md"));
+  return text != null && isChangeDir(dir) ? changeViews(text).criteria : text;
+}
+// The file a feature's tasks live in, as messages name it: tasks.md, or a change's change.md (1.21 review C10).
+const tasksFileName = (dir) => (isChangeDir(dir) ? CHANGE_FILE : "tasks.md");
+// …and its tasks text for the readers of IDs in it (trace_check): tasks.md, or a change's task blocks alone.
+function tasksIdText(dir) {
+  const text = readIfExists(path.join(dir, "tasks.md"));
+  return text != null && isChangeDir(dir) ? changeViews(text).tasks : text;
 }
 
 // `_Label: value_` markers on the task line or its sub-lines — or `*Label: value*`, the same italics (a renderer shows
@@ -1207,10 +1240,10 @@ function taskBrief(projectDir, name, number, opts = {}) {
     const n = taskNumber(number);
     if (!Number.isFinite(n)) return { ok: false, error: E.numberInt };
     block = resolveTask(blocks, n); // the task completeTask would tick (first OPEN one of a duplicated number)
-    if (!block) return { ok: false, error: E.taskNotFound(n) };
+    if (!block) return { ok: false, error: E.taskNotFound(n, tasksFileName(dir)) };
   }
 
-  const reqText = readIfExists(path.join(dir, "requirements.md")) || "";
+  const reqText = criteriaText(dir) || ""; // a change: its change.md without the task blocks (1.21 review C1)
   const planText = readIfExists(path.join(dir, "test-plan.md")) || "";
   const mk = taskMarkers(block);
   // The task's OWN text — fenced code under it is an example (taskProse): its AC/T IDs are never the task's (they gave the
@@ -1540,7 +1573,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   // must be one requirements.md writes (secondaryDefinitions — trace_check's phantomSecondary rule: SC-1 names SC-001).
   const cited = [...new Set(items.flatMap((t) => t.requirements))];
   if (cited.length) {
-    const reqText = readIfExists(path.join(dir, "requirements.md"));
+    const reqText = criteriaText(dir); // a change: its criteria, never an existing task's reference (1.21 review C1)
     if (reqText == null) return { ok: false, error: M.err.requirementsMissing(slug) };
     const known = acIndex(reqText);
     const secondary = cited.some((id) => /^(?:EC|NFR|SC)-\d+$/.test(id)) ? secondaryDefinitions(reqText).all : new Set();
@@ -1550,7 +1583,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
       return !!m && secondary.has(idKey(m[1], m[2]));
     };
     const phantom = cited.filter((id) => !isKnown(id));
-    if (phantom.length) return { ok: false, error: A.phantom(phantom.join(", ")), phantom };
+    if (phantom.length) return { ok: false, error: A.phantom(phantom.join(", "), isChangeDir(dir) ? CHANGE_FILE : "requirements.md"), phantom };
   }
   // full review Ga6: every _Makes green:_ T-ID must be planned in test-plan.md (its IDs as every reader takes them —
   // planIdText: comments and fenced examples out; T-01 = T-1), like an AC must exist in requirements.md.
@@ -1720,7 +1753,9 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     remaining: now.filter((t) => !t.done).length,
     needsReapproval,
   };
-  if (needsReapproval) res.note = A.reapprove(slug);
+  const tf = tasksFileName(dir); // a change's tasks are in change.md (1.21 review C10)
+  if (tf !== "tasks.md") res.file = tf;
+  if (needsReapproval) res.note = A.reapprove(slug, tf);
   return res;
 }
 
@@ -1730,7 +1765,7 @@ module.exports = { parseTasks, taskDescription, nextTask, parallelBatch, RE_DEP_
   taskNumber, completeTask, UNDO_REASON_MAX, reasonInput, untickTask, RE_TASK_LINE_HEAD, taskLine, RE_CHECKPOINT,
   COMMENT_MASK, RE_TASK_FENCE_OPEN, RE_PARA_BREAK, scanTaskLines, fenceLine, indentOf, hasOutsideCode, backtickRuns,
   TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, taskBlocks, scanTaskBlocks, resolveTask, duplicateTaskNumbers, taskProse,
-  RE_RED_PHASE_TASK, redPhaseTask, redPhaseHint, tasksProseText, TASK_MARKER_LABELS, RE_TASK_MARKER_OPEN,
+  RE_RED_PHASE_TASK, redPhaseTask, redPhaseHint, tasksProseText, changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, RE_TASK_MARKER_OPEN,
   MARKER_CLOSE_PUNCT, taskMarkerSpans, taskMarkerValues, withoutTaskMarkers, WHOLE_VALUE_MARKERS, taskMarkers,
   RE_MARKER_WORD, MARKER_WORD_LABEL, malformedMarkers, RE_GLOBAL_CONSTRAINTS, globalConstraints, isPromptTask,
   RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections, BRIEF_DESIGN_BUDGET, taskBrief, RE_NEW_TASK_TAGS,

@@ -19,11 +19,12 @@ const { MARKER_TRACKS } = require("./tracks.js"); // load time
 let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature, extractAcIds,
   featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket,
   markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists, replaceCodeSpans,
-  stripSupersedes, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf, VALID_TRACKS;
+  stripSupersedes, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf, VALID_TRACKS, wildcardMatch;
 function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature,
   extractAcIds, featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf,
   isPackMarkerBracket, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists,
-  replaceCodeSpans, stripSupersedes, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf, VALID_TRACKS } = E); }
+  replaceCodeSpans, stripSupersedes, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf, VALID_TRACKS,
+  wildcardMatch } = E); }
 
 // The text minus its HTML comments (commentLines' reading: a "<!--" in fenced code or an inline code span is text, one
 // that never closes is text). A comment spanning lines takes its line breaks with it, as the old regex did.
@@ -316,18 +317,29 @@ function sectionState(design, sections, marker, opts = {}) {
     return out("filled");
   });
 }
-// 1.21 F5 — the section's lines the USER wrote: visible (comments and fenced code out), not blank, not a line of a track design
-// block as the scaffold writes it (the built-in tracks' in EN / PT / ES — pt-BR's too for a pt-BR feature — and this project's
-// track packs'): a key per line, whitespace folded, lower-cased, a list bullet or quote marker dropped. Exact lines only — a
-// guidance line the user edited is theirs.
+// 1.21 F5 — the section's lines the USER wrote: visible (comments out), not blank, not a line of a track design block as the
+// scaffold writes it (the built-in tracks' in EN / PT / ES — pt-BR's too for a pt-BR feature — and this project's track packs'):
+// a key per line, whitespace folded, lower-cased, a list bullet or quote marker dropped. Exact lines only — a guidance line the
+// user edited is theirs. Fenced code is the user's too (1.21 review C2 — no track block holds a fence: a section answered by a
+// ```json schema, an OpenAPI ```yaml or a ```mermaid diagram read as "only the template's guidance"): its content lines count,
+// its fence lines don't. A pack's guidance line holding the feature's {{name}} / {{slug}} (the scaffold filled them in) is a
+// LINEAR wildcard (wildcardMatch, the project templates' rule — never a regex built from template text; 1.21 review C6).
 const sectionLineKey = (s) => String(s).replace(/^\s*(?:[-*+]|\d+[.)]|>)\s+/, "").replace(/\s+/g, " ").trim().toLowerCase();
 let SECTION_TEMPLATE_LINES = null; // process-wide: the built-in track blocks (EN / PT / ES)
 let SECTION_TEMPLATE_LINES_BR = null; // … their pt-BR twins, built on the first pt-BR feature
-const PACK_SECTION_LINES = new WeakMap(); // a call's pack registry → its packs' design-block lines (every language)
-function addSectionLines(set, text) {
+const PACK_SECTION_LINES = new WeakMap(); // a call's pack registry → its packs' design-block lines (every language): { set, wild }
+const RE_SECTION_WILD_VAR = /\{\{\s*(?:name|slug)\s*\}\}/; // a key is lower-cased already
+const RE_SECTION_WILD_VAR_G = new RegExp(RE_SECTION_WILD_VAR.source, "g");
+function addSectionLines(set, text, wild) {
   for (const l of stripFencedCode(stripHtmlComments(String(text || ""))).split(/\r?\n/)) {
     if (!l.trim() || /^#{1,6}\s/.test(l) || RE_TODO_SENTINEL.test(l)) continue;
-    set.add(sectionLineKey(l));
+    const k = sectionLineKey(l);
+    if (wild && RE_SECTION_WILD_VAR.test(k)) {
+      const segs = k.split(RE_SECTION_WILD_VAR_G);
+      if (segs.join("").replace(/\s+/g, "").length >= 3) wild.push(segs); // a line that is nothing but a variable matches nothing
+      continue;
+    }
+    set.add(k);
   }
 }
 function sectionTemplateLines(lang) {
@@ -346,22 +358,32 @@ function sectionTemplateLines(lang) {
     sets.push(SECTION_TEMPLATE_LINES_BR);
   }
   const reg = packRegistry();
+  let wild = [];
   if (reg.packs.length) {
-    let set = PACK_SECTION_LINES.get(reg);
-    if (!set) {
-      set = new Set();
-      for (const p of reg.packs) for (const l of i18n.LANGS) { try { addSectionLines(set, packDesignBlock(p, l, {})); } catch { /* ignore */ } }
-      PACK_SECTION_LINES.set(reg, set);
+    let pk = PACK_SECTION_LINES.get(reg);
+    if (!pk) {
+      pk = { set: new Set(), wild: [] };
+      // rendered with no feature values: {{name}} / {{slug}} stay variables (packSubstBasic) and are read as wildcards
+      for (const p of reg.packs) for (const l of i18n.LANGS) { try { addSectionLines(pk.set, packDesignBlock(p, l, {}), pk.wild); } catch { /* ignore */ } }
+      PACK_SECTION_LINES.set(reg, pk);
     }
-    sets.push(set);
+    sets.push(pk.set);
+    wild = pk.wild;
   }
-  return sets;
+  return { sets, wild };
 }
 function sectionOwnLines(body, lang) {
-  const lines = stripFencedCode(stripHtmlComments(body)).split(/\r?\n/).filter((l) => l.trim());
-  if (!lines.length) return [];
-  const sets = sectionTemplateLines(lang);
-  return lines.filter((l) => { const k = sectionLineKey(l); return !sets.some((s) => s.has(k)); });
+  const st = { fence: null };
+  const prose = [], code = [];
+  for (const l of stripHtmlComments(body).split(/\r?\n/)) {
+    const f = fenceStep(st, l);
+    if (f === "open") continue; // a fence line is no content
+    if (f) { if (st.fence && l.trim()) code.push(l); continue; } // inside the fence (still open after the step) — its closer is no content
+    if (l.trim()) prose.push(l);
+  }
+  if (!prose.length) return code;
+  const { sets, wild } = sectionTemplateLines(lang);
+  return prose.filter((l) => { const k = sectionLineKey(l); return !sets.some((s) => s.has(k)) && !wild.some((w) => wildcardMatch(w, k)); }).concat(code);
 }
 // "n/a — <why it does not apply>" (EN / PT / ES; any emphasis around the n/a): the section's own text is that ONE line → "na"
 // when the reason holds at least NA_REASON_WORDS words, "na-short" when it holds fewer; anything else → null.

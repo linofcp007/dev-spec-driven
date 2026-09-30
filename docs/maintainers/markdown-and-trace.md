@@ -18,9 +18,13 @@ matrix.
   section as present + filled (CLI ✓ filled · ◐ unfilled · ✗ missing; a sized feature's ○ optional, ✓ covered).
   **1.21 F5:** "template" = every visible line is a line of a track design block as the scaffold wrote it
   (`sectionOwnLines()` — exact lines of the built-in blocks, EN / PT / ES, pt-BR's for a pt-BR feature, the project's
-  packs'; a guidance line the user edited is theirs) — it fails a new approval and warns on an approved design; a sized
+  packs' — a pack line with `{{name}}` / `{{slug}}` as a linear wildcard; a guidance line the user edited is theirs, and so is
+  fenced code — a json / yaml / mermaid block answers a section, 1.21 review C2) — it fails a new approval and warns on an approved design; a sized
   feature's `na` / `na-short` (an `n/a — <reason>` answer) and `covered` (TRACK_OVERLAPS) — every gate reads them through
   `trackSectionReport()` + `sectionVerdict()` (gates-and-approvals.md → Right-sized rigor).
+- **A change's one file (1.21 review C1):** change.md holds the criteria AND the tasks — every reader takes its two views
+  (`changeViews` / `criteriaText` / `tasksIdText`, tasks.js — gates-and-approvals.md → Right-sized rigor): trace_check's
+  required ACs never include a task's `_Requirements:_` reference, and EARS never lints a task block.
 - **AC/test IDs**: `US-<n>.AC-<n>` and `T-<n>`. Extraction uses a lookbehind guard, NOT `\b` —
   markdown italics (`_US-1.AC-1_`) make `\b` fail because `_` is a word char. Don't reintroduce `\b`.
   A test-plan row covering an AC requirements.md doesn't define is a gap (`phantomAcsInTests`, +tdd; fenced examples

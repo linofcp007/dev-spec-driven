@@ -70,7 +70,8 @@ for (const f of files) {
   if (base === "requirements.md" || base === "change.md") {
     const text = stagedContent(f);
     if (text == null) continue;
-    const r = spec.earsValidate(text, lang);
+    // 1.21 review C1: a change's criteria are its change.md WITHOUT the task blocks (a task line is never linted as one)
+    const r = spec.earsValidate(base === "change.md" ? spec.changeViews(text).criteria : text, lang);
     if (r.ok) {
       const errs = r.issues.filter((i) => i.severity === "error");
       if (errs.length) {

@@ -416,8 +416,10 @@ const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS
 const TRACK_OVERLAPS = [
   { drop: ["saas", "Observability"], by: [["obs", "Telemetry"], ["obs", "Alerting & Runbooks"]] },
   { drop: ["saas", "Performance Budget"], by: [["obs", "SLIs & SLOs"]] },
-  { drop: ["api", "Pagination, Idempotency & Concurrency"], by: [["dist", "Delivery & Idempotency"], ["dist", "Concurrency"]] },
 ];
+// (1.21 review C8: no +api / +dist entry — [API] Pagination, Idempotency & Concurrency asks what [DIST] Delivery & Idempotency /
+// Concurrency never do: cursor pagination, an Idempotency-Key, If-Match / 412, 202 + a status resource for a long-running
+// operation — those are about the API's callers, the [DIST] ones about messages and locks. Both sections stay.)
 // +data (1.21 F4) has no overlap entry: its sections (schema evolution, data quality, backfills, lineage, retention & cost) ask
 // what no other track's do — [DIST] Delivery & Idempotency is about messages, not re-running a partition; [PRIVACY] retention is
 // about personal data, not storage tiers and query cost.

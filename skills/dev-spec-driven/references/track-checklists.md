@@ -87,8 +87,9 @@ apply>` (4+ words):
 | +data | Data Contracts & Schema Evolution · Data Quality · Pipeline Idempotency & Backfills | Lineage & Ownership · Retention & Cost |
 
 **Two tracks asking the same thing** (any size): with +obs, `[SaaS] Observability` is answered in `[OBS] Telemetry` /
-`Alerting & Runbooks` and `[SaaS] Performance Budget` in `[OBS] SLIs & SLOs`; with +dist, `[API] Pagination, Idempotency &
-Concurrency` in `[DIST] Delivery & Idempotency` / `Concurrency`. A sized scaffold writes the covering section once (a
+`Alerting & Runbooks` and `[SaaS] Performance Budget` in `[OBS] SLIs & SLOs`. (+api with +dist keeps both: `[API] Pagination,
+Idempotency & Concurrency` asks about the API's callers — cursors, an Idempotency-Key, If-Match / 412, 202 for a long-running
+operation — which `[DIST]`'s message and lock sections never do.) A sized scaffold writes the covering section once (a
 comment says what it also answers); a design that keeps both headings is judged on each. The core API Contracts / Error
 Handling (+api), Security Considerations (+sec) and Testing Strategy (+tdd) are left out of a sized design — the track's
 own sections hold them. **Filled means your own text:** the template's guidance bullet left alone is not an answer.

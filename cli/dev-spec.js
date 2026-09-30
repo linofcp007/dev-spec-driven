@@ -1089,7 +1089,7 @@ function main() {
       const r = spec.appendTasks(projectDir, pos[0], [task], { heading: typeof flags.heading === "string" ? flags.heading : undefined });
       if (!r.ok) return fail(r);
       return out(r, (r) => {
-        console.log(T.appended(r.heading, r.headingCreated));
+        console.log(T.appended(r.heading, r.headingCreated, r.file));
         r.appended.forEach((t) => console.log("  - [ ] " + t.number + ". " + t.text));
         if (r.note) console.log("  ⚠ " + r.note);
       });
@@ -1573,7 +1573,8 @@ function printMatrix(feature, mx, lang) {
   console.log(C.head(feature, mx.tracks, mx.counts));
   const a = mx.approval;
   const when = (iso) => (typeof iso === "string" && iso.length >= 16 ? iso.slice(0, 16).replace("T", " ") + " UTC" : "—");
-  console.log("  " + (a ? C.approved(when(a.at), a.by == null ? "—" : a.by, a.forced) : C.notApproved));
+  const plan = mx.kind === "change"; // 1.21 review C5: a change's criteria are signed off with its plan (change.md)
+  console.log("  " + (a ? (plan ? C.planApproved : C.approved)(when(a.at), a.by == null ? "—" : a.by, a.forced) : plan ? C.planNotApproved : C.notApproved));
   if (!mx.rows.length) return console.log("  " + R.none);
   const len = (s) => [...s].length;
   const cut = (s, n) => (len(s) > n ? [...s].slice(0, n - 1).join("") + "…" : s);
@@ -1627,7 +1628,7 @@ function helpText() {
                                   project (.specs/classifier.json): create learns them from Phase 0 corrections (a word
                                   that drove a suggestion you changed — applies after 2 consistent corrections); set one by
                                   hand (applies at once), forget one (= spec_tracks {action: "signals"})
-  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike, --lang en|pt|pt-BR|es)
+  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike|change, --size xs|s|m|l, --lang en|pt|pt-BR|es)
                                   --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase);
                                   --flow design-first: classification → design → requirements → … (starts from an architecture)
   bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
@@ -1759,7 +1760,7 @@ function helpText() {
                                   DEV_SPEC_BUNDLE_PATH=<file>); rebuild after every plugin update — a stale bundle is ignored
 
   Flags: --json  --project <dir>  --lang en|pt|pt-BR|es (init/create/steering/roadmap/ears)  --order N (depend)
-         --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix|spike (create; spike: --question, --timebox)  --text "…" (ears)
+         --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix|spike|change / --size xs|s|m|l (create; spike: --question, --timebox)  --text "…" (ears)
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
          --role ROLE / --through PHASE (approve)  --roles phase=role+role,… | none (init)

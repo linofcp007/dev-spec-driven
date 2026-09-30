@@ -62,4 +62,60 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
     st.code === 0 && /○ Security Requirements \(optional at this size\)/.test(st.out) && /◐ Threat Model \(unfilled\)/.test(st.out),
     "1.21 F5 (CLI): classify prints the suggested size (--json: suggestedSize / sizeReason, as spec_classify); status marks a size s feature's optional extended section ○ and its core one ◐ while unfilled (got " +
     JSON.stringify({ cls: cls.out.split("\n").filter((l) => /size/i.test(l)), st: st.out.split("\n").filter((l) => /SEC|Threat|Security/.test(l)) }) + ")");
+
+  // --- 1.21 review C — the F5 review's findings on the CLI (the same engine calls as MCP) ---
+  const q = path.join(tmp, "p121-review");
+  S.initProject(q, ["core"], "en");
+  const qrd = (slug, f) => fs.readFileSync(path.join(q, ".specs", slug, f), "utf8");
+  const qwr = (slug, f, t) => fs.writeFileSync(path.join(q, ".specs", slug, f), t);
+  const HEAD = "# Change: footer\n\n## Summary\nFix the footer text and its year.\n\n## Acceptance Criteria (EARS)\n" +
+    "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer text \"Copyright\".\n" +
+    "2. **US-1.AC-2** — WHEN the footer renders THE SYSTEM SHALL show the year 2026.\n\n## Approach\nTwo strings in templates/footer.html.\n\n## Tasks\n";
+  const task = (n, reqs) => `- [ ] ${n}. [US1] Fix string ${n}\n  - _Requirements: ${reqs}_\n  - _Verify: node -e "process.exit(0)"_\n`;
+  run(["create", "Footer", "--kind", "change", "--project", q]);
+
+  // C1: the save hook traces a change's task blocks against its criteria alone — a phantom is named, never "all covered"
+  qwr("footer", "change.md", HEAD.replace(/2\. \*\*US-1\.AC-2\*\*[^\n]*\n/, "") + task(1, "US-1.AC-1, US-1.AC-7"));
+  const qHook = spawnSync(process.execPath, [path.join(hookDir, "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Write", cwd: q,
+    tool_input: { file_path: path.join(q, ".specs", "footer", "change.md") } }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: q, SPEC_PROJECT_DIR: q } });
+  const qCtx = (() => { try { return JSON.parse(qHook.stdout).hookSpecificOutput.additionalContext; } catch { return qHook.stdout; } })();
+  const qTrace = run(["trace", "footer", "--project", q]);
+  ok(qHook.status === 0 && /US-1\.AC-7/.test(qCtx) && !/all 1 ACs covered/.test(qCtx) && qTrace.code === 1 && /US-1\.AC-7/.test(qTrace.out),
+    "1.21 review C1 (CLI, hooks): saving a change.md whose task cites a phantom AC names it (the save hook's trace), and `trace` exits 1 (got " + JSON.stringify({ ctx: String(qCtx).slice(0, 300), trace: qTrace.code }) + ")");
+
+  // C4 / C5: impact without a phase diffs the change's plan; the matrix and the export read it as a change
+  qwr("footer", "change.md", HEAD + task(1, "US-1.AC-1") + task(2, "US-1.AC-2"));
+  const qAp = run(["approve", "footer", "--through", "tasks", "--project", q]);
+  run(["done", "footer", "1", "--run", "--project", q]);
+  qwr("footer", "change.md", qrd("footer", "change.md").replace("the footer text \"Copyright\"", "the footer text \"Copyright 2026 Acme\""));
+  const qImp = run(["impact", "footer", "--project", q]);
+  const qImpReq = run(["impact", "footer", "--phase", "requirements", "--project", q]);
+  const qMx = run(["trace", "footer", "--matrix", "--project", q]);
+  const qExp = run(["export", "footer", "--md", "--project", q]);
+  const qRe = run(["impact", "footer", "--reopen", "--project", q]);
+  ok(qAp.code === 0 && qImp.code === 0 && /Impact: footer · tasks/.test(qImp.out) && /~ US-1\.AC-1/.test(qImp.out) && /--phase tasks --reopen/.test(qImp.out) &&
+    qImpReq.code === 1 && /one file, change\.md/.test(qImpReq.out) && /plan \(change\.md\) approved/.test(qMx.out) &&
+    /\*\*Kind:\*\* change \(size xs\)/.test(qExp.out) && !/^## Design/m.test(qExp.out) && /Plan \(change\.md\)/.test(qExp.out) &&
+    qRe.code === 0 && /Reopened #1/.test(qRe.out) && /^- \[ \] 1\. /m.test(qrd("footer", "change.md")),
+    "1.21 review C4 / C5 (CLI): `impact <change>` (no phase) diffs its plan — criteria by ID, the --phase tasks --reopen hint; --phase requirements exits 1; --reopen unticks the task in change.md; `trace --matrix` reads the plan approval; `export --md` renders a change (got " +
+    JSON.stringify({ imp: qImp.out.slice(0, 300), req: qImpReq.out.slice(0, 200), mx: qMx.out.split("\n")[1], re: qRe.out.slice(0, 200) }) + ")");
+
+  // C3 / C9 / C10: next-action names the call through test-plan; create on an existing change with a track says so; messages name
+  // change.md; the usage lists --kind change / --size; status says what doctor says on an unsized feature
+  run(["create", "Export csv", "tdd", "--size", "s", "--project", q]);
+  const qNa = run(["next-action", "export-csv", "--project", q]);
+  const qAgain = run(["create", "Footer", "saas", "--project", q]);
+  const qApp = run(["append-tasks", "footer", "--task", "Third string", "--req", "US-1.AC-1", "--project", q]);
+  const qNf = run(["undone", "footer", "9", "--project", q]);
+  const qHelp = run(["help"]);
+  run(["create", "Login", "sec", "--project", q]);
+  qwr("login", "design.md", qrd("login", "design.md").split("\n").filter((l) => !/^> \*\*TODO\*\*/.test(l)).join("\n"));
+  const qSt = run(["status", "login", "--project", q]);
+  const qDoc = run(["doctor", "login", "--project", q]);
+  ok(qNa.code === 0 && /--through test-plan/.test(qNa.out) && /\/writeTests export-csv/.test(qNa.out) && qAgain.code === 0 && /Tracks not added — \+saas/.test(qAgain.out) &&
+    /Appended to change\.md/.test(qApp.out) && /change\.md changed after its approval/.test(qApp.out) && qNf.code === 1 && /not found in change\.md/.test(qNf.out) &&
+    /--kind feature\|bugfix\|spike\|change, --size xs\|s\|m\|l/.test(qHelp.out) && /◐ Threat Model \(only the template's guidance\)/.test(qSt.out) &&
+    /Threat Model:only the template's guidance/.test(qDoc.out),
+    "1.21 review C3 / C9 / C10 (CLI): next-action on size s +tdd names --through test-plan then /writeTests; create on an existing change with a track prints 'Tracks not added'; append-tasks / undone name change.md; help lists --kind …|change and --size; status on an unsized feature says 'only the template's guidance', as doctor (got " +
+    JSON.stringify({ na: qNa.out.slice(0, 300), again: qAgain.out.slice(0, 200), app: qApp.out.slice(0, 200), nf: qNf.out, st: qSt.out.split("\n").filter((l) => /Threat/.test(l)) }) + ")");
 };

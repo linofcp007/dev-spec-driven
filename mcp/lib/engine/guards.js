@@ -19,14 +19,14 @@ let activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
-  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap;
+  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile;
 function __link(E) { ({ activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher, GUARD_CODE_EXT,
   guessLang, implementsRel, insideDirAlias, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
-  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap } = E); }
+  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile } = E); }
 
 // roadmap.json meta.guard — the opt-in guard mode read by hooks/guard-hook.js (PreToolUse): true, or "scope" (1.14 C1 — the
 // stricter level, guardLevel()).
@@ -1015,7 +1015,7 @@ function stopCheck(projectDir, opts = {}) {
     // A spike has no project-check gate anywhere (spec_finish, doctor and next_action close it on its decision): never here either.
     const suite = state.kind !== "spike" && blocks.length && blocks.every((b) => b.done) ? suiteStatus(pdir, state, f.dir).missing : [];
     if (!vs.unverifiedDetail.length && !suite.length) { clean.push(f.slug); continue; }
-    features.push({ feature: f.slug, unverified: vs.unverifiedDetail, suite });
+    features.push({ feature: f.slug, unverified: vs.unverifiedDetail, suite, file: phaseFile("tasks", state.kind) }); // a change's tasks are in change.md (1.21 review C10)
   }
   if (!features.length) return res(false, clean.length ? "verified" : "no-recent", { claims: cl.claims, verifiedFeatures: clean });
   const S = i18n.msg(lng).stopGate;
@@ -1029,7 +1029,7 @@ function stopCheck(projectDir, opts = {}) {
     if (f.suite.length) lines.push(S.suiteLine(f.feature, suiteLabel(f.suite, lng)));
   }
   const firstTasks = features.find((f) => f.unverified.length);
-  if (firstTasks) lines.push(S.todoTasks(firstTasks.feature, firstTasks.unverified[0].number));
+  if (firstTasks) lines.push(S.todoTasks(firstTasks.feature, firstTasks.unverified[0].number, firstTasks.file));
   const firstSuite = features.find((f) => f.suite.length);
   if (firstSuite) lines.push(S.todoSuite(firstSuite.feature));
   lines.push(S.plainly);

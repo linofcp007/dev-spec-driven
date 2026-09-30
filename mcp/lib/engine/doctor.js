@@ -34,7 +34,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   trackLabel, trackMarker, trackSectionTable, unverifiedLabel, VALID_TRACKS, verificationStatus, verifyPipes,
   waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  isChangeDir, changeScope;
+  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd;
 function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
@@ -57,7 +57,7 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   TRACK_SECTIONS, trackLabel, trackMarker, trackSectionTable, unverifiedLabel, VALID_TRACKS, verificationStatus,
   verifyPipes, waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  isChangeDir, changeScope } = E); }
+  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -237,8 +237,10 @@ function statusFeature(projectDir, name) {
   // rule (the template's guidance alone is not filled). A sized feature's rows also carry `status` (+ `tier`, `by`).
   const size = featureSize(dir);
   const report = trackSectionReport(design, tracks, { size, lang: featureLang(projectDir, slug) });
-  const sectionView = (st) => st.map((s) => Object.assign({ section: s.section, present: s.status !== "missing" && s.status !== "covered", filled: sectionVerdict(s, { size }) === "pass" && (s.status !== "missing" || !!size) },
-    size ? { status: s.status, tier: s.tier, ...(s.by ? { by: s.by } : {}) } : {}));
+  // (1.21 review C10: an unsized row carries its `status` too — status said "unfilled" where doctor said "only the template's
+  // guidance"; `tier` / `by` stay a sized feature's)
+  const sectionView = (st) => st.map((s) => Object.assign({ section: s.section, present: s.status !== "missing" && s.status !== "covered", filled: sectionVerdict(s, { size }) === "pass" && (s.status !== "missing" || !!size), status: s.status },
+    size ? { tier: s.tier, ...(s.by ? { by: s.by } : {}) } : {}));
   const rowsOf = (tr) => (report.find(([t]) => t === tr) || [])[2] || [];
   let scaleSections = null;
   if (tracks.includes("saas")) scaleSections = sectionView(rowsOf("saas"));
@@ -321,6 +323,9 @@ function nextAction(projectDir, name, opts = {}) {
   // runs, in order): the fill step names every planning artifact through tasks still a template, from the first pending phase on.
   const size = featureSize(dir);
   const planFf = (size === "xs" || size === "s") && kind !== "spike";
+  // 1.21 review C3: where the plan's one call ends — tasks, or the planning phase before a Phase 4 tests gate still ahead
+  // (its gate needs the written failing tests / eval sets: a call through tasks stopped there every time)
+  const ffEnd = planFf ? planFastForwardEnd(dir, tracks, kind, pending) || "tasks" : "tasks";
   let planOpen = [];
   if (pending) {
     if (planFf) {
@@ -397,7 +402,8 @@ function nextAction(projectDir, name, opts = {}) {
     // 1.21 F5 P3 — size XS / S (a change's own hint says it already): the whole plan, then one approval call
     if (planFf && kind !== "change") {
       const files = [...new Set([open.file, ...planOpen.map((r) => r.file)])];
-      recommendation += " " + fm.sizes.planFastForward(slug, size, files.join(", "));
+      recommendation += " " + (ffEnd === "tasks" ? fm.sizes.planFastForward(slug, size, files.join(", "))
+        : fm.sizes.planFastForwardTests(slug, size, files.join(", "), ffEnd, testsWhat));
     }
   } else if (pending && approveMsg[pending] && refused) {
     // Never recommend an approval the approve gate would refuse (it looped: "approve X" → refused → "approve X"…):
@@ -529,8 +535,8 @@ function nextAction(projectDir, name, opts = {}) {
   if (approveExtras && approveExtras.missingRoles) res.missingRoles = approveExtras.missingRoles; // 1.14 B3: stable — the roles to sign
   if (approveExtras && approveExtras.fastForward) res.fastForward = approveExtras.fastForward; // 1.14 B3: {through, phases, role}
   // 1.21 F5 P3: size XS / S — the one approval call the plan ends with, named from the start (the fill step)
-  if (!res.fastForward && planFf && pending && step === "fill" && walk.includes("tasks")) {
-    res.fastForward = { through: "tasks", phases: walk.slice(walk.indexOf(pending), walk.indexOf("tasks") + 1).filter((ph) => !approvals[ph]), role: null };
+  if (!res.fastForward && planFf && pending && step === "fill" && walk.includes(ffEnd)) {
+    res.fastForward = { through: ffEnd, phases: walk.slice(walk.indexOf(pending), walk.indexOf(ffEnd) + 1).filter((ph) => !approvals[ph]), role: null };
   }
   // 1.16 Q1: steering amended after the requirements / design approval — a re-review hint added to whatever the step is, never a
   // step (or a block) of its own; re-approving the phase records the current steering.
@@ -590,7 +596,10 @@ function specDoctor(projectDir, name, opts = {}) {
   }
 
   // Requirements + EARS
-  const reqs = readIfExists(path.join(dir, "requirements.md"));
+  const reqsFull = readIfExists(path.join(dir, "requirements.md"));
+  const isChange = isChangeDir(dir);
+  // 1.21 review C1: a change's criteria are its change.md WITHOUT the task blocks (a task's _Requirements:_ defines nothing)
+  const reqs = reqsFull != null && isChange ? changeViews(reqsFull).criteria : reqsFull;
   if (reqs == null) add("requirements", "fail", m.requirementsMissing);
   else {
     const e = earsValidate(reqs, featureLang(projectDir, slug));
@@ -600,14 +609,14 @@ function specDoctor(projectDir, name, opts = {}) {
     // IDs trace_check counts while EARS linted none of them fails (1.14 full review Pa2): nothing was checked.
     const unlinted = earsUnlinted(reqs, e);
     add("ears", nErr || unlinted ? "fail" : nCrit === 0 ? "warn" : "pass",
-      unlinted ? m.earsNoCriteria(unlinted) : m.earsDetail(nCrit, nErr, e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0));
+      unlinted ? m.earsNoCriteria(unlinted, isChange ? CHANGE_FILE : undefined) : m.earsDetail(nCrit, nErr, e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0));
     // Clarifications gate — design is blocked while any [NEEDS CLARIFICATION] remains.
-    const markers = clarificationMarkers(reqs);
+    const markers = clarificationMarkers(reqsFull);
     add("clarifications", markers.length ? "fail" : "pass", markers.length ? m.clarificationsOpen(markers.length) : m.clarificationsNone);
     // Spec-Kit-style structure — only REAL lines count: the template's P1 legend and placeholder SC-001 don't. (1.21 F5: a change
     // — one change.md, 1–3 criteria — has no stories to prioritize nor success criteria of its own: its scope check instead.)
     const reqsActive = activeDesign(reqs, tracks);
-    if (!isChangeDir(dir)) {
+    if (!isChange) {
       add("success-criteria", hasSuccessCriteria(reqsActive) ? "pass" : "warn", hasSuccessCriteria(reqsActive) ? m.scPresent : m.scMissing);
       add("priorities", hasPriority(reqsActive) ? "pass" : "warn", hasPriority(reqsActive) ? m.prioritiesOk : m.prioritiesMissing);
     } else {
@@ -730,7 +739,7 @@ function specDoctor(projectDir, name, opts = {}) {
     // Secondary IDs (EC / NFR / SC): a warn, never a fail — only when requirements.md defines or the chain cites one.
     const D = fm.deepTrace;
     const secLines = traceWarningLines(tr, lng, TRACE_SECONDARY_KINDS);
-    const secDefined = secondaryDefinitions(readIfExists(path.join(dir, "requirements.md")) || "").defined.size;
+    const secDefined = secondaryDefinitions(criteriaText(dir) || "").defined.size;
     if (secLines.length || secDefined) add("secondary-trace", secLines.length ? "warn" : "pass", secLines.length ? secLines.join("; ") : D.secondaryOk(secDefined));
     // `_Supersedes:_` references that resolve to nothing (a typo, a removed feature): trace_check's warnings, surfaced
     // here too — until fixed, the living catalog shows the AC they meant to replace as current. Never a fail.

@@ -10,7 +10,8 @@ Args: $ARGUMENTS
 Use this when an **approved** artifact was edited afterwards — `spec_doctor` warns `changed-since-approval`,
 `spec_next_action` answers `step: "re-review"`, or the user says "I changed the requirements".
 
-1. Call the `spec_impact` MCP tool `{name, phase}` (phase `requirements` by default, or `design` / `test-plan` /
+1. Call the `spec_impact` MCP tool `{name, phase}` (phase `requirements` by default — a change's is `tasks`, its one
+   `change.md`: criteria by ID, tasks by number —, or `design` / `test-plan` /
    `eval-plan` / `tasks` — the phase `/next-action` names for each changed file; CLI `dev-spec impact <feature> [--phase design]`). It diffs the artifact against the snapshot its latest
    approval saved (`.specs/<feature>/.history/<phase>@<n>.md`):
    - **requirements** — ACs (and SC/EC/NFR IDs) added / modified / removed, and for each modified or removed ID

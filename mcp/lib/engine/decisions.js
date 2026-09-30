@@ -20,7 +20,7 @@ let activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, dupl
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn;
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText;
 function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers,
   ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
@@ -29,7 +29,7 @@ function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn } = E); }
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) · the spike kind (investigate → decide)
@@ -190,7 +190,7 @@ function decisionSectionKeys(text) {
 // What an _Affects:_ reference may name in this feature (see the header comment).
 function decisionTargets(dir, kind) {
   const read = (x) => readIfExists(path.join(dir, x)) || "";
-  const req = read("requirements.md");
+  const req = criteriaText(dir) || ""; // a change: its criteria without the task blocks (1.21 review C1)
   const files = kind === "spike" ? [SPIKE_FILE] : kind === "bugfix" ? ["bug.md", "design.md"] : ["design.md"];
   const sections = new Map(); // key → { title, file }
   for (const file of files) {

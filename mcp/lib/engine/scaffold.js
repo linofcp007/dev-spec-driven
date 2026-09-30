@@ -27,7 +27,8 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   trackMarker, trackRunRe, trackSteeringFiles, trackSteeringStub, trackTaskHeading, trackTokens, unknownSteeringStub,
   unknownTracksError, userDefaultsApplied, VALID_TRACKS, validateApprovalRoles, withRoadmapLock, writeChecks,
   writeFileAtomic, writeIfAbsent, writeRoadmap,
-  CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs;
+  CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
+  trackSectionReport, sectionVerdict;
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -43,7 +44,8 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   trackMarker, trackRunRe, trackSteeringFiles, trackSteeringStub, trackTaskHeading, trackTokens, unknownSteeringStub,
   unknownTracksError, userDefaultsApplied, VALID_TRACKS, validateApprovalRoles, withRoadmapLock, writeChecks,
   writeFileAtomic, writeIfAbsent, writeRoadmap,
-  CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs } = E); }
+  CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
+  trackSectionReport, sectionVerdict } = E); }
 
 // ---------------------------------------------------------------------------
 // Steering scaffolding
@@ -725,7 +727,10 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     put("tasks.md", scaffoldText(projectDir, "spike-tasks", lng, sv, () => SP.tasks(name)));
     const res = finish({ ok: true, slug, dir, kind: "spike", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
     const ignored = given ? pt.tracks.filter((x) => x !== "core") : [];
-    if (res.ok !== false && ignored.length) res.note = [res.note, SP.tracksIgnored(ignored.map((x) => "+" + x).join(", "))].filter(Boolean).join(" ");
+    if (res.ok !== false && ignored.length) {
+      res.tracksIgnored = ignored; // (1.21 review C9: the field a change's create returns too)
+      res.note = [res.note, SP.tracksIgnored(ignored.map((x) => "+" + x).join(", "))].filter(Boolean).join(" ");
+    }
     if (res.ok !== false && spikeIn.until && created.includes(SPIKE_FILE)) res.timebox = spikeIn.until;
     return res;
   }
@@ -734,6 +739,12 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     put(CHANGE_FILE, scaf("change", () => i18n.change({ name, summary }, lng)));
     const res = finish({ ok: true, slug, dir, kind: "change", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
     if (res.ok !== false && created.includes(CHANGE_FILE)) res.note = [res.note, i18n.msg(lng).sizes.changeCreated(slug)].filter(Boolean).join(" ");
+    // 1.21 review C9: an EXISTING change named with tracks (a new one is refused before any write) — never silently: tracksIgnored
+    const ignored = given ? pt.tracks.filter((x) => x !== "core" && !t.includes(x)) : [];
+    if (res.ok !== false && ignored.length) {
+      res.tracksIgnored = ignored;
+      res.note = [res.note, i18n.msg(lng).sizes.tracksIgnored(ignored.map((x) => "+" + x).join(", "), slug)].filter(Boolean).join(" ");
+    }
     return res;
   }
 
@@ -1169,7 +1180,7 @@ function updateActiveTracks(file, label) {
 // and the now-inactive artifacts are listed (re-adding the track brings them back into play).
 // legacy (1.17 D review): pre-1.17 packs of a now reserved name (legacyPackName) to drop from the saved list — their packMarkers
 // record stays (their sections stay inactive, as a removed pack's).
-function removeTracks(projectDir, f, named, lng, legacy = []) {
+function removeTracks(projectDir, f, named, lng, legacy = [], name) {
   const { slug, dir } = f;
   const T = i18n.msg(lng).tracks;
   if (named.includes("core")) return { ok: false, error: T.cannotRemoveCore };
@@ -1186,9 +1197,45 @@ function removeTracks(projectDir, f, named, lng, legacy = []) {
   state.tracks = after.concat(missing.filter((x) => !legacyGone.includes(x))); // a saved track pack the project lacks now stays, inactive (1.15)
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
   updateActiveTracks(path.join(dir, "classification.md"), trackLabel(after));
+  const restored = restoreCoveredSections(dir, gone, after, lng, { name: name || slug, slug });
   maybeRefreshRoadmap(projectDir);
   const all = gone.concat(legacyGone);
-  return { ok: true, feature: slug, removedTracks: all, inactive: inactiveArtifacts(dir, gone, T), tracks: trackLabel(after), note: T.removed(plus(all), slug) };
+  const res = { ok: true, feature: slug, removedTracks: all, inactive: inactiveArtifacts(dir, gone, T), tracks: trackLabel(after), note: T.removed(plus(all), slug) };
+  if (restored.length) { res.restoredSections = restored; res.note += " " + T.restoredSections(restored.join(", ")); }
+  return res;
+}
+// 1.21 review C7 — a SIZED design left out a section another active track covered (TRACK_OVERLAPS: [SaaS] Observability under
+// [OBS] Telemetry …). Removing the covering track leaves it missing, and nothing would write it back: the remaining track's
+// block for that section — heading, `> **TODO**` sentinel, guidance — is appended (write-if-missing, as spec_add_track appends a
+// track's sections) for every such section whose verdict now fails (an optional extended one at size s stays out).
+// → the headings appended ("[SaaS] Observability").
+function restoreCoveredSections(dir, gone, after, lng, vars) {
+  const size = featureSize(dir);
+  const designPath = path.join(dir, "design.md");
+  const design = readIfExists(designPath);
+  if (!size || design == null) return [];
+  const want = [];
+  for (const [tr, , rows] of trackSectionReport(design, after, { size, lang: lng })) {
+    for (const row of rows) {
+      if (row.status !== "missing" || sectionVerdict(row, { size }) !== "fail") continue;
+      if (TRACK_OVERLAPS.some((o) => o.drop[0] === tr && o.drop[1] === row.section && o.by.some(([t]) => gone.includes(t)))) want.push([tr, row.section]);
+    }
+  }
+  if (!want.length) return [];
+  const blocks = [], names = [];
+  for (const [tr, secName] of want) {
+    const sec = (TRACK_SECTIONS[tr] || []).find((s) => s.name === secName);
+    const lines = trackDesignBlock(tr, lng, vars).split("\n");
+    const h = sec ? lines.findIndex((l) => /^## /.test(l) && l.includes(TRACK_MARKER[tr]) && headingMatches(l, sec.syn, true)) : -1;
+    if (h === -1) continue;
+    let end = h + 1;
+    while (end < lines.length && !/^## /.test(lines[end]) && !/^<!--/.test(lines[end])) end++;
+    blocks.push(lines.slice(h, end).join("\n").trimEnd());
+    names.push(lines[h].replace(/^##\s+/, "").trim());
+  }
+  if (!blocks.length) return [];
+  writeFileAtomic(designPath, design.trimEnd() + "\n\n" + blocks.join("\n\n") + "\n");
+  return names;
 }
 
 function inactiveArtifacts(dir, gone, T) {
@@ -1223,7 +1270,7 @@ function addTrack(projectDir, name, track, opts = {}) {
   if (isChangeDir(dir)) return { ok: false, change: true, error: msg.sizes.changeNoTracks(slug) }; // 1.21 F5: a change is core-only — a track makes it a size s feature
   if (opts.remove) {
     if (!pt.named.length && !legacy.length) return { ok: false, error: errs(projectDir, slug).badTrack };
-    return removeTracks(projectDir, f, pt.named, lng, legacy);
+    return removeTracks(projectDir, f, pt.named, lng, legacy, name);
   }
   const asked = pt.named.filter((t) => t !== "core");
   if (!asked.length) return { ok: false, error: errs(projectDir, slug).badTrack };
@@ -1257,4 +1304,4 @@ module.exports = { steeringFilesForTracks, initProject, scaffoldSteeringFile, RE
   pruneBacklog, STEERING_GOVERNED, safeSteeringName, STEERING_MAX_PATTERNS, governingSteering, steeringTargetsMatch,
   featureImplementsTargets, steeringFingerprints, steeringChanges, steeringChangeText, steeringImpact,
   steeringImpactLines, applyTracks, testPlanTracks, trackTemplateAcs, scaffoldTestPlan, trackTaskBlock,
-  updateActiveTracks, removeTracks, inactiveArtifacts, addTrack, removeTrack, __link };
+  updateActiveTracks, removeTracks, restoreCoveredSections, inactiveArtifacts, addTrack, removeTrack, __link };
