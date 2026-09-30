@@ -32,6 +32,36 @@ and U+FEFF gotchas are in CLAUDE.md.
   the error is thrown — the best-effort refreshes swallow that error, and used to leave a `<file>.<pid>.<ts>.tmp`
   in `.specs/` per call. On Windows an EPERM/EACCES/EBUSY rename is retried briefly (a scanner's lock). tasks.md
   ticks go through it too (a reader never sees a truncated tasks.md).
+- **Merging the spec state across branches (1.21 F1a) — git's merge driver.** Two branches that both approve, tick or record
+  evidence used to conflict in `.state.json` / `roadmap.json` (a text merge can't unite two JSON lists). `dev-spec merge-state
+  <base> <ours> <theirs> [<path>]` is git's `%O %A %B %P` driver: `mergeStateText()` (state.js, PURE — no file, no git) parses
+  the three texts, `mergeStateJson(base, ours, theirs, kind)` → `{kind, merged, conflicts}` merges, and the result is written to
+  `<ours>` in ours' own form (BOM, CRLF, final newline). The rules: a key only one side changed takes that side (a deletion too);
+  append-only lists (`approvalHistory`, `changes`, `unticks`) → the union by identity (`HISTORY_ID` phase/at/by/revoked/partial/role
+  · `CHANGE_ID` · `UNTICK_ID`; the same record with different fields — upgrade's seeded snapshot — gets both sides' fields),
+  chronological once theirs added one; `evidence[n]` / `finishChecks[name]` → the record with the latest run `at` (a tie is the same
+  run: its note and stale mark merged), histories merged, deduped, bounded by `EVIDENCE_HISTORY`; `ticks[n]` / `lastTickAt` → the
+  later; `finished` → the later (firstAt the earliest); `createdAt` → the earlier; `approvals[phase]` → the later approval unless
+  a revocation record (`revoked: true`, not `partial`) is later — **revocations win by time**; `signoffs[phase][role]` → the later,
+  dropped when a revocation or the phase's merged approval is no earlier; `lastApprovedPhase` follows the merged approvals (never its
+  own 3-way); `tracks` and every `dependsOn` / role list / milestone `features` → a 3-way SET merge; roadmap.json `features` (by
+  slug), `backlog` (by name, case-insensitive; notes joined with ` · `), `meta.milestones` (by name), `meta.checks` /
+  `meta.approvalRoles` (by key); `meta.specVersion` → the higher (`compareSemver`), `meta.changelogAt` → the later,
+  `meta.evidenceSince` → the earlier; a keyed entry one side deleted and the other changed → the changed one. **Anything else both
+  sides changed differently** (a meta scalar — `lang`, `approvalGuard` —, an unknown key, delete-vs-modify of a plain key) is a real
+  conflict: ours kept there, `{path, base?, ours?, theirs?}` reported (a missing side deleted the key), and written INTO the file as
+  a top-level `mergeConflicts` list — the file stays valid JSON, the driver exits 1 (git marks it conflicted, stderr lists each
+  path), and doctor fails `merge-conflicts` (`mergeConflictsCheck()`, feature + roadmap, both doctors) until someone picks the values
+  and deletes the list. An unparseable ours / theirs merges nothing (exit 1, ours untouched). `ROADMAP.md` / `.html` / `SPECS.md`
+  (`kind: "generated"`) keep ours when BOTH sides carry the AUTO-GENERATED marker (the next write regenerates them); a hand-written
+  one goes to `git merge-file`. `--install [--project]` (CLI only — the engine never calls git; MCP has no tool: git runs the
+  driver) writes the `.gitattributes` block (`mergeAttributes()`, pure, idempotent: a head comment + `MERGE_ATTRIBUTE_LINES`, the
+  file's other lines and EOL kept) in the project folder and this clone's git config `merge.dev-spec-state.name` / `.driver` =
+  `node '<clone>/cli/dev-spec.js' merge-state %O %A %B %P` (forward slashes, single-quoted: git runs it through sh); `--uninstall`
+  removes both (an emptied .gitattributes is deleted). Without `--install` in a clone, git falls back to its text merge (an
+  undefined driver name). **Known limits:** two branches that both approve the same phase write `.history/<phase>@<n>.md` under the
+  same name — different content is a plain add/add conflict (keep the one `approvals[phase]` names); `decisions.md` entries both
+  sides appended conflict as text (and may share a D-n); clock skew between machines decides "later".
 - **Feature mutators hold a cross-process lock** (`withFeatureLock` / `featureLocked` in the exports):
   `completeTask`, `approvePhase`, `appendTasks`, `addTrack` / `removeTrack`, `impactReport` with `reopen`,
   `finishFeature` with `write` or `evidence` (finishChecks), `decide`, `manageFeature`'s `flow`, `taskBrief` / `metrics` with `write` (a derived file written into the feature folder is a

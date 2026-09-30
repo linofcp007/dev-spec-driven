@@ -1829,6 +1829,45 @@ const msg = {
         " — then wait for them. Do not retry it by another route (the MCP tool, the CLI, a script or an edit of .specs/ files). (meta.approvalGuard: deny.)",
       denyUser: (list, command) => `dev-spec approval guard refused an agent's request to ${list}.` + (command ? ` To approve it yourself: ${command}` : " Make that change yourself if you want it."),
     },
+    // 1.21 F1b — human approvals over MCP elicitation (mcp/server.js: spec_approve, spec_feature remove, spec_init lowering a guard,
+    // while meta.approvalGuard is ask | deny and the MCP client can ask its user — elicitation/create). `message` and the field
+    // titles are read by the USER (the client's dialog); the refusals by the AGENT. list = approvalGuard.action's text.
+    elicit: {
+      message: (list, details) => `dev-spec: an agent asks to ${list}.` + (details ? " " + details : "") + " Approvals are yours — tick Approve only if you approve it yourself.",
+      gatePasses: "The phase's checks pass.",
+      forced: (ids) => `⚠ FORCED: the phase's checks fail (${ids}) — it would be recorded as approved anyway.`,
+      waiver: (reason, expires) => "Waiver: " + [reason ? `"${reason}"` : null, expires ? `until ${expires}` : null].filter(Boolean).join(" ") + ".",
+      phases: (list) => `Phases to approve, in order: ${list}.`,
+      approveTitle: "Approve",
+      approveDesc: "Tick it to record this; leave it unticked (or decline) to refuse.",
+      noteTitle: "Note",
+      noteDesc: "Optional — recorded with the approval (one line).",
+      declined: (list) => `The user declined in the MCP client: nothing recorded (${list}). Do not retry it another way — ask the user what should change.`,
+      cancelled: (list) => `The user dismissed the confirmation: nothing recorded (${list}). Ask the user before trying again.`,
+      timedOut: (s, list) => `No answer from the user within ${s} s: nothing recorded (${list}). Ask the user to approve it themselves.`,
+      failed: (why, list) => `The MCP client could not ask the user (${why}): nothing recorded (${list}). Ask the user to run the approval themselves.`,
+      confirmed: "Confirmed by the user in the MCP client (elicitation).",
+    },
+    // 1.21 F1a — git's merge driver for the spec state (`dev-spec merge-state`): doctor's merge-conflicts and the CLI's lines. The
+    // words ours / theirs / base and "mergeConflicts" stay English (git's and the file's own terms).
+    mergeState: {
+      doctor: (n, list) => `${n} merge conflict(s) the dev-spec merge driver left unresolved — ${list}. Each kept ours: pick the right value in the file (its "mergeConflicts" list shows base / ours / theirs), then delete "mergeConflicts".`,
+      conflictHead: (file, n) => `dev-spec merge-state: ${file}: ${n} conflict(s) — ours kept at each, listed in the file under "mergeConflicts":`,
+      conflictLine: (p, ours, theirs, base) => `  ${p}: ours ${ours} · theirs ${theirs} · base ${base}`,
+      conflictTail: "Pick each value in the file, delete \"mergeConflicts\", then git add it.",
+      absent: "(absent)",
+      parseError: (side, why) => `dev-spec merge-state: ${side} is not valid JSON (${why}) — nothing merged, ours left as it is; merge the file by hand.`,
+      unreadable: (file) => `cannot read ${file}.`,
+      noGit: (dir) => `${dir} is not inside a git repository (or git is not installed) — merge-state --install writes that repository's own git config.`,
+      attrsAdded: (file) => `${file}: the merge driver's lines added (commit it — the whole team gets them):`,
+      attrsKept: (file) => `${file}: the merge driver's lines are already there.`,
+      attrsRemoved: (file) => `${file}: the merge driver's lines removed (commit it).`,
+      attrsNone: (file) => `${file}: no merge driver line to remove.`,
+      configSet: (key, value) => `git config ${key} = ${value}`,
+      configRemoved: (key) => `git config: ${key} removed.`,
+      configFailed: (why) => `git config failed: ${why}`,
+      teamNote: "git config is per clone: every teammate runs dev-spec merge-state --install once (without it, git falls back to its text merge).",
+    },
     // Scoped steering: custom steering files (front matter inclusion: always | fileMatch | manual), the brief, doctor.
     scopedSteering: {
       customHint: "— or a custom scoped steering file: lowercase letters, digits and '-', ending in .md (e.g. api-conventions.md).",

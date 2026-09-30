@@ -17,6 +17,7 @@ evals/                         plugin evals for `claude plugin eval` — maintai
                                (tags triggering / negative) and behavioural cases (tag behavior: <case>/case.yaml + fixture.sh,
                                built from evals/fixtures/ — lib.sh + project trees — with this plugin's own CLI); evals/README.md
 mcp/server.js                  MCP stdio protocol (JSON-RPC 2.0, newline-delimited) + argument validation against each inputSchema
+                               + the approval guard over MCP (1.21 F1b: elicitation/create to the client, its one async path)
 mcp/lib/spec.js                the engine's FACADE (1.18): the one public object every surface requires (server, CLI, hooks, tests) —
                                the same keys as ever, each operation in ONE read-cache scope, the mutators under the feature lock;
                                it loads the engine from its modules, or from a current bundle with DEV_SPEC_BUNDLE=1 (The build)
@@ -33,7 +34,8 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
                                under the lock, the .specs/.gitignore lock lines
   state.js                     language resolution, the feature resolver (resolveFeature / existingFeature), .state.json,
                                PHASES and their files, content fingerprints; roadmap.json (deps, backlog, meta.lang), the
-                               roadmap writers, RE_AUTOGEN
+                               roadmap writers, RE_AUTOGEN; the semantic 3-way merge of .state.json / roadmap.json behind git's
+                               merge driver (1.21 F1a — mergeStateJson / mergeStateText / mergeAttributes, pure)
   markdown.js                  comments (commentLines), fences (closesFence / fenceStep), headings, sections (extractSection),
                                AC / T-ID readers; the template corpus, the bracket scan, artifact / feature / chain placeholders
   corpus.generated.json        GENERATED (npm run build, committed): the built-in placeholder corpus markdown.js reads (The build)
@@ -227,7 +229,8 @@ Two distinct distribution targets, deliberately kept separate — never conflate
 
 - **In-repo dotfiles are committable and portable.** They use relative / workspace-relative
   references, never a machine path, so `git clone`/download Just Works:
-  - `mcp/servers.json` (referenced by `plugin.json` → `mcpServers`) → `${CLAUDE_PLUGIN_ROOT}/mcp/server.js`.
+  - `mcp/servers.json` (referenced by `plugin.json` → `mcpServers`) → `${CLAUDE_PLUGIN_ROOT}/mcp/server.js` (env:
+    `SPEC_PROJECT_DIR`, `SPEC_MCP_PROMPTS=off`, `SPEC_MCP_APPROVAL_HOOK=on` — 1.21: the plugin's hook guards approvals there).
     It is deliberately NOT a root `.mcp.json`: when this repo is opened as a normal project, Claude Code
     reads a root `.mcp.json` as a *project* server where `${CLAUDE_PLUGIN_ROOT}` is undefined, so it
     failed with CONNECTION_CLOSED in every maintainer session (v1.11 moved it).

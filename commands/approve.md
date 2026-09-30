@@ -12,7 +12,11 @@ Only record an approval the user actually gave. Run `spec_doctor` first and show
 test-plan, eval-plan, tests, tasks, execution; CLI `dev-spec approve <feature> <phase> [--by NAME]`).
 With the human approval guard on (`spec_init {approvalGuard: "ask" | "deny"}`), the plugin's hook asks the user
 before that call, or refuses it: then give the user the command the refusal names to run themselves (their own
-terminal, or `! node <clone>/cli/dev-spec.js approve …`) and wait — never retry it another way.
+terminal, or `! node <clone>/cli/dev-spec.js approve …`) and wait — never retry it another way. In other MCP clients
+the server asks the user itself when the client supports elicitation (a question with an Approve box and a note —
+only their explicit approve is recorded, as `confirmed`); a `declined: true` result means the user said no (or didn't
+answer): record nothing, ask what should change. A `humanRequired: true` refusal (deny, a client that can't ask) works
+like the hook's: the user runs the `command` it names.
 
 **The approval is a gate:** that phase's checks run first and any failure **refuses** it, listing the failing
 check ids — e.g. requirements: `ears`, `placeholders`, `clarifications`, `success-criteria`, `priorities`,

@@ -48,7 +48,7 @@ const TOOLS = [
         guard: { type: "string", enum: ["on", "off", "scope"], description: "Guard mode (opt-in): \"on\" = code edits ask for confirmation while no feature has approved, unfinished tasks; \"scope\" = that, and once tasks are approved a code file no open task names in _Implements:_ (the file, a folder above it or a glob; test files excepted) asks too, naming the task to add it to; \"off\" = off. The booleans true / false are accepted as on / off. Omit to leave it unchanged (CLI: --guard on|off|scope)." },
         evidence: { type: "string", enum: ["reported", "observed"], description: "Evidence mode (roadmap.json meta.evidence): \"reported\" (default) — reported runs verify as given; \"observed\" — a runnable _Verify:_ (and a project check) is verified only by a run the harness observed (the plugin's Bash hook in Claude Code) or the CLI ran (done --run / finish --run). Omit to leave it unchanged (CLI: --evidence reported|observed)." },
         stopCheck: { type: "boolean", description: "The end-of-turn evidence gate (roadmap.json meta.stopCheck; on by default): the plugin's Stop hook sends a turn back when the agent's closing message claims the work is done or verified while a recently active feature has ticked tasks without verification evidence. false = off, true = on again. Omit to leave it unchanged (CLI: --stop-check on|off)." },
-        approvalGuard: { type: "string", enum: ["off", "ask", "deny"], description: "The human approval guard (opt-in, roadmap.json meta.approvalGuard, default off): \"ask\" = an agent's approval (spec_approve, spec_feature remove, dev-spec approve / feature remove --yes through the shell, lowering this guard) asks the user first — a prompt some permission modes (auto / bypass) may skip; \"deny\" = it is refused in every mode, the human runs it in their own terminal or with Claude Code's ! prefix; \"off\" = off. Omit to leave it unchanged (CLI: --approval-guard off|ask|deny)." },
+        approvalGuard: { type: "string", enum: ["off", "ask", "deny"], description: "The human approval guard (opt-in, roadmap.json meta.approvalGuard, default off): \"ask\" = an agent's approval (spec_approve, spec_feature remove, dev-spec approve / feature remove --yes through the shell, lowering this guard) asks the user first — a prompt some permission modes (auto / bypass) may skip; \"deny\" = it is refused in every mode, the human runs it in their own terminal or with Claude Code's ! prefix; \"off\" = off. In MCP clients without the plugin's hook this server enforces it: a client with elicitation asks its user (only an explicit approve records it), else deny is refused. Omit to leave it unchanged (CLI: --approval-guard off|ask|deny)." },
         checks: { type: "object", additionalProperties: { type: "string" }, description: "Project check commands {name: command} → roadmap.json meta.checks. Names: letters, digits, . _ : - (≤ 40); commands: one line (≤ 500 chars); an empty command removes that check; at most 20. Omit to leave them unchanged (CLI: --check name=\"cmd\", repeatable)." },
         approvalRoles: { type: "object", description: "Approvals by role (opt-in): {<phase>: [<role>, …]} — phases classification … execution, roles lower-cased (letters, digits, - _ .; a \"tech+security\" string is split). {} clears them; omit to leave them unchanged (CLI: --roles requirements=product,design=tech+security | none)." },
         projectDir: { type: "string", description: "Project root. Defaults to SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / cwd." },
@@ -150,7 +150,7 @@ const TOOLS = [
   },
   {
     name: "spec_approve",
-    description: "Record human approval of a phase gate for a feature (writes to .specs/<feature>/.state.json). Phases: classification, requirements, design, test-plan, eval-plan, tests, tasks, execution. The approval is a GATE: that phase's checks run first (requirements: EARS errors, template placeholders, open [NEEDS CLARIFICATION], success criteria + priorities, AC uniqueness — bugfix: bug.md Reproduction; design: placeholders, Constitution Check, active +saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs sections, clarifications — bugfix: bug.md Root Cause instead; test-plan: placeholders, every AC has a test, no row citing an AC requirements.md does not define; eval-plan: placeholders; tasks: no placeholder tasks, every AC covered, no phantom IDs; tests — the Phase 4 sign-off: +tdd every planned T-ID named by a test file (tests-in-code), +ai an evals/golden.json of the feature's own, not the scaffold's sample (eval-sets), nothing to approve on a core-only feature; execution — spec_finish's blockers: doctor, root-cause, placeholders, changed-since-approval, tasks, open-tasks, verification, suite-evidence (with project checks, roadmap.json meta.checks), approval-gates; a spike: spike, decision, open-tasks) and any failure REFUSES it, listing the failing check ids and details. Phase by phase: while an EARLIER active phase with an artifact is still unapproved (a bugfix's design before its tasks), the approval is refused too — check `phase-order`, naming the earlier phase(s) to approve first. `force: true` records it anyway as a forced approval (`forced` + the failing ids; doctor's approval-gates and the roadmap keep flagging it). A phase with no artifact (eval-plan without +ai, test-plan without +tdd, a missing file) can't be approved, not even with force. APPROVALS BY ROLE (opt-in, roadmap.json meta.approvalRoles — spec_init {approvalRoles}): a phase listed there needs `role` (one of its roles; each sign-off runs the gate and is recorded under the approval's `roles` and in approvalHistory with its role) and counts as approved only once EVERY role has signed off its CURRENT content — until then the result is ok with approved: null, signedOff, pending, missingRoles, and the phase stays pending (doctor, next_action, finish and ROADMAP.md name the missing roles); a sign-off of content changed since no longer counts. Without roles configured, a single approval as before. FAST-FORWARD: `through` (instead of `phase`, e.g. 'tasks') approves the active phases IN ORDER from the first unapproved one up to it, each through its own gate (snapshot + history record flagged batch: true) — it stops at the first refused gate (ok: false, refused, stoppedAt, failing, checks; the phases before it stay approved: `approved`) or, with roles, at a phase still waiting for another role (ok: true, complete: false); `role` signs each phase, `force` forces each gate (only when the user asked). Makes approval-gated progress auditable and resumable. Only record an approval the user gave: with roadmap.json meta.approvalGuard ask / deny (spec_init {approvalGuard}) the plugin's hook asks the user before this call, or refuses it — then ask the user to run it themselves (their terminal, or Claude Code's ! prefix), never retry it another way. WAIVERS: with `force`, `reason` (one line) and `expires` (an ISO date YYYY-MM-DD, today or later, or a number of days like 30d — at most 3650) record why the gate was forced and until when, as `waiver` {reason, expires} on the approval and its history record (only when the approval IS forced — a passing gate waives nothing: waiverIgnored); either without force is refused, a force without them stays allowed. Doctor warns `waiver-expired` once the expiry passed while the approval still stands forced; ROADMAP.md shows each forced approval with its waiver (EXPIRED flagged); spec_finish lists them (`waivers`, and in the merge summary). REVOKE: `revoke: true` (+ `reason`) removes the approval of `phase` — and the role sign-offs waiting for it — when it was given by mistake or no longer holds; recorded in approvalHistory as {phase, at, by, revoked: true, reason} (no snapshot). It never cascades: later phases stay approved (`laterApproved`), the revoked phase is pending again (doctor, next_action and spec_finish ask for it; approving another phase is refused on phase-order until it is approved again); revoking a planning phase of a finished feature makes its finish stale (spec_drift `stale`, the catalog reads it complete, not finished) until it is re-approved and finished again. Revoking an unapproved phase is an error (notApproved); `execution` included; no force / expires / through with it. CLI: approve <f> <phase> --revoke [--reason \"…\"] · approve <f> <phase> --force --reason \"…\" --expires 30d.",
+    description: "Record human approval of a phase gate for a feature (writes to .specs/<feature>/.state.json). Phases: classification, requirements, design, test-plan, eval-plan, tests, tasks, execution. The approval is a GATE: that phase's checks run first (requirements: EARS errors, template placeholders, open [NEEDS CLARIFICATION], success criteria + priorities, AC uniqueness — bugfix: bug.md Reproduction; design: placeholders, Constitution Check, active +saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs sections, clarifications — bugfix: bug.md Root Cause instead; test-plan: placeholders, every AC has a test, no row citing an AC requirements.md does not define; eval-plan: placeholders; tasks: no placeholder tasks, every AC covered, no phantom IDs; tests — the Phase 4 sign-off: +tdd every planned T-ID named by a test file (tests-in-code), +ai an evals/golden.json of the feature's own, not the scaffold's sample (eval-sets), nothing to approve on a core-only feature; execution — spec_finish's blockers: doctor, root-cause, placeholders, changed-since-approval, tasks, open-tasks, verification, suite-evidence (with project checks, roadmap.json meta.checks), approval-gates; a spike: spike, decision, open-tasks) and any failure REFUSES it, listing the failing check ids and details. Phase by phase: while an EARLIER active phase with an artifact is still unapproved (a bugfix's design before its tasks), the approval is refused too — check `phase-order`, naming the earlier phase(s) to approve first. `force: true` records it anyway as a forced approval (`forced` + the failing ids; doctor's approval-gates and the roadmap keep flagging it). A phase with no artifact (eval-plan without +ai, test-plan without +tdd, a missing file) can't be approved, not even with force. APPROVALS BY ROLE (opt-in, roadmap.json meta.approvalRoles — spec_init {approvalRoles}): a phase listed there needs `role` (one of its roles; each sign-off runs the gate and is recorded under the approval's `roles` and in approvalHistory with its role) and counts as approved only once EVERY role has signed off its CURRENT content — until then the result is ok with approved: null, signedOff, pending, missingRoles, and the phase stays pending (doctor, next_action, finish and ROADMAP.md name the missing roles); a sign-off of content changed since no longer counts. Without roles configured, a single approval as before. FAST-FORWARD: `through` (instead of `phase`, e.g. 'tasks') approves the active phases IN ORDER from the first unapproved one up to it, each through its own gate (snapshot + history record flagged batch: true) — it stops at the first refused gate (ok: false, refused, stoppedAt, failing, checks; the phases before it stay approved: `approved`) or, with roles, at a phase still waiting for another role (ok: true, complete: false); `role` signs each phase, `force` forces each gate (only when the user asked). Makes approval-gated progress auditable and resumable. Only record an approval the user gave: with roadmap.json meta.approvalGuard ask / deny (spec_init {approvalGuard}) the plugin's hook asks the user before this call, or refuses it — then ask the user to run it themselves (their terminal, or Claude Code's ! prefix), never retry it another way. In other MCP clients the server enforces it: a client that supports elicitation gets an elicitation/create question for the user (the phase, the gate — forced checks, waiver —, a boolean approve + an optional note) and the approval is recorded only on an explicit approve, with `confirmed` {via: \"elicitation\", at, note?}; declined, dismissed or unanswered (5 min, DEV_SPEC_ELICIT_TIMEOUT_MS) → `declined: true`, nothing recorded; at deny a client without elicitation is refused (`humanRequired: true` + the `command` the user runs).WAIVERS: with `force`, `reason` (one line) and `expires` (an ISO date YYYY-MM-DD, today or later, or a number of days like 30d — at most 3650) record why the gate was forced and until when, as `waiver` {reason, expires} on the approval and its history record (only when the approval IS forced — a passing gate waives nothing: waiverIgnored); either without force is refused, a force without them stays allowed. Doctor warns `waiver-expired` once the expiry passed while the approval still stands forced; ROADMAP.md shows each forced approval with its waiver (EXPIRED flagged); spec_finish lists them (`waivers`, and in the merge summary). REVOKE: `revoke: true` (+ `reason`) removes the approval of `phase` — and the role sign-offs waiting for it — when it was given by mistake or no longer holds; recorded in approvalHistory as {phase, at, by, revoked: true, reason} (no snapshot). It never cascades: later phases stay approved (`laterApproved`), the revoked phase is pending again (doctor, next_action and spec_finish ask for it; approving another phase is refused on phase-order until it is approved again); revoking a planning phase of a finished feature makes its finish stale (spec_drift `stale`, the catalog reads it complete, not finished) until it is re-approved and finished again. Revoking an unapproved phase is an error (notApproved); `execution` included; no force / expires / through with it. CLI: approve <f> <phase> --revoke [--reason \"…\"] · approve <f> <phase> --force --reason \"…\" --expires 30d.",
     inputSchema: { type: "object", properties: { name: { type: "string" }, phase: { type: "string", enum: ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"], description: "The phase to approve (or `through` for the fast-forward), or — with revoke — whose approval to revoke." }, through: { type: "string", enum: ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks"], description: "Fast-forward: approve every active phase from the first unapproved one up to this one, in order, each through its gate (CLI: --through <phase>; /spec-ff)." }, role: { type: "string", description: "The role this sign-off is for, when roadmap.json meta.approvalRoles lists the phase (CLI: --role)." }, by: { type: "string", description: "Approver (default: $USER / $USERNAME, else 'user' — same as the CLI)." }, force: { type: "boolean", description: "Approve even though the phase's checks fail — recorded as forced, with the failing check ids (CLI: --force)." }, reason: { type: "string", description: "With force: why the gate is waived (the waiver's reason); with revoke: why the approval is revoked. One line, ≤ 500 characters (CLI: --reason)." }, expires: { type: "string", description: "With force: when the waiver expires — YYYY-MM-DD (today or later) or Nd (e.g. 30d), at most 3650 days (CLI: --expires)." }, revoke: { type: "boolean", description: "Revoke the approval of `phase` (and its waiting role sign-offs) instead of approving it — never cascades (CLI: --revoke)." }, projectDir: { type: "string" } }, required: ["name"] },
   },
   {
@@ -451,7 +451,9 @@ for (const t of TOOLS) t.annotations = Object.prototype.hasOwnProperty.call(TOOL
 
 // --- Tool dispatch ---------------------------------------------------------
 
-function runTool(name, args) {
+// extra (1.21 F1b, spec_approve only — set by the server, never by a tool call): { dryRun } the preview before the user is asked,
+// { confirmation } the user's answer (elicitation), recorded with the approval.
+function runTool(name, args, extra) {
   args = args || {};
   // Guard against RELATIVE traversal only: a tool call must not reach out of the project with `..`.
   // This is NOT a sandbox — an absolute projectDir is accepted by design (multi-project use), and the
@@ -495,7 +497,8 @@ function runTool(name, args) {
       return spec.specDoctor(pdir, args.name);
     case "spec_approve": // role: the sign-off's role (approvals by role); through: the fast-forward — the same engine call as `approve [--role] [--through]`
       return spec.approvePhase(pdir, args.name, args.phase, args.by, { force: args.force === true, role: args.role, ...(args.through != null ? { through: args.through } : {}),
-        reason: args.reason, expires: args.expires, revoke: args.revoke === true }); // 1.16 U2 / U3: revoke · the waiver (reason / expires) — = `approve --revoke / --reason / --expires`
+        reason: args.reason, expires: args.expires, revoke: args.revoke === true, // 1.16 U2 / U3: revoke · the waiver (reason / expires) — = `approve --revoke / --reason / --expires`
+        ...(extra && extra.dryRun === true ? { dryRun: true } : {}), ...(extra && extra.confirmation ? { confirmation: extra.confirmation } : {}) }); // 1.21 F1b: never tool arguments — the elicitation's preview and the user's confirmation
     case "steering_scaffold":
       return spec.scaffoldSteeringFile(pdir, args.file, args.lang);
     case "spec_roadmap": // html:true implies writing; a failed write is an error (same engine call as the CLI)
@@ -571,8 +574,128 @@ function frame(msg) {
   return JSON.stringify(msg).replace(RE_UNICODE_LINE_SEP, (c) => "\\u" + c.charCodeAt(0).toString(16)) + "\n";
 }
 function send(msg) {
-  if (batchSink) batchSink.push(msg);
+  sendTo(batchSink, msg);
+}
+// A reply to a request that finished LATER (an approval waiting for the user — 1.21 F1b) goes where its request came from: the
+// batch it arrived in (the batch's reply array waits for it) or straight out.
+function sendTo(sink, msg) {
+  if (sink) sink.push(msg);
   else process.stdout.write(frame(msg));
+}
+
+// --- Human approvals over MCP elicitation (1.21 F1b) --------------------------------------------------------------------------
+// With roadmap.json meta.approvalGuard ask | deny, an AGENT's approval — spec_approve (approve, revoke, fast-forward, force /
+// waiver), spec_feature remove {confirm}, spec_init lowering a protection: the approval guard's own reading of the call
+// (spec.approvalGuardDecision) — is the human's to make. In Claude Code the plugin's PreToolUse hook asks / refuses (and
+// mcp/servers.json sets SPEC_MCP_APPROVAL_HOOK=on: the server leaves it to the hook — that path is unchanged). In any other
+// MCP client:
+//   · the client advertised `elicitation` in initialize → the server asks its user (elicitation/create: the actions, the
+//     gate's state — forced checks, the waiver, the phases of a fast-forward — and a boolean `approve` + an optional `note`)
+//     and runs the call only on an explicit accept with approve: true, recording `confirmed` {via: "elicitation", at, note?}
+//     with the approval; decline / cancel / no answer within DEV_SPEC_ELICIT_TIMEOUT_MS (default 5 min) → a localized
+//     refusal (`declined: true`), nothing recorded. The wait never blocks the server: other requests are answered meanwhile.
+//     spec_approve is previewed first (dryRun): a gate that refuses anyway is answered as it is — nobody is asked;
+//   · no elicitation: ask → today's behaviour (the call runs); deny → refused (`humanRequired: true` + the command the human
+//     runs in their own terminal) — a client that can't ask its user can't record an agent's approval.
+// A guardrail on the approve paths, as the hook is — never a sandbox.
+const APPROVAL_TOOLS = new Set(["spec_approve", "spec_feature", "spec_init"]);
+const APPROVAL_HOOK = /^(?:on|1|true|yes)$/i.test(String(process.env.SPEC_MCP_APPROVAL_HOOK || "").trim());
+const ELICIT_TIMEOUT_MS = (() => {
+  const n = Number(String(process.env.DEV_SPEC_ELICIT_TIMEOUT_MS || "").trim());
+  return Number.isSafeInteger(n) && n >= 1 ? Math.min(n, 60 * 60 * 1000) : 5 * 60 * 1000;
+})();
+let clientElicits = false; // initialize: the client declared capabilities.elicitation
+// Requests this server sent the client (elicitation/create), by id → the resolver of their response.
+const serverRequests = new Map();
+let serverRequestSeq = 0;
+function clientRequest(method, params, timeoutMs) {
+  return new Promise((resolve) => {
+    const rid = "dev-spec-" + ++serverRequestSeq;
+    const timer = setTimeout(() => {
+      if (!serverRequests.delete(rid)) return;
+      process.stdout.write(frame({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: rid, reason: "timeout" } }));
+      resolve({ timeout: true });
+    }, timeoutMs);
+    serverRequests.set(rid, (msg) => { clearTimeout(timer); resolve(msg); });
+    process.stdout.write(frame({ jsonrpc: "2.0", id: rid, method, params })); // never into a batch reply: the client must see it now
+  });
+}
+// roadmap.json meta as the approval hook reads it: {} without a roadmap, undefined when it can't be read or parsed (unknown —
+// the guard's guard-down reading fails closed).
+function approvalMeta(pdir) {
+  let text;
+  try { text = fs.readFileSync(path.join(spec.specsRoot(pdir), "roadmap.json"), "utf8"); } catch (e) { return e && e.code === "ENOENT" ? {} : undefined; }
+  try {
+    const j = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+    return TYPE_CHECK.object(j) ? (TYPE_CHECK.object(j.meta) ? j.meta : {}) : undefined;
+  } catch { return undefined; }
+}
+// null → run the call as usual · { refuse } → that result · { elicit, … } → ask the user first.
+function approvalPolicy(toolName, args) {
+  if (APPROVAL_HOOK || !APPROVAL_TOOLS.has(toolName)) return null;
+  if (args.projectDir && (RE_DOTDOT.test(String(args.projectDir)) || isNetworkPath(args.projectDir))) return null; // runTool refuses it
+  const pdir = spec.resolveProjectDir(args.projectDir);
+  const level = spec.approvalGuardLevel(pdir);
+  if (level === "off") return null;
+  let lang = spec.projectLang(pdir);
+  if (typeof args.name === "string" && args.name.trim()) {
+    const f = spec.existingFeature(pdir, args.name);
+    if (f.ok) lang = spec.featureLang(pdir, f.slug);
+  }
+  const d = spec.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: toolName, tool_input: args }, level, { lang, meta: approvalMeta(pdir) });
+  if (d.decision === "allow") return null;
+  if (clientElicits) return { elicit: true, level, decision: d, lang };
+  if (level === "deny") return { refuse: { ok: false, refused: true, humanRequired: true, approvalGuard: "deny", command: d.command, error: d.reason } };
+  return null; // ask, and the client can't ask its user: today's behaviour
+}
+// Ask the user, then run the call only on an explicit approve. → the tool's result, or a refusal ({ok: false, declined: true, …}).
+async function elicitApproval(toolName, args, pol) {
+  const E = spec.msg(pol.lang).elicit;
+  const list = pol.decision.summary || "";
+  const details = [];
+  if (toolName === "spec_approve") {
+    const pre = runTool(toolName, args, { dryRun: true });
+    if (!pre || pre.ok === false || !pre.dryRun) return pre; // refused, an error, nothing to do: the engine's own answer — nobody is asked
+    if (Array.isArray(pre.chain)) details.push(E.phases(pre.chain.join(", ")));
+    if (Array.isArray(pre.failing) && pre.failing.length) details.push(E.forced(pre.failing.join(", ")));
+    else if (!pre.revoke && !pre.chain) details.push(E.gatePasses);
+    if (pre.waiver) details.push(E.waiver(pre.waiver.reason, pre.waiver.expires));
+  } else if (toolName === "spec_feature") {
+    // remove's own preview (no confirm): a feature that doesn't exist is answered as it is — nobody is asked
+    const pre = spec.manageFeature(spec.resolveProjectDir(args.projectDir), "remove", args.name, undefined, { confirm: false });
+    if (pre && pre.ok === false && !pre.needsConfirm) return pre;
+  }
+  const res = await clientRequest("elicitation/create", {
+    message: E.message(list, details.join(" ")),
+    requestedSchema: {
+      type: "object",
+      properties: {
+        approve: { type: "boolean", title: E.approveTitle, description: E.approveDesc, default: false },
+        note: { type: "string", title: E.noteTitle, description: E.noteDesc, maxLength: 500 },
+      },
+      required: ["approve"],
+    },
+  }, ELICIT_TIMEOUT_MS);
+  const refusal = (extra, error) => Object.assign({ ok: false, declined: true, approvalGuard: pol.level }, extra, { error });
+  if (res.timeout) return refusal({ timedOut: true }, E.timedOut(String(ELICIT_TIMEOUT_MS / 1000), list));
+  if (TYPE_CHECK.object(res.error)) {
+    const why = String(res.error.message || res.error.code || "?").slice(0, 200);
+    return refusal({ elicitationError: { code: res.error.code, message: why } }, E.failed(why, list));
+  }
+  const r = TYPE_CHECK.object(res.result) ? res.result : {};
+  const answer = TYPE_CHECK.object(r.content) ? r.content : {};
+  if (r.action !== "accept" || answer.approve !== true) {
+    const action = ["accept", "decline", "cancel"].includes(r.action) ? r.action : "cancel";
+    return refusal({ action }, action === "cancel" ? E.cancelled(list) : E.declined(list));
+  }
+  const note = typeof answer.note === "string" ? answer.note.replace(/\s+/g, " ").trim().slice(0, 500) : "";
+  const confirmation = Object.assign({ via: "elicitation", at: new Date().toISOString() }, note ? { note } : {});
+  const out = runTool(toolName, args, { confirmation });
+  if (TYPE_CHECK.object(out)) out.confirmed = Object.assign({}, confirmation, { message: E.confirmed });
+  return out;
+}
+function toolReply(id, out, sink) {
+  sendTo(sink, { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(out, null, 2) }], isError: !!(out && out.ok === false) } });
 }
 
 function result(id, value) {
@@ -760,8 +883,13 @@ function handle(msg) {
   // A notification is a message WITHOUT an id member: it never gets a response — and never runs anything.
   if (!hasOwn(msg, "id")) return;
   // A JSON-RPC RESPONSE (result / error, no method) is never answered — whatever its id: a client's error response to a
-  // request it couldn't parse carries id null (checked before the id rule, full review R9).
-  if (typeof method !== "string" && (hasOwn(msg, "result") || hasOwn(msg, "error"))) return;
+  // request it couldn't parse carries id null (checked before the id rule, full review R9). One that answers a request THIS
+  // server sent (elicitation/create — 1.21 F1b) resolves it.
+  if (typeof method !== "string" && (hasOwn(msg, "result") || hasOwn(msg, "error"))) {
+    const cb = typeof id === "string" ? serverRequests.get(id) : undefined;
+    if (cb) { serverRequests.delete(id); cb(msg); }
+    return;
+  }
   // MCP: a request id is a string or an integer, never null. `id: null` used to be read as a notification and dropped (the
   // client waited forever), and an object / array / boolean / fractional id was echoed back. Invalid Request — with id
   // null, as JSON-RPC answers a request whose id can't be used.
@@ -777,6 +905,8 @@ function handle(msg) {
       case "initialize": {
         const asked = params && params.protocolVersion;
         const proto = SUPPORTED_PROTOCOLS.includes(asked) ? asked : asked ? SUPPORTED_PROTOCOLS[SUPPORTED_PROTOCOLS.length - 1] : DEFAULT_PROTOCOL;
+        // 1.21 F1b: a client that can ask its user (capabilities.elicitation) gets the approval guard's questions (elicitation/create).
+        clientElicits = TYPE_CHECK.object(params) && TYPE_CHECK.object(params.capabilities) && TYPE_CHECK.object(params.capabilities.elicitation);
         return result(id, {
           protocolVersion: proto,
           serverInfo: SERVER_INFO,
@@ -785,7 +915,7 @@ function handle(msg) {
             ? { tools: { listChanged: false }, prompts: { listChanged: false }, resources: { listChanged: false, subscribe: false }, completions: {} }
             : { tools: { listChanged: false }, resources: { listChanged: false, subscribe: false }, completions: {} },
           instructions:
-            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). Evidence before claims: tick a task (spec_complete_task) only with the run of its _Verify:_ command that you or the user actually made — if you cannot run it, ask for its output instead of ticking. ears_validate, trace_check and spec_doctor enforce quality gates. After a plugin update, spec_upgrade audits an existing .specs/ (apply: the safe migrations). All file ops are local to the project's .specs/ directory." +
+            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). Evidence before claims: tick a task (spec_complete_task) only with the run of its _Verify:_ command that you or the user actually made — if you cannot run it, ask for its output instead of ticking. ears_validate, trace_check and spec_doctor enforce quality gates. Approvals are the user's: with meta.approvalGuard ask / deny, spec_approve asks the user through the client (elicitation) when it can. After a plugin update, spec_upgrade audits an existing .specs/ (apply: the safe migrations). All file ops are local to the project's .specs/ directory." +
             (PROMPTS_ON ? " Prompts: one per plugin command (spec, spec-status, spec-impact, …) — the slash-command workflow for clients without the dev-spec-driven skill." : "") +
             " Resources (read-only): the project's spec artifacts — specs://roadmap, specs://catalog, specs://steering/{file}, specs://feature/{slug}/{artifact}.",
         });
@@ -815,9 +945,17 @@ function handle(msg) {
           const A = argMessages(args);
           return argError(id, A.invalid(invalid.map((i) => A.item(i.where, expectedType(i.schema, A), shortJson(i.value))).join("; ")));
         }
+        // 1.21 F1b: an agent's approval under meta.approvalGuard ask | deny — asked of the user (elicitation: the reply comes
+        // later, the server keeps answering meanwhile) or refused (deny, a client that can't ask).
+        const policy = approvalPolicy(toolName, args);
+        if (policy && policy.elicit) {
+          const sink = batchSink;
+          return elicitApproval(toolName, args, policy).then((o) => toolReply(id, o, sink),
+            (e) => sendTo(sink, { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: "ERROR: " + ((e && e.message) || String(e)) }], isError: true } }));
+        }
         let out;
         try {
-          out = runTool(toolName, args);
+          out = policy && policy.refuse ? policy.refuse : runTool(toolName, args);
         } catch (e) {
           return result(id, { content: [{ type: "text", text: "ERROR: " + e.message }], isError: true });
         }
@@ -858,13 +996,17 @@ function onLine(line) {
   }
   if (Array.isArray(msg)) {
     if (!msg.length) return error(null, -32600, "Invalid Request");
-    batchSink = [];
+    const replies = [];
+    let later = [];
+    batchSink = replies;
     try {
-      msg.forEach(handle);
+      later = msg.map(handle).filter((p) => p && typeof p.then === "function");
     } finally {
-      const replies = batchSink;
       batchSink = null;
-      if (replies.length) process.stdout.write(frame(replies));
+      // ONE array reply — once the requests still waiting (an approval the user is asked about, 1.21 F1b) have answered too.
+      const flush = () => { if (replies.length) process.stdout.write(frame(replies)); };
+      if (later.length) Promise.all(later).then(flush, flush);
+      else flush();
     }
   } else handle(msg);
 }

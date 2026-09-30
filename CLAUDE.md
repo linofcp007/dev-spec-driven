@@ -28,7 +28,8 @@ Read the file BEFORE you change its area (a section name another note cites — 
 - **`docs/maintainers/languages.md`** — before adding or rewording ANY user-facing string, a translated heading or a
   language: Languages (EN / PT-PT / PT-BR / ES) · Localization gotchas.
 - **`docs/maintainers/mcp.md`** — before changing a tool's schema or description, a capability (prompts, resources,
-  completions), argument validation or the stdio framing: MCP tools · Capabilities · Argument validation · Protocol.
+  completions), argument validation, the stdio framing or the elicitation path: MCP tools · Capabilities · Human approvals over
+  MCP elicitation (1.21) · Argument validation · Protocol (server-initiated requests).
 - **`docs/maintainers/gates-and-approvals.md`** — before changing an approval gate, next_action's steps, placeholders,
   spec_impact / the approval history, roles, undo / revoke / waivers, flows or the bugfix kind: Gates (1.13) · Approval
   fingerprints and pending gates · Change history · Team governance · Undo, revoke, waivers, MCP-only gates · Flows ·
@@ -51,8 +52,9 @@ Read the file BEFORE you change its area (a section name another note cites — 
 - **`docs/maintainers/claude-code-integration.md`** — before changing a hook, a command name, guard mode, the approval
   guard, the status line, user defaults or the plan-mode bridge: Hooks and commands · Guard mode · Human approval guard ·
   Claude Code integration (1.16 C).
-- **`docs/maintainers/conventions.md`** — before touching feature folders, `.state.json` / roadmap.json writes, the locks,
-  process I/O or CLI flags / exit codes: Conventions & gotchas (resolver, JSON state, locks, rename, stdout, the CLI).
+- **`docs/maintainers/conventions.md`** — before touching feature folders, `.state.json` / roadmap.json writes (or adding a key
+  to them — the merge driver must know it), the locks, process I/O or CLI flags / exit codes: Conventions & gotchas (resolver,
+  JSON state, merging the spec state — git's merge driver, 1.21 —, locks, rename, stdout, the CLI).
 - **`docs/maintainers/testing.md`** — before adding a test (which file of `mcp/tests/` / `cli/tests/`), writing one that
   runs a command or depends on the file system, or running a part of a suite or the Linux / plugin-eval suites: The
   suites (files, runner, `--only`) · Tests (continued) — Docker, plugin evals, Windows AND Linux, the eval harness.

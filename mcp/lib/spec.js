@@ -55,7 +55,8 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   featurePlaceholders, finishFeature, FLOWS, forecastData, globalConstraints, globFiles, glossaryEntries, guardCheck,
   guardEnabled, guardLevel, impactLines, impactReport, implementsTargets, importSpec, initProject, integrationPlanMd,
   isFeatureFolder, isNetworkPath, isPlaceholderTask, isTemplatePlaceholder, isTestFile, isWslLauncher, listFeatures,
-  manageFeature, markdownToHtml, matrixCsv, maybeRefreshCatalog, mdPlainText, metrics, metricsLines, milestone,
+  manageFeature, markdownToHtml, matrixCsv, maybeRefreshCatalog, mdPlainText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
+  MERGE_DRIVER, mergeAttributes, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, milestone,
   MILESTONE_ACTIONS, MILESTONE_STATUSES, milestoneLine, networkPathInside, nextAction, nextTask, normalizeLang,
   normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, PACK_LIMITS, parseApprovalRolesText,
   parseGitLog, parseTasks, parseTracks, phasePercent, PHASES, placeholderKey, placeholderReport, planBridge, planPaths,
@@ -281,6 +282,15 @@ module.exports = {
   observedRun, // was this reported run observed? (latest observed run of the same command, same exit code, recent) → { observed, at? }
   evidenceMode, // roadmap.json meta.evidence → "reported" (default) | "observed"
   OBSERVED_MAX_BYTES, // the log's size bound
+
+  // 1.21 F1a — git's merge driver for the spec state (`dev-spec merge-state %O %A %B %P`, installed by `merge-state --install`)
+  mergeStateJson, // (base, ours, theirs, kind) → { kind, merged, conflicts } — the semantic 3-way merge of a .state.json / roadmap.json (pure)
+  mergeStateText, // the driver's job on the three file texts → { ok, kind, clean, conflicts, text } (conflicts written INTO the JSON: mergeConflicts)
+  mergeKindOfPath, // git's %P → "state" | "roadmap" | "generated" (ROADMAP.md / .html, SPECS.md) | null
+  mergeAttributes, // (.gitattributes text, remove) → { text, changed, lines } — the driver's lines added / removed (pure)
+  MERGE_DRIVER, // "dev-spec-state" — the git config merge.<driver>.* name
+  MERGE_ATTRIBUTE_LINES, // the .gitattributes lines --install writes
+  MERGE_CONFLICTS_KEY, // "mergeConflicts" — the list a conflicted merge leaves in the file (doctor fails merge-conflicts)
 };
 
 // Every engine entry point is ONE call with ONE read-cache scope (withReadCache): an MCP tool call, a CLI command, a

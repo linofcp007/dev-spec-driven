@@ -15,7 +15,8 @@ const { TRACE_INFO_FIELDS } = require("./trace.js"); // load time
 let activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
-  maybeRefreshRoadmap, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL, readIfExists, readJson,
+  maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
+  readIfExists, readJson,
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   shortTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
@@ -23,7 +24,8 @@ let activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, dupl
 function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers,
   ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
-  maybeRefreshRoadmap, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL, readIfExists, readJson,
+  maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
+  readIfExists, readJson,
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   shortTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
@@ -609,6 +611,8 @@ function spikeDoctor(projectDir, f) {
   for (const c of decisionDoctorChecks(projectDir, slug, dir, st, "spike", lng)) add(c.id, c.status, c.detail);
   const wExp = waiverExpiredCheck(st.approvals, tracks, slug, lng); // 1.16 U3 (a forced execution sign-off)
   if (wExp) add(wExp.id, wExp.status, wExp.detail);
+  const mc = mergeConflictsCheck(projectDir, slug, st, lng); // 1.21 F1a: conflicts the merge driver left unresolved
+  if (mc) add(mc.id, mc.status, mc.detail);
   const fails = checks.filter((c) => c.status === "fail");
   const warns = checks.filter((c) => c.status === "warn");
   return { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), phase: detectPhase(dir, tracks), approvals: st.approvals || {}, pendingGates: [], forcedGates: [],

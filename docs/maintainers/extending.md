@@ -35,6 +35,9 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
 - New CLI switch (a flag that takes no value) → `CLI_SWITCHES` in `mcp/lib/engine/guards.js`, exported as
   `spec.CLI_SWITCHES` (the CLI's `BOOL_FLAGS` and the approval hook's lexer both read it); a new value flag → the CLI's
   `VALUE_FLAGS`.
+- New `.state.json` / `roadmap.json` key → decide how two branches merge it (conventions.md → Merging the spec state): an
+  append-only list or a keyed map gets its rule in state.js (`mergeFeatureState`'s `FIELDS`, `ROADMAP_FIELDS`, `META_FIELDS`);
+  a plain value needs nothing (3-way per key — both sides changed it differently = a conflict the user resolves).
 - New hook → `hooks/hooks.json` (never `plugin.json` — see Conventions), silent and exit 0 on any error, the engine loaded
   only after a cheap raw pre-check (roadmap.json / the payload), and a row in `references/tooling-reference.md`.
 - Any generated/returned user-facing text → put the strings in the i18n tables for every language — the same key in

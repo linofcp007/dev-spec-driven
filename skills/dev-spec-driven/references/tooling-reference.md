@@ -62,7 +62,8 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   sentinel) · `traceability` (every gap kind with its IDs; the kinds a later phase's still-template file would cause
   are deferred as a warn) · `task-deps` (only when some task declares `_Depends:_`: a value that is no task number, a
   number no active task carries, a self-dependency, a cycle — the tasks approval refuses on it) · bugfix `root-cause` ·
-  spike `question` / `decision`.
+  spike `question` / `decision` · `merge-conflicts` (a `mergeConflicts` list the git merge driver left in the feature's
+  `.state.json` or in `roadmap.json` — pick each value, delete the list).
 - **Warn:** `steering` (core files missing, or files still holding template placeholders) · `success-criteria` ·
   `priorities` · `mermaid` · `constitution-check` · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,
   empty, still the template, or fewer than 2 options) · `design-risks` (its Risks section missing, empty or still the
@@ -166,7 +167,25 @@ roadmap [--write] [--html] [--lang]      depend <feature> [deps...] [--add x] [-
 backlog [add|rm|remove <name> [note]]    scan [path] [--cap N] · coverage
 evals <feature> [--dry-run ...]          mcp-config [client] · rules <cursor|windsurf|copilot|gemini|agents>
 prompts [name] [--args "…"]              statusline [--print-config]
+merge-state --install | --uninstall [--project <dir>]     merge-state <base> <ours> <theirs> [<path>]   (git's merge driver)
 ```
+
+**Teams — git's merge driver for the spec state.** `merge-state --install` writes `.gitattributes` (commit it) and this
+clone's git config (`merge.dev-spec-state.driver`; every teammate runs it once). Git then runs `merge-state %O %A %B %P` on
+`.specs/**/.state.json` and `.specs/roadmap.json` whenever both branches changed one: approvals, ticks, evidence (the
+latest run per task, histories merged), the approval history, change requests, sign-offs, backlog, dependencies,
+milestones and checks of both branches are united — a revocation wins over an older approval. A real conflict (a setting
+both branches changed differently, e.g. `meta.lang`) exits 1 and stays valid JSON: ours is kept, the file lists each one
+under `mergeConflicts` (base / ours / theirs) and `spec_doctor` fails `merge-conflicts` until you pick the values and
+delete the list. `ROADMAP.md` / `SPECS.md` keep ours (regenerated on the next write). `--uninstall` removes both.
+
+**Approvals over MCP (other clients).** With `meta.approvalGuard` `ask` / `deny`, the MCP server itself guards an agent's
+`spec_approve` (approve, revoke, fast-forward, force), `spec_feature` remove and a `spec_init` that lowers a protection:
+a client that supports MCP **elicitation** gets an `elicitation/create` question for its user (the action, the gate —
+forced checks, the waiver —, an Approve box and a note); only an explicit approve records it, with `confirmed {via:
+"elicitation", at, note}`; decline, cancel or no answer within 5 min (`DEV_SPEC_ELICIT_TIMEOUT_MS`) → `declined: true`,
+nothing recorded. Without elicitation `ask` runs as before and `deny` is refused (`humanRequired: true` + the `command`).
+The Claude Code plugin's server leaves this to the approval hook (`SPEC_MCP_APPROVAL_HOOK=on` in `mcp/servers.json`).
 
 `done --run` runs the task's own `_Verify:_` command(s) from the project root and records the evidence (with the git
 commit and whether the tree was dirty, when git is available); `finish --run` runs the project checks
