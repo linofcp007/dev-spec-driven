@@ -65,10 +65,16 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   S16.initProject(s50, ["core"], "en");
   S16.createFeature(s50, "Feature 0", ["core"], "x", undefined, "en");
   for (let i = 1; i < 50; i++) fs.cpSync(path.join(s50, ".specs", "feature-0"), path.join(s50, ".specs", "feature-" + i), { recursive: true });
-  const r50 = cli(["statusline", "--json"], { input: js({ cwd: s50 }) });
+  // The bound: 8 s, or 4× the same process on the 1-feature project run just before it (the machine is shared with the parallel
+  // runner — 1.20 review); a timing-only miss is measured once more.
+  const measure50 = () => { const base = cli(["statusline", "--json"], { input: js({ cwd: sp }) }).ms; return { r: cli(["statusline", "--json"], { input: js({ cwd: s50 }) }), base }; };
+  let m50 = measure50();
+  if (m50.r.code === 0 && m50.r.ms >= Math.max(8000, 4 * m50.base)) m50 = measure50();
+  const r50 = m50.r;
   let r50j = null;
   try { r50j = JSON.parse(r50.out); } catch { /* stays null */ }
-  ok(r50.code === 0 && r50j && r50j.features === 50 && r50.ms < 8000, "1.16 C1: statusline on a 50-feature project — one line, " + r50.ms + " ms for the whole process");
+  ok(r50.code === 0 && r50j && r50j.features === 50 && r50.ms < Math.max(8000, 4 * m50.base),
+    "1.16 C1: statusline on a 50-feature project — one line, " + r50.ms + " ms for the whole process (1 feature: " + m50.base + " ms)");
   // --print-config: the settings.json entry with this clone's absolute path; the human text in the project language.
   const pc = cli(["statusline", "--print-config", "--json", "--project", sp]);
   let pcj = null;
@@ -114,14 +120,22 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     "1.16: help and the header docblock document statusline [--print-config] and import <plan|execplan> - | --text; print-config is one of spec.CLI_SWITCHES");
   // 1.16 C review 5: a UNC folder in the session JSON is never stat'ed (an unreachable host hung the status line for minutes) —
   // a TEST-NET address (192.0.2.1, never routed), a child process with its own timeout; silent and fast on every platform.
-  const uncRuns = [js({ cwd: "\\\\192.0.2.1\\share\\proj" }), js({ workspace: { current_dir: "//192.0.2.1/share/proj", project_dir: "\\\\?\\UNC\\192.0.2.1\\share" } })].map((input) => {
+  // "Fast" is relative (1.20 review — a flat 10 s flaked under the parallel runner: 13 s with the machine full, ~0.4 s alone):
+  // each UNC run against the same status line on a folder without a project, run just before it; an SMB attempt costs 20 s
+  // and more (the hang: minutes), far past 3× that + 3 s. A timing-only miss is measured once more.
+  const slRun = (input) => {
     const env = { ...process.env };
     for (const k of OPTS.concat(["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "COLUMNS"])) delete env[k];
     const t0 = Date.now();
-    const r = spawnSync(process.execPath, [CLI, "statusline"], { input, encoding: "utf8", env, cwd: none, timeout: 20000 });
+    const r = spawnSync(process.execPath, [CLI, "statusline"], { input, encoding: "utf8", env, cwd: none, timeout: 120000 });
     return { code: r.status, out: r.stdout || "", err: r.error ? r.error.code : null, ms: Date.now() - t0 };
-  });
-  ok(uncRuns.every((r) => r.code === 0 && r.out === "" && !r.err && r.ms < 10000),
+  };
+  const uncInputs = [js({ cwd: "\\\\192.0.2.1\\share\\proj" }), js({ workspace: { current_dir: "//192.0.2.1/share/proj", project_dir: "\\\\?\\UNC\\192.0.2.1\\share" } })];
+  const uncMeasure = () => uncInputs.map((input) => { const base = slRun(js({ cwd: none })).ms; return { ...slRun(input), base, bound: 3 * base + 3000 }; });
+  const silent = (r) => r.code === 0 && r.out === "" && !r.err;
+  let uncRuns = uncMeasure();
+  if (uncRuns.every(silent) && uncRuns.some((r) => r.ms >= r.bound)) uncRuns = uncMeasure(); // a timing-only miss: measured once more
+  ok(uncRuns.every((r) => silent(r) && r.ms < r.bound),
     "1.16 C review 5: statusline with a network cwd / workspace folder (UNC, //host, \\\\?\\UNC) prints nothing and exits at once — no SMB connection (got " + js(uncRuns) + ")");
   // 1.16 C review 8: --print-config names a project's .claude/settings.local.json (the entry holds this machine's path).
   const pcEn = cli(["statusline", "--print-config", "--project", sp]);

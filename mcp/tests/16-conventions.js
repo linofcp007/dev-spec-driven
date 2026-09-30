@@ -792,6 +792,66 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
       "1.20 build: without its corpus file a clone renders the corpus and decides every fresh scaffold text — " + here.texts + " texts (47 track sets × 4 languages, the feature, bugfix and steering builders): placeholderReport, artifactState, isPlaceholderTask, isBugStep — exactly as the committed corpus does (" +
       here.placeholders + " placeholders) (got " + js([here.source, here.hash, missing.source, missing.hash, missing.placeholders]) + ")");
 
+    // 1.20 review — the stamp is checked against the code the process LOADED, never the files as they are at its first
+    // placeholder question. A long-lived process (the MCP server) loads the engine; then the clone is updated under it — a slot
+    // reworded AND the corpus rebuilt, as a `git pull` of both would do. That process renders (its own code), and its answers
+    // are the old engine's; a process started after the update reads the new corpus. The same for a language file that loads
+    // on demand AFTER the corpus was trusted (pt.js here), and for package.json's version (read at load).
+    const raceChild = function (clone, mode) {
+      const fs = require("fs"), path = require("path"), { spawnSync } = require("child_process");
+      const lib = path.join(clone, "mcp", "lib");
+      const S = require(path.join(lib, "spec.js")), I = require(path.join(lib, "i18n.js")), E = require(path.join(lib, "engine", "index.js"));
+      // A core design.md: its Reuse & Integration slots are no 1.12 text (LEGACY_TEMPLATE_PLACEHOLDERS would keep an old one).
+      const design = (l) => I.design({ name: "x", tracks: ["core"], label: "core", slug: "x", summary: "" }, l);
+      const slots = (text) => S.placeholderReport(text).map((p) => p.text);
+      const edit = (rel, from, to) => { const p = path.join(clone, ...rel.split("/")); fs.writeFileSync(p, fs.readFileSync(p, "utf8").split(from).join(to)); };
+      const rebuild = () => spawnSync(process.execPath, [path.join(clone, "scripts", "build.js")], { encoding: "utf8" }).status;
+      const out = { mode };
+      if (mode === "en") { // its English scaffold written (en.js loaded), no placeholder question asked yet
+        const text = design("en");
+        edit("mcp/lib/i18n/en.js", "[what it already does for this feature]", "[what it does today for this feature]");
+        out.build = rebuild();
+        Object.assign(out, { source: E.builtinCorpusSource(), probe: slots(text), state: S.artifactState({ text }) });
+      } else if (mode === "locale") { // the corpus trusted first; then pt.js reworded + rebuilt; then Portuguese loads
+        out.first = slots(design("en")).length > 0 && E.builtinCorpusSource();
+        edit("mcp/lib/i18n/pt.js", "[o que já faz por esta feature]", "[o que faz hoje por esta feature]");
+        out.build = rebuild();
+        const pt = design("pt"); // the NEW pt.js — the code this process runs from now on
+        Object.assign(out, { source: E.builtinCorpusSource(), fresh: pt.includes("[o que faz hoje por esta feature]"), probe: slots(pt) });
+      } else if (mode === "version") { // nothing asked yet — package.json gets another version, the corpus is rebuilt for it
+        const p = path.join(clone, "package.json");
+        fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(/"version":\s*"[^"]+"/, "\"version\": \"0.0.2\""));
+        out.build = rebuild();
+        Object.assign(out, { version: E.engineVersion(), source: E.builtinCorpusSource() });
+      } else Object.assign(out, { version: E.engineVersion(), source: E.builtinCorpusSource(), probe: slots(design(mode.slice(6))) }); // "later-<lang>": a later process
+      process.stdout.write(JSON.stringify(out));
+    };
+    const raceJs = script("p20-race.js", raceChild, "process.argv[2], process.argv[3]");
+    const raceClone = (name) => {
+      const c = path.join(tmp, name);
+      fs.mkdirSync(path.join(c, "scripts"), { recursive: true });
+      fs.cpSync(libDir, path.join(c, "mcp", "lib"), { recursive: true, filter: (src) => path.basename(src) !== "spec.bundle.js" });
+      fs.copyFileSync(path.join(root, "package.json"), path.join(c, "package.json"));
+      fs.copyFileSync(buildJs, path.join(c, "scripts", "build.js"));
+      return c;
+    };
+    const raceDirs = { en: raceClone("p20-race-en"), pt: raceClone("p20-race-pt"), version: raceClone("p20-race-version") };
+    const race = (dir, mode) => spawnJson([raceJs, dir, mode], process.env);
+    const rEn = race(raceDirs.en, "en"), rLoc = race(raceDirs.pt, "locale"), rVer = race(raceDirs.version, "version");
+    const later = { en: race(raceDirs.en, "later-en"), pt: race(raceDirs.pt, "later-pt"), version: race(raceDirs.version, "later-en") }; // started after each update
+    const version = require(path.join(root, "package.json")).version;
+    const expected = S.placeholderReport(I.design({ name: "x", tracks: ["core"], label: "core", slug: "x", summary: "" }, "en")).map((p) => p.text); // this engine's answer
+    ok(rEn.build === 0 && rEn.source === "render" && Array.isArray(rEn.probe) && expected.includes("[what it already does for this feature]") && js(rEn.probe) === js(expected) &&
+      rEn.state === "placeholder" && rVer.build === 0 && rVer.version === version && rVer.source === "render" &&
+      later.en.source === "file" && Array.isArray(later.en.probe) && later.en.probe.includes("[what it does today for this feature]") && later.version.version === "0.0.2" &&
+      later.version.source === "file",
+      "1.20 review: sources and corpus updated under a running process (a slot reworded + npm run build; another version + rebuild) before its first placeholder question → it renders from the code it LOADED (source 'render'): its own fresh scaffold reads exactly as this engine reads it — [what it already does for this feature] still a placeholder — and engineVersion() is the version it loaded; a process started after the update reads the new corpus (got " +
+      js({ rEn, rVer, later: [later.en.source, later.version], expected }) + ")");
+    ok(rLoc.build === 0 && rLoc.first === "file" && rLoc.fresh === true && rLoc.source === "render" && Array.isArray(rLoc.probe) && rLoc.probe.includes("[o que faz hoje por esta feature]") &&
+      later.pt.source === "file" && Array.isArray(later.pt.probe) && js(later.pt.probe) === js(rLoc.probe),
+      "1.20 review: a language file loaded on demand AFTER the corpus was trusted and changed since the engine loaded (pt.js reworded + rebuilt) drops the corpus — rendered from the code the process now runs: the new slot of its fresh Portuguese scaffold is a placeholder, as a process started after the update says from the new corpus (got " +
+      js({ rLoc, later: later.pt }) + ")");
+
     // The bundle (built on demand — here into tmp, for this clone's mcp/lib): the same modules in one file — the modules'
     // namespace, the corpus it embeds (source 'bundle'), their own paths (engineVersion's package.json, the approval guard's
     // CLI path) — every module stamped with its size and mtime.

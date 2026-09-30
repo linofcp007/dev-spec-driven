@@ -364,13 +364,28 @@ exports.run = async ({ ok, rpc, S, tmp, require }) => {
       osx.warnings.some((x) => /carried over verbatim.*Purpose.*Constraints/.test(x)),
       "spec_import openspec: every Purpose paragraph and other ## sections are carried; a wrapped WHEN clause stays whole");
 
-    // Review round: a flat tasks.md is imported in linear time (the parent lookup was quadratic).
-    w6(im, ".kiro/specs/flat/requirements.md", "### Requirement 1\n\n#### Acceptance Criteria\n\n1. WHEN x happens THEN the system SHALL do y\n");
-    w6(im, ".kiro/specs/flat/tasks.md", Array.from({ length: 20000 }, (_, i) => `- [ ] ${i + 1}. T\n  - _Requirements: 1.1_`).join("\n") + "\n");
-    const t0flat = Date.now();
-    const flat = safe6(() => S.importSpec(im, "kiro", ".kiro/specs/flat"));
-    const flatMs = Date.now() - t0flat;
-    ok(flat.ok && flat.mapping["task 20000"] === "task 20000" && flatMs < 6000, "spec_import: a flat 20 000-task tasks.md imports in linear time (" + flatMs + " ms; was ~11 s)");
+    // Review round: a flat tasks.md is imported in linear time (the parent lookup was quadratic: ~11 s for 20 000 tasks).
+    // 1.20 review: bounded RELATIVE to a 2 000-task import measured just before it (a flat 6 s flaked under the parallel runner
+    // — 6.3 s on node:18 in Docker): linear is ~6–12× that, the quadratic lookup ~35×; the 6 s floor keeps the old bound on an
+    // idle machine, and a timing-only miss is measured once more. Each attempt in a project of its own (a 20 000-task feature
+    // makes every later import in its project pay for it in the roadmap refresh).
+    const flatImport = (dir, name, n) => {
+      w6(dir, `.kiro/specs/${name}/requirements.md`, "### Requirement 1\n\n#### Acceptance Criteria\n\n1. WHEN x happens THEN the system SHALL do y\n");
+      w6(dir, `.kiro/specs/${name}/tasks.md`, Array.from({ length: n }, (_, i) => `- [ ] ${i + 1}. T\n  - _Requirements: 1.1_`).join("\n") + "\n");
+      const t0 = Date.now();
+      const r = safe6(() => S.importSpec(dir, "kiro", `.kiro/specs/${name}`));
+      return { r, ms: Date.now() - t0 };
+    };
+    const flatRun = (tag) => {
+      const dir = path.join(tmp, "proj-wp6-flat-" + tag);
+      S.initProject(dir, ["core"], "en");
+      const small = flatImport(dir, "flat-small", 2000), big = flatImport(dir, "flat", 20000);
+      return { small, big, bound: Math.max(6000, 20 * small.ms) };
+    };
+    let flat = flatRun("a");
+    if (flat.big.r.ok && flat.big.ms >= flat.bound) flat = flatRun("b"); // a timing-only miss: measured once more
+    ok(flat.small.r.ok && flat.big.r.ok && flat.big.r.mapping["task 20000"] === "task 20000" && flat.big.ms < flat.bound,
+      "spec_import: a flat 20 000-task tasks.md imports in linear time (" + flat.big.ms + " ms; a 2 000-task one " + flat.small.ms + " ms; bound " + flat.bound + " ms = max(6 s, 20×); was ~11 s)");
 
     // Review round 2: a ## section WRAPPING requirements/stories carries only what is left around them (no second copy).
     w6(im, ".kiro/specs/wrapped-h2/requirements.md", ["# Requirements Document", "", "## Introduction", "", "Login stuff.", "", "## Functional Requirements", "", "Core flows (FRINTRO).", "",
