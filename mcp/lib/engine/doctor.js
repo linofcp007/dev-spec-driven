@@ -23,7 +23,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang, outsideCodeTemplates,
   overlapDoctorDetail, own, packOf, packRegistry, packTitle, packTracks, parseTasks, pendingGateList, PHASE_FILE,
   phaseActive, phaseContent, phaseFile, PHASES, placeholderSummary, planFileScopes, planIdText, projectLang,
-  RE_CODE_TID, RE_CONSTITUTION_CHECK, readIfExists, readJson, readRoadmap, readState, realRootOf, redPhaseHint,
+  RE_CODE_TID, RE_CONSTITUTION_CHECK, readFileHead, readIfExists, readJson, readRoadmap, readState, realRootOf, redPhaseHint,
   REPRO_SYN, reReviewRoles, reservedSlug, roadmapError, roleGateView, roleSignOffs, ROOT_CAUSE_SYN, SAAS_SECTIONS,
   safeReaddir, SAMPLE_GOLDEN, SCAN_IGNORE, SCAN_READ_BYTES, secondaryDefinitions, sectionFilled, sectionState,
   signOffWhyText, snapshotPhases, specsRoot, SPIKE_FILE, spikeDoctor, spikeInfo, spikeNextAction, staleFinish,
@@ -46,7 +46,7 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   isSpikeDir, isTestCodePath, legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang,
   outsideCodeTemplates, overlapDoctorDetail, own, packOf, packRegistry, packTitle, packTracks, parseTasks,
   pendingGateList, PHASE_FILE, phaseActive, phaseContent, phaseFile, PHASES, placeholderSummary, planFileScopes,
-  planIdText, projectLang, RE_CODE_TID, RE_CONSTITUTION_CHECK, readIfExists, readJson, readRoadmap, readState,
+  planIdText, projectLang, RE_CODE_TID, RE_CONSTITUTION_CHECK, readFileHead, readIfExists, readJson, readRoadmap, readState,
   realRootOf, redPhaseHint, REPRO_SYN, reReviewRoles, reservedSlug, roadmapError, roleGateView, roleSignOffs,
   ROOT_CAUSE_SYN, SAAS_SECTIONS, safeReaddir, SAMPLE_GOLDEN, SCAN_IGNORE, SCAN_READ_BYTES, secondaryDefinitions,
   sectionFilled, sectionState, signOffWhyText, snapshotPhases, specsRoot, SPIKE_FILE, spikeDoctor, spikeInfo,
@@ -976,8 +976,11 @@ function statusTestsGate(pdir, dir, tracks) {
       !SCAN_IGNORE.has(segs[segs.length - 1]) && isTestCodePath(segs.join("/"))) {
       try {
         if (fs.lstatSync(abs).isFile()) {
-          keys = new Set();
-          for (const m of fs.readFileSync(abs, "utf8").slice(0, SCAN_READ_BYTES).matchAll(RE_CODE_TID)) keys.add(tKey(m[1] || m[2] || m[3]));
+          const head = readFileHead(abs, SCAN_READ_BYTES); // the first SCAN_READ_BYTES characters, one bounded read (1.21.1 review)
+          if (head != null) {
+            keys = new Set();
+            for (const m of head.matchAll(RE_CODE_TID)) keys.add(tKey(m[1] || m[2] || m[3]));
+          }
         }
       } catch { keys = null; }
     }

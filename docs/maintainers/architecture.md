@@ -30,7 +30,8 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
                                pack memos, ghost markers, the built-in corpus flag) — one object, mutated in place
   core.js                      linear text scans (1.17 H), own-key lookup, blank facts; linear glob matching; the _Implements:_
                                readers (implementsPath / Rel / Key, implementsTargets, globFiles)
-  files.js                     paths, create-only / atomic writes, JSON reads, the read cache (withReadCache), path containment
+  files.js                     paths, create-only / atomic writes, JSON reads, the read cache (withReadCache), readFileHead (a
+                               file's first N characters in one bounded read — the code scans, 1.21.1), path containment
                                (drive roots, 8.3 names, junctions, network paths); the feature and roadmap locks, folder moves
                                under the lock, the .specs/.gitignore lock lines
   state.js                     language resolution, the feature resolver (resolveFeature / existingFeature), .state.json,
@@ -71,7 +72,8 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
   guards.js                    guard mode (meta.guard, the scope guard), the end-of-turn stop gate, the human approval guard
                                and its shell lexer; CLI_SWITCHES
   upgrade.js                   spec_upgrade (meta.specVersion, the audit, the migrations)
-  scan.js                      the brownfield scan and spec_coverage
+  scan.js                      the brownfield scan and spec_coverage; the ONE notion of code (CODE_EXT, isCodeFile) and of a
+                               test file (isTestFile) the scan, coverage, the test-code scan and guard mode share (1.21.1)
   import/                      spec_import: index.js (the entry point, task import) · common.js (the shared readers) · one
                                parser per tool — kiro.js · speckit.js · openspec.js · plan.js (plan + execplan) · bmad.js ·
                                fluidplan.js

@@ -539,6 +539,34 @@ function readIfExists(file) {
   const a = changeAlias(file);
   return a ? readRaw(a) : null;
 }
+// 1.21.1 review — the first maxChars characters of a file, UTF-8 decoded, from ONE bounded read of the disk: never the whole
+// file then a slice (a 177 MB tests/fixtures/db.sql cost every trace / doctor / finish / approve 249 ms and 179 MB). The
+// brownfield scan, the test-code scan and the status line's tests gate read code this way. The cap is in CHARACTERS (UTF-16
+// units), as the slice it replaced was — review 2: a byte cap lost a T-ID behind 150,000 accented letters. So it reads up to
+// 4 bytes a character (a unit is at most 3 UTF-8 bytes; a surrogate pair is 4 bytes for 2 units), decodes, then slices.
+// null when the file can't be read. Uncached (not the read cache): these readers visit each file once per call.
+let HEAD_BUF = null; // one scratch buffer, reused (the reads are synchronous)
+function readFileHead(file, maxChars) {
+  const chars = Math.max(1, Math.floor(maxChars) || 1);
+  const max = chars * 4;
+  if (!HEAD_BUF || HEAD_BUF.length < max) HEAD_BUF = Buffer.allocUnsafe(max);
+  let fd = null;
+  try {
+    fd = fs.openSync(file, "r");
+    let n = 0;
+    while (n < max) {
+      const r = fs.readSync(fd, HEAD_BUF, n, max - n, null);
+      if (r <= 0) break;
+      n += r;
+    }
+    const text = HEAD_BUF.toString("utf8", 0, n);
+    return text.length > chars ? text.slice(0, chars) : text;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) try { fs.closeSync(fd); } catch { /* already closed */ }
+  }
+}
 function readRaw(file) {
   const k = CTX.READ_CACHE ? readCacheKey(file) : null;
   if (k !== null && CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
@@ -728,6 +756,6 @@ module.exports = { resolveProjectDir, specsRoot, ensureDir, writeIfAbsent, RENAM
   featureBusyResult, withMoveLock, DIR_RENAME_RETRY_MS, renameDirSync, moveDirOrBusy, ROADMAP_LOCK_FILE,
   LOCK_IGNORE_LINES, ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel,
   shapeError, withReadCache, readCacheKey, EXISTS_KEY, DIR_KEY, CONTAINED_KEY, specsFileContained,
-  specsFileContainedNow, readContained, readIfExists, readRaw, existsCached, existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, globWalkReaches,
+  specsFileContainedNow, readContained, readIfExists, readFileHead, readRaw, existsCached, existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, globWalkReaches,
   invalidateReadCache, safeReaddir, withinRoot, isDirSafe, FOLD_CASE, toPosix, isInsideDir, realPathLoose, plainUnc,
   networkPathInside, insideDirAlias, isNetworkPath, __link };

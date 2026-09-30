@@ -154,13 +154,13 @@ import <plan|execplan|fluidplan> - | --text "<markdown>"   (the document from st
 list · status [feature]                  doctor <feature> · clarify <feature>
 ears <feature|path> | --text "…" | -     trace <feature> [--code] [--matrix | --csv]
 next <feature> [--batch] [--max N] [--waves]    brief <feature> [n] [--write] [--include-brief]
-done <feature> <n> [--run [--shell bash] [--timeout <s>] | --evidence "…" --exit N --cmd "…"]
+done <feature> <n> [--run [--shell bash|pwsh] [--timeout <s>] | --evidence "…" --exit N --cmd "…"]
 approve <feature> <phase> [--by NAME] [--role ROLE] [--force [--reason "…"] [--expires YYYY-MM-DD|Nd]]
 approve <feature> <phase> --revoke [--reason "…"]     undone <feature> <n> [--reason "…"]
 approve <feature> --through <phase> [--role ROLE] [--force]
 impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen]    impact [feature] --phase steering
 decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects ids,…] [--supersedes D-n] [--discovery]
-next-action|na <feature>                 finish <feature> [--write] [--include-body] [--run [--shell bash] [--timeout <s>]]
+next-action|na <feature>                 finish <feature> [--write] [--include-body] [--run [--shell bash|pwsh] [--timeout <s>]]
 append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--makes-green T-01,…] [--expect-fail]
              [--size XS|S|M|L|XL] [--depends 3,5] [--story US1|shared] [--parallel] [--heading "…"]
 metrics [feature] [--write]              catalog [--write] · drift [feature] · upgrade [--apply]
@@ -202,7 +202,11 @@ The Claude Code plugin's server leaves this to the approval hook (`SPEC_MCP_APPR
 `done --run` runs the task's own `_Verify:_` command(s) from the project root and records the evidence (with the git
 commit and whether the tree was dirty, when git is available); `finish --run` runs the project checks
 (`meta.checks`) and records them — the only CLI commands that execute anything from your spec. On Windows
-`--shell bash` is Git Bash, never WSL's `bash.exe` launcher (named by its path, WSL is used as given); a run that could not happen (no shell, a signal,
+`--shell bash` is Git Bash, never WSL's `bash.exe` launcher (named by its path, WSL is used as given); `--shell pwsh` /
+`powershell` (or `DEV_SPEC_SHELL=pwsh`) runs the command as PowerShell (`-NoProfile -NonInteractive -Command`) — the portable
+choice; under cmd.exe a `pwsh -NoProfile -Command "…"` `_Verify:_` runs as written (its `$` is PowerShell's — never refused as
+POSIX syntax), while a POSIX shell (`/bin/sh`, `--shell bash`) takes the single-quoted script (it would expand a double-quoted
+`$LASTEXITCODE` to nothing — refused before anything runs; `references/verification.md` → PowerShell); a run that could not happen (no shell, a signal,
 `--timeout <seconds>` expired, output over 64 MB) records nothing. `log` reads `git log`
 (read-only; `-` reads a log from stdin) and lists per task the commits that cite it, plus the +tdd red-first check.
 `done --run` / `finish --run` runs are stamped `observed: "cli"` (they count as observed under `init --evidence

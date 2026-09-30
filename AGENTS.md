@@ -162,6 +162,9 @@ next, `dev-spec next-action <feature>` names the single next step.
   `dev-spec finish <f> --run`.
 - **`--run` and its shell.** `done --run` / `finish --run` use cmd.exe on Windows (`/bin/sh` elsewhere) unless `--shell`
   (or `DEV_SPEC_SHELL`) names another; on Windows `--shell bash` is Git Bash, never WSL's `bash.exe` launcher (name that one by its path to run inside WSL).
+  `--shell pwsh` / `powershell` runs a PowerShell `_Verify:_` (`-NoProfile -NonInteractive -Command`) — the portable choice.
+  Otherwise quote the pwsh script for the shell that runs it: double quotes under cmd.exe, single quotes under a POSIX shell
+  when it holds `$` (`pwsh -NoProfile -Command 'npm test; exit $LASTEXITCODE'` — a double-quoted one is refused there).
   A run that could not happen (the shell didn't start, a signal, `--timeout <seconds>` expired, output over 64 MB)
   records nothing: the task stays open.
 - **No pipes in `_Verify:_`.** `npm test | tee log` exits with the last command's code, so a failure can read as

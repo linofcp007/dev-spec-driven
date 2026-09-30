@@ -192,17 +192,35 @@ function verificationStatus(projectDir, slug, dir) {
 // stack frame's "test_runner/test:960:18" (file:line) is not "test: 960".
 const RE_COUNT_KW = "(?:tests?|pass(?:ed|es|ing)?|fail(?:ed|s|ing|ures?)?|ok|errors?)";
 const RE_COUNT_LINE = new RegExp(`(?<![\\p{L}\\p{N}_])(?:\\d+\\s*${RE_COUNT_KW}|${RE_COUNT_KW}:?\\s+\\d+)(?![\\p{L}_])`, "iu");
+// 1.21.1 — terminal colour codes: PowerShell 7 (and Pester under it) colours its output even when it is captured
+// ("\e[91m[-] T-01 …\e[0m", "\e[97mTests Passed: 0, \e[0m\e[91mFailed: 1"), and so do runners forced to (FORCE_COLOR). They
+// are dropped before a run is summarized or read for could-not-run phrases: CSI sequences (ESC [ … final byte) and OSC ones
+// (ESC ] … BEL / ESC \). Built from char codes — never a raw control character (or its escape through an editor) in source.
+const ESC = String.fromCharCode(27), BEL = String.fromCharCode(7);
+const RE_ANSI = new RegExp(ESC + "\\[[0-9;?]*[ -/]*[@-~]|" + ESC + "\\][^" + BEL + ESC + "]{0,2000}(?:" + BEL + "|" + ESC + "\\\\)?", "g");
+const stripAnsi = (s) => (s.indexOf(ESC) === -1 ? s : s.replace(RE_ANSI, ""));
 function summarizeRunOutput(output, max = 500) {
-  const lines = String(output || "").split(/\r?\n/).map((l) => l.trimEnd().slice(0, 200)).filter((l) => l.trim());
-  const counts = lines.map((l, i) => (RE_COUNT_LINE.test(l) ? i : -1)).filter((i) => i >= 0).slice(-3);
-  const idx = [...new Set([...counts, ...lines.map((_, i) => i).slice(-5)])].sort((a, b) => a - b);
+  const lines = stripAnsi(String(output || "")).split(/\r?\n/).map((l) => l.trimEnd().slice(0, 200)).filter((l) => l.trim());
+  // (1.21.1 review: Pester's "a block / file failed before its tests" lines — RE_PESTER_NOT_RUN — are kept like count lines, so a
+  // recorded summary still shows the test never ran)
+  const counts = lines.map((l, i) => (RE_COUNT_LINE.test(l) || RE_PESTER_NOT_RUN.test(l) ? i : -1)).filter((i) => i >= 0).slice(-3);
+  // 1.21.1 review 2 — a run whose output shows a test RAN keeps that sign in its summary: a mixed Pester run (one block's
+  // BeforeAll failed — its NOT_RUN line kept above —, another block's test failed on an assertion) was summarized without the
+  // "[-] Greeter.T-01 … 99ms" line, and the stored summary then read "never ran" (the red proof refused, recorded as a failed
+  // run). The first line RE_ASSERTION_RAN reads (line by line) joins the kept lines whenever they don't show a run already.
+  const shows = (idxs) => { const t = idxs.map((i) => lines[i]).join("\n"); return RE_ASSERTION_RAN.test(t) || pesterRan(t); };
+  let keepAt = -1;
+  const base = [...new Set([...counts, ...lines.map((_, i) => i).slice(-5)])];
+  if (!shows(base)) keepAt = lines.findIndex((l) => RE_ASSERTION_RAN.test(l));
+  const idx = [...new Set([...base, ...(keepAt >= 0 ? [keepAt] : [])])].sort((a, b) => a - b);
   const seen = new Set();
   const picked = idx.reverse().filter((i) => !seen.has(lines[i]) && seen.add(lines[i])).reverse()
-    .map((i) => ({ text: lines[i], count: counts.includes(i) }));
+    .map((i) => ({ text: lines[i], count: counts.includes(i) || i === keepAt, keep: i === keepAt }));
   const size = () => picked.reduce((s, p) => s + p.text.length + 1, -1);
   while (picked.length > 1 && size() > max) {
     const plain = picked.findIndex((p) => !p.count);
-    picked.splice(plain === -1 ? 0 : plain, 1);
+    const count = picked.findIndex((p) => !p.keep);
+    picked.splice(plain !== -1 ? plain : count !== -1 ? count : 0, 1);
   }
   return picked.map((p) => p.text).join("\n").slice(0, max);
 }
@@ -244,10 +262,25 @@ function isWslLauncher(p) {
   const s = String(p == null ? "" : p).trim().replace(/^"|"$/g, "");
   return /^(?:bash|wsl)(?:\.exe)?$/i.test(path.win32.basename(s)) && RE_WSL_LAUNCHER_DIR.test(s);
 }
+// 1.21.1 — PowerShell as the run shell (`--shell pwsh` / `powershell`, a path to either, DEV_SPEC_SHELL=pwsh). Node's shell
+// option would run `<shell> -c "<cmd>"` — pwsh 7 and Windows PowerShell 5.1 both accept it — but that loads the user's
+// profile (slow; it may print, prompt or change the folder). The result carries `pwsh: true` and `args`: the CLI runs
+// `<shell> -NoProfile -NonInteractive -Command <cmd>` itself — the command ONE argument, quoted by Node's Windows rules, which
+// PowerShell reads back intact. The exit code is the script's (`exit 3` → 3; a last command that failed → 1; `exit
+// $LASTEXITCODE` passes a native program's own code on).
+const PWSH_RUN_ARGS = ["-NoProfile", "-NonInteractive", "-Command"];
+const RE_PWSH_PROGRAM = /^(?:pwsh|powershell)(?:\.exe)?$/i;
+const isPwshShell = (p) => RE_PWSH_PROGRAM.test(path.win32.basename(String(p == null ? "" : p).trim().replace(/^"|"$/g, "")));
+const pwshShell = (shell) => ({ shell, cmd: false, pwsh: true, args: PWSH_RUN_ARGS.slice() });
+// 1.21.1 review — a POSIX shell runs the command (`posix: true`): the default /bin/sh off Windows, bash / sh / zsh / dash /
+// ksh / fish… named or by path, Git Bash, WSL's bash. It expands `$…` outside single quotes BEFORE a pwsh program sees its
+// script (posixPwshScript): `pwsh -Command "…; exit $LASTEXITCODE"` became a bare `exit` → 0 — a failing check recorded passed.
+const isPosixShellName = (p) => POSIX_SHELLS.has(path.win32.basename(String(p == null ? "" : p).trim().replace(/^"|"$/g, "")).toLowerCase().replace(/\.exe$/, ""));
+const withPosix = (res) => (res.shell === true || isPosixShellName(res.shell) ? { ...res, posix: true } : res);
 function resolveRunShell(requested, opts = {}) {
   const platform = opts.platform || process.platform;
   const req = typeof requested === "string" ? requested.trim() : "";
-  if (platform !== "win32") return { shell: req || true, cmd: false };
+  if (platform !== "win32") return req && isPwshShell(req) ? pwshShell(req.replace(/^"(.*)"$/, "$1")) : withPosix({ shell: req || true, cmd: false });
   if (!req) return { shell: true, cmd: true }; // Node's default there: %ComSpec% (cmd.exe)
   if (/^(?:.*[\\/])?cmd(?:\.exe)?$/i.test(req)) return { shell: req, cmd: true }; // --shell cmd / a ComSpec path: cmd.exe anyway
   // wsl.exe is no shell: Node runs `<shell> -c "<cmd>"` and wsl.exe rejects -c (exit 4294967295 — a bogus failed run, or a
@@ -255,9 +288,11 @@ function resolveRunShell(requested, opts = {}) {
   if (/^(?:.*[\\/])?wsl(?:\.exe)?$/i.test(req.replace(/^"|"$/g, ""))) return { error: "wsl-exe", path: req };
   if (/[\\/]/.test(req)) {
     const shell = req.replace(/^"(.*)"$/, "$1"); // a quoted path: the quotes are no part of it (spawn would miss the file)
-    return isWslLauncher(shell) ? { shell, cmd: false, wsl: true } : { shell, cmd: false };
+    if (isPwshShell(shell)) return pwshShell(shell);
+    return withPosix(isWslLauncher(shell) ? { shell, cmd: false, wsl: true } : { shell, cmd: false });
   }
-  if (!/^bash(?:\.exe)?$/i.test(req)) return { shell: req, cmd: false }; // sh, pwsh, zsh…: as given
+  if (isPwshShell(req)) return pwshShell(req); // pwsh / powershell(.exe): found on PATH
+  if (!/^bash(?:\.exe)?$/i.test(req)) return withPosix({ shell: req, cmd: false }); // sh, zsh…: as given
   const env = opts.env || process.env;
   const envOf = (k) => { const hit = Object.keys(env).find((x) => x.toLowerCase() === k.toLowerCase()); return hit ? String(env[hit] || "") : ""; };
   const exists = opts.exists || ((p) => { try { return fs.statSync(p).isFile(); } catch { return false; } });
@@ -268,20 +303,174 @@ function resolveRunShell(requested, opts = {}) {
   for (const k of ["ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"]) if (envOf(k)) cands.push(W.join(envOf(k), "Git", "bin", "bash.exe"));
   if (envOf("LOCALAPPDATA")) cands.push(W.join(envOf("LOCALAPPDATA"), "Programs", "Git", "bin", "bash.exe"));
   for (const d of envOf("PATH").split(";").slice(0, 200)) { const dir = d.trim().replace(/^"|"$/g, ""); if (dir) cands.push(W.join(dir, "bash.exe")); }
-  for (const c of cands) if (!isWslLauncher(c) && exists(c)) return { shell: c, cmd: false, resolved: true };
+  for (const c of cands) if (!isWslLauncher(c) && exists(c)) return { shell: c, cmd: false, resolved: true, posix: true };
   return { error: "no-git-bash" };
+}
+// 1.21.1 — a PowerShell program's own script is PowerShell, not POSIX: `$` inside a double-quoted word of it is never flagged
+// (`pwsh -NoProfile -Command "Invoke-Pester ./tests -CI; exit $LASTEXITCODE"` was refused as "variable"). cmd.exe hands such a
+// word to the program intact — it expands no `$`, and `;` / `&` inside quotes are no separators to it. The script is every
+// word after -Command / -c (any abbreviation, `-` or `/`), -CommandWithArgs / -cwa or -EncodedCommand of pwsh / powershell
+// (.exe, any path) in PROGRAM position (the first word of a command: cmd.exe's `&` `|` `(` `)` and line breaks outside quotes
+// start another), and Windows PowerShell's first positional argument (powershell.exe's default parameter is -Command; its
+// value options — -ExecutionPolicy Bypass… — skipped). Still flagged: a single-quoted string outside double quotes
+// (`pwsh -c 'Invoke-Pester'`: cmd.exe splits it and PowerShell evaluates a string literal — exit 0), a `$` outside double
+// quotes, and the arguments after -File or pwsh's positional script path: PowerShell passes them to the script as literal
+// strings, so a `$` there was written for the CALLING shell (which, under cmd.exe, expands nothing) — --shell pwsh runs them.
+const PWSH_VALUE_OPTS = ["executionpolicy", "windowstyle", "version", "inputformat", "outputformat", "configurationname", "configurationfile",
+  "psconsolefile", "workingdirectory", "settingsfile", "custompipename"];
+const PWSH_VALUE_ALIASES = new Set(["ep", "ex", "if", "of", "wd", "v", "w", "o", "inp", "out"]);
+const RE_PWSH_COMMAND_OPT = /^c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?$|^c(?:ommandwithargs|wa)$/; // what shellScript() reads as -Command, + -CommandWithArgs
+function pwshOption(word) { // → "script" (the rest is the script) | "file" | "value" (takes the next word) | null (a switch)
+  const o = word.slice(1).toLowerCase();
+  if (!o) return null;
+  if (RE_PWSH_COMMAND_OPT.test(o) || o === "ec" || "encodedcommand".startsWith(o)) return "script";
+  if ("file".startsWith(o)) return "file";
+  return PWSH_VALUE_ALIASES.has(o) || (o.length >= 3 && PWSH_VALUE_OPTS.some((n) => n.startsWith(o))) ? "value" : null;
+}
+// Which words of ONE command are a PowerShell program's script — fed word by word by both lexers below (cmd.exe's and a POSIX
+// shell's): starts(c) at a word's first character says whether that word belongs to the script; ends(word, inScript) at its
+// end (its text, quotes dropped) moves the state: the program (the first word — a POSIX `VAR=value` prefix and a wrapper with
+// its options skipped: wrapperStep), then pwsh's options (pwshOption) up to -Command & co; reset() at a new command.
+function pwshTracker() {
+  let n = 0, ps = null, script = false, skipValue = false, wrap = {};
+  return {
+    starts: (c) => script || (!!ps && ps.win && n > 0 && !skipValue && c !== "-" && c !== "/"), // powershell.exe's positional command
+    ends(word, inScript) {
+      if (n === 0) {
+        if (wrapperStep(wrap, word)) return; // not the program yet
+        const prog = word.replace(/^@/, "").split(/[\\/]/).pop();
+        n++;
+        ps = RE_PWSH_PROGRAM.test(prog) ? { win: /^powershell/i.test(prog) } : null;
+        return;
+      }
+      n++;
+      if (!ps || script) return;
+      if (inScript) script = true;
+      else if (skipValue) skipValue = false;
+      else if (/^[-/]/.test(word)) {
+        const k = pwshOption(word);
+        if (k === "script") script = true;
+        else if (k === "file") ps = null; // the script's arguments: literal strings
+        else if (k === "value") skipValue = true;
+      } else ps = null; // pwsh's positional argument is -File's script path
+    },
+    reset() { n = 0; ps = null; script = false; skipValue = false; wrap = {}; },
+  };
+}
+// 1.21.1 review 2 — a word before the program: a `VAR=value` assignment, a wrapper that runs the rest of the line (env, exec,
+// command, nohup, time, busybox, wsl, sudo, doas, nice, ionice, timeout, setsid, stdbuf — the approval guard's list minus its
+// launchers), a wrapper's option (its value too: `sudo -u root`, `nice -n 10`, `timeout -s KILL`) or positional (`timeout 60`).
+// st: the caller's state object ({} per command). → true when the word is no program. shellScript and pwshTracker share it.
+const WRAPPER_OPTION_VALUES = new Map(Object.entries({
+  env: ["-u", "-C", "--unset", "--chdir"], wsl: ["-d", "-u", "--distribution", "--user", "--cd"], exec: ["-a"],
+  sudo: ["-u", "-g", "-p", "-C", "-D", "-r", "-t", "-U", "-T", "-R", "-h", "--user", "--group", "--prompt", "--close-from", "--chdir", "--role", "--type",
+    "--other-user", "--command-timeout", "--chroot", "--host"],
+  doas: ["-u", "-C"], nice: ["-n", "--adjustment"], ionice: ["-c", "-n", "-p", "--class", "--classdata", "--pid"],
+  timeout: ["-k", "-s", "--kill-after", "--signal"], stdbuf: ["-i", "-o", "-e", "--input", "--output", "--error"], time: ["-f", "-o", "--format", "--output"],
+}));
+const WRAPPER_POSITIONALS = new Map([["timeout", 1]]);
+function wrapperStep(st, word) {
+  const w = String(word);
+  if (st.value) { st.value = false; return true; }
+  if (st.wrapper && w.startsWith("-") && w !== "-") {
+    const eq = w.indexOf("=");
+    if (eq < 0 && (WRAPPER_OPTION_VALUES.get(st.wrapper) || []).includes(w)) st.value = true;
+    return true;
+  }
+  if (st.wrapper && st.positional > 0) { st.positional--; return true; }
+  if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) return true;
+  const base = w.replace(/^@/, "").replace(/["']/g, "").split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, "");
+  if (SHELL_WRAPPERS.has(base)) { st.wrapper = base; st.positional = WRAPPER_POSITIONALS.get(base) || 0; return true; }
+  return false;
 }
 function posixShellSyntax(cmd) {
   const s = String(cmd == null ? "" : cmd);
   const found = new Set();
   let dq = false, sq = false;
+  // The command being read — only to find a PowerShell program's script (pwshTracker).
+  const t = pwshTracker();
+  let word = "", inWord = false, wordScript = false;
+  const endWord = () => { if (!inWord) return; inWord = false; t.ends(word, wordScript); };
+  const endCommand = () => { endWord(); t.reset(); };
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
+    if (!dq && !sq) {
+      if (c === " " || c === "\t") { endWord(); continue; }
+      if (c === "&" || c === "|" || c === "(" || c === ")" || c === "\n" || c === "\r") { endCommand(); continue; }
+    }
+    if (!inWord) { inWord = true; word = ""; wordScript = t.starts(c); }
     if (c === '"' && !sq) dq = !dq;
     else if (c === "'" && !dq) { sq = !sq; if (!sq) found.add("single-quotes"); }
-    else if (c === "$" && !sq && /[A-Za-z_{(]/.test(s[i + 1] || "")) found.add("variable");
+    else if (c === "^" && !dq && !sq && i + 1 < s.length) { word += s[++i]; } // cmd.exe's escape: the next character is literal
+    else {
+      if (c === "$" && !sq && /[A-Za-z_{(]/.test(s[i + 1] || "") && !(dq && wordScript)) found.add("variable");
+      word += c;
+    }
   }
+  endCommand();
   return ["single-quotes", "variable"].filter((k) => found.has(k));
+}
+// 1.21.1 review — the mirror for a POSIX shell (resolveRunShell's `posix`: /bin/sh off Windows, bash, Git Bash…): it expands
+// `$…` and backticks OUTSIDE single quotes — inside double quotes too — before a pwsh / powershell program gets its script, so
+// `pwsh -NoProfile -Command "npm test; exit $LASTEXITCODE"` ran `npm test; exit ` (exit 0: a failing check recorded as passed)
+// and `$_` / `$x` vanished. → the stable codes found in such a script ("variable" | "backtick"; [] = nothing): refused before
+// anything runs. A POSIX shell reads the single-quoted script as written (`pwsh -Command 'Invoke-Pester -CI; exit
+// $LASTEXITCODE'`), and --shell pwsh takes the bare script. A `\$` / `\`` escape is literal; words outside the script
+// (`pwsh -File build.ps1 "$HOME"`) are the calling shell's own. The lexer: `;` `&` `|` `(` `)` and line breaks outside quotes
+// end a command, single quotes are literal, a backslash escapes the next character (inside double quotes only $ ` " \ and a
+// line break).
+// 1.21.1 review 2: a redirection outside quotes (`> "$OUT"`, `2>&1`, `< in`) and its target are the outer shell's, never the
+// script's; a `#` starting a word outside quotes comments out the rest of the line; a POSIX shell's own `-c` script (`bash -c
+// "pwsh -c \"$x\""` — the value lexShell / shellScript read) is analysed in turn, up to 3 levels.
+const POSIX_DQ_ESCAPES = new Set(["$", "`", '"', String.fromCharCode(92), "\n"]);
+function posixPwshScript(cmd) {
+  return ["variable", "backtick"].filter((k) => posixPwshScan(String(cmd == null ? "" : cmd), 0).has(k));
+}
+function posixPwshScan(s, depth) {
+  const found = new Set();
+  const BS = String.fromCharCode(92);
+  let dq = false, sq = false;
+  const t = pwshTracker();
+  let word = "", inWord = false, wordScript = false, redirect = false, target = false;
+  const endWord = () => {
+    if (!inWord) return;
+    inWord = false;
+    if (target) { target = false; return; } // a redirection's target: the outer shell's word
+    t.ends(word, wordScript);
+  };
+  const endCommand = () => { endWord(); t.reset(); redirect = false; target = false; };
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (sq) { if (c === "'") sq = false; else word += c; continue; } // single quotes: every character literal
+    if (!dq) {
+      if (c === " " || c === "\t") { endWord(); continue; }
+      if (c === ">" || c === "<" || (c === "&" && s[i + 1] === ">")) { // a redirection: its operator (>> 2>&1 >| << &>) and then its target word
+        if (inWord && /^\d{1,9}$/.test(word)) inWord = false; // `2>…`: the file-descriptor number is the operator's, no word
+        endWord();
+        while (i + 1 < s.length && /[<>&|]/.test(s[i + 1])) i++;
+        redirect = true;
+        continue;
+      }
+      if (c === ";" || c === "&" || c === "|" || c === "(" || c === ")" || c === "\n" || c === "\r") { endCommand(); continue; }
+      if (c === "#" && !inWord) { while (i + 1 < s.length && s[i + 1] !== "\n" && s[i + 1] !== "\r") i++; continue; } // a comment
+    }
+    if (!inWord) { inWord = true; word = ""; target = redirect; redirect = false; wordScript = !target && t.starts(c); }
+    if (c === BS && i + 1 < s.length && (!dq || POSIX_DQ_ESCAPES.has(s[i + 1]))) { word += s[++i]; continue; } // escaped: literal
+    if (c === "'" && !dq) { sq = true; continue; }
+    if (c === '"') { dq = !dq; continue; }
+    if (wordScript && c === "$" && /[A-Za-z0-9_{(?$!#@*-]/.test(s[i + 1] || "")) found.add("variable");
+    if (wordScript && c === "`") found.add("backtick");
+    word += c;
+  }
+  endCommand();
+  if (depth < 3 && /(?:^|[\\/\s;&|(])(?:sh|bash|zsh|dash|ksh|mksh|ash|fish)(?:\.exe)?\s/i.test(s)) {
+    // a POSIX shell's -c script, as that shell reads it: every simple command of the line (lexShell's words)
+    let words = [];
+    const check = () => { const sc = words.length ? shellScript(words) : null; words = []; if (sc && sc.kind === "posix") posixPwshScan(sc.script, depth + 1).forEach((k) => found.add(k)); };
+    for (const tok of lexShell(s)) { if (tok.t === "w") words.push(tok); else check(); }
+    check();
+  }
+  return found;
 }
 // A _Verify:_ command that PIPES into another one (`npm test | tee log`, `pytest | grep passed`): a pipeline's exit code is
 // its LAST command's, so a failing check exits 0 and would be recorded as a passing run. → true for an unquoted single `|`
@@ -301,8 +490,9 @@ function verifyPipeMasked(cmd) {
 }
 const POSIX_SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "fish"]);
 const PWSH_SHELLS = new Set(["pwsh", "powershell"]);
-const SHELL_WRAPPERS = new Set(["env", "command", "exec", "nohup", "time", "busybox", "wsl"]);
-const WRAPPER_ARG_OPTS = new Set(["-u", "-C", "-d", "--unset", "--chdir", "--distribution", "--user", "--cd"]); // env -u NAME · wsl -d Ubuntu
+const SHELL_WRAPPERS = new Set(["env", "command", "exec", "nohup", "time", "busybox", "wsl", "sudo", "doas", "nice", "ionice", "timeout", "setsid", "stdbuf"]);
+// every wrapper option that takes a value (per wrapper: WRAPPER_OPTION_VALUES — wrapperStep reads that)
+const WRAPPER_ARG_OPTS = new Set([...WRAPPER_OPTION_VALUES.values()].flat());
 // Split a command line into words and operators the way a shell reads it — enough to find pipes, `set` and shell scripts.
 // A word keeps its unquoted value `v` and its spelling as written (`raw`, quotes and escapes included — programName reads it).
 function lexShell(s) {
@@ -387,13 +577,9 @@ function setPipefail(words) {
 // A shell started with a script (`bash -c "<script>"`, `pwsh -Command <script>`, `cmd /c <script>`) → { script, kind,
 // pipefail } (a POSIX shell's own `-o pipefail`), else null.
 function shellScript(words) {
-  let i = 0, wrapped = false; // skip `VAR=value`, `env` / `exec` / `wsl`… and the options that follow a wrapper
-  for (; i < words.length; i++) {
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i].v)) continue;
-    if (SHELL_WRAPPERS.has(programName(words[i]))) { wrapped = true; continue; }
-    if (wrapped && words[i].v.startsWith("-")) { if (WRAPPER_ARG_OPTS.has(words[i].v)) i++; continue; }
-    break;
-  }
+  let i = 0;
+  const wrap = {}; // skip `VAR=value`, a wrapper (env, exec, sudo, timeout 60…) and its options (wrapperStep)
+  for (; i < words.length; i++) if (!wrapperStep(wrap, SHELL_WRAPPERS.has(programName(words[i])) ? programName(words[i]) : words[i].v)) break;
   if (i >= words.length) return null;
   const prog = programName(words[i]);
   const rest = words.slice(i + 1).map((t) => t.v);
@@ -488,23 +674,81 @@ const CANT_RUN_OUTPUT = [
   ["test", /\bMissing script: [^\n]{0,120}/], // npm run / npm test without that script
   ["test", /\bNo rule to make target [^\n]{0,200}/], // make <missing target>
   ["test", /\bnpm (?:ERR!|error) (?:code )?ENOENT\b/], // npm with no package.json
+  // PowerShell (1.21.1) — the command is unknown (Invoke-Pester without Pester installed, a typo): pwsh 7 "…is not recognized
+  // as a name of a cmdlet", Windows PowerShell 5.1 "…as the name of a cmdlet" (its console wraps long lines, so blanks between
+  // the words), pwsh's pt-BR / es wording ("não é reconhecido como um nome de um cmdlet", "no se reconoce como nombre de un
+  // cmdlet"); a module that isn't installed; the execution policy refusing a script (and an unsigned one); a script path
+  // pwsh / powershell can't find; Pester 5+ finding no test file. A test that RAN and failed on such an error — the function
+  // under test doesn't exist yet: "[-] Get-Greeting.T-01 … 12ms" then "The term 'Get-Greeting' is not recognized" — stays
+  // red (RE_ASSERTION_RAN / pesterRan below). Every blank run between words is followed by a literal (1.21.1 review: `de\s+
+  // (?:um\s+)?\s*cmdlet` — two blank runs meeting — took 58 s on 200,000 blanks).
+  ["test", /(?:['"][^'"\r\n]{1,200}['"]\s+)?(?:is\s+not\s+recognized\s+as\s+(?:a|the)\s+name\s+of\s+a|n[ãa]o\s+[ée]\s+reconhecido\s+como\s+(?:um\s+)?nome\s+de(?:\s+um)?|no\s+se\s+reconoce\s+como\s+(?:el\s+)?nombre\s+de(?:\s+un)?)\s+cmdlet\b/i],
+  ["test", /\bThe\s+specified\s+module\s+['"][^'"\r\n]{1,300}['"]\s+was\s+not\s+loaded\b|\bO\s+m[óo]dulo\s+especificado\s+['"][^'"\r\n]{1,300}['"]\s+n[ãa]o\s+foi\s+carregado\b|\bNo\s+se\s+carg[óo]\s+el\s+m[óo]dulo\s+especificado\s+['"][^'"\r\n]{1,300}['"]/i],
+  ["test", /\bcannot\s+be\s+loaded\s+because\s+running\s+scripts\s+is\s+disabled\s+on\s+this\s+system\b|\bporque\s+a\s+execu[çc][ãa]o\s+de\s+scripts\s+(?:est[áa]|foi)\s+(?:desabilitad|desativad)[ao]\s+neste\s+sistema\b|\bporque\s+la\s+ejecuci[óo]n\s+de\s+scripts\s+est[áa]\s+deshabilitada\s+en\s+este\s+sistema\b|\bis\s+not\s+digitally\s+signed\.\s+You\s+cannot\s+run\s+this\s+script\b/i],
+  ["test", /\bThe\s+argument\s+['"][^'"\r\n]{1,400}['"]\s+(?:is\s+not\s+recognized\s+as\s+(?:the|a)\s+name\s+of\s+a\s+script\s+file|to\s+the\s+-File\s+parameter\s+does\s+not\s+exist)\b/i],
+  ["test", /\bNo test files were found and no scriptblocks were provided\b/], // Pester 5 / 6: no *.Tests.ps1 under the path
 ];
 // → null | { kind: "wsl" | "spawn" | "test", text: "<the matched text, ≤ 160 chars>" }. NUL bytes are dropped first (the WSL
 // launcher writes UTF-16).
 // Output that shows tests RAN and an assertion failed ("not ok 1", AssertionError, pytest's "E   assert", jest's
 // "Expected:" / expect(…)): a genuine red run, even when its message quotes a runner phrase ("expected: Cannot find module
 // 'foo-plugin'") — the `test` kind never applies to it (full review R6).
-const RE_ASSERTION_RAN = /^[ \t]*not ok \d|\bAssertionError\b|^[ \t]*E[ \t]{2,}assert\b|\bexpect\(|^[ \t]*(?:Expected|Received):/m;
+// 1.21.1 — Pester's shapes too: a failed TEST line "[-] Get-Greeting.T-01 greets by name 12ms (9ms|3ms)" (Pester 3–6; never
+// a block's "[-] Error occurred in Describe block …" / "[-] Discovery in … failed" / "[-] <file> failed with:"), "Expected
+// 'Hello, Ana', but got 'Hello'." / "Expected strings to be the same, but they were different." / Pester 3's "Expected string
+// length 10 but was 5.", and "But was:" (Pester, NUnit). Every quantifier next to another one is bounded (1.21.1 review).
+const RE_ASSERTION_RAN = /^[ \t]*not ok \d|\bAssertionError\b|^[ \t]*E[ \t]{2,}assert\b|\bexpect\(|^[ \t]*(?:Expected|Received|But was):|^[ \t]*\[-\] (?!Error occurred in |Discovery in )[^\r\n]{1,500}? \d{1,9}(?:\.\d{1,6})?m?s(?: \([^\r\n)]{0,40}\))?[ \t]{0,40}$|\bExpected [^\r\n]{1,400}?,? but (?:got|was|they were|no exception)\b/m;
+// Pester's summary ("Tests Passed: 0, Failed: 1" — Pester 4–6; Pester 3: "Passed: 0 Failed: 1") counts a test whose block never
+// ran as failed too — a BeforeAll that failed on a module that isn't there, a test file that doesn't parse. RE_PESTER_NOT_RUN
+// is how Pester says so: "Container failed: N" (Pester 5+, a file's top-level BeforeAll or its discovery), "BeforeAll \
+// AfterAll failed: N" and "[-] Describe <name> failed" / "[-] Context <name> failed" (Pester 5+, a block's BeforeAll —
+// 1.21.1 review: no "Container failed" there), "[-] Discovery in … failed" (a file that doesn't parse), Pester 3 / 4's "[-]
+// Error occurred in Describe block" / "… in test script '…'". Then the count proves no assertion — and without any sign a
+// test ran (RE_ASSERTION_RAN's "[-] <test> 12ms"…), such a line alone shows the run never exercised the test (couldNotRunOutput).
+const RE_PESTER_FAILED = /^[ \t]*(?:Tests Passed: \d{1,9}, |Passed: \d{1,9} )Failed: [1-9]/m;
+const RE_PESTER_NOT_RUN = /^[ \t]*(?:Container failed: [1-9]|BeforeAll \\ AfterAll failed: [1-9]|\[-\] (?:Error occurred in |Discovery in )[^\r\n]{0,300}|\[-\] (?:Describe|Context) [^\r\n]{1,500}? failed[ \t]{0,40}$)/m;
+const pesterRan = (s) => RE_PESTER_FAILED.test(s) && !RE_PESTER_NOT_RUN.test(s);
 function couldNotRunOutput(output) {
-  const s = String(output == null ? "" : output).slice(0, 200000).replace(/\u0000/g, "");
+  const s = stripAnsi(String(output == null ? "" : output).slice(0, 200000).replace(/\u0000/g, ""));
   if (!s.trim()) return null;
-  const ran = RE_ASSERTION_RAN.test(s);
+  const ran = RE_ASSERTION_RAN.test(s) || pesterRan(s);
+  const one = (m) => m[0].trim().replace(/\s+/g, " ").slice(0, 160);
   for (const [kind, re] of CANT_RUN_OUTPUT) {
     if (kind === "test" && ran) continue;
     const m = s.match(re);
-    if (m) return { kind, text: m[0].trim().replace(/\s+/g, " ").slice(0, 160) };
+    if (m) return { kind, text: one(m) };
   }
-  return null;
+  const nr = ran ? null : s.match(RE_PESTER_NOT_RUN); // a Pester block / file that failed before its tests, and no test that ran
+  return nr ? { kind: "test", text: one(nr) } : null;
+}
+// 1.21.1 review — PowerShell's OWN parse error: the -Command script never ran (Windows PowerShell 5.1 has no `&&` / `||`: "The
+// token '&&' is not a valid statement separator in this version.", its "+ CategoryInfo : ParserError:" and
+// FullyQualifiedErrorId; pwsh 7's "ParserError:" block — "Unexpected token ')' in expression or statement.", "Missing closing
+// '}' in …"). The pwsh counterpart of windowsShellFailure: the CLI asks it only when PowerShell runs the line (--shell pwsh /
+// powershell, or a pwsh / powershell program in it — runsPwsh) and an _Expect: fail_ run failed; never when a test RAN (a
+// Pester test that asserts on a parser message stays red). → null | { text }
+const RE_PWSH_PARSE_FAILURE = /^[ \t]*(?:\+[ \t]{0,20}CategoryInfo[ \t]{0,40}:[ \t]{0,8})?ParserError:|\bis not a valid statement separator\b|\bFullyQualifiedErrorId[ \t]{0,40}:[ \t]{0,8}(?:InvalidEndOfLine|UnexpectedToken|MissingEndCurlyBrace|MissingEndParenthesisIn[A-Za-z]{0,40}|MissingEndSquareBracket|TerminatorExpectedAtEndOfString|ExpectedExpression|ExpectedValueExpression|MissingExpressionAfter[A-Za-z]{0,40})\b|\bUnexpected token '[^'\r\n]{1,80}' in expression or statement\b|\bMissing closing '[^'\r\n]{1,4}' in\b/m;
+function pwshParseFailure(output) {
+  const s = stripAnsi(String(output == null ? "" : output).slice(0, 200000).replace(/\u0000/g, ""));
+  if (!s.trim() || RE_ASSERTION_RAN.test(s) || pesterRan(s)) return null;
+  const m = s.match(RE_PWSH_PARSE_FAILURE);
+  if (!m) return null;
+  // the line the parser named (5.1: "The token '&&' is not a valid…"), else the match itself
+  const sep = s.match(/[^\r\n]{0,120}\bis not a valid statement separator\b[^\r\n]{0,40}|\bUnexpected token '[^'\r\n]{1,80}' in expression or statement\b|\bMissing closing '[^'\r\n]{1,4}' in [^\r\n]{0,60}/);
+  return { text: (sep ? sep[0] : m[0]).trim().replace(/\s+/g, " ").slice(0, 160) };
+}
+// Does the command line run a PowerShell program (pwsh / powershell, any path) in program position? (lexShell's words; a
+// `VAR=value` prefix or a wrapper with its options skipped — wrapperStep: env, exec, sudo -u root, timeout 60 …)
+function runsPwsh(cmd) {
+  let first = true, wrap = {};
+  for (const t of lexShell(String(cmd == null ? "" : cmd))) {
+    if (t.t === "op") { first = true; wrap = {}; continue; }
+    if (!first) continue;
+    if (wrapperStep(wrap, SHELL_WRAPPERS.has(programName(t)) ? programName(t) : t.v)) continue;
+    if (PWSH_SHELLS.has(programName(t))) return true;
+    first = false;
+  }
+  return false;
 }
 // A recorded run that could not run at all: a could-not-run exit code, or a non-zero one whose output (summary) shows it.
 function cantRunRecord(r) {
@@ -1147,10 +1391,14 @@ function untickedSince(evidence, block, dup, reason) {
 
 module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isRecord, evidenceRecords, ownRecord,
   ownEvidence, taskEvidenceIssue, taskVerification, EVIDENCE_HISTORY, EVIDENCE_OTHERS, recordEvidence, storeEvidence,
-  runOf, stateEvidence, verificationStatus, RE_COUNT_KW, RE_COUNT_LINE, summarizeRunOutput, RE_CMD_SHELL_FAILURE,
-  windowsShellFailure, RE_WSL_LAUNCHER_DIR, isWslLauncher, resolveRunShell, posixShellSyntax, verifyPipeMasked,
-  POSIX_SHELLS, PWSH_SHELLS, SHELL_WRAPPERS, WRAPPER_ARG_OPTS, lexShell, programName, setPipefail, shellScript,
-  pipeMaskedIn, verifyPipes, expectsFail, CANT_RUN_EXIT, CANT_RUN_OUTPUT, RE_ASSERTION_RAN, couldNotRunOutput,
+  runOf, stateEvidence, verificationStatus, RE_COUNT_KW, RE_COUNT_LINE, RE_ANSI, stripAnsi, summarizeRunOutput,
+  RE_CMD_SHELL_FAILURE, windowsShellFailure, RE_WSL_LAUNCHER_DIR, isWslLauncher, PWSH_RUN_ARGS, RE_PWSH_PROGRAM,
+  isPwshShell, isPosixShellName, resolveRunShell, PWSH_VALUE_OPTS, PWSH_VALUE_ALIASES, RE_PWSH_COMMAND_OPT, pwshOption,
+  pwshTracker, WRAPPER_OPTION_VALUES, WRAPPER_POSITIONALS, wrapperStep, posixShellSyntax, POSIX_DQ_ESCAPES, posixPwshScript,
+  posixPwshScan,
+  verifyPipeMasked, POSIX_SHELLS, PWSH_SHELLS, SHELL_WRAPPERS, WRAPPER_ARG_OPTS, lexShell, programName, setPipefail,
+  shellScript, pipeMaskedIn, verifyPipes, expectsFail, CANT_RUN_EXIT, CANT_RUN_OUTPUT, RE_ASSERTION_RAN,
+  RE_PESTER_FAILED, RE_PESTER_NOT_RUN, pesterRan, couldNotRunOutput, RE_PWSH_PARSE_FAILURE, pwshParseFailure, runsPwsh,
   cantRunRecord, isRedRun, redProof, expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps,
   gitEvidence, OBSERVED_LOG, OBSERVED_MAX_BYTES, OBSERVED_WINDOW_MS, OBSERVED_MAX_COMMAND, OBSERVED_MAX_FEATURES,
   EVIDENCE_MODES, flatCommand, evidenceMode, evidenceSince, evidenceRule, evidenceModeInput, setEvidenceMode,

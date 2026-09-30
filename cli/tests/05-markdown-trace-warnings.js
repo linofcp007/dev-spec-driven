@@ -79,4 +79,57 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   ok(o9n && o9done.code === 0 && !/tests-in-code/.test(o9doc.out) && /planned tests that no test file names[^\n]*T-06/.test(o9fin.out) && !/planned tests that no test file names[^\n]*T-07/.test(o9fin.out) &&
     /tests in code: 0\/6 planned T-ID\(s\) named in 0 test file\(s\) · checked outside test code \(the File column names a non-code artifact\): T-07/.test(o9tr.out),
     "the scaffold's load-test.md row (T-07) is checked outside test code: a done load task leaves no tests-in-code warning (doctor, finish); trace --code lists it apart (got " + o9tr.out + ")");
+
+  // 1.21.1 languages: a +tdd PowerShell feature on the CLI — trace --code and `approve <f> tests` (Phase 4) read the Pester files
+  // (tests/ and beside the module) the plan's File column names; before 1.21.1 they were never read and the gate never passed.
+  const pw = path.join(tmp, "l121-pester");
+  const putPw = (rel, s) => { const p = path.join(pw, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+  run(["init", "core", "tdd", "--project", pw]);
+  run(["create", "Greeter", "core", "tdd", "--project", pw]);
+  putPw(".specs/greeter/test-plan.md", "# Test Plan\n\n| Test ID | Kind | Covers | File |\n|---|---|---|---|\n| T-01 | example | US-1.AC-1 | `tests/Greeter.Tests.ps1` |\n" +
+    "| T-02 | example | US-1.AC-1 | `src/Greeter/Greeter.Tests.ps1` |\n");
+  run(["approve", "greeter", "--through", "test-plan", "--force", "--project", pw]);
+  const trBefore = run(["trace", "greeter", "--code", "--project", pw]);
+  const gateBefore = run(["approve", "greeter", "tests", "--project", pw]);
+  putPw("tests/Greeter.Tests.ps1", "BeforeAll { Import-Module \"$PSScriptRoot/../src/Greeter/Greeter.psm1\" -Force }\nDescribe 'Get-Greeting' {\n  It 'T-01 greets by name (US-1.AC-1)' { Get-Greeting -Name 'Ana' | Should -Be 'Hello, Ana' }\n}\n");
+  putPw("src/Greeter/Greeter.Tests.ps1", "Describe 'Get-Greeting' { It 'T-02 greets nobody' { Get-Greeting | Should -Be 'Hello' } }\n");
+  const trAfter = run(["trace", "greeter", "--code", "--project", pw]);
+  const gateAfter = run(["approve", "greeter", "tests", "--project", pw]);
+  ok(/tests in code: 0\/2 planned T-ID\(s\) named in 0 test file\(s\)/.test(trBefore.out) && gateBefore.code === 1 && /T-01, T-02/.test(gateBefore.out) &&
+    /tests in code: 2\/2 planned T-ID\(s\) named in 2 test file\(s\)/.test(trAfter.out) && gateAfter.code === 0 && !/forced/i.test(gateAfter.out),
+    "1.21.1 languages: trace --code and approve tests on a +tdd PowerShell feature — 0/2 and refused (T-01, T-02) until tests/Greeter.Tests.ps1 and src/Greeter/Greeter.Tests.ps1 name them, then 2/2 and approved unforced (got " +
+    JSON.stringify([trBefore.out.split("\n").filter((l) => /tests in code/.test(l)), gateBefore.out.slice(0, 160), trAfter.out.split("\n").filter((l) => /tests in code/.test(l)), gateAfter.out.slice(0, 120)]) + ")");
+
+  // 1.21.1 languages (review 2): pgTAP files named like no test (test/sql/users.sql, tests/001_users.sql) are read once the
+  // plan's File column names them — trace --code 2/2 and the tests gate passes; before, the scan skipped them as fixtures.
+  const pg = path.join(tmp, "l121-pgtap");
+  const putPg = (rel, s) => { const p = path.join(pg, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+  run(["init", "core", "tdd", "--project", pg]);
+  run(["create", "Users schema", "core", "tdd", "--project", pg]);
+  putPg(".specs/users-schema/test-plan.md", "# Test Plan\n\n| Test ID | Kind | Covers | File |\n|---|---|---|---|\n| T-01 | example | US-1.AC-1 | `test/sql/users.sql` |\n" +
+    "| T-02 | example | US-1.AC-1 | `tests/001_users.sql` |\n");
+  putPg("test/sql/users.sql", "BEGIN;\nSELECT plan(1);\nSELECT has_table('users', 'T-01 the users table exists');\nSELECT * FROM finish();\nROLLBACK;\n");
+  putPg("tests/001_users.sql", "SELECT plan(1);\nSELECT col_not_null('users', 'email', 'T-02 email is required');\n");
+  putPg("tests/fixtures/seed.sql", "insert into users values ('T-09');\n");
+  run(["approve", "users-schema", "--through", "test-plan", "--force", "--project", pg]);
+  const trPg = run(["trace", "users-schema", "--code", "--project", pg]);
+  const gatePg = run(["approve", "users-schema", "tests", "--project", pg]);
+  ok(/tests in code: 2\/2 planned T-ID\(s\) named in 2 test file\(s\)/.test(trPg.out) && !/T-09/.test(trPg.out) && gatePg.code === 0 && !/forced/i.test(gatePg.out),
+    "1.21.1 languages (review 2): trace --code and approve tests on a +tdd pgTAP feature — test/sql/users.sql and tests/001_users.sql, named in the plan's File column, are read (2/2, approved unforced); the unnamed tests/fixtures/seed.sql is not (got " +
+    JSON.stringify([trPg.out.split("\n").filter((l) => /tests in code|T-09/.test(l)), gatePg.out.slice(0, 160)]) + ")");
+
+  // 1.21.1 languages (review 3): a plan whose File column names the common `tests/` folder no longer makes seed data a test
+  // — tests/fixtures/seed.sql holding ('T-01','refund') is not directly in tests/, so it is not read: 0/1 and the gate refuses.
+  const fx3 = path.join(tmp, "l121-r3-folder");
+  run(["init", "core", "tdd", "--project", fx3]);
+  run(["create", "Refunds", "core", "tdd", "--project", fx3]);
+  fs.writeFileSync(path.join(fx3, ".specs", "refunds", "test-plan.md"), "# Test Plan\n\n| Test ID | Kind | Covers | File |\n|---|---|---|---|\n| T-01 | example | US-1.AC-1 | `tests/` |\n");
+  fs.mkdirSync(path.join(fx3, "tests", "fixtures"), { recursive: true });
+  fs.writeFileSync(path.join(fx3, "tests", "fixtures", "seed.sql"), "insert into refunds values ('T-01','refund');\n");
+  run(["approve", "refunds", "--through", "test-plan", "--force", "--project", fx3]);
+  const trFx3 = run(["trace", "refunds", "--code", "--project", fx3]);
+  const gateFx3 = run(["approve", "refunds", "tests", "--project", fx3]);
+  ok(/tests in code: 0\/1 planned T-ID\(s\) named in 0 test file\(s\)/.test(trFx3.out) && gateFx3.code === 1 && /tests-in-code/.test(gateFx3.out) && /T-01/.test(gateFx3.out),
+    "1.21.1 languages (review 3): trace --code and approve tests with a plan naming `tests/` — tests/fixtures/seed.sql (a fixture holding 'T-01') is no test: 0/1, the gate refuses naming T-01 (got " +
+    JSON.stringify([trFx3.out.split("\n").filter((l) => /tests in code/.test(l)), gateFx3.code, gateFx3.out.slice(0, 200)]) + ")");
 };

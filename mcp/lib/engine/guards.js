@@ -14,15 +14,15 @@ const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords, existingFeature,
-  expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher, GUARD_CODE_EXT, guessLang,
-  implementsRel, insideDirAlias, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
+  expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher, guessLang,
+  implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
   validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile;
 function __link(E) { ({ activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords,
-  existingFeature, expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher, GUARD_CODE_EXT,
-  guessLang, implementsRel, insideDirAlias, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
+  existingFeature, expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher,
+  guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
@@ -36,10 +36,12 @@ function guardEnabled(projectDir) {
 
 // The guard's decision for ONE code edit (hooks/guard-hook.js). Cheap by design — it runs before every Write/Edit
 // while the guard is on: roadmap.json plus each feature's .state.json and tasks.md, never a repo walk.
-//   allow: guard off · the file is outside the project · inside .specs/ · not code (GUARD_CODE_EXT: the scanner's CODE_EXT
-//          plus the source languages it doesn't inventory — C++ .cc/.hpp, .mts/.cts, Scala, Dart, Elixir, shell and
-//          Windows batch, SQL, Kotlin script, CUDA, Fortran, shaders, code-bearing templates…;
-//          notebooks count as code — NotebookEdit only edits them. Docs, config, markup and styles are not code) ·
+//   allow: guard off · the file is outside the project · inside .specs/ · not code (isCodeFile — CODE_EXT, the ONE list
+//          of code the scan, coverage and the test-code scan read too: a broad list of languages — C++ .cc/.hpp, .mts/.cts,
+//          Scala, Dart, Elixir, PowerShell, shell and Windows batch, SQL, Kotlin script, CUDA, Fortran, shaders, code-bearing
+//          templates… — plus a test-only file where it is a test: a .bats suite, Perl's t/*.t;
+//          notebooks count as code — NotebookEdit only edits them. Docs, config, data (a PowerShell .psd1), markup and
+//          styles are not code) ·
 //          some non-archived feature has an approved tasks phase and open
 //          tasks (a FORCED approval still counts, with a `note` saying so) · an active spike — undecided or with open tasks, its
 //          timebox not passed; never at the scope level once tasks are approved —
@@ -63,9 +65,9 @@ function guardCheck(projectDir, filePath, cwd) {
   const abs = insideDirAlias(pdir, path.resolve(cwd ? path.resolve(pdir, cwd) : pdir, filePath));
   if (!abs) return allow("outside");
   // Case-folded where the filesystem folds case: `.SPECS/x.ts` IS the spec folder on Windows/macOS.
-  if (toPosix(path.relative(pdir, abs)).split("/").some((s) => (FOLD_CASE ? s.toLowerCase() : s) === ".specs")) return allow("specs");
-  const ext = path.extname(abs).toLowerCase();
-  if (!GUARD_CODE_EXT.has(ext)) return allow("not-code");
+  const rel = toPosix(path.relative(pdir, abs));
+  if (rel.split("/").some((s) => (FOLD_CASE ? s.toLowerCase() : s) === ".specs")) return allow("specs");
+  if (!isCodeFile(rel)) return allow("not-code");
   const root = specsRoot(pdir);
   const covering = [], forced = [], pending = [], stale = [], spikes = [], testing = [];
   const texts = new Map(); // feature → tasks.md (the scope level reads its open tasks' _Implements:_)
@@ -104,7 +106,7 @@ function guardCheck(projectDir, filePath, cwd) {
   if (covering.length) return allow("approved", { covering });
   if (forced.length) return allow("forced", { covering: forced, forced, note: G.forced(forced.join(", ")) });
   if (spikes.length) return allow("spike", { covering: spikes, spikes });
-  if (testing.length && isTestFile(toPosix(path.relative(pdir, abs)))) return allow("tests-phase", { covering: testing });
+  if (testing.length && isTestFile(rel)) return allow("tests-phase", { covering: testing });
   const list = (xs) => xs.slice(0, 3).join(", ") + (xs.length > 3 ? ", …" : "");
   return { guard: true, decision: "ask", why: "no-approved-tasks", pending, stale, reason: G.ask(list(pending), list(stale)) };
 }

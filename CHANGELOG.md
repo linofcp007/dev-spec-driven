@@ -3,6 +3,43 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.21.1] — 2026-09-30
+
+PowerShell projects — and every language outside the old short list — work end to end.
+
+### Fixed
+- **One list of languages everywhere.** `spec_scan`, `spec_coverage`, `trace_check {code}` and the Phase 4 tests gate now
+  use the same broad list of languages as guard mode. A PowerShell, shell, SQL, Lua, R, Perl, Erlang / Elixir, Haskell,
+  Clojure or C++ project is scanned, counted and has its tests read — before, it scanned empty and its +tdd tests gate
+  could never pass. Coverage percentages of existing projects can drop: SQL migrations, shell scripts and similar files
+  now count as code. SQL and notebook fixtures in test folders count as neither code nor tests.
+- **Test files are recognised in every language:** Pester `*.Tests.ps1` (also beside the code), Bats, `*_test.sh`,
+  GoogleTest `*_test.cc` / `*_unittest.cc`, busted `*_spec.lua`, testthat `test-*.R`, Common Test / EUnit, clojure.test,
+  XCTest, Perl `t/*.t`, C / shell / hspec tests in test folders, and SQL tests (pgTAP) a test plan's File column names —
+  the file, or the folder that directly holds it (they count for those rows only).
+- **The scan reports a PowerShell project** — a module manifest, a Pester suite, or mostly PowerShell code: the stack,
+  Pester, the scripts and the module's entry point, and `$env:` names. It also reads CMake / Make, mix, rebar, pubspec,
+  sbt, SwiftPM, cabal, deps.edn, R, Julia, Zig, dune, nimble and cpanfile manifests.
+- **`done --run` / `finish --run` run PowerShell checks:** `--shell pwsh`, `--shell powershell` or `DEV_SPEC_SHELL=pwsh`
+  run the bare script (`_Verify: Invoke-Pester -Path tests -CI_`) with `-NoProfile -NonInteractive -Command` — the
+  portable choice. Under the default cmd.exe, `pwsh -NoProfile -Command "Invoke-Pester -Path tests -CI; exit
+  $LASTEXITCODE"` now runs instead of being refused as POSIX syntax; under a POSIX shell (bash, sh) a pwsh script holding
+  `$` must be single-quoted — a double-quoted one is refused before it runs, because the shell would turn
+  `exit $LASTEXITCODE` into `exit 0`.
+- **A PowerShell or Pester run that never ran the test is no red proof:** an unknown cmdlet, a missing module, the
+  execution policy, a missing `-File` script, a Pester block or test file that failed before its tests, "No test files
+  were found", or PowerShell's own parse error is refused with nothing recorded; a test that ran and failed stays red;
+  colour codes are stripped from run summaries.
+- The plan importer reads `.psm1`, `.psd1` and `.bats` file names as `_Implements:_` paths; a bare `color.r` or
+  `args.cmd` needs a folder part.
+
+### Tests
+- `node mcp/test.js` 1680 assertions (was 1653), `node cli/test-cli.js` 522 (was 508): a PowerShell project end to
+  end on MCP and the CLI (scan, coverage, the +tdd tests gate over a Pester file, guard and scope guard), the test-file
+  matrix of every language with its negatives, T-IDs found in each language's test files, SQL fixtures past the read
+  cap, `--shell pwsh` / `powershell` runs and the POSIX refusal, the could-not-run vs red readings of real pwsh 7 / 5.1
+  and Pester 3–6 output, and a 200 KB linearity sweep over every new pattern.
+
 ## [1.21.0] — 2026-09-30
 
 Rigor sized to the change, and a spec that works in a team: a typo no longer carries a feature's ceremony, git merges the

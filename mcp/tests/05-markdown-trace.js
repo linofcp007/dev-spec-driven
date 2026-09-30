@@ -1253,4 +1253,153 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     ok(hookRuns.every((x) => !x.r.threw) && hookMs < bound && S.classify("x" + "\n".repeat(3) + "Criar o pedido e gravar a fatura").lang === "pt",
       "1.17 linear headings: the stop gate's prose (4,000 unclosed '<!--', a 3,000-backtick run), classify's clause starts after 50,000 blank lines and a git log header with a 100,000-space run stay linear, within the bound above — a hook has 10 s (got " + js({ each: hookRuns.map((x) => x.ms), threw: hookRuns.filter((x) => x.r.threw).map((x) => x.r.error) }) + ")");
   }
+
+  // 1.21.1 languages — the test-code scan reads the tests of every language of the code list (isCodeFile + isTestFile): a
+  // T-ID in a Bats suite, a GoogleTest *_test.cc, a busted *_spec.lua, a testthat test-*.R, a Pester *.Tests.ps1 (beside the
+  // code too), Perl's t/*.t, an EUnit / hspec / clojure.test file — never a source file, nor a .t outside t/. Until 1.21.1 it
+  // read only JS/TS, Python, Go, Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C/C++, Vue/Svelte (+ F#, Scala, Groovy, Elixir, Dart).
+  {
+    const js = (v) => JSON.stringify(v);
+    const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const lp = path.join(tmp, "proj-121-test-scan");
+    put(lp, "test/deploy.bats", "@test \"T-01 deploys\" {\n  run ./deploy.sh\n  [ \"$status\" -eq 0 ]\n}\n");
+    put(lp, "src/codec_test.cc", "TEST(Codec, T02_RoundTrips) { EXPECT_EQ(1, 1); }\n");
+    put(lp, "lua/codec_spec.lua", "describe('codec', function() it('T-03 decodes', function() end) end)\n");
+    put(lp, "R/test-codec.R", "test_that(\"T-04 encodes\", { expect_equal(1, 1) })\n");
+    put(lp, "src/Codec.Tests.ps1", "Describe 'Codec' { It 'T-05 encodes' { 1 | Should -Be 1 } }\n");
+    put(lp, "t/basic.t", "use Test::More;\nok(1, 'T-06 loads');\ndone_testing;\n");
+    put(lp, "src/codec_tests.erl", "%% T-07 round-trips\n-module(codec_tests).\n");
+    put(lp, "test/CodecSpec.hs", "spec = it \"T-08 decodes\" $ True `shouldBe` True\n");
+    put(lp, "src/core_test.clj", "(deftest decodes (testing \"T-09 decodes\" (is true)))\n");
+    put(lp, "notes.t", "T-10 is no test\n");
+    put(lp, "src/codec.lua", "-- T-11 lives in source\n");
+    put(lp, "src/codec.ps1", "# T-12 lives in source\n");
+    put(lp, "src/DevSpec.hs", "-- T-13 lives in source (a module named …Spec, outside a test folder)\n");
+    put(lp, "tests/fixtures/seed.sql", "insert into t values ('T-14');\n"); // a fixture — never read
+    put(lp, "tests/test_schema.sql", "select plan(1); -- T-15 pgTAP\n"); // a pgTAP test by its name
+    const sc = S.scanTestCode(lp);
+    const where = (n) => ((sc.tids.get("T-" + n) || {}).files || []).join();
+    const want = ["test/deploy.bats", "src/codec_test.cc", "lua/codec_spec.lua", "R/test-codec.R", "src/Codec.Tests.ps1", "t/basic.t", "src/codec_tests.erl", "test/CodecSpec.hs", "src/core_test.clj", "", "", "",
+      "", "", "tests/test_schema.sql"];
+    const got = want.map((_, i) => where(i + 1));
+    const t0 = Date.now();
+    const lin = [S.isTestFile("test_" + "a.".repeat(100000) + "x"), S.isTestFile("x" + "_test".repeat(20000) + ".q"), S.isTestFile(".test".repeat(20000) + "."), S.isTestFile("t/" + "x".repeat(100000) + ".tests.ps1q")];
+    const linMs = Date.now() - t0;
+    ok(js(got) === js(want) && sc.scanned === 10 && !sc.truncated && lin.join() === "false,false,false,false" && linMs < 3000,
+      "1.21.1 languages: scanTestCode finds T-IDs in a .bats suite, a _test.cc (T02_…), a _spec.lua, a test-x.R, a *.Tests.ps1 outside tests/, Perl's t/basic.t, a _tests.erl, test/*Spec.hs, a _test.clj and a pgTAP tests/test_*.sql — never in notes.t, src/DevSpec.hs, a source file or a tests/fixtures/*.sql fixture; the test-name rule stays linear on 100,000-character names (got " +
+      js([got, sc.scanned, linMs]) + ")");
+
+    // 1.21.1 review: 1,600 .sql fixtures under tests/fixtures/ no longer exhaust the read cap (1.21.1's first cut: 1,500 read,
+    // truncated, the real test's T-01 missing); past the cap the test-NAMED files are read first; a file is read up to
+    // SCAN_READ_BYTES from disk (a T-ID past 200 KB of a 5 MB test file is not seen).
+    const fx = path.join(tmp, "proj-121-fixtures");
+    for (let i = 0; i < 1600; i++) put(fx, "tests/fixtures/f" + String(i).padStart(4, "0") + ".sql", "insert into t values ('T-01');\n");
+    put(fx, "tests/unit/greet.test.js", "test(\"T-01 greets\", () => {});\n");
+    const scFx = S.scanTestCode(fx);
+    const cap = path.join(tmp, "proj-121-cap");
+    for (let i = 0; i < 1510; i++) put(cap, "tests/data/d" + String(i).padStart(4, "0") + ".js", "module.exports = " + i + ";\n");
+    put(cap, "tests/zz/greet.test.js", "test(\"T-02 greets\", () => {});\n");
+    put(cap, "tests/zz/big.test.js", "test(\"T-03 early\", () => {});\n" + "/* " + "x".repeat(5 * 1024 * 1024) + " */\ntest(\"T-04 late\", () => {});\n");
+    const t1 = Date.now();
+    const scCap = S.scanTestCode(cap);
+    const capMs = Date.now() - t1;
+    ok(scFx.scanned === 1 && !scFx.truncated && js((scFx.tids.get("T-1") || {}).files) === '["tests/unit/greet.test.js"]' &&
+      scCap.truncated === true && scCap.scanned === 1500 && js((scCap.tids.get("T-2") || {}).files) === '["tests/zz/greet.test.js"]' && !!scCap.tids.get("T-3") && !scCap.tids.get("T-4") && capMs < 20000,
+      "1.21.1 languages: the test-code scan skips tests/fixtures/*.sql (1 test file read, T-01 found only in greet.test.js); past the 1,500-file cap it reads the test-NAMED files first (T-02 in tests/zz/greet.test.js found behind 1,510 tests/data/*.js); a 5 MB test file is read up to 200 KB (T-03 seen, T-04 not) (got " +
+      js([scFx.scanned, scFx.truncated, scCap.scanned, scCap.truncated, !!scCap.tids.get("T-2"), !!scCap.tids.get("T-4"), capMs]) + ")");
+
+    // A +tdd PowerShell feature: the tests gate (Phase 4) and trace_check {code} pass once the Pester files — tests/ and beside
+    // the module — and a Bats suite name the planned T-IDs (a .bats row is code: expected in a test file, never "outside code").
+    const pw = path.join(tmp, "proj-121-pester-gate");
+    S.initProject(pw, ["core", "tdd"], "en");
+    const f = S.createFeature(pw, "Greeter", ["core", "tdd"], "", undefined, "en");
+    put(pw, "src/Greeter/Greeter.psm1", "function Get-Greeting { param([string]$Name) throw 'not implemented' }\n");
+    put(f.dir, "test-plan.md", "# Test Plan\n\n| Test ID | Kind | Covers | File |\n|---|---|---|---|\n| T-01 | example | US-1.AC-1 | `tests/Greeter.Tests.ps1` |\n" +
+      "| T-02 | example | US-1.AC-1 | `src/Greeter/Greeter.Tests.ps1` |\n| T-03 | example | US-1.AC-1 | `test/greet.bats` |\n");
+    approveBefore(pw, f.slug, "tests");
+    const before = S.traceCheck(pw, f.slug, { code: true }).code || {};
+    const gate0 = S.approvePhase(pw, f.slug, "tests");
+    put(pw, "tests/Greeter.Tests.ps1", "BeforeAll { Import-Module \"$PSScriptRoot/../src/Greeter/Greeter.psm1\" -Force }\nDescribe 'Get-Greeting' {\n" +
+      "  It 'T-01 greets by name (US-1.AC-1)' { Get-Greeting -Name 'Ana' | Should -Be 'Hello, Ana' }\n}\n");
+    put(pw, "src/Greeter/Greeter.Tests.ps1", "Describe 'Get-Greeting' { It 'T-02 greets nobody' { Get-Greeting | Should -Be 'Hello' } }\n");
+    const mid = S.traceCheck(pw, f.slug, { code: true }).code || {};
+    const gate1 = S.approvePhase(pw, f.slug, "tests");
+    put(pw, "test/greet.bats", "@test \"T-03 greets from the shell\" {\n  run pwsh -NoProfile -Command \"Get-Greeting\"\n}\n");
+    const mcpTr = payload(await rpc("tools/call", { name: "trace_check", arguments: { projectDir: pw, name: f.slug, code: true } }));
+    const gate2 = S.approvePhase(pw, f.slug, "tests");
+    ok(js(before.plannedNotInCode) === '["T-01","T-02","T-03"]' && !(before.plannedOutsideCode || []).length && gate0.refused === true && js(gate0.failing) === '["tests-in-code"]' &&
+      /T-01, T-02, T-03/.test(gate0.error) && js(mid.plannedNotInCode) === '["T-03"]' && gate1.refused === true && /names yet: T-03/.test(gate1.error) &&
+      mcpTr.ok && js(mcpTr.code.plannedNotInCode) === "[]" && mcpTr.code.scanned === 3 && gate2.ok === true && !gate2.forced,
+      "1.21.1 languages: a +tdd PowerShell feature — trace_check {code} and the tests gate (approve tests) name T-01…T-03 missing, then only the Bats one once tests/Greeter.Tests.ps1 and src/Greeter/Greeter.Tests.ps1 name theirs; with the .bats suite the gate passes unforced (MCP trace_check: 3 test files read) (got " +
+      js([before.plannedNotInCode, before.plannedOutsideCode, gate0.error, mid.plannedNotInCode, mcpTr.code, gate2.ok, gate2.error]) + ")");
+
+    // 1.21.1 review 2 (B): pgTAP tests named like no test — test/sql/users.sql, a numbered tests/001_users.sql — are read once
+    // a feature's test plan names them (the file, or its folder) in its File column; an unnamed tests/fixtures/seed.sql stays
+    // a fixture (skipped). Before: the scan skipped them as fixtures, the plan's scope pointed at them → missing forever.
+    const pg = path.join(tmp, "proj-121-pgtap-plan");
+    S.initProject(pg, ["core", "tdd"], "en");
+    const fp = S.createFeature(pg, "Users schema", ["core", "tdd"], "", undefined, "en");
+    put(fp.dir, "test-plan.md", "# Test Plan\n\n| Test ID | Kind | Covers | File |\n|---|---|---|---|\n| T-01 | example | US-1.AC-1 | `test/sql/users.sql` |\n" +
+      "| T-02 | example | US-1.AC-1 | `tests/001_users.sql` |\n| T-03 | example | US-1.AC-1 | `db/tests/pgtap/` |\n");
+    put(pg, "test/sql/users.sql", "BEGIN;\nSELECT plan(1);\nSELECT has_table('users', 'T-01 the users table exists');\nSELECT * FROM finish();\nROLLBACK;\n");
+    put(pg, "tests/001_users.sql", "SELECT plan(1);\nSELECT col_not_null('users', 'email', 'T-02 email is required');\n");
+    put(pg, "db/tests/pgtap/roles.sql", "SELECT plan(1);\nSELECT has_role('app', 'T-03 the app role exists');\n");
+    put(pg, "tests/fixtures/seed.sql", "insert into users values ('T-04');\n"); // named by no plan: a fixture
+    approveBefore(pg, fp.slug, "tests");
+    const scPg = S.scanTestCode(pg);
+    const pgTr = payload(await rpc("tools/call", { name: "trace_check", arguments: { projectDir: pg, name: fp.slug, code: true } }));
+    const pgGate = S.approvePhase(pg, fp.slug, "tests");
+    ok(js(((scPg.tids.get("T-1") || {}).files)) === '["test/sql/users.sql"]' && js(((scPg.tids.get("T-2") || {}).files)) === '["tests/001_users.sql"]' &&
+      js(((scPg.tids.get("T-3") || {}).files)) === '["db/tests/pgtap/roles.sql"]' && !scPg.tids.get("T-4") && scPg.scanned === 3 &&
+      pgTr.ok && js(pgTr.code.plannedNotInCode) === "[]" && pgGate.ok === true && !pgGate.forced,
+      "1.21.1 languages (review 2): a +tdd plan naming pgTAP's test/sql/users.sql, tests/001_users.sql and the folder db/tests/pgtap/ in its File column — the scan reads those three (T-01…T-03 found, 3 files read), never the unnamed tests/fixtures/seed.sql (T-04 not seen); MCP trace_check {code} misses nothing and the tests gate passes unforced (got " +
+      js([[...scPg.tids.keys()], scPg.scanned, pgTr.code, pgGate.ok, pgGate.error]) + ")");
+
+    // 1.21.1 review 2 (D): readFileHead caps CHARACTERS, as the slice it replaced did — 150,000 'é' (300,000 bytes) or 90,000
+    // astral characters (180,000 UTF-16 units, 360,000 bytes) before a T-ID stay inside the 200,000-character head.
+    const acc = path.join(tmp, "proj-121-accents");
+    const eAcute = String.fromCharCode(0xe9);
+    const astral = String.fromCharCode(0xd83d, 0xde00);
+    put(acc, "tests/accents.test.js", "// " + eAcute.repeat(150000) + "\ntest(\"T-01 after the accents\", () => {});\n");
+    put(acc, "tests/emoji.test.js", "// " + astral.repeat(90000) + "\ntest(\"T-02 after the emoji\", () => {});\n");
+    put(acc, "tests/long.test.js", "// " + eAcute.repeat(200000) + "\ntest(\"T-03 past the cap\", () => {});\n");
+    const scAcc = S.scanTestCode(acc);
+    ok(!!scAcc.tids.get("T-1") && !!scAcc.tids.get("T-2") && !scAcc.tids.get("T-3") && scAcc.scanned === 3,
+      "1.21.1 languages (review 2): the test-code scan reads 200,000 CHARACTERS of a file, not bytes — T-01 behind 150,000 'é' (300 KB) and T-02 behind 90,000 emoji are found; T-03 behind 200,000 'é' is past the cap (got " +
+      js([[...scAcc.tids.keys()], scAcc.scanned]) + ")");
+
+    // 1.21.1 review 3: a plan naming a FOLDER made fixture data a test — tests/fixtures/seed.sql holds ('T-01','refund') and
+    // no real test does: (1) Alpha's plan names `tests/` → T-01 "in code" via seed.sql, the tests gate passed; (2) Alpha's
+    // T-01 has no File cell and Beta's plan names `tests/` (or `tests/fixtures/`) → Alpha's T-01 counted via seed.sql;
+    // (3) nobody names the folder → not in code. A fixture is read only when a plan names the FILE or the folder that
+    // DIRECTLY holds it, and its T-IDs count only for the rows that claim it.
+    const planOf = (rows) => "# Test Plan\n\n| Test ID | Kind | Covers | File |\n|---|---|---|---|\n" + rows.map(([id, f]) => "| " + id + " | example | US-1.AC-1 | " + f + " |\n").join("");
+    const fxCase = async (name, alphaRows, betaRows, extra) => {
+      const d = path.join(tmp, "proj-121-r3-" + name);
+      S.initProject(d, ["core", "tdd"], "en");
+      const a = S.createFeature(d, "Alpha", ["core", "tdd"], "", undefined, "en");
+      put(a.dir, "test-plan.md", planOf(alphaRows));
+      let b = null;
+      if (betaRows) { b = S.createFeature(d, "Beta", ["core", "tdd"], "", undefined, "en"); put(b.dir, "test-plan.md", planOf(betaRows)); }
+      put(d, "tests/fixtures/seed.sql", "insert into refunds values ('T-01','refund');\n");
+      if (extra) extra(d);
+      approveBefore(d, a.slug, "tests");
+      const tr = payload(await rpc("tools/call", { name: "trace_check", arguments: { projectDir: d, name: a.slug, code: true } })).code || {};
+      const gate = S.approvePhase(d, a.slug, "tests");
+      const beta = b ? (S.traceCheck(d, b.slug, { code: true }).code || {}) : null;
+      return { tr, gate, beta, scan: S.scanTestCode(d) };
+    };
+    const c1 = await fxCase("folder", [["T-01", "`tests/`"]]);
+    const c2 = await fxCase("other", [["T-01", ""]], [["T-01", "`tests/`"]]);
+    const c2b = await fxCase("other-direct", [["T-01", ""]], [["T-01", "`tests/fixtures/`"]]);
+    const c3 = await fxCase("none", [["T-01", ""]]);
+    // the B layouts through a folder: `tests/` claims its direct child tests/001_users.sql (T-01), not the seed below it
+    const c4 = await fxCase("direct", [["T-01", "`tests/`"]], null, (d) => put(d, "tests/001_users.sql", "SELECT plan(1);\nSELECT has_table('refunds', 'T-01 the refunds table exists');\n"));
+    const notIn = (c) => js(c.tr.plannedNotInCode) === '["T-01"]' && !c.tr.testsInCode["T-01"] && c.gate.refused === true && js(c.gate.failing) === '["tests-in-code"]';
+    ok(notIn(c1) && !c1.scan.fixtures.has("tests/fixtures/seed.sql") && notIn(c2) && notIn(c2b) && c2b.scan.fixtures.has("tests/fixtures/seed.sql") &&
+      js(c2b.beta.testsInCode["T-01"]) === '["tests/fixtures/seed.sql"]' && notIn(c3) &&
+      js(c4.tr.testsInCode["T-01"]) === '["tests/001_users.sql"]' && js(c4.tr.plannedNotInCode) === "[]" && c4.gate.ok === true && !c4.gate.forced,
+      "1.21.1 languages (review 3): fixture data is no test through a folder — (1) Alpha's plan naming `tests/` leaves tests/fixtures/seed.sql unread (T-01 not in code, the tests gate refuses); (2) Beta's plan naming `tests/`, or `tests/fixtures/` (seed.sql then read — for Beta's own row only), never counts it for Alpha's File-less T-01; (3) nobody names it: not in code; `tests/` still claims its direct child tests/001_users.sql (T-01 found, the gate passes unforced) (got " +
+      js([c1, c2, c2b, c3, c4].map((c) => [c.tr.plannedNotInCode, c.tr.testsInCode, c.gate.ok, c.gate.failing, [...c.scan.fixtures], c.beta && c.beta.testsInCode])) + ")");
+  }
 };

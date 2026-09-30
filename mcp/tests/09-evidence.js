@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
+exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => {
 
   { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -910,5 +910,359 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
     const sec11 = S.traceMatrix(r11, "tpl").rows.filter((r) => r.kind !== "ac");
     ok(sec11.length > 0 && sec11.every((r) => r.template === true && r.gaps.length === 0 && r.status !== "untraced") && S.traceCheck(r11, "tpl").warnings.length === 0,
       "feature review R11: template EC/NFR/SC rows carry no gap and are not untraced, as trace_check says nothing about them (got " + JSON.stringify(sec11.map((r) => r.id + ":" + r.status)) + ")");
+  }
+
+  // 1.21.1 languages — PowerShell evidence: the _Verify:_ refusal under cmd.exe, the run shell, could-not-run vs red.
+  {
+    const js = (v) => JSON.stringify(v);
+    const E = require("./lib/engine/index.js");
+    const ESC = String.fromCharCode(27), BS = String.fromCharCode(92);
+    const px = (c) => S.posixShellSyntax(c).join("+");
+    // 1. posixShellSyntax: `$` inside a double-quoted word of a PowerShell program's -Command script (or powershell.exe's positional
+    // command) is PowerShell's — cmd.exe hands it over intact; a single-quoted script, a `$` outside quotes and a -File script's
+    // arguments (literal strings to the script — the calling shell's syntax) stay flagged.
+    const PX = [
+      ['pwsh -NoProfile -Command "Invoke-Pester ./tests -CI; exit $LASTEXITCODE"', ""],
+      ['pwsh -NoProfile -Command "$r = Invoke-Pester ./tests -PassThru; exit $r.FailedCount"', ""],
+      ['pwsh.exe -nop -c "Invoke-Pester -Path tests -CI; exit $LASTEXITCODE"', ""],
+      ['PowerShell.exe -NoProfile -ExecutionPolicy Bypass -Command "Invoke-Pester -EnableExit; exit $LASTEXITCODE"', ""],
+      ['pwsh /c "exit $LASTEXITCODE"', ""],
+      ['pwsh -NoProfile -CommandWithArgs "exit $args[0]" 3', ""],
+      ['powershell -NoProfile "Invoke-Pester -EnableExit; exit $LASTEXITCODE"', ""],
+      ['powershell -ExecutionPolicy Bypass -WindowStyle Hidden "exit $LASTEXITCODE"', ""],
+      ['"C:' + BS + 'Program Files' + BS + 'PowerShell' + BS + '7' + BS + 'pwsh.exe" -NoProfile -Command "exit $LASTEXITCODE"', ""],
+      ['npm run build && pwsh -NoProfile -Command "Invoke-Pester -CI; exit $LASTEXITCODE"', ""],
+      ['pwsh -NoProfile -Command "node -e \'process.exit(0)\'; exit $LASTEXITCODE"', ""],
+      ["pwsh -c 'Invoke-Pester ./tests -CI'", "single-quotes"],
+      ['pwsh -NoProfile -Command Invoke-Pester; exit $LASTEXITCODE', "variable"],
+      ['pwsh -NoProfile -File build.ps1 -Target "$env:DEPLOY_ENV"', "variable"],
+      ['pwsh build.ps1 "$x"', "variable"],
+      ['powershell -ExecutionPolicy Bypass -File build.ps1 "$x"', "variable"],
+      ['pwsh -c "exit 0" && echo "$HOME"', "variable"],
+      ['echo pwsh -c "$x"', "variable"],
+      ['test "$CI" = 1', "variable"],
+    ];
+    const pxWrong = PX.filter(([c, want]) => px(c) !== want).map(([c]) => c + " → " + px(c));
+    ok(!pxWrong.length,
+      "1.21.1 languages: posixShellSyntax lets `$` through inside a double-quoted pwsh / powershell -Command script (-c, /c, -CommandWithArgs, powershell.exe's positional command, any path, after &&) — cmd.exe hands it to PowerShell intact; a single-quoted script, an unquoted `$`, a -File script's arguments and `$` outside PowerShell stay refused (wrong: " +
+      js(pxWrong) + ")");
+
+    // 2. The run shell: --shell pwsh / powershell (a bare name or a path, quoted or not; DEV_SPEC_SHELL too) runs
+    // `<shell> -NoProfile -NonInteractive -Command <cmd>` — on every platform; bash / cmd / the default are unchanged.
+    const ARGS = '["-NoProfile","-NonInteractive","-Command"]';
+    const rs = (req, platform) => S.resolveRunShell(req, { platform, env: {} });
+    const pwP = "C:" + BS + "Program Files" + BS + "PowerShell" + BS + "7" + BS + "pwsh.exe";
+    const shells = [rs("pwsh", "win32"), rs("powershell", "win32"), rs("POWERSHELL.EXE", "win32"), rs(pwP, "win32"), rs('"' + pwP + '"', "win32"), rs("pwsh", "linux"), rs("/usr/bin/pwsh", "darwin")];
+    ok(shells.every((r) => r.pwsh === true && r.cmd === false && js(r.args) === ARGS) && shells[3].shell === pwP && shells[4].shell === pwP && shells[0].shell === "pwsh" && shells[6].shell === "/usr/bin/pwsh" &&
+      !rs("bash", "linux").pwsh && !rs("", "win32").pwsh && rs("", "win32").cmd === true && !rs("cmd", "win32").pwsh && !rs("sh", "win32").args && !rs("zsh", "linux").args &&
+      E.isPwshShell("C:/tools/pwsh-preview/pwsh.exe") && !E.isPwshShell("pwsh-wrapper"),
+      "1.21.1 languages: resolveRunShell — pwsh / powershell(.exe), a path to either (quotes dropped), on Windows and elsewhere → pwsh: true + args -NoProfile -NonInteractive -Command (the CLI runs <shell> <args> <cmd>); bash, sh, zsh, cmd and the default are unchanged (got " +
+      js(shells) + ")");
+
+    // 3. could-not-run vs red — PowerShell's own could-not-run outputs (pwsh 7 / Windows PowerShell 5.1 / pwsh's pt-BR and es
+    // resources; ANSI colours as pwsh 7 writes them), and Pester's red runs — a test that RAN and failed, even on "is not
+    // recognized", stays red (outputs captured from pwsh 7.6, Windows PowerShell 5.1, Pester 3.4 / 5.9 / 6.2).
+    const red = (s) => ESC + "[91m" + s + ESC + "[0m";
+    const cnr = (s) => (S.couldNotRunOutput(s) || {}).kind || null;
+    const CANT = [
+      ESC + "[31;1mInvoke-Pester: " + ESC + "[31;1mThe term 'Invoke-Pester' is not recognized as a name of a cmdlet, function, script file, or executable program." + ESC + "[0m\r\n" + ESC + "[31;1mCheck the spelling of the name.",
+      "Invoke-Pester : The term 'Invoke-Pester' is not recognized as the name of a \r\ncmdlet, function, script file, or operable program. Check the spelling of the name.\r\nAt line:1 char:1",
+      'O termo "Invoke-Pester" não é reconhecido como um nome de um cmdlet, função, arquivo de script ou programa executável.',
+      'El término "Invoke-Pester" no se reconoce como nombre de un cmdlet, función, archivo de script o programa ejecutable.',
+      "Import-Module: The specified module 'Pester' was not loaded because no valid module file was found in any module directory.",
+      'O módulo especificado "Pester" não foi carregado porque nenhum arquivo de módulo válido foi encontrado em nenhum diretório de módulo.',
+      'No se cargó el módulo especificado "Pester" porque no se encontró ningún archivo de módulo válido en ningún directorio de módulos.',
+      "File C:" + BS + "x" + BS + "build.ps1 cannot be loaded because running scripts is \r\ndisabled on this system. For more information, see about_Execution_Policies.",
+      "Não é possível carregar o arquivo C:" + BS + "x" + BS + "b.ps1 porque a execução de scripts está desabilitada neste sistema.",
+      "El archivo C:" + BS + "x" + BS + "b.ps1 no se puede cargar porque la ejecución de scripts está deshabilitada en este sistema.",
+      "File C:" + BS + "x" + BS + "b.ps1 cannot be loaded. The file C:" + BS + "x" + BS + "b.ps1 is not digitally signed. You cannot run this script on the current system.",
+      "The argument 'scripts/nope.ps1' is not recognized as the name of a script file. Check the spelling of the name.\n\nUsage: pwsh[.exe] [-Login]",
+      "The argument 'scripts/nope.ps1' to the -File parameter does not exist. Provide the path to an existing '.ps1' file as an argument to the -File parameter.",
+      "System.Management.Automation.RuntimeException: No test files were found and no scriptblocks were provided. Please ensure that you provided at least one path to a *.Tests.ps1 file.",
+      // Pester 5: a BeforeAll that imports a module that isn't there — its test is COUNTED failed, but "Container failed" says it never ran
+      red("[-] C:" + BS + "x" + BS + "Ba.Tests.ps1 failed with:") + "\nFileNotFoundException: The specified module 'C:/x/../src/Missing.psm1' was not loaded because no valid module file was found in any module directory.\n" +
+        ESC + "[97mTests Passed: 0, " + ESC + "[0m" + ESC + "[91mFailed: 1, " + ESC + "[0m" + ESC + "[90mSkipped: 0, NotRun: 0" + ESC + "[0m\n" + red("Container failed: 1"),
+      // Pester 3: the same, in a Describe block
+      "Describing Missing\n [-] Error occurred in Describe block 378ms\n   FileNotFoundException: The specified module 'x/Missing.psm1' was not loaded because no valid module file was found in any module directory.\nPassed: 0 Failed: 1 Skipped: 0 Pending: 0 Inconclusive: 0",
+    ];
+    const RED = [
+      red("[-] Get-Greeting.T-01 greets by name (US-1.AC-1)") + ESC + "[90m 132ms (114ms|18ms)" + ESC + "[0m\n" + red(" Expected strings to be the same, but they were different.") + "\n" + red(" Expected: 'Hello, Ana'") + "\n" +
+        ESC + "[97mTests Passed: 0, " + ESC + "[0m" + ESC + "[91mFailed: 1, " + ESC + "[0m", // Pester 5, coloured
+      red("[-] Get-Farewell.T-02 says bye") + ESC + "[90m 89ms (72ms|17ms)" + ESC + "[0m\n" + red(" CommandNotFoundException: The term 'Get-Farewell' is not recognized as a name of a cmdlet, function, script file, or executable program.") +
+        "\nTests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0", // the function under test doesn't exist yet: a red test
+      "Describing Get-Farewell\n [-] T-02 says bye 469ms\n   CommandNotFoundException: The term 'Get-Farewell' is not recognized as the name of a cmdlet, function, script file, or operable program.\nPassed: 0 Failed: 1 Skipped: 0 Pending: 0 Inconclusive: 0", // Pester 3
+      "CommandNotFoundException: The term 'Get-Farewell' is not recognized as a name of a cmdlet, function, script file, or executable program.\nTests completed in 747ms\nTests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0", // a summary without the [-] line
+      "[-] Get-Greeting.T-01 greets by name (US-1.AC-1) 129ms\n Expected 'Hello, Ana', but got 'Hello'.\nTests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0", // Pester 6
+      " Expected 'no error', but got 'The term 'foo' is not recognized as a name of a cmdlet, function, script file, or executable program.'", // an assertion quoting it
+    ];
+    const cantWrong = CANT.map((s, i) => [i, cnr(s)]).filter(([, k]) => k !== "test");
+    const redWrong = RED.map((s, i) => [i, cnr(s)]).filter(([, k]) => k !== null);
+    const RA = E.RE_ASSERTION_RAN;
+    ok(!cantWrong.length && !redWrong.length && RA.test("  [-] T-01 greets 12ms") && RA.test("[-] a.b 1.02s (1s|20ms)") && !RA.test(" [-] Error occurred in Describe block 378ms") &&
+      !RA.test("[-] Discovery in C:/x/a.Tests.ps1 failed with:") && !RA.test("[-] C:/x/Ba.Tests.ps1 failed with:") && RA.test("Expected 3, but got 2.") && RA.test("   But was:  {Hello}") &&
+      RA.test("Expected string length 10 but was 5.") && !RA.test("Tests Passed: 0, Failed: 1") && E.pesterRan("Tests Passed: 0, Failed: 1, Skipped: 0") && !E.pesterRan("Tests Passed: 3, Failed: 0") &&
+      !E.pesterRan("Tests Passed: 0, Failed: 1\nContainer failed: 1") && E.pesterRan("Passed: 0 Failed: 2 Skipped: 0"),
+      "1.21.1 languages: couldNotRunOutput knows PowerShell's could-not-run outputs (an unknown command — pwsh 7, Windows PowerShell 5.1 wrapped, pt-BR, es; a missing module; the execution policy; an unsigned script; a -File path that isn't there; Pester's 'No test files were found'; a Pester container / Describe block that failed before its test ran) and never a Pester red run ('[-] … 12ms', 'Expected …, but got …', 'Tests Passed: 0, Failed: 1' — also when the failure quotes 'is not recognized'); ANSI colours read through (wrong: " +
+      js([cantWrong, redWrong]) + ")");
+
+    // 4. What a run records and says: colour codes dropped from the summary; cmd.exe's hint never fires on PowerShell's own
+    // messages; the pipe check reads a pwsh -Command script.
+    const sum = S.summarizeRunOutput(RED[0] + "\n" + ESC + "]8;;file:///C:/x" + ESC + BS + "link" + ESC + "]8;;" + ESC + BS + "\n");
+    const wsf = S.windowsShellFailure;
+    ok(!sum.includes(ESC) && /^\[-\] Get-Greeting\.T-01 greets by name \(US-1\.AC-1\) 132ms \(114ms\|18ms\)$/m.test(sum) && /Tests Passed: 0, Failed: 1,/.test(sum) && /^link$/m.test(sum) &&
+      CANT.slice(0, 4).every((s) => !wsf(s, 1)) && !wsf("Get-ChildItem: Cannot find path 'C:/x' because it does not exist.", 1) && !wsf(RED[1], 1) &&
+      !S.verifyPipeMasked('pwsh -NoProfile -Command "Invoke-Pester -Path tests -CI; exit $LASTEXITCODE"') && !S.verifyPipeMasked('pwsh -NoProfile -Command "$r = Invoke-Pester -PassThru; exit $r.FailedCount"') &&
+      S.verifyPipeMasked('pwsh -NoProfile -Command "Get-ChildItem tests | Invoke-Pester"') && !S.verifyPipeMasked("pwsh -NoProfile -Command \"Write-Output 'a|b'\""),
+      "1.21.1 languages: a run's summary drops ANSI colour and hyperlink codes (pwsh 7 colours captured output); windowsShellFailure (the --shell bash hint) never reads PowerShell's own messages as cmd.exe failing; the pipe check reads a pwsh -Command script (a real pipe flagged, a quoted '|' not) (got " +
+      js([sum]) + ")");
+
+    // 5. spec_complete_task on an _Expect: fail_ task: a Pester run that never ran the test is refused (couldNotRun: output); a
+    // Pester red run — the function under test doesn't exist yet — is the red proof.
+    const pe = path.join(tmp, "proj-121-pester-red");
+    S.initProject(pe, ["core"], "en");
+    const fe = S.createFeature(pe, "Farewell", ["core"], "", undefined, "en");
+    const PCMD = 'pwsh -NoProfile -Command "Invoke-Pester -Path tests -CI; exit $LASTEXITCODE"';
+    fs.writeFileSync(path.join(fe.dir, "tasks.md"), "- [ ] 1. [US1] Write test T-02 and watch it fail\n  - _Verify: " + PCMD + "_\n  - _Expect: fail_\n");
+    const notRun = S.completeTask(pe, fe.slug, 1, { command: PCMD, exitCode: 1, summary: "Invoke-Pester: The term 'Invoke-Pester' is not recognized as a name of a cmdlet, function, script file, or executable program." });
+    const redRun = S.completeTask(pe, fe.slug, 1, { command: PCMD, exitCode: 1, summary: S.summarizeRunOutput(RED[1]) });
+    ok(notRun.ok === false && notRun.couldNotRun === "output" && notRun.recorded === true && /'Invoke-Pester' is not recognized as a name of a cmdlet/.test(notRun.error) &&
+      redRun.ok === true && redRun.redRecorded === true && redRun.verified === true,
+      "1.21.1 languages: an _Expect: fail_ task — a Pester run whose summary shows Invoke-Pester is unknown is refused (couldNotRun: output); a Pester red run (the function under test not written yet — '[-] …', 'Tests Passed: 0, Failed: 1') is the red proof (got " +
+      js([notRun.couldNotRun, notRun.error && notRun.error.slice(0, 160), redRun.ok, redRun.redRecorded]) + ")");
+
+    // 6. Linear on hostile output (the run gate reads up to 200,000 characters of it).
+    const N = 100000;
+    const t0 = Date.now();
+    const hostile = ["[-] " + "x ".repeat(N) + "q", "Expected " + "a".repeat(2 * N), "'".repeat(2 * N), ("is " + " ".repeat(300)).repeat(N / 300) + "not", ("The argument '" + "a".repeat(390) + "' ").repeat(N / 400),
+      ("\"" + "a".repeat(199)).repeat(N / 200) + " is not recognized", ESC + "]" + "a".repeat(2 * N), ("Tests Passed: 1, ").repeat(N / 16)];
+    const hostileKinds = hostile.map((s) => cnr(s));
+    const hostileMs = Date.now() - t0;
+    ok(hostileMs < 5000 && hostileKinds.every((k) => k === null),
+      "1.21.1 languages: couldNotRunOutput stays linear on 200,000-character hostile outputs (a '[-] ' line with no duration, 'Expected ' runs, quote runs, blank runs between the words) (got " + js([hostileMs, hostileKinds]) + ")");
+  }
+
+  // 1.21.1 languages (review) — PowerShell evidence, second round: a POSIX shell expands a pwsh script's `$…`; Pester blocks and
+  // files that failed before their tests; PowerShell's own parse errors; every new pattern linear on 200 KB.
+  {
+    const js = (v) => JSON.stringify(v);
+    const E = require("./lib/engine/index.js");
+    const ESC = String.fromCharCode(27), BS = String.fromCharCode(92), BT = "`";
+    const red = (s) => ESC + "[91m" + s + ESC + "[0m";
+    // 1. posixPwshScript — the mirror of posixShellSyntax for a POSIX shell (/bin/sh, bash, Git Bash): `$…` / backticks
+    // outside single quotes in a pwsh / powershell script are expanded by the shell first (`exit $LASTEXITCODE` → `exit` → 0).
+    const pp = (c) => S.posixPwshScript(c).join("+");
+    const PP = [
+      ['pwsh -NoProfile -Command "npm test; exit $LASTEXITCODE"', "variable"],
+      ['pwsh -c "Get-ChildItem | ForEach-Object { $_.Name }"', "variable"],
+      ["pwsh -NoProfile -Command Invoke-Pester -CI; exit $LASTEXITCODE", ""], // `;` ends the pwsh command: `exit $X` is the shell's own
+      ["pwsh -NoProfile -Command Invoke-Pester -CI " + BS + "; exit $LASTEXITCODE", "variable"],
+      ['FOO=1 pwsh -c "exit $x"', "variable"],
+      ['env pwsh -NoProfile -Command "exit $x"', "variable"],
+      ['powershell "exit $LASTEXITCODE"', "variable"],
+      ['pwsh -c "Write-Output ' + BT + 'date' + BT + '"', "backtick"],
+      ["pwsh -NoProfile -Command 'npm test; exit $LASTEXITCODE'", ""],
+      ['pwsh -NoProfile -Command "Invoke-Pester -Path tests -CI"', ""],
+      ['pwsh -c "exit ' + BS + '$code"', ""],
+      ['pwsh -NoProfile -File build.ps1 "$HOME"', ""],
+      ['echo "$HOME" && npm test', ""],
+      ['npm test && pwsh -NoProfile -Command "exit $LASTEXITCODE"', "variable"],
+    ];
+    const ppWrong = PP.filter(([c, want]) => pp(c) !== want).map(([c]) => c + " → " + pp(c));
+    const rs = (req, platform) => S.resolveRunShell(req, { platform, env: {}, exists: () => false });
+    ok(!ppWrong.length && rs("", "linux").posix === true && rs("bash", "linux").posix === true && rs("/usr/bin/zsh", "darwin").posix === true && rs("fish", "linux").posix === true &&
+      rs("sh", "win32").posix === true && rs("C:/Program Files/Git/bin/bash.exe", "win32").posix === true && S.resolveRunShell("bash", { platform: "win32", env: {}, gitExecPath: "C:/Git/mingw64/libexec/git-core", exists: (p) => /bin[\\/]bash\.exe$/.test(p) }).posix === true &&
+      !rs("", "win32").posix && !rs("cmd", "win32").posix && !rs("pwsh", "linux").posix && !rs("nu", "linux").posix &&
+      S.runsPwsh('pwsh -NoProfile -Command "x"') && S.runsPwsh("npm test && powershell.exe -c x") && S.runsPwsh("FOO=1 pwsh -c x") && !S.runsPwsh("echo pwsh") && !S.runsPwsh("npm test"),
+      "1.21.1 languages (review): posixPwshScript flags `$…` / backticks a POSIX shell would expand in a pwsh script (double-quoted or bare, after a VAR= or env prefix, powershell's positional command) — never a single-quoted script, `\\$`, a -File argument or `$` outside PowerShell; resolveRunShell marks /bin/sh, bash, zsh, fish, sh and Git Bash posix (never cmd.exe, pwsh, an unknown shell); runsPwsh finds a pwsh program in the line (wrong: " +
+      js(ppWrong) + ")");
+
+    // 2. Pester blocks and files that failed BEFORE their tests are could-not-run, alone (outputs captured from Pester 3.4 /
+    // 5.9.1 / 6.2.0): a Describe-level BeforeAll ("[-] Describe … failed" + "BeforeAll \ AfterAll failed: 1", no "Container
+    // failed"), a test file that doesn't parse ("[-] Discovery in … failed" / "[-] Error occurred in test script"); the summary
+    // keeps those lines. A test that ran — an assertion, a missing function, a throw inside It — stays red.
+    const cnr = (s) => { const r = S.couldNotRunOutput(s); return r ? r.kind + ":" + r.text.slice(0, 40) : null; };
+    const summary5 = (lines) => lines.join("\n");
+    const NOTRUN = {
+      block5: summary5([red("[-] Describe Get-Greeting failed"), red(" RuntimeException: boom in BeforeAll"), ESC + "[97mTests completed in 753ms" + ESC + "[0m",
+        ESC + "[97mTests Passed: 0, " + ESC + "[0m" + ESC + "[91mFailed: 1, " + ESC + "[0m" + ESC + "[90mNotRun: 0" + ESC + "[0m", red("BeforeAll " + BS + " AfterAll failed: 1"), red("  - Get-Greeting")]),
+      context6: summary5(["[-] Context when empty failed", " RuntimeException: boom", "Tests Passed: 0, Failed: 2, Skipped: 0, Inconclusive: 0, NotRun: 0", "BeforeAll " + BS + " AfterAll failed: 1"]),
+      discovery5: summary5([red("[-] Discovery in C:/p/Syn.Tests.ps1 failed with:"), red("System.Management.Automation.ParseException: At C:/p/Syn.Tests.ps1:1 char:19"),
+        "Tests Passed: 0, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0", "Container failed: 1", "  - C:/p/Syn.Tests.ps1"]),
+      script3: summary5([" [-] Error occurred in test script 'C:/p/Syn.Tests.ps1' 175ms", "   ParseException: At C:/p/Syn.Tests.ps1:1 char:19", "Tests completed in 175ms",
+        "Passed: 0 Failed: 1 Skipped: 0 Pending: 0 Inconclusive: 0"]),
+      block3: summary5(["Describing Get-Greeting", " [-] Error occurred in Describe block 318ms", "   RuntimeException: boom", "Passed: 0 Failed: 1 Skipped: 0 Pending: 0 Inconclusive: 0"]),
+      summaryOnly: summary5(["Tests completed in 753ms", "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0", "BeforeAll " + BS + " AfterAll failed: 1", "  - Get-Greeting"]),
+    };
+    const RAN = {
+      throw5: summary5([red("[-] Get-Greeting.T-01 greets") + ESC + "[90m 52ms (35ms|17ms)" + ESC + "[0m", red(" RuntimeException: not implemented"), "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0"]),
+      throw6: summary5(["[-] Get-Greeting.T-01 greets 44ms", " RuntimeException: not implemented", "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0"]),
+      throw3: summary5(["Describing Get-Greeting", " [-] T-01 greets 405ms", "   RuntimeException: not implemented", "Passed: 0 Failed: 1 Skipped: 0 Pending: 0 Inconclusive: 0"]),
+      red3: summary5([" [-] T-01 greets 750ms", "   Expected string length 10 but was 5. Strings differ at index 5.", "   Expected: {Hello, Ana}", "   But was:  {Hello}"]),
+      mixed: summary5(["[-] Describe Other failed", "[-] Get-Greeting.T-01 greets 44ms", " Expected 'Hello, Ana', but got 'Hello'.", "Tests Passed: 0, Failed: 2", "BeforeAll " + BS + " AfterAll failed: 1"]),
+    };
+    const notRunWrong = Object.entries(NOTRUN).filter(([, s]) => !/^test:/.test(cnr(s) || "")).map(([k, s]) => k + "=" + cnr(s));
+    const ranWrong = Object.entries(RAN).filter(([, s]) => cnr(s) !== null).map(([k, s]) => k + "=" + cnr(s));
+    const keptInSummary = S.summarizeRunOutput(["Describing Missing", " [-] Error occurred in Describe block 318ms", "   FileNotFoundException: x", "   at <ScriptBlock>, X.Tests.ps1: line 2",
+      "   at Invoke-Blocks, SetupTeardown.ps1: line 134", "   at Invoke-TestGroupSetupBlocks, SetupTeardown.ps1: line 113", "Tests completed in 318ms", "Passed: 0 Failed: 1 Skipped: 0 Pending: 0 Inconclusive: 0"].join("\n"));
+    ok(!notRunWrong.length && !ranWrong.length && /\[-\] Error occurred in Describe block/.test(keptInSummary) && /^test:/.test(cnr(keptInSummary) || ""),
+      "1.21.1 languages (review): a Pester block's BeforeAll that failed ('[-] Describe … failed', 'BeforeAll \\ AfterAll failed: 1' — Pester 5 / 6), a Context, a test file that doesn't parse ('[-] Discovery in … failed' + 'Container failed', Pester 3's '[-] Error occurred in test script' / 'Describe block') is could-not-run on its own — also as a run summary, which keeps the line; a throw inside It, an assertion red and a mixed run stay red (wrong: " +
+      js([notRunWrong, ranWrong, keptInSummary.split("\n")]) + ")");
+
+    // 3. PowerShell's own parse error (the -Command script never ran) — pwshParseFailure, asked by the CLI when PowerShell runs
+    // the line; never when a test ran.
+    const pf = (s) => (S.pwshParseFailure(s) || {}).text || null;
+    const PARSE = [
+      "At line:1 char:10\r\n+ npm test && node -e \"process.exit(0)\"\r\n+          ~~\r\nThe token '&&' is not a valid statement separator in this version.\r\n    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException\r\n    + FullyQualifiedErrorId : InvalidEndOfLine",
+      "An expression was expected after '('.\r\n    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException\r\n    + FullyQualifiedErrorId : ExpectedExpression",
+      ESC + "[31;1mParserError: " + ESC + "[0m\n" + ESC + "[31;1m" + ESC + "[36;1mLine |" + ESC + "[0m\n     | " + ESC + "[31;1mUnexpected token ')' in expression or statement." + ESC + "[0m",
+    ];
+    const NOT_PARSE = ["[-] Parser.T-01 rejects a stray paren 12ms\n Expected 'Unexpected token', but got 'ok'.", "Error: Unexpected token } in JSON at position 3\n1 failing", "npm ERR! Test failed."];
+    ok(/^The token '&&' is not a valid statement separator/.test(pf(PARSE[0]) || "") && /ParserError/.test(pf(PARSE[1]) || "") && /^Unexpected token '\)' in expression or statement/.test(pf(PARSE[2]) || "") &&
+      NOT_PARSE.every((s) => pf(s) === null),
+      "1.21.1 languages (review): pwshParseFailure reads PowerShell's own parse error — 5.1's '&&' separator, its ParserError / FullyQualifiedErrorId, pwsh 7's coloured 'ParserError: … Unexpected token' block — never a Pester test that ran, a JSON parse error or a plain failure (got " +
+      js([PARSE.map(pf), NOT_PARSE.map(pf)]) + ")");
+
+    // 4. spec_complete_task on an _Expect: fail_ task: a Pester 5 run whose Describe BeforeAll failed is refused (couldNotRun:
+    // output); a throw inside It is the red proof.
+    const pe = path.join(tmp, "proj-121-pester-block");
+    S.initProject(pe, ["core"], "en");
+    const fe = S.createFeature(pe, "Block", ["core"], "", undefined, "en");
+    const PCMD = "Invoke-Pester -Path tests -CI";
+    fs.writeFileSync(path.join(fe.dir, "tasks.md"), "- [ ] 1. [US1] Write test T-01 and watch it fail\n  - _Verify: " + PCMD + "_\n  - _Expect: fail_\n");
+    const blocked = S.completeTask(pe, fe.slug, 1, { command: PCMD, exitCode: 2, summary: S.summarizeRunOutput(NOTRUN.block5) });
+    const thrown = S.completeTask(pe, fe.slug, 1, { command: PCMD, exitCode: 1, summary: S.summarizeRunOutput(RAN.throw5) });
+    ok(blocked.ok === false && blocked.couldNotRun === "output" && /Describe Get-Greeting failed|BeforeAll/.test(blocked.error) && thrown.ok === true && thrown.redRecorded === true,
+      "1.21.1 languages (review): an _Expect: fail_ task — a Pester 5 run whose Describe-level BeforeAll failed is refused (couldNotRun: output), a throw inside It is the red proof (got " +
+      js([blocked.couldNotRun, (blocked.error || "").slice(0, 160), thrown.ok, thrown.redRecorded]) + ")");
+
+    // 5. Every new could-not-run / assertion / Pester / parse pattern — and the functions over them — is linear: 200 KB of blanks,
+    // digits, quotes or letters after each pattern's own words, or those words repeated, within 1.5 s each.
+    const N = 200000;
+    const prefixes = ["is not recognized as a name of a", "is not recognized", "não é reconhecido como nome de", "não é reconhecido como", "no se reconoce como nombre de",
+      "'x'", "\"x\"", "The specified module 'x'", "O módulo especificado 'x'", "No se cargó el módulo especificado", "cannot be loaded because running scripts is",
+      "porque a execução de scripts está", "porque la ejecución de scripts está", "is not digitally signed.", "The argument 'x'", "No test files were found",
+      "[-]", "[-] a", "[-] a 1ms", "[-] a 1", "[-] Describe a", "[-] Context a", "[-] Discovery in", "Expected a", "Expected a,", "But was:", "Tests Passed: 1,", "Passed: 1",
+      "Container failed:", "BeforeAll " + BS + " AfterAll failed:", "+ CategoryInfo", "FullyQualifiedErrorId", "FullyQualifiedErrorId : MissingEndParenthesisIn",
+      "ParserError", "Unexpected token '", "Missing closing '", "is not a valid statement", ESC + "[", ESC + "]"];
+    const fills = [" ", "\t", "1", "a", "'", "."];
+    const inputs = [];
+    for (const p of prefixes) {
+      for (const f of fills) inputs.push(p + f.repeat(N) + "x");
+      inputs.push((p + " ").repeat(Math.ceil(N / (p.length + 1))));
+    }
+    const pats = [...E.CANT_RUN_OUTPUT.map(([k, re], i) => ["CANT_RUN_OUTPUT[" + i + "] " + k, re]), ["RE_ASSERTION_RAN", E.RE_ASSERTION_RAN], ["RE_PESTER_FAILED", E.RE_PESTER_FAILED],
+      ["RE_PESTER_NOT_RUN", E.RE_PESTER_NOT_RUN], ["RE_PWSH_PARSE_FAILURE", E.RE_PWSH_PARSE_FAILURE], ["RE_ANSI", new RegExp(E.RE_ANSI.source, "")]];
+    const slow = [];
+    let worst = 0;
+    for (const [name, re] of pats) {
+      for (const s of inputs) {
+        const t0 = Date.now();
+        re.test(s);
+        const ms = Date.now() - t0;
+        worst = Math.max(worst, ms);
+        if (ms > 1500) slow.push(name + " @ " + js(s.slice(0, 30)) + " " + ms + " ms");
+      }
+    }
+    const fnSlow = [];
+    for (const [name, fn] of [["couldNotRunOutput", S.couldNotRunOutput], ["pwshParseFailure", S.pwshParseFailure], ["summarizeRunOutput", (s) => S.summarizeRunOutput(s)],
+      ["posixPwshScript", S.posixPwshScript], ["posixShellSyntax", S.posixShellSyntax], ["runsPwsh", S.runsPwsh]]) {
+      for (const s of inputs.filter((_, i) => i % 3 === 0)) {
+        const t0 = Date.now();
+        fn(s);
+        const ms = Date.now() - t0;
+        if (ms > 1500) fnSlow.push(name + " @ " + js(s.slice(0, 30)) + " " + ms + " ms");
+      }
+    }
+    ok(!slow.length && !fnSlow.length,
+      "1.21.1 languages (review): every new could-not-run, assertion, Pester and parse pattern (" + pats.length + ") and couldNotRunOutput / pwshParseFailure / summarizeRunOutput / posixPwshScript / posixShellSyntax / runsPwsh stay linear on " +
+      inputs.length + " hostile 200 KB inputs (each within 1.5 s; the pt/es 'not recognized' pattern took 58 s before) (got " + js({ worst, slow: slow.slice(0, 5), fnSlow: fnSlow.slice(0, 5) }) + ")");
+  }
+
+  // 1.21.1 languages (review 2) — a mixed Pester run's summary keeps the sign a test ran; posixPwshScript's redirections,
+  // comments, wrappers with options and nested POSIX scripts.
+  {
+    const js = (v) => JSON.stringify(v);
+    const ESC = String.fromCharCode(27), BS = String.fromCharCode(92);
+    const red = (s) => ESC + "[91m" + s + ESC + "[0m";
+    // A. A real red Pester run where ANOTHER block's BeforeAll failed (outputs as Pester 6.2.0 / 5.9.1 print them, paths
+    // shortened): the summary kept the NOT_RUN line and the tail but dropped "[-] Greeter.T-01 … 121ms", so the stored summary
+    // read "never ran" — the red proof refused. Now it keeps the first line that shows a test ran. E: a test whose thrown
+    // message quotes "[-] Describe Foo failed" is the same case.
+    const stack = (n) => Array.from({ length: n }, (_, i) => " at Invoke-Step" + i + ", C:/p/Pester/Pester.psm1: line " + (100 + i));
+    const MIXED = {
+      pester6: ["Running tests from 2 files.", "[-] Describe Broken failed",
+        " FileNotFoundException: The specified module 'NoSuchModuleXyz' was not loaded because no valid module file was found in any module directory.",
+        " at <ScriptBlock>, C:/p/tests/A.Tests.ps1:2", "[-] Greeter.T-01 greets by name 121ms", " Expected strings to be the same, but they were different.",
+        " Expected length: 10", " Actual length:   5", " Strings differ at index 5.", " Expected: 'Hello, Ana'", " But was:  'Hello'", "            -----^",
+        " at It 'T-01 greets by name' { 'Hello' | Should -Be 'Hello, Ana' }, C:/p/tests/B.Tests.ps1:2", "Tests completed in 967ms",
+        "Tests Passed: 0, Failed: 2, Skipped: 0, Inconclusive: 0, NotRun: 0", "BeforeAll " + BS + " AfterAll failed: 1", "  - Broken"].join("\n"),
+      pester5: ["Starting discovery in 2 files.", "Discovery found 2 tests in 193ms.", "Running tests.",
+        red("[-] Greeter.T-01 greets by name") + ESC + "[90m 161ms (132ms|30ms)" + ESC + "[0m", red(" Expected strings to be the same, but they were different."),
+        ...stack(30), red("[-] Describe Broken failed"), red(" FileNotFoundException: The specified module 'NoSuchModuleXyz' was not loaded."), ...stack(12),
+        "Tests completed in 988ms", ESC + "[97mTests Passed: 0, " + ESC + "[0m" + ESC + "[91mFailed: 2, " + ESC + "[0m" + "Skipped: 0, Inconclusive: 0, NotRun: 0",
+        red("BeforeAll " + BS + " AfterAll failed: 1"), red("  - Broken")].join("\r\n"),
+      quoted: ["[-] Quoter.T-05 quotes 38ms", " RuntimeException: line one", " [-] Describe Foo failed", " line three", " at <ScriptBlock>, C:/p/tests/Q.Tests.ps1:2",
+        "Tests completed in 754ms", "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0"].join("\n"),
+    };
+    const sums = Object.fromEntries(Object.entries(MIXED).map(([k, s]) => [k, S.summarizeRunOutput(s)]));
+    const aWrong = Object.keys(MIXED).filter((k) => S.couldNotRunOutput(MIXED[k]) !== null || S.couldNotRunOutput(sums[k]) !== null || sums[k].length > 500);
+    // still refused: the same run with no test that ran (the block's BeforeAll failed, nothing else) — its summary too
+    const onlyBlock = ["[-] Describe Broken failed", " FileNotFoundException: x", ...stack(20), "Tests completed in 500ms",
+      "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0", "BeforeAll " + BS + " AfterAll failed: 1", "  - Broken"].join("\n");
+    ok(!aWrong.length && /\[-\] Greeter\.T-01 greets by name 121ms/.test(sums.pester6) && /\[-\] Greeter\.T-01 greets by name 161ms/.test(sums.pester5) &&
+      /\[-\] Quoter\.T-05 quotes 38ms/.test(sums.quoted) && /BeforeAll \\ AfterAll failed: 1/.test(sums.pester6) &&
+      /^test:/.test(((r) => (r ? r.kind + ":" : ""))(S.couldNotRunOutput(S.summarizeRunOutput(onlyBlock)))),
+      "1.21.1 languages (review 2): a mixed Pester run — one block's BeforeAll failed, another block's test failed on its assertion (Pester 6 and a coloured Pester 5 with 30 stack lines between), or a thrown message quoting '[-] Describe Foo failed' — is red, and its summary keeps the '[-] <test> 121ms' line (≤ 500 characters) so the summary reads red too; a run where only the block failed is still could-not-run, summary included (wrong: " +
+      js([aWrong, sums]) + ")");
+
+    // …and wherever a stored summary is re-read: spec_complete_task (MCP) on an _Expect: fail_ task records each as the red
+    // proof — the CLI's summary or the agent's own copy of the output; the block-only run is refused (couldNotRun: output).
+    const pm = path.join(tmp, "proj-121-mixed-pester");
+    S.initProject(pm, ["core"], "en");
+    const fm = S.createFeature(pm, "Mixed", ["core"], "", undefined, "en");
+    const PCMD = "Invoke-Pester -Path tests -CI";
+    fs.writeFileSync(path.join(fm.dir, "tasks.md"), [1, 2, 3, 4, 5].map((n) => "- [ ] " + n + ". [US1] Write test T-0" + n + " and watch it fail\n  - _Verify: " + PCMD + "_\n  - _Expect: fail_\n").join(""));
+    const mc = async (n, summary) => payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { projectDir: pm, name: fm.slug, number: n, evidence: { command: PCMD, exitCode: 3, summary } } }));
+    const r1 = await mc(1, sums.pester6);
+    const r2 = await mc(2, sums.pester5);
+    const r3 = await mc(3, MIXED.pester6); // the output itself as the summary (≤ 2,000 characters are kept)
+    const r4 = await mc(4, sums.quoted);
+    const r5 = await mc(5, S.summarizeRunOutput(onlyBlock));
+    ok([r1, r2, r3, r4].every((r) => r.ok === true && r.redRecorded === true) && r5.ok === false && r5.couldNotRun === "output",
+      "1.21.1 languages (review 2): MCP spec_complete_task on _Expect: fail_ tasks records a mixed Pester run's summary (Pester 6, coloured Pester 5, the raw output, the quoted '[-] Describe' message) as the red proof; the block-only run is still refused (couldNotRun: output) (got " +
+      js([r1, r2, r3, r4].map((r) => [r.ok, r.redRecorded, r.couldNotRun, (r.error || "").slice(0, 120)]).concat([[r5.ok, r5.couldNotRun]])) + ")");
+
+    // C. posixPwshScript (a POSIX shell running pwsh): a redirection's target (`> "$OUT"`, `2> "$ERR"`, `&>`) and a comment
+    // (`# $x`) are the outer shell's — never flagged; a wrapper with its options and positionals (sudo -u root, timeout 60,
+    // nice -n 10, doas, nohup time) before pwsh no longer hides its script; a POSIX shell's own -c script is read in turn
+    // (`bash -c "pwsh -c \"$x\""`, `bash -c 'pwsh -c "$x"'`). A `$PWD` in the script is still refused (accepted: rewrite it).
+    const pp = (c) => S.posixPwshScript(c).join("+");
+    const PP = [
+      ['pwsh -c "1+1" > "$OUT"', ""], ['pwsh -c "1+1" 2> "$ERR"', ""], ['pwsh -c "1+1" &> "$OUT"', ""], ['pwsh -c "1+1" 2>&1 | tee "$LOG"', ""],
+      ['pwsh -c "exit 0" # $comment', ""], ['pwsh -c "exit 0" #$comment', ""], ['echo "#" "$HOME"', ""],
+      ['pwsh -NoProfile 2>/dev/null -Command "exit $x"', "variable"], ['pwsh -c "Write-Output a#b $x"', "variable"],
+      ['sudo pwsh -c "$x"', "variable"], ['sudo -u root pwsh -c "$x"', "variable"], ['timeout 60 pwsh -c "$x"', "variable"], ['timeout -s KILL 60 pwsh -c "$x"', "variable"],
+      ['nice -n 10 pwsh -c "$x"', "variable"], ['nohup time pwsh -c "$x"', "variable"], ['doas -u me pwsh -c "$x"', "variable"], ["sudo pwsh -c 'exit $x'", ""],
+      ['bash -c "pwsh -c ' + BS + '"$x' + BS + '""', "variable"], ["bash -c 'pwsh -c \"$x\"'", "variable"], ["sh -c 'sudo pwsh -c \"exit $LASTEXITCODE\"'", "variable"],
+      ["bash -c 'pwsh -c \"exit 0\" > \"$OUT\"'", ""], ["bash -c 'pwsh -c '\"'\"'exit $x'\"'\"''", ""], ["sh -c 'echo $HOME'", ""],
+      ['pwsh -c "Invoke-Pester -Path $PWD/tests"', "variable"],
+    ];
+    const ppWrong = PP.filter(([c, want]) => pp(c) !== want).map(([c]) => c + " → " + pp(c));
+    const RP = [["sudo -u root pwsh -c x", true], ["timeout 60 pwsh -c x", true], ["nice -n 5 powershell -c x", true], ["sudo echo pwsh", false], ["timeout 60 npm test", false]];
+    const rpWrong = RP.filter(([c, want]) => S.runsPwsh(c) !== want).map(([c]) => c);
+    const VP = [['sudo bash -c "npm test | tee x"', true], ['timeout 60 sh -c "a | b"', true], ['env -u X bash -c "a | b"', true], ['sudo -u root bash -c "a | b"', true],
+      ['nice -n 10 bash -c "a || b"', false]];
+    const vpWrong = VP.filter(([c, want]) => S.verifyPipeMasked(c) !== want).map(([c]) => c);
+    // …and linear: 200,000 characters of wrappers, options, redirections, fd numbers, comments or nested shells
+    const N = 200000;
+    const HOSTILE = ["sudo ".repeat(N / 5) + 'pwsh -c "$x"', "timeout " + "-s ".repeat(N / 3) + 'pwsh -c "$x"', 'pwsh -c "x" ' + "> ".repeat(N / 2), 'pwsh -c "x" ' + "2".repeat(N) + ">",
+      "# ".repeat(N / 2), ("bash -c '").repeat(N / 9), ("sh -c " + BS + '"').repeat(N / 8), 'pwsh -c "' + "$".repeat(N) + '"', ("pwsh -c " + '"$x" ; ').repeat(N / 16)];
+    const slowC = [];
+    for (const [name, fn] of [["posixPwshScript", S.posixPwshScript], ["runsPwsh", S.runsPwsh], ["verifyPipeMasked", S.verifyPipeMasked], ["posixShellSyntax", S.posixShellSyntax]]) {
+      for (const s of HOSTILE) { const t0 = Date.now(); fn(s); const ms = Date.now() - t0; if (ms > 1500) slowC.push(name + " @ " + js(s.slice(0, 24)) + " " + ms + " ms"); }
+    }
+    ok(!ppWrong.length && !rpWrong.length && !vpWrong.length && !slowC.length,
+      "1.21.1 languages (review 2): posixPwshScript leaves a redirection's target, an fd number and a comment to the outer shell, reads pwsh's script behind sudo / doas / timeout / nice / nohup / time and their options, and follows a POSIX shell's -c script (bash -c \"pwsh -c \\\"$x\\\"\" is refused); runsPwsh and verifyPipeMasked skip the same wrappers; all linear on 200,000-character inputs (wrong: " +
+      js([ppWrong, rpWrong, vpWrong, slowC]) + ")");
   }
 };

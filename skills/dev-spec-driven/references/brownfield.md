@@ -12,12 +12,12 @@ gives you local, zero-cost tools; the agent does the reasoning.
 
 | Field | What it holds |
 |---|---|
-| `stack`, `frameworks` | From manifests (`package.json`, `requirements.txt`/`pyproject`, `go.mod`, `Cargo.toml`, `composer.json`, `pom.xml`/`gradle`, `Gemfile`, `*.csproj`); FastAPI/Flask/Django also from imports |
+| `stack`, `frameworks` | From manifests (`package.json`, `requirements.txt`/`pyproject`, `go.mod`, `Cargo.toml`, `composer.json`, `pom.xml`/`gradle`, `Gemfile`, `*.csproj`, `CMakeLists.txt` / `meson.build` / a `Makefile` with C sources, `mix.exs`, `rebar.config`, `pubspec.yaml`, `build.sbt`, `Package.swift`, `*.cabal` / `stack.yaml`, `deps.edn` / `project.clj`, an R `DESCRIPTION`, `Project.toml`, `build.zig`, `dune-project`, `*.nimble`, `cpanfile`); `powershell` from a `.psd1` module manifest, a Pester suite, or `.ps1` / `.psm1` files that are at least half the code; `shell` / `sql` when they are at least half the code; FastAPI/Flask/Django also from imports |
 | `topLevelDirs`, `byExtension` | Candidate feature boundaries; the file mix |
 | `routes`, `candidateEndpoints` | HTTP routes with method + path + `file:line` (Express/Koa/Fastify/Hono, NestJS, Next.js, Flask, FastAPI, Django, Spring, ASP.NET, Rails/Sinatra, Laravel/Symfony, Go net/http/gin/echo/chi/fiber); the list is capped (`routesTruncated`), the count is not |
-| `testFrameworks`, `testFiles` | What the suite runs on, and how big it is |
-| `entrypoints` | Where execution starts (servers, CLIs, workers) |
-| `envVars`, `envFiles` | Environment variable **names** the code reads — never values; `.env` itself is never read, only `.env.example`-style files |
+| `testFrameworks`, `testFiles` | What the suite runs on (Pester from a `*.Tests.ps1`, `Invoke-Pester` or a manifest's RequiredModules; Bats, busted, testthat, hspec, ExUnit, GoogleTest / CTest …), and how big it is — test files in every language of the code list (a `.sql` / `.ipynb` in a test folder only when named like a test — `tests/fixtures/seed.sql` is data) |
+| `entrypoints` | Where execution starts (servers, CLIs, workers; a top-level PowerShell script, a module manifest's RootModule) |
+| `envVars`, `envFiles` | Environment variable **names** the code reads (`process.env.X`, `os.environ`, PowerShell `$env:X` / `[Environment]::GetEnvironmentVariable('X')` …) — never values; `.env` itself is never read, only `.env.example`-style files |
 | `migrations`, `migrationDirs` | Migration / schema files |
 
 Treat it as a map, not the territory — then actually read the key files (entrypoints, routers,
@@ -49,8 +49,9 @@ routes, data models match the schema, error handling matches the code. Spot-chec
 ### 5. Coverage
 `spec_coverage` (CLI: `dev-spec coverage`) measures coverage through the **`_Implements:_` markers** of every
 feature's tasks (active or archived): a code file is covered when some marker names it — the file, a folder that
-contains it, or a glob. It reports `coveragePercent` (covered code files / code files — test files counted
-apart), `byFolder` (files, covered, percent per top-level folder), `undocumented` folders, per-feature counts,
+contains it, or a glob. Code is a source file in a broad list of languages (the one guard mode and the scan use — PowerShell,
+shell and SQL included; docs, config and data such as a `.psd1` are not). It reports `coveragePercent` (covered code files /
+code files — test files counted apart), `byFolder` (files, covered, percent per top-level folder), `undocumented` folders, per-feature counts,
 `unmatchedImplements` (markers naming nothing on disk — typos or deleted files) and `nonCodeImplements`
 (markers naming a test or non-code file, informational). Prioritize the highest-risk uncovered folders.
 

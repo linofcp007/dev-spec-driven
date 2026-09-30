@@ -12,11 +12,11 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText, CODE_EXT, commentLines,
+let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText, commentLines,
   decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey, duplicateTaskNumbers, evidenceRule,
   existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, gitEvidence, globFiles, GUARD_CODE_EXT,
-  historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord, isImplementsGlob, isObj, isRecord,
-  isSlashUnit, isTestFile, isWsUnit, italic, latestSnapshot, mdCell, mdPlainText, normWs, oneLiner, ownEvidence,
+  historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord, isCodeFile, isImplementsGlob, isObj, isRecord, isTestFixture,
+  isSlashUnit, isTestFile, isWsUnit, readFileHead, testNamed, italic, latestSnapshot, mdCell, mdPlainText, normWs, oneLiner, ownEvidence,
   packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained, readIfExists, readJson, realLines,
   requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes, retiredDecisions, safeReaddir,
   SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile, statePath, stripEnd, stripEnds,
@@ -24,10 +24,10 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
   useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir;
 function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
-  CODE_EXT, commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
+  commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
   duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE,
   gitEvidence, globFiles, GUARD_CODE_EXT, historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord,
-  isImplementsGlob, isObj, isRecord, isSlashUnit, isTestFile, isWsUnit, italic, latestSnapshot, mdCell, mdPlainText,
+  isCodeFile, isImplementsGlob, isObj, isRecord, isSlashUnit, isTestFile, isTestFixture, readFileHead, testNamed, isWsUnit, italic, latestSnapshot, mdCell, mdPlainText,
   normWs, oneLiner, ownEvidence, packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained,
   readIfExists, readJson, realLines, requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes,
   retiredDecisions, safeReaddir, SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile,
@@ -640,11 +640,10 @@ const RE_CODE_TID = /(?<![A-Za-z0-9])T-(\d+)|(?<![A-Za-z0-9])[Tt]est_?T(\d{2,})(
 const CODE_TRACE_CAP = 5000; // files walked
 const CODE_TRACE_READ_CAP = 1500; // test files read
 const CODE_TRACE_FILES_PER_ID = 10; // files listed per ID (every one still counts)
-// Test code in languages scan/coverage don't count as code (CODE_EXT), with their own test-name conventions: F# / Scala /
-// Groovy (FsCheck, ScalaTest, Spock: CodecTests.fs, CodecSpec.scala), Elixir and Dart (codec_test.exs / codec_test.dart).
-const TEST_EXTRA_EXT = new Set([".fs", ".fsx", ".scala", ".groovy", ".exs", ".dart"]);
-const RE_TEST_NAME_EXTRA = /(?:Tests?|Spec|Suite)\.(?:fs|fsx|scala|groovy)$|_test\.(?:exs|dart)$/;
-const isTestCodePath = (rel) => isTestFile(rel) || RE_TEST_NAME_EXTRA.test(rel.split("/").pop());
+// A test file in any language — isTestFile (engine/scan.js), the ONE rule since 1.21.1. Until then F# / Scala / Groovy,
+// Elixir and Dart kept their own conventions here, unknown to the scan, coverage and the guard; scan.js's RE_TEST_NAME holds
+// them now, with PowerShell's, shell's, C/C++'s, Lua's, R's, Erlang's, Haskell's, Clojure's, Objective-C / VB's and Perl's.
+const isTestCodePath = (rel) => isTestFile(rel);
 const tKey = (num) => "T-" + parseInt(num, 10);
 // The feature folders under .specs/ (live, then archived — their tests may still be in the tree).
 function specFeatureDirs(projectDir) {
@@ -653,11 +652,21 @@ function specFeatureDirs(projectDir) {
     .concat(safeReaddir(path.join(root, "_archive")).map((n) => path.join(root, "_archive", n)));
 }
 // One bounded, read-only walk of the project (walkProject: SCAN_IGNORE, hidden dirs and .specs skipped) over its TEST
-// files (isTestFile: test/spec/__tests__ folders, *.test.* / *.spec.*, test_*.py, *_test.go, *Test.java, *Tests.cs …),
+// files — code in any language of CODE_EXT (isCodeFile: a .bats suite and Perl's t/*.t too) that isTestFile says is a test:
+// test/spec/__tests__ folders, *.test.* / *.spec.*, test_*.py, *_test.go, *Test.java, *Tests.cs, Pester's *.Tests.ps1 …),
 // collecting the T-IDs and AC IDs they name — plus each feature's own .specs/<feature>/tests/ (the folder +tdd and bugfix
 // scaffold for the failing tests), within the same caps; the rest of .specs/ stays skipped. Project-level (not per
 // feature), so doctor / finish reuse it; traceTestCode decides which files count for a feature.
-// → { tids: Map(key → { id, files }), acs: Map(acId → { id, files }), scanned, truncated }
+// 1.21.1 review: a test FIXTURE — data-like code (.sql, .ipynb) in a test folder whose name follows no test convention
+// (isTestFixture: tests/fixtures/seed.sql) — is not read, nor counted (unless a plan names it: below); when more test files than CODE_TRACE_READ_CAP are
+// found, the ones NAMED like a test (testNamed) are read first, in walk order (below the cap nothing changes: every one,
+// in walk order); each is read up to SCAN_READ_BYTES characters (readFileHead: one bounded read — never the whole file).
+// 1.21.1 review 2: a fixture some feature's test plan CLAIMS in its File column (fixtureClaim: the file itself, or the
+// folder that directly holds it) is read like any test: pgTAP's test/sql/users.sql and a numbered tests/001_users.sql are
+// tests, not seed data, once a plan says so. An unclaimed fixture stays skipped — review 3: `tests/` claims
+// tests/001_users.sql, never tests/fixtures/seed.sql (a plan naming the common `tests/` made seed data a test). The files
+// read that way are returned in `fixtures`: traceTestCode counts their T-IDs only for the plan rows that claim them.
+// → { tids: Map(key → { id, files }), acs: Map(acId → { id, files }), fixtures: Set(rel), scanned, truncated }
 function scanTestCode(projectDir) {
   const root = path.resolve(projectDir);
   const tids = new Map();
@@ -669,18 +678,24 @@ function scanTestCode(projectDir) {
     const e = map.get(key);
     if (!e.files.includes(rel)) e.files.push(rel);
   };
-  const onFile = (rel, full, name) => {
-    const ext = path.extname(name).toLowerCase();
-    if (!(CODE_EXT.has(ext) || TEST_EXTRA_EXT.has(ext)) || !isTestCodePath(rel)) return;
-    if (scanned >= CODE_TRACE_READ_CAP) { readCapped = true; return; }
-    let txt;
-    try { txt = fs.readFileSync(full, "utf8").slice(0, SCAN_READ_BYTES); } catch { return; }
-    scanned++;
-    for (const m of txt.matchAll(RE_CODE_TID)) {
-      const num = m[1] || m[2] || m[3];
-      note(tids, tKey(num), "T-" + num, rel);
+  let planPaths = null; // every concrete File-column path of every feature's test plan — read once, on the first fixture
+  const planNamed = (rel) => {
+    if (planPaths === null) {
+      const all = new Set();
+      for (const d of specFeatureDirs(projectDir)) {
+        const plan = readIfExists(path.join(d, "test-plan.md"));
+        if (plan != null) for (const ps of planFileScopes(planIdText(plan)).scopes.values()) ps.forEach((p) => all.add(p));
+      }
+      planPaths = [...all];
     }
-    for (const id of extractAcIds(txt)) note(acs, id, id, rel);
+    return planPaths.some((p) => fixtureClaim(rel, p));
+  };
+  const cands = []; // the test files found, in walk order: { rel, full }
+  const fixtures = new Set(); // the fixtures a plan claims (read as tests)
+  const onFile = (rel, full) => {
+    if (!isCodeFile(rel) || !isTestCodePath(rel)) return;
+    if (isTestFixture(rel)) { if (!planNamed(rel)) return; fixtures.add(rel); }
+    cands.push({ rel, full });
   };
   const walk = walkProject(root, CODE_TRACE_CAP, onFile);
   let left = CODE_TRACE_CAP - walk.total;
@@ -690,11 +705,41 @@ function scanTestCode(projectDir) {
     const tdir = path.join(d, "tests");
     try { if (!fs.lstatSync(tdir).isDirectory()) continue; } catch { continue; } // a symlinked tests/ is never followed
     const tPre = toPosix(path.relative(root, tdir));
-    const w = walkProject(tdir, left, (rel, full, name) => onFile(tPre + "/" + rel, full, name));
+    const w = walkProject(tdir, left, (rel, full) => onFile(tPre + "/" + rel, full));
     left -= w.total;
     truncated = truncated || w.truncated;
   }
-  return { tids, acs, scanned, truncated: truncated || readCapped };
+  let pick = cands;
+  if (cands.length > CODE_TRACE_READ_CAP) {
+    readCapped = true;
+    const keep = new Set(cands.filter((c) => testNamed(c.rel)).slice(0, CODE_TRACE_READ_CAP));
+    for (const c of cands) { if (keep.size >= CODE_TRACE_READ_CAP) break; keep.add(c); }
+    pick = cands.filter((c) => keep.has(c));
+  }
+  for (const { rel, full } of pick) {
+    const txt = readFileHead(full, SCAN_READ_BYTES);
+    if (txt == null) continue;
+    scanned++;
+    for (const m of txt.matchAll(RE_CODE_TID)) {
+      const num = m[1] || m[2] || m[3];
+      note(tids, tKey(num), "T-" + num, rel);
+    }
+    for (const id of extractAcIds(txt)) note(acs, id, id, rel);
+  }
+  return { tids, acs, fixtures, scanned, truncated: truncated || readCapped };
+}
+// 1.21.1 review 3 — does the File cell path `p` claim the test FIXTURE `rel` (isTestFixture: a .sql / .ipynb in a test
+// folder named like no test)? Only the file itself (`test/sql/users.sql`, or its trailing whole segments, as pathNames
+// matches a file) or the folder that DIRECTLY holds it (`db/tests/pgtap/` → db/tests/pgtap/users.sql; `tests/` →
+// tests/001_users.sql, never tests/fixtures/seed.sql). A path without an extension, or ending in `/`, is a folder.
+function fixtureClaim(rel, p) {
+  const fold = (s) => (FOLD_CASE ? s.toLowerCase() : s);
+  const q = stripEnd(fold(p), isSlashUnit); // /\/+$/
+  if (q === "") return false;
+  const r = fold(rel);
+  const folder = p.endsWith("/") || !path.posix.extname(q);
+  const target = folder ? r.slice(0, Math.max(0, r.lastIndexOf("/"))) : r;
+  return ("/" + target).endsWith("/" + q);
 }
 // Every T-ID any feature's test plan lists (archived features too — their tests may still be in the tree), by key.
 function allPlannedTestKeys(projectDir) {
@@ -729,7 +774,9 @@ function pathNames(rel, p) {
 function scannableTestPath(t) {
   if (t.endsWith("/")) return true;
   const ext = path.posix.extname(t).toLowerCase();
-  return ext === "" || CODE_EXT.has(ext) || TEST_EXTRA_EXT.has(ext);
+  // code in any language, or a test-only extension (.bats, Perl's .t) — a .sql / .ipynb fixture too: the plan naming it
+  // is what makes scanTestCode read it (1.21.1 review 2: pgTAP's test/sql/users.sql)
+  return ext === "" || GUARD_CODE_EXT.has(ext);
 }
 // A File cell token naming a non-code artifact — a document or data file, never source in any language (GUARD_CODE_EXT):
 // `load-test.md`, `evals/golden.json`, `tests/load/plan.md`, a Gherkin `.feature` or a JMeter `.jmx`. The test-code scan
@@ -843,7 +890,8 @@ function otherPlanTestFiles(projectDir, ownDir) {
 // in its File column while this plan doesn't (1.14 full review Pa5); and a planned T-ID whose plan row's File
 // column names a concrete test path counts only in that file / under that folder (pathNames: written from the project
 // root, the feature folder, a package folder, or a bare file name) — otherwise another feature's test with the same
-// number would pass it. Without a File path the match is by number across the project.
+// number would pass it. Without a File path the match is by number across the project — never in a test fixture a plan
+// claims (1.21.1 review 3: such a file counts only for the rows of this plan that claim it — fixtureClaim).
 //   testsInCode       { T-ID: [test files …] } — every T-ID found in files that count, keyed by this plan's spelling
 //   plannedNotInCode  this plan's T-IDs that no counting test file names (those checked outside test code left out)
 //   plannedOutsideCode  this plan's T-IDs whose every row's File column names only non-code artifacts (load-test.md,
@@ -877,11 +925,17 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
     return foreignMemo.get(rel);
   };
   const counts = (rel) => mine(rel) && !foreign(rel);
+  // 1.21.1 review 3 — a fixture read as a test (scanTestCode's `fixtures`: some plan claims it) counts ONLY for this plan's
+  // rows that claim it themselves (fixtureClaim over the row's own File paths): never for a row without a File cell, nor
+  // for another feature whose plan never named it — seed data holding 'T-01' passed a feature's tests gate that way.
+  const fx = s.fixtures instanceof Set ? s.fixtures : new Set();
+  const ownPaths = [...new Set([...scopes.values()].flat())];
+  const fixtureFor = (k, rel) => planned.has(k) && scopes.has(k) && scopes.get(k).some((p) => fixtureClaim(rel, p));
   const everyPlan = allPlannedTestKeys(projectDir);
   const testsInCode = {};
   const found = new Set();
   for (const [k, e] of s.tids) {
-    const files = e.files.filter((rel) => counts(rel) && (!planned.has(k) || inScope(k, rel)));
+    const files = e.files.filter((rel) => counts(rel) && (fx.has(rel) ? fixtureFor(k, rel) : !planned.has(k) || inScope(k, rel)));
     if (!files.length) continue;
     found.add(k);
     testsInCode[planned.get(k) || e.id] = files.slice(0, CODE_TRACE_FILES_PER_ID);
@@ -892,7 +946,7 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
     plannedNotInCode: [...planned].filter(([k]) => !found.has(k) && !outside.has(k)).map(([, id]) => id),
     plannedOutsideCode: [...planned].filter(([k]) => outside.has(k)).map(([, id]) => id),
     inCodeNotInPlan: [...s.tids].filter(([k]) => found.has(k) && !planned.has(k) && !everyPlan.has(k)).map(([, e]) => e.id),
-    acsInTests: [...requiredAcs].filter((id) => s.acs.has(id) && s.acs.get(id).files.some(counts)),
+    acsInTests: [...requiredAcs].filter((id) => s.acs.has(id) && s.acs.get(id).files.some((rel) => counts(rel) && (!fx.has(rel) || ownPaths.some((p) => fixtureClaim(rel, p))))),
     scanned: s.scanned,
     truncated: s.truncated,
   };
@@ -1307,7 +1361,7 @@ module.exports = { VAGUE_WORDS, VAGUE_RE, VAGUE_RE_ALL, RE_LIST_ITEM, RE_NUMBERE
   TRACE_VERDICT_KINDS, TRACE_TASK_KINDS, TRACE_PLAN_KINDS, traceGaps, traceGapLines, TRACE_WARNING_ORDER,
   TRACE_SECONDARY_KINDS, traceWarnings, traceWarningLines, RE_SECONDARY_ID, RE_SECONDARY_ID_LINE, idKey, secondaryIds,
   secondaryDefinitions, traceSecondary, testPlanEntries, RE_CODE_TID, CODE_TRACE_CAP, CODE_TRACE_READ_CAP,
-  CODE_TRACE_FILES_PER_ID, TEST_EXTRA_EXT, RE_TEST_NAME_EXTRA, isTestCodePath, tKey, specFeatureDirs, scanTestCode,
+  CODE_TRACE_FILES_PER_ID, isTestCodePath, tKey, specFeatureDirs, scanTestCode,
   allPlannedTestKeys, RE_FILE_COLUMN, pathUnder, pathNames, scannableTestPath, nonCodeArtifactPath, codePathToken,
   planFileScopes, fileCellTokens, outsideCodeTemplates, otherPlanTestFiles, traceTestCode, RTM_STATUSES, RTM_KIND_ORDER,
   RTM_TEXT_MAX, acNums, supersededByIndex, shippedSupersedeKeys, featureShipped, rtmEvidence, buildTraceMatrix,

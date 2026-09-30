@@ -1160,4 +1160,40 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       "feature F2 review R10/R1: the hook passes the project's meta — spec_init {evidence: reported}, init --check test=, init --roles none are denied where they lower it, their raising twins pass; a Bash write of roadmap.json and a \\⏎-continued approve are denied (got " +
       JSON.stringify([hM.map(decision), wOut.systemMessage]) + ")");
   }
+
+  // 1.21.1 languages — guard mode reads the same notion of code as the scan (isCodeFile): a PowerShell script / module is code, its
+  // .psd1 manifest is data; a Bats suite and Perl's t/*.t are tests (a .t elsewhere is nothing); Pester's *.Tests.ps1 is a test
+  // file for the tests-phase and scope levels, beside the module too.
+  {
+    const js = (v) => JSON.stringify(v);
+    const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const guardJs = path.join(__dirname, "..", "hooks", "guard-hook.js");
+    const hook = (cwd, file) => spawnSync(process.execPath, [guardJs], { input: JSON.stringify({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: "Write", tool_input: { file_path: file, content: "x" } }),
+      encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
+    const asks = (r) => { try { return JSON.parse(r.stdout).hookSpecificOutput.permissionDecision === "ask"; } catch { return false; } };
+    const g = (p, f) => { const r = S.guardCheck(p, f, p); return r.decision + ":" + r.why; };
+    const pg = path.join(tmp, "proj-121-guard");
+    S.initProject(pg, ["tdd"], "en", { guard: true });
+    const fg = S.createFeature(pg, "Greeter", ["tdd"], "", undefined, "en");
+    const before = ["src/Greeter/Greeter.psm1", "scripts/deploy.ps1", "src/Greeter/Greeter.psd1", "test/deploy.bats", "t/basic.t", "notes.t", "tests/Greeter.Tests.ps1"].map((f) => g(pg, f));
+    const hookPs1 = hook(pg, path.join(pg, "scripts", "deploy.ps1")), hookPsd1 = hook(pg, path.join(pg, "src", "Greeter", "Greeter.psd1"));
+    // Phase 4: the test plan approved, tasks not yet — test files are covered, code still asks.
+    const st = JSON.parse(fs.readFileSync(path.join(fg.dir, ".state.json"), "utf8"));
+    st.approvals = { classification: { at: "2026-09-01T00:00:00.000Z", by: "u" }, requirements: { at: "2026-09-01T00:00:00.000Z", by: "u" }, design: { at: "2026-09-01T00:00:00.000Z", by: "u" }, "test-plan": { at: "2026-09-01T00:00:00.000Z", by: "u" } };
+    fs.writeFileSync(path.join(fg.dir, ".state.json"), JSON.stringify(st, null, 2));
+    const phase4 = ["tests/Greeter.Tests.ps1", "src/Greeter/Greeter.Tests.ps1", "test/deploy.bats", "t/basic.t", "src/Greeter/Greeter.psm1"].map((f) => g(pg, f));
+    // scope: tasks approved — the plan's .psm1 is in scope, another script is not, a Pester file is a test file.
+    put(fg.dir, "tasks.md", "- [ ] 1. [US1] Greet\n  - _Implements: src/Greeter/Greeter.psm1_\n  - _Verify: pwsh -NoProfile -Command \"Invoke-Pester -Path tests -CI\"_\n");
+    st.approvals.tasks = { at: "2026-09-02T00:00:00.000Z", by: "u" };
+    fs.writeFileSync(path.join(fg.dir, ".state.json"), JSON.stringify(st, null, 2));
+    S.initProject(pg, ["tdd"], "en", { guard: "scope" });
+    const scope = ["src/Greeter/Greeter.psm1", "scripts/deploy.ps1", "src/Greeter/Greeter.Tests.ps1", "src/Greeter/Greeter.psd1"].map((f) => g(pg, f));
+    const scopeHook = hook(pg, path.join(pg, "scripts", "deploy.ps1"));
+    ok(js(before) === js(["ask:no-approved-tasks", "ask:no-approved-tasks", "allow:not-code", "ask:no-approved-tasks", "ask:no-approved-tasks", "allow:not-code", "ask:no-approved-tasks"]) &&
+      asks(hookPs1) && hookPsd1.status === 0 && hookPsd1.stdout === "" &&
+      js(phase4) === js(["allow:tests-phase", "allow:tests-phase", "allow:tests-phase", "allow:tests-phase", "ask:no-approved-tasks"]) &&
+      js(scope) === js(["allow:in-scope", "ask:out-of-scope", "allow:test-file", "allow:not-code"]) && asks(scopeHook) && /scripts\/deploy\.ps1 is not in the plan/.test(JSON.parse(scopeHook.stdout || "{}").hookSpecificOutput.permissionDecisionReason || ""),
+      "1.21.1 languages: guard mode — a .ps1 / .psm1 edit asks (the hook too), the .psd1 manifest is not code, a .bats suite and t/basic.t are code, notes.t is not; in Phase 4 the Pester files (tests/ and beside the module), the .bats and t/*.t are test files; at the scope level the planned .psm1 is in scope, another .ps1 asks naming it, a *.Tests.ps1 is a test file (got " +
+      js([before, phase4, scope, hookPs1.stdout.slice(0, 120)]) + ")");
+  }
 };

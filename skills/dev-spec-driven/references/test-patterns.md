@@ -93,6 +93,11 @@ task that makes it green with `_Makes green:_`, and `dev-spec log` finds commits
 | Go | `func TestT01RejectsExpiredToken(t *testing.T)` |
 | Java / Kotlin (JUnit 5, jqwik) | `@DisplayName("T-01 rejects an expired token")` · `void testT01RejectsExpiredToken()` |
 | C# (xUnit, NUnit, FsCheck) | `[Fact(DisplayName = "T-01 rejects an expired token")]` · `public void T01_RejectsExpiredToken()` |
+| PowerShell (Pester, `*.Tests.ps1`) | `It 'T-01 rejects an expired token' { … }` |
+| Shell (Bats, `*.bats`) | `@test "T-01 rejects an expired token" { … }` |
+| C / C++ (GoogleTest, Catch2) | `TEST(Token, T01_RejectsExpired)` · `TEST_CASE("T-01 rejects an expired token")` |
+| Lua (busted) · R (testthat) | `it("T-01 rejects an expired token", function() … end)` · `test_that("T-01 rejects an expired token", { … })` |
+| Elixir · Erlang · Haskell · Clojure · Perl | `test "T-01 …"` · `%% T-01 …` · `it "T-01 …"` · `(testing "T-01 …" …)` · `ok($ok, 'T-01 …')` |
 
 - `T-01` with the hyphen is found anywhere in a test file (a title, a display name, a comment). Without
   the hyphen only the naming forms count, with an **uppercase** `T` and the zero-padded number the
@@ -100,13 +105,24 @@ task that makes it green with `_Makes green:_`, and `dev-spec log` finds commits
   with `T01_`. A bare `T1` is ignored — it collides with generic type parameters (`Func<T1, T2>`) — and
   so is `test_t2_is_after_t1` (a pytest name about a time variable, not test T-2).
 - IDs compare by number: `T-1`, `T-01` and `test_T01` name the same planned test.
-- Only test files are read: files in JS/TS, Python, Go, Rust, Java/Kotlin/Scala/Groovy, C#/F#, Ruby,
-  PHP, Swift, C/C++, Vue/Svelte, Elixir or Dart that sit under a `test/`, `tests/`, `__tests__/`,
-  `spec/` or `e2e/` folder or are named like a test (`*.test.ts`, `*.spec.js`, `test_*.py`, `*_test.go`,
-  `*Test.java`, `*Tests.cs`, `*Tests.fs`, `*Spec.scala`, `*_test.exs` …). `node_modules/`, build
-  output and hidden folders are skipped. `.specs/` is skipped
+- Only test files are read: source files in a broad list of languages — the one guard mode, `spec_scan` and
+  `spec_coverage` count as code (JS/TS, Python, Go, Rust, Java/Kotlin/Scala/Groovy, C#/F#/VB, Ruby, PHP, Swift,
+  Objective-C, C/C++, Vue/Svelte, PowerShell, shell, SQL, Lua, R, Perl, Elixir/Erlang, Haskell, Clojure, Dart, Julia,
+  Nim, OCaml …), plus a Bats suite (`*.bats`) and Perl's `t/*.t` — that sit under a `test/`, `tests/`, `__tests__/`,
+  `spec/` or `e2e/` folder or are named like a test in their language (`*.test.ts`, `*.spec.js`, `test_*.py`,
+  `*_test.go`, `*Test.java`, `*Tests.cs`, `*Tests.fs`, `*Spec.scala`, `*_test.exs`, Pester's `*.Tests.ps1` (beside the
+  code too), `*_test.sh`, `*_test.cc` / `*_unittest.cc`, `*_spec.lua`, `test-*.R`, `*_SUITE.erl` / `*_tests.erl`,
+  `*_test.clj`, `*Tests.m` …). A shell / C / C++ `test_*` file and an hspec `*Spec.hs` count in a test folder only, and a
+  name that merely ends in "test" or "spec" (`latest.sh`, `inspect.lua`, `DevSpec.hs`) or starts with it outside one
+  (`scripts/test_data.sh`, `src/test_utils.c`) is code. Data in a test folder is no test: a `.sql` / `.ipynb` there is
+  read only when NAMED like a test (pgTAP's `test_*.sql` / `*_test.sql`) or claimed by a test plan's File column — the
+  file itself (`test/sql/users.sql`) or the folder that directly holds it (`tests/` claims `tests/001_users.sql`, not
+  `tests/fixtures/seed.sql`), and then it counts only for the rows that name it. An unclaimed `tests/fixtures/seed.sql`
+  is a fixture.
+  `node_modules/`, build output and hidden folders are skipped. `.specs/` is skipped
   too, **except** each feature's own `.specs/<feature>/tests/` (the folder `+tdd` scaffolds). The walk
-  is bounded (the result says `truncated` when it stopped at its cap).
+  is bounded: each file is read up to 200,000 characters, at most 1,500 files — past that, the files named like a test first (the
+  result says `truncated` when it stopped at its cap).
 - T-IDs are per feature — every plan starts at T-01 — so **fill the plan's File column**: when a row
   names a concrete test file or folder (`tests/unit/login.test.ts`, `tests/auth/`), only that file — or a
   file under that folder — can satisfy the T-ID. Write the path from the project root, from the feature
