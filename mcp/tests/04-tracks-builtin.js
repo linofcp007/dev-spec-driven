@@ -1414,4 +1414,74 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       "1.19 verify 4: pt-BR — '[OBS] Alerting' says 'quem é acionado · cada alerta aponta para um runbook … o que vira um ticket e não aciona o plantão', the steering heading 'Alertas (cada um com um link para o runbook)', the finish check 'os runbooks para os quais os alertas apontam'; no liga / ligação / chamada left; PT unchanged; idempotent (got " +
       js(v4Br.split("\n").filter((l) => /runbook/.test(l))) + ")");
   }
+
+  { // 1.21 F2a — the 1.19 verification's remaining misses: a negation reaches every item of a coordinated list (every track), +ui
+    // named with everyday words, +api's "our API needs a v2", the settings screen + a public API (the mixed case)
+    const js = (v) => JSON.stringify(v);
+    const cls = (t, lang) => S.classify(t, lang ? { lang } : {});
+    const onOf = (t, tr) => cls(t).tracks.includes(tr);
+    // coordinated negation: "not add X or Y", PT "nem", ES "ni", a comma list closed by "or", "neither … nor" — and never past a
+    // contrast word ("just"), an "and" (a new predicate) or a comma that no conjunction closes; a hazard's negation opens no list
+    const coordOff = [["obs", "We will not add feature flags or canary releases for this internal script."],
+      ["obs", "Não vamos usar feature flags nem lançamento canário neste script interno."], ["obs", "No usaremos feature flags ni despliegue canario en este script interno."],
+      ["dist", "Without Kafka, RabbitMQ or SQS: a Postgres table is enough."], ["dist", "Neither Kafka nor RabbitMQ — the export runs in-process."],
+      ["ai", "Sem LLM nem embeddings: regras fixas."], ["tdd", "Informe interno de ventas, sin datos personales ni autenticación"]];
+    const coordOn = [["obs", "No feature flags, just a canary release behind a manual switch."], ["obs", "Without feature flags, the canary release is done by hand."],
+      ["obs", "Deploy the billing service without downtime and roll back on errors."], ["obs", "No Kafka and a canary release for the new consumer."],
+      ["obs", "Sem Kafka, apenas um lançamento canário com feature flags."]];
+    const neg3 = [cls(coordOff[0][1]), cls(coordOff[1][1]), cls(coordOff[2][1])];
+    ok(coordOff.every(([tr, t]) => !onOf(t, tr)) && coordOn.every(([tr, t]) => onOf(t, tr)) &&
+      neg3.every((r) => r.negated.obs.length === 2 && !r.signals.obs.length) && neg3[1].lang === "pt" &&
+      cls(coordOff[6][1]).negated.tdd.includes("autenticación") && S.classify("Sem uso de IA nem LLM.").negated.ai.includes("llm") && !onOf("Sem uso de IA nem LLM.", "ai"),
+      "1.21 F2a: a negation reaches every item of the coordinated list it opens, for every track — 'not add feature flags or canary releases', PT 'nem', ES 'ni', 'Without Kafka, RabbitMQ or SQS', 'Neither … nor', ES 'sin datos personales ni autenticación' (+tdd off); never past 'just', an 'and' or an unclosed comma; 'without downtime' (a hazard) opens no list (got " +
+      js([coordOff.filter(([tr, t]) => onOf(t, tr)), coordOn.filter(([tr, t]) => !onOf(t, tr)), neg3.map((r) => [r.negated.obs, r.signals.obs])]) + ")");
+    // +ui everyday words: a confirm dialog / toast notification / snackbar is UI work; a widget a display verb shows is strong; errors
+    // next to each field and a mobile-friendly screen are anchors; a "snack bar", "the modal verbs", a login FORM alone stay off
+    const uiOn = ["Show a confirm dialog before a user deletes a project, with the project name typed to confirm.",
+      "Toast notifications for saved changes, replacing the old alert() popups in the editor.", "Show a snackbar when the upload finishes.",
+      "Show a modal asking the user to confirm the logout.", "Downtime notice: show a banner 24 hours before scheduled maintenance.",
+      "O ecrã de login deve mostrar os erros de validação junto a cada campo.", "La pantalla de inicio de sesión debe mostrar los errores de validación junto a cada campo.",
+      "Pantalla de pago adaptada al móvil con el botón de pagar siempre visible.", "Mostrar um diálogo de confirmação antes de apagar o projeto.",
+      "Mostrar una notificación toast al guardar los cambios."];
+    const uiOff = ["The stadium's snack bar sells drinks and hot dogs.", "Teach the modal verbs in the English course.", "Log in form", "Formulário de login",
+      "Formulario de inicio de sesión", "Add a button to export orders as CSV", "Metrics dashboard for sales", "Show the monthly totals in the PDF report."];
+    ok(uiOn.every((t) => onOf(t, "ui")) && uiOff.every((t) => !onOf(t, "ui")) && S.trackSignals("ui").strong.includes("snackbar") &&
+      S.signalConcept("ui", "junto a cada campo") === "inline" && S.signalConcept("ui", "mobile-friendly") === "responsive",
+      "1.21 F2a: +ui from everyday words — a confirm dialog, a toast notification, a snackbar, a modal / banner a display verb shows, errors next to each field, a mobile-friendly screen (EN / PT / ES); a snack bar, the modal verbs, a login form, a button, a sales dashboard stay off (got " +
+      js([uiOn.filter((t) => !onOf(t, "ui")), uiOff.filter((t) => onOf(t, "ui"))]) + ")");
+    // +api: our own API + a new version in the sentence is contract work; someone else's versioned API is not; the settings screen of
+    // a PUBLIC API is UI work too (the mixed case) — the page's own API still demotes it
+    const apiOn = ["Our webhooks API needs a v2 with a new payload shape; keep v1 working for existing consumers until March.",
+      "A nossa API de webhooks precisa de uma v2 com um novo formato de payload.", "Nuestra API de pagos necesita una nueva versión con otro formato."];
+    const apiOff = ["Our app calls the Shopify API v3 for the orders.", "Call the Stripe API v2 to charge the card.", "Our API docs need a new logo."];
+    const mixed = ["Expose a public REST API for the mobile app's settings screen, with SLO alerts on its latency.",
+      "Expor uma API REST pública para o ecrã de definições da aplicação móvel, com alertas de SLO sobre a latência.",
+      "Exponer una API REST pública para la pantalla de ajustes de la app móvil, con alertas de SLO sobre su latencia."];
+    ok(apiOn.every((t) => onOf(t, "api")) && apiOff.every((t) => !onOf(t, "api")) &&
+      mixed.every((t) => { const r = cls(t); return ["api", "ui", "obs"].every((tr) => r.tracks.includes(tr)); }) &&
+      !onOf("Expose the admin page's API so the mobile app can fetch the same stats.", "ui") && !onOf("Backend for the profile page: the GET /me handler must return the avatar URL.", "ui"),
+      "1.21 F2a: +api — 'our webhooks API needs a v2' (EN / PT / ES) is ours and versioned (strong); a third party's versioned API is not; the mixed case (a public API for the settings screen) is +api +ui +obs, while 'the admin page's API' still says backend-only (got " +
+      js([apiOn.filter((t) => !onOf(t, "api")), apiOff.filter((t) => onOf(t, "api")), mixed.map((t) => cls(t).label)]) + ")");
+    // precision / recall on a compact corpus: the 1.19 verification's misses and false positives (EN / PT / ES) with their hard negatives
+    const F2 = [...uiOn.map((t) => ["ui", t]), ...uiOff.map((t) => ["", t]), ...apiOn.map((t) => ["api", t]), ...apiOff.map((t) => ["", t]),
+      ...mixed.map((t) => ["api ui obs", t]), ...coordOff.filter(([tr]) => tr === "obs").map(([, t]) => ["", t]),
+      ["obs", "Roll out the new pricing engine behind a feature flag to 5% of traffic, with a kill switch."], ["obs", "Implantação canário do novo motor de recomendações para 5% dos utilizadores."],
+      ["obs", "Despliegue canario del nuevo motor de precios con plan de reversión."], ["obs", "No feature flags, just a canary release behind a manual switch."],
+      ["", "Expose the admin page's API so the mobile app can fetch the same stats."], ["ui", "Settings page where users can change their notification preferences."],
+      ["api", "Design a versioned REST API for partners with an OpenAPI document."], ["", "Fetch exchange rates from the ECB's API every morning."],
+      ["ui", "Painel de administração para gerir utilizadores: pesquisa, filtros e desativação em massa."], ["", "Monitor stock levels and send alerts to the purchasing team."]];
+    const f2 = ["api", "ui", "obs"].map((tr) => {
+      let tp = 0, fp = 0, pos = 0;
+      const wrong = [];
+      for (const [labels, t] of F2) {
+        const want = labels.split(" ").includes(tr), on = onOf(t, tr);
+        if (want) pos++;
+        if (on && want) tp++; else if (on) { fp++; wrong.push("FP +" + tr + " " + t); } else if (want) wrong.push("FN +" + tr + " " + t);
+      }
+      return { tr, precision: tp / (tp + fp || 1), recall: tp / (pos || 1), pos, wrong };
+    });
+    ok(F2.length >= 40 && f2.every((x) => x.pos >= 5 && x.precision >= 0.95 && x.recall >= 0.95),
+      `1.21 F2a: precision / recall on ${F2.length} EN / PT / ES texts (the verification's misses and false positives + hard negatives) ≥ 95% per track — ` +
+      f2.map((x) => `+${x.tr} ${(x.precision * 100).toFixed(0)}% / ${(x.recall * 100).toFixed(0)}% (${x.pos} positives)`).join(", ") + " (got " + js(f2.flatMap((x) => x.wrong)) + ")");
+  }
 };

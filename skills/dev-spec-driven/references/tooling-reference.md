@@ -11,12 +11,12 @@ input schema (a wrong type or unknown value is refused with a clear message).
 
 | Tool | Use it for |
 |---|---|
-| `spec_classify` | Phase 0 — seed the track recommendation (core +tdd +saas +ai +sec +privacy +dist +api +ui +obs) from a description (keyword heuristic, strong / weak / corroborating signals, negation-aware) |
+| `spec_classify` | Phase 0 — seed the track recommendation (core +tdd +saas +ai +sec +privacy +dist +api +ui +obs) from a description (keyword heuristic, strong / weak / corroborating signals, negation-aware — a negation reaches every item of a coordinated list); the project's signal overrides (`.specs/classifier.json`, 1.21) apply and are named (`overrides`); `explain: true` lists every match |
 | `spec_init` | Scaffold `.specs/steering/` for the active tracks; `lang` sets the project default; opt-in `guard` (`"on"` / `"off"` / `"scope"`), `stopCheck` (the end-of-turn evidence gate, on by default), `checks` (the project's named check commands), `approvalRoles` (phase → roles), `evidence` (`"reported"` default / `"observed"` — only runs the harness saw, or the CLI made, verify a runnable `_Verify:_`) and `approvalGuard` (`"off"` / `"ask"` / `"deny"` — an agent's approval asks the user or is refused) — each stored in `roadmap.json → meta` and always reported back |
 | `steering_scaffold` | Create one steering file from its template (incl. `security.md`, `privacy.md`, `distributed.md`, `api.md`, `ui.md`, and `glossary.md` — the terms to use and the words to avoid, `_Avoid:_`) — or a custom scoped one (`api-conventions.md`, front matter `inclusion: always / fileMatch / manual`) |
 | `spec_templates` | The team's own scaffolds in `.specs/templates/`: `list` (built-in vs project per artifact) · `init` (copy the built-in ones to edit) · `check` (validate them) |
-| `spec_tracks` | The team's own tracks (1.15): packs in `.specs/tracks/<name>/` — `list` (built-in + packs, valid or not) · `init <name>` (a commented example pack) · `check` (stable codes, verdict) — see `references/project-tracks.md` |
-| `spec_create` | Scaffold a feature for its tracks (tracks + lang persisted in `.state.json`); `kind: "bugfix"` → the bugfix flow, `kind: "spike"` (+ `question`, `timebox`) → a spike; `brownfield: true` → + `integration-plan.md`; `flow: "design-first"` |
+| `spec_tracks` | The team's own tracks (1.15): packs in `.specs/tracks/<name>/` — `list` (built-in + packs, valid or not) · `init <name>` (a commented example pack) · `check` (stable codes, verdict) — see `references/project-tracks.md`; `signals` (1.21) — the classifier's signal overrides of this project (`op` list / set / forget; learned by `spec_create` from Phase 0 corrections, applied after 2 consistent ones) |
+| `spec_create` | Scaffold a feature for its tracks (tracks + lang persisted in `.state.json`; with `tracks` AND a `summary`, a choice that differs from the summary's classification is recorded as a Phase 0 correction — `signalOverrides`); `kind: "bugfix"` → the bugfix flow, `kind: "spike"` (+ `question`, `timebox`) → a spike; `brownfield: true` → + `integration-plan.md`; `flow: "design-first"` |
 | `spec_import` | Import a Kiro / spec-kit / OpenSpec spec, a plan (Claude Code plan mode / Cursor), a Codex ExecPlan, BMAD docs or a fluidplan plan (path inside the project — or, for a plan / ExecPlan / fluidplan PLAN.md, its markdown as `text`: plan mode keeps plans in `~/.claude/plans`) as a NEW feature — IDs remapped (`mapping`), `warnings` listed, source untouched; a fluidplan plan's settled decisions → `decisions.md` |
 | `spec_list` | List all features with track set, phase, and task progress |
 | `spec_status` | One feature: kind (feature / bugfix / spike), flow, phase, artifacts, tasks (with `verified`), each active track's sections present vs filled (`secSections`, `privacySections`, `distSections` …), eval state |
@@ -135,11 +135,12 @@ unreadable state) exit 1, so they are scriptable; so do `templates check` (an er
 1 only on an error.
 
 ```
-classify "<description>" [--name n]
+classify "<description>" [--name n] [--explain]
 init [tracks...] [--lang] [--guard on|off|scope] [--stop-check on|off] [--check name="cmd" …] [--roles phase=role+role,… | none]
      [--evidence reported|observed] [--approval-guard off|ask|deny]
 steering <file> [--lang]                 templates [list|init|check] [artifact] [--lang]
 tracks [list|init <name>|check] [name] [--lang]
+signals [list | set <track> <word> off|weak|strong | forget <track> <word>] [--lang]
 create "<name>" [tracks...] [--summary] [--kind feature|bugfix|spike] [--lang] [--brownfield] [--flow design-first]
 bugfix "<name>" [--summary]              spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]
 import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--lang] [--tracks …]
@@ -243,6 +244,7 @@ project-root/
     ├── exports/                  # generated stakeholder documents (spec_export write)
     ├── templates/                # the team's own scaffolds (spec_templates) — <artifact>.md, <lang>/, steering/
     ├── tracks/                   # the team's own tracks (spec_tracks) — <name>/track.json + fragments, <lang>/
+    ├── classifier.json           # the classifier's signal overrides (spec_tracks signals) — learned from Phase 0 corrections; commit it
     ├── .gitignore                # ignores the transient files (.lock, .roadmap.lock, *.reclaim, a killed process's *.tmp, .removing-*/ tombstones) — commit it
     ├── steering/                 # shared project context (created per active tracks)
     │   ├── constitution.md       # core (always) — non-negotiable principles

@@ -12,8 +12,10 @@ signals. Cross-check against `references/classification-matrix.md` (turn a track
 real defect goes to `/spec-bugfix`, a question to answer to `/spec-spike`, a contained change to an existing flow
 is Bounded mode). Read its `notes`: a track **on from weak signals only**, a **possible** track (one weak signal —
 auth words are weak for +sec, consent/retention for +privacy, queue/retry/"publish … event" for +dist), and a negated keyword on a track that is on anyway —
-each is a question for the user, not a verdict. Present the mode, track set, signals, blast radius and per-track
+each is a question for the user, not a verdict. A note naming **this project's signal overrides** (`.specs/classifier.json`,
+learned from earlier Phase 0 corrections) says the team's own history changed the reading — `dev-spec signals list` shows them. Present the mode, track set, signals, blast radius and per-track
 fields (hot path / autonomy / volume / compliance) for the user's approval — the chosen tracks drive every later
 phase. **After approval:** `spec_init {tracks, lang}` if `.specs/steering/` is missing, then
-`spec_create {name, tracks, lang}` once (add `flow: "design-first"` when the architecture is the input); record the
+`spec_create {name, tracks, summary, lang}` once (the description as `summary`: a choice that differs from
+the suggestion is recorded as a correction for this project) (add `flow: "design-first"` when the architecture is the input); record the
 decisions in the `classification.md` it seeds and `spec_approve` the `classification` phase.
