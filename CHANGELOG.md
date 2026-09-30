@@ -48,10 +48,12 @@ joins the built-in tracks. 38 MCP tools, 54 commands, eleven built-in tracks (wa
 ### Added — classifier
 - A negation that governs a list reaches every item ("no payments or subscriptions", "sem pagamentos nem subscrições",
   "sin pagos ni suscripciones", "we will not add X or Y"); a list ends at its closing "or" / "nem" / "ni", at "and" / "e" /
-  "y", at a contrast ("no X, just Y") and at a new clause. A negated verb is read by what it negates: a modal's ("the
-  system must not lose payments nor duplicate invoices", "the service must not leak personal data", "não pode perder
-  pagamentos") is a requirement and keeps its track; a plan's or an adoption verb's ("we will not integrate Kafka or
-  RabbitMQ", "não queremos usar LLM nem embeddings", "no es necesario Kafka ni RabbitMQ") excludes the whole list.
+  "y", at a contrast ("no X, just Y") and at a new clause. A negation excludes a track only when it certainly governs
+  the keyword — "no payments", "we don't use Kafka", "we will not add an LLM", "no need for Kafka", "we should not enable
+  feature flags", "não queremos usar LLM nem embeddings", "nunca usaremos Kafka"; anything else keeps the track for you to
+  confirm in Phase 0: a modal's or an auxiliary's verb ("the system must not lose payments nor duplicate invoices", "the
+  report does not show the LLM cost"), a condition ("if we don't add rate limiting…"), a relative clause, a hazard ("we
+  don't want duplicate payments"), and "without" after a negated verb ("we won't ship without a canary release").
   +ui recognises confirm dialogs, toasts, snackbars,
   field-level errors and mobile-friendly screens; +api reads "our API needs a v2" as contract work; a public API for a
   screen is +api +ui.
@@ -66,7 +68,8 @@ joins the built-in tracks. 38 MCP tools, 54 commands, eleven built-in tracks (wa
   US-1.AC-32..35; data-quality, re-run / backfill, freshness-SLA and schema-compatibility tests; `steering/data.md`; guide
   `references/data-pipeline-patterns.md`. Doctor `data-sections`, status, finish checks, brief / matrix / Gherkin,
   add_track, import, project templates, spec_tracks; EN / PT / ES / pt-BR. It turns on from data phrases (ETL / ELT
-  pipelines, a data warehouse or lakehouse, dbt, Airflow, CDC, lineage of data, freshness SLAs) — never from everyday
+  pipelines, a data warehouse or lakehouse, dbt, Airflow, CDC, lineage of data, freshness SLAs, CSV ingestion into a
+  table, a type-2 SCD) — never from everyday
   words (a lakehouse to rent, parquet flooring, the Portuguese BI card, a horse's lineage, a stock warehouse); a table or
   a query never backs an everyday word — "a BI dashboard over the orders table" is +data, "duplicate rows in the users
   table" is not; BI phrases match at a sentence start or in title case ("Relatório de BI", "BI Dashboard").
@@ -97,11 +100,11 @@ joins the built-in tracks. 38 MCP tools, 54 commands, eleven built-in tracks (wa
   <feature> data` adopts the built-in track, or rename the pack and re-add it.
 
 ### Tests
-- `node mcp/test.js` 1642 assertions (was 1544), `node cli/test-cli.js` 508 (was 480): sizes
+- `node mcp/test.js` 1648 assertions (was 1544), `node cli/test-cli.js` 508 (was 480): sizes
   and the change kind end to end (the no-size scaffolds pinned by hash in EN / PT / ES), the merge driver (six 3-way cases,
   sign-offs, a real two-branch git merge, `--check`), elicitation over a fake MCP client (accept / decline / cancel /
   error / timeout, force, batch), coordinated negation and signal overrides (a precision / recall assertion per track),
-  +data (115 EN / PT / ES texts, 100% / 100%) and the +mobile example pack, the eval fixes, and one regression per review
+  +data (133 EN / PT / ES texts, 100% / 100%) and the +mobile example pack, the eval fixes, and one regression per review
   finding.
 
 ## [1.20.0] — 2026-09-30
