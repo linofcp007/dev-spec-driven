@@ -248,6 +248,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
       "Add a freshness check on the orders table so the owner knows when the nightly load is late.",
       "The finance team's BI dashboard reads the monthly revenue from the warehouse snapshots.", "Carga incremental de dados das encomendas para o armazém de dados.",
       "Mostrar a linhagem de cada métrica do painel até às tabelas de origem.", "Write the clickstream as Parquet partitioned by day."];
+    // 1.21 verify V3: plain data sentences a data-term anchor + a table / a query make (1.21 wins the review's first fix lost), a data sense
+    // beside an everyday word (the data-sense cue runs first), and BI phrases at a sentence start or in title case
+    const V3_ON = ["A BI dashboard over the orders table.", "Load the orders table into the warehouse every night.", "Backfill the orders table for the last two years.",
+      "Query the warehouse for monthly revenue.", "A Power BI report over the sales table.", "Nightly export of the orders table to parquet.",
+      "Carga incremental diária da tabela de encomendas.", "Load the bookkeeping entries into the lakehouse tables.",
+      "Guest checkout events land in the lakehouse bronze tables.", "Keep 30 nights of raw data in the lakehouse.", "The lakehouse stays in sync with the Postgres tables.",
+      "Add a freshness check to the grocery orders pipeline.", "Show the column lineage of each metric per product family.",
+      "Relatório de BI sobre as vendas com backfill mensal.", "Informe de BI con backfill mensual.", "Herramienta de BI con backfill mensual.",
+      "Ferramenta de BI com backfill mensal.", "BI Dashboard with a monthly backfill.", "Relatório de BI com backfill mensal."];
     const CORPUS = [
       // positives — EN
       ["data", "Build an ETL pipeline that loads the orders from Postgres into BigQuery every night."], ["data", "A nightly job that recomputes the loyalty points in the warehouse."],
@@ -293,7 +302,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
       ["", "Painel de vendas por região."], ["", "Exportar los pedidos a CSV."], ["", "Migrar la tabla de usuarios para añadir una columna."], ["", "Importar un CSV de contactos."],
       ["", "Sincronizar el stock entre los almacenes."], ["", "Informe mensual de ventas en PDF."],
       // 1.21 review B3 / B4 — words that mean something else in everyday text (hard negatives) and their data senses (positives)
-      ...B3_OFF.map((t) => ["", t]), ...B3_ON.map((t) => ["data", t]),
+      ...B3_OFF.map((t) => ["", t]), ...B3_ON.map((t) => ["data", t]), ...V3_ON.map((t) => ["data", t]),
     ];
     let tp = 0, fp = 0, pos = 0;
     const wrong = [];
@@ -305,15 +314,24 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
     const precision = tp / (tp + fp || 1), recall = tp / (pos || 1);
     ok(CORPUS.length >= 40 && pos >= 20 && precision >= 0.9 && recall >= 0.85,
       `1.21 F4: +data precision ${(precision * 100).toFixed(0)}% / recall ${(recall * 100).toFixed(0)}% on ${CORPUS.length} EN / PT / ES texts, ${pos} positives (≥ 90% / 85%) (wrong: ` + js(wrong) + ")");
-    // 1.21 review B3: every everyday text is off (+ui stays on for React Query), every data sense on; a table / a query backs no lone anchor
-    // (a strong signal only); ELT, a freshness check, BI and "carga incremental" count only as data phrases; B4: a stock screen per
-    // warehouse is the building — "in a table" no longer keeps the warehouse
+    // 1.21 review B3: every everyday text is off (+ui stays on for React Query), every data sense on; a table / a query backs no anchor with an
+    // everyday sense (everydayAnchors — 1.21 verify V3: a data-term anchor it still backs); ELT, a freshness check, BI and "carga incremental"
+    // count only as data phrases; B4: a stock screen per warehouse is the building — "in a table" no longer keeps the warehouse
     const b3Off = B3_OFF.filter((t) => onOf(t, "data")), b3On = B3_ON.filter((t) => !onOf(t, "data"));
     const rq = cls(B3_OFF[7]), scd = cls(B3_OFF[4]), orders = cls("Load the orders table into the warehouse every night with a Spark job.");
     ok(!b3Off.length && !b3On.length && rq.tracks.includes("ui") && !scd.tracks.includes("data") && scd.possible.some((p) => p.track === "data") &&
       orders.signals.data.includes("table") && !S.trackSignals("data").strong.includes("elt") && !S.trackSignals("data").weak.includes("BI") && S.trackSignals("data").weak.includes("lakehouse"),
-      "1.21 review B3: +data turns on from data phrases only — a lakehouse to rent, ELT teachers, a kitchen's freshness check, parquet flooring, SCD patients, medication / water / calorie ingestion, duplicate rows in the users table, React Query's stale data (+ui only), the Portuguese BI, a training plan's carga incremental, a horse's lineage (EN / PT / ES) stay off; their data senses turn it on; a table backs a strong signal only (got " +
+      "1.21 review B3: +data turns on from data phrases only — a lakehouse to rent, ELT teachers, a kitchen's freshness check, parquet flooring, SCD patients, medication / water / calorie ingestion, duplicate rows in the users table, React Query's stale data (+ui only), the Portuguese BI, a training plan's carga incremental, a horse's lineage (EN / PT / ES) stay off; their data senses turn it on; a table never backs an everyday anchor (got " +
       js([b3Off, b3On, rq.label, scd.possible, orders.signals.data]) + ")");
+    // 1.21 verify V3: a data-term anchor + a table / a query is +data again (a warehouse, a backfill, a BI dashboard, Power BI, parquet, carga
+    // incremental), the data-sense cue beats an everyday word in the same sentence (bookkeeping, guests, nights, stays, grocery, family),
+    // and a BI phrase matches at a sentence start or in title case ("Relatório de BI", "BI Dashboard" — "BI" itself still case-sensitive)
+    const v3Off = V3_ON.filter((t) => !onOf(t, "data"));
+    const guest = cls(V3_ON[8]), bi = cls("Relatório de BI sobre as vendas."), biLower = cls("o número do bi e o relatório de bi da loja.");
+    ok(!v3Off.length && guest.tracks.includes("tdd") && bi.signals.data.includes("relatório de BI") && !biLower.signals.data.length &&
+      S.trackSignals("data").weak.includes("warehouse") && !B3_OFF.some((t) => onOf(t, "data")),
+      "1.21 verify V3: 'A BI dashboard over the orders table', 'Load the orders table into the warehouse every night', 'Backfill the orders table…', 'Query the warehouse…', 'A Power BI report over the sales table', 'Nightly export of the orders table to parquet', 'Carga incremental diária da tabela de encomendas' are +data; a lakehouse / freshness check / lineage beside bookkeeping, guests, nights, stays, grocery or a product family is +data; 'Relatório de BI' / 'Informe de BI' / 'Herramienta de BI' / 'Ferramenta de BI' / 'BI Dashboard' match (a lower-case 'bi' never does); every everyday negative stays off (got " +
+      js([v3Off, guest.label, bi.signals.data, biLower.signals.data]) + ")");
     const b4 = [cls(B3_OFF[15]), cls(B3_OFF[16])];
     ok(b4.every((r) => !r.tracks.includes("data") && !(r.signals.data || []).length) && cls("Load the Stripe payouts into the warehouse tables every hour with Fivetran.").tracks.includes("data"),
       "1.21 review B4: a warehouse in a sentence about stock is the building even with 'in a table' (no +data signal at all) — the keep rule no longer lists tables / columns / queries (got " + js(b4.map((r) => r.signals.data)) + ")");

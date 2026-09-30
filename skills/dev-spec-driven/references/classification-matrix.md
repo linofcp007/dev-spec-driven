@@ -63,11 +63,18 @@ is a draft for the human, who confirms Phase 0.
   "without Kafka, RabbitMQ or SQS", "neither … nor" — each item is negated. It stops at "and" (often a new predicate: "without
   downtime and roll back on errors"), at a contrast word ("no feature flags, just a canary release" keeps the canary release)
   and at a comma no "or" closes ("Without feature flags, the canary release is done by hand"); a comma after the list's
-  closing "or" ends it too ("Without an LLM or embeddings, the checkout or a subscription page is the priority" keeps +tdd).
-  A negator followed by another verb negates that VERB, not its objects — the requirement is about them, like a hazard:
-  "The system must not lose payments nor duplicate invoices", *"Não pode perder pagamentos nem reembolsos"*, *"No puede
-  perder pagos ni reembolsos"* keep +tdd. Only the verbs whose object IS what is excluded carry it on (use / add / need /
-  include / implement — *usar, adicionar, precisar · usar, añadir, necesitar*).
+  closing "or" ends it too ("Without an LLM or embeddings, the checkout or a subscription page is the priority" keeps +tdd),
+  and a comma + an article joins only an item of the list's own track with no predicate after it ("Without an LLM, a vector
+  database or embeddings" is one list; "No LLM, the checkout or the subscription flow first" keeps +tdd).
+  **What a negation negates:** a modal's negated verb — must / should / can, *pode / deve · puede / debe* — is a REQUIREMENT
+  about its objects, like a hazard: "The system must not lose payments nor duplicate invoices", "The system must not lose
+  payments", "The service must not leak personal data", *"Não pode perder pagamentos nem reembolsos"*, *"No puede perder pagos
+  ni reembolsos"*, "without losing payments or refunds" keep their tracks. An EXCLUSION is a noun phrase ("no payments",
+  "Postgres, not MongoDB nor Kafka"), an adoption verb's object whatever the modal (use / add / need / include / implement /
+  integrate / deploy / run / offer / provide / ship / adopt, "necessary" — *usar, adicionar, integrar, adotar, precisar ·
+  usar, añadir, integrar, desplegar, necesitar, es necesario, hace falta*: "must not use X or Y") or a plan's verb (will / do,
+  a volition or intention verb — "We will not run Kafka or RabbitMQ", *"Não queremos / pretendemos usar LLM nem embeddings",
+  "No pensamos usar Kafka ni RabbitMQ", "No se usará…"*).
 - **This project's own corrections** (1.21): when the human confirms Phase 0 with other tracks than suggested — `spec_create`
   with `tracks` and the same description as `summary` — the words that drove the suggestion are recorded in
   `.specs/classifier.json`. After **two consistent corrections** a word the team keeps rejecting for a track stops turning it on
@@ -478,10 +485,14 @@ business intelligence / a BI tool, dashboard or report / Power BI / Looker / Tab
 signal: *o número do BI* is the Portuguese ID card), duplicate rows, stale data, a uniqueness check (*linhagem, ingestão,
 processamento em lote, governança de dados, carga incremental, ferramenta / relatório de BI · linaje, ingesta, procesamiento
 por lotes, informe de BI*). **Generic:** analytics, a dataset, a partition, a transformation, a batch / nightly job, ingest, upsert, a
-materialized view, a data / analytics engineer (a role names no pipeline work). **Context** (evidence only beside a STRONG
-+data signal, one concept — a table, a column or a query is on every screen, so it never backs a lone anchor): table,
-column, row, SQL, query, schema (*tabela, coluna, linhas · tabla, columna, filas*) — "migrate the users table", "a horse's
-lineage in a table", "React Query never shows stale data" name no pipeline. **Hazards:** duplicate rows,
+materialized view, a data / analytics engineer (a role names no pipeline work). **Context** (evidence beside a strong
+or weak +data signal, one concept): table, column, row, SQL, query, schema (*tabela, coluna, linhas · tabla, columna,
+filas*) — "A BI dashboard over the orders table", "Load the orders table into the warehouse every night", "Query the
+warehouse for monthly revenue" are +data; "migrate the users table" is not. A table, a column or a query is on every screen,
+so it never backs an anchor with an everyday sense — a lakehouse, a lineage, ingestion, a freshness check, `SCD`, duplicate
+rows, stale data: "a horse's lineage in a table", "SCD patient records in the patients table", "React Query never shows
+stale data" name no pipeline. The BI phrases match at a sentence start or in title case ("Relatório de BI", "BI Dashboard"
+— `BI` itself stays case-sensitive). **Hazards:** duplicate rows,
 stale data, schema drift ("without duplicate rows" states the concern).
 
 **Cues** (the words around a keyword): a warehouse in a sentence about the building (stock, inventory, shelves, picking,
@@ -489,9 +500,11 @@ pallets, shipping, temperature, shifts…) is no signal — one about data (a ta
 a schema, partitions) stays an anchor; a backfill in a schema migration ("add a currency column; backfill existing
 rows") is app-level, one about partitions, a pipeline, the warehouse or history an anchor; data moved into / out of
 `Snowflake` / `Redshift` ("into Snowflake", "from Redshift") is the product — strong; DBT therapy, an Airflow reading,
-a galaxy's Redshift are none; so are the everyday senses — a lakehouse to rent, a kitchen's freshness check, a training
-plan's *carga incremental*, a horse's lineage, the ingestion of water or a medication, parquet flooring — while a lakehouse,
-a freshness check or a lineage in a sentence about data (tables, metrics, dashboards, a pipeline, the raw zone…) is strong. A
+a galaxy's Redshift are none. A lakehouse, a freshness check or a lineage in a sentence about data (tables, metrics,
+dashboards, a pipeline, the raw zone…) is strong — even beside an everyday word ("Load the bookkeeping entries into the
+lakehouse tables", "Add a freshness check to the grocery orders pipeline"); otherwise the everyday senses are no signal — a
+lakehouse to rent, a kitchen's freshness check, a training plan's *carga incremental*, a horse's lineage, the ingestion of
+water or a medication, parquet flooring. A
 warehouse's sentence about data never counts a table, a column or a query ("Show stock levels per warehouse in a table" is
 the building). Shared phrases: an ETL job / data pipeline is also +obs's technical target, a CDC pipeline
 +dist's strong phrase, data retention +privacy's (a phrase may serve two tracks). `analytics` is never a reserved pack
@@ -513,7 +526,9 @@ Worked examples (what `spec_classify` answers):
 | Track the lineage of every dashboard metric back to its source tables | `core +data` | lineage (strong — about metrics), table |
 | Guests can book a lakehouse or a cabin for the weekend · ELT teachers assign reading exercises | `core` | — (the everyday senses) |
 | Show stock levels per warehouse in a table so pickers know which shelf to restock | `core`, *possible +ui* | picker — warehouse: the building, no signal |
-| Prevent duplicate rows in the users table when the signup form is double-submitted | `core`, *possible +ui / +data* | form, duplicate rows (a table backs no anchor) |
+| Prevent duplicate rows in the users table when the signup form is double-submitted | `core`, *possible +ui / +data* | form, duplicate rows (a table backs no everyday anchor) |
+| A BI dashboard over the orders table · Load the orders table into the warehouse every night | `core +data` (weak-only; *possible +ui* for the dashboard) | BI dashboard / warehouse, table |
+| *Relatório de BI com backfill mensal* | `core +data` (weak-only) | relatório de BI, backfill |
 
 ---
 

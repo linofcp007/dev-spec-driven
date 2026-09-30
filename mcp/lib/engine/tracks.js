@@ -1283,10 +1283,11 @@ const SIGNALS = {
   // 1.21 review B3 — words that mean something else in everyday text are tied to a data phrase or read by a cue: ELT only as a
   // pipeline / job / tool / process ("ELT teachers" teach English); a bare lakehouse is an anchor (a lakehouse to rent), strong in a
   // sentence about data; a freshness check is an anchor (a kitchen's produce crate); PT / ES "carga incremental" an anchor (a
-  // training plan's load); BI only with its tool / dashboard / report ("o número do BI" is the Portuguese ID card); and the context
-  // words back a STRONG signal only (contextBackedBy) — a table, a column or a query is on every screen ("in a table", "React Query"):
-  // beside a lone anchor (a horse's lineage, SCD patient records, medication ingestion, duplicate rows in the users table) they are
-  // no second hint.
+  // training plan's load); BI only with its tool / dashboard / report ("o número do BI" is the Portuguese ID card — "BI" matched
+  // case-sensitively, the words around it not: "Relatório de BI", "BI Dashboard"); and the context words never back an anchor with an
+  // everyday sense (everydayAnchors) — a table, a column or a query is on every screen ("in a table", "React Query"): beside a horse's
+  // lineage, SCD patient records, medication ingestion or duplicate rows in the users table they are no second hint (1.21 verify V3:
+  // beside a data-term anchor — a warehouse, a backfill, a BI dashboard, parquet — they still are).
   data: {
     strong: [
       "etl", "elt pipeline", "elt job", "elt tool", "elt process", "elt workflow", "pipeline elt", "processo elt", "proceso elt",
@@ -1339,8 +1340,12 @@ const SIGNALS = {
     // CONTEXT: the words of the tables a pipeline reads and writes — evidence only beside another (non-negated) strong / weak +data
     // signal, and one concept (concepts.sql): "the warehouse … the orders table" is two hints, "table … rows … columns" one.
     context: ["table", "column", "row", "sql", "query", "queries", "schema", "tabela", "coluna", "linhas", "tabla", "columna", "filas"],
-    // 1.21 review B3: the context words back a STRONG +data signal only, never a lone anchor (classify.js — backedBy)
-    contextBackedBy: "strong",
+    // 1.21 review B3 / verify V3: the anchors that also have an everyday sense — a context word never backs them (classify.js — backedBy):
+    // a table / a column / a query is on every screen, so "a horse's lineage in a table", "SCD patient records in the patients table",
+    // "duplicate rows in the users table", "React Query never shows stale data" name no pipeline; a data-term anchor + a table still
+    // does ("a BI dashboard over the orders table", "load the orders table into the warehouse", "backfill the orders table")
+    everydayAnchors: ["lakehouse", "lineage", "linhagem", "linaje", "ingestion", "ingestão", "ingesta", "freshness check", "SCD", "duplicate rows",
+      "linhas duplicadas", "filas duplicadas", "stale data", "dados desatualizados", "datos obsoletos"],
     concepts: {
       sql: ["table", "column", "row", "sql", "query", "queries", "schema", "tabela", "coluna", "linhas", "tabla", "columna", "filas"],
       role: ["data engineer", "analytics engineer", "engenheiro de dados", "ingeniero de datos"],
@@ -1398,12 +1403,26 @@ const SIGNALS = {
       { kind: "near", on: ["dbt"], then: "none",
         after: { words: ["therapy", "therapists?", "skills?", "diar(?:y|ies)", "sessions?", "groups?", "programm?e?s?"], chars: 24 },
         before: { words: ["dialectical behaviou?r therapy", "dialectical"], chars: 40, edge: "letter" } },
-      // 1.21 review B3 — the everyday senses first (the first rule that fires decides): a lakehouse to rent, a kitchen's freshness check,
-      // a training plan's "carga incremental", a horse's lineage, the ingestion of water or a medication, parquet flooring — no signal …
+      // 1.21 review B3 / 1.21 verify V3 — the data senses FIRST (the first rule that fires decides): a lakehouse, a freshness check or a
+      // lineage in a sentence about data is data work (strong) — "Load the bookkeeping entries into the lakehouse tables", "Add a
+      // freshness check to the grocery orders pipeline", "the column lineage of each metric per product family" …
+      { kind: "sentence", on: ["lakehouse"], then: "strong", edge: "letter",
+        phrases: ["tables?", "raw (?:zones?|layers?|data)", "bronze", "silver", "medallion", "delta", "iceberg", "hudi", "parquet", "spark",
+          "databricks", "catalogs?", "partitions?", "pipelines?", "ingest\\p{L}*", "schemas?", "sql", "quer(?:y|ies)", "etl", "elt", "dbt", "data",
+          "dados", "datos", "tabelas?", "tablas?"] },
+      { kind: "sentence", on: ["freshness check"], then: "strong", edge: "letter",
+        phrases: ["tables?", "pipelines?", "datasets?", "sources?", "warehouse", "dbt", "partitions?", "feeds?", "dags?", "data", "sla", "tabelas?",
+          "tablas?", "dados", "datos"] },
+      { kind: "sentence", on: ["lineage", "linhagem", "linaje"], then: "strong", edge: "letter",
+        phrases: ["metrics?", "dashboards?", "columns?", "datasets?", "source tables?", "pipelines?", "kpis?", "métricas?", "indicadores?", "colunas?",
+          "conjuntos? de dados", "tabelas de origem", "painéis?", "columnas?", "conjuntos? de datos", "tablas de origen", "cuadros? de mando"] },
+      // … then the everyday senses: a lakehouse to rent, a kitchen's freshness check, a training plan's "carga incremental", a horse's
+      // lineage, the ingestion of water or a medication, parquet flooring — no signal at all
       { kind: "sentence", on: ["lakehouse"], then: "none", edge: "letter",
-        phrases: ["book\\p{L}*", "rent\\p{L}*", "cabins?", "cottages?", "chalets?", "guests?", "weekends?", "nights?", "stays?", "holidays?",
-          "vacations?", "reservations?", "deposits?", "bedrooms?", "airbnb", "reservas?", "alug\\p{L}*", "hóspedes", "fim de semana", "noites?",
-          "férias", "cabanas?", "quartos?", "alquil\\p{L}*", "huéspedes", "fin de semana", "noches?", "vacaciones", "cabañas?", "habitaciones?"] },
+        phrases: ["book(?:s|ed|ings?)?", "rent(?:s|ed|als?|ing)?", "cabins?", "cottages?", "chalets?", "guests?", "weekends?", "nights?", "overnight",
+          "holidays?", "vacations?", "reservations?", "deposits?", "bedrooms?", "airbnb", "reservas?", "alug\\p{L}*", "hóspedes", "fim de semana",
+          "noites?", "férias", "cabanas?", "quartos?", "alquil\\p{L}*", "huéspedes", "fin de semana", "noches?", "vacaciones", "cabañas?",
+          "habitaciones?"] },
       { kind: "sentence", on: ["freshness check"], then: "none", edge: "letter",
         phrases: ["produce", "foods?", "fruits?", "vegetables?", "meat", "fish", "milk", "dairy", "bread", "crates?", "fridges?", "refrigerat\\p{L}*",
           "kitchens?", "perishables?", "groceries", "grocery"] },
@@ -1422,18 +1441,6 @@ const SIGNALS = {
       { kind: "sentence", on: ["parquet"], then: "none", edge: "letter",
         phrases: ["floor\\p{L}*", "laminate", "oak", "tiles?", "carpets?", "planks?", "hardwood", "varnish\\p{L}*", "square (?:feet|meters|metres)",
           "pavimentos?", "soalho", "pisos?", "madeira", "flutuante", "suelos?", "tarima", "laminado", "madera", "baldosas?", "alfombras?"] },
-      // … and the data senses: a lakehouse, a freshness check or a lineage in a sentence about data is data work (strong)
-      { kind: "sentence", on: ["lakehouse"], then: "strong", edge: "letter",
-        phrases: ["tables?", "raw (?:zones?|layers?|data)", "bronze", "medallion", "delta", "iceberg", "hudi", "parquet", "spark", "databricks",
-          "catalogs?", "retention", "storage", "partitions?", "pipelines?", "ingest\\p{L}*", "schemas?", "sql", "quer(?:y|ies)", "etl", "elt", "dbt",
-          "data", "dados", "datos", "tabelas?", "tablas?", "retenção", "retención", "armazenamento", "almacenamiento"] },
-      { kind: "sentence", on: ["freshness check"], then: "strong", edge: "letter",
-        phrases: ["tables?", "pipelines?", "models?", "datasets?", "sources?", "warehouse", "dbt", "partitions?", "loads?", "feeds?", "jobs?", "dags?",
-          "data", "sla"] },
-      { kind: "sentence", on: ["lineage", "linhagem", "linaje"], then: "strong", edge: "letter",
-        phrases: ["metrics?", "dashboards?", "columns?", "datasets?", "source tables?", "pipelines?", "models?", "reports?", "fields?", "kpis?",
-          "métricas?", "indicadores?", "colunas?", "conjuntos? de dados", "tabelas de origem", "painéis?", "relatórios?", "campos?",
-          "columnas?", "conjuntos? de datos", "tablas de origen", "informes?", "cuadros? de mando"] },
     ],
   },
 };
