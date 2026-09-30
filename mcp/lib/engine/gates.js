@@ -568,11 +568,14 @@ function roleGateView(projectDir, dir, state, pendingGates, tracks, kind, lng) {
   const pending = {}, unsigned = {};
   if (!Object.keys(cfg).length) return { any: false, pending, unsigned, notes: [], label: (p) => p };
   const E = i18n.msg(lng).governance;
-  const stale = [], resign = [];
+  const stale = [], resign = [], complete = [];
   for (const p of pendingGates) {
     if (!cfg[p]) continue;
     const v = roleSignOffs(state, p, cfg[p], phaseContent(dir, p, kind));
     pending[p] = { required: cfg[p].slice(), signed: v.signed, missing: v.missing, stale: v.stale };
+    // 1.21 review A1: every required role signed the CURRENT content, yet no approval (the sign-offs were recorded apart — two
+    // branches the merge driver united, or a role dropped since): never "missing roles" — any of them signs again to complete it.
+    if (!v.missing.length && v.signed.length) { pending[p].signoffsComplete = true; complete.push(p); }
     if (v.stale.length) stale.push(`${p} (${v.stale.join(", ")})`);
   }
   const approvals = isObj(state.approvals) ? state.approvals : {};
@@ -588,15 +591,21 @@ function roleGateView(projectDir, dir, state, pendingGates, tracks, kind, lng) {
     }
   }
   const notes = [];
+  if (complete.length) {
+    const slug = path.basename(dir);
+    notes.push(E.signoffsComplete(complete.map((p) => `${p} (${pending[p].signed.join(", ")})`).join(", "), `/approve ${slug} ${complete[0]} --role ${pending[complete[0]].signed[0]}`));
+  }
   if (stale.length) notes.push(E.staleSignOffs(stale.join(", ")));
   if (resign.length) notes.push(E.resigning(resign.join(", ")));
   const un = Object.entries(unsigned);
   if (un.length) notes.push(E.unsigned(un.map(([p, l]) => `${p} (${l.join(", ")})`).join(", ")));
   return { any: true, pending, unsigned, notes, label: (p) => roleLabel(pending, p, lng) };
 }
-// "design (missing role: security)" for a pending phase that waits for roles; the bare phase otherwise.
+// "design (missing role: security)" for a pending phase that waits for roles; "design (every role signed: … — not approved yet)"
+// for one whose sign-offs are complete but never became an approval (1.21 review A1); the bare phase otherwise.
 function roleLabel(pendingRoles, p, lng) {
   const pr = isObj(pendingRoles) && own(pendingRoles, p) ? pendingRoles[p] : null;
+  if (pr && pr.signoffsComplete) return `${p} (${i18n.msg(lng).governance.signedAll(pr.signed.join(", "))})`;
   return pr && pr.missing.length ? `${p} (${i18n.msg(lng).governance.missing(pr.missing)})` : p;
 }
 // ROADMAP.md "Needs attention": the phases of a feature whose sign-off round is under way (some role signed, some didn't yet).
@@ -661,7 +670,10 @@ function approveStepExtras(projectDir, slug, dir, st, tracks, kind, pending, doc
   const E = i18n.msg(lng).governance;
   const out = { text: null };
   const pr = doc.pendingRoles && own(doc.pendingRoles, pending) ? doc.pendingRoles[pending] : null;
-  if (pr && pr.missing.length) {
+  if (pr && pr.signoffsComplete) { // 1.21 review A1: every role signed, no approval — one of them signs again (no missing roles)
+    out.signoffsComplete = true;
+    out.text = E.completeSignoffs(pending, slug, pr.signed.join(", "), pr.signed[0]);
+  } else if (pr && pr.missing.length) {
     out.missingRoles = pr.missing;
     out.text = E.approveRoles(pending, slug, E.missing(pr.missing), pr.signed.join(", "), pr.missing[0]);
   }

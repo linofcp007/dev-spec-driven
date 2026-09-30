@@ -777,6 +777,55 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       js([l5a.p.error, s5a.p.why, n5a.p.error, u5.map((r) => r.code), u5jj]) + ")");
   }
 
+  { // 1.21 review A1 — role sign-offs made on two branches: tech signs requirements on one, product on the other; git's merge driver
+    // unites them (it never approves) → every role signed, no approval. The readers say so — doctor (approval-gates, nextGate) and
+    // next_action recommend completing it (any of them signs again, `signoffsComplete: true`), never "missing roles"; one re-sign
+    // approves it. Localized (PT label).
+    const js = JSON.stringify;
+    const pA = path.join(tmp, "rev-a1-signoffs");
+    S.initProject(pA, ["core"], "en", { approvalRoles: { requirements: ["tech", "product"] } });
+    const fA = S.createFeature(pA, "Login", ["core"]);
+    const put = (rel, text) => fs.writeFileSync(path.join(fA.dir, rel), text);
+    const cls = path.join(fA.dir, "classification.md");
+    put("classification.md", fs.readFileSync(cls, "utf8").split("\n").map((l) => (/^- /.test(l) ? l : l.replace(/\[[^\]]*\]/g, "filled"))).join("\n"));
+    put("requirements.md", "# Feature: Login\n\n## Summary\nSign in with email.\n\n### US-1 (P1 — MVP): Sign in\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN a user submits valid credentials THE SYSTEM SHALL start a session.\n2. **US-1.AC-2** — IF the password is wrong THEN THE SYSTEM SHALL show an error.\n\n" +
+      "## Success Criteria\n- **SC-001** — 99% of sign-ins finish in under 1 s.\n\n## Out of Scope\n- SSO.\n");
+    S.approvePhase(pA, fA.slug, "classification", "ana");
+    const sp = path.join(fA.dir, ".state.json");
+    const base = fs.readFileSync(sp, "utf8");
+    const tech = S.approvePhase(pA, fA.slug, "requirements", "tom", { role: "tech" });
+    const ours = fs.readFileSync(sp, "utf8");
+    fs.writeFileSync(sp, base); // the other branch, from the same base
+    const product = S.approvePhase(pA, fA.slug, "requirements", "paula", { role: "product" });
+    const theirs = fs.readFileSync(sp, "utf8");
+    const mg = S.mergeStateText(base, ours, theirs, { path: ".specs/login/.state.json" });
+    fs.writeFileSync(sp, mg.text);
+    const st = JSON.parse(mg.text);
+    const doc = S.specDoctor(pA, fA.slug);
+    const gates = doc.checks.find((c) => c.id === "approval-gates") || {};
+    const na = S.nextAction(pA, fA.slug);
+    ok(tech.ok && tech.complete === false && product.ok && product.complete === false && mg.ok && mg.clean &&
+      !st.approvals.requirements && js(Object.keys(st.signoffs.requirements).sort()) === '["product","tech"]' &&
+      doc.pendingRoles.requirements.signoffsComplete === true && doc.pendingRoles.requirements.missing.length === 0 &&
+      doc.nextGate.phase === "requirements" && doc.nextGate.signoffsComplete === true &&
+      /requirements \(every role signed: tech, product — not approved yet\)/.test(gates.detail) && /one of those roles signs again to complete it: \/approve login requirements --role tech/.test(gates.detail) &&
+      !/missing role/.test(gates.detail) &&
+      na.step === "approve" && na.signoffsComplete === true && !na.missingRoles && /Every role has signed off 'requirements' \(tech, product\), but it isn't approved yet/.test(na.recommendation) &&
+      /\/approve login requirements --role tech\./.test(na.recommendation),
+      "1.21 review A1: sign-offs of every role made on two merged branches (no approval — the driver never approves) read as signoffsComplete in doctor (pendingRoles, nextGate, the approval-gates label + note) and next_action (the re-sign to complete it) — never as missing roles (got " +
+      js([st.signoffs, doc.pendingRoles, doc.nextGate, gates.detail, na.step, na.recommendation, na.missingRoles]) + ")");
+    const again = S.approvePhase(pA, fA.slug, "requirements", "tom", { role: "tech" });
+    const st2 = JSON.parse(fs.readFileSync(sp, "utf8"));
+    const doc2 = S.specDoctor(pA, fA.slug);
+    const I = require(path.join(__dirname, "lib", "i18n.js"));
+    const labels = ["pt", "es", "pt-BR"].map((l) => I.msg(l).governance.signedAll("tech, product"));
+    ok(again.ok && again.complete === true && again.approved === "requirements" && st2.approvals.requirements && js(Object.keys(st2.approvals.requirements.roles).sort()) === '["product","tech"]' &&
+      !st2.signoffs && !doc2.pendingRoles.requirements && labels.every((s) => /tech, product/.test(s)) && labels[0] !== labels[1] && /ainda não aprovada/.test(labels[2]) &&
+      ["en", "pt", "es"].every((l) => typeof I.msg(l).governance.completeSignoffs("p", "s", "a, b", "a") === "string" && typeof I.msg(l).governance.signoffsComplete("x", "y") === "string"),
+      "1.21 review A1: one role signing again completes it — approvals.requirements holds both roles, the waiting sign-offs are gone; the new texts exist in EN / PT / ES / pt-BR (got " + js([again.note, st2.approvals.requirements, labels]) + ")");
+  }
+
   { // 1.21 F1b — human approvals over MCP elicitation: a fake MCP client that can ask its user answers accept / decline / cancel /
     // an error / never (the timeout shortened by DEV_SPEC_ELICIT_TIMEOUT_MS), in EN / PT / ES; a client without elicitation.
     const js = JSON.stringify;
@@ -867,7 +916,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const rErr = await A.call("spec_approve", { name: "err", phase: "classification", projectDir: pEn });
     ok(rDec.ok === false && rDec.declined === true && rDec.action === "decline" && /^The user declined in the MCP client: nothing recorded \(approve the classification phase of 'dec'\)/.test(rDec.error) &&
       rCan.declined === true && rCan.action === "cancel" && /^The user dismissed the confirmation/.test(rCan.error) &&
-      rNo.declined === true && rNo.action === "accept" && /declined/.test(rNo.error) &&
+      rNo.declined === true && rNo.action === "accept" && /without ticking Approve/.test(rNo.error) &&
       rErr.declined === true && rErr.elicitationError && rErr.elicitationError.code === -32601 && /could not ask the user \(elicitation not available\)/.test(rErr.error) &&
       ["dec", "can", "err"].every((s) => !stateOf(pEn, s).approvals.classification && !(stateOf(pEn, s).approvalHistory || []).length),
       "1.21 F1b: decline, cancel, an accept without approve: true and a client error each refuse it (declined: true + the action / elicitationError, a localized refusal) and record nothing (got " + js([rDec, rCan, rNo, rErr]) + ")");
@@ -929,6 +978,24 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       /permanently delete the feature 'dec'/.test(qRm.params.message) && fs.existsSync(path.join(pEn, ".specs", "dec", ".state.json")),
       "1.21 F1b: spec_feature remove {confirm: true} is asked of the user (declined → the feature stays); a feature that doesn't exist gets the engine's own error — nobody is asked (got " + js([rGhost, rRm, qRm.params.message]) + ")");
 
+    // 1.21 review A6 — `confirmed` only on a call that ran: a fast-forward the user accepted, stopped by a later gate (requirements
+    // is still the scaffold) is ok: false with no `confirmed` (the phase it approved carries its own in .state.json); an accept
+    // without approve: true reads as its own answer (action "accept", "without ticking Approve"), never "declined", in EN / PT / ES.
+    const fThru = S.createFeature(pEn, "thru", ["core"]);
+    const clsThru = path.join(fThru.dir, "classification.md");
+    fs.writeFileSync(clsThru, fs.readFileSync(clsThru, "utf8").split("\n").map((l) => (/^- /.test(l) ? l : l.replace(/\[[^\]]*\]/g, "filled"))).join("\n"));
+    A.setAnswer(accept("go"));
+    const rThru = await A.call("spec_approve", { name: "thru", through: "requirements", projectDir: pEn });
+    const sThru = stateOf(pEn, "thru");
+    const I6 = require(path.join(__dirname, "lib", "i18n.js"));
+    const unapproved = ["en", "pt", "es", "pt-BR"].map((l) => I6.msg(l).elicit.unapproved("x"));
+    ok(rThru.ok === false && rThru.stoppedAt === "requirements" && rThru.refused === true && !("confirmed" in rThru) && js(rThru.approved) === '["classification"]' &&
+      sThru.approvals.classification && sThru.approvals.classification.confirmed && sThru.approvals.classification.confirmed.note === "go" &&
+      rNo.action === "accept" && !/declined/.test(rNo.error) && /^The user answered in the MCP client without ticking Approve: nothing recorded/.test(rNo.error) &&
+      /^O utilizador respondeu no cliente MCP sem marcar Aprovar/.test(unapproved[1]) && /^El usuario respondió en el cliente MCP sin marcar Aprobar/.test(unapproved[2]) && /^O usuário respondeu/.test(unapproved[3]),
+      "1.21 review A6: a failed run the user confirmed (a fast-forward stopped at a later gate) carries no `confirmed` — the phase it approved keeps its own in .state.json; an accept without approve: true is reported as such (not 'declined'), localized (got " +
+      js([rThru.ok, rThru.stoppedAt, rThru.confirmed, sThru.approvals.classification && sThru.approvals.classification.confirmed, rNo.error, unapproved]) + ")");
+
     // PT (deny: with elicitation the user's explicit approve still records it) and ES (ask): the question and the refusal in the
     // feature's language
     const pPt = project("pt-deny", "pt", "deny", ["faturas", "recibos"]);
@@ -972,5 +1039,17 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       rOff.ok === true && !rOff.confirmed && C.asked.length === 0 && rHook.ok === true && !rHook.confirmed && H.asked.length === 0,
       "1.21 F1b: without elicitation, ask keeps today's behaviour (recorded, nobody asked) and deny is refused (humanRequired + the command the user runs, nothing recorded); approvalGuard off asks nobody; SPEC_MCP_APPROVAL_HOOK=on (the Claude Code plugin — its hook guards the call) leaves the call as it was (got " +
       js([rAsk.approved, rDeny, rOff.approved, rHook.approved]) + ")");
+    // 1.21 review A4 — over MCP (a client outside Claude Code) the refusal's command is the plain runnable line — no `!` (Claude
+    // Code's prefix: PowerShell can't run `! node …`) — and its text never tells the user to type `!`; the Claude Code hook's own
+    // decision keeps the `!` form. EN here; PT / ES from the same engine call.
+    const payloadA4 = { hook_event_name: "PreToolUse", tool_name: "spec_approve", tool_input: { name: "two", phase: "classification" } };
+    const plainAll = ["en", "pt", "es", "pt-BR"].map((l) => S.approvalGuardDecision(payloadA4, "deny", { lang: l, plain: true }));
+    const hookForm = S.approvalGuardDecision(payloadA4, "deny", { lang: "en" });
+    ok(typeof rDeny.command === "string" && rDeny.command.startsWith(S.DEV_SPEC + " approve two classification --force") && !/^!/.test(rDeny.command) &&
+      /in their own terminal: node /.test(rDeny.error) && !/ ! prefix|\(! /.test(rDeny.error) && !/Claude Code/.test(rDeny.error) &&
+      plainAll.every((d) => d.command.startsWith(S.DEV_SPEC + " approve two classification") && !/prefix|prefixo|prefijo|Claude Code/.test(d.reason)) &&
+      hookForm.command.startsWith("! " + S.DEV_SPEC) && /Claude Code with the ! prefix/.test(hookForm.reason),
+      "1.21 review A4: the MCP deny refusal hands a client outside Claude Code the plain runnable command (no leading `!`) and a reason that doesn't mention the `!` prefix — EN / PT / ES / pt-BR; the Claude Code hook keeps `! node …` (got " +
+      js([rDeny.command, rDeny.error, plainAll.map((d) => d.reason), hookForm.command]) + ")");
   }
 };

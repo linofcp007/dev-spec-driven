@@ -86,6 +86,9 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
   `intro`, decisions.md's `header`, a pack's `initJson`, the tracker CSV's `featureLine`); the writers of ROADMAP.md /
   .html, SPECS.md, UPGRADE.md, retro.md and `.specs/exports/*` also pass their text through `portableCli()` (the
   runnable line → `dev-spec`, HTML-escaped too), so no machine path is ever committed. `mcp/tests/03-languages.js`
-  sweeps every message of every language: a bare `dev-spec <command>` outside that list fails. The MCP tool
+  sweeps every message of every language: a bare `dev-spec <command>` outside that list fails — the command list is read
+  from the CLI's own `case "<name>":` labels (1.21 review A2: a hand-written list missed `signals` and `merge-state`) and
+  each builder is called with several argument shapes (a list-mapping one is swept, not skipped); the driver's own stderr
+  lines (`dev-spec merge-state: <file>: …`, `mergeState.conflictHead` / `parseError`) are product-name uses. The MCP tool
   descriptions and `initialize` instructions interpolate `spec.DEV_SPEC` the same way; the command files write
   `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" …` where they hand the user a `--run` line.

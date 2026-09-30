@@ -52,16 +52,20 @@ PreToolUse payload): `spec_approve` (approve, revoke, `through`, force / waiver)
 sets it for the Claude Code plugin — its PreToolUse hook asks / refuses there, so that path is unchanged and nothing is asked
 twice), a network / `..` projectDir (runTool refuses it) → the call runs as before; elicitation → ask; no elicitation → `ask`
 runs as today, `deny` is refused (`{ok: false, refused, humanRequired: true, approvalGuard: "deny", command, error}` — the
-guard's own deny reason and the `!` command the human runs). The question (`msg.elicit`, the feature's language — else the
+server asks `approvalGuardDecision(…, {plain: true})` (1.21 review A4): `command` is the plain runnable line, WITHOUT Claude Code's
+`! ` prefix (a PowerShell / cmd.exe user can't run `! node …`), and `error` is `approvalGuard.denyMcp` — "in their own terminal",
+never the `!` prefix; the Claude Code hook keeps its `!` form). The question (`msg.elicit`, the feature's language — else the
 project's): `summary` (approvalGuardDecision's action line) + the gate from a **dry run** — `spec.approvePhase(…, {dryRun: true})`
 runs every check and writes nothing (approve → `{dryRun, failing, checks, role?, waiver?}`, revoke → `{dryRun, revoke}`, through
 → `{dryRun, chain}`); a gate that refuses anyway (or an error, or a fast-forward with nothing to do) is answered as it is and
 NOBODY is asked. `requestedSchema`: `approve` (boolean, default false, required) + `note` (string ≤ 500). Only `action:
 "accept"` with `content.approve === true` runs the call, with `confirmation` {via: "elicitation", at, note?} (a one-line note)
 recorded as `confirmed` on the approval, its history record, a role's sign-off and a revocation record (`confirmationOf()`,
-gates.js — never a tool argument); the result gains `confirmed` (+ a localized `message`). Decline / cancel / an accept without
-approve / a client error / no answer within `DEV_SPEC_ELICIT_TIMEOUT_MS` (default 300000, ≤ 1 h) → `{ok: false, declined: true,
-approvalGuard, action | elicitationError | timedOut, error}` (localized), nothing recorded; a timeout also sends the client
+gates.js — never a tool argument); the result gains `confirmed` (+ a localized `message`) only when it isn't `ok: false` (1.21
+review A6 — a fast-forward a later gate stopped: the phases it approved carry their own `confirmed` in .state.json). Decline /
+cancel / an accept without approve / a client error / no answer within `DEV_SPEC_ELICIT_TIMEOUT_MS` (default 300000, ≤ 1 h) →
+`{ok: false, declined: true, approvalGuard, action | elicitationError | timedOut, error}` (localized — an accept without approve
+has its own text, `elicit.unapproved`: the user answered without ticking Approve, `action: "accept"`), nothing recorded; a timeout also sends the client
 `notifications/cancelled {requestId, reason: "timeout"}`. A guardrail on the approve paths, like the hook — not a sandbox.
 
 **Argument validation (server.js).** Before dispatch, `tools/call` arguments are checked against the

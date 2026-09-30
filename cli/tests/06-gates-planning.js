@@ -124,7 +124,20 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   ok(bf21.code === 0 && j21 && j21.ok && /Apply PROMO10 twice; the total reads 81/.test(bug21) && /^applyCoupon\(\) never checks/m.test(bug21) &&
     /US-1\.AC-1\*\* — IF the same coupon is applied twice THEN THE SYSTEM SHALL keep one discount$/m.test(j21.bodies["requirements.md"]) && j21.bodies["bug.md"] === bug21 &&
     JSON.stringify(j21.prefilled) === JSON.stringify({ "bug.md": ["reproduction", "rootCause", "behaviour"], "requirements.md": ["condition", "behaviour"] }) &&
-    ref21.code === 1 && /rootCause is a bugfix's input/.test(ref21.out) && !fs.existsSync(path.join(w16, ".specs", "not-a-bug")),
+    ref21.code === 1 && /--root-cause is a bugfix's input/.test(ref21.out) && !fs.existsSync(path.join(w16, ".specs", "not-a-bug")),
     "1.21 F3: dev-spec bugfix --reproduction --root-cause --condition --behaviour prefills bug.md + the IF … THEN criterion, --include-body returns the bodies in --json; refused on a plain feature (got " +
     JSON.stringify({ code: bf21.code, prefilled: j21 && j21.prefilled, ref: ref21.out.slice(0, 160) }) + ")");
+
+  // 1.21 review A8: the CLI's refusals name the FLAG the user typed (--root-cause), never the MCP key (rootCause), and the CLI's own
+  // way to make a bugfix (the runnable `bugfix` line); a too-long --condition names --condition. MCP keeps its keys (mcp/tests/06-gates.js).
+  const refA8 = run(["create", "Not a bug either", "--project", w16, "--root-cause", "x", "--json"]);
+  let jA8 = null;
+  try { jA8 = JSON.parse(refA8.out); } catch { /* reported below */ }
+  const longA8 = run(["bugfix", "Long cond", "--project", w16, "--condition", "x".repeat(501)]);
+  const I = require(path.join(__dirname, "..", "mcp", "lib", "i18n.js"));
+  ok(refA8.code === 1 && jA8 && jA8.ok === false && /^--root-cause is a bugfix's input — create it as a bugfix: /.test(jA8.error) && !/rootCause/.test(jA8.error) &&
+    jA8.error.includes(I.DEV_SPEC + ' bugfix "<name>" --root-cause') && longA8.code === 1 && /--condition must be one line of at most 500 characters/.test(longA8.out) &&
+    !fs.existsSync(path.join(w16, ".specs", "not-a-bug-either")) && !fs.existsSync(path.join(w16, ".specs", "long-cond")),
+    "1.21 review A8: on the CLI a bugfix input given to a plain feature is refused naming --root-cause (not the MCP key rootCause) and the runnable bugfix command; a too-long --condition names the flag (got " +
+    JSON.stringify([jA8 && jA8.error, longA8.out.slice(0, 160)]) + ")");
 };

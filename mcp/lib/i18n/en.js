@@ -1239,6 +1239,8 @@ const msg = {
     // 1.21 F3 — spec_create {kind: "bugfix"} prefill: reproduction · rootCause · condition · behaviour (the input names stay English).
     bugPrefill: {
       bugOnly: (key) => `${key} is a bugfix's input — pass kind: "bugfix" (it prefills bug.md and the regression criterion).`,
+      // 1.21 review A8: the CLI names its flag (--root-cause, not the MCP key rootCause) and its own way to make a bugfix
+      bugOnlyCli: (flag) => `${flag} is a bugfix's input — create it as a bugfix: ${DEV_SPEC} bugfix "<name>" ${flag} "…" (or --kind bugfix); it prefills bug.md and the regression criterion.`,
       oneLine: (key, max) => `${key} must be one line of at most ${max} characters (it goes into the EARS criterion).`,
       skipped: (list) => `Not prefilled — ${list}: the file already existed or came from a project template (create-only); write those texts into it yourself.`,
     },
@@ -1294,8 +1296,8 @@ const msg = {
       keptOff: (t, kw) => `+${t} kept off — '${kw}' appeared negated.`,
       onAlthough: (t, quoted, list) => `+${t} is ON although ${quoted} appeared negated — enabled by: ${list}. Confirm this is intentional.`,
       // 1.21 F2 — the project's signal overrides (.specs/classifier.json) and classify --explain
-      overridesApplied: (list) => `This project's signal overrides changed the reading (.specs/classifier.json): ${list.map((o) => `'${o.word}' for +${o.track} → ${({ off: "no signal", weak: "a weak signal", strong: "a strong signal" })[o.effect]}`).join(", ")} — dev-spec signals list shows them all.`,
-      overridesInvalid: (code, n) => `.specs/classifier.json ${code === "invalid-entries" ? `holds ${n} invalid entr${n === 1 ? "y" : "ies"} (ignored)` : `is ignored (${({ "invalid-json": "not valid JSON", "invalid-shape": "no \"signals\" list", "too-big": "too big", "not-a-file": "not a regular file", unreadable: "unreadable" })[code] || code})`} — dev-spec signals list says what to fix.`,
+      overridesApplied: (list) => `This project's signal overrides changed the reading (.specs/classifier.json): ${list.map((o) => `'${o.word}' for +${o.track} → ${({ off: "no signal", weak: "a weak signal", strong: "a strong signal" })[o.effect]}`).join(", ")} — ${DEV_SPEC} signals list shows them all.`,
+      overridesInvalid: (code, n) => `.specs/classifier.json ${code === "invalid-entries" ? `holds ${n} invalid entr${n === 1 ? "y" : "ies"} (ignored)` : `is ignored (${({ "invalid-json": "not valid JSON", "invalid-shape": "no \"signals\" list", "too-big": "too big", "not-a-file": "not a regular file", unreadable: "unreadable" })[code] || code})`} — ${DEV_SPEC} signals list says what to fix.`,
       explainHead: "Matched keywords (track · keyword · table tier → final tier):",
       explainNone: "No keyword matched.",
       explainMatch: (m) => `  +${m.track} '${m.keyword}'${m.text.toLowerCase() !== m.keyword.toLowerCase() ? ` ("${m.text}")` : ""} · ${m.base || "—"} → ${({ shadowed: "shadowed (inside a longer strong phrase)", none: "no signal (a cue)", unbacked: "context, not backed by another signal" })[m.tier] || m.tier}${m.cue ? " (a cue)" : ""}${m.override ? " (a project override)" : ""}${m.negated ? ` · negated (${({ before: "a negator before it", after: "a phrase after it", list: "a negated list" })[m.negation] || m.negation})` : ""}`,
@@ -1305,22 +1307,22 @@ const msg = {
     },
     // 1.21 F2 — spec_tracks {action: "signals"} / dev-spec signals, and what spec_create learns from a Phase 0 correction
     signals: {
-      learnedPending: (t, w, e, n, min) => `Phase 0 correction recorded: '${w}' ${e === "off" ? `suggested +${t} and you left it off` : `was only a hint for +${t} and you added it`} (${n} of ${min} — after ${min} consistent corrections it ${e === "off" ? `no longer suggests +${t}` : `becomes ${({ weak: "a weak", strong: "a strong" })[e]} +${t} signal`} in this project; dev-spec signals list).`,
-      learnedActive: (t, w, e, n) => `Learned from ${n} consistent Phase 0 corrections: '${w}' ${e === "off" ? `no longer suggests +${t}` : `is ${({ weak: "a weak", strong: "a strong" })[e]} +${t} signal`} in this project (.specs/classifier.json — undo: dev-spec signals forget ${t} "${w}").`,
+      learnedPending: (t, w, e, n, min) => `Phase 0 correction recorded: '${w}' ${e === "off" ? `suggested +${t} and you left it off` : `was only a hint for +${t} and you added it`} (${n} of ${min} — after ${min} consistent corrections it ${e === "off" ? `no longer suggests +${t}` : `becomes ${({ weak: "a weak", strong: "a strong" })[e]} +${t} signal`} in this project; ${DEV_SPEC} signals list).`,
+      learnedActive: (t, w, e, n) => `Learned from ${n} consistent Phase 0 corrections: '${w}' ${e === "off" ? `no longer suggests +${t}` : `is ${({ weak: "a weak", strong: "a strong" })[e]} +${t} signal`} in this project (.specs/classifier.json — undo: ${DEV_SPEC} signals forget ${t} "${w}").`,
       learnedDropped: (t, w, e) => `This Phase 0 choice contradicts the override '${w}' → ${e} for +${t}: dropped (.specs/classifier.json).`,
-      learnFailed: (code) => `The Phase 0 correction was not recorded — ${code === "busy" ? ".specs/ is busy (another process holds its lock)" : `.specs/classifier.json can't be rewritten (${code}); dev-spec signals list says what to fix`}.`,
-      capped: (max) => `.specs/classifier.json is full (${max} overrides, all of them applying) — forget one (dev-spec signals forget <track> <word>) to record more.`,
+      learnFailed: (code) => `The Phase 0 correction was not recorded — ${code === "busy" ? ".specs/ is busy (another process holds its lock)" : `.specs/classifier.json can't be rewritten (${code}); ${DEV_SPEC} signals list says what to fix`}.`,
+      capped: (max) => `.specs/classifier.json is full (${max} overrides, all of them applying) — forget one (${DEV_SPEC} signals forget <track> <word>) to record more.`,
       badOp: (op) => `Unknown signals operation '${op}' — one of: list, set, forget.`,
-      needTrackWord: (op) => `signals ${op} needs a track and a word — dev-spec signals ${op} <track> <word>${op === "set" ? " off|weak|strong" : ""} (spec_tracks {action: "signals", op: "${op}", track, word${op === "set" ? ", effect" : ""}}).`,
+      needTrackWord: (op) => `signals ${op} needs a track and a word — ${DEV_SPEC} signals ${op} <track> <word>${op === "set" ? " off|weak|strong" : ""} (spec_tracks {action: "signals", op: "${op}", track, word${op === "set" ? ", effect" : ""}}).`,
       coreTrack: "core is always on — it has no signals to override.",
       badTrack: (t, list) => `No track '${t}' in this project — one of: ${list}.`,
       badWord: (w) => `'${w}' is not a signal word — letters and digits, with spaces, hyphens, apostrophes or dots inside, 2–60 characters (a literal word, never a pattern).`,
       badEffect: (e) => `Unknown effect '${e}' — one of: off (no signal), weak (an anchor: needs a second signal), strong (turns the track on alone).`,
-      notFound: (t, w) => `No override '${w}' for +${t} in .specs/classifier.json — dev-spec signals list shows them.`,
+      notFound: (t, w) => `No override '${w}' for +${t} in .specs/classifier.json — ${DEV_SPEC} signals list shows them.`,
       setDone: (t, w, e, prev) => `Set: '${w}' → ${e} for +${t} (${({ off: "no signal", weak: "a weak signal", strong: "a strong signal" })[e]}; applies from now on in this project)${prev ? ` — it was ${prev}` : ""}.`,
       forgotten: (t, w, e) => `Forgotten: '${w}' → ${e} for +${t} — the built-in signals apply again.`,
       listHead: (rel, n, active, min) => `${rel} — ${n} signal override(s), ${active} applying (a learned one applies after ${min} consistent Phase 0 corrections):`,
-      listNone: (rel) => `No signal override (${rel}) — spec_create learns them from Phase 0 corrections; dev-spec signals set <track> <word> off|weak|strong sets one.`,
+      listNone: (rel) => `No signal override (${rel}) — spec_create learns them from Phase 0 corrections; ${DEV_SPEC} signals set <track> <word> off|weak|strong sets one.`,
       listItem: (o, min) => `  +${o.track} '${o.word}' → ${o.effect} · ${o.origin === "set" ? "set by hand" : `learned, ${o.count} correction(s)`} · ${o.active ? "applies" : `pending (${o.count} of ${min})`}${o.unknownTrack ? " · no such track in this project now (unused)" : ""}${o.lastAt ? ` · ${o.lastAt.slice(0, 10)}` : ""}`,
       fileWarning: (rel, code, n) => `${rel} ${code === "invalid-entries" ? `holds ${n} invalid entr${n === 1 ? "y" : "ies"} — they are ignored, and the file is never rewritten until you fix or remove them by hand` : `is ignored and never rewritten — ${({ "invalid-json": "it is not valid JSON", "invalid-shape": "it holds no \"signals\" list", "too-big": "it is too big (64 KB at most)", "not-a-file": "it is not a regular file", unreadable: "it can't be read" })[code] || code}; fix it by hand or delete it`}.`,
       problem: (i, code) => `  entry ${i + 1}: ${({ "invalid-entry": "invalid (track, word, effect off|weak|strong, count ≥ 1, origin learned|set)", duplicate: "a duplicate of an earlier entry", "too-many": "beyond the 200-override bound" })[code] || code}`,
@@ -2122,6 +2124,10 @@ const msg = {
         (command ? `Stop and ask the user to run it themselves, in their own terminal or in Claude Code with the ! prefix (it runs as the user, not as your tool call): ${command}` : "Stop and ask the user to make that change themselves, in their own editor or terminal") +
         " — then wait for them. Do not retry it by another route (the MCP tool, the CLI, a script or an edit of .specs/ files). (meta.approvalGuard: deny.)",
       denyUser: (list, command) => `dev-spec approval guard refused an agent's request to ${list}.` + (command ? ` To approve it yourself: ${command}` : " Make that change yourself if you want it."),
+      // 1.21 review A4 — the MCP server's refusal (a client outside Claude Code, without elicitation): the plain command, no `!`
+      denyMcp: (list, command) => `dev-spec approval guard: refused — approvals are the human's, and an agent may not ${list}. ` +
+        (command ? `Stop and ask the user to run it themselves, in their own terminal: ${command}` : "Stop and ask the user to make that change themselves, in their own editor or terminal") +
+        " — then wait for them. Do not retry it by another route (the MCP tool, the CLI, a script or an edit of .specs/ files). (meta.approvalGuard: deny.)",
     },
     // 1.21 F1b — human approvals over MCP elicitation (mcp/server.js: spec_approve, spec_feature remove, spec_init lowering a guard,
     // while meta.approvalGuard is ask | deny and the MCP client can ask its user — elicitation/create). `message` and the field
@@ -2137,6 +2143,8 @@ const msg = {
       noteTitle: "Note",
       noteDesc: "Optional — recorded with the approval (one line).",
       declined: (list) => `The user declined in the MCP client: nothing recorded (${list}). Do not retry it another way — ask the user what should change.`,
+      // 1.21 review A6: action "accept" without approve: true — the user answered, but did not tick Approve
+      unapproved: (list) => `The user answered in the MCP client without ticking Approve: nothing recorded (${list}). Do not retry it another way — ask the user whether they approve it.`,
       cancelled: (list) => `The user dismissed the confirmation: nothing recorded (${list}). Ask the user before trying again.`,
       timedOut: (s, list) => `No answer from the user within ${s} s: nothing recorded (${list}). Ask the user to approve it themselves.`,
       failed: (why, list) => `The MCP client could not ask the user (${why}): nothing recorded (${list}). Ask the user to run the approval themselves.`,
@@ -2160,7 +2168,15 @@ const msg = {
       configSet: (key, value) => `git config ${key} = ${value}`,
       configRemoved: (key) => `git config: ${key} removed.`,
       configFailed: (why) => `git config failed: ${why}`,
-      teamNote: "git config is per clone: every teammate runs dev-spec merge-state --install once (without it, git falls back to its text merge).",
+      teamNote: `git config is per clone: every teammate runs ${DEV_SPEC} merge-state --install once — and again after each plugin update (git runs the driver by this plugin folder's path, which an update moves; ${DEV_SPEC} merge-state --check tells). Without it, git falls back to its text merge.`,
+      // 1.21 review A3 — merge-state --check (read only) and the SessionStart hook's line: is the configured driver still THIS clone's?
+      checkOk: (script) => `The spec state's merge driver is installed and runs this clone's CLI (${script}).`,
+      checkNone: `The spec state's merge driver is not installed here and .gitattributes doesn't name it — nothing to check (to install it: ${DEV_SPEC} merge-state --install).`,
+      checkNotInstalled: (file) => `${file} names the dev-spec-state merge driver, but this clone's git config has none — git falls back to its text merge (a .state.json both branches changed conflicts). Install it: ${DEV_SPEC} merge-state --install`,
+      checkOther: (script, cli) => `git runs the spec state's merge driver from ${script}, not from this clone's CLI (${cli}) — re-run: ${DEV_SPEC} merge-state --install`,
+      checkMissing: (script) => `git runs the spec state's merge driver from ${script}, which no longer exists (a plugin update moves the plugin to a new folder) — git then reports a conflict and keeps only your side of .state.json / roadmap.json. Re-run: ${DEV_SPEC} merge-state --install`,
+      checkNoGit: (dir) => `${dir} is not inside a git repository (or git is not installed) — there is no merge driver to check.`,
+      hookLine: (script, missing) => `⚠ The spec state's git merge driver runs ${script}, ${missing ? "which no longer exists (a plugin update moved the plugin)" : "not this plugin's CLI"} — a merge would keep only your side of .state.json / roadmap.json. Re-run: ${DEV_SPEC} merge-state --install`,
     },
     // Scoped steering: custom steering files (front matter inclusion: always | fileMatch | manual), the brief, doctor.
     scopedSteering: {
@@ -2743,6 +2759,11 @@ const msg = {
       resigning: (list) => `re-sign in progress (the phase stays approved as it was until every role has signed the new content): ${list}`,
       unsigned: (list) => `approved without the role sign-offs now required (approved before the roles were configured or changed — counted as approved by an unknown role; ask each role to re-sign): ${list}`,
       approveRoles: (phase, slug, missing, signed, first) => `Review & sign off '${phase}' — ${missing}${signed ? ` (signed: ${signed})` : ""}: /approve ${slug} ${phase} --role ${first}.`,
+      // 1.21 review A1 — every required role signed the current content, yet the phase has no approval (the sign-offs were recorded
+      // apart: on two branches git merged, or before a role was dropped). Any of them signs again and the phase is approved.
+      signedAll: (roles) => `every role signed: ${roles} — not approved yet`,
+      signoffsComplete: (list, cmd) => `every role signed off, but the phase was never approved (the sign-offs were recorded apart — on two merged branches, or before a role was dropped): ${list} — one of those roles signs again to complete it: ${cmd}`,
+      completeSignoffs: (phase, slug, signed, first) => `Every role has signed off '${phase}' (${signed}), but it isn't approved yet — the sign-offs were recorded apart (two merged branches?). One of them signs again to complete it: /approve ${slug} ${phase} --role ${first}.`,
       roadmapAwaiting: (list) => `awaiting role sign-off: ${list}`,
       resignHint: (list, cmd) => `Each role signs the new content again — ${list}: ${cmd}.`,
       ffBoth: "Pass either a phase or through (the fast-forward), not both.",

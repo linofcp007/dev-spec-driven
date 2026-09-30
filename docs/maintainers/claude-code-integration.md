@@ -95,7 +95,8 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
 - **Outside Claude Code the MCP server enforces it (1.21 F1b — mcp.md → Human approvals over MCP elicitation).** The same
   `approvalGuardDecision()` (its result also carries `summary`, the action line) runs inside server.js for spec_approve /
   spec_feature / spec_init: a client with elicitation asks its user (only an explicit approve records it, as `confirmed`); without
-  elicitation `ask` runs as before and `deny` is refused with the command. The plugin's `mcp/servers.json` sets
+  elicitation `ask` runs as before and `deny` is refused with the command (`{plain: true}`: the runnable line without the `!`,
+  a reason that doesn't mention it — 1.21 review A4). The plugin's `mcp/servers.json` sets
   `SPEC_MCP_APPROVAL_HOOK=on`: in Claude Code the hook stays the only gate (no second question) — this hook path is unchanged.
 - **A guardrail on the approve paths, not a sandbox:** an agent editing `.state.json` or running `node -e` isn't caught.
   `spec.CLI_SWITCHES` is the ONE list of CLI boolean switches (conventions.md → CLI boolean switches): a CLI-only switch would make this lexer

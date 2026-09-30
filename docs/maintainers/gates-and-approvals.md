@@ -166,7 +166,11 @@ flows, the bugfix kind.
   exactly like a single approval — so every reader of `approvals[<phase>]` (doctor approval-gates / `nextGate.missingRoles`
   / `pendingRoles`, next_action's "missing role", finish, ROADMAP.md attention, the guard hook, metrics) sees the phase
   approved only then. A sign-off of OLDER content no longer counts (`phaseContent()` fingerprints; a phase with no file —
-  tests, execution — keeps its sign-offs until approved). readState refuses a non-object `signoffs`.
+  tests, execution — keeps its sign-offs until approved). readState refuses a non-object `signoffs`. Every required role
+  with a CURRENT sign-off and still no approval (sign-offs made on two branches the merge driver united — it never approves —
+  or a role dropped from the config after the others signed): `pendingRoles[p].signoffsComplete` / `nextGate.signoffsComplete`
+  / next_action's `signoffsComplete` (1.21 review A1) — never missing roles; the recommendation asks one of them to sign
+  again, which completes the approval (conventions.md → Merging the spec state).
 - `spec_impact` returns `missingRoles` when the changed phase needs roles, and its "→ re-approve" line carries
   `--role <first>`; a fast-forward stopped by a role error says what it approved before (`ffWhyRole`).
 - **Legacy rule:** a phase approved WITHOUT the roles now required (approved before roles were configured, or before a
@@ -327,9 +331,12 @@ iron law, phase order, the finish / execution gate, every track criterion scaffo
   returns `bodies` {file: text} for the feature-folder `.md` files the call created (`createdBodies()`).
 - **`spec_finish`** builds a merge title + summary (`mergeTitle`/`mergeSummary`, `.execution/merge-summary.md`)
   from the spec chain; it never merges, pushes or approves. The title is `commitTitle(prefix, text)` (engine/finish.js,
-  1.21 F3): the WHOLE line ≤ 72 characters (`COMMIT_TITLE_MAX`; the text keeps at least 24); `shortTitle()` cuts the
-  first sentence at its last `,` `;` `—` `–` that fits (from a third of the budget on — no ellipsis there), else at a word
-  with `…`; the spike's `docs(<slug>): spike <outcome> — …` title too. A green run is evidence, not the `execution`
+  1.21 F3): the whole line ≤ 72 characters (`COMMIT_TITLE_MAX`) as long as the prefix leaves the text at least 24 — a
+  longer prefix (`feat(<slug>): ` with a slug over 40 characters) keeps 24 for the text, so the line is the prefix + up to
+  24 (a 60-character slug: up to 92); `shortTitle()` cuts the first sentence at its last `,` `;` `—` `–` that fits (from a
+  third of the budget on — no ellipsis there), else at a word with `…`; the spike's `docs(<slug>): spike <outcome> — …`
+  title too. Lengths are UTF-16 units (an emoji counts two) and a cut never splits a surrogate pair (`cutAt()`, 1.21
+  review A5 — a lone surrogate landed in merge-summary.md). A green run is evidence, not the `execution`
   sign-off: /spec-finish, SKILL.md and the spec_finish / spec_approve descriptions say to ask for an explicit yes
   first. **No PRs:** the owner's cost rule extends to
   pull requests — the plugin integrates by local merge only and must never steer users to open a PR or

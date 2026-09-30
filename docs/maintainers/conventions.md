@@ -64,9 +64,32 @@ and U+FEFF gotchas are in CLAUDE.md.
   file's other lines and EOL kept) in the project folder and this clone's git config `merge.dev-spec-state.name` / `.driver` =
   `node '<clone>/cli/dev-spec.js' merge-state %O %A %B %P` (forward slashes, single-quoted: git runs it through sh); `--uninstall`
   removes both (an emptied .gitattributes is deleted). Without `--install` in a clone, git falls back to its text merge (an
-  undefined driver name). **Known limits:** two branches that both approve the same phase write `.history/<phase>@<n>.md` under the
+  undefined driver name). **The sign-offs' drop rule runs on the 3-way RESULT** (`pruneSignoffs()`, 1.21 review A1): when only one
+  side changed `signoffs`, `mergeThree` hands that side back as it is, so the rule is applied after it too (a stale
+  `signoffs.<phase>.<role>` stayed next to the other side's later approval). **The driver never approves anything:** role
+  sign-offs of the same content made on two branches (tech on one, product on the other) merge into `signoffs[phase]` holding
+  EVERY required role while `approvals[phase]` stays absent — the driver can't read `meta.approvalRoles` (roadmap.json) and an
+  approval is a gate run, not a merge. The readers say it instead: `roleGateView()` marks the pending phase `signoffsComplete:
+  true` (every required role has a CURRENT sign-off — the content fingerprint — and no approval; the same happens when a role
+  is dropped from the config after the others signed), never as missing roles; doctor's approval-gates labels it and adds the
+  note (`governance.signoffsComplete`, `/approve <f> <phase> --role <a signed role>`), `nextGate.signoffsComplete`, next_action's
+  approve step (and the finished step for `execution`) recommends the re-sign (`governance.completeSignoffs`) with
+  `signoffsComplete: true` and no `missingRoles`. Any listed role signing again completes it (`recordRoleSignOff`). A re-merge
+  whose `mergeConflicts` list is still unresolved lists each conflict once (deduped by `mergeCanon`, 1.21 review A7).
+  **A stale driver path (1.21 review A3).** The git config names the CLI by its absolute path, and a plugin install lives in a
+  versioned folder (`plugins/cache/<marketplace>/dev-spec-driven/<version>/`): after an update the path is gone, git reports
+  CONFLICT (content), leaves ours without markers or a `mergeConflicts` list, doctor sees nothing and `git add` drops theirs.
+  `merge-state --check` (read-only: `git config --get merge.dev-spec-state.driver` + `.gitattributes`, `spec.mergeDriverStatus()`)
+  → `status` ok · none · not-installed · other · missing — exit 1 on the last three; `--check` is init's VALUE flag too
+  (`init --check name="cmd"`), so it is NOT in `CLI_SWITCHES`: main() turns a bare `merge-state --check` (its missing value) into
+  the switch. The SessionStart hook adds ONE line (`mergeState.hookLine`) when `.gitattributes` names the driver and the
+  configured one is `missing` / `other` — read as text: `repoGitConfigText()` (the nearest `.git`, a worktree's `.git` FILE →
+  gitdir → its `commondir` + `config.worktree`) and `gitConfigGet()` (git's own value syntax: quotes, escapes, comments,
+  continuation lines; the last definition wins) — no git process in a hook. teamNote / INSTALL.md / the tooling reference say
+  to re-run `merge-state --install` after each plugin update. **Known limits:** two branches that both approve the same phase write `.history/<phase>@<n>.md` under the
   same name — different content is a plain add/add conflict (keep the one `approvals[phase]` names); `decisions.md` entries both
-  sides appended conflict as text (and may share a D-n); clock skew between machines decides "later".
+  sides appended conflict as text (and may share a D-n); clock skew between machines decides "later"; the hook reads only the
+  repository's own config (a driver set in the global git config is `--check`'s alone).
 - **Feature mutators hold a cross-process lock** (`withFeatureLock` / `featureLocked` in the exports):
   `completeTask`, `approvePhase`, `appendTasks`, `addTrack` / `removeTrack`, `impactReport` with `reopen`,
   `finishFeature` with `write` or `evidence` (finishChecks), `decide`, `manageFeature`'s `flow`, `taskBrief` / `metrics` with `write` (a derived file written into the feature folder is a

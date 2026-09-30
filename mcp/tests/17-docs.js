@@ -347,6 +347,10 @@ exports.run = async ({
     const d6Desc = list.result.tools.find((t) => t.name === "spec_approve").description;
     ok(!/\n/.test(d6Desc) && /spec_finish's blockers:[^)]*\bsuite-evidence\b/.test(d6Desc) && /a spike: spike, decision/.test(d6Desc),
       "full review D6: spec_approve's description names the execution gate's suite-evidence and a spike's spike / decision checks");
+    // 1.21 review A8: no tool description runs two sentences together (spec_approve read "…the user runs).WAIVERS:")
+    const runTogether = list.result.tools.map((t) => [t.name, (t.description.match(/[a-z)\]`'"]\.[A-Z]{3,}/g) || [])]).filter((x) => x[1].length);
+    ok(!runTogether.length && /the user runs\)\. WAIVERS:/.test(d6Desc),
+      "1.21 review A8: every tool description leaves a space after a sentence before the next heading word (spec_approve's '…runs). WAIVERS:') (got " + JSON.stringify(runTogether) + ")");
     // D7: the demo is in the 1.14 shape (stamp, stored tracks, the .gitignore init writes) — no upgrade notice — and its
     // +tdd feature records the Phase 4 red run, so executing it as written leaves no red-green warning.
     const d7Src = path.join(root, "examples", "demo-project");

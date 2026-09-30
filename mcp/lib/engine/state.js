@@ -866,31 +866,38 @@ function mergeApprovals(hist) {
     return out;
   };
 }
-// signoffs[phase][role]: the later sign-off; one no later than a revocation of the phase or its merged approval is gone.
-function mergeSignoffs(hist, approvals) {
+// signoffs[phase][role]: the later sign-off (per role; a deleted-vs-changed entry keeps the change). The drop rule is
+// pruneSignoffs', applied to the 3-way RESULT.
+const mergeSignoffs = mergeMapWith(mergeMapWith((b, o, t, p, ctx) => (isObj(o) && isObj(t) ? laterAt(o, t) : mergeConflict(ctx, p, b, o, t))));
+// The drop rule (1.21 review A1): a waiting sign-off no later than a revocation of its phase or than the phase's merged approval
+// is gone — run on whatever the 3-way gave, also when only ONE side changed signoffs (mergeThree hands that side back as it is:
+// its sign-off stayed next to the other side's later approval). → the signoffs (the same object when nothing drops), or undefined
+// once none is left. The driver never APPROVES anything: sign-offs of every role made on two branches stay waiting sign-offs —
+// doctor / next_action say to complete them (any listed role signs again: approve <f> <phase> --role <role>).
+function pruneSignoffs(m, hist, approvals) {
+  if (!isObj(m)) return m;
   const revokedAt = revocationTimes(hist, true);
-  const role = (b, o, t, p, ctx) => (isObj(o) && isObj(t) ? laterAt(o, t) : mergeConflict(ctx, p, b, o, t));
-  const merge = mergeMapWith(mergeMapWith(role));
-  return (b, o, t, p, ctx) => {
-    const m = merge(b, o, t, p, ctx);
-    if (!isObj(m)) return m;
-    const out = {};
-    for (const ph of Object.keys(m)) {
-      if (!isObj(m[ph])) { setOwn(out, ph, m[ph]); continue; }
-      const cut = Math.max(ph in revokedAt ? revokedAt[ph] : -Infinity, isObj(ownVal(approvals, ph)) ? mergeTime(approvals[ph].at) : -Infinity);
-      const roles = {};
-      for (const r of Object.keys(m[ph])) if (!(isObj(m[ph][r]) && mergeTime(m[ph][r].at) <= cut)) setOwn(roles, r, m[ph][r]);
-      if (Object.keys(roles).length) setOwn(out, ph, roles);
+  const out = {};
+  let dropped = false;
+  for (const ph of Object.keys(m)) {
+    if (!isObj(m[ph]) || !Object.keys(m[ph]).length) { setOwn(out, ph, m[ph]); continue; }
+    const cut = Math.max(ph in revokedAt ? revokedAt[ph] : -Infinity, isObj(ownVal(approvals, ph)) ? mergeTime(approvals[ph].at) : -Infinity);
+    const roles = {};
+    for (const r of Object.keys(m[ph])) {
+      if (isObj(m[ph][r]) && mergeTime(m[ph][r].at) <= cut) dropped = true;
+      else setOwn(roles, r, m[ph][r]);
     }
-    return Object.keys(out).length ? out : undefined;
-  };
+    if (Object.keys(roles).length) setOwn(out, ph, roles);
+  }
+  if (!dropped) return m;
+  return Object.keys(out).length ? out : undefined;
 }
 // .state.json: the approval history first (approvals read its revocations), then approvals (the sign-offs read them).
 function mergeFeatureState(b, o, t, ctx) {
   const H = mergeThree(ownVal(b, "approvalHistory"), o.approvalHistory, t.approvalHistory,
     () => mergeHistoryBy(HISTORY_ID)(ownVal(b, "approvalHistory"), o.approvalHistory, t.approvalHistory, ["approvalHistory"], ctx));
   const A = mergeThree(ownVal(b, "approvals"), o.approvals, t.approvals, () => mergeApprovals(H)(ownVal(b, "approvals"), o.approvals, t.approvals, ["approvals"], ctx));
-  const SO = mergeThree(ownVal(b, "signoffs"), o.signoffs, t.signoffs, () => mergeSignoffs(H, A)(ownVal(b, "signoffs"), o.signoffs, t.signoffs, ["signoffs"], ctx));
+  const SO = pruneSignoffs(mergeThree(ownVal(b, "signoffs"), o.signoffs, t.signoffs, () => mergeSignoffs(ownVal(b, "signoffs"), o.signoffs, t.signoffs, ["signoffs"], ctx)), H, A);
   // lastApprovedPhase: the phase of the latest merged approval (the engine's own rule after an approval or a revocation).
   const lastApproved = () => {
     const list = isObj(A) ? Object.keys(A).filter((ph) => isObj(A[ph])) : [];
@@ -909,6 +916,11 @@ function mergeFeatureState(b, o, t, ctx) {
     const lap = mergeSame(A, o.approvals) ? ownVal(o, "lastApprovedPhase") : mergeSame(A, t.approvals) ? ownVal(t, "lastApprovedPhase") : lastApproved();
     if (lap === undefined) delete out.lastApprovedPhase;
     else setOwn(out, "lastApprovedPhase", lap);
+  }
+  // signoffs: always the pruned result (mergeObject's own 3-way hands back a side that alone changed them, unpruned).
+  if (own(o, "signoffs") || own(t, "signoffs")) {
+    if (SO === undefined) delete out.signoffs;
+    else setOwn(out, "signoffs", SO);
   }
   return out;
 }
@@ -981,7 +993,12 @@ function mergeStateText(baseText, oursText, theirsText, opts = {}) {
   let out = r.merged;
   if (r.conflicts.length && isObj(out)) {
     out = copyOwn(out);
-    setOwn(out, MERGE_CONFLICTS_KEY, (Array.isArray(out[MERGE_CONFLICTS_KEY]) ? out[MERGE_CONFLICTS_KEY] : []).concat(r.conflicts));
+    // 1.21 review A7: a re-merge with the list still unresolved reports the same conflicts again — each is listed once
+    // (mergeCanon: the same {path, base, ours, theirs}).
+    const seen = new Set();
+    const list = (Array.isArray(out[MERGE_CONFLICTS_KEY]) ? out[MERGE_CONFLICTS_KEY] : []).concat(r.conflicts)
+      .filter((c) => { const k = mergeCanon(c); if (seen.has(k)) return false; seen.add(k); return true; });
+    setOwn(out, MERGE_CONFLICTS_KEY, list);
   }
   const raw = String(oursText || "");
   const eol = /\r\n/.test(raw) ? "\r\n" : "\n";
@@ -1017,6 +1034,165 @@ function mergeConflictsCheck(projectDir, slug, state, lng) {
   return { id: "merge-conflicts", status: "fail", detail: i18n.msg(lng).mergeState.doctor(items.length, items.slice(0, 6).join(", ") + (items.length > 6 ? ", …" : "")) };
 }
 
+// ---------------------------------------------------------------------------
+// 1.21 review A3 — is the installed merge driver still THIS clone's? `merge-state --install` writes git config
+// merge.dev-spec-state.driver = `node '<clone>/cli/dev-spec.js' merge-state %O %A %B %P`; a plugin install lives in a versioned
+// folder (plugins/cache/<marketplace>/dev-spec-driven/<version>/), so after an update that path is gone — git then reports a
+// content conflict, leaves ours without markers or a mergeConflicts list, and `git add` drops theirs' changes silently. Read
+// only: `merge-state --check` passes the value `git config --get` read; the SessionStart hook passes nothing and the repository's
+// config is read here AS TEXT (no git process in a hook). Pure helpers first.
+// ---------------------------------------------------------------------------
+const MERGE_DRIVER_KEY = "merge." + MERGE_DRIVER + ".driver";
+// One value of a git config file's text (name "section.sub.key": section and key case-insensitive, the subsection exact; the old
+// `[section.sub]` form too) — the LAST definition wins, as in git. Values as git reads them: `#` / `;` comments outside quotes,
+// quotes dropped, the escapes \" \\ \n \t \b, a trailing backslash continues the line, unquoted whitespace kept inside and dropped
+// around. → the string, true (a key without `=`), or undefined.
+function gitConfigGet(text, name) {
+  const parts = String(name || "").split(".");
+  if (parts.length < 2) return undefined;
+  const wantSec = parts[0].toLowerCase(), wantKey = parts[parts.length - 1].toLowerCase(), wantSub = parts.length > 2 ? parts.slice(1, -1).join(".") : null;
+  const s = String(text || "").replace(/\r\n/g, "\n");
+  const n = s.length;
+  let i = s.charCodeAt(0) === 0xfeff ? 1 : 0;
+  let inSec = false, found;
+  const toEol = () => { while (i < n && s[i] !== "\n") i++; };
+  while (i < n) {
+    const c = s[i];
+    if (c === " " || c === "\t" || c === "\n") { i++; continue; }
+    if (c === "#" || c === ";") { toEol(); continue; }
+    if (c === "[") {
+      const m = /^\[[ \t]*([A-Za-z0-9.-]+)(?:[ \t]+"((?:[^"\\\n]|\\.)*)")?[ \t]*\]/.exec(s.slice(i, i + 4096));
+      if (!m) { inSec = false; toEol(); continue; }
+      i += m[0].length;
+      let sec = m[1], sub = m[2] === undefined ? null : m[2].replace(/\\(.)/g, "$1");
+      if (sub === null && sec.includes(".")) { sub = sec.slice(sec.indexOf(".") + 1).toLowerCase(); sec = sec.slice(0, sec.indexOf(".")); }
+      inSec = sec.toLowerCase() === wantSec && sub === wantSub;
+      continue;
+    }
+    const km = /^[A-Za-z][A-Za-z0-9-]*/.exec(s.slice(i, i + 256));
+    if (!km) { toEol(); continue; }
+    i += km[0].length;
+    const hit = inSec && km[0].toLowerCase() === wantKey;
+    while (i < n && (s[i] === " " || s[i] === "\t")) i++;
+    if (s[i] !== "=") { if (hit) found = true; if (s[i] === "#" || s[i] === ";") toEol(); continue; }
+    i++;
+    let val = "", quote = false, space = 0, comment = false, bad = false;
+    for (; i < n; i++) {
+      let ch = s[i];
+      if (ch === "\n") { if (quote) bad = true; break; }
+      if (comment) continue;
+      if ((ch === " " || ch === "\t") && !quote) { if (val.length) space++; continue; }
+      if (!quote && (ch === "#" || ch === ";")) { comment = true; continue; }
+      for (; space; space--) val += " ";
+      if (ch === "\\") {
+        const nx = s[i + 1];
+        i++;
+        if (nx === "\n") continue;
+        if (nx === "t") ch = "\t"; else if (nx === "b") ch = "\b"; else if (nx === "n") ch = "\n"; else if (nx === "\\" || nx === "\"") ch = nx;
+        else { bad = true; break; }
+        val += ch;
+        continue;
+      }
+      if (ch === "\"") { quote = !quote; continue; }
+      val += ch;
+    }
+    if (bad) { toEol(); continue; }
+    if (hit) found = val;
+  }
+  return found;
+}
+// The script a merge driver command runs: the word before `merge-state` (sh quoting read: '…' literal, "…" with \" \\ \$ \`,
+// a bare word with \x) — `node '/x/cli/dev-spec.js' merge-state %O %A %B %P` → "/x/cli/dev-spec.js". → the path, or null.
+function mergeDriverScript(command) {
+  if (typeof command !== "string") return null;
+  const words = [];
+  let w = null, i = 0;
+  const s = command;
+  while (i < s.length) {
+    const c = s[i];
+    if (c === " " || c === "\t" || c === "\n") { if (w !== null) { words.push(w); w = null; } i++; continue; }
+    if (w === null) w = "";
+    if (c === "'") { const e = s.indexOf("'", i + 1); if (e < 0) return null; w += s.slice(i + 1, e); i = e + 1; continue; }
+    if (c === "\"") {
+      i++;
+      while (i < s.length && s[i] !== "\"") {
+        if (s[i] === "\\" && "\"\\$`".includes(s[i + 1] || "")) { w += s[i + 1]; i += 2; continue; }
+        w += s[i++];
+      }
+      if (i >= s.length) return null;
+      i++;
+      continue;
+    }
+    if (c === "\\" && i + 1 < s.length) { w += s[i + 1]; i += 2; continue; }
+    w += c;
+    i++;
+  }
+  if (w !== null) words.push(w);
+  const at = words.indexOf("merge-state");
+  return at > 0 && words[at - 1] ? words[at - 1] : null;
+}
+// The repository's git config TEXT for the project folder (fs only): the nearest `.git` up from it — a folder, or a worktree's /
+// submodule's `.git` FILE (`gitdir: <path>`, relative to the file's folder); a linked worktree's settings live in the common dir
+// (`<gitdir>/commondir`), plus its own config.worktree (read after, so its values win). → { text, dir } | null
+function repoGitConfigText(projectDir) {
+  let dir = path.resolve(String(projectDir || "."));
+  for (let k = 0; k < 64; k++) {
+    const dotGit = path.join(dir, ".git");
+    let st = null;
+    try { st = fs.statSync(dotGit); } catch { st = null; }
+    if (st) {
+      let gitDir = dotGit;
+      if (st.isFile()) {
+        const m = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(fs.readFileSync(dotGit, "utf8"));
+        if (!m) return null;
+        gitDir = path.resolve(dir, m[1]);
+      }
+      let common = gitDir;
+      try { common = path.resolve(gitDir, fs.readFileSync(path.join(gitDir, "commondir"), "utf8").trim()); } catch { common = gitDir; }
+      const read = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return ""; } };
+      return { text: read(path.join(common, "config")) + "\n" + (common !== gitDir ? read(path.join(gitDir, "config.worktree")) : ""), dir: gitDir };
+    }
+    const up = path.dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  return null;
+}
+// The project's merge driver, checked (read only). opts.driver: the configured command when the caller read it (`git config --get`:
+// a string, or null when none is set); absent → read from the repository's config text. opts.cli: this clone's cli/dev-spec.js
+// (default: the engine's own clone). → { status, named, attributes, driver, script, cli } — status (stable): `ok` (it runs this
+// clone's CLI) · `none` (no driver and .gitattributes doesn't name it: nothing to check) · `not-installed` (.gitattributes names it,
+// this clone has no driver: git falls back to its text merge) · `other` (it runs another script, or a command that names none) ·
+// `missing` (it runs a script that doesn't exist — a plugin update moved the plugin).
+function mergeDriverStatus(projectDir, opts = {}) {
+  const attributes = path.join(path.resolve(String(projectDir || ".")), ".gitattributes");
+  let attrText = "";
+  try { attrText = fs.readFileSync(attributes, "utf8"); } catch { attrText = ""; }
+  const named = attrText.replace(/\r\n/g, "\n").split("\n").some((l) => { const w = l.trim().split(/\s+/); return w.length >= 2 && !w[0].startsWith("#") && w.slice(1).includes("merge=" + MERGE_DRIVER); });
+  const cli = path.resolve(typeof opts.cli === "string" && opts.cli ? opts.cli : i18n.DEV_SPEC_SCRIPT).replace(/\\/g, "/");
+  let driver;
+  if (own(opts, "driver")) driver = typeof opts.driver === "string" && opts.driver.trim() ? opts.driver.trim() : null;
+  else if (!named) driver = null; // the hook's cheap path: nothing names the driver — no config read
+  else {
+    const g = repoGitConfigText(projectDir);
+    const v = g ? gitConfigGet(g.text, MERGE_DRIVER_KEY) : undefined;
+    driver = typeof v === "string" && v.trim() ? v.trim() : null;
+  }
+  const res = { status: "none", named, attributes, driver, script: null, cli };
+  if (!driver) { res.status = named ? "not-installed" : "none"; return res; }
+  const script = mergeDriverScript(driver);
+  res.script = script;
+  if (!script) { res.status = "other"; return res; }
+  const norm = (p) => { const x = path.resolve(p).replace(/\\/g, "/"); return process.platform === "win32" ? x.toLowerCase() : x; };
+  let exists = false;
+  try { exists = fs.statSync(script).isFile(); } catch { exists = false; }
+  if (!exists) { res.status = "missing"; return res; }
+  let same = norm(script) === norm(cli);
+  if (!same) { try { same = norm(fs.realpathSync(script)) === norm(fs.realpathSync(cli)); } catch { same = false; } }
+  res.status = same ? "ok" : "other";
+  return res;
+}
+
 module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, legacySlugify, RE_WIN_RESERVED,
   RESERVED_SLUGS, reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState,
   stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, sha1Hex, fingerprintMatches,
@@ -1027,4 +1203,6 @@ module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, legac
   writeRoadmapFile, maybeRefreshRoadmap, roadmapReport, featureDirs, locateFeatures,
   // 1.21 F1a — the spec state's git merge driver
   MERGE_DRIVER, MERGE_KINDS, MERGE_ATTRIBUTE_PATHS, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY, mergeStateJson, mergeStateText,
-  mergeKindOfPath, mergeAttributes, mergeConflictsCheck, __link };
+  mergeKindOfPath, mergeAttributes, mergeConflictsCheck,
+  // 1.21 review A3 — the installed driver still this clone's? (merge-state --check, the SessionStart hook)
+  MERGE_DRIVER_KEY, gitConfigGet, mergeDriverScript, repoGitConfigText, mergeDriverStatus, __link };

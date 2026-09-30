@@ -91,7 +91,8 @@
  *                                      check, from git log (read-only, local; default 1000 commits); - reads a log from stdin
  *   merge-state <base> <ours> <theirs> [<path>]  git's merge driver for the spec state (%O %A %B %P): a semantic 3-way merge of
  *                                      .state.json / roadmap.json into <ours> (exit 1 = a real conflict, kept as valid JSON:
- *                                      "mergeConflicts"); --install / --uninstall writes .gitattributes + this clone's git config
+ *                                      "mergeConflicts"); --install / --uninstall writes .gitattributes + this clone's git config;
+ *                                      --check: does the configured driver still run THIS clone's CLI? (re-run --install after an update)
  *   upgrade [--apply]                  After a plugin update: audit .specs/ against the current rules (read-only);
  *                                      --apply runs the safe migrations + writes .specs/UPGRADE.md (exit 1 only on errors)
  *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap: ETA forecasts, cross-feature overlaps (+ .specs/ROADMAP.md / .html)
@@ -399,6 +400,10 @@ function main() {
   // 1.16 C1: the status line's render path runs before any flag / usage check — it must print its line or nothing, exit 0.
   if (cmd === "statusline" && !("print-config" in flags) && !("help" in flags)) return statusLineRender();
   refuseUnknownFlags(); // `--rnu` is an error (did you mean --run?), never a silent switch
+  // 1.21 review A3: `merge-state --check` is a switch there — `--check` is init's VALUE flag (init --check name="cmd"), so it can't
+  // join spec.CLI_SWITCHES (normalizeBoolFlags would refuse `init --check test="npm test"`, and the approval hook's lexer would read
+  // init's value as the next word): a bare `--check` after merge-state reads as on.
+  if (cmd === "merge-state" && missingValue === "check") { missingValue = null; flags.check = true; }
   if (missingValue) die(projectText().missingValue(missingValue));
   // --lang is checked once, like the MCP `lang` enum: an unknown value (fr, spanish, portugues…) is refused before any
   // command runs — the engine would quietly turn it into 'en' and SAVE it (init rewrote the project language).
@@ -511,6 +516,7 @@ function main() {
       const r = spec.createFeature(projectDir, name, tracks, flags.summary, undefined, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind,
         { brownfield: on("brownfield"), flow: flags.flow, question: flags.question, timebox: flags.timebox, // = spec_create {brownfield, flow, question, timebox,
           reproduction: flags.reproduction, rootCause: flags["root-cause"], condition: flags.condition, behaviour: flags.behaviour, // the bugfix prefill (1.21 F3)
+          cli: true, // 1.21 review A8: a refusal names the flag (--root-cause), not the MCP key (rootCause)
           includeBody: boolFlag("include-body") === true, // … includeBody} — the bodies are in the --json result
           size: flags.size }); // 1.21 F5: --size xs|s|m|l (= spec_create {size}; xs = a change: one change.md)
       if (!r.ok) return fail(r);
@@ -1443,8 +1449,13 @@ function main() {
       // conflict (ours kept at each, listed in the file as "mergeConflicts" — valid JSON, doctor fails merge-conflicts). The
       // generated overviews (ROADMAP.md / .html, SPECS.md) keep ours. --install / --uninstall: .gitattributes + this clone's
       // git config (merge.dev-spec-state.*) — the only git this command runs besides `git merge-file` for a hand-written overview.
+      // --check (1.21 review A3): read-only — does git config's driver still run THIS clone's CLI? (a plugin update moves it)
+      const msUsage = "dev-spec merge-state <base> <ours> <theirs> [<path>] · dev-spec merge-state --install | --uninstall | --check [--project <dir>]";
+      const check = flags.check === true || /^(?:true|1|yes|on)$/i.test(String(flags.check === undefined ? "" : flags.check));
+      if (flags.check !== undefined && !check && !/^(?:false|0|no|off)$/i.test(String(flags.check))) usage(msUsage);
+      if (check) { if (pos.length || on("install") || on("uninstall")) usage(msUsage); return mergeDriverCheck(); }
       if (on("install") || on("uninstall")) return mergeDriverSetup(on("uninstall"));
-      if (pos.length < 3 || pos.length > 4) usage("dev-spec merge-state <base> <ours> <theirs> [<path>] · dev-spec merge-state --install | --uninstall [--project <dir>]");
+      if (pos.length < 3 || pos.length > 4) usage(msUsage);
       return mergeStateRun(pos[0], pos[1], pos[2], pos[3]);
     }
 
@@ -1564,6 +1575,30 @@ function mergeDriverSetup(uninstall) {
 function mergeDriverCommand() {
   const cli = path.resolve(__filename).replace(/\\/g, "/");
   return "node '" + cli.replace(/'/g, "'\\''") + "' merge-state %O %A %B %P";
+}
+// merge-state --check (1.21 review A3): the configured driver (`git config --get merge.dev-spec-state.driver`, read only) against
+// THIS clone's CLI and the project's .gitattributes (spec.mergeDriverStatus). Exit 0: it runs this clone's CLI, or nothing names
+// the driver (nothing to check) · 1: it runs another or a missing script (a plugin update moved the plugin — git then drops
+// theirs' changes), .gitattributes names it while this clone has none, or not inside a git repository.
+function mergeDriverCheck() {
+  const M = spec.msg(spec.projectLang(projectDir)).mergeState;
+  const git = (args) => {
+    try { return spawnSync("git", args, { cwd: projectDir, encoding: "utf8", windowsHide: true, timeout: 30000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { return { error: e }; }
+  };
+  const top = git(["rev-parse", "--show-toplevel"]);
+  if (!top || top.error || top.status !== 0) return fail({ ok: false, error: M.checkNoGit(projectDir) });
+  const got = git(["config", "--get", spec.MERGE_DRIVER_KEY]); // exit 1: not set
+  const driver = got && !got.error && got.status === 0 ? String(got.stdout || "").trim() : null;
+  const s = spec.mergeDriverStatus(projectDir, { driver, cli: path.resolve(__filename) });
+  const res = { ok: true, action: "check", status: s.status, current: s.status === "ok", named: s.named, attributes: s.attributes, driver: s.driver, script: s.script, cli: s.cli };
+  if (!["ok", "none"].includes(s.status)) process.exitCode = 1;
+  return out(res, () => {
+    if (s.status === "ok") console.log(M.checkOk(s.script));
+    else if (s.status === "none") console.log(M.checkNone);
+    else if (s.status === "not-installed") console.log(M.checkNotInstalled(s.attributes));
+    else if (s.status === "missing") console.log(M.checkMissing(s.script));
+    else console.log(M.checkOther(s.script || s.driver, s.cli));
+  });
 }
 
 // 1.14 F5 — `trace <f> --matrix`: the requirements traceability matrix as a table (localized headers and notes; IDs as written).
@@ -1723,8 +1758,11 @@ function helpText() {
                                   writes "Part of .specs/<feature>/ task #N."), or its T-/AC IDs ("Makes T-01 green") — and, +tdd, a
                                   red-first check (implementation committed before its test?); reads git log (read-only, local, --max
                                   commits, default 1000); - reads a log from stdin (git log --name-only --relative)
-  merge-state --install [--project <dir>]   Teams: git merges the spec state SEMANTICALLY — .gitattributes (commit it) + this
-                                  clone's git config (merge.dev-spec-state.driver; every teammate runs it once); --uninstall removes both.
+  merge-state [--install|--uninstall|--check] [--project <dir>]   Teams: git merges the spec state SEMANTICALLY — .gitattributes
+                                  (commit it) + this clone's git config (merge.dev-spec-state.driver; every teammate runs it once, and
+                                  again after each plugin update — the driver names this clone's path); --uninstall removes both;
+                                  --check (read-only): exit 1 when the configured driver runs another or a missing script, or when
+                                  .gitattributes names the driver and this clone has none.
                                   Git then runs merge-state <base> <ours> <theirs> <path> on .state.json / roadmap.json: approvals,
                                   ticks, evidence and history of both branches are united; a real conflict (a meta value both sides
                                   set differently) exits 1 with ours kept and the file listing it under "mergeConflicts" (valid
@@ -1767,7 +1805,7 @@ function helpText() {
          --brownfield / --flow design-first (create)  --flow (feature flow)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
          --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
-         --text "<markdown>" (import plan|execplan|fluidplan)  --print-config (statusline)  --install / --uninstall (merge-state)
+         --text "<markdown>" (import plan|execplan|fluidplan)  --print-config (statusline)  --install / --uninstall / --check (merge-state)
          --guard on|off|scope / --stop-check on|off / --approval-guard off|ask|deny / --evidence reported|observed (init)  --message "…" / --agent <type> (stop-check)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
