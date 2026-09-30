@@ -344,7 +344,32 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   list), and not even that when a predicate — an auxiliary or a modal — follows the closing item ("Without payments, the
   checkout or a subscription page IS the priority"): another track's item or a predicate makes it a new clause's subject ("No
   LLM, the checkout or the subscription flow first", "Without an LLM or embeddings, the checkout or a subscription page is the
-  priority" keep +tdd). Measured below.
+  priority" keep +tdd). **1.21 verify P1 — whose adoption is negated (`subjectKeeps()`):** a VERBAL exclusion (not a nominal
+  negator, not a contrast — a contraction opening its stretch after a comma is still verbal) stands only when its SUBJECT is
+  the one designing: the first person (`FIRST_PERSON` we / I / our / let's / we're… · *nós, nosso · nosotros, nuestro* — or a
+  PT / ES first-person plural verb anywhere in the stretch, `firstPersonVerb()`: *usamos, vamos, decidimos, usaremos*, never
+  an adjective in -mos — `MOS_WORDS`), the system being built (`DESIGN_SUBJECTS`: system / service / app / API / feature / MVP
+  / version / release / page / checkout / webhook / logs… + PT / ES; `DESIGN_VERBISH` export / import / report / search and the
+  team, *a equipa, el equipo* only right after an article or a possessive — "Users export data", "the support team" are no
+  designing subject) or none at all (an imperative, an infinitive, "There is no need for…", *"Não é necessário
+  …", "No se necesita…"*). A role, a user group, a plan / tier / edition / account / tenant (`ROLE_SUBJECTS`: users, guests,
+  viewers, editors, admins, members, customers, tenants, accounts, plan(s) — not the verb "plan not to" / "plan to" —, tier,
+  edition, subscription, seats… + *utilizador(es), convidado(s), plano, conta(s), escalão · usuario(s), invitado(s), plan,
+  cuenta(s), nivel*…) states an access or entitlement rule, whatever the modal (can / can't / cannot / may / could, must /
+  should, *pode / deve · puede / debe*): the track stays — "Guests can't use the checkout", "Free users may not use the LLM
+  assistant", "Users on the free plan must not use the LLM assistant", "The Starter plan doesn't include the LLM assistant",
+  *"Os editores não podem adicionar feature flags", "Las cuentas de prueba no incluyen el asistente LLM"*. A subject in
+  neither list keeps the track too (the conservative default). The subject (`subjectOf()`): the nearest listed word back to
+  the clause start (the comma-free stretch), past a prepositional phrase ("Tenants ON the free plan", "The service FOR free
+  users", *"Um utilizador SEM subscrição"* — an article ends the phrase: "At launch the app…") and a relative clause ("Guests
+  WHO open the page", "Guests THAT…"); a listed noun right before another is its modifier ("the admin page"); a design noun
+  may be an earlier verb's object, so a role further back still keeps ("Guests can view the page but can't use the
+  checkout"); after a comma with no subject in the stretch the sentence's earlier words are read, and a role there keeps
+  ("Free users, however, can't use the checkout"; "For the MVP, don't use Kafka" still excludes). "cannot" is a negator like
+  "can't" (`NEGATORS`), and an EN "no" is read as verbal when a verb follows it (an ES "no" in a short text the guess reads as
+  English: "Los invitados no pueden usar el checkout"; "no longer uses"). An EN "no" right after an adoption verb negates its
+  noun for certain — only a role subject keeps it ("The free plan has no webhooks" +saas; "The MVP has no LLM", "WHEN the month
+  has no invoices" exclude). Measured below.
   **Measured (1.21 F2):** the verifier's 146 texts: +api 100% / 96.3% → 100% / 100%, +ui 100% / 74.2% → 100% / 100%, +obs
   91.2% / 100% → 100% / 100%; the reviewer's 205: +ui recall 87.0% → 88.9% (a banner), the rest unchanged; the 1.17 +dist
   corpus unchanged (96.8% / 100%). On 37,881 inputs (the logged classify inputs of both suites — 1.19, the 1.19 fix, 1.20 —,
@@ -397,6 +422,22 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   957, without X the checkout 629), N3 (don't want duplicate 949, Logs must not expose 171 — by the head noun), "We no longer
   use X" 55 (a governed exclusion), the new tests' texts (31) and two gap-keyword oddities; no logged input changed. Against
   427cd05 29,170, against 1.20 51,871. Every corpus 100% / 100% (+data: 133 texts). 50 / 100 / 200 KB: ≤ 0.15 / 0.3 / 0.62 s.
+  **Measured (1.21 verify P1):** the verifier's 859 sentences (rv/*.json incl. n4a – n4d, and the scratch sets) through 1.20 /
+  427cd05 / d10260f / the change: 30 decisions changed against d10260f — 27 role / plan sentences (n4c / n4d and their cmp6
+  copies) whose track is back (+ai, +tdd, +obs, +saas; "Free users may not use…", "Users on the free plan must not use…", "The
+  free plan does not include webhooks" and PT / ES, "O plano básico não suporta subscrições" are on for the first time — 1.20
+  lost them too), "A user who has no subscription cannot use the LLM assistant" (+tdd: the role's "has no subscription"),
+  "The LLM prompt must not include personal data" (+privacy: "the prompt" is no listed subject — the conservative keep) and one
+  test message; every n4a exclusion and n4b requirement reading unchanged. The keyword differential (141,741 inputs, a 73-frame
+  sweep: + "Guests can't / cannot use X", "Free users may not use X", "The free plan does not include / has no X", "The service
+  must not use X", "This feature does not require X", "Os convidados não podem usar X", "O plano gratuito não inclui X", "Los
+  invitados no pueden usar X", "El sistema no debe usar X", "We're not going to add X", "There is no need for X", "The MVP has no
+  X", "Decidimos não usar X", "Guests who open the page can't use X"): 7,589 changed against d10260f, NONE switching a track
+  off in the sweep — the role / plan frames keep X (7,543: 957 per frame, 1,034 / 863 / 861 for the relative clause, "has no"
+  and the ES one), "Mostrar X numa tabela no painel" twice (PT "no painel" is em + o: kept), one logged input ("a retried
+  request never charges twice" +tdd: "the request" is no designing subject) and the new tests' texts (43 — "The service /
+  We cannot use X" now exclude like can't); the designing-subject frames change nothing. Against 1.20 58,839. Every corpus
+  100% / 100%. 50 / 100 / 200 KB: ≤ 0.15 / 0.23 / 0.51 s.
 - **1.21 F2b — project-level signal overrides (`.specs/classifier.json`, classify.js).** A Phase 0 correction is learned:
   `createFeature` on a NEW plain feature (not a bugfix / spike / import — `cls` is not given) with explicit `tracks` and a
   non-empty summary compares the summary's classification (the suggestion classification.md records) with the chosen tracks
@@ -590,8 +631,11 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   "and", a contrast word, an unclosed comma or a comma after the closing "or" — and only an EXCLUSION opens one — and a negation excludes only when it certainly governs the keyword (a nominal negator with
   only fillers / modifiers between, an adoption verb, a plan / an intention); anything else keeps the track: "must not lose X or
   Y", "does not show X", a relative clause, a condition, a hazard (1.21 review B1, verify V1 / V5 / R1 / N1 — `negationOf()`) —
-  see 1.21 F2a above before widening `listLink()`, `GOVERN_ADOPT` or `GOVERN_AUX`, and prove it with the differential (1.20 /
-  the 1.21 base / the last release candidate / the change), the verifier's sentence sets and every B / V / R / N case in
+  and a negated adoption excludes only for a designing subject (the first person, the system, none): a role's or a plan's is an
+  access / entitlement rule ("Guests can't use the checkout", "The free plan does not include webhooks" — 1.21 verify P1,
+  `subjectKeeps()`) — see 1.21 F2a above before widening `listLink()`, `GOVERN_ADOPT`, `GOVERN_AUX` or the subject lists
+  (`ROLE_SUBJECTS` / `DESIGN_SUBJECTS`: a word in neither keeps the track), and prove it with the differential (1.20 / the 1.21
+  base / the last release candidate / the change), the verifier's sentence sets and every B / V / R / N / P case in
   04-tracks-builtin.js.
 - **Project signal overrides are the team's, never the engine's defaults.** A tuning that holds for everyone goes into
   `SIGNALS` (tracks.js); `.specs/classifier.json` is one project's learned or hand-set layer — never read it without a
