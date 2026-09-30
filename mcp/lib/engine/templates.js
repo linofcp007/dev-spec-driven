@@ -343,7 +343,7 @@ function parseTemplateText(key, text) {
   const put = (entry, x) => { const w = templateWildcard(x); if (w) entry.wild.push(w); else entry.set.add(x); };
   const brackets = { set: new Set(), wild: [] }, tasks = { set: new Set(), wild: [] };
   k.brackets.forEach((x) => put(brackets, x));
-  if (key === "tasks" || key === "bug-tasks") parseTasks(text).forEach((t) => put(tasks, taskDescription(t.text)));
+  if (key === "tasks" || key === "bug-tasks" || key === "change") parseTasks(text).forEach((t) => put(tasks, taskDescription(t.text)));
   return { brackets, code: new Set(k.code), tasks };
 }
 function buildProjectTemplateSets(root) {
@@ -365,7 +365,7 @@ function buildProjectTemplateSets(root) {
     const p = hit.parsed;
     merge(sets.brackets, p.brackets);
     p.code.forEach((x) => sets.code.add(x));
-    if (f.key === "tasks") merge(sets.tasks, p.tasks);
+    if (f.key === "tasks" || f.key === "change") merge(sets.tasks, p.tasks); // 1.21 F5: change.md holds the change's tasks
     if (f.key === "bug-tasks") merge(sets.bugSteps, p.tasks);
     if (f.key === "bug") merge(sets.bugSlots, p.brackets);
   }
@@ -425,6 +425,7 @@ function builtInTemplate(key, lang, tracks) {
     case "bug-tasks": return i18n.bugTasks(a.name, lang);
     case "spike": return i18n.msg(lang).spike.report({ name: a.name, question: a.summary }); // 1.14 C2: {{summary}} = the spike's question
     case "spike-tasks": return i18n.msg(lang).spike.tasks(a.name);
+    case "change": return i18n.change({ name: a.name, summary: a.summary }, lang); // 1.21 F5: a change's one file
     default: return null;
   }
 }

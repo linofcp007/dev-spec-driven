@@ -19,11 +19,11 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   const inPt = run(["templates", "init", "--lang", "pt", "--project", b1]);
   ok(in1.code === 0 && /1 built-in template\(s\) copied into \.specs\/templates\//.test(in1.out) && /\+ \.specs\/templates\/requirements\.md/.test(in1.out) &&
     fs.readFileSync(tpl("requirements.md"), "utf8").startsWith("# Feature: {{name}}") && in2.code === 0 && /Nothing copied/.test(in2.out) &&
-    inPt.code === 0 && /31 template\(s\) de base copiado\(s\) para \.specs\/templates\//.test(inPt.out) && fs.readFileSync(tpl("pt", "design.md"), "utf8").startsWith("# Design: {{name}}") &&
+    inPt.code === 0 && /32 template\(s\) de base copiado\(s\) para \.specs\/templates\//.test(inPt.out) && fs.readFileSync(tpl("pt", "design.md"), "utf8").startsWith("# Design: {{name}}") &&
     fs.existsSync(tpl("pt", "steering", "tech.md")),
-    "templates init <artifact> copies one built-in template (never over an existing one); init --lang pt copies all 31 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md; 1.19: + steering/api.md, ui.md) into .specs/templates/pt/, reported in Portuguese");
+    "templates init <artifact> copies one built-in template (never over an existing one); init --lang pt copies all 32 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md; 1.19: + steering/api.md, ui.md; 1.21 F5: + change.md) into .specs/templates/pt/, reported in Portuguese");
   const ckClean = run(["templates", "check", "--project", b1]);
-  ok(ckClean.code === 0 && /^32 template file\(s\) checked — 0 error\(s\), 0 warning\(s\)\./.test(ckClean.out), "templates check on the copied built-in templates: clean, exit 0");
+  ok(ckClean.code === 0 && /^33 template file\(s\) checked — 0 error\(s\), 0 warning\(s\)\./.test(ckClean.out), "templates check on the copied built-in templates: clean, exit 0");
   // A team template: used by `create`, variables substituted; a broken design template → check exits 1 naming the missing section.
   fs.writeFileSync(tpl("requirements.md"), "# Req — {{name}} ({{slug}}, {{tracks}})\n\n## Summary\n{{summary}}\n\n## Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN [nu trigger] THE SYSTEM SHALL [nu behaviour]\n");
   const cr = run(["create", "Team Report", "--tracks", "saas", "--summary", "Weekly numbers", "--json", "--project", b1]);

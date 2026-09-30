@@ -471,11 +471,11 @@ ${extra}
       if (s) {
         out.push("## Decisões, reutilização e riscos",
           "<!-- Uma resposta curta a cada. O que isto reutiliza (com o caminho) — ou \"nada a reutilizar\"; a opção escolhida, a",
-          "     rejeitada e porquê — ou \"nenhuma alternativa a ponderar\"; o que pode correr mal e como se deteta — ou \"nenhum",
+          "     rejeitada e porquê — ou \"nenhuma alternativa a ponderar\"; o que pode falhar e como se deteta — ou \"nenhum",
           "     risco relevante, porque X\". Em branco não é resposta. -->",
           "- **Reutilização:** [módulo ou helper existente reutilizado, com o caminho — ou nada a reutilizar]",
           "- **Decisão:** [a opção escolhida, a rejeitada e porquê]",
-          "- **Risco:** [o que pode correr mal e como se deteta — ou nenhum risco relevante, porque …]", "");
+          "- **Risco:** [o que pode falhar e como se deteta — ou nenhum risco relevante, porque …]", "");
       } else {
         out.push("## Reutilização e Integração",
           "<!-- Pesquisar antes de escrever (references/code-reuse-and-quality.md): o que esta feature aproveita do código existente",
@@ -545,8 +545,8 @@ ${extra}
      para ligar uma tarefa a um ficheiro de código real. -->
 
 ## Restrições Globais
-<!-- Valores exatos que todas as tarefas têm de respeitar, copiados literalmente da spec/steering — o spec_task_brief
-     inclui esta secção em cada brief de tarefa. -->
+<!-- Valores exatos que todas as tarefas têm de respeitar, copiados literalmente da spec/steering — o spec_task_brief copia
+     esta secção para cada brief de tarefa. -->
 - [ex.: Node >= 20 · sem dependências de runtime novas · campos da API em snake_case]
 
 ${body}`

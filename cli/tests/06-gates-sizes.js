@@ -39,6 +39,21 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
     "1.21 F5 (CLI): create --size xs / --kind change → ONE change.md; approve --through tasks approves its plan, a requirements approval is refused (exit 1); done --run ticks the task IN change.md; finish is ready; --size xl and a change with a track exit 1 (got " +
     JSON.stringify({ ch: ch.code, ap: ap.code, req: reqAp.code, done: [done.code, done.out.slice(0, 200)], fin: fin.code, bad: bad.code, tracked: tracked.code }) + ")");
 
+  // the hooks know a change: saving change.md lints its criteria AND traces its tasks; the observe hook logs a run of its _Verify:_
+  const { spawnSync } = require("child_process");
+  const hookDir = path.join(__dirname, "..", "hooks");
+  const hook = (name, payload) => spawnSync(process.execPath, [path.join(hookDir, name)], { input: JSON.stringify(payload), encoding: "utf8",
+    env: { ...process.env, CLAUDE_PROJECT_DIR: p, SPEC_PROJECT_DIR: p } });
+  const saved = hook("spec-hook.js", { hook_event_name: "PostToolUse", tool_name: "Write", cwd: p, tool_input: { file_path: path.join(p, ".specs", "footer-typo", "change.md") } });
+  const savedCtx = (() => { try { return JSON.parse(saved.stdout).hookSpecificOutput.additionalContext; } catch { return saved.stdout; } })();
+  const cmd = 'node -e "process.exit(0)"';
+  hook("observe-hook.js", { hook_event_name: "PostToolUse", tool_name: "Bash", cwd: p, session_id: "s1", tool_input: { command: cmd }, tool_response: { exit_code: 0, stdout: "" } });
+  const obsLog = path.join(p, ".specs", "footer-typo", ".execution", "observed.jsonl");
+  ok(saved.status === 0 && /EARS check: 1 criteria, all clean/.test(savedCtx) && /Traceability: all 1 ACs covered by tasks/.test(savedCtx) &&
+    fs.existsSync(obsLog) && fs.readFileSync(obsLog, "utf8").includes('"command":"node -e \\"process.exit(0)\\""'),
+    "1.21 F5 (hooks): saving a change's change.md reports its EARS check AND its traceability (one file holds both); the observe hook logs a run of the change's _Verify:_ command for that feature (got " +
+    JSON.stringify({ saved: savedCtx, obs: fs.existsSync(obsLog) }).slice(0, 600) + ")");
+
   // classify prints the suggested size (the same sizeNote spec_classify returns); status marks an optional section ○ at size s
   const cls = run(["classify", "add a CSV export button to the orders page", "--project", p]);
   const clsJ = JSON.parse(run(["classify", "add a CSV export button to the orders page", "--json", "--project", p]).out);

@@ -139,7 +139,7 @@ plugin? `/spec-tour` takes one tiny real change on the user's repo through every
 Phase 0 also picks a **size** (`spec_classify`'s `suggestedSize` is a draft; pass `spec_create {size}`): **xs** — a
 change: ONE `change.md` (summary, 1–3 EARS criteria, approach, 1–3 tasks with `_Verify:_`), core only, two approvals —
 the plan (`spec_approve {through: "tasks"}`) and execution; a track or a fourth task means size s. **s** — one story, no
-classification.md, each track's core-tier sections (an extended one may stay out, or answer "n/a — <reason>"); fill the
+classification.md, each track's core-tier sections (an extended one may stay out, or answer `n/a — <reason>`); fill the
 whole plan, then approve it in one call. **m / l** — the full chain, duplicate track sections merged. An XS bugfix drops
 the reproduce / root-cause tasks (their gates remain). No size = the pre-1.21 scaffold. Every size keeps EARS, trace,
 evidence, the iron law and the finish gate. `references/workflows.md`.
@@ -210,7 +210,8 @@ Steps: read steering → ask clarifying questions (don't guess) → fill the sca
 `ears_validate` (missing SHALL / IDs, vague words) → **run `spec_clarify`** (`/clarify`: vague terms, leftover
 placeholders, missing edge cases / NFRs / out-of-scope / IF…THEN failure paths, track gaps, unstated consistency) and
 ask the user → for a deeper one-question-at-a-time interrogation offer `/grill` (its constraints round: atomicity,
-isolation, races, consistency, idempotency, failures, volume) → present for approval.
+isolation, races, consistency, idempotency, failures, volume — minus what an active track's design sections already ask)
+→ present for approval.
 
 ### EARS Quick Reference
 | Pattern | Keyword | Example |
