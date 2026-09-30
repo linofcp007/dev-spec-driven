@@ -32,8 +32,10 @@ function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, DESIGN_WEIGH
 // absent or older than the engine.
 // ---------------------------------------------------------------------------
 
-// The engine's own version: package.json at the repo root (mcp/lib/engine → ../../../package.json), read once. null when it
-// can't be read or isn't x.y.z — then nothing is stamped and no notice is shown (never a guessed version).
+// The engine's own version: package.json at the repo root (mcp/lib/engine → ../../../package.json), read ONCE — as the engine
+// loads (the call below the function, 1.20 review): a long-lived process (the MCP server) reports, stamps and compares the
+// corpus stamp with (markdown.js) the version it LOADED, never one a `git pull` wrote under it since. null when it can't be
+// read or isn't x.y.z — then nothing is stamped and no notice is shown (never a guessed version).
 let ENGINE_VERSION = undefined; // undefined: not read yet — initialized, so it never reads as a linked name (mcp/test.js)
 function engineVersion() {
   if (ENGINE_VERSION === undefined) {
@@ -45,6 +47,7 @@ function engineVersion() {
   }
   return ENGINE_VERSION;
 }
+engineVersion(); // at load: the version this process runs (package.json only, and parseSemver — nothing linked yet)
 // "1.13.0" / "v1.13.0" / "1.14.0-beta.2" → { nums: [1, 13, 0], pre: ["beta", "2"] | null }; anything else → null.
 function parseSemver(v) {
   const m = /^v?(\d{1,9})\.(\d{1,9})\.(\d{1,9})(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(String(v == null ? "" : v).trim());

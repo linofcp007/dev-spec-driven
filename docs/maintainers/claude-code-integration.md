@@ -3,7 +3,9 @@
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
 The hook rules, guard mode (edit guard), the human approval guard, the status line, user defaults, MCP annotations and
 the plan-mode bridge. The hooks.json rule is in CLAUDE.md; the scope guard's rule is in tasks-and-evidence.md →
-End-of-turn evidence gate and scope guard.
+End-of-turn evidence gate and scope guard. A hook's process I/O and its folder lookups follow conventions.md — flush stdout
+before exiting (never `process.exit()` right after a write), a feature's folder through `resolveFeature()` /
+`existingFeature()`.
 
 ## Hooks and commands (from Conventions & gotchas)
 - **Hooks never block and stay cheap.** Every hook exits 0 on any error or irrelevant event, emits at most
@@ -91,7 +93,7 @@ End-of-turn evidence gate and scope guard.
   [--force] [--project "…"]` (`approvalCommand()`: a value from the agent's call goes in only when it is plainly safe to
   paste into bash / PowerShell, else a `<placeholder>`; the `!` line run by the agent itself is still an approval).
 - **A guardrail on the approve paths, not a sandbox:** an agent editing `.state.json` or running `node -e` isn't caught.
-  `spec.CLI_SWITCHES` is the ONE list of CLI boolean switches (see Conventions): a CLI-only switch would make this lexer
+  `spec.CLI_SWITCHES` is the ONE list of CLI boolean switches (conventions.md → CLI boolean switches): a CLI-only switch would make this lexer
   read the next word as its value.
 - **The lexer (review fixes).** `shellCommandWords(cmd, mode)` lexes by the tool's shell: `bash` (`\x`, `\⏎`, `$'…'`,
   `$( )` / backticks also inside "…"; `raw` keeps backslashes for Windows paths), `ps` (the backtick is PowerShell's escape

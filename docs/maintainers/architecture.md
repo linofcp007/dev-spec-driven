@@ -82,7 +82,7 @@ mcp/test.js                    the MCP suite's entry point — `node mcp/test.js
 mcp/tests/                     its files, one per area: NN-<area>[-<topic>].js (each exports run(ctx)) + harness.js (the
                                server under test, ok / rpc / payload, the shared helpers) — see testing.md → The suites
 cli/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; also prints MCP configs, rule files and prompts)
-cli/test-cli.js                the CLI suite's entry point — `node cli/test-cli.js` (never a top-level bin/, see below)
+cli/test-cli.js                the CLI suite's entry point — `node cli/test-cli.js` (never a top-level bin/: CLAUDE.md → Never ship a top-level bin/)
 cli/tests/                     its files: NN-<area>-<topic>.js (NN = the same area numbers as mcp/tests/) + harness.js
 scripts/build.js               `npm run build`: the committed corpus (--check: exit 1 when stale) · --bundle [--out]: the bundle
 scripts/test-runner.js         the runner both suites share: files → chains (deps) → parallel processes, --only / --list
@@ -177,10 +177,17 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   CLI call (1.19's SessionStart was ~20% slower than 1.18's for it). The build renders it ONCE with the engine's own
   functions (`renderCorpusData()`: the sets' members, sorted) into the JSON file, stamped `version` (package.json) and
   `sources` — a sha1 over `CORPUS_SOURCES` (markdown.js): the eleven mcp/lib files the render runs through. On the first
-  placeholder question a process reads the file (one `JSON.parse`, ~38 KB) and uses it only while `version` is
-  `engineVersion()` and `sources` is the hash of those files NOW (re-read: ~2 ms natively); otherwise — a clone hand-edited
-  and not rebuilt, a missing or broken file — it renders exactly as before: never a wrong answer, only a slower one
-  (`builtinCorpusSource()`: `file` · `bundle` · `render`). mcp/test.js proves `CORPUS_SOURCES` with V8 coverage (every
+  placeholder question a process reads the file (one `JSON.parse`, ~38 KB) and uses it only while it matches the engine the
+  process LOADED: `version` is `engineVersion()` — package.json read as the engine loads, never later — and `sources` is the
+  hash of the sources as they were at load. markdown.js stats every source as it loads (`LOADED_STATS`: size, mtime, ctime —
+  one stat each, no read, ~0.5 ms); the first question re-reads and hashes them (~2 ms natively) and trusts the file only
+  while every stat is still the load-time one (stat'ed after the hash). A language file i18n.js loads on first use (`onLocaleLoad`) that
+  changed since the engine loaded, after the corpus was trusted, drops it (`localeLoaded`: the sets render again). So a
+  long-lived process — the MCP server — under which a `git pull` / `npm run build` rewrote the sources AND the corpus renders
+  from the code it runs, never trusts the new corpus (1.20 review — the race mcp/tests/16-conventions.js reproduces in child
+  processes). Otherwise too — a clone hand-edited and not rebuilt, a missing or broken file — it renders exactly as before:
+  never a wrong answer, only a slower one (`builtinCorpusSource()`: `file` · `bundle` · `render`). An edit that keeps a
+  source's size, mtime AND ctime is the accepted limit. mcp/test.js proves `CORPUS_SOURCES` with V8 coverage (every
   mcp/lib file whose functions run during `renderCorpusData()` is listed — a render that starts to depend on another module
   makes that test name it), and that a rendered corpus decides every fresh scaffold text exactly as the committed one. The
   per-project part (the project's templates, its track packs — `projectTemplateHas`, `packCorpusSets`) stays per call. Only
@@ -200,7 +207,10 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   to a `.js` file, else ignored: the default place) — and only while it is CURRENT: its version stamp is package.json's and
   every module it holds still has the size and mtime it was built with — one `stat` per module, no read (38 stats: ~1 ms
   natively, ~95 ms on a Docker Desktop bind mount, where one open + read costs more). A `git pull` / plugin update, even to
-  the same version, changes the files' mtimes: the old bundle is never run. Missing, broken, stale or of another version →
+  the same version, changes the files' mtimes: the old bundle is never run. **An edit that keeps a module's size AND its
+  mtime is undetectable by this check** (a same-length change within the file system's mtime granularity, a tool that
+  restores the mtime) — an accepted limit, the price of one stat per module and no read: rebuild the bundle after editing a
+  module (or leave DEV_SPEC_BUNDLE unset while you edit). Missing, broken, stale or of another version →
   the modules, silently (hooks and the status line print nothing about it). Compare in the environment that built it: a
   bundle built on the host and read through a bind mount may see other mtime precision — it is then simply ignored; build it
   where it runs (`dev-spec bundle --out /tmp/…` in a container with a read-only mount). Opt-in because natively it gains

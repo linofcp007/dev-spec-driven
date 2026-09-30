@@ -131,18 +131,35 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
       S.statusLineProject([none, path.join(sl2, "lib")]) === path.resolve(sl2) && [...cut].length === 24 && cut.endsWith("…"),
       "1.16 C1: no feature → a hint line; no .specs/ → nothing; the project is the nearest dev-spec .specs/ at or above the folder (unexpanded / empty candidates skipped); cut to the width (got " +
       JSON.stringify([sl3r.line, slNone, cut]) + ")");
-    // Bounded: 50 features read in well under a second once the engine is warm.
-    const sl50 = path.join(cRoot, "status-50");
-    withOpts({}, () => { S.initProject(sl50, ["core"], "en"); S.createFeature(sl50, "Feature 0", ["core"], "x", undefined, "en"); });
-    for (let i = 1; i < 50; i++) fs.cpSync(path.join(sl50, ".specs", "feature-0"), path.join(sl50, ".specs", "feature-" + i), { recursive: true });
-    const t50 = Date.now();
-    const r50 = S.statusLine(sl50);
-    const first50 = Date.now() - t50;
-    const t50w = Date.now();
-    for (let i = 0; i < 3; i++) S.statusLine(sl50);
-    const warm50 = (Date.now() - t50w) / 3;
-    ok(r50.features === 50 && typeof r50.line === "string" && r50.line.startsWith("◆ feature-") && first50 < 3000 && warm50 < 1000,
-      "1.16 C1: a 50-feature project — one line, bounded time (first " + first50 + " ms, warm " + warm50.toFixed(1) + " ms per call)");
+    // Bounded: 50 features read in well under a second once the engine is warm. 1.20 review: relative to a 5-feature project
+    // measured just before (the absolute bounds shared the machine with the parallel runner — warm 730 ms against 1 s): linear
+    // is ~10× it, so 20× (or the old 3 s / 1 s floors, which hold on an idle machine) still catches a big slowdown; a
+    // timing-only miss is measured once more.
+    const slProject = (name, n) => {
+      const dir = path.join(cRoot, name);
+      withOpts({}, () => { S.initProject(dir, ["core"], "en"); S.createFeature(dir, "Feature 0", ["core"], "x", undefined, "en"); });
+      for (let i = 1; i < n; i++) fs.cpSync(path.join(dir, ".specs", "feature-0"), path.join(dir, ".specs", "feature-" + i), { recursive: true });
+      return dir;
+    };
+    const sl5 = slProject("status-5", 5), sl50 = slProject("status-50", 50);
+    const slTimes = (dir) => { // warm = the best of 3 calls: a slowdown shows in every call, a busy machine's spike in one
+      const t0 = Date.now();
+      const r = S.statusLine(dir);
+      const first = Date.now() - t0;
+      const warm = [0, 1, 2].map(() => { const t1 = Date.now(); S.statusLine(dir); return Date.now() - t1; });
+      return { r, first, warm: Math.min(...warm) };
+    };
+    const slMeasure = () => {
+      const base = slTimes(sl5), big = slTimes(sl50);
+      const bounds = { first: Math.max(3000, 20 * Math.max(base.first, 5)), warm: Math.max(1000, 20 * Math.max(base.warm, 1)) };
+      return { base, big, bounds, fast: big.first < bounds.first && big.warm < bounds.warm };
+    };
+    let sl50m = slMeasure();
+    if (!sl50m.fast) sl50m = slMeasure(); // a timing-only miss: measured once more
+    const r50 = sl50m.big.r;
+    ok(r50.features === 50 && typeof r50.line === "string" && r50.line.startsWith("◆ feature-") && sl50m.base.r.features === 5 && sl50m.fast,
+      "1.16 C1: a 50-feature project — one line, bounded time (first " + sl50m.big.first + " ms, warm " + sl50m.big.warm + " ms per call — best of 3; 5 features: " +
+      sl50m.base.first + " / " + sl50m.base.warm + " ms; bounds " + JSON.stringify(sl50m.bounds) + ")");
 
     // --- C2: the user's defaults (DEV_SPEC_<KEY> environment variables) — fallbacks only; the project's meta wins ---
     const u1 = path.join(cRoot, "opts-fresh");

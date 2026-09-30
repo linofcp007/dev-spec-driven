@@ -16,7 +16,8 @@
  * Every chain runs in its own child process (its own temp dir and, for the MCP suite, its own server), at most one per
  * CPU at a time; the output is printed file by file in file order, then ONE total. The LAST line is always
  * `N passed, M failed` — scripts/test-docker.js reads it — and a chain that dies without its total fails the suite (the
- * run never drains to exit 0).
+ * run never drains to exit 0). An assertion a file makes after its run() resolved (a forgotten await) is a FAIL — a "late
+ * assertion", labelled with its file — never a silent pass or a lost line.
  *
  *   node <suite> [--only <file|area|NN>[,…]]... [--list] [--times] [--jobs <n>] [--help]
  */
@@ -67,13 +68,15 @@ function readTimes(key) {
   } catch { return {}; }
 }
 function writeTimes(key, stats) {
+  const f = timesFile(key), part = `${f}.${process.pid}.tmp`;
   try {
     const t = readTimes(key);
     for (const s of stats) t[s.stem] = s.ms;
-    const f = timesFile(key), part = `${f}.${process.pid}.tmp`;
     fs.writeFileSync(part, JSON.stringify(t, null, 1));
     fs.renameSync(part, f);
-  } catch {}
+  } catch {
+    try { fs.unlinkSync(part); } catch {} // a refused rename (EPERM: the file held open, a folder of that name) leaves no .tmp
+  }
 }
 
 // The suite's files, in name order: { stem, nn, name, file, deps, handshake, head }. A malformed deps list, a dependency
@@ -163,7 +166,11 @@ function parseArgs(argv, usage) {
       return v;
     };
     if (a === "--help" || a === "-h") { console.log(usage); exitFlushed(0); return null; }
-    else if (a === "--only" || a.startsWith("--only=")) o.only.push(...val().split(",").map((t) => t.trim()).filter(Boolean));
+    else if (a === "--only" || a.startsWith("--only=")) {
+      const v = val(), tokens = v.split(",").map((t) => t.trim()).filter(Boolean);
+      if (!tokens.length) usageError(`--only needs a file, an area or NN (got '${v}')`, usage); // `--only ,` never means "all"
+      o.only.push(...tokens);
+    }
     else if (a === "--list") o.list = true;
     else if (a === "--times") o.times = true;
     else if (a === "--jobs" || a.startsWith("--jobs=")) {
@@ -218,14 +225,16 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
   sweepStaleTmp(opts.tmpPrefix);
 
   const t0 = Date.now();
+  // out: stdout and stderr as they came (what is printed) · stdout alone: where the total is read — a Node warning a chain
+  // writes to stderr after its total line never voids the count.
   const runChain = (chain) => new Promise((resolve) => {
-    let out = "";
+    let out = "", stdout = "";
     const started = Date.now();
     const kid = spawn(process.execPath, [opts.entry], { env: { ...process.env, [CHAIN_ENV]: chain.map((f) => f.stem).join(",") }, stdio: ["ignore", "pipe", "pipe"] });
-    kid.stdout.on("data", (d) => (out += d));
+    kid.stdout.on("data", (d) => { out += d; stdout += d; });
     kid.stderr.on("data", (d) => (out += d));
-    kid.on("error", (e) => resolve({ chain, out: out + "\n" + e.message, code: 1, ms: Date.now() - started }));
-    kid.on("close", (code) => resolve({ chain, out, code, ms: Date.now() - started }));
+    kid.on("error", (e) => resolve({ chain, out: out + "\n" + e.message, stdout, code: 1, ms: Date.now() - started }));
+    kid.on("close", (code) => resolve({ chain, out, stdout, code, ms: Date.now() - started }));
   });
   // At most one process per CPU at a time (each MCP chain also runs its own server), the longest chains first; results
   // keep the chain order.
@@ -240,9 +249,12 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
     let passed = 0, failed = 0;
     const stats = [];
     for (const r of all) {
-      const m = r.out.match(RE_TOTAL);
+      const m = r.stdout.match(RE_TOTAL);
       for (const s of r.out.matchAll(RE_FILE_STATS)) stats.push({ stem: s[1], passed: +s[2], failed: +s[3], ms: +s[4] });
-      process.stdout.write(r.out.replace(RE_FILE_STATS, "").replace(RE_TOTAL, "\n"));
+      let shown = r.out.replace(RE_FILE_STATS, "");
+      const at = m ? shown.lastIndexOf(m[0].trimEnd()) : -1; // the chain's total line leaves (whatever stderr wrote after it stays)
+      if (at >= 0) shown = shown.slice(0, at) + "\n" + shown.slice(at + m[0].trimEnd().length).replace(/^[ \t]*\r?\n/, "");
+      process.stdout.write(shown);
       if (m) { passed += +m[1]; failed += +m[2]; }
       // A chain that died (or never printed its total) fails the suite — never let it drain to exit 0.
       if (!m || (r.code !== 0 && +m[2] === 0)) {
@@ -263,9 +275,26 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
   });
 }
 
+// Before the total: let what a forgotten await left behind run while it can still be counted — one macrotask, then, while
+// a timer is pending (an MCP rpc keeps its 15 s reply timer until the reply comes; a setTimeout), up to SETTLE_MAX_MS more.
+// A clean chain has none and waits for nothing. process.getActiveResourcesInfo() lists ref'd timers only (Node ≥ 17.3).
+const SETTLE_MAX_MS = 3000;
+async function settle() {
+  const t0 = Date.now();
+  await new Promise((resolve) => setImmediate(resolve));
+  const pending = () => typeof process.getActiveResourcesInfo === "function" &&
+    process.getActiveResourcesInfo().some((r) => r === "Timeout" || r === "Immediate");
+  while (pending() && Date.now() - t0 < SETTLE_MAX_MS) await new Promise((resolve) => setTimeout(resolve, 10));
+}
+
 // A child: run the files of one chain, in order, in this process. `setup(files)` → { ctx, counts(), fail(label), end() } —
 // the suite's harness (its server, its temp dir, its helpers); the runner reports each file, then hands over to end(),
 // which prints the total line and exits.
+// Each file gets its own `ok`: one it calls after its run() has resolved (a forgotten await — an rpc's .then, a timer, a
+// child's callback) is a FAIL labelled with the file ("late assertion"), whenever it fires — during a later file, while the
+// chain settles, or after end() printed the total (the total is printed again, so the last line stays the count). Before,
+// such an assertion passed silently into another file's count, or was dropped: the CLI harness exits at once, the MCP
+// harness's total stopped being the last line ("without a clean total").
 async function runChildChain(opts) {
   const stems = String(process.env[CHAIN_ENV]).split(",").filter(Boolean);
   const files = loadFiles(opts.dir);
@@ -275,19 +304,29 @@ async function runChildChain(opts) {
     return exitFlushed(1);
   }
   const h = await opts.setup(chain);
+  let ended = false;
+  const late = (f, label) => {
+    h.fail(`late assertion from ${f.stem} — it ran after the file's run() had resolved (a missing await?): ${label}`);
+    if (ended) { const c = h.counts(); console.log(`\n${c.pass} passed, ${c.fail} failed`); }
+  };
   for (const f of chain) {
     console.log(`# ${f.stem}`);
     const before = h.counts();
     const t0 = Date.now();
+    let open = true;
+    const ok = (cond, label) => (open ? h.ctx.ok(cond, label) : late(f, label));
     try {
-      const left = await require(f.file).run(h.ctx);
+      const left = await require(f.file).run({ ...h.ctx, ok });
       if (left && typeof left === "object") Object.assign(h.ctx, left); // values for the files that need this one
     } catch (e) {
       h.fail(`${f.stem} threw: ${(e && e.stack) || e}`);
     }
+    open = false;
     const after = h.counts();
     console.log(`#file ${f.stem} ${after.pass - before.pass} ${after.fail - before.fail} ${Date.now() - t0}`);
   }
+  await settle();
+  ended = true;
   h.end();
 }
 

@@ -75,7 +75,7 @@ the engine's resolver), (2) the `dev-spec` CLI for any tool/terminal, (3) Claude
 requires `mcp/lib/spec.js` — never an engine module directly.
 When you add an operation, add it to the engine module of its concern first (see Layout), export it from the facade's
 object in `spec.js`, then wire it into server.js (tool) AND
-cli/dev-spec.js (subcommand) AND mcp/test.js (assertion). Keep the CLI and MCP behavior identical —
+cli/dev-spec.js (subcommand) AND a test in the area's mcp/tests file. Keep the CLI and MCP behavior identical —
 both call the same engine function with the same defaults (e.g. `roadmapReport()` backs `spec_roadmap`
 and `dev-spec roadmap`; `approvePhase()` has one default approver, `$USER`/`$USERNAME`/`user`).
 Any user-facing string the operation GENERATES or RETURNS goes through `mcp/lib/i18n.js` (EN/PT/ES),
