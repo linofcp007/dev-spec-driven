@@ -15,7 +15,12 @@ matrix.
   and requires the synonym to START the heading (after marker / numbering / "Section N:" / an emoji), word-bounded; a
   track section also accepts an English inflection of its name (s / es / ing — "Threat Modeling").
   "Unfilled" = the `> **TODO**` sentinel is still there OR the body is empty. `spec_status` reports each
-  section as present + filled (CLI ✓ filled · ◐ unfilled · ✗ missing).
+  section as present + filled (CLI ✓ filled · ◐ unfilled · ✗ missing; a sized feature's ○ optional, ✓ covered).
+  **1.21 F5:** "template" = every visible line is a line of a track design block as the scaffold wrote it
+  (`sectionOwnLines()` — exact lines of the built-in blocks, EN / PT / ES, pt-BR's for a pt-BR feature, the project's
+  packs'; a guidance line the user edited is theirs) — it fails a new approval and warns on an approved design; a sized
+  feature's `na` / `na-short` (an `n/a — <reason>` answer) and `covered` (TRACK_OVERLAPS) — every gate reads them through
+  `trackSectionReport()` + `sectionVerdict()` (gates-and-approvals.md → Right-sized rigor).
 - **AC/test IDs**: `US-<n>.AC-<n>` and `T-<n>`. Extraction uses a lookbehind guard, NOT `\b` —
   markdown italics (`_US-1.AC-1_`) make `\b` fail because `_` is a word char. Don't reintroduce `\b`.
   A test-plan row covering an AC requirements.md doesn't define is a gap (`phantomAcsInTests`, +tdd; fenced examples

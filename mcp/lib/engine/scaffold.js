@@ -26,7 +26,8 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   stripHashComment, stripHtmlComments, taskBlocks, taskMarkers, textFingerprint, toPosix, trackAcIds, trackLabel,
   trackMarker, trackRunRe, trackSteeringFiles, trackSteeringStub, trackTaskHeading, trackTokens, unknownSteeringStub,
   unknownTracksError, userDefaultsApplied, VALID_TRACKS, validateApprovalRoles, withRoadmapLock, writeChecks,
-  writeFileAtomic, writeIfAbsent, writeRoadmap;
+  writeFileAtomic, writeIfAbsent, writeRoadmap,
+  CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs;
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -41,7 +42,8 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   stripHashComment, stripHtmlComments, taskBlocks, taskMarkers, textFingerprint, toPosix, trackAcIds, trackLabel,
   trackMarker, trackRunRe, trackSteeringFiles, trackSteeringStub, trackTaskHeading, trackTokens, unknownSteeringStub,
   unknownTracksError, userDefaultsApplied, VALID_TRACKS, validateApprovalRoles, withRoadmapLock, writeChecks,
-  writeFileAtomic, writeIfAbsent, writeRoadmap } = E); }
+  writeFileAtomic, writeIfAbsent, writeRoadmap,
+  CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs } = E); }
 
 // ---------------------------------------------------------------------------
 // Steering scaffolding
@@ -331,8 +333,121 @@ function classificationMd(name, tracks, summary, cls, lang) {
   return i18n.classification({ name, tracks, label: trackLabel(tracks), signals: cls && cls.signals, summary }, lang);
 }
 
-function requirementsMd(name, tracks, summary, lang) {
-  return i18n.requirements({ name, tracks, summary }, lang);
+function requirementsMd(name, tracks, summary, lang, size) {
+  return i18n.requirements(size ? { name, tracks, summary, size } : { name, tracks, summary }, lang);
+}
+
+// ---------------------------------------------------------------------------
+// 1.21 F5 — sized scaffolds. The i18n builders render every track block whole; a SIZED feature keeps, per built-in marker
+// track, the sections of its size (size S: the "core" tier — TRACK_SECTIONS `tier`) minus the ones another active track
+// covers (TRACK_OVERLAPS), and in tasks.md the track tasks that implement a criterion (size S) minus the ones another active
+// track's tasks do (TRACK_TASK_OVERLAPS). One place, the same tables the gates read — never a second copy of the rule.
+// ---------------------------------------------------------------------------
+// The track sections a sized scaffold keeps for `tr` → { keep: [section names], extended: [left out: optional at S],
+// covered: [{ name, by: [[track, name]] }] (left out: another active track's sections answer it) }.
+function sizedTrackSections(tr, tracks, size) {
+  const secs = TRACK_SECTIONS[tr] || [];
+  const extended = size === "s" ? secs.filter((s) => s.tier === "extended").map((s) => s.name) : [];
+  const covered = [];
+  for (const o of TRACK_OVERLAPS) {
+    if (o.drop[0] !== tr || !o.by.every(([t]) => tracks.includes(t)) || extended.includes(o.drop[1])) continue;
+    // only when a covering section is scaffolded itself (size S may leave an extended one out)
+    const by = o.by.filter(([t, n]) => !(size === "s" && ((TRACK_SECTIONS[t] || []).find((s) => s.name === n) || {}).tier === "extended"));
+    if (by.length) covered.push({ name: o.drop[1], by });
+  }
+  const out = new Set([...extended, ...covered.map((c) => c.name)]);
+  return { keep: secs.map((s) => s.name).filter((n) => !out.has(n)), extended, covered };
+}
+// A design text (a scaffold, or a track block spec_add_track appends) → the same text with the sections a size leaves out
+// removed and an HTML comment saying where they went (the extended ones: optional at S; the covered ones: under the section that
+// answers them). Built-in marker tracks only (a track pack's sections are all core, and no pack overlaps). No size → unchanged.
+function sizeDesignText(text, tracks, size, lng) {
+  if (!size || typeof text !== "string") return text;
+  const S = i18n.msg(lng).sizes;
+  const names = (list) => list.map((n) => i18n.msg(lng).sectionNames[n] || n).join(" · ");
+  const lines = text.split("\n");
+  const heads = [];
+  lines.forEach((l, i) => { if (/^## /.test(l)) heads.push(i); });
+  const secs = [];
+  for (let k = 0; k < heads.length; k++) {
+    const h = heads[k];
+    const tr = MARKER_TRACKS.find((t) => tracks.includes(t) && lines[h].includes(TRACK_MARKER[t]));
+    if (!tr) continue;
+    const sec = (TRACK_SECTIONS[tr] || []).find((s) => headingMatches(lines[h], s.syn, true));
+    if (!sec) continue;
+    let end = k + 1 < heads.length ? heads[k + 1] : lines.length;
+    for (let i = h + 1; i < end; i++) if (/^<!--/.test(lines[i])) { end = i; break; } // the design's closing comment is no section's
+    secs.push({ h, end, tr, name: sec.name });
+  }
+  const plan = new Map(MARKER_TRACKS.filter((t) => tracks.includes(t)).map((t) => [t, sizedTrackSections(t, tracks, size)]));
+  const drop = new Set(), after = new Map(); // after: line index → comment lines to insert before it
+  const addAfter = (s, c) => { const at = lines[s.end - 1] === "" ? s.end - 1 : s.end; after.set(at, (after.get(at) || []).concat(c)); };
+  for (const s of secs) { const p = plan.get(s.tr); if (p && !p.keep.includes(s.name)) drop.add(s); }
+  if (!drop.size) return text;
+  for (const [tr, p] of plan) {
+    const kept = secs.filter((s) => s.tr === tr && !drop.has(s));
+    const extended = p.extended.filter((n) => secs.some((s) => s.tr === tr && s.name === n));
+    if (extended.length && kept.length) addAfter(kept[kept.length - 1], "<!-- " + S.extendedComment(TRACK_MARKER[tr], names(extended)) + " -->");
+    for (const c of p.covered) {
+      if (!secs.some((s) => s.tr === tr && s.name === c.name)) continue;
+      const host = secs.find((s) => !drop.has(s) && c.by.some(([t, n]) => s.tr === t && s.name === n));
+      if (host) addAfter(host, "<!-- " + S.coveredComment(TRACK_MARKER[tr] + " " + (i18n.msg(lng).sectionNames[c.name] || c.name)) + " -->");
+    }
+  }
+  const skip = new Set();
+  for (const s of drop) for (let i = s.h; i < s.end; i++) skip.add(i);
+  const out = [];
+  lines.forEach((l, i) => { if (after.has(i)) out.push(...after.get(i)); if (!skip.has(i)) out.push(l); });
+  if (after.has(lines.length)) out.push(...after.get(lines.length));
+  return out.join("\n");
+}
+// A tasks text → the same text without the track template tasks a size leaves out, renumbered. Size S: in each built-in track's
+// template block, a task with no _Makes green:_ whose every criterion another kept task of the block cites is left out — the
+// tasks citing the most criteria first (the cross-cutting "threat model", "contract tests", "failure-injection" tasks), the
+// later one first on a tie; every track criterion stays cited (trace holds). Any size: TRACK_TASK_OVERLAPS. No size → unchanged.
+const RE_SIZE_TASK = /^(\s*-\s*\[[ xX]\]\s*)(\d+)(\.)/;
+function sizeTasksText(text, tracks, size) {
+  if (!size || typeof text !== "string") return text;
+  const lines = text.split("\n");
+  const heads = [];
+  lines.forEach((l, i) => { if (/^#{1,6}\s/.test(l)) heads.push(i); });
+  const skip = new Set();
+  for (let k = 0; k < heads.length; k++) {
+    const tr = MARKER_TRACKS.find((t) => tracks.includes(t) && trackTaskHeadingIs(t, lines[heads[k]]));
+    if (!tr) continue;
+    const end = k + 1 < heads.length ? heads[k + 1] : lines.length;
+    const tasks = [];
+    for (let i = heads[k] + 1; i < end; i++) {
+      if (RE_SIZE_TASK.test(lines[i])) tasks.push({ start: i, end: i + 1 });
+      else if (tasks.length && /^\s{2,}\S/.test(lines[i]) && tasks[tasks.length - 1].end === i) tasks[tasks.length - 1].end = i + 1;
+    }
+    tasks.forEach((t, pos) => {
+      const body = lines.slice(t.start, t.end).join("\n");
+      const m = body.match(/_Requirements:\s*([^_\n]+)_/);
+      t.pos = pos;
+      t.acs = m ? m[1].split(/[,;]/).map((x) => x.trim()).filter(Boolean) : [];
+      t.green = /_Makes green:/.test(body);
+    });
+    const gone = new Set();
+    for (const o of TRACK_TASK_OVERLAPS) if (o.drop[0] === tr && tracks.includes(o.by) && tasks[o.drop[1] - 1]) gone.add(tasks[o.drop[1] - 1]);
+    if (size === "s") {
+      for (const t of tasks.slice().sort((a, b) => b.acs.length - a.acs.length || b.pos - a.pos)) {
+        if (gone.has(t) || t.green || !t.acs.length) continue;
+        const others = tasks.filter((x) => x !== t && !gone.has(x));
+        if (t.acs.every((id) => others.some((x) => x.acs.includes(id)))) gone.add(t);
+      }
+    }
+    for (const t of gone) for (let i = t.start; i < t.end; i++) skip.add(i);
+  }
+  if (!skip.size) return text;
+  const first = lines.map((l) => l.match(RE_SIZE_TASK)).find(Boolean); // a block spec_add_track appends starts after the last task
+  let n = first ? Number(first[2]) - 1 : 0;
+  return lines.filter((_, i) => !skip.has(i)).map((l) => l.replace(RE_SIZE_TASK, (m, a, num, dot) => a + ++n + dot)).join("\n");
+}
+// The mandatory section count per built-in marker track at this size (the checklist's "N mandatory design sections").
+function sizedSectionCounts(tracks, size) {
+  if (!size) return undefined;
+  return Object.fromEntries(MARKER_TRACKS.filter((t) => tracks.includes(t)).map((t) => [t, sizedTrackSections(t, tracks, size).keep.length]));
 }
 
 // Mandatory design sections for a single track. Shared by designMd (greenfield) and addTrack
@@ -341,17 +456,20 @@ function trackDesignBlock(track, lang, vars) {
   return isPackTrack(track) ? packDesignBlock(packOf(track), lang, vars) : i18n.trackDesignBlock(track, lang); // a track pack: its sections (1.15)
 }
 
-function designMd(name, tracks, lang) {
-  return i18n.design({ name, tracks, label: trackLabel(tracks) }, lang);
+// size (1.21 F5): a sized feature's builder variant, its sections kept / merged by sizeDesignText (none → the 1.20 text).
+function designMd(name, tracks, lang, size) {
+  if (!size) return i18n.design({ name, tracks, label: trackLabel(tracks) }, lang);
+  return sizeDesignText(i18n.design({ name, tracks, label: trackLabel(tracks), size }, lang), tracks, size, lang);
 }
 
-function tasksMd(name, tracks, lang) {
-  return i18n.tasks({ name, tracks, label: trackLabel(tracks), slug: slugify(name) }, lang);
+function tasksMd(name, tracks, lang, size) {
+  if (!size) return i18n.tasks({ name, tracks, label: trackLabel(tracks), slug: slugify(name) }, lang);
+  return sizeTasksText(i18n.tasks({ name, tracks, label: trackLabel(tracks), slug: slugify(name), size }, lang), tracks, size);
 }
 
 // tracks decide which template ACs the plan covers (one planned test each — the tasks template makes each green).
-function testPlanMd(name, lang, tracks, acs) {
-  return i18n.testPlan(name, lang, tracks, acs);
+function testPlanMd(name, lang, tracks, acs, size) {
+  return size ? i18n.testPlan(name, lang, tracks, acs, size) : i18n.testPlan(name, lang, tracks, acs);
 }
 
 function evalPlanMd(name, lang) {
@@ -393,9 +511,10 @@ function quickstartMd(name, lang) {
   return i18n.quickstart(name, lang);
 }
 
-function checklistMd(name, tracks, lang) {
+function checklistMd(name, tracks, lang, size) {
   const t = normalizeTracks(tracks);
-  return i18n.checklist({ name, tracks: t, label: trackLabel(t) }, lang);
+  if (!size) return i18n.checklist({ name, tracks: t, label: trackLabel(t) }, lang);
+  return i18n.checklist({ name, tracks: t, label: trackLabel(t), size, sectionCounts: sizedSectionCounts(t, size) }, lang);
 }
 
 function integrationPlanMd(name, lang) {
@@ -459,14 +578,30 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   const pt = parseTracks(tracks);
   const given = pt.given;
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir)), pt.unknown) };
-  const storedKind = existed ? readState(projectDir, slug).kind || "feature" : null;
-  const askedKind = kind != null ? String(kind).trim().toLowerCase() : null;
+  const storedState = existed ? readState(projectDir, slug) : null;
+  const storedKind = existed ? storedState.kind || "feature" : null;
+  let askedKind = kind != null ? String(kind).trim().toLowerCase() : null;
+  const inLang = existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir));
   // An unknown kind is an error on every surface (the MCP enum refuses it): the CLI's `--kind bugfx` used to scaffold a
   // plain feature, and a re-run with the right kind then only "kept" the wrong one.
-  if (askedKind !== null && askedKind !== "feature" && askedKind !== "bugfix" && askedKind !== "spike") {
-    const A = i18n.msg(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir))).args;
-    return { ok: false, error: A.invalid(A.item("kind", A.oneOf("feature, bugfix, spike"), JSON.stringify(String(kind)))) };
+  if (askedKind !== null && askedKind !== "feature" && askedKind !== "bugfix" && askedKind !== "spike" && askedKind !== "change") {
+    const A = i18n.msg(inLang).args;
+    return { ok: false, error: A.invalid(A.item("kind", A.oneOf("feature, bugfix, spike, change"), JSON.stringify(String(kind)))) };
   }
+  // 1.21 F5 — the feature's size (spec_create {size}: xs | s | m | l), validated before anything is written. A NEW feature only: an
+  // existing one keeps its size (a note when another is asked). size xs on a plain feature IS a change (kind "change": one
+  // change.md); kind "change" is size xs; a spike is timeboxed, never sized. No size = the 1.20 scaffolds and rules exactly.
+  const SZ = i18n.msg(inLang).sizes;
+  const si = sizeInput(opts && opts.size, inLang);
+  if (si.error) return { ok: false, error: si.error };
+  const storedSize = existed && FEATURE_SIZES.includes(storedState.size) ? storedState.size : null;
+  if (!existed && si.size === "xs" && (askedKind == null || askedKind === "feature")) askedKind = "change";
+  if (!existed && askedKind === "change" && si.size && si.size !== "xs") return { ok: false, error: SZ.changeSize(si.size) };
+  if (!existed && askedKind === "spike" && si.size) return { ok: false, error: SZ.spikeNoSize };
+  const change = (storedKind || askedKind) === "change";
+  if (!existed && change && pt.named.some((x) => x !== "core")) return { ok: false, error: SZ.changeTracks(pt.named.filter((x) => x !== "core").map((x) => "+" + x).join(", ")) };
+  const size = existed ? storedSize : change ? "xs" : si.size;
+  const sizeNote = existed && si.size && si.size !== storedSize ? SZ.sizeKept(storedSize || "—", si.size) : null;
   const bugfix = (storedKind || askedKind) === "bugfix";
   const kindNote = storedKind && askedKind && askedKind !== storedKind ? i18n.msg(normalizeLang(lang || projectLang(projectDir))).kindKept(storedKind, askedKind) : null;
   const flowInfo = createFlow(projectDir, slug, dir, existed, storedKind || askedKind || "feature", opts && opts.flow, lang); // C3: {error} | {flow, note, store}
@@ -495,14 +630,14 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // The summary's classification (the tracks of a new feature, the signals classification.md lists), read in the feature's
   // language: the explicit one, else the project's configured one (full review Pb2 — spec_create / create used to classify
   // with the explicit lang only; they now leave it to the engine, so both surfaces read it the same way).
-  const clsR = cls || (bugfix || spike ? null : classify(summary || "", existed ? { name, lang: featureLang(projectDir, slug) } : { name, lang, projectDir }));
-  const t = spike ? (existed ? current : ["core"]) // a spike is core-only (tracks belong to the feature a 'go' leads to)
+  const clsR = cls || (bugfix || spike || change ? null : classify(summary || "", existed ? { name, lang: featureLang(projectDir, slug) } : { name, lang, projectDir }));
+  const t = spike || change ? (existed ? current : ["core"]) // a spike is core-only (tracks belong to the feature a 'go' leads to); so is a change (1.21 F5)
     : existed ? allTracks().filter((x) => current.includes(x) || (given && pt.tracks.includes(x)) || (bugfix && x === "tdd"))
     : bugfix ? allTracks().filter((x) => x === "core" || x === "tdd" || (given && pt.tracks.includes(x)))
     : given ? pt.tracks
     : clsR.tracks;
   // (1.21 F2) the human confirmed Phase 0 with tracks of their own for a new plain feature whose summary was classified here
-  const learnFrom = !existed && !bugfix && !spike && given && !cls && !!clsR && summary != null && !!String(summary).trim();
+  const learnFrom = !existed && !bugfix && !spike && !change && given && !cls && !!clsR && summary != null && !!String(summary).trim();
   const newTracks = existed ? t.filter((x) => !current.includes(x)) : [];
   const bugExtra = !existed && bugfix ? t.filter((x) => x !== "core" && x !== "tdd") : [];
   if (newTracks.length) {
@@ -527,8 +662,9 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   const langNote = stored && lang && normalizeLang(lang) !== normalizeLang(stored) ? i18n.msg(lng).langKept(normalizeLang(stored), normalizeLang(lang)) : null;
   // createdAt: the start of the feature's lead times (spec_metrics) — only a NEW state file gets one (a re-run keeps it).
   const createdAt = new Date().toISOString();
-  const kindOut = bugfix ? "bugfix" : spike ? "spike" : null;
-  writeIfAbsent(statePath(dir), JSON.stringify({ lang: lng, ...(kindOut ? { kind: kindOut } : {}), tracks: t, ...packMarkersFor(t), approvals: {}, createdAt }, null, 2));
+  const kindOut = bugfix ? "bugfix" : spike ? "spike" : change ? "change" : null;
+  // 1.21 F5: `size` only when one was given (a change is xs) — a feature created without one has no key (the 1.20 state, byte for byte)
+  writeIfAbsent(statePath(dir), JSON.stringify({ lang: lng, ...(kindOut ? { kind: kindOut } : {}), ...(size ? { size } : {}), tracks: t, ...packMarkersFor(t), approvals: {}, createdAt }, null, 2));
   if (flowInfo.store) storeCreateFlow(dir, flowInfo.store); // C3: a NEW plain feature created design-first
 
   const created = [];
@@ -570,8 +706,9 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
       } catch { /* best-effort */ }
     }
     maybeRefreshRoadmap(projectDir);
-    const notes = [kindNote, langNote, newTracks.length ? i18n.msg(lng).tracks.addedOnCreate(slug, newTracks.map((x) => "+" + x).join(", ")) : null, learnNote].filter(Boolean);
+    const notes = [kindNote, langNote, sizeNote, newTracks.length ? i18n.msg(lng).tracks.addedOnCreate(slug, newTracks.map((x) => "+" + x).join(", ")) : null, learnNote].filter(Boolean);
     if (notes.length) res.note = notes.join(" ");
+    if (size) res.size = size; // 1.21 F5 (only for a sized feature: the 1.20 result is unchanged)
     // C3: the flow — named when created design-first, ignored (a bugfix …) or kept (an existing feature); `flow` only when design-first.
     const flowNote = flowInfo.store ? i18n.msg(lng).flow.created(flowOrderText(dir, t, flowInfo.store)) : flowInfo.note;
     if (flowNote) res.note = res.note ? res.note + " " + flowNote : flowNote;
@@ -593,6 +730,13 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     return res;
   }
 
+  if (change) { // 1.21 F5 — a change (size xs): ONE file, change.md (a project's change template first); no other artifact
+    put(CHANGE_FILE, scaf("change", () => i18n.change({ name, summary }, lng)));
+    const res = finish({ ok: true, slug, dir, kind: "change", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
+    if (res.ok !== false && created.includes(CHANGE_FILE)) res.note = [res.note, i18n.msg(lng).sizes.changeCreated(slug)].filter(Boolean).join(" ");
+    return res;
+  }
+
   if (opts && opts.brownfield) put("integration-plan.md", scaf("integration-plan", () => integrationPlanMd(name, lng))); // create-only, like every artifact
 
   if (bugfix) {
@@ -602,7 +746,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     put("test-plan.md", scaf("bug-test-plan", () => i18n.bugTestPlan(name, lng)));
     ensureDir(path.join(dir, "tests", "unit"));
     ensureDir(path.join(dir, "tests", "integration"));
-    put("tasks.md", scaf("bug-tasks", () => i18n.bugTasks(name, lng)));
+    put("tasks.md", scaf("bug-tasks", () => (size ? i18n.bugTasks(name, lng, size) : i18n.bugTasks(name, lng)))); // 1.21 F5: xs drops the reproduce / root-cause tasks
     const res = finish({ ok: true, slug, dir, kind: "bugfix", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
     const given = Object.keys(bt);
     if (res.ok === false || !given.length) return res;
@@ -627,14 +771,15 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
 
   // A project template (.specs/templates/) replaces the built-in one; design / requirements / tasks still get the active
   // tracks' blocks the template doesn't carry (withTrackBlocks).
-  put("classification.md", scaf("classification", () => classificationMd(name, t, summary, clsR, lng)));
-  put("requirements.md", scaf("requirements", () => requirementsMd(name, t, summary, lng), { tracks: t }));
-  put("design.md", scaf("design", () => designMd(name, t, lng), { tracks: t }));
+  // 1.21 F5 — size S has no classification.md (its Phase 0 is the size and the tracks recorded in .state.json: one approval less).
+  if (size !== "s") put("classification.md", scaf("classification", () => classificationMd(name, t, summary, clsR, lng)));
+  put("requirements.md", scaf("requirements", () => requirementsMd(name, t, summary, lng, size), { tracks: t }));
+  put("design.md", scaf("design", () => designMd(name, t, lng, size), { tracks: t }));
   if (t.includes("tdd")) {
     // The same rule as spec_add_track: a template test row only for the track criteria requirements.md has — on an
     // EXISTING feature given +tdd with +saas/+ai the requirements predate those tracks, and their rows would cite
     // US-1.AC-5…AC-9 that don't exist.
-    put("test-plan.md", scaf("test-plan", () => scaffoldTestPlan(dir, name, lng, t), { tracks: t, reqText: () => readIfExists(path.join(dir, "requirements.md")) }));
+    put("test-plan.md", scaf("test-plan", () => scaffoldTestPlan(dir, name, lng, t, size), { tracks: t, reqText: () => readIfExists(path.join(dir, "requirements.md")) }));
     ensureDir(path.join(dir, "tests", "unit"));
     ensureDir(path.join(dir, "tests", "integration"));
     ensureDir(path.join(dir, "tests", "e2e"));
@@ -652,10 +797,10 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     put("load-test.md", scaf("load-test", () => loadTestMd(name, lng)));
   }
   put("quickstart.md", scaf("quickstart", () => quickstartMd(name, lng)));
-  put("checklist.md", scaf("checklist", () => checklistMd(name, t, lng), { tracks: t, reqText: () => readIfExists(path.join(dir, "requirements.md")) })); // + a track pack's items (1.15)
+  put("checklist.md", scaf("checklist", () => checklistMd(name, t, lng, size), { tracks: t, reqText: () => readIfExists(path.join(dir, "requirements.md")) })); // + a track pack's items (1.15)
   // tasks.md last (it references the tracks; a template's track blocks keep only the ACs requirements.md defines; a track pack's
   // tasks make its planned tests green)
-  put("tasks.md", scaf("tasks", () => tasksMd(name, t, lng), { tracks: t, reqText: () => readIfExists(path.join(dir, "requirements.md")),
+  put("tasks.md", scaf("tasks", () => tasksMd(name, t, lng, size), { tracks: t, reqText: () => readIfExists(path.join(dir, "requirements.md")),
     planText: () => readIfExists(path.join(dir, "test-plan.md")) }));
   // A track pack's steering file (1.15) — project-level, in the project language, create-only (spec_add_track writes it too): the
   // pack's standards reach .specs/steering/ with the first feature that uses it.
@@ -853,6 +998,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
   const T = i18n.msg(lng).tracks;
   const before = detectTracks(dir);
   const after = allTracks().filter((t) => before.includes(t) || trs.includes(t));
+  const size = featureSize(dir); // 1.21 F5: a sized feature's blocks follow its size (none → the 1.20 blocks)
   // A pre-1.17 pack of this built-in track's name (legacyPackName — 1.17 D review): adding the built-in track by name adopts it —
   // the pack's record goes, and the track's own design sections are appended even though a heading already carries its marker
   // (the pack's sections — '## [DIST] Release Channels' — are not the built-in ones).
@@ -874,7 +1020,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
 
   for (const tr of trs) {
     if (tr === "tdd") {
-      put("test-plan.md", scaf("test-plan", () => scaffoldTestPlan(dir, name, lng, after), { tracks: after, reqText: () => readIfExists(path.join(dir, "requirements.md")) }));
+      put("test-plan.md", scaf("test-plan", () => scaffoldTestPlan(dir, name, lng, after, size), { tracks: after, reqText: () => readIfExists(path.join(dir, "requirements.md")) }));
       ["unit", "integration", "e2e"].forEach((d) => ensureDir(path.join(dir, "tests", d)));
     }
     if (tr === "ai") {
@@ -892,15 +1038,17 @@ function applyTracks(projectDir, f, name, trs, lng) {
     // "Testability Notes" heading). A marker in a Mermaid node or in prose does not count.
     const designPath = path.join(dir, "design.md");
     const design = readIfExists(designPath);
+    // 1.21 F5: a sized feature gets the block of its size (sizeDesignText — the tiers, the sections another active track covers)
+    const block = () => sizeDesignText(trackDesignBlock(tr, lng, { name, slug }), after, size, lng);
     if (design != null) {
       const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(design)) : !adopted.includes(tr) && headingHasMarker(design, trackMarker(tr));
       if (!present) {
-        writeFileAtomic(designPath, design.trimEnd() + "\n" + trackDesignBlock(tr, lng, { name, slug })); // trimEnd: no /\s*$/ backtracking
+        writeFileAtomic(designPath, design.trimEnd() + "\n" + block()); // trimEnd: no /\s*$/ backtracking
         note(T.addedDesign);
       }
     } else if (tr !== "tdd") {
       // A bugfix has no design.md: the escalated track's mandatory sections still need a home (localized title).
-      if (writeIfAbsent(designPath, T.designTitle(name) + "\n" + trackDesignBlock(tr, lng, { name, slug }))) note(T.addedDesign);
+      if (writeIfAbsent(designPath, T.designTitle(name) + "\n" + block())) note(T.addedDesign);
     }
 
     // Steering the track needs (scale/observability/cost, ai-strategy, testing-standards) — project-level,
@@ -917,7 +1065,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
     const tasksPath = path.join(dir, "tasks.md");
     const tasksText = readIfExists(tasksPath);
     if (tasksText != null) {
-      const block = trackTaskBlock(tr, tasksText, readIfExists(path.join(dir, "requirements.md")), lng, undefined, readIfExists(path.join(dir, "test-plan.md")), { name, slug });
+      const block = sizeTasksText(trackTaskBlock(tr, tasksText, readIfExists(path.join(dir, "requirements.md")), lng, undefined, readIfExists(path.join(dir, "test-plan.md")), { name, slug }), after, size);
       if (block) {
         writeFileAtomic(tasksPath, tasksText.trimEnd() + "\n" + block); // never a torn tasks.md for a concurrent reader
         note(T.addedTasks);
@@ -963,18 +1111,18 @@ function trackTemplateAcs(tr) {
 // requirements.md WRITTEN with no AC ID at all (an import whose source had no criteria, spec_add_track tdd on ID-less
 // requirements): one generic row whose Covers cell is a slot — the template's rows were phantoms there (1.14 full review
 // Pa4). Only a missing / blank requirements.md still gets the template rows.
-function scaffoldTestPlan(dir, name, lng, tracks) {
+function scaffoldTestPlan(dir, name, lng, tracks, size) {
   const reqText = readIfExists(path.join(dir, "requirements.md"));
   const reqIds = requirementAcIds(reqText || "");
   const t = testPlanTracks(dir, tracks, reqIds);
-  const tmpl = i18n.templateAcIds(t);
+  const tmpl = i18n.templateAcIds(t, size); // 1.21 F5: a size S scaffold's two core criteria
   // A track pack's criteria (1.15) are the pack's scaffold, not written requirements: they get the pack's own rows (withTrackBlocks).
   const packIds = new Set(tracks.filter(isPackTrack).flatMap((tr) => [...trackAcIds(reqText || "", tr)]));
   const mine = packIds.size ? new Set([...reqIds].filter((id) => !packIds.has(id))) : reqIds;
   const same = mine.size === tmpl.length && tmpl.every((id) => mine.has(id));
   const written = reqText != null && !!reqText.trim();
   // (the generic rows leave a pack's criteria out too: the pack's own rows plan them — packTestRowsBlock via withTrackBlocks)
-  return testPlanMd(name, lng, t, same || (!reqIds.size && !written) ? undefined : [...mine]);
+  return testPlanMd(name, lng, t, same || (!reqIds.size && !written) ? undefined : [...mine], size);
 }
 
 // The template task block for a track, numbered after the last task — or null when the track has none or
@@ -1072,6 +1220,7 @@ function addTrack(projectDir, name, track, opts = {}) {
   const pt = parseTracks(legacy.length ? trackTokens(track).filter((t) => !legacy.includes(t)) : track);
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(lng, pt.unknown) };
   if (isSpikeDir(dir)) return { ok: false, spike: true, error: msg.spike.noTracks(slug) }; // 1.14 C2: a spike is core-only
+  if (isChangeDir(dir)) return { ok: false, change: true, error: msg.sizes.changeNoTracks(slug) }; // 1.21 F5: a change is core-only — a track makes it a size s feature
   if (opts.remove) {
     if (!pt.named.length && !legacy.length) return { ok: false, error: errs(projectDir, slug).badTrack };
     return removeTracks(projectDir, f, pt.named, lng, legacy);
@@ -1104,7 +1253,7 @@ function removeTrack(projectDir, name, track) {
 module.exports = { steeringFilesForTracks, initProject, scaffoldSteeringFile, RE_CUSTOM_STEERING, PROTO_KEYS,
   customSteeringError, customSteeringStub, steeringFrontMatter, BRIEF_STEERING_BUDGET, briefSteering,
   steeringPlaceholders, classificationMd, requirementsMd, trackDesignBlock, designMd, tasksMd, testPlanMd, evalPlanMd,
-  loadTestMd, SAMPLE_GOLDEN, SAMPLE_ADVERSARIAL, quickstartMd, checklistMd, integrationPlanMd, BUG_PREFILL, bugCreateInput, createdBodies, createFeature,
+  loadTestMd, SAMPLE_GOLDEN, SAMPLE_ADVERSARIAL, quickstartMd, checklistMd, sizedTrackSections, sizeDesignText, RE_SIZE_TASK, sizeTasksText, sizedSectionCounts, integrationPlanMd, BUG_PREFILL, bugCreateInput, createdBodies, createFeature,
   pruneBacklog, STEERING_GOVERNED, safeSteeringName, STEERING_MAX_PATTERNS, governingSteering, steeringTargetsMatch,
   featureImplementsTargets, steeringFingerprints, steeringChanges, steeringChangeText, steeringImpact,
   steeringImpactLines, applyTracks, testPlanTracks, trackTemplateAcs, scaffoldTestPlan, trackTaskBlock,

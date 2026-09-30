@@ -11,7 +11,10 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   06 gates · 07 approvals · 08 tasks · 09 evidence · 10 guards and hooks · 11 Claude Code integration · 12 lifecycle ·
   13 imports · 14 templates and exports · 15 spec quality · 16 conventions and source guards · 17 docs and prose ·
   18 review regressions whose findings span several areas. `--list` prints every file with its one-line summary (the
-  file's first comment line).
+  file's first comment line). (1.21 F5: `06-gates-sizes.js` in both folders — the sizes, the change kind, the stricter
+  filled rule, the overlaps; its pinned sha1 is every no-size builder output of the pre-1.21 track combinations: update it
+  only when the no-size scaffold changes ON PURPOSE. A test that "fills" a track section answers each `> **TODO**` line with
+  a line of its own — deleting the sentinel and keeping the guidance bullet is the template, not an answer.)
 - **The harnesses.** `mcp/tests/harness.js`: ONE server per process (mcp/server.js over stdio, its default project a
   throwaway temp dir), the handshake, and the context every file's `run` receives, destructured in its signature
   (`exports.run = async ({ ok, rpc, S, tmp }) => { … }` — no parameter name a test could redeclare): `ok`, `rpc`,

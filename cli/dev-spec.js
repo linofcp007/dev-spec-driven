@@ -428,6 +428,7 @@ function main() {
         console.log(T.tracks(r.label, Object.keys(r.confidence).map((t) => t + "=" + (C.conf[r.confidence[t]] || r.confidence[t])).join(", "))); // + the project's track packs (1.15)
         console.log(r.reasoning);
         if (r.note) console.log(T.note(r.note));
+        if (r.sizeNote) console.log(r.sizeNote); // 1.21 F5: the suggested size (spec_create --size)
         if (r.explain) { // 1.21 F2: every keyword match and the project's signal overrides (.specs/classifier.json)
           console.log(r.explain.matches.length ? C.explainHead : C.explainNone);
           r.explain.matches.forEach((m) => console.log(C.explainMatch(m)));
@@ -510,7 +511,8 @@ function main() {
       const r = spec.createFeature(projectDir, name, tracks, flags.summary, undefined, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind,
         { brownfield: on("brownfield"), flow: flags.flow, question: flags.question, timebox: flags.timebox, // = spec_create {brownfield, flow, question, timebox,
           reproduction: flags.reproduction, rootCause: flags["root-cause"], condition: flags.condition, behaviour: flags.behaviour, // the bugfix prefill (1.21 F3)
-          includeBody: boolFlag("include-body") === true }); // … includeBody} — the bodies are in the --json result
+          includeBody: boolFlag("include-body") === true, // … includeBody} — the bodies are in the --json result
+          size: flags.size }); // 1.21 F5: --size xs|s|m|l (= spec_create {size}; xs = a change: one change.md)
       if (!r.ok) return fail(r);
       return out(r, (r) => { const T = cliText(r.lang); console.log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : "")); });
     }
@@ -528,8 +530,11 @@ function main() {
         console.log(T.statusTasks(r.tasks.done, r.tasks.total, r.tasks.next ? "#" + r.tasks.next.number + " " + r.tasks.next.text : null));
         // ✓ only when FILLED (the doctor's rule): ◐ present but still a TODO/empty, ✗ missing — in the feature language.
         const fm = spec.msg(spec.featureLang(projectDir, r.feature));
-        const marks = (list) => list.map((s) => (s.filled ? "✓ " : s.present ? "◐ " : "✗ ") + (fm.sectionNames[s.section] || s.section) +
-          (s.filled ? "" : " (" + fm.sectionStatus[s.present ? "unfilled" : "missing"] + ")")).join(" · ");
+        // 1.21 F5: a sized feature's rows carry `status` — ○ an optional section left out (size s), ✓ one another track covers,
+        // the template-only / short n/a states named
+        const marks = (list) => list.map((s) => (s.filled ? (s.status === "missing" ? "○ " : "✓ ") : s.present ? "◐ " : "✗ ") + (fm.sectionNames[s.section] || s.section) +
+          (s.filled ? (s.status === "missing" ? " (" + fm.sizes.optionalMark + ")" : s.status === "covered" ? " (" + fm.sizes.coveredMark + ")" : "")
+            : " (" + fm.sectionStatus[s.status && fm.sectionStatus[s.status] ? s.status : s.present ? "unfilled" : "missing"] + ")")).join(" · ");
         if (r.scaleSections) console.log(T.scaleSections(marks(r.scaleSections)));
         if (r.aiSections && r.aiSections.sections) console.log(T.aiSections(marks(r.aiSections.sections)));
         for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs", "data"]) if (r[tr + "Sections"]) console.log(fm.secPrivacy.statusSections[tr](marks(r[tr + "Sections"])));

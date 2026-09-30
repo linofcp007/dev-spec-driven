@@ -10,7 +10,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
   { // 1.14 A2 — the composable +sec (security) and +privacy (GDPR / RGPD) tracks, end to end, EN / PT / ES.
     const a2Root = path.join(tmp, "a2-tracks");
     const a2 = (name) => path.join(a2Root, name);
-    const dropTodo = (file) => fs.writeFileSync(file, fs.readFileSync(file, "utf8").split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+    const dropTodo = (file) => fs.writeFileSync(file, fs.readFileSync(file, "utf8").split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
 
     // --- the track list itself
@@ -120,7 +120,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
         const fp = path.join(f.dir, file);
         let t = fs.readFileSync(fp, "utf8");
         for (let i = 0; i < 3; i++) t = t.replace(SLOT, "the account export"); // nested slots ("[e.g., … [N] …]") need a few passes
-        fs.writeFileSync(fp, t.split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+        fs.writeFileSync(fp, t.split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
       }
       const doc = S.specDoctor(p, f.slug);
       const gates = ["classification", "requirements", "design", "tasks"].map((ph) => [ph, S.approvePhase(p, f.slug, ph, "t")]);
@@ -276,7 +276,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const dRoot = path.join(tmp, "p17d");
     const d = (n) => path.join(dRoot, n);
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
-    const dropTodo = (file) => fs.writeFileSync(file, rd(file).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+    const dropTodo = (file) => fs.writeFileSync(file, rd(file).split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
     const cls = (t, lang) => S.classify(t, lang ? { lang } : {});
 
     // --- D1: the registry
@@ -393,7 +393,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
         const fp = path.join(f.dir, file);
         let t = rd(fp);
         for (let i = 0; i < 3; i++) t = t.replace(SLOT, "the order event");
-        fs.writeFileSync(fp, t.split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+        fs.writeFileSync(fp, t.split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
       }
       const doc = S.specDoctor(p, f.slug);
       const gates = ["classification", "requirements", "design", "tasks"].map((ph) => [ph, S.approvePhase(p, f.slug, ph, "t")]);
@@ -802,7 +802,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const tRoot = path.join(tmp, "p19t");
     const d = (n) => path.join(tRoot, n);
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
-    const dropTodo = (file) => fs.writeFileSync(file, rd(file).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+    const dropTodo = (file) => fs.writeFileSync(file, rd(file).split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
     const cls = (t, lang) => S.classify(t, lang ? { lang } : {});
     const unfilledWord = { en: /unfilled/, pt: /por preencher/, es: /sin rellenar/, "pt-BR": /sem preencher/ };
     const T19 = [
@@ -884,7 +884,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
           const fp = path.join(f.dir, file);
           let t = rd(fp);
           for (let i = 0; i < 3; i++) t = t.replace(SLOT, "the order record");
-          fs.writeFileSync(fp, t.split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+          fs.writeFileSync(fp, t.split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
         }
         const doc = S.specDoctor(p, f.slug);
         const gates = ["classification", "requirements", "design", "tasks"].map((ph) => [ph, S.approvePhase(p, f.slug, ph, "t")]);
@@ -1142,8 +1142,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       t0 = process.hrtime.bigint(); texts = EI.templateCorpus().length; ratios.push(Number(process.hrtime.bigint() - t0) / unit);
     }
     ratios.sort((a, b) => a - b);
-    ok(texts > 900 && texts <= 1400 && ratios[1] <= 60,
-      `1.19 T10: the template corpus renders ${texts} texts (≤ 1400) in ~${ratios[1].toFixed(0)}× one all-tracks scaffold (≤ 60×; 1.18: 628 texts, ~19×)`);
+    // (1.21: +data and the size variants brought it to ~1480 texts; since 1.20 a process reads the pre-generated corpus instead)
+    ok(texts > 900 && texts <= 1650 && ratios[1] <= 60,
+      `1.19 T10: the template corpus renders ${texts} texts (≤ 1650) in ~${ratios[1].toFixed(0)}× one all-tracks scaffold (≤ 60×; 1.18: 628 texts, ~19×; 1.19: ~1390)`);
 
     // --- 1.19 T11: the pt-BR twins of the new PT strings hold no European-only word, are idempotent and keep the markers / IDs
     const aBr = { name: "ARGN", tracks: ["core", "tdd", "api", "ui", "obs"], label: "core +tdd +api +ui +obs", slug: "argn", summary: "" };

@@ -7,6 +7,10 @@ Use the **dev-spec-driven** skill approval gate.
 
 Args: $ARGUMENTS
 
+(A **change** — kind `change`, size xs — has two approvals only: `tasks`, its plan in `change.md`, and `execution`; a
+size xs / s feature approves its whole plan with `/spec-ff` once it is filled. A design section left with nothing but
+the template's guidance line is refused like an unfilled one — 1.21.)
+
 Only record an approval the user actually gave. Run `spec_doctor` first and show the verdict. Then call the
 `spec_approve` MCP tool with the feature name and phase (one of: classification, requirements, design,
 test-plan, eval-plan, tests, tasks, execution; CLI `dev-spec approve <feature> <phase> [--by NAME]`).

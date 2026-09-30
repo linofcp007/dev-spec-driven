@@ -243,6 +243,71 @@ flows, the bugfix kind.
   flow / `requirements-first` = the default order. Any kind but a plain feature (bugfix, spike) ignores the flow
   (`flowOfState()`; spec_create says so, spec_feature refuses it).
 
+## Right-sized rigor — sizes, the change kind, the stricter filled rule (1.21 F5)
+The 1.20 friction audit measured a typo paying ~70% of a public API's slot cost; a feature's **size** now decides its
+scaffold and its approvals. **No size = the 1.20 scaffolds and rules exactly** (every builder takes `a.size` undefined —
+mcp/tests/06-gates-sizes.js pins the sha1 of every no-size builder output of the pre-1.21 track combinations) and
+`spec_upgrade` never assigns one. What holds at EVERY size: EARS on every criterion, trace, the evidence gate, the bugfix
+iron law, phase order, the finish / execution gate, every track criterion scaffolded.
+- **Input.** `spec_create {size: xs | s | m | l}` / `create --size` (`sizeInput()`, state.js — case-folded; the MCP enum; a
+  new feature only: an existing one keeps its size, `sizes.sizeKept` note). Stored as `.state.json → size` only when given
+  (a plain value — the merge driver needs no rule); `featureSize(dir)` reads it (null for any other value). `res.size` on a
+  sized create. `spec_classify` suggests one — `suggestedSize`, `sizeReason` (stable: trivial-change · several-tracks ·
+  public-api · cross-system · single-unit · default — `suggestSize()`, classify.js: a deterministic EN / PT / ES reading of
+  the request, never the track count alone; the localized `sizeNote`, never in `notes`); nothing applies it by itself.
+- **xs = the change kind** (`kind: "change"`; size xs on a plain feature IS a change; kind change with s / m / l, a spike
+  with any size, a change with an optional track → refused before any write — `sizes.changeSize` / `spikeNoSize` /
+  `changeTracks`). ONE file, `change.md` (`i18n.change` — summary · 1–3 EARS criteria · approach · 1–3 tasks with
+  `_Verify:_`; a project template `change` — `TEMPLATE_ARTIFACTS`), core only, `{kind: "change", size: "xs"}` in the state.
+  **The alias (files.js `changeAlias()`):** a change folder's `requirements.md` / `tasks.md`, when absent, ARE its
+  `change.md` for `readIfExists`, `existsCached`, `readContained` and `writeFileAtomic` (only when change.md exists and the
+  folder's .state.json says kind change) — so EARS, trace, the task scanner, `completeTask` (it ticks change.md), the
+  evidence gate, finish, the roadmap, the exports and the brief read it unchanged. Raw `fs.existsSync` does NOT alias:
+  kind-aware sites use `phaseFile("tasks", "change")` = `change.md`. **Gates:** `gateWalk` = ["tasks"], `pendingGateList`
+  = tasks while unapproved, `chainArtifacts` = [change.md, idx 1]; `approvePhase` refuses every phase but `tasks` (the
+  plan) and `execution` (`sizes.noGate`); `approvalChecks("tasks")` for a change = EARS (errors, unlinted), placeholders,
+  clarifications, ac-uniqueness, a real task, **`change-scope`** (`changeScope()`: 1–3 criteria, 1–3 tasks, core only —
+  never ratcheted silently: "create it as a feature of size s"), traceability, task-deps. Doctor: no design / SC /
+  priorities checks for a change, `change-scope` instead (CHECK_PHASE 1). next_action: fill change.md (`fillHint`) →
+  approve the plan (`sizes.approvePlan`, `spec_approve {through: "tasks"}`) → implement → finish. `changedSinceApproval`
+  compares change.md (reported as `change.md`). `spec_add_track` refuses a change (`sizes.changeNoTracks`). Hooks: the
+  save hook runs EARS + trace on change.md, the pre-commit validator both (a mirror with change.md + .state.json), the
+  observe hook's pre-filter reads change.md too; the resources allowlist and the roadmap links know it.
+- **An XS bugfix** (`kind: "bugfix", size: "xs"`): `bugTasks(name, lang, "xs")` drops the reproduce / root-cause tasks
+  (renumbered: 1 = the red regression test, 2 = the fix) — the requirements gate needs bug.md → Reproduction and the design
+  gate its Root Cause before tasks can be approved, and `bugfixGate()` with no root-cause task lets only task 1 through
+  while Root Cause is empty (`bugGateFirst`). The iron law holds.
+- **s**: `requirements` / `tasks` / `testPlan` S variants (one story: AC-1 WHEN + AC-2 IF…THEN — `SIZE_CORE_ACS` /
+  `coreTemplateAcs()`, i18n/common.js, the T-IDs follow — + every track criterion; one core task), no `classification.md`
+  (one approval less), the design's three weigh sections merged into **Decisions, reuse & risks** (`WEIGH_MERGED_SYN`,
+  quality.js — designWeighChecks and the brief's Reuse part read it), only each track's **core-tier** sections
+  (`sizeDesignText()`, scaffold.js, over `TRACK_SECTIONS` `tier` — an HTML comment names the extended ones), and per track
+  only the template tasks that implement a criterion (`sizeTasksText()`: a task with no `_Makes green:_` whose criteria
+  the block's other kept tasks all cite goes — most criteria first, the later on a tie — then renumbered). **m / l**: the
+  full chain; at every size `CORE_SUPERSEDED_BY` (i18n/common.js: API Contracts / Error Handling under +api, Security
+  Considerations under +sec, Testing Strategy under +tdd) leaves the core section out, Complexity Tracking has no example
+  row, Reuse & Integration one example row, Error Handling points at the IF…THEN criteria (P5 / P6), and `TRACK_OVERLAPS` /
+  `TRACK_TASK_OVERLAPS` (tracks.js — DATA) write a section / task two active tracks both ask for once (a comment on the
+  covering section). `spec_add_track` on a sized feature appends the size's blocks. The checklist's counts follow the size
+  (`a.sectionCounts`), and with +obs the +saas telemetry line is dropped.
+- **P3 — the plan in one call.** At size xs / s next_action's fill step names every planning artifact through `tasks` still a
+  template (`sizes.planFastForward`) and returns `fastForward {through: "tasks", phases, role: null}` from the start; the
+  pending phase's own fix step still comes first, then the rest of the plan is filled, then the fast-forward. Each gate runs.
+- **Track sections — the gate (markdown.js).** `sectionState(design, sections, marker, {size, lang})` → missing · unfilled ·
+  **template** (every visible line of the section is a line of a track design block as the scaffold writes it —
+  `sectionOwnLines()`: the built-in blocks EN / PT / ES, pt-BR's for a pt-BR feature, the project's packs'; exact lines,
+  bullet folded) · filled; a sized feature also **na** (ONE own line `n/a — <reason>` with ≥ `NA_REASON_WORDS` (4) words —
+  `RE_NA_LEAD`: n/a, not applicable, não se aplica, no aplica…) · **na-short**, and rows carry `tier`.
+  `trackSectionReport(design, tracks, {size, lang})` adds **covered** (+ `by`) for a TRACK_OVERLAPS section left out while
+  a covering one is there (sized features only). `sectionVerdict(row, {size, approved})`: filled / na / covered pass;
+  missing fails (passes for an extended section at size s); **template fails a new approval — a warn in doctor on a design
+  approved already** (`sizes.templateApproved`: never a phase failed retroactively; its next approval asks); unfilled and
+  na-short fail. The five readers — doctor `<track>-sections`, the design approval, `designSaveCheck`, `spec_status` (a sized
+  feature's rows add `status` / `tier` / `by`), the roadmap's attention — all go through the report. **Backward
+  compatibility:** an existing design that deleted the TODO line and kept the guidance bullet still passes a phase approved
+  before — doctor warns, finish (doctor fails only) and next_action are unaffected; editing it means a re-approval, which
+  applies the stricter rule.
+
 ## Bugfix and finish (v1.12)
 - **`kind: "bugfix"`** is stored in `.state.json`; `createFeature` scaffolds `bug.md` +
   bug requirements/test plan/tasks (always +tdd), `specDoctor` swaps the design checks for

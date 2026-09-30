@@ -85,7 +85,7 @@ exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, SERVER, child, r
     // C4.2.5 — a deleted [PRIVACY] heading is not satisfied by an unrelated core heading.
     const pv = S.createFeature(c4("sections"), "Accounts", ["privacy"], "", undefined, "en");
     const pvDesign = path.join(pv.dir, "design.md");
-    const filledDesign = fs.readFileSync(pvDesign, "utf8").split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n")
+    const filledDesign = fs.readFileSync(pvDesign, "utf8").split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n")
       .replace(/\[([^\]\n]*)\]/g, (m, x) => (/^(?:PRIVACY|SEC|SaaS|AI|x| )$/.test(x) ? m : "filled"));
     fs.writeFileSync(pvDesign, filledDesign);
     const pvFilled = chk(S.specDoctor(c4("sections"), pv.slug), "privacy-sections");

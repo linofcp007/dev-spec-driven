@@ -157,7 +157,7 @@ const MIME = "text/markdown";
 // The artifacts a feature resource can name (every other file of a feature folder is out of reach).
 const RESOURCE_ARTIFACTS = ["classification.md", "requirements.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md",
   "bug.md", "quickstart.md", "checklist.md", "integration-plan.md", "retro.md",
-  "spike.md", "decisions.md"]; // 1.14 C2: a spike's spike.md, a feature's decision log
+  "spike.md", "decisions.md", "change.md"]; // 1.14 C2: a spike's spike.md, a feature's decision log · 1.21 F5: a change's one file
 const RESOURCE_CAP = 500; // resources/list returns at most this many (the rest stay readable through the templates)
 // A steering file: one .md name straight under .specs/steering/ — no separators, no '..', no Windows device name.
 const RE_STEERING_FILE = /^[A-Za-z0-9](?:[A-Za-z0-9_-]|\.(?!\.))*\.md$/;

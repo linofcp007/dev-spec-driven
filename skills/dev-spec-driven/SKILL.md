@@ -136,6 +136,15 @@ one. Switch anytime: "let's vibe" → Vibe; "spec this" → Spec from Phase 0. I
 boundary, a payment path, personal data, a trust boundary or an LLM call, say so and offer to classify. New to the
 plugin? `/spec-tour` takes one tiny real change on the user's repo through every gate in ~10 minutes.
 
+### Size — rigor proportional to the change
+Phase 0 also picks a **size** (`spec_classify`'s `suggestedSize` is a draft; pass `spec_create {size}`): **xs** — a
+change: ONE `change.md` (summary, 1–3 EARS criteria, approach, 1–3 tasks with `_Verify:_`), core only, two approvals —
+the plan (`spec_approve {through: "tasks"}`) and execution; a track or a fourth task means size s. **s** — one story, no
+classification.md, each track's core-tier sections (an extended one may stay out, or answer `n/a — <reason>`); fill the
+whole plan, then approve it in one call. **m / l** — the full chain, duplicate track sections merged. An XS bugfix drops
+the reproduce / root-cause tasks (their gates remain). No size = the pre-1.21 scaffold. Every size keeps EARS, trace,
+evidence, the iron law and the finish gate. `references/workflows.md`.
+
 ### Brownfield — adopt SDD in an EXISTING codebase
 No `.specs/` yet, or "spec our existing app": **scan** (`/scan`) → steering + a constitution that acknowledges the
 existing patterns → reverse-engineer specs of what the code does *today* (`/reverse`) → **coverage** (`/coverage`) →
@@ -178,7 +187,7 @@ Decide the mode, then the track set. This is fast (5–10 min) and saves days of
    `+obs` if people depend on it staying up (SLOs, alerting, on-call, rollout) · `+data` if it moves data between stores on a
    schedule or a stream and owns its quality (ETL, a warehouse, backfills). **When unsure, turn the track on.**
    One auth word alone only makes `+sec` "possible"; the classifier's notes say so.
-3. **Present for approval:** mode, active tracks, the signals, blast radius, and (per track) hot-path / autonomy /
+3. **Present for approval:** mode, active tracks, size, the signals, blast radius, and (per track) hot-path / autonomy /
    volume / compliance. If the user disagrees with the track set, adjust it now.
 4. **After Phase 0 approval:** `spec_init {tracks, lang}` if steering is missing, then
    `spec_create {name, tracks, lang}` **once** — it seeds `classification.md` (record the fields from
@@ -203,7 +212,8 @@ Steps: read steering → ask clarifying questions (don't guess) → fill the sca
 `ears_validate` (missing SHALL / IDs, vague words) → **run `spec_clarify`** (`/clarify`: vague terms, leftover
 placeholders, missing edge cases / NFRs / out-of-scope / IF…THEN failure paths, track gaps, unstated consistency) and
 ask the user → for a deeper one-question-at-a-time interrogation offer `/grill` (its constraints round: atomicity,
-isolation, races, consistency, idempotency, failures, volume) → present for approval.
+isolation, races, consistency, idempotency, failures, volume — minus what an active track's design sections already ask)
+→ present for approval.
 
 ### EARS Quick Reference
 | Pattern | Keyword | Example |
@@ -348,7 +358,7 @@ change an AC, the design or a planned test goes back to that phase; +ai prompt/e
 
 Before advancing a phase, run `/spec-doctor` (`spec_doctor`): one `readyToAdvance` verdict over EARS, placeholders,
 traceability, steering, the design + Mermaid + Constitution Check, every active track's mandatory sections (present
-AND filled — no leftover `TODO` sentinel), evidence, artifacts changed since their approval and the **approval
+AND filled with your own text — not the `TODO` sentinel, not the template's guidance line left alone), evidence, artifacts changed since their approval and the **approval
 gates** (`gatesOk`, `pendingGates`, forced approvals); check ids: `references/tooling-reference.md`. `--deep` adds a
 semantic review by the `dev-spec-driven:spec-critic` agent. When the user signs off — an explicit yes for that phase —
 record it with `/approve <feature> <phase>` (auditable, resumable, in `.state.json`). **The approval is a gate:** that

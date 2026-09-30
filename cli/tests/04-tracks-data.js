@@ -29,12 +29,12 @@ exports.run = ({ ok, run, tmp, __dirname }) => {
   run(["approve", "orders-data", "requirements", "--force", "--project", pd]);
   const appr = run(["approve", "orders-data", "design", "--project", pd]);
   const des = path.join(pd, ".specs", "orders-data", "design.md");
-  fs.writeFileSync(des, rd(des).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+  fs.writeFileSync(des, rd(des).split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
   const doc2 = run(["doctor", "orders-data", "--project", pd]).out;
   const sj = JSON.parse(run(["status", "orders-data", "--json", "--project", pd]).out);
   ok(es.code === 0 && doc.code === 1 && /✗ data-sections — Contratos de Datos y Evolución del Esquema:sin rellenar/.test(doc.out) && appr.code === 1 && /data-sections/.test(appr.out) &&
     /✓ data-sections — las 5 rellenadas/.test(doc2) && sj.dataSections.length === 5 && sj.dataSections.every((s) => s.filled) && sj.obsSections === null,
-    "1.21 F4 (CLI): doctor exits 1 with data-sections failing (ES) and approve design is refused naming it; once the TODO lines are gone the check passes (--json: dataSections) (got " +
+    "1.21 F4 (CLI): doctor exits 1 with data-sections failing (ES) and approve design is refused naming it; once each TODO line is answered the check passes (--json: dataSections) (got " +
     js([doc.out.split("\n").filter((l) => l.includes("data-sections")), doc2.split("\n").filter((l) => l.includes("data-sections"))]) + ")");
 
   // add-track: a did-you-mean for a typo, +data added and --remove lists its inactive sections; tracks lists data [DATA]; tracks init data / etl

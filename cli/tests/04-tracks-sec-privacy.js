@@ -25,12 +25,12 @@ exports.run = ({ ok, run, tmp }) => {
     appr.code === 1 && /sec-sections, privacy-sections/.test(appr.out),
     "doctor exits 1 with sec-sections / privacy-sections failing; approve design is refused naming them");
   const des = path.join(a2, ".specs", "exportar", "design.md");
-  fs.writeFileSync(des, fs.readFileSync(des, "utf8").split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+  fs.writeFileSync(des, fs.readFileSync(des, "utf8").split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
   const doc2 = run(["doctor", "exportar", "--project", a2]).out;
   const js = JSON.parse(run(["status", "exportar", "--json", "--project", a2]).out);
   ok(/✓ sec-sections — as 5 preenchidas/.test(doc2) && /✓ privacy-sections — as 6 preenchidas/.test(doc2) && /✓ Modelo de Ameaças · ✓ Requisitos de Segurança/.test(run(["status", "exportar", "--project", a2]).out) &&
     js.secSections.length === 5 && js.secSections.every((s) => s.filled) && js.privacySections.length === 6 && js.scaleSections === null,
-    "once the TODO lines are gone doctor passes both section checks and status marks them ✓ (--json: secSections / privacySections)");
+    "once each TODO line is answered doctor passes both section checks and status marks them ✓ (--json: secSections / privacySections)");
   run(["create", "Plain", "core", "--lang", "en", "--project", a2]);
   const typo = run(["add-track", "plain", "secc", "--project", a2]);
   const add = run(["add-track", "plain", "sec", "privacy", "--project", a2]);

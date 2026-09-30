@@ -10,7 +10,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
   const rd = (...p) => fs.readFileSync(path.join(...p), "utf8");
   const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
-  const dropTodo = (file) => fs.writeFileSync(file, rd(file).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+  const dropTodo = (file) => fs.writeFileSync(file, rd(file).split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
   const cls = (t, lang) => S.classify(t, lang ? { lang } : {});
   const onOf = (t, tr) => cls(t).tracks.includes(tr);
 
@@ -70,7 +70,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
         const fp = path.join(f.dir, file);
         let t = rd(fp);
         for (let i = 0; i < 3; i++) t = t.replace(SLOT, "the orders table");
-        fs.writeFileSync(fp, t.split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+        fs.writeFileSync(fp, t.split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
       }
       const doc = S.specDoctor(p, f.slug);
       const gates = ["classification", "requirements", "design", "tasks"].map((ph) => [ph, S.approvePhase(p, f.slug, ph, "t")]);

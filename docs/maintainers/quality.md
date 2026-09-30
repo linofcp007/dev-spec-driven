@@ -104,7 +104,15 @@ nudge, the TDD micro-cycle.
   "consistent", "eventually", "atomic" or "isolation" ("tenant isolation"). → `nudges [{code: "consistency-unstated",
   signals ≤ 3}]` (one word per concept, each strong phrase); plain features only, never with +dist. /grill has the matching
   "Constraints round" (atomicity, ACID / isolation, race conditions, consistency model, delivery + idempotency, dependency
-  failure, volume, a measurable business outcome).
+  failure, volume, a measurable business outcome). **1.21 F5 P6 — one question bank:** /grill skips a constraint question an
+  active track's design sections own (+dist: atomicity … dependency failure; +saas: volume; +api: idempotent creates and
+  concurrent updates) — clarify's rule (no nudge under +dist) — and a sized design's Error Handling points at the IF…THEN
+  criteria instead of asking again (prose + the sized builders; no engine check).
+- **The merged section (1.21 F5 — size S)** — a sized-S design writes ONE `## Decisions, reuse & risks` section (Reuse ·
+  Decision · Risk bullets) instead of the three. `designWeighChecks` reads it (`WEIGH_MERGED_SYN`, EN / PT / ES) for a check
+  whose own section the design lacks, with min 0 (one line of prose or a bullet answers each: "nothing to reuse", "no
+  alternative worth weighing", "no material risk"); the brief's Reuse part reads it too. A design with its own section is
+  judged on that section as ever.
 - **The TDD micro-cycle** (adapted from obra/superpowers' test-driven-development, MIT) is prose only —
   references/test-patterns.md "The micro-cycle inside a task", agents/spec-implementer.md (a hard rule), spec-reviewer,
   /executeTask, AGENTS.md, SKILL.md Phase 6: one behaviour at a time, fail for the right reason, minimal code, refactor only

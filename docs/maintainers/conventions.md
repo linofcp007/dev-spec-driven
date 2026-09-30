@@ -20,6 +20,11 @@ and U+FEFF gotchas are in CLAUDE.md.
   written after): roadmap.json dependsOn, `_Supersedes: <old>/…_` markers in other features' requirements.md (active
   and archived; never one in a comment/fence), and archived features' `.state.json → archived` records. A broken
   archived state file that names the old slug refuses the rename.
+- **A change's requirements.md / tasks.md are its change.md (1.21 F5).** `readIfExists`, `existsCached`, `readContained`
+  and `writeFileAtomic` alias a missing `requirements.md` / `tasks.md` to the folder's `change.md` when that folder's
+  `.state.json` says `kind: "change"` (`changeAlias()`, files.js; `readRaw` / `existsRaw` are the unaliased readers). A raw
+  `fs.existsSync` / `fs.statSync` of those names does NOT alias — kind-aware code names the file through
+  `phaseFile("tasks", "change")`. Never create a `tasks.md` in a change folder (it would win over change.md).
 - **JSON state is read with `readJson()` and written atomically (`writeFileAtomic`)**. A
   `roadmap.json` / `.state.json` that exists but doesn't parse is an ERROR every mutator returns
   (`roadmapError()`, `state.invalid`) — never "repaired" into `{}` (that erased deps, backlog,

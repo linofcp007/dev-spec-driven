@@ -75,7 +75,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     fs.writeFileSync(path.join(n13, "src", "a.js"), "x\n");
     const sc13 = S.scanCodebase(n13, { cap: -3 });
     // (1.14 full review S7: the action list now names rm's alias remove — the spec_backlog enum.)
-    ok(kind13.ok === false && /kind must be one of: feature, bugfix, spike \(got "bugfx"\)/.test(kind13.error) && kindEmpty13.ok === false && !fs.existsSync(path.join(n13, ".specs", "zed")) &&
+    ok(kind13.ok === false && /kind must be one of: feature, bugfix, spike, change \(got "bugfx"\)/.test(kind13.error) && kindEmpty13.ok === false && !fs.existsSync(path.join(n13, ".specs", "zed")) &&
       bl13.ok === false && /action must be one of: add, rm, remove, list \(got "delete"\)/.test(bl13.error) && S.backlog(n13).ok === true && S.backlog(n13, "LIST").ok === true &&
       sc13.filesScanned === 1 && !sc13.truncated,
       "createFeature refuses an unknown kind (nothing scaffolded), backlog an unknown action (= the MCP enums); scanCodebase with cap -3 falls back to the default (never 0 files)");

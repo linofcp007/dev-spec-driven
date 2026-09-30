@@ -16,14 +16,16 @@ let activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSi
   ownRecord, parseTasks, PHASE_PERCENT, phaseActive, PHASES, readIfExists, readJson, readRoadmap, roadmap, roleWaitList,
   round1, round2, sectionState, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats, supersedesTrace, taskBlocks,
   taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf, unverifiedLabel, verificationStatus,
-  waiverView;
+  waiverView,
+  featureSize, trackSectionReport, sectionVerdict;
 function __link(E) { ({ activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSinceApproval,
   clarificationMarkers, detectTracks, duplicateTaskNumbers, flatText, FOLD_CASE, globMatcher, implementsRel,
   isImplementsGlob, isObj, isRecord, MILESTONE_ICON, milestoneAttention, milestoneInvalidInfo, milestoneLine,
   milestoneStatuses, normalizeLang, ownRecord, parseTasks, PHASE_PERCENT, phaseActive, PHASES, readIfExists, readJson,
   readRoadmap, roadmap, roleWaitList, round1, round2, sectionState, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats,
   supersedesTrace, taskBlocks, taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf,
-  unverifiedLabel, verificationStatus, waiverView } = E); }
+  unverifiedLabel, verificationStatus, waiverView,
+  featureSize, trackSectionReport, sectionVerdict } = E); }
 
 // ---------------------------------------------------------------------------
 // ROADMAP.md renderer — a single always-current overview of all features
@@ -101,8 +103,10 @@ function roadmapData(projectDir, opts = {}) {
     // the current phase's template placeholders, approvals recorded with --force.
     const st = readJson(statePath(dir)).data; // read-only here: no resolver pass (it re-reads roadmap.json per call)
     const approvals = isObj(st) && isObj(st.approvals) ? st.approvals : {};
-    const sections = activeSectionTracks(tracks)
-      .flatMap(([, secs, mark]) => sectionState(design, secs, mark).filter((s) => s.status !== "filled").map((s) => ({ ...s, mark })));
+    // 1.21 F5: the size's rules and the stricter filled rule (a guidance-only section on an approved design is flagged too — a warn)
+    const size = featureSize(dir);
+    const sections = trackSectionReport(design, tracks, { size, lang: isObj(st) && typeof st.lang === "string" ? st.lang : undefined })
+      .flatMap(([, mark, rows]) => rows.filter((s) => sectionVerdict(s, { size }) !== "pass").map((s) => ({ ...s, mark })));
     const changed = changedSinceApproval(dir, approvals, tracks, isObj(st) ? st.kind : undefined);
     const placeholders = chainPlaceholders(dir, tracks, (isObj(st) && st.kind) || "feature", f.phase, true, raw).blocking.map((r) => r.file);
     const forced = PHASES.filter((p) => phaseActive(p, tracks) && approvals[p] && approvals[p].forced);
@@ -166,7 +170,7 @@ function renderRoadmapMd(projectDir, lang, data) {
   const nextCell = (r) => (r.f.percent === 100 ? "—" : r.f.blocked || r.depsBlocked ? t.blocked : r.next ? `#${r.next.number} ${cell(roadmapTaskText(r.next.text, t).slice(0, 42))}` : "…");
   const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked && !r.depsBlocked);
   const kindTag = (f) => (f.kind === "spike" ? " 🔬 " + i18n.msg(lang).spike.kind : ""); // 1.14 C2: spikes read apart
-  const specLink = (f) => `./${f.name}/${f.kind === "spike" ? SPIKE_FILE : "requirements.md"}`;
+  const specLink = (f) => `./${f.name}/${f.kind === "spike" ? SPIKE_FILE : f.kind === "change" ? "change.md" : "requirements.md"}`; // 1.21 F5: a change's one file
 
   let md = `# ${t.roadmap} — ${proj}\n\n<!-- ${t.autogen} -->\n\n`;
   md += `**${t.progress}: ${rmv.overallPercent}%** ${progressBar(rmv.overallPercent)} · ${rmv.complete}/${rmv.total} ${t.complete} · ${tasksDone}/${tasksTotal} ${t.tasks}\n\n`;
@@ -226,7 +230,7 @@ function renderRoadmapHtml(projectDir, lang, data) {
     .map(
       (r) =>
         `<tr><td><span class="dot" style="background:${dot[r.state]}"></span></td>` +
-        `<td><a href="./${encodeURI(r.f.name)}/${r.f.kind === "spike" ? SPIKE_FILE : "requirements.md"}">${htmlEsc(r.f.name)}</a>${r.f.kind === "spike" ? ` <span class="tracks">🔬 ${htmlEsc(i18n.msg(lang).spike.kind)}</span>` : ""}</td>` +
+        `<td><a href="./${encodeURI(r.f.name)}/${r.f.kind === "spike" ? SPIKE_FILE : r.f.kind === "change" ? "change.md" : "requirements.md"}">${htmlEsc(r.f.name)}</a>${r.f.kind === "spike" ? ` <span class="tracks">🔬 ${htmlEsc(i18n.msg(lang).spike.kind)}</span>` : ""}</td>` +
         `<td><span class="tracks">${htmlEsc(r.f.tracks)}</span></td>` +
         `<td>${htmlEsc(phaseName(r.f.phase))}</td>` +
         `<td class="pct"><span class="bar"><span style="width:${r.f.percent}%"></span></span>${r.f.percent}%</td>` +

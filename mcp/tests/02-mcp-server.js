@@ -609,7 +609,7 @@ exports.run = async ({
     ok(capped.resources.length === 3 && capped.truncated && capped.total === a1Expected.length && /capped at 3 of \d+/.test(capped.note) &&
       PR.listResources(a1p).truncated === false && PR.RESOURCE_CAP === 500,
       "resources/list is capped (RESOURCE_CAP 500) and says so: truncated, total, a note naming the templates (the server passes it in _meta)");
-    const a1big = path.join(tmp, "proj-a1-big"); // 45 hand-made feature folders × 14 artifacts = 630 resources > the cap
+    const a1big = path.join(tmp, "proj-a1-big"); // 45 hand-made feature folders × 15 artifacts = 675 resources > the cap (1.21 F5: + a change's change.md)
     for (let i = 1; i <= 45; i++) {
       const d = path.join(a1big, ".specs", "f" + String(i).padStart(2, "0"));
       fs.mkdirSync(d, { recursive: true });
@@ -620,8 +620,8 @@ exports.run = async ({
     const big = (await s4.req("resources/list", {})).result;
     const bigLast = await s4.req("resources/read", { uri: "specs://feature/f45/retro.md" });
     await s4.stop();
-    ok(big.resources.length === 500 && big._meta && big._meta.truncated === true && big._meta.total === 630 && big._meta.cap === 500 &&
-      /capped at 500 of 630 — read the others through the templates/.test(big._meta.note) && bigLast.result && bigLast.result.contents[0].text === "# retro.md\n",
+    ok(big.resources.length === 500 && big._meta && big._meta.truncated === true && big._meta.total === 675 && big._meta.cap === 500 &&
+      /capped at 500 of 675 — read the others through the templates/.test(big._meta.note) && bigLast.result && bigLast.result.contents[0].text === "# retro.md\n",
       "resources/list over the cap: 500 resources plus _meta {truncated, total, cap, note}; a resource past the cap is still readable through its URI");
     const a1r = path.join(tmp, "proj-a1-roadmap");
     S.initProject(a1r, ["core"], "en");

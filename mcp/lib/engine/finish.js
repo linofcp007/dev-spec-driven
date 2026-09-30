@@ -217,7 +217,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (decLines.length) body.push(...decLines, "");
   if (forcedList.length) body.push(...waiverSummaryLines(forcedList, lng), ""); // 1.16 U3: the waived gates
   body.push(F.prChecks, ...checks.map((c) => "- [ ] " + c), "");
-  const specFiles = ["requirements.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md", DECISIONS_FILE]
+  const specFiles = ["requirements.md", "change.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md", DECISIONS_FILE] // 1.21 F5: a change's one file
     .filter((x) => fs.existsSync(path.join(dir, x)));
   body.push(F.prSpec, ...specFiles.map((x) => "- `.specs/" + slug + "/" + x + "`"));
   const mergeSummary = body.join("\n") + "\n";

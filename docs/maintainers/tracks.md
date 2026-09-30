@@ -20,6 +20,13 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   from the registries; update the MCP descriptions and CLI help by hand. `templateCorpus()` renders every set of at
   most two optional tracks plus all of them (quadratic beyond three tracks — verified equal to the full power set's
   placeholder reports). A TEAM's own track needs none of this: it is a track pack (see Project-defined tracks, 1.15).
+  **1.21 F5 — sizes (DATA, no code):** a new built-in marker track also gives each section of its `TRACK_SECTIONS` table a
+  `tier` (`"extended"` = optional at size s; absent = core — keep ≥ 1 core section, and one per criterion's concern), adds
+  a `TRACK_OVERLAPS` entry when one of its sections duplicates another track's (`{drop: [track, name], by: [[track,
+  name]…]}`) and a `TRACK_TASK_OVERLAPS` entry for a duplicated template task, a `CORE_SUPERSEDED_BY` key (i18n/common.js)
+  when its sections own a core design section, and its template criteria in `TEMPLATE_ACS` (every size scaffolds them).
+  Its template tasks are trimmed at size s by rule (`sizeTasksText()` — the tasks whose criteria the others cite), never
+  by a per-track list. gates-and-approvals.md → Right-sized rigor.
 - **+dist (1.17)** — the seventh built-in marker track `[DIST]` (distributed systems & data consistency), added through the
   registries: SIGNALS.dist has FOUR tiers (1.17 D review) — strong: named brokers / job and workflow platforms (kafka,
   rabbitmq, sqs, debezium, Google Pub/Sub, sidekiq, bullmq…; a common word only in its capitalised, case-sensitive product

@@ -31,9 +31,9 @@ Read the file BEFORE you change its area (a section name another note cites — 
   completions), argument validation, the stdio framing or the elicitation path: MCP tools · Capabilities · Human approvals over
   MCP elicitation (1.21) · Argument validation · Protocol (server-initiated requests).
 - **`docs/maintainers/gates-and-approvals.md`** — before changing an approval gate, next_action's steps, placeholders,
-  spec_impact / the approval history, roles, undo / revoke / waivers, flows or the bugfix kind: Gates (1.13) · Approval
-  fingerprints and pending gates · Change history · Team governance · Undo, revoke, waivers, MCP-only gates · Flows ·
-  Bugfix and finish.
+  spec_impact / the approval history, roles, undo / revoke / waivers, flows, the bugfix kind or feature sizes / the change
+  kind / the track sections' filled rule: Gates (1.13) · Approval fingerprints and pending gates · Change history · Team
+  governance · Undo, revoke, waivers, MCP-only gates · Flows · Right-sized rigor (1.21 F5) · Bugfix and finish.
 - **`docs/maintainers/tasks-and-evidence.md`** — before changing tasks.md parsing, the task brief, `_Verify:_` / evidence /
   `done --run`, `_Depends:_`, the stop gate, the scope guard or observed evidence: Subagent-driven execution · Evidence ·
   Task dependencies and execution waves · Tasks: ONE scanner · End-of-turn evidence gate and scope guard ·

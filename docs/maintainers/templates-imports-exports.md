@@ -8,7 +8,9 @@ trackers, release notes, milestones).
 - **Resolution:** `.specs/templates/<lang>/<artifact>.md` wins over `.specs/templates/<artifact>.md`, which wins over the
   built-in i18n builder (`templateOverride()`); a pt-BR feature reads `pt-BR/`, then `pt/` (`templateLangChain()`). Only allowlisted names are ever read — `TEMPLATE_ARTIFACTS`
   (classification, requirements, design, tasks, test-plan, eval-plan, load-test, quickstart, checklist, integration-plan,
-  bug, bug-requirements, bug-test-plan, bug-tasks, spike, spike-tasks) plus `steering/<file>.md` (a known stub, or a name
+  bug, bug-requirements, bug-test-plan, bug-tasks, spike, spike-tasks, change — 1.21 F5: a change's one file; a sized
+  feature's built-in scaffold follows its size, a project template is written as it says, its missing track blocks
+  appended whole) plus `steering/<file>.md` (a known stub, or a name
   steering_scaffold accepts). Every path is built from the allowlist and `LANGS`, never from a caller's string; at most
   three levels; dot files are not listed; a linked folder is never entered, a file whose real path is outside the project
   is ignored, and `init` refuses to write through a link. Files are read BOM-stripped with LF line ends; a
