@@ -232,6 +232,18 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
 
+### New in 1.21
+
+- **Rigor sized to the change** — Phase 0 suggests a size: **xs** is a *change* (one `change.md`, two approvals), **s** one
+  story whose plan is approved in one call with each track's core sections only, **m / l** the full chain with the sections
+  two tracks both ask for written once. A track section counts as filled only with your own text. No size = as before.
+- **Teams** — `dev-spec merge-state --install` lets git merge the spec state (approvals, ticks, evidence) of two branches;
+  MCP clients with elicitation ask their user before an approval is recorded.
+- **A classifier that learns** — a negation reaches a whole list ("no payments or subscriptions"), and your Phase 0
+  corrections become project overrides (`.specs/classifier.json`, `dev-spec signals`, `classify --explain`).
+- **+data** — data contracts & schema evolution, data quality, idempotent re-runs & backfills, lineage & ownership,
+  retention & cost; and an example `+mobile` track pack in `examples/track-packs/mobile`.
+
 ### New in 1.20
 
 - **Easier to maintain, faster to start** — the maintainer notes, the test suites (`--only`, `--list`, parallel) and the
@@ -683,6 +695,19 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabalho, aprovações forçadas, pedidos de
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
+
+### Novidades da 1.21
+
+- **Rigor à medida da alteração** — a Fase 0 sugere um tamanho: **xs** é uma *alteração* (um `change.md`, duas
+  aprovações), **s** uma história cujo plano se aprova numa só chamada, só com as secções essenciais de cada track, **m / l**
+  a cadeia completa, com as secções que dois tracks pedem escritas uma vez. Uma secção de track só conta como preenchida com
+  texto seu. Sem tamanho = como antes.
+- **Equipas** — `dev-spec merge-state --install` deixa o git juntar o estado da spec (aprovações, tarefas, evidência) de dois
+  branches; os clientes MCP com elicitation perguntam ao utilizador antes de registar uma aprovação.
+- **Um classificador que aprende** — uma negação alcança uma lista inteira ("sem pagamentos nem subscrições") e as suas
+  correções da Fase 0 tornam-se ajustes do projeto (`.specs/classifier.json`, `dev-spec signals`, `classify --explain`).
+- **+data** — contratos de dados e evolução do esquema, qualidade dos dados, reprocessamentos idempotentes e backfills,
+  linhagem e responsáveis, retenção e custo; e um track pack de exemplo `+mobile` em `examples/track-packs/mobile`.
 
 ### Novidades da 1.20
 
@@ -1155,6 +1180,19 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabajo, aprobaciones forzadas, solicitudes de
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
+
+### Novedades de la 1.21
+
+- **Rigor a la medida del cambio** — la Fase 0 sugiere un tamaño: **xs** es un *cambio* (un `change.md`, dos
+  aprobaciones), **s** una historia cuyo plan se aprueba en una sola llamada, solo con las secciones esenciales de cada track,
+  **m / l** la cadena completa, con las secciones que piden dos tracks escritas una vez. Una sección de track solo cuenta como
+  rellenada con texto propio. Sin tamaño = como antes.
+- **Equipos** — `dev-spec merge-state --install` deja que git fusione el estado de la spec (aprobaciones, tareas, evidencia)
+  de dos ramas; los clientes MCP con elicitation preguntan a su usuario antes de registrar una aprobación.
+- **Un clasificador que aprende** — una negación alcanza toda una lista ("sin pagos ni suscripciones") y sus correcciones de
+  la Fase 0 se vuelven ajustes del proyecto (`.specs/classifier.json`, `dev-spec signals`, `classify --explain`).
+- **+data** — contratos de datos y evolución del esquema, calidad de los datos, reprocesos idempotentes y backfills, linaje y
+  responsables, retención y coste; y un track pack de ejemplo `+mobile` en `examples/track-packs/mobile`.
 
 ### Novedades de la 1.20
 
