@@ -1504,6 +1504,33 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     ok(r2Off.every(([tr, t]) => !onOf(t, tr)) && r2On.every(([tr, t]) => onOf(t, tr)),
       "1.21 verify R2: 'must not / should not enable / activate / install / embed / bundle / expose X' and PT 'não deve instalar', ES 'no debemos activar' exclude X; 'Logs must not expose personal data', 'must not leak personal data', 'must not corrupt payments' keep their tracks (got " +
       js([r2Off.filter(([tr, t]) => onOf(t, tr)), r2On.filter(([tr, t]) => !onOf(t, tr))]) + ")");
+    // 1.21 verify N1: a negation excludes only when it certainly governs the keyword (a nominal negator with only fillers / modifiers between,
+    // or an adoption verb / a plan / an intention); anything else keeps the track — a noun ends the negated phrase, an auxiliary + another
+    // verb negates the verb, a people relative clause, a condition, a nominal negator inside a negated predicate (EN / PT / ES)
+    const n1On = [["tdd", "Without payments the checkout is useless."], ["tdd", "Sem pagamentos o checkout não serve."], ["tdd", "Sin pagos el checkout no sirve."],
+      ["saas", "Without Kafka the webhook retries on failure."], ["tdd", "Users who do not pay the subscription are blocked."],
+      ["tdd", "Users who don't pay the subscription are blocked."], ["tdd", "Utilizadores que não pagam a subscrição são bloqueados."],
+      ["tdd", "Los usuarios que no pagan la suscripción quedan bloqueados."], ["ai", "The report does not show the LLM cost."], ["ai", "The report doesn't show the LLM cost."],
+      ["ai", "O relatório não mostra o custo do LLM."], ["tdd", "The admin who doesn't have MFA must enable it."],
+      ["privacy", "The export doesn't include personal data unless the admin asks."], ["saas", "If we don't add rate limiting, the API will be abused."],
+      ["saas", "If we do not add rate limiting, the API will be abused."], ["saas", "Se não adicionarmos rate limiting, a API será abusada."],
+      ["saas", "Si no añadimos rate limiting, la API será abusada."], ["obs", "We won't ship without a canary release."], ["tdd", "Nobody should access the admin API without SSO."]];
+    const n1Off = [["dist", "We don't use Kafka."], ["ai", "We will not add an LLM."], ["ai", "This feature doesn't need an LLM."], ["dist", "Nunca usaremos Kafka."],
+      ["dist", "We do not plan to use Kafka."], ["dist", "No need for Kafka or RabbitMQ."], ["dist", "Não vamos integrar Kafka, RabbitMQ nem SQS."],
+      ["dist", "We no longer use Kafka or RabbitMQ."], ["ai", "This feature doesn't involve an LLM or embeddings."], ["dist", "We are not going to use Kafka or RabbitMQ."],
+      ["ai", "Página interna que no usa LLM, sólo una tabla"], ["ai", "Sem integração externa nem embeddings."], ["dist", "Sem Kafka e sem RabbitMQ."]];
+    ok(n1On.every(([tr, t]) => onOf(t, tr)) && n1Off.every(([tr, t]) => !onOf(t, tr)) && b1On.every((t) => onOf(t, "tdd")),
+      "1.21 verify N1: 'Without payments the checkout is useless' (PT / ES), 'Without Kafka the webhook retries', 'Users who do not pay the subscription' (PT / ES), 'The report does not show the LLM cost', 'The admin who doesn't have MFA', '…unless the admin asks', 'If we don't add rate limiting' (PT / ES), 'We won't ship without a canary release', 'Nobody … without SSO' keep their tracks; the governed exclusions (don't use, will not add, doesn't need, nunca usaremos, do not plan to use, no need for, a 3-item nem list, no longer use, doesn't involve, a page that doesn't use an LLM) still exclude (got " +
+      js([n1On.filter(([tr, t]) => !onOf(t, tr)), n1Off.filter(([tr, t]) => onOf(t, tr))]) + ")");
+    // 1.21 verify N3: a wish on a hazard noun is a requirement ("don't want duplicate payments", PT / ES "pagamentos duplicados"); expose /
+    // embed of a protected HEAD noun (secrets, keys, tokens, credentials, passwords, personal data, introspection…) keeps the keyword's track
+    const n3On = [["tdd", "We don't want duplicate payments."], ["tdd", "Não queremos pagamentos duplicados."], ["tdd", "No queremos pagos duplicados."],
+      ["tdd", "The frontend must not embed OAuth client secrets."], ["api", "The API must not expose GraphQL introspection in production."],
+      ["privacy", "Logs must not expose personal data."], ["tdd", "Logs must not expose passwords."]];
+    const n3Off = [["api", "We must not expose GraphQL."], ["ai", "The MVP must not embed LLMs."], ["dist", "We don't want Kafka or RabbitMQ."]];
+    ok(n3On.every(([tr, t]) => onOf(t, tr)) && n3Off.every(([tr, t]) => !onOf(t, tr)),
+      "1.21 verify N3: 'don't want duplicate payments' (PT / ES) keeps +tdd; 'must not embed OAuth client secrets' keeps +tdd, 'must not expose GraphQL introspection' keeps +api, 'Logs must not expose personal data / passwords' keep theirs; 'must not expose GraphQL', 'must not embed LLMs', 'don't want Kafka or RabbitMQ' exclude (got " +
+      js([n3On.filter(([tr, t]) => !onOf(t, tr)), n3Off.filter(([tr, t]) => onOf(t, tr))]) + ")");
     // 1.21 review B2: a comma after the list's closing conjunction — or one before an article (a new clause's subject) — ends the list
     const b2 = [["tdd", "ai", "Without an LLM or embeddings, the checkout or a subscription page is the priority."],
       ["saas", "dist", "Without Kafka or RabbitMQ, the webhook or a nightly retry job handles delivery."],

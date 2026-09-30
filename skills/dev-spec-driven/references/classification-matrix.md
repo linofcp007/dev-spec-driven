@@ -66,22 +66,29 @@ is a draft for the human, who confirms Phase 0.
   closing "or" ends it too ("Without an LLM or embeddings, the checkout or a subscription page is the priority" keeps +tdd),
   and a comma + an article joins only an item of the list's own track with no predicate after it ("Without an LLM, a vector
   database or embeddings" is one list; "No LLM, the checkout or the subscription flow first" keeps +tdd).
-  **What a negation negates:** a modal's negated verb — must / should / can, *pode / deve · puede / debe* — is a REQUIREMENT
-  about its objects, like a hazard: "The system must not lose payments nor duplicate invoices", "The system must not lose
-  payments", "The service must not leak personal data", *"Não pode perder pagamentos nem reembolsos"*, *"No puede perder pagos
-  ni reembolsos"*, "without losing payments or refunds", "a second write never overwrites the ledger", "We don't want to lose
-  payments" keep their tracks. An EXCLUSION is a noun phrase ("no payments", "Postgres, not MongoDB nor Kafka"), an adoption
-  verb's object whatever the modal (use / add / need / include / implement / integrate / deploy / run / offer / provide / ship /
-  adopt / enable / activate / install / embed / bundle / expose, "necessary" — *usar, adicionar, integrar, adotar, ativar,
-  instalar, expor, precisar · usar, añadir, integrar, desplegar, activar, exponer, necesitar, es necesario, hace falta*: "must
-  not use X or Y", "We should not enable feature flags yet", "We must not expose GraphQL", *"O serviço não deve instalar
-  Kafka"*) or a plan's verb (will / do, a volition or intention verb before a noun — "We will not run Kafka or RabbitMQ",
-  *"Não queremos / pretendemos usar LLM nem embeddings", "No pensamos usar Kafka ni RabbitMQ", "No se usará…"*). Personal data
-  and secrets are data to protect: "Logs must not expose personal data", "The client must not embed the API key or the access token" keep
-  +privacy / +sec. The negator may sit a few words back and be contracted: "We don't use Kafka", "We won't use Kafka", "This feature
-  doesn't need an LLM", "We will not add an LLM", "We do not plan to use Kafka", *"Não vamos adicionar um LLM", "Nunca / Jamás
-  usaremos Kafka"* exclude (so does a 3-item list: *"Não vamos integrar Kafka, RabbitMQ nem SQS"*) — never across a preposition
-  after another noun ("We didn't add an LLM to the checkout" keeps +tdd).
+  **What a negation negates:** a negation EXCLUDES a keyword only when it certainly governs it — anything else keeps the
+  track (an extra track is a one-word removal in Phase 0; a missing one loses rigor). Certain: a nominal negator with only
+  articles, quantifiers or a modifier before the keyword ("no payments", "without real-time Kafka", *"sem Kafka"*, "Postgres,
+  not MongoDB nor Kafka") or a list it opened; an adoption verb (use / add / need / include / implement / integrate / deploy /
+  run / offer / provide / ship / adopt / involve / enable / activate / install / embed / bundle / expose, "necessary" —
+  *usar, adicionar, integrar, adotar, ativar, instalar, expor, precisar · usar, añadir, integrar, desplegar, activar, exponer,
+  necesitar, es necesario, hace falta*), whatever the modal ("must not use X or Y", "We should not enable feature flags yet",
+  "We must not expose GraphQL"), or a plan / an intention (will / do / going to, want / plan / intend — *vamos, iremos,
+  queremos, pretendemos, planeamos, pensamos*) before a noun: "We don't use Kafka", "We won't use Kafka", "This feature doesn't
+  need an LLM", "We will not add an LLM", "We do not plan to use Kafka", "We no longer use Kafka", "No need for Kafka",
+  *"Não queremos Kafka nem RabbitMQ", "Nunca / Jamás usaremos Kafka", "Não vamos integrar Kafka, RabbitMQ nem SQS"*. Kept: a
+  noun ends the negated phrase ("Without payments the checkout is useless" keeps +tdd); an auxiliary or a modal + any other
+  verb is the requirement about its object ("The report does not show the LLM cost", "The system must not lose payments nor
+  duplicate invoices", "The service must not leak personal data", *"Não pode perder pagamentos nem reembolsos", "No puede
+  perder pagos ni reembolsos"*, "a second write never overwrites the ledger", "We do not collect personal data" — +privacy
+  stays for you to confirm); a verb form or a wished verb ("without losing payments or refunds", "We don't want to lose
+  payments"); a hazard ("We don't want duplicate payments", *"Não queremos pagamentos duplicados"*); a people relative clause
+  ("The admin who doesn't have MFA must enable it"); a condition ("If we don't add rate limiting, the API will be abused",
+  *"Se não adicionarmos…", "Si no añadimos…"*, "…unless the admin asks"); a "without" inside a negated predicate ("We won't
+  ship without a canary release", "Nobody should access the admin API without SSO"); expose / embed of secrets, keys, tokens,
+  credentials, passwords, personal data or introspection ("The frontend must not embed OAuth client secrets", "The API must
+  not expose GraphQL introspection", "Logs must not expose personal data"). A preposition after another noun ends it too ("We
+  didn't add an LLM to the checkout" keeps +tdd).
 - **This project's own corrections** (1.21): when the human confirms Phase 0 with other tracks than suggested — `spec_create`
   with `tracks` and the same description as `summary` — the words that drove the suggestion are recorded in
   `.specs/classifier.json`. After **two consistent corrections** a word the team keeps rejecting for a track stops turning it on

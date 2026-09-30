@@ -367,52 +367,13 @@ function negatedAfter(text, idx, kwLen) {
 function negatedBefore(text, idx, lang, cased) {
   return negatorBefore(text, idx, lang, cased) !== null;
 }
-// The negator that negates the match at idx from BEFORE it (the word, lower-case) — or null. track (optional): the match's track —
-// +sec / +privacy keywords are data to protect, so "must not expose / embed X" is their requirement (PROTECT_TRACKS, negationKind).
-function negatorBefore(text, idx, lang, cased, track) {
-  const protect = !!track && PROTECT_TRACKS.has(track);
-  // Negator token in the 1-2 words immediately before the match.
-  const before = text.slice(Math.max(0, idx - 20), idx).toLowerCase();
-  const tokens = before.split(/[^a-zà-ú-]+/).filter(Boolean);
-  const pt = i18n.baseLang(lang) === "pt"; // pt and pt-BR alike: "no" is em+o, never a negator
-  const negators = pt ? NEGATORS.filter((w) => w !== "no") : NEGATORS;
-  // "aplicado no checkout" / "guardado na sessão": after a participle, "no"/"na" is PT em+o, even in a
-  // phrase too short for guessLang to see Portuguese.
-  const prev = tokens[tokens.length - 2] || "";
-  const prevCased = ((cased || "").slice(Math.max(0, idx - 20), idx).split(/[^\p{L}-]+/u).filter(Boolean).slice(-2)[0]) || "";
-  const contraction = tokens[tokens.length - 1] === "no" && /(?:ad|id)[oa]s?$/.test(prev) &&
-    (pt || (prev.length >= 6 && prevCased === prevCased.toLowerCase()));
-  const wide = text.slice(Math.max(0, idx - 40), idx).toLowerCase().split(/[^a-zà-ú-]+/).filter(Boolean);
-  if (!contraction) {
-    const t1 = tokens[tokens.length - 1], t2 = tokens[tokens.length - 2];
-    if (t1 && negators.includes(t1)) return t1;
-    // 1.21 review B1: a negative conjunction (nor / nem / ni) negates the word right after it only — "nem duplicar faturas",
-    // "nor duplicate invoices" negate the verb (a second predicate), never its object. 1.21 verify V5: nor does a negator whose
-    // verb is a requirement's (negationKind) — "The system must not lose payments" keeps its payments, as PT "não pode perder
-    // pagamentos" always did; "we will not add payments", "do not store card numbers" still exclude.
-    if (t2 && negators.includes(t2) && !LIST_NEG.has(t2)) {
-      const j = wide.length - 2;
-      if (!(j >= 0 && wide[j] === t2 && wide[j + 1] === t1 && negationKind(wide, j, wide.length, lang, protect).kind === "require")) return t2;
-    }
-  }
-  // "sem uso de IA", "sin uso de IA", "no use of AI", "without the use of any AI": a negator a few filler words
-  // back still negates — weak signals included (a lone 'ia' used to come back as "Possible +ai").
-  let k = wide.length - 1;
-  while (k >= 0 && NEG_FILLER.has(wide[k])) k--;
-  // Across fillers, "no" negates only before an ENGLISH filler ("no use of AI"): before a PT one it is the
-  // contraction em+o — "Guia no uso do LLM" is a guide IN the use of the LLM, even when guessLang says 'en'.
-  const noContraction = wide[k] === "no" && !NEG_FILLER_EN.has(wide[k + 1]);
-  if (k < wide.length - 1 && k >= 0 && negators.includes(wide[k]) && !noContraction) return wide[k]; // only across at least one filler word
-  // 1.21 verify R1: a negator a few words back that GOVERNS the match — an exclusion (negationKind) read on the clause's words,
-  // contractions whole: "We don't use Kafka", "We won't use Kafka", "We will not add an LLM", "This feature doesn't need an LLM",
-  // "We do not plan to use Kafka", "Não vamos adicionar um LLM", "Nunca usaremos Kafka" (a requirement — "mustn't lose payments" —
-  // never is one)
-  // (a cheap precheck first: most matches have no negator within the look-back's reach)
-  if (contraction || !RE_NEG_NEAR.test(text.slice(Math.max(0, idx - GOVERN_REACH), idx))) return null;
-  return governingNegator(text, idx, lang, protect);
+// The negator that EXCLUDES the match at idx … end (the word, lower-case) — or null. (1.21 verify N1: only a CERTAIN exclusion —
+// negationOf; when in doubt the track stays: a track wrongly off loses rigor, an extra one is a one-word removal in Phase 0.)
+function negatorBefore(text, idx, lang, cased, end) {
+  const n = negationOf(text, idx, end == null ? idx : end, lang, cased);
+  return n ? n.word : null;
 }
-// a negator word, or a contraction ending n't, in a stretch of text (the governing look-back's precheck — the reach of cueBefore)
-const GOVERN_REACH = CUE_SPAN;
+// a negator word, or a contraction ending n't, in a stretch of text (the look-back's precheck — the reach of cueBefore)
 const RE_NEG_NEAR = new RegExp("(?<![\\p{L}])(?:" + NEGATORS.join("|") + ")(?![\\p{L}])|n['’]t(?![\\p{L}])", "u");
 
 // COORDINATED NEGATION (1.21 F2): a negation reaches every item of the coordinated list it opens, in its clause, for every track
@@ -460,27 +421,31 @@ function listLink(text, from, to, es) {
   if (or) return other <= 1 ? or : null;
   return gap.includes(",") && other === 0 ? "comma" : null;
 }
-// WHAT A NEGATION NEGATES (1.21 review B1, 1.21 verify V1 / V5) — negationKind(): the words after a negator decide whether it
-// EXCLUDES what follows (a noun phrase, an adoption verb's object, the verb of a plan or an intention) or states a REQUIREMENT about
-// it (a deontic modal's verb, a verb form after a nominal negator):
-//   - "no X", "sem X", "without the use of any X", "no new X", "Postgres, not MongoDB" — a noun phrase: exclude;
-//   - an ADOPTION verb (GOVERN_ADOPT: use / add / need / include / implement / integrate / deploy / run / offer / provide / ship /
-//     create / adopt, "necessary", + PT / ES) — its object is what is left out, whatever the modal: "will not add X", "must not use
-//     X", "Não vamos integrar X", "No es necesario X": exclude;
-//   - a DEONTIC modal (GOVERN_DEONTIC: must / shall / should / can / may, cannot / can't / mustn't; pode / deve; puede / debe) before
-//     another verb — "must not lose X", "não pode perder X", "no debe perder X", "must never leak X": the requirement about X (like a
-//     hazard's negation), never an exclusion of X;
-//   - a plain AUXILIARY or a volition / intention verb (GOVERN_AUX: will / do / is, vamos / iremos / queremos / pretendemos /
-//     planeamos, vamos / queremos / pensamos / se / hace…) before another verb — a plan: "We will not run X", "Não queremos X",
-//     "No pensamos desplegar X": exclude;
-//   - no auxiliary at all: a verb FORM (-ing, a PT / ES infinitive or gerund) is a requirement ("without losing X", "sem perder X",
-//     "não perder X"), any other word a noun (exclude — the 1.20 reading).
-// → { kind: "exclude" | "require", others } — `others`: the words between the negator and the end that are neither fillers, nor
-// modifiers, nor auxiliaries, nor adoption verbs. words: lower-case, from the negator (at j) to the item (end, exclusive). Linear.
+// WHAT A NEGATION NEGATES (1.21 review B1, verify V1 / V5 / R1 / N1) — a negation EXCLUDES a keyword only when it certainly governs
+// it; ANYTHING ELSE keeps the track (when in doubt, keep: a track wrongly off loses rigor, an extra one is a one-word removal the human
+// confirms in Phase 0). It certainly governs it when:
+//   (a) a NOMINAL negator (no / without / sem / sin / nor / nem / ni, avoid, skip… — NOMINAL_NEGATORS; a contrast "Postgres, not
+//       MongoDB" too) has nothing but fillers, articles, quantifiers or modifiers before it — "no X", "sem o X", "without the use of
+//       any X", "no new X", one word right before the keyword ("without real-time X"); a plain noun ENDS the negated phrase ("Without
+//       payments THE checkout is useless": the checkout stays); or a list it opened carries it on;
+//   (b) an ADOPTION verb (GOVERN_ADOPT: use / add / need / include / implement / integrate / deploy / run / offer / provide / ship /
+//       create / adopt / enable / install / embed / bundle / expose, "necessary" + PT / ES) or a PLAN / an INTENTION (GOVERN_AUX: will /
+//       do / going to, vamos / iremos · GOVERN_WANT: plan / intend / want, pretendemos / planeamos / queremos, tenemos previsto…)
+//       governs it, optionally with an article / a quantifier / one modifier — "We will not add an LLM", "We don't use managed Kafka",
+//       "Não queremos Kafka", "No es necesario Kafka", "must not use X" (whatever the modal).
+// Never an exclusion: an auxiliary or a modal + any other verb ("The report does not show the LLM cost", "Users who do not pay the
+// subscription", "must not lose payments", "never overwrites the ledger" — the verb is the requirement), a wished verb ("We don't want to
+// lose payments") or a hazard ("don't want duplicate payments", "pagamentos duplicados"), a relative clause ("Users who don't pay…",
+// "Utilizadores que não pagam…"), a condition ("If we don't add rate limiting…", "…unless the admin asks"), a nominal negator inside a
+// negated predicate ("We won't ship without a canary release": the canary release is required), and expose / embed of a protected head
+// ("must not embed OAuth client secrets", "must not expose GraphQL introspection", "Logs must not expose personal data" — PROTECTED_HEADS).
+// negationKind() → "exclude" | "require" | "none" (a verb negation or anything unsure); words: lower-case, the negator at j, the item at end.
 const GOVERN_MAX = 5;
 const GOVERN_BOUNDARY = /[.!?;:,\n]/;
 const GOVERN_DEONTIC = new Set(["must", "shall", "should", "can", "could", "may", "might", "cannot", "pode", "podem", "poderá", "poderão", "deve",
-  "devem", "deverá", "deverão", "debe", "deben", "deberá", "deberán", "puede", "pueden", "podrá", "podrán"]);
+  "devem", "deverá", "deverão", "debe", "deben", "deberá", "deberán", "puede", "pueden", "podrá", "podrán",
+  // (1.21 verify N1: the 1st person plural and the conditional too — "Não devemos ativar…", "No debemos activar…", "deveria")
+  "podemos", "devemos", "debemos", "deveria", "deveríamos", "poderia", "poderíamos", "debería", "deberíamos", "podría", "podríamos"]);
 // the stem of a contracted negator: can't → "ca", mustn't → "must", shouldn't, shan't → "sha" (won't / don't / doesn't: a plain auxiliary)
 const NT_DEONTIC = new Set(["ca", "can", "must", "should", "could", "might", "may", "sha"]);
 const GOVERN_AUX = new Set([
@@ -500,7 +465,8 @@ const GOVERN_ADOPT = new Set([
   "include", "includes", "including", "introduce", "introduces", "introducing", "implement", "implements", "implementing", "support",
   "supports", "supporting", "have", "has", "having", "adopt", "adopts", "adopting", "rely", "relying", "depend", "depends", "depending",
   "set", "integrate", "integrates", "integrating", "deploy", "deploys", "deploying", "run", "runs", "running", "offer", "offers",
-  "offering", "provide", "provides", "providing", "ship", "ships", "create", "creates", "creating", "necessary",
+  "offering", "provide", "provides", "providing", "ship", "ships", "create", "creates", "creating", "necessary", "involve", "involves",
+  "involving", "envolve", "envolvem", "implica", "implicam", "involucra", "involucran",
   // 1.21 verify R2 — enabling, installing, embedding, exposing: "must not enable feature flags", "should not bundle Kafka", "must not
   // expose GraphQL" exclude the technology (expose / embed: not for a +sec / +privacy keyword — GOVERN_EXPOSE)
   "enable", "enables", "enabling", "activate", "activates", "activating", "turn", "install", "installs", "installing", "embed", "embeds",
@@ -526,11 +492,32 @@ const GOVERN_ADOPT = new Set([
   "proporcionaremos", "crear", "crea", "creamos", "crearemos", "activar", "activa", "activamos", "activaremos", "instalamos", "instalaremos",
   "incrustar", "incrusta", "incrustamos", "exponer", "expone", "exponemos", "expondremos", "habilitar", "introduce", "introducimos",
 ]);
-// The adoption verbs that, for a +sec / +privacy keyword (data to protect — PROTECT_TRACKS), state the requirement instead: "Logs must not
-// expose personal data", "The client must not embed the API key" negate no keyword, "We must not expose GraphQL" excludes GraphQL.
+// The adoption verbs whose object may be data to PROTECT: expose / embed of a protected head noun (PROTECTED_HEADS — a secret, a key, a
+// token, credentials, a password, personal data, PII, introspection, internals, stack traces + PT / ES) is the requirement, never an
+// exclusion: "The frontend must not embed OAuth client secrets" keeps +tdd, "The API must not expose GraphQL introspection" keeps +api;
+// "We must not expose GraphQL" excludes it (1.21 verify N3 — by the phrase's head noun, never by the keyword's track).
 const GOVERN_EXPOSE = new Set(["expose", "exposes", "exposing", "embed", "embeds", "embedding", "expor", "expõe", "expomos", "exporemos", "exponer",
   "expone", "exponemos", "expondremos", "incrustar", "incrusta", "incrustamos", "incorporar", "incorpora", "incorporamos", "incorporaremos"]);
-const PROTECT_TRACKS = new Set(["sec", "privacy"]);
+const PROTECTED_HEADS = /(?<![\p{L}])(?:secrets?|keys?|tokens?|credentials?|passwords?|passphrases?|personal data|pii|introspection|internals|stack traces?|segredos?|chaves?|credenciais|credencial|senhas?|palavras?-passe|dados pessoais|secretos?|claves?|credenciales|contraseñas?|datos personales|introspe(?:c)?ção|introspecci[óo]n)(?![\p{L}])/iu;
+// The negators that negate a noun phrase (EN "no" too; ES "no" negates a verb)
+const NOMINAL_NEGATORS = new Set(["without", "sem", "sin", "nor", "neither", "nem", "ni", "skip", "exclude", "avoid", "omit", "dispensa", "prescinde"]);
+// A hazard's modifier: the negated phrase is the concern, never an exclusion ("We don't want duplicate payments", "Não queremos pagamentos
+// duplicados", "without duplicate charges")
+const HAZARD_MODS = new Set(["duplicate", "duplicated", "double", "doubled", "lost", "missing", "stale", "corrupt", "corrupted", "inconsistent",
+  "orphan", "orphaned", "partial", "duplicado", "duplicados", "duplicada", "duplicadas", "duplos", "duplas", "dobles", "doble", "perdido", "perdidos",
+  "perdida", "perdidas", "corrompido", "corrompidos", "corrompida", "corrompidas", "desatualizado", "desatualizados", "obsoletos", "inconsistentes"]);
+// A relative pronoun for PEOPLE right before the negator (or before its auxiliary): the negation describes someone, never excludes ("The
+// admin who doesn't have MFA must enable it"). A thing's relative clause ("Página interna que no usa LLM", "a page that doesn't use an
+// LLM") still excludes with an adoption verb; with any other verb nothing is excluded anyway ("Users that do not pay the subscription").
+const REL_PRONOUNS = new Set(["who", "whom", "whose", "quem", "quien", "quienes"]);
+// A condition around the negation: a requirement, never an exclusion ("If we don't add rate limiting…", "Se não adicionarmos…", "Si no
+// añadimos…", "…unless the admin asks", "a menos que", "salvo que") — in the condition itself: "IF … THEN THE SYSTEM SHALL NOT retry"
+// negates in the consequence (a then / então / entonces after the condition word ends it)
+const COND_BEFORE = new Set(["if", "unless", "se", "si", "caso"]);
+const COND_THEN = new Set(["then", "então", "entao", "entonces"]);
+const RE_COND_AFTER = /(?<![\p{L}])(?:unless|except (?:when|if)|a menos que|salvo (?:que|se|si)|a no ser que|exce(?:p)?to (?:se|si|quando|cuando))(?![\p{L}])/iu;
+// the people words that negate a whole predicate ("Nobody should access the admin API without SSO": SSO is required)
+const NOBODY_WORDS = new Set(["nobody", "noone", "ninguém", "nadie"]);
 // "never" and its PT / ES twins: before a verb that is no adoption verb they state a behaviour — a requirement, like a modal's ("a
 // second write never overwrites the ledger"); "Nunca usaremos Kafka", "We will never run Kafka" exclude (1.21 verify R1).
 const NEVER_WORDS = new Set(["never", "nunca", "jamás", "jamas", "jamais"]);
@@ -538,7 +525,9 @@ const NEVER_WORDS = new Set(["never", "nunca", "jamás", "jamas", "jamais"]);
 // checkout" negates the LLM, not the checkout (1.21 verify R1).
 const GOVERN_PREP = new Set(["to", "for", "on", "in", "into", "at", "from", "with", "para", "com", "em", "con", "en"]);
 const GOVERN_NEUTRAL = new Set(["on", "for", "to", "up", "yet", "new", "more", "extra", "additional", "external", "separate", "third-party", "ao",
-  "novo", "nova", "novos", "novas", "mais", "adicional", "adicionais", "nuevo", "nueva", "nuevos", "nuevas", "más", "adicionales"]);
+  "novo", "nova", "novos", "novas", "mais", "adicional", "adicionais", "nuevo", "nueva", "nuevos", "nuevas", "más", "adicionales",
+  // "We no longer use X", "The app no longer needs X", "Já não usamos X", "Ya no usamos X"
+  "longer", "já", "ya"]);
 const isNegatorWord = (w, pt) => (NEGATORS.includes(w) && !(pt && w === "no")) || /n['’]t$/.test(w);
 const verbForm = (w, ptes) => (w.length > 4 && /ing$/.test(w)) || (ptes && /(?:[aei]r|ndo)$/.test(w));
 const passWord = (w) => NEG_FILLER.has(w) || LIST_FILLER.has(w) || GOVERN_NEUTRAL.has(w);
@@ -547,73 +536,133 @@ const passWord = (w) => NEG_FILLER.has(w) || LIST_FILLER.has(w) || GOVERN_NEUTRA
 const PTES_GOVERN_WORDS = new Set(["sem", "sin", "não", "nao", "nunca", "jamás", "jamas", "jamais", "nem", "ni", "queremos", "quero", "quer",
   "querem", "querer", "pretendemos", "pretendo", "pretende", "pretendem", "pretender", "planeamos", "planeio", "planeia", "planejamos", "planeja",
   "planejam", "tencionamos", "tenciona", "quiero", "quiere", "quieren", "pensamos", "pienso", "piensa", "piensan", "planeo", "planea", "planean"]);
-function negationKind(words, j, end, lang, protect) {
+// opts: contrast (the negator opens its segment after a comma, or EN "not" opens the sentence — "Postgres, not MongoDB": nominal),
+// protectedHead (a function, called only for an expose / embed verb: the object phrase has a PROTECTED_HEADS noun — the verb is then
+// no adoption verb). Linear in end - j.
+function negationKind(words, j, end, lang, opts = {}) {
   const base = i18n.baseLang(lang);
   let ptes = base === "pt" || base === "es";
   const w = words[j];
   if (PTES_GOVERN_WORDS.has(w)) ptes = true;
+  const nominal = NOMINAL_NEGATORS.has(w) || (w === "no" && base !== "es") || !!opts.contrast;
   let deontic = false, aux = false;
   if (/n['’]t$/.test(w)) { if (NT_DEONTIC.has(w.replace(/n['’]t$/, ""))) deontic = true; else aux = true; }
   else if (w === "cannot" || NEVER_WORDS.has(w)) deontic = true; // "never" states how the system behaves (NEVER_WORDS)
   else if (j > 0 && GOVERN_DEONTIC.has(words[j - 1])) deontic = true; // "must not", "should never"
   else if (j > 0 && GOVERN_AUX.has(words[j - 1])) aux = true; // "will not", "does not"
-  let kind = null, others = 0, want = false, prevTo = false;
-  for (let i = j + 1; i < end; i++) {
+  // the negated stretch ends at a negative conjunction ("Não queremos Kafka nem …": Kafka is right before it)
+  let stop = end;
+  for (let i = j + 1; i < end; i++) if (LIST_NEG.has(words[i])) { stop = i; break; }
+  let adopted = false, want = false, prevTo = false, modifier = false;
+  for (let i = j + 1; i < stop; i++) {
     const x = words[i];
-    if (LIST_NEG.has(x)) break;
-    const to = x === "to";
-    if (passWord(x)) { prevTo = to; continue; }
-    if (GOVERN_ADOPT.has(x) && !(protect && GOVERN_EXPOSE.has(x))) { if (!kind) kind = "exclude"; prevTo = false; continue; }
-    if (!kind && GOVERN_DEONTIC.has(x)) { deontic = true; prevTo = false; continue; }
-    if (!kind && GOVERN_AUX.has(x)) { aux = true; if (GOVERN_WANT.has(x)) want = true; if (PTES_GOVERN_WORDS.has(x)) ptes = true; prevTo = false; continue; }
-    others++;
-    // the first other word decides: a deontic modal's verb, a wished verb ("don't want to lose X") or a bare verb form is a
-    // requirement; anything else is excluded
-    if (!kind) kind = deontic || (want && (prevTo || verbForm(x, ptes))) || (!aux && verbForm(x, ptes)) ? "require" : "exclude";
-    prevTo = false;
-  }
-  return { kind: kind || "exclude", others };
-}
-// Does a negator GOVERN the item at `start` — an EXCLUSION of it (negationKind), with at most one other word between them, in the same
-// clause and comma-free stretch, ≤ GOVERN_MAX words back? A negative conjunction governs only the phrase right after it (fillers
-// between). "No X", "will not add X", "Não queremos X", "No es necesario X", "without real-time X" — yes; "must not lose X", "não pode
-// perder X", "without losing X" — no: they open no list.
-// the clause's words before `start`, lower-case, a quote's apostrophes dropped ("'not add X or Y'")
-const govWords = (text, start, bound) => cueWords(cueBefore(text, start, bound)).map((w) => w.toLowerCase().replace(/^['’]+|['’]+$/g, "")).filter(Boolean);
-function negationGoverns(text, start, lang, protect) {
-  return governingNegator(text, start, lang, protect) !== null;
-}
-// The negator that governs the item at `start` (above) — the word, lower-case — or null. 1.21 verify R1: never across a preposition
-// that follows another noun ("We didn't add an LLM to the checkout": the checkout is the LLM's complement); a PT "no" before a PT filler
-// is em + o ("Guia no uso do LLM").
-function governingNegator(text, start, lang, protect) {
-  const pt = i18n.baseLang(lang) === "pt";
-  const words = govWords(text, start, GOVERN_BOUNDARY);
-  let prep = false;
-  for (let i = words.length - 1, n = 0; i >= 0 && n <= GOVERN_MAX; i--, n++) {
-    const w = words[i];
-    if (!isNegatorWord(w, pt)) {
-      if (GOVERN_PREP.has(w)) prep = true;
-      else if (prep && !passWord(w) && !GOVERN_ADOPT.has(w) && !GOVERN_AUX.has(w) && !GOVERN_DEONTIC.has(w)) return null;
+    if (passWord(x)) { prevTo = x === "to"; continue; }
+    if (GOVERN_ADOPT.has(x) && !(GOVERN_EXPOSE.has(x) && opts.protectedHead && opts.protectedHead())) { adopted = true; prevTo = false; continue; }
+    if (!adopted && GOVERN_DEONTIC.has(x)) { deontic = true; prevTo = false; continue; }
+    if (!adopted && GOVERN_AUX.has(x)) { aux = true; if (GOVERN_WANT.has(x)) want = true; if (PTES_GOVERN_WORDS.has(x)) ptes = true; prevTo = false; continue; }
+    // any other word is a verb or a noun that ends the negated phrase — or ONE modifier right before the keyword after an adoption
+    // verb, a wish or a nominal negator ("don't use managed Kafka", "without real-time Kafka", "Não queremos o novo Kafka")
+    const verbish = prevTo || verbForm(x, ptes);
+    if (i === stop - 1 && !modifier && !verbish && (adopted || want || (nominal && !aux && !deontic))) {
+      if (HAZARD_MODS.has(x)) return "require"; // "We don't want duplicate payments", "without duplicate charges"
+      modifier = true;
       continue;
     }
-    if (LIST_NEG.has(w)) return words.slice(i + 1).every(passWord) ? w : null;
-    if (w === "no" && i + 1 < words.length && NEG_FILLER.has(words[i + 1]) && !NEG_FILLER_EN.has(words[i + 1])) return null;
-    const k = negationKind(words, i, words.length, lang, protect);
-    return k.kind === "exclude" && k.others <= 1 ? w : null;
+    // a verb form, or a VERB after a verbal negator / an auxiliary / a modal, states a requirement; a noun — after a nominal negator ("Without
+    // payments the checkout…"), an adoption verb or a wish (its object runs on: "Não vamos usar o sistema X nem Y") — ends the negated
+    // phrase: nothing is certain — "none"
+    if (verbish) return "require";
+    if (adopted || want) return "none";
+    return !nominal || deontic || aux ? "require" : "none";
   }
-  return null;
+  return "exclude";
 }
-// Does the clause's negator (the last one before `start` that is no negative conjunction — "cannot" too) state a REQUIREMENT
-// (negationKind) — which a negative conjunction then continues ("Não pode perder pagamentos nem reembolsos", "must not lose data nor
-// refunds", "sem perder dados nem reembolsos")? Not an exclusion ("Não queremos Kafka nem RabbitMQ", "We use Postgres, not MongoDB nor
-// Kafka"), nor a clause with only the correlative "nem … nem" / "ni … ni".
-function negatedVerb(text, start, lang, protect) {
+// the clause's words before `start`, lower-case, a quote's apostrophes dropped ("'not add X or Y'")
+const govWords = (text, start, bound) => cueWords(cueBefore(text, start, bound)).map((w) => w.toLowerCase().replace(/^['’]+|['’]+$/g, "")).filter(Boolean);
+// the comma-free stretch before `start` → { words, afterComma, sentenceStart }
+function govSegment(text, start) {
+  const seg = cueBefore(text, start, GOVERN_BOUNDARY);
+  const at = start - seg.length - 1;
+  return { words: govWords(text, start, GOVERN_BOUNDARY), afterComma: at >= 0 && text[at] === ",", sentenceStart: at < 0 || /[.!?;:\n]/.test(text[at]) };
+}
+// Is the negation at words[j] blocked — a relative clause, a condition, a nominal negator inside a negated predicate, a hazard modifier
+// right after the item — whatever it reads like (1.21 verify N1 / N3)?
+function negationBlocked(text, words, j, end, pt) {
+  const w = words[j];
+  // a people relative pronoun right before the negator or its auxiliary ("who doesn't have", "who do not pay", "quien no paga")
+  let r = j - 1;
+  if (r >= 0 && (GOVERN_AUX.has(words[r]) || GOVERN_DEONTIC.has(words[r]))) r--;
+  if (r >= 0 && REL_PRONOUNS.has(words[r])) return true;
+  // a condition before the negator in its stretch (not ended by a then), or an "unless" after the item in its clause
+  let cond = false;
+  for (let i = 0; i < j; i++) { if (COND_BEFORE.has(words[i])) cond = true; else if (COND_THEN.has(words[i])) cond = false; }
+  const after = cueAfter(text, end, CUE_BOUNDARY);
+  if (cond || RE_COND_AFTER.test(after)) return true;
+  // a nominal negator inside a negated predicate ("We won't ship without a canary release", "Nobody … without SSO"): a double negation
+  // (never a negative conjunction: nor / nem / ni continue a negation — "not MongoDB nor Kafka")
+  const verbChain = (x) => !!x && (GOVERN_AUX.has(x) || GOVERN_DEONTIC.has(x) || GOVERN_ADOPT.has(x));
+  if (NOMINAL_NEGATORS.has(w) && !LIST_NEG.has(w)) for (let i = 0; i < j; i++) {
+    const x = words[i];
+    if (NOBODY_WORDS.has(x) || /n['’]t$/.test(x) || x === "not" || x === "cannot" || NEVER_WORDS.has(x) || x === "não" || x === "nao" ||
+      // "No user can access the admin API without SSO": EN "no" + a noun + a modal negates the predicate
+      (x === "no" && !pt && (verbChain(words[i + 1]) || (i + 2 < j && verbChain(words[i + 2]))))) return true;
+  }
+  // a hazard's modifier right after the item (PT / ES: "pagamentos duplicados", "pagos duplicados")
+  const next = (after.match(/[\p{L}\p{N}'’-]+/u) || [""])[0].toLowerCase();
+  return HAZARD_MODS.has(next);
+}
+// The object phrase of an expose / embed verb has a protected head: the item and up to four words after it (to a preposition)
+function protectedHead(text, start, end) {
+  const after = (cueAfter(text, end, GOVERN_BOUNDARY).match(/[\p{L}\p{N}'’-]+/gu) || []).slice(0, 4);
+  const cut = after.findIndex((x) => GOVERN_PREP.has(x.toLowerCase()));
+  return PROTECTED_HEADS.test(text.slice(start, end) + " " + (cut < 0 ? after : after.slice(0, cut)).join(" "));
+}
+// The negation that EXCLUDES the item at start … end — { word, conj } — or null. The nearest negator ≤ GOVERN_MAX words back in the
+// item's comma-free stretch (contractions whole): a negative conjunction with only fillers between (a list's own link); any other one
+// when it is no relative / condition / double negation / hazard (negationBlocked) and negationKind says "exclude". A PT "no" after a
+// participle or before a PT filler is em + o ("aplicado no checkout", "Guia no uso do LLM"). A cheap precheck skips a match with no
+// negator in reach.
+function negationOf(text, start, end, lang, cased) {
+  if (!RE_NEG_NEAR.test(text.slice(Math.max(0, start - CUE_SPAN), start))) return null;
+  const pt = i18n.baseLang(lang) === "pt"; // pt and pt-BR alike: "no" is em+o, never a negator
+  const tokens = text.slice(Math.max(0, start - 20), start).split(/[^a-zà-ú-]+/).filter(Boolean);
+  if (tokens[tokens.length - 1] === "no") {
+    const prev = tokens[tokens.length - 2] || "";
+    const prevCased = ((cased || "").slice(Math.max(0, start - 20), start).split(/[^\p{L}-]+/u).filter(Boolean).slice(-2)[0]) || "";
+    if (/(?:ad|id)[oa]s?$/.test(prev) && (pt || (prev.length >= 6 && prevCased === prevCased.toLowerCase()))) return null;
+  }
+  const seg = govSegment(text, start);
+  const words = seg.words;
+  let j = -1;
+  for (let i = words.length - 1, n = 0; i >= 0 && n <= GOVERN_MAX; i--, n++) if (isNegatorWord(words[i], pt)) { j = i; break; }
+  if (j < 0) return null;
+  const w = words[j];
+  if (LIST_NEG.has(w)) return words.slice(j + 1).every(passWord) && !negationBlocked(text, words, j, end, pt) ? { word: w, conj: true } : null;
+  if (w === "no" && j + 1 < words.length && NEG_FILLER.has(words[j + 1]) && !NEG_FILLER_EN.has(words[j + 1])) return null;
+  if (negationBlocked(text, words, j, end, pt)) return null;
+  const contrast = j === 0 && (seg.afterComma || (w === "not" && seg.sentenceStart));
+  const k = negationKind(words, j, words.length, lang, { contrast, protectedHead: () => protectedHead(text, start, end) });
+  return k === "exclude" ? { word: w, conj: false } : null;
+}
+function negationGoverns(text, start, end, lang) {
+  return negationOf(text, start, end, lang) !== null;
+}
+// A nor / nem / ni item no list carries keeps its negation (the conjunction right before it is certain) unless its clause's other negator
+// negates a VERB (negationKind "require") — the conjunction then continues that requirement: "Não pode perder pagamentos nem
+// reembolsos", "must not lose data nor refunds", "sem perder dados nem reembolsos", "does not show X nor Y" un-negate the item; "Não
+// queremos Kafka nem RabbitMQ", "We use Postgres, not MongoDB nor Kafka", "Sem integração externa nem X" and the correlative "Nem X nem
+// Y" keep it.
+function conjExcluded(text, start, end, lang) {
   const pt = i18n.baseLang(lang) === "pt";
-  const words = govWords(text, start, CUE_BOUNDARY);
+  const seg = govSegment(text, start);
+  const words = seg.words;
   let j = words.length - 1;
   while (j >= 0 && !((isNegatorWord(words[j], pt) || words[j] === "cannot") && !LIST_NEG.has(words[j]))) j--;
-  return j >= 0 && negationKind(words, j, words.length, lang, protect).kind === "require";
+  if (j < 0) return true;
+  if (negationBlocked(text, words, j, end, pt)) return false;
+  const contrast = j === 0 && (seg.afterComma || (words[j] === "not" && seg.sentenceStart));
+  // (a verb negation — "require" — is continued by the conjunction; a noun phrase — "Sem integração externa nem X" — keeps it)
+  return negationKind(words, j, words.length, lang, { contrast, protectedHead: () => protectedHead(text, start, end) }) !== "require";
 }
 // The article a new clause's subject starts with (1.21 review B2): a comma followed by one is no list continuation — "Without an LLM
 // or embeddings, the checkout or a subscription page is the priority".
@@ -644,8 +693,7 @@ function coordinatedNegation(hits, text, lang) {
   }
   // a hazard's negation is its requirement ("without downtime"), never a list's: it opens none — nor does a negator that governs a
   // verb, not the item (1.21 review B1: "must not lose payments or refunds")
-  const protects = (it) => it.hits.some((h) => PROTECT_TRACKS.has(h.track)); // (+sec / +privacy data — GOVERN_EXPOSE)
-  const opens = (it) => !hazardItem(it) && it.hits.some((h) => h.negBy === "before" && !h.hazard) && negationGoverns(text, it.start, lang, protects(it));
+  const opens = (it) => !hazardItem(it) && it.hits.some((h) => h.negBy === "before" && !h.hazard) && negationGoverns(text, it.start, it.end, lang);
   const mark = (it) => { for (const h of it.hits) if (!h.hazard) { h.neg = true; if (!h.negBy) h.negBy = "list"; } };
   // the gap's first word is an article (1.21 review B2)
   const articleFirst = (from, to) => { const w = cueWords(text.slice(from, to))[0]; return !!w && LIST_ARTICLES.has(w.toLowerCase()); };
@@ -674,7 +722,7 @@ function coordinatedNegation(hits, text, lang) {
         pending.forEach(mark); pending = []; mark(it); join(it); closed = true; continue;
       }
       active = false; closed = false; pending = []; articleAt = -1; // the list ended here: this item may open a new one
-    } else if (it.hits.some((h) => h.conj) && negatedVerb(text, it.start, lang, protects(it))) {
+    } else if (it.hits.some((h) => h.conj) && !conjExcluded(text, it.start, it.end, lang)) {
       // 1.21 review B1: a negative conjunction no list carries, in a clause whose negator states a requirement ("Não pode perder
       // pagamentos nem reembolsos", "No puede perder pagos ni reembolsos"), continues that requirement, not a list of exclusions: its
       // item is not negated either
@@ -682,7 +730,7 @@ function coordinatedNegation(hits, text, lang) {
     }
     if (opens(it)) { open(it); continue; }
     // "Não vamos usar X nem Y": a negative conjunction after an item a negator governs (the negator three words back)
-    if (i + 1 < items.length && listLink(text, it.end, items[i + 1].start, es) === "neg" && negationGoverns(text, it.start, lang, protects(it))) { mark(it); open(it); }
+    if (i + 1 < items.length && listLink(text, it.end, items[i + 1].start, es) === "neg" && negationGoverns(text, it.start, it.end, lang)) { mark(it); open(it); }
   }
 }
 
@@ -865,7 +913,7 @@ function classify(description, opts = {}) {
   // or not; a hazard is never negated (SIGNAL_HAZARDS) but still carries a list's negation on.
   // conj: negated by a negative conjunction right before it (nor / nem / ni) — coordinatedNegation keeps that negation only in a list.
   const newHit = (track, tier, kw, start, end, hazard, base, by) => {
-    const nb = negatorBefore(text, start, lang, cased, track);
+    const nb = negatorBefore(text, start, lang, cased, end);
     const negBy = nb ? "before" : negatedAfter(text, start, end - start) ? "after" : null;
     return { track, tier, kw, start, end, neg: !hazard && !!negBy, negBy, hazard, base: base === undefined ? tier : base, by: by || null, conj: !!nb && LIST_NEG.has(nb) };
   };
