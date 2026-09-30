@@ -15,7 +15,8 @@ PowerShell projects — and every language outside the old short list — work e
   now count as code. SQL and notebook fixtures in test folders count as neither code nor tests.
 - **Test files are recognised in every language:** Pester `*.Tests.ps1` (also beside the code), Bats, `*_test.sh`,
   GoogleTest `*_test.cc` / `*_unittest.cc`, busted `*_spec.lua`, testthat `test-*.R`, Common Test / EUnit, clojure.test,
-  XCTest, Perl `t/*.t`, C / shell / hspec tests in test folders, and SQL tests (pgTAP) a test plan's File column names.
+  XCTest, Perl `t/*.t`, C / shell / hspec tests in test folders, and SQL tests (pgTAP) a test plan's File column names —
+  the file, or the folder that directly holds it (they count for those rows only).
 - **The scan reports a PowerShell project** — a module manifest, a Pester suite, or mostly PowerShell code: the stack,
   Pester, the scripts and the module's entry point, and `$env:` names. It also reads CMake / Make, mix, rebar, pubspec,
   sbt, SwiftPM, cabal, deps.edn, R, Julia, Zig, dune, nimble and cpanfile manifests.
