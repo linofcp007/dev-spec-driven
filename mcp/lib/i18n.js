@@ -30,7 +30,16 @@ const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests
 // The pt-BR derivation (i18n/pt-br.js) loads on its first use — a table's "pt-BR" entry, toPtBr, derivePtBr: a process
 // that never meets pt-BR (most hooks) doesn't load it.
 let PTBR = null;
-const ptbr = () => PTBR || (PTBR = require("./i18n/pt-br.js"));
+const ptbr = () => PTBR || ((PTBR = require("./i18n/pt-br.js")), localeFileLoaded("i18n/pt-br.js"), PTBR);
+// 1.20 review — the engine's corpus check (engine/markdown.js) is told of every language file loaded on demand
+// (onLocaleLoad(fn): fn("i18n/<file>.js") once it has loaded): a file that changed on disk after the engine loaded (a
+// `git pull` under a long-lived MCP server) must not run under a corpus stamped for the old one. A listener never breaks
+// a load.
+const LOCALE_LISTENERS = [];
+const onLocaleLoad = (fn) => { if (typeof fn === "function") LOCALE_LISTENERS.push(fn); };
+function localeFileLoaded(rel) {
+  for (const fn of LOCALE_LISTENERS) { try { fn(rel); } catch { /* the listener's own trouble */ } }
+}
 
 // Artifact builders, one set per language (i18n/<lang>.js `build`).
 const BUILD = {};
@@ -62,6 +71,7 @@ function loadLocale(l) {
   MSG[l].quality = QUALITY_MSG[l];
   MSG[l].designWeigh = DESIGN_WEIGH_MSG[l];
   blocks.__link({ BUILD, MSG });
+  localeFileLoaded(LOCALE_FILES[l].slice(2)); // "i18n/<l>.js"
 }
 for (const l of BASE_LANGS) for (const [t] of TABLES) Object.defineProperty(t, l, { enumerable: true, configurable: true, get() { loadLocale(l); return t[l]; } });
 
@@ -212,6 +222,7 @@ module.exports = {
   DEV_SPEC_SCRIPT, // this clone's cli/dev-spec.js (forward slashes)
   cliPrefix, // (script?) → `node "<script>"`, quoted to paste into bash and PowerShell
   portableCli, // text for a committed file: the runnable line → `dev-spec`
+  onLocaleLoad, // (fn) fn("i18n/<file>.js") after each language file loads on demand — the engine's corpus check (1.20 review)
   toPtBr: (text, masks) => ptbr().toPtBr(text, masks), // (text, masks?) European → Brazilian Portuguese (the pt-BR derivation, 1.14 D1)
   derivePtBr: (value, raw) => ptbr().derivePtBr(value, raw || null, null, value), // a pt table (spec.js's roadmap chrome) → its pt-BR twin
   // artifact builders

@@ -31,7 +31,11 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   file never timed starts first). The output comes file by file (a `# <file>` line before each), then `# N file(s) in M process(es), T s —
   slowest: …`, then the total: the LAST line is always `N passed, M failed` (scripts/test-docker.js reads it). A process
   that dies or never prints its total fails the suite, a file that throws is one FAIL (its chain goes on), a server that
-  stops answering (15 s) fails the run — never a drain to exit 0. The MCP chains today: `01-core → 17-docs` (17-docs reads
+  stops answering (15 s) fails the run — never a drain to exit 0. Each file gets its own `ok`: one it calls after its `run`
+  resolved (a forgotten await) is a FAIL, "late assertion from <file>", whenever it fires — the runner lets pending timers
+  run (≤ 3 s) before the total, and one fired after it prints the total again; the total is read from stdout alone (a Node
+  warning on stderr after it doesn't void the count). cli/tests/16-conventions-runner.js tests the runner on a fake suite.
+  The MCP chains today: `01-core → 17-docs` (17-docs reads
   `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality`
   (15-quality re-checks the behavioural fixtures 17-docs-evals builds under tmp). The handshake's assertions are counted
   by the file exporting `handshake: true` (02-mcp-server); every other process runs the handshake muted.
@@ -47,7 +51,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   `run` (async in the MCP suite) — the runner picks it up. Make your projects under `tmp` (`path.join(tmp, "proj-<name>")`, a name no other file uses); the MCP
   server's default project (`tmp` itself) is 01-core's. A test that reads what another file built declares it in `deps`
   — never rely on file order. Timing-bound assertions share the machine with the other processes: bound them relative to
-  a baseline measured in the same test (as the 1.17 H checks do), not with a figure tuned on an idle machine.
+  a baseline measured in the same test (as the 1.17 H checks do), not with a figure tuned on an idle machine — keep the old
+  figure as a floor (`Math.max(floor, k × baseline)`: an idle run is as strict as before) and measure once more on a
+  timing-only miss (the statusline and flat-import checks since the 1.20 review).
 - **The source guards follow the layout:** the U+FEFF guard reads mcp/test.js, scripts/test-runner.js and every file of
   mcp/tests/. The engine guards (U+FEFF, backslash-stripped regex literals) also read scripts/build.js — a bundle's
   registry comes from it — and `libSources()` leaves a user-built `mcp/lib/spec.bundle.js` out (the sources verbatim: it

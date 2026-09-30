@@ -114,7 +114,7 @@ trackers, release notes, milestones).
 
 ## Stakeholder export and release notes (1.14)
 - **`spec_export`** writes (with `write`) `.specs/exports/<slug>.<html|md>` (1.14 F5: `format: "csv"` → `<slug>.rtm.csv`,
-  the traceability matrix — see below) — the project: `project.<fmt>`, a feature
+  the traceability matrix — markdown-and-trace.md → Requirements traceability matrix) — the project: `project.<fmt>`, a feature
   slugged `project`: `project.feature.<fmt>` — with the `RE_AUTOGEN` marker family; `isGeneratedOrAbsent()` means never
   over a hand-written file (an error). A feature renders in its language, the project in the project language. The HTML
   is offline by construction: a zero-dep markdown renderer (`expInline` and friends) escapes EVERY text run (`htmlEsc` —

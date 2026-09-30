@@ -180,7 +180,7 @@ exports.run = async ({
       ["no PR / CI steering", /No user-facing text may steer users toward PRs or CI/], ["zero runtime dependencies", /\*\*Zero runtime dependencies\.\*\* The MCP server and all scripts use only Node core/],
       ["specs in .specs/", /Specs always live in `\.specs\/`/], ["never a top-level bin/", /## Never ship a top-level `bin\/` .*rejects\*\* any plugin shipping a top-level `bin\/`/],
       ["hooks.json never in plugin.json", /\*\*Hooks: never reference `hooks\/hooks\.json` in `plugin\.json`\.\*\*/],
-      ["engine first, then tool AND subcommand AND test", /add it to the engine module of its concern first .* then wire it into server\.js \(tool\) AND cli\/dev-spec\.js \(subcommand\) AND mcp\/test\.js \(assertion\)\. Keep the CLI and MCP behavior identical/],
+      ["engine first, then tool AND subcommand AND test", /add it to the engine module of its concern first .* then wire it into server\.js \(tool\) AND cli\/dev-spec\.js \(subcommand\) AND a test in the area's mcp\/tests file\. Keep the CLI and MCP behavior identical/],
       ["i18n in mcp/lib/i18n/, pt-BR derived", /every user-facing string lives in `mcp\/lib\/i18n\/\*` — `en\.js` · `pt\.js` · `es\.js` .* pt-BR is DERIVED from pt/],
       ["the heredoc backslash gotcha", /\*\*Shell heredocs eat backslashes\.\*\*/], ["the U+FEFF gotcha", /\*\*Never write a literal U\+FEFF into source\.\*\*/],
       ["the module rule", /\*\*The module rule \(1\.18\), in short:\*\* .*`\/\/ load time`.*`__link\(E\)`/],

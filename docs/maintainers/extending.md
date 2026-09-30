@@ -9,7 +9,9 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   (load-time imports marked `// load time` and acyclic, in either direction of `MODULES`; every other name through
   `__link`, in the module's bare `let` list AND its `__link` destructure; shared mutable state in `CTX`), then its key in
   the facade object of `mcp/lib/spec.js`
-  (wrapped in `featureLocked` when it writes a feature) — every surface requires the facade, never a module.
+  (wrapped in `featureLocked` when it writes a feature) — every surface requires the facade, never a module. A name it
+  takes resolves its folder through `resolveFeature()` / `existingFeature()`, never `path.join(specsRoot, slugify(name))`,
+  and its state goes through `readJson()` / `writeFileAtomic` under the locks (conventions.md → Conventions & gotchas).
 - New MCP tool → the operation above, a TOOLS entry + dispatch case in
   `mcp/server.js` (its `inputSchema` IS the validation — declare types, enums, required keys), the CLI
   subcommand, a test in the file of its area in `mcp/tests/` and `cli/tests/` (testing.md → The suites; bump the exact
@@ -42,8 +44,10 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
 - New `.state.json` / `roadmap.json` key → decide how two branches merge it (conventions.md → Merging the spec state): an
   append-only list or a keyed map gets its rule in state.js (`mergeFeatureState`'s `FIELDS`, `ROADMAP_FIELDS`, `META_FIELDS`);
   a plain value needs nothing (3-way per key — both sides changed it differently = a conflict the user resolves).
-- New hook → `hooks/hooks.json` (never `plugin.json` — see Conventions), silent and exit 0 on any error, the engine loaded
-  only after a cheap raw pre-check (roadmap.json / the payload), and a row in `references/tooling-reference.md`.
+- New hook → `hooks/hooks.json` (never `plugin.json` — CLAUDE.md → Gotchas that bite in every area), silent and exit 0 on
+  any error, the engine loaded only after a cheap raw pre-check (roadmap.json / the payload), and a row in
+  `references/tooling-reference.md`. Its process I/O follows conventions.md → Flush stdout before exiting (stdin read
+  asynchronously, the exit only in the write callback) — claude-code-integration.md → Hooks and commands has the rest.
 - Any generated/returned user-facing text → put the strings in the i18n tables for every language — the same key in
   `mcp/lib/i18n/en.js`, `pt.js` and `es.js` (pt-BR inherits PT unless it needs its own wording, `i18n/pt-br.js`) — and
   resolve the lang via `featureLang()`/`projectLang()`; keep IDs/markers English-stable. A message that tells someone

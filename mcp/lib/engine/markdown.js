@@ -673,10 +673,12 @@ function renderTemplateSetsBr(base) {
 // a hook or CLI call. scripts/build.js (`npm run build`) renders it ONCE with the functions above (renderCorpusData) into
 // engine/corpus.generated.json, stamped with the engine version and the hash of CORPUS_SOURCES — every file the render runs
 // through (mcp/test.js proves the list with V8 coverage). A process reads that file (one JSON.parse) only while both stamps
-// match this engine; otherwise — a hand-edited clone that wasn't rebuilt, a missing or broken file — it renders as before:
-// a slower answer, never a wrong one. Inside spec.bundle.js the corpus is the copy the build embedded beside the very sources
-// it was rendered from (module.bundle — undefined under Node's own loader). The per-project part (the project's templates,
-// its track packs: projectTemplateHas, packCorpusSets) stays computed per call. Only .has() is ever asked of these sets.
+// match the engine it LOADED (the version read at load, the sources as they were at load — LOADED_STATS below); otherwise —
+// a hand-edited clone that wasn't rebuilt, a missing or broken file, sources updated under a running process — it renders
+// as before: a slower answer, never a wrong one. Inside spec.bundle.js the corpus is the copy the build embedded beside the
+// very sources it was rendered from (module.bundle — undefined under Node's own loader). The per-project part (the
+// project's templates, its track packs: projectTemplateHas, packCorpusSets) stays computed per call. Only .has() is ever
+// asked of these sets.
 const CORPUS_FILE = "corpus.generated.json";
 const CORPUS_KEYS = ["brackets", "code", "bracketsBr", "codeBr", "tasks", "bugSteps"];
 const CORPUS_SOURCES = ["i18n.js", "i18n/common.js", "i18n/en.js", "i18n/es.js", "i18n/pt-br.js", "i18n/pt.js", "engine/core.js",
@@ -694,6 +696,21 @@ function corpusSourcesHash(libDir) {
   for (const rel of CORPUS_SOURCES) h.update(rel + "\0").update(sourceText(fs.readFileSync(path.join(dir, ...rel.split("/"))))).update("\0");
   return h.digest("hex");
 }
+// The stamp's inputs as this process LOADED them (1.20 review). A long-lived process — the MCP server — keeps the code it
+// loaded while a `git pull` or `npm run build` rewrites the sources AND the corpus under it: compared with the files as they
+// are at its first placeholder question, the old code would trust a corpus rendered from the NEW sources (a reworded slot of
+// its own fresh scaffold would then read as the user's text). So every source's size, mtime and ctime are taken as the engine
+// loads (one stat each, no read — ~0.5 ms), and the version is the one read at load (engineVersion, upgrade.js); the file is
+// trusted only while every source still has them — its text on disk is then the text this process runs, and the sources
+// hash is compared as before (an edit that keeps a file's size, mtime AND ctime is the accepted limit). A language file loads
+// on its first use (i18n.js): one that loads after the corpus was trusted and has changed since the engine loaded drops the
+// corpus (localeLoaded) — the sets render again, from the code this process now runs. Not in a bundle (its corpus is
+// embedded beside the very sources it was rendered from, which never change under it).
+const sourceStat = (rel) => {
+  try { const st = fs.statSync(path.join(__dirname, "..", ...rel.split("/"))); return st.size + ":" + st.mtimeMs + ":" + st.ctimeMs; } catch { return null; }
+};
+const LOADED_STATS = module.bundle ? null : new Map(CORPUS_SOURCES.map((rel) => [rel, sourceStat(rel)]));
+const sourcesUnchanged = () => !!LOADED_STATS && CORPUS_SOURCES.every((rel) => { const s = LOADED_STATS.get(rel); return s !== null && sourceStat(rel) === s; });
 // The built-in corpus as it renders now → { brackets, code, bracketsBr, codeBr, tasks, bugSteps }: sorted string lists (the
 // sets' members — code-unit order, stable across Node versions). What scripts/build.js writes, and what the tests compare.
 function renderCorpusData() {
@@ -710,8 +727,10 @@ function builtinCorpus() {
   try {
     const b = module.bundle; // set by spec.bundle.js's module registry only
     const data = b ? b.corpus() : JSON.parse(fs.readFileSync(path.join(__dirname, CORPUS_FILE), "utf8"));
+    // The load-time version and (the modules) the sources' hash, the sources unchanged since the engine loaded — stat'ed
+    // AFTER the hash read them, so a file rewritten before or while it was hashed is never trusted.
     if (data && typeof data === "object" && CORPUS_KEYS.every((k) => Array.isArray(data[k]) && data[k].every((x) => typeof x === "string")) &&
-      data.version === engineVersion() && data.sources === (b ? b.corpusSources : corpusSourcesHash())) {
+      data.version === engineVersion() && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
       BUILTIN_CORPUS = data;
       BUILTIN_CORPUS_FROM = b ? "bundle" : "file";
     }
@@ -719,6 +738,15 @@ function builtinCorpus() {
   return BUILTIN_CORPUS;
 }
 const builtinCorpusSource = () => { builtinCorpus(); return BUILTIN_CORPUS_FROM; };
+// i18n.js tells us each language file it loads (en / pt / es.js on first use, pt-br.js): one changed since the engine loaded
+// makes a trusted file corpus the corpus of code this process doesn't run — dropped, with the sets built from it.
+function localeLoaded(rel) {
+  if (BUILTIN_CORPUS_FROM !== "file" || !LOADED_STATS.has(rel) || sourceStat(rel) === LOADED_STATS.get(rel)) return;
+  BUILTIN_CORPUS = null; // looked for, none usable: the sets render on their next use
+  BUILTIN_CORPUS_FROM = "render";
+  TEMPLATE_SETS = TEMPLATE_SETS_BR = TEMPLATE_TASKS = BUG_STEPS = null;
+}
+if (LOADED_STATS) i18n.onLocaleLoad(localeLoaded);
 // …and the slots of the project's own templates (.specs/templates/ — projectTemplateHas, 1.14).
 const isTemplatePlaceholder = (inner) => { const k = placeholderKey(inner); return isGenericSlot(inner) || templateSets().brackets.has(k) || templateSetsBr().brackets.has(k) || projectTemplateHas("brackets", k); };
 // A code span is opaque — `[Authorize]`, `[dependencies]`, `[aeiou]`, `[]`, `["a"]` are code — except a template's own
