@@ -41,7 +41,7 @@ If the plugin itself isn't updated yet, say how (above) and stop.
    follow-up tasks — and change nothing without the user's OK. Each change goes through the normal gates:
    re-approvals with `spec_approve` (`/approve`), edits after an approval with `spec_impact` (`/spec-impact`, reopen
    only with their OK), follow-up work with `spec_append_tasks` (`/spec-converge`), unverified ticks with
-   `dev-spec done <f> <n> --run`. Tick the boxes of `.specs/UPGRADE.md` as items are done; re-run the audit for the
+   `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <f> <n> --run`. Tick the boxes of `.specs/UPGRADE.md` as items are done; re-run the audit for the
    current state.
 
 A second apply changes nothing and says so. `dev-spec upgrade` exits 0 with a report, 1 only on an error.

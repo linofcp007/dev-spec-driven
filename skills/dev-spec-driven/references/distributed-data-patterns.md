@@ -17,7 +17,8 @@ large data volumes — and a decision checklist to run before the design gate.
 
 See also: `saas-patterns.md` (queues, the DLQ, retry policies, idempotency keys, circuit breakers — the
 scale view of the same tools; this file does not repeat them), `test-patterns.md` (property-based tests),
-`security-track.md` (a message is also an entry point), `privacy-track.md` (events that carry personal data).
+`security-track.md` (a message is also an entry point), `privacy-track.md` (events that carry personal data),
+`data-pipeline-patterns.md` (the `+data` track: pipelines, warehouses, data quality, backfills — CDC into a warehouse).
 
 ---
 

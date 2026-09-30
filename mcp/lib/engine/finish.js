@@ -29,7 +29,7 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus, suiteSummaryLines,
   taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines, trackLabel,
   unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject, withMoveLock,
-  withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap;
+  withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews;
 function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
@@ -45,7 +45,7 @@ function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport, bugS
   spikeFinish, spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus,
   suiteSummaryLines, taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines,
   trackLabel, unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject,
-  withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap } = E); }
+  withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews } = E); }
 
 // ---------------------------------------------------------------------------
 // spec_finish — close a feature LOCALLY: readiness report + a merge summary generated from the spec chain
@@ -75,13 +75,37 @@ function codeSpan(s) {
   const fence = "`".repeat(longest + 1);
   return longest ? fence + " " + text + " " + fence : fence + text + fence;
 }
-// A commit title: the first sentence, at most ~72 chars, cut at a word boundary. Abbreviations like
-// "e.g." / "i.e." / "p. ej." don't end a sentence.
+// A commit title's text: the first sentence, at most `max` characters. Abbreviations like "e.g." / "i.e." / "p. ej." don't
+// end a sentence. A longer sentence is cut at its LAST clause boundary that fits — a comma, a semicolon or a dash (— –) —
+// and reads whole there (no ellipsis); only when no boundary leaves at least a third of the budget is it cut at a word
+// boundary, with "…" (counted in `max`). 1.21 F3: the 1.19 eval run's merge title ran to ~90 characters, cut mid-clause.
+// Lengths are UTF-16 units (an emoji counts two — the line is never longer in code points); a cut never splits a surrogate pair.
 function shortTitle(text, max = 72) {
-  const first = text.split(/(?<!\b(?:e\.g|i\.e|ex|etc|ej|vs|p)\.)(?<=[.!?])\s+(?=\p{Lu})/u)[0];
+  const first = String(text || "").split(/(?<!\b(?:e\.g|i\.e|ex|etc|ej|vs|p)\.)(?<=[.!?])\s+(?=\p{Lu})/u)[0].trim();
   if (first.length <= max) return first.replace(/\.$/, "");
-  const cut = first.slice(0, max);
-  return cut.slice(0, Math.max(cut.lastIndexOf(" "), max / 2)).replace(/[,;:\s]+$/, "") + "…";
+  const head = first.slice(0, max + 2); // bounded: the boundary scan never reads past the budget
+  let clause = -1;
+  for (const m of head.matchAll(/[,;]\s|\s[—–]/g)) if (m.index <= max && m.index >= max / 3) clause = m.index;
+  if (clause > 0) return first.slice(0, clause).replace(/[,;:\s—–-]+$/, "");
+  const cut = cutAt(first, max - 1);
+  return cutAt(cut, Math.max(cut.lastIndexOf(" "), Math.floor(max / 2))).replace(/[,;:\s—–-]+$/, "") + "…";
+}
+// s cut at `end` — one unit earlier when `end` falls inside a surrogate pair (1.21 review A5: the word-boundary fallback cut an emoji
+// in two and merge-summary.md got a lone high surrogate), and without a zero-width joiner left dangling at the end.
+function cutAt(s, end) {
+  const hi = (c) => c >= 0xd800 && c <= 0xdbff, lo = (c) => c >= 0xdc00 && c <= 0xdfff;
+  let e = Math.max(0, Math.min(end, s.length));
+  if (e > 0 && e < s.length && hi(s.charCodeAt(e - 1)) && lo(s.charCodeAt(e))) e--;
+  let out = s.slice(0, e);
+  while (out.length && out.charCodeAt(out.length - 1) === 0x200d) out = out.slice(0, -1);
+  return out;
+}
+// The merge / commit title: `type(slug): ` + shortTitle — the whole line at most 72 characters (COMMIT_TITLE_MAX) whenever the
+// prefix leaves the text at least 24; a longer prefix (a slug over 40 characters) keeps 24 for the text, so the line is
+// prefix + up to 24 (a 60-character slug: up to 92).
+const COMMIT_TITLE_MAX = 72;
+function commitTitle(prefix, text) {
+  return prefix + shortTitle(text, Math.max(24, COMMIT_TITLE_MAX - prefix.length));
 }
 
 function finishFeature(projectDir, name, opts = {}) {
@@ -162,12 +186,12 @@ function finishFeature(projectDir, name, opts = {}) {
   if (kind === "bugfix") checks.push(F.checkBug);
   if (tracks.includes("saas")) checks.push(F.checkLoad, F.checkObs);
   if (tracks.includes("ai")) checks.push(F.checkCost, F.checkSafety);
-  for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs"]) if (tracks.includes(tr)) checks.push(...i18n.msg(lng).secPrivacy.finishChecks[tr]);
+  for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs", "data"]) if (tracks.includes(tr)) checks.push(...i18n.msg(lng).secPrivacy.finishChecks[tr]);
 
   // Merge summary from the spec chain (usable as the merge commit message).
   const reqs = readIfExists(path.join(dir, "requirements.md")) || "";
   const summary = sectionFirstParagraph(reqs, ["summary", "resumo", "resumen"]) || slug;
-  const mergeTitle = `${kind === "bugfix" ? "fix" : "feat"}(${slug}): ${shortTitle(summary)}`;
+  const mergeTitle = commitTitle(`${kind === "bugfix" ? "fix" : "feat"}(${slug}): `, summary);
   const body = [F.prSummary, summary, ""];
   if (kind === "bugfix") {
     const bug = readIfExists(path.join(dir, "bug.md")) || "";
@@ -205,7 +229,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (decLines.length) body.push(...decLines, "");
   if (forcedList.length) body.push(...waiverSummaryLines(forcedList, lng), ""); // 1.16 U3: the waived gates
   body.push(F.prChecks, ...checks.map((c) => "- [ ] " + c), "");
-  const specFiles = ["requirements.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md", DECISIONS_FILE]
+  const specFiles = ["requirements.md", "change.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md", DECISIONS_FILE] // 1.21 F5: a change's one file
     .filter((x) => fs.existsSync(path.join(dir, x)));
   body.push(F.prSpec, ...specFiles.map((x) => "- `.specs/" + slug + "/" + x + "`"));
   const mergeSummary = body.join("\n") + "\n";
@@ -398,7 +422,7 @@ function metrics(projectDir, name, opts = {}) {
     if (write) {
       const file = path.join(f.dir, "retro.md");
       const rel = path.relative(projectDir, file).split(path.sep).join("/");
-      const written = writeIfAbsent(file, M.retro(res, { dur: fmtHours, today: new Date().toISOString().slice(0, 10) }));
+      const written = writeIfAbsent(file, i18n.portableCli(M.retro(res, { dur: fmtHours, today: new Date().toISOString().slice(0, 10) })));
       res.retro = { path: rel, written };
       res.note = written ? M.retroWritten(rel) : M.retroExists(rel);
     }
@@ -916,8 +940,10 @@ function catalogData(projectDir) {
   const cache = new Map();
   const srcs = featureDirs(projectDir).map((s) => {
     const tracks = detectTracks(s.dir);
-    const reqRaw = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
-    return { ...s, tracks, phase: detectPhase(s.dir, tracks), reqRaw, state: stateFromFile(projectDir, statePath(s.dir)) };
+    const state = stateFromFile(projectDir, statePath(s.dir));
+    const reqFull = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
+    const reqRaw = state.kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without its task blocks (1.21 review C1)
+    return { ...s, tracks, phase: detectPhase(s.dir, tracks), reqRaw, state };
   });
   // Superseded ACs, keyed by the target folder (dirKey: case-folded where the file system is) + ID → the
   // "<feature>/<AC>" that replaces them. 1.15: only a SHIPPED declaring feature (featureShipped) retires the AC; one still in
@@ -1037,7 +1063,7 @@ function catalog(projectDir, opts = {}) {
     const E = i18n.msg(data.lang).err;
     if (!fs.existsSync(root)) return { ...res, ok: false, error: E.noSpecs(root) };
     if (!isGeneratedOrAbsent(file)) return { ...res, ok: false, skipped: true, error: E.notGenerated("SPECS.md") };
-    writeFileAtomic(file, data.markdown);
+    writeFileAtomic(file, i18n.portableCli(data.markdown)); // committed: `dev-spec`, never a machine path (1.21 F3)
     res.wrote = true;
   } else res.markdown = data.markdown;
   return res;
@@ -1049,7 +1075,7 @@ function maybeRefreshCatalog(projectDir) {
     const file = path.join(specsRoot(projectDir), "SPECS.md");
     const cur = readIfExists(file);
     if (cur == null || !isGeneratedOrAbsent(file)) return false;
-    const md = catalogData(projectDir).markdown;
+    const md = i18n.portableCli(catalogData(projectDir).markdown);
     if (md === cur) return false;
     writeFileAtomic(file, md);
     return true;
@@ -1490,7 +1516,7 @@ function baselineDrift(root, rootReal, fin) {
   return { unchanged, changed, missing, nowPresent, ignored, drifted: changed.length + missing.length + nowPresent.length > 0 };
 }
 
-module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, finishFeature, METRIC_PHASES, timeOf, round1,
+module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, COMMIT_TITLE_MAX, commitTitle, finishFeature, METRIC_PHASES, timeOf, round1,
   round2, isoOf, hoursFrom, featureMetrics, stats, metrics, fmtHours, metricsLines, pruneRoadmapRefs, milestoneResult,
   pruneRoadmapRefsLocked, removeFeature, TOMBSTONE_PREFIX, TOMBSTONE_SWEEP_AGE_MS, sweepTombstones, removeFeatureLocked,
   archiveFeature, archiveFeatureLocked, renameFeature, renameFeatureLocked, renamePlan, renameSupersedesRefs,

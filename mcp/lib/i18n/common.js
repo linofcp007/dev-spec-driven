@@ -11,6 +11,40 @@
  * the pt-BR derivation in i18n/pt-br.js. The language model and the English-stable tokens are described in i18n.js.
  */
 
+const path = require("path");
+
+// 1.21 F3 — the CLI line a person can RUN. A plugin install puts no `dev-spec` on PATH (only `npm link` does), so a message
+// that tells someone to run the CLI names THIS clone's script — `${DEV_SPEC} done <f> <n> --run` in every language, never
+// a bare `dev-spec done …` (the 1.19 eval run relayed exactly that to a user, who could not run it). The path is resolved
+// from this file's place (mcp/lib/i18n/ → the clone root), with forward slashes (bash, PowerShell and cmd.exe all read
+// them). Quoted to paste as is into bash AND PowerShell: double quotes, unless the path holds a character one of them
+// expands or ends a string on there (" $ ` ! and the curly double quotes PowerShell also reads) — then single quotes
+// (literal in both); a path that also holds a single quote gets a <placeholder> (no quoting survives both shells).
+// Text written into a COMMITTED file (ROADMAP.md, SPECS.md, UPGRADE.md, the exports, retro.md) goes through portableCli():
+// a machine path never lands in git — there the CLI keeps its name, `dev-spec`.
+const RE_CLI_UNSAFE_DOUBLE = /["$`!“”„]/;
+const RE_CLI_UNSAFE_SINGLE = /['‘’‚‛]/;
+function cliQuote(p) {
+  const s = String(p).replace(/\\/g, "/");
+  if (!RE_CLI_UNSAFE_DOUBLE.test(s)) return '"' + s + '"';
+  if (!RE_CLI_UNSAFE_SINGLE.test(s)) return "'" + s + "'";
+  return '"<dev-spec-driven>/cli/dev-spec.js"';
+}
+const DEV_SPEC_SCRIPT = path.resolve(__dirname, "..", "..", "..", "cli", "dev-spec.js").replace(/\\/g, "/");
+// `node "<clone>/cli/dev-spec.js"` — the runnable stand-in for `dev-spec` (a message appends the subcommand and its arguments).
+const cliPrefix = (script) => "node " + cliQuote(script || DEV_SPEC_SCRIPT);
+const DEV_SPEC = cliPrefix();
+// The runnable line → its portable form, for a file meant to be committed — as written, or HTML-escaped (ROADMAP.html and
+// the HTML export escape its quotes).
+const DEV_SPEC_HTML = DEV_SPEC.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function portableCli(text) {
+  if (typeof text !== "string") return text;
+  let s = text;
+  if (s.includes(DEV_SPEC)) s = s.split(DEV_SPEC).join("dev-spec");
+  if (DEV_SPEC_HTML !== DEV_SPEC && s.includes(DEV_SPEC_HTML)) s = s.split(DEV_SPEC_HTML).join("dev-spec");
+  return s;
+}
+
 // The AUTHORED locales (one hand-written block each in BUILD / STEERING / MSG / BRIEF / EVALS_README — i18n/<lang>.js) and
 // every locale the engine speaks: pt-BR (1.14 D1) is DERIVED from pt — see "pt-BR — a derived locale" in i18n/pt-br.js.
 const BASE_LANGS = ["en", "pt", "es"];
@@ -46,21 +80,36 @@ const TEMPLATE_ACS = { core: ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4"
   dist: ["US-1.AC-16", "US-1.AC-17", "US-1.AC-18", "US-1.AC-19"], // +dist (1.17 D)
   api: ["US-1.AC-20", "US-1.AC-21", "US-1.AC-22", "US-1.AC-23"], // +api (1.19 T)
   ui: ["US-1.AC-24", "US-1.AC-25", "US-1.AC-26", "US-1.AC-27"], // +ui (1.19 T)
-  obs: ["US-1.AC-28", "US-1.AC-29", "US-1.AC-30", "US-1.AC-31"] }; // +obs (1.19 T)
+  obs: ["US-1.AC-28", "US-1.AC-29", "US-1.AC-30", "US-1.AC-31"], // +obs (1.19 T)
+  data: ["US-1.AC-32", "US-1.AC-33", "US-1.AC-34", "US-1.AC-35"] }; // +data (1.21 F4)
 // The optional tracks whose template criteria / tasks / sections follow the core ones, in track order.
-const MARKER_TRACK_ORDER = ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs"];
+const MARKER_TRACK_ORDER = ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
 // The tracks classification.md lists signals for: +tdd, the built-in marker tracks, then a project's track packs (1.15 — any
 // other name in the feature's track list), in its order.
 function signalTracks(tracks) {
   const builtIn = ["core", "tdd", ...MARKER_TRACK_ORDER];
   return ["tdd", ...MARKER_TRACK_ORDER, ...(tracks || []).filter((t) => typeof t === "string" && !builtIn.includes(t))];
 }
-function templateTests(tracks) {
+// 1.21 F5 — feature sizes (spec_create {size}): xs is the one-file change (change.md), s a one-story scaffold, m / l today's
+// chain with the duplicates merged. No size = the 1.20 scaffolds, byte for byte (every builder takes `a.size` undefined).
+const FEATURE_SIZES = ["xs", "s", "m", "l"];
+// The core template criteria of a size: S keeps one story with two criteria — AC-1 (WHEN) and AC-2 (IF…THEN, the error path);
+// the track criteria keep their numbers at every size (US-1.AC-5… — a gap after AC-2 is fine: IDs are stable, not contiguous).
+const SIZE_CORE_ACS = { s: ["US-1.AC-1", "US-1.AC-2"] };
+function coreTemplateAcs(size) {
+  return Object.prototype.hasOwnProperty.call(SIZE_CORE_ACS, size) ? SIZE_CORE_ACS[size] : TEMPLATE_ACS.core;
+}
+// Core design sections a track's own sections supersede on a SIZED scaffold (P4 — DATA: a track that owns a concern the core
+// design also asks about): the builders leave the core section out when one of its tracks is on. Keys = the core sections every
+// language's design builder names; values = the tracks that supersede them. A new built-in track adds its entry here.
+const CORE_SUPERSEDED_BY = { apiContracts: ["api"], errorHandling: ["api"], securityConsiderations: ["sec"], testingStrategy: ["tdd"] };
+const coreSuperseded = (a, key) => !!a.size && (CORE_SUPERSEDED_BY[key] || []).some((t) => (a.tracks || []).includes(t));
+function templateTests(tracks, size) {
   const ids = {};
   let n = 0;
   for (const t of Object.keys(TEMPLATE_ACS)) {
     if (t !== "core" && !(tracks || []).includes(t)) continue;
-    for (const ac of TEMPLATE_ACS[t]) ids[ac] = "T-" + String(++n).padStart(2, "0");
+    for (const ac of t === "core" ? coreTemplateAcs(size) : TEMPLATE_ACS[t]) ids[ac] = "T-" + String(++n).padStart(2, "0");
   }
   return ids;
 }
@@ -73,18 +122,20 @@ function greenLine(green, ...acs) {
 // ubiquitous AC-4 ("always-true property") and tenant isolation ("never") are invariants, the event-driven ones examples.
 // acs: the feature's REAL AC IDs (a test plan scaffolded after requirements.md was written — spec_add_track tdd): one
 // generic row each (T-01…, unit, example, [behavior]) instead of the template's, whose IDs the feature may not define.
-function templateTestRows(tracks, row, L, acs) {
+function templateTestRows(tracks, row, L, acs, size) {
   if (Array.isArray(acs) && acs.length) {
     return acs.map((ac, i) => row("T-" + String(i + 1).padStart(2, "0"), "unit", "example", L.behavior, ac, "tests/unit/...")).join("\n");
   }
   // An EMPTY list: requirements.md was written and defines no AC ID (an import without criteria) — one generic row whose
   // Covers cell is a slot, never the template's US-1.AC-1… rows (phantoms for trace_check). 1.14 full review Pa4.
   if (Array.isArray(acs)) return row("T-01", "unit", "example", L.behavior, L.acSlot, "tests/unit/...");
-  const T = templateTests(tracks);
+  const T = templateTests(tracks, size);
   const r = (ac, layer, desc, file, kind = "example") => row(T[ac], layer, kind, desc, ac, file);
-  const rows = [r("US-1.AC-1", "unit", L.behavior, "tests/unit/..."), r("US-1.AC-2", L.integration, L.behavior, "tests/integration/..."),
-    r("US-1.AC-3", "unit", L.recovery, "tests/unit/..."), r("US-1.AC-4", "unit", L.property, "tests/unit/...", "property"),
-    r("US-2.AC-1", L.integration, L.behavior, "tests/integration/...")];
+  // 1.21 F5: size S — its two core criteria (AC-2 is the IF…THEN error path there)
+  const rows = size === "s" ? [r("US-1.AC-1", "unit", L.behavior, "tests/unit/..."), r("US-1.AC-2", "unit", L.recovery, "tests/unit/...")]
+    : [r("US-1.AC-1", "unit", L.behavior, "tests/unit/..."), r("US-1.AC-2", L.integration, L.behavior, "tests/integration/..."),
+      r("US-1.AC-3", "unit", L.recovery, "tests/unit/..."), r("US-1.AC-4", "unit", L.property, "tests/unit/...", "property"),
+      r("US-2.AC-1", L.integration, L.behavior, "tests/integration/...")];
   if (T["US-1.AC-5"]) rows.push(r("US-1.AC-5", L.integration, L.tenant, "tests/integration/...", "property"), r("US-1.AC-6", L.load, L.latency, "load-test.md"));
   if (T["US-1.AC-7"]) rows.push(r("US-1.AC-7", "eval", L.golden, "evals/golden.json"), r("US-1.AC-8", "eval", L.injection, "evals/adversarial.json"),
     r("US-1.AC-9", L.integration, L.cost, "tests/integration/..."));
@@ -112,8 +163,14 @@ function templateTestRows(tracks, row, L, acs) {
   if (T["US-1.AC-28"]) rows.push(r("US-1.AC-28", L.integration, L.telemetry, "tests/integration/...", "property"),
     r("US-1.AC-29", L.integration, L.burnAlert, "tests/integration/..."), r("US-1.AC-30", L.integration, L.rollbackDrill, "tests/integration/..."),
     r("US-1.AC-31", L.integration, L.readiness, "tests/integration/..."));
+  // +data (1.21 F4): data-quality checks on fixture batches and an idempotent re-run hold for every batch / every re-run → property; a
+  // stale partition fires the freshness alert; the schema-change compatibility check runs against the published schema (contract).
+  if (T["US-1.AC-32"]) rows.push(r("US-1.AC-32", L.integration, L.dataQuality, "tests/integration/...", "property"),
+    r("US-1.AC-33", L.integration, L.idempotentRerun, "tests/integration/...", "property"), r("US-1.AC-34", L.integration, L.freshness, "tests/integration/..."),
+    r("US-1.AC-35", L.contract, L.schemaChange, "tests/contract/..."));
   return rows.join("\n");
 }
 
 
-module.exports = { BASE_LANGS, LANGS, LANG_ALIASES, canonicalLang, normalizeLang, baseLang, TEMPLATE_ACS, MARKER_TRACK_ORDER, signalTracks, templateTests, greenLine, templateTestRows };
+module.exports = { BASE_LANGS, LANGS, LANG_ALIASES, canonicalLang, normalizeLang, baseLang, TEMPLATE_ACS, MARKER_TRACK_ORDER, signalTracks, templateTests, greenLine, templateTestRows,
+  cliQuote, cliPrefix, DEV_SPEC_SCRIPT, DEV_SPEC, portableCli, FEATURE_SIZES, SIZE_CORE_ACS, coreTemplateAcs, CORE_SUPERSEDED_BY, coreSuperseded };

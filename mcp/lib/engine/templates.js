@@ -72,9 +72,10 @@ const TEMPLATE_ARTIFACTS = Object.freeze({
   checklist: "checklist.md", "integration-plan": "integration-plan.md",
   bug: "bug.md", "bug-requirements": "requirements.md", "bug-test-plan": "test-plan.md", "bug-tasks": "tasks.md",
   spike: "spike.md", "spike-tasks": "tasks.md", // 1.14 C2 — the spike kind's scaffolds
+  change: "change.md", // 1.21 F5 — a change's one file (kind change, size xs)
 });
 // The chain artifacts a gate reads — a template of theirs with no slot at all scaffolds an approvable file (check warns).
-const TEMPLATE_CHAIN = new Set(["requirements", "design", "test-plan", "eval-plan", "tasks", "bug", "bug-requirements", "bug-test-plan", "bug-tasks"]);
+const TEMPLATE_CHAIN = new Set(["requirements", "design", "test-plan", "eval-plan", "tasks", "bug", "bug-requirements", "bug-test-plan", "bug-tasks", "change"]);
 const TEMPLATE_VARS = ["name", "slug", "summary", "tracks", "lang", "date"];
 const RE_TEMPLATE_VAR = /\{\{\s*([A-Za-z_][\w-]*)\s*\}\}/g;
 const RE_TEMPLATE_KNOWN_VAR = new RegExp("\\{\\{\\s*(?:" + TEMPLATE_VARS.join("|") + ")\\s*\\}\\}", "i");
@@ -342,7 +343,7 @@ function parseTemplateText(key, text) {
   const put = (entry, x) => { const w = templateWildcard(x); if (w) entry.wild.push(w); else entry.set.add(x); };
   const brackets = { set: new Set(), wild: [] }, tasks = { set: new Set(), wild: [] };
   k.brackets.forEach((x) => put(brackets, x));
-  if (key === "tasks" || key === "bug-tasks") parseTasks(text).forEach((t) => put(tasks, taskDescription(t.text)));
+  if (key === "tasks" || key === "bug-tasks" || key === "change") parseTasks(text).forEach((t) => put(tasks, taskDescription(t.text)));
   return { brackets, code: new Set(k.code), tasks };
 }
 function buildProjectTemplateSets(root) {
@@ -364,7 +365,7 @@ function buildProjectTemplateSets(root) {
     const p = hit.parsed;
     merge(sets.brackets, p.brackets);
     p.code.forEach((x) => sets.code.add(x));
-    if (f.key === "tasks") merge(sets.tasks, p.tasks);
+    if (f.key === "tasks" || f.key === "change") merge(sets.tasks, p.tasks); // 1.21 F5: change.md holds the change's tasks
     if (f.key === "bug-tasks") merge(sets.bugSteps, p.tasks);
     if (f.key === "bug") merge(sets.bugSlots, p.brackets);
   }
@@ -424,6 +425,7 @@ function builtInTemplate(key, lang, tracks) {
     case "bug-tasks": return i18n.bugTasks(a.name, lang);
     case "spike": return i18n.msg(lang).spike.report({ name: a.name, question: a.summary }); // 1.14 C2: {{summary}} = the spike's question
     case "spike-tasks": return i18n.msg(lang).spike.tasks(a.name);
+    case "change": return i18n.change({ name: a.name, summary: a.summary }, lang); // 1.21 F5: a change's one file
     default: return null;
   }
 }

@@ -38,7 +38,7 @@ code and output summary — evidence before claims (`references/verification.md`
   output shows the test never ran — a missing test file, module or script (`couldNotRun`);
 - a `_Verify:_` that pipes (`npm test | tee log`) reports the last command's exit code — the tick carries
   `pipeMasked`; drop the pipe or `set -o pipefail`.
-CLI: `dev-spec done <feature> <n> --run` runs the task's `_Verify:_` and records the result (with the git commit);
+CLI: `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run` runs the task's `_Verify:_` and records the result (with the git commit);
 a run that could not happen (no shell, a signal, `--timeout <seconds>`) records nothing.
 Ticked the wrong task, or its work turned out incomplete? **Undo the tick** — never edit the checkbox by hand:
 `spec_complete_task {name, number, undo: true, reason}` (CLI `dev-spec undone <feature> <n> --reason "…"`). The task
@@ -57,8 +57,9 @@ until a second or third use; never copy-paste. A refactor you notice outside the
 add …`) — one name per candidate: an existing name gets the new note appended to its entry.
 
 **Can't run the `_Verify:_` command yourself** (no shell, no runtime in this session)? **Do not tick the task** — not
-bare, not with a note, never with an exit code nobody saw. Name the command and ask the user to run it and paste the
-output (or to run `dev-spec done <feature> <n> --run`); record exactly what they report
+bare, not with a note, never with an exit code nobody saw — and never send a subagent (or a tool search) to look for a
+shell. Name the command and ask the user to run it and paste the
+output (or to run `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run`); record exactly what they report
 (`{command, exitCode, summary}`). Tick it unverified only if the user explicitly asks for exactly that, and say it
 stays unverified. In Claude Code the Stop hook sends back a closing "done" / "tests pass" while a ticked task has no
 passing evidence — the fix is the run, or saying plainly what is not verified. With project checks set
@@ -86,5 +87,5 @@ When the last task is done, run `/spec-converge` if you doubt every AC is delive
 
 Either way: honor the track-gated "done" checks before finishing the feature: load test + observability
 validation (+saas), cost + safety validation (+ai), security scans + threat model re-check (+sec), data subject
-rights + retention verified (+privacy), failure-injection tests green (+dist), contract tests + the breaking-change diff green (+api), accessibility checks + the keyboard / screen-reader pass (+ui), an alert fired in a staged failure + a rollback drill (+obs). A decision or discovery made on the way goes to `/spec-decide`. If blocked,
+rights + retention verified (+privacy), failure-injection tests green (+dist), contract tests + the breaking-change diff green (+api), accessibility checks + the keyboard / screen-reader pass (+ui), an alert fired in a staged failure + a rollback drill (+obs), the data-quality checks + a partition re-run / backfill rehearsal (+data). A decision or discovery made on the way goes to `/spec-decide`. If blocked,
 pause and discuss rather than improvising outside the design. Respond in the user's language (EN/PT/ES).

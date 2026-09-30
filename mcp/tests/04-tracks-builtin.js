@@ -10,11 +10,11 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
   { // 1.14 A2 — the composable +sec (security) and +privacy (GDPR / RGPD) tracks, end to end, EN / PT / ES.
     const a2Root = path.join(tmp, "a2-tracks");
     const a2 = (name) => path.join(a2Root, name);
-    const dropTodo = (file) => fs.writeFileSync(file, fs.readFileSync(file, "utf8").split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+    const dropTodo = (file) => fs.writeFileSync(file, fs.readFileSync(file, "utf8").split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
 
     // --- the track list itself
-    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy,dist,api,ui,obs" && // 1.17 D: + dist; 1.19 T: + api, ui, obs
+    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs,data" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy,dist,api,ui,obs,data" && // 1.17 D: + dist; 1.19 T: + api, ui, obs; 1.21 F4: + data
       S.TRACK_MARKER.sec === "[SEC]" && S.TRACK_MARKER.privacy === "[PRIVACY]" && S.trackLabel(S.normalizeTracks("privacy sec saas")) === "core +saas +sec +privacy",
       "A2: sec and privacy are valid, composable tracks with English-stable markers, labelled in track order");
     const typo = S.createFeature(a2("typo"), "Typo", "privcy");
@@ -120,7 +120,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
         const fp = path.join(f.dir, file);
         let t = fs.readFileSync(fp, "utf8");
         for (let i = 0; i < 3; i++) t = t.replace(SLOT, "the account export"); // nested slots ("[e.g., … [N] …]") need a few passes
-        fs.writeFileSync(fp, t.split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+        fs.writeFileSync(fp, t.split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
       }
       const doc = S.specDoctor(p, f.slug);
       const gates = ["classification", "requirements", "design", "tasks"].map((ph) => [ph, S.approvePhase(p, f.slug, ph, "t")]);
@@ -276,7 +276,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const dRoot = path.join(tmp, "p17d");
     const d = (n) => path.join(dRoot, n);
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
-    const dropTodo = (file) => fs.writeFileSync(file, rd(file).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+    const dropTodo = (file) => fs.writeFileSync(file, rd(file).split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
     const cls = (t, lang) => S.classify(t, lang ? { lang } : {});
 
     // --- D1: the registry
@@ -393,7 +393,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
         const fp = path.join(f.dir, file);
         let t = rd(fp);
         for (let i = 0; i < 3; i++) t = t.replace(SLOT, "the order event");
-        fs.writeFileSync(fp, t.split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+        fs.writeFileSync(fp, t.split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
       }
       const doc = S.specDoctor(p, f.slug);
       const gates = ["classification", "requirements", "design", "tasks"].map((ph) => [ph, S.approvePhase(p, f.slug, ph, "t")]);
@@ -497,7 +497,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const pChk = S.trackPacks(tp, "check");
     const probs = JSON.stringify(pChk);
     ok(!pDist.ok && /reserved/.test(pDist.error) && !pKafka.ok && /reserved/.test(pKafka.error) && /marker-reserved/.test(probs) &&
-      !S.parseTracks("events").tracks.includes("events") && S.trackPacks(tp, "list").builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs",
+      !S.parseTracks("events").tracks.includes("events") && S.trackPacks(tp, "list").builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs,data",
       "1.17 D12: a track pack named dist (or kafka) is refused, one with the marker DIST is invalid (marker-reserved); spec_tracks list names the built-in tracks (got " + js([pDist.error, pKafka.error, probs.slice(0, 300)]) + ")");
 
     // --- D13: project templates — the copied built-ins check clean; a design template with some [DIST] headings needs them all
@@ -568,7 +568,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const lpUpF = (n) => lpUp.features.find((x) => x.name === n) || {};
     ok(lpStD.tracks === "core" && js(lpStD.missingPacks) === js(["dist"]) && !chk(lpDocD, "dist-sections").status && chk(lpDocD, "track-pack-missing").status === "warn" &&
       /\+dist \(a track pack from before 1\.17 — 'dist' is a reserved name now, and the built-in \+dist track is NOT applied to this feature: rename \.specs\/tracks\/dist\//.test(chk(lpDocD, "track-pack-missing").detail) &&
-      /dev-spec add-track f-dist dist --remove; to adopt the built-in track instead: dev-spec add-track f-dist dist\)/.test(chk(lpDocD, "track-pack-missing").detail) &&
+      /node "[^"]*dev-spec\.js" add-track f-dist dist --remove; to adopt the built-in track instead: node "[^"]*dev-spec\.js" add-track f-dist dist\)/.test(chk(lpDocD, "track-pack-missing").detail) &&
       lpStK.tracks === "core" && js(lpStK.missingPacks) === js(["kafka"]) && /'kafka' is a reserved name now: rename/.test(chk(lpDocK, "track-pack-missing").detail) &&
       lpUpF("f-dist").attention.includes("track-pack-reserved") && js(lpUpF("f-kafka").reservedPacks) === js(["kafka"]) &&
       lpUp.lines.some((l) => /Rename its track pack\(s\) from before 1\.17 — \+kafka: the name is reserved now/.test(l)),
@@ -802,7 +802,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const tRoot = path.join(tmp, "p19t");
     const d = (n) => path.join(tRoot, n);
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
-    const dropTodo = (file) => fs.writeFileSync(file, rd(file).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+    const dropTodo = (file) => fs.writeFileSync(file, rd(file).split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
     const cls = (t, lang) => S.classify(t, lang ? { lang } : {});
     const unfilledWord = { en: /unfilled/, pt: /por preencher/, es: /sin rellenar/, "pt-BR": /sem preencher/ };
     const T19 = [
@@ -884,7 +884,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
           const fp = path.join(f.dir, file);
           let t = rd(fp);
           for (let i = 0; i < 3; i++) t = t.replace(SLOT, "the order record");
-          fs.writeFileSync(fp, t.split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+          fs.writeFileSync(fp, t.split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
         }
         const doc = S.specDoctor(p, f.slug);
         const gates = ["classification", "requirements", "design", "tasks"].map((ph) => [ph, S.approvePhase(p, f.slug, ph, "t")]);
@@ -1120,12 +1120,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const acIds = [...aReq.matchAll(/\*\*(US-\d+\.AC-\d+)\*\*/g)].map((m) => m[1]);
     const tIds = [...aPlan.matchAll(/^\| (T-\d+) \|/gm)].map((m) => m[1]);
     const aTr = S.traceCheck(all, every.slug), aDoc = S.specDoctor(all, every.slug);
-    const order = ["[SaaS]", "[AI]", "[SEC]", "[PRIVACY]", "[DIST]", "[API]", "[UI]", "[OBS]"].map((m) => aReq.indexOf("#### " + m));
-    ok(every.ok && every.label === "core +tdd +saas +ai +sec +privacy +dist +api +ui +obs" && acIds.length === 32 && new Set(acIds).size === 32 && acIds.includes("US-1.AC-31") &&
-      tIds.length === 32 && new Set(tIds).size === 32 && new Set(aTasks.map((t) => t.number)).size === aTasks.length && order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])) &&
+    // (1.21 F4: + [DATA], US-1.AC-32..35 — eleven tracks, 36 criteria and T-IDs, nine <track>-sections checks)
+    const order = ["[SaaS]", "[AI]", "[SEC]", "[PRIVACY]", "[DIST]", "[API]", "[UI]", "[OBS]", "[DATA]"].map((m) => aReq.indexOf("#### " + m));
+    ok(every.ok && every.label === "core +tdd +saas +ai +sec +privacy +dist +api +ui +obs +data" && acIds.length === 36 && new Set(acIds).size === 36 && acIds.includes("US-1.AC-35") &&
+      tIds.length === 36 && new Set(tIds).size === 36 && new Set(aTasks.map((t) => t.number)).size === aTasks.length && order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])) &&
       !aTr.uncoveredByTasks.length && !aTr.uncoveredByTests.length && !aTr.phantomAcsInTasks.length && !aTr.phantomTestsInTasks.length && !(aTr.testsNotMappedToTasks || []).length &&
-      ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs"].every((t) => chk(aDoc, t + "-sections").status === "fail"),
-      "1.19 T9: all ten tracks — 32 unique criteria (the [API] / [UI] / [OBS] blocks after [DIST], US-1.AC-20..31), 32 unique T-IDs, unique task numbers, every template AC planned and tasked, eight <track>-sections checks (got " +
+      ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"].every((t) => chk(aDoc, t + "-sections").status === "fail"),
+      "1.19 T9: every built-in track — 36 unique criteria (the [API] / [UI] / [OBS] / [DATA] blocks after [DIST], US-1.AC-20..35), 36 unique T-IDs, unique task numbers, every template AC planned and tasked, nine <track>-sections checks (got " +
       js([every.label, acIds.length, tIds.length, order, aTr.uncoveredByTasks, aTr.uncoveredByTests]) + ")");
 
     // --- 1.19 T10: the placeholder corpus stays bounded as tracks are added (every set of at most two optional tracks + all of them):
@@ -1141,8 +1142,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       t0 = process.hrtime.bigint(); texts = EI.templateCorpus().length; ratios.push(Number(process.hrtime.bigint() - t0) / unit);
     }
     ratios.sort((a, b) => a - b);
-    ok(texts > 900 && texts <= 1400 && ratios[1] <= 60,
-      `1.19 T10: the template corpus renders ${texts} texts (≤ 1400) in ~${ratios[1].toFixed(0)}× one all-tracks scaffold (≤ 60×; 1.18: 628 texts, ~19×)`);
+    // (1.21: +data and the size variants brought it to ~1480 texts; since 1.20 a process reads the pre-generated corpus instead)
+    ok(texts > 900 && texts <= 1650 && ratios[1] <= 60,
+      `1.19 T10: the template corpus renders ${texts} texts (≤ 1650) in ~${ratios[1].toFixed(0)}× one all-tracks scaffold (≤ 60×; 1.18: 628 texts, ~19×; 1.19: ~1390)`);
 
     // --- 1.19 T11: the pt-BR twins of the new PT strings hold no European-only word, are idempotent and keep the markers / IDs
     const aBr = { name: "ARGN", tracks: ["core", "tdd", "api", "ui", "obs"], label: "core +tdd +api +ui +obs", slug: "argn", summary: "" };
@@ -1242,7 +1244,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const mWebSt = JSON.parse(rd(mWeb.dir, ".state.json")), mWebDesign = rd(mWeb.dir, "design.md");
     const mUiDoc = chk(S.specDoctor(mp, "f-webui"), "ui-sections");
     const mDrop = S.addTrack(mp, "f-contracts", "contracts", { remove: true });
-    ok(/\+webui \(a track pack from before 1\.19 — its marker \[UI\] is the built-in \+ui track's now/.test(mDoc.detail || "") && /dev-spec add-track f-webui ui/.test(mDoc.detail || "") &&
+    ok(/\+webui \(a track pack from before 1\.19 — its marker \[UI\] is the built-in \+ui track's now/.test(mDoc.detail || "") && /node "[^"]*dev-spec\.js" add-track f-webui ui/.test(mDoc.detail || "") &&
       /o seu marcador \[OBS\] é agora o do track \+obs incluído/.test(mDocPt.detail || "") && js(mUpF.reservedMarkers) === js([{ name: "webui", marker: "[UI]", track: "ui" }]) &&
       (mUpF.attention || []).includes("track-pack-reserved") && mUp.lines.some((l) => /Change the marker of its track pack\(s\) from before 1\.19 — \+webui \[UI\]/.test(l)) &&
       mAdopt.ok && js(mAdopt.adopted) === js(["ui"]) && js(mAdopt.adoptedPacks) === js(["webui"]) && mWebDesign.includes("## [UI] Design System Usage") && mWebDesign.includes("## [UI] Thing webui") &&
@@ -1413,5 +1415,282 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       /quem é chamado · cada chamada liga a um runbook/.test(v4Pt) && /## Alertas \(cada um liga a um runbook\)/.test(v4Pt),
       "1.19 verify 4: pt-BR — '[OBS] Alerting' says 'quem é acionado · cada alerta aponta para um runbook … o que vira um ticket e não aciona o plantão', the steering heading 'Alertas (cada um com um link para o runbook)', the finish check 'os runbooks para os quais os alertas apontam'; no liga / ligação / chamada left; PT unchanged; idempotent (got " +
       js(v4Br.split("\n").filter((l) => /runbook/.test(l))) + ")");
+  }
+
+  { // 1.21 F2a — the 1.19 verification's remaining misses: a negation reaches every item of a coordinated list (every track), +ui
+    // named with everyday words, +api's "our API needs a v2", the settings screen + a public API (the mixed case)
+    const js = (v) => JSON.stringify(v);
+    const cls = (t, lang) => S.classify(t, lang ? { lang } : {});
+    const onOf = (t, tr) => cls(t).tracks.includes(tr);
+    // coordinated negation: "not add X or Y", PT "nem", ES "ni", a comma list closed by "or", "neither … nor" — and never past a
+    // contrast word ("just"), an "and" (a new predicate) or a comma that no conjunction closes; a hazard's negation opens no list
+    const coordOff = [["obs", "We will not add feature flags or canary releases for this internal script."],
+      ["obs", "Não vamos usar feature flags nem lançamento canário neste script interno."], ["obs", "No usaremos feature flags ni despliegue canario en este script interno."],
+      ["dist", "Without Kafka, RabbitMQ or SQS: a Postgres table is enough."], ["dist", "Neither Kafka nor RabbitMQ — the export runs in-process."],
+      ["ai", "Sem LLM nem embeddings: regras fixas."], ["tdd", "Informe interno de ventas, sin datos personales ni autenticación"]];
+    const coordOn = [["obs", "No feature flags, just a canary release behind a manual switch."], ["obs", "Without feature flags, the canary release is done by hand."],
+      ["obs", "Deploy the billing service without downtime and roll back on errors."], ["obs", "No Kafka and a canary release for the new consumer."],
+      ["obs", "Sem Kafka, apenas um lançamento canário com feature flags."]];
+    const neg3 = [cls(coordOff[0][1]), cls(coordOff[1][1]), cls(coordOff[2][1])];
+    ok(coordOff.every(([tr, t]) => !onOf(t, tr)) && coordOn.every(([tr, t]) => onOf(t, tr)) &&
+      neg3.every((r) => r.negated.obs.length === 2 && !r.signals.obs.length) && neg3[1].lang === "pt" &&
+      cls(coordOff[6][1]).negated.tdd.includes("autenticación") && S.classify("Sem uso de IA nem LLM.").negated.ai.includes("llm") && !onOf("Sem uso de IA nem LLM.", "ai"),
+      "1.21 F2a: a negation reaches every item of the coordinated list it opens, for every track — 'not add feature flags or canary releases', PT 'nem', ES 'ni', 'Without Kafka, RabbitMQ or SQS', 'Neither … nor', ES 'sin datos personales ni autenticación' (+tdd off); never past 'just', an 'and' or an unclosed comma; 'without downtime' (a hazard) opens no list (got " +
+      js([coordOff.filter(([tr, t]) => onOf(t, tr)), coordOn.filter(([tr, t]) => !onOf(t, tr)), neg3.map((r) => [r.negated.obs, r.signals.obs])]) + ")");
+    // 1.21 review B1: a negator followed by another verb negates that VERB, never its objects — "must not lose X nor Y" is a requirement
+    // about X and Y (like a hazard), so no list opens and the negative conjunction after it negates nothing; the verbs whose object IS
+    // what is excluded (use / add / need…) still carry the list on
+    const b1On = ["O sistema não pode perder pagamentos nem duplicar faturas.", "El sistema no debe perder pagos ni duplicar facturas.",
+      "The system must not lose payments nor duplicate invoices.",
+      "Reconciliação noturna do extrato bancário com a contabilidade. Não pode perder pagamentos nem reembolsos.",
+      "Conciliación nocturna del extracto bancario con la contabilidad. No puede perder pagos ni reembolsos.",
+      "The ledger must never lose payments or refunds.", "O sistema não pode perder dados nem reembolsos.", "Sem perder dados nem reembolsos no fecho do mês.",
+      "The system must not lose data nor refunds."];
+    const b1Off = [["tdd", "The export must not use payments or subscriptions."], ["tdd", "Não precisamos de filas nem de pagamentos."],
+      ["obs", "Não vamos usar filas nem lançamento canário."], ["obs", "Nem iniciar sessão nem lançamento canário."], ["tdd", "Nem iniciar sessão nem pagamentos."],
+      ["obs", "1.21 F2a: 'not add feature flags or canary releases', 'Without Kafka, RabbitMQ or SQS', done"]];
+    ok(b1On.every((t) => onOf(t, "tdd")) && b1Off.every(([tr, t]) => !onOf(t, tr)) && !onOf("1.21 F2a: 'not add feature flags or canary releases', 'Without Kafka, RabbitMQ or SQS', done", "dist") &&
+      !cls(b1On[2]).negated.tdd.length && !cls(b1On[3]).negated.tdd.length,
+      "1.21 review B1: a negated verb never turns its objects into exclusions — 'must not lose payments nor duplicate invoices', PT 'não pode perder … nem', ES 'no debe / no puede perder … ni', 'must never lose payments or refunds' keep +tdd; 'must not use', 'Não precisamos de', 'Não vamos usar', 'Nem … nem' and a quoted \"'not add X or Y'\" still negate the whole list (got " +
+      js([b1On.filter((t) => !onOf(t, "tdd")), b1Off.filter(([tr, t]) => onOf(t, tr))]) + ")");
+    // 1.21 verify V1: an EXCLUSION is read after a volition / intention verb, a plan's auxiliary, an adoption verb (integrate, deploy, run,
+    // offer, provide, ship, adopt…) or a "necessary" phrase, EN / PT / ES — the whole list stays negated, as the 1.21 pre-review code read it;
+    // a bare "not X nor Y" after a noun is nominal (a contrast), never a negated verb
+    const v1 = [["ai", "Não queremos usar LLM nem embeddings."], ["ai", "No queremos usar LLM ni embeddings."], ["dist", "Não queremos Kafka nem RabbitMQ."],
+      ["dist", "Não vamos integrar Kafka nem RabbitMQ."], ["dist", "No vamos a integrar Kafka ni RabbitMQ."], ["dist", "Não integraremos Kafka nem RabbitMQ."],
+      ["dist", "Não pretendemos usar Kafka nem RabbitMQ."], ["dist", "Não planeamos usar Kafka nem RabbitMQ."], ["dist", "No pensamos usar Kafka ni RabbitMQ."],
+      ["dist", "No planeamos usar Kafka ni RabbitMQ."], ["dist", "Não iremos adotar Kafka nem RabbitMQ."], ["dist", "No es necesario Kafka ni RabbitMQ."],
+      ["dist", "No hace falta Kafka ni RabbitMQ."], ["dist", "No se usará Kafka ni RabbitMQ."], ["dist", "No vamos a desplegar Kafka ni RabbitMQ."],
+      ["dist", "We will not integrate Kafka or RabbitMQ."], ["dist", "We will not deploy Kafka or RabbitMQ."], ["dist", "We will not run Kafka or RabbitMQ."],
+      ["obs", "We will not offer feature flags or canary releases."], ["obs", "We will not provide feature flags or canary releases."],
+      ["obs", "We will not ship feature flags or canary releases."], ["dist", "We use Postgres, not MongoDB nor Kafka."], ["dist", "Usamos Postgres, não SMS nem Kafka."],
+      ["dist", "Usamos Postgres, no SMS ni Kafka."], ["ai", "Não pretendemos usar LLM nem embeddings."], ["ai", "No es necesario usar LLM ni embeddings."]];
+    const v1r = v1.map(([tr, t]) => [tr, t, cls(t)]);
+    ok(v1r.every(([tr, , r]) => !r.tracks.includes(tr) && !r.signals[tr].length) && b1On.every((t) => onOf(t, "tdd")),
+      "1.21 verify V1: 'Não queremos / pretendemos / planeamos usar X nem Y', 'Não vamos integrar', 'Não iremos adotar', 'No es necesario', 'No hace falta', 'No se usará', 'No vamos a desplegar', 'We will not integrate / deploy / run / offer / provide / ship X or Y' and 'We use Postgres, not MongoDB nor Kafka' (PT / ES too) negate the whole list; the B1 requirements keep +tdd (got " +
+      js(v1r.filter(([tr, , r]) => r.tracks.includes(tr) || r.signals[tr].length).map(([, t, r]) => [t, r.label, r.negated])) + ")");
+    // 1.21 verify V5: EN reads a negated verb's direct object as PT / ES always did — "The system must not lose payments" keeps +tdd (a
+    // deontic modal's verb: the requirement), "must not leak personal data" keeps +privacy; "we will not add payments", "do not use X" and
+    // "Não usa X" still exclude; the phrase a negator precedes is negated whole ("sem iniciar sessão": 'sessão' too)
+    const v5 = [cls("The system must not lose payments."), cls("The system must not lose payments or refunds."), cls("O sistema não pode perder pagamentos."),
+      cls("The service must not leak personal data."), cls("We will not add payments to this report."), cls("We do not use payments here."),
+      cls("Sem iniciar sessão nem embeddings."), cls("Without losing payments or refunds.")];
+    ok(v5[0].tracks.includes("tdd") && !v5[0].negated.tdd.length && v5[1].tracks.includes("tdd") && v5[2].tracks.includes("tdd") && v5[3].tracks.includes("privacy") &&
+      !v5[4].tracks.includes("tdd") && !v5[5].tracks.includes("tdd") && !v5[6].tracks.includes("tdd") && !v5[6].tracks.includes("ai") && v5[7].tracks.includes("tdd"),
+      "1.21 verify V5: 'The system must not lose payments' keeps +tdd like PT 'não pode perder pagamentos'; 'must not leak personal data' keeps +privacy; 'without losing payments or refunds' keeps +tdd; 'we will not add payments' / 'we do not use payments' exclude; 'Sem iniciar sessão nem embeddings' negates the whole phrase (got " +
+      js(v5.map((r) => [r.label, r.negated.tdd])) + ")");
+    // 1.21 verify R1: a single-item exclusion a few words back — a contraction (don't / won't / doesn't / didn't), an adoption verb before an
+    // article, a plan verb two words back, nunca / jamás — and a 3-item comma list a nem / ni closes; a requirement stays on its track
+    // (mustn't / can't / shouldn't, must not, não pode / no debe, without losing / sem perder, "never overwrites"), a hazard opens nothing
+    const r1Off = [["dist", "We don't use Kafka."], ["dist", "We won't use Kafka."], ["dist", "We don't use Kafka or RabbitMQ."], ["ai", "We will not add an LLM."],
+      ["ai", "Não vamos adicionar um LLM."], ["ai", "No vamos a añadir un LLM."], ["ai", "This feature doesn't need an LLM."], ["dist", "We do not plan to use Kafka."],
+      ["dist", "Nunca usaremos Kafka."], ["dist", "Jamás usaremos Kafka."], ["dist", "Nunca usaremos Kafka nem RabbitMQ."], ["dist", "Não vamos integrar Kafka, RabbitMQ nem SQS."],
+      ["dist", "No usaremos Kafka, RabbitMQ ni SQS."], ["ai", "We didn't add an LLM to the checkout."]];
+    const r1On = [["tdd", "The system mustn't lose payments."], ["tdd", "The system can't lose payments nor refunds."], ["tdd", "The system must not lose payments."],
+      ["tdd", "O sistema não pode perder pagamentos."], ["tdd", "El sistema no debe perder pagos."], ["tdd", "Without losing payments or refunds."],
+      ["tdd", "Sem perder pagamentos nem reembolsos."], ["tdd", "The system shouldn't duplicate payments."], ["tdd", "a second write never overwrites the ledger"],
+      ["tdd", "We do not want to lose payments or refunds."], ["tdd", "We didn't add an LLM to the checkout."], ["obs", "We will not add duplicate rows or canary releases."],
+      ["privacy", "Never log personal data."]];
+    ok(r1Off.every(([tr, t]) => !onOf(t, tr)) && r1On.every(([tr, t]) => onOf(t, tr)),
+      "1.21 verify R1: 'We don't / won't use Kafka', 'We will not add an LLM', 'Não vamos adicionar um LLM', 'This feature doesn't need an LLM', 'We do not plan to use Kafka', 'Nunca / Jamás usaremos Kafka', 'Não vamos integrar Kafka, RabbitMQ nem SQS' exclude; 'mustn't / can't / must not lose', 'não pode / no debe perder', 'without losing', 'never overwrites the ledger', 'don't want to lose', a hazard's list and 'We didn't add an LLM to the checkout' (+tdd) keep their tracks (got " +
+      js([r1Off.filter(([tr, t]) => onOf(t, tr)), r1On.filter(([tr, t]) => !onOf(t, tr))]) + ")");
+    // 1.21 verify R2: a modal + an enabling / installing / embedding / exposing verb excludes the technology (EN / PT / ES); for a +sec /
+    // +privacy keyword — data to protect — "must not expose / embed" is the requirement
+    const r2Off = [["obs", "We should not enable feature flags yet."], ["obs", "We should not activate feature flags yet."],
+      ["obs", "The first release must not enable canary releases."], ["dist", "The service must not install Kafka."], ["ai", "The MVP must not embed LLMs."],
+      ["dist", "The app should not bundle Kafka."], ["api", "We must not expose GraphQL."], ["dist", "O serviço não deve instalar Kafka."],
+      ["obs", "No debemos activar feature flags todavía."]];
+    const r2On = [["privacy", "Logs must not expose personal data."], ["privacy", "The service must not leak personal data."], ["tdd", "The system must not corrupt payments."]];
+    ok(r2Off.every(([tr, t]) => !onOf(t, tr)) && r2On.every(([tr, t]) => onOf(t, tr)),
+      "1.21 verify R2: 'must not / should not enable / activate / install / embed / bundle / expose X' and PT 'não deve instalar', ES 'no debemos activar' exclude X; 'Logs must not expose personal data', 'must not leak personal data', 'must not corrupt payments' keep their tracks (got " +
+      js([r2Off.filter(([tr, t]) => onOf(t, tr)), r2On.filter(([tr, t]) => !onOf(t, tr))]) + ")");
+    // 1.21 verify N1: a negation excludes only when it certainly governs the keyword (a nominal negator with only fillers / modifiers between,
+    // or an adoption verb / a plan / an intention); anything else keeps the track — a noun ends the negated phrase, an auxiliary + another
+    // verb negates the verb, a people relative clause, a condition, a nominal negator inside a negated predicate (EN / PT / ES)
+    const n1On = [["tdd", "Without payments the checkout is useless."], ["tdd", "Sem pagamentos o checkout não serve."], ["tdd", "Sin pagos el checkout no sirve."],
+      ["saas", "Without Kafka the webhook retries on failure."], ["tdd", "Users who do not pay the subscription are blocked."],
+      ["tdd", "Users who don't pay the subscription are blocked."], ["tdd", "Utilizadores que não pagam a subscrição são bloqueados."],
+      ["tdd", "Los usuarios que no pagan la suscripción quedan bloqueados."], ["ai", "The report does not show the LLM cost."], ["ai", "The report doesn't show the LLM cost."],
+      ["ai", "O relatório não mostra o custo do LLM."], ["tdd", "The admin who doesn't have MFA must enable it."],
+      ["privacy", "The export doesn't include personal data unless the admin asks."], ["saas", "If we don't add rate limiting, the API will be abused."],
+      ["saas", "If we do not add rate limiting, the API will be abused."], ["saas", "Se não adicionarmos rate limiting, a API será abusada."],
+      ["saas", "Si no añadimos rate limiting, la API será abusada."], ["obs", "We won't ship without a canary release."], ["tdd", "Nobody should access the admin API without SSO."]];
+    const n1Off = [["dist", "We don't use Kafka."], ["ai", "We will not add an LLM."], ["ai", "This feature doesn't need an LLM."], ["dist", "Nunca usaremos Kafka."],
+      ["dist", "We do not plan to use Kafka."], ["dist", "No need for Kafka or RabbitMQ."], ["dist", "Não vamos integrar Kafka, RabbitMQ nem SQS."],
+      ["dist", "We no longer use Kafka or RabbitMQ."], ["ai", "This feature doesn't involve an LLM or embeddings."], ["dist", "We are not going to use Kafka or RabbitMQ."],
+      ["ai", "Página interna que no usa LLM, sólo una tabla"], ["ai", "Sem integração externa nem embeddings."], ["dist", "Sem Kafka e sem RabbitMQ."]];
+    ok(n1On.every(([tr, t]) => onOf(t, tr)) && n1Off.every(([tr, t]) => !onOf(t, tr)) && b1On.every((t) => onOf(t, "tdd")),
+      "1.21 verify N1: 'Without payments the checkout is useless' (PT / ES), 'Without Kafka the webhook retries', 'Users who do not pay the subscription' (PT / ES), 'The report does not show the LLM cost', 'The admin who doesn't have MFA', '…unless the admin asks', 'If we don't add rate limiting' (PT / ES), 'We won't ship without a canary release', 'Nobody … without SSO' keep their tracks; the governed exclusions (don't use, will not add, doesn't need, nunca usaremos, do not plan to use, no need for, a 3-item nem list, no longer use, doesn't involve, a page that doesn't use an LLM) still exclude (got " +
+      js([n1On.filter(([tr, t]) => !onOf(t, tr)), n1Off.filter(([tr, t]) => onOf(t, tr))]) + ")");
+    // 1.21 verify N3: a wish on a hazard noun is a requirement ("don't want duplicate payments", PT / ES "pagamentos duplicados"); expose /
+    // embed of a protected HEAD noun (secrets, keys, tokens, credentials, passwords, personal data, introspection…) keeps the keyword's track
+    const n3On = [["tdd", "We don't want duplicate payments."], ["tdd", "Não queremos pagamentos duplicados."], ["tdd", "No queremos pagos duplicados."],
+      ["tdd", "The frontend must not embed OAuth client secrets."], ["api", "The API must not expose GraphQL introspection in production."],
+      ["privacy", "Logs must not expose personal data."], ["tdd", "Logs must not expose passwords."]];
+    const n3Off = [["api", "We must not expose GraphQL."], ["ai", "The MVP must not embed LLMs."], ["dist", "We don't want Kafka or RabbitMQ."]];
+    ok(n3On.every(([tr, t]) => onOf(t, tr)) && n3Off.every(([tr, t]) => !onOf(t, tr)),
+      "1.21 verify N3: 'don't want duplicate payments' (PT / ES) keeps +tdd; 'must not embed OAuth client secrets' keeps +tdd, 'must not expose GraphQL introspection' keeps +api, 'Logs must not expose personal data / passwords' keep theirs; 'must not expose GraphQL', 'must not embed LLMs', 'don't want Kafka or RabbitMQ' exclude (got " +
+      js([n3On.filter(([tr, t]) => !onOf(t, tr)), n3Off.filter(([tr, t]) => onOf(t, tr))]) + ")");
+    // 1.21 verify P1: an adoption verb's negation excludes only when its SUBJECT is the one designing (the first person, the system being
+    // built, or none); a role, a user group, a plan / tier / edition / account / tenant states an access or entitlement rule — the track
+    // stays (EN / PT / ES, can't = cannot, the permission modals and must / deve / debe alike); an unreadable subject keeps it too
+    const p1On = [["tdd", "Guests can't use the checkout."], ["tdd", "Guests cannot use the checkout."], ["obs", "Viewers can't add feature flags."],
+      ["obs", "Viewers cannot add feature flags."], ["saas", "Editors can't use webhooks."], ["saas", "Tenants on the free plan can't use webhooks."],
+      ["saas", "Tenants on the free plan cannot use webhooks."], ["ai", "Free users can't use the LLM assistant."], ["ai", "Free users may not use the LLM assistant."],
+      ["ai", "Users on the free plan must not use the LLM assistant."], ["tdd", "O utilizador convidado não pode usar o checkout."],
+      ["tdd", "El usuario invitado no puede usar el checkout."], ["obs", "Os editores não podem adicionar feature flags."],
+      ["obs", "Los editores no pueden añadir feature flags."], ["ai", "Os utilizadores gratuitos não podem usar o assistente LLM."],
+      ["ai", "Los usuarios gratuitos no pueden usar el asistente LLM."], ["ai", "Um utilizador sem subscrição não pode usar o assistente LLM."],
+      ["tdd", "Convidados não podem usar o checkout."], ["tdd", "Los invitados no pueden usar el checkout."]];
+    const p1Plan = [["ai", "The Starter plan doesn't include the LLM assistant."], ["ai", "O plano Starter não inclui o assistente LLM."],
+      ["ai", "El plan Starter no incluye el asistente LLM."], ["ai", "Trial accounts do not include the LLM assistant."],
+      ["ai", "As contas de teste não incluem o assistente LLM."], ["ai", "Las cuentas de prueba no incluyen el asistente LLM."],
+      ["saas", "The free plan does not include webhooks."], ["saas", "O plano gratuito não inclui webhooks."], ["saas", "El plan gratuito no incluye webhooks."],
+      ["tdd", "The basic plan doesn't support subscriptions."], ["tdd", "O plano básico não suporta subscrições."], ["saas", "The free plan has no webhooks."],
+      ["saas", "The free tier does not include webhooks or the LLM assistant."], ["ai", "The free tier does not include webhooks or the LLM assistant."]];
+    const p1Off = [["dist", "The service must not use Redis or Kafka."], ["ai", "This feature does not require an LLM."], ["dist", "We don't use Kafka."],
+      ["dist", "O sistema não deve usar Redis nem Kafka."], ["dist", "El servicio no debe usar Redis ni Kafka."], ["dist", "We don't need a message queue for this."],
+      ["ai", "Não é necessário um LLM."], ["ai", "No se necesita un LLM."], ["dist", "We decided not to use Kafka."], ["ai", "We avoid using an LLM."],
+      ["obs", "Sem necessidade de feature flags."], ["ai", "Não vamos usar nenhum LLM."], ["ai", "No usaremos ningún LLM."], ["saas", "We won't be adding webhooks."],
+      ["obs", "We chose not to add feature flags."], ["ai", "The MVP has no LLM and no vector database."], ["tdd", "This version will not have subscriptions."],
+      ["dist", "Decidimos não usar Kafka."], ["dist", "Decidimos no usar Kafka."], ["dist", "We're not going to use Kafka or RabbitMQ."],
+      ["dist", "There is no need for Kafka or RabbitMQ."], ["dist", "Do not use Kafka."], ["dist", "Não usar Kafka."], ["dist", "We plan not to use Kafka."]];
+    ok(p1On.every(([tr, t]) => onOf(t, tr)) && p1Plan.every(([tr, t]) => onOf(t, tr)) && p1Off.every(([tr, t]) => !onOf(t, tr)),
+      "1.21 verify P1: a role's / a user group's negated adoption keeps the track — 'Guests can't / cannot use the checkout', 'Viewers can't add feature flags', 'Tenants on the free plan can't use webhooks', 'Free users may not use the LLM assistant', 'Users on the free plan must not use…' (PT / ES too); a plan's / an account's — 'The Starter plan doesn't include the LLM assistant', 'The free plan does not include / has no webhooks', 'Trial accounts do not include…' (PT / ES); the designing subject or none still excludes — 'The service must not use Redis', 'This feature does not require an LLM', 'We don't use Kafka', 'O sistema não deve usar', 'No usaremos ningún LLM', 'Decidimos não usar Kafka', 'Do not use Kafka' (got " +
+      js([p1On.filter(([tr, t]) => !onOf(t, tr)), p1Plan.filter(([tr, t]) => !onOf(t, tr)), p1Off.filter(([tr, t]) => onOf(t, tr))]) + ")");
+    // can't and cannot read the same, with any subject
+    const p1Pairs = [["Guests can't use the checkout.", "Guests cannot use the checkout."], ["The service can't use Kafka.", "The service cannot use Kafka."],
+      ["We can't use an LLM here.", "We cannot use an LLM here."], ["Free users can't use the LLM assistant.", "Free users cannot use the LLM assistant."],
+      ["Editors can't add feature flags or canary releases.", "Editors cannot add feature flags or canary releases."]];
+    const p1PairsR = p1Pairs.map(([a, b]) => [cls(a).label, cls(b).label]);
+    ok(p1PairsR.every(([a, b]) => a === b) && p1PairsR[0][0].includes("tdd") && !p1PairsR[1][0].includes("dist") && !p1PairsR[2][0].includes("ai") &&
+      p1PairsR[4][0].includes("obs"),
+      "1.21 verify P1: can't and cannot classify alike — a role subject keeps ('Guests can't / cannot use the checkout' +tdd, 'Editors can't / cannot add feature flags' +obs), the designing subject excludes ('The service can't / cannot use Kafka', 'We can't / cannot use an LLM') (got " + js(p1PairsR) + ")");
+    // the subject: the nearest listed word back to the clause start, past a prepositional phrase and a relative clause; a design noun that
+    // is an earlier verb's object leaves a role further back; after a comma with no subject the sentence's earlier words are read; an EN
+    // "no" after the verb negates its noun for certain (only a role keeps)
+    const p1Subj = [["dist", false, "The service for free users must not use Kafka."], ["saas", true, "Users of the service can't use webhooks."],
+      ["tdd", true, "Guests who open the page can't use the checkout."], ["tdd", true, "We must ensure guests can't use the checkout."],
+      ["tdd", true, "Guests can view the page but can't use the checkout."], ["tdd", true, "Free users, however, can't use the checkout."],
+      ["dist", false, "For the MVP, don't use Kafka."], ["dist", false, "The first version of the app doesn't use Kafka."], ["dist", false, "Our team plans not to use Kafka."],
+      ["ai", false, "A página do utilizador não usa LLM."], ["dist", false, "The export must not use Kafka."], ["saas", true, "Users export data but can't use webhooks."],
+      ["tdd", false, "WHEN the month has no invoices THE SYSTEM SHALL return a header-only CSV."], ["tdd", true, "A user who has no subscription cannot use the LLM assistant."],
+      ["dist", false, "The team doesn't use Kafka."], ["dist", false, "El equipo no usará Kafka."], ["ai", true, "The support team can't use the LLM assistant."]];
+    ok(p1Subj.every(([tr, on, t]) => onOf(t, tr) === on),
+      "1.21 verify P1: the subject reading — 'The service for free users must not use Kafka' excludes (the users are a complement), 'Users of the service can't use webhooks', 'Guests who open the page…', 'We must ensure guests can't…', 'Guests can view the page but can't…', 'Free users, however, can't…' keep; 'For the MVP, don't use Kafka', 'Our team plans not to use Kafka', 'The team doesn't use Kafka', 'The export must not use Kafka' exclude ('the support team' keeps); 'WHEN the month has no invoices' excludes, 'A user who has no subscription cannot use…' keeps (got " +
+      js(p1Subj.filter(([tr, on, t]) => onOf(t, tr) !== on)) + ")");
+    // 1.21 verify P2: a singular noun in no list with a definite article, demonstrative or possessive (the / this / our / its, o / a / este /
+    // o nosso, el / la / este / nuestro) is a component of what is being designed — a plain verbal negation excludes; a modal, a bare or
+    // -s plural, an indefinite article and a role / plan keep; the PT / ES 3rd-person future is an adoption verb ("no añadirá")
+    const p2Off = [["dist", "The importer does not need Kafka."], ["dist", "The scheduler does not need Kafka."], ["dist", "The uploader does not use Kafka."],
+      ["dist", "The notifier doesn't use RabbitMQ."], ["ai", "The crawler won't use an LLM."], ["api", "The gateway won't use GraphQL."],
+      ["ai", "The newsletter doesn't use an LLM."], ["ai", "The new search won't use embeddings."], ["dist", "Our importer will not use Kafka."],
+      ["dist", "El importador no necesita Kafka."], ["dist", "El programador de tareas no usa Kafka."], ["dist", "Este importador no usa Kafka."],
+      ["dist", "O agendador não usa Kafka."], ["dist", "O importador não precisa de Kafka."], ["dist", "O nosso importador não vai usar Kafka."],
+      ["tdd", "La versión 2 no añadirá suscripciones."], ["tdd", "A versão 2 não vai adicionar subscrições."], ["tdd", "Version 2 will not add subscriptions."],
+      ["dist", "La primera versión no usará Kafka."]];
+    const p2On = [["tdd", "Drivers don't use the checkout; they get paid by transfer."], ["tdd", "Suppliers don't use the checkout."],
+      ["dist", "The importer can't use Kafka."], ["dist", "The importer cannot use Kafka."], ["dist", "The importer may not use Kafka."],
+      ["dist", "O importador não pode usar Kafka."], ["dist", "El importador no puede usar Kafka."], ["dist", "The importers don't use Kafka."],
+      ["dist", "Os importadores não usam Kafka."], ["dist", "Los importadores no usan Kafka."], ["dist", "A scheduler does not need Kafka."],
+      ["dist", "Kafka consumers must not use auto-commit."], ["ai", "The LLM must not use personal data for training."], ["saas", "The mobile client doesn't need webhooks."],
+      ["dist", "Users of the importer don't need Kafka."], ["dist", "Guests who open the importer don't need Kafka."],
+      ["ai", "The admin approves the invoice and doesn't need an LLM."]];
+    ok(p2Off.every(([tr, t]) => !onOf(t, tr)) && p2On.every(([tr, t]) => onOf(t, tr)),
+      "1.21 verify P2: a component subject + a plain negation excludes — 'The importer / scheduler / uploader does not need / use Kafka', 'The crawler won't use an LLM', 'The new search won't use embeddings', 'El importador no necesita Kafka', 'El programador de tareas no usa Kafka', 'O agendador não usa Kafka', 'O nosso importador não vai usar Kafka', 'La versión 2 no añadirá suscripciones' (EN / PT / ES); kept — a permission modal ('The importer can't / cannot / may not use Kafka', 'não pode', 'no puede'), a bare or -s plural ('Suppliers / The importers don't use…', 'Os / Los importadores'), 'A scheduler', a modal on an unread subject ('must not'), a role ('The mobile client', 'Users of the importer', 'The admin approves…') (got " +
+      js([p2Off.filter(([tr, t]) => onOf(t, tr)), p2On.filter(([tr, t]) => !onOf(t, tr))]) + ")");
+    // 1.21 verify P3: a negated verb whose object's head noun is data to protect (personal data, PII, a token, a secret, a key, a password,
+    // a card number… + PT / ES) is the requirement — whatever the verb and the subject, the keyword's track stays (EN / PT / ES)
+    const p3On = [["privacy", "The email doesn't include personal data."], ["privacy", "The receipt won't include personal data."],
+      ["privacy", "The export doesn't include personal data."], ["privacy", "The webhook payload won't include personal data."],
+      ["saas", "The webhook payload won't include personal data."], ["tdd", "The URL does not include the session token."],
+      ["privacy", "O email não inclui dados pessoais."], ["privacy", "El correo no incluye datos personales."], ["privacy", "The notification does not include PII."],
+      ["privacy", "The export must not include personal data."], ["privacy", "The API response will not include personal data."],
+      ["privacy", "The chatbot must not use personal data."], ["privacy", "The service must not include personal data in logs."],
+      ["privacy", "O relatório não vai incluir dados pessoais."], ["privacy", "El informe no incluirá datos personales."],
+      ["privacy", "The log does not contain personal data."], ["tdd", "We will not log the payment token."]];
+    const p3Off = [["api", "We must not expose GraphQL."], ["ai", "The MVP must not embed LLMs."], ["saas", "The email doesn't include webhooks."],
+      ["tdd", "We won't use Stripe to store card numbers."], ["privacy", "No personal data."]];
+    // the head, not a modifier or a look-alike: design tokens, a secrets manager, custo de tokens are no data to protect (still excluded);
+    // expose / embed read any protected word as before (N3)
+    const p3Head = [["ui", false, "We won't use design tokens."], ["sec", false, "We don't use a secrets manager."], ["sec", false, "Não vamos usar gestão de segredos."],
+      ["api", false, "We will not add an Idempotency-Key header."], ["sec", true, "Logs must not expose the secrets manager."], ["tdd", true, "We don't use passwords."]];
+    ok(p3On.every(([tr, t]) => onOf(t, tr)) && p3Off.every(([tr, t]) => !onOf(t, tr)) && onOf("The chatbot must not use personal data.", "ai") &&
+      p3Head.every(([tr, on, t]) => onOf(t, tr) === on),
+      "1.21 verify P3: data to protect as a negated verb's object keeps its track — 'The email / receipt / export doesn't include personal data', 'The webhook payload won't include personal data' (+saas +privacy), 'The URL does not include the session token' (+tdd), 'O email não inclui dados pessoais', 'El correo no incluye datos personales', 'The notification does not include PII', 'must not include / use personal data', 'O relatório não vai incluir…', 'El informe no incluirá…'; other objects still exclude — 'We must not expose GraphQL', 'The MVP must not embed LLMs', 'The email doesn't include webhooks', 'We won't use Stripe to store card numbers' (Stripe is the object), a nominal 'No personal data', and a protected word that is no head ('We won't use design tokens', 'We don't use a secrets manager', 'gestão de segredos', 'an Idempotency-Key header'); 'Logs must not expose the secrets manager' keeps +sec (N3) (got " +
+      js([p3On.filter(([tr, t]) => !onOf(t, tr)), p3Off.filter(([tr, t]) => onOf(t, tr)), p3Head.filter(([tr, on, t]) => onOf(t, tr) !== on)]) + ")");
+    // 1.21 review B2: a comma after the list's closing conjunction — or one before an article (a new clause's subject) — ends the list
+    const b2 = [["tdd", "ai", "Without an LLM or embeddings, the checkout or a subscription page is the priority."],
+      ["saas", "dist", "Without Kafka or RabbitMQ, the webhook or a nightly retry job handles delivery."],
+      ["tdd", "ai", "Sem LLM nem embeddings, o checkout ou a subscrição são a prioridade."], ["tdd", "ai", "Sin LLM ni embeddings, el checkout o la suscripción son la prioridad."],
+      ["tdd", "ai", "No LLM, the checkout or the subscription flow first."]];
+    const b2r = b2.map(([on, off, t]) => [on, off, cls(t)]);
+    ok(b2r.every(([on, off, r]) => r.tracks.includes(on) && !r.signals[on].some((k) => r.negated[on].includes(k)) && (off === "dist" ? r.negated.dist.length === 2 : !r.tracks.includes(off))) &&
+      coordOff.every(([tr, t]) => !onOf(t, tr)),
+      "1.21 review B2: a list has one closing conjunction — 'Without an LLM or embeddings, the checkout or a subscription page…' (EN / PT / ES) keeps +tdd (the LLM and embeddings stay negated), 'Without Kafka or RabbitMQ, the webhook or a nightly retry job…' keeps the webhook; 'Without Kafka, RabbitMQ or SQS' still negates all three (got " +
+      js(b2r.map(([, , r]) => [r.label, r.negated])) + ")");
+    // 1.21 verify V2: a comma + an article joins an item of the list's own track ("Without an LLM, a vector database or embeddings",
+    // "Without Kafka, the RabbitMQ broker or SQS", PT "Sem Kafka, o RabbitMQ ou o SQS"); another track's item, or a predicate after the
+    // closing item ("… is the priority"), is a new clause's subject
+    const v2 = [["ai", "Without an LLM, a vector database or embeddings."], ["dist", "Without Kafka, the RabbitMQ broker or SQS."], ["dist", "Sem Kafka, o RabbitMQ ou o SQS."],
+      ["dist", "Sin Kafka, el RabbitMQ o el SQS."]];
+    const v2on = ["Without payments, the checkout or a subscription page is the priority.", "No LLM, the checkout or the subscription flow first."];
+    ok(v2.every(([tr, t]) => !onOf(t, tr)) && v2on.every((t) => onOf(t, "tdd")) && b2r.every(([on, , r]) => r.tracks.includes(on)),
+      "1.21 verify V2: 'Without an LLM, a vector database or embeddings', 'Without Kafka, the RabbitMQ broker or SQS' (PT / ES) are one list; 'Without payments, the checkout or a subscription page is the priority' and 'No LLM, the checkout or the subscription flow first' keep +tdd (got " +
+      js([v2.filter(([tr, t]) => onOf(t, tr)).map(([, t]) => [t, cls(t).label]), v2on.filter((t) => !onOf(t, "tdd"))]) + ")");
+    // +ui everyday words: a confirm dialog / toast notification / snackbar is UI work; a widget a display verb shows is strong; errors
+    // next to each field and a mobile-friendly screen are anchors; a "snack bar", "the modal verbs", a login FORM alone stay off
+    const uiOn = ["Show a confirm dialog before a user deletes a project, with the project name typed to confirm.",
+      "Toast notifications for saved changes, replacing the old alert() popups in the editor.", "Show a snackbar when the upload finishes.",
+      "Show a modal asking the user to confirm the logout.", "Downtime notice: show a banner 24 hours before scheduled maintenance.",
+      "O ecrã de login deve mostrar os erros de validação junto a cada campo.", "La pantalla de inicio de sesión debe mostrar los errores de validación junto a cada campo.",
+      "Pantalla de pago adaptada al móvil con el botón de pagar siempre visible.", "Mostrar um diálogo de confirmação antes de apagar o projeto.",
+      "Mostrar una notificación toast al guardar los cambios."];
+    const uiOff = ["The stadium's snack bar sells drinks and hot dogs.", "Teach the modal verbs in the English course.", "Log in form", "Formulário de login",
+      "Formulario de inicio de sesión", "Add a button to export orders as CSV", "Metrics dashboard for sales", "Show the monthly totals in the PDF report."];
+    ok(uiOn.every((t) => onOf(t, "ui")) && uiOff.every((t) => !onOf(t, "ui")) && S.trackSignals("ui").strong.includes("snackbar") &&
+      S.signalConcept("ui", "junto a cada campo") === "inline" && S.signalConcept("ui", "mobile-friendly") === "responsive",
+      "1.21 F2a: +ui from everyday words — a confirm dialog, a toast notification, a snackbar, a modal / banner a display verb shows, errors next to each field, a mobile-friendly screen (EN / PT / ES); a snack bar, the modal verbs, a login form, a button, a sales dashboard stay off (got " +
+      js([uiOn.filter((t) => !onOf(t, "ui")), uiOff.filter((t) => onOf(t, "ui"))]) + ")");
+    // +api: our own API + a new version in the sentence is contract work; someone else's versioned API is not; the settings screen of
+    // a PUBLIC API is UI work too (the mixed case) — the page's own API still demotes it
+    const apiOn = ["Our webhooks API needs a v2 with a new payload shape; keep v1 working for existing consumers until March.",
+      "A nossa API de webhooks precisa de uma v2 com um novo formato de payload.", "Nuestra API de pagos necesita una nueva versión con otro formato."];
+    const apiOff = ["Our app calls the Shopify API v3 for the orders.", "Call the Stripe API v2 to charge the card.", "Our API docs need a new logo."];
+    const mixed = ["Expose a public REST API for the mobile app's settings screen, with SLO alerts on its latency.",
+      "Expor uma API REST pública para o ecrã de definições da aplicação móvel, com alertas de SLO sobre a latência.",
+      "Exponer una API REST pública para la pantalla de ajustes de la app móvil, con alertas de SLO sobre su latencia."];
+    ok(apiOn.every((t) => onOf(t, "api")) && apiOff.every((t) => !onOf(t, "api")) &&
+      mixed.every((t) => { const r = cls(t); return ["api", "ui", "obs"].every((tr) => r.tracks.includes(tr)); }) &&
+      !onOf("Expose the admin page's API so the mobile app can fetch the same stats.", "ui") && !onOf("Backend for the profile page: the GET /me handler must return the avatar URL.", "ui"),
+      "1.21 F2a: +api — 'our webhooks API needs a v2' (EN / PT / ES) is ours and versioned (strong); a third party's versioned API is not; the mixed case (a public API for the settings screen) is +api +ui +obs, while 'the admin page's API' still says backend-only (got " +
+      js([apiOn.filter((t) => !onOf(t, "api")), apiOff.filter((t) => onOf(t, "api")), mixed.map((t) => cls(t).label)]) + ")");
+    // precision / recall on a compact corpus: the 1.19 verification's misses and false positives (EN / PT / ES) with their hard negatives
+    const F2 = [...uiOn.map((t) => ["ui", t]), ...uiOff.map((t) => ["", t]), ...apiOn.map((t) => ["api", t]), ...apiOff.map((t) => ["", t]),
+      ...mixed.map((t) => ["api ui obs", t]), ...coordOff.filter(([tr]) => tr === "obs").map(([, t]) => ["", t]),
+      ["obs", "Roll out the new pricing engine behind a feature flag to 5% of traffic, with a kill switch."], ["obs", "Implantação canário do novo motor de recomendações para 5% dos utilizadores."],
+      ["obs", "Despliegue canario del nuevo motor de precios con plan de reversión."], ["obs", "No feature flags, just a canary release behind a manual switch."],
+      ["", "Expose the admin page's API so the mobile app can fetch the same stats."], ["ui", "Settings page where users can change their notification preferences."],
+      ["api", "Design a versioned REST API for partners with an OpenAPI document."], ["", "Fetch exchange rates from the ECB's API every morning."],
+      ["ui", "Painel de administração para gerir utilizadores: pesquisa, filtros e desativação em massa."], ["", "Monitor stock levels and send alerts to the purchasing team."],
+      // 1.21 verify R2: a modal + an enabling / exposing verb excludes an +obs / +api technology (hard negatives)
+      ...r2Off.filter(([tr]) => tr === "obs" || tr === "api").map(([, t]) => ["", t]),
+      // 1.21 verify P1: a role's negated adoption keeps +obs (EN / PT / ES); the designing subject's excludes it (hard negatives)
+      ...p1On.filter(([tr]) => tr === "obs").map(([, t]) => ["obs", t]), ...p1Off.filter(([tr]) => tr === "obs").map(([, t]) => ["", t]),
+      // 1.21 verify P2: a component's plain negation excludes an +api technology (a hard negative)
+      ...p2Off.filter(([tr]) => tr === "api").map(([, t]) => ["", t])];
+    const f2 = ["api", "ui", "obs"].map((tr) => {
+      let tp = 0, fp = 0, pos = 0;
+      const wrong = [];
+      for (const [labels, t] of F2) {
+        const want = labels.split(" ").includes(tr), on = onOf(t, tr);
+        if (want) pos++;
+        if (on && want) tp++; else if (on) { fp++; wrong.push("FP +" + tr + " " + t); } else if (want) wrong.push("FN +" + tr + " " + t);
+      }
+      return { tr, precision: tp / (tp + fp || 1), recall: tp / (pos || 1), pos, wrong };
+    });
+    ok(F2.length >= 40 && f2.every((x) => x.pos >= 5 && x.precision >= 0.95 && x.recall >= 0.95),
+      `1.21 F2a: precision / recall on ${F2.length} EN / PT / ES texts (the verification's misses and false positives + hard negatives) ≥ 95% per track — ` +
+      f2.map((x) => `+${x.tr} ${(x.precision * 100).toFixed(0)}% / ${(x.recall * 100).toFixed(0)}% (${x.pos} positives)`).join(", ") + " (got " + js(f2.flatMap((x) => x.wrong)) + ")");
   }
 };

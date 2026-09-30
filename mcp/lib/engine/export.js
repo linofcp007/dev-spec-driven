@@ -24,7 +24,7 @@ let acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM
   specsRoot, SPIKE_FILE, spikeInfo, stateFromFile, statePath, statusFeature, storyContext, stripEnd, stripEnds,
   stripHtmlComments, supersededByIndex, supersedesMarkers, taskBlocks, taskProse, taskSize, timeOf, trackAcIds,
   trackLabel, trackMarker, verificationStatus, withoutTaskMarkers, withRoadmapLock, writeFileAtomic, writeRoadmap,
-  wsOrUnitIn;
+  wsOrUnitIn, changeViews, CHANGE_FILE;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM_CHAR,
   buildTraceMatrix, catalogData, changedSinceApproval, clarificationMarkers, cleanTaskText, closesFence, csvRecord, day,
   designSections, detectPhase, detectTracks, dirKey, existingFeature, extractAcIds, extractSection, fcDay, fcIso,
@@ -36,7 +36,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeadin
   sectionFirstParagraph, sha1Hex, SIZE_POINTS, slugify, specsRoot, SPIKE_FILE, spikeInfo, stateFromFile, statePath,
   statusFeature, storyContext, stripEnd, stripEnds, stripHtmlComments, supersededByIndex, supersedesMarkers, taskBlocks,
   taskProse, taskSize, timeOf, trackAcIds, trackLabel, trackMarker, verificationStatus, withoutTaskMarkers,
-  withRoadmapLock, writeFileAtomic, writeRoadmap, wsOrUnitIn } = E); }
+  withRoadmapLock, writeFileAtomic, writeRoadmap, wsOrUnitIn, changeViews, CHANGE_FILE } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.14 B2 — stakeholder export (spec_export) · release notes from the specs (spec_changelog)
@@ -46,6 +46,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeadin
 const EXPORT_DIR = "exports";
 const EXPORT_FORMATS = ["html", "md", "csv", "gherkin", "jira", "linear"]; // csv (1.14 F5): the requirements traceability matrix; 1.16 E1 gherkin, E2 jira / linear
 const SUMMARY_SYN = ["summary", "resumo", "resumen"];
+const CRITERIA_SYN = ["acceptance criteria", "critérios de aceitação", "criterios de aceitacao", "critérios de aceite", "criterios de aceptación", "criterios de aceptacion"]; // a change's criteria (1.21 review C5)
 const SUCCESS_SYN = ["success criteria", "critérios de sucesso", "criterios de sucesso", "criterios de éxito", "criterios de exito"];
 
 // --- markdown → HTML (zero-dep) for the subset the artifacts use ---
@@ -372,9 +373,10 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
   const read = (n) => readContained(projectDir, path.join(dir, n)); // a linked artifact is skipped, never copied out
   const tracks = detectTracks(dir);
   const st = stateFromFile(projectDir, statePath(dir));
-  const kind = st.kind === "bugfix" || st.kind === "spike" ? st.kind : "feature"; // 1.14 C2: + spike
+  const kind = st.kind === "bugfix" || st.kind === "spike" || st.kind === "change" ? st.kind : "feature"; // 1.14 C2: + spike; 1.21 review C5: + change
   const SP = M.spike;
-  const reqRaw = read("requirements.md") || "";
+  // 1.21 review C5: a change's criteria are its change.md WITHOUT the task blocks (its tasks are the Tasks table, once)
+  const reqRaw = kind === "change" ? changeViews(read("requirements.md") || "").criteria : read("requirements.md") || "";
   const reqs = activeDesign(reqRaw, tracks); // a removed track's [SaaS]/[AI]/… criteria are inactive — not part of the spec
   const status = statusFeature(projectDir, slug);
   const tasks = status.ok ? status.tasks.list : [];
@@ -392,11 +394,12 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
   const spikeText = kind === "spike" ? read(SPIKE_FILE) : null; // 1.14 C2: a spike — its question is the summary, spike.md its body
   const summary = sectionText(reqs, SUMMARY_SYN) || (bugText != null ? sectionText(bugText, SUMMARY_SYN) : null) || (kind === "spike" ? spikeInfo(dir).question : null);
   blocks.push({ id: "summary", h: X.sections.summary, md: summary || italic(X.noSummary) });
-  if (kind !== "spike") {
+  if (kind !== "spike" && kind !== "change") { // a change has no stories: its criteria are its own section (below)
     const stories = exportStories(reqs, X, marks);
     blocks.push({ id: "stories", h: X.sections.stories, md: stories.length ? "" : italic(X.noStories), children: stories });
   }
-  requirementSections(reqs).forEach((s, k) => blocks.push({ id: "req-" + (k + 1), h: s.title, md: s.body }));
+  // (a change: its Tasks heading keeps only the template's closing comment once the task blocks are out — no section of its own)
+  requirementSections(reqs).filter((s) => kind !== "change" || stripHtmlComments(s.body).trim()).forEach((s, k) => blocks.push({ id: "req-" + (k + 1), h: s.title, md: s.body }));
   if (spikeText != null) {
     const secs = designSections(spikeText);
     blocks.push({ id: "spike", h: SP.exportSection, md: secs.length ? "" : italic(X.none), children: secs.map((s) => ({ h: s.title, md: s.body || italic(X.none) })) });
@@ -433,6 +436,7 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
   const cs = changedSinceApproval(dir, approvals, tracks, kind, { detail: true });
   const changed = cs.changed.filter((x) => !cs.byDate.includes(x));
   const pending = new Set(pendingGateList(dir, tracks, kind, approvals));
+  const phaseLabel = (p) => (kind === "change" && p === "tasks" ? X.planPhase : X.phases[p]); // a change's tasks phase is its whole plan
   const aRows = [];
   for (const p of PHASES) {
     const a = approvals[p];
@@ -440,14 +444,14 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
       const notes = [];
       if (a.forced === true) notes.push(X.forced((Array.isArray(a.failing) ? a.failing.join(", ") : "") || "—"));
       if (PHASE_FILE[p] && (changed.includes(phaseFile(p, kind)) || (p === "design" && changed.includes("design.md")))) notes.push(X.changedSince);
-      aRows.push(`| ${X.phases[p]} | ${mdCell(a.by == null ? "—" : String(a.by))} | ${utcStamp(a.at)} | ${mdCell(notes.join("; ") || "—")} |`);
-    } else if (pending.has(p)) aRows.push(`| ${X.phases[p]} | — | — | ${X.pending} |`);
+      aRows.push(`| ${phaseLabel(p)} | ${mdCell(a.by == null ? "—" : String(a.by))} | ${utcStamp(a.at)} | ${mdCell(notes.join("; ") || "—")} |`);
+    } else if (pending.has(p)) aRows.push(`| ${phaseLabel(p)} | — | — | ${X.pending} |`);
   }
   blocks.push({ id: "approvals", h: X.sections.approvals, md: aRows.length ? head(X.cols.approval) + aRows.join("\n") : italic(X.noApprovals) });
 
   // Open clarifications — every [NEEDS CLARIFICATION] still in the spec (outside HTML comments), with its file.
   const clar = [];
-  for (const file of ["requirements.md", "bug.md", "design.md"]) {
+  for (const file of kind === "change" ? [CHANGE_FILE] : ["requirements.md", "bug.md", "design.md"]) { // a change: its one file
     const t = file === "requirements.md" ? reqs : read(file);
     if (t == null) continue;
     for (const q of clarificationMarkers(file === "design.md" ? activeDesign(t, tracks) : t)) clar.push(`- \`${file}\` — ${q || "[NEEDS CLARIFICATION]"}`);
@@ -480,8 +484,9 @@ function exportProjectDoc(projectDir, lang, cat) {
   for (const f of rmv.features) {
     const dir = path.join(root, f.name);
     const tracks = detectTracks(dir);
-    const kind = f.kind === "bugfix" || f.kind === "spike" ? f.kind : "feature"; // 1.14 C2: + spike (its question is the summary)
-    const reqRaw = readContained(projectDir, path.join(dir, "requirements.md")) || "";
+    const kind = f.kind === "bugfix" || f.kind === "spike" || f.kind === "change" ? f.kind : "feature"; // 1.14 C2: + spike (its question is the summary); 1.21 review C5: + change
+    const reqFull = readContained(projectDir, path.join(dir, "requirements.md")) || "";
+    const reqRaw = kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change: change.md without its task blocks
     const reqs = activeDesign(reqRaw, tracks);
     const c = counts(f.name);
     const catF = cat.features.find((x) => x.feature === f.name && !x.archived);
@@ -490,8 +495,11 @@ function exportProjectDoc(projectDir, lang, cat) {
     const line = [X.kind[kind] || M.spike.kind, f.tracks, P[f.phase] || f.phase, X.progress(c.tasksDone, c.tasks, f.percent)].concat(f.blocked ? [X.blocked(f.unmetDeps.join(", "))] : []).join(" · ");
     const stories = exportStories(reqs, X, new Map((catF ? catF.acs : []).map((a) => [a.id, a])));
     const sc = sectionText(reqs, SUCCESS_SYN);
+    // a change has no stories: its acceptance criteria section instead (1.21 review C5)
+    const kids = kind === "spike" ? [] : kind === "change" ? [{ h: X.criteria, md: sectionText(reqs, CRITERIA_SYN) || italic(X.noStories) }]
+      : [{ h: X.sections.stories, md: stories.length ? "" : italic(X.noStories), children: stories }];
     blocks.push({ id: "f-" + f.name, cls: "feature", h: titledSlug(specTitle(reqRaw, f.name), f.name), md: italic(line) + "\n\n" + (summary || italic(X.noSummary)),
-      children: (kind === "spike" ? [] : [{ h: X.sections.stories, md: stories.length ? "" : italic(X.noStories), children: stories }]).concat(sc ? [{ h: X.sections.successCriteria, md: sc }] : []) });
+      children: kids.concat(sc ? [{ h: X.sections.successCriteria, md: sc }] : []) });
   }
   // The living catalog, once the project keeps one (.specs/SPECS.md) — rendered fresh, archived features and superseded ACs included.
   if (fs.existsSync(path.join(root, "SPECS.md"))) blocks.push({ id: "catalog", cls: "feature", h: X.sections.catalog, md: artifactBody(cat.markdown) });
@@ -661,7 +669,7 @@ function exportSpecs(projectDir, opts = {}) {
   // A feature folder named 'exports' from before the name was reserved: never drop documents into someone's spec.
   if (["requirements.md", ".state.json"].some((n) => fs.existsSync(path.join(exDir, n)))) return { ...res, ok: false, error: i18n.msg(doc.lang).stakeholderExport.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
   if (!isGeneratedOrAbsent(file)) return { ...res, ok: false, skipped: true, error: i18n.msg(doc.lang).err.notGenerated(".specs/" + EXPORT_DIR + "/" + base + "." + ext) };
-  writeFileAtomic(file, content);
+  writeFileAtomic(file, i18n.portableCli(content)); // committed: `dev-spec`, never a machine path (1.21 F3)
   return { ...res, wrote: true, bytes: Buffer.byteLength(content, "utf8") };
 }
 // spec_export {format: "gherkin"} (1.16 E1): a feature → .specs/exports/<slug>.feature ({content | wrote, file, bytes,
@@ -700,7 +708,7 @@ function exportGherkin(projectDir, opts, pl) {
   if (["requirements.md", ".state.json"].some((n) => fs.existsSync(path.join(exDir, n)))) return { ...res, ok: false, error: i18n.msg(lang).stakeholderExport.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
   const hand = docs.find((d) => !isGeneratedOrAbsent(d.file));
   if (hand) return { ...res, ok: false, skipped: true, error: i18n.msg(lang).err.notGenerated(".specs/" + EXPORT_DIR + "/" + path.basename(hand.file)) };
-  for (const d of docs) writeFileAtomic(d.file, d.content);
+  for (const d of docs) writeFileAtomic(d.file, i18n.portableCli(d.content));
   const bytes = (d) => Buffer.byteLength(d.content, "utf8");
   if (res.scope === "feature") return { ...res, wrote: true, bytes: bytes(docs[0]) };
   return { ...res, wrote: docs.length > 0, files: docs.map((d) => d.file),
@@ -938,12 +946,13 @@ function gherkinFeature(projectDir, f, opts = {}) {
   if (state.kind === "spike") return { error: G.spike(slug), spike: true, lang };
   const D = GHERKIN_DIALECT[i18n.baseLang(lang)] || GHERKIN_DIALECT.en;
   const tracks = detectTracks(dir);
-  const reqRaw = readContained(projectDir, path.join(dir, "requirements.md")) || "";
+  const reqFull = readContained(projectDir, path.join(dir, "requirements.md")) || "";
+  const reqRaw = state.kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without the task blocks (1.21 review C1)
   const reqs = activeDesign(reqRaw, tracks);
   const idx = requirementIndex(reqs);
   const mx = buildTraceMatrix(projectDir, f, { supBy: opts.supBy });
   const byTrack = markerTracks().filter((tr) => tracks.includes(tr)).map((tr) => ({ tag: ghTag(tr), acs: trackAcIds(reqs, tr) }));
-  const lines = [`# language: ${i18n.baseLang(lang)}`, `# ${G.autogen}`, `# ${G.source(".specs/" + slug + "/requirements.md")}`];
+  const lines = [`# language: ${i18n.baseLang(lang)}`, `# ${G.autogen}`, `# ${G.source(".specs/" + slug + "/" + (state.kind === "change" ? CHANGE_FILE : "requirements.md"))}`]; // a change: its one file (1.21 verify V7)
   const ftags = gherkinFeatureTags(tracks, state.kind);
   if (ftags.length) lines.push(ftags.join(" "));
   // Gherkin is plain text: markdown escapes and entities are written as the characters a reader sees (mdPlainText — 1.17
@@ -1025,8 +1034,9 @@ function trackerRecords(projectDir, f, lang, supBy) {
   const X = i18n.msg(lang).stakeholderExport;
   const tracks = detectTracks(dir);
   const state = stateFromFile(projectDir, statePath(dir));
-  const kind = state.kind === "bugfix" || state.kind === "spike" ? state.kind : "feature";
-  const reqRaw = readContained(projectDir, path.join(dir, "requirements.md")) || "";
+  const kind = state.kind === "bugfix" || state.kind === "spike" || state.kind === "change" ? state.kind : "feature";
+  const reqFull = readContained(projectDir, path.join(dir, "requirements.md")) || "";
+  const reqRaw = kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without the task blocks (1.21 review C1)
   const reqs = activeDesign(reqRaw, tracks);
   const blocks = taskBlocks(activeTasks(readContained(projectDir, path.join(dir, "tasks.md")) || "", tracks) || "");
   const base = [slug, ...tracks.filter((t) => t !== "core")].concat(kind === "feature" ? [] : [kind]);
@@ -1077,7 +1087,7 @@ function trackerRecords(projectDir, f, lang, supBy) {
     const occ = (seen.get(String(b.number)) || 0) + 1;
     seen.set(String(b.number), occ);
     return { key: `${slug}/#${b.number}${occ > 1 ? ` (${occ})` : ""}`, parent, type: parent === slug ? "task" : "subtask", summary: `#${b.number} ${ghLine(mdPlainText(withoutTaskMarkers(cleanTaskText(b.text)))) || ghLine(b.text)}`,
-      description: prose.map((l) => l.trim()).filter(Boolean).join("\n") + "\n\n" + T.taskLine(".specs/" + slug + "/tasks.md", b.number),
+      description: prose.map((l) => l.trim()).filter(Boolean).join("\n") + "\n\n" + T.taskLine(".specs/" + slug + "/" + (kind === "change" ? CHANGE_FILE : "tasks.md"), b.number), // a change: its one file (1.21 verify V7)
       status: b.done ? "done" : "open", labels: cap(base.concat([...extractAcIds(prose.join("\n"))])), estimate: size ? SIZE_POINTS[size] : null };
   });
   // Each story's tasks right after it, then the feature-level ones — parents always before their children.
@@ -1171,7 +1181,8 @@ function changelogData(projectDir, since, only) {
     shipped.add(s.dir);
     const at = Math.max(...events);
     const tracks = detectTracks(s.dir);
-    const reqRaw = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
+    const reqFull = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
+    const reqRaw = st.kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without its task blocks (1.21 review C1)
     const reqs = activeDesign(reqRaw, tracks);
     const entry = { feature: s.slug, title: specTitle(reqRaw, s.slug), kind: st.kind === "bugfix" ? "bugfix" : "feature", at: new Date(at).toISOString(), event: at === fin ? "finished" : "execution-approved" };
     if (s.archived) entry.archived = true;
@@ -1200,8 +1211,10 @@ function changelogData(projectDir, since, only) {
       const ids = (k) => (Array.isArray(c[k]) ? c[k].filter((x) => typeof x === "string" || typeof x === "number").map(String) : []);
       const cr = { feature: s.slug, n: i + 1, at: new Date(timeOf(c.at)).toISOString(), phase: typeof c.phase === "string" ? c.phase : "requirements",
         added: ids("added"), modified: ids("modified"), removed: ids("removed"), reopened: Array.isArray(c.reopened) ? c.reopened.filter((n) => Number.isSafeInteger(n)) : [] };
-      if (cr.phase === "requirements") { // the current text of the requirement IDs it added or modified
-        const idx = requirementIndex(readContained(projectDir, path.join(s.dir, "requirements.md")) || "");
+      const chg = s.st.kind === "change"; // a change's criteria change with its plan (phase tasks; 1.21 review C4) — its criteria view
+      if (cr.phase === "requirements" || (chg && cr.phase === "tasks")) { // the current text of the requirement IDs it added or modified
+        const raw = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
+        const idx = requirementIndex(chg ? changeViews(raw).criteria : raw);
         cr.acs = [...cr.added, ...cr.modified].filter((id) => idx.has(id)).map((id) => ({ id, text: acOneLine(idx.get(id).text, id) }));
       }
       if (s.archived) cr.archived = true;
@@ -1290,7 +1303,7 @@ function changelog(projectDir, opts = {}) {
     const bad = roadmapError(projectDir);
     if (bad) return { ok: false, error: bad };
     if (!isGeneratedOrAbsent(file)) return { ok: false, skipped: true, error: M.err.notGenerated(fileName) };
-    writeFileAtomic(file, markdown);
+    writeFileAtomic(file, i18n.portableCli(markdown));
     if (ms) return { ok: true }; // a milestone's notes leave the project's meta.changelogAt alone
     const rm = readRoadmap(projectDir);
     rm.meta = rm.meta || {};

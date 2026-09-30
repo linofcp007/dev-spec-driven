@@ -16,13 +16,13 @@ const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in pl
 let acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, extractTestIds, headingIndex,
   isInsideDir, isObj, MARKER_TRACKS, normalizeLang, parseTasks, planIdText, projectLang, PROTO_KEYS, RE_CUSTOM_STEERING,
   RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, readJson,
-  requirementAcIds, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription, templateBracketKeys,
+  requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription, templateBracketKeys,
   templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING, trackAcIds, trackMarker,
   trackTaskHeading, VALID_TRACKS, writeIfAbsent;
 function __link(E) { ({ acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, extractTestIds,
   headingIndex, isInsideDir, isObj, MARKER_TRACKS, normalizeLang, parseTasks, planIdText, projectLang, PROTO_KEYS,
   RE_CUSTOM_STEERING, RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists,
-  readJson, requirementAcIds, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription,
+  readJson, requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription,
   templateBracketKeys, templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING,
   trackAcIds, trackMarker, trackTaskHeading, VALID_TRACKS, writeIfAbsent } = E); }
 
@@ -49,7 +49,7 @@ const RE_PACK_NAME = /^[a-z][a-z0-9]{1,19}$/;
 const RE_PACK_MARKER = /^[A-Z][A-Z0-9]{1,11}$/;
 // Bracket words the engine already reads — the built-in markers, the story / parallel tags ([US1] [P1] [shared]), the generic
 // slots ([TODO] [TBD] [FIXME]…) and ID prefixes — are never a pack marker.
-const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|DIST|API|UI|OBS|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
+const RE_PACK_MARKER_RESERVED = /^(?:SAAS|AI|SEC|PRIVACY|DIST|API|UI|OBS|DATA|TDD|CORE|SHARED|US\d*|P\d|TODO|TBD|TBC|FIXME|NEEDS|NOTE|WIP|AC\d*|SC\d*|EC\d*|NFR\d*|T\d+)$/;
 // A classifier keyword: letters / digits with inner spaces, hyphens, apostrophes and dots, 2–60 characters (a bounded class — linear).
 const RE_PACK_KEYWORD = /^[\p{L}\p{N}][\p{L}\p{N}' .’-]{0,58}[\p{L}\p{N}]$/u;
 const PACK_KEYS = new Set(["name", "marker", "title", "description", "signals", "sections", "steering", "$schema"]);
@@ -589,7 +589,7 @@ function legacyPackMarkerTrack(st, n) {
 }
 // The dev-spec release that reserved a pack name a feature still records (1.19 T): the +api / +ui / +obs names and their aliases
 // became reserved in 1.19, +dist's in 1.17 — the doctor / upgrade messages say "a track pack from before <that release>".
-const TRACK_RESERVED_SINCE = { dist: "1.17", api: "1.19", ui: "1.19", obs: "1.19" };
+const TRACK_RESERVED_SINCE = { dist: "1.17", api: "1.19", ui: "1.19", obs: "1.19", data: "1.21" };
 function packReservedSince(n) {
   const tr = Object.prototype.hasOwnProperty.call(TRACK_ALIASES, n) ? TRACK_ALIASES[n] : n;
   return Object.prototype.hasOwnProperty.call(TRACK_RESERVED_SINCE, tr) ? TRACK_RESERVED_SINCE[tr] : "1.17";
@@ -843,6 +843,8 @@ function localizePackProblem(p, K) {
   return out;
 }
 function trackPacks(projectDir, action, opts = {}) {
+  // 1.21 F2 — the project's classifier signal overrides (.specs/classifier.json): an action of this tool, not a tool of its own
+  if (action != null && String(action).trim().toLowerCase() === "signals") return signalOverrides(projectDir, opts.op, opts);
   const pl = projectLang(projectDir);
   let lang = null;
   if (opts.lang != null && String(opts.lang).trim()) {

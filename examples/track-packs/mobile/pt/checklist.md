@@ -1,0 +1,3 @@
+- Testado nas versões mais antigas suportadas de iOS e Android e num dispositivo de gama baixa
+- Percurso em modo de avião feito; um conflito de sincronização ensaiado em dois dispositivos
+- Ficha da loja, rótulos de privacidade (App Store, segurança dos dados do Google Play) e o plano de lançamento faseado prontos

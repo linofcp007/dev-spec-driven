@@ -11,9 +11,9 @@
   "plugins": [
     {
       "name": "dev-spec-driven",
-      "version": "1.20.0",
+      "version": "1.21.0",
       "source": "./",
-      "description": "Unified track-based spec-driven development (core + TDD + SaaS-scale + AI-eval + security + privacy + distributed data + API contracts + UI + observability) with a bundled local MCP server. No cloud, no CI."
+      "description": "Unified track-based spec-driven development (core + TDD + SaaS-scale + AI-eval + security + privacy + distributed data + API contracts + UI + observability + data pipelines) with a bundled local MCP server. No cloud, no CI."
     }
   ]
 }

@@ -62,6 +62,29 @@ exports.run = async ({ ok, S, root, tmp, require }) => {
       `plugin evals: ${behav.length} behavioural cases (EN/PT/ES) — 2-3 runs, <= 20 turns, a scaffold fixture, >= 3 graders incl. a deterministic one, every regex compiles, every MCP tool they name exists (${prefix}…); the README lists each and how to run them` +
       (problems.length ? " — " + problems.join(" · ") : ""));
 
+    // 1.21 F3: the local-options grader of behavior-finish-local-merge-en read with its own flags — it must match both replies
+    // the 1.19.0 run recorded (the second said "Merging … locally" / "Keeping the branch", which the old pattern missed and
+    // scored 0.88) and never a reply that only proposes a pull request.
+    const loFm = front(readEv("behavior-finish-local-merge-en", "graders", "local-options.md"));
+    const loRe = (() => { try { return new RegExp(yamlQuoted(loFm, "pattern"), (loFm.match(/^flags:\s*(\S+)\s*$/m) || [])[1] || ""); } catch { return null; } })();
+    const loReplies = [
+      "If it passes, I'll approve `execution`. Then you choose one of two options:\n1. **Merge into `main` locally**, fast-forwarding where possible, with the summary as the commit message. I'd then run the suite again on the merged result.\n2. **Keep the branch as-is.**\n\nPushing to a remote is a separate step I'll ask about after that.",
+      "Once you paste a green run, I'll approve the `execution` phase and ask you to choose between:\n1. Merging `feat/csv-export` into `main` locally (fast-forward, with the summary as the commit message), then re-running the suite on the result.\n2. Keeping the branch as-is.\n\nIf the run fails, I'll show you the failure first instead. Pushing `main` would be a separate step that needs your OK.",
+    ];
+    const loHits = loRe ? loReplies.map((r) => loRe.test(r)) : [];
+    const loPrOnly = loRe ? loRe.test("csv-export is ready. Next: push the branch and open a pull request so CI can run.") : true;
+    ok(loRe && loHits.every(Boolean) && !loPrOnly,
+      "1.21 F3: the finish case's local-options regex (flags from its front matter) matches both recorded 1.19.0 replies ('Merge into `main` locally' · 'Merging `feat/csv-export` into `main` locally … Keeping the branch as-is') and not a PR-only reply (got " +
+      JSON.stringify({ compiles: !!loRe, hits: loHits, prOnly: loPrOnly }) + ")");
+    // The stays-local rubric passes "pushing the merged base branch is a separate step"; triggering cases keep max_turns 4
+    // (documented: the max-turns error after the Skill fired is harmless) and the README says no tool can be disallowed per case.
+    const stays = readEv("behavior-finish-local-merge-en", "graders", "stays-local.md");
+    const trigTurns = fs.readdirSync(evDir).filter((c) => /^(?:no-)?trigger-/.test(c)).map((c) => +((front(readEv(c, "prompt.md")).match(/^max_turns:\s*(\d+)\s*$/m) || [])[1]));
+    ok(/pushing the merged base branch.{0,40} is a separate step.{0,80}still a PASS/.test(stays.replace(/\s+/g, " ")) && trigTurns.length >= 9 && trigTurns.every((t) => t === 4) &&
+      /Triggering cases keep `max_turns: 4` on purpose/.test(evReadme) && /no `disallowed_tools`/.test(evReadme),
+      "1.21 F3: stays-local passes a 'push the merged base branch later, with your OK' remark; the triggering cases keep max_turns 4 and the README documents the harmless max-turns error and that `Agent` can't be disallowed per case (got " +
+      JSON.stringify({ trigTurns }) + ")");
+
     // Build every fixture exactly as `claude plugin eval --scaffold` does (bash, cwd = an empty workspace) and check the
     // premise each case relies on. Needs bash (Git Bash on Windows, like the eval harness); skipped without it.
     const bashBin = (process.platform === "win32"

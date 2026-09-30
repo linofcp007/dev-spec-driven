@@ -52,7 +52,8 @@ one behaviour at a time, red for the right reason, minimal code, green, refactor
 | "I'll copy this function and tweak it" | A copy forks the knowledge: the bug fixed in one lives on in the other. Extend it (a parameter with a default, callers unchanged) — or, at the third use, extract it (the rule of three). |
 | "The subagent said DONE" | Review the diff and the evidence. A report is a claim. |
 | "The command is slow, a note will do" | A runnable `_Verify:_` counts only with its command and exit 0. Run it. |
-| "I have no shell here, so I'll tick it with a note" | No run, no tick. Name the `_Verify:_` command and ask the user for its output (or `dev-spec done <f> <n> --run`); tick unverified only if they ask for exactly that. |
+| "I have no shell here, so I'll tick it with a note" | No run, no tick. Name the `_Verify:_` command and ask the user for its output (or to run `node "<clone>/cli/dev-spec.js" done <f> <n> --run`, the line the tool's note prints); tick unverified only if they ask for exactly that. |
+| "I'll send a subagent to find a shell" | No shell means ask the user — a subagent (or a tool search) hunting for one costs calls and learns nothing new. |
 | "It surely exits 0 — I'll record `exitCode: 0`" | An exit code nobody saw is a fabricated run, the worst claim of all. |
 | "`npm test \| tee log` is fine" | A pipeline reports its LAST command's exit code — a failing suite reads as passing. Drop the pipe or `set -o pipefail`. |
 | "The Stop hook sent me back — I'll rephrase the summary" | It sent you back because a claim has no evidence. Run the check, or say plainly what is not verified. |

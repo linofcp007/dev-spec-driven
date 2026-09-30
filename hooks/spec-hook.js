@@ -140,6 +140,15 @@ function handle(raw) {
           lines.push(m.forecast.overlap.hookLine(ov.pairs.length, names));
         }
       } catch { /* best-effort */ }
+      // 1.21 review A3 — the project's .gitattributes names the dev-spec-state merge driver, and git config's driver runs a script that
+      // no longer exists or isn't this plugin's CLI (a plugin update moved the versioned plugin folder): git would keep only ours'
+      // side of a .state.json both branches changed. ONE line. Text reads only (.gitattributes, the repository's config) — no git.
+      try {
+        const md = spec.mergeDriverStatus(pdir, { cli: path.join(__dirname, "..", "cli", "dev-spec.js") });
+        if (md && md.named && (md.status === "missing" || md.status === "other") && m.mergeState && m.mergeState.hookLine) {
+          lines.push(m.mergeState.hookLine(md.script || md.driver, md.status === "missing"));
+        }
+      } catch { /* best-effort */ }
       return emit("SessionStart", h.sessionHeader + "\n" + lines.join("\n"));
     } catch {
       process.exit(0);
@@ -202,36 +211,55 @@ function handle(raw) {
     }
 
     try {
-      if (base === "requirements.md") {
+      // The EARS lines of a criteria file — requirements.md, or a change's change.md (1.21 F5: its criteria AND its tasks; the
+      // criteria view alone is linted — a task line is no criterion, the engine's own rule) — or null.
+      const earsText = (fileName) => {
         const text = fs.readFileSync(filePath, "utf8");
         const lang = spec.featureLang(pdir, feature);
-        const r = spec.earsValidate(text, lang); // issue messages in the spec's language
-        if (!r.ok) process.exit(0);
+        const r = spec.earsValidate(fileName === "change.md" ? spec.changeViews(text).criteria : text, lang); // issue messages in the spec's language
+        if (!r.ok) return null;
         const errs = r.issues.filter((i) => i.severity === "error");
         const warns = r.issues.filter((i) => i.severity === "warn");
         // Template placeholders anywhere in the file (Summary, stories, SC/NFR — not only criteria): never "all clean"
         // while any remain. The gates' own view: a removed track's [SaaS]/[AI] criteria are inactive.
-        const ph = (spec.featurePlaceholders(pdir, feature, "requirements.md") || { items: [] }).items;
+        const ph = (spec.featurePlaceholders(pdir, feature, fileName) || { items: [] }).items;
         const G = spec.msg(lang).gates;
-        const phLine = ph.length ? G.hookPlaceholders(ph.length, ph.slice(0, 3).map((p) => `L${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`).join(", ") + (ph.length > 3 ? ", " + G.more(ph.length - 3) : "")) : null;
-        if (!errs.length && !warns.length) return emit("PostToolUse", phLine || h.earsClean(r.summary.criteriaDetected));
+        // (1.21 verify V7: named after the file saved — a change's change.md is approved as the plan, it has no design)
+        const phLine = ph.length ? G.hookPlaceholders(ph.length, ph.slice(0, 3).map((p) => `L${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`).join(", ") + (ph.length > 3 ? ", " + G.more(ph.length - 3) : ""), fileName) : null;
+        if (!errs.length && !warns.length) return phLine || h.earsClean(r.summary.criteriaDetected);
         // The severity label `dev-spec ears` prints (cliOutput.words: aviso / erro · aviso / error); EN keeps warn / error.
         const words = (spec.msg(lang).cliOutput && spec.msg(lang).cliOutput.words) || {};
         const top = [...errs, ...warns].slice(0, 6).map((i) => `  L${i.line} [${words[i.severity] || i.severity}] ${i.msg}`);
-        return emit("PostToolUse", h.earsIssues(errs.length, warns.length, top.join("\n"), errs.length > 0) + (phLine ? "\n" + phLine : ""));
-      }
-
-      if (base === "tasks.md") {
+        return h.earsIssues(errs.length, warns.length, top.join("\n"), errs.length > 0, fileName) + (phLine ? "\n" + phLine : "");
+      };
+      // The trace lines of a feature's tasks — tasks.md, or a change's change.md — or null.
+      const traceText = () => {
         const tr = spec.traceCheck(pdir, feature);
-        if (!tr.ok) process.exit(0);
+        if (!tr.ok) return null;
         // Every gap kind the engine reports, with its IDs (a hand-picked subset used to leave an empty "- ").
         const lang = spec.featureLang(pdir, feature);
         const parts = spec.traceGapLines(tr, lang);
         // Then the warnings (uncovered / phantom EC·NFR·SC) — listed, never blocking. No test-code scan here: hooks stay fast.
         const warns = spec.traceWarningLines(tr, lang);
         const warnText = warns.length ? "\n" + spec.msg(lang).deepTrace.warningsHead + "\n" + warns.map((w) => "  ▲ " + w).join("\n") : "";
-        if (tr.verdict === "pass") return emit("PostToolUse", [h.traceOk(tr.totalAcs), ...parts.map((p) => "  - " + p)].join("\n") + warnText);
-        return emit("PostToolUse", h.traceGaps(feature, (parts.length ? parts : [tr.verdict]).join("\n  - ")) + warnText);
+        if (tr.verdict === "pass") return [h.traceOk(tr.totalAcs), ...parts.map((p) => "  - " + p)].join("\n") + warnText;
+        return h.traceGaps(feature, (parts.length ? parts : [tr.verdict]).join("\n  - ")) + warnText;
+      };
+      if (base === "requirements.md") {
+        const t = earsText("requirements.md");
+        if (t == null) process.exit(0);
+        return emit("PostToolUse", t);
+      }
+
+      if (base === "tasks.md") {
+        const t = traceText();
+        if (t == null) process.exit(0);
+        return emit("PostToolUse", t);
+      }
+
+      if (base === "change.md") { // 1.21 F5 — a change: its one file holds the criteria and the tasks
+        const t = [earsText("change.md"), traceText()].filter(Boolean);
+        if (t.length) return emit("PostToolUse", t.join("\n"));
       }
 
       if (base === "design.md") {

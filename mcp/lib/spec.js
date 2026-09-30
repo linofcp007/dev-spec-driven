@@ -55,7 +55,8 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   featurePlaceholders, finishFeature, FLOWS, forecastData, globalConstraints, globFiles, glossaryEntries, guardCheck,
   guardEnabled, guardLevel, impactLines, impactReport, implementsTargets, importSpec, initProject, integrationPlanMd,
   isFeatureFolder, isNetworkPath, isPlaceholderTask, isTemplatePlaceholder, isTestFile, isWslLauncher, listFeatures,
-  manageFeature, markdownToHtml, matrixCsv, maybeRefreshCatalog, mdPlainText, metrics, metricsLines, milestone,
+  manageFeature, markdownToHtml, matrixCsv, maybeRefreshCatalog, mdPlainText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
+  MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, milestone,
   MILESTONE_ACTIONS, MILESTONE_STATUSES, milestoneLine, networkPathInside, nextAction, nextTask, normalizeLang,
   normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, PACK_LIMITS, parseApprovalRolesText,
   parseGitLog, parseTasks, parseTracks, phasePercent, PHASES, placeholderKey, placeholderReport, planBridge, planPaths,
@@ -67,12 +68,15 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   STOP_RECENT_HOURS, stopCheck, stopCheckEnabled, stopClaims, stripHtmlComments, summarizeRunOutput, supersedesMarkers,
   supersedesWarnings, taskBlocks, taskBrief, taskCommits, taskDependsSpec, taskMarkers, taskSchedule, taskSize,
   taskWaves, TEMPLATE_ARTIFACTS, templateBracketKeys, templateKey, templates, templateSets, traceCheck, traceGapLines,
-  traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks,
+  traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks, FEATURE_SIZES, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS,
+  changeViews,
   userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, windowsShellFailure, withFeatureLock, withinRoot,
   withReadCache, writeRoadmapHtml, writeRoadmapMd } = engine;
 
 module.exports = {
   CLI_SWITCHES, // the CLI's boolean switches — ONE list (cli/dev-spec.js BOOL_FLAGS, the approval hook's lexer)
+  DEV_SPEC: i18n.DEV_SPEC, // 1.21 F3: `node "<clone>/cli/dev-spec.js"` — the runnable CLI line (tool descriptions, messages)
+  portableCli: i18n.portableCli, // the runnable line → `dev-spec`, for text meant to be committed
   VALID_TRACKS,
   PHASES,
   resolveProjectDir,
@@ -210,7 +214,7 @@ module.exports = {
   OPTIONAL_TRACKS,
   TRACK_MARKER: Object.freeze({ ...TRACK_MARKER }), // the stable [Marker] of each marker track
   // A track's mandatory design sections ([{ name, syn }] — saas / ai / sec / privacy; undefined for core / tdd).
-  trackSections: (tr) => (Object.prototype.hasOwnProperty.call(TRACK_SECTIONS, tr) ? TRACK_SECTIONS[tr].map((s) => ({ name: s.name, syn: s.syn.slice() })) : undefined),
+  trackSections: (tr) => (Object.prototype.hasOwnProperty.call(TRACK_SECTIONS, tr) ? TRACK_SECTIONS[tr].map((s) => ({ name: s.name, syn: s.syn.slice(), ...(s.tier ? { tier: s.tier } : {}) })) : undefined),
   // A track's classifier keywords (copies — the engine's tables stay private): { strong, weak }.
   trackSignals: (tr) => (Object.prototype.hasOwnProperty.call(SIGNALS, tr) ? { strong: SIGNALS[tr].strong.slice(), weak: SIGNALS[tr].weak.slice(), generic: (SIGNALS[tr].generic || []).slice(), context: (SIGNALS[tr].context || []).slice() } : undefined),
   signalConcept: (tr, kw) => (Object.prototype.hasOwnProperty.call(SIGNAL_CONCEPTS, tr) ? SIGNAL_CONCEPTS[tr].get(kw) || null : null), // 1.17 D review
@@ -281,6 +285,26 @@ module.exports = {
   observedRun, // was this reported run observed? (latest observed run of the same command, same exit code, recent) → { observed, at? }
   evidenceMode, // roadmap.json meta.evidence → "reported" (default) | "observed"
   OBSERVED_MAX_BYTES, // the log's size bound
+
+  // 1.21 F1a — git's merge driver for the spec state (`dev-spec merge-state %O %A %B %P`, installed by `merge-state --install`)
+  mergeStateJson, // (base, ours, theirs, kind) → { kind, merged, conflicts } — the semantic 3-way merge of a .state.json / roadmap.json (pure)
+  mergeStateText, // the driver's job on the three file texts → { ok, kind, clean, conflicts, text } (conflicts written INTO the JSON: mergeConflicts)
+  mergeKindOfPath, // git's %P → "state" | "roadmap" | "generated" (ROADMAP.md / .html, SPECS.md) | null
+  mergeAttributes, // (.gitattributes text, remove) → { text, changed, lines } — the driver's lines added / removed (pure)
+  MERGE_DRIVER, // "dev-spec-state" — the git config merge.<driver>.* name
+  MERGE_ATTRIBUTE_LINES, // the .gitattributes lines --install writes
+  MERGE_CONFLICTS_KEY, // "mergeConflicts" — the list a conflicted merge leaves in the file (doctor fails merge-conflicts)
+  // 1.21 review A3 — is the installed driver still THIS clone's? (a plugin update moves the plugin folder; git then drops theirs)
+  mergeDriverStatus, // (projectDir, {driver?, cli?}) → { status: ok | none | not-installed | other | missing, named, attributes, driver, script, cli } (read only)
+  mergeDriverScript, // the driver command → the script it runs (the word before `merge-state`), or null (pure)
+  gitConfigGet, // (git config file text, "section.sub.key") → the value as git reads it (pure)
+  MERGE_DRIVER_KEY, // "merge.dev-spec-state.driver"
+
+  // 1.21 F5 — right-sized rigor (data: the sizes; the sections / tasks two tracks both scaffold — the tiers are TRACK_SECTIONS' own)
+  FEATURE_SIZES, // ["xs", "s", "m", "l"] — spec_create {size}
+  TRACK_OVERLAPS, // [{drop: [track, section], by: [[track, section]…]}]
+  TRACK_TASK_OVERLAPS, // [{drop: [track, position], by: track}]
+  changeViews, // (change.md text) → { criteria, tasks }: its criteria without the task blocks / the task blocks alone, line for line (1.21 review C1)
 };
 
 // Every engine entry point is ONE call with ONE read-cache scope (withReadCache): an MCP tool call, a CLI command, a

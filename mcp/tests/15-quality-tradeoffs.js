@@ -197,10 +197,10 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, require })
       /Watch it fail for the right reason/.test(implCycle) && /Refactor only on green/.test(implCycle) && /No production code without a failing test first/.test(impl) &&
       /micro-cycle/.test(exec) && /deleted and redone/.test(exec) && /\| test-driven-development \| [^\n]*micro-cycle[^\n]*\|/.test(sup) &&
       /Trade-offs & risks/.test(critic) && /at least two REAL options/.test(critic) && /Alternatives & Trade-offs/.test(dcmd) && /\*\*Risks\*\*/.test(dcmd) &&
-      /\*\*Alternatives & Trade-offs\*\*/.test(skill) && /design-tradeoffs/.test(skill) && /micro-cycle/.test(skill) && /constraints round/.test(skill) && skill.split("\n").length <= 540 &&
+      /\*\*Alternatives & Trade-offs\*\*/.test(skill) && /design-tradeoffs/.test(skill) && /micro-cycle/.test(skill) && /constraints round/.test(skill) && skill.split(/\s+/).filter(Boolean).length <= 5000 &&
       newProse.every((t) => t.length > 50 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
-      "1.17 A2 / A3: /grill has the constraints round (atomicity, ACID + isolation, races, consistency, delivery + idempotency, dependency failure, volume, a measurable outcome); the micro-cycle (credited to obra/superpowers, MIT) with its rationalizations and red flags is in test-patterns.md, spec-implementer.md and /executeTask; the superpowers row, the critic's trade-offs row, /design and SKILL.md (≤ 540 lines) name them; no PR / CI steering in the new text (got " +
-      js([newProse.map((t) => t.length), skill.split("\n").length]) + ")");
+      "1.17 A2 / A3: /grill has the constraints round (atomicity, ACID + isolation, races, consistency, delivery + idempotency, dependency failure, volume, a measurable outcome); the micro-cycle (credited to obra/superpowers, MIT) with its rationalizations and red flags is in test-patterns.md, spec-implementer.md and /executeTask; the superpowers row, the critic's trade-offs row, /design and SKILL.md (≤ 5,000 words — 1.21 F3) name them; no PR / CI steering in the new text (got " +
+      js([newProse.map((t) => t.length), skill.split(/\s+/).filter(Boolean).length]) + ")");
 
     // 1.17 A review 1 — the nudge never reads the plugin's own template text: a pristine scaffold of every track (+saas's "Concurrent users …
     // queue strategy … (events+fields)", +sec's "record a security audit event") fires nothing in EN / PT / ES / pt-BR; a template criterion
@@ -276,10 +276,10 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, require })
       ["implementer", exempt(implCycle) && /for the test of a NEW behaviour/.test(implCycle) && /never make it fail artificially/.test(implCycle) && /a new behaviour's code/.test(impl)],
       ["executeTask", exempt(exec) && /red flags for a NEW behaviour's test/.test(exec)],
       ["AGENTS", /a new behaviour's test first/.test(agents) && /guard tests, characterization tests of existing code and T-IDs an earlier task turned green pass at once/.test(agents)],
-      ["SKILL", /a new behaviour's test/.test(skill) && /guard \/ characterization tests and T-IDs an earlier task turned green pass at once/.test(skill) && skill.split("\n").length <= 540],
+      ["SKILL", /a new behaviour's test/.test(skill) && /guard \/ characterization tests and T-IDs an earlier task turned green pass at once/.test(skill) && skill.split(/\s+/).filter(Boolean).length <= 5000],
       ["refs", /Never make a guard test fail\s+artificially/.test(bugRef) && /characterization tests → refactor →\s+tests still green/.test(impRef)]];
     ok(rv4.every((x) => x[1]),
-      "1.17 A review 4: the red flags ('passed on its first run', 'written after the code') apply to a NEW behaviour's test — guard / characterization tests and T-IDs already green are exempt in test-patterns.md, spec-implementer.md, /executeTask, AGENTS.md and SKILL.md (≤ 540 lines) (got " +
+      "1.17 A review 4: the red flags ('passed on its first run', 'written after the code') apply to a NEW behaviour's test — guard / characterization tests and T-IDs already green are exempt in test-patterns.md, spec-implementer.md, /executeTask, AGENTS.md and SKILL.md (≤ 5,000 words — 1.21 F3) (got " +
       js(rv4.filter((x) => !x[1]).map((x) => x[0])) + ")");
 
     // 1.17 A review 5 — the reviewer's untested-behaviour rule counts the target T-IDs (committed in Phase 4, outside the task's diff).

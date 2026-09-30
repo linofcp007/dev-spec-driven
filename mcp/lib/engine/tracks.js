@@ -18,7 +18,7 @@ let acIndex, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackNa
 function __link(E) { ({ acIndex, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName, noteGhostPacks,
   packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf } = E); }
 
-const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs"];
+const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
 // Adding a track: VALID_TRACKS + its classifier SIGNALS; a MARKER track (mandatory design sections under a stable
 // [Marker]) also needs TRACK_MARKER, a sections table in TRACK_SECTIONS, TRACK_STEERING and its i18n builders
@@ -26,7 +26,7 @@ const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "ap
 const OPTIONAL_TRACKS = VALID_TRACKS.filter((t) => t !== "core");
 // The steering files a track brings (spec_init / add_track write them, the task brief lists them).
 const TRACK_STEERING = { tdd: ["testing-standards.md"], saas: ["scale.md", "observability.md", "cost.md"], ai: ["ai-strategy.md"], sec: ["security.md"], privacy: ["privacy.md"],
-  dist: ["distributed.md"], api: ["api.md"], ui: ["ui.md"], obs: ["observability.md"] };
+  dist: ["distributed.md"], api: ["api.md"], ui: ["ui.md"], obs: ["observability.md"], data: ["data.md"] };
 
 // Track input from MCP or the CLI: an array or a string, EVERY element split on whitespace, commas and '+'
 // ("tdd,saas", "+saas +ai", ["tdd saas"]), case-insensitive, core implied. Unknown tokens are reported
@@ -62,7 +62,10 @@ const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd",
   // +ui (1.19 T) — never "a11y" / "accessibility": a team's accessibility pack (the example of references/project-tracks.md) keeps its name
   frontend: "ui", "front-end": "ui", ux: "ui", gui: "ui", wcag: "ui",
   // +obs (1.19 T)
-  observability: "obs", o11y: "obs", monitoring: "obs", sre: "obs", telemetry: "obs", opentelemetry: "obs" };
+  observability: "obs", o11y: "obs", monitoring: "obs", sre: "obs", telemetry: "obs", opentelemetry: "obs",
+  // +data (1.21 F4) — never "analytics": a team's product-analytics pack (a tracking plan, event names) is another concern and keeps its name
+  etl: "data", elt: "data", pipeline: "data", pipelines: "data", warehouse: "data", datawarehouse: "data", lakehouse: "data", dbt: "data",
+  dataquality: "data", dataeng: "data" };
 function suggestTrack(token) {
   // Own keys only: a plain-object lookup matched 'constructor' / '__proto__' and suggested Object itself.
   if (Object.prototype.hasOwnProperty.call(TRACK_ALIASES, token)) return TRACK_ALIASES[token];
@@ -145,7 +148,7 @@ function headingHasMarker(md, marker) {
 
 // The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
 // language). MARKER_TRACKS drives every per-marker loop: detection, inactive sections/tasks, doctor, approve, status.
-const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]", api: "[API]", ui: "[UI]", obs: "[OBS]" };
+const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]", api: "[API]", ui: "[UI]", obs: "[OBS]", data: "[DATA]" };
 const MARKER_TRACKS = Object.keys(TRACK_MARKER);
 // The AC IDs requirements.md defines as a track's criteria: under a heading carrying its marker ([SaaS] / [AI] — the
 // template's "#### [SaaS] Acceptance Criteria (EARS)", in any language) or with the marker in the criterion itself.
@@ -248,31 +251,31 @@ const SAAS_SECTIONS = [
   { name: "Multi-tenancy", syn: ["multi-tenancy", "multitenancy", "multi-inquilino", "multiinquilino", "multi inquilino", "multitenant", "modelo multi-inquilino", "modelo multiinquilino", "modelo de multi-inquilino",
     // pt-BR (full review Pb4 / Pb7): the Brazilian word for tenant — its scaffold writes "Modelo Multilocatário"
     "multilocatário", "multilocatario", "multi-locatário", "multi-locatario", "modelo multilocatário", "modelo multilocatario", "modelo multi-locatário"] },
-  { name: "Observability", syn: ["observability", "observabilidade", "observabilidad"] },
-  { name: "Cost Envelope", syn: ["cost envelope", "envelope de custo", "orçamento de custo", "sobre de coste", "presupuesto de coste"] },
+  { name: "Observability", syn: ["observability", "observabilidade", "observabilidad"], tier: "extended" },
+  { name: "Cost Envelope", syn: ["cost envelope", "envelope de custo", "orçamento de custo", "sobre de coste", "presupuesto de coste"], tier: "extended" },
 ];
 const AI_SECTIONS = [
   { name: "Model Strategy", syn: ["model strategy", "estratégia de modelo", "estrategia de modelo"] },
   { name: "Prompt Architecture", syn: ["prompt architecture", "arquitetura de prompt", "arquitectura de prompt"] },
   { name: "Token Economics", syn: ["token economics", "economia de tokens", "economía de tokens"] },
-  { name: "Latency Budget", syn: ["latency budget", "orçamento de latência", "presupuesto de latencia"] },
+  { name: "Latency Budget", syn: ["latency budget", "orçamento de latência", "presupuesto de latencia"], tier: "extended" },
   { name: "Eval Strategy", syn: ["eval strategy", "estratégia de eval", "estrategia de eval", "estratégia de avaliação", "estrategia de evaluación"] },
   { name: "Safety & Abuse", syn: ["safety & abuse", "safety and abuse", "segurança e abuso", "seguridad y abuso"] },
   { name: "Fallback & Degradation", syn: ["fallback", "degradação", "degradación"] },
-  { name: "Observability for AI", syn: ["observability for ai", "observabilidade de ai", "observabilidade de ia", "observabilidad de ia"] },
-  { name: "Model Lifecycle", syn: ["model lifecycle", "ciclo de vida do modelo", "ciclo de vida del modelo"] },
-  { name: "Multi-modality", syn: ["multi-modality", "multimodality", "multimodalidade", "multimodalidad"] },
+  { name: "Observability for AI", syn: ["observability for ai", "observabilidade de ai", "observabilidade de ia", "observabilidad de ia"], tier: "extended" },
+  { name: "Model Lifecycle", syn: ["model lifecycle", "ciclo de vida do modelo", "ciclo de vida del modelo"], tier: "extended" },
+  { name: "Multi-modality", syn: ["multi-modality", "multimodality", "multimodalidade", "multimodalidad"], tier: "extended" },
 ];
 // +sec (1.14) — never a bare "security" synonym: the core design's own "Security Considerations" is not a [SEC] section.
 const SEC_SECTIONS = [
   { name: "Threat Model", syn: ["threat model", "modelo de ameaças", "modelo de ameacas", "modelação de ameaças", "modelacao de ameacas", "modelo de amenazas", "modelado de amenazas"] },
-  { name: "Security Requirements", syn: ["security requirements", "requisitos de segurança", "requisitos de seguranca", "requisitos de seguridad"] },
+  { name: "Security Requirements", syn: ["security requirements", "requisitos de segurança", "requisitos de seguranca", "requisitos de seguridad"], tier: "extended" },
   { name: "Authentication & Authorization", syn: ["authentication & authorization", "authentication and authorization", "authn & authz", "authn/authz",
     "autenticação e autorização", "autenticacao e autorizacao", "autenticación y autorización", "autenticacion y autorizacion"] },
   { name: "Secrets & Key Management", syn: ["secrets & key management", "secrets and key management", "secrets management", "secret management", "key management",
     "gestão de segredos", "gestao de segredos", "gestão de chaves", "gestión de secretos", "gestion de secretos", "gestión de claves",
-    "gerenciamento de segredos", "gerenciamento de chaves"] }, // pt-BR (full review Pb4)
-  { name: "Security Testing", syn: ["security testing", "security tests", "testes de segurança", "testes de seguranca", "pruebas de seguridad"] },
+    "gerenciamento de segredos", "gerenciamento de chaves"], tier: "extended" }, // pt-BR (full review Pb4)
+  { name: "Security Testing", syn: ["security testing", "security tests", "testes de segurança", "testes de seguranca", "pruebas de seguridad"], tier: "extended" },
 ];
 // +privacy (1.14) — GDPR / RGPD. `loose` (C4, see extractSection): the synonyms that are ordinary design words — they
 // count only on a [PRIVACY] heading or under one, never on a core heading ("## Processors and queues", "## Retention").
@@ -290,11 +293,11 @@ const PRIVACY_SECTIONS = [
   { name: "Processors & International Transfers", syn: ["processors & international transfers", "processors and international transfers", "processors", "sub-processors",
     "international transfers", "subcontratantes", "transferências internacionais", "transferencias internacionais", "encargados del tratamiento", "transferencias internacionales",
     "operadores e transferências internacionais", "operadores e transferencias internacionais", "operadores", "suboperadores"],
-  loose: ["processors", "sub-processors", "operadores", "suboperadores"] },
+  loose: ["processors", "sub-processors", "operadores", "suboperadores"], tier: "extended" },
   // pt-BR / LGPD (full review Pb4 / Pb7): the RIPD (Relatório de Impacto à Proteção de Dados), art. 38.
   { name: "DPIA", syn: ["dpia", "data protection impact assessment", "aipd", "avaliação de impacto", "avaliacao de impacto", "eipd", "evaluación de impacto", "evaluacion de impacto",
     "ripd", "relatório de impacto à proteção de dados", "relatorio de impacto a protecao de dados", "relatório de impacto", "relatorio de impacto"],
-    loose: ["avaliação de impacto", "avaliacao de impacto", "evaluación de impacto", "evaluacion de impacto", "relatório de impacto", "relatorio de impacto"] },
+    loose: ["avaliação de impacto", "avaliacao de impacto", "evaluación de impacto", "evaluacion de impacto", "relatório de impacto", "relatorio de impacto"], tier: "extended" },
 ];
 // +dist (1.17 D) — distributed systems and data consistency. `loose`: the synonyms that are ordinary design words (a core
 // "## Concurrency", "## Failure modes", "## Idempotency", "## Consistency") — they name a [DIST] section only on a heading
@@ -311,13 +314,13 @@ const DIST_SECTIONS = [
   loose: ["idempotency", "delivery guarantees", "message delivery", "idempotência", "idempotencia", "garantias de entrega", "garantías de entrega"] },
   { name: "Concurrency", syn: ["concurrency control", "concurrency", "controlo de concorrência", "controle de concorrência", "controle de concorrencia",
     "concorrência", "concorrencia", "control de concurrencia", "concurrencia"],
-  loose: ["concurrency", "concorrência", "concorrencia", "concurrencia"] },
+  loose: ["concurrency", "concorrência", "concorrencia", "concurrencia"], tier: "extended" },
   // 1.17 D review: the section's own names (Failure Modes / Failure Handling — the core design's heading is "Error Handling")
   // are strict, as every other [DIST] section's are — a marker-less hand-written design with all five headings passes; the
   // singular is loose.
   { name: "Failure Modes", syn: ["failure modes", "failure mode", "failure handling", "modos de falha", "modo de falha", "modos de fallo", "modo de fallo",
     "modos de falla", "modo de falla"],
-  loose: ["failure mode", "modo de falha", "modo de fallo", "modo de falla"] },
+  loose: ["failure mode", "modo de falha", "modo de fallo", "modo de falla"], tier: "extended" },
 ];
 // +api (1.19 T) — API contracts. The core design already has "## API Contracts" (PT / ES "Contratos de API") and "## Error
 // Handling": every ordinary name here is `loose` — it names an [API] section only on a heading carrying the marker or nested
@@ -335,17 +338,17 @@ const API_SECTIONS = [
   loose: ["error format", "api errors", "errors", "formato de erros", "erros da api", "erros", "formato de errores", "errores de la api", "errores"] },
   { name: "Pagination, Idempotency & Concurrency", syn: ["pagination, idempotency & concurrency", "pagination, idempotency and concurrency", "pagination",
     "paginação, idempotência e concorrência", "paginação", "paginación, idempotencia y concurrencia", "paginación"],
-  loose: ["pagination", "paginação", "paginación"] },
+  loose: ["pagination", "paginação", "paginación"], tier: "extended" },
   { name: "Rate Limits & Quotas", syn: ["rate limits & quotas", "rate limits and quotas", "rate limits", "rate limiting", "quotas",
     "limites de taxa e quotas", "limites de taxa e cotas", "limites de taxa", "cotas", "límites de tasa y cuotas", "límites de tasa", "cuotas"],
-  loose: ["rate limits", "rate limiting", "quotas", "limites de taxa", "cotas", "límites de tasa", "cuotas"] },
+  loose: ["rate limits", "rate limiting", "quotas", "limites de taxa", "cotas", "límites de tasa", "cuotas"], tier: "extended" },
 ];
 // +ui (1.19 T) — user-facing UI. Every ordinary name is `loose` (marker-bound): a core "## Accessibility" or "## States" note, or
 // +saas's "## [SaaS] Performance Budget", never stands in for a deleted [UI] section; the full names stay strict.
 const UI_SECTIONS = [
   { name: "Design System Usage", syn: ["design system usage", "design system", "component inventory", "uso do design system", "sistema de design",
     "inventário de componentes", "uso del design system", "sistema de diseño", "inventario de componentes"],
-  loose: ["design system", "component inventory", "sistema de design", "inventário de componentes", "sistema de diseño", "inventario de componentes"] },
+  loose: ["design system", "component inventory", "sistema de design", "inventário de componentes", "sistema de diseño", "inventario de componentes"], tier: "extended" },
   { name: "UI States", syn: ["ui states", "view states", "states", "estados da interface", "estados da ui", "estados de la interfaz", "estados de la ui", "estados"],
   loose: ["view states", "states", "estados"] },
   { name: "Accessibility", syn: ["accessibility", "a11y", "acessibilidade", "accesibilidad"], loose: ["accessibility", "a11y", "acessibilidade", "accesibilidad"] },
@@ -353,11 +356,11 @@ const UI_SECTIONS = [
     "internationalisation", "i18n", "design responsivo e i18n", "design responsivo", "responsividade", "internacionalização", "diseño adaptable e i18n",
     "diseño adaptable", "diseño responsivo", "internacionalización"],
   loose: ["responsiveness", "responsive design", "internationalization", "internationalisation", "i18n", "design responsivo", "responsividade",
-    "internacionalização", "diseño adaptable", "diseño responsivo", "internacionalización"] },
+    "internacionalização", "diseño adaptable", "diseño responsivo", "internacionalización"], tier: "extended" },
   { name: "UI Performance Budget", syn: ["ui performance budget", "web performance budget", "front-end performance", "frontend performance", "core web vitals",
     "performance budget", "orçamento de desempenho da interface", "orçamento de desempenho", "presupuesto de rendimiento de la interfaz",
     "presupuesto de rendimiento"],
-  loose: ["front-end performance", "frontend performance", "core web vitals", "performance budget", "orçamento de desempenho", "presupuesto de rendimiento"] },
+  loose: ["front-end performance", "frontend performance", "core web vitals", "performance budget", "orçamento de desempenho", "presupuesto de rendimiento"], tier: "extended" },
 ];
 // +obs (1.19 T) — observability & operability. No name is "Observability" (+saas's section); every ordinary name is `loose`
 // (marker-bound) — a core "## Rollback" or "## Alerts" note never stands in for a deleted [OBS] section; the full names stay strict.
@@ -370,17 +373,61 @@ const OBS_SECTIONS = [
   loose: ["telemetry", "instrumentation", "metrics, logs & traces", "metrics, logs and traces", "telemetria", "instrumentação", "telemetría", "instrumentación"] },
   { name: "Alerting & Runbooks", syn: ["alerting & runbooks", "alerting and runbooks", "alerting", "alerts", "runbooks", "alertas e runbooks", "alertas y runbooks",
     "alertas"],
-  loose: ["alerting", "alerts", "runbooks", "alertas"] },
+  loose: ["alerting", "alerts", "runbooks", "alertas"], tier: "extended" },
   { name: "Rollout & Rollback", syn: ["rollout & rollback", "rollout and rollback", "rollout", "rollback", "release strategy", "lançamento e reversão", "rollout e rollback",
     "despliegue y reversión", "rollout y rollback"],
   loose: ["rollout", "rollback", "release strategy"] },
   { name: "Health & Capacity", syn: ["health & capacity", "health and capacity", "health checks", "capacity", "saúde e capacidade", "verificações de saúde",
     "capacidade", "salud y capacidad", "comprobaciones de salud", "capacidad"],
-  loose: ["health checks", "capacity", "verificações de saúde", "capacidade", "comprobaciones de salud", "capacidad"] },
+  loose: ["health checks", "capacity", "verificações de saúde", "capacidade", "comprobaciones de salud", "capacidad"], tier: "extended" },
+];
+// +data (1.21 F4) — data pipelines & data quality. The ordinary names are `loose` (marker-bound): a core "## Retention" or
+// "## Ownership" note, +privacy's "[PRIVACY] Retention & Deletion" or +saas's "[SaaS] Cost Envelope" never stand in for a deleted
+// [DATA] section; the full names and the unmistakable data terms (schema evolution, data quality, data lineage) stay strict.
+const DATA_SECTIONS = [
+  { name: "Data Contracts & Schema Evolution", syn: ["data contracts & schema evolution", "data contracts and schema evolution", "schema evolution", "data contracts",
+    "data contract", "schema versioning", "contratos de dados e evolução do esquema", "evolução do esquema", "evolução de esquemas", "contratos de dados",
+    "contratos de datos y evolución del esquema", "evolución del esquema", "evolución de esquemas", "contratos de datos"],
+  loose: ["data contracts", "data contract", "schema versioning", "contratos de dados", "contratos de datos"] },
+  { name: "Data Quality", syn: ["data quality", "data quality checks", "quality checks", "qualidade dos dados", "qualidade de dados", "verificações de qualidade",
+    "calidad de los datos", "calidad de datos", "comprobaciones de calidad", "controles de calidad"],
+  loose: ["quality checks", "verificações de qualidade", "comprobaciones de calidad", "controles de calidad"] },
+  { name: "Pipeline Idempotency & Backfills", syn: ["pipeline idempotency & backfills", "pipeline idempotency and backfills", "idempotency & backfills",
+    "idempotency and backfills", "backfills", "backfill", "reprocessing", "re-runs", "idempotência do pipeline e backfills", "idempotência e backfills",
+    "reprocessamento", "idempotencia del pipeline y backfills", "idempotencia y backfills", "reprocesamiento"],
+  loose: ["backfills", "backfill", "reprocessing", "re-runs", "reprocessamento", "reprocesamiento"] },
+  { name: "Lineage & Ownership", syn: ["lineage & ownership", "lineage and ownership", "data lineage", "lineage", "ownership", "linhagem e responsáveis",
+    "linhagem e responsaveis", "linhagem dos dados", "linhagem", "linaje y responsables", "linaje de los datos", "linaje"],
+  loose: ["lineage", "ownership", "linhagem", "linaje"], tier: "extended" },
+  { name: "Retention & Cost", syn: ["retention & cost", "retention and cost", "storage & cost", "storage and cost", "retention", "storage cost", "query cost",
+    "retenção e custo", "retencao e custo", "retenção", "custo de armazenamento", "retención y coste", "retención y costo", "retención", "coste de almacenamiento"],
+  loose: ["retention", "storage cost", "query cost", "retenção", "custo de armazenamento", "retención", "coste de almacenamiento"], tier: "extended" },
 ];
 // The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
 // check read (a marker track = a TRACK_MARKER entry + its table here).
-const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS, api: API_SECTIONS, ui: UI_SECTIONS, obs: OBS_SECTIONS };
+const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS, api: API_SECTIONS, ui: UI_SECTIONS, obs: OBS_SECTIONS,
+  data: DATA_SECTIONS };
+// A section's `tier` (1.21 F5 — DATA in the tables above): "core" (absent = core) is mandatory at every size; "extended" is
+// optional at size S — absent, or answered by one "n/a — <reason>" line (sectionVerdict). A track pack's sections are all core.
+// 1.21 F5 P4 — sections two tracks both scaffold (DATA): when both tracks are on, a SIZED scaffold writes only the covering
+// section(s) (`by`, [track, section name]) and the gate reads the dropped one (`drop`) as answered by them — status "covered"
+// (trackSectionReport); a design that still holds the dropped heading is judged on it as ever. No size: never applied. A new
+// built-in track adds its pairs here, no code.
+const TRACK_OVERLAPS = [
+  { drop: ["saas", "Observability"], by: [["obs", "Telemetry"], ["obs", "Alerting & Runbooks"]] },
+  { drop: ["saas", "Performance Budget"], by: [["obs", "SLIs & SLOs"]] },
+];
+// (1.21 review C8: no +api / +dist entry — [API] Pagination, Idempotency & Concurrency asks what [DIST] Delivery & Idempotency /
+// Concurrency never do: cursor pagination, an Idempotency-Key, If-Match / 412, 202 + a status resource for a long-running
+// operation — those are about the API's callers, the [DIST] ones about messages and locks. Both sections stay.)
+// +data (1.21 F4) has no overlap entry: its sections (schema evolution, data quality, backfills, lineage, retention & cost) ask
+// what no other track's do — [DIST] Delivery & Idempotency is about messages, not re-running a partition; [PRIVACY] retention is
+// about personal data, not storage tiers and query cost.
+// The template TASKS two tracks both scaffold (DATA): with the `by` track on, a sized scaffold leaves out the task at 1-based
+// `drop` position of the other track's template block (its criteria stay cited by that block's other tasks).
+const TRACK_TASK_OVERLAPS = [
+  { drop: ["saas", 1], by: "obs" }, // "Emit metrics, add dashboard, configure alerts" — +obs's telemetry / alerting tasks do it
+];
 // [[track, sections, marker]] for the ACTIVE marker tracks, in track order.
 function activeSectionTracks(tracks) {
   return markerTracks().filter((t) => tracks.includes(t)).map((t) => [t, trackSectionTable(t), trackMarker(t)]); // + the track packs (1.15)
@@ -885,6 +932,18 @@ const SIGNALS = {
     //   article + ≤ window.adjectives lower-case adjectives ("REST API for the mobile app", "Add rate limiting to the public API").
     // Verb lists hold one whole lower-case word per entry — a word or a regex fragment ("publish(?:es|ed|ing)?").
     cues: [
+      // (1.21 F2) our own API + a new version of it in the sentence is contract work: "Our webhooks API needs a v2 …", "A nossa API
+      // de webhooks precisa de uma v2", "Nuestra API de pagos necesita una nueva versión" — the bare word "api" (generic) is strong
+      // when an own word stands right before it (≤ 2 words between) AND the sentence names a version (v2, version 3, a new / major
+      // version, versioning). Tried before the ownership rule (which decides every other hit).
+      { kind: "all", on: ["api"], ifTier: "generic", then: "strong",
+        rules: [
+          { kind: "near", before: { words: [[["our", "nosso", "nossa", "nuestro", "nuestra"], { optional: "[\\p{L}\\p{N}-]+" }, { optional: "[\\p{L}\\p{N}-]+" }]],
+            chars: 40, edge: "letter" } },
+          { kind: "sentence", edge: "word", phrases: ["v[1-9][0-9]?", ["versions?", "[0-9]+"], ["new", { optional: "major" }, "versions?"],
+            ["major", "versions?"], "versioning", ["versão", "[0-9]+"], ["nova", "versão"], "versionamento", ["versión", "[0-9]+"],
+            ["nueva", "versión"], "versionado"] },
+        ] },
       {
         kind: "ownership",
         ambiguous: ["public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "problem details",
@@ -963,29 +1022,43 @@ const SIGNALS = {
       "storybook", "figma", "core web vitals", "largest contentful paint", "cumulative layout shift", "interaction to next paint", "LCP",
       "visual regression", "skeleton screen", "skeleton loader", "empty state", "right-to-left", "landing page", "settings page",
       "settings screen", "admin page", "admin panel", "admin ui", "management page", "profile page", "account page",
+      // 1.21 F2: the everyday UI components a text names by themselves — a confirm dialog, a toast notification, a snackbar (one
+      // word: a "snack bar" is a food counter) — were anchors only ('possible' alone); they are UI work
+      "confirm dialog", "confirmation dialog", "confirmation modal", "confirm modal", "modal dialog", "modal window",
+      "toast notification", "toast message", "snackbar",
       // PT
       "sistema de design", "leitor de ecrã", "leitor de tela", "navegação por teclado", "contraste de cor", "texto alternativo", "movimento reduzido", "design responsivo", "layout responsivo", "modo escuro", "tema escuro",
       "interface do utilizador", "interface de utilizador", "interface do usuário", "interface de usuário", "componente de interface",
       "biblioteca de componentes", "regressão visual", "estado vazio", "página de definições", "página de configurações",
       "página de administração", "painel de administração", "página de gestão", "página de perfil", "ecrã de definições",
       "tela de configurações",
+      "diálogo de confirmação", "caixa de diálogo de confirmação", "janela de confirmação", "modal de confirmação", "janela modal",
+      "notificação toast", "notificações toast", "mensagem toast",
       // ES
       "sistema de diseño", "lector de pantalla", "navegación por teclado", "contraste de color", "movimiento reducido",
       "diseño responsivo", "diseño adaptable", "modo oscuro", "tema oscuro", "interfaz de usuario", "componente de interfaz", "regresión visual",
       "estado vacío", "página de ajustes", "página de configuración", "panel de administración", "página de gestión", "pantalla de ajustes",
+      "diálogo de confirmación", "cuadro de diálogo de confirmación", "ventana de confirmación", "modal de confirmación", "ventana modal",
+      "notificación toast", "notificaciones toast", "mensaje toast",
     ],
     weak: [
       "accessibility", // (1.19 T review) weak: "wheelchair accessibility of each venue" — with a page / form / WCAG it is +ui
       "frontend", "front-end", "UI", "UX", "React", "Vue", "Angular", "Svelte", "tailwind", "css", "stylesheet", "modal", "dropdown", "tooltip",
       "navbar", "sidebar", "toast", "carousel", "spinner", "responsive", "i18n", "l10n", "RTL", "CLS", "INP", "loading state", "error state",
       "form validation", "wireframe", "mockup",
-      // 1.19 T review: a picker ("a language picker"), a confirm dialog, a swipe gesture, inline form errors
-      "picker", "confirmation dialog", "confirm dialog", "swipeable", "swipe", "inline error", "inline validation",
+      // 1.19 T review: a picker ("a language picker"), a swipe gesture, inline form errors (a confirm dialog is strong since 1.21)
+      "picker", "swipeable", "swipe", "inline error", "inline validation",
+      // 1.21 F2: a pop-up; errors shown next to each field (inline validation, one concept); a mobile-friendly screen (responsive)
+      "popup", "pop-up", "banner", "next to each field", "beside each field", "below each field", "under each field", "mobile-friendly", "mobile friendly",
       // PT
       "acessibilidade", "responsivo", "responsiva", "estado de carregamento", "estado de erro", "validação de formulário",
       "validação inline", "erros inline",
+      "junto a cada campo", "junto de cada campo", "ao lado de cada campo", "por baixo de cada campo", "adaptado ao telemóvel",
+      "adaptada ao telemóvel", "adaptado para telemóvel", "adaptada para telemóvel", "adaptado para celular", "adaptada para celular",
       // ES
       "accesibilidad", "estado de carga", "estado de error", "validación de formulario", "validación inline", "errores inline",
+      "al lado de cada campo", "debajo de cada campo", "adaptada al móvil", "adaptado al móvil", "adaptada a móviles", "adaptado a móviles",
+      "adaptada para móvil", "adaptado para móvil",
     ],
     generic: [
       "screen", "page", "form", "button", "dialog", "dashboard", "menu", "icon", "widget", "click", "layout", "theme",
@@ -1005,12 +1078,16 @@ const SIGNALS = {
       vitals: ["CLS", "INP"],
       states: ["loading state", "error state", "estado de carregamento", "estado de erro", "estado de carga", "estado de error"],
       formValidation: ["form validation", "validação de formulário", "validación de formulario"],
-      responsive: ["responsive", "responsivo", "responsiva"],
+      responsive: ["responsive", "responsivo", "responsiva", "mobile-friendly", "mobile friendly", "adaptado ao telemóvel", "adaptada ao telemóvel",
+        "adaptado para telemóvel", "adaptada para telemóvel", "adaptado para celular", "adaptada para celular", "adaptada al móvil",
+        "adaptado al móvil", "adaptada a móviles", "adaptado a móviles", "adaptada para móvil", "adaptado para móvil"],
       design: ["wireframe", "mockup"],
       a11y: ["accessibility", "acessibilidade", "accesibilidad"],
       gesture: ["swipe", "swipeable"],
-      dialog: ["confirmation dialog", "confirm dialog"],
-      inline: ["inline error", "inline validation", "validação inline", "erros inline", "validación inline", "errores inline"],
+      popup: ["popup", "pop-up", "banner"],
+      inline: ["inline error", "inline validation", "validação inline", "erros inline", "validación inline", "errores inline",
+        "next to each field", "beside each field", "below each field", "under each field", "junto a cada campo", "junto de cada campo",
+        "ao lado de cada campo", "por baixo de cada campo", "al lado de cada campo", "debajo de cada campo"],
       screen: ["screen", "page", "ecrã", "tela", "página", "pantalla"],
       form: ["form", "formulário", "formulario"],
       button: ["button", "botão", "botón", "click"],
@@ -1019,6 +1096,13 @@ const SIGNALS = {
     },
     // CUES (1.19 T review, verify 1) — rules tried in order, the first that fires decides (generic kinds in classify.js):
     cues: [
+      // (1.21 F2) a widget a display verb shows or opens is UI work: "Show a modal …", "display a tooltip", "open the date picker",
+      // "Mostrar um popup", "muestra un spinner" — strong (alone the widget word stays an anchor: "modal split", "the modal verbs")
+      { kind: "near", on: ["modal", "dropdown", "tooltip", "toast", "popup", "pop-up", "banner", "carousel", "sidebar", "navbar", "spinner", "picker", "dialog"],
+        then: "strong",
+        before: { words: [[["show", "shows", "showing", "display", "displays", "displaying", "open", "opens", "opening", "render", "renders",
+          "mostrar", "mostra", "mostram", "exibir", "exibe", "exibem", "abrir", "abre", "abrem", "muestra", "muestran", "abren"],
+        ["a", "an", "the", "um", "uma", "o", "un", "una", "el", "la"], { optional: "[\\p{L}-]+" }]], chars: 40, edge: "letter" } },
       // an empty state in a sentence about a state machine is a flow state, not a UI state ("the empty state blocks sales"): weak
       { kind: "sentence", on: ["empty state", "estado vazio", "estado vacío"], ifTier: "strong", then: "weak", edge: "letter",
         phrases: ["state[- ]machines?", "state transitions?", "máquinas? de estados?", "transiç(?:ão|ões) de estados?",
@@ -1047,7 +1131,10 @@ const SIGNALS = {
           words: ["request handlers?", "route handlers?", "endpoints?", "back-?end", "data layer", "repositor(?:y|ies)", "sql",
             "server-side", "already exists?", "já existe", "ya existe", "camada de dados", "capa de datos"],
           requests: { methods: ["get", "post", "put", "patch", "delete"], targets: ["handlers?", "endpoints?", "routes?"] },
-          api: { words: ["apis?"], notAfter: [["chaves?", "claves?"], ["de", "da", "del"]], notBefore: ["keys?", "tokens?"] },
+          // (never an API key / token; 1.21 F2: never a PUBLIC API — a contract for outside consumers, not the backend of one page:
+          // "Expose a public REST API for the mobile app's settings screen" builds the screen's consumer too, the mixed case)
+          api: { words: ["apis?"], notAfter: [[["chaves?", "claves?"], ["de", "da", "del"]], "public", ["public", ["rest", "http", "json", "web"]]],
+            notBefore: ["keys?", "tokens?", "públicas?", [["rest", "http", "json", "web"], "públicas?"]] },
         },
         negators: ["no", "not", "without", "never", "nor", "none", "sem", "não", "nao", "nem", "nunca", "sin", "ni"],
         negWindow: 4,
@@ -1179,6 +1266,206 @@ const SIGNALS = {
         after: { words: ["level", "ao cliente", "a clientes", "de atendimento", "al cliente", "de atención"], chars: 30, plural: true } },
     ],
   },
+  // +data (1.21 F4): data pipelines & data quality — data that moves between stores on a schedule or a stream (ETL / ELT, a warehouse or
+  // a lake, dbt / Airflow / Spark jobs) and whose quality, freshness, lineage and history the feature owns. STRONG: ETL / ELT, a data
+  // pipeline / warehouse / lake / mart, data quality, data contracts, lineage, a data catalog, schema evolution / a schema registry,
+  // slowly changing dimensions, a star schema, fact / dimension tables, dbt models / tests, an Airflow DAG, Spark jobs, the platforms
+  // named in full (BigQuery, Databricks, Amazon Redshift, a Snowflake warehouse / table, Delta Lake, Iceberg tables, Fivetran,
+  // Airbyte), data freshness, late-arriving data, incremental loads. WEAK (anchors): a backfill (also a migration's "backfill the new
+  // column" — its cue makes that one generic), a warehouse (also a building — its cue drops the logistics one), the product names
+  // written with their capital (Snowflake, Redshift, Airflow — a snowflake icon, a galaxy's redshift, a vent's airflow), dbt (also a
+  // therapy), lineage, ingestion, change data capture (+dist's strong phrase too), Parquet / Avro, BI and its tools, data
+  // governance / platform. GENERIC (app-level — every product has them): analytics, a dataset, a partition, a transformation, a
+  // batch / nightly job, ingest, upsert, a materialized view — "analytics events for the signup funnel", "import a CSV of contacts",
+  // "export orders as CSV" and "migrate the users table" stay core ('possible' at most). CONTEXT (corroborating only — one concept):
+  // table, column, rows, SQL, query, schema — "a nightly job that loads the orders table into the warehouse" is +data, "migrate the
+  // users table" is not. HAZARDS: duplicate rows, stale data, schema drift ("without duplicate rows" states the concern).
+  // 1.21 review B3 — words that mean something else in everyday text are tied to a data phrase or read by a cue: ELT only as a
+  // pipeline / job / tool / process ("ELT teachers" teach English); a bare lakehouse is an anchor (a lakehouse to rent), strong in a
+  // sentence about data; a freshness check is an anchor (a kitchen's produce crate); PT / ES "carga incremental" an anchor (a
+  // training plan's load); BI only with its tool / dashboard / report ("o número do BI" is the Portuguese ID card — "BI" matched
+  // case-sensitively, the words around it not: "Relatório de BI", "BI Dashboard"); and the context words never back an anchor with an
+  // everyday sense (everydayAnchors) — a table, a column or a query is on every screen ("in a table", "React Query"): beside a horse's
+  // lineage, SCD patient records, medication ingestion or duplicate rows in the users table they are no second hint (1.21 verify V3:
+  // beside a data-term anchor — a warehouse, a backfill, a BI dashboard, parquet — they still are).
+  data: {
+    strong: [
+      "etl", "elt pipeline", "elt job", "elt tool", "elt process", "elt workflow", "pipeline elt", "processo elt", "proceso elt",
+      "data pipeline", "ingestion pipeline", "batch pipeline", "data warehouse", "data warehousing", "data lakehouse",
+      "data lake", "data mart", "data quality", "data-quality", "data contract", "data lineage", "data catalog", "data catalogue", "data mesh",
+      "data engineering", "analytics engineering", "schema evolution", "schema registry", "schema drift",
+      "backfill job", "historical backfill", "slowly changing dimension", "star schema", "snowflake schema", "fact table", "dimension table",
+      "dimensional model", "dimensional modelling", "olap", "dbt model", "dbt project", "dbt test", "dbt run", "dbt job",
+      "dbt cloud", "apache airflow", "airflow dag", "dagster", "apache spark", "pyspark", "spark job", "spark sql", "spark streaming",
+      "databricks", "bigquery", "amazon redshift", "Snowflake warehouse", "Snowflake table", "delta lake", "apache iceberg",
+      "iceberg table", "apache hudi", "parquet file", "fivetran", "airbyte", "data ingestion", "data freshness",
+      "freshness sla", "late-arriving data", "late arriving data", "incremental load", "incremental model", "medallion architecture",
+      "data observability", "great expectations suite", "quarantine table",
+      // PT (the plural of a phrase's first word is generated only for "de" / non-ASCII phrases — "armazéns" is listed)
+      "pipeline de dados", "armazém de dados", "armazéns de dados", "lago de dados", "qualidade de dados", "qualidade dos dados",
+      "contrato de dados", "linhagem de dados", "linhagem dos dados", "catálogo de dados", "engenharia de dados",
+      "evolução do esquema", "evolução de esquema", "evolução dos esquemas", "ingestão de dados", "frescura dos dados", "atualidade dos dados",
+      "esquema em estrela", "tabela de factos", "tabela de fatos", "tabela de dimensão", "carga incremental de dados", "carga incremental dos dados",
+      "dados que chegam atrasados",
+      // ES
+      "pipeline de datos", "canalización de datos", "almacén de datos", "almacenes de datos", "lago de datos", "calidad de datos",
+      "calidad de los datos", "contrato de datos", "linaje de datos", "linaje de los datos", "catálogo de datos", "ingeniería de datos",
+      "evolución del esquema", "evolución de esquema", "ingesta de datos", "frescura de los datos",
+      "frescura de datos", "esquema en estrella", "tabla de hechos", "tabla de dimensiones", "datos que llegan tarde", "datos tardíos",
+      "carga incremental de datos", "carga incremental de los datos",
+    ],
+    weak: [
+      "backfill", "warehouse", "lakehouse", "Snowflake", "Redshift", "Airflow", "dbt", "SCD", "lineage", "ingestion", "change data capture",
+      "CDC pipeline", "parquet", "avro", "streaming pipeline", "batch processing", "data platform", "data governance", "data product",
+      "freshness check", "business intelligence", "BI tool", "BI dashboard", "BI report", "BI platform", "BI team", "power bi", "looker",
+      "tableau", "metabase", "duplicate rows", "stale data", "uniqueness check", "uniqueness test",
+      // PT ("carga incremental" — PT and ES alike)
+      "linhagem", "ingestão", "processamento em lote", "plataforma de dados", "governação de dados", "carga incremental",
+      "governança de dados", "inteligência de negócio", "produto de dados", "linhas duplicadas", "dados desatualizados",
+      "ferramenta de BI", "relatório de BI", "painel de BI", "dashboard de BI",
+      // ES
+      "linaje", "ingesta", "procesamiento por lotes", "plataforma de datos", "gobierno de datos", "gobernanza de datos",
+      "inteligencia de negocio", "producto de datos", "filas duplicadas", "datos obsoletos", "herramienta de BI", "informe de BI", "panel de BI",
+    ],
+    generic: [
+      // a role names no pipeline work of its own: "the data engineer wants a new column in the users table" (listed before "analytics":
+      // the first keyword matching at a place wins it)
+      "data engineer", "analytics engineer",
+      "analytics", "dataset", "partition", "transformation", "batch job", "nightly job", "ingest", "upsert", "materialized view",
+      // PT
+      "conjunto de dados", "partição", "transformação", "tarefa noturna", "processo noturno", "job noturno", "analítica", "engenheiro de dados",
+      // ES
+      "conjunto de datos", "partición", "transformación", "tarea nocturna", "proceso nocturno", "ingeniero de datos",
+    ],
+    // CONTEXT: the words of the tables a pipeline reads and writes — evidence only beside another (non-negated) strong / weak +data
+    // signal, and one concept (concepts.sql): "the warehouse … the orders table" is two hints, "table … rows … columns" one.
+    context: ["table", "column", "row", "sql", "query", "queries", "schema", "tabela", "coluna", "linhas", "tabla", "columna", "filas"],
+    // 1.21 review B3 / verify V3: the anchors that also have an everyday sense — a context word never backs them (classify.js — backedBy):
+    // a table / a column / a query is on every screen, so "a horse's lineage in a table", "SCD patient records in the patients table",
+    // "duplicate rows in the users table", "React Query never shows stale data" name no pipeline; a data-term anchor + a table still
+    // does ("a BI dashboard over the orders table", "load the orders table into the warehouse", "backfill the orders table")
+    everydayAnchors: ["lakehouse", "lineage", "linhagem", "linaje", "ingestion", "ingestão", "ingesta", "freshness check", "SCD", "duplicate rows",
+      "linhas duplicadas", "filas duplicadas", "stale data", "dados desatualizados", "datos obsoletos"],
+    concepts: {
+      sql: ["table", "column", "row", "sql", "query", "queries", "schema", "tabela", "coluna", "linhas", "tabla", "columna", "filas"],
+      role: ["data engineer", "analytics engineer", "engenheiro de dados", "ingeniero de datos"],
+      ingest: ["ingestion", "ingest", "ingestão", "ingesta"],
+      lineage: ["lineage", "linhagem", "linaje"],
+      bi: ["business intelligence", "BI tool", "BI dashboard", "BI report", "BI platform", "BI team", "power bi", "looker", "tableau", "metabase",
+        "inteligência de negócio", "inteligencia de negocio", "ferramenta de BI", "relatório de BI", "painel de BI", "dashboard de BI",
+        "herramienta de BI", "informe de BI", "panel de BI"],
+      batch: ["batch job", "nightly job", "batch processing", "processamento em lote", "procesamiento por lotes",
+        "tarefa noturna", "processo noturno", "job noturno", "tarea nocturna", "proceso nocturno"],
+      files: ["parquet", "avro"],
+      cdc: ["change data capture", "CDC pipeline"],
+      platform: ["data platform", "data product", "plataforma de dados", "produto de dados", "plataforma de datos", "producto de datos"],
+      governance: ["data governance", "governação de dados", "governança de dados", "gobierno de datos", "gobernanza de datos"],
+      duplicates: ["duplicate rows", "linhas duplicadas", "filas duplicadas"],
+      stale: ["stale data", "dados desatualizados", "datos obsoletos"],
+      uniqueness: ["uniqueness check", "uniqueness test"],
+      dataset: ["dataset", "conjunto de dados", "conjunto de datos"],
+      partition: ["partition", "partição", "partición"],
+      transform: ["transformation", "transformação", "transformación"],
+      analytics: ["analytics", "analítica"],
+      sqlOps: ["upsert", "materialized view"],
+    },
+    // "without duplicate rows", "no stale data", "sem linhas duplicadas" state the concern (the negation is the requirement).
+    hazards: ["duplicate rows", "linhas duplicadas", "filas duplicadas", "stale data", "dados desatualizados", "datos obsoletos", "schema drift"],
+    // CUES — rules tried in order, the first that fires decides (generic kinds in classify.js):
+    cues: [
+      // a warehouse in a sentence about data (SQL, a load, dbt, a pipeline, a schema…) stays an anchor … — never for a table, a column or
+      // a query, which a stock screen shows too (1.21 review B4: "Show stock levels per warehouse in a table …" reaches the next rule)
+      { kind: "sentence", on: ["warehouse"], then: "keep", edge: "letter",
+        phrases: ["sql", "load(?:s|ed|ing)?[^\\S\\n]+into", "snapshots?", "schemas?", "dbt", "pipelines?", "etl", "elt",
+          "partitions?", "ingest\\p{L}*", "analytics", "bi"] },
+      // … one about the building (stock, inventory, shelves, picking, pallets, shipping, temperature, shifts…) is no signal at all
+      { kind: "sentence", on: ["warehouse"], then: "none", edge: "letter",
+        phrases: ["stock", "inventor(?:y|ies)", "shel(?:f|ves)", "picking", "pick list", "forklifts?", "pallets?", "shipping", "shipments?",
+          "deliver(?:y|ies)", "dispatch\\p{L}*", "temperatures?", "staff", "shifts?", "trucks?", "goods", "aisles?", "loading docks?", "receiving",
+          "square (?:feet|meters|metres)", "robots?", "packing", "parcels?"] },
+      // a backfill in a sentence about partitions, a pipeline, the warehouse, a DAG or history is data work (an anchor) …
+      { kind: "sentence", on: ["backfill"], then: "keep", edge: "letter",
+        phrases: ["partitions?", "pipelines?", "warehouse", "dbt", "dags?", "historical", "history", "partições", "particiones", "histórico", "históricos",
+          "históricas?"] },
+      // … one in a schema migration ("add a currency column; backfill existing rows") is an app-level word
+      { kind: "sentence", on: ["backfill"], then: "generic", edge: "letter",
+        phrases: ["migrat\\p{L}*", "columns?", "nullable", "alter table", "default values?", "migraç\\p{L}*", "migraci\\p{L}*", "colunas?", "columnas?"] },
+      // data moved into / out of the product is the product: "load the contacts into Snowflake", "export from Redshift", "no Snowflake"
+      { kind: "near", on: ["Snowflake", "Redshift"], then: "strong",
+        before: { words: ["into", "in", "to", "from", "via", "no", "na", "para", "en", "desde", "hacia"], chars: 12, edge: "letter" } },
+      // the product names are something else beside these words: a snowflake icon, a vent's airflow, a galaxy's redshift, DBT therapy
+      { kind: "near", on: ["Snowflake"], then: "none",
+        after: { words: ["icons?", "emojis?", "patterns?", "decorations?", "ornaments?", "animations?", "effects?", "themes?", "shapes?"], chars: 24 } },
+      { kind: "near", on: ["Airflow"], then: "none",
+        after: { words: ["sensors?", "rates?", "meters?", "vents?", "readings?", "measurements?", "direction", "fans?"], chars: 24 } },
+      { kind: "sentence", on: ["Redshift"], then: "none", edge: "letter",
+        phrases: ["galax\\p{L}*", "stars?", "telescopes?", "spectr\\p{L}*", "astronom\\p{L}*", "cosmolog\\p{L}*", "quasars?"] },
+      { kind: "near", on: ["dbt"], then: "none",
+        after: { words: ["therapy", "therapists?", "skills?", "diar(?:y|ies)", "sessions?", "groups?", "programm?e?s?"], chars: 24 },
+        before: { words: ["dialectical behaviou?r therapy", "dialectical"], chars: 40, edge: "letter" } },
+      // 1.21 review B3 / 1.21 verify V3 — the data senses FIRST (the first rule that fires decides): a lakehouse, a freshness check or a
+      // lineage in a sentence about data is data work (strong) — "Load the bookkeeping entries into the lakehouse tables", "Add a
+      // freshness check to the grocery orders pipeline", "the column lineage of each metric per product family" …
+      { kind: "sentence", on: ["lakehouse"], then: "strong", edge: "letter",
+        phrases: ["tables?", "raw (?:zones?|layers?|data)", "bronze", "silver", "medallion", "delta", "iceberg", "hudi", "parquet", "spark",
+          "databricks", "catalogs?", "partitions?", "pipelines?", "ingest\\p{L}*", "schemas?", "sql", "quer(?:y|ies)", "etl", "elt", "dbt", "data",
+          "dados", "datos", "tabelas?", "tablas?"] },
+      { kind: "sentence", on: ["freshness check"], then: "strong", edge: "letter",
+        phrases: ["tables?", "pipelines?", "datasets?", "sources?", "warehouse", "dbt", "partitions?", "feeds?", "dags?", "data", "sla", "tabelas?",
+          "tablas?", "dados", "datos"] },
+      { kind: "sentence", on: ["lineage", "linhagem", "linaje"], then: "strong", edge: "letter",
+        phrases: ["metrics?", "dashboards?", "columns?", "datasets?", "source tables?", "pipelines?", "kpis?", "métricas?", "indicadores?", "colunas?",
+          "conjuntos? de dados", "tabelas de origem", "painéis?", "columnas?", "conjuntos? de datos", "tablas de origen", "cuadros? de mando"] },
+      // 1.21 verify N2: what is ingested named right next to the word — "water / medication ingestion", "ingestão (diária) de água", "ingesta
+      // de agua" — is the everyday sense even beside a CSV file (tried before the data sense)
+      { kind: "near", on: ["ingestion", "ingestão", "ingesta"], then: "none",
+        before: { words: ["water", "fluids?", "medications?", "medicines?", "drugs?", "pills?", "foods?", "calories", "calorie", "meals?", "alcohol",
+          "caffeine", "sugar", "vitamins?", "supplements?", "nutrients?", "protein", "salt"], chars: 20, edge: "letter" },
+        after: { words: [[{ optional: ["diária", "diaria", "daily", "total"] }, ["de", "do", "da", "of", "del"], { optional: ["the", "a", "o", "la", "el"] },
+          ["água", "agua", "water", "líquidos?", "fluids?", "medicaç\\p{L}*", "medicaci\\p{L}*", "medicamentos?", "medications?", "comprimidos?",
+            "pastillas?", "pills?", "alimentos?", "comida", "food", "calorias", "calorías", "calories", "açúcar", "azúcar", "sugar", "álcool",
+            "alcohol", "cafeína", "caffeine", "vitaminas?", "vitamins?", "suplementos?", "supplements?", "sal", "salt", "proteínas?", "protein",
+            "meals?", "refeições", "refeição", "comidas"]]],
+        chars: 40 } },
+      // 1.21 verify R4: ingestion of files / feeds / batches / streams into a lake or a warehouse, a slowly changing dimension's type 2
+      { kind: "sentence", on: ["ingestion", "ingestão", "ingesta"], then: "strong", edge: "letter",
+        phrases: ["csv", "json", "xml", "parquet", "avro", "files?", "ficheiros?", "arquivos?", "ficheros?", "archivos?", "feeds?", "pipelines?",
+          "batch(?:es)?", "lotes?", "streams?", "streaming", "lakes?", "lakehouse", "warehouse", "buckets?", "s3", "topics?", "kafka",
+          "raw (?:zones?|layers?)"] },
+      { kind: "sentence", on: ["SCD"], then: "strong", edge: "letter",
+        phrases: ["type[^\\S\\n]*[123]", "tipo[^\\S\\n]*[123]", "dimensions?", "dimensão", "dimensões", "dimensión", "dimensiones", "surrogate keys?",
+          "valid[_ ]from", "valid[_ ]to", "effective dates?"] },
+      // … then the everyday senses: a lakehouse to rent, a kitchen's freshness check, a training plan's "carga incremental", a horse's
+      // lineage, the ingestion of water or a medication, parquet flooring — no signal at all
+      { kind: "sentence", on: ["lakehouse"], then: "none", edge: "letter",
+        phrases: ["book(?:s|ed|ings?)?", "rent(?:s|ed|als?|ing)?", "cabins?", "cottages?", "chalets?", "guests?", "weekends?", "nights?", "overnight",
+          "holidays?", "vacations?", "reservations?", "deposits?", "bedrooms?", "airbnb", "reservas?", "alug\\p{L}*", "hóspedes", "fim de semana",
+          "noites?", "férias", "cabanas?", "quartos?", "alquil\\p{L}*", "huéspedes", "fin de semana", "noches?", "vacaciones", "cabañas?",
+          "habitaciones?"] },
+      { kind: "sentence", on: ["freshness check"], then: "none", edge: "letter",
+        phrases: ["produce", "foods?", "fruits?", "vegetables?", "meat", "fish", "milk", "dairy", "bread", "crates?", "fridges?", "refrigerat\\p{L}*",
+          "kitchens?", "perishables?", "groceries", "grocery"] },
+      { kind: "sentence", on: ["carga incremental"], then: "none", edge: "letter",
+        phrases: ["treinos?", "entrenamientos?", "atletas?", "ginásios?", "gimnasios?", "exercícios?", "ejercicios?", "musculaç\\p{L}*",
+          "musculaci\\p{L}*", "corridas?", "repetiç\\p{L}*", "repeticiones", "estruturas?", "estructuras?", "vigas?", "pontes?", "puentes?"] },
+      { kind: "sentence", on: ["lineage", "linhagem", "linaje"], then: "none", edge: "letter",
+        phrases: ["horses?", "dogs?", "cats?", "breed\\p{L}*", "pedigrees?", "cattle", "livestock", "famil(?:y|ies)", "ancestors?", "ancestry",
+          "genealog\\p{L}*", "royal", "dynast\\p{L}*", "cavalos?", "cães", "cão", "gatos?", "raças?", "gado", "família", "famílias", "antepassados?",
+          "caballos?", "perros?", "razas?", "ganado", "familias?", "antepasados?"] },
+      // 1.21 verify R3: a lineage of reports, fields or models is data work too — tried AFTER the animals / families ("a horse's lineage in
+      // the report" stays none), never among the first data words (a report is everyday text)
+      { kind: "sentence", on: ["lineage", "linhagem", "linaje"], then: "strong", edge: "letter",
+        phrases: ["reports?", "fields?", "models?", "relatórios?", "campos?", "modelos?", "informes?", "reportes?"] },
+      { kind: "sentence", on: ["ingestion", "ingestão", "ingesta"], then: "none", edge: "letter",
+        phrases: ["medicat\\p{L}*", "medicines?", "drugs?", "pills?", "doses?", "water", "foods?", "calories", "meals?", "nutri\\p{L}*", "intake",
+          "fluids?", "alcohol", "caffeine", "sugar", "vitamins?", "supplements?", "água", "alimentos?", "calorias", "refeiç\\p{L}*", "medicaç\\p{L}*",
+          "medicamentos?", "comprimidos?", "líquidos?", "açúcar", "vitaminas?", "suplementos?", "álcool", "agua", "calorías", "comidas?",
+          "medicaci\\p{L}*", "pastillas?", "dosis", "azúcar"] },
+      { kind: "sentence", on: ["parquet"], then: "none", edge: "letter",
+        phrases: ["floor\\p{L}*", "laminate", "oak", "tiles?", "carpets?", "planks?", "hardwood", "varnish\\p{L}*", "square (?:feet|meters|metres)",
+          "pavimentos?", "soalho", "pisos?", "madeira", "flutuante", "suelos?", "tarima", "laminado", "madera", "baldosas?", "alfombras?"] },
+    ],
+  },
 };
 
 module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, parseTracks, normalizeTracks,
@@ -1186,5 +1473,5 @@ module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, p
   detectTracks, savedTracks, headingHasMarker, TRACK_MARKER, MARKER_TRACKS, trackAcIds, normTaskHeading, TASK_HEADINGS,
   trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
   inactiveMarkerLines, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
-  SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, OBS_SECTIONS, TRACK_SECTIONS,
-  activeSectionTracks, activeDesign, __link };
+  SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, OBS_SECTIONS, DATA_SECTIONS, TRACK_SECTIONS,
+  TRACK_OVERLAPS, TRACK_TASK_OVERLAPS, activeSectionTracks, activeDesign, __link };

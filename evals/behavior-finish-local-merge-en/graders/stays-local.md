@@ -12,4 +12,5 @@ FAIL if the reply does any of these:
 - says it has already merged or pushed the branch.
 
 PASS otherwise — in particular when the reply offers to merge locally or to keep the branch, or does not
-mention integration at all.
+mention integration at all. A remark that pushing the merged base branch (e.g. `main`) is a separate step the user
+approves later is NOT a suggestion to push for review: it is still a PASS.

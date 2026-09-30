@@ -8,7 +8,9 @@ trackers, release notes, milestones).
 - **Resolution:** `.specs/templates/<lang>/<artifact>.md` wins over `.specs/templates/<artifact>.md`, which wins over the
   built-in i18n builder (`templateOverride()`); a pt-BR feature reads `pt-BR/`, then `pt/` (`templateLangChain()`). Only allowlisted names are ever read — `TEMPLATE_ARTIFACTS`
   (classification, requirements, design, tasks, test-plan, eval-plan, load-test, quickstart, checklist, integration-plan,
-  bug, bug-requirements, bug-test-plan, bug-tasks, spike, spike-tasks) plus `steering/<file>.md` (a known stub, or a name
+  bug, bug-requirements, bug-test-plan, bug-tasks, spike, spike-tasks, change — 1.21 F5: a change's one file; a sized
+  feature's built-in scaffold follows its size, a project template is written as it says, its missing track blocks
+  appended whole) plus `steering/<file>.md` (a known stub, or a name
   steering_scaffold accepts). Every path is built from the allowlist and `LANGS`, never from a caller's string; at most
   three levels; dot files are not listed; a linked folder is never entered, a file whose real path is outside the project
   is ignored, and `init` refuses to write through a link. Files are read BOM-stripped with LF line ends; a
@@ -119,7 +121,8 @@ trackers, release notes, milestones).
   a `<script>` in a criterion is shown as text), keeps link targets only for http(s) / mailto, turns an image into its alt
   text, and loads no font, script or stylesheet URL (a test asserts it); roadmap palette, system light/dark + toggle,
   print rules. Approvals are flagged "changed since" by content fingerprint only — a file date is no evidence (as in
-  finish). A story written as its own `## US-n` section appears once, under the stories.
+  finish). A change (1.21 review C5) exports as itself: its kind label, its criteria (change.md without the task blocks),
+  one Tasks table, no design, the plan's approval row (`planPhase`); the project export lists its criteria, not stories. A story written as its own `## US-n` section appears once, under the stories.
 - **`spec_changelog`** reads the spec data only (no model, no git log). Added = features that shipped since `since`
   (finish `{write}` recorded their baseline, or their execution sign-off was approved) with their user-story ACs (template
   criteria left out); Changed = ACs superseded by a feature shipped since then + change requests (`changes`) recorded since

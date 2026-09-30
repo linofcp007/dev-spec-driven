@@ -75,7 +75,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     fs.writeFileSync(path.join(n13, "src", "a.js"), "x\n");
     const sc13 = S.scanCodebase(n13, { cap: -3 });
     // (1.14 full review S7: the action list now names rm's alias remove — the spec_backlog enum.)
-    ok(kind13.ok === false && /kind must be one of: feature, bugfix, spike \(got "bugfx"\)/.test(kind13.error) && kindEmpty13.ok === false && !fs.existsSync(path.join(n13, ".specs", "zed")) &&
+    ok(kind13.ok === false && /kind must be one of: feature, bugfix, spike, change \(got "bugfx"\)/.test(kind13.error) && kindEmpty13.ok === false && !fs.existsSync(path.join(n13, ".specs", "zed")) &&
       bl13.ok === false && /action must be one of: add, rm, remove, list \(got "delete"\)/.test(bl13.error) && S.backlog(n13).ok === true && S.backlog(n13, "LIST").ok === true &&
       sc13.filesScanned === 1 && !sc13.truncated,
       "createFeature refuses an unknown kind (nothing scaffolded), backlog an unknown action (= the MCP enums); scanCodebase with cap -3 falls back to the default (never 0 files)");
@@ -948,5 +948,280 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     ok(srvM.length === 14 && srvB.length === 14 && srvM.every((l, i) => l === srvB[i]) && srvErr === 0,
       "1.20 bundle: the MCP server on the bundle (DEV_SPEC_BUNDLE=1, DEV_SPEC_BUNDLE_PATH) answers the handshake, tools / prompts / resources lists and ten read-only tool calls byte for byte as on the modules (got " +
       js({ modules: srvM.length, bundle: srvB.length, errors: srvErr, differ: srvM.map((l, i) => (l === srvB[i] ? null : i + 1)).filter(Boolean) }) + ")");
+  }
+
+  { // 1.21 F1a — the spec state's git merge driver: a SEMANTIC 3-way merge of .state.json / roadmap.json (a table of cases)
+    const js = JSON.stringify;
+    const clone = (x) => JSON.parse(js(x));
+    const T = (d, h = 0) => new Date(Date.UTC(2026, 8, d, h)).toISOString();
+    const M = (b, o, t, kind) => S.mergeStateJson(b, o, t, kind);
+    const base = { lang: "en", kind: "feature", tracks: ["core"], createdAt: T(1),
+      approvals: { requirements: { at: T(2), by: "ana", fingerprint: "r1" } }, lastApprovedPhase: "requirements",
+      approvalHistory: [{ phase: "requirements", at: T(2), by: "ana", fingerprint: "r1", snapshot: ".history/requirements@1.md" }] };
+    const run = (cmd, code, at) => ({ command: cmd, exitCode: code, summary: "s", at });
+    const rec = (cmd, code, at, hist) => Object.assign(run(cmd, code, at), { history: hist || [run(cmd, code, at)], task: "t", verify: cmd });
+
+    // 1. both tick different tasks (ticks, evidence, lastTickAt) → both kept, no conflict
+    const o1 = clone(base), t1 = clone(base);
+    Object.assign(o1, { ticks: { 1: T(5) }, evidence: { 1: rec("npm test", 0, T(5)) }, lastTickAt: T(5) });
+    Object.assign(t1, { ticks: { 2: T(6) }, evidence: { 2: rec("npm run lint", 0, T(6)) }, lastTickAt: T(6), tracks: ["core", "tdd"] });
+    const m1 = M(base, o1, t1, "state");
+    ok(!m1.conflicts.length && js(Object.keys(m1.merged.ticks)) === '["1","2"]' && m1.merged.evidence[1].command === "npm test" && m1.merged.evidence[2].command === "npm run lint" &&
+      m1.merged.lastTickAt === T(6) && js(m1.merged.tracks) === '["core","tdd"]' && m1.kind === "state",
+      "1.21 F1a merge: both branches tick different tasks — ticks, evidence and the later lastTickAt of both, the track one side added; no conflict (got " + js(m1) + ")");
+
+    // 2. both approve different phases → both approvals, the history's union in time order, lastApprovedPhase recomputed
+    const o2 = clone(base), t2 = clone(base);
+    o2.approvals.design = { at: T(4), by: "bo", fingerprint: "d1" };
+    o2.approvalHistory.push({ phase: "design", at: T(4), by: "bo", fingerprint: "d1", snapshot: ".history/design@1.md" });
+    o2.lastApprovedPhase = "design";
+    t2.approvals.classification = { at: T(3), by: "cy", fingerprint: "c1" };
+    t2.approvalHistory.push({ phase: "classification", at: T(3), by: "cy", fingerprint: "c1", snapshot: ".history/classification@1.md" });
+    t2.lastApprovedPhase = "classification";
+    const m2 = M(base, o2, t2);
+    ok(!m2.conflicts.length && js(Object.keys(m2.merged.approvals).sort()) === '["classification","design","requirements"]' &&
+      js(m2.merged.approvalHistory.map((h) => h.phase)) === '["requirements","classification","design"]' && m2.merged.lastApprovedPhase === "design",
+      "1.21 F1a merge: both branches approve different phases — every approval kept, approvalHistory the union in chronological order, lastApprovedPhase = the latest approval's phase (got " + js(m2) + ")");
+
+    // 3. one revokes, the other approves another phase / re-approves the same phase before / after the revocation
+    const revoked = (at) => { const x = clone(base); x.approvals = {}; delete x.lastApprovedPhase; x.approvalHistory.push({ phase: "requirements", at, by: "ana", revoked: true, reason: "wrong scope", approvedAt: T(2) }); return x; };
+    const reapproved = (at) => { const x = clone(base); x.approvals.requirements = { at, by: "bo", fingerprint: "r2" }; x.approvalHistory.push({ phase: "requirements", at, by: "bo", fingerprint: "r2", snapshot: ".history/requirements@2.md" }); x.lastApprovedPhase = "requirements"; return x; };
+    const m3a = M(base, revoked(T(6)), t2);
+    const m3b = M(base, revoked(T(6)), reapproved(T(5))); // the revocation is later: it wins
+    const m3c = M(base, reapproved(T(7)), revoked(T(6))); // the re-approval is later: it stands
+    ok(!m3a.conflicts.length && !m3a.merged.approvals.requirements && !!m3a.merged.approvals.classification && m3a.merged.lastApprovedPhase === "classification" &&
+      m3a.merged.approvalHistory.some((h) => h.revoked === true) &&
+      !m3b.merged.approvals.requirements && m3b.merged.approvalHistory.length === 3 && !m3b.conflicts.length &&
+      m3c.merged.approvals.requirements && m3c.merged.approvals.requirements.at === T(7) && m3c.merged.lastApprovedPhase === "requirements",
+      "1.21 F1a merge: a revocation on one branch wins by time — it removes the approval (and another phase approved on the other branch stays); a re-approval LATER than the revocation stands (got " +
+      js([m3a.merged.approvals, m3b.merged.approvals, m3c.merged.approvals]) + ")");
+
+    // 4. evidence on the same task at different times → the later run wins, both histories merged (deduped, ≤ 5); the same run
+    // on both sides with theirs undone (stale) and ours noted → both annotations kept
+    const shared = run("npm test", 1, T(3));
+    const o4 = clone(base), t4 = clone(base);
+    o4.evidence = { 1: rec("npm test", 0, T(8), [shared, run("npm test", 1, T(4)), run("npm test", 0, T(8))]) };
+    t4.evidence = { 1: rec("npm test", 0, T(7), [shared, run("npm test", 0, T(5)), run("npm test", 1, T(6)), run("npm test", 0, T(7))]) };
+    const m4 = M(base, o4, t4);
+    const e4 = m4.merged.evidence[1];
+    const same = { ...base, evidence: { 1: rec("npm test", 0, T(8)) } };
+    const undone = clone(same);
+    Object.assign(undone.evidence[1], { stale: true, staleBy: "undo" });
+    const noted = clone(same);
+    Object.assign(noted.evidence[1], { note: "re-checked by hand", noteAt: T(9) });
+    const m4b = M(same, noted, undone);
+    ok(!m4.conflicts.length && e4.at === T(8) && e4.history.length === 5 && e4.history[4].at === T(8) && e4.history[0].at === T(4) &&
+      new Set(e4.history.map((h) => h.at)).size === 5 && m4b.merged.evidence[1].stale === true && m4b.merged.evidence[1].staleBy === "undo" && m4b.merged.evidence[1].note === "re-checked by hand",
+      "1.21 F1a merge: evidence on the same task — the record with the latest run wins, the two histories merged (deduped, chronological, bounded by EVIDENCE_HISTORY = 5); the same run on both sides keeps both annotations (a note, an undo's stale mark) (got " + js([e4, m4b.merged.evidence]) + ")");
+
+    // 5. roadmap.json: deps edited on both sides (a set merge), the backlog by name (notes joined), milestones, checks, roles
+    const rb = { features: { app: { dependsOn: ["auth"] }, auth: {} }, backlog: [{ name: "Export", note: "csv" }],
+      meta: { lang: "en", checks: { test: "npm test" }, approvalRoles: { design: ["tech"] }, milestones: [{ name: "beta", date: "2026-10-01", features: ["app"] }], specVersion: "1.20.0" } };
+    const ro = clone(rb), rt = clone(rb);
+    ro.features.app.dependsOn.push("billing"); ro.features.billing = {}; ro.backlog[0].note = "csv · pdf"; ro.backlog.push({ name: "Search" });
+    ro.meta.checks.lint = "npm run lint"; ro.meta.approvalRoles.design.push("security"); ro.meta.milestones[0].features.push("billing"); ro.meta.specVersion = "1.21.0";
+    rt.features.app.dependsOn = []; rt.features.app.order = 2; rt.backlog[0].note = "csv · xlsx"; rt.backlog.push({ name: "search", note: "later" });
+    rt.meta.checks.types = "npx tsc --noEmit"; rt.meta.approvalRoles.tasks = ["tech"]; rt.meta.milestones.push({ name: "ga", date: "2026-12-01", features: ["auth"] }); rt.meta.changelogAt = T(9);
+    const m5 = M(rb, ro, rt, "roadmap");
+    const f5 = m5.merged;
+    ok(!m5.conflicts.length && m5.kind === "roadmap" && js(f5.features.app.dependsOn) === '["billing"]' && f5.features.app.order === 2 && !!f5.features.billing &&
+      f5.backlog.length === 2 && f5.backlog[0].note === "csv · pdf · xlsx" && f5.backlog[1].name === "Search" && f5.backlog[1].note === "later" &&
+      js(Object.keys(f5.meta.checks)) === '["test","lint","types"]' && js(f5.meta.approvalRoles) === '{"design":["tech","security"],"tasks":["tech"]}' &&
+      js(f5.meta.milestones.map((m) => [m.name, m.features])) === '[["beta",["app","billing"]],["ga",["auth"]]]' && f5.meta.specVersion === "1.21.0" && f5.meta.changelogAt === T(9) &&
+      S.mergeStateJson(undefined, { meta: {} }, { meta: {} }).kind === "roadmap",
+      "1.21 F1a merge: roadmap.json — dependsOn a 3-way set merge (one side removed auth, the other added billing), features / backlog (case-insensitive names, notes joined) / milestones / checks / roles united by key, specVersion the higher, changelogAt the later; no conflict (got " + js(m5) + ")");
+
+    // 6. a meta scalar both sides changed differently → a real conflict: ours kept, reported; written INTO the file as
+    // mergeConflicts (valid JSON, ours' BOM / CRLF / final newline kept); an unknown key → 3-way per key
+    const cb = { meta: { lang: "en", guard: false }, features: {}, custom: { a: 1 } };
+    const co = { meta: { lang: "pt", guard: false }, features: {}, custom: { a: 2 }, onlyOurs: true };
+    const ct = { meta: { lang: "es", guard: "scope" }, features: {}, custom: { a: 3 } };
+    const m6 = M(cb, co, ct, "roadmap");
+    const bom = String.fromCharCode(0xfeff);
+    const x6 = S.mergeStateText(js(cb), bom + js(co, null, 2).replace(/\n/g, "\r\n") + "\r\n", js(ct), { path: ".specs/roadmap.json" });
+    let p6 = null;
+    try { p6 = JSON.parse(x6.text.slice(1)); } catch { p6 = null; }
+    ok(js(m6.conflicts.map((c) => c.path).sort()) === '["custom.a","meta.lang"]' && m6.merged.meta.lang === "pt" && m6.merged.meta.guard === "scope" && m6.merged.onlyOurs === true &&
+      js(m6.conflicts.find((c) => c.path === "meta.lang")) === '{"path":"meta.lang","base":"en","ours":"pt","theirs":"es"}' &&
+      x6.ok && x6.clean === false && p6 && p6.meta.lang === "pt" && p6.mergeConflicts.length === 2 && x6.text.charCodeAt(0) === 0xfeff && /\r\n$/.test(x6.text) && !/[^\r]\n/.test(x6.text),
+      "1.21 F1a merge: a meta scalar (lang) and an unknown key both sides changed differently are CONFLICTS — ours kept, {path, base, ours, theirs} reported; the side-only changes merge (guard: theirs, onlyOurs: ours); mergeStateText writes them as mergeConflicts in valid JSON, keeping ours' BOM, CRLF and final newline (got " + js([m6, x6.text.slice(0, 80)]) + ")");
+
+    // 7. sign-offs per role, finished, createdAt; a __proto__ key stays a plain key
+    const sb = { ...clone(base), signoffs: { design: { tech: { by: "t", at: T(3), fingerprint: "d1" } } }, finished: { at: T(10), files: { "a.js": "1" } } };
+    const so = clone(sb), st = clone(sb);
+    so.signoffs.design.security = { by: "s", at: T(5), fingerprint: "d1" }; so.finished = { at: T(12), firstAt: T(10), files: { "a.js": "2" } };
+    st.signoffs.design.tech = { by: "t2", at: T(6), fingerprint: "d2" }; st.finished = { at: T(11), files: { "a.js": "3" } }; st.createdAt = T(0);
+    const m7 = M(sb, so, st);
+    const rv = clone(sb); delete rv.signoffs; rv.approvalHistory.push({ phase: "design", at: T(7), by: "x", revoked: true, partial: true, roles: ["tech"] });
+    const m7b = M(sb, so, rv); // ours signed security at T5; theirs withdrew the waiting sign-offs at T7 → gone
+    const pr = S.mergeStateJson({}, JSON.parse('{"__proto__": {"polluted": 1}, "a": 1}'), { a: 1, b: 2 });
+    ok(!m7.conflicts.length && js(m7.merged.signoffs) === js({ design: { tech: { by: "t2", at: T(6), fingerprint: "d2" }, security: { by: "s", at: T(5), fingerprint: "d1" } } }) &&
+      m7.merged.finished.at === T(12) && m7.merged.finished.firstAt === T(10) && m7.merged.createdAt === T(0) && m7b.merged.signoffs === undefined &&
+      Object.prototype.hasOwnProperty.call(pr.merged, "__proto__") && Object.getPrototypeOf(pr.merged) === Object.prototype && pr.merged.b === 2 && ({}).polluted === undefined,
+      "1.21 F1a merge: role sign-offs merge per role (the later one), a revocation later than them drops them; `finished` → the later baseline with the earliest firstAt; createdAt → the earlier; a __proto__ key stays a plain own key (got " + js([m7.merged.signoffs, m7.merged.finished, m7b.merged.signoffs]) + ")");
+
+    // 8. the file-level rules: an unparseable side merges nothing; the generated overviews keep ours only when both are dev-spec's
+    // output; an empty base (added on both sides); .gitattributes lines added / removed idempotently (other lines, CRLF kept)
+    const bad = S.mergeStateText("{}", "{}", "{ nope", { path: ".specs/x/.state.json" });
+    const genMd = "# Roadmap\n<!-- AUTO-GENERATED by dev-spec — do not edit -->\n";
+    const g1 = S.mergeStateText("", genMd + "a", genMd + "b", { path: ".specs/ROADMAP.md" });
+    const g2 = S.mergeStateText("", "# my own roadmap", genMd, { path: "sub/.specs/ROADMAP.md" });
+    const added = S.mergeStateText("", js({ lang: "en", ticks: { 1: T(1) } }), js({ lang: "en", ticks: { 2: T(2) } }), { path: ".specs/f/.state.json" });
+    const at1 = S.mergeAttributes("*.png binary\r\n", false);
+    const at2 = S.mergeAttributes(at1.text, false);
+    const at3 = S.mergeAttributes(at1.text, true);
+    const at4 = S.mergeAttributes(at3.text, true);
+    ok(bad.ok === false && bad.parseError === "theirs" && g1.kind === "generated" && g1.keepOurs === true && g2.keepOurs === false &&
+      added.ok && added.clean && js(JSON.parse(added.text).ticks) === js({ 1: T(1), 2: T(2) }) &&
+      S.mergeKindOfPath(".specs/a/.state.json") === "state" && S.mergeKindOfPath(".specs/roadmap.json") === "roadmap" && S.mergeKindOfPath("x/.specs/SPECS.md") === "generated" &&
+      at1.changed && at1.text.startsWith("*.png binary\r\n") && S.MERGE_ATTRIBUTE_LINES.every((l) => at1.text.includes(l + "\r\n")) &&
+      S.MERGE_ATTRIBUTE_LINES[0] === ".specs/**/.state.json merge=dev-spec-state" && !at2.changed && at3.changed && at3.text === "*.png binary\r\n" && !at4.changed,
+      "1.21 F1a merge: an unparseable side merges nothing (parseError); ROADMAP.md / SPECS.md keep ours only when both sides are dev-spec's output (a hand-written one is left to git's text merge); an empty base merges as added on both sides; .gitattributes gains / loses the driver's lines idempotently, other lines and CRLF kept (got " +
+      js([bad, g1, g2, at1.text]) + ")");
+
+    // 9. doctor fails merge-conflicts while a conflicted merge's list is still in the feature's .state.json or in roadmap.json (PT)
+    const mp = path.join(tmp, "proj-merge-doctor");
+    S.initProject(mp, ["core"], "pt");
+    const mf = S.createFeature(mp, "Faturas", ["core"]);
+    const before = S.specDoctor(mp, mf.slug).checks.some((c) => c.id === "merge-conflicts");
+    const sp = path.join(mf.dir, ".state.json");
+    const stt = JSON.parse(fs.readFileSync(sp, "utf8"));
+    stt.mergeConflicts = [{ path: "kind", ours: "feature", theirs: "bugfix" }];
+    fs.writeFileSync(sp, JSON.stringify(stt, null, 2));
+    const rmp = path.join(mp, ".specs", "roadmap.json");
+    const rmj = JSON.parse(fs.readFileSync(rmp, "utf8"));
+    rmj.mergeConflicts = [{ path: "meta.guard", ours: true, theirs: "scope" }];
+    fs.writeFileSync(rmp, JSON.stringify(rmj, null, 2));
+    const d9 = S.specDoctor(mp, mf.slug);
+    const c9 = d9.checks.find((c) => c.id === "merge-conflicts") || {};
+    ok(!before && c9.status === "fail" && /^2 conflito\(s\) de merge/.test(c9.detail) && /\.state\.json kind/.test(c9.detail) && /roadmap\.json meta\.guard/.test(c9.detail) && d9.verdict === "fail",
+      "1.21 F1a: doctor fails merge-conflicts (in the feature's language) while a conflicted merge's mergeConflicts list is still in its .state.json or in roadmap.json; none → no such check (got " + js(c9) + ")");
+
+    // 1.21 review A1 — the sign-offs' drop rule runs on the 3-way RESULT: only one side changed signoffs (theirs signed tech at T3,
+    // ours approved the phase at T5) → mergeThree used to hand theirs' signoffs back as they were, a stale sign-off next to the
+    // approval; now it is dropped. A sign-off LATER than the approval (a re-sign round under way) stays.
+    const a1b = { ...clone(base), approvals: {} };
+    delete a1b.lastApprovedPhase;
+    const a1o = clone(a1b); a1o.approvals.design = { at: T(5), by: "bo", fingerprint: "d1" }; a1o.approvalHistory.push({ phase: "design", at: T(5), by: "bo", fingerprint: "d1" });
+    const a1t = clone(a1b); a1t.signoffs = { design: { tech: { by: "t", at: T(3), fingerprint: "d1" } } };
+    const a1late = clone(a1b); a1late.signoffs = { design: { tech: { by: "t", at: T(6), fingerprint: "d2" } } };
+    const m1a = M(a1b, a1o, a1t), m1b = M(a1b, a1t, a1o), m1c = M(a1b, a1o, a1late);
+    ok(!m1a.conflicts.length && m1a.merged.approvals.design && !("signoffs" in m1a.merged) && !("signoffs" in m1b.merged) && m1b.merged.approvals.design &&
+      m1c.merged.signoffs && m1c.merged.signoffs.design.tech.at === T(6),
+      "1.21 review A1 (merge): a sign-off only one side made, no later than the other side's approval of the phase, is dropped from the merge (either direction) — the drop rule runs after the 3-way; a later sign-off stays (got " +
+      js([m1a.merged.signoffs, m1b.merged.signoffs, m1c.merged.signoffs]) + ")");
+
+    // 1.21 review A7 — a re-merge while ours still holds the unresolved mergeConflicts list: each conflict listed once
+    const r7b = { meta: { lang: "en" }, features: {} };
+    const r7o = { meta: { lang: "pt" }, features: {} }, r7t = { meta: { lang: "es" }, features: {} };
+    const first7 = S.mergeStateText(js(r7b), js(r7o), js(r7t), { path: ".specs/roadmap.json" });
+    const again7 = S.mergeStateText(js(r7b), first7.text, js(r7t), { path: ".specs/roadmap.json" });
+    const list7 = JSON.parse(again7.text).mergeConflicts;
+    ok(first7.clean === false && JSON.parse(first7.text).mergeConflicts.length === 1 && again7.clean === false && Array.isArray(list7) && list7.length === 1 && list7[0].path === "meta.lang",
+      "1.21 review A7: merging again while the unresolved mergeConflicts list is still in ours lists each conflict ONCE (deduped by its canonical form) (got " + js(list7) + ")");
+  }
+
+  { // 1.21 review A3 — is git's merge driver still THIS clone's? The pure readers (git config text, the driver command) and the
+    // status against a repository's config read AS TEXT (a .git folder, a worktree's .git FILE → gitdir → commondir), then the
+    // SessionStart hook's ONE line when .gitattributes names the driver and the configured script is missing / another copy.
+    const js = JSON.stringify;
+    const cfg = '[core]\n\tbare = false\n[merge "dev-spec-state"]\n\tname = dev-spec: semantic merge\n\tdriver = node \'/old/plugins/cache/m/dev-spec-driven/1.20.0/cli/dev-spec.js\' merge-state %O %A %B %P\n' +
+      '[Merge "Other"]\n\tdriver = cat\n[merge.dev-spec-state]\n\t; a comment\n';
+    const quoted = '[merge "dev-spec-state"]\n  driver = "node \'/a b/#x/cli/dev-spec.js\' merge-state %O %A %B %P" # trailing comment\n  driver = node \\\n\'/c/cli/dev-spec.js\' merge-state %O %A %B %P\n';
+    const got = [S.gitConfigGet(cfg, "merge.dev-spec-state.driver"), S.gitConfigGet(cfg, "MERGE.dev-spec-state.DRIVER"), S.gitConfigGet(cfg, "merge.Other.driver"),
+      S.gitConfigGet(cfg, "merge.other.driver"), S.gitConfigGet(quoted, "merge.dev-spec-state.driver"), S.gitConfigGet('[merge "dev-spec-state"]\n\tdriver = "node \'/a b/#x/cli/dev-spec.js\' merge-state"\n', "merge.dev-spec-state.driver")];
+    const scripts = [S.mergeDriverScript("node '/x/it'\\''s/cli/dev-spec.js' merge-state %O %A %B %P"), S.mergeDriverScript('node "/y z/cli/dev-spec.js" merge-state %O %A %B %P'),
+      S.mergeDriverScript("cat %A"), S.mergeDriverScript(null)];
+    ok(got[0] === "node '/old/plugins/cache/m/dev-spec-driven/1.20.0/cli/dev-spec.js' merge-state %O %A %B %P" && got[1] === got[0] && got[2] === "cat" && got[3] === undefined &&
+      got[4] === "node '/c/cli/dev-spec.js' merge-state %O %A %B %P" && got[5] === "node '/a b/#x/cli/dev-spec.js' merge-state" &&
+      scripts[0] === "/x/it's/cli/dev-spec.js" && scripts[1] === "/y z/cli/dev-spec.js" && scripts[2] === null && scripts[3] === null && S.MERGE_DRIVER_KEY === "merge.dev-spec-state.driver",
+      "1.21 review A3: gitConfigGet reads a git config text as git does (section / key case-insensitive, the subsection exact, quotes and a # inside them, comments, a continued line, the last definition wins); mergeDriverScript names the script before `merge-state` (sh quoting) (got " +
+      js([got, scripts]) + ")");
+
+    // A repository laid out by hand (no git needed): .git/config + a linked worktree whose .git FILE points at gitdir → commondir.
+    const repo = path.join(tmp, "rev-a3-repo");
+    fs.mkdirSync(path.join(repo, ".git", "worktrees", "wt"), { recursive: true });
+    const cliHere = path.resolve(__dirname, "..", "cli", "dev-spec.js").replace(/\\/g, "/");
+    const setDriver = (script) => fs.writeFileSync(path.join(repo, ".git", "config"), '[core]\n\tbare = false\n[merge "dev-spec-state"]\n\tdriver = node \'' + script + '\' merge-state %O %A %B %P\n');
+    S.initProject(repo, ["core"], "en");
+    S.createFeature(repo, "Invoices", ["core"]);
+    const status = () => S.mergeDriverStatus(repo, { cli: cliHere });
+    const s0 = status(); // .gitattributes doesn't name the driver: nothing read, "none"
+    fs.writeFileSync(path.join(repo, ".gitattributes"), "*.png binary\n" + S.MERGE_ATTRIBUTE_LINES.join("\n") + "\n");
+    const s1 = status(); // named, no driver in the config
+    setDriver(cliHere);
+    const s2 = status();
+    const gone = path.join(tmp, "rev-a3-gone", "cli", "dev-spec.js").replace(/\\/g, "/");
+    setDriver(gone);
+    const s3 = status();
+    const other = path.join(tmp, "rev-a3-other", "cli", "dev-spec.js");
+    fs.mkdirSync(path.dirname(other), { recursive: true });
+    fs.writeFileSync(other, "// another copy\n");
+    setDriver(other.replace(/\\/g, "/"));
+    const s4 = status();
+    const wt = path.join(tmp, "rev-a3-wt");
+    fs.mkdirSync(wt, { recursive: true });
+    fs.writeFileSync(path.join(wt, ".git"), "gitdir: " + path.join(repo, ".git", "worktrees", "wt") + "\n");
+    fs.writeFileSync(path.join(repo, ".git", "worktrees", "wt", "commondir"), "../..\n");
+    fs.writeFileSync(path.join(wt, ".gitattributes"), S.MERGE_ATTRIBUTE_LINES.join("\n") + "\n");
+    const s5 = S.mergeDriverStatus(wt, { cli: cliHere });
+    const s6 = S.mergeDriverStatus(repo, { cli: cliHere, driver: "node '" + cliHere + "' merge-state %O %A %B %P" }); // --check passes what git config --get read
+    ok(s0.status === "none" && s0.named === false && s1.status === "not-installed" && s1.named === true && s2.status === "ok" && s2.script === cliHere &&
+      s3.status === "missing" && s3.script === gone && s4.status === "other" && s5.status === "other" && s5.named === true && s6.status === "ok",
+      "1.21 review A3: mergeDriverStatus — none (nothing names the driver) · not-installed (.gitattributes names it, no driver) · ok (this clone's CLI) · missing (the script is gone — a plugin update) · other (another copy); a linked worktree's .git FILE is followed to the common config; a driver the caller read (--check) is used as given (got " +
+      js([s0.status, s1.status, s2.status, s3.status, s4.status, s5.status, s6.status]) + ")");
+
+    // The SessionStart hook: ONE line while the configured script is missing (or another copy), none once it is this clone's.
+    const hookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
+    const session = () => {
+      const r = spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: repo }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: repo, SPEC_PROJECT_DIR: repo } });
+      try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; }
+    };
+    setDriver(gone);
+    const hMissing = session();
+    setDriver(other.replace(/\\/g, "/"));
+    const hOther = session();
+    setDriver(cliHere);
+    const hOk = session();
+    const lineOf = (ctx) => ctx.split("\n").filter((l) => /merge driver/.test(l));
+    ok(lineOf(hMissing).length === 1 && lineOf(hMissing)[0].includes(gone) && /which no longer exists/.test(lineOf(hMissing)[0]) && lineOf(hMissing)[0].includes(S.DEV_SPEC + " merge-state --install") &&
+      lineOf(hOther).length === 1 && /not this plugin's CLI/.test(lineOf(hOther)[0]) && /Invoices|invoices/.test(hOk) && lineOf(hOk).length === 0,
+      "1.21 review A3: the SessionStart hook adds ONE line when .gitattributes names the merge driver and git config runs a missing script (a plugin update) or another copy — the path and the runnable re-install line; none when it runs this clone's CLI (got " +
+      js([lineOf(hMissing), lineOf(hOther), lineOf(hOk)]) + ")");
+  }
+
+  { // 1.21 F3 — the runnable CLI line (S.DEV_SPEC, i18n/common.js) is safe to paste: quoted for bash AND PowerShell (double quotes,
+    // single quotes when the path holds " $ ` !, a placeholder when it also holds a '), forward slashes; it RUNS as printed in the
+    // platform shell, in bash and in PowerShell where they exist; a committed file (UPGRADE.md here) gets `dev-spec` instead.
+    const I = require("./lib/i18n.js");
+    const quoting = [I.cliPrefix("C:\\Users\\Ana Sá\\dev-spec-driven\\cli\\dev-spec.js"), I.cliPrefix("/home/x$y/cli/dev-spec.js"), I.cliPrefix("/it's/$HOME/cli/dev-spec.js"),
+      I.cliPrefix("/opt/bang!/cli/dev-spec.js")];
+    const quoteOk = quoting[0] === 'node "C:/Users/Ana Sá/dev-spec-driven/cli/dev-spec.js"' && quoting[1] === "node '/home/x$y/cli/dev-spec.js'" &&
+      quoting[2] === 'node "<dev-spec-driven>/cli/dev-spec.js"' && quoting[3] === "node '/opt/bang!/cli/dev-spec.js'";
+    const line = S.DEV_SPEC + " help";
+    const cwd = os.tmpdir();
+    const heads = (r) => (r && !r.error && r.status === 0 && /^dev-spec — /.test(String(r.stdout || ""))) ? "ok" : r && r.error ? "absent" : "failed:" + (r && r.status) + " " + String(r && r.stderr || "").slice(0, 200);
+    const viaShell = heads(spawnSync(line, { shell: true, encoding: "utf8", cwd }));
+    const bashBin = (process.platform === "win32" ? [process.env.DEV_SPEC_TEST_BASH, "C:\\Program Files\\Git\\bin\\bash.exe"] : [process.env.DEV_SPEC_TEST_BASH, "bash"])
+      .filter(Boolean).find((b) => { try { return spawnSync(b, ["--version"], { encoding: "utf8" }).status === 0; } catch { return false; } });
+    const viaBash = bashBin ? heads(spawnSync(bashBin, ["-c", line], { encoding: "utf8", cwd })) : "absent";
+    const psBin = process.platform === "win32" ? "powershell.exe" : "pwsh";
+    const viaPs = heads(spawnSync(psBin, ["-NoProfile", "-NonInteractive", "-Command", line], { encoding: "utf8", cwd, timeout: 60000 }));
+    // UPGRADE.md (committed) gets the portable `dev-spec` line; the audit's `lines` (read in the terminal) the runnable one.
+    const pu = path.join(tmp, "proj-121-portable");
+    S.initProject(pu, ["core"], "en");
+    const fu = S.createFeature(pu, "Csv export", ["core"], "x");
+    fs.writeFileSync(path.join(fu.dir, "tasks.md"), "# Tasks\n\n- [x] 1. [US1] Do it\n  - _Requirements: US-1.AC-1_\n  - _Verify: node -e \"process.exit(0)\"_\n");
+    const rmp = path.join(pu, ".specs", "roadmap.json"), rmj = JSON.parse(fs.readFileSync(rmp, "utf8"));
+    delete rmj.meta.specVersion;
+    fs.writeFileSync(rmp, JSON.stringify(rmj, null, 2));
+    const up = S.specUpgrade(pu, { apply: true });
+    const upMd = fs.readFileSync(path.join(pu, ".specs", "UPGRADE.md"), "utf8");
+    const portOk = up.ok && !upMd.includes(S.DEV_SPEC) && upMd.includes("dev-spec done csv-export <n> --run") && up.lines.some((l) => l.includes(S.DEV_SPEC + " done csv-export <n> --run")) &&
+      S.portableCli("run " + S.DEV_SPEC.replace(/"/g, "&quot;") + " drift x") === "run dev-spec drift x" && S.portableCli(S.DEV_SPEC + " done x 1 --run") === "dev-spec done x 1 --run";
+    ok(quoteOk && viaShell === "ok" && viaBash !== "failed" && !/^failed/.test(viaBash) && !/^failed/.test(viaPs) && portOk,
+      "1.21 F3: the runnable CLI line is quoted for bash AND PowerShell (double quotes; single quotes around \" $ ` !; a placeholder when a ' joins them; forward slashes) and runs as printed in the platform shell" +
+      " (and bash / PowerShell where present); a committed UPGRADE.md keeps `dev-spec`, the audit's lines the runnable form (got " +
+      JSON.stringify({ quoting, viaShell, viaBash, viaPs, portOk, upMd: (upMd.match(/.*dev-spec done.*/) || [])[0] }) + ")");
   }
 };

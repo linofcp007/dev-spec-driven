@@ -27,6 +27,7 @@ steering files.
 | `distributed.md` | `+dist` | when the distributed systems & data consistency track is used |
 | `api.md` | `+api` | when the API contract track is used |
 | `ui.md` | `+ui` | when the UI track is used |
+| `data.md` | `+data` | when the data pipeline track is used |
 | `glossary.md` | any (optional) | when the product has domain terms people use loosely — `steering_scaffold` only, `spec_init` never creates it |
 
 At project start, create at least the four `core` files. Add the others the first time a
@@ -599,6 +600,36 @@ i18n, performance budgets, visual regression): `references/ui-design-patterns.md
 
 ---
 
+## `data.md` (+data)
+
+```markdown
+# Data Pipeline Standards
+
+## Contracts & Schemas
+- Where schemas live: [dbt YAML with enforced contracts | a schema registry | schemas/] · compatibility: additive changes only; a breaking change ships as a new version with [N weeks] of deprecation.
+- Naming: [snake_case] tables and columns · timestamps in UTC · the layers: [raw → staging → marts].
+
+## Data Quality
+- Every dataset: not-null and unique keys, accepted values and ranges, row-count anomaly checks · they run at ingestion and before publishing · a failure: [quarantine the rows | stop the load] and alert the owner.
+- Tool: [dbt tests | Great Expectations | SQL checks] · command: [command].
+
+## Idempotency & Backfills
+- Every job re-runnable for a partition: overwrite the partition or MERGE on a key — never a blind append · late-arriving data: a lookback window of [N days].
+- Backfills: a dry run first · at most [N] partitions in parallel · the cost estimated and approved by [role].
+
+## Lineage & Ownership
+- Every dataset has an owner and a freshness SLA · lineage lives in: [dbt docs | the data catalog] · consumers hear of a breaking change [N days] ahead.
+
+## Retention & Cost
+- Retention per layer: raw [N days] · curated [N months] — personal data per privacy.md · partitioned by [date], clustered by [key] · cost budget: [$ per month], with an alert at [N] %.
+```
+
+Per-dataset decisions (a contract, a check's reaction, a backfill plan) belong in the feature's `[DATA]` design sections.
+The reasoning (write-audit-publish, idempotent load patterns, late data, SCD types, lineage, retention across derived
+tables): `references/data-pipeline-patterns.md`.
+
+---
+
 ## `glossary.md` (optional — the ubiquitous language)
 
 One entry per domain term: the word the specs use, what it means in this product, and the words **not** to use for it.
@@ -682,7 +713,7 @@ override when present — create-only, never over an existing file.
    a template full of placeholders is a liability.
 2. **First time a track activates:** add its steering file (e.g., first SaaS feature → `scale.md`,
    `observability.md`, `cost.md`; first AI feature → `ai-strategy.md`; first TDD feature →
-   `testing-standards.md`; first +sec feature → `security.md`; first +privacy feature → `privacy.md`; first +dist feature → `distributed.md`; first +api feature → `api.md`; first +ui feature → `ui.md`; first +obs feature → `observability.md`).
+   `testing-standards.md`; first +sec feature → `security.md`; first +privacy feature → `privacy.md`; first +dist feature → `distributed.md`; first +api feature → `api.md`; first +ui feature → `ui.md`; first +obs feature → `observability.md`; first +data feature → `data.md`).
 3. **At feature spec time:** the design phase reads the active-track files. If a design conflicts
    with a steering file (exceeds budget, breaks an SLA), raise it in review — never silently exceed.
    Area-specific rules go in a scoped file (`inclusion: fileMatch`) rather than bloating `tech.md`.

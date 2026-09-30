@@ -16,14 +16,15 @@ const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 const { MARKER_TRACKS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature, extractAcIds,
+let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature, extractAcIds,
   featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket,
-  markerTracks, OPTIONAL_TRACKS, packRegistry, parseTasks, projectTemplateHas, readIfExists, replaceCodeSpans,
-  stripSupersedes, taskDescription, trackLabel, trackMarker, useTemplateScopeOf, VALID_TRACKS;
-function __link(E) { ({ atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature,
+  markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists, replaceCodeSpans,
+  stripSupersedes, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf, VALID_TRACKS, wildcardMatch;
+function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature,
   extractAcIds, featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf,
-  isPackMarkerBracket, markerTracks, OPTIONAL_TRACKS, packRegistry, parseTasks, projectTemplateHas, readIfExists,
-  replaceCodeSpans, stripSupersedes, taskDescription, trackLabel, trackMarker, useTemplateScopeOf, VALID_TRACKS } = E); }
+  isPackMarkerBracket, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists,
+  replaceCodeSpans, stripSupersedes, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf, VALID_TRACKS,
+  wildcardMatch } = E); }
 
 // The text minus its HTML comments (commentLines' reading: a "<!--" in fenced code or an inline code span is text, one
 // that never closes is text). A comment spanning lines takes its line breaks with it, as the old regex did.
@@ -261,7 +262,8 @@ function headingMatches(line, syns, inflect) {
 // `### Processors`). Without that, deleting a `[PRIVACY]` heading let a core heading like "## Processors and queues"
 // satisfy "Processors & International Transfers" and doctor passed a section nobody wrote. The other synonyms are
 // unambiguous and keep the unmarked fallback anywhere (hand-written and PT/ES designs without markers, the reference
-// templates' "## Observability" / "## Section 1: Model Strategy").
+// templates' "## Observability" / "## Section 1: Model Strategy") — except inside ANOTHER track's section (1.21 review B5: an
+// unmarked heading whose nearest marked enclosing heading carries another marker belongs to that section).
 function extractSection(md, synonyms, marker, loose) {
   const syns = (Array.isArray(synonyms) ? synonyms : [synonyms]).map((s) => s.toLowerCase());
   const looseSet = new Set((loose || []).map((s) => s.toLowerCase()));
@@ -282,11 +284,33 @@ function extractSection(md, synonyms, marker, loose) {
     return false;
   };
   const MARKERS = markerTracks().map((t) => trackMarker(t)); // + the track packs' (1.15)
+  // 1.21 review B5 — the mirror of inTrackContext: the nearest enclosing heading that carries a marker carries ANOTHER track's — the
+  // heading is part of that track's section ("## [PRIVACY] Lawful Basis" → "### Data quality (LGPD art. 6, V)" never stands in for a
+  // deleted [DATA] Data Quality). Tried last (only on a heading whose name matches); every heading's context marker comes from ONE
+  // linear pass (a stack of the enclosing headings), on first use.
+  let ctxOf = null;
+  const inOtherTrackContext = (i) => {
+    if (!ctxOf) {
+      ctxOf = new Map();
+      const stack = [];
+      for (const h of heads) {
+        const lv = level(h);
+        while (stack.length && stack[stack.length - 1].lv >= lv) stack.pop();
+        const top = stack[stack.length - 1];
+        const ctx = top ? top.own || top.ctx : null;
+        ctxOf.set(h, ctx);
+        stack.push({ lv, own: MARKERS.find((x) => lines[h].includes(x)) || null, ctx });
+      }
+    }
+    const m = ctxOf.get(i);
+    return !!m && m !== marker;
+  };
   let start = -1;
   if (marker) start = heads.find((i) => lines[i].includes(marker) && matches(i));
   if (start == null || start === -1) {
     const other = marker ? MARKERS.filter((m) => m !== marker) : [];
-    start = heads.find((i) => (matches(i, strict) || (marker && looseSet.size && matches(i) && inTrackContext(i))) && !other.some((m) => lines[i].includes(m)));
+    start = heads.find((i) => (matches(i, strict) || (marker && looseSet.size && matches(i) && inTrackContext(i))) && !other.some((m) => lines[i].includes(m)) &&
+      !(marker && inOtherTrackContext(i)));
   }
   if (start == null || start === -1) return null;
   const end = heads.find((i) => i > start && level(i) <= level(start));
@@ -298,14 +322,130 @@ function extractSection(md, synonyms, marker, loose) {
 const RE_TODO_SENTINEL = /^[^\S\n\r\u2028\u2029]*>\s*\*\*TODO\*\*/m;
 const ROOT_CAUSE_SYN = ["root cause", "causa raiz", "causa raíz"];
 const REPRO_SYN = ["reproduction", "reprodução", "reproducao", "reproducción", "reproduccion"];
-function sectionState(design, sections, marker) {
+// A track's mandatory sections → [{ section, status }] (+ `tier` "core" | "extended" on a SIZED feature). Statuses: missing ·
+// unfilled (the `> **TODO**` sentinel is still there, or nothing was written — blank is not an answer) · template (1.21 F5:
+// nothing but the template's own guidance lines — deleting the sentinel and keeping the scaffold's bullet used to pass) ·
+// filled; on a sized feature (opts.size) also na (the section's own text is ONE "n/a — <reason of ≥ 4 words>" line) and
+// na-short (an n/a with a shorter reason, or none). The verdict is sectionVerdict's; opts.lang adds that language's template
+// lines (pt-BR's derived ones).
+function sectionState(design, sections, marker, opts = {}) {
   return sections.map((sec) => {
+    const out = (status) => (opts.size ? { section: sec.name, status, tier: sec.tier === "extended" ? "extended" : "core" } : { section: sec.name, status });
     const body = extractSection(design, sec.syn, marker, sec.loose);
-    if (body == null) return { section: sec.name, status: "missing" };
-    // Unfilled = the scaffold sentinel is still there, or nothing real was written (blank is not an answer).
-    if (RE_TODO_SENTINEL.test(body) || !stripHtmlComments(body).trim()) return { section: sec.name, status: "unfilled" };
-    return { section: sec.name, status: "filled" };
+    if (body == null) return out("missing");
+    if (RE_TODO_SENTINEL.test(body) || !stripHtmlComments(body).trim()) return out("unfilled");
+    const own = sectionOwnLines(body, opts.lang);
+    if (!own.length) return out("template");
+    if (opts.size) { const na = naAnswer(own); if (na) return out(na); }
+    return out("filled");
   });
+}
+// 1.21 F5 — the section's lines the USER wrote: visible (comments out), not blank, not a line of a track design block as the
+// scaffold writes it (the built-in tracks' in EN / PT / ES — pt-BR's too for a pt-BR feature — and this project's track packs'):
+// a key per line, whitespace folded, lower-cased, a list bullet or quote marker dropped. Exact lines only — a guidance line the
+// user edited is theirs. Fenced code is the user's too (1.21 review C2 — no track block holds a fence: a section answered by a
+// ```json schema, an OpenAPI ```yaml or a ```mermaid diagram read as "only the template's guidance"): its content lines count,
+// its fence lines don't. A pack's guidance line holding the feature's {{name}} / {{slug}} (the scaffold filled them in) is a
+// LINEAR wildcard (wildcardMatch, the project templates' rule — never a regex built from template text; 1.21 review C6).
+const sectionLineKey = (s) => String(s).replace(/^\s*(?:[-*+]|\d+[.)]|>)\s+/, "").replace(/\s+/g, " ").trim().toLowerCase();
+let SECTION_TEMPLATE_LINES = null; // process-wide: the built-in track blocks (EN / PT / ES)
+let SECTION_TEMPLATE_LINES_BR = null; // … their pt-BR twins, built on the first pt-BR feature
+const PACK_SECTION_LINES = new WeakMap(); // a call's pack registry → its packs' design-block lines (every language): { set, wild }
+const RE_SECTION_WILD_VAR = /\{\{\s*(?:name|slug)\s*\}\}/; // a key is lower-cased already
+const RE_SECTION_WILD_VAR_G = new RegExp(RE_SECTION_WILD_VAR.source, "g");
+function addSectionLines(set, text, wild) {
+  for (const l of stripFencedCode(stripHtmlComments(String(text || ""))).split(/\r?\n/)) {
+    if (!l.trim() || /^#{1,6}\s/.test(l) || RE_TODO_SENTINEL.test(l)) continue;
+    const k = sectionLineKey(l);
+    if (wild && RE_SECTION_WILD_VAR.test(k)) {
+      const segs = k.split(RE_SECTION_WILD_VAR_G);
+      if (segs.join("").replace(/\s+/g, "").length >= 3) wild.push(segs); // a line that is nothing but a variable matches nothing
+      continue;
+    }
+    set.add(k);
+  }
+}
+function sectionTemplateLines(lang) {
+  if (!SECTION_TEMPLATE_LINES) {
+    const set = new Set();
+    for (const l of i18n.BASE_LANGS) for (const tr of VALID_TRACKS) { try { addSectionLines(set, i18n.trackDesignBlock(tr, l)); } catch { /* a builder's trouble never breaks a gate */ } }
+    SECTION_TEMPLATE_LINES = set;
+  }
+  const sets = [SECTION_TEMPLATE_LINES];
+  if (lang === "pt-BR") {
+    if (!SECTION_TEMPLATE_LINES_BR) {
+      const set = new Set();
+      for (const tr of VALID_TRACKS) { try { addSectionLines(set, i18n.trackDesignBlock(tr, "pt-BR")); } catch { /* ignore */ } }
+      SECTION_TEMPLATE_LINES_BR = set;
+    }
+    sets.push(SECTION_TEMPLATE_LINES_BR);
+  }
+  const reg = packRegistry();
+  let wild = [];
+  if (reg.packs.length) {
+    let pk = PACK_SECTION_LINES.get(reg);
+    if (!pk) {
+      pk = { set: new Set(), wild: [] };
+      // rendered with no feature values: {{name}} / {{slug}} stay variables (packSubstBasic) and are read as wildcards
+      for (const p of reg.packs) for (const l of i18n.LANGS) { try { addSectionLines(pk.set, packDesignBlock(p, l, {}), pk.wild); } catch { /* ignore */ } }
+      PACK_SECTION_LINES.set(reg, pk);
+    }
+    sets.push(pk.set);
+    wild = pk.wild;
+  }
+  return { sets, wild };
+}
+function sectionOwnLines(body, lang) {
+  const st = { fence: null };
+  const prose = [], code = [];
+  for (const l of stripHtmlComments(body).split(/\r?\n/)) {
+    const f = fenceStep(st, l);
+    if (f === "open") continue; // a fence line is no content
+    if (f) { if (st.fence && l.trim()) code.push(l); continue; } // inside the fence (still open after the step) — its closer is no content
+    if (l.trim()) prose.push(l);
+  }
+  if (!prose.length) return code;
+  const { sets, wild } = sectionTemplateLines(lang);
+  return prose.filter((l) => { const k = sectionLineKey(l); return !sets.some((s) => s.has(k)) && !wild.some((w) => wildcardMatch(w, k)); }).concat(code);
+}
+// "n/a — <why it does not apply>" (EN / PT / ES; any emphasis around the n/a): the section's own text is that ONE line → "na"
+// when the reason holds at least NA_REASON_WORDS words, "na-short" when it holds fewer; anything else → null.
+const RE_NA_LEAD = /^\s*(?:[-*+]\s+|>\s*)?(?:\*\*|__|\*|_)?(?:n\/a|n\.a\.|not applicable|does not apply|n[ãa]o se aplica|n[ãa]o aplic[áa]vel|no (?:se )?aplica|no aplicable)(?:\*\*|__|\*|_)?(?![\p{L}\p{N}])/iu;
+const NA_REASON_WORDS = 4;
+function naAnswer(own) {
+  if (own.length !== 1) return null;
+  const m = own[0].match(RE_NA_LEAD);
+  if (!m) return null;
+  const words = own[0].slice(m[0].length).match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || [];
+  return words.length >= NA_REASON_WORDS ? "na" : "na-short";
+}
+// 1.21 F5 — the active marker tracks' mandatory sections as every gate reads them (doctor `<track>-sections`, the design
+// approval, the design save check, status, the roadmap) → [[track, marker, rows]]. On a SIZED feature a section two active tracks
+// both ask for (TRACK_OVERLAPS) that the design leaves out is `covered` (+ `by`: the headings that answer it) once one of the
+// covering sections is there — the sized scaffold writes only those. opts: { size, lang }.
+function trackSectionReport(design, tracks, opts = {}) {
+  const out = activeSectionTracks(tracks).map(([tr, secs, mark]) => [tr, mark, sectionState(design, secs, mark, opts)]);
+  if (!opts.size) return out;
+  const rowsOf = (t) => (out.find(([x]) => x === t) || [])[2] || [];
+  for (const o of TRACK_OVERLAPS) {
+    if (![o.drop[0], ...o.by.map(([t]) => t)].every((t) => tracks.includes(t))) continue; // both tracks on
+    const row = rowsOf(o.drop[0]).find((s) => s.section === o.drop[1]);
+    if (!row || row.status !== "missing") continue;
+    const by = o.by.filter(([t, n]) => rowsOf(t).some((s) => s.section === n && s.status !== "missing"));
+    if (by.length) Object.assign(row, { status: "covered", by: by.map(([t, n]) => trackMarker(t) + " " + n) });
+  }
+  return out;
+}
+// One section row's verdict → "pass" | "warn" | "fail". Size S: an EXTENDED-tier section may be absent (the scaffold leaves it
+// out). "template" fails a new approval — opts.approved (the design is approved already): a warn, never a fail on a phase signed
+// off before the stricter rule (1.21). na / covered answer the section; unfilled and na-short never do.
+function sectionVerdict(row, opts = {}) {
+  switch (row.status) {
+    case "filled": case "na": case "covered": return "pass";
+    case "missing": return opts.size === "s" && row.tier === "extended" ? "pass" : "fail";
+    case "template": return opts.approved ? "warn" : "fail";
+    default: return "fail";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -316,7 +456,7 @@ function sectionState(design, sections, marker) {
 // The list separator is UNAMBIGUOUS — `\s*(?:[,;/]\s*)?`, never `\s*[,;/]?\s*`: with the separator optional
 // between two `\s*`, every whitespace gap could split two ways and a failing match (`[US-1 US-2 … and more]`)
 // backtracked 2^k — 26 space-separated IDs froze the MCP server and pushed the hooks past their timeout.
-const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|SEC|PRIVACY|DIST|API|UI|OBS|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*(?:[,;/]\s*)?(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
+const RE_STABLE_BRACKET = /^(?:US\d+|P\d?|shared|SaaS|AI|SEC|PRIVACY|DIST|API|UI|OBS|DATA|x)$|^\s*(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+)(?:\s*(?:[,;/]\s*)?(?:US-\d+(?:\.AC-\d+)?|AC-\d+|T-\d+|SC-\d+|EC-\d+|NFR-\d+))*\s*$/i;
 const RE_REF_DEFINITION = /^\s{0,3}\[([^\]]+)\]:\s*\S/;
 // The core-only Signals answer scaffolds before 1.13 wrote in brackets (`- [none beyond core]`, PT/ES): the tool's own
 // final answer, never a slot — the classification.md of every core-only feature created by 1.12 still holds it.
@@ -467,7 +607,7 @@ function templateCorpus(langs) {
   // a larger set does (for three tracks this IS the full power set; it grows quadratically, not 2^n, as tracks are added).
   const combos = [[], ...OPTIONAL_TRACKS.map((t) => [t]), ...OPTIONAL_TRACKS.flatMap((t, i) => OPTIONAL_TRACKS.slice(i + 1).map((u) => [t, u])), OPTIONAL_TRACKS]
     .map((x) => ["core", ...x]);
-  const signals = { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"], sec: ["owasp"], privacy: ["gdpr"], dist: ["kafka"], api: ["openapi"], ui: ["wcag"], obs: ["slo"] };
+  const signals = { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"], sec: ["owasp"], privacy: ["gdpr"], dist: ["kafka"], api: ["openapi"], ui: ["wcag"], obs: ["slo"], data: ["etl"] };
   for (const l of langs || i18n.BASE_LANGS) { // the authored locales; pt-BR's slots come from pt's lines (templateSetsBr)
     const M = i18n.msg(l);
     for (const tracks of combos) {
@@ -482,6 +622,21 @@ function templateCorpus(langs) {
     }
     add(() => i18n.testPlan("x", l, VALID_TRACKS, ["US-1.AC-1"]));
     add(() => i18n.testPlan("x", l, ["core", "tdd"], [])); // requirements that define no AC yet: one generic row (Pa4)
+    // 1.21 F5 — the sized builders (s: one story, the merged weigh section; m / l: the trimmed core design) and the change's one
+    // file, the XS bugfix's tasks. Their slots differ from the unsized ones only in the core parts — the track blocks and criteria
+    // are the same texts — so core alone, core +tdd and every track render each of them.
+    for (const size of ["s", "m"]) {
+      for (const tracks of [["core"], ["core", "tdd"], VALID_TRACKS]) {
+        const a = { name: "x", tracks, label: trackLabel(tracks), slug: "x", summary: "", size };
+        add(() => i18n.requirements(a, l));
+        add(() => i18n.design(a, l));
+        add(() => i18n.tasks(a, l));
+        add(() => i18n.testPlan("x", l, tracks, undefined, size));
+        add(() => i18n.checklist({ ...a, sectionCounts: {} }, l));
+      }
+    }
+    add(() => i18n.change({ name: "x", summary: "" }, l));
+    add(() => i18n.bugTasks("x", l, "xs"));
     for (const tr of VALID_TRACKS) {
       add(() => i18n.trackDesignBlock(tr, l));
       add(() => M.tracks.taskBlock(tr, 1));
@@ -868,7 +1023,8 @@ function bugTemplateSlots() {
 module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirementAcIds, planIdText, clarificationMarkers,
   templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
   headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, extractSection,
-  RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
+  RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionLineKey, sectionOwnLines, RE_NA_LEAD, NA_REASON_WORDS, naAnswer,
+  trackSectionReport, sectionVerdict, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
   RE_LIST_CHECKBOX, placeholderKey, isGenericSlot, unknownSteeringStub, LEGACY_TEMPLATE_PLACEHOLDERS, templateCorpus,
   templateBracketKeys, templateSets, templateSetsBr, CORPUS_FILE, CORPUS_SOURCES, corpusSourcesHash, renderCorpusData,
   builtinCorpusSource, isTemplatePlaceholder, isCodeSlot, visibleLines, placeholderReport,

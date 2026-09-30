@@ -224,9 +224,10 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
     // fields strictly would refuse the plugin) and mcp/servers.json passes no ${user_config.*}; still no hooks key.
     const man = JSON.parse(cRead(path.join(root, ".claude-plugin", "plugin.json")));
     const srvEnv = JSON.parse(cRead(path.join(root, "mcp", "servers.json"))).mcpServers["spec-driven"].env;
-    ok(!("userConfig" in man) && !("hooks" in man) && Object.keys(srvEnv).sort().join() === "SPEC_MCP_PROMPTS,SPEC_PROJECT_DIR" &&
-      !/user_config|CLAUDE_PLUGIN_OPTION/.test(JSON.stringify(srvEnv)),
-      "1.16 C2: plugin.json declares no userConfig and no hooks key; mcp/servers.json passes only SPEC_PROJECT_DIR / SPEC_MCP_PROMPTS (got " +
+    // 1.21 F1b: + SPEC_MCP_APPROVAL_HOOK=on — in Claude Code the plugin's approval hook guards spec_approve (no elicitation there).
+    ok(!("userConfig" in man) && !("hooks" in man) && Object.keys(srvEnv).sort().join() === "SPEC_MCP_APPROVAL_HOOK,SPEC_MCP_PROMPTS,SPEC_PROJECT_DIR" &&
+      srvEnv.SPEC_MCP_APPROVAL_HOOK === "on" && !/user_config|CLAUDE_PLUGIN_OPTION/.test(JSON.stringify(srvEnv)),
+      "1.16 C2: plugin.json declares no userConfig and no hooks key; mcp/servers.json passes only SPEC_PROJECT_DIR / SPEC_MCP_PROMPTS / SPEC_MCP_APPROVAL_HOOK=on (got " +
       JSON.stringify([Object.keys(man), srvEnv]) + ")");
 
     // --- C3: MCP tool annotations and completion/complete ---

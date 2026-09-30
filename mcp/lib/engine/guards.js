@@ -19,14 +19,14 @@ let activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
-  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap;
+  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile;
 function __link(E) { ({ activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher, GUARD_CODE_EXT,
   guessLang, implementsRel, insideDirAlias, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
-  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap } = E); }
+  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile } = E); }
 
 // roadmap.json meta.guard — the opt-in guard mode read by hooks/guard-hook.js (PreToolUse): true, or "scope" (1.14 C1 — the
 // stricter level, guardLevel()).
@@ -149,6 +149,8 @@ const CLI_SWITCHES = new Set(["json", "run", "remove", "write", "md", "html", "b
   "print-config"]); // the CLI's BOOL_FLAGS ARE this list (print-config: 1.16 C1 — statusline --print-config)
 CLI_SWITCHES.add("revoke"); // 1.16 U2: approve <feature> <phase> --revoke (the approval hook reads it as a switch too)
 CLI_SWITCHES.add("gherkin"); // 1.16 E1: export [f] --gherkin (= spec_export {format: "gherkin"})
+CLI_SWITCHES.add("install").add("uninstall"); // 1.21 F1a: merge-state --install / --uninstall (the git merge driver's setup)
+CLI_SWITCHES.add("explain"); // 1.21 F2: classify "<text>" --explain (= spec_classify {explain: true})
 // Words that may come before the CLI's script in the same simple command (a launcher, an env assignment, an option, a timeout, a
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "pnpx", "npm", "pnpm", "yarn", "sudo", "doas", "env", "nohup",
@@ -706,7 +708,7 @@ function approvalCommand(a, cli) {
   const safe = (v, re) => (typeof v === "string" && re.test(v) ? v : null);
   const word = (v, ph) => safe(v, /^[\p{L}\p{N}_.-]{1,80}$/u) || ph;
   const name = (v) => { const s = safe(v, /^[\p{L}\p{N} _.@+,-]{1,120}$/u); return s ? (/\s/.test(s) ? '"' + s + '"' : s) : "<feature>"; };
-  const words = ["node", '"' + cli + '"'];
+  const words = [i18n.cliPrefix(cli)]; // 1.21 F3: `node "<cli>"`, quoted like every runnable CLI line (i18n/common.js cliQuote)
   if (a.kind === "remove") words.push("feature", "remove", name(a.feature), "--yes");
   else if (a.kind === "guard-down") {
     if (a.setting === "roadmap") return null;
@@ -741,8 +743,8 @@ function approvalCommand(a, cli) {
 // why (stable): off · no-payload · not-pre-tool-use · not-an-approval · approval. On an approval: `actions` [{kind: approve |
 // remove | guard-down, source: mcp | cli | shell, feature, phase, through, role, by, force, setting (guard-down: approvalGuard |
 // evidence | roles | check | stopCheck | guard | roadmap), from, to, name, removed, project}], `force`, `command` (what the human
-// runs, `!`-prefixed; null when there is none), `reason` (localized — opts.lang: the user reads it for ask, the agent for deny)
-// and, for deny, `userNote` (the line the user sees). opts.cli: the CLI path shown (default: this clone's cli/dev-spec.js);
+// runs, `!`-prefixed — opts.plain: without the `!`, for the MCP server; null when there is none), `reason` (localized — opts.lang:
+// the user reads it for ask, the agent for deny) and, for deny, `userNote` (the line the user sees). opts.cli: the CLI path shown (default: this clone's cli/dev-spec.js);
 // opts.meta: the project's roadmap.json meta (what a spec_init / `init` change is compared with — absent: unknown, fail closed).
 function approvalGuardDecision(payload, level, opts = {}) {
   const lvl = approvalGuardInput(level) || "off";
@@ -768,10 +770,15 @@ function approvalGuardDecision(payload, level, opts = {}) {
     name: show(a.name), removed: Array.isArray(a.removed) ? a.removed.map(show) : a.removed })));
   const text = [...new Set(list)].join("; ");
   const force = actions.some((a) => a.force);
-  const cli = typeof opts.cli === "string" && opts.cli ? opts.cli : toPosix(path.resolve(__dirname, "..", "..", "..", "cli", "dev-spec.js"));
+  const cli = typeof opts.cli === "string" && opts.cli ? opts.cli : i18n.DEV_SPEC_SCRIPT;
   const commands = [...new Set(actions.map((a) => approvalCommand(a, cli)).filter(Boolean))];
-  const command = commands.length ? "! " + commands.join(" && ") : null;
-  const res = { decision: lvl, why: "approval", level: lvl, tool, actions, force, command, reason: lvl === "deny" ? A.deny(text, command) : A.ask(text, force) };
+  // opts.plain (1.21 review A4 — the MCP server, for a client outside Claude Code): the command as a plain runnable line, without
+  // Claude Code's `!` prefix (a PowerShell or cmd.exe user can't run `! node …`), and a deny reason that never mentions it.
+  const plain = opts.plain === true;
+  const command = commands.length ? (plain ? "" : "! ") + commands.join(" && ") : null;
+  // summary (1.21 F1b): the actions as one localized line — what the MCP server's elicitation asks the user about.
+  const res = { decision: lvl, why: "approval", level: lvl, tool, actions, force, command, summary: text,
+    reason: lvl === "deny" ? (plain ? A.denyMcp(text, command) : A.deny(text, command)) : A.ask(text, force) };
   if (lvl === "deny") res.userNote = A.denyUser(text, command);
   return res;
 }
@@ -1012,7 +1019,7 @@ function stopCheck(projectDir, opts = {}) {
     // A spike has no project-check gate anywhere (spec_finish, doctor and next_action close it on its decision): never here either.
     const suite = state.kind !== "spike" && blocks.length && blocks.every((b) => b.done) ? suiteStatus(pdir, state, f.dir).missing : [];
     if (!vs.unverifiedDetail.length && !suite.length) { clean.push(f.slug); continue; }
-    features.push({ feature: f.slug, unverified: vs.unverifiedDetail, suite });
+    features.push({ feature: f.slug, unverified: vs.unverifiedDetail, suite, file: phaseFile("tasks", state.kind) }); // a change's tasks are in change.md (1.21 review C10)
   }
   if (!features.length) return res(false, clean.length ? "verified" : "no-recent", { claims: cl.claims, verifiedFeatures: clean });
   const S = i18n.msg(lng).stopGate;
@@ -1026,7 +1033,7 @@ function stopCheck(projectDir, opts = {}) {
     if (f.suite.length) lines.push(S.suiteLine(f.feature, suiteLabel(f.suite, lng)));
   }
   const firstTasks = features.find((f) => f.unverified.length);
-  if (firstTasks) lines.push(S.todoTasks(firstTasks.feature, firstTasks.unverified[0].number));
+  if (firstTasks) lines.push(S.todoTasks(firstTasks.feature, firstTasks.unverified[0].number, firstTasks.file));
   const firstSuite = features.find((f) => f.suite.length);
   if (firstSuite) lines.push(S.todoSuite(firstSuite.feature));
   lines.push(S.plainly);

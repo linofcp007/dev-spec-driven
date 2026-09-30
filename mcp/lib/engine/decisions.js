@@ -15,19 +15,21 @@ const { TRACE_INFO_FIELDS } = require("./trace.js"); // load time
 let activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
-  maybeRefreshRoadmap, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL, readIfExists, readJson,
+  maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
+  readIfExists, readJson,
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
-  shortTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
+  commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn;
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE;
 function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers,
   ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
-  maybeRefreshRoadmap, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL, readIfExists, readJson,
+  maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
+  readIfExists, readJson,
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
-  shortTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
+  commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn } = E); }
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) · the spike kind (investigate → decide)
@@ -188,8 +190,9 @@ function decisionSectionKeys(text) {
 // What an _Affects:_ reference may name in this feature (see the header comment).
 function decisionTargets(dir, kind) {
   const read = (x) => readIfExists(path.join(dir, x)) || "";
-  const req = read("requirements.md");
-  const files = kind === "spike" ? [SPIKE_FILE] : kind === "bugfix" ? ["bug.md", "design.md"] : ["design.md"];
+  const req = criteriaText(dir) || ""; // a change: its criteria without the task blocks (1.21 review C1)
+  // (1.21 verify V7: a change has no design — its own sections, change.md's Summary / Acceptance Criteria / Approach / Tasks)
+  const files = kind === "spike" ? [SPIKE_FILE] : kind === "bugfix" ? ["bug.md", "design.md"] : kind === "change" ? [CHANGE_FILE] : ["design.md"];
   const sections = new Map(); // key → { title, file }
   for (const file of files) {
     const lines = blankHtmlComments(read(file)).split(/\r?\n/);
@@ -322,7 +325,7 @@ function decide(projectDir, name, input) {
   const targets = decisionTargets(dir, kind);
   const resolved = inp.affects.map((r) => resolveAffect(r, targets));
   const unknown = resolved.filter((r) => !r.ok).map((r) => r.ref);
-  if (unknown.length) return { ok: false, unknownAffects: unknown, error: D.badAffects(unknown.join(", ")) };
+  if (unknown.length) return { ok: false, unknownAffects: unknown, error: (kind === "change" ? D.badAffectsChange : D.badAffects)(unknown.join(", ")) };
   const n = Math.max(0, ...log.map((e) => e.n)) + 1;
   const entry = { id: "D-" + n, title: inp.title, kind: inp.kind, at: new Date().toISOString(), affects: [...new Set(resolved.map((r) => r.ref))],
     supersedes: [...new Set(sup.map((x) => x.id))], context: inp.context, decision: inp.decision, consequences: inp.consequences };
@@ -609,6 +612,8 @@ function spikeDoctor(projectDir, f) {
   for (const c of decisionDoctorChecks(projectDir, slug, dir, st, "spike", lng)) add(c.id, c.status, c.detail);
   const wExp = waiverExpiredCheck(st.approvals, tracks, slug, lng); // 1.16 U3 (a forced execution sign-off)
   if (wExp) add(wExp.id, wExp.status, wExp.detail);
+  const mc = mergeConflictsCheck(projectDir, slug, st, lng); // 1.21 F1a: conflicts the merge driver left unresolved
+  if (mc) add(mc.id, mc.status, mc.detail);
   const fails = checks.filter((c) => c.status === "fail");
   const warns = checks.filter((c) => c.status === "warn");
   return { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), phase: detectPhase(dir, tracks), approvals: st.approvals || {}, pendingGates: [], forcedGates: [],
@@ -668,7 +673,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   const blockers = blocked.map((b) => b.detail);
   const text = s.text || "";
   const sec = (syn) => { const b = extractSection(text, syn); return b == null ? null : spikeFilled(b) ? spikeProse(b).trim() : null; };
-  const mergeTitle = `docs(${slug}): ${SP.kind}${s.outcome ? " " + s.outcome : ""} — ${shortTitle(s.question || slug)}`;
+  const mergeTitle = commitTitle(`docs(${slug}): ${SP.kind}${s.outcome ? " " + s.outcome : ""} — `, s.question || slug);
   const body = [SP.finish.prQuestion, s.question || slug, ""];
   const decision = sec(SPIKE_SYN.decision);
   if (decision) body.push(SP.finish.prDecision(s.outcome), decision, "");

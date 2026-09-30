@@ -19,7 +19,7 @@ no plan has (`inCodeNotInPlan`). Rows whose File column names only a non-code ar
 evidence. Commit `test(<feature>): scaffold failing tests …`. To keep the red run as evidence (doctor's `red-green`
 check warns about T-IDs made green with no recorded red run), plan a first task in `tasks.md` that names these T-IDs
 and runs them while still red — `_Expect: fail_` with their command as `_Verify:_` — and record its failing run
-before any implementation task (`dev-spec done <feature> <n> --run`) — `references/test-patterns.md`.
+before any implementation task (`node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run`) — `references/test-patterns.md`.
 
 **+ai:** Write the deterministic tests (validation, schema, rate limiting, logging, fallback, cost
 circuit breaker) AND implement the runnable eval harness; establish and record the baseline scores.

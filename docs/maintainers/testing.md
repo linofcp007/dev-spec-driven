@@ -11,7 +11,10 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   06 gates · 07 approvals · 08 tasks · 09 evidence · 10 guards and hooks · 11 Claude Code integration · 12 lifecycle ·
   13 imports · 14 templates and exports · 15 spec quality · 16 conventions and source guards · 17 docs and prose ·
   18 review regressions whose findings span several areas. `--list` prints every file with its one-line summary (the
-  file's first comment line).
+  file's first comment line). (1.21 F5: `06-gates-sizes.js` in both folders — the sizes, the change kind, the stricter
+  filled rule, the overlaps; its pinned sha1 is every no-size builder output of the pre-1.21 track combinations: update it
+  only when the no-size scaffold changes ON PURPOSE. A test that "fills" a track section answers each `> **TODO**` line with
+  a line of its own — deleting the sentinel and keeping the guidance bullet is the template, not an answer.)
 - **The harnesses.** `mcp/tests/harness.js`: ONE server per process (mcp/server.js over stdio, its default project a
   throwaway temp dir), the handshake, and the context every file's `run` receives, destructured in its signature
   (`exports.run = async ({ ok, rpc, S, tmp }) => { … }` — no parameter name a test could redeclare): `ok`, `rpc`,
@@ -85,7 +88,12 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   --allow-tools …` — the exact command is in evals/README.md). `mcp/test.js` checks every behavioural case is well-formed
   (runs, turns, a scaffold, ≥ 3 graders incl. a deterministic one, regexes compile, every MCP tool it names exists) and
   builds every fixture with the current engine (bash / Git Bash; skipped without bash) — fix a fixture there, not after
-  a paid run.
+  a paid run. A grader regex that failed a right answer in a paid run gets that answer as a fixture: 1.21 checks the
+  finish case's `local-options` pattern on both replies the 1.19.0 run recorded (`17-docs-evals.js`). The case front
+  matter has no `disallowed_tools` (CLI 2.1.282: `max_turns`, `timeout_seconds`, `model`, `allowed_tools`,
+  `artifact_publish`, `growthbook_overrides`, `append_system_prompt`, `env`) and `allowed_tools` only grants gated tools,
+  so `Agent` can't be taken away per case; the triggering cases keep `max_turns: 4` (a "max turns" run error after the
+  Skill fired is harmless — evals/README.md).
 - **Tests run on Windows AND Linux** (`npm run test:docker`): a `_Verify:_` a test writes must work under cmd.exe AND
   `/bin/sh` — quote it (`node -e "process.exit(0)"`; the bare `node -e process.exit(0)` is a sh syntax error that cmd.exe
   accepts); don't depend on a case-insensitive file system (assert the Linux counterpart where Windows/macOS fold case)

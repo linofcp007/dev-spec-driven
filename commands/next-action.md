@@ -33,7 +33,7 @@ Call the `spec_next_action` MCP tool (CLI `dev-spec next-action <feature>`, alia
    [{number, waitsOn}]: correct the `_Depends:_` markers (`spec_doctor` fails `task-deps`);
 5. **verify** — every task is ticked, but one is not verified (its latest run failed, or its runnable `_Verify:_`
    has only a note, stale or shared-number evidence): `/spec-finish` and the `execution` sign-off would refuse. The
-   recommendation names each task with its reason — re-run its `_Verify:_` with `dev-spec done <feature> <n> --run`
+   recommendation names each task with its reason — re-run its `_Verify:_` with `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run`
    (a failing run means fixing the code first; an `_Expect: fail_` task's proof is a FAILING run — its red test). No
    shell to run it? Ask the user to run it and paste the output — never tick or record a run nobody made;
 6. **finish** — every task done and verified → `/spec-finish` (**tasks** instead when no tasks exist yet). Once

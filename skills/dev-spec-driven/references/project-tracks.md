@@ -1,6 +1,6 @@
 # Project-defined tracks (track packs)
 
-Read on demand from `SKILL.md`. The built-in tracks are core, +tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui and +obs. A team that needs
+Read on demand from `SKILL.md`. The built-in tracks are core, +tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs and +data. A team that needs
 its own domain rigor (+a11y, +mobile, +dbmigration, +compliance…) defines it as a **track pack**: a folder in
 `.specs/tracks/<name>/`. A valid pack behaves like a built-in *marker* track (+sec, +privacy) everywhere — it is
 classified, scaffolded, gated, traced, briefed, exported and removed the same way. Manage packs with `/spec-tracks`
@@ -27,8 +27,8 @@ by `check` and ignored. `dev-spec tracks init a11y` scaffolds all of it, comment
 
 | Key | Rule |
 |---|---|
-| `name` | The folder name: `^[a-z][a-z0-9]{1,19}$`. Never a built-in track (core tdd saas ai sec privacy dist api ui obs), a word people type for one (`security`, `gdpr`, `test`…), one of `none all any track tracks pack packs list init check`, a Windows device name or an `Object.prototype` key. |
-| `marker` | `^[A-Z][A-Z0-9]{1,11}$` (`"A11Y"` or `"[A11Y]"`). The stable, **case-sensitive** token of the pack's headings — `[A11Y]`. Never a built-in marker (SaaS / AI / SEC / PRIVACY / DIST / API / UI / OBS), a story / parallel tag (`US1`, `P1`, `SHARED`), a generic slot (`TODO`, `TBD`, `FIXME`…) or an ID prefix (`AC1`, `T2`…); unique across packs — two packs with one marker: the first by name keeps it, the other is refused. |
+| `name` | The folder name: `^[a-z][a-z0-9]{1,19}$`. Never a built-in track (core tdd saas ai sec privacy dist api ui obs data), a word people type for one (`security`, `gdpr`, `test`…), one of `none all any track tracks pack packs list init check`, a Windows device name or an `Object.prototype` key. |
+| `marker` | `^[A-Z][A-Z0-9]{1,11}$` (`"A11Y"` or `"[A11Y]"`). The stable, **case-sensitive** token of the pack's headings — `[A11Y]`. Never a built-in marker (SaaS / AI / SEC / PRIVACY / DIST / API / UI / OBS / DATA), a story / parallel tag (`US1`, `P1`, `SHARED`), a generic slot (`TODO`, `TBD`, `FIXME`…) or an ID prefix (`AC1`, `T2`…); unique across packs — two packs with one marker: the first by name keeps it, the other is refused. |
 | `title` | `{ "en": "…", "pt"?: "…", "es"?: "…", "pt-BR"?: "…" }` (a plain string = its English). 2–80 characters, one line, no `[ ] < >` or backtick. Shown in the headings. |
 | `description` | Optional, one line, ≤ 300 characters (listed by `list`). |
 | `signals` | Optional `{ "strong"?: [...], "weak"?: [...], "context"?: [...] }` — classifier keywords, ≤ 50 per tier, 2–60 characters of letters / digits with inner spaces, `-`, `'`, `.`. |
@@ -120,6 +120,25 @@ A `core +tdd +a11y` feature then gets US-1.AC-5 / AC-6 under `#### [A11Y]`, thre
 their `> **TODO**` line, tasks 7–8 citing US-1.AC-5 / AC-6 and making T-06 / T-07 green, the two rows after the
 template's T-01…T-05, `- [ ] A11Y: axe-core …` in checklist.md, and `.specs/steering/accessibility.md`.
 
+## A complete pack to start from — +mobile
+
+The plugin ships a full, valid pack: **`examples/track-packs/mobile/`** (in the dev-spec-driven clone). Copy
+`examples/track-packs/mobile` to `.specs/tracks/mobile` in your project to start, then adapt it to your team:
+
+```
+cp -r <dev-spec-driven>/examples/track-packs/mobile .specs/tracks/mobile
+dev-spec tracks check                      # pass — 0 errors, 0 warnings
+dev-spec add-track <feature> mobile        # or name it when creating a feature: --tracks tdd,mobile
+```
+
+It holds everything a pack can: a commented `track.json` (marker `MOBILE`, titles in EN / PT / pt-BR / ES, strong / weak /
+context signals — `iOS` and `Android` case-sensitive —, five sections with EN / PT / ES names, synonyms and guidance:
+Offline & Sync · Platform Versions & Rollout · Device Capabilities & Permissions · Performance & Battery · Push
+Notifications, and the steering file `mobile.md`), the five fragments (five EARS criteria, a task block using `{{ac1}}…`
+and `{{t1}}…`, five test rows, checklist items, the steering stub) and `pt/` / `es/` folders with all five fragments —
+criteria, tasks, test rows, checklist and steering stub — in those languages (a pt-BR feature reads `pt/`). A `core +tdd +mobile` feature gets US-1.AC-5..9, the five `[MOBILE]` sections gating the
+design, the task block, the test rows T-06…T-10 and `.specs/steering/mobile.md`.
+
 ## How the engine treats a pack
 
 - **Classification (Phase 0).** `spec_classify` (with the project), `spec_create` without tracks and `spec_import`
@@ -167,6 +186,11 @@ template's T-01…T-05, `- [ ] A11Y: axe-core …` in checklist.md, and `.specs/
   — never `a11y` or `accessibility`: a team's accessibility pack (the example above) keeps its name. The same rule: such a pack from an earlier
   version is that feature's missing pack (doctor and `spec_upgrade` say "from before 1.19"), never the built-in track; rename
   it, or adopt the built-in one with `dev-spec add-track <feature> api` (or `ui`, `obs`).
+- **Names reserved since 1.21.** 1.21 adds the built-in `+data` track (data pipelines & data quality) and reserves `data` and its
+  words (`etl`, `elt`, `pipeline`, `pipelines`, `warehouse`, `datawarehouse`, `lakehouse`, `dbt`, `dataquality`, `dataeng`) and the
+  marker `DATA` — never `analytics`: a team's product-analytics pack (a tracking plan, event names) keeps its name. The same rule
+  as above: such a pack from an earlier version is that feature's missing pack ("from before 1.21"), never the built-in track;
+  rename it, or adopt the built-in one with `dev-spec add-track <feature> data`.
 
 ## check — stable codes
 

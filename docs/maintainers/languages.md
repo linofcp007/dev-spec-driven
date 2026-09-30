@@ -73,3 +73,22 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
   pre-commit lines all go through `i18n.msg(lang)`. Callers branch on stable fields — EARS `code` / `severity`,
   evidence `unverifiedReason` (and `spec_impact`'s task `evidence`), doctor check `id`, next_action `step` —
   never regex a `msg`.
+- **Runnable CLI lines (1.21 F3).** A plugin install puts no `dev-spec` on PATH (only `npm link` does), and the 1.19 eval
+  run showed agents relaying `dev-spec done <f> <n> --run` to users who couldn't run it. So every message that tells
+  someone to RUN the CLI writes `${DEV_SPEC} <command> …` (a quoted string: `" + DEV_SPEC + "`) — `DEV_SPEC` =
+  `node "<clone>/cli/dev-spec.js"` from `i18n/common.js` (resolved from its own place; forward slashes; `cliQuote()`:
+  double quotes, single quotes when the path holds `"` `$` `` ` `` `!` or a curly double quote, a `<placeholder>` when it
+  holds a single quote too — pasteable into bash AND PowerShell; `approvalCommand()` uses the same `cliPrefix()`). EN /
+  PT / ES carry the same keys; pt-BR's stage 0 holds `DEV_SPEC` whole (a folder named with a word the rules map would
+  be rewritten otherwise). The bare name stays where it NAMES the command (`observed.on`, the approval guard's
+  `on.ask` / `on.deny`, `gitLog.noGit`'s first half), in product-name uses (`dev-spec upgrade — …` headings, "dev-spec
+  guard:") and in text written into a COMMITTED file (every `autogen` marker, retro.md's `followUpsNote`, UPGRADE.md's
+  `intro`, decisions.md's `header`, a pack's `initJson`, the tracker CSV's `featureLine`); the writers of ROADMAP.md /
+  .html, SPECS.md, UPGRADE.md, retro.md and `.specs/exports/*` also pass their text through `portableCli()` (the
+  runnable line → `dev-spec`, HTML-escaped too), so no machine path is ever committed. `mcp/tests/03-languages.js`
+  sweeps every message of every language: a bare `dev-spec <command>` outside that list fails — the command list is read
+  from the CLI's own `case "<name>":` labels (1.21 review A2: a hand-written list missed `signals` and `merge-state`) and
+  each builder is called with several argument shapes (a list-mapping one is swept, not skipped); the driver's own stderr
+  lines (`dev-spec merge-state: <file>: …`, `mergeState.conflictHead` / `parseError`) are product-name uses. The MCP tool
+  descriptions and `initialize` instructions interpolate `spec.DEV_SPEC` the same way; the command files write
+  `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" …` where they hand the user a `--run` line.

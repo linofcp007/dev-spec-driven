@@ -20,6 +20,11 @@ and U+FEFF gotchas are in CLAUDE.md.
   written after): roadmap.json dependsOn, `_Supersedes: <old>/…_` markers in other features' requirements.md (active
   and archived; never one in a comment/fence), and archived features' `.state.json → archived` records. A broken
   archived state file that names the old slug refuses the rename.
+- **A change's requirements.md / tasks.md are its change.md (1.21 F5).** `readIfExists`, `existsCached`, `readContained`
+  and `writeFileAtomic` alias a missing `requirements.md` / `tasks.md` to the folder's `change.md` when that folder's
+  `.state.json` says `kind: "change"` (`changeAlias()`, files.js; `readRaw` / `existsRaw` are the unaliased readers). A raw
+  `fs.existsSync` / `fs.statSync` of those names does NOT alias — kind-aware code names the file through
+  `phaseFile("tasks", "change")`. Never create a `tasks.md` in a change folder (it would win over change.md).
 - **JSON state is read with `readJson()` and written atomically (`writeFileAtomic`)**. A
   `roadmap.json` / `.state.json` that exists but doesn't parse is an ERROR every mutator returns
   (`roadmapError()`, `state.invalid`) — never "repaired" into `{}` (that erased deps, backlog,
@@ -32,6 +37,59 @@ and U+FEFF gotchas are in CLAUDE.md.
   the error is thrown — the best-effort refreshes swallow that error, and used to leave a `<file>.<pid>.<ts>.tmp`
   in `.specs/` per call. On Windows an EPERM/EACCES/EBUSY rename is retried briefly (a scanner's lock). tasks.md
   ticks go through it too (a reader never sees a truncated tasks.md).
+- **Merging the spec state across branches (1.21 F1a) — git's merge driver.** Two branches that both approve, tick or record
+  evidence used to conflict in `.state.json` / `roadmap.json` (a text merge can't unite two JSON lists). `dev-spec merge-state
+  <base> <ours> <theirs> [<path>]` is git's `%O %A %B %P` driver: `mergeStateText()` (state.js, PURE — no file, no git) parses
+  the three texts, `mergeStateJson(base, ours, theirs, kind)` → `{kind, merged, conflicts}` merges, and the result is written to
+  `<ours>` in ours' own form (BOM, CRLF, final newline). The rules: a key only one side changed takes that side (a deletion too);
+  append-only lists (`approvalHistory`, `changes`, `unticks`) → the union by identity (`HISTORY_ID` phase/at/by/revoked/partial/role
+  · `CHANGE_ID` · `UNTICK_ID`; the same record with different fields — upgrade's seeded snapshot — gets both sides' fields),
+  chronological once theirs added one; `evidence[n]` / `finishChecks[name]` → the record with the latest run `at` (a tie is the same
+  run: its note and stale mark merged), histories merged, deduped, bounded by `EVIDENCE_HISTORY`; `ticks[n]` / `lastTickAt` → the
+  later; `finished` → the later (firstAt the earliest); `createdAt` → the earlier; `approvals[phase]` → the later approval unless
+  a revocation record (`revoked: true`, not `partial`) is later — **revocations win by time**; `signoffs[phase][role]` → the later,
+  dropped when a revocation or the phase's merged approval is no earlier; `lastApprovedPhase` follows the merged approvals (never its
+  own 3-way); `tracks` and every `dependsOn` / role list / milestone `features` → a 3-way SET merge; roadmap.json `features` (by
+  slug), `backlog` (by name, case-insensitive; notes joined with ` · `), `meta.milestones` (by name), `meta.checks` /
+  `meta.approvalRoles` (by key); `meta.specVersion` → the higher (`compareSemver`), `meta.changelogAt` → the later,
+  `meta.evidenceSince` → the earlier; a keyed entry one side deleted and the other changed → the changed one. **Anything else both
+  sides changed differently** (a meta scalar — `lang`, `approvalGuard` —, an unknown key, delete-vs-modify of a plain key) is a real
+  conflict: ours kept there, `{path, base?, ours?, theirs?}` reported (a missing side deleted the key), and written INTO the file as
+  a top-level `mergeConflicts` list — the file stays valid JSON, the driver exits 1 (git marks it conflicted, stderr lists each
+  path), and doctor fails `merge-conflicts` (`mergeConflictsCheck()`, feature + roadmap, both doctors) until someone picks the values
+  and deletes the list. An unparseable ours / theirs merges nothing (exit 1, ours untouched). `ROADMAP.md` / `.html` / `SPECS.md`
+  (`kind: "generated"`) keep ours when BOTH sides carry the AUTO-GENERATED marker (the next write regenerates them); a hand-written
+  one goes to `git merge-file`. `--install [--project]` (CLI only — the engine never calls git; MCP has no tool: git runs the
+  driver) writes the `.gitattributes` block (`mergeAttributes()`, pure, idempotent: a head comment + `MERGE_ATTRIBUTE_LINES`, the
+  file's other lines and EOL kept) in the project folder and this clone's git config `merge.dev-spec-state.name` / `.driver` =
+  `node '<clone>/cli/dev-spec.js' merge-state %O %A %B %P` (forward slashes, single-quoted: git runs it through sh); `--uninstall`
+  removes both (an emptied .gitattributes is deleted). Without `--install` in a clone, git falls back to its text merge (an
+  undefined driver name). **The sign-offs' drop rule runs on the 3-way RESULT** (`pruneSignoffs()`, 1.21 review A1): when only one
+  side changed `signoffs`, `mergeThree` hands that side back as it is, so the rule is applied after it too (a stale
+  `signoffs.<phase>.<role>` stayed next to the other side's later approval). **The driver never approves anything:** role
+  sign-offs of the same content made on two branches (tech on one, product on the other) merge into `signoffs[phase]` holding
+  EVERY required role while `approvals[phase]` stays absent — the driver can't read `meta.approvalRoles` (roadmap.json) and an
+  approval is a gate run, not a merge. The readers say it instead: `roleGateView()` marks the pending phase `signoffsComplete:
+  true` (every required role has a CURRENT sign-off — the content fingerprint — and no approval; the same happens when a role
+  is dropped from the config after the others signed), never as missing roles; doctor's approval-gates labels it and adds the
+  note (`governance.signoffsComplete`, `/approve <f> <phase> --role <a signed role>`), `nextGate.signoffsComplete`, next_action's
+  approve step (and the finished step for `execution`) recommends the re-sign (`governance.completeSignoffs`) with
+  `signoffsComplete: true` and no `missingRoles`. Any listed role signing again completes it (`recordRoleSignOff`). A re-merge
+  whose `mergeConflicts` list is still unresolved lists each conflict once (deduped by `mergeCanon`, 1.21 review A7).
+  **A stale driver path (1.21 review A3).** The git config names the CLI by its absolute path, and a plugin install lives in a
+  versioned folder (`plugins/cache/<marketplace>/dev-spec-driven/<version>/`): after an update the path is gone, git reports
+  CONFLICT (content), leaves ours without markers or a `mergeConflicts` list, doctor sees nothing and `git add` drops theirs.
+  `merge-state --check` (read-only: `git config --get merge.dev-spec-state.driver` + `.gitattributes`, `spec.mergeDriverStatus()`)
+  → `status` ok · none · not-installed · other · missing — exit 1 on the last three; `--check` is init's VALUE flag too
+  (`init --check name="cmd"`), so it is NOT in `CLI_SWITCHES`: main() turns a bare `merge-state --check` (its missing value) into
+  the switch. The SessionStart hook adds ONE line (`mergeState.hookLine`) when `.gitattributes` names the driver and the
+  configured one is `missing` / `other` — read as text: `repoGitConfigText()` (the nearest `.git`, a worktree's `.git` FILE →
+  gitdir → its `commondir` + `config.worktree`) and `gitConfigGet()` (git's own value syntax: quotes, escapes, comments,
+  continuation lines; the last definition wins) — no git process in a hook. teamNote / INSTALL.md / the tooling reference say
+  to re-run `merge-state --install` after each plugin update. **Known limits:** two branches that both approve the same phase write `.history/<phase>@<n>.md` under the
+  same name — different content is a plain add/add conflict (keep the one `approvals[phase]` names); `decisions.md` entries both
+  sides appended conflict as text (and may share a D-n); clock skew between machines decides "later"; the hook reads only the
+  repository's own config (a driver set in the global git config is `--check`'s alone).
 - **Feature mutators hold a cross-process lock** (`withFeatureLock` / `featureLocked` in the exports):
   `completeTask`, `approvePhase`, `appendTasks`, `addTrack` / `removeTrack`, `impactReport` with `reopen`,
   `finishFeature` with `write` or `evidence` (finishChecks), `decide`, `manageFeature`'s `flow`, `taskBrief` / `metrics` with `write` (a derived file written into the feature folder is a

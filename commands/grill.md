@@ -34,6 +34,13 @@ Steps:
    - **Business outcome** — how will we know, after release, that the feature achieved what it is for? Name a
      measurable Success Criterion (`SC-00n`) and where its number comes from — not "users are happy".
 
+   **One question bank — skip what an active track's design sections already own** (`spec_clarify`'s rule: it drops its
+   consistency nudge under +dist). +dist → atomicity, ACID / isolation, race conditions, the consistency model, delivery
+   and idempotency, dependency failure (its [DIST] sections ask them); +saas → volume and growth ([SaaS] Scale Design);
+   +api → idempotent creates and concurrent updates ([API] sections; with +dist, [DIST] Delivery & Idempotency). Name the
+   section that will answer it and move on. A failure path asked here becomes an IF…THEN criterion — the design's Error
+   Handling points back to those criteria instead of asking again.
+
    The answers become acceptance criteria (an IF…THEN per failure), NFRs with numbers and Success Criteria — and the
    input of the design's **Alternatives & Trade-offs** and **Risks** sections. (`spec_clarify` asks about consistency
    on its own when the spec names queues, events, concurrency or transactions and neither the requirements nor the

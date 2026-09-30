@@ -3,6 +3,118 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.21.0] — 2026-09-30
+
+Rigor sized to the change, and a spec that works in a team: a typo no longer carries a feature's ceremony, git merges the
+spec state, approvals can be put to the human over MCP, the classifier learns from your Phase 0 corrections, and +data
+joins the built-in tracks. 38 MCP tools, 54 commands, eleven built-in tracks (was ten).
+
+### Added — right-sized rigor
+- **Feature sizes** — `spec_create {size: xs|s|m|l}` / `create --size` (`spec_classify` suggests one: `suggestedSize`,
+  `sizeReason`, `sizeNote`). At **S** a feature scaffolds one story (a WHEN and an IF…THEN criterion plus its tracks'),
+  one core task and no classification.md; the core design sections merge into "Decisions, reuse & risks"; a track's
+  *extended* sections may be absent or one `n/a — <reason>` line (the table in `references/track-checklists.md`), and
+  `spec_clarify` asks no edge-case or NFR questions. **M** /
+  **L** keep the full chain. At XS / S next_action offers to approve the whole plan in one call (`approve --through`,
+  `fastForward`) — with +tdd or +ai it ends before Phase 4, which needs the failing tests or eval sets first.
+- **XS is a change** — `kind: "change"` (or size xs on a plain feature) writes ONE `change.md` holding its criteria and
+  tasks: two approvals (the plan and the execution sign-off), at most 3 criteria or tasks (doctor `change-scope`), no
+  tracks. Its criteria and its tasks are read apart, so traceability, EARS, the plan gate, the pre-commit and save hooks,
+  `spec_impact` (criteria by ID, tasks by number, `--reopen`), `spec_clarify` (only a change's own questions),
+  `spec_decide --affects` (a `change.md` section), approvals by role, exports, the matrix and release notes treat it as a
+  change. An XS bugfix skips the first two steps and keeps the root-cause gate.
+- **Overlapping track sections merge** on a sized feature — `[SaaS] Observability` is covered by +obs's Telemetry and
+  Alerting, `[SaaS] Performance Budget` by its SLIs & SLOs; the covered section reads `covered` (with `by`) and its
+  duplicate task or checklist item is dropped. Removing the covering track puts the covered sections back in design.md
+  (`restoredSections`).
+- Measured on 14 features of every size: slots −36%, tasks −29%, approvals −27%, calls −22% (XS 28 → 15 calls, S 85 → 40);
+  M and L lose ~10% of their slots. **A feature without a size scaffolds exactly as in 1.20**, and `spec_upgrade` never
+  assigns one.
+
+### Added — team collaboration
+- **Git merges the spec state** — `dev-spec merge-state --install` (once per clone, and again after each plugin update;
+  commit `.gitattributes`) makes git merge `.state.json` / `roadmap.json` by meaning: the approvals, ticks, evidence,
+  history, sign-offs, backlog, dependencies and milestones of both branches are united (revocations win by time). A real
+  conflict exits 1 and stays valid JSON (`mergeConflicts`); doctor fails `merge-conflicts` until it is resolved.
+  ROADMAP.md / SPECS.md keep ours. Role sign-offs completed across two branches are reported as such
+  (`signoffsComplete`: one role signs again to record the approval). `merge-state --check` — and one session-start line —
+  report a driver that points at an old or missing plugin folder.
+- **Human approvals over MCP elicitation** — with `approvalGuard` ask / deny, the MCP server asks the user through
+  `elicitation/create` before an agent's `spec_approve` (approve, revoke, fast-forward, force), `spec_feature` remove or a
+  `spec_init` that lowers a guard; only an explicit approve is recorded (`confirmed`); a decline, a cancel or no answer
+  within `DEV_SPEC_ELICIT_TIMEOUT_MS` (5 min) records nothing. Without elicitation, `deny` is refused (`humanRequired`)
+  with the plain command for the user to run. The Claude Code plugin keeps its hook (`SPEC_MCP_APPROVAL_HOOK=on`).
+
+### Added — classifier
+- A negation that governs a list reaches every item ("no payments or subscriptions", "sem pagamentos nem subscrições",
+  "sin pagos ni suscripciones", "we will not add X or Y"); a list ends at its closing "or" / "nem" / "ni", at "and" / "e" /
+  "y", at a contrast ("no X, just Y") and at a new clause. A negation excludes a track only when it certainly governs
+  the keyword — "no payments", "we don't use Kafka", "we will not add an LLM", "no need for Kafka", "we should not enable
+  feature flags", "não queremos usar LLM nem embeddings", "nunca usaremos Kafka"; anything else keeps the track for you to
+  confirm in Phase 0: a modal's or an auxiliary's verb ("the system must not lose payments nor duplicate invoices", "the
+  report does not show the LLM cost"), a condition ("if we don't add rate limiting…"), a relative clause, a hazard ("we
+  don't want duplicate payments"), "without" after a negated verb ("we won't ship without a canary release"), and an
+  access or entitlement rule — a role's, a user group's or a plan's ("guests can't use the checkout", "the free plan does
+  not include webhooks", "os editores não podem adicionar feature flags"): only the one designing — we, the system, or
+  no subject at all — excludes ("the service must not use Redis", "do not use Kafka"), and so does a part of what is
+  being built after a plain negation ("the importer does not need Kafka", "la versión 2 no añadirá suscripciones"),
+  while a modal or a plural keeps the track ("the importer can't use Kafka", "suppliers don't use the checkout"); a
+  negated verb whose object is data to protect — personal data, PII, a token, a secret, a key, a password, a card number
+  — keeps its track whatever the verb and the subject ("the email doesn't include personal data", "the URL does not
+  include the session token", "o email não inclui dados pessoais"); "cannot" reads like "can't".
+  +ui recognises confirm dialogs, toasts, snackbars,
+  field-level errors and mobile-friendly screens; +api reads "our API needs a v2" as contract work; a public API for a
+  screen is +api +ui.
+- **Project signal overrides** — `spec_create` learns from your Phase 0 corrections (a track you reject or add; an
+  override applies after two consistent corrections) into `.specs/classifier.json`; every override is shown (`overrides`,
+  `signalOverrides`, `spec_classify {explain}` / `classify --explain`) and managed with `spec_tracks {action: "signals"}` /
+  `dev-spec signals list|set|forget`. A project without the file classifies as the built-in tables say.
+
+### Added — +data track and an example +mobile pack
+- **+data** `[DATA]` (data pipelines and data quality) — Data Contracts & Schema Evolution · Data Quality · Pipeline
+  Idempotency & Backfills · Lineage & Ownership · Retention & Cost (the last two *extended*: optional at size S); criteria
+  US-1.AC-32..35; data-quality, re-run / backfill, freshness-SLA and schema-compatibility tests; `steering/data.md`; guide
+  `references/data-pipeline-patterns.md`. Doctor `data-sections`, status, finish checks, brief / matrix / Gherkin,
+  add_track, import, project templates, spec_tracks; EN / PT / ES / pt-BR. It turns on from data phrases (ETL / ELT
+  pipelines, a data warehouse or lakehouse, dbt, Airflow, CDC, lineage of data, freshness SLAs, CSV ingestion into a
+  table, a type-2 SCD) — never from everyday
+  words (a lakehouse to rent, parquet flooring, the Portuguese BI card, a horse's lineage, a stock warehouse); a table or
+  a query never backs an everyday word — "a BI dashboard over the orders table" is +data, "duplicate rows in the users
+  table" is not; BI phrases match at a sentence start or in title case ("Relatório de BI", "BI Dashboard").
+- **Example track pack +mobile** — `examples/track-packs/mobile/` (offline & sync, platform versions & rollout, device
+  permissions, performance & battery, push notifications; EN / PT / ES): copy it to `.specs/tracks/mobile/` to start.
+
+### Changed
+- **A track section holding only its template's guidance is not filled** — at every size: removing the `> **TODO**` line
+  alone no longer passes (a code block — a JSON schema, an OpenAPI snippet, a Mermaid diagram — is an answer). A new
+  approval is refused on it; a design approved before 1.21 only warns until its next approval.
+- The eval findings: SKILL.md 7,968 → ~5,000 words (the tool catalog, track checklists, workflows and reference index
+  moved to `references/`); every message prints a runnable `node "<clone>/cli/dev-spec.js"` line (committed files keep
+  `dev-spec`); `spec_create {kind: "bugfix"}` / `create` take `reproduction`, `rootCause`, `condition`, `behaviour`
+  (prefilled bug report; the root-cause gate is unchanged); the merge title is at most 72 characters, cut at a clause
+  boundary; the execution sign-off asks for an explicit yes — a green run is evidence, not the sign-off; with no shell the
+  agent asks the user, never a subagent.
+- Eleven built-in tracks, 33 built-in templates (+ `change.md`, `steering/data.md`).
+
+### Fixed
+- A track section's name written under ANOTHER track's section (e.g. "### Data quality" under "## [PRIVACY] …") no
+  longer counts as that track's deleted section.
+- Merge titles never cut an emoji in half.
+
+### Upgrade note — track packs with a now-reserved name or marker
+- Track packs named `data`, `etl`, `elt`, `pipeline`, `pipelines`, `warehouse`, `datawarehouse`, `lakehouse`, `dbt`,
+  `dataquality` or `dataeng`, or marked `DATA`, are now reserved (`analytics` and `mobile` stay free). A feature that used
+  one keeps it as a missing pack (doctor `track-pack-missing`, spec_upgrade "from before 1.21"); `dev-spec add-track
+  <feature> data` adopts the built-in track, or rename the pack and re-add it.
+
+### Tests
+- `node mcp/test.js` 1653 assertions (was 1544), `node cli/test-cli.js` 508 (was 480): sizes
+  and the change kind end to end (the no-size scaffolds pinned by hash in EN / PT / ES), the merge driver (six 3-way cases,
+  sign-offs, a real two-branch git merge, `--check`), elicitation over a fake MCP client (accept / decline / cancel /
+  error / timeout, force, batch), coordinated negation and signal overrides (a precision / recall assertion per track),
+  +data (133 EN / PT / ES texts, 100% / 100%) and the +mobile example pack, the eval fixes, and one regression per review
+  finding.
+
 ## [1.20.0] — 2026-09-30
 
 Easier to maintain and faster to start, with no behaviour change: the maintainer notes, the test suites and the track

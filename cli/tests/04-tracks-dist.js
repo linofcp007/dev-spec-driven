@@ -26,12 +26,12 @@ exports.run = ({ ok, run, tmp }) => {
   run(["approve", "publicar-eventos", "requirements", "--force", "--project", pd]);
   const appr = run(["approve", "publicar-eventos", "design", "--project", pd]);
   const des = path.join(pd, ".specs", "publicar-eventos", "design.md");
-  fs.writeFileSync(des, rd(des).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+  fs.writeFileSync(des, rd(des).split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
   const doc2 = run(["doctor", "publicar-eventos", "--project", pd]).out;
   const sj = JSON.parse(run(["status", "publicar-eventos", "--json", "--project", pd]).out);
   ok(doc.code === 1 && /✗ dist-sections — Modelo de Consistencia:sin rellenar/.test(doc.out) && appr.code === 1 && /dist-sections/.test(appr.out) &&
     /✓ dist-sections — las 5 rellenadas/.test(doc2) && sj.distSections.length === 5 && sj.distSections.every((s) => s.filled) && sj.secSections === null,
-    "1.17 D3 (CLI): doctor exits 1 with dist-sections failing and approve design is refused naming it; once the TODO lines are gone the check passes (--json: distSections) (got " + js([doc.out.split("\n").filter((l) => /dist-sections/.test(l)), appr.out.slice(0, 200)]) + ")");
+    "1.17 D3 (CLI): doctor exits 1 with dist-sections failing and approve design is refused naming it; once each TODO line is answered the check passes (--json: distSections) (got " + js([doc.out.split("\n").filter((l) => /dist-sections/.test(l)), appr.out.slice(0, 200)]) + ")");
   run(["create", "Plain", "core", "--lang", "en", "--project", pd]);
   const typo = run(["add-track", "plain", "distt", "--project", pd]);
   const add = run(["add-track", "plain", "+dist", "--project", pd]);
@@ -45,7 +45,7 @@ exports.run = ({ ok, run, tmp }) => {
   const pk = run(["tracks", "init", "dist", "--project", pd]);
   const help = run(["help"]).out;
   const usage = run(["add-track", "--project", pd]).out;
-  ok(trk.code === 0 && /^Tracks — 10 incluídos/.test(trk.out) && /  · dist +\[DIST\]  5 secção/.test(trk.out) && pk.code === 1 && /reservado/.test(pk.out) && // the project speaks PT (init --lang pt)
+  ok(trk.code === 0 && /^Tracks — 11 incluídos/.test(trk.out) && /  · dist +\[DIST\]  5 secção/.test(trk.out) && pk.code === 1 && /reservado/.test(pk.out) && // the project speaks PT (init --lang pt)
     /core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy\/\+dist/.test(help) && /<tdd\|saas\|ai\|sec\|privacy\|dist[|>]/.test(usage),
     "1.17 D5 (CLI): tracks lists dist [DIST] (5 sections) among the built-in tracks; tracks init dist is refused (reserved); help and the add-track usage name +dist (got " + js([trk.out.split("\n").slice(0, 9), pk.out]) + ")");
   const kiro = path.join(pd, ".kiro", "specs", "signup");

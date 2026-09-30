@@ -23,6 +23,7 @@ set determines which artifacts, design sections, and execution loop the feature 
 | **+api** | 5 mandatory `[API]` sections (API contract, versioning & compatibility, error model, pagination / idempotency / concurrency, rate limits & quotas), 4 criteria, contract tests + a breaking-change diff, `api.md` | other code depends on the API's contract — public, partner or internal: a versioned API, OpenAPI / GraphQL / gRPC, SDKs |
 | **+ui** | 5 mandatory `[UI]` sections (design-system usage, UI states, accessibility, responsiveness & i18n, UI performance budget), 4 criteria, accessibility + visual-regression tests, `ui.md` | a user-facing screen, component or flow: a design system, accessibility (WCAG), responsive layout, dark mode, a settings / admin page |
 | **+obs** | 5 mandatory `[OBS]` sections (SLIs & SLOs, telemetry, alerting & runbooks, rollout & rollback, health & capacity), 4 criteria, operability tests (an alert in a staged failure, a rollback drill, fault injection), `observability.md` | a service people depend on: SLOs, error budgets, alerting, on-call, runbooks, tracing, feature flags, a canary / progressive rollout |
+| **+data** | 5 mandatory `[DATA]` sections (data contracts & schema evolution, data quality, pipeline idempotency & backfills, lineage & ownership, retention & cost), 4 criteria, data-quality / re-run / backfill / schema-change tests, `data.md` | data that moves between stores on a schedule or a stream and whose quality the feature owns: ETL / ELT, a warehouse or a lake, dbt / Airflow / Spark jobs, backfills, lineage, freshness SLAs |
 
 `core` is always on. The others are added independently based on the signals below.
 
@@ -42,7 +43,7 @@ is a draft for the human, who confirms Phase 0.
   model" is no +ai hint, `security` in "row-level security" no +sec one. A phrase may count for two tracks when it names
   both concerns: "message queue" is strong for +dist and weak for +saas (a queue is a +saas scaling hint too).
 - **Generic** signals (app-level words — +dist: queue, retry, consumer / producer, subscriber, publish … event, worker;
-  +api: api, endpoint, route, request, pagination; +ui: screen, page, form, button, dialog, dashboard, menu, icon; +obs: metrics, logs, latency, p99, monitor, deploy) add to the score but never turn the track on alone: at least one strong
+  +api: api, endpoint, route, request, pagination; +ui: screen, page, form, button, dialog, dashboard, menu, icon; +obs: metrics, logs, latency, p99, monitor, deploy; +data: analytics, dataset, partition, transformation, a batch / nightly job, ingest, upsert, a data engineer) add to the score but never turn the track on alone: at least one strong
   or weak signal of that track must be there. "Print queue: … retry failed prints" stays *possible* (a note names the app-level words). Words of **one
   concept** count once: retry · backoff · jitter, consumer · producer · subscriber, dedupe · deduplicate.
 - Auth words (`authentication`, `authorization`, `RBAC`, `MFA`) are **strong for +tdd and weak for +sec**: "login with a
@@ -56,7 +57,57 @@ is a draft for the human, who confirms Phase 0.
   A +dist **hazard** (lost update, oversell, race condition, duplicate delivery, write skew, split brain) is written
   negated by nature — "concurrent updates never oversell" — so its negation is the requirement: it counts. So is a +api
   breaking change ("without breaking changes", "sem alterações incompatíveis", "sin cambios incompatibles") and a +obs outage
-  ("without downtime", "sem indisponibilidade").
+  ("without downtime", "sem indisponibilidade"), a +data duplicate row or stale data ("without duplicate rows").
+- **A negation reaches the whole list it opens** (1.21), for every track: "We will not add feature flags or canary
+  releases", *"Não vamos usar feature flags nem lançamento canário"*, *"No usaremos feature flags ni despliegue canario"*,
+  "without Kafka, RabbitMQ or SQS", "neither … nor" — each item is negated. It stops at "and" (often a new predicate: "without
+  downtime and roll back on errors"), at a contrast word ("no feature flags, just a canary release" keeps the canary release)
+  and at a comma no "or" closes ("Without feature flags, the canary release is done by hand"); a comma after the list's
+  closing "or" ends it too ("Without an LLM or embeddings, the checkout or a subscription page is the priority" keeps +tdd),
+  and a comma + an article joins only an item of the list's own track with no predicate after it ("Without an LLM, a vector
+  database or embeddings" is one list; "No LLM, the checkout or the subscription flow first" keeps +tdd).
+  **What a negation negates:** a negation EXCLUDES a keyword only when it certainly governs it — anything else keeps the
+  track (an extra track is a one-word removal in Phase 0; a missing one loses rigor). Certain: a nominal negator with only
+  articles, quantifiers or a modifier before the keyword ("no payments", "without real-time Kafka", *"sem Kafka"*, "Postgres,
+  not MongoDB nor Kafka") or a list it opened; an adoption verb (use / add / need / include / implement / integrate / deploy /
+  run / offer / provide / ship / adopt / involve / enable / activate / install / embed / bundle / expose, "necessary" —
+  *usar, adicionar, integrar, adotar, ativar, instalar, expor, precisar · usar, añadir, integrar, desplegar, activar, exponer,
+  necesitar, es necesario, hace falta*), whatever the modal ("must not use X or Y", "We should not enable feature flags yet",
+  "We must not expose GraphQL"), or a plan / an intention (will / do / going to, want / plan / intend — *vamos, iremos,
+  queremos, pretendemos, planeamos, pensamos*) before a noun: "We don't use Kafka", "We won't use Kafka", "This feature doesn't
+  need an LLM", "We will not add an LLM", "We do not plan to use Kafka", "We no longer use Kafka", "No need for Kafka",
+  *"Não queremos Kafka nem RabbitMQ", "Nunca / Jamás usaremos Kafka", "Não vamos integrar Kafka, RabbitMQ nem SQS"*. Kept: a
+  noun ends the negated phrase ("Without payments the checkout is useless" keeps +tdd); an auxiliary or a modal + any other
+  verb is the requirement about its object ("The report does not show the LLM cost", "The system must not lose payments nor
+  duplicate invoices", "The service must not leak personal data", *"Não pode perder pagamentos nem reembolsos", "No puede
+  perder pagos ni reembolsos"*, "a second write never overwrites the ledger", "We do not collect personal data" — +privacy
+  stays for you to confirm); a verb form or a wished verb ("without losing payments or refunds", "We don't want to lose
+  payments"); a hazard ("We don't want duplicate payments", *"Não queremos pagamentos duplicados"*); a people relative clause
+  ("The admin who doesn't have MFA must enable it"); a condition ("If we don't add rate limiting, the API will be abused",
+  *"Se não adicionarmos…", "Si no añadimos…"*, "…unless the admin asks"); a "without" inside a negated predicate ("We won't
+  ship without a canary release", "Nobody should access the admin API without SSO"); any negated verb whose object is data to
+  protect — secrets, keys, tokens, credentials, passwords, card numbers, personal data, PII or introspection — whatever the
+  verb and the subject ("The frontend must not embed OAuth client secrets", "The API must not expose GraphQL introspection",
+  "The email doesn't include personal data", *"O email não inclui dados pessoais"*, "The URL does not include the session
+  token"): not handling that data is the requirement. A preposition after another noun ends it too ("We
+  didn't add an LLM to the checkout" keeps +tdd). **Whose adoption:** a negated adoption verb excludes only when its subject
+  is the one designing — the first person ("We don't use Kafka", *"Não usamos Kafka", "No usaremos ningún LLM"*), the system
+  being built ("The service must not use Redis", "This feature does not require an LLM", *"O sistema não deve usar Redis"*)
+  or none ("Do not use Kafka", *"Não é necessário um LLM", "No se necesita un LLM"*). A role, a user group or a plan / tier /
+  account states an access or entitlement rule and keeps the track: "Guests can't (or cannot) use the checkout" +tdd, "Free
+  users may not use the LLM assistant" +ai, "Tenants on the free plan can't use webhooks" +saas, "The Starter plan doesn't
+  include the LLM assistant", "The free plan has no webhooks", *"Os editores não podem adicionar feature flags", "Las cuentas
+  de prueba no incluyen el asistente LLM"*. A subject that is neither keeps the track too — when in doubt, keep — except a
+  component of what is being built: a singular noun after the / this / our, *o / este / o nosso, el / este / nuestro* with a
+  plain negation ("The importer does not need Kafka", *"O agendador não usa Kafka", "El importador no necesita Kafka"*)
+  excludes; with can't / may not, *não pode, no puede*, or as a plural ("Suppliers don't use the checkout") it keeps.
+- **This project's own corrections** (1.21): when the human confirms Phase 0 with other tracks than suggested — `spec_create`
+  with `tracks` and the same description as `summary` — the words that drove the suggestion are recorded in
+  `.specs/classifier.json`. After **two consistent corrections** a word the team keeps rejecting for a track stops turning it on
+  in this project (`off`), and a word the team keeps adding a track for becomes a `weak` / `strong` signal there; an agreement
+  resets a pending correction, a contrary choice drops an applied one. `spec_classify` names every override that changed its
+  reading (`overrides` + a note) and `{explain: true}` lists every match and override; `dev-spec signals` / `spec_tracks
+  {action: "signals"}` lists, sets (applies at once) or forgets them. Without the file nothing changes.
 
 ---
 
@@ -77,8 +128,9 @@ is a draft for the human, who confirms Phase 0.
 3. **Present for approval** the mode, the active track set, the signals that triggered each, and the
    blast radius. If the user disagrees, adjust the track set before requirements.
 4. **After approval**, `spec_init {tracks, lang}` if steering is missing, then
-   `spec_create {name, tracks, lang}` once — it seeds `classification.md` (format below), where you
-   record those decisions.
+   `spec_create {name, tracks, summary, lang}` once — it seeds `classification.md` (format below), where you
+   record those decisions. Pass the description you classified as `summary`: when the chosen tracks differ from the
+   suggestion, the correction is recorded for this project (see "This project's own corrections" above).
 
 When unsure whether a track applies, **turn it on**. Over-investing rigor on a feature that turns
 out simple costs a little time; under-investing on a feature that turns out critical costs an
@@ -298,7 +350,9 @@ payment provider's OpenAPI spec", "their Admin API version", *"a API REST do Str
 organisation's acronym (*"la API pública del BCE"*, "the ECB's public API" — never a technical one: REST, CRM, SDK…) — or
 governed by a consumer verb ("call", "integrate with", "sync from", "through", "via", "fetch", "the Salesforce REST API";
 *integrar com, chamar, consultar · integrar con, llamar a, obtener*) counts as a generic word, unless the clause says the API
-is ours ("Expose our catalog to partners through a versioned REST API"). An API **key** is +sec's word, not a contract: "an
+is ours ("Expose our catalog to partners through a versioned REST API"). **Our API + a new version** (1.21): a bare "API"
+right after "our" (*nossa · nuestra*, ≤ 2 words between) in a sentence that names a version (v2, version 3, a new / major
+version, versioning) is strong — "Our webhooks API needs a v2 …". An API **key** is +sec's word, not a contract: "an
 API key management page" is a UI, "call the Stripe API" consumes someone else's contract — *possible +api* at most.
 
 Worked examples (what `spec_classify` answers):
@@ -331,15 +385,19 @@ Classifier signals — **strong:** design system, design tokens, component libra
 WCAG, a11y, screen reader, keyboard navigation / accessible / only, focus order / trap / indicator
 / management, colour / color contrast, contrast ratio, alt text, `ARIA`, aria-label, reduced motion, responsive layout /
 design, mobile-first, dark mode, Storybook, Figma, Core Web Vitals, `LCP`, visual regression, skeleton screen, empty state,
-right-to-left, a landing / settings / admin / management / profile / account page, an admin panel (*sistema de design,
+right-to-left, a landing / settings / admin / management / profile / account page, an admin panel, a confirm dialog, a
+confirmation modal, a modal dialog / window, a toast notification, a snackbar (1.21 — *diálogo de confirmação, janela modal,
+notificação toast · diálogo de confirmación, ventana modal, notificación toast*) (*sistema de design,
 leitor de ecrã / de tela, navegação por teclado, modo escuro, interface do utilizador, página de definições,
 painel de administração · sistema de diseño, lector de pantalla, modo oscuro, interfaz de usuario, página de
 ajustes, panel de administración*). **Weak:** accessibility (*acessibilidade · accesibilidad* — alone it may be a venue's
 wheelchair access; with a page, a form or WCAG it is UI), frontend, `UI` / `UX` (capitals, one concept — "translate the UI
 into Spanish" alone is no UI work), a UI framework written with its capital (`React`, `Vue`,
 `Angular`, `Svelte` — one concept), CSS / Tailwind, a modal, dropdown, tooltip, navbar, sidebar, toast, carousel, spinner,
-a picker, a confirm dialog, swipe, responsive, i18n / l10n / `RTL`, `CLS` / `INP`, a loading / error state, form validation,
-inline errors / validation, a wireframe / mockup. **Generic** (only beside a strong or weak one): screen, page, form (the
+a picker, a popup / banner, swipe, responsive, mobile-friendly (*adaptado ao telemóvel · adaptada al móvil*), i18n / l10n /
+`RTL`, `CLS` / `INP`, a loading / error state, form validation, inline errors / validation — errors next to each field
+(*junto a cada campo*) —, a wireframe / mockup; a widget a display verb shows or opens is strong ("Show a modal …", "display a
+tooltip", *"Mostrar um popup"*). **Generic** (only beside a strong or weak one): screen, page, form (the
 nouns — never "screening", "formed"), button, click, dialog, dashboard, menu, icon, widget, layout, theme (*ecrã, tela,
 página, formulário, botão, painel · pantalla, formulario, botón, tablero, cuadro de mando*). **Backend-only work is no UI
 work:** in a clause (up to `. ! ? ; :` — a short label before a colon belongs to what follows it) that names a handler
@@ -349,7 +407,8 @@ interface já existe"*) — but not when the backend word is negated ("Frontend 
 page", "The settings page redesign needs no API changes", *"Sin backend: nueva página de ajustes"*), when the page consumes
 it ("The landing page loads its testimonials from the CMS API"), when it sits in another clause ("Redesign the admin panel;
 the backend team will add the endpoints later") or when the text says "frontend only" (*apenas frontend · solo frontend*);
-"the frontend team" names a team, not UI work. An empty state in a sentence about a state machine is weak.
+"the frontend team" names a team, not UI work. A **public** API is never a page's backend (1.21): "Expose a public REST API
+for the mobile app's settings screen" is +api and +ui. An empty state in a sentence about a state machine is weak.
 A **dashboard** is +ui's generic word only — a sales dashboard is a product screen, never +obs; a monitoring / Grafana
 dashboard is +obs. `a11y` is a +ui signal, but never a reserved pack name: a team's accessibility pack keeps it.
 
@@ -424,6 +483,81 @@ Worked examples (what `spec_classify` answers):
 | Send price alerts to users when a product gets cheaper | `core`, *possible +obs* | alerts |
 | Canary Islands shipping rates | `core`, *possible +obs* | canary (weak — never a release alone) |
 
+## +data signals (turn on the data pipeline & data quality track)
+
+Turn on `+data` if **any** are true (see `data-pipeline-patterns.md`):
+
+| Signal | Example |
+|---|---|
+| Data moves between stores on a schedule or a stream | An ETL / ELT job, a data pipeline, an Airflow DAG, dbt models, a Spark job, ingestion into a warehouse / lake |
+| Consumers depend on the numbers | A data warehouse / mart, fact and dimension tables, BI reports fed by the pipeline, a freshness SLA |
+| The data's quality is the feature's job | Data-quality checks, quarantined rows, schema evolution / data contracts, lineage |
+| History has to be (re)computed | A backfill of past partitions, late-arriving data, slowly changing dimensions, idempotent re-runs |
+
+Classifier signals — **strong:** ETL, an ELT pipeline / job / tool / process ("ELT teachers" teach English), a data pipeline /
+ingestion pipeline / batch pipeline, a data warehouse / lake / lakehouse / mart, data quality, a data contract, data lineage, a data catalog, a data mesh, data / analytics engineering,
+schema evolution, a schema registry, schema drift, a backfill job, a historical backfill, a slowly changing dimension, a star
+/ snowflake schema, a fact / dimension table, dimensional modelling, OLAP, dbt models / tests / runs / jobs, an Airflow DAG,
+Apache Airflow / Spark / Iceberg / Hudi, PySpark, a Spark job, Dagster, Databricks, BigQuery, Amazon Redshift, a Snowflake
+warehouse / table, Delta Lake, Iceberg tables, Parquet files, Fivetran, Airbyte, data ingestion, data freshness, a freshness
+SLA, late-arriving data, an incremental load / model, a medallion architecture, data observability, a quarantine
+table (*pipeline de dados, armazém de dados, lago de dados, qualidade de dados, linhagem de dados, evolução do esquema,
+ingestão de dados, esquema em estrela, tabela de factos / fatos, carga incremental de dados · pipeline de datos, almacén de datos, lago
+de datos, calidad de datos, linaje de datos, evolución del esquema, ingesta de datos, tabla de hechos, datos que llegan
+tarde*). **Weak** (anchors): a backfill, a warehouse, a lakehouse, a freshness check, `Snowflake` / `Redshift` / `Airflow` (capitals — a snowflake icon, a
+galaxy's redshift, a vent's airflow are no signal), dbt, `SCD`, lineage, ingestion, change data capture / a CDC pipeline
+(also +dist's), Parquet / Avro, a streaming pipeline, batch processing, a data platform / product, data governance,
+business intelligence / a BI tool, dashboard or report / Power BI / Looker / Tableau / Metabase (one concept — `BI` alone is no
+signal: *o número do BI* is the Portuguese ID card), duplicate rows, stale data, a uniqueness check (*linhagem, ingestão,
+processamento em lote, governança de dados, carga incremental, ferramenta / relatório de BI · linaje, ingesta, procesamiento
+por lotes, informe de BI*). **Generic:** analytics, a dataset, a partition, a transformation, a batch / nightly job, ingest, upsert, a
+materialized view, a data / analytics engineer (a role names no pipeline work). **Context** (evidence beside a strong
+or weak +data signal, one concept): table, column, row, SQL, query, schema (*tabela, coluna, linhas · tabla, columna,
+filas*) — "A BI dashboard over the orders table", "Load the orders table into the warehouse every night", "Query the
+warehouse for monthly revenue" are +data; "migrate the users table" is not. A table, a column or a query is on every screen,
+so it never backs an anchor with an everyday sense — a lakehouse, a lineage, ingestion, a freshness check, `SCD`, duplicate
+rows, stale data: "a horse's lineage in a table", "SCD patient records in the patients table", "React Query never shows
+stale data" name no pipeline. The BI phrases match at a sentence start or in title case ("Relatório de BI", "BI Dashboard"
+— `BI` itself stays case-sensitive). **Hazards:** duplicate rows,
+stale data, schema drift ("without duplicate rows" states the concern).
+
+**Cues** (the words around a keyword): a warehouse in a sentence about the building (stock, inventory, shelves, picking,
+pallets, shipping, temperature, shifts…) is no signal — one about data (a table, a query, a load into, dbt, a pipeline,
+a schema, partitions) stays an anchor; a backfill in a schema migration ("add a currency column; backfill existing
+rows") is app-level, one about partitions, a pipeline, the warehouse or history an anchor; data moved into / out of
+`Snowflake` / `Redshift` ("into Snowflake", "from Redshift") is the product — strong; DBT therapy, an Airflow reading,
+a galaxy's Redshift are none. A lakehouse, a freshness check or a lineage in a sentence about data (tables, metrics,
+dashboards, a pipeline, the raw zone…) is strong — even beside an everyday word ("Load the bookkeeping entries into the
+lakehouse tables", "Add a freshness check to the grocery orders pipeline"), and so is ingestion of files / feeds / batches into
+a table or a lake ("Ingestion of CSV files into the orders table") and an SCD with its type ("SCD type 2 on the customers
+table"); otherwise the everyday senses are no signal — a lakehouse to rent, a kitchen's freshness check, a training plan's
+*carga incremental*, a horse's lineage, the ingestion of water or a medication, parquet flooring; then a lineage of reports or
+fields is strong ("Field-level lineage for the revenue report" — a horse's lineage in a report stays none). A
+warehouse's sentence about data never counts a table, a column or a query ("Show stock levels per warehouse in a table" is
+the building). Shared phrases: an ETL job / data pipeline is also +obs's technical target, a CDC pipeline
++dist's strong phrase, data retention +privacy's (a phrase may serve two tracks). `analytics` is never a reserved pack
+name — a team's product-analytics pack (a tracking plan) keeps it.
+
+Worked examples (what `spec_classify` answers):
+
+| Description | Result | Signals |
+|---|---|---|
+| Build an ETL pipeline that loads the orders from Postgres into BigQuery every night | `core +data` | etl, bigquery |
+| A nightly job that recomputes the loyalty points in the warehouse | `core +data` (weak-only) | warehouse, nightly job |
+| Backfill the last 90 days of the events table partitions | `core +data` (weak-only) | backfill, partition |
+| Stream changes from Postgres to the data warehouse with a CDC pipeline | `core +dist +data` | data warehouse, CDC pipeline |
+| *Verificações de qualidade de dados na ingestão: as linhas com chaves nulas ficam em quarentena* | `core +data` | qualidade de dados |
+| Migrate the orders table to add a currency column; backfill existing rows with EUR | `core +tdd`, *possible +data* | backfill (a migration's — app-level) |
+| Analytics events for the signup funnel | `core`, *possible +data* | analytics (generic only) |
+| Warehouse temperature monitoring: sensors report every minute | `core` | warehouse (the building — no signal) |
+| Export orders as CSV · Import a CSV of contacts · Migrate the users table | `core` | — |
+| Track the lineage of every dashboard metric back to its source tables | `core +data` | lineage (strong — about metrics), table |
+| Guests can book a lakehouse or a cabin for the weekend · ELT teachers assign reading exercises | `core` | — (the everyday senses) |
+| Show stock levels per warehouse in a table so pickers know which shelf to restock | `core`, *possible +ui* | picker — warehouse: the building, no signal |
+| Prevent duplicate rows in the users table when the signup form is double-submitted | `core`, *possible +ui / +data* | form, duplicate rows (a table backs no everyday anchor) |
+| A BI dashboard over the orders table · Load the orders table into the warehouse every night | `core +data` (weak-only; *possible +ui* for the dashboard) | BI dashboard / warehouse, table |
+| *Relatório de BI com backfill mensal* | `core +data` (weak-only) | relatório de BI, backfill |
+
 ---
 
 ## How tracks combine — what each artifact set looks like
@@ -446,10 +580,11 @@ Worked examples (what `spec_classify` answers):
 | `core +api` | design gains 5 `[API]` sections; `[API]` criteria US-1.AC-20..23; contract-first, error-model, idempotency / concurrency, compatibility-gate and contract-test tasks; `steering/api.md` |
 | `core +ui` | design gains 5 `[UI]` sections; `[UI]` criteria US-1.AC-24..27; design-system, UI-states, forms-and-keyboard, accessibility-check and responsiveness / performance tasks; `steering/ui.md` |
 | `core +obs` | design gains 5 `[OBS]` sections; `[OBS]` criteria US-1.AC-28..31; SLO / alert, telemetry (`_Emits metrics:_`), rollout, health-check and operability-test tasks; `steering/observability.md` |
+| `core +data` | design gains 5 `[DATA]` sections; `[DATA]` criteria US-1.AC-32..35; data-contract, data-quality, idempotent-load, backfill and lineage / retention tasks; `steering/data.md` |
 
 **Design sections are additive:** `+saas` adds its 5 mandatory sections, `+ai` its 10, `+sec` its 5, `+privacy`
-its 6, `+dist` its 5, `+api` its 5, `+ui` its 5 and `+obs` its 5, on top of the base design. A blank mandatory section is never acceptable — an honest "not needed because X" is.
-The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`, `[UI]`, `[OBS]`) are English in every language and case-sensitive.
+its 6, `+dist` its 5, `+api` its 5, `+ui` its 5, `+obs` its 5 and `+data` its 5, on top of the base design. A blank mandatory section is never acceptable — an honest "not needed because X" is.
+The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`, `[UI]`, `[OBS]`, `[DATA]`) are English in every language and case-sensitive.
 
 **Execution loop is chosen per task by track:**
 - Deterministic task on `+tdd` → red → green → refactor → `spec_complete_task {evidence}`.
@@ -461,7 +596,8 @@ The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`, 
   duplicate delivery, concurrent updates, a dependency down) green before "done"; `+api` → the contract tests and the
   breaking-change diff against the published contract green before "done"; `+ui` → the automated accessibility check, the
   manual keyboard / screen-reader pass and the performance budget before "done"; `+obs` → an alert fired in a staged
-  failure, a rollback drill and the health checks with a dependency down before "done".
+  failure, a rollback drill and the health checks with a dependency down before "done"; `+data` → the data-quality checks, a partition
+  re-run and a backfill rehearsal (the same rows as one run) before "done".
 
 ---
 
@@ -474,7 +610,7 @@ The section markers (`[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]`, `[DIST]`, `[API]`, 
 Spec | Vibe
 
 ## Active Tracks
-core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api] [+ui] [+obs]
+core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api] [+ui] [+obs] [+data]
 
 ## Signals
 - **+tdd:** [signal from table] — [why it applies] (omit section if track off)
@@ -486,6 +622,7 @@ core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api] [+ui] [+obs]
 - **+api:** [signal] — [why]
 - **+ui:** [signal] — [why]
 - **+obs:** [signal] — [why]
+- **+data:** [signal] — [why]
 
 ## Blast Radius
 [What breaks if this is wrong? Who is affected? Is it recoverable? How fast?]

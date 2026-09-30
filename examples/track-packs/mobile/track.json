@@ -1,0 +1,54 @@
+// Example track pack +mobile — a project-defined track (dev-spec 1.15+). Data only: nothing in this folder is run.
+// Start with it: copy this folder to your project's .specs/tracks/mobile/, adapt it to your team, then
+//   dev-spec tracks check                   (spec_tracks {action: "check"} — must say pass)
+//   dev-spec add-track <feature> mobile     (or name it when creating a feature: --tracks mobile)
+// Guide: references/project-tracks.md (the dev-spec-driven skill).
+{
+  // = the folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track or a word reserved for one.
+  "name": "mobile",
+  // The stable, case-sensitive marker of the design sections, criteria and task block: [MOBILE].
+  "marker": "MOBILE",
+  "title": { "en": "Mobile App", "pt": "Aplicação Móvel", "pt-BR": "Aplicativo Móvel", "es": "Aplicación Móvil" },
+  "description": "Native and cross-platform mobile apps: offline and sync, OS versions and store rollout, device permissions, performance and battery, push notifications.",
+  // Classifier keywords (matched as whole words, inflections too). One strong keyword turns +mobile on, two weak ones do; a
+  // context keyword only corroborates another. A keyword with capitals is matched case-sensitively (iOS, Android).
+  "signals": {
+    "strong": ["mobile app", "iOS app", "Android app", "react native", "flutter", "swiftui", "jetpack compose", "app store", "play store",
+      "google play", "testflight", "push notification", "offline mode", "offline-first",
+      "aplicação móvel", "app móvel", "aplicativo móvel", "notificação push", "notificações push", "modo offline",
+      "aplicación móvil", "app móvil", "notificación push", "notificaciones push", "modo sin conexión"],
+    "weak": ["iOS", "Android", "mobile", "tablet", "deep link", "biometric", "offline", "battery",
+      "telemóvel", "celular", "aplicativo", "bateria", "móvil", "batería"],
+    "context": ["device", "devices", "dispositivo", "dispositivos"]
+  },
+  // The mandatory design sections — each one a "## [MOBILE] <name>" heading with its > **TODO** line and this guidance.
+  "sections": [
+    { "name": { "en": "Offline & Sync", "pt": "Offline e Sincronização", "es": "Sin Conexión y Sincronización" },
+      "syn": ["offline support", "offline mode", "sync & conflicts", "modo offline", "sincronização", "modo sin conexión", "sincronización"],
+      "guidance": { "en": "What works offline, what is queued and replayed on reconnect, how a conflict between two devices resolves (last write wins, merge, ask the user) and what the user sees while it syncs.",
+        "pt": "O que funciona offline, o que fica em fila e é reenviado ao reconectar, como se resolve um conflito entre dois dispositivos (a última escrita ganha, fusão, perguntar ao utilizador) e o que se vê durante a sincronização.",
+        "es": "Qué funciona sin conexión, qué se encola y se reenvía al reconectar, cómo se resuelve un conflicto entre dos dispositivos (gana la última escritura, fusión, preguntar al usuario) y qué se ve mientras sincroniza." } },
+    { "name": { "en": "Platform Versions & Rollout", "pt": "Versões da Plataforma e Lançamento", "es": "Versiones de la Plataforma y Despliegue" },
+      "syn": ["os versions", "supported versions", "store rollout", "release & rollout", "versões suportadas", "versiones soportadas"],
+      "guidance": { "en": "The minimum iOS / Android versions and why · the store review lead time · the staged rollout (percentages) and its halt criteria · the forced / soft update policy and the API versions still served to the app versions in the wild.",
+        "pt": "As versões mínimas de iOS / Android e porquê · o tempo de revisão das lojas · o lançamento faseado (percentagens) e os critérios para o parar · a política de atualização obrigatória / sugerida e as versões da API ainda servidas às versões da app em uso.",
+        "es": "Las versiones mínimas de iOS / Android y por qué · el tiempo de revisión de las tiendas · el despliegue escalonado (porcentajes) y sus criterios de parada · la política de actualización obligatoria / sugerida y las versiones de la API que siguen sirviéndose a las versiones de la app en uso." } },
+    { "name": { "en": "Device Capabilities & Permissions", "pt": "Capacidades do Dispositivo e Permissões", "es": "Capacidades del Dispositivo y Permisos" },
+      "syn": ["device permissions", "permissions", "permissões", "permisos"],
+      "guidance": { "en": "Each permission (camera, location, notifications, contacts…): when it is asked, the rationale shown first, and what the feature does when it is denied or revoked later.",
+        "pt": "Cada permissão (câmara, localização, notificações, contactos…): quando é pedida, a justificação mostrada antes e o que a funcionalidade faz quando é recusada ou revogada mais tarde.",
+        "es": "Cada permiso (cámara, ubicación, notificaciones, contactos…): cuándo se pide, la justificación que se muestra antes y qué hace la función cuando se deniega o se revoca más tarde." } },
+    { "name": { "en": "Performance & Battery", "pt": "Desempenho e Bateria", "es": "Rendimiento y Batería" },
+      "syn": ["app performance", "battery usage", "desempenho da app", "rendimiento de la app"],
+      "guidance": { "en": "Cold start and screen transition targets on a low-end device · the memory ceiling · background work (what runs, how often) and its battery and data cost · the app size budget.",
+        "pt": "Metas de arranque a frio e de transição de ecrã num dispositivo de gama baixa · o teto de memória · o trabalho em segundo plano (o que corre, com que frequência) e o seu custo em bateria e dados · o orçamento de tamanho da app.",
+        "es": "Objetivos de arranque en frío y de transición de pantalla en un dispositivo de gama baja · el techo de memoria · el trabajo en segundo plano (qué se ejecuta, con qué frecuencia) y su coste en batería y datos · el presupuesto de tamaño de la app." } },
+    { "name": { "en": "Push Notifications", "pt": "Notificações Push", "es": "Notificaciones Push" },
+      "syn": ["notifications", "notificações", "notificaciones"],
+      "guidance": { "en": "Each notification: its trigger, audience and content (no personal data on the lock screen), the deep link it opens, opt-in / opt-out, rate limits, and what happens when a device token is no longer valid.",
+        "pt": "Cada notificação: o gatilho, o público e o conteúdo (sem dados pessoais no ecrã de bloqueio), a ligação profunda que abre, a adesão / saída, os limites de envio e o que acontece quando um token de dispositivo deixa de ser válido.",
+        "es": "Cada notificación: su disparador, su público y su contenido (sin datos personales en la pantalla de bloqueo), el enlace profundo que abre, la suscripción / baja, los límites de envío y qué pasa cuando un token de dispositivo deja de ser válido." } }
+  ],
+  // The steering file the track brings (.specs/steering/mobile.md — the team's mobile defaults), from steering.md.
+  "steering": "mobile.md"
+}

@@ -40,12 +40,12 @@ exports.run = ({ ok, run, tmp }) => {
     run(["approve", eslug, "requirements", "--force", "--project", pd]);
     const appr = run(["approve", eslug, "design", "--project", pd]);
     const des = path.join(pd, ".specs", eslug, "design.md");
-    fs.writeFileSync(des, rd(des).split(/\r?\n/).filter((l) => !/^\s*>\s*\*\*TODO\*\*/.test(l)).join("\n"));
+    fs.writeFileSync(des, rd(des).split(/\r?\n/).map((l) => (/^\s*>\s*\*\*TODO\*\*/.test(l) ? "Decided for this feature: the concrete answer written here." : l)).join("\n"));
     const doc2 = run(["doctor", eslug, "--project", pd]).out;
     const sj = JSON.parse(run(["status", eslug, "--json", "--project", pd]).out);
     ok(es.code === 0 && doc.code === 1 && X.docEs.test(doc.out) && appr.code === 1 && new RegExp(n0 + "-sections").test(appr.out) &&
       X.filledEs.test(doc2) && sj[X.statusKey].length === 5 && sj[X.statusKey].every((s) => s.filled) && sj.distSections === null,
-      `1.19 T3 (CLI): doctor exits 1 with ${n0}-sections failing (ES) and approve design is refused naming it; once the TODO lines are gone the check passes (--json: ${X.statusKey}) (got ` +
+      `1.19 T3 (CLI): doctor exits 1 with ${n0}-sections failing (ES) and approve design is refused naming it; once each TODO line is answered the check passes (--json: ${X.statusKey}) (got ` +
       js([doc.out.split("\n").filter((l) => l.includes(n0 + "-sections")), doc2.split("\n").filter((l) => l.includes(n0 + "-sections"))]) + ")");
     run(["create", "Plain " + n0, "core", "--lang", "en", "--project", pd]);
     const pslug = "plain-" + n0;

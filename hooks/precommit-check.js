@@ -8,6 +8,7 @@
  * tree) of spec files before a commit:
  *   - <any>/.specs/<feature>/requirements.md  → EARS lint (errors block the commit)
  *   - <any>/.specs/<feature>/tasks.md         → traceability check (phantom refs block)
+ *   - <any>/.specs/<feature>/change.md        → both (1.21 F5: a change holds its criteria and its tasks)
  * Nested `.specs/` folders (monorepos) are validated in place.
  *
  * Exit 0 = allow commit; exit 1 = block.
@@ -65,10 +66,12 @@ for (const f of files) {
   const lang = spec.featureLang(featureProject, feature);
   const PF = spec.msg(lang).precommit;
 
-  if (base === "requirements.md") {
+  // (1.21 F5: a change's change.md holds its criteria AND its tasks — both checks run on it)
+  if (base === "requirements.md" || base === "change.md") {
     const text = stagedContent(f);
     if (text == null) continue;
-    const r = spec.earsValidate(text, lang);
+    // 1.21 review C1: a change's criteria are its change.md WITHOUT the task blocks (a task line is never linted as one)
+    const r = spec.earsValidate(base === "change.md" ? spec.changeViews(text).criteria : text, lang);
     if (r.ok) {
       const errs = r.issues.filter((i) => i.severity === "error");
       if (errs.length) {
@@ -79,7 +82,7 @@ for (const f of files) {
         // Never "clean" while warnings or template placeholders remain (the PostToolUse hook's rule) — listed, not blocking.
         // Placeholders in the STAGED text, judged like the gates do (a removed track's criteria are inactive).
         const warns = r.issues.filter((i) => i.severity === "warn");
-        const phRep = spec.featurePlaceholders(featureProject, feature, "requirements.md", text);
+        const phRep = spec.featurePlaceholders(featureProject, feature, base, text);
         const ph = phRep ? phRep.items : spec.placeholderReport(text);
         if (warns.length || ph.length) {
           out.push(PF.earsWarnings(f, r.summary.criteriaDetected, warns.length, ph.length));
@@ -91,14 +94,14 @@ for (const f of files) {
     }
   }
 
-  if (base === "tasks.md") {
+  if (base === "tasks.md" || base === "change.md") {
     // Mirror the feature's STAGED spec files into a scratch project and trace that, so the check sees
     // exactly what is being committed (requirements/test-plan included, staged or not).
     scratch = scratch || fs.mkdtempSync(path.join(os.tmpdir(), "dev-spec-precommit-"));
     const mirror = path.join(scratch, String(files.indexOf(f)));
     const dir = path.join(mirror, ".specs", feature);
     fs.mkdirSync(dir, { recursive: true });
-    for (const name of ["requirements.md", "tasks.md", "test-plan.md", "design.md"]) {
+    for (const name of ["requirements.md", "tasks.md", "test-plan.md", "design.md", ...(base === "change.md" ? ["change.md", ".state.json"] : [])]) {
       const c = stagedContent(featureRel + "/" + name);
       if (c != null) fs.writeFileSync(path.join(dir, name), c, "utf8");
     }

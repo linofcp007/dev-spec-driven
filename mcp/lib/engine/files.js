@@ -63,6 +63,7 @@ function writeIfAbsent(file, content) {
 const RENAME_RETRY_MS = [5, 15, 40];
 const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
 function writeFileAtomic(file, content) {
+  if (!existsRaw(file)) { const a = changeAlias(file); if (a) file = a; } // 1.21 F5: a change's tasks.md / requirements.md is its change.md
   forgetCached(file);
   ensureDir(path.dirname(file));
   const tmp = file + "." + process.pid + "." + Date.now() + ".tmp";
@@ -507,9 +508,38 @@ function specsFileContainedNow(projectDir, file) {
 }
 // readIfExists for such a file: null when it is not contained (skipped, as if absent).
 function readContained(projectDir, file) {
-  return specsFileContained(projectDir, file) ? readIfExists(file) : null;
+  const f = (!existsRaw(file) && changeAlias(file)) || file; // 1.21 F5: a change's change.md is checked as itself
+  return specsFileContained(projectDir, f) ? readRaw(f) : null;
+}
+// 1.21 F5 — a CHANGE (kind "change", size xs) keeps its requirements AND its tasks in ONE file, change.md: every reader and
+// writer of a feature's requirements.md / tasks.md reaches it through this alias, so the engine's many readers of those two
+// files (EARS, trace, the tasks scanner, the evidence gate, finish, the roadmap, the exports, the hooks) work on it unchanged.
+// Only when the file itself is absent, its folder holds change.md and that folder's .state.json says kind "change" — a plain
+// feature is never aliased (its requirements.md exists; a missing one stays missing). → change.md's path | null.
+const CHANGE_FILE = "change.md";
+function changeAlias(file) {
+  const s = String(file);
+  const base = path.basename(s);
+  if (base !== "requirements.md" && base !== "tasks.md") return null;
+  const dir = path.dirname(s);
+  const ch = path.join(dir, CHANGE_FILE);
+  if (!existsRaw(ch)) return null;
+  const raw = readRaw(path.join(dir, ".state.json"));
+  if (raw == null || !raw.includes("change")) return null;
+  try {
+    const j = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
+    return j && typeof j === "object" && j.kind === "change" ? ch : null;
+  } catch {
+    return null;
+  }
 }
 function readIfExists(file) {
+  const text = readRaw(file);
+  if (text != null) return text;
+  const a = changeAlias(file);
+  return a ? readRaw(a) : null;
+}
+function readRaw(file) {
   const k = CTX.READ_CACHE ? readCacheKey(file) : null;
   if (k !== null && CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
   let text;
@@ -521,8 +551,12 @@ function readIfExists(file) {
   if (k !== null) CTX.READ_CACHE.set(k, text);
   return text;
 }
-// fs.existsSync, served from the same scope (the per-feature file probes of listFeatures / detectPhase / detectTracks).
+// fs.existsSync, served from the same scope (the per-feature file probes of listFeatures / detectPhase / detectTracks) — a
+// change's requirements.md / tasks.md exist as its change.md (changeAlias, 1.21 F5).
 function existsCached(p) {
+  return existsRaw(p) || !!changeAlias(p);
+}
+function existsRaw(p) {
   if (!CTX.READ_CACHE) return fs.existsSync(p);
   const k = EXISTS_KEY + readCacheKey(p);
   if (CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
@@ -694,6 +728,6 @@ module.exports = { resolveProjectDir, specsRoot, ensureDir, writeIfAbsent, RENAM
   featureBusyResult, withMoveLock, DIR_RENAME_RETRY_MS, renameDirSync, moveDirOrBusy, ROADMAP_LOCK_FILE,
   LOCK_IGNORE_LINES, ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel,
   shapeError, withReadCache, readCacheKey, EXISTS_KEY, DIR_KEY, CONTAINED_KEY, specsFileContained,
-  specsFileContainedNow, readContained, readIfExists, existsCached, readDirCached, forgetCached, globWalkReaches,
+  specsFileContainedNow, readContained, readIfExists, readRaw, existsCached, existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, globWalkReaches,
   invalidateReadCache, safeReaddir, withinRoot, isDirSafe, FOLD_CASE, toPosix, isInsideDir, realPathLoose, plainUnc,
   networkPathInside, insideDirAlias, isNetworkPath, __link };

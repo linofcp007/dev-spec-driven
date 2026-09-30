@@ -22,7 +22,7 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile, statePath, stripEnd, stripEnds,
   stripStart, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
-  useTemplateScopeOf, utcStamp, walkProject, withinRoot;
+  useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir;
 function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
   CODE_EXT, commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
   duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE,
@@ -33,7 +33,8 @@ function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atx
   retiredDecisions, safeReaddir, SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile,
   statePath, stripEnd, stripEnds, stripStart, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
   taskMarkerValues, taskProse, tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds,
-  trackLabel, trackMarker, unitIn, useTemplateScopeOf, utcStamp, walkProject, withinRoot } = E); }
+  trackLabel, trackMarker, unitIn, useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews,
+  isChangeDir } = E); }
 
 // ---------------------------------------------------------------------------
 // EARS linting
@@ -228,7 +229,7 @@ function criterionBlocks(text, opts = {}) {
 function earsFeature(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
-  const text = readIfExists(path.join(f.dir, "requirements.md"));
+  const text = criteriaText(f.dir); // a change: its change.md without the task blocks (1.21 review C1)
   const lng = featureLang(projectDir, f.slug);
   if (text == null) return { ok: false, error: i18n.msg(lng).err.requirementsMissing(f.slug) };
   return earsValidate(text, lng);
@@ -351,8 +352,10 @@ function traceCheck(projectDir, name, opts = {}) {
   if (!f.ok) return { ok: false, error: f.error };
   const dir = f.dir;
   // Strip HTML comments so example markers in template guidance don't count as real refs.
-  const rawReqs = readIfExists(path.join(dir, "requirements.md")) || "";
-  const rawTasks = readIfExists(path.join(dir, "tasks.md")) || "";
+  // 1.21 review C1: a change's change.md is read as two views — its criteria without the task blocks, its task blocks alone —
+  // or every task reference would count as a defined criterion and every criterion as covered by its own definition.
+  const rawReqs = criteriaText(dir) || "";
+  const rawTasks = tasksIdText(dir) || "";
   const rawPlan = readIfExists(path.join(dir, "test-plan.md")) || "";
   // `_Supersedes: other/US-1.AC-2_` names ANOTHER feature's AC — never one of this feature's (see supersedesTrace). An ID
   // that only appears in a fenced code block (an example) is not a required AC either (requirementAcIds).
@@ -462,8 +465,9 @@ function traceCheck(projectDir, name, opts = {}) {
   // no typos — traceGapLines names the change request and says to delete or update what cites them. Informational.
   const removedAt = new Map();
   const changes = stateFromFile(projectDir, statePath(dir)).changes;
+  const reqPhase = isChangeDir(dir) ? "tasks" : "requirements"; // 1.21 review C4: a change's criteria change with its plan (phase tasks)
   (Array.isArray(changes) ? changes : []).forEach((c, i) => {
-    if (isRecord(c) && c.phase === "requirements" && Array.isArray(c.removed)) for (const id of c.removed) if (typeof id === "string") removedAt.set(id, i + 1);
+    if (isRecord(c) && c.phase === reqPhase && Array.isArray(c.removed)) for (const id of c.removed) if (typeof id === "string") removedAt.set(id, i + 1);
   });
   result.removedAcs = [...new Set([...phantomAcsInTasks, ...(result.phantomAcsInTests || [])])].filter((id) => removedAt.has(id))
     .map((id) => ({ id, changeRequest: removedAt.get(id) }));
@@ -992,9 +996,13 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const lang = featureLang(projectDir, slug);
   const tracks = detectTracks(dir);
   const state = stateFromFile(projectDir, statePath(dir));
-  const kind = state.kind === "bugfix" || state.kind === "spike" ? state.kind : "feature";
+  const kind = state.kind === "bugfix" || state.kind === "spike" || state.kind === "change" ? state.kind : "feature";
   const read = (n) => readContained(projectDir, path.join(dir, n));
-  const reqRaw = read("requirements.md") || "";
+  // 1.21 review C1 / C5: a change's criteria are its change.md without the task blocks, and its plan approval (phase tasks)
+  // signed them off — there is no requirements approval.
+  const change = kind === "change";
+  const fullReq = read("requirements.md") || "";
+  const reqRaw = change ? changeViews(fullReq).criteria : fullReq;
   const reqs = activeDesign(reqRaw, tracks);
   const idx = requirementIndex(reqs);
 
@@ -1050,7 +1058,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     dsecs = designSections(read("bug.md") || "").map(byFile("bug.md")).concat(dsecs.map(byFile(PHASE_FILE.design)));
   }
   const dinfo = dsecs.map((s) => { const hay = s.title + "\n" + s.body; return { title: s.title, acs: extractAcIds(hay), sec: secondaryIds(hay) }; });
-  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs (1.15)
+  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs (1.15)
 
   // decisions.md — the current entries (a later entry's _Supersedes: D-n_ retires D-n).
   const decRaw = read(DECISIONS_FILE);
@@ -1072,19 +1080,23 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const supBy = opts.supBy || supersededByIndex(projectDir);
 
   // The requirements approval, and per row whether its text changed since (the snapshot), or only whether the file did.
-  const appr = isRecord(state.approvals) ? state.approvals.requirements : null;
+  const apPhase = change ? "tasks" : "requirements";
+  const appr = isRecord(state.approvals) ? state.approvals[apPhase] : null;
   let approval = null;
   let rowChanged = () => null;
   if (isRecord(appr)) {
     approval = { at: typeof appr.at === "string" ? appr.at : null, by: appr.by == null ? null : String(appr.by), forced: appr.forced === true };
     if (appr.forced === true && Array.isArray(appr.failing)) approval.failing = appr.failing.filter((x) => typeof x === "string");
-    const snap = latestSnapshot(dir, state, "requirements");
+    const snap = latestSnapshot(dir, state, apPhase);
     if (snap) {
-      const before = requirementIndex(snap.text);
-      Object.assign(approval, { baseline: "snapshot", snapshot: snap.rel, changed: textFingerprint(reqRaw, "requirements") !== textFingerprint(snap.text, "requirements") });
+      const snapReq = change ? changeViews(snap.text).criteria : snap.text;
+      const before = requirementIndex(snapReq);
+      // (a change: the views' blank lines stand for task lines — a task added or moved is no change of the criteria)
+      const cmp = (t) => (change ? t.split("\n").filter((l) => l.trim()).join("\n") : t);
+      Object.assign(approval, { baseline: "snapshot", snapshot: snap.rel, changed: textFingerprint(cmp(reqRaw), "requirements") !== textFingerprint(cmp(snapReq), "requirements") });
       rowChanged = (row) => { const o = before.get(row.id); return !o || normWs(o.text) !== normWs(row.raw); };
     } else if (appr.fingerprint) {
-      const changed = !fingerprintMatches(reqRaw, "requirements", appr.fingerprint);
+      const changed = !fingerprintMatches(change ? fullReq : reqRaw, apPhase, appr.fingerprint);
       Object.assign(approval, { baseline: "fingerprint-only", changed });
       rowChanged = () => (changed ? null : false); // THAT the file changed, not which criterion
     } else Object.assign(approval, { baseline: "none", changed: null });
@@ -1247,7 +1259,8 @@ function rtmMarkdown(mx, lang) {
   const code = (s) => "`" + s + "`";
   const lines = [italic(R.legend)];
   const a = mx.approval;
-  lines.push("", a ? R.approvedLine(utcStamp(a.at), a.by == null ? "—" : a.by, a.forced) : R.notApproved);
+  const plan = mx.kind === "change"; // 1.21 review C5: a change's criteria are signed off with its plan (change.md)
+  lines.push("", a ? (plan ? R.planApprovedLine : R.approvedLine)(utcStamp(a.at), a.by == null ? "—" : a.by, a.forced) : plan ? R.planNotApproved : R.notApproved);
   if (!mx.rows.length) return lines.concat(["", italic(R.none)]).join("\n");
   const cols = ["id", "requirement", "status", "design", "tasks", "tests", "decisions"].map((c) => R.cols[c]);
   lines.push("", `| ${cols.join(" | ")} |`, `|${cols.map(() => "---").join("|")}|`);
@@ -1256,7 +1269,7 @@ function rtmMarkdown(mx, lang) {
     if (r.supersededBy.length) notes.push((r.supersedePending ? R.toBeSupersededBy : R.supersededBy)(r.supersededBy.map(code).join(", ")));
     if (r.supersedes.length) notes.push(i18n.msg(lang).stakeholderExport.supersedes(r.supersedes.map(code).join(", ")));
     if (r.template) notes.push(R.template);
-    if (r.approval && r.approval.changed === true) notes.push(R.changedSince);
+    if (r.approval && r.approval.changed === true) notes.push(plan ? R.changedSincePlan : R.changedSince);
     const gaps = r.gaps.map((g) => R.gap[g === "no-coverage" && r.kind === "sc" ? "no-coverage-sc" : g] || g);
     const taskIcon = (t) => (!t.done ? "☐" : t.verified ? "✅" : "⚠");
     const cells = [

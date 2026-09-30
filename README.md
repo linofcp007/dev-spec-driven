@@ -45,6 +45,7 @@ feature and composes exactly the rigor it needs:
 | **+api** | API contracts: the contract file (OpenAPI / proto / GraphQL schema), versioning & compatibility (what is breaking, deprecation), problem+json errors with stable codes, pagination / idempotency / concurrency (Idempotency-Key, ETag / If-Match), rate limits & quotas |
 | **+ui** | User interfaces: design-system usage, the UI states every view needs (loading / empty / error / offline…), accessibility (WCAG 2.2 AA), responsiveness & i18n, a performance budget (Core Web Vitals) |
 | **+obs** | Observability & operability: SLIs & SLOs with error budgets and burn-rate alerts, telemetry (metrics, structured logs, traces), alerting & runbooks, rollout & rollback (feature flags, canary), health & capacity |
+| **+data** | Data pipelines & data quality: data contracts & schema evolution, data-quality checks (a bad row quarantined, never loaded), idempotent re-runs & backfills (late-arriving data), lineage & ownership (freshness SLAs), retention & cost |
 
 Tracks **combine**. A Stripe webhook in a multi-tenant SaaS that also summarizes invoices with an
 LLM is `core +tdd +saas +ai`; a signup form that stores personal data is `+privacy` (GDPR, RGPD and HIPAA
@@ -52,6 +53,13 @@ point there); an endpoint that writes a user to Postgres and publishes a `UserCr
 tweak is Vibe mode: no ceremony at all. A **Phase 0
 classifier** (the local `spec_classify` tool, multilingual) picks the track set; you approve it. The
 chosen tracks are stored with the feature, and a track can be added or turned off later.
+
+**Sizes (1.21) — the rigor follows the change.** Phase 0 also suggests a size (`spec_create {size}`): **xs** is a
+*change* — one `change.md` (summary, 1–3 EARS criteria, approach, tasks with `_Verify:_`) and two approvals; **s** is
+one story whose whole plan is approved in one call (with +tdd / +ai up to the test / eval plan — the failing tests
+come next, then the tasks), with each track's core sections only; **m / l** keep the full chain,
+with the sections two tracks both ask for written once. EARS, traceability, the evidence gate and the finish gate hold
+at every size; a design section counts as filled only with your own text. No size keeps the previous scaffold.
 
 ### The local MCP server (`spec-driven`) — 38 tools
 
@@ -140,7 +148,9 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   list each unverified task with a localized reason. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — a light spec for a defect: reproduce → **root cause with evidence** → failing
   regression test → fix → verify. `doctor` fails until the root cause is written, and the tasks after the
-  root-cause task can't be completed before that.
+  root-cause task can't be completed before that. What you already know goes in with the scaffold
+  (`spec_create {kind: "bugfix", reproduction, rootCause, condition, behaviour, includeBody}` / `--reproduction`,
+  `--root-cause`, `--condition`, `--behaviour`) — no read-back and rewrite of the four files.
 - **`/spec-finish`** — blocks on doctor failures, an artifact changed since its approval, placeholders
   anywhere in the chain, open or unverified tasks and pending gates; lists the checks to run fresh and
   builds a merge summary from the spec (ACs, tasks with their evidence, root cause/fix). Then merge
@@ -195,6 +205,11 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   `fileMatch` (with `fileMatchPattern: "src/api/**"`) or `manual`. `steering_scaffold` creates custom
   files such as `api-conventions.md`, and each task brief includes the files whose pattern matches the
   task's `_Implements:_` paths.
+- **Teams: git merges the spec state** — `dev-spec merge-state --install` (once per clone, and again after a plugin update — `--check` tells; commit the `.gitattributes`
+  it writes) makes git merge `.state.json` / `roadmap.json` semantically: two branches' approvals, ticks and evidence are
+  united instead of conflicting; a real conflict stays valid JSON (`mergeConflicts`) and doctor fails until it is resolved.
+- **Approvals in other MCP clients** — with `approvalGuard` ask / deny, a client that supports MCP elicitation asks its
+  user before `spec_approve` records anything (only an explicit approve counts); without it, `deny` is refused.
 
 ### Brownfield, import and metrics
 
@@ -216,6 +231,18 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   Test plans have a **Kind** column (`example` | `property`) with property-based testing guidance.
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
+
+### New in 1.21
+
+- **Rigor sized to the change** — Phase 0 suggests a size: **xs** is a *change* (one `change.md`, two approvals), **s** one
+  story whose plan is approved in one call with each track's core sections only, **m / l** the full chain with the sections
+  two tracks both ask for written once. A track section counts as filled only with your own text. No size = as before.
+- **Teams** — `dev-spec merge-state --install` lets git merge the spec state (approvals, ticks, evidence) of two branches;
+  MCP clients with elicitation ask their user before an approval is recorded.
+- **A classifier that learns** — a negation reaches a whole list ("no payments or subscriptions"), and your Phase 0
+  corrections become project overrides (`.specs/classifier.json`, `dev-spec signals`, `classify --explain`).
+- **+data** — data contracts & schema evolution, data quality, idempotent re-runs & backfills, lineage & ownership,
+  retention & cost; and an example `+mobile` track pack in `examples/track-packs/mobile`.
 
 ### New in 1.20
 
@@ -279,6 +306,8 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   criteria, `## [A11Y]` design sections, tasks and test rows, and doctor / the design approval refuse until its sections
   are filled. It is data only (nothing runs; links out of `.specs/` are ignored); a bad pack is reported by `check` and
   ignored. Guide: `skills/dev-spec-driven/references/project-tracks.md`.
+  An example to start from: `examples/track-packs/mobile` (+mobile — offline & sync, OS versions & store rollout, permissions,
+  performance & battery, push notifications; EN / PT / ES) — copy it to `.specs/tracks/mobile/` and run `dev-spec tracks check`.
 
 ### New in 1.14
 
@@ -414,18 +443,19 @@ New in 1.16: `/spec-statusline`, `/spec-milestone`.
 ### The `dev-spec` CLI
 
 The same engine from any terminal (`node cli/dev-spec.js <command>`, or `dev-spec` on PATH); `--json`
-prints the raw result, and `help` lists every flag:
+prints the raw result, and `help` lists every flag. A plugin install puts no `dev-spec` on PATH, so every message that tells you to run the CLI prints the runnable line,
+`node "<clone>/cli/dev-spec.js" …` with the path resolved (committed files such as `ROADMAP.md` keep `dev-spec`):
 
 ```text
-classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
+classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
-create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts · statusline [--print-config]
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check]
 ```
 
 ### Why no GitHub Actions
@@ -471,6 +501,7 @@ funcionalidade e compõe exatamente o rigor necessário:
 | **+api** | Contratos de API: o ficheiro do contrato (OpenAPI / proto / esquema GraphQL), versionamento e compatibilidade (o que é incompatível, descontinuação), erros problem+json com códigos estáveis, paginação / idempotência / concorrência (Idempotency-Key, ETag / If-Match), limites de taxa e quotas |
 | **+ui** | Interfaces: uso do design system, os estados de cada vista (a carregar / vazio / erro / offline…), acessibilidade (WCAG 2.2 AA), design responsivo e i18n, um orçamento de desempenho (Core Web Vitals) |
 | **+obs** | Observabilidade e operabilidade: SLIs e SLOs com orçamento de erro e alertas por taxa de consumo, telemetria (métricas, logs estruturados, traces), alertas e runbooks, lançamento e reversão (feature flags, canário), saúde e capacidade |
+| **+data** | Pipelines e qualidade de dados: contratos de dados e evolução do esquema, verificações de qualidade (uma linha errada vai para quarentena, nunca é carregada), reexecuções idempotentes e backfills (dados que chegam atrasados), linhagem e responsáveis (SLAs de atualidade), retenção e custo |
 
 Os tracks **combinam-se**. Um webhook do Stripe num SaaS multi-inquilino que também resume faturas
 com um LLM é `core +tdd +saas +ai`; um formulário de registo que guarda dados pessoais é `+privacy` (o RGPD, o GDPR e
@@ -479,6 +510,14 @@ a HIPAA apontam para aí); um endpoint que grava um utilizador no Postgres e pub
 **classificador de Fase 0** (a ferramenta local `spec_classify`, multilíngue) escolhe os tracks; tu
 aprovas. Os tracks escolhidos ficam guardados com a funcionalidade, e é possível acrescentar ou desligar
 um track mais tarde.
+
+**Tamanhos (1.21) — o rigor acompanha a alteração.** A Fase 0 também sugere um tamanho (`spec_create {size}`): **xs** é
+uma *alteração* — um só `change.md` (resumo, 1–3 critérios EARS, abordagem, tarefas com `_Verify:_`) e duas aprovações;
+**s** é uma história cujo plano inteiro é aprovado numa só chamada (com +tdd / +ai até ao plano de testes / de avaliação —
+a seguir vêm os testes que falham e depois as tarefas), só com as secções core de cada track; **m / l**
+mantêm a cadeia completa, com as secções que dois tracks pedem escritas uma só vez. EARS, rastreabilidade, o gate de
+evidência e o de fecho valem em todos os tamanhos; uma secção de design só conta como preenchida com texto próprio. Sem
+tamanho, fica o scaffold anterior.
 
 ### O servidor MCP local (`spec-driven`) — 38 ferramentas
 
@@ -568,7 +607,9 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — uma spec leve para um defeito: reproduzir → **causa raiz com evidência** → teste de
   regressão a falhar → correção → verificação. O `doctor` falha até a causa raiz estar escrita, e as tarefas
-  depois da tarefa da causa raiz não podem ser concluídas antes disso.
+  depois da tarefa da causa raiz não podem ser concluídas antes disso. O que já sabes entra com o scaffold
+  (`spec_create {kind: "bugfix", reproduction, rootCause, condition, behaviour, includeBody}` / `--reproduction`,
+  `--root-cause`, `--condition`, `--behaviour`) — sem reler e reescrever os quatro ficheiros.
 - **`/spec-finish`** — bloqueia com falhas do doctor, um artefacto alterado depois da aprovação, placeholders
   em qualquer ponto da cadeia, tarefas abertas ou por verificar e gates pendentes; lista as verificações a
   correr de novo e constrói um resumo de merge a partir da spec. Depois fazes o merge localmente ou manténs o
@@ -624,6 +665,13 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   `inclusion: always`, `fileMatch` (com `fileMatchPattern: "src/api/**"`) ou `manual`. O `steering_scaffold`
   cria ficheiros personalizados como `api-conventions.md`, e cada brief de tarefa inclui os ficheiros cujo
   padrão corresponde aos caminhos `_Implements:_` da tarefa.
+- **Equipas: o git combina o estado da spec** — `dev-spec merge-state --install` (uma vez por clone, e de novo após uma atualização do plugin — `--check` diz; faz commit do
+  `.gitattributes` que escreve) faz o git combinar `.state.json` / `roadmap.json` pelo significado: as aprovações, tarefas
+  concluídas e evidência de dois ramos juntam-se em vez de entrar em conflito; um conflito real fica em JSON válido
+  (`mergeConflicts`) e o doctor falha até ser resolvido.
+- **Aprovações noutros clientes MCP** — com `approvalGuard` ask / deny, um cliente que suporte elicitation do MCP
+  pergunta ao utilizador antes de o `spec_approve` registar alguma coisa (só conta uma aprovação explícita); sem isso,
+  `deny` é recusado.
 
 ### Brownfield, importação e métricas
 
@@ -647,6 +695,19 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabalho, aprovações forçadas, pedidos de
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
+
+### Novidades da 1.21
+
+- **Rigor à medida da alteração** — a Fase 0 sugere um tamanho: **xs** é uma *alteração* (um `change.md`, duas
+  aprovações), **s** uma história cujo plano se aprova numa só chamada, só com as secções essenciais de cada track, **m / l**
+  a cadeia completa, com as secções que dois tracks pedem escritas uma vez. Uma secção de track só conta como preenchida com
+  texto seu. Sem tamanho = como antes.
+- **Equipas** — `dev-spec merge-state --install` deixa o git juntar o estado da spec (aprovações, tarefas, evidência) de dois
+  branches; os clientes MCP com elicitation perguntam ao utilizador antes de registar uma aprovação.
+- **Um classificador que aprende** — uma negação alcança uma lista inteira ("sem pagamentos nem subscrições") e as suas
+  correções da Fase 0 tornam-se ajustes do projeto (`.specs/classifier.json`, `dev-spec signals`, `classify --explain`).
+- **+data** — contratos de dados e evolução do esquema, qualidade dos dados, reprocessamentos idempotentes e backfills,
+  linhagem e responsáveis, retenção e custo; e um track pack de exemplo `+mobile` em `examples/track-packs/mobile`.
 
 ### Novidades da 1.20
 
@@ -717,6 +778,8 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   secções `## [A11Y]` do design, as tarefas e as linhas de teste, e o doctor / a aprovação do design recusam até as
   secções estarem preenchidas. São só dados (nada é executado; ligações para fora de `.specs/` são ignoradas); um pack
   inválido é reportado pelo `check` e ignorado. Guia: `skills/dev-spec-driven/references/project-tracks.md`.
+  Um exemplo para começar: `examples/track-packs/mobile` (+mobile — offline e sincronização, versões e lançamento nas lojas,
+  permissões, desempenho e bateria, notificações push; EN / PT / ES) — copie-o para `.specs/tracks/mobile/` e corra `dev-spec tracks check`.
 
 ### Novidades da 1.14
 
@@ -861,18 +924,19 @@ Novos na 1.16: `/spec-statusline`, `/spec-milestone`.
 ### A CLI `dev-spec`
 
 O mesmo motor em qualquer terminal (`node cli/dev-spec.js <comando>`, ou `dev-spec` no PATH); `--json`
-mostra o resultado em bruto e `help` lista todas as opções:
+mostra o resultado em bruto e `help` lista todas as opções. Uma instalação como plugin não põe `dev-spec` no PATH, por isso cada mensagem que manda correr a CLI mostra a linha
+executável, `node "<clone>/cli/dev-spec.js" …` com o caminho resolvido (ficheiros versionados como o `ROADMAP.md` mantêm `dev-spec`):
 
 ```text
-classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
+classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
-create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts · statusline [--print-config]
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check]
 ```
 
 ### Porque não há GitHub Actions
@@ -918,6 +982,7 @@ compone exactamente el rigor necesario:
 | **+api** | Contratos de API: el fichero del contrato (OpenAPI / proto / esquema GraphQL), versionado y compatibilidad (qué es incompatible, obsolescencia), errores problem+json con códigos estables, paginación / idempotencia / concurrencia (Idempotency-Key, ETag / If-Match), límites de tasa y cuotas |
 | **+ui** | Interfaces: uso del design system, los estados de cada vista (cargando / vacío / error / sin conexión…), accesibilidad (WCAG 2.2 AA), diseño adaptable e i18n, un presupuesto de rendimiento (Core Web Vitals) |
 | **+obs** | Observabilidad y operabilidad: SLIs y SLOs con presupuesto de errores y alertas por tasa de consumo, telemetría (métricas, logs estructurados, trazas), alertas y runbooks, despliegue y reversión (feature flags, canario), salud y capacidad |
+| **+data** | Pipelines y calidad de datos: contratos de datos y evolución del esquema, comprobaciones de calidad (una fila errónea va a cuarentena, nunca se carga), reejecuciones idempotentes y backfills (datos que llegan tarde), linaje y responsables (SLAs de frescura), retención y coste |
 
 Los tracks **se combinan**. Un webhook de Stripe en un SaaS multiinquilino que además resume
 facturas con un LLM es `core +tdd +saas +ai`; un formulario de registro que guarda datos personales es `+privacy` (el
@@ -926,6 +991,14 @@ Kafka es `+dist`. Un cambio de texto es modo Vibe: sin ceremonia. Un
 **clasificador de Fase 0** (la herramienta local `spec_classify`, multilingüe) elige los tracks; tú
 apruebas. Los tracks elegidos se guardan con la función, y se puede añadir o desactivar un track más
 adelante.
+
+**Tamaños (1.21) — el rigor sigue al cambio.** La Fase 0 también sugiere un tamaño (`spec_create {size}`): **xs** es
+un *cambio* — un solo `change.md` (resumen, 1–3 criterios EARS, enfoque, tareas con `_Verify:_`) y dos aprobaciones;
+**s** es una historia cuyo plan entero se aprueba en una sola llamada (con +tdd / +ai hasta el plan de pruebas / de
+evaluación — después llegan las pruebas que fallan y luego las tareas), solo con las secciones core de cada track;
+**m / l** mantienen la cadena completa, con las secciones que piden dos tracks escritas una sola vez. EARS, la
+trazabilidad, el gate de evidencia y el de cierre valen en todos los tamaños; una sección de diseño solo cuenta como
+rellenada con texto propio. Sin tamaño, se mantiene el scaffold anterior.
 
 ### El servidor MCP local (`spec-driven`) — 38 herramientas
 
@@ -1017,7 +1090,9 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   motivo. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — una spec ligera para un defecto: reproducir → **causa raíz con evidencia** → prueba de
   regresión en rojo → corrección → verificación. El `doctor` falla hasta que la causa raíz esté escrita, y
-  las tareas posteriores a la de la causa raíz no se pueden completar antes.
+  las tareas posteriores a la de la causa raíz no se pueden completar antes. Lo que ya sabes entra con el
+  scaffold (`spec_create {kind: "bugfix", reproduction, rootCause, condition, behaviour, includeBody}` /
+  `--reproduction`, `--root-cause`, `--condition`, `--behaviour`) — sin releer y reescribir los cuatro archivos.
 - **`/spec-finish`** — bloquea con fallos del doctor, un artefacto cambiado tras su aprobación, placeholders en
   cualquier punto de la cadena, tareas abiertas o sin verificar y gates pendientes; lista las comprobaciones a
   repetir y construye un resumen de merge desde la spec. Después haces el merge en local o conservas la rama —
@@ -1075,6 +1150,13 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   `inclusion: always`, `fileMatch` (con `fileMatchPattern: "src/api/**"`) o `manual`. `steering_scaffold`
   crea archivos personalizados como `api-conventions.md`, y cada brief de tarea incluye los archivos cuyo
   patrón coincide con las rutas `_Implements:_` de la tarea.
+- **Equipos: git combina el estado de la spec** — `dev-spec merge-state --install` (una vez por clon, y de nuevo tras una actualización del plugin — `--check` lo dice; haz commit del
+  `.gitattributes` que escribe) hace que git combine `.state.json` / `roadmap.json` por su significado: las aprobaciones,
+  tareas terminadas y evidencia de dos ramas se unen en vez de entrar en conflicto; un conflicto real queda en JSON válido
+  (`mergeConflicts`) y doctor falla hasta resolverlo.
+- **Aprobaciones en otros clientes MCP** — con `approvalGuard` ask / deny, un cliente que soporte elicitation de MCP
+  pregunta al usuario antes de que `spec_approve` registre nada (solo cuenta una aprobación explícita); sin ella, `deny`
+  se rechaza.
 
 ### Brownfield, importación y métricas
 
@@ -1098,6 +1180,19 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabajo, aprobaciones forzadas, solicitudes de
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
+
+### Novedades de la 1.21
+
+- **Rigor a la medida del cambio** — la Fase 0 sugiere un tamaño: **xs** es un *cambio* (un `change.md`, dos
+  aprobaciones), **s** una historia cuyo plan se aprueba en una sola llamada, solo con las secciones esenciales de cada track,
+  **m / l** la cadena completa, con las secciones que piden dos tracks escritas una vez. Una sección de track solo cuenta como
+  rellenada con texto propio. Sin tamaño = como antes.
+- **Equipos** — `dev-spec merge-state --install` deja que git fusione el estado de la spec (aprobaciones, tareas, evidencia)
+  de dos ramas; los clientes MCP con elicitation preguntan a su usuario antes de registrar una aprobación.
+- **Un clasificador que aprende** — una negación alcanza toda una lista ("sin pagos ni suscripciones") y sus correcciones de
+  la Fase 0 se vuelven ajustes del proyecto (`.specs/classifier.json`, `dev-spec signals`, `classify --explain`).
+- **+data** — contratos de datos y evolución del esquema, calidad de los datos, reprocesos idempotentes y backfills, linaje y
+  responsables, retención y coste; y un track pack de ejemplo `+mobile` en `examples/track-packs/mobile`.
 
 ### Novedades de la 1.20
 
@@ -1169,6 +1264,8 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   las secciones `## [A11Y]` del diseño, las tareas y las filas de prueba, y doctor / la aprobación del diseño se niegan
   hasta que las secciones estén rellenadas. Son solo datos (nada se ejecuta; los enlaces fuera de `.specs/` se ignoran);
   un pack no válido lo informa `check` y se ignora. Guía: `skills/dev-spec-driven/references/project-tracks.md`.
+  Un ejemplo para empezar: `examples/track-packs/mobile` (+mobile — sin conexión y sincronización, versiones y despliegue en
+  las tiendas, permisos, rendimiento y batería, notificaciones push; EN / PT / ES) — cópielo en `.specs/tracks/mobile/` y ejecute `dev-spec tracks check`.
 
 ### Novedades de la 1.14
 
@@ -1313,18 +1410,19 @@ Nuevos en la 1.16: `/spec-statusline`, `/spec-milestone`.
 ### La CLI `dev-spec`
 
 El mismo motor desde cualquier terminal (`node cli/dev-spec.js <comando>`, o `dev-spec` en el PATH);
-`--json` muestra el resultado en bruto y `help` lista todas las opciones:
+`--json` muestra el resultado en bruto y `help` lista todas las opciones. Una instalación como plugin no pone `dev-spec` en el PATH, así que cada mensaje que pide ejecutar la CLI muestra la
+línea ejecutable, `node "<clone>/cli/dev-spec.js" …` con la ruta resuelta (los archivos versionados como `ROADMAP.md` mantienen `dev-spec`):
 
 ```text
-classify · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
+classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
-create [--brownfield] [--flow design-first] [--kind spike] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts · statusline [--print-config]
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check]
 ```
 
 ### Por qué no hay GitHub Actions

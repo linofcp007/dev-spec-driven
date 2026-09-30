@@ -218,7 +218,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
     S.initProject(d10, ["core"], "en");
     const reEn = redExpect(d10, "en"), rePt = redExpect(d10, "pt");
     ok(reEn.pass3.unexpectedPass === true && reEn.na.step === "verify" && /#3 \(run passed, but _Expect: fail_ needs a red run\)/.test(reEn.na.recommendation) &&
-      /Task 3 is marked _Expect: fail_: its proof is a run that FAILS .*\(dev-spec done red-expect-en 3 --run while the test fails/.test(reEn.na.recommendation) &&
+      /Task 3 is marked _Expect: fail_: its proof is a run that FAILS .*\(node "[^"]*dev-spec\.js" done red-expect-en 3 --run while the test fails/.test(reEn.na.recommendation) &&
       !/Mark task 3 with _Expect: fail_/.test(reEn.na.recommendation) && rePt.na.step === "verify" && /A tarefa 3 tem _Expect: fail_: a prova é uma execução que FALHA/.test(rePt.na.recommendation),
       "B5 next_action verify: an _Expect: fail_ task whose run passed (unexpected-pass) is told its proof is a FAILING run — no 'add the marker' red-phase hint; PT (got " +
       JSON.stringify([reEn.na.step, reEn.na.recommendation]).slice(0, 400) + ")");
@@ -267,7 +267,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
     S.completeTask(d7, f7.slug, 1);
     const docDone7 = (await b5Call("spec_doctor", { projectDir: d7, name: "suite" })).checks.find((c) => c.id === "suite-evidence");
     const gate7 = S.approvePhase(d7, f7.slug, "execution", "t");
-    ok(!docOpen7 && finOpen7.suiteChecks.every((c) => c.status === "no-run") && finOpen7.blockers.some((b) => /project checks without a passing run since the last task activity: test \(no run recorded\), lint \(no run recorded\) — run them: dev-spec finish suite --run/.test(b)) &&
+    ok(!docOpen7 && finOpen7.suiteChecks.every((c) => c.status === "no-run") && finOpen7.blockers.some((b) => /project checks without a passing run since the last task activity: test \(no run recorded\), lint \(no run recorded\) — run them: node "[^"]*dev-spec\.js" finish suite --run/.test(b)) &&
       docDone7 && docDone7.status === "warn" && /every task is done, but project checks have no passing run/.test(docDone7.detail) &&
       gate7.ok === false && gate7.failing.includes("suite-evidence") && typeof b5State(f7).lastTickAt === "string",
       "B5 meta.checks set: finish blocks on suite-evidence (every check without a run named), doctor warns once every task is done (not before), the execution sign-off refuses on it; a tick stamps lastTickAt (got " +
@@ -580,7 +580,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
     const sum8a = S.finishFeature(p2, f2.slug, {}).mergeSummary || "";
     S.completeTask(p2, f2.slug, 1, { command: RED_CMD, exitCode: 0, summary: "ℹ pass 1" }); // the fix is in: the test passes now
     const sum8b = S.finishFeature(p2, f2.slug, {}).mergeSummary || "";
-    ok(na8.step === "finish" && new RegExp("dev-spec finish " + f8.slug + " --run runs and records them").test(na8.recommendation) && /spec_finish \{evidence: \[/.test(na8.recommendation) &&
+    ok(na8.step === "finish" && na8.recommendation.includes(S.DEV_SPEC + " finish " + f8.slug + " --run runs and records them") && /spec_finish \{evidence: \[/.test(na8.recommendation) &&
       /1\. Write test T-01 and watch it fail — `node --test test\/uppercase\.test\.js` → exit 1 \(the expected red run \(_Expect: fail_\)\)/.test(sum8a) &&
       /`node --test test\/uppercase\.test\.js` → exit 0 \(red run before the fix: exit 1 on \d{4}-\d{2}-\d{2}\)/.test(sum8b),
       "full review Ga8: next_action's finish step names dev-spec finish --run / spec_finish {evidence} when project checks are configured; the merge summary marks the expected red run (and the red run kept after the fix) (got " +
@@ -783,7 +783,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
     obsHook(pO, bash(pO, "node t2.js", { tool_response: { exit_code: 0 } }));
     const c2c = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0 } });
     const cCli = S.completeTask(pN, "solo", 1, { command: "node s.js", exitCode: 0 }, { ranBy: "cli" });
-    ok(c2b.p.ok && c2b.p.verified === false && c2b.p.unverifiedReason === "unobserved" && c2b.p.observed === false && /dev-spec done auth 2 --run/.test(c2b.p.note) &&
+    ok(c2b.p.ok && c2b.p.verified === false && c2b.p.unverifiedReason === "unobserved" && c2b.p.observed === false && /node "[^"]*dev-spec\.js" done auth 2 --run/.test(c2b.p.note) &&
       !/No run was ever observed/.test(c2b.p.note) && cN.p.unverifiedReason === "unobserved" && /No run was ever observed in this project/.test(cN.p.note) &&
       /MCP-only client has no hook/.test(cN.p.note) && c2c.p.verified === true && c2c.p.observed === true && !c2c.p.unverifiedReason &&
       cCli.verified === true && cCli.observed === "cli" && obsState(fN).evidence["1"].observed === "cli",

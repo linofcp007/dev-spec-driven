@@ -20,7 +20,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText, flowPhaseIndex,
   FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority, hasSuccessCriteria,
   headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord, isSpikeDir, isTestCodePath,
-  legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, missingPackTracks, packReservedSince, normalizeLang, outsideCodeTemplates,
+  legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang, outsideCodeTemplates,
   overlapDoctorDetail, own, packOf, packRegistry, packTitle, packTracks, parseTasks, pendingGateList, PHASE_FILE,
   phaseActive, phaseContent, phaseFile, PHASES, placeholderSummary, planFileScopes, planIdText, projectLang,
   RE_CODE_TID, RE_CONSTITUTION_CHECK, readIfExists, readJson, readRoadmap, readState, realRootOf, redPhaseHint,
@@ -32,7 +32,9 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   taskSchedule, taskVerification, tKey, toPosix, TRACE_PLAN_KINDS, TRACE_SECONDARY_KINDS, TRACE_TASK_KINDS,
   TRACE_VERDICT_KINDS, traceCheck, traceGapLines, traceGaps, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS,
   trackLabel, trackMarker, trackSectionTable, unverifiedLabel, VALID_TRACKS, verificationStatus, verifyPipes,
-  waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap;
+  waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
+  featureSize, trackSectionReport, sectionVerdict,
+  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd;
 function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
@@ -41,7 +43,7 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   expectsFail, extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText,
   flowPhaseIndex, FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority,
   hasSuccessCriteria, headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord,
-  isSpikeDir, isTestCodePath, legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, missingPackTracks, packReservedSince, normalizeLang,
+  isSpikeDir, isTestCodePath, legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang,
   outsideCodeTemplates, overlapDoctorDetail, own, packOf, packRegistry, packTitle, packTracks, parseTasks,
   pendingGateList, PHASE_FILE, phaseActive, phaseContent, phaseFile, PHASES, placeholderSummary, planFileScopes,
   planIdText, projectLang, RE_CODE_TID, RE_CONSTITUTION_CHECK, readIfExists, readJson, readRoadmap, readState,
@@ -53,7 +55,9 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   taskDepsCheck, taskMarkers, taskSchedule, taskVerification, tKey, toPosix, TRACE_PLAN_KINDS, TRACE_SECONDARY_KINDS,
   TRACE_TASK_KINDS, TRACE_VERDICT_KINDS, traceCheck, traceGapLines, traceGaps, traceWarningLines, TRACK_MARKER,
   TRACK_SECTIONS, trackLabel, trackMarker, trackSectionTable, unverifiedLabel, VALID_TRACKS, verificationStatus,
-  verifyPipes, waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap } = E); }
+  verifyPipes, waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
+  featureSize, trackSectionReport, sectionVerdict,
+  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -70,8 +74,11 @@ function designSaveCheck(projectDir, name) {
   const kind = readState(projectDir, f.slug).kind || "feature";
   const label = (s) => `${fm.sectionNames[s.section] || s.section}:${fm.sectionStatus[s.status] || s.status}`;
   const sections = [];
-  for (const [tr, secs, marker] of activeSectionTracks(tracks)) {
-    const bad = sectionState(design, secs, marker).filter((s) => s.status !== "filled");
+  // 1.21 F5: the size's rules (tiers, overlaps) and the stricter filled rule; a section holding only the template's guidance
+  // is listed even on an approved design (the hook informs — doctor warns there, a new approval refuses).
+  const size = featureSize(f.dir);
+  for (const [tr, marker, rows] of trackSectionReport(design, tracks, { size, lang: lng })) {
+    const bad = rows.filter((s) => sectionVerdict(s, { size }) !== "pass");
     if (bad.length) sections.push({ track: tr, marker, sections: bad });
   }
   let constitution = null; // null = not checked (bugfix)
@@ -226,20 +233,28 @@ function statusFeature(projectDir, name) {
   // doctor (sectionState: no `> **TODO**` sentinel, non-empty body): status used to show ✓ for sections doctor
   // called unfilled.
   const design = readIfExists(path.join(dir, "design.md")) || "";
-  const sectionView = (st) => st.map((s) => ({ section: s.section, present: s.status !== "missing", filled: s.status === "filled" }));
+  // 1.21 F5: the size's rules (an optional extended section at S, a section another active track covers) and the stricter filled
+  // rule (the template's guidance alone is not filled). A sized feature's rows also carry `status` (+ `tier`, `by`).
+  const size = featureSize(dir);
+  const report = trackSectionReport(design, tracks, { size, lang: featureLang(projectDir, slug) });
+  // (1.21 review C10: an unsized row carries its `status` too — status said "unfilled" where doctor said "only the template's
+  // guidance"; `tier` / `by` stay a sized feature's)
+  const sectionView = (st) => st.map((s) => Object.assign({ section: s.section, present: s.status !== "missing" && s.status !== "covered", filled: sectionVerdict(s, { size }) === "pass" && (s.status !== "missing" || !!size), status: s.status },
+    size ? { tier: s.tier, ...(s.by ? { by: s.by } : {}) } : {}));
+  const rowsOf = (tr) => (report.find(([t]) => t === tr) || [])[2] || [];
   let scaleSections = null;
-  if (tracks.includes("saas")) scaleSections = sectionView(sectionState(design, SAAS_SECTIONS, "[SaaS]"));
+  if (tracks.includes("saas")) scaleSections = sectionView(rowsOf("saas"));
   let aiSections = null;
   if (tracks.includes("ai")) {
     aiSections = { hasEvalPlan: fs.existsSync(path.join(dir, "eval-plan.md")), promptVersions: safeReaddir(path.join(dir, "prompts")).filter((f) => /\.md$/.test(f)),
-      designHasAiSections: headingHasMarker(design, "[AI]"), sections: sectionView(sectionState(design, AI_SECTIONS, "[AI]")) };
+      designHasAiSections: headingHasMarker(design, "[AI]"), sections: sectionView(rowsOf("ai")) };
   }
   // +sec / +privacy: the same view as the scale sections (null while the track is off).
-  const trackView = (tr) => (tracks.includes(tr) ? sectionView(sectionState(design, TRACK_SECTIONS[tr], TRACK_MARKER[tr])) : null);
+  const trackView = (tr) => (tracks.includes(tr) ? sectionView(rowsOf(tr)) : null);
   // The active track packs (1.15): { <name>: { marker, title, sections } } — present only when the feature has one.
   const packSections = {};
   for (const tr of packTracks()) {
-    if (tracks.includes(tr)) packSections[tr] = { marker: trackMarker(tr), title: packTitle(packOf(tr), featureLang(projectDir, slug)), sections: sectionView(sectionState(design, trackSectionTable(tr), trackMarker(tr))) };
+    if (tracks.includes(tr)) packSections[tr] = { marker: trackMarker(tr), title: packTitle(packOf(tr), featureLang(projectDir, slug)), sections: sectionView(rowsOf(tr)) };
   }
   const missingPacks = missingPackTracks(dir);
 
@@ -261,6 +276,7 @@ function statusFeature(projectDir, name) {
     apiSections: trackView("api"), // 1.19 T
     uiSections: trackView("ui"),
     obsSections: trackView("obs"),
+    dataSections: trackView("data"), // 1.21 F4
     ...(Object.keys(packSections).length ? { packSections } : {}),
     ...(missingPacks.length ? { missingPacks } : {}), // saved track packs the project lacks now (inactive — doctor: track-pack-missing)
   };
@@ -303,13 +319,28 @@ function nextAction(projectDir, name, opts = {}) {
   const pending = gateWalk(dir, tracks, kind).find((ph) => !approvals[ph]) || null;
   let open = null;
   let refused = null;
+  // 1.21 F5 P3 — size XS / S: the plan is filled WHOLE, then approved in one call (spec_approve {through: "tasks"} — each gate still
+  // runs, in order): the fill step names every planning artifact through tasks still a template, from the first pending phase on.
+  const size = featureSize(dir);
+  const planFf = (size === "xs" || size === "s") && kind !== "spike";
+  // 1.21 review C3: where the plan's one call ends — tasks, or the planning phase before a Phase 4 tests gate still ahead
+  // (its gate needs the written failing tests / eval sets: a call through tasks stopped there every time)
+  const ffEnd = planFf ? planFastForwardEnd(dir, tracks, kind, pending) || "tasks" : "tasks";
+  let planOpen = [];
   if (pending) {
+    if (planFf) {
+      const walk0 = gateWalk(dir, tracks, kind);
+      const upto = walk0.indexOf("tasks") >= 0 ? walk0.indexOf("tasks") : walk0.length - 1;
+      planOpen = walk0.slice(walk0.indexOf(pending), upto + 1).filter((ph) => !approvals[ph])
+        .flatMap((ph) => gateArtifacts(dir, tracks, kind, ph)).map((file) => artifactReport(dir, file, tracks)).filter((r) => r.state !== "filled");
+    }
     open = gateArtifacts(dir, tracks, kind, pending).map((file) => artifactReport(dir, file, tracks)).find((r) => r.state !== "filled") || null;
     if (!open) {
       // doctor already ran this gate's own checks when it is its first pending gate (nextGate) — the tests gate scans the
       // test code, so it is never run twice.
       const g = doc.nextGate && doc.nextGate.phase === pending ? { checks: doc.nextGate.failing } : approvalChecks(projectDir, slug, dir, pending, tracks, kind, lng);
       if (g.checks.length) refused = g.checks;
+      else if (planFf && planOpen.length) open = planOpen[0]; // P3: the rest of the plan before the one approval call
     }
   }
   const flow = featureFlow(dir, kind); // C3: the phase scale of the feature's flow (design-first: design 1, requirements 2)
@@ -324,7 +355,7 @@ function nextAction(projectDir, name, opts = {}) {
   const testsSignOff = phase === "executing" || phase === "complete";
   const approveMsg = { classification: G.approveClassification, requirements: nx.approveRequirements,
     design: st.kind === "bugfix" ? nx.approveBugDesign : nx.approveDesign, "test-plan": nx.approveTestPlan, "eval-plan": nx.approveEvalPlan,
-    tests: (s) => (testsSignOff ? nx.signOffTests(s, testsWhat) : nx.approveTests(s, testsWhat)), tasks: nx.approveTasks };
+    tests: (s) => (testsSignOff ? nx.signOffTests(s, testsWhat) : nx.approveTests(s, testsWhat)), tasks: kind === "change" ? fm.sizes.approvePlan : nx.approveTasks };
   let step;
   let recommendation;
   let gateFix = false;
@@ -334,6 +365,7 @@ function nextAction(projectDir, name, opts = {}) {
   let approveExtras = null; // 1.14 B3: {missingRoles?, fastForward?} of the approve step
   let reReviewRefused = null; // the re-review phase whose approve gate would refuse (refusedGate names it)
   let finishedRoles = null; // the roles still to sign the execution phase off (finished step)
+  let finishedComplete = false; // 1.21 review A1: every execution role signed, yet no approval (finished step)
   let suiteMissing = null; // the project checks without a passing run since the last task activity (verify step, finished)
   let depsBlocked = null; // 1.14 F3: [{number, waitsOn}] — open tasks, none can start (fix step)
   // Re-review now only what can be re-approved now: an artifact of a phase AFTER the first pending gate waits for that gate
@@ -368,6 +400,12 @@ function nextAction(projectDir, name, opts = {}) {
     const what = open.state === "missing" ? G.fillMissing : open.empty && !open.items.length ? G.fillEmpty
       : G.fillPlaceholders(open.items.length, `L${open.items[0].line} ${first.length > 48 ? first.slice(0, 47) + "…" : first}`);
     recommendation = G.fill(open.file, what, (G.fillHint[open.file] || G.fillHint.default)(slug));
+    // 1.21 F5 P3 — size XS / S (a change's own hint says it already): the whole plan, then one approval call
+    if (planFf && kind !== "change") {
+      const files = [...new Set([open.file, ...planOpen.map((r) => r.file)])];
+      recommendation += " " + (ffEnd === "tasks" ? fm.sizes.planFastForward(slug, size, files.join(", "))
+        : fm.sizes.planFastForwardTests(slug, size, files.join(", "), ffEnd, testsWhat));
+    }
   } else if (pending && approveMsg[pending] && refused) {
     // Never recommend an approval the approve gate would refuse (it looped: "approve X" → refused → "approve X"…):
     // name what it would fail on instead — classification.md placeholders, missing SC-### / P1 lines…
@@ -469,8 +507,11 @@ function nextAction(projectDir, name, opts = {}) {
         if (signOff && exRoles.length) {
           if (!approvals.execution) {
             const v = roleSignOffs(st, "execution", exRoles, phaseContent(dir, "execution", kind));
-            finishedRoles = v.missing;
-            Object.assign(signOff, { role: v.missing[0] || exRoles[0], missing: v.missing.length ? fm.governance.missing(v.missing) : null, signed: v.signed.join(", ") });
+            const all = !v.missing.length && v.signed.length > 0; // 1.21 review A1: every role signed, no approval — one re-signs
+            finishedRoles = all ? null : v.missing;
+            if (all) finishedComplete = true;
+            Object.assign(signOff, { role: v.missing[0] || v.signed[0] || exRoles[0], missing: all ? fm.governance.signedAll(v.signed.join(", ")) : v.missing.length ? fm.governance.missing(v.missing) : null,
+              signed: all ? "" : v.signed.join(", ") });
           } else signOff.role = exRoles[0];
         }
         recommendation = nx.finished(slug, day, finishedDrift.files, signOff);
@@ -496,7 +537,12 @@ function nextAction(projectDir, name, opts = {}) {
   if (depsBlocked) res.blocked = depsBlocked; // 1.14 F3: stable — the open tasks and the dependencies each waits on
   if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
   if (approveExtras && approveExtras.missingRoles) res.missingRoles = approveExtras.missingRoles; // 1.14 B3: stable — the roles to sign
+  if ((approveExtras && approveExtras.signoffsComplete) || finishedComplete) res.signoffsComplete = true; // 1.21 review A1: stable — every role signed, one re-signs to approve
   if (approveExtras && approveExtras.fastForward) res.fastForward = approveExtras.fastForward; // 1.14 B3: {through, phases, role}
+  // 1.21 F5 P3: size XS / S — the one approval call the plan ends with, named from the start (the fill step)
+  if (!res.fastForward && planFf && pending && step === "fill" && walk.includes(ffEnd)) {
+    res.fastForward = { through: ffEnd, phases: walk.slice(walk.indexOf(pending), walk.indexOf(ffEnd) + 1).filter((ph) => !approvals[ph]), role: null };
+  }
   // 1.16 Q1: steering amended after the requirements / design approval — a re-review hint added to whatever the step is, never a
   // step (or a block) of its own; re-approving the phase records the current steering.
   if (Array.isArray(doc.steeringChanged) && doc.steeringChanged.length) {
@@ -555,7 +601,10 @@ function specDoctor(projectDir, name, opts = {}) {
   }
 
   // Requirements + EARS
-  const reqs = readIfExists(path.join(dir, "requirements.md"));
+  const reqsFull = readIfExists(path.join(dir, "requirements.md"));
+  const isChange = isChangeDir(dir);
+  // 1.21 review C1: a change's criteria are its change.md WITHOUT the task blocks (a task's _Requirements:_ defines nothing)
+  const reqs = reqsFull != null && isChange ? changeViews(reqsFull).criteria : reqsFull;
   if (reqs == null) add("requirements", "fail", m.requirementsMissing);
   else {
     const e = earsValidate(reqs, featureLang(projectDir, slug));
@@ -565,14 +614,20 @@ function specDoctor(projectDir, name, opts = {}) {
     // IDs trace_check counts while EARS linted none of them fails (1.14 full review Pa2): nothing was checked.
     const unlinted = earsUnlinted(reqs, e);
     add("ears", nErr || unlinted ? "fail" : nCrit === 0 ? "warn" : "pass",
-      unlinted ? m.earsNoCriteria(unlinted) : m.earsDetail(nCrit, nErr, e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0));
+      unlinted ? m.earsNoCriteria(unlinted, isChange ? CHANGE_FILE : undefined) : m.earsDetail(nCrit, nErr, e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0));
     // Clarifications gate — design is blocked while any [NEEDS CLARIFICATION] remains.
-    const markers = clarificationMarkers(reqs);
-    add("clarifications", markers.length ? "fail" : "pass", markers.length ? m.clarificationsOpen(markers.length) : m.clarificationsNone);
-    // Spec-Kit-style structure — only REAL lines count: the template's P1 legend and placeholder SC-001 don't.
+    const markers = clarificationMarkers(reqsFull);
+    add("clarifications", markers.length ? "fail" : "pass", markers.length ? (isChange ? m.clarificationsOpenPlan : m.clarificationsOpen)(markers.length) : m.clarificationsNone); // a change has no design (1.21 verify V7)
+    // Spec-Kit-style structure — only REAL lines count: the template's P1 legend and placeholder SC-001 don't. (1.21 F5: a change
+    // — one change.md, 1–3 criteria — has no stories to prioritize nor success criteria of its own: its scope check instead.)
     const reqsActive = activeDesign(reqs, tracks);
-    add("success-criteria", hasSuccessCriteria(reqsActive) ? "pass" : "warn", hasSuccessCriteria(reqsActive) ? m.scPresent : m.scMissing);
-    add("priorities", hasPriority(reqsActive) ? "pass" : "warn", hasPriority(reqsActive) ? m.prioritiesOk : m.prioritiesMissing);
+    if (!isChange) {
+      add("success-criteria", hasSuccessCriteria(reqsActive) ? "pass" : "warn", hasSuccessCriteria(reqsActive) ? m.scPresent : m.scMissing);
+      add("priorities", hasPriority(reqsActive) ? "pass" : "warn", hasPriority(reqsActive) ? m.prioritiesOk : m.prioritiesMissing);
+    } else {
+      const sc = changeScope(dir, tracks, lng);
+      add("change-scope", sc.ok ? "pass" : "fail", sc.detail);
+    }
     // Folded analyze: AC ID uniqueness (duplicate IDs = a real spec bug)
     const dups = acDuplicates(reqs);
     add("ac-uniqueness", dups.length ? "fail" : "pass", dups.length ? m.acDup(dups.join(", ")) : m.acUnique);
@@ -602,7 +657,7 @@ function specDoctor(projectDir, name, opts = {}) {
 
   // Design + Mermaid + Constitution Check
   const design = readIfExists(path.join(dir, "design.md"));
-  if (design == null) { if (kind !== "bugfix") add("design", "fail", m.designMissing); }
+  if (design == null) { if (kind !== "bugfix" && kind !== "change") add("design", "fail", m.designMissing); } // 1.21 F5: a change has no design
   else if (kind !== "bugfix") {
     add("mermaid", /```mermaid/.test(design) ? "pass" : "warn", /```mermaid/.test(design) ? m.mermaidOk : m.mermaidMissing);
     add("constitution-check", RE_CONSTITUTION_CHECK.test(design) ? "pass" : "warn", RE_CONSTITUTION_CHECK.test(design) ? m.constitutionOk : m.constitutionMissing);
@@ -621,10 +676,20 @@ function specDoctor(projectDir, name, opts = {}) {
   // Mandatory sections — `<track>-sections` per active marker track (saas, ai, sec, privacy).
   const allFilled = { saas: m.saasAllFilled, ai: m.aiAllFilled, ...fm.secPrivacy.allFilled };
   if (design != null) {
-    for (const [tr, secs, mark] of activeSectionTracks(tracks)) {
-      const bad = sectionState(design, secs, mark).filter((s) => s.status !== "filled");
-      add(tr + "-sections", bad.length ? "fail" : "pass", bad.length ? bad.map(sectionLabel).join("; ")
-        : Object.prototype.hasOwnProperty.call(allFilled, tr) ? allFilled[tr] : fm.trackPacks.allFilled(mark)); // a track pack's (1.15)
+    // 1.21 F5 — the size's rules (tiers, overlaps) and the stricter filled rule: a section holding nothing but the template's
+    // guidance lines fails — a WARN on a design approved already (never a phase failed retroactively; its next approval asks).
+    const size = featureSize(dir);
+    const dApproval = readState(projectDir, slug).approvals.design;
+    const approved = isRecord(dApproval);
+    for (const [tr, mark, rows] of trackSectionReport(design, tracks, { size, lang: lng })) {
+      const bad = rows.filter((s) => sectionVerdict(s, { size, approved }) === "fail");
+      const soft = rows.filter((s) => sectionVerdict(s, { size, approved }) === "warn");
+      const S = fm.sizes;
+      const okText = Object.prototype.hasOwnProperty.call(allFilled, tr) ? allFilled[tr] : fm.trackPacks.allFilled(mark); // a track pack's (1.15)
+      const sizedText = size ? S.sectionsPassSized(rows.filter((s) => s.status === "filled" || s.status === "na").length, rows.filter((s) => s.status === "covered").length,
+        rows.filter((s) => s.status === "missing").length) : null;
+      add(tr + "-sections", bad.length ? "fail" : soft.length ? "warn" : "pass", bad.length ? bad.map(sectionLabel).join("; ")
+        : soft.length ? S.templateApproved(soft.map(sectionLabel).join("; ")) : sizedText || okText);
     }
   }
   // 1.15: a saved track pack the project no longer has (its folder deleted, or the pack now invalid) — the track is inactive.
@@ -679,7 +744,7 @@ function specDoctor(projectDir, name, opts = {}) {
     // Secondary IDs (EC / NFR / SC): a warn, never a fail — only when requirements.md defines or the chain cites one.
     const D = fm.deepTrace;
     const secLines = traceWarningLines(tr, lng, TRACE_SECONDARY_KINDS);
-    const secDefined = secondaryDefinitions(readIfExists(path.join(dir, "requirements.md")) || "").defined.size;
+    const secDefined = secondaryDefinitions(criteriaText(dir) || "").defined.size;
     if (secLines.length || secDefined) add("secondary-trace", secLines.length ? "warn" : "pass", secLines.length ? secLines.join("; ") : D.secondaryOk(secDefined));
     // `_Supersedes:_` references that resolve to nothing (a typo, a removed feature): trace_check's warnings, surfaced
     // here too — until fixed, the living catalog shows the AC they meant to replace as current. Never a fail.
@@ -770,6 +835,7 @@ function specDoctor(projectDir, name, opts = {}) {
     const g = approvalChecks(projectDir, slug, dir, pendingGates[0], tracks, kind, lng);
     nextGate = { phase: pendingGates[0], ready: g.artifact && !g.checks.length, failing: g.checks };
     if (rv.pending[pendingGates[0]]) nextGate.missingRoles = rv.pending[pendingGates[0]].missing;
+    if (rv.pending[pendingGates[0]] && rv.pending[pendingGates[0]].signoffsComplete) nextGate.signoffsComplete = true; // 1.21 review A1: re-sign to complete
   }
   // Artifacts edited after THEIR approval (next_action / finish / roadmap's view): re-review, then re-approve —
   // spec_impact lists what the edit touches when the approval has a snapshot.
@@ -793,6 +859,8 @@ function specDoctor(projectDir, name, opts = {}) {
   for (const c of decisionDoctorChecks(projectDir, slug, dir, state, kind, lng, tr)) add(c.id, c.status, c.detail); // 1.14 C2 (warns)
   const wExp = waiverExpiredCheck(approvals, tracks, slug, lng); // 1.16 U3: a forced approval whose waiver expired
   if (wExp) add(wExp.id, wExp.status, wExp.detail);
+  const mc = mergeConflictsCheck(projectDir, slug, state, lng); // 1.21 F1a: conflicts the merge driver left unresolved (a fail)
+  if (mc) add(mc.id, mc.status, mc.detail);
   const gatesOk = pendingGates.length === 0;
   if (kind === "feature" && !(opts.lean && checks.some((c) => c.status !== "pass"))) {
     const xac = crossFeatureAcs(projectDir, { only: slug }).pairs;

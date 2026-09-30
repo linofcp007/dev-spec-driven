@@ -669,7 +669,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     S.finishFeature(p3, "login", { evidence: [{ name: "test", command: "npm test", exitCode: 0 }] });
     const na3c = S.nextAction(p3, "login");
     ok(fin3.readyToFinish && na3a.step === "finished" && na3b.step === "verify" && JSON.stringify(na3b.suite) === '[{"name":"test","status":"before-last-tick"}]' &&
-      /project checks have no passing run since the last task activity: test \(ran before the last task activity\)/.test(na3b.recommendation) && /dev-spec finish login --run/.test(na3b.recommendation) &&
+      /project checks have no passing run since the last task activity: test \(ran before the last task activity\)/.test(na3b.recommendation) && /node "[^"]*dev-spec\.js" finish login --run/.test(na3b.recommendation) &&
       !/Nothing left to do/.test(na3b.recommendation) && fin3b.readyToFinish === false && na3c.step === "finished" && na3c.suite === undefined,
       "full review Gb3: a finished feature whose project checks have no passing run since the last task activity → step verify naming the checks (suite: [{name, status}]) — never 'finished, nothing left to do' while spec_finish refuses (got " +
       JSON.stringify([na3a.step, na3b.step, na3b.suite, na3c.step]) + ")");
@@ -964,13 +964,20 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const m2 = await rpc("tools/call", { name: "spec_init", arguments: { projectDir: pMcp } });
     const m3 = await rpc("tools/call", { name: "spec_init", arguments: { approvalGuard: "maybe", projectDir: pMcp } });
     const m4 = await rpc("tools/call", { name: "spec_init", arguments: { approvalGuard: true, projectDir: pMcp } });
+    // 1.21 F1b: at deny, an MCP client that can't ask its user (this harness declares no elicitation) can't lower the guard — the
+    // server refuses it (humanRequired + the command); the human lowers it to ask (their CLI), then lowering to off runs as before.
+    const m5d = await rpc("tools/call", { name: "spec_init", arguments: { approvalGuard: "off", projectDir: pMcp, lang: "es" } });
+    const r5d = payload(m5d);
+    const stillDeny = JSON.parse(fs.readFileSync(path.join(pMcp, ".specs", "roadmap.json"), "utf8")).meta.approvalGuard;
+    S.initProject(pMcp, [], undefined, { approvalGuard: "ask" });
     const m5 = await rpc("tools/call", { name: "spec_init", arguments: { approvalGuard: "off", projectDir: pMcp, lang: "es" } });
     const r1 = payload(m1), r2 = payload(m2), r5 = payload(m5);
     ok(ag.type === "string" && JSON.stringify(ag.enum) === '["off","ask","deny"]' && r1.approvalGuard === "deny" && /^Approval guard DENY/.test(r1.approvalGuardNote) &&
       rmAfter1 === "deny" && r2.approvalGuard === "deny" && r2.approvalGuardNote === undefined &&
-      m3.result.isError === true && m4.result.isError === true && r5.approvalGuard === "off" && /^Guardia de aprobaciones DESACTIVADA/.test(r5.approvalGuardNote),
-      "feature F2: spec_init {approvalGuard} — a string enum off | ask | deny (case-folded), stored in roadmap.json meta.approvalGuard, always reported (+ a localized note when set); another value or a boolean is refused (got " +
-      JSON.stringify([ag, r1.approvalGuard, r2.approvalGuard, m3.result.isError, m4.result.isError, r5.approvalGuardNote]) + ")");
+      m3.result.isError === true && m4.result.isError === true && r5.approvalGuard === "off" && /^Guardia de aprobaciones DESACTIVADA/.test(r5.approvalGuardNote) &&
+      m5d.result.isError === true && r5d.humanRequired === true && r5d.approvalGuard === "deny" && stillDeny === "deny" && /init --approval-guard off/.test(r5d.command || ""),
+      "feature F2: spec_init {approvalGuard} — a string enum off | ask | deny (case-folded), stored in roadmap.json meta.approvalGuard, always reported (+ a localized note when set); another value or a boolean is refused; 1.21 F1b: lowering deny over MCP without elicitation is refused (got " +
+      JSON.stringify([ag, r1.approvalGuard, r2.approvalGuard, m3.result.isError, m4.result.isError, r5.approvalGuardNote, r5d.humanRequired, stillDeny]) + ")");
   }
 
   // 1.14 feature (F2) — review fixes: the shell lexer reads the tool's shell (R3), heredoc bodies are data (R9), guard-down actions

@@ -9,10 +9,12 @@ Feature / request: $ARGUMENTS
 
 Begin at **Phase 0 (Classification)**: decide the mode (Vibe / Bounded / Spec; a real defect goes to
 `/spec-bugfix`, a question to investigate to `/spec-spike`), then select the composable track set (core +tdd? +saas?
-+ai? +sec? +privacy? +dist? +api? +ui? +obs?). Use the `spec_classify` MCP tool to seed the recommendation, confirm against
-`references/classification-matrix.md`, and present the track set for approval before moving on. After
++ai? +sec? +privacy? +dist? +api? +ui? +obs? +data?) and the **size** (xs · s · m · l — `spec_classify` returns a
+`suggestedSize` with its reason; xs is a one-file change, s one story with its plan approved in one call, m / l the full
+chain — `references/workflows.md` → Sizes). Use the `spec_classify` MCP tool to seed the recommendation, confirm against
+`references/classification-matrix.md`, and present the track set and size for approval before moving on. After
 approval: `spec_init {tracks, lang}` if steering is missing, then `spec_create {name, tracks, lang}`
-once (it seeds `classification.md` and persists the tracks + language in `.state.json`; add `brownfield: true`
+once, with `size` (it seeds the artifacts the size needs and persists the tracks, size + language in `.state.json`; add `brownfield: true`
 when the feature lands in existing code → `integration-plan.md`, `flow: "design-first"` when the architecture is the
 input). The spec or plan already exists in Kiro, spec-kit, OpenSpec, Claude Code / Cursor plan mode, a Codex ExecPlan
 or BMAD? Use `/spec-import` instead of re-typing it. If the user clearly wants Vibe mode, skip the artifacts and just

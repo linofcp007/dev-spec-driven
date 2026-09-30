@@ -21,7 +21,8 @@ let acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceho
   savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter, stripEnd, stripEnds,
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
-  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix;
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingIndex, headingLeadRe, inactiveMarkerLines, isGenericSlot, isObj, isRecord,
@@ -31,7 +32,8 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHea
   replaceHtmlCommentSpans, savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter,
   stripEnd, stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
-  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix } = E); }
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.16 Q — spec quality: steering amendments (Q1) · cross-feature acceptance criteria (Q2) · the glossary (Q3)
@@ -148,7 +150,7 @@ function xacNumbers(low, base) {
 // nums: [numbers in document order], numKey: "n unit|…" (sorted), neg: the response's polarity }.
 function acShape(text, lang) {
   const base = i18n.baseLang(normalizeLang(lang));
-  const low = stripSupersedes(String(text || "")).replace(RE_XAC_IDS, " ").replace(/\[(?:SaaS|AI|SEC|PRIVACY|DIST|API|UI|OBS)\]/g, " ")
+  const low = stripSupersedes(String(text || "")).replace(RE_XAC_IDS, " ").replace(/\[(?:SaaS|AI|SEC|PRIVACY|DIST|API|UI|OBS|DATA)\]/g, " ")
     .normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
   const sys = low.match(RE_XAC_SYS_MODAL);
   const m = sys ? null : low.match(RE_XAC_MODAL);
@@ -266,8 +268,9 @@ function xacContextSig(projectDir) {
 // One feature's compared criteria (template criteria, slots, short ones left out) → { rows: [{ id, key, text, shape, near }],
 // hasSup }. tmplOf() gives the template criteria (built on first use).
 function xacFeatureRows(projectDir, s, state, tracks, tmplOf) {
-  const raw = readContained(projectDir, path.join(s.dir, "requirements.md"));
-  if (!raw) return { rows: [], hasSup: false };
+  const full = readContained(projectDir, path.join(s.dir, "requirements.md"));
+  if (!full) return { rows: [], hasSup: false };
+  const raw = state.kind === "change" ? changeViews(full).criteria : full; // a change's criteria: change.md without its task blocks (1.21 review C1)
   const lng = typeof state.lang === "string" ? state.lang : projectLang(projectDir);
   const rows = [];
   for (const e of acIndex(activeDesign(raw, tracks)).values()) {
@@ -602,6 +605,15 @@ function glossBuiltinLines(lang) {
     put(() => i18n.design(a, base));
   }
   for (const tr of VALID_TRACKS) put(() => i18n.trackDesignBlock(tr, base));
+  // 1.21 F5 — the sized scaffolds' own lines (S's one story, the merged weigh section, the Error Handling pointer) and a change
+  for (const size of ["s", "m"]) {
+    for (const tracks of [["core"], VALID_TRACKS]) {
+      const a = { name: "x", tracks, label: trackLabel(tracks), slug: "x", summary: "", size };
+      put(() => i18n.requirements(a, base));
+      put(() => i18n.design(a, base));
+    }
+  }
+  put(() => i18n.change({ name: "x", summary: "" }, base));
   put(() => i18n.bugRequirements({ name: "x" }, base));
   put(() => i18n.bugReport({ name: "x" }, base));
   const lines = new Set();
@@ -678,7 +690,7 @@ function glossaryHits(dir, gl, opts = {}) {
   const slotless = (s) => (s.includes("[") ? bracketPlaceholders(s, new Set()).reduce((a, p) => a.split(p).join(" ".repeat(p.length)), s) : s);
   const hits = new Map();
   let total = 0;
-  for (const file of ["requirements.md", "design.md"]) {
+  for (const file of isChangeDir(dir) ? [CHANGE_FILE] : ["requirements.md", "design.md"]) { // a change: its one file, named as such (1.21 verify V6)
     const text = readIfExists(path.join(dir, file));
     if (text == null) continue;
     scanTaskLines(text).forEach((l, i) => {
@@ -866,11 +878,18 @@ function designReuseFallback(integrationPlan) {
 // sign-off). opts.approval = the design approval record (approvals.design) — each check reads its own stamp (`weigh` / `reuse`);
 // opts.legacy = true (the 1.17 form) treats every check as approved before it. opts.integrationPlan = integration-plan.md's text
 // (designReuseFallback — state "integration").
+// 1.21 F5 — a SIZE S design merges the three into ONE section, "Decisions, reuse & risks" (the sized builders write it): a
+// design with none of the three sections of its own and that merged one has each check read it — one entry or a line of prose
+// answers each (min 0: "nothing to reuse", "no alternative worth weighing", "no material risk" are answers).
+const WEIGH_MERGED_SYN = ["decisions, reuse & risks", "decisions, reuse and risks", "decisões, reutilização e riscos", "decisoes, reutilizacao e riscos",
+  "decisiones, reutilización y riesgos", "decisiones, reutilizacion y riesgos"];
 function designWeighChecks(design, lang, opts = {}) {
   const W = i18n.msg(lang).designWeigh;
   const approval = isRecord(opts.approval) ? opts.approval : null;
+  const merged = weighSection(design || "", WEIGH_MERGED_SYN) != null;
   return DESIGN_WEIGH.map(([id, syn, min, stamp]) => {
-    let st = designWeighState(design, syn, min);
+    const own = !merged || weighSection(design || "", syn) != null;
+    let st = own ? designWeighState(design, syn, min) : designWeighState(design, WEIGH_MERGED_SYN, 0);
     if (id === "design-reuse" && (st.status === "missing" || st.status === "empty")) {
       const fb = designReuseFallback(opts.integrationPlan);
       if (fb) st = { status: "integration", entries: fb.entries };
@@ -1075,8 +1094,10 @@ function reuseQuotedSection(sections, design, reuse) {
 // (the ones naming this task, bounded), omitted (matching ones left out for size), files, more (nearby files beyond the cap),
 // truncated (only when true: a folder was read up to its cap — `more` is "at least") }.
 function briefReuse(projectDir, design, implementsList, acIds) {
-  const body = design == null ? null : weighSection(design, REUSE_SYN);
-  const state = design == null ? "missing" : designWeighState(design, REUSE_SYN, 0).status;
+  // 1.21 F5: a size S design's merged "Decisions, reuse & risks" section answers for a Reuse section it doesn't have
+  const syn = design != null && weighSection(design, REUSE_SYN) == null && weighSection(design, WEIGH_MERGED_SYN) != null ? WEIGH_MERGED_SYN : REUSE_SYN;
+  const body = design == null ? null : weighSection(design, syn);
+  const state = design == null ? "missing" : designWeighState(design, syn, 0).status;
   const t = reuseTargets(projectDir, implementsList);
   const acRe = (acIds || []).length ? new RegExp("(?<![\\p{L}\\p{N}_.-])(?:" + acIds.map(escRe).join("|") + ")(?!\\d)", "u") : null;
   const units = state === "filled" && body != null ? reuseUnits(body) : [];
@@ -1237,23 +1258,35 @@ function clarify(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const dir = f.dir;
-  const reqs = readIfExists(path.join(dir, "requirements.md"));
-  if (reqs == null) return { ok: false, error: errs(projectDir, f.slug).requirementsMissing(f.slug) };
+  // 1.21 verify V6 — clarify asks what THIS kind / size's doctor asks, never more: a change (one change.md) is read as its
+  // criteria view (changeViews — the task blocks out; lines still point into change.md) and asked only about its own sections,
+  // its EARS and its markers; a size s feature (one story — "a second story, edge cases or NFRs mean size m") is not asked for
+  // edge cases or NFRs. It looped needs-clarification on a change doctor passed (/grill confirms with spec_clarify).
+  const st = readJson(statePath(dir)).data || {};
+  const kind = typeof st.kind === "string" ? st.kind : "feature";
+  const change = kind === "change";
+  const size = featureSize(dir);
+  const file = change ? CHANGE_FILE : "requirements.md";
+  const full = readIfExists(path.join(dir, file));
+  if (full == null) return { ok: false, error: errs(projectDir, f.slug).requirementsMissing(f.slug) };
+  const reqs = change ? changeViews(full).criteria : full;
   const tracks = detectTracks(dir);
   const fm = i18n.msg(featureLang(projectDir, name));
   const q = fm.clarify; // localized clarification questions
   const questions = [];
   const add = (s) => { if (!questions.includes(s)) questions.push(s); };
 
-  // Author-marked ambiguities take priority — resolve every [NEEDS CLARIFICATION] first.
-  const markers = clarificationMarkers(reqs);
+  // Author-marked ambiguities take priority — resolve every [NEEDS CLARIFICATION] first (a change: anywhere in change.md).
+  const markers = clarificationMarkers(full);
   markers.forEach((mk) => add(q.resolveMarker(mk)));
 
-  // Spec-Kit-style structure checks (headings matched EN/PT/ES)
-  if (!RE_SUCCESS_CRITERIA.test(reqs)) add(q.addSuccessCriteria);
-  else if (!/\bSC-\d+/.test(reqs)) add(q.idSuccessCriteria);
-  if (!/\bP1\b/.test(reqs)) add(q.prioritize);
-  if (!RE_INDEPENDENT_TEST.test(reqs)) add(q.independentTest);
+  // Spec-Kit-style structure checks (headings matched EN/PT/ES) — a change has no stories, success criteria or priorities
+  if (!change) {
+    if (!RE_SUCCESS_CRITERIA.test(reqs)) add(q.addSuccessCriteria);
+    else if (!/\bSC-\d+/.test(reqs)) add(q.idSuccessCriteria);
+    if (!/\bP1\b/.test(reqs)) add(q.prioritize);
+    if (!RE_INDEPENDENT_TEST.test(reqs)) add(q.independentTest);
+  }
 
   // EARS-derived: vague terms + missing IDs
   const e = earsValidate(reqs);
@@ -1263,26 +1296,28 @@ function clarify(projectDir, name) {
   // Leftover template placeholders (placeholderReport: bracketed prose, the TODO sentinel — never tags, IDs, links,
   // checkboxes or code) plus TBDs, as ONE question naming file:line and the text (it used to be one "Resolve
   // placeholder/TBD on line N" per line). A removed track's [SaaS]/[AI] criteria are inactive, not asked about.
-  const active = artifactReport(dir, "requirements.md", tracks);
-  const drop = inactiveMarkerLines(reqs, tracks);
+  // (A change: change.md whole — its task slots are its plan's placeholders too — named as change.md.)
+  const active = artifactReport(dir, file, tracks);
+  const drop = inactiveMarkerLines(full, tracks);
   const tbd = [];
   // Comments are blanked, not deleted: their newlines stay, so `i` is the real line — the same index `drop` and
   // artifactReport's items use (stripping a multi-line comment shifted every TBD below it). The comments: /<!--[\s\S]*?-->/g
   // by replaceHtmlCommentSpans (1.17 H).
-  replaceHtmlCommentSpans(reqs, (m) => m.replace(/[^\r\n]/g, " ")).split(/\r?\n/).forEach((l, i) => { if (!drop.has(i) && /(?<![\p{L}])TBD(?![\p{L}])/u.test(l.slice(0, 2000))) tbd.push({ line: i + 1, text: "TBD" }); });
+  replaceHtmlCommentSpans(full, (m) => m.replace(/[^\r\n]/g, " ")).split(/\r?\n/).forEach((l, i) => { if (!drop.has(i) && /(?<![\p{L}])TBD(?![\p{L}])/u.test(l.slice(0, 2000))) tbd.push({ line: i + 1, text: "TBD" }); });
   const slots = [...active.items, ...tbd].sort((a, b) => a.line - b.line);
   if (slots.length) {
-    const shown = slots.slice(0, 8).map((p) => `requirements.md:${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`);
+    const shown = slots.slice(0, 8).map((p) => `${file}:${p.line} ${p.text.length > 40 ? p.text.slice(0, 39) + "…" : p.text}`);
     if (slots.length > 8) shown.push(fm.gates.more(slots.length - 8));
-    add(fm.gates.clarifyPlaceholders("requirements.md", slots.length, shown.join(", ")));
+    add(fm.gates.clarifyPlaceholders(file, slots.length, shown.join(", ")));
   }
-  // missing structural sections (matched EN/PT/ES)
-  if (!RE_EDGE_CASES.test(reqs)) add(q.edgeCases);
+  if (change) return clarifyChange(projectDir, f, { full, e, tracks, fm, add, questions });
+  // missing structural sections (matched EN/PT/ES) — size s: edge cases and NFRs mean size m (its template says so)
+  if (size !== "s" && !RE_EDGE_CASES.test(reqs)) add(q.edgeCases);
   if (!RE_OUT_OF_SCOPE.test(reqs)) add(q.outOfScope);
   // A bugfix's requirements (EN/PT/ES template) have no NFR section by design — the fix restores behaviour that already
   // existed — so asking for one kept every filled bugfix at needs-clarification forever. A feature is still asked.
-  const bugfix = (readJson(statePath(dir)).data || {}).kind === "bugfix";
-  if (!bugfix && !RE_NFR.test(reqs)) add(q.nfr);
+  const bugfix = kind === "bugfix";
+  if (!bugfix && size !== "s" && !RE_NFR.test(reqs)) add(q.nfr);
   // Unwanted-behaviour criteria: IF…THEN / SE…ENTÃO / SI…ENTONCES (CUANDO is WHEN, not IF) — per CRITERION, so an
   // IF on one line and its THEN on the next (wrapped EARS) count.
   const RE_IF_THEN = /(?<![\p{L}\p{N}_])(IF|SE|SI)(?![\p{L}\p{N}_]).{0,400}?(?<![\p{L}\p{N}_])(THEN|ENTÃO|ENTAO|ENTONCES)(?![\p{L}\p{N}_])/iu;
@@ -1304,10 +1339,14 @@ function clarify(projectDir, name) {
   if (nudge) add(fm.designWeigh.clarifyConsistency(nudge.signals.map((w) => `'${w}'`).join(", ")));
   if (tracks.includes("dist") && !RE_DIST_DELIVERY.test(reqs)) add(QP.distDelivery); // 1.17 D
   if (tracks.includes("dist") && !RE_DIST_FAILURE.test(reqs)) add(QP.distFailure);
-  // 1.16 Q3 — the glossary: every word it says to avoid that requirements.md / design.md use (at most 10 questions, then one
-  // pointing at doctor). No glossary → nothing asked.
+  return clarifyResult(projectDir, f, tracks, fm, add, questions, nudge);
+}
+// The glossary questions and the result, for every kind. 1.16 Q3 — the glossary: every word it says to avoid that
+// requirements.md / design.md use (a change: change.md) — at most 10 questions, then one pointing at doctor. No glossary →
+// nothing asked.
+function clarifyResult(projectDir, f, tracks, fm, add, questions, nudge) {
   const gl = glossaryEntries(f.root);
-  const gh = glossaryHits(dir, gl, { projectDir, lang: featureLang(projectDir, name) });
+  const gh = glossaryHits(f.dir, gl, { projectDir, lang: featureLang(projectDir, f.slug) });
   const Q = fm.quality;
   gh.slice(0, 10).forEach((h) => add(Q.glossaryQuestion(h.locations.join(", "), h.word, h.term, h.definition)));
   if (gh.length > 10) add(Q.glossaryMore(gh.length - 10));
@@ -1318,6 +1357,21 @@ function clarify(projectDir, name) {
   // Past GLOSSARY_MAX_ENTRIES entries the rest is never read: said (stable counts + the localized note), never silent.
   if (gl && gl.truncated) Object.assign(res, { glossaryTruncated: { read: gl.entries.length, total: gl.total }, glossaryNote: Q.glossaryTruncated(gl.entries.length, gl.total) });
   return res;
+}
+// 1.21 verify V6 — a change's own questions (doctor's view of a change): its Summary and Approach written, 1–3 EARS criteria, its
+// XS scope (change-scope's detail) — never stories, success criteria, priorities, edge cases, NFRs, IF…THEN or a track's questions.
+const CHANGE_SUMMARY_SYN = ["summary", "resumo", "resumen"];
+const CHANGE_APPROACH_SYN = ["approach", "abordagem", "enfoque"];
+function clarifyChange(projectDir, f, c) {
+  const { full, e, tracks, fm, add, questions } = c;
+  const q = fm.clarify;
+  const written = (syn) => { const b = extractSection(full, syn); return b != null && !!stripHtmlComments(b).trim(); };
+  if (!written(CHANGE_SUMMARY_SYN)) add(q.changeSummary);
+  if (!(e && e.summary && e.summary.criteriaDetected > 0)) add(q.changeCriteria);
+  if (!written(CHANGE_APPROACH_SYN)) add(q.changeApproach);
+  const sc = changeScope(f.dir, tracks, featureLang(projectDir, f.slug));
+  if (!sc.ok && sc.acs > 0) add(q.changeScope(sc.detail));
+  return clarifyResult(projectDir, f, tracks, fm, add, questions, null);
 }
 
 module.exports = { XAC_DUPLICATE, XAC_CONFLICT, XAC_TRIGGER, XAC_RESPONSE, XAC_MIN_WORDS, XAC_MAX_CRITERIA,
@@ -1332,9 +1386,9 @@ module.exports = { XAC_DUPLICATE, XAC_CONFLICT, XAC_TRIGGER, XAC_RESPONSE, XAC_M
   glossBuiltinLines, glossProjectLines, glossSpans, glossUserParts, glossaryHits, briefGlossary, TRADEOFFS_SYN,
   RISKS_SYN, DESIGN_WEIGH, DESIGN_WEIGH_IDS, RE_WEIGH_HEADING_REST, weighHeadingMatches, weighSection, weighSectionHead, genericUnit,
   designBody, designEntries, WEIGH_PROSE_WORDS, designWeighState, designWeighChecks, designApprovedBeforeWeigh,
-  REUSE_SYN, DESIGN_WEIGH_STAMPS, designReuseFallback, BRIEF_REUSE_MAX_ENTRIES, BRIEF_REUSE_CHARS, BRIEF_REUSE_MAX_FILES,
+  REUSE_SYN, WEIGH_MERGED_SYN, DESIGN_WEIGH_STAMPS, designReuseFallback, BRIEF_REUSE_MAX_ENTRIES, BRIEF_REUSE_CHARS, BRIEF_REUSE_MAX_FILES,
   BRIEF_REUSE_MAX_DIRS, BRIEF_REUSE_DIR_ENTRIES, RE_REUSE_PATH, reuseUnits, reuseInsideRel, reuseProbe, reuseTargets, reuseEntryMatches,
   readDirBounded, reuseNearbyFiles, reuseQuotedSection, briefReuse,
   RE_RATE_LIMIT, RE_ACCESS_DENIED, RE_SUBJECT_RIGHTS, CONSTRAINT_KINDS, CONSTRAINT_SIGNALS, CONSTRAINT_RE,
   constraintSignalRe, RE_CONSISTENCY_ANSWER, RE_ACID, CONSTRAINT_MAX_WORDS, userSpecText, constraintNudge,
-  RE_DIST_DELIVERY, RE_DIST_FAILURE, clarify, __link };
+  RE_DIST_DELIVERY, RE_DIST_FAILURE, clarify, clarifyResult, CHANGE_SUMMARY_SYN, CHANGE_APPROACH_SYN, clarifyChange, __link };

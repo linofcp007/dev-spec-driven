@@ -9,13 +9,17 @@
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
+const fs = require("fs");
+const path = require("path");
 const i18n = require("../i18n.js");
 const { SIGNALS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let allTracks, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, readRoadmap, specsRoot, trackLabel,
-  trackSignalTable;
-function __link(E) { ({ allTracks, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, readRoadmap, specsRoot,
-  trackLabel, trackSignalTable } = E); }
+let allTracks, forgetCached, isObj, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, PACK_LIMITS, projectLang,
+  RE_PACK_KEYWORD, readIfExists, readRoadmap, roadmapBusyResult, specsRoot, trackLabel, trackSignalTable, withRoadmapLock,
+  writeFileAtomic;
+function __link(E) { ({ allTracks, forgetCached, isObj, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, PACK_LIMITS,
+  projectLang, RE_PACK_KEYWORD, readIfExists, readRoadmap, roadmapBusyResult, specsRoot, trackLabel, trackSignalTable,
+  withRoadmapLock, writeFileAtomic } = E); }
 
 // ---------------------------------------------------------------------------
 // Heuristic classifier (local, keyword based — no LLM, no cost)
@@ -118,14 +122,14 @@ const CUE_KINDS = {
   // governs it (one of `negators` ≤ `negWindow` words before it in the clause, or a word ending n't — PT "no" is em + o, never a
   // negator in a PT text, the classifier's rule) nor when it FOLLOWS the hit with a `consumers` verb between them (the hit consumes
   // it); the hit itself is never its own mention. mention: { words — fragments; requests: { methods, targets } — an HTTP method
-  // + a path (/…) or a target word; api: { words, notAfter (a sequence), notBefore } — an API word, never right after notAfter
-  // nor right before notBefore (an API key) }.
+  // + a path (/…) or a target word; api: { words, notAfter, notBefore — phrases (fragments or sequences) } — an API word, never
+  // right after a notAfter phrase nor right before a notBefore one (an API key; 1.21 F2: a public API) }.
   clause(rule) {
     const m = rule.mention, EDGE = "(?![\\p{L}\\p{N}_])";
     const alts = [];
     if (m.requests) alts.push(cueAlt(m.requests.methods) + CUE_SP + "(?:\\/|" + cueAlt(m.requests.targets) + EDGE + ")");
     if (m.words) alts.push(cueAlt(m.words) + EDGE);
-    if (m.api) alts.push("(?<!" + cueSequence(m.api.notAfter) + CUE_SP + ")" + cueAlt(m.api.words) + EDGE + "(?!" + CUE_SP + cueAlt(m.api.notBefore) + "(?![\\p{L}]))");
+    if (m.api) alts.push("(?<!(?<![\\p{L}])(?:" + cuePhrases(m.api.notAfter) + ")" + CUE_SP + ")" + cueAlt(m.api.words) + EDGE + "(?!" + CUE_SP + "(?:" + cuePhrases(m.api.notBefore) + ")(?![\\p{L}]))");
     const re = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + alts.join("|") + ")", "gu");
     const negators = new Set(rule.negators), consumers = new Set(rule.consumers), win = rule.negWindow;
     return (h, text, cased, lang) => {
@@ -216,14 +220,28 @@ const CUE_KINDS = {
       return j === 0 || articles.has(lower[j - 1]) ? "strong" : "keep";
     };
   },
+  // all (1.21 F2) — every rule of `rules` fires (each a rule of any other kind, without on / ifTier / then: the enclosing rule's
+  // apply): "our API" + a version in the sentence. Each sub-rule reads its own bounded window — still linear.
+  all(rule) {
+    const tests = rule.rules.map((r) => CUE_KINDS[r.kind](r));
+    return (h, text, cased, lang) => tests.every((t) => t(h, text, cased, lang) !== false);
+  },
 };
+// A rule's kind — and every sub-rule's kind (the `all` kind) — must be a CUE_KINDS entry.
+function checkCueKinds(r, track) {
+  if (!r || !Object.prototype.hasOwnProperty.call(CUE_KINDS, r.kind)) throw new Error("engine: SIGNALS." + track + ".cues — unknown kind " + (r && r.kind));
+  if (r.kind === "all") {
+    if (!Array.isArray(r.rules) || !r.rules.length) throw new Error("engine: SIGNALS." + track + ".cues — an 'all' rule needs rules");
+    r.rules.forEach((x) => checkCueKinds(x, track));
+  }
+}
 // A track's cue rules → its SIGNAL_CUES function: the rules are tried in order (a rule reads the keywords of its `on` — none: every
 // keyword — and, with `ifTier`, a hit of that tier only); the first that fires decides — "keep" is null (unchanged). A rule naming
 // an unknown kind is an error while the engine loads (a table typo never passes silently); its test — its regexes — is built on
 // its first use, never while the engine loads (every hook and CLI call is a fresh process that loads the engine).
 function cueRules(rules, track) {
   const compiled = rules.map((r) => {
-    if (!Object.prototype.hasOwnProperty.call(CUE_KINDS, r.kind)) throw new Error("engine: SIGNALS." + track + ".cues — unknown kind " + r.kind);
+    checkCueKinds(r, track);
     return { on: r.on ? new Set(r.on) : null, ifTier: r.ifTier || null, rule: r, test: null, then: r.then };
   });
   return function cues(h, text, cased, lang) {
@@ -245,9 +263,16 @@ const signalLookup = (key, build) => Object.fromEntries(Object.entries(SIGNALS).
 const SIGNAL_CONCEPTS = signalLookup("concepts", conceptMap);
 const SIGNAL_HAZARDS = signalLookup("hazards", (list) => new Set(list));
 const SIGNAL_CUES = signalLookup("cues", cueRules);
+const SIGNAL_EVERYDAY = signalLookup("everydayAnchors", (list) => new Set(list)); // (1.21 verify V3 — see backedBy in classify())
 
-// Words that negate a signal when they appear just before the keyword (EN/PT/ES).
-const NEGATORS = ["no", "not", "without", "never", "skip", "exclude", "avoid", "omit", "dispensa", "prescinde", "sem", "não", "nao", "sin"];
+// Words that negate a signal when they appear just before the keyword (EN/PT/ES). 1.21 F2: the negative conjunctions too —
+// "nor" / "neither", PT "nem", ES "ni" ("sem X nem Y", "ni X ni Y": each item they introduce is negated).
+const NEGATORS = ["no", "not", "without", "never", "skip", "exclude", "avoid", "omit", "dispensa", "prescinde", "sem", "não", "nao", "sin",
+  "nor", "neither", "nem", "ni",
+  // 1.21 verify R1: PT / ES "never" ("Nunca usaremos Kafka", "Jamás usaremos Kafka"; "jamais" is PT too)
+  "nunca", "jamás", "jamas", "jamais",
+  // 1.21 verify P1: "cannot" reads as "can't" ("Guests cannot use the checkout" = "Guests can't use the checkout")
+  "cannot"];
 
 // Words that may sit between a negator and the keyword ("sem uso de IA", "without the use of any LLM").
 const NEG_FILLER = new Set(["uso", "use", "usage", "of", "de", "do", "da", "del", "the", "a", "an", "any", "qualquer", "nenhum", "nenhuma", "ningún", "ninguna", "ningun", "el", "la", "o"]);
@@ -333,30 +358,627 @@ function configuredLang(projectDir, lang) {
 }
 
 function isNegated(text, idx, kwLen, lang, cased) {
-  // Negator token in the 1-2 words immediately before the match.
-  const before = text.slice(Math.max(0, idx - 20), idx).toLowerCase();
-  const tokens = before.split(/[^a-zà-ú-]+/).filter(Boolean);
-  const pt = i18n.baseLang(lang) === "pt"; // pt and pt-BR alike: "no" is em+o, never a negator
-  const negators = pt ? NEGATORS.filter((w) => w !== "no") : NEGATORS;
-  // "aplicado no checkout" / "guardado na sessão": after a participle, "no"/"na" is PT em+o, even in a
-  // phrase too short for guessLang to see Portuguese.
-  const prev = tokens[tokens.length - 2] || "";
-  const prevCased = ((cased || "").slice(Math.max(0, idx - 20), idx).split(/[^\p{L}-]+/u).filter(Boolean).slice(-2)[0]) || "";
-  const contraction = tokens[tokens.length - 1] === "no" && /(?:ad|id)[oa]s?$/.test(prev) &&
-    (pt || (prev.length >= 6 && prevCased === prevCased.toLowerCase()));
-  if (!contraction && tokens.slice(-2).some((w) => negators.includes(w))) return true;
-  // "sem uso de IA", "sin uso de IA", "no use of AI", "without the use of any AI": a negator a few filler words
-  // back still negates — weak signals included (a lone 'ia' used to come back as "Possible +ai").
-  const wide = text.slice(Math.max(0, idx - 40), idx).toLowerCase().split(/[^a-zà-ú-]+/).filter(Boolean);
-  let k = wide.length - 1;
-  while (k >= 0 && NEG_FILLER.has(wide[k])) k--;
-  // Across fillers, "no" negates only before an ENGLISH filler ("no use of AI"): before a PT one it is the
-  // contraction em+o — "Guia no uso do LLM" is a guide IN the use of the LLM, even when guessLang says 'en'.
-  const noContraction = wide[k] === "no" && !NEG_FILLER_EN.has(wide[k + 1]);
-  if (k < wide.length - 1 && k >= 0 && negators.includes(wide[k]) && !noContraction) return true; // only across at least one filler word
-  // "<keyword> ... not needed/required" shortly after.
+  return negatedBefore(text, idx, lang, cased) || negatedAfter(text, idx, kwLen);
+}
+// "<keyword> ... not needed/required" shortly after.
+function negatedAfter(text, idx, kwLen) {
   const after = text.slice(idx + (kwLen || 0), idx + (kwLen || 0) + 30).toLowerCase();
   return NEG_AFTER.test(after);
+}
+// A negator BEFORE the match — the negation a coordinated list carries on to its next items (coordinatedNegation).
+function negatedBefore(text, idx, lang, cased) {
+  return negatorBefore(text, idx, lang, cased) !== null;
+}
+// The negator that EXCLUDES the match at idx … end (the word, lower-case) — or null. (1.21 verify N1: only a CERTAIN exclusion —
+// negationOf; when in doubt the track stays: a track wrongly off loses rigor, an extra one is a one-word removal in Phase 0.)
+function negatorBefore(text, idx, lang, cased, end) {
+  const n = negationOf(text, idx, end == null ? idx : end, lang, cased);
+  return n ? n.word : null;
+}
+// a negator word, or a contraction ending n't, in a stretch of text (the look-back's precheck — the reach of cueBefore)
+const RE_NEG_NEAR = new RegExp("(?<![\\p{L}])(?:" + NEGATORS.join("|") + ")(?![\\p{L}])|n['’]t(?![\\p{L}])", "u");
+
+// COORDINATED NEGATION (1.21 F2): a negation reaches every item of the coordinated list it opens, in its clause, for every track
+// — "We will not add feature flags or canary releases", "Não vamos usar feature flags nem lançamento canário", "No usaremos
+// feature flags ni despliegue canario", "without Kafka, RabbitMQ or SQS". The items are the matched keywords (every track;
+// overlapping matches are one item); two items are coordinated when the text between them is a LIST LINK: a conjunction (or /
+// nor / ou / nem / ni, ES o / u) with at most one other word ("or any", "nem outro"), or a comma with articles only — a
+// comma-joined item counts only once a conjunction closes the list later ("no X, Y or Z"; "Without feature flags, the canary
+// release…" is no list). Never across . ! ? ; : or a line break, "and" / "e" / "y" (often a new predicate: "without downtime and
+// roll back on errors"), a contrast word ("no X, just Y", "sem X, apenas Y", "not X but Y") or a longer gap; a hazard's negation
+// (its requirement: "without downtime") opens no list. A negative conjunction (nor / nem / ni) also negates the item BEFORE it
+// when a negator GOVERNS that item ("Não vamos usar X nem Y" — the negator three words back). 1.21 review: a list opens only at an
+// item its negator governs (negationGoverns — "must not lose payments or refunds" negates the verb: no list; B1); a comma after
+// the list's closing conjunction, or one before an article, ends it (B2: "Without an LLM or embeddings, the checkout or …"). Linear:
+// each gap between two consecutive items is read at most twice, and bounded (LIST_GAP_MAX characters).
+const LIST_GAP_MAX = 80;
+const LIST_OR = new Set(["or", "nor", "ou", "nem", "ni"]);
+const LIST_OR_ES = new Set(["o", "u"]); // ES "or" (PT "o" is an article)
+const LIST_NEG = new Set(["nor", "nem", "ni"]);
+const LIST_AND = new Set(["and", "e", "y"]);
+const LIST_FILLER = new Set(["a", "an", "the", "any", "other", "some", "no", "not", "without", "never", "um", "uma", "o", "os", "as", "qualquer",
+  "nenhum", "nenhuma", "outro", "outra", "outros", "outras", "sem", "não", "nao", "un", "una", "unos", "unas", "el", "la", "los", "las", "ningún",
+  "ninguna", "ningun", "otro", "otra", "otros", "otras", "sin", "neither", "either"]);
+const LIST_CONTRAST = new Set(["but", "just", "only", "instead", "rather", "except", "besides", "although", "though", "while", "whereas", "yet",
+  "so", "then", "which", "that", "who", "because", "since", "when", "if", "unless", "until", "mas", "porém", "contudo", "apenas", "só",
+  "somente", "sim", "exceto", "salvo", "embora", "enquanto", "porque", "que", "quando", "se", "pero", "sino", "sólo", "solo", "solamente",
+  "excepto", "aunque", "mientras", "cuando", "si"]);
+const LIST_BOUNDARY = /[.!?;:\n]/;
+// The link between two consecutive items: "or" (a conjunction), "neg" (a negative one), "and", "comma" — or null (no list link).
+function listLink(text, from, to, es) {
+  if (to - from > LIST_GAP_MAX) return null;
+  const gap = text.slice(from, to);
+  if (LIST_BOUNDARY.test(gap)) return null;
+  const words = gap.match(/[\p{L}\p{N}'’-]+/gu) || [];
+  if (words.length > 4) return null;
+  let or = null, other = 0;
+  for (const w0 of words) {
+    const w = w0.toLowerCase();
+    // "and" / "e" / "y" end the list: often a new predicate ("without downtime and roll back on errors", "don't store PII and
+    // encrypt the rest") — the negation stops there
+    if (LIST_CONTRAST.has(w) || LIST_AND.has(w)) return null;
+    if (LIST_OR.has(w) || (es && LIST_OR_ES.has(w))) { if (!or || LIST_NEG.has(w)) or = LIST_NEG.has(w) ? "neg" : "or"; }
+    else if (!LIST_FILLER.has(w)) other++;
+  }
+  if (or) return other <= 1 ? or : null;
+  return gap.includes(",") && other === 0 ? "comma" : null;
+}
+// WHAT A NEGATION NEGATES (1.21 review B1, verify V1 / V5 / R1 / N1) — a negation EXCLUDES a keyword only when it certainly governs
+// it; ANYTHING ELSE keeps the track (when in doubt, keep: a track wrongly off loses rigor, an extra one is a one-word removal the human
+// confirms in Phase 0). It certainly governs it when:
+//   (a) a NOMINAL negator (no / without / sem / sin / nor / nem / ni, avoid, skip… — NOMINAL_NEGATORS; a contrast "Postgres, not
+//       MongoDB" too) has nothing but fillers, articles, quantifiers or modifiers before it — "no X", "sem o X", "without the use of
+//       any X", "no new X", one word right before the keyword ("without real-time X"); a plain noun ENDS the negated phrase ("Without
+//       payments THE checkout is useless": the checkout stays); or a list it opened carries it on;
+//   (b) an ADOPTION verb (GOVERN_ADOPT: use / add / need / include / implement / integrate / deploy / run / offer / provide / ship /
+//       create / adopt / enable / install / embed / bundle / expose, "necessary" + PT / ES) or a PLAN / an INTENTION (GOVERN_AUX: will /
+//       do / going to, vamos / iremos · GOVERN_WANT: plan / intend / want, pretendemos / planeamos / queremos, tenemos previsto…)
+//       governs it, optionally with an article / a quantifier / one modifier — "We will not add an LLM", "We don't use managed Kafka",
+//       "Não queremos Kafka", "No es necesario Kafka", "must not use X" (whatever the modal) — and its SUBJECT is the one designing
+//       (the first person, the system being built, or none): a role's / a plan's is an access or entitlement rule, the track stays
+//       ("Guests can't use the checkout", "The free plan does not include webhooks" — 1.21 verify P1, subjectKeeps()).
+// Never an exclusion: an auxiliary or a modal + any other verb ("The report does not show the LLM cost", "Users who do not pay the
+// subscription", "must not lose payments", "never overwrites the ledger" — the verb is the requirement), a wished verb ("We don't want to
+// lose payments") or a hazard ("don't want duplicate payments", "pagamentos duplicados"), a relative clause ("Users who don't pay…",
+// "Utilizadores que não pagam…"), a condition ("If we don't add rate limiting…", "…unless the admin asks"), a nominal negator inside a
+// negated predicate ("We won't ship without a canary release": the canary release is required), and a negated verb whose object's head
+// is data to protect ("must not embed OAuth client secrets", "must not expose GraphQL introspection", "The email doesn't include personal
+// data" — PROTECTED_HEADS, whatever the verb and the subject).
+// negationKind() → "exclude" | "require" | "none" (a verb negation or anything unsure); words: lower-case, the negator at j, the item at end.
+const GOVERN_MAX = 5;
+const GOVERN_BOUNDARY = /[.!?;:,\n]/;
+const GOVERN_DEONTIC = new Set(["must", "shall", "should", "can", "could", "may", "might", "cannot", "pode", "podem", "poderá", "poderão", "deve",
+  "devem", "deverá", "deverão", "debe", "deben", "deberá", "deberán", "puede", "pueden", "podrá", "podrán",
+  // (1.21 verify N1: the 1st person plural and the conditional too — "Não devemos ativar…", "No debemos activar…", "deveria")
+  "podemos", "devemos", "debemos", "deveria", "deveríamos", "poderia", "poderíamos", "debería", "deberíamos", "podría", "podríamos"]);
+// the stem of a contracted negator: can't → "ca", mustn't → "must", shouldn't, shan't → "sha" (won't / don't / doesn't: a plain auxiliary)
+const NT_DEONTIC = new Set(["ca", "can", "must", "should", "could", "might", "may", "sha"]);
+const GOVERN_AUX = new Set([
+  "will", "would", "do", "does", "did", "be", "is", "are", "was", "were", "been", "going", "intend", "intends", "plan", "plans", "planning",
+  "want", "wants", "wish", "vamos", "vai", "vão", "iremos", "irá", "irão", "será", "serão", "é", "são", "ser", "queremos", "quero", "quer",
+  "querem", "querer", "pretendemos", "pretendo", "pretende", "pretendem", "pretender", "planeamos", "planeio", "planeia", "planejamos",
+  "planeja", "planejam", "tencionamos", "tenciona", "va", "van", "es", "son", "se", "hace", "faz", "quiero", "quiere", "quieren",
+  "pensamos", "pienso", "piensa", "piensan", "planeo", "planea", "planean", "tenemos", "previsto",
+]);
+// The volition / intention verbs of GOVERN_AUX: their object is what is wanted — a noun is excluded ("Não queremos Kafka", "We don't want
+// Kafka"), a verb states the wish ("We don't want to lose payments", "Não queremos perder pagamentos" — a requirement; 1.21 verify R1).
+const GOVERN_WANT = new Set(["intend", "intends", "plan", "plans", "planning", "want", "wants", "wish", "queremos", "quero", "quer", "querem",
+  "querer", "pretendemos", "pretendo", "pretende", "pretendem", "pretender", "planeamos", "planeio", "planeia", "planejamos", "planeja",
+  "planejam", "tencionamos", "tenciona", "quiero", "quiere", "quieren", "pensamos", "pienso", "piensa", "piensan", "planeo", "planea", "planean"]);
+const GOVERN_ADOPT = new Set([
+  "need", "needs", "needed", "require", "requires", "required", "use", "uses", "using", "add", "adds", "adding", "build", "builds", "building",
+  "include", "includes", "including", "introduce", "introduces", "introducing", "implement", "implements", "implementing", "support",
+  "supports", "supporting", "have", "has", "having", "adopt", "adopts", "adopting", "rely", "relying", "depend", "depends", "depending",
+  "set", "integrate", "integrates", "integrating", "deploy", "deploys", "deploying", "run", "runs", "running", "offer", "offers",
+  "offering", "provide", "provides", "providing", "ship", "ships", "create", "creates", "creating", "necessary", "involve", "involves",
+  "involving", "envolve", "envolvem", "implica", "implicam", "involucra", "involucran",
+  // 1.21 verify R2 — enabling, installing, embedding, exposing: "must not enable feature flags", "should not bundle Kafka", "must not
+  // expose GraphQL" exclude the technology (never data to protect — PROTECTED_HEADS)
+  "enable", "enables", "enabling", "activate", "activates", "activating", "turn", "install", "installs", "installing", "embed", "embeds",
+  "embedding", "bundle", "bundles", "bundling", "expose", "exposes", "exposing",
+  // PT
+  "precisa", "precisam", "precisamos", "precisar", "preciso", "necessita", "necessitam", "necessitamos", "necessitar", "necessário",
+  "necessária", "necessários", "necessárias", "necessidade", "falta", "usar", "usa", "usam", "usamos", "usará", "usarão", "usaremos",
+  "utilizar", "utiliza", "utilizam", "utilizamos", "utilizará", "utilizaremos", "adicionar", "adiciona", "adicionamos", "adicionaremos",
+  "acrescentar", "acrescentamos", "incluir", "inclui", "incluem", "incluímos", "incluiremos", "implementar", "implementamos",
+  "implementaremos", "introduzir", "ter", "tem", "têm", "temos", "terá", "teremos", "haver", "há", "haverá", "suportar", "suporta",
+  "depender", "depende", "dependemos", "recorrer", "integrar", "integra", "integramos", "integraremos", "adotar", "adota", "adotamos",
+  "adotaremos", "implantar", "implanta", "implantamos", "implantaremos", "oferecer", "oferece", "oferecemos", "ofereceremos", "fornecer",
+  "fornece", "fornecemos", "forneceremos", "disponibilizar", "disponibilizamos", "criar", "cria", "criamos", "criaremos",
+  "ativar", "ativa", "ativamos", "ativaremos", "instalar", "instala", "instalamos", "instalaremos", "incorporar", "incorpora", "incorporamos",
+  "incorporaremos", "expor", "expõe", "expomos", "exporemos", "habilitar", "habilita", "habilitamos", "habilitaremos", "introduz",
+  "introduzimos",
+  // ES
+  "necesita", "necesitan", "necesitamos", "necesitará", "necesitar", "necesario", "necesaria", "necesarios", "necesarias", "necesidad",
+  "usan", "usará", "utilizan", "añadir", "añade", "añadimos", "añadiremos", "agregar", "agrega", "agregamos", "agregaremos", "incluye",
+  "incluimos", "introducir", "tener", "tiene", "tienen", "tendrá", "tendremos", "hay", "habrá", "haber", "requiere", "requieren",
+  "requerirá", "recurrir", "soportar", "soporta", "integramos", "adoptar", "adopta", "adoptamos", "adoptaremos", "desplegar", "despliega",
+  "desplegamos", "desplegaremos", "ofrecer", "ofrece", "ofrecemos", "ofreceremos", "proporcionar", "proporciona", "proporcionamos",
+  "proporcionaremos", "crear", "crea", "creamos", "crearemos", "activar", "activa", "activamos", "activaremos", "instalamos", "instalaremos",
+  "incrustar", "incrusta", "incrustamos", "exponer", "expone", "exponemos", "expondremos", "habilitar", "introduce", "introducimos",
+  // 1.21 verify P2 — the 3rd-person future of the verbs above ("La versión 2 no añadirá suscripciones", "O MVP não incluirá X"): ES
+  "añadirá", "añadirán", "agregará", "agregarán", "incluirán", "integrará", "integrarán", "implementará", "implementarán", "adoptará",
+  "adoptarán", "desplegará", "desplegarán", "ofrecerá", "ofrecerán", "proporcionará", "proporcionarán", "creará", "crearán", "activará",
+  "activarán", "instalará", "instalarán", "soportará", "soportarán", "necesitarán", "requerirán", "usarán", "utilizarán", "tendrán",
+  "habilitará", "habilitarán", "expondrá", "incorporará", "introducirá", "dependerá",
+  // PT ("incluirá" is PT and ES)
+  "adicionará", "adicionarão", "incluirá", "incluirão", "integrarão", "implementarão", "adotará", "adotarão", "implantará", "implantarão",
+  "oferecerá", "oferecerão", "fornecerá", "fornecerão", "criará", "criarão", "ativará", "ativarão", "instalarão", "suportará", "suportarão",
+  "precisará", "precisarão", "necessitará", "necessitarão", "utilizarão", "terão", "disponibilizará", "incorporarão", "introduzirá",
+  "exporá", "acrescentará",
+]);
+// DATA TO PROTECT: a negated verb whose object's head noun is protected (PROTECTED_HEADS — a secret, a key, a token, credentials, a
+// password, a card number, personal data, PII, introspection, internals, stack traces + PT / ES) states the requirement, never an
+// exclusion — whatever the verb (include / contain / send / show / return / log / store / expose / embed / use…) and the subject: "The
+// frontend must not embed OAuth client secrets" keeps +tdd, "The API must not expose GraphQL introspection" keeps +api, "The email doesn't
+// include personal data" keeps +privacy, "The URL does not include the session token" keeps +tdd; "We must not expose GraphQL" excludes it
+// (1.21 verify N3, generalised in verify P3 — by the phrase's head noun, never by the keyword's track: protectedHead()). The N3 verbs,
+// expose / embed (GOVERN_EXPOSE), read any protected word in the phrase as before ("must not expose the secrets manager" keeps +sec).
+const GOVERN_EXPOSE = new Set(["expose", "exposes", "exposing", "embed", "embeds", "embedding", "expor", "expõe", "expomos", "exporemos", "exponer",
+  "expone", "exponemos", "expondremos", "incrustar", "incrusta", "incrustamos", "incorporar", "incorpora", "incorporamos", "incorporaremos"]);
+const PROTECTED_HEADS = /(?<![\p{L}])(?:secrets?|keys?|tokens?|credentials?|passwords?|passphrases?|card numbers?|personal data|pii|introspection|internals|stack traces?|segredos?|chaves?|credenciais|credencial|senhas?|palavras?-passe|n[úu]meros? d[oe] cart[ãa]o|dados pessoais|secretos?|claves?|credenciales|contraseñas?|n[úu]meros? de tarjeta|datos personales|introspe(?:c)?ção|introspecci[óo]n)(?![\p{L}])/iu;
+// The negators that negate a noun phrase (EN "no" too; ES "no" negates a verb)
+const NOMINAL_NEGATORS = new Set(["without", "sem", "sin", "nor", "neither", "nem", "ni", "skip", "exclude", "avoid", "omit", "dispensa", "prescinde"]);
+// A hazard's modifier: the negated phrase is the concern, never an exclusion ("We don't want duplicate payments", "Não queremos pagamentos
+// duplicados", "without duplicate charges")
+const HAZARD_MODS = new Set(["duplicate", "duplicated", "double", "doubled", "lost", "missing", "stale", "corrupt", "corrupted", "inconsistent",
+  "orphan", "orphaned", "partial", "duplicado", "duplicados", "duplicada", "duplicadas", "duplos", "duplas", "dobles", "doble", "perdido", "perdidos",
+  "perdida", "perdidas", "corrompido", "corrompidos", "corrompida", "corrompidas", "desatualizado", "desatualizados", "obsoletos", "inconsistentes"]);
+// A relative pronoun for PEOPLE right before the negator (or before its auxiliary): the negation describes someone, never excludes ("The
+// admin who doesn't have MFA must enable it"). A thing's relative clause ("Página interna que no usa LLM", "a page that doesn't use an
+// LLM") still excludes with an adoption verb; with any other verb nothing is excluded anyway ("Users that do not pay the subscription").
+const REL_PRONOUNS = new Set(["who", "whom", "whose", "quem", "quien", "quienes"]);
+// A condition around the negation: a requirement, never an exclusion ("If we don't add rate limiting…", "Se não adicionarmos…", "Si no
+// añadimos…", "…unless the admin asks", "a menos que", "salvo que") — in the condition itself: "IF … THEN THE SYSTEM SHALL NOT retry"
+// negates in the consequence (a then / então / entonces after the condition word ends it)
+const COND_BEFORE = new Set(["if", "unless", "se", "si", "caso"]);
+const COND_THEN = new Set(["then", "então", "entao", "entonces"]);
+const RE_COND_AFTER = /(?<![\p{L}])(?:unless|except (?:when|if)|a menos que|salvo (?:que|se|si)|a no ser que|exce(?:p)?to (?:se|si|quando|cuando))(?![\p{L}])/iu;
+// the people words that negate a whole predicate ("Nobody should access the admin API without SSO": SSO is required)
+const NOBODY_WORDS = new Set(["nobody", "noone", "ninguém", "nadie"]);
+// "never" and its PT / ES twins: before a verb that is no adoption verb they state a behaviour — a requirement, like a modal's ("a
+// second write never overwrites the ledger"); "Nunca usaremos Kafka", "We will never run Kafka" exclude (1.21 verify R1).
+const NEVER_WORDS = new Set(["never", "nunca", "jamás", "jamas", "jamais"]);
+// A preposition after another noun makes the match that noun's complement, never the negated object: "We didn't add an LLM TO the
+// checkout" negates the LLM, not the checkout (1.21 verify R1).
+const GOVERN_PREP = new Set(["to", "for", "on", "in", "into", "at", "from", "with", "para", "com", "em", "con", "en"]);
+const GOVERN_NEUTRAL = new Set(["on", "for", "to", "up", "yet", "new", "more", "extra", "additional", "external", "separate", "third-party", "ao",
+  "novo", "nova", "novos", "novas", "mais", "adicional", "adicionais", "nuevo", "nueva", "nuevos", "nuevas", "más", "adicionales",
+  // "We no longer use X", "The app no longer needs X", "Já não usamos X", "Ya no usamos X"
+  "longer", "já", "ya"]);
+const isNegatorWord = (w, pt) => (NEGATORS.includes(w) && !(pt && w === "no")) || /n['’]t$/.test(w);
+const verbForm = (w, ptes) => (w.length > 4 && /ing$/.test(w)) || (ptes && /(?:[aei]r|ndo)$/.test(w));
+const passWord = (w) => NEG_FILLER.has(w) || LIST_FILLER.has(w) || GOVERN_NEUTRAL.has(w);
+// the PT / ES words among the negators and the volition verbs: a short PT / ES text the language guess reads as English ("No queremos
+// perder pagos.") still has its infinitives read as verb forms
+const PTES_GOVERN_WORDS = new Set(["sem", "sin", "não", "nao", "nunca", "jamás", "jamas", "jamais", "nem", "ni", "queremos", "quero", "quer",
+  "querem", "querer", "pretendemos", "pretendo", "pretende", "pretendem", "pretender", "planeamos", "planeio", "planeia", "planejamos", "planeja",
+  "planejam", "tencionamos", "tenciona", "quiero", "quiere", "quieren", "pensamos", "pienso", "piensa", "piensan", "planeo", "planea", "planean"]);
+// opts: contrast (the negator opens its segment after a comma, or EN "not" opens the sentence — "Postgres, not MongoDB": nominal),
+// protectedHead (a function of `loose` — an expose / embed verb in the stretch —, called at most once and only for a VERB negation — a
+// verbal negator, or an adoption verb after a nominal one: "without exposing secrets", "No need for personal data" —: the object phrase
+// has a protected head, so the negation is the requirement: "require"). Linear in end - j.
+function negationKind(words, j, end, lang, opts = {}) {
+  const base = i18n.baseLang(lang);
+  let ptes = base === "pt" || base === "es";
+  const w = words[j];
+  if (PTES_GOVERN_WORDS.has(w)) ptes = true;
+  const nominal = NOMINAL_NEGATORS.has(w) || (w === "no" && base !== "es") || !!opts.contrast;
+  let guard;
+  const guarded = () => {
+    if (guard === undefined) guard = !!(opts.protectedHead && opts.protectedHead(words.slice(j + 1, end).some((x) => GOVERN_EXPOSE.has(x))));
+    return guard;
+  };
+  if (!nominal && guarded()) return "require"; // 1.21 verify P3: "The email doesn't include personal data", "O email não inclui…"
+  let deontic = false, aux = false;
+  if (/n['’]t$/.test(w)) { if (NT_DEONTIC.has(w.replace(/n['’]t$/, ""))) deontic = true; else aux = true; }
+  else if (w === "cannot" || NEVER_WORDS.has(w)) deontic = true; // "never" states how the system behaves (NEVER_WORDS)
+  else if (j > 0 && GOVERN_DEONTIC.has(words[j - 1])) deontic = true; // "must not", "should never"
+  else if (j > 0 && GOVERN_AUX.has(words[j - 1])) aux = true; // "will not", "does not"
+  // the negated stretch ends at a negative conjunction ("Não queremos Kafka nem …": Kafka is right before it)
+  let stop = end;
+  for (let i = j + 1; i < end; i++) if (LIST_NEG.has(words[i])) { stop = i; break; }
+  let adopted = false, want = false, prevTo = false, modifier = false;
+  for (let i = j + 1; i < stop; i++) {
+    const x = words[i];
+    if (passWord(x)) { prevTo = x === "to"; continue; }
+    if (GOVERN_ADOPT.has(x)) {
+      if (guarded()) return "require"; // a verb after a nominal negator: "without exposing secrets", "El correo no incluye datos personales"
+      adopted = true; prevTo = false; continue;
+    }
+    if (!adopted && GOVERN_DEONTIC.has(x)) { deontic = true; prevTo = false; continue; }
+    if (!adopted && GOVERN_AUX.has(x)) { aux = true; if (GOVERN_WANT.has(x)) want = true; if (PTES_GOVERN_WORDS.has(x)) ptes = true; prevTo = false; continue; }
+    // any other word is a verb or a noun that ends the negated phrase — or ONE modifier right before the keyword after an adoption
+    // verb, a wish or a nominal negator ("don't use managed Kafka", "without real-time Kafka", "Não queremos o novo Kafka")
+    const verbish = prevTo || verbForm(x, ptes);
+    if (i === stop - 1 && !modifier && !verbish && (adopted || want || (nominal && !aux && !deontic))) {
+      if (HAZARD_MODS.has(x)) return "require"; // "We don't want duplicate payments", "without duplicate charges"
+      modifier = true;
+      continue;
+    }
+    // a verb form, or a VERB after a verbal negator / an auxiliary / a modal, states a requirement; a noun — after a nominal negator ("Without
+    // payments the checkout…"), an adoption verb or a wish (its object runs on: "Não vamos usar o sistema X nem Y") — ends the negated
+    // phrase: nothing is certain — "none"
+    if (verbish) return "require";
+    if (adopted || want) return "none";
+    return !nominal || deontic || aux ? "require" : "none";
+  }
+  return "exclude";
+}
+// the clause's words before `start`, lower-case, a quote's apostrophes dropped ("'not add X or Y'")
+const govWords = (text, start, bound) => cueWords(cueBefore(text, start, bound)).map((w) => w.toLowerCase().replace(/^['’]+|['’]+$/g, "")).filter(Boolean);
+// the comma-free stretch before `start` → { words, afterComma, sentenceStart }
+function govSegment(text, start) {
+  const seg = cueBefore(text, start, GOVERN_BOUNDARY);
+  const at = start - seg.length - 1;
+  return { words: govWords(text, start, GOVERN_BOUNDARY), afterComma: at >= 0 && text[at] === ",", sentenceStart: at < 0 || /[.!?;:\n]/.test(text[at]) };
+}
+// Is the negation at words[j] blocked — a relative clause, a condition, a nominal negator inside a negated predicate, a hazard modifier
+// right after the item — whatever it reads like (1.21 verify N1 / N3)?
+function negationBlocked(text, words, j, end, pt) {
+  const w = words[j];
+  // a people relative pronoun right before the negator or its auxiliary ("who doesn't have", "who do not pay", "quien no paga")
+  let r = j - 1;
+  if (r >= 0 && (GOVERN_AUX.has(words[r]) || GOVERN_DEONTIC.has(words[r]))) r--;
+  if (r >= 0 && REL_PRONOUNS.has(words[r])) return true;
+  // a condition before the negator in its stretch (not ended by a then), or an "unless" after the item in its clause
+  let cond = false;
+  for (let i = 0; i < j; i++) { if (COND_BEFORE.has(words[i])) cond = true; else if (COND_THEN.has(words[i])) cond = false; }
+  const after = cueAfter(text, end, CUE_BOUNDARY);
+  if (cond || RE_COND_AFTER.test(after)) return true;
+  // a nominal negator inside a negated predicate ("We won't ship without a canary release", "Nobody … without SSO"): a double negation
+  // (never a negative conjunction: nor / nem / ni continue a negation — "not MongoDB nor Kafka")
+  const verbChain = (x) => !!x && (GOVERN_AUX.has(x) || GOVERN_DEONTIC.has(x) || GOVERN_ADOPT.has(x));
+  if (NOMINAL_NEGATORS.has(w) && !LIST_NEG.has(w)) for (let i = 0; i < j; i++) {
+    const x = words[i];
+    if (NOBODY_WORDS.has(x) || /n['’]t$/.test(x) || x === "not" || x === "cannot" || NEVER_WORDS.has(x) || x === "não" || x === "nao" ||
+      // "No user can access the admin API without SSO": EN "no" + a noun + a modal negates the predicate
+      (x === "no" && !pt && (verbChain(words[i + 1]) || (i + 2 < j && verbChain(words[i + 2]))))) return true;
+  }
+  // a hazard's modifier right after the item (PT / ES: "pagamentos duplicados", "pagos duplicados")
+  const next = (after.match(/[\p{L}\p{N}'’-]+/u) || [""])[0].toLowerCase();
+  return HAZARD_MODS.has(next);
+}
+// The negated verb's object phrase has a protected HEAD: the item and up to four words after it (to a preposition). A protected word is
+// no head when it only modifies another noun (1.21 verify P3 — now that any verb reads it): an EN compound's head after it ("token cost",
+// "secrets manager", "credential stuffing" — PROTECTED_MODIFIED), a PT / ES head before it, linked by de / do / da ("custo de tokens",
+// "gestão de segredos"; "token de acesso", "chave de API", "dados pessoais" are data to protect), and the words that only look like it
+// (design tokens, an idempotency key, a primary / foreign key — NOT_PROTECTED). `loose` (an expose / embed verb, N3): any protected word.
+const PROTECTED_MODIFIED = new Set(["cost", "costs", "manager", "managers", "management", "stuffing", "usage", "count", "limit", "limits",
+  "budget"]);
+const NOT_PROTECTED = /(?<![\p{L}])(?:design tokens?|idempotency[- ]keys?|primary keys?|foreign keys?)(?![\p{L}])/giu;
+const PROTECTED_HEADS_ALL = new RegExp(PROTECTED_HEADS.source, "giu");
+const RE_HEAD_INITIAL = /(?:^|\s)(?:de|do|da|dos|das|del)\s/i;
+function protectedHead(text, start, end, loose) {
+  const after = (cueAfter(text, end, GOVERN_BOUNDARY).match(/[\p{L}\p{N}'’-]+/gu) || []).slice(0, 4);
+  const cut = after.findIndex((x) => GOVERN_PREP.has(x.toLowerCase()));
+  const phrase = text.slice(start, end) + " " + (cut < 0 ? after : after.slice(0, cut)).join(" ");
+  if (loose) return PROTECTED_HEADS.test(phrase);
+  const p = phrase.replace(NOT_PROTECTED, " ");
+  for (const m of p.matchAll(PROTECTED_HEADS_ALL)) {
+    const next = (p.slice(m.index + m[0].length).match(/[\p{L}\p{N}'’-]+/u) || [""])[0].toLowerCase();
+    if (!PROTECTED_MODIFIED.has(next) && !RE_HEAD_INITIAL.test(p.slice(0, m.index))) return true;
+  }
+  return false;
+}
+// WHOSE ADOPTION IS NEGATED (1.21 verify P1) — a verbal negation of an adoption verb excludes only when its SUBJECT is the one
+// designing: the first person ("We don't use Kafka", "Não usamos Kafka", "No usaremos ningún LLM"), the system being built ("The
+// service must not use Redis", "This feature does not require an LLM", "O sistema não deve usar Redis") or none at all (an imperative, an
+// infinitive, "Não é necessário um LLM", "No se necesita un LLM"). Any other subject — a role, a user group, a plan / tier / edition /
+// account / tenant — states an access or entitlement rule, and the track stays: "Guests can't use the checkout", "Free users may not use
+// the LLM assistant", "The Starter plan doesn't include the LLM assistant", "Os editores não podem adicionar feature flags", "Las
+// cuentas de prueba no incluyen el asistente LLM". A subject that can't be read (a noun in neither list) keeps the track too — but a
+// component (a singular noun after the / this / our, o / este / o nosso, el / este / nuestro) after a plain negation excludes (P2). The
+// subject (subjectOf) is the nearest listed noun back to the clause start (the comma-free stretch), past a prepositional phrase
+// ("Tenants ON the free plan", "Um utilizador SEM subscrição") and a relative clause ("Guests WHO open the page"); an EN "no" after an
+// adoption verb negates its noun for certain — only a role keeps it ("The free plan has no webhooks"; "The MVP has no LLM" excludes).
+// "cannot" reads as "can't" (NEGATORS). Linear in the stretch (one pass back, bounded look-backs; the sentence's earlier words ≤ 24).
+const FIRST_PERSON = new Set(["we", "i", "us", "our", "ours", "ourselves", "let's", "lets", "nós", "nossa", "nosso", "nossas", "nossos",
+  "eu", "nosotros", "nosotras", "nuestro", "nuestra", "nuestros", "nuestras", "yo"]);
+const ROLE_SUBJECTS = new Set([
+  "user", "users", "guest", "guests", "visitor", "visitors", "viewer", "viewers", "editor", "editors", "admin", "admins", "administrator",
+  "administrators", "member", "members", "customer", "customers", "client", "clients", "tenant", "tenants", "account", "accounts", "plan",
+  "plans", "tier", "tiers", "edition", "editions", "subscriber", "subscribers", "subscription", "subscriptions", "license", "licenses",
+  "licence", "licences", "seat", "seats", "owner", "owners", "operator", "operators", "staff", "employee", "employees", "manager",
+  "managers", "role", "roles", "anyone", "everyone", "nobody", "people", "person", "buyer", "buyers", "seller", "sellers", "merchant",
+  "merchants", "vendor", "vendors", "partner", "partners", "reseller", "resellers", "affiliate", "affiliates", "student", "students",
+  "teacher", "teachers", "patient", "patients", "doctor", "doctors", "driver", "drivers", "rider", "riders", "author", "authors", "reader",
+  "readers", "contributor", "contributors", "moderator", "moderators", "reviewer", "reviewers", "approver", "approvers", "workspace",
+  "workspaces", "organization", "organizations", "organisation", "organisations", "org", "orgs", "household", "households", "family",
+  "families",
+  // PT
+  "utilizador", "utilizadores", "usuário", "usuários", "convidado", "convidados", "convidada", "convidadas", "visitante", "visitantes",
+  "editores", "administrador", "administradores", "membro", "membros", "cliente", "clientes", "inquilino", "inquilinos", "conta", "contas",
+  "plano", "planos", "escalão", "escalões", "nível", "níveis", "edição", "edições", "assinante", "assinantes", "subscritor", "subscritores",
+  "assinatura", "assinaturas", "subscrição", "subscrições", "licença", "licenças", "funcionário", "funcionários", "gestor", "gestores",
+  "perfil", "perfis", "papel", "papéis", "operador", "operadores", "leitor", "leitores", "autor", "autores", "aluno", "alunos", "professor",
+  "professores", "paciente", "pacientes", "doente", "doentes", "médico", "médicos", "motorista", "motoristas", "comprador", "compradores",
+  "vendedor", "vendedores", "lojista", "lojistas", "parceiro", "parceiros", "revendedor", "revendedores", "moderador", "moderadores",
+  "colaborador", "colaboradores", "pessoa", "pessoas", "ninguém", "organização", "organizações",
+  // ES
+  "usuario", "usuarios", "usuaria", "usuarias", "invitado", "invitados", "invitada", "invitadas", "miembro", "miembros", "cuenta",
+  "cuentas", "planes", "nivel", "niveles", "edición", "ediciones", "suscriptor", "suscriptores", "suscripción", "suscripciones", "licencia",
+  "licencias", "empleado", "empleados", "perfiles", "rol", "roles", "lector", "lectores", "alumno", "alumnos", "estudiante", "estudiantes",
+  "profesores", "conductor", "conductores", "socio", "socios", "persona", "personas", "nadie", "organización", "organizaciones",
+]);
+const DESIGN_SUBJECTS = new Set([
+  "system", "systems", "service", "services", "app", "apps", "application", "applications", "api", "apis", "backend", "frontend", "server",
+  "servers", "platform", "product", "solution", "feature", "features", "module", "modules", "component", "components", "mvp", "version",
+  "versions", "release", "releases", "v1", "v2", "v3", "design", "architecture", "implementation", "integration", "job", "jobs", "worker",
+  "workers", "pipeline", "pipelines", "bot", "chatbot", "engine", "dashboard", "dashboards", "reports", "page", "pages", "screen",
+  "screens", "ui", "website", "site", "portal", "widget", "form", "script", "scripts", "tool", "library", "sdk", "cli", "prototype",
+  "project", "code", "codebase", "stack", "infrastructure", "infra", "microservice", "microservices", "function", "functions", "endpoint",
+  "endpoints", "handler", "handlers", "database", "cache", "checkout", "cart", "webhook", "webhooks", "logs", "logging", "assistant", "it",
+  "this", "phase", "iteration", "milestone", "poc", "pilot", "spec",
+  // PT
+  "sistema", "sistemas", "serviço", "serviços", "aplicação", "aplicações", "aplicativo", "funcionalidade", "funcionalidades", "módulo",
+  "módulos", "componente", "componentes", "versão", "versões", "desenho", "arquitetura", "arquitectura", "implementação", "integração",
+  "página", "páginas", "ecrã", "ecrãs", "tela", "telas", "relatório", "relatórios", "painel", "painéis", "plataforma", "produto", "solução",
+  "servidor", "projeto", "projecto", "código", "protótipo", "ferramenta", "biblioteca", "motor", "assistente", "formulário", "carrinho",
+  "isto", "fase", "iteração",
+  // ES
+  "servicio", "servicios", "aplicación", "aplicaciones", "función", "funciones", "funcionalidad", "funcionalidades", "versión", "versiones",
+  "diseño", "implementación", "integración", "pantalla", "pantallas", "informe", "informes", "reporte", "reportes", "panel", "paneles",
+  "producto", "solución", "proyecto", "prototipo", "herramienta", "librería", "formulario", "carrito", "esto", "iteración",
+]);
+// a noun that is a verb too, or the team (a user group once modified: "the support team") — a design subject only right after an
+// article or a possessive ("The export must not use…", "The team / A equipa / El equipo won't use Kafka"; "Users export data…")
+const DESIGN_VERBISH = new Set(["export", "exports", "import", "imports", "sync", "report", "search", "login", "signup", "upload",
+  "download", "process", "flow", "flows", "log", "team", "equipa", "equipo"]);
+// the words that are no subject: articles, determiners, conjunctions, discourse adverbs (and any EN -ly / PT / ES -mente adverb)
+const SUBJECT_SKIP = new Set(["the", "a", "an", "these", "those", "any", "all", "some", "each", "every", "both", "only", "also", "still",
+  "currently", "really", "simply", "just", "even", "yet", "therefore", "so", "then", "however", "thus", "already", "always", "please",
+  "and", "but", "or", "now", "today", "here", "there", "that", "which", "o", "os", "as", "um", "uma", "uns", "umas", "este", "esta",
+  "estes", "estas", "esse", "essa", "esses", "essas", "todos", "todas", "cada", "só", "apenas", "também", "ainda", "já", "portanto",
+  "então", "e", "mas", "ou", "porém", "contudo", "agora", "hoje", "aqui", "que", "el", "la", "los", "las", "un", "una", "unos", "unas",
+  "estos", "ese", "esa", "esos", "esas", "solo", "sólo", "también", "todavía", "aún", "ya", "entonces", "y", "pero", "ahora", "hoy", "aquí",
+  "se", "lo"]);
+const SUBJECT_ARTICLES = new Set(["the", "a", "an", "this", "these", "those", "o", "os", "as", "um", "uma", "este", "esta", "estes",
+  "estas", "el", "la", "los", "las", "un", "una", "estos"]);
+// a preposition (or a nominal negator) before a listed noun makes it a complement: the subject is further back
+const SUBJECT_PREP = new Set(["of", "on", "in", "for", "with", "without", "from", "at", "by", "under", "de", "do", "da", "dos", "das", "em",
+  "na", "nas", "com", "sem", "para", "por", "pelo", "pela", "pelos", "pelas", "del", "en", "con", "sin", "al"]);
+// the relative pronouns: a listed noun after one is inside a relative clause ("Guests who open the page") — "that" / "que" only right
+// after a listed noun ("Guests that open…"; "ensure that guests…" is a complement clause)
+const SUBJECT_REL = new Set(["who", "whom", "whose", "which", "quem", "quien", "quienes", "cuyo", "cuya", "cuyos", "cuyas", "cujo", "cuja"]);
+// a PT / ES first-person plural verb ("usamos", "vamos", "decidimos", "incluímos" — in any text: a short one may read as EN) — never
+// an adjective or a noun in -mos
+const MOS_WORDS = new Set(["últimos", "próximos", "mínimos", "máximos", "íntimos", "ótimos", "óptimos", "legítimos", "extremos", "supremos",
+  "ramos", "termos", "demos", "memos", "promos", "primos", "mismos", "mesmos"]);
+// the EN first person contracted: we're, we'll, we've, we'd, i'm, i'll, i've, i'd
+const RE_FIRST_PERSON_NT = /^(?:we|i)['’](?:re|ll|ve|d|m)$/;
+const firstPerson = (x) => FIRST_PERSON.has(x) || RE_FIRST_PERSON_NT.test(x);
+const firstPersonVerb = (x) => x.length > 4 && /[aeiíé]mos$/.test(x) && !MOS_WORDS.has(x);
+const subjectSkip = (x) => SUBJECT_SKIP.has(x) || GOVERN_AUX.has(x) || GOVERN_DEONTIC.has(x) || GOVERN_ADOPT.has(x) || NEVER_WORDS.has(x) ||
+  NEGATORS.includes(x) || /n['’]t$/.test(x) || x === "cannot" || (x.length > 4 && /(?:ly|mente)$/.test(x));
+// the listed noun at words[i]: "role" | "design" | null ("plan" / "plans" before "not" / "to" is the verb: "We plan not to use Kafka")
+function subjectNoun(words, i) {
+  const x = words[i];
+  if (DESIGN_SUBJECTS.has(x)) return "design";
+  if (DESIGN_VERBISH.has(x)) return i > 0 && (SUBJECT_ARTICLES.has(words[i - 1]) || firstPerson(words[i - 1])) ? "design" : null;
+  if (!ROLE_SUBJECTS.has(x)) return null;
+  return (x === "plan" || x === "plans") && (words[i + 1] === "not" || words[i + 1] === "to") ? null : "role";
+}
+// a candidate subject at words[i] is a complement — [prep][modifiers…][noun]; an article disables the preposition test — or inside a
+// relative clause (a relative pronoun up to 6 words back, before another listed word): the index to resume before, or -1 (a subject)
+function complementAt(words, i) {
+  let article = false;
+  for (let p = i - 1, n = 0; p >= 0 && n < 6; p--, n++) {
+    const y = words[p];
+    if (!article && n < 4 && SUBJECT_PREP.has(y)) return p;
+    if (SUBJECT_REL.has(y) || ((y === "that" || y === "que") && p > 0 && subjectNoun(words, p - 1))) return p;
+    if (firstPerson(y) || (!SUBJECT_ARTICLES.has(y) && subjectNoun(words, p))) return -1;
+    if (SUBJECT_ARTICLES.has(y)) article = true;
+  }
+  return -1;
+}
+// 1.21 verify P2 — a COMPONENT of what is being designed: a noun in no list with a singular definite article, demonstrative or possessive
+// ≤ 3 modifiers back ("The importer", "The new search", "El programador de tareas", "O agendador"; PT "a" only in a PT text — EN "a" is
+// indefinite); an EN noun in -s after the / this / our / its is a plural ("The drivers"), and a bare plural has no determiner at all
+const SINGULAR_DETS_EN = new Set(["the", "this", "our", "its"]);
+const SINGULAR_DETS = new Set(["o", "este", "esta", "nosso", "nossa", "el", "la", "nuestro", "nuestra"]);
+function componentAt(words, i, pt) {
+  const x = words[i];
+  for (let p = i - 1, n = 0; p >= 0 && n <= 3; p--, n++) {
+    const y = words[p];
+    if (SINGULAR_DETS_EN.has(y)) return !(x.length > 3 && /[^su]s$/.test(x));
+    if (SINGULAR_DETS.has(y) || (pt && y === "a")) return true;
+    if (subjectSkip(y) || SUBJECT_PREP.has(y) || SUBJECT_REL.has(y) || firstPerson(y) || subjectNoun(words, p)) return false;
+  }
+  return false;
+}
+// → "design" | "role" | "component" | "none" (no subject word) | "unknown" (content words, none listed); words[0 … j) is the stretch
+// before the verb. The nearest listed word decides — but a design noun may be an earlier verb's object ("Guests can view the page but
+// can't use the checkout"): a role further back still keeps (when in doubt, keep); a noun right before another listed one is its
+// modifier ("the admin page"). With no listed word, the nearest other noun that is no complement may be a component (componentAt).
+function subjectOf(words, j, pt) {
+  let content = false, design = false, head = false, component = false;
+  for (let i = j - 1; i >= 0; i--) {
+    const x = words[i];
+    if (firstPerson(x) || firstPersonVerb(x)) return "design";
+    let kind = subjectNoun(words, i);
+    if (kind && !SUBJECT_ARTICLES.has(x) && i + 1 < j && subjectNoun(words, i + 1)) kind = null;
+    if (!kind) {
+      if (subjectSkip(x)) continue;
+      content = true;
+      if (!head) { // the nearest other noun: past a complement; its determiner read once
+        const skip = complementAt(words, i);
+        if (skip >= 0) { i = skip; continue; }
+        head = true;
+        component = componentAt(words, i, pt);
+      }
+      continue;
+    }
+    content = true;
+    const skip = complementAt(words, i);
+    if (skip >= 0) { i = skip; continue; } // the loop's i-- resumes before the preposition / the relative pronoun
+    if (kind === "role") return "role";
+    design = true;
+  }
+  return design ? "design" : component ? "component" : content ? "unknown" : "none";
+}
+// a plain verbal negation — an auxiliary or a present / future verb (does not / won't / will not, não usa / não vai usar / no usará),
+// never a modal (can't / cannot / may not / must not, não pode / não deve, no puede / no debe)
+function plainNegation(words, j) {
+  const w = words[j];
+  if (w === "cannot") return false;
+  if (/n['’]t$/.test(w)) return !NT_DEONTIC.has(w.replace(/n['’]t$/, ""));
+  if (j > 0 && GOVERN_DEONTIC.has(words[j - 1])) return false;
+  return !(j + 1 < words.length && GOVERN_DEONTIC.has(words[j + 1]));
+}
+// Does the subject keep the negated adoption's track (a role, a plan, or an unreadable subject)? words / j as negationOf's, the subject
+// before words[from]; after a comma with no subject in its stretch ("Guests, however, can't use the checkout") the sentence's earlier
+// words are read — a role there keeps. An EN "no" after the verb (from < j) negates its noun for certain: only a role keeps ("The free
+// plan has no webhooks"; "WHEN the month has no invoices" still excludes). A component (1.21 verify P2) excludes after a plain verbal
+// negation ("The importer does not need Kafka", "El importador no necesita Kafka") and keeps after a modal, like an unread subject.
+function subjectKeeps(text, start, words, j, from, pt) {
+  for (let i = j + 1; i < words.length; i++) if (firstPersonVerb(words[i])) return false; // "não usamos", "no usaremos"
+  const s = subjectOf(words, from, pt || words[j] === "não" || words[j] === "nao");
+  if (s === "role" || ((s === "unknown" || (s === "component" && !plainNegation(words, j))) && from === j)) return true;
+  if (s !== "none") return false; // design, a component after a plain negation, or an EN "no" after the verb (from < j)
+  const seg = cueBefore(text, start, GOVERN_BOUNDARY);
+  const at = start - seg.length - 1;
+  if (at < 0 || text[at] !== ",") return false;
+  const earlier = govWords(text, at, /[.!?;:\n]/);
+  return subjectOf(earlier.slice(-24), Math.min(earlier.length, 24), pt) === "role";
+}
+// Is the negator at words[j] verbal — an adoption verb's negation whose subject decides (not a nominal "no X" / "sem X" / "without X",
+// nor a contrast) — or an EN "no" right after an adoption verb ("The free plan has no webhooks": the verb's subject decides)?
+function subjectDecides(words, j, lang, contrast) {
+  const w = words[j];
+  // (a contraction opening its stretch after a comma is still verbal: "Guests, however, can't use the checkout")
+  if (contrast && !(/n['’]t$/.test(w) || w === "cannot")) return -1;
+  if (w === "no" && i18n.baseLang(lang) !== "es") {
+    // a verb right after it: an ES "no" in a short text read as EN ("Los invitados no pueden usar el checkout"), "no longer uses"
+    let k = j + 1;
+    while (k < words.length && GOVERN_NEUTRAL.has(words[k])) k++;
+    const v = words[k];
+    if (v && (GOVERN_DEONTIC.has(v) || GOVERN_AUX.has(v) || GOVERN_ADOPT.has(v))) return j;
+    return j > 0 && GOVERN_ADOPT.has(words[j - 1]) ? j - 1 : -1;
+  }
+  return NOMINAL_NEGATORS.has(w) ? -1 : j;
+}
+// The negation that EXCLUDES the item at start … end — { word, conj } — or null. The nearest negator ≤ GOVERN_MAX words back in the
+// item's comma-free stretch (contractions whole): a negative conjunction with only fillers between (a list's own link); any other one
+// when it is no relative / condition / double negation / hazard (negationBlocked) and negationKind says "exclude". A PT "no" after a
+// participle or before a PT filler is em + o ("aplicado no checkout", "Guia no uso do LLM"). A cheap precheck skips a match with no
+// negator in reach.
+function negationOf(text, start, end, lang, cased) {
+  if (!RE_NEG_NEAR.test(text.slice(Math.max(0, start - CUE_SPAN), start))) return null;
+  const pt = i18n.baseLang(lang) === "pt"; // pt and pt-BR alike: "no" is em+o, never a negator
+  const tokens = text.slice(Math.max(0, start - 20), start).split(/[^a-zà-ú-]+/).filter(Boolean);
+  if (tokens[tokens.length - 1] === "no") {
+    const prev = tokens[tokens.length - 2] || "";
+    const prevCased = ((cased || "").slice(Math.max(0, start - 20), start).split(/[^\p{L}-]+/u).filter(Boolean).slice(-2)[0]) || "";
+    if (/(?:ad|id)[oa]s?$/.test(prev) && (pt || (prev.length >= 6 && prevCased === prevCased.toLowerCase()))) return null;
+  }
+  const seg = govSegment(text, start);
+  const words = seg.words;
+  let j = -1;
+  for (let i = words.length - 1, n = 0; i >= 0 && n <= GOVERN_MAX; i--, n++) if (isNegatorWord(words[i], pt)) { j = i; break; }
+  if (j < 0) return null;
+  const w = words[j];
+  if (LIST_NEG.has(w)) return words.slice(j + 1).every(passWord) && !negationBlocked(text, words, j, end, pt) ? { word: w, conj: true } : null;
+  if (w === "no" && j + 1 < words.length && NEG_FILLER.has(words[j + 1]) && !NEG_FILLER_EN.has(words[j + 1])) return null;
+  if (negationBlocked(text, words, j, end, pt)) return null;
+  const contrast = j === 0 && (seg.afterComma || (w === "not" && seg.sentenceStart));
+  const k = negationKind(words, j, words.length, lang, { contrast, protectedHead: (loose) => protectedHead(text, start, end, loose) });
+  if (k !== "exclude") return null;
+  // (1.21 verify P1) a role's / a plan's negated adoption is an access or entitlement rule: the track stays
+  const from = subjectDecides(words, j, lang, contrast);
+  return from >= 0 && subjectKeeps(text, start, words, j, from, pt) ? null : { word: w, conj: false };
+}
+function negationGoverns(text, start, end, lang) {
+  return negationOf(text, start, end, lang) !== null;
+}
+// A nor / nem / ni item no list carries keeps its negation (the conjunction right before it is certain) unless its clause's other negator
+// negates a VERB (negationKind "require") — the conjunction then continues that requirement: "Não pode perder pagamentos nem
+// reembolsos", "must not lose data nor refunds", "sem perder dados nem reembolsos", "does not show X nor Y" un-negate the item; "Não
+// queremos Kafka nem RabbitMQ", "We use Postgres, not MongoDB nor Kafka", "Sem integração externa nem X" and the correlative "Nem X nem
+// Y" keep it.
+function conjExcluded(text, start, end, lang) {
+  const pt = i18n.baseLang(lang) === "pt";
+  const seg = govSegment(text, start);
+  const words = seg.words;
+  let j = words.length - 1;
+  while (j >= 0 && !((isNegatorWord(words[j], pt) || words[j] === "cannot") && !LIST_NEG.has(words[j]))) j--;
+  if (j < 0) return true;
+  if (negationBlocked(text, words, j, end, pt)) return false;
+  const contrast = j === 0 && (seg.afterComma || (words[j] === "not" && seg.sentenceStart));
+  // (a verb negation — "require" — is continued by the conjunction; a noun phrase — "Sem integração externa nem X" — keeps it; a role's
+  // or a plan's negated adoption — "Guests can't use the checkout nor the cart" — keeps the track: 1.21 verify P1)
+  if (negationKind(words, j, words.length, lang, { contrast, protectedHead: (loose) => protectedHead(text, start, end, loose) }) === "require") return false;
+  const from = subjectDecides(words, j, lang, contrast);
+  return !(from >= 0 && subjectKeeps(text, start, words, j, from, pt));
+}
+// The article a new clause's subject starts with (1.21 review B2): a comma followed by one is no list continuation — "Without an LLM
+// or embeddings, the checkout or a subscription page is the priority".
+const LIST_ARTICLES = new Set(["the", "a", "an", "o", "os", "as", "um", "uma", "el", "la", "los", "las", "un", "una"]);
+// hits: the counted (non-shadowed) matches, each with `negBy` ("before" / "after" / null) — marks `neg` on the list items a negation
+// reaches (never a hazard: `hazard` stays un-negated, but it still carries the list on).
+function coordinatedNegation(hits, text, lang) {
+  if (hits.length < 2 && !(hits.length && hits[0].conj)) return;
+  const es = i18n.baseLang(lang) === "es";
+  const sorted = hits.slice().sort((a, b) => a.start - b.start || b.end - a.end);
+  const items = [];
+  for (const h of sorted) {
+    const last = items[items.length - 1];
+    if (last && h.start < last.end) { last.hits.push(h); if (h.end > last.end) last.end = h.end; } else items.push({ start: h.start, end: h.end, hits: [h] });
+  }
+  // a negator negates the whole phrase it precedes — the keywords inside it too ("nem iniciar sessão", "sem iniciar sessão": 'sessão',
+  // whose own look-back now sees a verb form, 1.21 verify V5)
+  // … and a HAZARD phrase keeps the keywords inside it un-negated: "without duplicate rows" negates neither 'rows' (its negation is the
+  // requirement — 1.21 verify R1: the farther look-back reached the inner word)
+  const hazardItem = (it) => it.hits.some((h) => h.hazard && h.start === it.start);
+  for (const it of items) {
+    if (hazardItem(it)) { for (const h of it.hits) if (h.neg && h.negBy !== "after") { h.neg = false; h.negBy = null; h.conj = false; } continue; }
+    const head = it.hits.find((h) => h.start === it.start && h.negBy === "before" && !h.hazard);
+    if (!head) continue;
+    // (the keywords INSIDE the phrase — one starting where it starts had the same look-back, and a +sec / +privacy one may have read
+    // "must not embed" as its requirement: "must not embed the API key")
+    for (const h of it.hits) if (!h.negBy && !h.hazard && h.start > it.start) { h.neg = true; h.negBy = "before"; h.conj = head.conj; }
+  }
+  // a hazard's negation is its requirement ("without downtime"), never a list's: it opens none — nor does a negator that governs a
+  // verb, not the item (1.21 review B1: "must not lose payments or refunds")
+  const opens = (it) => !hazardItem(it) && it.hits.some((h) => h.negBy === "before" && !h.hazard) && negationGoverns(text, it.start, it.end, lang);
+  const mark = (it) => { for (const h of it.hits) if (!h.hazard) { h.neg = true; if (!h.negBy) h.negBy = "list"; } };
+  // the gap's first word is an article (1.21 review B2)
+  const articleFirst = (from, to) => { const w = cueWords(text.slice(from, to))[0]; return !!w && LIST_ARTICLES.has(w.toLowerCase()); };
+  // closed: a conjunction has closed the list — a later comma ends it (a list has one closing conjunction — 1.21 review B2).
+  // listTracks: the tracks of the list's items so far — a comma + an article still joins an item of one of them ("Without an LLM, a
+  // vector database or embeddings", "Without Kafka, the RabbitMQ broker or SQS"), never another track's item: that is a new clause's
+  // subject ("No LLM, the checkout or the subscription flow first" — 1.21 verify V2); and a predicate after the closing item (an
+  // auxiliary or a modal: "… IS the priority") makes the article-led items a subject too (articleAt: where they start in `pending`)
+  let active = false, closed = false, pending = [], listTracks = new Set(), articleAt = -1;
+  const join = (it) => { for (const h of it.hits) listTracks.add(h.track); };
+  const open = (it) => { active = true; closed = false; pending = []; articleAt = -1; listTracks = new Set(); join(it); };
+  // an auxiliary or a modal in the clause after the item: a predicate ("is the priority", "são a prioridade", "will handle it")
+  const predicateAfter = (end) => cueWords(cueAfter(text, end, CUE_BOUNDARY)).some((w0) => { const w = w0.toLowerCase(); return GOVERN_AUX.has(w) || GOVERN_DEONTIC.has(w); });
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (active) {
+      const l = listLink(text, items[i - 1].end, it.start, es);
+      if (l === "comma" && !closed) {
+        const art = articleFirst(items[i - 1].end, it.start);
+        if (!art || it.hits.some((h) => listTracks.has(h.track))) { if (art && articleAt < 0) articleAt = pending.length; pending.push(it); join(it); continue; }
+      }
+      if (l && l !== "comma") {
+        // … unless a predicate follows the closing item: then the article-led items were a new clause's subject ("Without payments, the
+        // checkout or a subscription page IS the priority") — the list ended before them
+        if (articleAt >= 0 && predicateAfter(it.end)) { pending.slice(0, articleAt).forEach(mark); active = false; closed = false; pending = []; articleAt = -1; continue; }
+        pending.forEach(mark); pending = []; mark(it); join(it); closed = true; continue;
+      }
+      active = false; closed = false; pending = []; articleAt = -1; // the list ended here: this item may open a new one
+    } else if (it.hits.some((h) => h.conj) && !conjExcluded(text, it.start, it.end, lang)) {
+      // 1.21 review B1: a negative conjunction no list carries, in a clause whose negator states a requirement ("Não pode perder
+      // pagamentos nem reembolsos", "No puede perder pagos ni reembolsos"), continues that requirement, not a list of exclusions: its
+      // item is not negated either
+      for (const h of it.hits) if (h.conj) { h.neg = false; h.negBy = null; h.conj = false; }
+    }
+    if (opens(it)) { open(it); continue; }
+    // "Não vamos usar X nem Y": a negative conjunction after an item a negator governs (the negator three words back)
+    if (i + 1 < items.length && listLink(text, it.end, items[i + 1].start, es) === "neg" && negationGoverns(text, it.start, it.end, lang)) { mark(it); open(it); }
+  }
 }
 
 // Signals are matched as WORDS, never as bare substrings. A plain `indexOf` fired 'claude' inside
@@ -484,6 +1106,20 @@ function keywordPattern(kw, plain) {
   return body + (STEMS.has(kw) ? "\\p{L}*" : !plain && VERB_STEMS.has(kw) ? VERB_STEMS.get(kw) : (kw.length <= 3 ? ACRONYM_INFLECTION : INFLECTION) + ADJ_SUFFIX);
 }
 
+// A keyword's ALL-CAPS acronyms when it mixes them with lower-case words and nothing else ("relatório de BI" → ["BI"], "CDC pipeline" →
+// ["CDC"]) — else null ("STRIDE", "Snowflake warehouse", "X-RateLimit-Remaining" keep their exact case). Cached per keyword.
+const MIXED_ACR = new Map();
+function mixedAcronyms(kw) {
+  if (MIXED_ACR.has(kw)) return MIXED_ACR.get(kw);
+  const toks = kw.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const acr = toks.filter((t) => t.length >= 2 && /\p{Lu}/u.test(t) && t === t.toUpperCase());
+  const ok = acr.length && toks.some((t) => /\p{Ll}/u.test(t)) && toks.every((t) => t === t.toLowerCase() || acr.includes(t));
+  const out = ok ? acr : null;
+  if (MIXED_ACR.size >= KW_CACHE_MAX) MIXED_ACR.clear();
+  MIXED_ACR.set(kw, out);
+  return out;
+}
+
 // Tokens that look like source paths ("src/rag", "lib/auth.ts") must stay opaque to the classifier.
 const PATH_HEADS = new Set(["src", "lib", "app", "apps", "api", "pkg", "packages", "internal", "cmd", "bin", "test", "tests", "docs",
   "components", "modules", "services", "server", "client", "scripts", "config", "routes", "handlers", "controllers", "features",
@@ -519,28 +1155,71 @@ function classify(description, opts = {}) {
   const active = new Set(["core"]);
   const matched = perTrack(() => ({ strong: [], weak: [], generic: [] }));
   const negated = perTrack(() => []);
-  const hits = []; // every counted match, in scan order: { track, tier, kw, start, end, neg }
+  const hits = []; // every match, in scan order: { track, tier, kw, start, end, neg, negBy, hazard, base, by }
+  // A match: negated by a negator BEFORE it (negBy "before" — a coordinated list carries it on), by a phrase after it ("after"),
+  // or not; a hazard is never negated (SIGNAL_HAZARDS) but still carries a list's negation on.
+  // conj: negated by a negative conjunction right before it (nor / nem / ni) — coordinatedNegation keeps that negation only in a list.
+  const newHit = (track, tier, kw, start, end, hazard, base, by) => {
+    const nb = negatorBefore(text, start, lang, cased, end);
+    const negBy = nb ? "before" : negatedAfter(text, start, end - start) ? "after" : null;
+    return { track, tier, kw, start, end, neg: !hazard && !!negBy, negBy, hazard, base: base === undefined ? tier : base, by: by || null, conj: !!nb && LIST_NEG.has(nb) };
+  };
+  // The project's signal overrides (1.21 F2 — .specs/classifier.json, learned from Phase 0 corrections or set by hand): a layer over
+  // the tables — a word "off" is no signal of that track at all (its place stays free for another keyword), "weak" / "strong"
+  // re-tier it, and a word no table has is matched as a literal word (a track pack's rule) at its tier. Only with a projectDir.
+  const layer = opts.projectDir ? projectSignalLayer(opts.projectDir, OPT) : null;
+  const applied = new Map(); // override key → its record (an override that changed this text's reading)
 
   for (const track of OPT) {
     const table = trackSignalTable(track);
     const plain = !Object.prototype.hasOwnProperty.call(SIGNALS, track); // a track pack's keywords are literal words (1.17 D review)
     const hazards = Object.prototype.hasOwnProperty.call(SIGNAL_HAZARDS, track) ? SIGNAL_HAZARDS[track] : null; // (never negated)
+    const ov = layer ? layer.byTrack.get(track) : null;
+    const consumed = ov ? new Set() : null;
     // (tier `generic` — 1.17 D review — exists in the built-in +dist table only; see SIGNALS.dist)
     for (const tier of ["strong", "weak", "generic", "context"]) {
       for (const kw of table[tier] || []) {
         // A keyword written with upper-case letters ('STRIDE') is an acronym matched CASE-SENSITIVELY, on the original
         // text (C4): the lower-case word is something else (an array stride). `cased` is `text` before toLowerCase().
-        const hay = kw === kw.toLowerCase() ? text : cased;
+        // 1.21 verify V3: a built-in keyword mixing lower-case words with an ALL-CAPS acronym ("relatório de BI", "BI dashboard", "CDC
+        // pipeline") matches its words in any case and only its acronym case-sensitively — "Relatório de BI" opens a sentence, "BI
+        // Dashboard" is a title; "o número do bi" is still no BI.
+        const acr = plain ? null : mixedAcronyms(kw);
+        const kwm = acr ? kw.toLowerCase() : kw;
+        const hay = kwm === kwm.toLowerCase() ? text : cased;
+        const rec = ov ? ov.get(kw.toLowerCase()) : undefined;
+        if (rec) consumed.add(kw.toLowerCase());
         // A text without the keyword's literal prefix can't match its regex — skipping it spares compiling ~300 unicode
         // regexes on every CLI run (a classify used to cost ~250 ms per process).
-        if (!hay.includes(keywordLiteral(kw, plain))) continue;
-        const re = keywordRe(kw, plain);
+        if (!hay.includes(keywordLiteral(kwm, plain))) continue;
+        const re = keywordRe(kwm, plain);
+        re.lastIndex = 0;
+        let m;
+        while ((m = re.exec(hay)) !== null) {
+          if (seenSpan[track].has(m.index)) continue;
+          if (acr) { const ws = cueWords(cased.slice(m.index, m.index + m[0].length)); if (!acr.every((a) => ws.includes(a))) continue; }
+          if (rec && rec.effect === "off") { applied.set(signalKey(track, rec.word), rec); continue; }
+          seenSpan[track].add(m.index);
+          const t2 = rec ? rec.effect : tier;
+          if (t2 !== tier) applied.set(signalKey(track, rec.word), rec);
+          hits.push(newHit(track, t2, kw, m.index, m.index + m[0].length, !!(hazards && hazards.has(kw)), tier, t2 !== tier ? "override" : null));
+        }
+      }
+    }
+    // an override word no table keyword of this track has: a literal word at its tier (off: nothing to drop)
+    if (ov) {
+      for (const [lw, rec] of ov) {
+        if (consumed.has(lw) || rec.effect === "off") continue;
+        const hay = rec.word === lw ? text : cased;
+        if (!hay.includes(keywordLiteral(rec.word, true))) continue;
+        const re = keywordRe(rec.word, true);
         re.lastIndex = 0;
         let m;
         while ((m = re.exec(hay)) !== null) {
           if (seenSpan[track].has(m.index)) continue;
           seenSpan[track].add(m.index);
-          hits.push({ track, tier, kw, start: m.index, end: m.index + m[0].length, neg: !(hazards && hazards.has(kw)) && isNegated(text, m.index, m[0].length, lang, cased) });
+          applied.set(signalKey(track, rec.word), rec);
+          hits.push(newHit(track, rec.effect, rec.word, m.index, m.index + m[0].length, false, null, "override"));
         }
       }
     }
@@ -563,6 +1242,9 @@ function classify(description, opts = {}) {
     for (; si < strongHits.length && strongHits[si].start < h.start; si++) if (strongHits[si].end > reach) reach = strongHits[si].end;
     if (reach >= h.end || (startsAt.get(h.start) || []).some((s) => s.end > h.end)) shadowedHits.add(h);
   }
+  // A negation reaches every item of the coordinated list it opens (1.21 F2 — coordinatedNegation): "not add feature flags or
+  // canary releases", "sem X nem Y", "ni X ni Y".
+  coordinatedNegation(hits.filter((h) => !shadowedHits.has(h)), text, lang);
   // CORROBORATING-only signals (tier `context`, C4 — 'permission' for +sec) are weak evidence only beside another
   // (non-negated) signal of their track ("RBAC permissions"); a negated one is noted only when the track has some other
   // signal. Alone they are no evidence at all: no signal, no "possible" note, no "kept off" note ("file permission bits").
@@ -571,16 +1253,21 @@ function classify(description, opts = {}) {
   // app-level for us, "the settings page backend" is no UI work, "customer service" no technical target).
   const counted = [];
   for (const h of hits) {
-    if (shadowedHits.has(h)) continue;
+    if (shadowedHits.has(h)) { h.final = "shadowed"; continue; }
     const cue = Object.prototype.hasOwnProperty.call(SIGNAL_CUES, h.track) && Object.prototype.hasOwnProperty.call(SIGNALS, h.track) ? SIGNAL_CUES[h.track] : null;
     const tier = cue ? cue(h, text, cased, lang) : null;
-    if (tier === "none") continue;
-    counted.push(tier && tier !== h.tier ? Object.assign({}, h, { tier }) : h);
+    h.cue = !!tier && tier !== h.tier;
+    if (tier === "none") { h.final = "none"; continue; }
+    h.final = tier || h.tier;
+    counted.push(tier && tier !== h.tier ? Object.assign({}, h, { tier, src: h }) : h);
   }
   const own = (pred) => new Set(counted.filter((h) => h.tier !== "context" && pred(h)).map((h) => h.track));
-  const backedBy = own((h) => !h.neg && h.tier !== "generic"), mentionedBy = own(() => true);
+  // (1.21 review B3 / verify V3) an anchor its table lists in `everydayAnchors` (+data: a lakehouse, a lineage, ingestion, SCD, duplicate
+  // rows… — words with an everyday sense) backs no context word: a table / a column / a query is on every screen
+  const everyday = (h) => h.tier === "weak" && Object.prototype.hasOwnProperty.call(SIGNAL_EVERYDAY, h.track) && SIGNAL_EVERYDAY[h.track].has(h.kw);
+  const backedBy = own((h) => !h.neg && h.tier !== "generic" && !everyday(h)), mentionedBy = own(() => true);
   for (const h of counted) {
-    if (h.tier === "context" && !(h.neg ? mentionedBy : backedBy).has(h.track)) continue;
+    if (h.tier === "context" && !(h.neg ? mentionedBy : backedBy).has(h.track)) { (h.src || h).final = "unbacked"; continue; }
     const tier = h.tier === "context" ? "weak" : h.tier;
     if (h.neg) { if (!negated[h.track].includes(h.kw)) negated[h.track].push(h.kw); }
     else if (!matched[h.track][tier].includes(h.kw)) matched[h.track][tier].push(h.kw);
@@ -663,8 +1350,15 @@ function classify(description, opts = {}) {
     }
   }
 
+  // The project's overrides are never applied silently (1.21 F2): the ones that changed this reading are named (a note + the stable
+  // `overrides` list), and a classifier.json that can't be read is ignored with a warning — never a crash.
+  const overrides = [...applied.values()].map((r) => ({ track: r.track, word: r.word, effect: r.effect }));
+  if (overrides.length) notes.push(C.overridesApplied(overrides));
+  const warning = layer ? signalFileWarning(layer.rd) : null;
+  if (warning) notes.push(C.overridesInvalid(warning.code, warning.entries || 0));
+
   const tracks = allTracks().filter((t) => active.has(t));
-  return {
+  const res = {
     tracks,
     label: trackLabel(tracks),
     signals,
@@ -678,6 +1372,54 @@ function classify(description, opts = {}) {
     lang, // the language notes/reasoning were written in (explicit, or guessed from the text)
     reasoning: buildReasoning(tracks, signals, confidence, negated, C, OPT),
   };
+  // 1.21 F5: the suggested size (a deterministic reading — stable `sizeReason`; the localized sentence in `sizeNote`, never in notes)
+  const sz = suggestSize(text, tracks);
+  const SZ = i18n.msg(lang).sizes;
+  Object.assign(res, { suggestedSize: sz.size, sizeReason: sz.reason, sizeNote: (SZ.suggest[sz.reason] || SZ.suggest.default) + " " + SZ.suggestTail });
+  if (overrides.length) res.overrides = overrides;
+  if (warning) res.overridesWarning = warning;
+  // explain (1.21 F2 — spec_classify {explain} / classify --explain): every keyword match — its table tier, its final one (a cue, an
+  // override, shadowed, unbacked context), its negation — and the project's overrides with their state.
+  if (opts.explain) {
+    res.explain = {
+      matches: hits.slice().sort((a, b) => a.start - b.start || a.track.localeCompare(b.track)).map((h) => ({ track: h.track, keyword: h.kw,
+        text: cased.slice(h.start, h.end), base: h.base, tier: h.final || h.tier, cue: !!h.cue, override: h.by === "override" ? h.tier : null,
+        negated: h.neg, negation: h.neg ? h.negBy : null })),
+      overrides: layer ? layer.rd.records.map((r) => ({ track: r.track, word: r.word, effect: r.effect, count: r.count, origin: r.origin,
+        active: signalActive(r), applied: applied.has(signalKey(r.track, r.word)) })) : [],
+      min: SIGNAL_OVERRIDE_MIN,
+    };
+  }
+  // The tiers each track matched (after the de-dupe), for the Phase 0 learner (learnSignalOverrides) — not part of the result's JSON.
+  Object.defineProperty(res, "tiers", { value: matched, enumerable: false });
+  return res;
+}
+
+// 1.21 F5 — the size spec_classify suggests (spec_create {size}): a deterministic reading of the request — never the track count
+// alone (the 1.20 friction audit: the classifier under-calls tracks). → { size, reason } — reason (stable): trivial-change ·
+// several-tracks · public-api · cross-system · single-unit · default. The human confirms or overrides it in Phase 0; nothing
+// applies a size by itself (spec_create without one keeps the 1.20 scaffold).
+const B_ = "(?<![\\p{L}\\p{N}])", _B = "(?![\\p{L}\\p{N}])";
+const SIZE_TRIVIAL = new RegExp(B_ + "(?:typos?|misspell(?:ing|ed|ings)?|spelling (?:mistake|error)s?|wording|copy (?:change|tweak|edit|fix)|" +
+  "(?:change|update|fix|edit|correct) (?:the |a )?(?:text|label|copy|wording|caption|colou?r|footer text|button text)|rename (?:the |a )?(?:label|button|field|variable|file|column)|" +
+  "one[- ]line(?:r)? (?:fix|change)|(?:bump|upgrade|update) (?:the |a )?(?:version|dependency)|broken link|(?:update|fix) (?:the )?copyright|" +
+  "gralhas?|erros? (?:ortográfico|de digitação|de escrita|tipográfico)s?|(?:corrigir|mudar|alterar|atualizar) (?:o |a )?(?:texto|rótulo|legenda|etiqueta|cor|redação)|" +
+  "renomear (?:o |a )?(?:rótulo|botão|campo|ficheiro|arquivo)|(?:numa|uma|em uma) (?:só )?linha|link (?:partido|quebrado)|atualizar (?:a )?versão|" +
+  "erratas?|errores? (?:tipográfico|ortográfico|de escritura)s?|faltas? de ortografía|(?:corregir|cambiar|actualizar) (?:el |la )?(?:texto|etiqueta|color|redacción)|" +
+  "renombrar (?:el |la )?(?:etiqueta|botón|campo|archivo)|(?:en )?una (?:sola )?línea|enlace roto|actualizar (?:la )?versión)" + _B, "u");
+const SIZE_UNIT = new RegExp(B_ + "(?:a|an|one|single|um|uma|un|una|1)\\s+(?:[\\p{L}\\p{N}/-]+\\s+){0,3}?(?:endpoints?|button|screen|page|field|column|form|filter|" +
+  "report|export|checkbox|toggle|tab|dialog|modal|query|job|script|command|setting|link|email|notification|route|widget|" +
+  "botão|ecrã|tela|página|campo|coluna|formulário|filtro|relatório|exportação|botón|pantalla|columna|formulario|informe|exportación|ruta)" + _B, "u");
+const SIZE_CROSS = new RegExp(B_ + "(?:several|multiple|many|across) (?:services|systems|microservices)|(?:vários|varios|múltiplos|múltiples|entre) (?:serviços|sistemas|servicios|microsserviços|microservicios)" + _B, "u");
+const SIZE_PUBLIC = new RegExp(B_ + "(?:public|pública|publica|público|publico)" + _B, "u");
+function suggestSize(text, tracks) {
+  const markers = tracks.filter((t) => t !== "core" && t !== "tdd");
+  if (!markers.length && SIZE_TRIVIAL.test(text)) return { size: "xs", reason: "trivial-change" };
+  if (markers.length >= 3) return { size: "l", reason: "several-tracks" };
+  if (markers.includes("api") && SIZE_PUBLIC.test(text)) return { size: "l", reason: "public-api" };
+  if ((markers.includes("dist") && markers.length >= 2) || SIZE_CROSS.test(text)) return { size: "l", reason: "cross-system" };
+  if (markers.length <= 1 && SIZE_UNIT.test(text)) return { size: "s", reason: "single-unit" };
+  return { size: "m", reason: "default" };
 }
 
 function buildReasoning(tracks, signals, confidence, negated, C, optional) {
@@ -696,9 +1438,255 @@ function buildReasoning(tracks, signals, confidence, negated, C, optional) {
   return lines.join("\n");
 }
 
+// ---------------------------------------------------------------------------
+// Project-level signal overrides (1.21 F2) — .specs/classifier.json, learned from Phase 0 corrections
+// ---------------------------------------------------------------------------
+// When the human confirms Phase 0 with other tracks than the classifier suggested (spec_create {tracks} on a new feature with a
+// summary — the suggestion is the summary's classification, the one classification.md records), the words that DROVE the
+// suggestion are recorded: a track suggested and left off → its driving words (the strong ones, else the anchors) vote "off"; a
+// track added that was not suggested → its lone word votes "strong", two or more app-level words vote "weak" each (one anchor
+// is then enough). After SIGNAL_OVERRIDE_MIN consistent corrections a learned override applies in this project (classify with a
+// projectDir); an agreement or an opposite correction resets a pending one, a correction that contradicts an applied one drops
+// it. A word set by hand (`signals set`) applies at once and is never changed by learning. Never silently: classify names the
+// overrides that changed its reading (`overrides` + a note), spec_create names what it learned (`signalOverrides` + a note).
+// The file: one record per line, sorted by track and word (two branches learning different words merge cleanly); bounded
+// (SIGNAL_OVERRIDE_MAX records, SIGNAL_FILE_MAX_BYTES); words follow the track-pack keyword rule (literal, never a pattern);
+// a file that doesn't parse, or holds an invalid entry, is ignored for reading with a warning and never rewritten.
+const SIGNAL_FILE = "classifier.json";
+const SIGNAL_OVERRIDE_MIN = 2;
+const SIGNAL_OVERRIDE_MAX = 200;
+const SIGNAL_FILE_MAX_BYTES = 64 * 1024;
+const SIGNAL_EFFECTS = Object.freeze(["off", "weak", "strong"]);
+const SIGNAL_OPS = Object.freeze(["list", "set", "forget"]);
+const RE_SIGNAL_TRACK = /^[a-z][a-z0-9]{1,19}$/;
+const RE_LEADING_BOM = new RegExp("^" + String.fromCharCode(0xfeff));
+const signalKey = (track, word) => track + "\u0000" + String(word).toLowerCase();
+const signalActive = (r) => r.origin === "set" || r.count >= SIGNAL_OVERRIDE_MIN;
+// A word: the track-pack keyword rule (letters / digits with inner spaces, hyphens, apostrophes, dots; 2–60 characters) → the
+// word (spaces folded) or null.
+function signalWord(w) {
+  if (typeof w !== "string" || w.length > 4 * PACK_LIMITS.keywordLen) return null;
+  const t = w.trim().replace(/\s+/g, " ");
+  return t.length <= PACK_LIMITS.keywordLen && RE_PACK_KEYWORD.test(t) ? t : null;
+}
+function signalRecord(r) {
+  if (!isObj(r)) return null;
+  const track = typeof r.track === "string" ? r.track.trim().toLowerCase() : "";
+  const word = signalWord(r.word);
+  const effect = typeof r.effect === "string" ? r.effect.trim().toLowerCase() : "";
+  const origin = r.origin == null ? "learned" : r.origin;
+  const count = r.count == null ? 1 : r.count;
+  if (!RE_SIGNAL_TRACK.test(track) || track === "core" || !word || !SIGNAL_EFFECTS.includes(effect) || (origin !== "learned" && origin !== "set") ||
+    !Number.isSafeInteger(count) || count < 1) return null;
+  const lastAt = typeof r.lastAt === "string" && r.lastAt.length <= 40 && !Number.isNaN(Date.parse(r.lastAt)) ? r.lastAt : null;
+  return { track, word, effect, count, origin, lastAt };
+}
+// → { file, exists, records (valid, deduplicated, ≤ SIGNAL_OVERRIDE_MAX), problems [{index, code}], error (a code) | null }
+function readSignalOverrides(projectDir) {
+  const file = path.join(specsRoot(projectDir), SIGNAL_FILE);
+  const out = { file, exists: false, records: [], problems: [], error: null };
+  let st;
+  try { st = fs.lstatSync(file); } catch { return out; }
+  out.exists = true;
+  if (!st.isFile()) { out.error = "not-a-file"; return out; } // a folder, a link: never followed
+  if (st.size > SIGNAL_FILE_MAX_BYTES) { out.error = "too-big"; return out; }
+  const raw = readIfExists(file);
+  if (raw == null) { out.error = "unreadable"; return out; }
+  let j;
+  try { j = JSON.parse(raw.replace(RE_LEADING_BOM, "")); } catch { out.error = "invalid-json"; return out; }
+  if (!isObj(j) || !Array.isArray(j.signals)) { out.error = "invalid-shape"; return out; }
+  const seen = new Set();
+  j.signals.forEach((x, index) => {
+    if (out.records.length >= SIGNAL_OVERRIDE_MAX) { out.problems.push({ index, code: "too-many" }); return; }
+    const rec = signalRecord(x);
+    if (!rec) { out.problems.push({ index, code: "invalid-entry" }); return; }
+    const k = signalKey(rec.track, rec.word);
+    if (seen.has(k)) { out.problems.push({ index, code: "duplicate" }); return; }
+    seen.add(k);
+    out.records.push(rec);
+  });
+  return out;
+}
+const signalFileWarning = (rd) => (rd.error ? { code: rd.error } : rd.problems.length ? { code: "invalid-entries", entries: rd.problems.length } : null);
+// The classifier's view: the ACTIVE overrides of the tracks it reads (a missing pack's are kept in the file, unused) → { rd,
+// byTrack: Map(track → Map(lower-case word → record)) } — null when the project has no classifier.json (byte-identical results).
+function projectSignalLayer(projectDir, OPT) {
+  const rd = readSignalOverrides(projectDir);
+  if (!rd.exists) return null;
+  const byTrack = new Map();
+  for (const r of rd.records) {
+    if (!signalActive(r) || !OPT.includes(r.track)) continue;
+    if (!byTrack.has(r.track)) byTrack.set(r.track, new Map());
+    byTrack.get(r.track).set(r.word.toLowerCase(), r);
+  }
+  return { rd, byTrack };
+}
+function renderSignalFile(records) {
+  const k = (r) => [r.track, r.word.toLowerCase()];
+  const sorted = records.slice().sort((a, b) => { const x = k(a), y = k(b); return x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : x[1] < y[1] ? -1 : x[1] > y[1] ? 1 : 0; });
+  const line = (r) => JSON.stringify({ track: r.track, word: r.word, effect: r.effect, count: r.count, origin: r.origin, ...(r.lastAt ? { lastAt: r.lastAt } : {}) });
+  return "{\n  \"signals\": [" + (sorted.length ? "\n" + sorted.map((r) => "    " + line(r)).join(",\n") + "\n  " : "") + "]\n}\n";
+}
+// A read-modify-write of classifier.json under the roadmap lock (the project-level lock): re-read from disk, `mutate(records)` →
+// { changed, … }; written only when changed. A file that can't be read, or holds an invalid entry, is never rewritten (its
+// entries would be lost) → { ok: false, fileError }.
+function writeSignalRecords(projectDir, mutate) {
+  return withRoadmapLock(projectDir, () => {
+    const file = path.join(specsRoot(projectDir), SIGNAL_FILE);
+    forgetCached(file);
+    const rd = readSignalOverrides(projectDir);
+    const w = signalFileWarning(rd);
+    if (w) return { ok: false, fileError: w };
+    const records = rd.records.map((r) => Object.assign({}, r));
+    const out = mutate(records) || {};
+    if (out.changed) writeFileAtomic(file, renderSignalFile(records));
+    return Object.assign({ ok: true }, out);
+  }, (b) => roadmapBusyResult(projectDir, b));
+}
+// Learn from a Phase 0 correction: `cls` = the suggestion (classify's result for the new feature's name + summary), `confirmed` =
+// the tracks the human chose. → null (nothing to learn) | { learned [{track, word, effect, count, active}], forgotten [...], capped? }
+// | { error, busy? } (nothing recorded).
+function learnSignalOverrides(projectDir, cls, confirmed) {
+  if (!cls || !cls.tiers || !cls.signals) return null;
+  const S = new Set(cls.tracks), C = new Set(confirmed), appliedOv = cls.overrides || [];
+  const votes = [], contradicted = [], agreed = [];
+  for (const t of Object.keys(cls.signals)) {
+    const m = cls.tiers[t] || { strong: [], weak: [], generic: [] };
+    const sug = S.has(t), conf = C.has(t);
+    if (sug && !conf) { // suggested, left off: the words that turned it on (a strong one alone does; else the anchors)
+      for (const w of m.strong.length ? m.strong : m.weak) votes.push({ track: t, word: w, effect: "off" });
+      for (const o of appliedOv) if (o.track === t && o.effect !== "off") contradicted.push(o);
+    } else if (!sug && conf) { // added, not suggested: its lone word turns it on; two or more app-level words, each an anchor
+      const words = m.weak.concat(m.generic);
+      if (words.length === 1) votes.push({ track: t, word: words[0], effect: "strong" });
+      else if (!m.weak.length && m.generic.length >= 2) for (const w of m.generic) votes.push({ track: t, word: w, effect: "weak" });
+      for (const o of appliedOv) if (o.track === t && o.effect === "off") contradicted.push(o);
+    } else if (sug) for (const w of m.strong.concat(m.weak)) agreed.push({ track: t, word: w, off: true }); // agreed: on
+    else for (const w of m.weak.concat(m.generic)) agreed.push({ track: t, word: w, off: false }); // agreed: off
+  }
+  const valid = votes.map((v) => Object.assign({}, v, { word: signalWord(v.word) })).filter((v) => v.word);
+  const file = path.join(specsRoot(projectDir), SIGNAL_FILE);
+  if (!valid.length && (!fs.existsSync(file) || (!contradicted.length && !agreed.length))) return null;
+  const now = new Date().toISOString();
+  const r = writeSignalRecords(projectDir, (records) => {
+    const idx = new Map(records.map((x) => [signalKey(x.track, x.word), x]));
+    const learned = [], forgotten = [];
+    let changed = false, capped = 0;
+    const drop = (rec) => {
+      const i = records.indexOf(rec);
+      if (i < 0) return;
+      records.splice(i, 1);
+      idx.delete(signalKey(rec.track, rec.word));
+      forgotten.push({ track: rec.track, word: rec.word, effect: rec.effect });
+      changed = true;
+    };
+    for (const o of contradicted) { const rec = idx.get(signalKey(o.track, o.word)); if (rec && rec.origin === "learned") drop(rec); }
+    for (const a of agreed) {
+      const rec = idx.get(signalKey(a.track, a.word));
+      if (rec && rec.origin === "learned" && rec.count < SIGNAL_OVERRIDE_MIN && a.off === (rec.effect === "off")) drop(rec);
+    }
+    for (const v of valid) {
+      const k = signalKey(v.track, v.word);
+      let rec = idx.get(k);
+      if (rec && rec.origin === "set") continue; // a word set by hand is the team's explicit choice: learning never changes it
+      if (rec && (rec.effect === "off") === (v.effect === "off")) { // one more consistent correction
+        rec.count++;
+        rec.lastAt = now;
+        if (v.effect === "strong") rec.effect = "strong";
+      } else {
+        if (rec) drop(rec); // an opposite correction starts over
+        if (records.length >= SIGNAL_OVERRIDE_MAX) { // full: the oldest pending learned record makes room, never an active one
+          const pend = records.filter((x) => x.origin === "learned" && x.count < SIGNAL_OVERRIDE_MIN).sort((a, b) => String(a.lastAt || "").localeCompare(String(b.lastAt || "")))[0];
+          if (!pend) { capped++; continue; }
+          drop(pend);
+        }
+        rec = { track: v.track, word: v.word, effect: v.effect, count: 1, origin: "learned", lastAt: now };
+        records.push(rec);
+        idx.set(k, rec);
+      }
+      changed = true;
+      learned.push({ track: rec.track, word: rec.word, effect: rec.effect, count: rec.count, active: signalActive(rec) });
+    }
+    return { changed, learned, forgotten, capped };
+  });
+  if (!r.ok) return { error: r.fileError ? r.fileError.code : "busy", busy: !!r.busy };
+  if (!r.learned.length && !r.forgotten.length && !r.capped) return null;
+  return Object.assign({ learned: r.learned, forgotten: r.forgotten }, r.capped ? { capped: r.capped } : {});
+}
+// The localized note spec_create adds for what it learned (null when nothing).
+function signalLearnNote(L, lang) {
+  if (!L) return null;
+  const G = i18n.msg(lang).signals;
+  if (L.error) return G.learnFailed(L.error);
+  return [...L.learned.map((x) => (x.active ? G.learnedActive(x.track, x.word, x.effect, x.count) : G.learnedPending(x.track, x.word, x.effect, x.count, SIGNAL_OVERRIDE_MIN))),
+    ...L.forgotten.map((x) => G.learnedDropped(x.track, x.word, x.effect)), L.capped ? G.capped(SIGNAL_OVERRIDE_MAX) : null].filter(Boolean).join(" ");
+}
+// spec_tracks {action: "signals", op, track, word, effect} / `dev-spec signals [list | set <track> <word> off|weak|strong | forget
+// <track> <word>]` — the project's overrides: list them (active / pending, the file's problems), set one by hand (applies at once),
+// forget one.
+function signalOverrides(projectDir, op, opts = {}) {
+  const pl = projectLang(projectDir);
+  let lang = null;
+  if (opts.lang != null && String(opts.lang).trim()) {
+    lang = i18n.canonicalLang(String(opts.lang));
+    if (!lang) { const A = i18n.msg(pl).args; return { ok: false, error: A.invalid(A.item("lang", A.oneOf(i18n.LANGS.join(", ")), JSON.stringify(String(opts.lang)))) }; }
+  }
+  const lng = lang || pl;
+  const G = i18n.msg(lng).signals;
+  const act = op == null || !String(op).trim() ? "list" : String(op).trim().toLowerCase();
+  if (!SIGNAL_OPS.includes(act)) return { ok: false, error: G.badOp(String(op)) };
+  const rel = ".specs/" + SIGNAL_FILE;
+  const base = { action: "signals", op: act, file: rel };
+  if (act === "list") {
+    const rd = readSignalOverrides(projectDir);
+    const OPT = optionalTracks();
+    const overrides = rd.records.map((r) => Object.assign({}, r, { active: signalActive(r) }, OPT.includes(r.track) ? {} : { unknownTrack: true }));
+    const warning = signalFileWarning(rd);
+    const lines = [overrides.length ? G.listHead(rel, overrides.length, overrides.filter((o) => o.active).length, SIGNAL_OVERRIDE_MIN) : G.listNone(rel)];
+    for (const o of overrides) lines.push(G.listItem(o, SIGNAL_OVERRIDE_MIN));
+    if (warning) lines.push(G.fileWarning(rel, warning.code, warning.entries || 0));
+    for (const p of rd.problems) lines.push(G.problem(p.index, p.code));
+    return Object.assign({ ok: true }, base, { exists: rd.exists, min: SIGNAL_OVERRIDE_MIN, max: SIGNAL_OVERRIDE_MAX, overrides, problems: rd.problems },
+      warning ? { warning } : {}, { lines });
+  }
+  const track = opts.track != null ? String(opts.track).trim().toLowerCase().replace(/^\+/, "") : "";
+  if (!track) return { ok: false, error: G.needTrackWord(act) };
+  if (track === "core") return { ok: false, error: G.coreTrack };
+  const OPT = optionalTracks();
+  if (act === "set" ? !OPT.includes(track) : !RE_SIGNAL_TRACK.test(track)) return { ok: false, error: G.badTrack(track, OPT.join(", ")) };
+  const word = signalWord(opts.word);
+  if (!word) return { ok: false, error: opts.word == null || !String(opts.word).trim() ? G.needTrackWord(act) : G.badWord(String(opts.word).slice(0, 80)) };
+  const effect = opts.effect != null ? String(opts.effect).trim().toLowerCase() : "";
+  if (act === "set" && !SIGNAL_EFFECTS.includes(effect)) return { ok: false, error: G.badEffect(String(opts.effect == null ? "" : opts.effect)) };
+  if (!fs.existsSync(specsRoot(projectDir))) return { ok: false, error: i18n.msg(lng).err.noSpecs(projectDir) };
+  const k = signalKey(track, word);
+  const r = writeSignalRecords(projectDir, (records) => {
+    const i = records.findIndex((x) => signalKey(x.track, x.word) === k);
+    const prev = i >= 0 ? records[i] : null;
+    if (act === "forget") {
+      if (!prev) return { changed: false, removed: null };
+      records.splice(i, 1);
+      return { changed: true, removed: prev };
+    }
+    if (!prev && records.length >= SIGNAL_OVERRIDE_MAX) return { changed: false, full: true };
+    const rec = { track, word, effect, count: prev ? prev.count : 1, origin: "set", lastAt: new Date().toISOString() };
+    if (prev) records[i] = rec; else records.push(rec);
+    return { changed: true, override: rec, replaced: prev };
+  });
+  if (!r.ok) return r.busy ? r : { ok: false, error: G.fileWarning(rel, r.fileError.code, r.fileError.entries || 0), fileWarning: r.fileError };
+  if (act === "forget") {
+    if (!r.removed) return { ok: false, error: G.notFound(track, word), notFound: true };
+    return Object.assign({ ok: true }, base, { removed: r.removed, lines: [G.forgotten(r.removed.track, r.removed.word, r.removed.effect)] });
+  }
+  if (r.full) return { ok: false, error: G.capped(SIGNAL_OVERRIDE_MAX), full: true };
+  return Object.assign({ ok: true }, base, { override: Object.assign({}, r.override, { active: true }), replaced: r.replaced || null,
+    lines: [G.setDone(track, word, effect, r.replaced ? r.replaced.effect : null)] });
+}
+
 module.exports = { conceptMap, SIGNAL_CONCEPTS, SIGNAL_HAZARDS, SIGNAL_CUES, NEGATORS, NEG_FILLER, NEG_FILLER_EN, NEG_AFTER,
   W, PT_STRONG, PT_STRONG_CHARS, PT_WEAK, ES_STRONG, ES_STRONG_CHARS, ES_WEAK, EN_WORDS, CLAUSE_START, INF_WORDS, INF, PT_INF,
   ES_INF, PTES_INF, ES_NO_INF,
-  guessLang, configuredLang, isNegated, STEMS, VERB_STEMS, IRREGULAR_FORMS, KW_GAP, KW_GAP_RE, INFLECTION,
-  ACRONYM_INFLECTION, ADJ_SUFFIX, KW_RE, pluralize, KW_LITERAL, KW_CACHE_MAX, KW_PLAIN, keywordLiteral, keywordRe,
-  keywordPattern, PATH_HEADS, splitWordPairs, classify, buildReasoning, __link };
+  guessLang, configuredLang, isNegated, negatedBefore, negatedAfter, coordinatedNegation, listLink, STEMS, VERB_STEMS, IRREGULAR_FORMS,
+  KW_GAP, KW_GAP_RE, INFLECTION, ACRONYM_INFLECTION, ADJ_SUFFIX, KW_RE, pluralize, KW_LITERAL, KW_CACHE_MAX, KW_PLAIN, keywordLiteral,
+  keywordRe, keywordPattern, PATH_HEADS, splitWordPairs, classify, buildReasoning, SIGNAL_FILE, SIGNAL_OVERRIDE_MIN, SIGNAL_OVERRIDE_MAX,
+  SIGNAL_EFFECTS, SIGNAL_OPS, readSignalOverrides, learnSignalOverrides, signalLearnNote, signalOverrides, __link };

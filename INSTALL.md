@@ -195,7 +195,33 @@ node "$plugin\cli\dev-spec.js" init --approval-guard deny   # or ask; off to dis
 ```
 
 `ask` relies on Claude Code's permission prompt, which auto / bypass permission modes may skip; `deny` holds in every mode.
-Both are guardrails, not a sandbox, and only Claude Code runs these hooks.
+Both are guardrails, not a sandbox. In other MCP clients the MCP server enforces the same setting itself: a client that
+supports MCP elicitation shows you the question (Approve + an optional note) and only your explicit approve records it; a
+client without it runs `ask` as before and refuses `deny` with the command to run yourself.
+
+**Teams: a merge driver for the spec state (opt-in, once per clone).** Two branches that both approve phases, tick tasks or
+record evidence change the same `.specs/<feature>/.state.json` and `.specs/roadmap.json` — a plain git merge conflicts on
+them. `merge-state --install` makes git merge them semantically (approvals, ticks, evidence and history of both branches
+united; a real conflict — a setting both branches changed differently — stays valid JSON, listed under `mergeConflicts`,
+and `dev-spec doctor` fails until you resolve it):
+
+```powershell
+node "$plugin\cli\dev-spec.js" merge-state --install   # writes .gitattributes (commit it) + this clone's git config
+```
+
+Commit `.gitattributes`; every teammate runs `--install` once in their clone (git config is per clone — without it git
+falls back to its text merge). `--uninstall` removes both.
+
+**Re-run `merge-state --install` after each plugin update.** Git runs the driver by the CLI's path, and a plugin install
+lives in a versioned folder (`plugins/cache/<marketplace>/dev-spec-driven/<version>/`): after an update the configured
+path points at the old folder. When it no longer exists, git reports a conflict on the spec state and keeps only your
+side — `git add` would then drop the other branch's approvals and evidence. `merge-state --check` tells (exit 1 when the
+driver runs another or a missing script), and the session-start status adds one line when it happens:
+
+```powershell
+node "$plugin\cli\dev-spec.js" merge-state --check     # read-only: does git's driver still run this plugin's CLI?
+node "$plugin\cli\dev-spec.js" merge-state --install   # points it at the current plugin folder again
+```
 
 **Plan-mode bridge (always on, one line of context).** A PostToolUse hook on `ExitPlanMode` (`hooks/plan-hook.js`): when
 you approve a plan in Claude Code's plan mode inside a dev-spec project, Claude is reminded that the plan can become a spec

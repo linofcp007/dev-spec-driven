@@ -23,7 +23,9 @@ let acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, ar
   ROOT_CAUSE_SYN, SAMPLE_GOLDEN, sectionState, specChangedSince, spikePhase, statePath, STEERING_GOVERNED,
   steeringFingerprints, steeringImpact, steeringImpactLines, stripFencedCode, stripHtmlComments, taskBlocks,
   taskDepsCheck, taskMarkers, taskVerification, testIndex, textFingerprint, timeOf, todayIso, traceCheck, traceGapLines,
-  uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic, writeRoadmap;
+  uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic, writeRoadmap,
+  featureSize, trackSectionReport, sectionVerdict,
+  CHANGE_FILE, requirementAcIds, changeViews, isChangeDir;
 function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, artifactReport,
   artifactState, bugPlaceholders, clarificationMarkers, criterionBlocks, designSections, detectTracks,
   duplicateTaskNumbers, earsUnlinted, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection,
@@ -35,7 +37,9 @@ function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks,
   statePath, STEERING_GOVERNED, steeringFingerprints, steeringImpact, steeringImpactLines, stripFencedCode,
   stripHtmlComments, taskBlocks, taskDepsCheck, taskMarkers, taskVerification, testIndex, textFingerprint, timeOf,
   todayIso, traceCheck, traceGapLines, uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic,
-  writeRoadmap } = E); }
+  writeRoadmap,
+  featureSize, trackSectionReport, sectionVerdict,
+  CHANGE_FILE, requirementAcIds, changeViews, isChangeDir } = E); }
 
 // Phases that only exist for a track: an inactive track's artifact (kept on disk after add_track --remove)
 // is not a gate, not a phase and not a "changed since approval".
@@ -105,6 +109,8 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   const wv = waiverInput(opts, lng);
   if (wv.error) return { ok: false, error: wv.error };
   if (state.kind === "spike" && p !== "execution") return { ok: false, spike: true, error: i18n.msg(lng).spike.noGate(p, f.slug) }; // 1.14 C2
+  // 1.21 F5: a change has two approvals — the plan (phase `tasks`: its change.md) and the execution sign-off
+  if (state.kind === "change" && p !== "tasks" && p !== "execution") return { ok: false, change: true, error: i18n.msg(lng).sizes.noGate(p, f.slug) };
   const G = i18n.msg(lng).gates;
   const tracks = detectTracks(f.dir);
   const gate = approvalChecks(projectDir, f.slug, f.dir, p, tracks, state.kind || "feature", lng);
@@ -125,6 +131,11 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
     return { ok: false, refused: true, failing, checks: gate.checks,
       error: G.approveRefused(p, f.slug, failing.join(", "), gate.checks.map((c) => G.checkLine(c.id, c.detail)).join("\n")) };
   }
+  // 1.21 F1b: the MCP server's preview before it asks the user (elicitation) — every check above ran, nothing is written.
+  if (opts.dryRun === true) {
+    return Object.assign({ ok: true, dryRun: true, feature: f.slug, phase: p, failing, checks: gate.checks }, rc.role ? { role: rc.role } : {},
+      failing.length && wv.waiver ? { waiver: wv.waiver } : {});
+  }
   // One default for every surface (the CLI used $USER, the MCP server 'user').
   const entry = { at: new Date().toISOString(), by: by || process.env.USER || process.env.USERNAME || "user" };
   // The artifact is read ONCE: its fingerprint and its snapshot are the same version.
@@ -135,7 +146,8 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (file && file !== PHASE_FILE[p]) {
     entry.file = file;
     // A bugfix's design.md holds only track sections ([SaaS]/[AI]) the gate checked too: an edit to it still counts.
-    design = readIfExists(path.join(f.dir, PHASE_FILE[p]));
+    // (1.21 F5: a change's plan signs off change.md alone — its tasks.md IS change.md, nothing else to fingerprint)
+    design = state.kind === "change" ? null : readIfExists(path.join(f.dir, PHASE_FILE[p]));
     if (design != null) entry.designFingerprint = textFingerprint(design, p);
   }
   if (failing.length) { entry.forced = true; entry.failing = failing; } // a clean re-approval replaces it
@@ -152,6 +164,8 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (p === "design") { entry.weigh = true; entry.reuse = true; }
   if (rc.role) entry.role = rc.role; // 1.14 B3: the role signing (informational on a phase no role is required for)
   if (opts.batch === true) entry.batch = true; // 1.14 B3: approved by a fast-forward (metrics count them apart)
+  const conf = confirmationOf(opts.confirmation); // 1.21 F1b: the user confirmed it in the MCP client (elicitation)
+  if (conf) entry.confirmed = conf;
   // Change history (1.13): `approvals[p]` stays the latest approval; every approval is also appended to
   // approvalHistory, with a snapshot of what it signed off (.history/<phase>@<n>.md) — the baseline spec_impact diffs.
   // A feature upgraded mid-flight: the approvals made before the history are seeded first as `legacy` records (no
@@ -169,6 +183,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (entry.reuse) record.reuse = true; // 1.19 R1
   if (entry.role) record.role = entry.role;
   if (entry.batch) record.batch = true;
+  if (entry.confirmed) record.confirmed = entry.confirmed;
   // 1.14 B3: with roles, a sign-off that doesn't complete the phase waits in state.signoffs — approvals[p] untouched, no snapshot.
   const so = rc.roles.length ? recordRoleSignOff(state, p, entry, rc.roles, record) : dropRoleSignOffs(state, p);
   // A bugfix's design approval keeps design.md as it was too (<phase>@<n>.design.md): spec_impact diffs both files.
@@ -192,6 +207,17 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   else if (wv.waiver) Object.assign(res, { waiverIgnored: true, note: [res.note, W.notForced].filter(Boolean).join(" ") });
   if (so && so.complete && entry.waiver) res.waiver = entry.waiver; // the completing sign-off: the waiver the approval carries
   return res;
+}
+
+// 1.21 F1b — how the user confirmed an agent's approval over MCP (mcp/server.js asked them: elicitation/create) → { via:
+// "elicitation", at, note? } | null — recorded as `confirmed` on the approval, its history record and a role's sign-off (a
+// revocation's record too). Only the server passes it, never a tool argument; the note: one line, at most 500 characters.
+function confirmationOf(c) {
+  if (!isObj(c) || c.via !== "elicitation") return null;
+  const out = { via: "elicitation", at: typeof c.at === "string" && c.at ? c.at : new Date().toISOString() };
+  const note = typeof c.note === "string" ? c.note.replace(/\s+/g, " ").trim().slice(0, 500) : "";
+  if (note) out.note = note;
+  return out;
 }
 
 // 1.16 U3 — the waiver a forced approval carries: spec_approve {force: true, reason?, expires?} / `approve <f> <phase> --force
@@ -299,6 +325,8 @@ function revokeApproval(projectDir, name, phase, by, opts) {
   const appr = isRecord(state.approvals[p]) ? state.approvals[p] : null;
   const waiting = isObj(state.signoffs) && isObj(state.signoffs[p]) ? Object.keys(state.signoffs[p]) : [];
   if (!appr && !waiting.length) return { ok: false, notApproved: true, error: R.notApproved(p, f.slug) };
+  if (opts.dryRun === true) return { ok: true, dryRun: true, feature: f.slug, phase: p, revoke: true }; // 1.21 F1b: the MCP server's preview
+  const conf = confirmationOf(opts.confirmation); // 1.21 F1b
   const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory : [];
   const legacy = legacySeeds(state.approvals, hist);
   const record = { phase: p, at: new Date().toISOString(), by: by || process.env.USER || process.env.USERNAME || "user", revoked: true };
@@ -309,6 +337,7 @@ function revokeApproval(projectDir, name, phase, by, opts) {
     if (appr.forced === true) record.wasForced = true;
   } else record.partial = true; // only waiting sign-offs were withdrawn: nothing had been approved
   if (waiting.length) record.roles = waiting;
+  if (conf) record.confirmed = conf;
   state.approvalHistory = hist.concat(legacy, [record]);
   delete state.approvals[p];
   dropRoleSignOffs(state, p);
@@ -440,7 +469,9 @@ function phaseContent(dir, phase, kind) {
   const file = phaseFile(phase, kind);
   const raw = file ? readIfExists(path.join(dir, file)) : null;
   const c = { fingerprint: raw != null ? textFingerprint(raw, phase) : null, designFingerprint: null };
-  if (file && file !== PHASE_FILE[phase]) {
+  // (1.21 verify V4: a change's plan signs off change.md ALONE — approvePhase records no designFingerprint for it; reading
+  // tasks.md here, the alias of that very change.md, gave every role sign-off a second fingerprint no record carries: stale forever)
+  if (file && file !== PHASE_FILE[phase] && kind !== "change") {
     const d = readIfExists(path.join(dir, PHASE_FILE[phase]));
     if (d != null) c.designFingerprint = textFingerprint(d, phase);
   }
@@ -484,6 +515,7 @@ function recordRoleSignOff(state, phase, entry, required, record) {
   if (entry.forced) { rec.forced = true; rec.failing = entry.failing; }
   if (entry.waiver) rec.waiver = entry.waiver; // 1.16 U3: a forced sign-off's waiver
   if (entry.batch) rec.batch = true;
+  if (entry.confirmed) rec.confirmed = entry.confirmed; // 1.21 F1b
   const signoffs = isObj(state.signoffs) ? state.signoffs : {};
   const cur = isObj(signoffs[phase]) ? signoffs[phase] : {};
   const view = roleSignOffs({ signoffs: { [phase]: { ...cur, [entry.role]: rec } }, approvals: state.approvals }, phase, required, entry);
@@ -538,11 +570,14 @@ function roleGateView(projectDir, dir, state, pendingGates, tracks, kind, lng) {
   const pending = {}, unsigned = {};
   if (!Object.keys(cfg).length) return { any: false, pending, unsigned, notes: [], label: (p) => p };
   const E = i18n.msg(lng).governance;
-  const stale = [], resign = [];
+  const stale = [], resign = [], complete = [];
   for (const p of pendingGates) {
     if (!cfg[p]) continue;
     const v = roleSignOffs(state, p, cfg[p], phaseContent(dir, p, kind));
     pending[p] = { required: cfg[p].slice(), signed: v.signed, missing: v.missing, stale: v.stale };
+    // 1.21 review A1: every required role signed the CURRENT content, yet no approval (the sign-offs were recorded apart — two
+    // branches the merge driver united, or a role dropped since): never "missing roles" — any of them signs again to complete it.
+    if (!v.missing.length && v.signed.length) { pending[p].signoffsComplete = true; complete.push(p); }
     if (v.stale.length) stale.push(`${p} (${v.stale.join(", ")})`);
   }
   const approvals = isObj(state.approvals) ? state.approvals : {};
@@ -558,15 +593,21 @@ function roleGateView(projectDir, dir, state, pendingGates, tracks, kind, lng) {
     }
   }
   const notes = [];
+  if (complete.length) {
+    const slug = path.basename(dir);
+    notes.push(E.signoffsComplete(complete.map((p) => `${p} (${pending[p].signed.join(", ")})`).join(", "), `/approve ${slug} ${complete[0]} --role ${pending[complete[0]].signed[0]}`));
+  }
   if (stale.length) notes.push(E.staleSignOffs(stale.join(", ")));
   if (resign.length) notes.push(E.resigning(resign.join(", ")));
   const un = Object.entries(unsigned);
   if (un.length) notes.push(E.unsigned(un.map(([p, l]) => `${p} (${l.join(", ")})`).join(", ")));
   return { any: true, pending, unsigned, notes, label: (p) => roleLabel(pending, p, lng) };
 }
-// "design (missing role: security)" for a pending phase that waits for roles; the bare phase otherwise.
+// "design (missing role: security)" for a pending phase that waits for roles; "design (every role signed: … — not approved yet)"
+// for one whose sign-offs are complete but never became an approval (1.21 review A1); the bare phase otherwise.
 function roleLabel(pendingRoles, p, lng) {
   const pr = isObj(pendingRoles) && own(pendingRoles, p) ? pendingRoles[p] : null;
+  if (pr && pr.signoffsComplete) return `${p} (${i18n.msg(lng).governance.signedAll(pr.signed.join(", "))})`;
   return pr && pr.missing.length ? `${p} (${i18n.msg(lng).governance.missing(pr.missing)})` : p;
 }
 // ROADMAP.md "Needs attention": the phases of a feature whose sign-off round is under way (some role signed, some didn't yet).
@@ -603,10 +644,11 @@ function reReviewRoles(projectDir, dir, st, phases, kind, slug, lng) {
 // next_action's fast-forward: when the first pending phase would be approved now and EVERY unapproved phase after it through
 // `tasks` is filled and passes its own gate, one /spec-ff approves them all in order. With roles, a single role must be the
 // one missing sign-off of each phase that needs roles (the fast-forward signs as that role) — otherwise no suggestion.
-// → { through: "tasks", phases, role } | null (fewer than two phases, or some gate would refuse).
-function fastForwardPlan(projectDir, slug, dir, st, tracks, kind, pending, doc, lng) {
+// → { through, phases, role } | null (fewer than two phases, or some gate would refuse). `through`: tasks, or where a sized plan's
+// one call ends (planFastForwardEnd — 1.21 review C3).
+function fastForwardPlan(projectDir, slug, dir, st, tracks, kind, pending, doc, lng, through = "tasks") {
   const walk = gateWalk(dir, tracks, kind);
-  const start = walk.indexOf(pending), end = walk.indexOf("tasks");
+  const start = walk.indexOf(pending), end = walk.indexOf(through);
   if (start < 0 || end < start) return null;
   const approvals = isObj(st.approvals) ? st.approvals : {};
   const chain = walk.slice(start, end + 1).filter((ph) => !approvals[ph]);
@@ -623,7 +665,19 @@ function fastForwardPlan(projectDir, slug, dir, st, tracks, kind, pending, doc, 
       role = v.missing[0];
     }
   }
-  return { through: "tasks", phases: chain, role };
+  return { through, phases: chain, role };
+}
+// 1.21 review C3 — where a size xs / s plan's ONE approval call ends: tasks, or — with the Phase 4 tests gate due (+tdd / +ai:
+// the written failing tests / the feature's own eval sets, work that comes AFTER the plan) and still ahead of the pending
+// phase — the last planning phase before it (test-plan / eval-plan): a fast-forward through tasks stopped at `tests` every time.
+// null: no sized plan (no size, m / l, a spike).
+function planFastForwardEnd(dir, tracks, kind, pending) {
+  const size = featureSize(dir);
+  if ((size !== "xs" && size !== "s") || kind === "spike") return null;
+  const walk = gateWalk(dir, tracks, kind);
+  const t = walk.indexOf("tests");
+  const at = walk.indexOf(pending);
+  return t > 0 && at >= 0 && at < t ? walk[t - 1] : "tasks";
 }
 // next_action's "approve" step, 1.14: the roles still missing for the pending phase (the recommendation names the role to
 // sign as) and the fast-forward, when it applies. → { text, missingRoles?, fastForward? } (text null = keep the default).
@@ -631,14 +685,20 @@ function approveStepExtras(projectDir, slug, dir, st, tracks, kind, pending, doc
   const E = i18n.msg(lng).governance;
   const out = { text: null };
   const pr = doc.pendingRoles && own(doc.pendingRoles, pending) ? doc.pendingRoles[pending] : null;
-  if (pr && pr.missing.length) {
+  if (pr && pr.signoffsComplete) { // 1.21 review A1: every role signed, no approval — one of them signs again (no missing roles)
+    out.signoffsComplete = true;
+    out.text = E.completeSignoffs(pending, slug, pr.signed.join(", "), pr.signed[0]);
+  } else if (pr && pr.missing.length) {
     out.missingRoles = pr.missing;
     out.text = E.approveRoles(pending, slug, E.missing(pr.missing), pr.signed.join(", "), pr.missing[0]);
   }
-  const ff = fastForwardPlan(projectDir, slug, dir, st, tracks, kind, pending, doc, lng);
+  let ff = fastForwardPlan(projectDir, slug, dir, st, tracks, kind, pending, doc, lng);
+  // 1.21 review C3: a size xs / s plan whose tests gate is still ahead — the one call through the planning phases before it
+  const end = ff ? null : planFastForwardEnd(dir, tracks, kind, pending);
+  if (end && end !== "tasks") ff = fastForwardPlan(projectDir, slug, dir, st, tracks, kind, pending, doc, lng, end);
   if (ff) {
     out.fastForward = ff;
-    out.hint = E.ffHint(slug, ff.phases.join(", "), ff.role);
+    out.hint = ff.through === "tasks" ? E.ffHint(slug, ff.phases.join(", "), ff.role) : E.ffHintTests(slug, ff.phases.join(", "), ff.through, ff.role);
   }
   return out;
 }
@@ -669,10 +729,12 @@ function approveThrough(projectDir, name, phase, by, opts) {
   const chain = walk.slice(0, walk.indexOf(t) + 1).filter((ph) => !state.approvals[ph]);
   const base = { feature: f.slug, through: t, batch: true };
   if (!chain.length) return { ok: true, ...base, approved: [], steps: [], complete: true, nothingToDo: true, approvals: state.approvals, message: E.ffNothing(f.slug, t) };
+  if (opts.dryRun === true) return { ok: true, dryRun: true, ...base, chain }; // 1.21 F1b: the MCP server's preview (each gate runs when approved)
   const approved = [], steps = [];
   let approvals = state.approvals;
   for (const ph of chain) {
-    const r = approvePhase(projectDir, f.slug, ph, by, { force: opts.force === true, role: opts.role, batch: true, reason: opts.reason, expires: opts.expires });
+    const r = approvePhase(projectDir, f.slug, ph, by, { force: opts.force === true, role: opts.role, batch: true, reason: opts.reason, expires: opts.expires,
+      confirmation: opts.confirmation });
     if (r.approvals) approvals = r.approvals;
     const step = { phase: ph, approved: !!r.ok && r.complete !== false };
     if (r.role) step.role = r.role;
@@ -778,7 +840,7 @@ function snapshotPhases(dir, state, changedFiles) {
     const snap = latestSnapshot(dir, state, p);
     if (!snap) return false;
     if (changedFiles.includes(phaseFile(p, kind))) return true;
-    return phaseFile(p, kind) !== PHASE_FILE[p] && changedFiles.includes(PHASE_FILE[p]) && !!designBaseline(dir, snap, state.approvals[p]);
+    return kind !== "change" && phaseFile(p, kind) !== PHASE_FILE[p] && changedFiles.includes(PHASE_FILE[p]) && !!designBaseline(dir, snap, state.approvals[p]); // (a change: change.md alone)
   });
 }
 
@@ -865,10 +927,14 @@ function impactReport(projectDir, name, opts = {}) {
   const { slug, dir } = f;
   const lng = featureLang(projectDir, slug);
   const I = i18n.msg(lng).impact;
-  const phase = opts.phase == null || String(opts.phase).trim() === "" ? "requirements" : String(opts.phase).toLowerCase().trim();
+  // 1.21 review C4 — a change has ONE approved artifact, change.md (its plan: phase tasks) holding its criteria AND its tasks:
+  // the default phase is tasks; its criteria are diffed by stable ID (as requirements), its tasks by number, and --reopen works.
+  const isChange = isChangeDir(dir);
+  const phase = opts.phase == null || String(opts.phase).trim() === "" ? (isChange ? "tasks" : "requirements") : String(opts.phase).toLowerCase().trim();
   if (!IMPACT_PHASES.includes(phase)) return { ok: false, error: I.badPhase(String(opts.phase), [...IMPACT_PHASES, "steering"].join(", ")) };
+  if (isChange && phase !== "tasks") return { ok: false, change: true, error: I.changePhase(phase, slug) };
   const reopen = opts.reopen === true;
-  if (reopen && phase === "tasks") return { ok: false, error: I.reopenTasks };
+  if (reopen && phase === "tasks" && !isChange) return { ok: false, error: I.reopenTasks };
   const state = readState(projectDir, slug);
   if (state.invalid) return { ok: false, error: state.invalid }; // approvals/history of the wrong shape: nothing to trust
   const file = phaseFile(phase, state.kind || "feature"); // a bugfix's design approval signed off bug.md
@@ -966,6 +1032,21 @@ function impactReport(projectDir, name, opts = {}) {
     for (const a of res.added) digests[a.id] = shortDigest(a.text);
     for (const m of res.modified) { digests[m.id] = shortDigest(m.after); reach.set(m.id, [m.id]); }
     for (const r of res.removed) { digests[r.id] = "removed"; reach.set(r.id, [r.id]); }
+  } else if (isChange) {
+    // 1.21 review C4 — a change: the criteria (change.md WITHOUT its task blocks — changeViews) by stable ID, as requirements —
+    // a modified / removed criterion reaches the tasks citing it —, and the tasks (by number, checkboxes normalized) in `tasks`.
+    const crit = (t) => changeViews(t).criteria;
+    const d = diffEntries(requirementIndex(crit(snap.text)), requirementIndex(crit(cur)));
+    res.added = d.added.map((a) => ({ id: a.id, text: a.text, tasks: citing([a.id]).map((b) => b.number) }));
+    res.modified = d.modified.map((m) => ({ id: m.key, before: m.before.text, after: m.after.text }));
+    res.removed = d.removed.map((r) => ({ id: r.id, text: r.text }));
+    res.impacted = [...res.modified.map((m) => [m.id, "modified"]), ...res.removed.map((r) => [r.id, "removed"])].map(([id, change]) => ({ id, change, tasks: citing([id]).map(taskView) }));
+    for (const a of res.added) digests[a.id] = shortDigest(a.text);
+    for (const m of res.modified) { digests[m.id] = shortDigest(m.after); reach.set(m.id, [m.id]); }
+    for (const r of res.removed) { digests[r.id] = "removed"; reach.set(r.id, [r.id]); }
+    const t = diffEntries(taskEntries(uncheckTasks(snap.text)), taskEntries(uncheckTasks(cur)));
+    res.tasks = { added: t.added.map((e) => ({ number: e.number, text: e.title })), modified: t.modified.map((m) => ({ number: m.key, before: m.before.title, after: m.after.title })),
+      removed: t.removed.map((e) => ({ number: e.number, text: e.title })) };
   } else if (phase === "test-plan") {
     // T-ID row diff: added / modified / removed planned tests; a changed or removed test reaches the tasks that make it
     // green (_Makes green:_). Reopen semantics are the requirements': a modified test's done tasks are unticked (their
@@ -1006,7 +1087,7 @@ function impactReport(projectDir, name, opts = {}) {
     res.modified = d.modified.map((m) => ({ number: m.key, before: m.before.title, after: m.after.title }));
     res.removed = d.removed.map((e) => ({ number: e.number, text: e.title }));
   }
-  if (phase !== "tasks") {
+  if (phase !== "tasks" || isChange) {
     // Every task a change reaches, once, with what reaches it.
     const byTask = new Map();
     for (const [k, ids] of reach) for (const b of citing(ids)) {
@@ -1023,7 +1104,7 @@ function impactReport(projectDir, name, opts = {}) {
   // A REMOVED requirement is not redone: the tasks and test-plan rows still citing it are to be deleted or pointed at the
   // criterion that replaces it — listed in `retire`, never unticked ("redo them with fresh evidence" re-built a feature
   // the spec no longer has). A task also reached by a modified ID or a changed section is reopened as before.
-  const byId = phase === "requirements" || phase === "test-plan"; // ID-keyed diffs (sections for design / eval-plan)
+  const byId = phase === "requirements" || phase === "test-plan" || isChange; // ID-keyed diffs (sections for design / eval-plan)
   const removedIds = new Set(byId ? res.removed.map((r) => r.id) : []);
   if (byId) {
     // test-plan: a removed T-ID's tasks still name it in _Makes green:_ (no test rows to list).
@@ -1096,12 +1177,14 @@ function impactLines(r) {
   // The criterion text without its own leading "**US-1.AC-2** —" (the label already names it) — or a test row's "T-01 |".
   const body = (x) => String(x.after != null ? x.after : x.text != null ? x.text : "")
     .replace(/^(?:\*\*|__)?(?:US-\d+\.AC-\d+|SC-\d+|EC-\d+|NFR-\d+|T-\d+)(?:\*\*|__)?\s*[—–:|-]?\s*/, "");
-  for (const [sign, list] of [["+", r.added], ["~", r.modified], ["-", r.removed]]) {
+  // (1.21 review C4: a change lists its criteria, then its tasks — r.tasks)
+  const lists = [["+", r.added], ["~", r.modified], ["-", r.removed], ...(r.tasks ? [["+", r.tasks.added], ["~", r.tasks.modified], ["-", r.tasks.removed]] : [])];
+  for (const [sign, list] of lists) {
     for (const x of list || []) out.push(`  ${sign} ${label(x)}${body(x) && r.phase !== "design" ? "  " + cut(body(x)) : ""}`);
   }
   // design.md changed but can't be diffed (no snapshot of it): say that, never "no changes since the approval".
   if (r.designHint) out.push("  " + r.designHint);
-  else if (!(r.added || []).length && !(r.modified || []).length && !(r.removed || []).length) out.push("  " + (r.changed ? I.noStructural : I.noChanges));
+  else if (lists.every(([, list]) => !(list || []).length)) out.push("  " + (r.changed ? I.noStructural : I.noChanges));
   if ((r.impacted || []).length) {
     out.push("  " + I.affected);
     for (const x of r.impacted) {
@@ -1125,6 +1208,7 @@ function impactLines(r) {
 // it was never a gate there; every other chain artifact that is missing is "fill it").
 function gateWalk(dir, tracks, kind) {
   if (kind === "spike") return []; // 1.14 C2: a spike has no approval chain (question → investigate → decide)
+  if (kind === "change") return ["tasks"]; // 1.21 F5: a change has ONE planning approval — the plan (change.md), phase `tasks`
   return phaseOrder(featureFlow(dir, kind)).filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && (ph !== "tests" || testsGateDue(dir, tracks, kind)) && // C3: the feature's flow orders the chain
     (ph !== "classification" || fs.existsSync(path.join(dir, "classification.md"))));
 }
@@ -1139,6 +1223,7 @@ function gateArtifacts(dir, tracks, kind, phase) {
 // refuses a phase while an EARLIER one is still in this list (a phase with nothing to approve never blocks a later one).
 function pendingGateList(dir, tracks, kind, approvals) {
   if (kind === "spike") return []; // 1.14 C2
+  if (kind === "change") return fs.existsSync(path.join(dir, CHANGE_FILE)) && !(approvals || {}).tasks ? ["tasks"] : []; // 1.21 F5: the plan
   const due = (ph) => (ph === "tests" ? testsGateDue(dir, tracks, kind) : fs.existsSync(path.join(dir, phaseFile(ph, kind))));
   return phaseOrder(featureFlow(dir, kind)).filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && due(ph) && !(approvals || {})[ph]); // C3: in the flow's order
 }
@@ -1245,11 +1330,27 @@ function storeCreateFlow(dir, flow) {
 // (and earlier ones) first. A check not listed (placeholders: it only fails for the current phase or an earlier
 // one) counts as current.
 const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-criteria": 1, priorities: 1, "ac-uniqueness": 1, reproduction: 1,
-  design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "dist-sections": 2, "api-sections": 2, "ui-sections": 2, "obs-sections": 2, "root-cause": 2,
+  design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "dist-sections": 2, "api-sections": 2, "ui-sections": 2, "obs-sections": 2, "data-sections": 2, "root-cause": 2,
   "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, "malformed-markers": 5, verification: 6, "outside-code-artifacts": 6 };
 CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
 Object.assign(CHECK_PHASE, { glossary: 1, "cross-feature-acs": 1, "steering-changed-since-approval": 2 }); // 1.16 Q (warns only)
 Object.assign(CHECK_PHASE, { "design-tradeoffs": 2, "design-risks": 2, "design-reuse": 2 }); // 1.17 A1, 1.19 R1 (warns only)
+CHECK_PHASE["change-scope"] = 1; // 1.21 F5: a change's size (1–3 criteria, 1–3 tasks, core only) — its plan, from the start
+
+// 1.21 F5 — a change stays XS: 1–3 acceptance criteria, 1–3 tasks, no optional track (a +track is a design's worth of sections).
+// Past that it is a feature of size s — never ratcheted silently: doctor fails `change-scope`, the plan approval refuses, and the
+// detail says so (a new feature, spec_create {size: "s"}; the change archived). → { ok, acs, tasks, tracks, detail }
+const CHANGE_MAX_ACS = 3, CHANGE_MAX_TASKS = 3;
+function changeScope(dir, tracks, lang) {
+  const text = readIfExists(path.join(dir, CHANGE_FILE)) || "";
+  // 1.21 review C1: the criteria are change.md WITHOUT its task blocks — a task's _Requirements:_ reference defines none
+  const acs = requirementAcIds(changeViews(text).criteria).size;
+  const tasks = parseTasks(text).length;
+  const extra = (tracks || []).filter((t) => t !== "core");
+  const ok = acs >= 1 && acs <= CHANGE_MAX_ACS && tasks >= 1 && tasks <= CHANGE_MAX_TASKS && !extra.length;
+  const S = i18n.msg(lang).sizes;
+  return { ok, acs, tasks, tracks: extra, detail: ok ? S.scopeOk(acs, tasks) : S.scope(acs, tasks, CHANGE_MAX_ACS, CHANGE_MAX_TASKS, extra.map((t) => "+" + t).join(", ")) };
+}
 
 // ---------------------------------------------------------------------------
 // Gates — the ONE view doctor / approve / next_action / finish / roadmap share of what a phase still lacks
@@ -1263,6 +1364,7 @@ const PHASE_INDEX = { empty: 0, classified: 0, requirements: 1, design: 2, "test
 // replaces the design — and its design.md joins only while it holds active track sections (detectPhase's rule).
 function chainArtifacts(dir, tracks, kind) {
   if (kind === "spike") return []; // 1.14 C2: spike.md is judged by the spike tools (spikeDoctor / spikeFinish), not the planning chain
+  if (kind === "change") return [{ file: CHANGE_FILE, phase: "tasks", idx: 1 }]; // 1.21 F5: the plan is the whole chain (current from the start)
   const out = [{ file: "requirements.md", phase: "requirements", idx: 1 }];
   if (kind === "bugfix") {
     out.push({ file: "bug.md", phase: "design", idx: 2 });
@@ -1309,12 +1411,13 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
       if (fs.existsSync(design) && !artifactMatches(design, ph, a.designFingerprint)) out.push(file);
       continue;
     }
-    const abs = path.join(dir, file);
+    const rel = kind === "change" ? phaseFile(ph, kind) : file; // 1.21 F5: a change's plan approval signed off change.md
+    const abs = path.join(dir, rel);
     if (!a || !fs.existsSync(abs) || !phaseActive(ph, tracks)) continue;
     if (a.fingerprint) {
-      if (!artifactMatches(abs, ph, a.fingerprint)) out.push(file);
+      if (!artifactMatches(abs, ph, a.fingerprint)) out.push(rel);
     } else if (a.at && ph !== "tasks") {
-      try { if (fs.statSync(abs).mtime.getTime() > new Date(a.at).getTime()) { out.push(file); byDate.push(file); } } catch { /* ignore */ }
+      try { if (fs.statSync(abs).mtime.getTime() > new Date(a.at).getTime()) { out.push(rel); byDate.push(rel); } } catch { /* ignore */ }
     }
   }
   return opts.detail ? { changed: out, byDate, untracked } : out;
@@ -1406,8 +1509,11 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
         need("constitution-check", sectionFilled(activeDesign(design, tracks), CONSTITUTION_SYN), G.constitutionUnfilled);
       }
       if (design != null) {
-        for (const [tr, secs, mark] of activeSectionTracks(tracks)) {
-          const bad = sectionState(design, secs, mark).filter((s) => s.status !== "filled");
+        // 1.21 F5: a NEW approval is held to the stricter rule — a section holding only the template's guidance is not filled —
+        // and a sized feature to its size (an optional extended section at S, a section another active track covers).
+        const size = featureSize(dir);
+        for (const [tr, , rows] of trackSectionReport(design, tracks, { size, lang })) {
+          const bad = rows.filter((s) => sectionVerdict(s, { size }) !== "pass");
           need(tr + "-sections", !bad.length, bad.map(label).join("; "));
         }
       }
@@ -1429,6 +1535,30 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
       noPlaceholders("eval-plan.md");
       break;
     case "tasks": {
+      if (kind === "change") { // 1.21 F5 — the plan of a change: ONE file holds its criteria and its tasks, one gate checks both
+        if (!exists(CHANGE_FILE)) return nothing(CHANGE_FILE);
+        const text = read(CHANGE_FILE);
+        const crit = changeViews(text).criteria; // 1.21 review C1: its criteria without the task blocks (line numbers kept)
+        const ev = earsValidate(crit, lang);
+        const errs = (ev.issues || []).filter((i) => i.severity === "error");
+        need("ears", !errs.length, errs.slice(0, 3).map((i) => `L${i.line} ${i.msg}`).join("; "));
+        const unlinted = earsUnlinted(crit, ev);
+        need("ears", !unlinted, unlinted ? m.earsNoCriteria(unlinted, CHANGE_FILE) : "");
+        noPlaceholders(CHANGE_FILE);
+        const mk = clarificationMarkers(text);
+        need("clarifications", !mk.length, m.clarificationsOpenPlan(mk.length)); // (1.21 verify V7: no design to resolve them before)
+        const dups = acDuplicates(crit);
+        need("ac-uniqueness", !dups.length, m.acDup(dups.join(", ")));
+        need("placeholders", parseTasks(text).some((t) => !isPlaceholderTask(t.text)), G.noRealTasks);
+        const sc = changeScope(dir, tracks, lang);
+        need("change-scope", sc.ok, sc.detail);
+        const tr = traceCheck(projectDir, slug);
+        const kinds = ["uncoveredByTasks", "phantomAcsInTasks", "phantomTestsInTasks"];
+        need("traceability", kinds.every((k) => !(tr[k] || []).length), gaps(tr, kinds));
+        const deps = taskDepsCheck(taskBlocks(text || ""), lang);
+        if (deps) need("task-deps", deps.status !== "fail", deps.detail);
+        break;
+      }
       if (!exists("tasks.md")) return nothing("tasks.md");
       noPlaceholders("tasks.md");
       // No placeholder tasks: bracketed ones are in the report above; a list made ONLY of the scaffold's verbatim track
@@ -1495,12 +1625,12 @@ module.exports = { phaseActive, testsGateDue, detectPhase, approvePhase, WAIVER_
   revokeApproval, RE_ROLE, normRole, parseRoleList, validateApprovalRoles, parseApprovalRolesText, approvalRolesOf,
   approvalRolesFrom, rolesSummary, setApprovalRoles, approvalRole, phaseContent, sameContent, approvalRoleRecords,
   roleSignOffs, recordRoleSignOff, dropRoleSignOffs, roleSignOffResult, roleGateView, roleLabel, roleWaitList,
-  reReviewRoles, fastForwardPlan, approveStepExtras, approveThrough, HISTORY_DIR, IMPACT_PHASES, RE_REQ_REF,
+  reReviewRoles, fastForwardPlan, planFastForwardEnd, approveStepExtras, approveThrough, HISTORY_DIR, IMPACT_PHASES, RE_REQ_REF,
   RE_OTHER_REQ_REF, RE_TEST_REF, RE_DEFINES_REQ_ID, normWs, refsIn, shortDigest, isApprovalRecord, legacyRecord,
   writeSnapshot, historyText, latestSnapshot, designBaseline, snapshotPhases, requirementIndex, diffEntries,
   sectionEntries, taskEntries, plannedTestEntries, activeTaskBlocks, impactReport, impactLines, gateWalk, gateArtifacts,
   pendingGateList, FLOWS, DESIGN_FIRST_PHASES, flowOfState, featureFlow, phaseOrder, flowIndex, flowPhaseIndex,
   checkPhaseIndex, positionPhase, parseFlow, flowOrderText, setFeatureFlow, setFeatureFlowLocked, createFlow,
-  storeCreateFlow, CHECK_PHASE, PHASE_INDEX, chainArtifacts, changedSinceApproval, realLines, hasSuccessCriteria,
+  storeCreateFlow, CHECK_PHASE, CHANGE_MAX_ACS, CHANGE_MAX_TASKS, changeScope, PHASE_INDEX, chainArtifacts, changedSinceApproval, realLines, hasSuccessCriteria,
   hasPriority, acDuplicates, sectionFilled, bugSectionFilled, CONSTITUTION_SYN, approvalChecks, RE_CONSTITUTION_CHECK,
   RE_SUCCESS_CRITERIA, RE_INDEPENDENT_TEST, RE_OUT_OF_SCOPE, RE_NFR, RE_EDGE_CASES, RE_TESTABILITY, __link };

@@ -72,7 +72,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const na2 = run(["next-action", "quick-spec", "--project", pf]);
   const ff2 = run(["approve", "quick-spec", "--through", "tasks", "--project", pf]);
   const met2 = run(["metrics", "quick-spec", "--project", pf]);
-  ok(/fast-forward: \/spec-ff quick-spec \(CLI: dev-spec approve quick-spec --through tasks\) approves classification, requirements, design, tasks in order/.test(na2.out) &&
+  ok(/fast-forward: \/spec-ff quick-spec \(CLI: node "[^"]*dev-spec\.js" approve quick-spec --through tasks\) approves classification, requirements, design, tasks in order/.test(na2.out) &&
     ff2.code === 0 && /approved classification, requirements, design, tasks/.test(ff2.out) && /batch approvals \(fast-forward\): 4/.test(met2.out) &&
     /→ Implement task #1/.test(run(["next-action", "quick-spec", "--project", pf]).out),
     "next-action names the fast-forward (/spec-ff + approve --through tasks); approve --through approves every phase; metrics counts the batch approvals");

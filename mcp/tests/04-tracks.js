@@ -413,7 +413,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname 
     const lst = payload(await call("spec_tracks", { projectDir: tp }));
     const chk = payload(await call("spec_tracks", { action: "check", projectDir: tp }));
     const a11yRow = (lst.packs || []).find((p) => p.name === "a11y");
-    ok(lst.ok && lst.builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs" && a11yRow && a11yRow.valid && a11yRow.marker === "[A11Y]" &&
+    ok(lst.ok && lst.builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs,data" && a11yRow && a11yRow.valid && a11yRow.marker === "[A11Y]" &&
       a11yRow.title === "Accessibility" && a11yRow.sections.length === 3 && a11yRow.steering === "accessibility.md" && chk.ok && chk.verdict === "pass" && chk.errors === 0,
       "feature F4: spec_tracks list shows the built-in tracks and the valid +a11y pack ([A11Y], 3 sections, steering); check passes (got " + js(a11yRow) + " / " + js(chk.problems) + ")");
 
@@ -775,5 +775,106 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname 
     ok(/for pt features/.test(r10p.message || "") && /pt\/requirements\.md gives 1 criterion/.test(r10p.message || "") && r10p.file === ".specs/tracks/a11y/tasks.md" &&
       /## \[KBD\] Keyboard Map\n> \*\*TODO\*\*[^\n]*\nThe keyboard map of Search \(\[KBD\]\)\./.test(rd(path.join(r10c.dir, "design.md"))),
       "F4 review R10: fragment-ref names the language context and the file its count comes from; a section's guidance fills in {{name}} / {{marker}} (got " + js(r10p.message) + ")");
+  }
+
+  { // 1.21 F2b — project-level signal overrides learned from Phase 0 corrections (.specs/classifier.json): learned after two
+    // consistent corrections, applied by classify {projectDir} and named, set / forget by hand, never silent, never a crash
+    const js = (x) => JSON.stringify(x);
+    const fdir = (n) => path.join(tmp, "proj-f2b-" + n);
+    const cfile = (d) => path.join(d, ".specs", "classifier.json");
+    const readC = (d) => (fs.existsSync(cfile(d)) ? fs.readFileSync(cfile(d), "utf8") : null);
+    // (1) two consistent corrections: "admin panel" suggested +ui, the human created the feature core-only — twice
+    const d1 = fdir("learn");
+    S.initProject(d1, [], "en");
+    const c1 = S.createFeature(d1, "Coupons admin", ["core"], "Admin panel to manage coupons with filters");
+    const mid = S.classify("Admin panel for refunds", { projectDir: d1 });
+    const c2 = S.createFeature(d1, "Sales admin", "core", "Admin panel for the sales team");
+    const after = S.classify("Admin panel for refunds", { projectDir: d1 }), builtIn = S.classify("Admin panel for refunds");
+    ok(c1.ok && js(c1.signalOverrides) === js({ learned: [{ track: "ui", word: "admin panel", effect: "off", count: 1, active: false }], forgotten: [] }) &&
+      /Phase 0 correction recorded: 'admin panel' suggested \+ui and you left it off \(1 of 2/.test(c1.note) && mid.tracks.includes("ui") && !mid.overrides &&
+      c2.signalOverrides.learned[0].active === true && /Learned from 2 consistent Phase 0 corrections: 'admin panel' no longer suggests \+ui/.test(c2.note) &&
+      !after.tracks.includes("ui") && js(after.overrides) === js([{ track: "ui", word: "admin panel", effect: "off" }]) &&
+      after.notes.some((n) => /signal overrides changed the reading \(\.specs\/classifier\.json\): 'admin panel' for \+ui → no signal/.test(n)) &&
+      builtIn.tracks.includes("ui") && !builtIn.overrides,
+      "1.21 F2b: two consistent Phase 0 corrections learn an override — pending after the first (the suggestion unchanged), applied after the second: 'admin panel' no longer suggests +ui in THIS project, and classify names it (`overrides` + a note); without the project the built-in reading stands (got " +
+      js([c1.signalOverrides, c2.signalOverrides, mid.tracks, after.tracks, after.overrides]) + ")");
+    // (2) the other direction: +ui added twice where "dashboard" was only a hint → a strong +ui signal; an agreement resets a
+    // pending record; a correction that contradicts an applied override drops it
+    const d2 = fdir("promote");
+    S.initProject(d2, [], "en");
+    const p1 = S.createFeature(d2, "Sales board", ["core", "ui"], "Metrics dashboard for sales");
+    const p2 = S.createFeature(d2, "Marketing board", "core +ui", "Metrics dashboard for the marketing team");
+    const pOn = S.classify("Metrics dashboard for finance", { projectDir: d2 });
+    S.createFeature(d2, "Stock admin", ["core"], "Admin panel for the stock");
+    const agreed = S.createFeature(d2, "Refund admin", ["core", "tdd", "ui"], "Admin panel for refunds");
+    const pend = S.trackPacks(d2, "signals");
+    const contra = S.createFeature(d2, "Ops board", ["core"], "Metrics dashboard for ops");
+    const pAfter = S.classify("Metrics dashboard for finance", { projectDir: d2 });
+    ok(p1.signalOverrides.learned[0].effect === "strong" && p2.signalOverrides.learned[0].active && pOn.tracks.includes("ui") &&
+      js(pOn.overrides) === js([{ track: "ui", word: "dashboard", effect: "strong" }]) && agreed.signalOverrides && agreed.signalOverrides.forgotten.some((x) => x.word === "admin panel") &&
+      !pend.overrides.some((o) => o.word === "admin panel") && contra.signalOverrides.forgotten.some((x) => x.word === "dashboard") && !pAfter.tracks.includes("ui"),
+      "1.21 F2b: +ui added twice where 'dashboard' was only a hint makes it a strong +ui signal here; agreeing with a suggestion resets a pending correction; leaving +ui off where the learned 'dashboard' turned it on drops that override (got " +
+      js([p1.signalOverrides, pOn.tracks, agreed.signalOverrides, contra.signalOverrides, pAfter.tracks]) + ")");
+    // (3) set / forget by hand (MCP spec_tracks {action: "signals"} = the engine), validated; a set word applies at once and learning
+    // never changes it; a word no table has is matched as a literal
+    const d3 = fdir("set");
+    S.initProject(d3, [], "en");
+    const set1 = payload(await rpc("tools/call", { name: "spec_tracks", arguments: { action: "signals", op: "set", track: "obs", word: "heartbeat check", effect: "strong", projectDir: d3 } }));
+    const hb = S.classify("Add a heartbeat check to the export worker", { projectDir: d3 });
+    const setOff = S.trackPacks(d3, "signals", { op: "set", track: "ui", word: "Dashboard", effect: "off" });
+    const learnSet = S.createFeature(d3, "Sales board", ["core", "ui"], "Sales dashboard"), keepSet = S.trackPacks(d3, "signals");
+    const bad = [S.trackPacks(d3, "signals", { op: "set", track: "core", word: "x", effect: "off" }), S.trackPacks(d3, "signals", { op: "set", track: "uii", word: "x", effect: "off" }),
+      S.trackPacks(d3, "signals", { op: "set", track: "ui", word: "(a|b)+", effect: "off" }), S.trackPacks(d3, "signals", { op: "set", track: "ui", word: "grid", effect: "loud" }),
+      S.trackPacks(d3, "signals", { op: "forget", track: "ui", word: "nothing here" }), S.trackPacks(d3, "signals", { op: "purge" })];
+    const fg = payload(await rpc("tools/call", { name: "spec_tracks", arguments: { action: "signals", op: "forget", track: "obs", word: "heartbeat check", projectDir: d3 } }));
+    const listMcp = payload(await rpc("tools/call", { name: "spec_tracks", arguments: { action: "signals", projectDir: d3 } }));
+    ok(set1.ok && set1.override.origin === "set" && set1.override.active && hb.tracks.includes("obs") && hb.overrides[0].word === "heartbeat check" &&
+      setOff.ok && keepSet.overrides.find((o) => o.track === "ui").effect === "off" && keepSet.overrides.find((o) => o.track === "ui").origin === "set" && !learnSet.signalOverrides &&
+      bad.every((r) => r.ok === false && typeof r.error === "string") && /core is always on/.test(bad[0].error) && /No track 'uii'/.test(bad[1].error) &&
+      /not a signal word/.test(bad[2].error) && /Unknown effect 'loud'/.test(bad[3].error) && bad[4].notFound && /Unknown signals operation 'purge'/.test(bad[5].error) &&
+      fg.ok && fg.removed.word === "heartbeat check" && js(listMcp) === js(S.trackPacks(d3, "signals")) && listMcp.overrides.length === 1 &&
+      /^\{\n {2}"signals": \[\n {4}\{"track":"ui","word":"Dashboard","effect":"off","count":1,"origin":"set","lastAt":"[^"]+"\}\n {2}\]\n\}\n$/.test(readC(d3)),
+      "1.21 F2b: spec_tracks {action: 'signals'} sets (applies at once — a word no table has is a literal signal), forgets and lists overrides; learning never changes a word set by hand; core, an unknown track, a pattern-like word, an unknown effect / op and a missing override are refused; MCP = engine; the file is one record per line (got " +
+      js([set1, hb.tracks, bad.map((r) => r.error), readC(d3)]) + ")");
+    // (4) a project without overrides is byte-identical — no classifier.json written when the human keeps the suggestion, no new keys
+    // in classify / create results; a file of pending corrections only changes nothing either
+    const d4 = fdir("same"), d5 = fdir("pending");
+    S.initProject(d4, [], "en");
+    S.initProject(d5, [], "en");
+    fs.writeFileSync(cfile(d5), js({ signals: [{ track: "ui", word: "dashboard", effect: "off", count: 1, origin: "learned" }] }));
+    const kept = S.createFeature(d4, "Coupons", ["core", "ui"], "Admin panel to manage coupons");
+    const sample = ["Admin panel to manage coupons", "Metrics dashboard for sales", "We will not add feature flags or canary releases.", "Publicar eventos no Kafka.",
+      "Sin datos personales ni autenticación", "Our public REST API returns problem+json errors"];
+    ok(kept.ok && !("signalOverrides" in kept) && readC(d4) === null &&
+      sample.every((t) => js(S.classify(t, { projectDir: d4 })) === js(S.classify(t, { projectDir: d5 })) && !("overrides" in S.classify(t, { projectDir: d4 })) &&
+        !("overridesWarning" in S.classify(t, { projectDir: d5 })) && !("explain" in S.classify(t, { projectDir: d4 }))),
+      "1.21 F2b: a project without overrides is byte-identical — no classifier.json when Phase 0 is confirmed as suggested, no signalOverrides / overrides / overridesWarning / explain key; a file holding only pending corrections reads the same (got " +
+      js([kept.signalOverrides, readC(d4)]) + ")");
+    // (5) a classifier.json that doesn't parse, or holds an invalid entry, is ignored with a warning — classify still answers, set /
+    // learning refuse to rewrite it (its entries would be lost), list says what to fix; a 201st entry is beyond the bound
+    const d6 = fdir("invalid");
+    S.initProject(d6, [], "en");
+    fs.writeFileSync(cfile(d6), "{ nope");
+    const w1 = S.classify("Admin panel for refunds", { projectDir: d6 });
+    const w1set = S.trackPacks(d6, "signals", { op: "set", track: "ui", word: "grid", effect: "weak" });
+    const w1learn = S.createFeature(d6, "Admin", ["core"], "Admin panel for coupons");
+    const w1list = S.trackPacks(d6, "signals"), w1raw = readC(d6);
+    const many = Array.from({ length: 201 }, (_, i) => ({ track: "ui", word: "word" + i, effect: "off", origin: "set" }));
+    fs.writeFileSync(cfile(d6), js({ signals: [{ track: "ui", word: "a|b", effect: "off" }, { track: "ui", word: "admin panel", effect: "off", origin: "set" }, ...many] }));
+    const w2 = S.classify("Admin panel for refunds", { projectDir: d6 }), w2list = S.trackPacks(d6, "signals");
+    ok(w1.tracks.includes("ui") && js(w1.overridesWarning) === js({ code: "invalid-json" }) && w1.notes.some((n) => /classifier\.json is ignored \(not valid JSON\)/.test(n)) &&
+      !w1set.ok && /never rewritten/.test(w1set.error) && w1raw === "{ nope" &&
+      w1learn.ok && w1learn.signalOverrides.error === "invalid-json" && /was not recorded/.test(w1learn.note) && w1list.ok && w1list.warning.code === "invalid-json" &&
+      !w2.tracks.includes("ui") && w2.overridesWarning.code === "invalid-entries" && w2list.overrides.length === 200 &&
+      w2list.problems.some((p) => p.index === 0 && p.code === "invalid-entry") && w2list.problems.some((p) => p.code === "too-many"),
+      "1.21 F2b: an unparseable classifier.json is ignored with a warning (classify answers, set and learning refuse to rewrite it, list says why); an invalid entry is skipped with a warning while the valid ones apply; at most 200 overrides (got " +
+      js([w1.overridesWarning, w1set.error, w1learn.signalOverrides, w2.overridesWarning, w2list.problems.slice(0, 2)]) + ")");
+    // (6) explain: every match with its tiers, cue / override, negation — and the project's overrides with their state
+    const ex = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "We will not add feature flags or canary releases; show a modal instead", explain: true, projectDir: d1 } }));
+    const m = (kw) => ex.explain.matches.find((x) => x.keyword === kw) || {};
+    ok(m("canary release").negated && m("canary release").negation === "list" && m("feature flag").negation === "before" && m("modal").base === "weak" &&
+      m("modal").tier === "strong" && m("modal").cue && ex.explain.min === 2 && ex.explain.overrides.some((o) => o.word === "admin panel" && o.active && !o.applied),
+      "1.21 F2b: spec_classify {explain} lists every match (table tier → final tier, a cue, the negation: before / a negated list) and the project's overrides with their state (got " +
+      js([ex.explain.matches, ex.explain.overrides]) + ")");
   }
 };

@@ -323,8 +323,9 @@ function importSpec(projectDir, tool, source, opts = {}) {
   const evidence = [model.title, model.summary, ...model.stories.flatMap((s) => [s.title, ...s.prose, ...s.quote, ...s.criteria.map((c) => c.raw)]),
     ...model.extra.flatMap((x) => x.lines)].filter(Boolean).join("\n");
   // Read in the source's own language when it shows one (an English plan imported into a PT project reads "no LLM" as a
-  // negation), else in the project's configured language (full review Pb2); an explicit lang wins.
-  const cls = classify(evidence, { name, lang: opts.lang, fallbackLang: configuredLang(projectDir) });
+  // negation), else in the project's configured language (full review Pb2); an explicit lang wins. The project's signal overrides
+  // (1.21 F2 — .specs/classifier.json) apply as for spec_classify / spec_create (projectDir); an import never learns from them.
+  const cls = classify(evidence, { name, lang: opts.lang, fallbackLang: configuredLang(projectDir), projectDir });
   const cr = createFeature(projectDir, name, pt.given ? pt.tracks : cls.tracks, model.summary || undefined, cls, opts.lang);
   if (!cr.ok) return cr;
   const lng = cr.lang;

@@ -12,7 +12,8 @@
  *   node cli/dev-spec.js <command> [args]   (or `dev-spec <command>` if on PATH)
  *
  * Commands:
- *   classify "<description>" [--name n]  Recommend tracks (multilingual; --name = the feature name as evidence)
+ *   classify "<description>" [--name n]  Recommend tracks (multilingual; --name = the feature name as evidence;
+ *                                      --explain: every keyword match + the project's signal overrides)
  *   init [tracks...] [--lang]           Scaffold .specs/steering for tracks (--lang → project default;
  *                                      --guard on|off|scope → guard mode: code edits ask while no approved tasks
  *                                      (scope: also a code file no open task names in _Implements:_);
@@ -25,9 +26,13 @@
  *                                      (any other name-like.md → front matter inclusion: always|fileMatch|manual)
  *   templates [list|init|check] [artifact] [--lang]  The project's own scaffolds in .specs/templates/ (exit 1 on a check error)
  *   tracks [list|init <name>|check] [name] [--lang]  The project's own tracks: .specs/tracks/<name>/ track packs (exit 1 on a check error)
+ *   signals [list | set <track> <word> off|weak|strong | forget <track> <word>]  The classifier's signal overrides of this
+ *                                      project (.specs/classifier.json — learned from Phase 0 corrections, or set by hand)
  *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
  *                                      --brownfield → + integration-plan.md; --flow design-first → design before requirements)
  *   bugfix "<name>" [--summary]         Scaffold the bugfix flow (bug.md + regression test plan)
+ *                                      [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] prefill
+ *                                      bug.md + the regression criterion; [--include-body] (--json: the scaffolds' bodies)
  *   spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]  Scaffold a spike: spike.md (question · timebox · options ·
  *                                      evidence · decision go/no-go/pivot) + investigation tasks (= create --kind spike)
  *   decide <feature> --title "…" --decision "…"  Append a D-n entry to decisions.md ([--context] [--consequences]
@@ -68,7 +73,7 @@
  *   append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared]
  *                                      [--makes-green T-01,…] [--expect-fail] [--size XS|S|M|L|XL] [--depends 3,5]
  *                                      [--parallel] [--heading "…"]  Append one task to tasks.md (converge)
- *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs or a track pack (additive); --remove turns one off
+ *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data or a track pack (additive); --remove turns one off
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature; flow <name> <flow> sets its phase order
  *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
  *   export [feature] [--md] [--write]  Stakeholder document (offline HTML, or markdown) → .specs/exports/ (no feature = project)
@@ -84,6 +89,10 @@
  *                                      done / verified while a recently active feature has ticked tasks without evidence? (exit 1 = sent back)
  *   log <feature> [--max N] [-]        Commits citing each task ("task #N" + the feature name, T-/AC IDs) + the +tdd red-first
  *                                      check, from git log (read-only, local; default 1000 commits); - reads a log from stdin
+ *   merge-state <base> <ours> <theirs> [<path>]  git's merge driver for the spec state (%O %A %B %P): a semantic 3-way merge of
+ *                                      .state.json / roadmap.json into <ours> (exit 1 = a real conflict, kept as valid JSON:
+ *                                      "mergeConflicts"); --install / --uninstall writes .gitattributes + this clone's git config;
+ *                                      --check: does the configured driver still run THIS clone's CLI? (re-run --install after an update)
  *   upgrade [--apply]                  After a plugin update: audit .specs/ against the current rules (read-only);
  *                                      --apply runs the safe migrations + writes .specs/UPGRADE.md (exit 1 only on errors)
  *   roadmap [--write|--md] [--html] [--lang]  Multi-feature roadmap: ETA forecasts, cross-feature overlaps (+ .specs/ROADMAP.md / .html)
@@ -190,6 +199,8 @@ VALUE_FLAGS.add("flow"); // create --flow design-first · feature flow <name> --
 VALUE_FLAGS.add("depends"); // 1.14 F3: append-tasks --depends 3,5 (repeatable) = spec_append_tasks {tasks: [{depends}]}
 ["reason", "expires"].forEach((k) => VALUE_FLAGS.add(k)); // 1.16 U: undone --reason · approve --revoke --reason · approve --force --reason --expires (= spec_complete_task {undo, reason}, spec_approve {revoke, reason, expires})
 VALUE_FLAGS.add("out"); // 1.20: bundle --out <file.js> — the one-file engine written elsewhere (a read-only clone: DEV_SPEC_BUNDLE_PATH)
+// 1.21 F3: bugfix <name> --reproduction "…" --root-cause "…" --condition "…" --behaviour "…" (= spec_create's bugfix prefill)
+["reproduction", "root-cause", "condition", "behaviour"].forEach((k) => VALUE_FLAGS.add(k));
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -389,6 +400,10 @@ function main() {
   // 1.16 C1: the status line's render path runs before any flag / usage check — it must print its line or nothing, exit 0.
   if (cmd === "statusline" && !("print-config" in flags) && !("help" in flags)) return statusLineRender();
   refuseUnknownFlags(); // `--rnu` is an error (did you mean --run?), never a silent switch
+  // 1.21 review A3: `merge-state --check` is a switch there — `--check` is init's VALUE flag (init --check name="cmd"), so it can't
+  // join spec.CLI_SWITCHES (normalizeBoolFlags would refuse `init --check test="npm test"`, and the approval hook's lexer would read
+  // init's value as the next word): a bare `--check` after merge-state reads as on.
+  if (cmd === "merge-state" && missingValue === "check") { missingValue = null; flags.check = true; }
   if (missingValue) die(projectText().missingValue(missingValue));
   // --lang is checked once, like the MCP `lang` enum: an unknown value (fr, spanish, portugues…) is refused before any
   // command runs — the engine would quietly turn it into 'en' and SAVE it (init rewrote the project language).
@@ -410,15 +425,33 @@ function main() {
       return console.log(helpText());
 
     case "classify": {
-      if (!pos[0]) usage('dev-spec classify "<description>" [--name "<feature name>"] [--lang en|pt|pt-BR|es]');
-      const r = spec.classify(pos.join(" "), { name: flags.name, lang: flags.lang, projectDir }); // same args as spec_classify
+      if (!pos[0]) usage('dev-spec classify "<description>" [--name "<feature name>"] [--lang en|pt|pt-BR|es] [--explain]');
+      const r = spec.classify(pos.join(" "), { name: flags.name, lang: flags.lang, projectDir, explain: on("explain") }); // same args as spec_classify
       return out(r, (r) => {
         const T = cliText(r.lang); // the language the reasoning was written in
-        const conf = spec.msg(r.lang).classify.conf;
-        console.log(T.tracks(r.label, Object.keys(r.confidence).map((t) => t + "=" + (conf[r.confidence[t]] || r.confidence[t])).join(", "))); // + the project's track packs (1.15)
+        const C = spec.msg(r.lang).classify;
+        console.log(T.tracks(r.label, Object.keys(r.confidence).map((t) => t + "=" + (C.conf[r.confidence[t]] || r.confidence[t])).join(", "))); // + the project's track packs (1.15)
         console.log(r.reasoning);
         if (r.note) console.log(T.note(r.note));
+        if (r.sizeNote) console.log(r.sizeNote); // 1.21 F5: the suggested size (spec_create --size)
+        if (r.explain) { // 1.21 F2: every keyword match and the project's signal overrides (.specs/classifier.json)
+          console.log(r.explain.matches.length ? C.explainHead : C.explainNone);
+          r.explain.matches.forEach((m) => console.log(C.explainMatch(m)));
+          if (!r.explain.overrides.length) console.log(C.explainNoOverrides);
+          else { console.log(C.explainOverridesHead(r.explain.overrides.length, r.explain.min)); r.explain.overrides.forEach((o) => console.log(C.explainOverride(o, r.explain.min))); }
+        }
       });
+    }
+
+    case "signals": {
+      // dev-spec signals [list | set <track> <word> off|weak|strong | forget <track> <word>] [--lang] — the project's classifier
+      // signal overrides in .specs/classifier.json (= spec_tracks {action: "signals", op, track, word, effect}); exit 1 on a refusal.
+      const syntax = "dev-spec signals [list | set <track> <word> off|weak|strong | forget <track> <word>] [--lang en|pt|pt-BR|es]";
+      const op = pos[0] == null ? "list" : String(pos[0]).trim().toLowerCase();
+      if ((op === "list" && pos.length > 1) || (op === "set" && pos.length !== 4) || (op === "forget" && pos.length !== 3)) usage(syntax);
+      const r = spec.trackPacks(projectDir, "signals", { op, track: pos[1], word: pos[2], effect: pos[3], lang: flags.lang });
+      if (!r.ok) return fail(r);
+      return out(r, (r) => r.lines.forEach((l) => console.log(l)));
     }
 
     case "init": {
@@ -481,7 +514,11 @@ function main() {
       const tracks = tr.length ? tr : undefined; // none → engine: keep existing / classify new
       // the engine classifies a new feature in its language (the explicit --lang, else the project's) — same as spec_create
       const r = spec.createFeature(projectDir, name, tracks, flags.summary, undefined, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind,
-        { brownfield: on("brownfield"), flow: flags.flow, question: flags.question, timebox: flags.timebox }); // = spec_create {brownfield, flow, question, timebox}
+        { brownfield: on("brownfield"), flow: flags.flow, question: flags.question, timebox: flags.timebox, // = spec_create {brownfield, flow, question, timebox,
+          reproduction: flags.reproduction, rootCause: flags["root-cause"], condition: flags.condition, behaviour: flags.behaviour, // the bugfix prefill (1.21 F3)
+          cli: true, // 1.21 review A8: a refusal names the flag (--root-cause), not the MCP key (rootCause)
+          includeBody: boolFlag("include-body") === true, // … includeBody} — the bodies are in the --json result
+          size: flags.size }); // 1.21 F5: --size xs|s|m|l (= spec_create {size}; xs = a change: one change.md)
       if (!r.ok) return fail(r);
       return out(r, (r) => { const T = cliText(r.lang); console.log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : "")); });
     }
@@ -499,11 +536,14 @@ function main() {
         console.log(T.statusTasks(r.tasks.done, r.tasks.total, r.tasks.next ? "#" + r.tasks.next.number + " " + r.tasks.next.text : null));
         // ✓ only when FILLED (the doctor's rule): ◐ present but still a TODO/empty, ✗ missing — in the feature language.
         const fm = spec.msg(spec.featureLang(projectDir, r.feature));
-        const marks = (list) => list.map((s) => (s.filled ? "✓ " : s.present ? "◐ " : "✗ ") + (fm.sectionNames[s.section] || s.section) +
-          (s.filled ? "" : " (" + fm.sectionStatus[s.present ? "unfilled" : "missing"] + ")")).join(" · ");
+        // 1.21 F5: a sized feature's rows carry `status` — ○ an optional section left out (size s), ✓ one another track covers,
+        // the template-only / short n/a states named
+        const marks = (list) => list.map((s) => (s.filled ? (s.status === "missing" ? "○ " : "✓ ") : s.present ? "◐ " : "✗ ") + (fm.sectionNames[s.section] || s.section) +
+          (s.filled ? (s.status === "missing" ? " (" + fm.sizes.optionalMark + ")" : s.status === "covered" ? " (" + fm.sizes.coveredMark + ")" : "")
+            : " (" + fm.sectionStatus[s.status && fm.sectionStatus[s.status] ? s.status : s.present ? "unfilled" : "missing"] + ")")).join(" · ");
         if (r.scaleSections) console.log(T.scaleSections(marks(r.scaleSections)));
         if (r.aiSections && r.aiSections.sections) console.log(T.aiSections(marks(r.aiSections.sections)));
-        for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs"]) if (r[tr + "Sections"]) console.log(fm.secPrivacy.statusSections[tr](marks(r[tr + "Sections"])));
+        for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs", "data"]) if (r[tr + "Sections"]) console.log(fm.secPrivacy.statusSections[tr](marks(r[tr + "Sections"])));
         for (const p of Object.values(r.packSections || {})) console.log(fm.trackPacks.statusSections(p.marker, marks(p.sections))); // track packs (1.15)
         if (r.missingPacks) console.log(fm.trackPacks.missing(r.missingPacks.map((n) => "+" + n).join(", ")));
       });
@@ -911,7 +951,7 @@ function main() {
 
     case "add-track": {
       const tr = withTracksFlag(pos.slice(1));
-      if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai|sec|privacy|dist|api|ui|obs>... (or a track pack's name — dev-spec tracks) [--remove]");
+      if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai|sec|privacy|dist|api|ui|obs|data>... (or a track pack's name — dev-spec tracks) [--remove]");
       // Several tracks at once ("saas ai", "saas,ai"); --remove turns them off (files kept, listed as inactive).
       const r = spec.addTrack(projectDir, pos[0], tr, { remove: on("remove") });
       if (!r.ok) return fail(r);
@@ -992,7 +1032,7 @@ function main() {
       // spec_import: <path> resolves against the project root and must stay inside it.
       // 1.16 C4: `import plan|execplan|fluidplan -` reads the document's markdown from stdin, `--text "<markdown>"` takes it inline
       // (= spec_import {tool, text} — a plan kept outside the project, e.g. Claude Code's ~/.claude/plans).
-      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs] · import <plan|execplan|fluidplan> - | --text \"<markdown>\"";
+      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data] · import <plan|execplan|fluidplan> - | --text \"<markdown>\"";
       const fromStdin = pos[1] === "-";
       const hasText = typeof flags.text === "string";
       if (!pos[0] || (!pos[1] && !hasText) || (fromStdin && hasText)) usage(usageLine);
@@ -1055,7 +1095,7 @@ function main() {
       const r = spec.appendTasks(projectDir, pos[0], [task], { heading: typeof flags.heading === "string" ? flags.heading : undefined });
       if (!r.ok) return fail(r);
       return out(r, (r) => {
-        console.log(T.appended(r.heading, r.headingCreated));
+        console.log(T.appended(r.heading, r.headingCreated, r.file));
         r.appended.forEach((t) => console.log("  - [ ] " + t.number + ". " + t.text));
         if (r.note) console.log("  ⚠ " + r.note);
       });
@@ -1403,6 +1443,22 @@ function main() {
       });
     }
 
+    case "merge-state": {
+      // 1.21 F1a — git's merge driver for the spec state: merge-state <base> <ours> <theirs> [<path>] (git's %O %A %B %P) merges
+      // .state.json / roadmap.json SEMANTICALLY (spec.mergeStateText) and writes the result to <ours> — exit 0 merged, 1 a real
+      // conflict (ours kept at each, listed in the file as "mergeConflicts" — valid JSON, doctor fails merge-conflicts). The
+      // generated overviews (ROADMAP.md / .html, SPECS.md) keep ours. --install / --uninstall: .gitattributes + this clone's
+      // git config (merge.dev-spec-state.*) — the only git this command runs besides `git merge-file` for a hand-written overview.
+      // --check (1.21 review A3): read-only — does git config's driver still run THIS clone's CLI? (a plugin update moves it)
+      const msUsage = "dev-spec merge-state <base> <ours> <theirs> [<path>] · dev-spec merge-state --install | --uninstall | --check [--project <dir>]";
+      const check = flags.check === true || /^(?:true|1|yes|on)$/i.test(String(flags.check === undefined ? "" : flags.check));
+      if (flags.check !== undefined && !check && !/^(?:false|0|no|off)$/i.test(String(flags.check))) usage(msUsage);
+      if (check) { if (pos.length || on("install") || on("uninstall")) usage(msUsage); return mergeDriverCheck(); }
+      if (on("install") || on("uninstall")) return mergeDriverSetup(on("uninstall"));
+      if (pos.length < 3 || pos.length > 4) usage(msUsage);
+      return mergeStateRun(pos[0], pos[1], pos[2], pos[3]);
+    }
+
     case "mcp-config":
       return console.log(mcpConfig(pos[0]));
 
@@ -1438,6 +1494,113 @@ function main2list() {
   });
 }
 
+// ---- merge-state (1.21 F1a) -------------------------------------------------------------------------------------------------
+// The driver git runs on a .state.json / roadmap.json both branches changed (and on the generated overviews): the three files git
+// hands it (%O %A %B, relative to its cwd — the top of the work tree), the merge written into <ours>. Messages in the project
+// language; stdout stays empty unless --json (git shows a driver's output as it runs).
+function mergeStateRun(baseF, oursF, theirsF, rel) {
+  const M = spec.msg(spec.projectLang(projectDir)).mergeState;
+  const read = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return null; } };
+  const oursText = read(oursF), theirsText = read(theirsF);
+  if (oursText == null || theirsText == null) die(M.unreadable(oursText == null ? oursF : theirsF));
+  const r = spec.mergeStateText(read(baseF) || "", oursText, theirsText, { path: rel, kind: flags.kind });
+  if (r.kind === "generated") {
+    // Both sides dev-spec's own output: ours stays (the next dev-spec write regenerates it from the merged state). A hand-written
+    // overview (no AUTO-GENERATED marker): git's own text merge, in place — its exit status is the number of conflicts.
+    if (r.keepOurs) return flags.json ? console.log(JSON.stringify({ ok: true, kind: r.kind, kept: "ours" }, null, 2)) : undefined;
+    let g;
+    try { g = spawnSync("git", ["merge-file", "-L", "ours", "-L", "base", "-L", "theirs", oursF, baseF, theirsF], { encoding: "utf8", windowsHide: true, timeout: 30000 }); } catch { g = null; }
+    process.exitCode = g && !g.error && g.status === 0 ? 0 : 1;
+    return;
+  }
+  if (!r.ok) { console.error(M.parseError(r.parseError, r.error)); process.exitCode = 1; return; } // ours left as it is
+  fs.writeFileSync(oursF, r.text);
+  if (flags.json) {
+    console.log(JSON.stringify({ ok: true, kind: r.kind, clean: r.clean, conflicts: r.conflicts }, null, 2));
+    if (!r.clean) process.exitCode = 1;
+    return;
+  }
+  if (r.clean) return;
+  const show = (v) => { if (v === undefined) return M.absent; const s = JSON.stringify(v); return s.length > 60 ? s.slice(0, 59) + "…" : s; };
+  console.error(M.conflictHead(rel || oursF, r.conflicts.length));
+  r.conflicts.slice(0, 20).forEach((c) => console.error(M.conflictLine(c.path || "(root)", show(c.ours), show(c.theirs), show(c.base))));
+  if (r.conflicts.length > 20) console.error("  …");
+  console.error(M.conflictTail);
+  process.exitCode = 1;
+}
+// merge-state --install / --uninstall: the .gitattributes lines (in the project folder — its patterns are relative to it; commit
+// it) and this clone's git config (merge.dev-spec-state.name / .driver — per clone, never committed). Nothing without git.
+function mergeDriverSetup(uninstall) {
+  const M = spec.msg(spec.projectLang(projectDir)).mergeState;
+  const git = (args) => {
+    try { return spawnSync("git", args, { cwd: projectDir, encoding: "utf8", windowsHide: true, timeout: 30000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { return { error: e }; }
+  };
+  const top = git(["rev-parse", "--show-toplevel"]);
+  if (!top || top.error || top.status !== 0) return fail({ ok: false, error: M.noGit(projectDir) });
+  const file = path.join(projectDir, ".gitattributes");
+  let before = "";
+  try { before = fs.readFileSync(file, "utf8"); } catch { before = ""; }
+  const a = spec.mergeAttributes(before, uninstall);
+  if (a.changed) {
+    if (a.text) fs.writeFileSync(file, a.text);
+    else fs.rmSync(file, { force: true }); // it held only the driver's lines
+  }
+  const key = "merge." + spec.MERGE_DRIVER;
+  const driver = mergeDriverCommand();
+  const config = [];
+  if (uninstall) {
+    const r = git(["config", "--remove-section", key]); // exit 128: no such section — nothing to remove
+    if (r && !r.error && r.status === 0) config.push({ removed: key });
+  } else {
+    for (const [k, v] of [[key + ".name", "dev-spec: semantic merge of the spec state (.state.json, roadmap.json)"], [key + ".driver", driver]]) {
+      const r = git(["config", k, v]);
+      if (!r || r.error || r.status !== 0) return fail({ ok: false, error: M.configFailed(String((r && (r.stderr || (r.error && r.error.message))) || "?").trim()) });
+      config.push({ key: k, value: v });
+    }
+  }
+  const res = { ok: true, action: uninstall ? "uninstall" : "install", attributes: { file, changed: a.changed, lines: a.lines }, config };
+  return out(res, () => {
+    if (uninstall) {
+      console.log(a.changed ? M.attrsRemoved(file) : M.attrsNone(file));
+      config.forEach((c) => console.log(M.configRemoved(c.removed)));
+      return;
+    }
+    console.log(a.changed ? M.attrsAdded(file) : M.attrsKept(file));
+    if (a.changed) a.lines.forEach((l) => console.log("  " + l));
+    config.forEach((c) => console.log(M.configSet(c.key, c.value)));
+    console.log(M.teamNote);
+  });
+}
+// The command git runs (sh -c, Git's own sh on Windows): this clone's CLI by its absolute path, forward slashes, single-quoted.
+function mergeDriverCommand() {
+  const cli = path.resolve(__filename).replace(/\\/g, "/");
+  return "node '" + cli.replace(/'/g, "'\\''") + "' merge-state %O %A %B %P";
+}
+// merge-state --check (1.21 review A3): the configured driver (`git config --get merge.dev-spec-state.driver`, read only) against
+// THIS clone's CLI and the project's .gitattributes (spec.mergeDriverStatus). Exit 0: it runs this clone's CLI, or nothing names
+// the driver (nothing to check) · 1: it runs another or a missing script (a plugin update moved the plugin — git then drops
+// theirs' changes), .gitattributes names it while this clone has none, or not inside a git repository.
+function mergeDriverCheck() {
+  const M = spec.msg(spec.projectLang(projectDir)).mergeState;
+  const git = (args) => {
+    try { return spawnSync("git", args, { cwd: projectDir, encoding: "utf8", windowsHide: true, timeout: 30000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { return { error: e }; }
+  };
+  const top = git(["rev-parse", "--show-toplevel"]);
+  if (!top || top.error || top.status !== 0) return fail({ ok: false, error: M.checkNoGit(projectDir) });
+  const got = git(["config", "--get", spec.MERGE_DRIVER_KEY]); // exit 1: not set
+  const driver = got && !got.error && got.status === 0 ? String(got.stdout || "").trim() : null;
+  const s = spec.mergeDriverStatus(projectDir, { driver, cli: path.resolve(__filename) });
+  const res = { ok: true, action: "check", status: s.status, current: s.status === "ok", named: s.named, attributes: s.attributes, driver: s.driver, script: s.script, cli: s.cli };
+  if (!["ok", "none"].includes(s.status)) process.exitCode = 1;
+  return out(res, () => {
+    if (s.status === "ok") console.log(M.checkOk(s.script));
+    else if (s.status === "none") console.log(M.checkNone);
+    else if (s.status === "not-installed") console.log(M.checkNotInstalled(s.attributes));
+    else if (s.status === "missing") console.log(M.checkMissing(s.script));
+    else console.log(M.checkOther(s.script || s.driver, s.cli));
+  });
+}
+
 // 1.14 F5 — `trace <f> --matrix`: the requirements traceability matrix as a table (localized headers and notes; IDs as written).
 function printMatrix(feature, mx, lang) {
   const R = spec.msg(lang).rtm;
@@ -1445,7 +1608,8 @@ function printMatrix(feature, mx, lang) {
   console.log(C.head(feature, mx.tracks, mx.counts));
   const a = mx.approval;
   const when = (iso) => (typeof iso === "string" && iso.length >= 16 ? iso.slice(0, 16).replace("T", " ") + " UTC" : "—");
-  console.log("  " + (a ? C.approved(when(a.at), a.by == null ? "—" : a.by, a.forced) : C.notApproved));
+  const plan = mx.kind === "change"; // 1.21 review C5: a change's criteria are signed off with its plan (change.md)
+  console.log("  " + (a ? (plan ? C.planApproved : C.approved)(when(a.at), a.by == null ? "—" : a.by, a.forced) : plan ? C.planNotApproved : C.notApproved));
   if (!mx.rows.length) return console.log("  " + R.none);
   const len = (s) => [...s].length;
   const cut = (s, n) => (len(s) > n ? [...s].slice(0, n - 1).join("") + "…" : s);
@@ -1470,7 +1634,9 @@ function printMatrix(feature, mx, lang) {
 function helpText() {
   return `dev-spec — universal spec-driven CLI (local, zero-dependency)
 
-  classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs), multilingual
+  classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data), multilingual
+                                  --explain: every keyword match (table tier → final tier, cue / override, negation) + the
+                                  project's signal overrides
   init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|pt-BR|es → project default)
                                   --guard on|off|scope: guard mode — Write/Edit on code files asks while no feature has approved, open tasks
                                   (scope: once tasks are approved, also a code file no open task names in _Implements:_ — test files excepted)
@@ -1493,10 +1659,16 @@ function helpText() {
   tracks [list|init <name>|check] [name] [--lang]   The project's own tracks: a pack .specs/tracks/<name>/ (track.json +
                                   fragments) is a marker track like +sec — classified, scaffolded, gated; init scaffolds
                                   one; check validates them (exit 1 on an error)
-  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike, --lang en|pt|pt-BR|es)
+  signals [list | set <track> <word> off|weak|strong | forget <track> <word>]   The classifier's signal overrides of this
+                                  project (.specs/classifier.json): create learns them from Phase 0 corrections (a word
+                                  that drove a suggestion you changed — applies after 2 consistent corrections); set one by
+                                  hand (applies at once), forget one (= spec_tracks {action: "signals"})
+  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike|change, --size xs|s|m|l, --lang en|pt|pt-BR|es)
                                   --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase);
                                   --flow design-first: classification → design → requirements → … (starts from an architecture)
   bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
+                                  --reproduction "…" --root-cause "…" --condition "…" --behaviour "…" prefill bug.md and the
+                                  IF … THEN criterion (a text left out stays a slot); --include-body: the bodies in --json
   spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]   Scaffold a spike (investigate → decide): spike.md — question,
                                   timebox, options, evidence, decision (go / no-go / pivot) — + investigation tasks; no
                                   requirements/design gates (= create --kind spike; prototype code stays outside .specs/)
@@ -1552,7 +1724,7 @@ function helpText() {
                                   since — read-only; re-review, then re-approve (the approval records the current steering)
   metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate, velocity (project: + avg/median);
                                   --write → .specs/<feature>/retro.md (a pre-filled retrospective, never overwritten)
-  add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs (additive, never overwrites);
+  add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data (additive, never overwrites);
                                   --remove turns a track off (non-destructive: files kept, listed as inactive);
                                   a project track pack (dev-spec tracks) is named the same way
   feature <remove|archive|rename|restore> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes;
@@ -1587,6 +1759,15 @@ function helpText() {
                                   writes "Part of .specs/<feature>/ task #N."), or its T-/AC IDs ("Makes T-01 green") — and, +tdd, a
                                   red-first check (implementation committed before its test?); reads git log (read-only, local, --max
                                   commits, default 1000); - reads a log from stdin (git log --name-only --relative)
+  merge-state [--install|--uninstall|--check] [--project <dir>]   Teams: git merges the spec state SEMANTICALLY — .gitattributes
+                                  (commit it) + this clone's git config (merge.dev-spec-state.driver; every teammate runs it once, and
+                                  again after each plugin update — the driver names this clone's path); --uninstall removes both;
+                                  --check (read-only): exit 1 when the configured driver runs another or a missing script, or when
+                                  .gitattributes names the driver and this clone has none.
+                                  Git then runs merge-state <base> <ours> <theirs> <path> on .state.json / roadmap.json: approvals,
+                                  ticks, evidence and history of both branches are united; a real conflict (a meta value both sides
+                                  set differently) exits 1 with ours kept and the file listing it under "mergeConflicts" (valid
+                                  JSON; doctor fails merge-conflicts until it is resolved); ROADMAP.md / SPECS.md keep ours
   upgrade [--apply]               After a plugin update: audit every active feature against the current rules (read-only) — status,
                                   what doctor flags, next step, review (critic / converge); --apply saves inferred tracks, seeds the
                                   approval history, stamps meta.specVersion and writes .specs/UPGRADE.md (never edits a spec)
@@ -1598,7 +1779,7 @@ function helpText() {
                                   tests, entrypoints, env var names, migrations)
   coverage                        Brownfield: % of code files named in any _Implements:_ (active + archived features), per folder
   import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
-                                  tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|pt-BR|es · --tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs
+                                  tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|pt-BR|es · --tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data
                                   plan = Claude Code plan mode / Cursor .cursor/plans, execplan = a Codex ExecPlan (PLANS.md),
                                   bmad = BMAD-METHOD docs (prd.md + docs/stories/), fluidplan = a fluidplan plan (.fluidplan/<id>/:
                                   plan.json + answers.json, PLAN.md + DECISIONS.md → tasks, criteria, decisions.md)
@@ -1617,7 +1798,7 @@ function helpText() {
                                   DEV_SPEC_BUNDLE_PATH=<file>); rebuild after every plugin update — a stale bundle is ignored
 
   Flags: --json  --project <dir>  --lang en|pt|pt-BR|es (init/create/steering/roadmap/ears)  --order N (depend)
-         --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix|spike (create; spike: --question, --timebox)  --text "…" (ears)
+         --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix|spike|change / --size xs|s|m|l (create; spike: --question, --timebox)  --text "…" (ears)
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
          --role ROLE / --through PHASE (approve)  --roles phase=role+role,… | none (init)
@@ -1625,7 +1806,7 @@ function helpText() {
          --brownfield / --flow design-first (create)  --flow (feature flow)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
          --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
-         --text "<markdown>" (import plan|execplan|fluidplan)  --print-config (statusline)
+         --text "<markdown>" (import plan|execplan|fluidplan)  --print-config (statusline)  --install / --uninstall / --check (merge-state)
          --guard on|off|scope / --stop-check on|off / --approval-guard off|ask|deny / --evidence reported|observed (init)  --message "…" / --agent <type> (stop-check)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).

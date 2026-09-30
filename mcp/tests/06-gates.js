@@ -255,7 +255,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, list, __dirname 
     const plain = S.completeTask(w5, rb.slug, 4, { command: "npm test", exitCode: 1 });
     ok(rbRun.ok === false && rbRun.redPhaseVerify === true && /verification failed \(exit 1\).*Task 3 writes a test that must FAIL \(the red phase\)/.test(rbRun.error) &&
       /Mark task 3 with _Expect: fail_ — a run that FAILS is then its proof \(T-01 fails before the fix\)/.test(rbRun.error) &&
-      /dev-spec done red-loop-en 3 --run\. Or move the command to the task that makes it green/.test(rbRun.error) &&
+      /node "[^"]*dev-spec\.js" done red-loop-en 3 --run\. Or move the command to the task that makes it green/.test(rbRun.error) &&
       rbNote.ok && rbNote.unverifiedReason === "failed-run" && rbNote.redPhaseVerify === true && / — Task 3 writes a test that must FAIL/.test(rbNote.note) &&
       rbNext.step === "verify" && /Task 3 writes a test that must FAIL/.test(rbNext.recommendation) &&
       rbPtRun.redPhaseVerify === true && /A tarefa 3 escreve um teste que tem de FALHAR \(a fase vermelha\)/.test(rbPtRun.error) &&
@@ -668,10 +668,10 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, list, __dirname 
     S.approvePhase(w8, "drafts", "classification", "rev", { force: true });
     const na8 = S.nextAction(w8, "drafts");
     const dc8 = S.specDoctor(w8, "drafts").checks.find((c) => c.id === "changed-since-approval");
-    ok(na8.step === "re-review" && /Re-review: requirements\.md changed/.test(na8.recommendation) && /spec_impact \(dev-spec impact drafts --phase requirements\)/.test(na8.recommendation) &&
+    ok(na8.step === "re-review" && /Re-review: requirements\.md changed/.test(na8.recommendation) && /spec_impact \(node "[^"]*dev-spec\.js" impact drafts --phase requirements\)/.test(na8.recommendation) &&
       na8.impact && na8.impact.tool === "spec_impact" && na8.impact.phases.join() === "requirements" && dc8 && dc8.status === "warn" && /^changed after their approval: requirements\.md/.test(dc8.detail) &&
       /spec_impact/.test(dc8.detail), "next_action's re-review recommends spec_impact (tool + command) before re-approval; doctor warns changed-since-approval with the artifacts");
-    ok(/spec_impact \(dev-spec impact drafts --phase requirements\)/.test(dc8.detail), "doctor's changed-since-approval names the phase to diff (dev-spec impact defaults to requirements)");
+    ok(/spec_impact \(node "[^"]*dev-spec\.js" impact drafts --phase requirements\)/.test(dc8.detail), "doctor's changed-since-approval names the phase to diff (dev-spec impact defaults to requirements)");
 
     // Reopen: the done tasks citing a MODIFIED ID are unticked, their evidence marked stale; nothing else is edited. A task that
     // implemented a REMOVED criterion (US-1.AC-3 → #3) is not redone: it stays ticked, listed in `retire` with its test rows.
@@ -722,7 +722,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, list, __dirname 
       di8.impacted.find((x) => x.section === "Data Model").tasks.map((t) => t.number).join() === "1" && di8.impacted.find((x) => x.section === "Writer").ids.join() === "US-1.AC-3",
       "design diff by ## section (added / modified by normalized body / removed) with the IDs each names and the tasks citing them");
     ok(S.specDoctor(w8, "drafts").checks.find((c) => c.id === "changed-since-approval").detail
-      .includes("spec_impact (dev-spec impact drafts --phase requirements · dev-spec impact drafts --phase design)"), "doctor names one impact command per changed phase with a snapshot");
+      .includes("spec_impact (" + S.DEV_SPEC + " impact drafts --phase requirements · " + S.DEV_SPEC + " impact drafts --phase design)"), "doctor names one impact command per changed phase with a snapshot");
     const dro8 = S.impactReport(w8, "drafts", { phase: "design", reopen: true });
     ok(dro8.reopened.join() === "1" && st8().evidence["1"].stale === true && st8().changes[1].phase === "design" && st8().changes[1].removed.join() === "Writer" &&
       /- \[x\] 3\./.test(fs.readFileSync(f8("tasks.md"), "utf8")),
@@ -775,8 +775,8 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, list, __dirname 
       tpIm.impacted.find((x) => x.id === "T-01").tasks.map((t) => t.number).join() === "1" && tpIm.affectedTasks.map((t) => t.number).join() === "1,3" &&
       JSON.stringify(tpIm.retire) === JSON.stringify([{ id: "T-03", tasks: [3], tests: [] }]) && /Removed tests still made green by tasks — T-03 → tasks #3: don't redo those tasks/.test(tpIm.hint) &&
       /--phase test-plan --reopen/.test(tpIm.hint) && /~ T-01 {2}unit \| example \| a saved plan is stored with its owner/.test(tpLines) && /T-03 \(removed\) — tasks: #3 \[x\]/.test(tpLines) &&
-      tpNext.step === "re-review" && /dev-spec impact plan-edits --phase test-plan/.test(tpNext.recommendation) && tpNext.impact.phases.join() === "test-plan" &&
-      tpDoc && /\(dev-spec impact plan-edits --phase test-plan\)/.test(tpDoc.detail),
+      tpNext.step === "re-review" && /node "[^"]*dev-spec\.js" impact plan-edits --phase test-plan/.test(tpNext.recommendation) && tpNext.impact.phases.join() === "test-plan" &&
+      tpDoc && /\(node "[^"]*dev-spec\.js" impact plan-edits --phase test-plan\)/.test(tpDoc.detail),
       "impact --phase test-plan: added / modified / removed T-IDs (re-padding is no change), the tasks making them green, a removed test in retire; next_action and doctor name --phase test-plan (got " +
       JSON.stringify([tpIm.added, tpIm.modified, tpIm.removed, tpIm.retire, tpNext.recommendation]).slice(0, 400) + ")");
     const tpRo = S.impactReport(w8, pe8.slug, { phase: "test-plan", reopen: true });
@@ -797,7 +797,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, list, __dirname 
     const epIm = S.impactReport(w8, ep8.slug, { phase: "eval-plan" });
     const epNext = S.nextAction(w8, ep8.slug);
     ok(epIm.ok && epIm.modified.map((x) => x.section).join() === "Regression Set" && !epIm.added.length && !epIm.removed.length &&
-      epNext.step === "re-review" && /dev-spec impact eval-edits --phase eval-plan/.test(epNext.recommendation),
+      epNext.step === "re-review" && /node "[^"]*dev-spec\.js" impact eval-edits --phase eval-plan/.test(epNext.recommendation),
       "impact --phase eval-plan: a section-level diff like design; next_action names --phase eval-plan (got " + JSON.stringify([epIm.modified, epNext.recommendation]).slice(0, 300) + ")");
     // A ticked sub-step is progress (like the fingerprint), not a changed task; doctor names only the phase that changed.
     const sb8 = S.createFeature(w8, "Steps", ["core"]);
@@ -809,7 +809,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, list, __dirname 
     fs.appendFileSync(sbf("design.md"), "\n## Extra\nmore\n");
     const sbD = S.specDoctor(w8, "steps").checks.find((c) => c.id === "changed-since-approval");
     ok(sbT.ok && sbT.changed === false && sbT.modified.length === 0 && sbD && /^changed after their approval: design\.md —/.test(sbD.detail) &&
-      sbD.detail.includes("(dev-spec impact steps --phase design)") && !sbD.detail.includes("--phase requirements"),
+      sbD.detail.includes("(" + S.DEV_SPEC + " impact steps --phase design)") && !sbD.detail.includes("--phase requirements"),
       "impact tasks: a ticked sub-step is not a changed task; doctor's hint names --phase design when only design.md changed");
 
     // Never approved; an existing snapshot file is never overwritten; a pre-1.13 approval is fingerprint-only.
@@ -994,7 +994,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, list, __dirname 
     const bfIm = S.impactReport(w8, "crash-on-save", { phase: "design" });
     const bfDc = S.specDoctor(w8, "crash-on-save").checks.find((c) => c.id === "changed-since-approval");
     ok(bfIm.ok && bfIm.file === "bug.md" && bfIm.baseline === "snapshot" && bfIm.changed === true && bfIm.modified.map((x) => x.section + "|" + x.file).join() === "bug.md: Root Cause|bug.md" &&
-      bfDc && /^changed after their approval: bug\.md —/.test(bfDc.detail) && bfDc.detail.includes("(dev-spec impact crash-on-save --phase design)"),
+      bfDc && /^changed after their approval: bug\.md —/.test(bfDc.detail) && bfDc.detail.includes("(" + S.DEV_SPEC + " impact crash-on-save --phase design)"),
       "an edit to bug.md after a bugfix's design approval: spec_impact --phase design diffs bug.md's sections; doctor flags bug.md and names --phase design");
     S.addTrack(w8, "crash-on-save", "saas");
     const ob8 = S.createFeature(w8, "Old bug", ["core"], undefined, undefined, undefined, "bugfix");
@@ -1029,7 +1029,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, list, __dirname 
     const spL = S.impactLines(spI).join("\n");
     ok(spI.ok && spI.changed === true && spI.designMd.baseline === "snapshot" && spI.modified.map((x) => x.section + "|" + x.file).join() === "design.md: [SaaS] Performance Budget|design.md" &&
       spI.impacted[0].ids.includes("US-1.AC-1") && spL.includes("(.history/design@1.md, .history/design@1.design.md)") && spL.includes("  ~ design.md: [SaaS] Performance Budget") &&
-      !spL.includes("no changes since the approval") && /^changed after their approval: design\.md —/.test(spDc.detail) && spDc.detail.includes("(dev-spec impact slow-page --phase design)"),
+      !spL.includes("no changes since the approval") && /^changed after their approval: design\.md —/.test(spDc.detail) && spDc.detail.includes("(" + S.DEV_SPEC + " impact slow-page --phase design)"),
       "an edit to a bugfix's design.md after its design approval: spec_impact --phase design diffs it (keyed by file), agreeing with doctor");
     const spR = S.impactReport(w8, "slow-page", { phase: "design", reopen: true });
     const spR2 = S.impactReport(w8, "slow-page", { phase: "design", reopen: true });
@@ -1154,5 +1154,95 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, list, __dirname 
     ok(/keep &lt;!-- as text/.test(ex7) && !/&amp;lt;!--/.test(ex7) && ex7.includes('href="https://a.b/c&gt;"') && ex7.includes('href="https://a.b/d"'),
       "full review C7: export renders decisions.md's '&lt;!--' as '<!--' (no double escape); only a <…> link target loses its brackets (got " +
       JSON.stringify([(ex7.match(/keep [^<]{0,30}/) || [])[0], (ex7.match(/href="https:\/\/a\.b\/[^"]*"/g) || [])]) + ")");
+  }
+
+  { // 1.21 F3 — the merge title: the WHOLE line ≤ 72 characters, cut at the last clause boundary (, ; — –) that fits — no
+    // ellipsis there —, else at a word with "…" (the 1.19 eval run's title ran to ~90 characters, cut mid-clause).
+    const tt = path.join(tmp, "proj-121-titles");
+    S.initProject(tt, ["core"], "en");
+    const title = (name, summary, kind) => S.finishFeature(tt, S.createFeature(tt, name, ["core"], summary, undefined, "en", kind).slug).mergeTitle;
+    const t1 = title("CSV export", "Export the orders list as CSV from the command line, so it opens cleanly in a spreadsheet.");
+    const t2 = title("Key rotation", "Rotate every tenant API key daily; the old key stays valid for a twenty-four hour grace period.");
+    const t3 = title("Dash title", "Keep the old key valid during the grace period — then revoke it everywhere at once please.");
+    const t4 = title("No boundary", "A very long summary without any clause boundary at all that goes on and on and on forever and ever");
+    const t5 = title("An extremely long feature slug that eats the budget", "Short words fit in the floor budget of twenty four characters or so.");
+    const t6 = title("Short one", "Short summary.", "bugfix");
+    const all = [t1, t2, t3, t4, t5];
+    ok(t1 === "feat(csv-export): Export the orders list as CSV from the command line" && t2 === "feat(key-rotation): Rotate every tenant API key daily" &&
+      t3 === "feat(dash-title): Keep the old key valid during the grace period" && /^feat\(no-boundary\): A very long summary [^,;]*…$/.test(t4) && t4.length <= 72 &&
+      all.slice(0, 4).every((t) => t.length <= 72) && t5.length <= "feat(an-extremely-long-feature-slug-that-eats-the-budget): ".length + 24 && /…$|[a-z]$/.test(t5) &&
+      /^fix\(short-one\): /.test(t6) && !/Short summary\./.test(t6),
+      "1.21 F3: the merge title is ≤ 72 characters in all — the summary cut at its last , ; — that fits (no ellipsis), else at a word with …; a very long slug keeps a 24-character floor (got " +
+      JSON.stringify(all.concat(t6).map((t) => [t, t.length])) + ")");
+    // 1.21 review A5 — the word-boundary fallback (no space: half the budget) used to cut an emoji in two, and a lone high surrogate
+    // landed in merge-summary.md: the cut never splits a surrogate pair. "feat(emoji-cut): " leaves 55 → the fallback cuts at 27,
+    // right inside the emoji at 26–27; one at 25–26 stays whole.
+    const emoji = String.fromCodePoint(0x1f600);
+    const lone = (s) => { for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); if (c >= 0xd800 && c <= 0xdbff) { const d = s.charCodeAt(i + 1); if (!(d >= 0xdc00 && d <= 0xdfff)) return true; i++; } else if (c >= 0xdc00 && c <= 0xdfff) return true; } return false; };
+    const e1 = title("Emoji cut", "a".repeat(26) + emoji + "b".repeat(60));
+    const e2 = title("Emoji two", "a".repeat(25) + emoji + "b".repeat(60));
+    ok(!lone(e1) && e1 === "feat(emoji-cut): " + "a".repeat(26) + "…" && !lone(e2) && e2.includes(emoji) && e2.length <= 72,
+      "1.21 review A5: the merge title never splits an emoji (a UTF-16 surrogate pair) at its cut — no lone surrogate reaches the title / merge-summary.md; a whole emoji before the cut stays (got " +
+      JSON.stringify([e1, e2].map((t) => [t, t.length])) + ")");
+  }
+
+  { // 1.21 F3 — spec_create {kind: "bugfix"} prefill (reproduction · rootCause · condition · behaviour) + includeBody; the gates unchanged.
+    const bp = path.join(tmp, "proj-121-bugprefill");
+    S.initProject(bp, ["core"], "en");
+    const rd = (f, x) => fs.readFileSync(path.join(f.dir, x), "utf8");
+    const sec = (md, h) => (md.split("\n## " + h + "\n")[1] || "").split("\n## ")[0].trim();
+    const ac1 = (md) => (md.match(/^1\. \*\*US-1\.AC-1\*\* — (.*)$/m) || [])[1] || "";
+    const kw = { en: ["IF", "THEN THE SYSTEM SHALL", "Reproduction", "Root Cause", "**Expected:**"], pt: ["SE", "ENTÃO O SISTEMA DEVE", "Reprodução", "Causa Raiz", "**Esperado:**"],
+      es: ["SI", "ENTONCES EL SISTEMA DEBE", "Reproducción", "Causa Raíz", "**Esperado:**"] };
+    const got = {};
+    const langOk = ["en", "pt", "es"].every((l) => {
+      const [kIf, kThen, hRepro, hRoot, hExp] = kw[l];
+      const r = S.createFeature(bp, "Coupon twice " + l, undefined, "The same coupon applies twice.", undefined, l, "bugfix", {
+        reproduction: "1. Cart of 100\n2. Apply PROMO10 twice\n3. Total reads 81", rootCause: "applyCoupon() never checks cart.coupons — src/discount.js:12 pushes the code again (log: coupons=[PROMO10,PROMO10]).",
+        condition: kIf + " the same coupon code is applied a second time " + kThen.split(" ")[0], behaviour: kThen + " keep the first discount only", includeBody: true });
+      const bug = rd(r, "bug.md"), req = rd(r, "requirements.md"), doc = S.specDoctor(bp, r.slug);
+      const rc = doc.checks.find((c) => c.id === "root-cause"), rp = doc.checks.find((c) => c.id === "reproduction");
+      got[l] = { ac: ac1(req), rc: rc && rc.status, rp: rp && rp.status, prefilled: r.prefilled };
+      return r.ok && ac1(req) === kIf + " the same coupon code is applied a second time " + kThen + " keep the first discount only" &&
+        sec(bug, hRepro) === "1. Cart of 100\n2. Apply PROMO10 twice\n3. Total reads 81" && /^applyCoupon\(\) never checks/.test(sec(bug, hRoot)) &&
+        bug.includes("- " + hExp + " keep the first discount only") && rc.status === "pass" && rp.status === "pass" &&
+        JSON.stringify(r.prefilled) === JSON.stringify({ "bug.md": ["reproduction", "rootCause", "behaviour"], "requirements.md": ["condition", "behaviour"] }) &&
+        !r.prefillSkipped && r.bodies["bug.md"] === bug && r.bodies["requirements.md"] === req && Object.keys(r.bodies).sort().join() === "bug.md,requirements.md,tasks.md,test-plan.md" &&
+        !S.earsValidate(ac1(req) ? "1. **US-1.AC-1** — " + ac1(req) : "").issues.some((i) => i.severity === "error");
+    });
+    // The gate is unchanged: a slot-only, an empty or a sentinel Root Cause is no root cause; no prefill = the template, byte for byte.
+    const slot = S.createFeature(bp, "Slot cause", undefined, "x", undefined, "en", "bugfix", { rootCause: "[the cause, with evidence]" });
+    const todo = S.createFeature(bp, "Todo cause", undefined, "x", undefined, "en", "bugfix", { rootCause: "> **TODO** — later" });
+    const blank = S.createFeature(bp, "Blank cause", undefined, "x", undefined, "en", "bugfix", { rootCause: "   ", reproduction: "" });
+    const rcOf = (f) => S.specDoctor(bp, f.slug).checks.find((c) => c.id === "root-cause").status;
+    const apSlot = S.approvePhase(bp, slot.slug, "design", "t");
+    const plain = S.createFeature(bp, "Plain bug", undefined, "s", undefined, "en", "bugfix");
+    const gateOk = rcOf(slot) === "fail" && rcOf(todo) === "fail" && rcOf(blank) === "fail" && apSlot.ok === false && apSlot.failing.includes("root-cause") &&
+      blank.prefilled === undefined && rd(plain, "bug.md") === require(path.join(__dirname, "lib", "i18n.js")).bugReport({ name: "Plain bug", summary: "s" }, "en");
+    // Refusals: a prefill on a feature (nothing created), a condition over 500 characters, a non-string.
+    const onFeature = S.createFeature(bp, "Not a bug", ["core"], "x", undefined, "en", "feature", { rootCause: "abc" });
+    const tooLong = S.createFeature(bp, "Long cond", undefined, "x", undefined, "en", "bugfix", { condition: "x".repeat(501) });
+    const notStr = S.createFeature(bp, "Obj cond", undefined, "x", undefined, "en", "bugfix", { behaviour: { a: 1 } });
+    const refusals = onFeature.ok === false && /rootCause is a bugfix's input/.test(onFeature.error) && !fs.existsSync(path.join(bp, ".specs", "not-a-bug")) &&
+      tooLong.ok === false && /condition must be one line of at most 500 characters/.test(tooLong.error) && !fs.existsSync(path.join(bp, ".specs", "long-cond")) &&
+      notStr.ok === false && /behaviour/.test(notStr.error);
+    // A project template supplies bug.md: the prefill can't land there — prefillSkipped + a localized note (PT); requirements.md still gets it.
+    const bpt = path.join(tmp, "proj-121-bugprefill-tpl");
+    S.initProject(bpt, ["core"], "pt");
+    fs.mkdirSync(path.join(bpt, ".specs", "templates"), { recursive: true });
+    fs.writeFileSync(path.join(bpt, ".specs", "templates", "bug.md"), "# Bug: {{name}}\n\n## Reprodução\n> **TODO** — passos\n\n## Causa Raiz\n> **TODO** — a causa\n");
+    const tp = S.createFeature(bpt, "Cupão", undefined, "x", undefined, "pt", "bugfix", { rootCause: "A causa, com evidência: o log mostra o cupão duas vezes.", condition: "o cupão é aplicado duas vezes" });
+    const tplOk = tp.ok && JSON.stringify(tp.prefillSkipped) === JSON.stringify({ "bug.md": ["rootCause"] }) && JSON.stringify(tp.prefilled) === JSON.stringify({ "requirements.md": ["condition"] }) &&
+      /Não foi pré-preenchido — rootCause \(bug\.md\)/.test(tp.note) && /> \*\*TODO\*\* — a causa/.test(rd(tp, "bug.md")) && /^SE o cupão é aplicado duas vezes ENTÃO O SISTEMA DEVE \[/.test(ac1(rd(tp, "requirements.md")));
+    // MCP: the schema carries the four inputs + includeBody; spec_create passes them through.
+    const ctool = list.result.tools.find((t) => t.name === "spec_create");
+    const viaMcp = payload(await rpc("tools/call", { name: "spec_create", arguments: { projectDir: bp, name: "Mcp bug", kind: "bugfix", lang: "es",
+      reproduction: "Paso 1", condition: "SI el cupón se aplica dos veces", behaviour: "aplicar el descuento una sola vez", includeBody: true } }));
+    const mcpOk = ["reproduction", "rootCause", "condition", "behaviour"].every((k) => ctool.inputSchema.properties[k] && ctool.inputSchema.properties[k].type === "string") &&
+      ctool.inputSchema.properties.includeBody.type === "boolean" && /prefilled/.test(ctool.description) && viaMcp.ok &&
+      /^SI el cupón se aplica dos veces ENTONCES EL SISTEMA DEBE aplicar el descuento una sola vez$/.test(ac1(viaMcp.bodies["requirements.md"] || ""));
+    ok(langOk && gateOk && refusals && tplOk && mcpOk,
+      "1.21 F3: spec_create {kind: 'bugfix'} prefills bug.md (Reproduction, Root Cause, Expected) and US-1.AC-1's IF … THEN (EN/PT/ES keywords; a leading IF / trailing THEN / THE SYSTEM SHALL dropped), returns `prefilled` and — with includeBody — every scaffold's body; a slot-only, sentinel or blank Root Cause still fails root-cause and the design gate; no prefill = the template byte for byte; refused on a feature / over 500 characters / a non-string; a project template's bug.md is left alone (prefillSkipped + a PT note); MCP schema + call (got " +
+      JSON.stringify({ got, gate: [rcOf(slot), rcOf(todo), rcOf(blank), apSlot.failing], refusals: [onFeature.error, tooLong.error, notStr.error], tp: [tp.prefilled, tp.prefillSkipped, tp.note], mcp: viaMcp.error || ac1(viaMcp.bodies && viaMcp.bodies["requirements.md"] || "") }).slice(0, 1500) + ")");
   }
 };
