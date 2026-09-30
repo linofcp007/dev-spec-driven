@@ -716,6 +716,13 @@ function main() {
           const posix = cmds.map((c) => [c, spec.posixShellSyntax(c)]).find(([, k]) => k.length);
           if (posix) return fail({ ok: false, error: D.posixOnWindows(posix[0], posix[1]) });
         }
+        // 1.21.1 review — the mirror: a POSIX shell (/bin/sh, bash, Git Bash…) expands `$…` / backticks in a pwsh script
+        // outside single quotes before PowerShell sees it (`exit $LASTEXITCODE` → `exit` → 0: a failing check recorded as
+        // passing) — refused before anything runs.
+        if (sh.posix) {
+          const pw = cmds.map((c) => [c, spec.posixPwshScript(c)]).find(([, k]) => k.length);
+          if (pw) return fail({ ok: false, error: D.pwshInPosix(pw[0], pw[1], b5ShellName(sh)) });
+        }
         // A pipe masks the check's exit code (a pipeline reports its LAST command's): one hint line — it still runs.
         cmds.filter(spec.verifyPipeMasked).forEach((c) => say(M.verifyPipe.runHint(c)));
         const git = b5GitState(); // B5: the commit the run is made on (+ dirty outside .specs/) — read-only git, skipped without it
@@ -740,6 +747,11 @@ function main() {
             // full review Ga2: …nor is a run whose output shows the test never ran (a missing test file, module or script).
             const notRun = b.expect === "fail" ? spec.couldNotRunOutput(x.output) : null;
             if (notRun) return fail({ ok: false, expected: "fail", couldNotRun: "output", error: M.redGreen.notRed(cmd, notRun.text) });
+            // 1.21.1 review — nor is PowerShell's own parse error (the script never ran: 5.1's "'&&' is not a valid statement
+            // separator"), whenever PowerShell runs the line (--shell pwsh / powershell, or a pwsh program in it). After the
+            // could-not-run output: a Pester test file that doesn't parse is named as such ("[-] Discovery in … failed").
+            const parse = b.expect === "fail" && (sh.pwsh || spec.runsPwsh(cmd)) ? spec.pwshParseFailure(x.output) : null;
+            if (parse) return fail({ ok: false, expected: "fail", couldNotRun: "pwsh", error: M.redGreen.pwshNotRed(cmd, parse.text) });
             evidence = { command: cmd, exitCode: code, summary: x.summary, ...git };
             // The cmd.exe / --shell bash hint only when cmd.exe itself failed (unknown command, its syntax error) — a check
             // that ran and failed (node tests/x.js → exit 1) needs a code fix, not another shell.
@@ -1316,6 +1328,10 @@ function main() {
         const posix = checks.map((c) => [c, spec.posixShellSyntax(c.command)]).find(([, k]) => k.length);
         if (posix) return { ok: false, error: M.projectChecks.posixOnWindows(posix[0].name, posix[0].command, posix[1]) };
       }
+      if (sh.posix) { // 1.21.1 review: a POSIX shell would expand the pwsh script's `$…` first (done --run's rule)
+        const pw = checks.map((c) => [c, spec.posixPwshScript(c.command)]).find(([, k]) => k.length);
+        if (pw) return { ok: false, error: M.projectChecks.pwshInPosix(pw[0].name, pw[0].command, pw[1], b5ShellName(sh)) };
+      }
       const say = flags.json ? console.error : console.log; // --json keeps stdout one JSON document
       checks.map((c) => c.command).filter(spec.verifyPipeMasked).forEach((c) => say(M.verifyPipe.runHint(c)));
       const git = b5GitState();
@@ -1343,6 +1359,10 @@ function main() {
       const needsGit = process.platform === "win32" && /^bash(?:\.exe)?$/i.test(req);
       return spec.resolveRunShell(req, { gitExecPath: needsGit ? b5Git(["--exec-path"]) : null });
     }
+    // The shell a run uses, as a message names it (the platform default spelled out).
+    function b5ShellName(sh) {
+      return sh.shell === true ? (process.platform === "win32" ? process.env.ComSpec || "cmd.exe" : "/bin/sh") : String(sh.shell);
+    }
     // Runs ONE command line — the user's own _Verify:_ (done --run) or meta.checks command (finish --run), only on an explicit
     // --run: the same trust as an npm script; a shell is the point, each is a shell command line. → { code, output, summary,
     // cantRun: null | { code, why } } — cantRun (full review Ga1 / Ga9 / Ga10, stable codes): the run never exercised the check,
@@ -1363,7 +1383,7 @@ function main() {
       const output = (run.stdout || "") + (run.stderr || "") + (run.error ? "\n" + run.error.message : "");
       const summary = spec.summarizeRunOutput(output);
       const W = M.runGate.why;
-      const shellName = sh.shell === true ? (process.platform === "win32" ? process.env.ComSpec || "cmd.exe" : "/bin/sh") : String(sh.shell);
+      const shellName = b5ShellName(sh);
       let cantRun = null;
       if (run.error) {
         const ec = String(run.error.code || "");

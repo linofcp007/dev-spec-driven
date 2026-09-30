@@ -1040,4 +1040,141 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     ok(hostileMs < 5000 && hostileKinds.every((k) => k === null),
       "1.21.1 languages: couldNotRunOutput stays linear on 200,000-character hostile outputs (a '[-] ' line with no duration, 'Expected ' runs, quote runs, blank runs between the words) (got " + js([hostileMs, hostileKinds]) + ")");
   }
+
+  // 1.21.1 languages (review) — PowerShell evidence, second round: a POSIX shell expands a pwsh script's `$…`; Pester blocks and
+  // files that failed before their tests; PowerShell's own parse errors; every new pattern linear on 200 KB.
+  {
+    const js = (v) => JSON.stringify(v);
+    const E = require("./lib/engine/index.js");
+    const ESC = String.fromCharCode(27), BS = String.fromCharCode(92), BT = "`";
+    const red = (s) => ESC + "[91m" + s + ESC + "[0m";
+    // 1. posixPwshScript — the mirror of posixShellSyntax for a POSIX shell (/bin/sh, bash, Git Bash): `$…` / backticks
+    // outside single quotes in a pwsh / powershell script are expanded by the shell first (`exit $LASTEXITCODE` → `exit` → 0).
+    const pp = (c) => S.posixPwshScript(c).join("+");
+    const PP = [
+      ['pwsh -NoProfile -Command "npm test; exit $LASTEXITCODE"', "variable"],
+      ['pwsh -c "Get-ChildItem | ForEach-Object { $_.Name }"', "variable"],
+      ["pwsh -NoProfile -Command Invoke-Pester -CI; exit $LASTEXITCODE", ""], // `;` ends the pwsh command: `exit $X` is the shell's own
+      ["pwsh -NoProfile -Command Invoke-Pester -CI " + BS + "; exit $LASTEXITCODE", "variable"],
+      ['FOO=1 pwsh -c "exit $x"', "variable"],
+      ['env pwsh -NoProfile -Command "exit $x"', "variable"],
+      ['powershell "exit $LASTEXITCODE"', "variable"],
+      ['pwsh -c "Write-Output ' + BT + 'date' + BT + '"', "backtick"],
+      ["pwsh -NoProfile -Command 'npm test; exit $LASTEXITCODE'", ""],
+      ['pwsh -NoProfile -Command "Invoke-Pester -Path tests -CI"', ""],
+      ['pwsh -c "exit ' + BS + '$code"', ""],
+      ['pwsh -NoProfile -File build.ps1 "$HOME"', ""],
+      ['echo "$HOME" && npm test', ""],
+      ['npm test && pwsh -NoProfile -Command "exit $LASTEXITCODE"', "variable"],
+    ];
+    const ppWrong = PP.filter(([c, want]) => pp(c) !== want).map(([c]) => c + " → " + pp(c));
+    const rs = (req, platform) => S.resolveRunShell(req, { platform, env: {}, exists: () => false });
+    ok(!ppWrong.length && rs("", "linux").posix === true && rs("bash", "linux").posix === true && rs("/usr/bin/zsh", "darwin").posix === true && rs("fish", "linux").posix === true &&
+      rs("sh", "win32").posix === true && rs("C:/Program Files/Git/bin/bash.exe", "win32").posix === true && S.resolveRunShell("bash", { platform: "win32", env: {}, gitExecPath: "C:/Git/mingw64/libexec/git-core", exists: (p) => /bin[\\/]bash\.exe$/.test(p) }).posix === true &&
+      !rs("", "win32").posix && !rs("cmd", "win32").posix && !rs("pwsh", "linux").posix && !rs("nu", "linux").posix &&
+      S.runsPwsh('pwsh -NoProfile -Command "x"') && S.runsPwsh("npm test && powershell.exe -c x") && S.runsPwsh("FOO=1 pwsh -c x") && !S.runsPwsh("echo pwsh") && !S.runsPwsh("npm test"),
+      "1.21.1 languages (review): posixPwshScript flags `$…` / backticks a POSIX shell would expand in a pwsh script (double-quoted or bare, after a VAR= or env prefix, powershell's positional command) — never a single-quoted script, `\\$`, a -File argument or `$` outside PowerShell; resolveRunShell marks /bin/sh, bash, zsh, fish, sh and Git Bash posix (never cmd.exe, pwsh, an unknown shell); runsPwsh finds a pwsh program in the line (wrong: " +
+      js(ppWrong) + ")");
+
+    // 2. Pester blocks and files that failed BEFORE their tests are could-not-run, alone (outputs captured from Pester 3.4 /
+    // 5.9.1 / 6.2.0): a Describe-level BeforeAll ("[-] Describe … failed" + "BeforeAll \ AfterAll failed: 1", no "Container
+    // failed"), a test file that doesn't parse ("[-] Discovery in … failed" / "[-] Error occurred in test script"); the summary
+    // keeps those lines. A test that ran — an assertion, a missing function, a throw inside It — stays red.
+    const cnr = (s) => { const r = S.couldNotRunOutput(s); return r ? r.kind + ":" + r.text.slice(0, 40) : null; };
+    const summary5 = (lines) => lines.join("\n");
+    const NOTRUN = {
+      block5: summary5([red("[-] Describe Get-Greeting failed"), red(" RuntimeException: boom in BeforeAll"), ESC + "[97mTests completed in 753ms" + ESC + "[0m",
+        ESC + "[97mTests Passed: 0, " + ESC + "[0m" + ESC + "[91mFailed: 1, " + ESC + "[0m" + ESC + "[90mNotRun: 0" + ESC + "[0m", red("BeforeAll " + BS + " AfterAll failed: 1"), red("  - Get-Greeting")]),
+      context6: summary5(["[-] Context when empty failed", " RuntimeException: boom", "Tests Passed: 0, Failed: 2, Skipped: 0, Inconclusive: 0, NotRun: 0", "BeforeAll " + BS + " AfterAll failed: 1"]),
+      discovery5: summary5([red("[-] Discovery in C:/p/Syn.Tests.ps1 failed with:"), red("System.Management.Automation.ParseException: At C:/p/Syn.Tests.ps1:1 char:19"),
+        "Tests Passed: 0, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0", "Container failed: 1", "  - C:/p/Syn.Tests.ps1"]),
+      script3: summary5([" [-] Error occurred in test script 'C:/p/Syn.Tests.ps1' 175ms", "   ParseException: At C:/p/Syn.Tests.ps1:1 char:19", "Tests completed in 175ms",
+        "Passed: 0 Failed: 1 Skipped: 0 Pending: 0 Inconclusive: 0"]),
+      block3: summary5(["Describing Get-Greeting", " [-] Error occurred in Describe block 318ms", "   RuntimeException: boom", "Passed: 0 Failed: 1 Skipped: 0 Pending: 0 Inconclusive: 0"]),
+      summaryOnly: summary5(["Tests completed in 753ms", "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0", "BeforeAll " + BS + " AfterAll failed: 1", "  - Get-Greeting"]),
+    };
+    const RAN = {
+      throw5: summary5([red("[-] Get-Greeting.T-01 greets") + ESC + "[90m 52ms (35ms|17ms)" + ESC + "[0m", red(" RuntimeException: not implemented"), "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0"]),
+      throw6: summary5(["[-] Get-Greeting.T-01 greets 44ms", " RuntimeException: not implemented", "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0"]),
+      throw3: summary5(["Describing Get-Greeting", " [-] T-01 greets 405ms", "   RuntimeException: not implemented", "Passed: 0 Failed: 1 Skipped: 0 Pending: 0 Inconclusive: 0"]),
+      red3: summary5([" [-] T-01 greets 750ms", "   Expected string length 10 but was 5. Strings differ at index 5.", "   Expected: {Hello, Ana}", "   But was:  {Hello}"]),
+      mixed: summary5(["[-] Describe Other failed", "[-] Get-Greeting.T-01 greets 44ms", " Expected 'Hello, Ana', but got 'Hello'.", "Tests Passed: 0, Failed: 2", "BeforeAll " + BS + " AfterAll failed: 1"]),
+    };
+    const notRunWrong = Object.entries(NOTRUN).filter(([, s]) => !/^test:/.test(cnr(s) || "")).map(([k, s]) => k + "=" + cnr(s));
+    const ranWrong = Object.entries(RAN).filter(([, s]) => cnr(s) !== null).map(([k, s]) => k + "=" + cnr(s));
+    const keptInSummary = S.summarizeRunOutput(["Describing Missing", " [-] Error occurred in Describe block 318ms", "   FileNotFoundException: x", "   at <ScriptBlock>, X.Tests.ps1: line 2",
+      "   at Invoke-Blocks, SetupTeardown.ps1: line 134", "   at Invoke-TestGroupSetupBlocks, SetupTeardown.ps1: line 113", "Tests completed in 318ms", "Passed: 0 Failed: 1 Skipped: 0 Pending: 0 Inconclusive: 0"].join("\n"));
+    ok(!notRunWrong.length && !ranWrong.length && /\[-\] Error occurred in Describe block/.test(keptInSummary) && /^test:/.test(cnr(keptInSummary) || ""),
+      "1.21.1 languages (review): a Pester block's BeforeAll that failed ('[-] Describe … failed', 'BeforeAll \\ AfterAll failed: 1' — Pester 5 / 6), a Context, a test file that doesn't parse ('[-] Discovery in … failed' + 'Container failed', Pester 3's '[-] Error occurred in test script' / 'Describe block') is could-not-run on its own — also as a run summary, which keeps the line; a throw inside It, an assertion red and a mixed run stay red (wrong: " +
+      js([notRunWrong, ranWrong, keptInSummary.split("\n")]) + ")");
+
+    // 3. PowerShell's own parse error (the -Command script never ran) — pwshParseFailure, asked by the CLI when PowerShell runs
+    // the line; never when a test ran.
+    const pf = (s) => (S.pwshParseFailure(s) || {}).text || null;
+    const PARSE = [
+      "At line:1 char:10\r\n+ npm test && node -e \"process.exit(0)\"\r\n+          ~~\r\nThe token '&&' is not a valid statement separator in this version.\r\n    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException\r\n    + FullyQualifiedErrorId : InvalidEndOfLine",
+      "An expression was expected after '('.\r\n    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException\r\n    + FullyQualifiedErrorId : ExpectedExpression",
+      ESC + "[31;1mParserError: " + ESC + "[0m\n" + ESC + "[31;1m" + ESC + "[36;1mLine |" + ESC + "[0m\n     | " + ESC + "[31;1mUnexpected token ')' in expression or statement." + ESC + "[0m",
+    ];
+    const NOT_PARSE = ["[-] Parser.T-01 rejects a stray paren 12ms\n Expected 'Unexpected token', but got 'ok'.", "Error: Unexpected token } in JSON at position 3\n1 failing", "npm ERR! Test failed."];
+    ok(/^The token '&&' is not a valid statement separator/.test(pf(PARSE[0]) || "") && /ParserError/.test(pf(PARSE[1]) || "") && /^Unexpected token '\)' in expression or statement/.test(pf(PARSE[2]) || "") &&
+      NOT_PARSE.every((s) => pf(s) === null),
+      "1.21.1 languages (review): pwshParseFailure reads PowerShell's own parse error — 5.1's '&&' separator, its ParserError / FullyQualifiedErrorId, pwsh 7's coloured 'ParserError: … Unexpected token' block — never a Pester test that ran, a JSON parse error or a plain failure (got " +
+      js([PARSE.map(pf), NOT_PARSE.map(pf)]) + ")");
+
+    // 4. spec_complete_task on an _Expect: fail_ task: a Pester 5 run whose Describe BeforeAll failed is refused (couldNotRun:
+    // output); a throw inside It is the red proof.
+    const pe = path.join(tmp, "proj-121-pester-block");
+    S.initProject(pe, ["core"], "en");
+    const fe = S.createFeature(pe, "Block", ["core"], "", undefined, "en");
+    const PCMD = "Invoke-Pester -Path tests -CI";
+    fs.writeFileSync(path.join(fe.dir, "tasks.md"), "- [ ] 1. [US1] Write test T-01 and watch it fail\n  - _Verify: " + PCMD + "_\n  - _Expect: fail_\n");
+    const blocked = S.completeTask(pe, fe.slug, 1, { command: PCMD, exitCode: 2, summary: S.summarizeRunOutput(NOTRUN.block5) });
+    const thrown = S.completeTask(pe, fe.slug, 1, { command: PCMD, exitCode: 1, summary: S.summarizeRunOutput(RAN.throw5) });
+    ok(blocked.ok === false && blocked.couldNotRun === "output" && /Describe Get-Greeting failed|BeforeAll/.test(blocked.error) && thrown.ok === true && thrown.redRecorded === true,
+      "1.21.1 languages (review): an _Expect: fail_ task — a Pester 5 run whose Describe-level BeforeAll failed is refused (couldNotRun: output), a throw inside It is the red proof (got " +
+      js([blocked.couldNotRun, (blocked.error || "").slice(0, 160), thrown.ok, thrown.redRecorded]) + ")");
+
+    // 5. Every new could-not-run / assertion / Pester / parse pattern — and the functions over them — is linear: 200 KB of blanks,
+    // digits, quotes or letters after each pattern's own words, or those words repeated, within 1.5 s each.
+    const N = 200000;
+    const prefixes = ["is not recognized as a name of a", "is not recognized", "não é reconhecido como nome de", "não é reconhecido como", "no se reconoce como nombre de",
+      "'x'", "\"x\"", "The specified module 'x'", "O módulo especificado 'x'", "No se cargó el módulo especificado", "cannot be loaded because running scripts is",
+      "porque a execução de scripts está", "porque la ejecución de scripts está", "is not digitally signed.", "The argument 'x'", "No test files were found",
+      "[-]", "[-] a", "[-] a 1ms", "[-] a 1", "[-] Describe a", "[-] Context a", "[-] Discovery in", "Expected a", "Expected a,", "But was:", "Tests Passed: 1,", "Passed: 1",
+      "Container failed:", "BeforeAll " + BS + " AfterAll failed:", "+ CategoryInfo", "FullyQualifiedErrorId", "FullyQualifiedErrorId : MissingEndParenthesisIn",
+      "ParserError", "Unexpected token '", "Missing closing '", "is not a valid statement", ESC + "[", ESC + "]"];
+    const fills = [" ", "\t", "1", "a", "'", "."];
+    const inputs = [];
+    for (const p of prefixes) {
+      for (const f of fills) inputs.push(p + f.repeat(N) + "x");
+      inputs.push((p + " ").repeat(Math.ceil(N / (p.length + 1))));
+    }
+    const pats = [...E.CANT_RUN_OUTPUT.map(([k, re], i) => ["CANT_RUN_OUTPUT[" + i + "] " + k, re]), ["RE_ASSERTION_RAN", E.RE_ASSERTION_RAN], ["RE_PESTER_FAILED", E.RE_PESTER_FAILED],
+      ["RE_PESTER_NOT_RUN", E.RE_PESTER_NOT_RUN], ["RE_PWSH_PARSE_FAILURE", E.RE_PWSH_PARSE_FAILURE], ["RE_ANSI", new RegExp(E.RE_ANSI.source, "")]];
+    const slow = [];
+    let worst = 0;
+    for (const [name, re] of pats) {
+      for (const s of inputs) {
+        const t0 = Date.now();
+        re.test(s);
+        const ms = Date.now() - t0;
+        worst = Math.max(worst, ms);
+        if (ms > 1500) slow.push(name + " @ " + js(s.slice(0, 30)) + " " + ms + " ms");
+      }
+    }
+    const fnSlow = [];
+    for (const [name, fn] of [["couldNotRunOutput", S.couldNotRunOutput], ["pwshParseFailure", S.pwshParseFailure], ["summarizeRunOutput", (s) => S.summarizeRunOutput(s)],
+      ["posixPwshScript", S.posixPwshScript], ["posixShellSyntax", S.posixShellSyntax], ["runsPwsh", S.runsPwsh]]) {
+      for (const s of inputs.filter((_, i) => i % 3 === 0)) {
+        const t0 = Date.now();
+        fn(s);
+        const ms = Date.now() - t0;
+        if (ms > 1500) fnSlow.push(name + " @ " + js(s.slice(0, 30)) + " " + ms + " ms");
+      }
+    }
+    ok(!slow.length && !fnSlow.length,
+      "1.21.1 languages (review): every new could-not-run, assertion, Pester and parse pattern (" + pats.length + ") and couldNotRunOutput / pwshParseFailure / summarizeRunOutput / posixPwshScript / posixShellSyntax / runsPwsh stay linear on " +
+      inputs.length + " hostile 200 KB inputs (each within 1.5 s; the pt/es 'not recognized' pattern took 58 s before) (got " + js({ worst, slow: slow.slice(0, 5), fnSlow: fnSlow.slice(0, 5) }) + ")");
+  }
 };

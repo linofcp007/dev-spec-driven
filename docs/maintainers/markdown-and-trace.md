@@ -46,11 +46,18 @@ matrix.
   where they are tests) that `isTestFile()` calls a test — ONE rule (engine/scan.js; trace's `isTestCodePath` is it): the
   test folders (`TEST_DIRS`; `t/` / `xt/` for a Perl `.t` only) and every language's name convention in `RE_TEST_NAME`
   (`*.test.*` / `*.spec.*`, `test_*.py` / `*_test.go` / `*Test.java` / `*Tests.cs`, F# / Scala / Groovy / Elixir / Dart,
-  shell `test_*.sh` / `*_test.sh`, C/C++ `*_test.cc` / `*_unittest.cc` / `test_*.c`, busted `*_spec.lua`, testthat
-  `test-*.R`, `*_SUITE.erl` / `*_tests.erl`, hspec `*Spec.hs`, `*_test.clj`, XCTest `*Tests.m`, `*Tests.vb`) and
-  `RE_TEST_NAME_EXTRA` (case-insensitive: Pester's `*.Tests.ps1`, `*.bats`) — anchored, linear, the existing names kept
-  (a name that merely ends in "spec" / "test" is code). Until 1.21.1 the scan read only the scanner's short `CODE_EXT` and
-  a PowerShell project's tests gate never passed. The scan (`scanTestCode()`) is bounded and read-only; a plan row whose File column names a
+  shell `*_test.sh`, C/C++ `*_test.cc` / `*_unittest.cc`, busted `*_spec.lua`, testthat `test-*.R`, `*_SUITE.erl` /
+  `*_tests.erl`, `*_test.clj`, XCTest `*Tests.m`, `*Tests.vb`) and `RE_TEST_NAME_EXTRA` (case-insensitive: Pester's
+  `*.Tests.ps1`, `*.bats`) — anchored, linear, the existing names kept (a name that merely ends in "spec" / "test" is code;
+  the 1.21.1 review dropped the name-only `test_*.sh` / `test_*.c` / `*Spec.hs` rules — `scripts/test_data.sh`,
+  `src/test_utils.c`, `lib/DevSpec.hs` are code; in a test folder they are tests). **Fixtures:** `isTestFixture()` — a
+  `TEST_DATA_EXT` file (`.sql`, `.ipynb`) in a test folder whose NAME follows no convention (`testNamed()`, + pgTAP's
+  `test_*.sql` / `*_test.sql`) is data: the scan, coverage and the test-code scan skip it (1,600 `tests/fixtures/*.sql`
+  exhausted the read cap; a 'T-01' in a seed counted as the test); guard mode still asks before editing one. The test-code
+  scan collects its candidates, reads them all in walk order below `CODE_TRACE_READ_CAP`, above it the test-NAMED ones
+  first, and reads each through `readFileHead()` (files.js — at most `SCAN_READ_BYTES` from disk, never the whole file
+  then a slice; the brownfield scan and the status line's tests gate too). Until 1.21.1 the scan read only the scanner's
+  short `CODE_EXT` and a PowerShell project's tests gate never passed. The scan (`scanTestCode()`) is bounded and read-only; a plan row whose File column names a
   concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts; a test file
   ANOTHER feature's plan (active or archived) names in its File column — and this feature's plan does not — never counts
   for this feature's T-IDs (T-IDs restart at T-01 in every feature: a new feature's Phase 4 gate passed on another

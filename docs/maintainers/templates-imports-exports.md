@@ -69,7 +69,8 @@ trackers, release notes, milestones).
     sub-headings → tasks keeping state; file paths a step names → `_Implements:_` (`planPaths()`: never a URL, absolute or
     home path, `..`, alias, glob; `:line` / `#L10` dropped; a single backticked name without a folder needs a known
     extension — `PLAN_FILE_EXT`: since 1.21.1 every `CODE_EXT` / test-only extension (engine/scan.js — `.psm1`, `.bats`,
-    `.cmd`…) but `PLAN_EXT_AMBIGUOUS` (`conf.d`, `this.el`, one-letter ones), plus docs / config / data such as `.psd1`); the
+    `.go`…) but `PLAN_EXT_AMBIGUOUS` (d, s, v, f, t, m, r, el, re, sc, cmd — `conf.d`, `this.el`, `color.r`, `args.cmd`,
+    `obj.m` are object fields: such a name needs a folder part, `scripts/build.cmd`), plus docs / config / data such as `.psd1`); the
     rest → design.md. A folder holding several plans is refused (name the file).
   - `execplan` — a Codex ExecPlan (PLANS.md): Validation and Acceptance → criteria; Progress (state kept) + Concrete Steps
     → tasks (deduplicated), a step naming a check command → `_Verify:_`; Decision Log → design.md `## Decisions` (D-1…);

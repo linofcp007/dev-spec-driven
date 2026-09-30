@@ -15,8 +15,8 @@ const i18n = require("../i18n.js");
 let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText, commentLines,
   decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey, duplicateTaskNumbers, evidenceRule,
   existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, gitEvidence, globFiles, GUARD_CODE_EXT,
-  historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord, isCodeFile, isImplementsGlob, isObj, isRecord,
-  isSlashUnit, isTestFile, isWsUnit, italic, latestSnapshot, mdCell, mdPlainText, normWs, oneLiner, ownEvidence,
+  historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord, isCodeFile, isImplementsGlob, isObj, isRecord, isTestFixture,
+  isSlashUnit, isTestFile, isWsUnit, readFileHead, testNamed, italic, latestSnapshot, mdCell, mdPlainText, normWs, oneLiner, ownEvidence,
   packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained, readIfExists, readJson, realLines,
   requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes, retiredDecisions, safeReaddir,
   SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile, statePath, stripEnd, stripEnds,
@@ -27,7 +27,7 @@ function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atx
   commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
   duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE,
   gitEvidence, globFiles, GUARD_CODE_EXT, historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord,
-  isCodeFile, isImplementsGlob, isObj, isRecord, isSlashUnit, isTestFile, isWsUnit, italic, latestSnapshot, mdCell, mdPlainText,
+  isCodeFile, isImplementsGlob, isObj, isRecord, isSlashUnit, isTestFile, isTestFixture, readFileHead, testNamed, isWsUnit, italic, latestSnapshot, mdCell, mdPlainText,
   normWs, oneLiner, ownEvidence, packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained,
   readIfExists, readJson, realLines, requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes,
   retiredDecisions, safeReaddir, SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile,
@@ -657,6 +657,10 @@ function specFeatureDirs(projectDir) {
 // collecting the T-IDs and AC IDs they name — plus each feature's own .specs/<feature>/tests/ (the folder +tdd and bugfix
 // scaffold for the failing tests), within the same caps; the rest of .specs/ stays skipped. Project-level (not per
 // feature), so doctor / finish reuse it; traceTestCode decides which files count for a feature.
+// 1.21.1 review: a test FIXTURE — data-like code (.sql, .ipynb) in a test folder whose name follows no test convention
+// (isTestFixture: tests/fixtures/seed.sql) — is never read, nor counted; when more test files than CODE_TRACE_READ_CAP are
+// found, the ones NAMED like a test (testNamed) are read first, in walk order (below the cap nothing changes: every one,
+// in walk order); each is read up to SCAN_READ_BYTES from disk (readFileHead — never the whole file).
 // → { tids: Map(key → { id, files }), acs: Map(acId → { id, files }), scanned, truncated }
 function scanTestCode(projectDir) {
   const root = path.resolve(projectDir);
@@ -669,17 +673,9 @@ function scanTestCode(projectDir) {
     const e = map.get(key);
     if (!e.files.includes(rel)) e.files.push(rel);
   };
+  const cands = []; // the test files found, in walk order: { rel, full }
   const onFile = (rel, full) => {
-    if (!isCodeFile(rel) || !isTestCodePath(rel)) return;
-    if (scanned >= CODE_TRACE_READ_CAP) { readCapped = true; return; }
-    let txt;
-    try { txt = fs.readFileSync(full, "utf8").slice(0, SCAN_READ_BYTES); } catch { return; }
-    scanned++;
-    for (const m of txt.matchAll(RE_CODE_TID)) {
-      const num = m[1] || m[2] || m[3];
-      note(tids, tKey(num), "T-" + num, rel);
-    }
-    for (const id of extractAcIds(txt)) note(acs, id, id, rel);
+    if (isCodeFile(rel) && isTestCodePath(rel) && !isTestFixture(rel)) cands.push({ rel, full });
   };
   const walk = walkProject(root, CODE_TRACE_CAP, onFile);
   let left = CODE_TRACE_CAP - walk.total;
@@ -689,9 +685,26 @@ function scanTestCode(projectDir) {
     const tdir = path.join(d, "tests");
     try { if (!fs.lstatSync(tdir).isDirectory()) continue; } catch { continue; } // a symlinked tests/ is never followed
     const tPre = toPosix(path.relative(root, tdir));
-    const w = walkProject(tdir, left, (rel, full, name) => onFile(tPre + "/" + rel, full, name));
+    const w = walkProject(tdir, left, (rel, full) => onFile(tPre + "/" + rel, full));
     left -= w.total;
     truncated = truncated || w.truncated;
+  }
+  let pick = cands;
+  if (cands.length > CODE_TRACE_READ_CAP) {
+    readCapped = true;
+    const keep = new Set(cands.filter((c) => testNamed(c.rel)).slice(0, CODE_TRACE_READ_CAP));
+    for (const c of cands) { if (keep.size >= CODE_TRACE_READ_CAP) break; keep.add(c); }
+    pick = cands.filter((c) => keep.has(c));
+  }
+  for (const { rel, full } of pick) {
+    const txt = readFileHead(full, SCAN_READ_BYTES);
+    if (txt == null) continue;
+    scanned++;
+    for (const m of txt.matchAll(RE_CODE_TID)) {
+      const num = m[1] || m[2] || m[3];
+      note(tids, tKey(num), "T-" + num, rel);
+    }
+    for (const id of extractAcIds(txt)) note(acs, id, id, rel);
   }
   return { tids, acs, scanned, truncated: truncated || readCapped };
 }
@@ -728,7 +741,8 @@ function pathNames(rel, p) {
 function scannableTestPath(t) {
   if (t.endsWith("/")) return true;
   const ext = path.posix.extname(t).toLowerCase();
-  return ext === "" || GUARD_CODE_EXT.has(ext); // code in any language, or a test-only extension (.bats, Perl's .t)
+  // code in any language, or a test-only extension (.bats, Perl's .t) — never a test fixture the scan skips (seed.sql)
+  return ext === "" || (GUARD_CODE_EXT.has(ext) && !isTestFixture(t));
 }
 // A File cell token naming a non-code artifact — a document or data file, never source in any language (GUARD_CODE_EXT):
 // `load-test.md`, `evals/golden.json`, `tests/load/plan.md`, a Gherkin `.feature` or a JMeter `.jmx`. The test-code scan

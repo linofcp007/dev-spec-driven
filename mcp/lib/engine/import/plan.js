@@ -63,9 +63,10 @@ function planItem(l) {
 // A single backticked name reads as a file with one of these extensions (`package.json`); a name with a folder part needs none.
 // 1.21.1: the code extensions are CODE_EXT's (engine/scan.js — the one list of code) and the test-only ones (a .bats suite),
 // so a plan's `Greeter.psm1` or `deploy.bats` is a file like its `server.ts` — except the ones a prose token wears as often as
-// a file does (PLAN_EXT_AMBIGUOUS: `conf.d` is a folder, `this.el` a view's element, `x.v` / `a.s` / `re.re` read as code
-// expressions; Perl's .t needs its t/ folder anyway). The rest: documents, config and data a plan names (PowerShell's .psd1).
-const PLAN_EXT_AMBIGUOUS = new Set(["d", "s", "v", "f", "t", "el", "re", "sc"]);
+// a file does (PLAN_EXT_AMBIGUOUS: `conf.d` is a folder, `this.el` a view's element, `color.r`, `args.cmd`, `obj.m`, `x.v`,
+// `a.s`, `re.re` are object fields — 1.21.1 review; Perl's .t needs its t/ folder anyway): such a name counts only with a
+// folder part (`scripts/build.cmd`). The rest: documents, config and data a plan names (PowerShell's .psd1).
+const PLAN_EXT_AMBIGUOUS = new Set(["d", "s", "v", "f", "t", "m", "r", "el", "re", "sc", "cmd"]);
 const PLAN_FILE_EXT = new Set([...[...CODE_EXT, ...TEST_EXTRA_EXT].map((e) => e.slice(1)).filter((e) => !PLAN_EXT_AMBIGUOUS.has(e)),
   "md", "mdx", "json", "jsonc", "yaml", "yml", "toml", "ini", "cfg", "conf", "css", "scss", "sass", "less", "html", "htm", "prisma", "graphql",
   "gql", "proto", "xml", "gradle", "lock", "txt", "csv", "tf", "hcl", "psd1"]);

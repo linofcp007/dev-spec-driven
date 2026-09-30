@@ -180,4 +180,60 @@ if (hasWinPs) {
   ok(r7.code === 0 && /Task 7 done \(verified\)/.test(r7.out) && lpEv()["7"].exitCode === 0,
     "1.21.1 languages: done --run --shell powershell runs the _Verify:_ under Windows PowerShell 5.1 (PSEdition Desktop → exit 0) (got " + r7.out.slice(0, 160) + ")");
 } else ok(true, "1.21.1 languages: done --run --shell powershell — skipped: Windows PowerShell only");
+
+// 1.21.1 languages (review) — a POSIX shell (/bin/sh off Windows, --shell bash = Git Bash on it) expands `$LASTEXITCODE` in a
+// double-quoted pwsh script BEFORE pwsh starts: `exit $LASTEXITCODE` became a bare `exit` → 0, a failing check recorded as
+// passing. done --run / finish --run refuse it before anything runs (no pwsh needed); the single-quoted script runs as written.
+const rp = path.join(tmp, "l121-posix-pwsh");
+run(["init", "core", "--check", "unit=pwsh -NoProfile -Command \"node -e 'process.exit(3)'; exit $LASTEXITCODE\"", "--project", rp]);
+run(["create", "Posix", "core", "--project", rp]);
+fs.writeFileSync(path.join(rp, ".specs", "posix", "tasks.md"), [
+  "- [ ] 1. double-quoted pwsh script", "  - _Verify: pwsh -NoProfile -Command \"node -e 'process.exit(3)'; exit $LASTEXITCODE\"_",
+  "- [ ] 2. single-quoted pwsh script", "  - _Verify: pwsh -NoProfile -Command 'node -e \"process.exit(3)\"; exit $LASTEXITCODE'_",
+  "- [ ] 3. [US1] Write T-01 and watch it fail", "  - _Verify: node t/pester-block.js_", "  - _Expect: fail_",
+  "- [ ] 4. [US1] Write T-02 and watch it fail", "  - _Verify: node t/pester-throw.js_", "  - _Expect: fail_",
+  "- [ ] 5. [US1] Write T-03 and watch it fail", "  - _Verify: node -e \"process.exit(1)\" && node -e \"process.exit(0)\"_", "  - _Expect: fail_", ""].join("\n"));
+const rpEv = () => { try { return JSON.parse(fs.readFileSync(path.join(rp, ".specs", "posix", ".state.json"), "utf8")).evidence || {}; } catch { return {}; } };
+const posixArgs = process.platform === "win32" ? ["--shell", "bash"] : [];
+const rq1 = run(["done", "posix", "1", "--run", ...posixArgs, "--project", rp]);
+const rqf = run(["finish", "posix", "--run", ...posixArgs, "--project", rp]);
+if (/no Git Bash was found/.test(rq1.out)) ok(true, "1.21.1 languages (review): a pwsh script under a POSIX shell — skipped: no Git Bash on this Windows machine");
+else {
+  const rqState = JSON.parse(fs.readFileSync(path.join(rp, ".specs", "posix", ".state.json"), "utf8"));
+  ok(rq1.code === 1 && /hands PowerShell a script holding \$VARIABLES outside single quotes, but a POSIX shell/.test(rq1.out) && /--shell pwsh/.test(rq1.out) && !/^\$ pwsh/m.test(rq1.out) &&
+    !rpEv()["1"] && rqf.code === 1 && /the project check 'unit'/.test(rqf.out) && /a POSIX shell/.test(rqf.out) && !rqState.finishChecks,
+    "1.21.1 languages (review): done --run / finish --run under a POSIX shell (" + (posixArgs.length ? "--shell bash" : "/bin/sh") + ") refuse a double-quoted pwsh script holding $LASTEXITCODE before anything runs — nothing recorded, the message names single quotes and --shell pwsh (got " +
+    JSON.stringify([rq1.out.slice(0, 200), rqf.out.slice(0, 160)]) + ")");
+  if (hasPwsh) {
+    const rq2 = run(["done", "posix", "2", "--run", ...posixArgs, "--project", rp]);
+    ok(rq2.code === 1 && rpEv()["2"] && rpEv()["2"].exitCode === 3,
+      "1.21.1 languages (review): the single-quoted `pwsh -NoProfile -Command '…; exit $LASTEXITCODE'` runs under the POSIX shell as written — exit 3 recorded as 3 (got " + JSON.stringify([rq2.out.slice(0, 200), rpEv()["2"]]) + ")");
+  } else ok(true, "1.21.1 languages (review): a single-quoted pwsh script under a POSIX shell — skipped: pwsh is not installed here");
+}
+// A Pester 5 run whose Describe-level BeforeAll failed (printed by a stand-in: the suite has no Pester) is no red test; a throw
+// inside It is. Colour codes as pwsh 7 writes them.
+const E_ = String.fromCharCode(27);
+const pesterOut = (lines, code) => "process.stdout.write(" + JSON.stringify(lines.join("\n") + "\n") + ");\nprocess.exit(" + code + ");\n";
+fs.mkdirSync(path.join(rp, "t"), { recursive: true });
+fs.writeFileSync(path.join(rp, "t", "pester-block.js"), pesterOut([E_ + "[95mRunning tests." + E_ + "[0m", E_ + "[91m[-] Describe Get-Greeting failed" + E_ + "[0m",
+  E_ + "[91m FileNotFoundException: The specified module 'NoSuchModuleXyz' was not loaded because no valid module file was found in any module directory.",
+  "Tests completed in 753ms", "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0", "BeforeAll " + String.fromCharCode(92) + " AfterAll failed: 1", "  - Get-Greeting"], 2));
+fs.writeFileSync(path.join(rp, "t", "pester-throw.js"), pesterOut([E_ + "[91m[-] Get-Greeting.T-02 greets" + E_ + "[0m" + E_ + "[90m 52ms (35ms|17ms)" + E_ + "[0m",
+  E_ + "[91m RuntimeException: not implemented", "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0"], 1));
+const runJ = (args) => { const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } }); let j = null; try { j = JSON.parse(r.stdout); } catch { /* not JSON */ } return { code: r.status, j }; };
+const rq3 = runJ(["done", "posix", "3", "--run", "--json", "--project", rp]);
+const rq4 = run(["done", "posix", "4", "--run", "--project", rp]);
+const rq3j = rq3.j;
+ok(rq3.code === 1 && rq3j && rq3j.couldNotRun === "output" && /Describe Get-Greeting failed|was not loaded/.test(rq3j.error) && !rpEv()["3"] &&
+  rq4.code === 0 && /red run recorded for task 4/.test(rq4.out) && rpEv()["4"].exitCode === 1,
+  "1.21.1 languages (review): done --run on an _Expect: fail_ task — a Pester run whose Describe BeforeAll failed ('[-] Describe … failed', 'BeforeAll \\ AfterAll failed: 1') is no red test (couldNotRun: output, nothing recorded); a throw inside It is the red proof (got " +
+  JSON.stringify([rq3j && rq3j.couldNotRun, rq3j && (rq3j.error || "").slice(0, 160), rq4.out.slice(-120)]) + ")");
+// Windows PowerShell 5.1 has no `&&`: its parse error is no red test (couldNotRun: pwsh) — Windows only.
+if (hasWinPs) {
+  const rq5 = runJ(["done", "posix", "5", "--run", "--shell", "powershell", "--json", "--project", rp]);
+  const rq5j = rq5.j;
+  ok(rq5.code === 1 && rq5j && rq5j.couldNotRun === "pwsh" && /PowerShell could not parse/.test(rq5j.error) && /not a valid statement separator/.test(rq5j.error) && !rpEv()["5"],
+    "1.21.1 languages (review): done --run --shell powershell on an _Expect: fail_ task whose `a && b` Windows PowerShell 5.1 can't parse is no red test (couldNotRun: pwsh, nothing recorded) (got " +
+    JSON.stringify([rq5.code, rq5j && rq5j.couldNotRun, rq5j && (rq5j.error || "").slice(0, 200)]) + ")");
+} else ok(true, "1.21.1 languages (review): a Windows PowerShell 5.1 parse error — skipped: Windows PowerShell only");
 };

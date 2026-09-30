@@ -101,8 +101,10 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   cli/tests/09-evidence-done-run.js: `done --run --shell pwsh`, a `pwsh -Command "…"` `_Verify:_` under cmd.exe, `--shell
   powershell`) probes the program first (`<shell> -NoProfile -NonInteractive -Command "exit 0"` → 0) and asserts `ok(true,
   "… skipped: …")` without it — the Docker images have no pwsh, and cmd.exe / Windows PowerShell exist only on Windows. The
-  engine-level PowerShell checks (posixShellSyntax, resolveRunShell, couldNotRunOutput on captured pwsh 7 / 5.1 / Pester
-  3–6 outputs) run everywhere.
+  POSIX-shell refusal of a double-quoted pwsh script runs everywhere (nothing is run: /bin/sh on Linux, `--shell bash` on
+  Windows — skipped without Git Bash), a Pester run is stood in for by a node script printing captured Pester output, and the
+  engine-level PowerShell checks (posixShellSyntax, posixPwshScript, resolveRunShell, couldNotRunOutput / pwshParseFailure
+  on captured pwsh 7 / 5.1 / Pester 3–6 outputs, every new pattern timed on 200 KB hostile inputs) run everywhere.
 - **Eval harness** (`run-evals.js`) resolves the feature with the engine's resolver (accents, legacy slugs,
   `${VAR}` guard), prints in the feature's language, and treats a wrong-shaped set as invalid (exit 1). It validates
   EVERY item (`itemProblems()`: object, `id`, `input`, a grader in contains|equals|regex|refuse|judge, a value / a regex

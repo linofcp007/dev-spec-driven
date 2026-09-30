@@ -1269,21 +1269,44 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     put(lp, "src/Codec.Tests.ps1", "Describe 'Codec' { It 'T-05 encodes' { 1 | Should -Be 1 } }\n");
     put(lp, "t/basic.t", "use Test::More;\nok(1, 'T-06 loads');\ndone_testing;\n");
     put(lp, "src/codec_tests.erl", "%% T-07 round-trips\n-module(codec_tests).\n");
-    put(lp, "src/CodecSpec.hs", "spec = it \"T-08 decodes\" $ True `shouldBe` True\n");
+    put(lp, "test/CodecSpec.hs", "spec = it \"T-08 decodes\" $ True `shouldBe` True\n");
     put(lp, "src/core_test.clj", "(deftest decodes (testing \"T-09 decodes\" (is true)))\n");
     put(lp, "notes.t", "T-10 is no test\n");
     put(lp, "src/codec.lua", "-- T-11 lives in source\n");
     put(lp, "src/codec.ps1", "# T-12 lives in source\n");
+    put(lp, "src/DevSpec.hs", "-- T-13 lives in source (a module named …Spec, outside a test folder)\n");
+    put(lp, "tests/fixtures/seed.sql", "insert into t values ('T-14');\n"); // a fixture — never read
+    put(lp, "tests/test_schema.sql", "select plan(1); -- T-15 pgTAP\n"); // a pgTAP test by its name
     const sc = S.scanTestCode(lp);
     const where = (n) => ((sc.tids.get("T-" + n) || {}).files || []).join();
-    const want = ["test/deploy.bats", "src/codec_test.cc", "lua/codec_spec.lua", "R/test-codec.R", "src/Codec.Tests.ps1", "t/basic.t", "src/codec_tests.erl", "src/CodecSpec.hs", "src/core_test.clj", "", "", ""];
+    const want = ["test/deploy.bats", "src/codec_test.cc", "lua/codec_spec.lua", "R/test-codec.R", "src/Codec.Tests.ps1", "t/basic.t", "src/codec_tests.erl", "test/CodecSpec.hs", "src/core_test.clj", "", "", "",
+      "", "", "tests/test_schema.sql"];
     const got = want.map((_, i) => where(i + 1));
     const t0 = Date.now();
     const lin = [S.isTestFile("test_" + "a.".repeat(100000) + "x"), S.isTestFile("x" + "_test".repeat(20000) + ".q"), S.isTestFile(".test".repeat(20000) + "."), S.isTestFile("t/" + "x".repeat(100000) + ".tests.ps1q")];
     const linMs = Date.now() - t0;
-    ok(js(got) === js(want) && sc.scanned === 9 && !sc.truncated && lin.join() === "false,false,false,false" && linMs < 3000,
-      "1.21.1 languages: scanTestCode finds T-IDs in a .bats suite, a _test.cc (T02_…), a _spec.lua, a test-x.R, a *.Tests.ps1 outside tests/, Perl's t/basic.t, a _tests.erl, a *Spec.hs and a _test.clj — never in notes.t or a source file; the test-name rule stays linear on 100,000-character names (got " +
+    ok(js(got) === js(want) && sc.scanned === 10 && !sc.truncated && lin.join() === "false,false,false,false" && linMs < 3000,
+      "1.21.1 languages: scanTestCode finds T-IDs in a .bats suite, a _test.cc (T02_…), a _spec.lua, a test-x.R, a *.Tests.ps1 outside tests/, Perl's t/basic.t, a _tests.erl, test/*Spec.hs, a _test.clj and a pgTAP tests/test_*.sql — never in notes.t, src/DevSpec.hs, a source file or a tests/fixtures/*.sql fixture; the test-name rule stays linear on 100,000-character names (got " +
       js([got, sc.scanned, linMs]) + ")");
+
+    // 1.21.1 review: 1,600 .sql fixtures under tests/fixtures/ no longer exhaust the read cap (1.21.1's first cut: 1,500 read,
+    // truncated, the real test's T-01 missing); past the cap the test-NAMED files are read first; a file is read up to
+    // SCAN_READ_BYTES from disk (a T-ID past 200 KB of a 5 MB test file is not seen).
+    const fx = path.join(tmp, "proj-121-fixtures");
+    for (let i = 0; i < 1600; i++) put(fx, "tests/fixtures/f" + String(i).padStart(4, "0") + ".sql", "insert into t values ('T-01');\n");
+    put(fx, "tests/unit/greet.test.js", "test(\"T-01 greets\", () => {});\n");
+    const scFx = S.scanTestCode(fx);
+    const cap = path.join(tmp, "proj-121-cap");
+    for (let i = 0; i < 1510; i++) put(cap, "tests/data/d" + String(i).padStart(4, "0") + ".js", "module.exports = " + i + ";\n");
+    put(cap, "tests/zz/greet.test.js", "test(\"T-02 greets\", () => {});\n");
+    put(cap, "tests/zz/big.test.js", "test(\"T-03 early\", () => {});\n" + "/* " + "x".repeat(5 * 1024 * 1024) + " */\ntest(\"T-04 late\", () => {});\n");
+    const t1 = Date.now();
+    const scCap = S.scanTestCode(cap);
+    const capMs = Date.now() - t1;
+    ok(scFx.scanned === 1 && !scFx.truncated && js((scFx.tids.get("T-1") || {}).files) === '["tests/unit/greet.test.js"]' &&
+      scCap.truncated === true && scCap.scanned === 1500 && js((scCap.tids.get("T-2") || {}).files) === '["tests/zz/greet.test.js"]' && !!scCap.tids.get("T-3") && !scCap.tids.get("T-4") && capMs < 20000,
+      "1.21.1 languages: the test-code scan skips tests/fixtures/*.sql (1 test file read, T-01 found only in greet.test.js); past the 1,500-file cap it reads the test-NAMED files first (T-02 in tests/zz/greet.test.js found behind 1,510 tests/data/*.js); a 5 MB test file is read up to 200 KB (T-03 seen, T-04 not) (got " +
+      js([scFx.scanned, scFx.truncated, scCap.scanned, scCap.truncated, !!scCap.tids.get("T-2"), !!scCap.tids.get("T-4"), capMs]) + ")");
 
     // A +tdd PowerShell feature: the tests gate (Phase 4) and trace_check {code} pass once the Pester files — tests/ and beside
     // the module — and a Bats suite name the planned T-IDs (a .bats row is code: expected in a test file, never "outside code").

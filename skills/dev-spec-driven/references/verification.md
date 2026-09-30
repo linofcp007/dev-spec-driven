@@ -93,7 +93,10 @@ ask the user to run the test and paste the red output — don't write the fix on
   under cmd.exe anyway. A script handed to `pwsh` / `powershell` in double quotes is PowerShell, not POSIX: `pwsh -NoProfile
   -Command "Invoke-Pester -Path tests -CI; exit $LASTEXITCODE"` runs under cmd.exe as written (cmd.exe passes it on
   intact); `pwsh -c '…'` is refused (cmd.exe splits the single-quoted script and PowerShell would evaluate a string —
-  exit 0). A failed run
+  exit 0). The mirror holds under a POSIX shell (`/bin/sh`, `--shell bash`): it expands `$…` and backticks outside single
+  quotes before PowerShell starts — `exit $LASTEXITCODE` would become a bare `exit` (exit 0) — so a pwsh script holding them
+  outside single quotes is refused there, and `pwsh -NoProfile -Command '…; exit $LASTEXITCODE'` is the POSIX form
+  (PowerShell below). A failed run
   suggests `--shell bash` only when cmd.exe itself could not run the line (an unknown command, its syntax error); a
   check that ran and failed means fixing the code. **A run that could not happen records nothing:** the shell could not
   be started, the command was killed by a signal, its output passed 64 MB, `--timeout <seconds>` expired, or WSL's relay
@@ -135,7 +138,9 @@ green (the fix), not to this one.
   `[-] <test> 12ms`, "Expected …, but got …"): `spec_complete_task` refuses a run whose
   `summary` shows it (`couldNotRun: "output"`), `dev-spec done --run` refuses it with nothing recorded, and an older
   record of that kind is no red proof. Whenever cmd.exe is the shell (the Windows default, or `--shell cmd`), a line
-  cmd.exe itself could not run is refused by `done --run` with nothing recorded.
+  cmd.exe itself could not run is refused by `done --run` with nothing recorded — and whenever PowerShell runs the line
+  (`--shell pwsh` / `powershell`, or a `pwsh` program in it), so is PowerShell's own parse error (`couldNotRun: "pwsh"`:
+  Windows PowerShell 5.1 has no `&&`).
 - A red-phase task that carries a must-pass `_Verify:_` and no `_Expect: fail_` gets `redPhaseVerify: true` and a note
   saying to mark it `_Expect: fail_` (or move the command to the task that makes it green).
 - `spec_doctor` warns **`red-green`** (+tdd): T-IDs that done tasks make green (`_Makes green:_`) with no recorded red
@@ -172,18 +177,28 @@ no pipefail).
 - **Make a failure exit non-zero.** Pester 5+ `-CI` exits non-zero when a test fails (it also writes testResults.xml);
   on Windows PowerShell 5.1 with Pester 3 / 4 use `-EnableExit`. Without either, `Invoke-Pester` returns normally and the run
   exits 0 whatever failed. A script's `exit N` is the run's exit code; a last command that failed makes it 1 — add
-  `; exit $LASTEXITCODE` to pass a native tool's own code on (`pwsh -NoProfile -Command "npm test; exit $LASTEXITCODE"`).
-- **Running it with `done --run` / `finish --run`:** the double-quoted form above runs under the default shell (cmd.exe on
-  Windows, `/bin/sh` elsewhere) as written; or pick PowerShell itself — `--shell pwsh` (or `--shell powershell` for Windows
-  PowerShell 5.1, a path to either, `DEV_SPEC_SHELL=pwsh`) — and write the `_Verify:_` in PowerShell directly
-  (`_Verify: Invoke-Pester -Path tests -CI_`). The CLI then runs `<shell> -NoProfile -NonInteractive -Command <cmd>`: no
-  profile, no prompt.
+  `; exit $LASTEXITCODE` to pass a native tool's own code on.
+- **Running it with `done --run` / `finish --run` — pick the form for the shell that runs it:**
+  - **Portable (any OS):** `--shell pwsh` (or `DEV_SPEC_SHELL=pwsh`; `--shell powershell` for Windows PowerShell 5.1, or a path
+    to either) with the bare script — `_Verify: Invoke-Pester -Path tests -CI_`,
+    `_Verify: npm test; exit $LASTEXITCODE_`. The CLI runs `<shell> -NoProfile -NonInteractive -Command <cmd>`: no profile,
+    no prompt.
+  - **cmd.exe (the Windows default):** double quotes — the example above, or
+    `pwsh -NoProfile -Command "npm test; exit $LASTEXITCODE"` (cmd.exe passes `$` on; single quotes are refused there).
+  - **A POSIX shell (`/bin/sh` elsewhere, `--shell bash`):** single quotes when the script holds `$` —
+    `pwsh -NoProfile -Command 'npm test; exit $LASTEXITCODE'`. The shell would expand `$LASTEXITCODE` inside double quotes
+    to nothing (a bare `exit` → 0: a failing check recorded as passing), so a double-quoted pwsh script holding `$` or a
+    backtick is refused there before anything runs.
+  - A script with no `$` or backtick (`pwsh -NoProfile -Command "Invoke-Pester -Path tests -CI"`) runs the same under all
+    three.
 - **Test names:** Pester runs `*.Tests.ps1` files — tests/, or beside the code (`src/Greeter/Greeter.Tests.ps1`) — and
   `trace_check {code: true}` reads them: put the T-ID in the `It` name (`It 'T-01 greets by name' { … }`).
 - **Red first (`_Expect: fail_`).** A red run is a test that ran and failed (`[-] Get-Greeting.T-01 … 12ms`, "Expected
-  'Hello, Ana', but got 'Hello'.", or the function under test not written yet). `Invoke-Pester` unknown (Pester not
-  installed), a module the test imports that isn't there ("Container failed" in the summary), a script the execution
-  policy blocks and "No test files were found" are no red test: the run is refused.
+  'Hello, Ana', but got 'Hello'.", a `throw` inside `It`, or the function under test not written yet). No red test — the
+  run is refused: `Invoke-Pester` unknown (Pester not installed); a block or file that failed before its tests — a
+  `BeforeAll` importing a module that isn't there ("[-] Describe … failed" / "BeforeAll \ AfterAll failed" / "Container
+  failed"), a test file that doesn't parse ("[-] Discovery in … failed", Pester 3's "Error occurred in test script"); a
+  script the execution policy blocks; "No test files were found"; PowerShell's own parse error of the `_Verify:_` line.
 
 ## Project checks and suite evidence
 

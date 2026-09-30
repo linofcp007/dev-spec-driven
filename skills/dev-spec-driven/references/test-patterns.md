@@ -111,12 +111,15 @@ task that makes it green with `_Makes green:_`, and `dev-spec log` finds commits
   Nim, OCaml …), plus a Bats suite (`*.bats`) and Perl's `t/*.t` — that sit under a `test/`, `tests/`, `__tests__/`,
   `spec/` or `e2e/` folder or are named like a test in their language (`*.test.ts`, `*.spec.js`, `test_*.py`,
   `*_test.go`, `*Test.java`, `*Tests.cs`, `*Tests.fs`, `*Spec.scala`, `*_test.exs`, Pester's `*.Tests.ps1` (beside the
-  code too), `test_*.sh` / `*_test.sh`, `*_test.cc` / `*_unittest.cc` / `test_*.c`, `*_spec.lua`, `test-*.R`,
-  `*_SUITE.erl` / `*_tests.erl`, `*Spec.hs`, `*_test.clj`, `*Tests.m` …). A name that merely ends in "test" or "spec"
-  (`latest.sh`, `inspect.lua`) is code. `node_modules/`, build
-  output and hidden folders are skipped. `.specs/` is skipped
+  code too), `*_test.sh`, `*_test.cc` / `*_unittest.cc`, `*_spec.lua`, `test-*.R`, `*_SUITE.erl` / `*_tests.erl`,
+  `*_test.clj`, `*Tests.m` …). A shell / C / C++ `test_*` file and an hspec `*Spec.hs` count in a test folder only, and a
+  name that merely ends in "test" or "spec" (`latest.sh`, `inspect.lua`, `DevSpec.hs`) or starts with it outside one
+  (`scripts/test_data.sh`, `src/test_utils.c`) is code. Data in a test folder is no test: a `.sql` / `.ipynb` there is
+  read only when NAMED like a test (pgTAP's `test_*.sql` / `*_test.sql`) — `tests/fixtures/seed.sql` is a fixture.
+  `node_modules/`, build output and hidden folders are skipped. `.specs/` is skipped
   too, **except** each feature's own `.specs/<feature>/tests/` (the folder `+tdd` scaffolds). The walk
-  is bounded (the result says `truncated` when it stopped at its cap).
+  is bounded: each file is read up to 200 KB, at most 1,500 files — past that, the files named like a test first (the
+  result says `truncated` when it stopped at its cap).
 - T-IDs are per feature — every plan starts at T-01 — so **fill the plan's File column**: when a row
   names a concrete test file or folder (`tests/unit/login.test.ts`, `tests/auth/`), only that file — or a
   file under that folder — can satisfy the T-ID. Write the path from the project root, from the feature

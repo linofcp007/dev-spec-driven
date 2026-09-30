@@ -67,7 +67,15 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   a single-quoted string outside double quotes (`pwsh -c '…'` — cmd.exe splits it, PowerShell evaluates a string literal:
   exit 0), a `$` outside double quotes, and the arguments after `-File` / pwsh's positional script path (passed to the
   script as literal strings — the CALLING shell's syntax, which cmd.exe never expands: `--shell pwsh` runs them). The
-  refusal names `--shell pwsh` for a PowerShell command (`taskDone.posixOnWindows`, `projectChecks.posixOnWindows`). After a failed
+  refusal names `--shell pwsh` for a PowerShell command (`taskDone.posixOnWindows`, `projectChecks.posixOnWindows`).
+  **The mirror (1.21.1 review):** `resolveRunShell` marks a POSIX shell `posix: true` (the default /bin/sh off Windows, bash /
+  sh / zsh / dash / ksh / fish named or by path, Git Bash, WSL's bash — `isPosixShellName()`); there `posixPwshScript()`
+  refuses, before anything runs, a pwsh / powershell script holding `$…` or a backtick outside single quotes (double-quoted
+  or bare — the shell expands them first: `exit $LASTEXITCODE` became a bare `exit` → 0, a failing check recorded as
+  passing). It lexes POSIX (single quotes literal, `\` escapes, `;` `&` `|` `(` `)` / line breaks end a command) over ONE
+  program / option tracker shared with posixShellSyntax (`pwshTracker()`: the program after `VAR=` prefixes and env / exec
+  / command / nohup / time wrappers). Stable codes `variable` · `backtick`; messages `taskDone.pwshInPosix`,
+  `projectChecks.pwshInPosix` (single quotes, or `--shell pwsh` with the bare script). After a failed
   run the `taskDone.shellHint` (retry with `--shell bash`) is printed only when `windowsShellFailure(output, code)` says
   cmd.exe itself failed (exit 9009, "is not recognized as an internal or external command", its syntax errors, "cannot
   find the path specified" — EN/PT/ES wording) — never for a check that ran and failed.
@@ -79,8 +87,11 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   128 + the signal number instead, and on an `_Expect: fail_` task no red test) · `output-too-large` (over the 64 MB buffer) · `timeout` (`--timeout <seconds>`, an integer ≥ 1 validated
   before anything runs) · `wsl` (a non-zero run whose output is WSL's relay — `couldNotRunOutput()` kind `wsl`) — plus, on
   an `_Expect: fail_` task only, `cmd` (cmd.exe itself failed the line, `windowsShellFailure()`, any exit but 9009 —
-  whenever cmd.exe is the shell: the default or `--shell cmd`) and `output` (the output shows the test never ran — see
-  `_Expect: fail_` below); the shell resolution adds `no-git-bash`. `finish --run` stays all-or-nothing: one
+  whenever cmd.exe is the shell: the default or `--shell cmd`), `pwsh` (1.21.1 review: PowerShell's own parse error of the
+  line — `pwshParseFailure()`: 5.1's "'&&' is not a valid statement separator", "ParserError:", its FullyQualifiedErrorId,
+  pwsh 7's "Unexpected token … in expression or statement" / "Missing closing …" — whenever PowerShell runs the line:
+  `--shell pwsh` / `powershell` or `runsPwsh(cmd)`; asked after `output`, never when a test ran) and `output` (the output
+  shows the test never ran — see `_Expect: fail_` below); the shell resolution adds `no-git-bash`. `finish --run` stays all-or-nothing: one
   check that could not run records none.
 - **Red-phase tasks** (`redPhaseTask()`: "watch it fail", "failing test", "fails for the right reason", PT/ES
   equivalents — `RE_RED_PHASE_TASK`, markers excluded) can never pass a must-pass `_Verify:_`. `redPhaseHint()` appends
@@ -144,14 +155,20 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   ERR_MODULE_NOT_FOUND, python "can't open file" / ModuleNotFoundError, pytest "file or directory not found" / "no tests
   ran", jest "No tests found", vitest / mocha "No test files found", npm "Missing script" / ENOENT, make "No rule to make
   target", PowerShell (1.21.1) "… is not recognized as a / the name of a cmdlet" (pwsh 7 / 5.1, pwsh's pt-BR / es wording,
-  blanks between the words — 5.1 wraps), "The specified module … was not loaded" (EN / PT / ES), the execution policy
+  blanks between the words — 5.1 wraps; every blank run followed by a literal: `de\s+(?:um\s+)?\s*cmdlet` took 58 s on
+  200,000 blanks — mcp/tests/09-evidence.js times EVERY such pattern on 200 KB hostile inputs), "The specified module … was not loaded" (EN / PT / ES), the execution policy
   ("running scripts is disabled on this system", EN / PT / ES; "is not digitally signed"), a -File path pwsh / powershell
   can't find, Pester's "No test files were found"; kinds `wsl` / `spawn`: WSL's relay, a Node spawn error; the `test` kind
   never applies to output that shows an assertion failed — `RE_ASSERTION_RAN`: "not ok N", AssertionError, pytest
   `E   assert`, expect(…), "Expected:" / "But was:", Pester's failed-test line `[-] <name> 12ms (…)` (never a block's "[-] Error
   occurred in …" / "[-] Discovery in …" / "[-] <file> failed with:"), "Expected …, but got …" — or `pesterRan()`: Pester's
-  summary "Tests Passed: N, Failed: M>0" (Pester 3: "Passed: N Failed: M") unless "Container failed: N" / a block line says
-  the test never ran (a BeforeAll importing a module that isn't there counts its test failed). A red run whose message
+  summary "Tests Passed: N, Failed: M>0" (Pester 3: "Passed: N Failed: M") unless a `RE_PESTER_NOT_RUN` line says the test
+  never ran (a BeforeAll importing a module that isn't there counts its test failed): "Container failed: N", "BeforeAll \
+  AfterAll failed: N" / "[-] Describe <name> failed" / "[-] Context … failed" (Pester 5 / 6 — a block's BeforeAll; the
+  1.21.1 review found no "Container failed" there, and the red proof was recorded), "[-] Discovery in … failed", Pester 3 /
+  4's "[-] Error occurred in Describe block" / "… in test script". Such a line with no sign a test ran is could-not-run ON
+  ITS OWN (kind `test`, the line as the text — a test file that doesn't parse used to be a red proof, 1.21.0 too), and
+  `summarizeRunOutput` keeps it like a count line. A red run whose message
   quotes "Cannot find module" or "is not recognized" (the Pester function under test not written yet) is still red. Output is
   read with its ANSI colour / hyperlink codes dropped (`stripAnsi` — pwsh 7 colours captured output; `summarizeRunOutput`
   drops them too) — `spec_complete_task` refuses and records a run whose

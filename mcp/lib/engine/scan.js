@@ -11,9 +11,9 @@ const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isInsideDir, isObj, isSlashUnit, listFeatures,
-  projectLang, readDirCached, readIfExists, safeReaddir, specsRoot, stripEnd;
+  projectLang, readDirCached, readFileHead, readIfExists, safeReaddir, specsRoot, stripEnd;
 function __link(E) { ({ FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isInsideDir, isObj, isSlashUnit,
-  listFeatures, projectLang, readDirCached, readIfExists, safeReaddir, specsRoot, stripEnd } = E); }
+  listFeatures, projectLang, readDirCached, readFileHead, readIfExists, safeReaddir, specsRoot, stripEnd } = E); }
 
 // ---------------------------------------------------------------------------
 // Brownfield: heuristic local codebase scan + spec coverage (no model, no cost)
@@ -107,15 +107,17 @@ const TEST_DIRS = new Set(["test", "tests", "__tests__", "__test__", "spec", "e2
 const PERL_TEST_DIRS = new Set(["t", "xt"]);
 // Only the conventions — every alternative anchored, the names are one path segment (linear):
 //   foo.test.ts · foo.spec.js · foo.test.mts / .spec.cts (any language) · test.js / tests.py
-//   test-x.js · test_x.py · test_x.sh / test-x.bash · test_x.c / .cc / .cpp / .cxx (Unity, Catch) · test-x.R / test_x.R (testthat)
+//   test-x.js · test_x.py · test-x.R / test_x.R (testthat)
 //   x_test.go · x_test.py · x_test.c / .cc / .cpp / .cxx (GoogleTest) · x_unittest.cc (Chromium) · x_test.sh (shunit2)
 //   x_test.exs (ExUnit) · x_test.dart · core_test.clj / .cljs / .cljc (clojure.test)
 //   x_spec.rb (RSpec) · x_spec.lua (busted) · x_SUITE.erl (Common Test) · x_tests.erl (EUnit)
 //   FooTest(s).java / .kt / .cs / .swift / .php / .scala · FooIT.java · FooTests.fs / FooSpec.scala / FooSuite.groovy (F#,
-//   ScalaTest, Spock) · FooTests.m / .mm (XCTest) / FooTests.vb · FooSpec.kt · FooSpec.hs (hspec)
+//   ScalaTest, Spock) · FooTests.m / .mm (XCTest) / FooTests.vb · FooSpec.kt
 // A module that merely ends in "spec" / "test" without the separator is code: dev-spec.js, lib/spec.js, latest.sh,
-// contest.py, inspect.lua, attest.c.
-const RE_TEST_NAME = /\.(?:test|spec)\.[a-z0-9]+$|^tests?\.(?:[cm]?[jt]s|py)$|^test[-_][^/]*\.(?:[cm]?[jt]s|py|sh|bash|zsh|c|cc|cpp|cxx|[Rr])$|_test\.(?:go|py|c|cc|cpp|cxx|sh|bash|exs|dart|clj|cljs|cljc)$|_unittest\.(?:c|cc|cpp|cxx)$|_spec\.(?:rb|lua)$|_(?:SUITE|tests)\.erl$|(?:Tests?|IT)\.(?:java|kt|cs|swift|php|scala)$|(?:Tests?|Spec|Suite)\.(?:fs|fsx|scala|groovy)$|Tests?\.(?:m|mm|vb)$|Spec\.(?:kt|hs)$/;
+// contest.py, inspect.lua, attest.c. 1.21.1 review: a PREFIX alone names no shell / C / C++ test and "Spec" no Haskell one
+// (scripts/test_data.sh, test-connection.sh, src/test_utils.c, lib/test_helper.c, lib/DevSpec.hs are production code) —
+// those count under a test folder (shunit / Bats / Unity / hspec keep their tests in test/), their SUFFIXES anywhere.
+const RE_TEST_NAME = /\.(?:test|spec)\.[a-z0-9]+$|^tests?\.(?:[cm]?[jt]s|py)$|^test[-_][^/]*\.(?:[cm]?[jt]s|py|[Rr])$|_test\.(?:go|py|c|cc|cpp|cxx|sh|bash|exs|dart|clj|cljs|cljc)$|_unittest\.(?:c|cc|cpp|cxx)$|_spec\.(?:rb|lua)$|_(?:SUITE|tests)\.erl$|(?:Tests?|IT)\.(?:java|kt|cs|swift|php|scala)$|(?:Tests?|Spec|Suite)\.(?:fs|fsx|scala|groovy)$|Tests?\.(?:m|mm|vb)$|Spec\.kt$/;
 // The conventions whose case doesn't matter (Windows file systems): Pester's *.Tests.ps1 (Invoke-Pester's default filter,
 // anywhere in the tree) and a Bats suite (*.bats).
 const RE_TEST_NAME_EXTRA = /\.tests\.ps1$|\.bats$/i;
@@ -126,11 +128,29 @@ function isTestFile(rel) {
   if (parts.some((p) => TEST_DIRS.has(p.toLowerCase()))) return true;
   return /\.t$/i.test(name) && parts.some((p) => PERL_TEST_DIRS.has(p.toLowerCase()));
 }
+// 1.21.1 review — code extensions that are mostly DATA under a test folder: SQL dumps / seeds and notebooks in
+// tests/fixtures/. Such a file is a test only when its NAME says so (pgTAP's test_*.sql / *_test.sql, x.test.sql, nbval's
+// test_*.ipynb); otherwise it is a fixture — neither code nor a test for the scan, coverage and the test-code scan (1,600
+// .sql fixtures used to exhaust the test scan's read cap before the one real test file; a 'T-01' in seed.sql counted as the
+// test). Guard mode still asks before editing one (it is code by extension).
+const TEST_DATA_EXT = new Set([".sql", ".ipynb"]);
+const RE_TEST_DATA_NAME = /^test[-_][^/]*\.(?:sql|ipynb)$|_test\.(?:sql|ipynb)$/i;
+// Does the file NAME follow a test convention (not merely sit in a test folder)? The test-code scan reads these first.
+function testNamed(rel) {
+  const parts = String(rel).split("/");
+  const name = parts.pop();
+  return RE_TEST_NAME.test(name) || RE_TEST_NAME_EXTRA.test(name) || RE_TEST_DATA_NAME.test(name) ||
+    (/\.t$/i.test(name) && parts.some((p) => PERL_TEST_DIRS.has(p.toLowerCase())));
+}
+const extOf = (rel) => { const r = String(rel); return path.posix.extname(r.slice(r.lastIndexOf("/") + 1)).toLowerCase(); };
+function isTestFixture(rel) {
+  return TEST_DATA_EXT.has(extOf(rel)) && isTestFile(rel) && !testNamed(rel);
+}
 // Is this project-relative (forward-slash) path code? Its extension is in CODE_EXT, or it is a test-only one
-// (TEST_EXTRA_EXT) on a file that IS a test. The scan, coverage, the test-code scan and guard mode ask this.
+// (TEST_EXTRA_EXT) on a file that IS a test. The scan, coverage, the test-code scan and guard mode ask this (the first three
+// then set test fixtures apart — isTestFixture).
 function isCodeFile(rel) {
-  const r = String(rel);
-  const ext = path.posix.extname(r.slice(r.lastIndexOf("/") + 1)).toLowerCase();
+  const ext = extOf(rel);
   return CODE_EXT.has(ext) || (TEST_EXTRA_EXT.has(ext) && isTestFile(rel));
 }
 
@@ -473,7 +493,8 @@ function scanCodebase(projectDir, opts = {}) {
 
   // Root manifests: stack, frameworks, test runners, package.json entrypoints.
   const has = (f) => fs.existsSync(path.join(root, f));
-  const text = (f) => { try { return fs.readFileSync(path.join(root, f), "utf8").slice(0, SCAN_READ_BYTES); } catch { return ""; } };
+  // (every reader below reads at most its cap from disk — readFileHead, never the whole file then a slice)
+  const text = (f) => readFileHead(path.join(root, f), SCAN_READ_BYTES) || "";
   const stackHints = [];
   if (has("package.json")) {
     try {
@@ -535,7 +556,7 @@ function scanCodebase(projectDir, opts = {}) {
     if (ENV_EXAMPLE_FILES.has(name)) {
       envFiles.push(rel);
       try {
-        for (const l of fs.readFileSync(full, "utf8").slice(0, 50000).split(/\r?\n/)) {
+        for (const l of (readFileHead(full, 50000) || "").split(/\r?\n/)) {
           const m = l.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
           if (m) env.add(m[1]);
         }
@@ -547,7 +568,7 @@ function scanCodebase(projectDir, opts = {}) {
     if (/^phpunit\.xml(?:\.dist)?$/.test(name)) phpunitConfig = true;
     if (ext === ".csproj" && csproj.length < 20) csproj.push(full);
     if (ext === ".psd1" && psd1.length < 20) psd1.push({ rel, full });
-    if (!isCodeFile(rel)) return;
+    if (!isCodeFile(rel) || isTestFixture(rel)) return; // a test fixture (tests/fixtures/seed.sql) is data, no test
     const test = isTestFile(rel);
     if (test) {
       testFiles++;
@@ -570,8 +591,8 @@ function scanCodebase(projectDir, opts = {}) {
     if (!SCAN_TEXT_EXT.has(ext)) return; // counted, never read: the scan has no reader for its language
     if (read >= SCAN_READ_CAP) { readCapped = true; return; }
     read++;
-    let txt;
-    try { txt = fs.readFileSync(full, "utf8").slice(0, SCAN_READ_BYTES); } catch { return; }
+    const txt = readFileHead(full, SCAN_READ_BYTES);
+    if (txt == null) return;
     envNamesIn(txt, env);
     if (ext === ".rs" && /#\[(?:test|cfg\(test\))\]/.test(txt)) testFws.add("cargo test");
     if ((ext === ".ps1" || ext === ".psm1") && /\bInvoke-Pester\b/i.test(txt)) testFws.add("pester"); // build.ps1 runs the suite
@@ -596,8 +617,7 @@ function scanCodebase(projectDir, opts = {}) {
     }
   });
   for (const f of csproj) {
-    let t = "";
-    try { t = fs.readFileSync(f, "utf8").slice(0, SCAN_READ_BYTES).toLowerCase(); } catch {}
+    const t = (readFileHead(f, SCAN_READ_BYTES) || "").toLowerCase();
     if (/microsoft\.net\.sdk\.web|microsoft\.aspnetcore/.test(t)) frameworks.add("aspnet");
     [["xunit", "xunit"], ["nunit", "nunit"], ["mstest", "mstest"]].forEach(([k, v]) => { if (t.includes(k)) testFws.add(v); });
   }
@@ -607,8 +627,7 @@ function scanCodebase(projectDir, opts = {}) {
   // RequiredModules is the test runner. A .psd1 without ModuleVersion / RootModule is plain data (a localized strings file).
   let psManifest = false;
   for (const f of psd1) {
-    let t = "";
-    try { t = fs.readFileSync(f.full, "utf8").slice(0, SCAN_READ_BYTES); } catch {}
+    const t = readFileHead(f.full, SCAN_READ_BYTES) || "";
     const root1 = t.match(/\b(?:RootModule|ModuleToProcess)\s*=\s*['"]([^'"\r\n]{1,260})['"]/i);
     if (!root1 && !/\bModuleVersion\s*=/i.test(t)) continue;
     psManifest = true;
@@ -648,7 +667,9 @@ function scanCodebase(projectDir, opts = {}) {
   if (has("dune-project")) stackHints.push("ocaml");
   if (rootHas(/\.nimble$/)) stackHints.push("nim");
   if (has("cpanfile") || has("Makefile.PL") || has("Build.PL")) stackHints.push("perl");
-  if (psManifest || langs.powershell) stackHints.push("powershell");
+  // PowerShell: a module manifest, a Pester suite, or scripts that are at least half the code (1.21.1 review — a Node repo's
+  // build.ps1 / install.ps1 alone is no PowerShell stack)
+  if (psManifest || testFws.has("pester") || (langs.powershell && langs.powershell * 2 >= langs.code)) stackHints.push("powershell");
   // a tree that is mostly shell scripts or SQL (at least half of its code files, tests apart)
   if (langs.shell && langs.shell * 2 >= langs.code) stackHints.push("shell");
   if (langs.sql && langs.sql * 2 >= langs.code) stackHints.push("sql");
@@ -708,7 +729,7 @@ function coverage(projectDir) {
   const other = new Map(); // every other walked file (tests, docs, config) — an _Implements:_ naming one is not a gap
   let testFiles = 0;
   const walk = walkProject(root, COVERAGE_CAP, (rel) => {
-    if (!isCodeFile(rel)) other.set(fold(rel), rel);
+    if (!isCodeFile(rel) || isTestFixture(rel)) other.set(fold(rel), rel); // a test fixture (tests/fixtures/seed.sql) is data
     else if (isTestFile(rel)) { testFiles++; other.set(fold(rel), rel); }
     else code.set(fold(rel), rel);
   });
@@ -775,7 +796,7 @@ function coverage(projectDir) {
 
 module.exports = { SCAN_IGNORE, CODE_EXT, TEST_EXTRA_EXT, GUARD_CODE_EXT, SCAN_TEXT_EXT, SCAN_READ_CAP, SCAN_READ_BYTES,
   SCAN_ROUTE_CAP, SCAN_LIST_CAP, COVERAGE_CAP, WALK_STOP, walkProject, TEST_DIRS, PERL_TEST_DIRS, RE_TEST_NAME,
-  RE_TEST_NAME_EXTRA, isTestFile, isCodeFile, JS_EXT, FRONTEND_EXT, JS_ROUTE_OWNERS,
+  RE_TEST_NAME_EXTRA, isTestFile, TEST_DATA_EXT, RE_TEST_DATA_NAME, testNamed, extOf, isTestFixture, isCodeFile, JS_EXT, FRONTEND_EXT, JS_ROUTE_OWNERS,
   RE_JS_OWNER_SUFFIX, RE_JS_ROUTE, RE_JS_ROUTE_CHAIN, RE_JS_ROUTE_OPEN, RE_JS_LEAD_STRING, RE_JS_CHAIN_VERB,
   RE_JS_IMPORT, RE_JS_CLIENT_IMPORT, RE_JS_CLIENT_DEF, JS_GENERIC_OWNERS, RE_NEST_ROUTE, RE_NEST_CTRL, RE_NEXT_APP,
   RE_NEXT_PAGES, RE_NEXT_EXPORT, RE_PY_ROUTE, RE_PY_METHODS, PY_ROUTE_OWNERS, RE_PY_OWNER_SUFFIX, RE_PY_APP_DEF,
