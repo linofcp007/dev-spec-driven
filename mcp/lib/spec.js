@@ -74,6 +74,8 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
 
 module.exports = {
   CLI_SWITCHES, // the CLI's boolean switches — ONE list (cli/dev-spec.js BOOL_FLAGS, the approval hook's lexer)
+  DEV_SPEC: i18n.DEV_SPEC, // 1.21 F3: `node "<clone>/cli/dev-spec.js"` — the runnable CLI line (tool descriptions, messages)
+  portableCli: i18n.portableCli, // the runnable line → `dev-spec`, for text meant to be committed
   VALID_TRACKS,
   PHASES,
   resolveProjectDir,

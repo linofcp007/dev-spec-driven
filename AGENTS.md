@@ -140,7 +140,9 @@ next, `dev-spec next-action <feature>` names the single next step.
 - **Evidence rules.** A task whose `_Verify:_` holds a runnable command counts as verified only with a recorded
   run of it: exit code 0 — or, on an `_Expect: fail_` task (a red test, such as a bugfix's task 3), a failing run (see
   Red → green). **Can't run the command yourself?** Don't tick the task — not bare, not with a note: name the command
-  and ask the user for its output (or to run `dev-spec done <feature> <n> --run`), then record what they report; a
+  and ask the user for its output (or to run `node cli/dev-spec.js done <feature> <n> --run` — the line the tool's
+  note prints, the clone's path resolved: no `dev-spec` is on PATH unless linked), then record what they report —
+  never send a subagent to look for a shell; a
   note-only tick (it stays unverified) is for when the user explicitly asks for one. A failed run is recorded and
   keeps the task unverified until a later passing run; evidence goes stale when the spec behind the
   task changes (`impact --reopen`) or its `_Verify:_` command is edited. `done --json` (MCP

@@ -152,7 +152,7 @@ const naSt10 = run(["next-action", "login-loop", "--project", w10f]);
 fs.appendFileSync(path.join(w10f, "src", "audit.js"), "// changed\n");
 const drSt10 = run(["drift", "login-loop", "--project", w10f]);
 ok(apT10.code === 0 && done5.code === 0 && /was finished on \d{4}-\d\d-\d\d, but it changed since \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\) and all its tasks are done — finish it again/.test(naSt10.out) &&
-  !/Nothing left to do/.test(naSt10.out) && drSt10.code === 1 && /↻ login-loop: changed since finish \(\d{4}-\d\d-\d\d\) — re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js; its baseline no longer covers it: finish it again \(dev-spec finish login-loop --write\)/.test(drSt10.out) &&
+  !/Nothing left to do/.test(naSt10.out) && drSt10.code === 1 && /↻ login-loop: changed since finish \(\d{4}-\d\d-\d\d\) — re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js; its baseline no longer covers it: finish it again \(node "[^"]*dev-spec\.js" finish login-loop --write\)/.test(drSt10.out) &&
   !/✓ login-loop/.test(drSt10.out),
   "after append-tasks + re-approval + done, next-action asks to finish again and drift exits 1 with the stale baseline (never '✓ unchanged' while audit.js is unhashed) (got " +
   JSON.stringify([apT10.code, done5.code, naSt10.out.slice(0, 160), drSt10.code, drSt10.out.slice(0, 160)]) + ")");
@@ -161,7 +161,7 @@ ok(apT10.code === 0 && done5.code === 0 && /was finished on \d{4}-\d\d-\d\d, but
 fs.writeFileSync(path.join(w10f, "src", "auth.js"), "changed by another feature\n");
 const naSD10 = run(["next-action", "login-loop", "--project", w10f]);
 const drSD10 = run(["drift", "login-loop", "--project", w10f]);
-ok(/but 1 of 1 implementing file\(s\) changed since: src\/auth\.js \(dev-spec drift login-loop\)\. Decide: /.test(naSD10.out) && /It also changed since that finish \(re-approved: tasks/.test(naSD10.out) &&
+ok(/but 1 of 1 implementing file\(s\) changed since: src\/auth\.js \(node "[^"]*dev-spec\.js" drift login-loop\)\. Decide: /.test(naSD10.out) && /It also changed since that finish \(re-approved: tasks/.test(naSD10.out) &&
   drSD10.code === 1 && /⚠ login-loop: 1 of 1 implementing file\(s\) changed since finish/.test(drSD10.out) && /changed: src\/auth\.js/.test(drSD10.out) && /↻ login-loop: changed since finish/.test(drSD10.out),
   "a stale baseline whose recorded file changed: next-action → the drift decision + finish again; drift names the file and the stale baseline (got " + JSON.stringify([naSD10.out.slice(0, 120), drSD10.out.slice(0, 160)]) + ")");
 fs.writeFileSync(path.join(w10f, "src", "auth.js"), "two\n");
@@ -171,7 +171,7 @@ const fail5 = run(["done", "login-loop", "5", "--evidence", "1 failing", "--exit
 const naV10 = run(["next-action", "login-loop", "--project", w10f]);
 let naVJ10 = null;
 try { naVJ10 = JSON.parse(run(["next-action", "login-loop", "--json", "--project", w10f]).out); } catch { /* invalid JSON */ }
-ok(fail5.code === 1 && /→ All tasks are ticked, but not all are verified: #5 \(latest run failed\)/.test(naV10.out) && /dev-spec done login-loop 5 --run/.test(naV10.out) &&
+ok(fail5.code === 1 && /→ All tasks are ticked, but not all are verified: #5 \(latest run failed\)/.test(naV10.out) && /node "[^"]*dev-spec\.js" done login-loop 5 --run/.test(naV10.out) &&
   !/close the feature|Nothing left to do/.test(naV10.out) && naVJ10 && naVJ10.step === "verify" && JSON.stringify(naVJ10) === JSON.stringify(S10.nextAction(w10f, "login-loop")) &&
   run(["finish", "login-loop", "--project", w10f]).code === 1,
   "next-action on a feature whose latest run failed: 'verify' naming #5 and `done --run` (never 'close the feature'); finish refuses too (got " + JSON.stringify(naV10.out.slice(0, 140)) + ")");
@@ -182,8 +182,8 @@ run(["feature", "archive", "login-loop", "--project", w10f]);
 const drAr10 = run(["drift", "--project", w10f]);
 const finAr10 = run(["finish", "login-loop", "--write", "--project", w10f]);
 run(["feature", "restore", "login-loop", "--project", w10f]);
-ok(drAr10.code === 1 && /↻ login-loop \(archived\): changed since finish \(\d{4}-\d\d-\d\d\) — re-approved: tasks; its baseline no longer covers it: restore it \(dev-spec feature restore login-loop\), finish it again \(dev-spec finish login-loop --write\), then archive it again/.test(drAr10.out) &&
-  !/not in the baseline/.test(drAr10.out) && finAr10.code === 1 && /Feature 'login-loop' not found under .* — it is archived \(\.specs\/_archive\/login-loop\): restore it first \(dev-spec feature restore login-loop\)\./.test(finAr10.out),
+ok(drAr10.code === 1 && /↻ login-loop \(archived\): changed since finish \(\d{4}-\d\d-\d\d\) — re-approved: tasks; its baseline no longer covers it: restore it \(node "[^"]*dev-spec\.js" feature restore login-loop\), finish it again \(node "[^"]*dev-spec\.js" finish login-loop --write\), then archive it again/.test(drAr10.out) &&
+  !/not in the baseline/.test(drAr10.out) && finAr10.code === 1 && /Feature 'login-loop' not found under .* — it is archived \(\.specs\/_archive\/login-loop\): restore it first \(node "[^"]*dev-spec\.js" feature restore login-loop\)\./.test(finAr10.out),
   "drift on an archived stale feature says restore → finish → archive again (no _Implements:_ walk: no new-file reason); finish of an archived feature names the archive and the restore (got " +
   JSON.stringify([drAr10.code, drAr10.out.slice(0, 220), finAr10.out.slice(0, 200)]) + ")");
 

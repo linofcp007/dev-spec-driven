@@ -568,7 +568,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const lpUpF = (n) => lpUp.features.find((x) => x.name === n) || {};
     ok(lpStD.tracks === "core" && js(lpStD.missingPacks) === js(["dist"]) && !chk(lpDocD, "dist-sections").status && chk(lpDocD, "track-pack-missing").status === "warn" &&
       /\+dist \(a track pack from before 1\.17 — 'dist' is a reserved name now, and the built-in \+dist track is NOT applied to this feature: rename \.specs\/tracks\/dist\//.test(chk(lpDocD, "track-pack-missing").detail) &&
-      /dev-spec add-track f-dist dist --remove; to adopt the built-in track instead: dev-spec add-track f-dist dist\)/.test(chk(lpDocD, "track-pack-missing").detail) &&
+      /node "[^"]*dev-spec\.js" add-track f-dist dist --remove; to adopt the built-in track instead: node "[^"]*dev-spec\.js" add-track f-dist dist\)/.test(chk(lpDocD, "track-pack-missing").detail) &&
       lpStK.tracks === "core" && js(lpStK.missingPacks) === js(["kafka"]) && /'kafka' is a reserved name now: rename/.test(chk(lpDocK, "track-pack-missing").detail) &&
       lpUpF("f-dist").attention.includes("track-pack-reserved") && js(lpUpF("f-kafka").reservedPacks) === js(["kafka"]) &&
       lpUp.lines.some((l) => /Rename its track pack\(s\) from before 1\.17 — \+kafka: the name is reserved now/.test(l)),
@@ -1242,7 +1242,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const mWebSt = JSON.parse(rd(mWeb.dir, ".state.json")), mWebDesign = rd(mWeb.dir, "design.md");
     const mUiDoc = chk(S.specDoctor(mp, "f-webui"), "ui-sections");
     const mDrop = S.addTrack(mp, "f-contracts", "contracts", { remove: true });
-    ok(/\+webui \(a track pack from before 1\.19 — its marker \[UI\] is the built-in \+ui track's now/.test(mDoc.detail || "") && /dev-spec add-track f-webui ui/.test(mDoc.detail || "") &&
+    ok(/\+webui \(a track pack from before 1\.19 — its marker \[UI\] is the built-in \+ui track's now/.test(mDoc.detail || "") && /node "[^"]*dev-spec\.js" add-track f-webui ui/.test(mDoc.detail || "") &&
       /o seu marcador \[OBS\] é agora o do track \+obs incluído/.test(mDocPt.detail || "") && js(mUpF.reservedMarkers) === js([{ name: "webui", marker: "[UI]", track: "ui" }]) &&
       (mUpF.attention || []).includes("track-pack-reserved") && mUp.lines.some((l) => /Change the marker of its track pack\(s\) from before 1\.19 — \+webui \[UI\]/.test(l)) &&
       mAdopt.ok && js(mAdopt.adopted) === js(["ui"]) && js(mAdopt.adoptedPacks) === js(["webui"]) && mWebDesign.includes("## [UI] Design System Usage") && mWebDesign.includes("## [UI] Thing webui") &&

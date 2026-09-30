@@ -11,6 +11,40 @@
  * the pt-BR derivation in i18n/pt-br.js. The language model and the English-stable tokens are described in i18n.js.
  */
 
+const path = require("path");
+
+// 1.21 F3 — the CLI line a person can RUN. A plugin install puts no `dev-spec` on PATH (only `npm link` does), so a message
+// that tells someone to run the CLI names THIS clone's script — `${DEV_SPEC} done <f> <n> --run` in every language, never
+// a bare `dev-spec done …` (the 1.19 eval run relayed exactly that to a user, who could not run it). The path is resolved
+// from this file's place (mcp/lib/i18n/ → the clone root), with forward slashes (bash, PowerShell and cmd.exe all read
+// them). Quoted to paste as is into bash AND PowerShell: double quotes, unless the path holds a character one of them
+// expands or ends a string on there (" $ ` ! and the curly double quotes PowerShell also reads) — then single quotes
+// (literal in both); a path that also holds a single quote gets a <placeholder> (no quoting survives both shells).
+// Text written into a COMMITTED file (ROADMAP.md, SPECS.md, UPGRADE.md, the exports, retro.md) goes through portableCli():
+// a machine path never lands in git — there the CLI keeps its name, `dev-spec`.
+const RE_CLI_UNSAFE_DOUBLE = /["$`!“”„]/;
+const RE_CLI_UNSAFE_SINGLE = /['‘’‚‛]/;
+function cliQuote(p) {
+  const s = String(p).replace(/\\/g, "/");
+  if (!RE_CLI_UNSAFE_DOUBLE.test(s)) return '"' + s + '"';
+  if (!RE_CLI_UNSAFE_SINGLE.test(s)) return "'" + s + "'";
+  return '"<dev-spec-driven>/cli/dev-spec.js"';
+}
+const DEV_SPEC_SCRIPT = path.resolve(__dirname, "..", "..", "..", "cli", "dev-spec.js").replace(/\\/g, "/");
+// `node "<clone>/cli/dev-spec.js"` — the runnable stand-in for `dev-spec` (a message appends the subcommand and its arguments).
+const cliPrefix = (script) => "node " + cliQuote(script || DEV_SPEC_SCRIPT);
+const DEV_SPEC = cliPrefix();
+// The runnable line → its portable form, for a file meant to be committed — as written, or HTML-escaped (ROADMAP.html and
+// the HTML export escape its quotes).
+const DEV_SPEC_HTML = DEV_SPEC.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function portableCli(text) {
+  if (typeof text !== "string") return text;
+  let s = text;
+  if (s.includes(DEV_SPEC)) s = s.split(DEV_SPEC).join("dev-spec");
+  if (DEV_SPEC_HTML !== DEV_SPEC && s.includes(DEV_SPEC_HTML)) s = s.split(DEV_SPEC_HTML).join("dev-spec");
+  return s;
+}
+
 // The AUTHORED locales (one hand-written block each in BUILD / STEERING / MSG / BRIEF / EVALS_README — i18n/<lang>.js) and
 // every locale the engine speaks: pt-BR (1.14 D1) is DERIVED from pt — see "pt-BR — a derived locale" in i18n/pt-br.js.
 const BASE_LANGS = ["en", "pt", "es"];
@@ -116,4 +150,5 @@ function templateTestRows(tracks, row, L, acs) {
 }
 
 
-module.exports = { BASE_LANGS, LANGS, LANG_ALIASES, canonicalLang, normalizeLang, baseLang, TEMPLATE_ACS, MARKER_TRACK_ORDER, signalTracks, templateTests, greenLine, templateTestRows };
+module.exports = { BASE_LANGS, LANGS, LANG_ALIASES, canonicalLang, normalizeLang, baseLang, TEMPLATE_ACS, MARKER_TRACK_ORDER, signalTracks, templateTests, greenLine, templateTestRows,
+  cliQuote, cliPrefix, DEV_SPEC_SCRIPT, DEV_SPEC, portableCli };

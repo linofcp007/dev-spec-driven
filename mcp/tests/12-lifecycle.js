@@ -359,11 +359,11 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
       "spec_drift after edits: changed / missing / now present per file; a recorded path outside the project is never probed (ignored)");
     const naD10 = S.nextAction(w10d, "login-loop");
     ok(naD10.step === "drift" && naD10.drift.drifted && naD10.drift.changed.join() === "src/auth.js" && naD10.drift.missing.join() === "src/lib/x.js" && naD10.drift.nowPresent.join() === "src/new.js" &&
-      /^'login-loop' was finished on \d{4}-\d\d-\d\d, but 3 of 5 implementing file\(s\) changed since: src\/auth\.js, src\/lib\/x\.js, src\/new\.js \(dev-spec drift login-loop\)\. Decide: /.test(naD10.recommendation) &&
+      /^'login-loop' was finished on \d{4}-\d\d-\d\d, but 3 of 5 implementing file\(s\) changed since: src\/auth\.js, src\/lib\/x\.js, src\/new\.js \(node "[^"]*dev-spec\.js" drift login-loop\)\. Decide: /.test(naD10.recommendation) &&
       /\/spec-impact login-loop/.test(naD10.recommendation) && /re-run \/spec-finish login-loop for a fresh baseline/.test(naD10.recommendation) &&
       /mudaram desde então/.test(S.msg("pt").next.drifted("x", "2026-01-01", 1, 2, "a.js")) && /cambiaron desde entonces/.test(S.msg("es").next.drifted("x", "2026-01-01", 1, 2, "a.js")),
       "next_action on a finished feature whose implementing files drifted: step 'drift' with the files and the decision (spec wrong → spec_impact, code wrong → fix, harmless → re-finish); PT/ES localized");
-    ok(/ {2}⚠ login-loop: 3 implementing file\(s\) changed since finish — run dev-spec drift login-loop/.test(hook10(w10d)) &&
+    ok(/ {2}⚠ login-loop: 3 implementing file\(s\) changed since finish — run node \\?"[^"]*dev-spec\.js\\?" drift login-loop/.test(hook10(w10d)) /* the hook's JSON escapes the quotes */ &&
       S.drift(w10d, null, { maxFiles: 2 }).skipped === true && S.drift(w10d, null, { maxBytes: 1 }).skipped === true && S.drift(w10d, null, { maxFiles: 2 }).features.length === 0,
       "SessionStart: one localized drift line per drifted finished feature; over the file/byte budget the check is skipped (nothing hashed)");
     ok(S.drift(w10d, "nope").ok === false && S.drift(w10d, "draft").features.length === 0 && S.drift(w10d, "draft").unbaselined.join() === "draft" &&
@@ -417,7 +417,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const naSD10 = (await call10("spec_next_action", { name: "login-loop", projectDir: w10d })).p;
     const drSD10 = S.drift(w10d, "login-loop");
     ok(naSD10.step === "drift" && naSD10.staleBaseline && naSD10.staleBaseline.newFiles.join() === "src/audit.js" && naSD10.drift && naSD10.drift.changed.join() === "src/auth.js" &&
-      /^'login-loop' was finished on \d{4}-\d\d-\d\d, but 1 of 2 implementing file\(s\) changed since: src\/auth\.js \(dev-spec drift login-loop\)\. Decide: /.test(naSD10.recommendation) &&
+      /^'login-loop' was finished on \d{4}-\d\d-\d\d, but 1 of 2 implementing file\(s\) changed since: src\/auth\.js \(node "[^"]*dev-spec\.js" drift login-loop\)\. Decide: /.test(naSD10.recommendation) &&
       /It also changed since that finish \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\): whichever you decide, finish it again afterwards/.test(naSD10.recommendation) &&
       drSD10.verdict === "drift" && drSD10.drifted.join() === "login-loop" && drSD10.features.length === 1 && drSD10.features[0].stale === true && drSD10.features[0].changed.join() === "src/auth.js" &&
       drSD10.stale.length === 1 && drSD10.stale[0].drifted === true && / {2}⚠ login-loop: 1 implementing file\(s\) changed since finish/.test(hook10(w10d)),
@@ -470,7 +470,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const naNF10 = (await call10("spec_next_action", { name: "login-loop", projectDir: w10d })).p;
     const drNF10 = S.drift(w10d, "login-loop");
     ok(naNF10.step === "drift" && naNF10.drift.changed.join() === "src/lib/y.ts" && naNF10.staleBaseline && naNF10.staleBaseline.since.length === 0 &&
-      naNF10.staleBaseline.newFiles.join() === "src/lib/z.ts" && /changed since: src\/lib\/y\.ts \(dev-spec drift login-loop\)\. Decide: /.test(naNF10.recommendation) &&
+      naNF10.staleBaseline.newFiles.join() === "src/lib/z.ts" && /changed since: src\/lib\/y\.ts \(node "[^"]*dev-spec\.js" drift login-loop\)\. Decide: /.test(naNF10.recommendation) &&
       /It also changed since that finish \(1 implementing file\(s\) not in the baseline: src\/lib\/z\.ts\)/.test(naNF10.recommendation) &&
       drNF10.verdict === "drift" && drNF10.features.length === 1 && drNF10.features[0].changed.join() === "src/lib/y.ts" && drNF10.features[0].stale === true && drNF10.stale[0].drifted === true &&
       /Também mudou desde esse fecho \(x\)/.test(S.msg("pt").next.driftedStale("x")) && /También cambió desde ese cierre \(x\)/.test(S.msg("es").next.driftedStale("x")),
@@ -485,7 +485,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const finV10 = S.finishFeature(w10d, "login-loop");
     const catV10 = S.catalog(w10d).features.find((f) => f.feature === "login-loop");
     ok(failRun10.ok === false && naV10.step === "verify" && /^All tasks are ticked, but not all are verified: #4 \(latest run failed\) — \/spec-finish and the execution sign-off refuse/.test(naV10.recommendation) &&
-      /dev-spec done login-loop 4 --run/.test(naV10.recommendation) && !/Nothing left to do|close the feature|Sign it off/.test(naV10.recommendation) && naV10.drift && naV10.drift.drifted === false &&
+      /node "[^"]*dev-spec\.js" done login-loop 4 --run/.test(naV10.recommendation) && !/Nothing left to do|close the feature|Sign it off/.test(naV10.recommendation) && naV10.drift && naV10.drift.drifted === false &&
       finV10.readyToFinish === false && finV10.unverified.join() === "4" && catV10.status === "complete" && catV10.finishedAt === undefined &&
       /nem todas estão verificadas: #1/.test(S.msg("pt").next.verify("f", "#1", 1, true)) && /no todas están verificadas: #1/.test(S.msg("es").next.verify("f", "#1", 1, false)) &&
       /spec_complete_task \{name: "f", number: 2/.test(S.msg("en").next.verify("f", "#2", 2, false)),
@@ -542,10 +542,10 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     ok(drAr10.ok && drAr10.stale.length === 0 && drAr10.verdict === "clean" && drAr10.features.some((f) => f.feature === "login-loop" && f.archived && !f.drifted) &&
       drArNamed10.verdict === "clean" && drArNamed10.stale.length === 0 &&
       drArCr10.verdict === "stale" && drArCr10.stale.length === 1 && drArCr10.stale[0].archived === true && drArCr10.stale[0].newFiles.length === 0 &&
-      finAr10.ok === false && /not found/.test(finAr10.error) && /it is archived \(\.specs\/_archive\/login-loop\): restore it first \(dev-spec feature restore login-loop\)/.test(finAr10.error) &&
-      ["en", "pt", "es"].every((l) => staleLine10(l, true).includes("dev-spec feature restore login-loop") && staleLine10(l, true).includes("dev-spec finish login-loop --write") &&
+      finAr10.ok === false && /not found/.test(finAr10.error) && /it is archived \(\.specs\/_archive\/login-loop\): restore it first \(node "[^"]*dev-spec\.js" feature restore login-loop\)/.test(finAr10.error) &&
+      ["en", "pt", "es"].every((l) => staleLine10(l, true).includes("" + S.DEV_SPEC + " feature restore login-loop") && staleLine10(l, true).includes("" + S.DEV_SPEC + " finish login-loop --write") &&
         !staleLine10(l, false).includes("feature restore")) &&
-      ["pt", "es"].every((l) => S.msg(l).err.archivedHint("x").includes("dev-spec feature restore x")),
+      ["pt", "es"].every((l) => S.msg(l).err.archivedHint("x").includes("" + S.DEV_SPEC + " feature restore x")),
       "an archived finished feature: a later file under its implemented folder is no stale baseline (drift clean, exit 0); a change request after its finish is (stale, archived) and the line says restore → finish → archive (EN/PT/ES); finish of an archived feature names the archive and the restore (got " +
       JSON.stringify([drAr10.verdict, drAr10.stale.map((x) => x.feature), drArCr10.verdict, finAr10.error]) + ")");
     fs.unlinkSync(zArch10);
@@ -628,7 +628,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     ok(au16.ok && au16.from === null && au16.to === ENGINE && au16.needsUpgrade === true && au16.archived === 1 && au16.migrations === null &&
       au16.features.map((f) => f.name).join() === "bug,done,draft,half" && snapTree(path.join(p16, ".specs")) === before16 &&
       JSON.stringify(au16) === JSON.stringify(S.specUpgrade(p16)) && impBefore16.baseline === "fingerprint-only" &&
-      /⬆ \.specs\/ was created with an older dev-spec \(before 1\.13\) — run \/spec-upgrade \(dev-spec upgrade\) to review what isn't implemented yet/.test(hookBefore16),
+      /⬆ \.specs\/ was created with an older dev-spec \(before 1\.13\) — run \/spec-upgrade \(node \\?"[^"]*dev-spec\.js\\?" upgrade\) to review what isn't implemented yet/.test(hookBefore16),
       "spec_upgrade audit of a legacy .specs/ (no meta.specVersion): from null → " + ENGINE + ", needsUpgrade, the archived feature counted apart, nothing written, MCP = engine; SessionStart prints the one-line notice (got " +
       JSON.stringify([au16.from, au16.to, au16.archived, au16.features.map((f) => f.name)]) + ")");
     const d16 = f16(au16, "draft"), h16 = f16(au16, "half"), dn16 = f16(au16, "done"), b16 = f16(au16, "bug");
@@ -1225,7 +1225,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const apEx = S.approvePhase(d6, "cache-spike", "execution", "t");
     const apExQ = S.approvePhase(d6, "queue-spike", "execution", "t");
     ok(finQ.ok && finQ.readyToFinish === false && finQ.kind === "spike" && finQ.blockers.some((b) => /Decision is not written yet/.test(b)) && finQ.blockers.some((b) => /^open tasks: #1, #2, #3, #4$/.test(b)) &&
-      finGo.readyToFinish === true && finGo.outcome === "go" && finGo.mergeTitle === "docs(cache-spike): spike go — Can Redis hold the sessions under 5 ms p95?" &&
+      finGo.readyToFinish === true && finGo.outcome === "go" && finGo.mergeTitle === "docs(cache-spike): spike go — Can Redis hold the sessions under 5 ms…" /* 1.21 F3: ≤ 72 */ &&
       /^## Question\nCan Redis hold the sessions under 5 ms p95\?\n\n## Decision — go\nRedis held 2 ms p95 under a 5k rps load run\.\n\n## Tasks\n- \[x\] 1\. /.test(finGo.mergeSummary) &&
       /## Checks before merge\n- \[ \] The decision is shared with the people it affects\./.test(finGo.mergeSummary) && !/## Acceptance criteria|## Tests/.test(finGo.mergeSummary) &&
       finGo.suiteChecks === undefined && finGo.baseline && finGo.baseline.recorded === true && stGo.finished && typeof stGo.finished.at === "string" &&

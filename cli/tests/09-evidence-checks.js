@@ -82,7 +82,7 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
   const na3 = jsonGa(rga(g3p, ["next-action", f3.slug, "--json"]).stdout); // drift → "harmless → re-finish" names the check run it needs
   const g3c = rga(g3p, ["finish", f3.slug, "--run", "--write"]);
   ok(g3a.code === 0 && /is ready to finish/.test(g3a.out) && !!fin3At && g3b.code === 1 && /test \(the implementing files changed since the run\)/.test(g3b.out) && !/Replaced the baseline/.test(g3b.out) && fin3Same &&
-    na3 && na3.step === "drift" && /dev-spec finish limiter --run runs and records them/.test(na3.recommendation) &&
+    na3 && na3.step === "drift" && /node "[^"]*dev-spec\.js" finish limiter --run runs and records them/.test(na3.recommendation) &&
     g3c.code === 0 && /Replaced the baseline/.test(g3c.out),
     "full review Ga3: finish --write after the implementing file changed is refused on the old check run (code-changed, baseline kept); next-action's drift step names finish --run; finish --run --write runs the checks again and re-baselines (got " +
     JSON.stringify([g3a.code, g3a.out.slice(0, 160), g3b.code, g3b.out.slice(0, 300), g3c.code]).slice(0, 700) + ")");

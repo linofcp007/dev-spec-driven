@@ -8,8 +8,9 @@ The full layout, how the engine's modules load and link, and where each config f
 .claude-plugin/plugin.json     manifest (skills, commands, mcpServers point here; NO hooks key — see gotcha)
 .claude-plugin/marketplace.json local marketplace for install
 mcp/servers.json               registers the `spec-driven` stdio server (plugin.json → mcpServers; deliberately NOT a root .mcp.json — see Config paths)
-skills/dev-spec-driven/SKILL.md the workflow (track routing engine, prose)
-skills/.../references/          deep library, read on demand
+skills/dev-spec-driven/SKILL.md the workflow (track routing engine, prose) — the decision-time rules, ≤ 5,000 words (1.21)
+skills/.../references/          deep library, read on demand — index.md lists every file; tool-catalog.md · track-checklists.md ·
+                               workflows.md hold what SKILL.md points to (1.21)
 commands/*.md                  54 slash commands (thin wrappers that invoke the skill/MCP) — also served as the MCP prompts
 agents/*.md                    plugin subagents, auto-discovered and dispatched as `dev-spec-driven:spec-implementer` /
                                `dev-spec-driven:spec-reviewer` (subagent execution) / `dev-spec-driven:spec-critic` (--deep)

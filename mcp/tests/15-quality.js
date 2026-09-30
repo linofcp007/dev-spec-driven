@@ -55,7 +55,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
     const cA = dA.checks.find((c) => c.id === "steering-changed-since-approval") || {};
     const naA = S.nextAction(q1, "alpha");
     ok(cA.status === "warn" && /constitution\.md \(changed\), security\.md \(removed\)/.test(cA.detail) && /requirements \(approved \d{4}-\d\d-\d\d\)/.test(cA.detail) &&
-      /dev-spec impact alpha --phase steering/.test(cA.detail) && dA.verdict !== "pass" &&
+      /node "[^"]*dev-spec\.js" impact alpha --phase steering/.test(cA.detail) && dA.verdict !== "pass" &&
       js(dA.steeringChanged.map((c) => [c.phase, c.files.map((x) => x.file + ":" + x.change)])) === js([["requirements", ["constitution.md:modified", "security.md:removed"]], ["design", ["constitution.md:modified", "security.md:removed"]]]) &&
       !dA.checks.some((c) => c.id === "steering-changed-since-approval" && c.status === "fail") &&
       naA.step === naBefore.step && /Also: steering changed after the approval of requirements, design \(constitution\.md, security\.md\)/.test(naA.recommendation) && naA.steeringChanged.length === 2 &&
@@ -677,7 +677,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
 
     // R3 — the prose: the implementer searches before it writes (a hard step) and reports a Reuse block; the reviewer checks new code
     // against the EXISTING codebase (a duplicate is Important); the controller files refactor candidates in the backlog; /executeTask,
-    // red-flags, /design, AGENTS.md and SKILL.md (≤ 540 lines) say so — and none of the new text steers toward PRs or CI.
+    // red-flags, /design, AGENTS.md and SKILL.md (≤ 5,000 words — 1.21 F3) say so — and none of the new text steers toward PRs or CI.
     const impl = rRd("agents", "spec-implementer.md"), rev = rRd("agents", "spec-reviewer.md"), sub = rRd("skills", "dev-spec-driven", "references", "subagent-execution.md");
     const exec = rRd("commands", "executeTask.md"), flags = rRd("skills", "dev-spec-driven", "references", "red-flags.md"), skill = rRd("skills", "dev-spec-driven", "SKILL.md");
     const dcmd = rRd("commands", "design.md"), agentsMd = rRd("AGENTS.md"), guide = rRd("skills", "dev-spec-driven", "references", "code-reuse-and-quality.md");
@@ -696,11 +696,11 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
       /refactor:/.test(execReuse) && /duplicate in the existing codebase/.test(exec) &&
       /"I'll write a quick helper" \| Search first/.test(flags) && /"I'll copy this function and tweak it"/.test(flags) && /rule of three/.test(flags) &&
       /\*\*Reuse & Integration\*\*/.test(skill) && /design-reuse/.test(skill) && /code-reuse-and-quality\.md/.test(skill) && /\*\*Search before you write:\*\*/.test(skill) &&
-      skill.split("\n").length <= 540 && /\*\*Every design names what it reuses:\*\*/.test(dcmd) && /design-reuse/.test(dcmd) &&
+      skill.split(/\s+/).filter(Boolean).length <= 5000 && /\*\*Every design names what it reuses:\*\*/.test(dcmd) && /design-reuse/.test(dcmd) &&
       /\*\*Reuse & Integration\*\*/.test(agentsMd) && /design-reuse/.test(agentsMd) && /Search before you write/.test(agentsMd) && /design-reuse/.test(guide) &&
       [implSearch, implReuse, revQuality, subRefactor, execReuse].every((t) => t.length > 100 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
-      "1.19 R3: spec-implementer searches before it writes (a hard step: concept + synonyms, reuse → extend → create, no copy-paste) and reports a Reuse block; spec-reviewer checks every new unit against the existing codebase (a duplicate is Important, smells Minor); the controller files refactor candidates in the backlog (subagent-execution.md, /executeTask); red-flags, /design, AGENTS.md and SKILL.md (≤ 540 lines) name them; no PR / CI steering in the new text (got " +
-      js([implSearch.length, implReuse.length, revQuality.length, subRefactor.length, execReuse.length, skill.split("\n").length]) + ")");
+      "1.19 R3: spec-implementer searches before it writes (a hard step: concept + synonyms, reuse → extend → create, no copy-paste) and reports a Reuse block; spec-reviewer checks every new unit against the existing codebase (a duplicate is Important, smells Minor); the controller files refactor candidates in the backlog (subagent-execution.md, /executeTask); red-flags, /design, AGENTS.md and SKILL.md (≤ 5,000 words — 1.21 F3) name them; no PR / CI steering in the new text (got " +
+      js([implSearch.length, implReuse.length, revQuality.length, subRefactor.length, execReuse.length, skill.split(/\s+/).filter(Boolean).length]) + ")");
 
     // R4 — steering: structure.md gains Module Boundaries and Shared Code slots, the constitution's example principles a reuse rule
     // (EN / PT / ES / pt-BR) — slots, so a fresh stub still reads as a template.

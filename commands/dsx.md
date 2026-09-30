@@ -12,7 +12,7 @@ Use `spec_next_task` to find the next task (or jump to the given number), pick t
 `spec_complete_task {evidence}` (the `_Verify:_` command and its exit code — a note alone leaves a runnable
 `_Verify:_` unverified, a failed run is recorded and refuses the tick, an `_Expect: fail_` task needs its failing red
 run) when each goes green. No shell to run the `_Verify:_`? Don't tick — ask the user for the output (or
-`dev-spec done <feature> <n> --run`). With `--subagents`, follow
+`node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run`). With `--subagents`, follow
 `references/subagent-execution.md` instead (`spec_task_brief` → `dev-spec-driven:spec-implementer` → `dev-spec-driven:spec-reviewer` →
 `spec_complete_task` after a clean review, stopping at each `**Checkpoint:**`). Respond in the user's
 language (EN/PT/ES).

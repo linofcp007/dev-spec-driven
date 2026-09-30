@@ -35,7 +35,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const doc = r(["doctor", "alpha"]);
   const na = r(["next-action", "alpha"]);
   ok(/\n {2}▲ steering-changed-since-approval — steering changed after approval — requirements \(approved \d{4}-\d\d-\d\d\): constitution\.md \(changed\)/.test(doc.out) &&
-    /Also: steering changed after the approval of requirements, design \(constitution\.md\) — re-review against it and re-approve if it still holds \(dev-spec impact alpha --phase steering\)\./.test(na.out),
+    /Also: steering changed after the approval of requirements, design \(constitution\.md\) — re-review against it and re-approve if it still holds \(node "[^"]*dev-spec\.js" impact alpha --phase steering\)\./.test(na.out),
     "1.16 Q1 CLI: doctor prints the steering-changed-since-approval warning; next-action adds the re-review hint (got " + js(na.out.slice(0, 400)) + ")");
 
   // Q2 — cross-feature criteria: catalog section, doctor warning, --json = spec_catalog.

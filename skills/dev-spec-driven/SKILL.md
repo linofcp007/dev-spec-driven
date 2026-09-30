@@ -17,9 +17,7 @@ description: >
 # Dev Spec-Driven (unified, track-based)
 
 Take the developer from idea to production-ready code through a disciplined, approval-gated process,
-and **scale the rigor to the feature**, not the other way around. One feature is a 20-minute Vibe
-edit; the next is a billing webhook in a multi-tenant product that also calls an LLM and needs TDD +
-scale design + evals at once. Handle both with one pipeline and composable tracks:
+and **scale the rigor to the feature**, not the other way around — one pipeline, composable tracks:
 
 | Track | What it adds |
 |---|---|
@@ -28,70 +26,72 @@ scale design + evals at once. Handle both with one pipeline and composable track
 | **+saas** | 5 mandatory scale sections, multi-tenancy, observability, cost, load tests |
 | **+ai** | Eval plan, prompts-as-code, token economics, safety, model lifecycle |
 | **+sec** | 5 mandatory `[SEC]` sections: STRIDE threat model, ASVS level, authn/authz, secrets, security testing |
-| **+privacy** | 6 mandatory `[PRIVACY]` sections (GDPR / RGPD): data inventory, lawful basis, retention, data subject rights, processors & transfers, DPIA |
-| **+dist** *(1.17)* | 5 mandatory `[DIST]` sections for data that crosses systems: consistency model, cross-system (dual) writes, delivery & idempotency, concurrency, failure modes |
-| **+api** *(1.19)* | 5 mandatory `[API]` sections for a contract other code depends on: API contract (OpenAPI / proto / GraphQL), versioning & compatibility, error model (problem+json), pagination / idempotency / concurrency, rate limits & quotas |
-| **+ui** *(1.19)* | 5 mandatory `[UI]` sections for a user-facing screen: design-system usage, UI states, accessibility (WCAG 2.2 AA), responsiveness & i18n, UI performance budget (Core Web Vitals) |
-| **+obs** *(1.19)* | 5 mandatory `[OBS]` sections for a service people depend on: SLIs & SLOs (error budgets, burn-rate alerts), telemetry, alerting & runbooks, rollout & rollback, health & capacity |
-| **+your own** *(1.15)* | A project track pack in `.specs/tracks/<name>/` (`/spec-tracks`): its own `[MARKER]` sections, criteria, tasks and signals — a marker track like +sec (`references/project-tracks.md`) |
+| **+privacy** | 6 mandatory `[PRIVACY]` sections (GDPR / RGPD): data inventory, lawful basis, retention, subject rights, processors, DPIA |
+| **+dist** | 5 mandatory `[DIST]` sections for data that crosses systems (consistency, dual writes, idempotency…) |
+| **+api** | 5 mandatory `[API]` sections for a contract other code depends on (versioning, error model, rate limits…) |
+| **+ui** | 5 mandatory `[UI]` sections for a user-facing screen (UI states, WCAG 2.2 AA accessibility, i18n…) |
+| **+obs** | 5 mandatory `[OBS]` sections for a service people depend on (SLOs, alerting & runbooks, rollout…) |
+| **+your own** | A project track pack in `.specs/tracks/<name>/` (`/spec-tracks`, `references/project-tracks.md`) |
+
+What each active track adds at every phase — criteria, design sections, tests, task markers, done checks:
+**`references/track-checklists.md`** (read its rows at each phase).
 
 **With the superpowers plugin installed too:** for feature work this workflow replaces its brainstorming,
 writing-plans, executing-plans, subagent-driven-development, test-driven-development, systematic-debugging,
 verification-before-completion, code-review and finishing-a-development-branch skills — don't run both for the same
-feature. `/spec-superpowers` records that precedence in CLAUDE.md (superpowers itself defers to CLAUDE.md).
+feature (`/spec-superpowers` records that precedence in CLAUDE.md).
 
 ## Language (EN / PT / ES)
 
-This skill is **trilingual**. Detect the language of the user's request and **mirror it** in
-everything: your conversation, the questions you ask, the approval prompts, AND the prose inside the
-artifacts (`requirements.md`, `design.md`, `tasks.md`, `classification.md`) — **including the section
-headings** (e.g. `## Critérios de Sucesso`, `## Verificação da Constituição`, `## Orçamento de
-Desempenho`). The engine recognizes the mandatory section headings in EN/PT/ES, so a fully-localized
-spec still passes `doctor`/`clarify`. Don't switch the user to English.
-
-**The engine scaffolds in the user's language — pass `lang`** on `spec_init` (project default) and
-`spec_create` (per feature; explicit `lang` > project default > en). Artifacts, steering stubs and every
-tool message then come out localized — fill the placeholders, don't translate the scaffold.
-
-Keep these **structural tokens stable across languages** (the tooling matches them literally): AC/SC
-IDs (`US-1.AC-1`, `SC-001`), test IDs (`T-01`), task markers (`_Requirements:_`, `_Makes green:_`,
-`_Implements:_`, `_Verify:_`, `_Expect:_`, `_Size:_`), story/parallel tags (`[US1]`, `[shared]`, `[P]`), track names,
-the section markers `[SaaS]` `[AI]` `[SEC]` `[PRIVACY]` `[DIST]` `[API]` `[UI]` `[OBS]` (case-sensitive: `[sec]` is no marker) and the
-`[NEEDS CLARIFICATION:]` marker. EARS keywords may be localized (they're detected in all three).
-
-If the user mixes languages or asks to switch, follow their lead; when unsure, match their most recent message.
+Detect the language of the user's request and **mirror it** in everything: the conversation, your questions, the
+approval prompts AND the prose of the artifacts — **section headings included** (`## Critérios de Sucesso`,
+`## Verificação da Constituição`). The engine recognizes the mandatory headings in EN/PT/ES, so a localized spec still
+passes `doctor`/`clarify`. **Pass `lang`** on `spec_init` (project default) and `spec_create` (explicit `lang` >
+project default > en): artifacts, steering stubs and tool messages then come out localized — fill the placeholders,
+don't translate the scaffold. Keep the **structural tokens** as they are in every language: AC/SC IDs (`US-1.AC-1`,
+`SC-001`), test IDs (`T-01`), task markers (`_Requirements:_`, `_Makes green:_`, `_Implements:_`, `_Verify:_`,
+`_Expect:_`, `_Size:_`, `_Depends:_`), tags (`[US1]`, `[shared]`, `[P]`), track names, the section markers `[SaaS]`
+`[AI]` `[SEC]` `[PRIVACY]` `[DIST]` `[API]` `[UI]` `[OBS]` (case-sensitive: `[sec]` is no marker) and
+`[NEEDS CLARIFICATION:]`. EARS keywords may be localized. If the user switches language, follow them.
 
 ## Core Principles
 
-1. **No implementation without approval.** The developer reviews each phase's artifact — mistakes caught early are cheap.
+1. **No implementation without approval.** The developer reviews each phase's artifact — mistakes caught early are
+   cheap. An approval is the user's explicit yes for THAT phase: "fix it", "ship it", a passing run or a ticked task is
+   not one.
 2. **Right rigor for the job.** Tracks compose per feature. Don't TDD a copy change; don't ship a payment path on vibes.
-3. **Traceability end-to-end.** Code → tasks → (tests/evals) → design → requirements → need. Every acceptance criterion has a stable ID that later artifacts reference.
-4. **The mandatory sections are mandatory.** On +saas, +ai, +sec, +privacy, +dist, +api, +ui and +obs the track's design sections cannot be blank. An honest "not needed because X" is fine; an empty section means "I didn't think about it" — the source of every 3AM incident, every breach and every surprise bill.
-5. **Everything is local.** The bundled MCP server runs on your machine. No GitHub Actions, no cloud runners, no per-run cost. Specs live in `.specs/` and are versioned in your git repo.
-6. **Evidence before claims.** Nothing is "done", "passing" or "fixed" until a command proved it on the final code. Tick tasks only through `spec_complete_task {evidence}` — never by editing the checkbox.
-   A task whose `_Verify:_` names a runnable command counts as verified only with `{command, exitCode: 0}` (on an
-   `_Expect: fail_` task: its failing red run); a failed run is recorded and refuses the tick; a text note ticks it
-   but leaves it unverified. **Can't run the command yourself** (no shell, no environment)? Don't tick the task —
-   not bare, not with a note, never with an exit code you didn't see: name the `_Verify:_` command and ask the user
-   for its output (or to run `dev-spec done <feature> <n> --run`); record what they report, and tick it unverified
-   only if they explicitly ask for exactly that. Rules and reason codes: `references/verification.md`; the thoughts
-   that precede skipping a phase: `references/red-flags.md`.
-7. **An approved spec that changed is not approved.** Every approval snapshots what it signed off; an edit afterwards is diffed (`spec_impact`), reviewed with the human and re-approved — never silently shipped.
+3. **Traceability end-to-end.** Code → tasks → (tests/evals) → design → requirements → need. Every acceptance
+   criterion has a stable ID that later artifacts reference.
+4. **The mandatory sections are mandatory.** On +saas, +ai, +sec, +privacy, +dist, +api, +ui and +obs the track's design
+   sections cannot be blank. An honest "not needed because X" is fine; an empty section means "I didn't think about
+   it" — the source of every 3AM incident, every breach and every surprise bill.
+5. **Everything is local.** The bundled MCP server runs on your machine. No GitHub Actions, no cloud runners, no
+   per-run cost. Specs live in `.specs/` and are versioned in your git repo.
+6. **Evidence before claims.** Nothing is "done", "passing" or "fixed" until a command proved it on the final code. Tick
+   tasks only through `spec_complete_task {evidence}` — never by editing the checkbox. A task whose `_Verify:_` names a
+   runnable command counts as verified only with `{command, exitCode: 0}` (on an `_Expect: fail_` task: its failing red
+   run); a failed run is recorded and refuses the tick; a text note ticks it but leaves it unverified. **Can't run the
+   command yourself** (no shell, no environment)? Don't tick the task — not bare, not with a note, never with an exit
+   code you didn't see — and don't send a subagent to look for a shell: name the `_Verify:_` command and ask the user
+   for its output (or to run `node "<clone>/cli/dev-spec.js" done <feature> <n> --run`, the line the tool's note prints
+   with the path resolved); record what they report, and tick it unverified only if they explicitly ask for exactly
+   that. Rules and reason codes: `references/verification.md`; the thoughts that precede skipping a phase:
+   `references/red-flags.md`.
+7. **An approved spec that changed is not approved.** Every approval snapshots what it signed off; an edit afterwards is
+   diffed (`spec_impact`), reviewed with the human and re-approved — never silently shipped.
 
 ## The local MCP server (use it — it's free and offline)
 
-The bundled zero-dependency MCP server **`spec-driven`** does the mechanical work; prefer it over
-hand-rolled edits for the structural steps. Which tool when:
+The bundled zero-dependency MCP server **`spec-driven`** does the mechanical work; prefer it over hand-rolled edits:
+`spec_classify` → `spec_init` → `spec_create` to start, `spec_doctor` / `spec_approve` / `spec_next_action` at every
+gate, `spec_next_task` / `spec_task_brief` / `spec_complete_task {evidence}` / `spec_finish` to execute. **Which tool
+when:** `references/tool-catalog.md`; the full tool table, CLI, hooks, MCP prompts and `specs://` resources:
+`references/tooling-reference.md`. The tools produce **skeletons and checks** (never overwriting your files); *you*
+fill them. No MCP connection (e.g. claude.ai)? Write the files by hand.
 
-- **Start:** `spec_classify` (Phase 0 draft) → `spec_init` (steering; opt-in `guard`, project `checks`, `approvalRoles`, `evidence: "observed"`, `approvalGuard`) → `spec_create` (one feature; `kind: "bugfix"` for a defect, `kind: "spike"` for a question, `brownfield: true` in existing code, `flow: "design-first"`) — or `spec_import` (Kiro / spec-kit / OpenSpec / a plan / a Codex ExecPlan / BMAD / fluidplan). The team's own scaffolds: `spec_templates`.
-- **Gates:** `ears_validate` · `spec_clarify` · `trace_check` (`code: true` → T-IDs in test files; `matrix: true` → the requirements traceability matrix) · `spec_doctor` (one "ready to advance?" verdict) · `spec_approve` (refused while the phase's checks fail; `role`, `through`) · `spec_next_action` (you are here, one ordered next step).
-- **Execute:** `spec_next_task` (`waves: true` → the parallel execution waves) · `spec_task_brief` · `spec_complete_task {evidence}` · `spec_append_tasks` (converge) · `spec_finish`.
-- **Change & after:** `spec_impact` (an edit after approval → what it touches; reopen) · `spec_decide` (decision log) · `spec_drift` · `spec_metrics` · `spec_catalog` · `spec_export` · `spec_changelog`.
-- **Project:** `spec_list`/`spec_status` · `spec_roadmap`/`spec_depend`/`spec_backlog`/`spec_milestone` · `spec_add_track`/`spec_feature` · `spec_scan`/`spec_coverage` (brownfield) · `steering_scaffold` · `spec_upgrade` (after a plugin update).
-
-Full tool table, CLI, hooks, and the MCP prompts + `specs://` resources other MCP clients get: `references/tooling-reference.md`.
-The tools produce **skeletons and checks** (never overwriting your files); *you* fill them with real content from
-the `references/` templates. No MCP connection (e.g. claude.ai)? Write the files by hand.
+**CLI lines you hand the user are the runnable ones.** `dev-spec …` in these docs is the CLI's name; a plugin install
+puts no `dev-spec` on PATH. Give the user the line the tools' messages print — `node "<clone>/cli/dev-spec.js" …`, the
+clone's path resolved — never a bare `dev-spec …`.
 
 ## First Things First: Mode, then Tracks
 
@@ -107,62 +107,53 @@ gate. No artifacts. If there's no existing flow to change, it isn't bounded. **T
 complexity found mid-task upgrades the mode (Vibe → Bounded → Spec), never the reverse.
 
 ### Bugfix — a real defect
-Something that worked (or is specified to work) and doesn't. Use the **bugfix flow** (`/spec-bugfix`):
-a light spec whose order is fixed — reproduce → root cause with evidence → **STOP for the `bug.md`
-approval** → failing regression test (`_Expect: fail_`, seen red) → fix → verify. "Fix it" asks for the outcome;
-it is not an approval of the root cause. Details under Supporting Workflows and in `references/bugfix.md`.
+Something that worked (or is specified to work) and doesn't. Use the **bugfix flow** (`/spec-bugfix`): a light spec
+whose order is fixed — reproduce → root cause with evidence → **STOP for the `bug.md` approval** → failing regression
+test (`_Expect: fail_`, seen red) → fix → verify. "Fix it" asks for the outcome; it is not an approval of the root
+cause. Prefill what you already know in the `spec_create {kind: "bugfix"}` call (`reproduction`, `rootCause`,
+`condition`, `behaviour`; `includeBody: true` returns the scaffolds) instead of reading four files back and rewriting
+them. After three failed fixes, question the design. `references/bugfix.md`.
 
 ### Spike — a question, not a feature
 An investigation that must end in a decision (which queue? can the API do X?): `/spec-spike`
-(`spec_create {kind: "spike", question, timebox}`) → `spike.md` (question · timebox · options · evidence ·
-decision `_Outcome: go | no-go | pivot_`) and investigation tasks, no requirements/design gates; prototype code
-stays outside `.specs/`. `go` seeds the real feature. `references/design-first.md`.
+(`spec_create {kind: "spike", question, timebox}`) → `spike.md` (question · timebox · options · evidence · decision
+`_Outcome: go | no-go | pivot_`) and investigation tasks, no requirements/design gates; prototype code stays outside
+`.specs/`. `go` seeds the real feature. `references/design-first.md`.
 
 ### Spec Mode — Plan First, Then Build
-Everything else. Spec Mode always begins with **Phase 0: Classification**, which selects the
-composable track set for this feature. Then it runs the pipeline below, with the track-conditional
-phases switched on or off. Internal-improvement work (refactor, coverage, a complexity hotspot) is Spec
-mode too, with a re-measurable metric delta as its acceptance criterion: `references/improvement-specs.md`.
-When the architecture is the input (a migration, an imported plan), use the **design-first** order —
-classification → design → requirements → … (`spec_create {flow: "design-first"}`, `references/design-first.md`).
+Everything else. Spec Mode always begins with **Phase 0: Classification**, which selects the composable track set for
+this feature, then runs the pipeline below with the track-conditional phases switched on or off. Internal-improvement
+work (refactor, coverage, a complexity hotspot) is Spec mode too, with a re-measurable metric delta as its acceptance
+criterion: `references/improvement-specs.md`. When the architecture is the input (a migration, an imported plan), use
+the **design-first** order — classification → design → requirements → … (`spec_create {flow: "design-first"}`,
+`references/design-first.md`).
 
 If unsure which mode: casual language → Vibe; a contained change to a flow that already exists →
 Bounded; a real defect → bugfix (`/spec-bugfix`); an open question → spike; formal/complex/"system"/"integration"/
 "properly" → Spec. Say the mode out loud so the user can override it; when in doubt between two, take the heavier
-one. Switch anytime: "let's vibe" → Vibe; "spec this" → Spec from Phase 0. If a Vibe session sprouts a
-tenant boundary, a payment path, personal data, a trust boundary or an LLM call, say so and offer to classify.
-New to the plugin? `/spec-tour` takes one tiny real change on the user's repo through every gate in ~10 minutes.
+one. Switch anytime: "let's vibe" → Vibe; "spec this" → Spec from Phase 0. If a Vibe session sprouts a tenant
+boundary, a payment path, personal data, a trust boundary or an LLM call, say so and offer to classify. New to the
+plugin? `/spec-tour` takes one tiny real change on the user's repo through every gate in ~10 minutes.
 
 ### Brownfield — adopt SDD in an EXISTING codebase
-When the project already has code (no `.specs/` yet, or "document/spec our existing app"): **scan**
-(`/scan`, `spec_scan`) → **infer steering + a constitution that acknowledges the existing patterns** →
-reverse-engineer specs for the core modules, describing what the code does *today* (`/reverse`) →
-**coverage** (`/coverage`, `spec_coverage`: the share of code files named by `_Implements:_`) → spec new
-features integration-aware (`spec_create {brownfield: true}` → `integration-plan.md`, `_Implements:_`). Specs or
-plans written elsewhere — Kiro, spec-kit, OpenSpec, a Claude Code or Cursor plan, a Codex ExecPlan, BMAD docs — come
-in with `/spec-import` (IDs remapped to `US-N.AC-M`; confirm the tracks, then the normal gates). Adopt
-incrementally; prove value on one module first. Full flow, strategies and import mappings: `references/brownfield.md`.
+No `.specs/` yet, or "spec our existing app": **scan** (`/scan`) → steering + a constitution that acknowledges the
+existing patterns → reverse-engineer specs of what the code does *today* (`/reverse`) → **coverage** (`/coverage`) →
+new features integration-aware (`spec_create {brownfield: true}` → `integration-plan.md`, `_Implements:_`). Specs or
+plans written elsewhere (Kiro, spec-kit, OpenSpec, a Claude Code or Cursor plan, a Codex ExecPlan, BMAD) come in with
+`/spec-import`. Adopt incrementally. `references/brownfield.md`.
 
-## Directory Structure
+## Directory Structure and Steering
 
-All artifacts live in `.specs/` at the project root: `steering/` (shared context, per active track),
-`roadmap.json`, and one folder per feature — `classification.md`, `requirements.md`, `design.md`,
-`tasks.md`, `quickstart.md`, `checklist.md`, plus `test-plan.md` + `tests/` (+tdd), `eval-plan.md` +
-`prompts/` + `evals/` (+ai) and `load-test.md` (+saas); `integration-plan.md` (brownfield), `bug.md` (bugfix),
-`spike.md` (spike), `decisions.md` (the decision log), `retro.md`, and `.history/` (approval snapshots — commit
-them). Generated in `.specs/`: `ROADMAP.md`, the living catalog `SPECS.md`, `RELEASE-NOTES.md` and `exports/`; the
-team's own scaffolds live in `.specs/templates/`. Annotated tree: `references/tooling-reference.md`.
-**An existing `.specs/` from an older dev-spec** (the session-start line says so): run `/spec-upgrade` first — audit → apply (after an OK) → review.
+Everything lives in `.specs/` at the project root: `steering/`, `roadmap.json` and one folder per feature — its
+artifacts (the tracks decide which), `decisions.md`, `retro.md` and `.history/` (approval snapshots — commit them);
+generated there: `ROADMAP.md`, `SPECS.md`, `RELEASE-NOTES.md`, `exports/`. Annotated tree:
+`references/tooling-reference.md`. **An existing `.specs/` from an older dev-spec** (the session-start line says so):
+run `/spec-upgrade` first — audit → apply (after an OK) → review.
 
-### Steering Files
-Before any spec work, read whatever exists in `.specs/steering/`. Steering depends on the tracks, so missing files
-are created **after Phase 0 approval** (see Phase 0, step 4); add a track's steering file (`steering_scaffold`) the
-first time a later feature pulls in that track. They're short and dramatically improve every downstream spec; one
-still full of template placeholders steers nothing (`spec_doctor` names it). **Scoped steering:** rules for one area
-go in a custom file (`steering_scaffold {file: "api-conventions.md"}`) whose front matter says when a task brief
-includes it — `inclusion: always`, `fileMatch` (+ `fileMatchPattern: "src/api/**"`, matched against the task's
-`_Implements:_` paths) or `manual`. A team's own scaffolds go in `.specs/templates/` (`/spec-templates init`, then
-`check`). Templates, inclusion modes and overrides: `references/steering-templates.md`. Optional `glossary.md` (`steering_scaffold`): `- **Customer** — … _Avoid: client, user_` — `spec_clarify` asks about every avoided word a spec uses, `spec_doctor` warns `glossary`, briefs quote the entries a task uses.
+**Steering.** Before any spec work, read whatever exists in `.specs/steering/`. Missing files are created **after
+Phase 0 approval** (step 4); add a track's steering file (`steering_scaffold`) the first time a later feature pulls in
+that track. One still full of placeholders steers nothing (`spec_doctor` names it). Scoped steering (front matter
+`inclusion`), the team's scaffolds in `.specs/templates/`, the optional `glossary.md`: `references/steering-templates.md`.
 
 **`constitution.md` is core (always).** It holds the project's non-negotiable principles (e.g. "every write is
 idempotent", "no PII in logs", "errors fail closed"). Every design carries a **Constitution Check** section;
@@ -174,19 +165,19 @@ actually honours each principle is judged by the human at the gate and by the `s
 
 Decide the mode, then the track set. This is fast (5–10 min) and saves days of wrong-rigor work.
 
-1. **Run `spec_classify`** with the feature description (and `projectDir` — the project's track packs are classified too) to get a recommended track set + the keyword signals that triggered each track. Treat it as a draft, not gospel.
-2. **Sanity-check against the matrix** in `references/classification-matrix.md`. The rule of thumb:
-   - `+tdd` if correctness matters or it's hard to undo (billing, auth, data integrity, tricky logic).
-   - `+saas` if it's multi-tenant, hot-path, background, an external contract, hard to rollback, or cost-sensitive at scale.
-   - `+ai` if quality depends on LLM/agent/embedding output, or user input reaches a model.
-   - `+sec` if a mistake is a breach: credentials, a trust boundary (public endpoint, upload, webhook), who-may-do-what, secrets.
-   - `+privacy` if it collects, stores, shares, profiles or deletes personal data (GDPR / RGPD, HIPAA).
-   - `+dist` if one write reaches more than one system (a database AND a broker, a cache, another service) or delivery, idempotency, concurrency or partial failures matter — Kafka, outbox, saga, microservices.
-   - `+api` if other code depends on the API's contract — a public, partner or internal API, OpenAPI / GraphQL / gRPC, versioning, breaking changes, SDKs (`references/api-design-patterns.md`).
-   - `+ui` if it adds or changes a user-facing screen, component or flow — a design system, accessibility (WCAG), responsive layout, dark mode, a settings / admin page (`references/ui-design-patterns.md`).
-   - `+obs` if people depend on it staying up — SLOs, alerting, on-call, runbooks, tracing, feature flags, a canary / progressive rollout (`references/observability-patterns.md`).
-   - **When unsure, turn the track on.** Under-investing on a critical feature is far more expensive than over-investing on a simple one. One auth word alone only makes `+sec` "possible" (weak there, strong for `+tdd`); the classifier's notes say so.
-3. **Present for approval:** mode, active tracks, the signals, blast radius, and (per track) hot-path / autonomy / volume / compliance. If the user disagrees with the track set, adjust it now.
+1. **Run `spec_classify`** with the feature description (and `projectDir` — the project's track packs are classified
+   too) to get a recommended track set + the keyword signals that triggered each track. A draft, not gospel.
+2. **Sanity-check against the matrix** in `references/classification-matrix.md`. The rule of thumb: `+tdd` if
+   correctness matters or it's hard to undo (billing, auth, data integrity, tricky logic) · `+saas` if multi-tenant,
+   hot-path, background, an external contract, hard to roll back or cost-sensitive at scale · `+ai` if quality depends
+   on LLM/agent/embedding output or user input reaches a model · `+sec` if a mistake is a breach (credentials, a trust
+   boundary, who-may-do-what, secrets) · `+privacy` if it collects, stores, shares, profiles or deletes personal data ·
+   `+dist` if one write reaches more than one system or delivery, idempotency, concurrency or partial failures matter ·
+   `+api` if other code depends on the API's contract · `+ui` if it adds or changes a user-facing screen or flow ·
+   `+obs` if people depend on it staying up (SLOs, alerting, on-call, rollout). **When unsure, turn the track on.**
+   One auth word alone only makes `+sec` "possible"; the classifier's notes say so.
+3. **Present for approval:** mode, active tracks, the signals, blast radius, and (per track) hot-path / autonomy /
+   volume / compliance. If the user disagrees with the track set, adjust it now.
 4. **After Phase 0 approval:** `spec_init {tracks, lang}` if steering is missing, then
    `spec_create {name, tracks, lang}` **once** — it seeds `classification.md` (record the fields from
    step 3 there) and every artifact skeleton the tracks need, and persists the track set and language in
@@ -196,25 +187,21 @@ Worked examples: `references/classification-examples-saas.md`, `references/class
 
 ## Phase 1: Requirements (`/createSpec`)
 
-Transform the idea into formal, testable requirements in **EARS** syntax with **stable AC IDs**
-(`US-1.AC-1`, `US-1.AC-2`, …). Those IDs are the backbone of traceability — tests, tasks, commits,
-dashboards, and alerts all reference them, so assign them even on the lightest track.
-
-**Prioritize the user stories and make each independently shippable.** Label them **P1 / P2 / P3** where **P1 is
-the MVP** that delivers value on its own; give each a one-line *Independent Test*. Add a **Success Criteria** section
-with measurable, **technology-agnostic** outcomes (`SC-001`, … — e.g. "90% complete checkout in <30s") — these sit
-alongside the EARS ACs (system behavior), not instead of them. Give edge cases and NFRs stable IDs too (`EC-1`,
-`NFR-1`) — `trace_check` warns when no task or test covers them. **Mark any ambiguity inline** with
-`[NEEDS CLARIFICATION: question]`; **the design phase is gated — it cannot start while any such marker remains**
-(`spec_doctor` fails the `clarifications` check until they're resolved). Replace every template placeholder: the
-gates treat a scaffold that is still a template as unwritten (`placeholders` check; approval refused).
+Transform the idea into formal, testable requirements in **EARS** syntax with **stable AC IDs** (`US-1.AC-1`, …) —
+the backbone of traceability (tests, tasks, commits, dashboards and alerts reference them), so assign them even on the
+lightest track. **Prioritize the user stories and make each independently shippable:** P1 / P2 / P3, P1 the MVP, each
+with a one-line *Independent Test*. Add **Success Criteria** — measurable, **technology-agnostic** outcomes (`SC-001`,
+e.g. "90% complete checkout in <30s") beside the EARS ACs. Give edge cases and NFRs stable IDs too (`EC-1`, `NFR-1`) —
+`trace_check` warns when no task or test covers them. **Mark any ambiguity inline** with
+`[NEEDS CLARIFICATION: question]`; **the design phase cannot start while any marker remains** (`spec_doctor` fails
+`clarifications`). Replace every template placeholder: a scaffold still a template counts as unwritten (`placeholders`
+check; approval refused). Each active track's criteria to consider: `references/track-checklists.md`.
 
 Steps: read steering → ask clarifying questions (don't guess) → fill the scaffolded `requirements.md` → run
-`ears_validate` to catch missing SHALL / missing IDs / vague words → **run `spec_clarify`** (`/clarify`) to surface
-remaining gaps (vague terms, leftover placeholders, missing edge-cases/NFR/out-of-scope, missing IF…THEN failure paths,
-track-specific gaps like tenant isolation, AI quality/cost, access denial or data subject rights, unstated consistency for
-queues / events / concurrent writes) and ask the user → for a deeper, one-question-at-a-time interrogation, offer `/grill`
-(its constraints round: atomicity, isolation, races, consistency, idempotency, failures, volume) → present for approval.
+`ears_validate` (missing SHALL / IDs, vague words) → **run `spec_clarify`** (`/clarify`: vague terms, leftover
+placeholders, missing edge cases / NFRs / out-of-scope / IF…THEN failure paths, track gaps, unstated consistency) and
+ask the user → for a deeper one-question-at-a-time interrogation offer `/grill` (its constraints round: atomicity,
+isolation, races, consistency, idempotency, failures, volume) → present for approval.
 
 ### EARS Quick Reference
 | Pattern | Keyword | Example |
@@ -229,26 +216,10 @@ PT: QUANDO / ENQUANTO / SE…ENTÃO / ONDE · O SISTEMA DEVE — ES: CUANDO / MI
 EL SISTEMA DEBE (all pass `ears_validate`). Compound order: WHILE → WHEN → IF. Every criterion must be
 testable and specific — no "fast", "user-friendly"; use concrete values. Full reference: `references/ears-guide.md`.
 
-### Track-specific ACs to always consider
-- **+saas:** tenant isolation (`WHEN a user from tenant A requests data, THE SYSTEM SHALL NOT
-  return any record whose tenant_id != A`), rate limits, abuse/fair-use, auth boundary per role,
-  audit trail, latency target.
-- **+ai:** output-quality target (% on golden set), latency target (time-to-first-token), cost
-  ceiling ($/request), refusal behavior, hallucination boundary ("say I don't know"), prompt-
-  injection resistance, fallback model, per-call audit logging.
-- **+sec:** unauthenticated → 401 and no data, unauthorized → 403 + an audit event, no secret / token / stack
-  trace in any response or log (scaffolded as `US-1.AC-10..12`), plus the abuse cases the threat model finds.
-- **+privacy:** the subject's data exported machine-readably, erased in every store, deleted or anonymized when its retention ends (`US-1.AC-13..15`), and consent withdrawal when consent is the lawful basis.
-- **+dist:** a publish that fails after the commit is still delivered (outbox), a duplicate message has one effect, concurrent updates are never lost, a dependency down degrades instead of blocking (`US-1.AC-16..19`).
-- **+api:** a malformed request answered 400 with a problem+json body naming the field, an Idempotency-Key replay with one effect, a stale If-Match refused with 412, a breaking change only in a new version (`US-1.AC-20..23`).
-- **+ui:** keyboard-only operation with a visible focus, a failed form that keeps its values and names each error, an empty state with the next action, a failed load with Retry (`US-1.AC-24..27`).
-- **+obs:** telemetry with a correlation ID and no personal data, a burn-rate page with the runbook, a canary that rolls back on its error rate, not-ready-but-live while a dependency is down (`US-1.AC-28..31`).
-- **+tdd:** make sure every AC is concrete enough to become a failing test — if it can't, rewrite it.
-
 ## Phase 2: Design (`/design`)
 
-Convert approved requirements into a technical blueprint (on a design-first feature this phase comes before
-Phase 1). Re-read steering + requirements, scan the codebase for patterns to match and code to reuse, then write `design.md`.
+Convert approved requirements into a technical blueprint (on a design-first feature this phase comes before Phase 1).
+Re-read steering + requirements, scan the codebase for patterns to match and code to reuse, then write `design.md`.
 
 **Base sections (always):** Overview · Architecture (≥1 Mermaid diagram) · **Reuse & Integration** (existing modules /
 components / helpers reused or extended, with paths; what is new and why; where it lives) · **Alternatives & Trade-offs**
@@ -256,62 +227,37 @@ components / helpers reused or extended, with paths; what is new and why; where 
 Security · Error Handling · Testing Strategy · **Risks** (likelihood · impact · mitigation · owner) · **Constitution Check**
 (each principle of `steering/constitution.md` — a gate, re-checked after any change) · **Complexity Tracking** (justify what
 breaks a principle; empty is good). Doctor warns `design-tradeoffs` / `design-risks` / `design-reuse` (never blocks).
-`spec_create` always scaffolds `quickstart.md` (a manual acceptance scenario) and `checklist.md` — fill both; optionally `research.md`.
+`spec_create` always scaffolds `quickstart.md` (a manual acceptance scenario) and `checklist.md` — fill both; optionally
+`research.md`. **Each active track adds its mandatory sections** (+tdd Testability Notes; +saas 5, +ai 10, +sec 5,
++privacy 6, +dist / +api / +ui / +obs 5 each) — what goes in each: `references/track-checklists.md`.
 
-**+tdd adds:** Testability Notes (seams, determinism, side effects to isolate, test-data strategy).
-
-**+saas adds 5 mandatory sections** — Performance Budget (P50/P95/P99, max query time, memory, throughput) ·
-Scale Design (users and data over time, hot paths, caching, queues, indexes, sharding) · Multi-tenancy Model
-(isolation, tenant_id enforcement, noisy neighbours, export/delete) · Observability (named metrics, structured logs,
-traces, alerts → thresholds → who, dashboards) · Cost Envelope ($/1000 users/month, cost-critical paths, cost
-metric + alert). See `references/scale-design-template.md` and `references/saas-patterns.md`.
-
-**+ai adds 10 mandatory sections** — Model Strategy · Prompt Architecture · Token Economics · Latency Budget · Eval
-Strategy · Safety & Abuse · Fallback & Degradation · Observability for AI · Model Lifecycle · Multi-modality. See
-`references/mandatory-ai-design-sections.md`, `references/prompt-engineering-patterns.md`,
-`references/model-provider-guide.md`, `references/ai-cost-modeling.md`, `references/ai-safety-patterns.md`.
-
-**+sec adds 5 mandatory `[SEC]` sections** — Threat Model (STRIDE per trust boundary) · Security Requirements (ASVS level) · Authentication & Authorization · Secrets & Key Management · Security Testing. See `references/security-track.md`.
-
-**+privacy adds 6 mandatory `[PRIVACY]` sections** — Personal Data Inventory · Lawful Basis & Purpose · Retention & Deletion · Data Subject Rights · Processors & International Transfers · DPIA. See `references/privacy-track.md` (not legal advice: the DPO or counsel decides, the spec records it).
-
-**+dist adds 5 mandatory `[DIST]` sections** — Consistency Model · Cross-system Writes (every dual write → outbox / inbox / saga, or an accepted risk) · Delivery & Idempotency · Concurrency · Failure Modes (CAP / PACELC). See `references/distributed-data-patterns.md`. **+api adds 5 mandatory `[API]` sections** — API Contract · Versioning & Compatibility · Error Model (RFC 9457 problem+json) · Pagination, Idempotency & Concurrency · Rate Limits & Quotas. See `references/api-design-patterns.md`. **+ui adds 5 mandatory `[UI]` sections** — Design System Usage · UI States (a state matrix per view) · Accessibility (WCAG 2.2 AA) · Responsiveness & i18n · UI Performance Budget (Core Web Vitals). See `references/ui-design-patterns.md`. **+obs adds 5 mandatory `[OBS]` sections** — SLIs & SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health & Capacity. See `references/observability-patterns.md`.
-
-Design principles: simplicity over cleverness, consistency with the codebase, reach for known
-patterns over novelty. Present for approval before proceeding.
+Design principles: simplicity over cleverness, consistency with the codebase, known patterns over novelty. Present for
+approval before proceeding.
 
 ## Phase 3: Test Plan & Eval Plan (`/testPlan`, `/evalPlan`) — track-conditional
 
-**+tdd → Test Plan.** Enumerate every test (≥1 per AC; negative tests for every IF/THEN; boundary tests). Each test
-gets a stable ID (`T-01`) mapped to AC IDs, a layer (unit/integration/E2E) following the pyramid, and a **Kind**:
-`example` (one concrete case — event-driven WHEN / IF…THEN) or `property` (an invariant over generated inputs —
-ubiquitous, WHILE, "never / for every" rules like tenant isolation). The Coverage Check section must show every AC
-appears in ≥1 test. On +saas, add tenant-isolation, rate-limit, idempotency, authorization-matrix, and audit-log
-tests; on +sec, one abuse-case test per threat; on +privacy, export / erasure / retention tests; on +dist, failure injection; on +api, contract tests and the breaking-change diff; on +ui, an accessibility check + visual regression of the states; on +obs, an alert in a staged failure, a rollback drill, fault injection. Approve before
-writing test code. References: `references/test-patterns.md`.
+**+tdd → Test Plan.** Enumerate every test (≥1 per AC; negative tests for every IF/THEN; boundary tests). Each test gets
+a stable ID (`T-01`) mapped to AC IDs, a layer (unit/integration/E2E, following the pyramid) and a **Kind**: `example`
+(one concrete case — WHEN / IF…THEN) or `property` (an invariant over generated inputs — ubiquitous, WHILE, "never /
+for every" rules like tenant isolation). The Coverage Check shows every AC in ≥1 test. Approve before writing test
+code. `references/test-patterns.md`.
 
-**+ai → Eval Plan.** Build three sets: **golden** (50–200 representative inputs with expected
-quality), **adversarial** (injections, jailbreaks, out-of-scope, unsafe-elicitation, degenerate
-inputs — should refuse/degrade), **regression** (every fixed production bug, grows forever). Choose
-grading per set (exact match / schema / LLM-as-judge with rubric / human). Set explicit ship
-thresholds (e.g. golden ≥85%, adversarial safety 100%, regression 100%). Record a **baseline** from
-a minimal v1 prompt before implementing. References: `references/eval-suite-patterns.md`.
+**+ai → Eval Plan.** Three sets — **golden**, **adversarial**, **regression** — with grading per set, explicit ship
+thresholds and a **baseline** from a minimal v1 prompt before implementing. `references/eval-suite-patterns.md`.
 
-A feature with both tracks has both artifacts.
+The tests each other track adds, and the eval plan in detail: `references/track-checklists.md`. A feature with both
+tracks has both artifacts.
 
 ## Phase 4: Failing Tests + Eval Harness (`/writeTests`) — track-conditional, the hard gate
 
-**+tdd:** Write every planned test. Each must exist and **fail for the right reason** (assertion /
-NotImplementedError, not a typo or missing import). Scaffold only stubs/signatures so tests compile — no business
-logic. Confirm: N written, N red, 0 green, 0 erroring. Put the T-ID in each test's name (`test("T-01 …")`,
-`def test_T01_…`) and run `trace_check {code: true}` (`dev-spec trace <f> --code`): every planned T-ID found in the
-test code. Commit `test(feature): scaffold failing tests …`. **No implementation code until this gate is approved.**
+**+tdd:** Write every planned test. Each must exist and **fail for the right reason** (assertion / NotImplementedError,
+not a typo or missing import). Scaffold only stubs/signatures so tests compile — no business logic. Confirm: N written,
+N red, 0 green, 0 erroring. Put the T-ID in each test's name (`test("T-01 …")`, `def test_T01_…`) and run
+`trace_check {code: true}`: every planned T-ID found in the test code. Commit `test(feature): scaffold failing tests …`.
+**No implementation code until this gate is approved.**
 
-**+ai:** Write deterministic tests (validation, schema, rate limiting, logging, fallback, cost
-circuit breaker) AND implement the eval harness (loads sets → runs through prompt+model → grades →
-scores per set → fails below threshold); the bundled local harness runs with `/eval` (the user's own
-API key; `--dry-run` offline). Establish and record the baseline. Commit
-`test(feature): eval harness + baseline (golden 73%, adversarial 96%)`.
+**+ai:** deterministic tests AND the eval harness (`/eval` runs the bundled local one; `--dry-run` offline); record the
+baseline and commit it (`references/track-checklists.md`).
 
 **The gate is tracked:** once the test plan (+tdd) or eval plan (+ai) exists, phase `tests` is pending —
 `/next-action` asks for it (after the test/eval plan approval, before the tasks approval) and never recommends
@@ -323,17 +269,12 @@ before asking. A bugfix has no Phase 4 gate — its failing regression test is o
 ## Phase 5: Tasks (`/createTask`)
 
 Break the design into tasks (~30 min–2 h each). **Organize by user story (P1 first)** so each story is independently
-shippable: a `Setup` phase, a `Foundational` phase (blocks all stories), then one phase per story (`Story US-1 (P1)`,
-…) ending with a **`**Checkpoint:**`** line where that story is independently testable, then a `Polish` phase.
-Within a story keep track-aware ordering (foundation → logic → API → UI → observability → load/eval). **Tag every
-task with its story:** `[US1]`/`[US2]` for story work, `[shared]` for cross-cutting/foundational/setup/polish — so
-membership is obvious at a glance. Mark **`[P]`** on tasks that can run in **parallel** (different files, no
-dependencies); the tag order is `[US1][P]`. Numbers ARE the order; 2–4 sub-steps each.
-
-**Why by story:** a product reader maps tasks straight to the value slices of the user stories; a technical reader
-still gets build-order *within* each story plus explicit `[P]`/dependency markers. **Fallback:** stories that are
-NOT independent (P1 can't ship without most of P2's infra) were mis-sliced — re-slice them; for a genuinely
-monolithic feature use a technical-layer layout (Foundation→Logic→API→…), keeping the `[US1]` tags.
+shippable: a `Setup` phase, a `Foundational` phase (blocks all stories), one phase per story (`Story US-1 (P1)`, …)
+ending with a **`**Checkpoint:**`** line where that story is independently testable, then a `Polish` phase. Within a
+story keep track-aware ordering (foundation → logic → API → UI → observability → load/eval). **Tag every task with its
+story** — `[US1]`/`[US2]`, or `[shared]` for cross-cutting/foundational/setup/polish — and mark **`[P]`** on tasks that
+can run in **parallel** (different files, no dependencies); tag order `[US1][P]`. Numbers ARE the order; 2–4 sub-steps
+each. Stories that aren't independent were mis-sliced — re-slice them.
 
 Traceability markers per task:
 - Always: `_Requirements: US-1.AC-1, US-1.AC-2_` and `_Verify: <command that proves it>_` (no pipe: a pipeline
@@ -343,23 +284,20 @@ Traceability markers per task:
 - Optional: `_Size: XS|S|M|L|XL_` (1/2/3/5/8 points — the roadmap's velocity and ETA)
 - Optional: `_Depends: 3, 5_` — tasks of this tasks.md that must be done first (the next task and the waves follow it;
   doctor fails `task-deps` on an unknown number or a cycle); without it, tasks.md order is the order
-- +tdd: `_Makes green: T-01, T-02_`
-- +saas: `_Emits metrics: req_duration_ms{feature=X}_` + an observability task + (hot path) a load-test task
-- +ai: `_Affects evals: golden (maintain baseline)_` + a separate task per prompt change + a cost-monitoring task
-- brownfield/integration: `_Implements: path/to/file_` to tie a task to a real source file (checked by `trace`)
+- Per track (+tdd `_Makes green:_`, +saas `_Emits metrics:_`, +ai `_Affects evals:_`, brownfield `_Implements:_`):
+  `references/track-checklists.md`
 
-Run `trace_check` after writing tasks: every AC must map to ≥1 task (and, on +tdd, the test plan;
-every planned T-ID should map to a task). Keep task numbers unique and replace every scaffold placeholder task
-(the tasks gate refuses them). Present for review. Work found after approval is appended, never renumbered in
-(`spec_append_tasks`, below).
+Run `trace_check` after writing tasks: every AC must map to ≥1 task (and, on +tdd, the test plan; every planned T-ID
+should map to a task). Keep task numbers unique and replace every scaffold placeholder task (the tasks gate refuses
+them). Present for review. Work found after approval is appended, never renumbered in (`spec_append_tasks`).
 
 ## Phase 6: Execute (`/executeTask`)
 
 Before any code, re-read steering, requirements, design, (test/eval plans), and tasks; summarize your understanding to
 confirm alignment. **Search before you write:** the design's Reuse & Integration, the brief's Reuse section, the codebase by
-concept and synonyms — reuse, else extend, else create; a refactor outside the task goes to the backlog (`refactor:` note).
-Then work tasks **in order** — the next is `spec_next_task`'s: the first open task whose `_Depends:_` are all done —
-choosing the loop per task:
+concept and synonyms — reuse, else extend, else create; a refactor outside the task goes to the backlog (`refactor:` note;
+`references/code-reuse-and-quality.md`). Then work tasks **in order** — the next is `spec_next_task`'s: the first open
+task whose `_Depends:_` are all done — choosing the loop per task:
 
 - **core task (no +tdd):** announce → implement per design → run existing tests and the task's
   `_Verify:_` → `spec_complete_task {evidence}` → report.
@@ -373,80 +311,56 @@ choosing the loop per task:
   otherwise revert/investigate → `spec_complete_task {evidence}`: the harness command + its exit code,
   and the eval scores with their delta vs baseline in the summary → commit with that delta.
 
-**Evidence, enforced** (`references/verification.md`): no shell to run a `_Verify:_`? Ask for the output or
-`dev-spec done <f> <n> --run` — never tick on your own (Principle 6). A `_Verify:_` that pipes
-(`npm test | tee log`) is flagged (`pipeMasked`, doctor `verify-pipes`): drop the pipe or `set -o pipefail`. With project checks set
-(`spec_init {checks}`) every brief lists them and `/spec-finish` needs a passing run of each since the last tick, on the current code. In
-Claude Code a **Stop hook** sends the turn back when your closing message claims done / verified while a recently
-active feature has ticked tasks without passing evidence (opt-out `meta.stopCheck`) — run the check, or say plainly
-what is not verified. With `spec_init {evidence: "observed"}` only a run the harness saw (Claude Code's Bash hook) or
-`done --run` made verifies: run the `_Verify:_` with the Bash tool, then record exactly that command and exit code.
+**Evidence, enforced** (`references/verification.md`): no shell to run a `_Verify:_`? Ask for the output or for the
+runnable `done … --run` line the tool prints — never tick on your own, never send a subagent to find a shell
+(Principle 6). A `_Verify:_` that pipes is flagged (`pipeMasked`, doctor `verify-pipes`): drop the pipe or
+`set -o pipefail`. With project checks set (`spec_init {checks}`) every brief lists them and `/spec-finish` needs a
+passing run of each since the last tick, on the current code. In Claude Code a **Stop hook** sends the turn back when
+your closing message claims done / verified while a recently active feature has ticked tasks without passing evidence
+— run the check, or say plainly what is not verified. With `spec_init {evidence: "observed"}` only a run the harness saw
+(Claude Code's Bash hook) or `done --run` made verifies — run the `_Verify:_` with the Bash tool, then record exactly that.
 
-Track-gated "done" checks before a feature is finished:
-- **+saas:** the hot-path load test from `load-test.md` meets the P50/P95/P99 budget (missed → root-cause and fix,
-  never silently accept it — `references/load-testing-patterns.md`); observability validated — metrics emitting,
-  logs appearing, alerts configured, dashboard exists. Code ≠ proven.
-- **+ai:** cost validation (real token usage within ~20% of the projection) and safety validation (full adversarial
-  set, 100% on safety-critical categories, human spot-check of ~20 outputs).
-- **+sec:** security scans clean, the threat model re-checked against what was built; **+privacy:** data subject
-  rights verified end to end on the real stores, retention scheduled; **+dist:** failure-injection tests green, no dual write left; **+api:** contract tests and the breaking-change diff green; **+ui:** the accessibility check, a keyboard / screen-reader pass and the performance budget; **+obs:** an alert fired in a staged failure and a rollback drill.
+Track-gated "done" checks before a feature is finished (load test, cost and safety, scans, subject rights, failure
+injection, contract tests, accessibility, a staged alert…): `references/track-checklists.md`; `spec_finish` lists them.
 
-If blocked, pause and discuss — don't improvise outside the design. If a test/measurement reveals a
-gap, go back to that phase, not the implementation. If a "green" test is actually wrong, pause,
-explain, fix the plan with approval, rerun — never quietly edit a test to pass. A decision or discovery made on
-the way goes to the decision log (`/spec-decide`), not only into chat.
+If blocked, pause and discuss — don't improvise outside the design. If a test/measurement reveals a gap, go back to
+that phase, not the implementation. If a "green" test is actually wrong, pause, explain, fix the plan with approval,
+rerun — never quietly edit a test to pass. A decision or discovery made on the way goes to the decision log
+(`/spec-decide`), not only into chat.
 
-### Execution strategy: inline (default) or subagents (opt-in)
+**Inline (default) or subagents (opt-in).** `/executeTask <feature> --subagents` (or when the user asks) keeps your
+context for coordination: per task write a brief with `spec_task_brief {name, number, write:true}`, dispatch
+**`dev-spec-driven:spec-implementer`** with its path, send the diff to **`dev-spec-driven:spec-reviewer`**, run a fix loop of
+at most 5 rounds, only then `spec_complete_task`. Offer it for ~6+ mostly independent tasks (it costs 2–3× the tokens).
+You (the controller) never write feature code; stop at every `**Checkpoint:**` for human review; a finding that would
+change an AC, the design or a planned test goes back to that phase; +ai prompt/eval tasks stay inline. Full protocol:
+`references/subagent-execution.md`.
 
-**Inline** is the loop above: you implement every task in this session. **Subagents**
-(`/executeTask <feature> --subagents`, or when the user asks) keeps your context for coordination: per
-task you write a brief with `spec_task_brief {name, number, write:true}`, dispatch the plugin's
-**`dev-spec-driven:spec-implementer`** agent with the brief path, send its diff to the **`dev-spec-driven:spec-reviewer`** agent
-(verdict per AC ID + quality + track checks), run a fix loop of at most 5 rounds, and only then call
-`spec_complete_task`. Offer it for features with ~6+ mostly independent tasks. It costs roughly 2–3× the
-tokens. Invariants:
-- you (the controller) never write feature code; `tasks.md` `[x]` means *implemented and reviewed*;
-- run continuously within a story, but **stop at every `**Checkpoint:**`** for human review;
-- any finding that would change an AC, the design or a planned test goes **back to that phase**. Never
-  rule on it yourself;
-- +ai prompt/eval tasks (`inlineOnly` in the brief) stay inline;
-- the implementer's report names each `_Verify:_` command with its exit code — a SubagentStop hook sends a DONE
-  without them back;
-- hosts without subagents (Cursor, Windsurf, Copilot, Gemini, claude.ai) use inline, and can still use
-  `dev-spec brief` to focus each task.
+**Converge pass (`/spec-converge`).** When implementation drifted or you doubt every AC is delivered,
+`dev-spec-driven:spec-reviewer` in **converge** mode walks the feature AC by AC and proposes the missing work as tasks;
+**the human approves the list**, then `spec_append_tasks` adds them and you re-approve the tasks phase.
 
-Full protocol (preconditions incl. a green baseline, ledger, review packages, fix loop, model selection,
-final review): `references/subagent-execution.md`.
-
-### Converge pass (`/spec-converge`)
-
-When implementation drifted, a review found follow-up work, or every task is ticked but you doubt every AC is
-delivered: dispatch `dev-spec-driven:spec-reviewer` in **converge** mode (or run its checklist inline) — the
-whole feature, AC by AC: implemented where? tested by what? It proposes the missing work as tasks; gaps that
-need a different AC or design go back to their phase instead. **The human approves the list**, then
-`spec_append_tasks` adds them under "Phase: Convergence" (existing tasks untouched), you re-approve the tasks
-phase and execute them with evidence.
-
-**User commands during execution:** "implement"/"next" (next task) · "implement N" (jump) · "continue" (resume) ·
-"status" (progress + test/eval state) · "pause" (stop after current task).
+**User commands during execution:** "implement"/"next" · "implement N" · "continue" · "status" · "pause".
 
 ## Gates (`/spec-doctor`, `/approve`, `/spec-ff`, `/next-action`)
 
 Before advancing a phase, run `/spec-doctor` (`spec_doctor`): one `readyToAdvance` verdict over EARS, placeholders,
 traceability, steering, the design + Mermaid + Constitution Check, every active track's mandatory sections (present
 AND filled — no leftover `TODO` sentinel), evidence, artifacts changed since their approval and the **approval
-gates** (`gatesOk`, `pendingGates`, forced approvals); every check id: `references/tooling-reference.md`. `--deep`
-adds a semantic review by the `dev-spec-driven:spec-critic` agent (completeness, contradictions, ambiguity,
-testability, scope, YAGNI). When the user signs off, record it with `/approve <feature> <phase>` (auditable,
-resumable, in `.state.json`). **The approval is a gate:** that phase's checks run first and any failure refuses it,
-naming them. `force: true` (`--force`) records it anyway as a *forced* approval — only when the user explicitly
-accepts the failures; doctor, the roadmap and the metrics keep showing it. **Phase by phase:** a phase can't be
-approved while an earlier one is unapproved (`phase-order`). **Several filled phases at once:** `/spec-ff`
-(`spec_approve {through: "tasks"}`) approves them in order, each through its own gate, stopping at the first
-refusal — only after the user said go. **Teams:** with `spec_init {approvalRoles}` (e.g. design → tech + security)
-a listed phase counts as approved only once every role signed off its current content (`spec_approve {role}`).
-With `spec_init {approvalGuard: "ask" | "deny"}` a hook asks the user before your approval or refuses it — then give
-the user the command it names to run themselves and wait; never retry it another way.
+gates** (`gatesOk`, `pendingGates`, forced approvals); check ids: `references/tooling-reference.md`. `--deep` adds a
+semantic review by the `dev-spec-driven:spec-critic` agent. When the user signs off — an explicit yes for that phase —
+record it with `/approve <feature> <phase>` (auditable, resumable, in `.state.json`). **The approval is a gate:** that
+phase's checks run first and any failure refuses it, naming them. `force: true` (`--force`) records it anyway as a
+*forced* approval — only when the user explicitly accepts the failures; doctor, the roadmap and the metrics keep
+showing it. **Phase by phase:** a phase can't be approved while an earlier one is unapproved (`phase-order`).
+**Several filled phases at once:** `/spec-ff` (`spec_approve {through: "tasks"}`) approves them in order, each through
+its own gate, stopping at the first refusal — only after the user said go. **Teams:** with `spec_init {approvalRoles}` a
+listed phase counts as approved only once every role signed off its current content (`spec_approve {role}`). With
+`spec_init {approvalGuard: "ask" | "deny"}` a hook asks the user before your approval or refuses it — then give the
+user the command it names to run themselves and wait; never retry it another way. **The `execution` sign-off:** a green
+run is evidence, not the sign-off — show the run and the merge summary, then ask for an explicit yes before
+`spec_approve {phase: "execution"}`; never "once you paste a passing run, I'll approve it".
+
 Lost? `/next-action <feature>` gives ONE next step — re-review what changed since approval → the first phase not
 approved yet (fill → fix what its gate would refuse → approve) → fix → implement → verify an unverified tick →
 finish (then `finished`, or `drift` to decide on).
@@ -455,65 +369,20 @@ At every gate present: **(1) what was produced · (2) key decisions + rationale 
 affected · (4) risks to review · (5) the `spec_doctor` verdict · (6) next step** — then ask for
 approval. Keep it tight.
 
-## After approval: changes, decisions, drift, metrics
+## Finish and after approval
 
-- **Change request (`/spec-impact`).** Every approval saves a snapshot (`.history/<phase>@<n>.md`) and joins
-  `approvalHistory`. An approved artifact edited later is flagged everywhere (`changed-since-approval`;
-  `next_action` → re-review; `spec_finish` blocks). `spec_impact` diffs it against the snapshot — ACs (by ID),
-  design sections or tasks — and lists the tasks, tests and design sections each change reaches. Show that to the
-  user; only with their OK, `reopen: true` unticks the affected done tasks, marks their evidence stale and records
-  the change request (`state.changes`) — a REMOVED criterion's tasks are never redone: `retire` lists them (and
-  their test rows) to delete or repoint. Then update what the change reaches and re-approve (a new snapshot). **Steering amendments:** requirements / design approvals record the steering that governed them (constitution, the tracks' files, `always` / matching `fileMatch` ones); once one changes, doctor warns `steering-changed-since-approval` and `spec_impact {phase: "steering"}` (no name = every feature) lists who to re-review and re-approve.
-- **Decisions (`/spec-decide`).** A decision or discovery made while planning or implementing goes to
-  `decisions.md` (`spec_decide`: `D-n`, `_Affects: US-1.AC-2, T-03, <design section>_`, append-only — supersede,
-  never rewrite). Briefs, the merge summary, the export and the catalog show it; doctor warns when one lands after
-  the approval of what it affects.
-- **Superseding.** A later feature that replaces an earlier criterion marks its new AC `_Supersedes: <feature>/US-n.AC-m_`
-  instead of rewriting finished specs; `/spec-catalog` keeps `.specs/SPECS.md` (every feature and AC) current. A criterion that reads like another active feature's, or may contradict it (SHALL vs SHALL NOT, different numbers), is flagged by doctor (`cross-feature-acs`) and the catalog — merge, reword or declare `_Supersedes:_`.
-- **Drift (`/spec-drift`).** `spec_finish {write: true}` on a ready feature hashes every `_Implements:_` file;
-  `spec_drift` (and a session-start line) reports what changed since. Decide with the user: update the spec
-  (`/spec-impact`, or a new feature with `_Supersedes:_`), fix the code, or accept and re-baseline.
-- **Metrics & retro (`/spec-metrics`).** Lead times, rework, forced approvals, change requests, evidence pass rate,
-  velocity; `--write` drafts `retro.md` after finish — its steering/constitution amendments are proposals, never applied.
-- **Stakeholders.** `/spec-export` — an offline, printable HTML/md document (`--gherkin`: `.feature` files, steps = the EARS
-  clauses; `--tracker jira|linear`: an import CSV); `/spec-changelog` — release notes (Added · Changed · Fixed), `--milestone`.
-- **Archive, don't delete.** `/feature archive` is reversible (`restore` puts the roadmap deps back).
+**Finish (`/spec-finish`).** `spec_finish` lists the blockers, the checks to run fresh and a merge title + summary from
+the spec chain; with `write` on a ready feature it records the drift baseline. After the explicit `execution` sign-off
+the user picks **merge into the base branch locally** or **keep the branch** — no pull requests, no CI; never merge or
+push on your own (pushing the merged base branch is a separate step the user approves).
 
-Depth: `references/change-management.md`.
-
-## Supporting Workflows
-
-| Command | What it does | Reference |
-|---|---|---|
-| `/spec-bugfix` | A defect as a light spec (`spec_create {kind:"bugfix"}`): `bug.md` + a one-story `IF … THEN THE SYSTEM SHALL …` requirement + regression test plan. Reproduction + root cause, then STOP for the `bug.md` approval; `spec_doctor` fails, the design approval is refused and every task after the root-cause task is refused until the root cause is written with evidence. The regression test (`_Expect: fail_`) is seen red before the fix. After three failed fixes, question the design. | `references/bugfix.md` |
-| `/spec-spike` | A question → a decision (`kind: "spike"`): `spike.md`, timebox, go / no-go / pivot; `go` seeds the real feature. | `references/design-first.md` |
-| `/spec-finish` | Blockers (doctor fails, open tasks, tasks without a passing run, project checks without a passing run since the last tick, pending approvals, artifacts changed since approval, placeholders, a missing root cause) and warnings, the checks to run fresh (`--run` runs the project checks), a merge title + summary built from the spec chain, and the drift baseline. The user then merges locally or keeps the branch — no pull requests, no CI; never merge or push on your own. | `references/verification.md` |
-| `/spec-impact` · `/spec-converge` · `/spec-drift` · `/spec-metrics` · `/spec-catalog` · `/spec-decide` · `/spec-export` · `/spec-changelog` | Change requests, the AC-by-AC converge pass, drift since finish, metrics + retro, the living catalog, the decision log, the stakeholder export, release notes (sections above). | `references/change-management.md` |
-| `/spec-upgrade` | After a plugin update: `spec_upgrade` audits every active feature against the current rules (status, what doctor flags, next step; review `critic` before any task is ticked, `converge` mid-execution); with an OK, `apply` saves inferred tracks, seeds pre-1.13 approval baselines, stamps `meta.specVersion` and writes `.specs/UPGRADE.md` — never edits a spec. | `references/change-management.md` |
-| `/spec-import` | A Kiro / spec-kit / OpenSpec spec, a Claude Code or Cursor plan, a Codex ExecPlan or BMAD docs → a NEW feature (IDs remapped, `mapping` + `warnings` shown); then Phase 0 track confirmation and the normal gates. | `references/brownfield.md` |
-| `/spec-templates` · `/spec-tracks` | The team's own scaffolds in `.specs/templates/` (`list` · `init` · `check`; the engine still appends each active track's sections) · the team's own tracks, packs in `.specs/tracks/<name>/` (`list` · `init <name>` · `check`; a valid pack is a marker track everywhere, a bad one is ignored). | `references/steering-templates.md` · `references/project-tracks.md` |
-| `/spec-tour` | A guided ~10-minute tour: one tiny real change on the user's repo through every gate, then keep / archive / remove it. | — |
-| `/spec-superpowers` | When superpowers is installed too: writes (after an OK) a marked precedence block into the project's or the user's CLAUDE.md so feature work uses this workflow; `--remove` takes it out. Never disables superpowers. | — |
-| `/spec-guard` | Opt-in guard mode (`spec_init {guard}`): in Claude Code, a PreToolUse hook asks before a code edit while no feature has approved, unfinished tasks (a test file during Phase 4 and an active spike's prototype excepted); `scope` also asks for a code file no open task names in `_Implements:_`. | `references/tooling-reference.md` |
-| `/spec-review-feedback` | Every review comment judged against the spec: fix AC violations, send spec changes back to their phase, push back on out-of-scope asks citing `Out of Scope`, ask about unclear ones. | `references/review-feedback.md` |
-| `/prReview` | Local pre-merge review gated by tracks: spec compliance + constitution · +tdd red-first history, every AC tested · +saas tenant isolation (`WHERE tenant_id = ?`), observability, hot-path cost · +ai eval delta in the commit / merge summary, versioned prompts, PII-to-model · +sec / +privacy / +dist / +api / +ui / +obs sections honoured · security. | — |
-| `/spec-commit` | Conventional commit referencing the task (`Part of .specs/<feature>/ task #N.`), `Makes T-xx green`, the eval delta and emitted metrics; Phase-4 commits use `test:`. `dev-spec log <feature>` reads them back per task (+tdd: the red-first check). | `references/tooling-reference.md` |
-| `/promptReview` · `/migrateModel` (+ai) | Prompt changes are blocked without eval results (golden up, adversarial held, version bumped, cost delta noted). A model migration is eval-gated only: run the current sets on the new model, switch only if equal-or-better (or tune the prompt to recover), record it in Model Lifecycle — never migrate blind. | `references/eval-suite-patterns.md` · `references/model-provider-guide.md` |
-| `/add-track` · `/feature` | Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs (additive, never overwrites; `remove: true` / `--remove` takes a track off without deleting files). Archive (reversible, preferred) · restore · rename (deps follow) · flow (design-first) · remove (destructive: needs `confirm: true` / `--yes`, confirm with the user first). | `references/tooling-reference.md` |
-| `/roadmap` · `/depend` · `/backlog` · `/spec-milestone` | Order and dependencies between features (cycles rejected), %, blocked status, ETA from velocity (`_Size:_`), features whose open tasks plan the same files, planned-but-unspecced work, milestones (a target date for a set of features: on-track · at-risk · late · done). Don't start a feature whose dependencies aren't met without saying so. `.specs/ROADMAP.md` is regenerated automatically — never hand-edit it. | `references/tooling-reference.md` |
-| `/spec-status` | Mode, tracks, phase, task progress, test/eval state, section completeness (`spec_status` / `spec_list`). | — |
-
-**Local automation, not CI:** saving `requirements.md` lints EARS and placeholders, `tasks.md` checks traceability,
-`design.md` the active tracks' mandatory sections and the Constitution Check; session start prints feature status,
-drifted finished features, cross-feature file overlaps and an outdated `.specs/`; guard mode asks before code edits
-while no feature has approved, unfinished tasks (Phase 4 test files and spike prototypes excepted); the Stop /
-SubagentStop evidence gate sends back a "done" without passing evidence; the optional `pre-commit` validator blocks
-staged EARS errors / phantom refs. Hand security/quality to **dev-guardian** (`/guardian-review`, `/guardian-scan`) and UI work to **ui-ux-pro-max** when
-present — route to them, don't duplicate them.
-
-**Commands:** entry `/spec` (alias `/ds`), execute `/executeTask` (`/dsx`), status `/spec-status`
-(`/dss`), onboarding `/spec-tour`; as a plugin every command is namespaced (`/dev-spec-driven:spec-doctor`); other
-MCP clients get them as MCP prompts. Full table: `references/tooling-reference.md`.
+**Change requests (`/spec-impact`).** An approved artifact edited later is flagged everywhere; `spec_impact` diffs it
+against the approved snapshot and lists what each change reaches. Show that to the user; only with their OK,
+`reopen: true` unticks the affected done tasks and marks their evidence stale — a REMOVED criterion's tasks are never
+redone: `retire` lists them to delete or repoint. Then update what the change reaches and re-approve. Decisions
+(`/spec-decide`), superseding (`_Supersedes:_`), drift, metrics, exports, release notes, archive / restore — and every
+supporting command (`/spec-upgrade`, `/spec-import`, `/prReview`, `/spec-commit`, `/roadmap`, `/spec-guard`…) with the
+local automation behind them: `references/workflows.md`.
 
 ## Environment Notes
 - **Claude Code / Cowork:** full support — the local MCP server scaffolds and tracks, git versions everything.
@@ -521,19 +390,7 @@ MCP clients get them as MCP prompts. Full table: `references/tooling-reference.m
   environment — describe the expected results, and never tick a task on a run nobody made (Principle 6).
 
 ## References (read on demand — don't preload everything)
-- `references/classification-matrix.md` — track-routing brain (the decision procedure, all seven tracks' signals); worked examples: `references/classification-examples-saas.md` / `references/classification-examples-ai.md`
-- `references/brownfield.md` — adopting SDD in an existing codebase (scan → constitution → reverse-specs → integration) + importing Kiro / spec-kit / OpenSpec specs, plans, Codex ExecPlans and BMAD docs
-- `references/design-first.md` — the design-first phase order and spikes (investigate → decide)
-- `references/change-management.md` — after approval: snapshots + approval history, `spec_impact` + reopen, decisions, `_Supersedes:_`, the catalog, drift, archive/restore, metrics, roles + fast-forward, export + release notes, upgrading
-- `references/improvement-specs.md` — internal-improvement work (the metric delta is the acceptance criterion) · `references/ears-guide.md` — full EARS syntax, all 5 patterns
-- `references/steering-templates.md` — all 15 steering-file templates (incl. `distributed.md`, `api.md`, `ui.md` and the optional `glossary.md`), scoped steering (front matter inclusion modes), project templates in `.specs/templates/`
-- `references/tooling-reference.md` — the MCP tools, prompts + resources, the CLI, the hooks, doctor checks, command table, annotated `.specs/` tree, roadmap, commit format
-- `references/verification.md` — evidence before claims: the gate, `_Verify:_`, `_Expect: fail_`, reason codes, pipes, project checks, the Stop gate
-- `references/bugfix.md` — systematic debugging as a light spec (reproduce → root cause → approval → red regression test → fix)
-- `references/review-feedback.md` — handling review comments against the spec · `references/red-flags.md` — the rationalizations that precede skipping each phase
-- `references/subagent-execution.md` — Phase 6 with subagents: brief → implementer → reviewer → fix loop, ledger, checkpoints, the SubagentStop gate, model selection, converge mode
-- `references/example-spec.md` — end-to-end example, `core +tdd` auth · `references/example-spec-combined.md` — `core +tdd +saas +ai`
-- `references/test-patterns.md` — naming, T-IDs in test names, `_Expect: fail_`, AAA, table-driven and property-based tests, anti-patterns · `references/code-reuse-and-quality.md` — search before you write, reuse / extend / create, module boundaries, code smells, the refactor backlog
-- +saas: `references/scale-design-template.md` (the 5 sections, filled) · `references/saas-patterns.md` (caching, queues, rate limiting, idempotency, multi-tenancy) · `references/load-testing-patterns.md` (k6/Artillery)
-- +ai: `references/mandatory-ai-design-sections.md` (the 10 sections, filled) · `references/eval-suite-patterns.md` · `references/prompt-engineering-patterns.md` · `references/ai-cost-modeling.md` · `references/ai-safety-patterns.md` · `references/model-provider-guide.md`
-- +sec: `references/security-track.md` (STRIDE, ASVS, OWASP Top 10, abuse cases, local security testing) · +privacy: `references/privacy-track.md` (GDPR / RGPD sections, data subject rights, retention, DPIA — not legal advice) · +dist: `references/distributed-data-patterns.md` (dual writes, outbox / inbox, sagas, retries, idempotency, isolation levels, locking, CAP / PACELC) · +api: `references/api-design-patterns.md` (versioning, breaking changes, problem+json, pagination, idempotency, ETag, rate limits, contract tests) · +ui: `references/ui-design-patterns.md` (design system first, UI states, WCAG 2.2 AA and how to test it, i18n, performance budgets) · +obs: `references/observability-patterns.md` (SLOs and burn-rate alerts, telemetry, runbooks, feature flags, progressive delivery, operability tests)
+The whole library, grouped, with one line per file: **`references/index.md`**. The ones every feature meets:
+`references/track-checklists.md` (per track, per phase) · `references/tool-catalog.md` (which tool when) ·
+`references/workflows.md` (supporting commands, after approval) · `references/verification.md` (evidence) ·
+`references/classification-matrix.md` (Phase 0).

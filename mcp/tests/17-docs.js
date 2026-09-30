@@ -109,8 +109,8 @@ exports.run = async ({
   ok(/for a task whose `_Verify:_` names a runnable command, a text note alone/.test(docsStep(6)) && /`_Verify: <command>_` always/.test(docsStep(5)) &&
     /`_Verify: <command>_` always/.test(docsRead("commands", "createTask.md")) && /target tests/.test(docsRead("commands", "createTask.md")) &&
     ((docsRef("example-spec-combined.md").split("## tasks.md")[1] || "").split("\n---")[0].match(/_Verify: /g) || []).length === 7 &&
-    /\*\*Constitution\*\*[^\n]*constitution\.md/.test(docsRead("commands", "prReview.md")) && /`\/prReview` \| [^|\n]*constitution/.test(docsSkill),
-    "_Verify:_ is an always-marker in AGENTS.md step 5, /createTask and the combined example; a note verifies only a non-runnable task; /prReview checks the constitution");
+    /\*\*Constitution\*\*[^\n]*constitution\.md/.test(docsRead("commands", "prReview.md")) && /`\/prReview` \| [^|\n]*constitution/.test(docsRef("workflows.md")),
+    "_Verify:_ is an always-marker in AGENTS.md step 5, /createTask and the combined example; a note verifies only a non-runnable task; /prReview checks the constitution (its row: references/workflows.md since 1.21 F3)");
   // Prose that lagged behind 1.13 behaviour. (a) The ROADMAP.md "needs attention" line NAMES each unverified task with its
   // reason — README/AGENTS said it "shows how many each feature has". (b) reopen never unticks a REMOVED criterion's tasks
   // (`retire` lists them) — every surface that says "reopen unticks the affected tasks" must carry that exception in the
@@ -128,7 +128,8 @@ exports.run = async ({
     ![docsReadme, docsAgents].some((t) => /shows how many each feature has|mostra quantas há|muestra cuántas tiene/.test(docsWs(t))),
     "README (EN/PT/ES) + AGENTS.md: the ROADMAP.md needs-attention line lists each unverified task with its reason (the heading as the roadmap prints it), never 'shows how many'");
   const docsReopen = (t) => [...docsWs(t).matchAll(/reopen(?:: true)?`? (?:unticks|desmarca)/g)].map((m) => docsWs(t).slice(m.index).split(/\.\s|\|/)[0]);
-  const docsReopenSurfaces = [["README.md", docsReadme, 6], ["AGENTS.md", docsAgents, 2], ["tooling-reference.md", docsRef("tooling-reference.md"), 1], ["SKILL.md", docsSkill, 1]];
+  const docsReopenSurfaces = [["README.md", docsReadme, 6], ["AGENTS.md", docsAgents, 2], ["tooling-reference.md", docsRef("tooling-reference.md"), 1], ["SKILL.md", docsSkill, 1],
+    ["workflows.md", docsRef("workflows.md"), 1]]; // 1.21 F3: the after-approval detail moved there
   const docsReopenBad = docsReopenSurfaces.flatMap(([f, t, n]) => { const s = docsReopen(t); return s.length < n ? [f + " (" + s.length + " < " + n + ")"] : s.filter((x) => !/\bretire\b/.test(x)).map((x) => f + ": " + x); });
   ok(!docsReopenBad.length, "README (EN/PT/ES), AGENTS.md, tooling-reference and SKILL.md: every 'reopen unticks' sentence says a removed criterion's tasks are never unticked (retire) (bad: " + docsReopenBad.join(" | ") + ")");
   const docsApprove = docsWs(docsRead("commands", "approve.md"));
@@ -403,6 +404,32 @@ exports.run = async ({
     const d13Rec = (JSON.parse(fs.readFileSync(path.join(d13p, ".specs", "red", ".state.json"), "utf8")).evidence || {})["1"] || {};
     ok(d13a.ok === false && d13a.recorded === true && d13Rec.exitCode === 127 && !/`done --run` records nothing for it/.test(maintainerNotes()),
       "full review D13: a could-not-run exit (127) on an _Expect: fail_ task is refused and recorded — no maintainer note (CLAUDE.md, docs/maintainers/) says done --run records nothing for it");
+  }
+
+  { // 1.21 F3 — what the plugin evals showed, in the prose the agent reads: (a) every `done … --run` / `finish … --run` line a command
+    // file hands the user is runnable in a plugin install (node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" …), and the skill / the
+    // references hand over the runnable line (`node "<clone>/cli/dev-spec.js" …`), never a bare `dev-spec done … --run`; (b) without a
+    // shell: ask the user — never a subagent hunting for one (/spec-bugfix, verification.md, bugfix.md, red-flags.md, SKILL.md, the
+    // spec_complete_task description and the MCP instructions); (c) a green run is evidence, not the execution sign-off — an explicit
+    // yes first (/spec-finish step 3, SKILL.md, the spec_finish / spec_approve descriptions); (d) the bugfix prefill is documented.
+    const cmdDir = path.join(root, "commands");
+    const bareRun = fs.readdirSync(cmdDir).filter((f) => f.endsWith(".md")).flatMap((f) => (fs.readFileSync(path.join(cmdDir, f), "utf8").match(/`dev-spec (?:done|finish) <[^`\n]*--run[^`\n]*`/g) || []).map((m) => f + ": " + m));
+    const runnableCmds = fs.readdirSync(cmdDir).filter((f) => /node "\$\{CLAUDE_PLUGIN_ROOT\}\/cli\/dev-spec\.js" (?:done|finish) /.test(fs.readFileSync(path.join(cmdDir, f), "utf8")));
+    const skillT = docsSkill, verT = docsRef("verification.md"), bugT = docsRef("bugfix.md"), flagsT = docsRef("red-flags.md");
+    const bareHandOff = [["SKILL.md", skillT], ["verification.md", verT], ["bugfix.md", bugT], ["red-flags.md", flagsT]]
+      .filter(([, t]) => /(?:ask the user[^.\n]{0,120}|or to run |or run )`dev-spec (?:done|finish) /i.test(t.replace(/\s+/g, " "))).map(([f]) => f);
+    const tools = Object.fromEntries(list.result.tools.map((t) => [t.name, t.description]));
+    const finishCmd = docsWs(docsRead("commands", "spec-finish.md")), bugCmd = docsWs(docsRead("commands", "spec-bugfix.md"));
+    const noSubagent = [["spec-bugfix.md", bugCmd], ["verification.md", docsWs(verT)], ["bugfix.md", docsWs(bugT)], ["red-flags.md", docsWs(flagsT)], ["SKILL.md", docsWs(skillT)],
+      ["spec_complete_task", tools.spec_complete_task], ["initialize", init.result.instructions]].filter(([, t]) => !/(?:never|don't|not) send a subagent|never dispatch a subagent|send a subagent to find a shell/i.test(t || "")).map(([f]) => f);
+    const signOff = /\*\*A green run is evidence, not\s+the sign-off:\*\*/.test(finishCmd) && /only on their yes/.test(finishCmd) &&
+      /a green\s+run is evidence, not the sign-off/i.test(docsWs(skillT)) && /A green run is EVIDENCE, not the sign-off/.test(tools.spec_finish) &&
+      /an explicit yes for THAT phase/.test(tools.spec_approve);
+    const prefill = ["reproduction", "rootCause", "condition", "behaviour", "includeBody"].every((k) => bugCmd.includes("`" + k) || bugCmd.includes(k + "`")) &&
+      /--root-cause/.test(docsWs(bugT)) && /prefill/i.test(tools.spec_create) && tools.spec_complete_task.includes(S.DEV_SPEC + " done <feature> <n> --run");
+    ok(!bareRun.length && runnableCmds.length >= 8 && !bareHandOff.length && !noSubagent.length && signOff && prefill,
+      "1.21 F3: command files hand over runnable `--run` lines (node \"${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js\" …), the skill and references the `node \"<clone>/cli/dev-spec.js\"` line; no shell → ask the user, never a subagent (bugfix command, verification / bugfix / red-flags references, SKILL.md, the complete_task description, the MCP instructions); a green run is evidence, not the execution sign-off (/spec-finish, SKILL.md, spec_finish / spec_approve); the bugfix prefill is documented (got " +
+      JSON.stringify({ bareRun, runnableCmds: runnableCmds.length, bareHandOff, noSubagent, signOff, prefill }) + ")");
   }
 
   // Release hygiene: the three version fields agree.

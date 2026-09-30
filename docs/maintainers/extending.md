@@ -42,10 +42,18 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   only after a cheap raw pre-check (roadmap.json / the payload), and a row in `references/tooling-reference.md`.
 - Any generated/returned user-facing text → put the strings in the i18n tables for every language — the same key in
   `mcp/lib/i18n/en.js`, `pt.js` and `es.js` (pt-BR inherits PT unless it needs its own wording, `i18n/pt-br.js`) — and
-  resolve the lang via `featureLang()`/`projectLang()`; keep IDs/markers English-stable.
+  resolve the lang via `featureLang()`/`projectLang()`; keep IDs/markers English-stable. A message that tells someone
+  to RUN the CLI writes `${DEV_SPEC} <command> …` (the runnable `node "<clone>/cli/dev-spec.js"`, i18n/common.js), never a
+  bare `dev-spec <command>`; text written into a committed file goes through `i18n.portableCli()` (languages.md →
+  Runnable CLI lines). A command file that hands the user a CLI line writes `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" …`.
 - A change to a file of `CORPUS_SOURCES` — `mcp/lib/i18n.js`, `mcp/lib/i18n/*.js` (a template, a string), `engine/core.js`,
   `markdown.js`, `packs.js`, `tasks.js`, `tracks.js` (a track) — or to package.json's version → `npm run build`, and commit
   the regenerated `mcp/lib/engine/corpus.generated.json` with it (architecture.md → The build; mcp/test.js fails until you
   do). A module that the corpus render starts to run through goes into `CORPUS_SOURCES` (the V8-coverage test names it).
   Never commit `mcp/lib/spec.bundle.js` (git-ignored, built on demand).
-- Keep `SKILL.md` the source of truth for the workflow; commands stay thin.
+- Keep `SKILL.md` the source of truth for the workflow — the rules an agent needs at decision time, ≤ 5,000 words
+  (1.21: `mcp/tests/01-core.js` counts them; it is loaded whole every time the skill fires). Lookup material goes into
+  `references/` with a one-line pointer ("read X when Y"): the tool catalog (`tool-catalog.md`), per-track material
+  (`track-checklists.md`), supporting commands (`workflows.md`), and every reference file is listed in
+  `references/index.md` (a test fails on an orphan). A rule agents need even when they skip the skill also goes into
+  the MCP tool description that acts on it. Commands stay thin.

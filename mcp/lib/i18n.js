@@ -26,7 +26,7 @@
  * are matched by the synonym tables (SAAS_SECTIONS/AI_SECTIONS/SEC_SECTIONS/PRIVACY_SECTIONS/DIST_SECTIONS) and RE_* matchers in the engine.
  */
 
-const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests } = require("./i18n/common.js");
+const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests, DEV_SPEC, DEV_SPEC_SCRIPT, cliPrefix, portableCli } = require("./i18n/common.js");
 // The pt-BR derivation (i18n/pt-br.js) loads on its first use — a table's "pt-BR" entry, toPtBr, derivePtBr: a process
 // that never meets pt-BR (most hooks) doesn't load it.
 let PTBR = null;
@@ -208,6 +208,10 @@ module.exports = {
   normalizeLang,
   canonicalLang,
   baseLang,
+  DEV_SPEC, // 1.21 F3: `node "<clone>/cli/dev-spec.js"` — the runnable CLI line every message prints (i18n/common.js)
+  DEV_SPEC_SCRIPT, // this clone's cli/dev-spec.js (forward slashes)
+  cliPrefix, // (script?) → `node "<script>"`, quoted to paste into bash and PowerShell
+  portableCli, // text for a committed file: the runnable line → `dev-spec`
   toPtBr: (text, masks) => ptbr().toPtBr(text, masks), // (text, masks?) European → Brazilian Portuguese (the pt-BR derivation, 1.14 D1)
   derivePtBr: (value, raw) => ptbr().derivePtBr(value, raw || null, null, value), // a pt table (spec.js's roadmap chrome) → its pt-BR twin
   // artifact builders

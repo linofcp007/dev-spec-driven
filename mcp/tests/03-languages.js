@@ -302,4 +302,35 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
       "full review Pb8: a pt-BR feature reads templates/pt-BR/ → templates/pt/ → templates/ (an English one skips pt/); spec_templates list names the same file (got " +
       JSON.stringify([f8.templates, l8.templates && l8.templates[0].override, e8.templates]) + ")");
   }
+
+  { // 1.21 F3 — a CLI line a message tells someone to run is the RUNNABLE one, `node "<clone>/cli/dev-spec.js" …` (a plugin install
+    // has no `dev-spec` on PATH — the 1.19 eval run relayed `dev-spec done csv-export 2 --run` to a user who couldn't run it), in
+    // EN / PT / ES and pt-BR (held byte for byte by the derivation). A sweep of every message: a bare `dev-spec <command>` is left
+    // only where it names the command (a description) or lands in a committed file (AUTO-GENERATED markers, retro.md, UPGRADE.md,
+    // decisions.md, a track pack's track.json, the tracker CSV) — there portableCli() keeps the name, never a machine path.
+    const I = require("./lib/i18n.js");
+    const cloneCli = path.resolve(__dirname, "..", "..", "cli", "dev-spec.js").replace(/\\/g, "/"); // this file's folder: mcp/tests/
+    const run = (l) => [I.msg(l).evidenceGate.manualOnRunnable(2, "csv-export"), I.msg(l).projectChecks.blocker("test", "csv-export"),
+      I.msg(l).drift.hookLine("csv-export", 2), I.msg(l).governance.ffHint("csv-export", "design, tasks")];
+    const want = ["done csv-export 2 --run", "finish csv-export --run", "drift csv-export", "approve csv-export --through tasks"];
+    const perLang = ["en", "pt", "es", "pt-BR"].map((l) => run(l).every((m, k) => m.includes(I.DEV_SPEC + " " + want[k]) && !/(?<![\w/.-])dev-spec (?:done|finish|drift|approve) /.test(m)));
+    const RE_BARE = /(?<![\w/.-])dev-spec (help|classify|init|bugfix|create|list|status|doctor|trace|ears|next|finish|steering|brief|done|undone|approve|evals|backlog|milestone|roadmap|depend|scan|coverage|clarify|next-action|add-track|feature|rules|import|append-tasks|impact|metrics|catalog|drift|upgrade|prompts|templates|tracks|export|changelog|log|stop-check|spike|decide|mcp-config|statusline)(?![\w-])(?! —)/;
+    const ALLOWED = new Set(["observed.on", "metrics.retroText.followUpsNote", "catalog.autogen", "approvalGuard.on.ask", "approvalGuard.on.deny", "upgrade.md.autogen",
+      "upgrade.md.intro", "trackPacks.initJson", "stakeholderExport.autogen", "rtm.autogen", "releaseNotes.autogen", "gherkin.autogen", "trackerCsv.autogen",
+      "trackerCsv.featureLine", "milestone.notesAutogen", "gitLog.noGit", "decisions.header"]);
+    const bare = {}, runnable = {};
+    for (const l of ["en", "pt", "es", "pt-BR"]) {
+      const walk = (o, p, d) => { if (d > 4) return; for (const k of Object.keys(o)) { const v = o[k]; let s = null;
+        if (typeof v === "function") { try { s = String(v("x", "y", "z")); } catch { continue; } } else if (typeof v === "string") s = v; else if (v && typeof v === "object") { walk(v, p + k + ".", d + 1); continue; }
+        if (s == null) continue;
+        if (s.includes(I.DEV_SPEC)) runnable[l] = (runnable[l] || 0) + 1;
+        if (RE_BARE.test(s) && !ALLOWED.has(p + k)) (bare[l] = bare[l] || []).push(p + k); } };
+      walk(I.msg(l), "", 0);
+    }
+    const br = I.toPtBr("Corre: " + I.DEV_SPEC + " done csv-export 2 --run (a equipa regista-o).");
+    ok(I.DEV_SPEC === 'node "' + cloneCli + '"' && perLang.every(Boolean) && !Object.keys(bare).length &&
+      ["en", "pt", "es", "pt-BR"].every((l) => runnable[l] >= 60 && runnable[l] === runnable.en) && br.includes(I.DEV_SPEC + " done csv-export 2 --run") && /^Execute: /.test(br) && /equipe/.test(br),
+      "1.21 F3: every message that says to run the CLI prints `node \"<clone>/cli/dev-spec.js\" …` (this clone's path) in EN / PT / ES / pt-BR — done --run, finish --run, drift, the fast-forward; no bare `dev-spec <command>` outside the descriptions and the committed-file texts; pt-BR keeps the line byte for byte (got " +
+      JSON.stringify({ devSpec: I.DEV_SPEC, perLang, bare, runnable, br }) + ")");
+  }
 };

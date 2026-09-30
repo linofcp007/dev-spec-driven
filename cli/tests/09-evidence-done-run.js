@@ -27,7 +27,7 @@ ok(!/--shell bash/.test(w1Dup.out) && w1No.code === 1 && (process.platform === "
 run(["create", "Red", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "red", "tasks.md"), "- [ ] 1. [US1] Write regression test T-01 and watch it fail for the right reason\n  - _Verify: node -e \"process.exit(1)\"_\n");
 const w1Red = run(["done", "red", "1", "--run", "--project", w1p]);
-ok(w1Red.code === 1 && /Task 1 writes a test that must FAIL \(the red phase\)/.test(w1Red.out) && /Mark task 1 with _Expect: fail_/.test(w1Red.out) && /dev-spec done red 1 --run\. Or move the command/.test(w1Red.out) && !/--shell bash/.test(w1Red.out),
+ok(w1Red.code === 1 && /Task 1 writes a test that must FAIL \(the red phase\)/.test(w1Red.out) && /Mark task 1 with _Expect: fail_/.test(w1Red.out) && /node "[^"]*dev-spec\.js" done red 1 --run\. Or move the command/.test(w1Red.out) && !/--shell bash/.test(w1Red.out),
   "done --run on a red-phase task: the refusal says to mark it _Expect: fail_ (or move the _Verify:_ to the fix task) (no shell hint)");
 run(["create", "Pad", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "pad", "tasks.md"), "- [ ] 01. First\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 02. Second\n- [ ] 03. Third\n");

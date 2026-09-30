@@ -22,7 +22,7 @@ unchanged):
 - `guard` — guard mode `"on"` / `"scope"` / `"off"` (see `/spec-guard`).
 - `checks` — the project's named check commands, e.g. `{"test": "npm test", "lint": "npm run lint"}` (CLI
   `--check test="npm test"`, repeatable; `name=` removes one): every task brief lists them in its definition of done,
-  and `/spec-finish` then needs a passing run of each since the feature's last task (`dev-spec finish <f> --run`).
+  and `/spec-finish` then needs a passing run of each since the feature's last task (`node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" finish <f> --run`).
   Ask the user for the real commands — never guess them.
 - `approvalRoles` — team governance (CLI `--roles requirements=product,design=tech+security`, `--roles none` clears
   them): each listed phase is approved only once every role has signed off its current content (see `/approve`).

@@ -708,7 +708,7 @@ function approvalCommand(a, cli) {
   const safe = (v, re) => (typeof v === "string" && re.test(v) ? v : null);
   const word = (v, ph) => safe(v, /^[\p{L}\p{N}_.-]{1,80}$/u) || ph;
   const name = (v) => { const s = safe(v, /^[\p{L}\p{N} _.@+,-]{1,120}$/u); return s ? (/\s/.test(s) ? '"' + s + '"' : s) : "<feature>"; };
-  const words = ["node", '"' + cli + '"'];
+  const words = [i18n.cliPrefix(cli)]; // 1.21 F3: `node "<cli>"`, quoted like every runnable CLI line (i18n/common.js cliQuote)
   if (a.kind === "remove") words.push("feature", "remove", name(a.feature), "--yes");
   else if (a.kind === "guard-down") {
     if (a.setting === "roadmap") return null;
@@ -770,7 +770,7 @@ function approvalGuardDecision(payload, level, opts = {}) {
     name: show(a.name), removed: Array.isArray(a.removed) ? a.removed.map(show) : a.removed })));
   const text = [...new Set(list)].join("; ");
   const force = actions.some((a) => a.force);
-  const cli = typeof opts.cli === "string" && opts.cli ? opts.cli : toPosix(path.resolve(__dirname, "..", "..", "..", "cli", "dev-spec.js"));
+  const cli = typeof opts.cli === "string" && opts.cli ? opts.cli : i18n.DEV_SPEC_SCRIPT;
   const commands = [...new Set(actions.map((a) => approvalCommand(a, cli)).filter(Boolean))];
   const command = commands.length ? "! " + commands.join(" && ") : null;
   // summary (1.21 F1b): the actions as one localized line — what the MCP server's elicitation asks the user about.

@@ -45,7 +45,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     input: JSON.stringify({ session_id: "c1", cwd: po, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "node three.js" }, tool_response: { stdout: "ok", stderr: "", exit_code: 0 } }) });
   const d3j = jsonOb(rob(po, ["done", fo.slug, "3", "--cmd", "node three.js", "--exit", "0", "--json"]).stdout) || {};
   ok(d1.code === 0 && d1j.verified === true && d1j.observed === "cli" && stOb(fo).evidence["1"].observed === "cli" &&
-    d2.code === 0 && /^Task 2 done\. /m.test(d2.out) && !/\(verified\)/.test(d2.out) && /⚠ Task 2: the run was recorded, but the harness never saw it .*dev-spec done obs 2 --run/.test(d2.out) &&
+    d2.code === 0 && /^Task 2 done\. /m.test(d2.out) && !/\(verified\)/.test(d2.out) && /⚠ Task 2: the run was recorded, but the harness never saw it .*node "[^"]*dev-spec\.js" done obs 2 --run/.test(d2.out) &&
     d2j.unverifiedReason === "unobserved" && d2j.observed === false && hk.status === 0 && hk.stdout === "" && d3j.verified === true && d3j.observed === true,
     "feature F1: with meta.evidence observed, done --run records observed: \"cli\" (verified); done --cmd/--exit of a run nobody saw ticks it unverified (unobserved, the note names --run); after the hook logged the run, the same report verifies (got " +
     JSON.stringify([d1j.observed, d2.out.trim().slice(0, 200), d2j.unverifiedReason, d3j.observed]) + ")");

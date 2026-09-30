@@ -75,13 +75,25 @@ function codeSpan(s) {
   const fence = "`".repeat(longest + 1);
   return longest ? fence + " " + text + " " + fence : fence + text + fence;
 }
-// A commit title: the first sentence, at most ~72 chars, cut at a word boundary. Abbreviations like
-// "e.g." / "i.e." / "p. ej." don't end a sentence.
+// A commit title's text: the first sentence, at most `max` characters. Abbreviations like "e.g." / "i.e." / "p. ej." don't
+// end a sentence. A longer sentence is cut at its LAST clause boundary that fits — a comma, a semicolon or a dash (— –) —
+// and reads whole there (no ellipsis); only when no boundary leaves at least a third of the budget is it cut at a word
+// boundary, with "…" (counted in `max`). 1.21 F3: the 1.19 eval run's merge title ran to ~90 characters, cut mid-clause.
 function shortTitle(text, max = 72) {
-  const first = text.split(/(?<!\b(?:e\.g|i\.e|ex|etc|ej|vs|p)\.)(?<=[.!?])\s+(?=\p{Lu})/u)[0];
+  const first = String(text || "").split(/(?<!\b(?:e\.g|i\.e|ex|etc|ej|vs|p)\.)(?<=[.!?])\s+(?=\p{Lu})/u)[0].trim();
   if (first.length <= max) return first.replace(/\.$/, "");
-  const cut = first.slice(0, max);
-  return cut.slice(0, Math.max(cut.lastIndexOf(" "), max / 2)).replace(/[,;:\s]+$/, "") + "…";
+  const head = first.slice(0, max + 2); // bounded: the boundary scan never reads past the budget
+  let clause = -1;
+  for (const m of head.matchAll(/[,;]\s|\s[—–]/g)) if (m.index <= max && m.index >= max / 3) clause = m.index;
+  if (clause > 0) return first.slice(0, clause).replace(/[,;:\s—–-]+$/, "");
+  const cut = first.slice(0, max - 1);
+  return cut.slice(0, Math.max(cut.lastIndexOf(" "), Math.floor(max / 2))).replace(/[,;:\s—–-]+$/, "") + "…";
+}
+// The merge / commit title: `type(slug): ` + shortTitle, the WHOLE line at most 72 characters — the text gets what the prefix
+// leaves (at least 24, so a very long slug still keeps a readable title).
+const COMMIT_TITLE_MAX = 72;
+function commitTitle(prefix, text) {
+  return prefix + shortTitle(text, Math.max(24, COMMIT_TITLE_MAX - prefix.length));
 }
 
 function finishFeature(projectDir, name, opts = {}) {
@@ -167,7 +179,7 @@ function finishFeature(projectDir, name, opts = {}) {
   // Merge summary from the spec chain (usable as the merge commit message).
   const reqs = readIfExists(path.join(dir, "requirements.md")) || "";
   const summary = sectionFirstParagraph(reqs, ["summary", "resumo", "resumen"]) || slug;
-  const mergeTitle = `${kind === "bugfix" ? "fix" : "feat"}(${slug}): ${shortTitle(summary)}`;
+  const mergeTitle = commitTitle(`${kind === "bugfix" ? "fix" : "feat"}(${slug}): `, summary);
   const body = [F.prSummary, summary, ""];
   if (kind === "bugfix") {
     const bug = readIfExists(path.join(dir, "bug.md")) || "";
@@ -398,7 +410,7 @@ function metrics(projectDir, name, opts = {}) {
     if (write) {
       const file = path.join(f.dir, "retro.md");
       const rel = path.relative(projectDir, file).split(path.sep).join("/");
-      const written = writeIfAbsent(file, M.retro(res, { dur: fmtHours, today: new Date().toISOString().slice(0, 10) }));
+      const written = writeIfAbsent(file, i18n.portableCli(M.retro(res, { dur: fmtHours, today: new Date().toISOString().slice(0, 10) })));
       res.retro = { path: rel, written };
       res.note = written ? M.retroWritten(rel) : M.retroExists(rel);
     }
@@ -1037,7 +1049,7 @@ function catalog(projectDir, opts = {}) {
     const E = i18n.msg(data.lang).err;
     if (!fs.existsSync(root)) return { ...res, ok: false, error: E.noSpecs(root) };
     if (!isGeneratedOrAbsent(file)) return { ...res, ok: false, skipped: true, error: E.notGenerated("SPECS.md") };
-    writeFileAtomic(file, data.markdown);
+    writeFileAtomic(file, i18n.portableCli(data.markdown)); // committed: `dev-spec`, never a machine path (1.21 F3)
     res.wrote = true;
   } else res.markdown = data.markdown;
   return res;
@@ -1049,7 +1061,7 @@ function maybeRefreshCatalog(projectDir) {
     const file = path.join(specsRoot(projectDir), "SPECS.md");
     const cur = readIfExists(file);
     if (cur == null || !isGeneratedOrAbsent(file)) return false;
-    const md = catalogData(projectDir).markdown;
+    const md = i18n.portableCli(catalogData(projectDir).markdown);
     if (md === cur) return false;
     writeFileAtomic(file, md);
     return true;
@@ -1490,7 +1502,7 @@ function baselineDrift(root, rootReal, fin) {
   return { unchanged, changed, missing, nowPresent, ignored, drifted: changed.length + missing.length + nowPresent.length > 0 };
 }
 
-module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, finishFeature, METRIC_PHASES, timeOf, round1,
+module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, COMMIT_TITLE_MAX, commitTitle, finishFeature, METRIC_PHASES, timeOf, round1,
   round2, isoOf, hoursFrom, featureMetrics, stats, metrics, fmtHours, metricsLines, pruneRoadmapRefs, milestoneResult,
   pruneRoadmapRefsLocked, removeFeature, TOMBSTONE_PREFIX, TOMBSTONE_SWEEP_AGE_MS, sweepTombstones, removeFeatureLocked,
   archiveFeature, archiveFeatureLocked, renameFeature, renameFeatureLocked, renamePlan, renameSupersedesRefs,

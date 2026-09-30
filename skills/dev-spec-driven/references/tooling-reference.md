@@ -125,7 +125,11 @@ and can read the specs:
 
 ## CLI (`dev-spec`, same engine, same behaviour)
 
-`node cli/dev-spec.js <command>` from the plugin clone (or `dev-spec` on PATH). `--json` prints the structured
+`node cli/dev-spec.js <command>` from the plugin clone (or `dev-spec` on PATH — only after `npm link`; a plugin install
+has none). `dev-spec …` below is the CLI's NAME: a line you hand the user is the runnable one the tools print, `node
+"<clone>/cli/dev-spec.js" …` with the path resolved (1.21 — every engine, hook and tool message prints it that way;
+the command files write `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" …`; a committed file — ROADMAP.md, SPECS.md,
+UPGRADE.md, the exports, retro.md — keeps `dev-spec`, never a machine path). `--json` prints the structured
 result — a refused operation too (`{ok: false, error, …}` on stdout, exit 1, as the MCP tool returns it);
 `--project <dir>` sets the project root; human output is localized. Switches take `--x` or `--x=true|false`
 (any other value is an error) — so do the eval harness's (`--dry-run`, `--set-baseline`, `--require-live`), which

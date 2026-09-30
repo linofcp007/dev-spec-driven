@@ -34,6 +34,7 @@
 // A clause-start 3rd person read as an order ("— liberta o nome" → "libere") goes into RE_PTBR_NOT_IMPERATIVE; a word the
 // maps miss into PTBR_WORDS / PTBR_PHRASES; anything else into PTBR_OVERRIDES. mcp/test.js (pD1) lints every string.
 // ===========================================================================
+const { DEV_SPEC } = require("./common.js"); // load time \u2014 the runnable CLI line (1.21 F3), protected whole in stage 0
 const PTBR_KEEP = "\uE000", PTBR_END = "\uE001"; // private-use sentinels around a protected segment's index
 const PTBR_W = "\\p{L}\\p{N}_"; // word characters
 
@@ -316,6 +317,9 @@ function ptbrMaskAll(s, m, hold) {
 function ptbrProtect(text, masks, store) {
   const hold = (seg) => PTBR_KEEP + (store.push(seg) - 1) + PTBR_END;
   let s = text;
+  // The clone's CLI line (`node "<clone>/cli/dev-spec.js"`): a machine path — a folder may be named with a word the rules
+  // map (…/equipa/…) — held whole, byte-identical in every pt-BR message.
+  if (s.includes(DEV_SPEC)) s = s.split(DEV_SPEC).join(hold(DEV_SPEC));
   for (const m of masks) if (s.includes(m)) s = ptbrMaskAll(s, m, hold); // whole words: a track 'sec' never masks "secção"
   for (const [eu, br] of PTBR_OVERRIDES) if (s.includes(eu)) s = s.split(eu).join(hold(br));
   return s

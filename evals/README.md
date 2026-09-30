@@ -90,6 +90,16 @@ claude plugin eval . --ablation none --tag evidence --scaffold --allow-real-serv
   then expects *no* tick. On macOS/Linux/WSL2 you may add `"Bash(node --test *)"` to `--allow-tools`; the same
   graders then pass when the agent runs the `_Verify:_` command before recording it.
 - A case's run stops at `max_turns` (10–18); hitting it is a run error, and the graders still score what was done.
+- **Triggering cases keep `max_turns: 4` on purpose.** Their only grader is the `Skill` call, made in the first turns;
+  a run that fires the skill and then tries to go on (only `Skill` is granted) may end with *"Reached maximum number of
+  turns (4)"* — expected, the score is unaffected (1.19.0: 5 of 27 runs, all at 1.0). Raising the cap would only pay
+  for turns no grader reads.
+- **No tool can be taken away per case.** A case's front matter holds `max_turns`, `timeout_seconds`, `model`,
+  `allowed_tools`, `artifact_publish`, `growthbook_overrides`, `append_system_prompt` and `env` — no `disallowed_tools`
+  (CLI 2.1.282). `allowed_tools` only GRANTS the gated tools; a tool that needs no grant, like `Agent`, stays
+  available. A shell-less run may still dispatch a subagent to hunt for a shell — `/spec-bugfix`, `/executeTask`,
+  `references/verification.md` and `references/bugfix.md` say not to (ask the user for the run instead); an
+  `append_system_prompt` would hide whether that guidance works, so the cases don't use one.
 
 **`--ablation none` matters.** By default the harness adds a no-plugin baseline arm, and under it
 `tool_used: Skill` graders become a "plugin fired" *indicator* instead of part of the score — every triggering
@@ -113,6 +123,16 @@ Reference runs (default model, `-j 3`):
   rule now also opens the tool's description and the MCP `initialize` instructions → **2/2** ($0.60).
   `behavior-bugfix-root-cause-pt` went 1/2 (a run fixed the bug directly, no skill) → **2/2** once the description named
   bug reports ($1.33); `behavior-finish-local-merge-en` 1/2 (a judge vote) → 2/2 on a re-run ($0.67).
+- **1.19.0, 2026-09-29** (CLI 2.1.282, Windows, no shell): triggering **9/9 at 1.0** (27 runs, $4.08); behavioural
+  **6/7 at 1.0**, `behavior-finish-local-merge-en` 0.88 ($3.51 for the 14 runs). That reply was right ("Merging
+  `feat/csv-export` into `main` locally … Keeping the branch as-is") but the `local-options` regex missed "Merging" /
+  "Keeping", and one judge vote read "pushing `main` is a separate step that needs your OK" as a push for review — 1.21
+  widened the regex (`mcp/tests/17-docs-evals.js` checks it on both recorded replies) and says in the `stays-local`
+  rubric that such a remark passes. The traces also showed the skill doubling the context once it fires (~17.5k →
+  ~38k tokens; 1.21 moved its lookup tables to `references/`), `dev-spec …` lines relayed to a user who has no
+  `dev-spec` on PATH (1.21 prints `node "<clone>/cli/dev-spec.js" …`), a bugfix agent reading back and rewriting all
+  four scaffolds (1.21: `spec_create {kind: "bugfix"}` takes `reproduction`, `rootCause`, `condition`, `behaviour` and
+  `includeBody`) and 4 of 14 shell-less runs sending a subagent to find a shell (1.21: ask the user for the run).
 - behavioural, 2026-09-26, CLI 2.1.282, Windows (no shell granted), 2 runs per case: **6/7 cases at 1.0, $3.30**
   for the 14 runs (about $0.12–0.54 per run; the bugfix case is the dearest). Per case, with the earlier smoke run
   (1 run each, $1.63) where it tells something:

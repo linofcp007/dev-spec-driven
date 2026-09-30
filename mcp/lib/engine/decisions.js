@@ -18,7 +18,7 @@ let activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, dupl
   maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
   readIfExists, readJson,
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
-  shortTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
+  commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
   waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn;
 function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers,
@@ -27,7 +27,7 @@ function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase
   maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
   readIfExists, readJson,
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
-  shortTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
+  commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
   waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn } = E); }
 
@@ -672,7 +672,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   const blockers = blocked.map((b) => b.detail);
   const text = s.text || "";
   const sec = (syn) => { const b = extractSection(text, syn); return b == null ? null : spikeFilled(b) ? spikeProse(b).trim() : null; };
-  const mergeTitle = `docs(${slug}): ${SP.kind}${s.outcome ? " " + s.outcome : ""} — ${shortTitle(s.question || slug)}`;
+  const mergeTitle = commitTitle(`docs(${slug}): ${SP.kind}${s.outcome ? " " + s.outcome : ""} — `, s.question || slug);
   const body = [SP.finish.prQuestion, s.question || slug, ""];
   const decision = sec(SPIKE_SYN.decision);
   if (decision) body.push(SP.finish.prDecision(s.outcome), decision, "");

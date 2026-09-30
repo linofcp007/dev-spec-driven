@@ -24,7 +24,12 @@ Then **you have no evidence, so you make no claim** — and a tick is a claim:
   shell"), and never with an exit code nobody saw. The engine would accept a note on a runnable `_Verify:_` and
   leave the task *unverified*; that is still a claim without evidence.
 - **Name the command and ask for its result:** "Task 2's proof is `node --test test/cli.test.js` — run it and paste
-  the output (or run `dev-spec done csv-export 2 --run`, which runs it and records the evidence)."
+  the output (or run `node "<clone>/cli/dev-spec.js" done csv-export 2 --run`, which runs it and records the
+  evidence)." Hand over the CLI line exactly as the tool's note prints it — the clone's path resolved; a plugin
+  install puts no `dev-spec` on PATH, so a bare `dev-spec done …` doesn't run for the user.
+- **Ask — don't go looking for a shell.** No Bash / PowerShell tool in this session means stop and ask the user:
+  never dispatch a subagent or search the tool list for one (the 1.19 eval traces: 4 of 14 shell-less runs did,
+  and it cost 2–4 extra calls each to learn nothing new).
 - **The user ran it and reported the result** ("ran `npm test`: 14 pass, exit 0") → record exactly that:
   `spec_complete_task {…, evidence: {command, exitCode, summary}}`. A reported failure is recorded the same way (it
   refuses the tick).

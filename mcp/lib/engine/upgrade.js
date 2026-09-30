@@ -319,7 +319,7 @@ function specUpgrade(projectDir, opts = {}) {
     if (!migrations.changed) migrations.report = { file, written: false };
     else if (!isGeneratedOrAbsent(file)) migrations.report = { file, written: false, error: i18n.msg(lang).err.notGenerated("UPGRADE.md") };
     else {
-      writeFileAtomic(file, renderUpgradeMd(res, lang, path.basename(path.resolve(projectDir))));
+      writeFileAtomic(file, i18n.portableCli(renderUpgradeMd(res, lang, path.basename(path.resolve(projectDir))))); // committed (1.21 F3)
       migrations.report = { file, written: true };
     }
   }
@@ -338,7 +338,7 @@ function upgradeItems(f, lang) {
   if (f.next && f.next.recommendation) act(I.next(f.next.recommendation)); // next_action's one step first, then everything the rules flag
   if (f.doctor.failing.length) act(I.fix(f.doctor.failing.map((c) => c.id + (c.detail ? ` (${c.detail})` : "")).join("; ")));
   if (f.pendingGates.length) act(I.approve(f.pendingGates.join(", "), f.name));
-  if (f.changedSinceApproval.length) act(I.reReview(f.changedSinceApproval.join(", "), (f.impact || []).map((p) => `dev-spec impact ${f.name} --phase ${p}`).join(" · ")));
+  if (f.changedSinceApproval.length) act(I.reReview(f.changedSinceApproval.join(", "), (f.impact || []).map((p) => `${i18n.DEV_SPEC} impact ${f.name} --phase ${p}`).join(" · ")));
   if (f.history.skip.length) act(I.reapprove(f.history.skip.map((x) => `${x.phase} (${U.reason[x.reason] || x.reason})`).join(", ")));
   if (f.unverified.length) act(I.verify(unverifiedLabel({ unverifiedDetail: f.unverified }, lang), f.name));
   if (f.drift && f.drift.drifted) act(I.drift(f.drift.changed.length + f.drift.missing.length + f.drift.nowPresent.length, f.name));

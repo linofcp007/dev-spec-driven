@@ -1037,4 +1037,39 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     ok(!before && c9.status === "fail" && /^2 conflito\(s\) de merge/.test(c9.detail) && /\.state\.json kind/.test(c9.detail) && /roadmap\.json meta\.guard/.test(c9.detail) && d9.verdict === "fail",
       "1.21 F1a: doctor fails merge-conflicts (in the feature's language) while a conflicted merge's mergeConflicts list is still in its .state.json or in roadmap.json; none → no such check (got " + js(c9) + ")");
   }
+
+  { // 1.21 F3 — the runnable CLI line (S.DEV_SPEC, i18n/common.js) is safe to paste: quoted for bash AND PowerShell (double quotes,
+    // single quotes when the path holds " $ ` !, a placeholder when it also holds a '), forward slashes; it RUNS as printed in the
+    // platform shell, in bash and in PowerShell where they exist; a committed file (UPGRADE.md here) gets `dev-spec` instead.
+    const I = require("./lib/i18n.js");
+    const quoting = [I.cliPrefix("C:\\Users\\Ana Sá\\dev-spec-driven\\cli\\dev-spec.js"), I.cliPrefix("/home/x$y/cli/dev-spec.js"), I.cliPrefix("/it's/$HOME/cli/dev-spec.js"),
+      I.cliPrefix("/opt/bang!/cli/dev-spec.js")];
+    const quoteOk = quoting[0] === 'node "C:/Users/Ana Sá/dev-spec-driven/cli/dev-spec.js"' && quoting[1] === "node '/home/x$y/cli/dev-spec.js'" &&
+      quoting[2] === 'node "<dev-spec-driven>/cli/dev-spec.js"' && quoting[3] === "node '/opt/bang!/cli/dev-spec.js'";
+    const line = S.DEV_SPEC + " help";
+    const cwd = os.tmpdir();
+    const heads = (r) => (r && !r.error && r.status === 0 && /^dev-spec — /.test(String(r.stdout || ""))) ? "ok" : r && r.error ? "absent" : "failed:" + (r && r.status) + " " + String(r && r.stderr || "").slice(0, 200);
+    const viaShell = heads(spawnSync(line, { shell: true, encoding: "utf8", cwd }));
+    const bashBin = (process.platform === "win32" ? [process.env.DEV_SPEC_TEST_BASH, "C:\\Program Files\\Git\\bin\\bash.exe"] : [process.env.DEV_SPEC_TEST_BASH, "bash"])
+      .filter(Boolean).find((b) => { try { return spawnSync(b, ["--version"], { encoding: "utf8" }).status === 0; } catch { return false; } });
+    const viaBash = bashBin ? heads(spawnSync(bashBin, ["-c", line], { encoding: "utf8", cwd })) : "absent";
+    const psBin = process.platform === "win32" ? "powershell.exe" : "pwsh";
+    const viaPs = heads(spawnSync(psBin, ["-NoProfile", "-NonInteractive", "-Command", line], { encoding: "utf8", cwd, timeout: 60000 }));
+    // UPGRADE.md (committed) gets the portable `dev-spec` line; the audit's `lines` (read in the terminal) the runnable one.
+    const pu = path.join(tmp, "proj-121-portable");
+    S.initProject(pu, ["core"], "en");
+    const fu = S.createFeature(pu, "Csv export", ["core"], "x");
+    fs.writeFileSync(path.join(fu.dir, "tasks.md"), "# Tasks\n\n- [x] 1. [US1] Do it\n  - _Requirements: US-1.AC-1_\n  - _Verify: node -e \"process.exit(0)\"_\n");
+    const rmp = path.join(pu, ".specs", "roadmap.json"), rmj = JSON.parse(fs.readFileSync(rmp, "utf8"));
+    delete rmj.meta.specVersion;
+    fs.writeFileSync(rmp, JSON.stringify(rmj, null, 2));
+    const up = S.specUpgrade(pu, { apply: true });
+    const upMd = fs.readFileSync(path.join(pu, ".specs", "UPGRADE.md"), "utf8");
+    const portOk = up.ok && !upMd.includes(S.DEV_SPEC) && upMd.includes("dev-spec done csv-export <n> --run") && up.lines.some((l) => l.includes(S.DEV_SPEC + " done csv-export <n> --run")) &&
+      S.portableCli("run " + S.DEV_SPEC.replace(/"/g, "&quot;") + " drift x") === "run dev-spec drift x" && S.portableCli(S.DEV_SPEC + " done x 1 --run") === "dev-spec done x 1 --run";
+    ok(quoteOk && viaShell === "ok" && viaBash !== "failed" && !/^failed/.test(viaBash) && !/^failed/.test(viaPs) && portOk,
+      "1.21 F3: the runnable CLI line is quoted for bash AND PowerShell (double quotes; single quotes around \" $ ` !; a placeholder when a ' joins them; forward slashes) and runs as printed in the platform shell" +
+      " (and bash / PowerShell where present); a committed UPGRADE.md keeps `dev-spec`, the audit's lines the runnable form (got " +
+      JSON.stringify({ quoting, viaShell, viaBash, viaPs, portOk, upMd: (upMd.match(/.*dev-spec done.*/) || [])[0] }) + ")");
+  }
 };
