@@ -58,8 +58,10 @@ joins the built-in tracks. 38 MCP tools, 54 commands, eleven built-in tracks (wa
   not include webhooks", "os editores não podem adicionar feature flags"): only the one designing — we, the system, or
   no subject at all — excludes ("the service must not use Redis", "do not use Kafka"), and so does a part of what is
   being built after a plain negation ("the importer does not need Kafka", "la versión 2 no añadirá suscripciones"),
-  while a modal or a plural keeps the track ("the importer can't use Kafka", "suppliers don't use the checkout");
-  "cannot" reads like "can't".
+  while a modal or a plural keeps the track ("the importer can't use Kafka", "suppliers don't use the checkout"); a
+  negated verb whose object is data to protect — personal data, PII, a token, a secret, a key, a password, a card number
+  — keeps its track whatever the verb and the subject ("the email doesn't include personal data", "the URL does not
+  include the session token", "o email não inclui dados pessoais"); "cannot" reads like "can't".
   +ui recognises confirm dialogs, toasts, snackbars,
   field-level errors and mobile-friendly screens; +api reads "our API needs a v2" as contract work; a public API for a
   screen is +api +ui.
@@ -106,7 +108,7 @@ joins the built-in tracks. 38 MCP tools, 54 commands, eleven built-in tracks (wa
   <feature> data` adopts the built-in track, or rename the pack and re-add it.
 
 ### Tests
-- `node mcp/test.js` 1652 assertions (was 1544), `node cli/test-cli.js` 508 (was 480): sizes
+- `node mcp/test.js` 1653 assertions (was 1544), `node cli/test-cli.js` 508 (was 480): sizes
   and the change kind end to end (the no-size scaffolds pinned by hash in EN / PT / ES), the merge driver (six 3-way cases,
   sign-offs, a real two-branch git merge, `--check`), elicitation over a fake MCP client (accept / decline / cancel /
   error / timeout, force, batch), coordinated negation and signal overrides (a precision / recall assertion per track),
