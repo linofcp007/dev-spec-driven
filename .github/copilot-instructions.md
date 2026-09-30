@@ -12,9 +12,10 @@ When the task is non-trivial, follow the spec-driven workflow in `AGENTS.md` (re
   `+privacy` (personal data — GDPR / RGPD), `+dist` (writes across systems — outbox, idempotency, concurrency),
   `+api` (an API contract — versioning, breaking changes, problem+json errors),
   `+ui` (user-facing UI — design system, UI states, WCAG 2.2 AA accessibility),
-  `+obs` (operability — SLOs, alerting and runbooks, safe rollout and rollback). Tracks combine.
+  `+obs` (operability — SLOs, alerting and runbooks, safe rollout and rollback),
+  `+data` (data pipelines — data contracts, quality checks, idempotent re-runs and backfills, lineage). Tracks combine.
 - Run the approval-gated pipeline: requirements (EARS, stable AC IDs) → design (with the mandatory
-  +saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs sections filled) → test/eval plan → failing tests / eval harness → tasks (traceable) →
+  +saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data sections filled) → test/eval plan → failing tests / eval harness → tasks (traceable) →
   execute (red-green-refactor or prompt-iteration per track).
 - Use the local engine for mechanical steps (zero-dependency, no CI):
   `node cli/dev-spec.js classify|init|create|next-action|doctor|trace|ears|next|brief|done|approve|impact|append-tasks|decide|finish|stop-check|evals`

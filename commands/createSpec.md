@@ -20,7 +20,8 @@ responses or logs for +sec; export, erasure in every store, retention expiry for
 duplicate message applied once, no lost update, a dependency down degrading for +dist; a malformed request answered 400 problem+json, an
 Idempotency-Key replay, a stale If-Match refused with 412, a breaking change only in a new version for +api; keyboard operation, a form that keeps its values and names its errors, an
 empty state, a failed load with Retry for +ui; telemetry with a correlation ID, a burn-rate page, a canary that rolls back, a readiness
-check for +obs — the scaffold seeds `US-1.AC-10…31` for the last six: make them concrete). On a design-first feature (`flow: "design-first"`) this phase
+check for +obs; a bad row quarantined, an idempotent re-run / backfill, a freshness alert, a schema change checked for compatibility for
++data — the scaffold seeds `US-1.AC-10…35` for the last seven: make them concrete). On a design-first feature (`flow: "design-first"`) this phase
 comes after the design approval: the criteria must match the approved design. Replace every template
 placeholder — the requirements gate refuses an approval while any remains. Run the `ears_validate`
 MCP tool to catch missing SHALL, missing IDs, vague words and leftover placeholders (issue `code`s: `no-modal`,

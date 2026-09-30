@@ -24,6 +24,9 @@ A project track pack (`.specs/tracks/<name>/`) brings its own criteria, sections
   empty state with the next action, a failed load with Retry (`US-1.AC-24..27`).
 - **+obs:** telemetry with a correlation ID and no personal data, a burn-rate page with the runbook, a canary that rolls
   back on its error rate, not-ready-but-live while a dependency is down (`US-1.AC-28..31`).
+- **+data:** a row that breaks a data-quality rule quarantined and never loaded, a re-run / backfill of a partition with
+  the same result as one run, a freshness alert to the owner, a breaking schema change rejected before it reaches the
+  consumers (`US-1.AC-32..35`), plus the late-data rule (how late still counts).
 - **+tdd:** make sure every AC is concrete enough to become a failing test — if it can't, rewrite it.
 
 ## Phase 2 — the mandatory design sections
@@ -61,6 +64,12 @@ problem+json) · Pagination, Idempotency & Concurrency · Rate Limits & Quotas. 
 **+obs adds 5 mandatory `[OBS]` sections** — SLIs & SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health
 & Capacity. See `references/observability-patterns.md`.
 
+**+data adds 5 mandatory `[DATA]` sections** — Data Contracts & Schema Evolution (producers, consumers, schema, compatibility
+rule) · Data Quality (the checks, where they run, what a failure does) · Pipeline Idempotency & Backfills (the unit of work,
+re-runs, late-arriving data, the backfill procedure) · Lineage & Ownership (sources → consumers, owners, freshness SLAs) ·
+Retention & Cost (retention per layer — personal data per `references/privacy-track.md` —, partitioning, query cost). See
+`references/data-pipeline-patterns.md`.
+
 ## Phase 3 — test plan and eval plan additions
 
 - **+tdd test plan:** ≥ 1 test per AC, a negative test for every IF…THEN, boundary tests; each with a stable ID
@@ -70,7 +79,9 @@ problem+json) · Pagination, Idempotency & Concurrency · Rate Limits & Quotas. 
 - **+saas:** tenant-isolation, rate-limit, idempotency, authorization-matrix and audit-log tests. **+sec:** one
   abuse-case test per threat. **+privacy:** export / erasure / retention tests. **+dist:** failure injection. **+api:**
   contract tests and the breaking-change diff. **+ui:** an accessibility check + visual regression of the states.
-  **+obs:** an alert in a staged failure, a rollback drill, fault injection. `references/test-patterns.md`.
+  **+obs:** an alert in a staged failure, a rollback drill, fault injection. **+data:** data-quality checks on fixture
+  batches, an idempotent re-run / backfill of a partition, the freshness alert, the schema-change compatibility check.
+  `references/test-patterns.md`, `references/data-pipeline-patterns.md`.
 - **+ai eval plan:** three sets — **golden** (50–200 representative inputs with expected quality), **adversarial**
   (injections, jailbreaks, out-of-scope, unsafe-elicitation, degenerate inputs — should refuse/degrade), **regression**
   (every fixed production bug, grows forever). Grading per set (exact match / schema / LLM-as-judge with rubric /
@@ -101,5 +112,6 @@ problem+json) · Pagination, Idempotency & Concurrency · Rate Limits & Quotas. 
 - **+api:** contract tests and the breaking-change diff green.
 - **+ui:** the accessibility check, a keyboard / screen-reader pass and the performance budget.
 - **+obs:** an alert fired in a staged failure and a rollback drill.
+- **+data:** the data-quality checks, a partition re-run and a backfill rehearsal on real-sized data — the same rows as one run.
 
 `spec_finish` lists the same items as `checks` — only a fresh run or a human can confirm them.

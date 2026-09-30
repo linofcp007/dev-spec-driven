@@ -73,7 +73,7 @@
  *   append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared]
  *                                      [--makes-green T-01,…] [--expect-fail] [--size XS|S|M|L|XL] [--depends 3,5]
  *                                      [--parallel] [--heading "…"]  Append one task to tasks.md (converge)
- *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs or a track pack (additive); --remove turns one off
+ *   add-track <feature> <track...>     Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data or a track pack (additive); --remove turns one off
  *   feature <action> <name> [new]      remove (needs --yes) | archive | rename | restore a feature; flow <name> <flow> sets its phase order
  *   catalog [--write]                  Living catalog: every feature's ACs, superseded ones marked → .specs/SPECS.md
  *   export [feature] [--md] [--write]  Stakeholder document (offline HTML, or markdown) → .specs/exports/ (no feature = project)
@@ -532,7 +532,7 @@ function main() {
           (s.filled ? "" : " (" + fm.sectionStatus[s.present ? "unfilled" : "missing"] + ")")).join(" · ");
         if (r.scaleSections) console.log(T.scaleSections(marks(r.scaleSections)));
         if (r.aiSections && r.aiSections.sections) console.log(T.aiSections(marks(r.aiSections.sections)));
-        for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs"]) if (r[tr + "Sections"]) console.log(fm.secPrivacy.statusSections[tr](marks(r[tr + "Sections"])));
+        for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs", "data"]) if (r[tr + "Sections"]) console.log(fm.secPrivacy.statusSections[tr](marks(r[tr + "Sections"])));
         for (const p of Object.values(r.packSections || {})) console.log(fm.trackPacks.statusSections(p.marker, marks(p.sections))); // track packs (1.15)
         if (r.missingPacks) console.log(fm.trackPacks.missing(r.missingPacks.map((n) => "+" + n).join(", ")));
       });
@@ -940,7 +940,7 @@ function main() {
 
     case "add-track": {
       const tr = withTracksFlag(pos.slice(1));
-      if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai|sec|privacy|dist|api|ui|obs>... (or a track pack's name — dev-spec tracks) [--remove]");
+      if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai|sec|privacy|dist|api|ui|obs|data>... (or a track pack's name — dev-spec tracks) [--remove]");
       // Several tracks at once ("saas ai", "saas,ai"); --remove turns them off (files kept, listed as inactive).
       const r = spec.addTrack(projectDir, pos[0], tr, { remove: on("remove") });
       if (!r.ok) return fail(r);
@@ -1021,7 +1021,7 @@ function main() {
       // spec_import: <path> resolves against the project root and must stay inside it.
       // 1.16 C4: `import plan|execplan|fluidplan -` reads the document's markdown from stdin, `--text "<markdown>"` takes it inline
       // (= spec_import {tool, text} — a plan kept outside the project, e.g. Claude Code's ~/.claude/plans).
-      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs] · import <plan|execplan|fluidplan> - | --text \"<markdown>\"";
+      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data] · import <plan|execplan|fluidplan> - | --text \"<markdown>\"";
       const fromStdin = pos[1] === "-";
       const hasText = typeof flags.text === "string";
       if (!pos[0] || (!pos[1] && !hasText) || (fromStdin && hasText)) usage(usageLine);
@@ -1593,7 +1593,7 @@ function printMatrix(feature, mx, lang) {
 function helpText() {
   return `dev-spec — universal spec-driven CLI (local, zero-dependency)
 
-  classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs), multilingual
+  classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data), multilingual
                                   --explain: every keyword match (table tier → final tier, cue / override, negation) + the
                                   project's signal overrides
   init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|pt-BR|es → project default)
@@ -1683,7 +1683,7 @@ function helpText() {
                                   since — read-only; re-review, then re-approve (the approval records the current steering)
   metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate, velocity (project: + avg/median);
                                   --write → .specs/<feature>/retro.md (a pre-filled retrospective, never overwritten)
-  add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs (additive, never overwrites);
+  add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data (additive, never overwrites);
                                   --remove turns a track off (non-destructive: files kept, listed as inactive);
                                   a project track pack (dev-spec tracks) is named the same way
   feature <remove|archive|rename|restore> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes;
@@ -1735,7 +1735,7 @@ function helpText() {
                                   tests, entrypoints, env var names, migrations)
   coverage                        Brownfield: % of code files named in any _Implements:_ (active + archived features), per folder
   import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
-                                  tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|pt-BR|es · --tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs
+                                  tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|pt-BR|es · --tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data
                                   plan = Claude Code plan mode / Cursor .cursor/plans, execplan = a Codex ExecPlan (PLANS.md),
                                   bmad = BMAD-METHOD docs (prd.md + docs/stories/), fluidplan = a fluidplan plan (.fluidplan/<id>/:
                                   plan.json + answers.json, PLAN.md + DECISIONS.md → tasks, criteria, decisions.md)

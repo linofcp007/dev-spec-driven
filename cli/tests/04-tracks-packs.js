@@ -31,7 +31,7 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   const ck = r(["tracks", "check"]);
   let ckJ = {};
   try { ckJ = JSON.parse(r(["tracks", "check", "--json"]).out); } catch { /* stays {} */ }
-  ok(ls.code === 0 && /^Tracks — 10 built-in, 1 project pack\(s\) in \.specs\/tracks\/ \(1 valid\):/.test(ls.out) && /  ✎ a11y +\[A11Y\]  Accessibility — 2 section\(s\) · 3 signal\(s\) · steering\/a11y\.md/.test(ls.out) &&
+  ok(ls.code === 0 && /^Tracks — 11 built-in, 1 project pack\(s\) in \.specs\/tracks\/ \(1 valid\):/.test(ls.out) && /  ✎ a11y +\[A11Y\]  Accessibility — 2 section\(s\) · 3 signal\(s\) · steering\/a11y\.md/.test(ls.out) &&
     /  · sec +\[SEC\]  5 section\(s\)/.test(ls.out) && ck.code === 0 && /1 track pack\(s\) checked — 1 valid, 0 error\(s\), 0 warning\(s\)\./.test(ck.out) && ckJ.ok === true && ckJ.verdict === "pass",
     "feature F4: tracks (list) shows the built-in tracks and the pack; tracks check passes (exit 0; --json = spec_tracks' result) (got " + js(ls.out.slice(0, 400)) + ")");
   // classify / create / status / doctor with the pack.

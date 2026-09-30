@@ -28,6 +28,8 @@ Review against the full chain, gating checks by the feature's active tracks:
   handled; keyboard operable, labelled, sufficient contrast (the automated accessibility check clean); strings in the catalogue.
 - **+obs** — the metrics / logs / traces the design names are emitted (correlation ID, no personal data); each alert has a
   runbook; the flag, the rollout steps and the rollback criteria as the design says; liveness never checks a dependency.
+- **+data** — every dataset written matches its contract (schema, owner, compatibility rule); the data-quality checks run where the
+  design says and quarantine bad rows; loads are idempotent per partition (no blind append); retention and partitioning applied.
 - **Security** — injection, authz, data exposure — always.
 
 Run `trace_check` to confirm coverage. Report findings grouped by severity.

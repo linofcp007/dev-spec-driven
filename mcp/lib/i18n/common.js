@@ -80,9 +80,10 @@ const TEMPLATE_ACS = { core: ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4"
   dist: ["US-1.AC-16", "US-1.AC-17", "US-1.AC-18", "US-1.AC-19"], // +dist (1.17 D)
   api: ["US-1.AC-20", "US-1.AC-21", "US-1.AC-22", "US-1.AC-23"], // +api (1.19 T)
   ui: ["US-1.AC-24", "US-1.AC-25", "US-1.AC-26", "US-1.AC-27"], // +ui (1.19 T)
-  obs: ["US-1.AC-28", "US-1.AC-29", "US-1.AC-30", "US-1.AC-31"] }; // +obs (1.19 T)
+  obs: ["US-1.AC-28", "US-1.AC-29", "US-1.AC-30", "US-1.AC-31"], // +obs (1.19 T)
+  data: ["US-1.AC-32", "US-1.AC-33", "US-1.AC-34", "US-1.AC-35"] }; // +data (1.21 F4)
 // The optional tracks whose template criteria / tasks / sections follow the core ones, in track order.
-const MARKER_TRACK_ORDER = ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs"];
+const MARKER_TRACK_ORDER = ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
 // The tracks classification.md lists signals for: +tdd, the built-in marker tracks, then a project's track packs (1.15 — any
 // other name in the feature's track list), in its order.
 function signalTracks(tracks) {
@@ -146,6 +147,11 @@ function templateTestRows(tracks, row, L, acs) {
   if (T["US-1.AC-28"]) rows.push(r("US-1.AC-28", L.integration, L.telemetry, "tests/integration/...", "property"),
     r("US-1.AC-29", L.integration, L.burnAlert, "tests/integration/..."), r("US-1.AC-30", L.integration, L.rollbackDrill, "tests/integration/..."),
     r("US-1.AC-31", L.integration, L.readiness, "tests/integration/..."));
+  // +data (1.21 F4): data-quality checks on fixture batches and an idempotent re-run hold for every batch / every re-run → property; a
+  // stale partition fires the freshness alert; the schema-change compatibility check runs against the published schema (contract).
+  if (T["US-1.AC-32"]) rows.push(r("US-1.AC-32", L.integration, L.dataQuality, "tests/integration/...", "property"),
+    r("US-1.AC-33", L.integration, L.idempotentRerun, "tests/integration/...", "property"), r("US-1.AC-34", L.integration, L.freshness, "tests/integration/..."),
+    r("US-1.AC-35", L.contract, L.schemaChange, "tests/contract/..."));
   return rows.join("\n");
 }
 

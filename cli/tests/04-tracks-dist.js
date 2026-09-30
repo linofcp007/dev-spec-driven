@@ -45,7 +45,7 @@ exports.run = ({ ok, run, tmp }) => {
   const pk = run(["tracks", "init", "dist", "--project", pd]);
   const help = run(["help"]).out;
   const usage = run(["add-track", "--project", pd]).out;
-  ok(trk.code === 0 && /^Tracks — 10 incluídos/.test(trk.out) && /  · dist +\[DIST\]  5 secção/.test(trk.out) && pk.code === 1 && /reservado/.test(pk.out) && // the project speaks PT (init --lang pt)
+  ok(trk.code === 0 && /^Tracks — 11 incluídos/.test(trk.out) && /  · dist +\[DIST\]  5 secção/.test(trk.out) && pk.code === 1 && /reservado/.test(pk.out) && // the project speaks PT (init --lang pt)
     /core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy\/\+dist/.test(help) && /<tdd\|saas\|ai\|sec\|privacy\|dist[|>]/.test(usage),
     "1.17 D5 (CLI): tracks lists dist [DIST] (5 sections) among the built-in tracks; tracks init dist is refused (reserved); help and the add-track usage name +dist (got " + js([trk.out.split("\n").slice(0, 9), pk.out]) + ")");
   const kiro = path.join(pd, ".kiro", "specs", "signup");

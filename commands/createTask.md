@@ -21,7 +21,8 @@ inventory, data subject requests, retention job) on +privacy and the data-consis
 consumer, concurrency control, resilience, failure-injection tests) on +dist and the API-contract tasks (contract first, error
 model, idempotency and concurrency, the compatibility gate, contract tests) on +api and the UI tasks (design-system build, UI states,
 forms and keyboard, accessibility checks, responsiveness / i18n / performance budget) on +ui and the operability tasks (SLOs and
-burn-rate alerts, telemetry with `_Emits metrics:_`, rollout, health checks, operability tests) on +obs; `_Implements: path_` on tasks that touch real files. Optionally
+burn-rate alerts, telemetry with `_Emits metrics:_`, rollout, health checks, operability tests) on +obs and the data tasks (data contract first, data-quality checks, idempotent loads, a backfill rehearsal,
+lineage / ownership / retention) on +data; `_Implements: path_` on tasks that touch real files. Optionally
 `_Size: XS|S|M|L|XL_` (1/2/3/5/8 points) — the roadmap turns sizes and the recorded velocity into an ETA — and
 `_Depends: 3, 5_` where a task needs other tasks of this tasks.md done first (without it, tasks.md order is the order):
 `spec_next_task` then serves the first open task whose dependencies are done, `dev-spec next <feature> --waves` shows

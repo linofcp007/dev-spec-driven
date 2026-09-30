@@ -23,7 +23,7 @@ Read the file BEFORE you change its area (a section name another note cites — 
 - **`docs/maintainers/architecture.md`** — before adding or splitting an engine module, changing what a surface requires,
   the build (the committed corpus, the on-demand bundle), or touching the MCP / rule-file configs: Layout (the full tree) · The module rule
   (1.18) · The build (1.20) · Config paths.
-- **`docs/maintainers/tracks.md`** — before changing the classifier, a built-in track (+tdd … +dist, +api, +ui, +obs) or
+- **`docs/maintainers/tracks.md`** — before changing the classifier, a built-in track (+tdd … +dist, +api, +ui, +obs, +data) or
   track packs: The track model · Project-defined tracks (1.15) · Classifier gotchas.
 - **`docs/maintainers/languages.md`** — before adding or rewording ANY user-facing string, a translated heading or a
   language: Languages (EN / PT-PT / PT-BR / ES) · Localization gotchas.

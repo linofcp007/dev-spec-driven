@@ -1,10 +1,10 @@
 # Tracks and the Phase 0 classifier
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
-The track registries, the built-in tracks (+dist, +api, +ui, +obs…), track packs and the classifier's rules.
+The track registries, the built-in tracks (+dist, +api, +ui, +obs, +data…), track packs and the classifier's rules.
 
 ## The track model
-`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17), `+api` / `+ui` / `+obs` (1.19) are independent and
+`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy` (the last two since 1.14), `+dist` (1.17), `+api` / `+ui` / `+obs` (1.19), `+data` (1.21) are independent and
 composable, chosen in Phase 0 by `spec_classify` (keyword heuristic with negation + confidence) and confirmed by the
 human. The track set drives which artifacts/sections/loops apply. See `references/classification-matrix.md`
 (GDPR / RGPD / LGPD / CCPA / HIPAA are +privacy signals, not +saas).
@@ -187,6 +187,46 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   100% / 74.2% (the misses left are generic-word UIs: a confirm dialog, a toast, a login screen), +obs 90.6% / 93.5% → 91.2% /
   100% (the false positives left are coordinated negations: "not add feature flags or canary releases"); the reviewer's 205
   texts unchanged; 2,644 logged classify inputs and a 12,390-text keyword sweep give the seven older tracks' 1.18 decisions.
+- **+data (1.21 F4)** — the eleventh built-in marker track `[DATA]` (data pipelines & data quality), added through the registries
+  (VALID_TRACKS after obs, TRACK_MARKER, `DATA_SECTIONS`, TRACK_STEERING **`data.md`**, TEMPLATE_ACS US-1.AC-32..35 — a batch row
+  quarantined and never loaded, an idempotent re-run / backfill of a partition, a freshness SLA alert, a breaking schema change
+  rejected —, MARKER_TRACK_ORDER, RE_STABLE_BRACKET, RE_PACK_MARKER_RESERVED, `TRACK_RESERVED_SINCE.data` "1.21", the per-track
+  lists of finish / brief / RTM / status / gates / removeTracks, the CLI status loop). `DATA_SECTIONS`: Data Contracts & Schema
+  Evolution · Data Quality · Pipeline Idempotency & Backfills · Lineage & Ownership · Retention & Cost — the full names and the
+  unmistakable data terms (schema evolution, data quality, data lineage) strict, every ordinary word `loose` (marker-bound): a
+  core "## Ownership", +privacy's "[PRIVACY] Retention & Deletion" or +saas's Cost Envelope never stand in for a deleted
+  [DATA] section, and a [DATA] Retention heading never satisfies +privacy's. TRACK_ALIASES (reserved pack names): etl, elt,
+  pipeline(s), warehouse, datawarehouse, lakehouse, dbt, dataquality, dataeng — **never `analytics`** (a team's product-analytics
+  pack — a tracking plan — keeps its name). SIGNALS.data — strong: ETL / ELT, a data / ingestion / batch pipeline, a data
+  warehouse / lake / lakehouse / mart, data quality, a data contract / lineage / catalog / mesh, data / analytics engineering,
+  schema evolution / registry / drift, a backfill job, a historical backfill, a slowly changing dimension, a star / snowflake
+  schema, fact / dimension tables, dimensional modelling, OLAP, dbt model / project / test / run / job / cloud, Apache Airflow /
+  an Airflow DAG, Dagster, Apache Spark / PySpark / a Spark job / Spark SQL / Spark streaming, Databricks, BigQuery, Amazon
+  Redshift, a `Snowflake warehouse` / `Snowflake table` (capitals), Delta Lake, Iceberg / Hudi, a Parquet file, Fivetran,
+  Airbyte, data ingestion / freshness, a freshness check / SLA, late-arriving data, an incremental load / model, a medallion
+  architecture, data observability, a quarantine table (+ PT / ES); weak (anchors): a backfill, a warehouse, `Snowflake` /
+  `Redshift` / `Airflow` (capitals), dbt, `SCD`, lineage, ingestion, change data capture / a CDC pipeline (+dist's strong phrase
+  too — a phrase may serve two tracks), Parquet / Avro, a streaming pipeline, batch processing, a data platform / product, data
+  governance, BI and its tools (one concept), duplicate rows, stale data, a uniqueness check; **generic**: analytics, a dataset,
+  a partition, a transformation, a batch / nightly job, ingest, upsert, a materialized view, a data / analytics engineer (a
+  role — listed before "analytics": the first keyword matching at a place wins it); **context** (one concept `sql`): table,
+  column, row, SQL, query / queries, schema (+ PT / ES) — "the warehouse … the orders table" is two hints, "migrate the users
+  table" none; hazards: duplicate rows, stale data, schema drift. **Cues** (`SIGNALS.data.cues`): a warehouse in a SENTENCE
+  with data words (tables, queries, SQL, "load … into", snapshots, schemas, dbt, pipelines, ETL / ELT, columns, partitions,
+  ingest…, analytics, BI) → keep; with the building's words (stock, inventory, shelves, picking, pallets, shipping, deliveries,
+  temperature, staff, shifts, trucks, goods, aisles, a loading dock, robots, parcels…) → none; a backfill in a sentence with
+  partitions / a pipeline / the warehouse / dbt / a DAG / history → keep, with a schema migration's words (migrat…, column(s),
+  nullable, alter table, default value) → generic; "into / in / to / from / via / no / na / para / en / desde / hacia" +
+  `Snowflake` / `Redshift` → strong; a Snowflake icon / pattern / theme, an Airflow reading / sensor / vent, a galaxy's /
+  telescope's Redshift, DBT therapy / skills / diary → none. **Measured (1.21 F4):** 72 EN / PT / ES texts (38 positives, 34
+  hard negatives — mcp/tests/04-tracks-data.js) 100% / 100%; on 36,281 inputs (the logged classify inputs of both suites —
+  1.19, the 1.19 fix, 1.20 —, the reviewers' corpora rev19-t / verify19 / rev17-d / p19t, every string literal of the test
+  files and an 18-frame keyword sweep of every built-in keyword) **no decision of the ten older tracks changed** (a first cut's
+  "redshift cluster" shadowed +obs's context word "cluster" — dropped); +data turns on for 2 logged inputs and 1 corpus text,
+  all CDC / Segment feeds into a data warehouse. The placeholder corpus renders 57 track sets now (1,387 texts ≤ T10's 1,400).
+  Guide: `references/data-pipeline-patterns.md`. The EXAMPLE track pack `examples/track-packs/mobile/` (+mobile — a data-only
+  pack, not a built-in track; `mobile` / `MOBILE` are no reserved names) is what references/project-tracks.md tells a team to
+  copy to `.specs/tracks/mobile/` to start; 04-tracks-data.js copies it into a project and runs `tracks check` + a create.
 - **1.21 F2a — the verification's remaining misses, as data where possible.** +ui: the everyday components a text names by
   themselves are strong (confirm / confirmation dialog, confirmation modal, modal dialog / window, toast notification / message,
   `snackbar` — one word: a "snack bar" is a food counter; PT / ES diálogo de confirmação / de confirmación, janela / ventana

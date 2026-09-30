@@ -1,6 +1,6 @@
 ---
 description: Initialize .specs/ and the steering files for the tracks this project uses. PT - inicializa .specs/ e steering. ES - inicializa .specs/ y steering.
-argument-hint: "[tracks, e.g. tdd saas ai sec privacy dist api ui obs] [--lang pt] [--guard on|off|scope] [--check name=cmd] [--roles requirements=product,design=tech+security] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]"
+argument-hint: "[tracks, e.g. tdd saas ai sec privacy dist api ui obs data] [--lang pt] [--guard on|off|scope] [--check name=cmd] [--roles requirements=product,design=tech+security] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]"
 ---
 
 Use the **dev-spec-driven** skill to bootstrap project context.

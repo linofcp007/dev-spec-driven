@@ -413,7 +413,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname 
     const lst = payload(await call("spec_tracks", { projectDir: tp }));
     const chk = payload(await call("spec_tracks", { action: "check", projectDir: tp }));
     const a11yRow = (lst.packs || []).find((p) => p.name === "a11y");
-    ok(lst.ok && lst.builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs" && a11yRow && a11yRow.valid && a11yRow.marker === "[A11Y]" &&
+    ok(lst.ok && lst.builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs,data" && a11yRow && a11yRow.valid && a11yRow.marker === "[A11Y]" &&
       a11yRow.title === "Accessibility" && a11yRow.sections.length === 3 && a11yRow.steering === "accessibility.md" && chk.ok && chk.verdict === "pass" && chk.errors === 0,
       "feature F4: spec_tracks list shows the built-in tracks and the valid +a11y pack ([A11Y], 3 sections, steering); check passes (got " + js(a11yRow) + " / " + js(chk.problems) + ")");
 

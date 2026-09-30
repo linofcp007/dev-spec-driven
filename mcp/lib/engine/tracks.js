@@ -18,7 +18,7 @@ let acIndex, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackNa
 function __link(E) { ({ acIndex, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName, noteGhostPacks,
   packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf } = E); }
 
-const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs"];
+const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
 // Adding a track: VALID_TRACKS + its classifier SIGNALS; a MARKER track (mandatory design sections under a stable
 // [Marker]) also needs TRACK_MARKER, a sections table in TRACK_SECTIONS, TRACK_STEERING and its i18n builders
@@ -26,7 +26,7 @@ const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "ap
 const OPTIONAL_TRACKS = VALID_TRACKS.filter((t) => t !== "core");
 // The steering files a track brings (spec_init / add_track write them, the task brief lists them).
 const TRACK_STEERING = { tdd: ["testing-standards.md"], saas: ["scale.md", "observability.md", "cost.md"], ai: ["ai-strategy.md"], sec: ["security.md"], privacy: ["privacy.md"],
-  dist: ["distributed.md"], api: ["api.md"], ui: ["ui.md"], obs: ["observability.md"] };
+  dist: ["distributed.md"], api: ["api.md"], ui: ["ui.md"], obs: ["observability.md"], data: ["data.md"] };
 
 // Track input from MCP or the CLI: an array or a string, EVERY element split on whitespace, commas and '+'
 // ("tdd,saas", "+saas +ai", ["tdd saas"]), case-insensitive, core implied. Unknown tokens are reported
@@ -62,7 +62,10 @@ const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd",
   // +ui (1.19 T) — never "a11y" / "accessibility": a team's accessibility pack (the example of references/project-tracks.md) keeps its name
   frontend: "ui", "front-end": "ui", ux: "ui", gui: "ui", wcag: "ui",
   // +obs (1.19 T)
-  observability: "obs", o11y: "obs", monitoring: "obs", sre: "obs", telemetry: "obs", opentelemetry: "obs" };
+  observability: "obs", o11y: "obs", monitoring: "obs", sre: "obs", telemetry: "obs", opentelemetry: "obs",
+  // +data (1.21 F4) — never "analytics": a team's product-analytics pack (a tracking plan, event names) is another concern and keeps its name
+  etl: "data", elt: "data", pipeline: "data", pipelines: "data", warehouse: "data", datawarehouse: "data", lakehouse: "data", dbt: "data",
+  dataquality: "data", dataeng: "data" };
 function suggestTrack(token) {
   // Own keys only: a plain-object lookup matched 'constructor' / '__proto__' and suggested Object itself.
   if (Object.prototype.hasOwnProperty.call(TRACK_ALIASES, token)) return TRACK_ALIASES[token];
@@ -145,7 +148,7 @@ function headingHasMarker(md, marker) {
 
 // The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
 // language). MARKER_TRACKS drives every per-marker loop: detection, inactive sections/tasks, doctor, approve, status.
-const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]", api: "[API]", ui: "[UI]", obs: "[OBS]" };
+const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]", api: "[API]", ui: "[UI]", obs: "[OBS]", data: "[DATA]" };
 const MARKER_TRACKS = Object.keys(TRACK_MARKER);
 // The AC IDs requirements.md defines as a track's criteria: under a heading carrying its marker ([SaaS] / [AI] — the
 // template's "#### [SaaS] Acceptance Criteria (EARS)", in any language) or with the marker in the criterion itself.
@@ -378,9 +381,32 @@ const OBS_SECTIONS = [
     "capacidade", "salud y capacidad", "comprobaciones de salud", "capacidad"],
   loose: ["health checks", "capacity", "verificações de saúde", "capacidade", "comprobaciones de salud", "capacidad"] },
 ];
+// +data (1.21 F4) — data pipelines & data quality. The ordinary names are `loose` (marker-bound): a core "## Retention" or
+// "## Ownership" note, +privacy's "[PRIVACY] Retention & Deletion" or +saas's "[SaaS] Cost Envelope" never stand in for a deleted
+// [DATA] section; the full names and the unmistakable data terms (schema evolution, data quality, data lineage) stay strict.
+const DATA_SECTIONS = [
+  { name: "Data Contracts & Schema Evolution", syn: ["data contracts & schema evolution", "data contracts and schema evolution", "schema evolution", "data contracts",
+    "data contract", "schema versioning", "contratos de dados e evolução do esquema", "evolução do esquema", "evolução de esquemas", "contratos de dados",
+    "contratos de datos y evolución del esquema", "evolución del esquema", "evolución de esquemas", "contratos de datos"],
+  loose: ["data contracts", "data contract", "schema versioning", "contratos de dados", "contratos de datos"] },
+  { name: "Data Quality", syn: ["data quality", "data quality checks", "quality checks", "qualidade dos dados", "qualidade de dados", "verificações de qualidade",
+    "calidad de los datos", "calidad de datos", "comprobaciones de calidad", "controles de calidad"],
+  loose: ["quality checks", "verificações de qualidade", "comprobaciones de calidad", "controles de calidad"] },
+  { name: "Pipeline Idempotency & Backfills", syn: ["pipeline idempotency & backfills", "pipeline idempotency and backfills", "idempotency & backfills",
+    "idempotency and backfills", "backfills", "backfill", "reprocessing", "re-runs", "idempotência do pipeline e backfills", "idempotência e backfills",
+    "reprocessamento", "idempotencia del pipeline y backfills", "idempotencia y backfills", "reprocesamiento"],
+  loose: ["backfills", "backfill", "reprocessing", "re-runs", "reprocessamento", "reprocesamiento"] },
+  { name: "Lineage & Ownership", syn: ["lineage & ownership", "lineage and ownership", "data lineage", "lineage", "ownership", "linhagem e responsáveis",
+    "linhagem e responsaveis", "linhagem dos dados", "linhagem", "linaje y responsables", "linaje de los datos", "linaje"],
+  loose: ["lineage", "ownership", "linhagem", "linaje"] },
+  { name: "Retention & Cost", syn: ["retention & cost", "retention and cost", "storage & cost", "storage and cost", "retention", "storage cost", "query cost",
+    "retenção e custo", "retencao e custo", "retenção", "custo de armazenamento", "retención y coste", "retención y costo", "retención", "coste de almacenamiento"],
+  loose: ["retention", "storage cost", "query cost", "retenção", "custo de armazenamento", "retención", "coste de almacenamiento"] },
+];
 // The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
 // check read (a marker track = a TRACK_MARKER entry + its table here).
-const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS, api: API_SECTIONS, ui: UI_SECTIONS, obs: OBS_SECTIONS };
+const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS, api: API_SECTIONS, ui: UI_SECTIONS, obs: OBS_SECTIONS,
+  data: DATA_SECTIONS };
 // [[track, sections, marker]] for the ACTIVE marker tracks, in track order.
 function activeSectionTracks(tracks) {
   return markerTracks().filter((t) => tracks.includes(t)).map((t) => [t, trackSectionTable(t), trackMarker(t)]); // + the track packs (1.15)
@@ -1219,6 +1245,123 @@ const SIGNALS = {
         after: { words: ["level", "ao cliente", "a clientes", "de atendimento", "al cliente", "de atención"], chars: 30, plural: true } },
     ],
   },
+  // +data (1.21 F4): data pipelines & data quality — data that moves between stores on a schedule or a stream (ETL / ELT, a warehouse or
+  // a lake, dbt / Airflow / Spark jobs) and whose quality, freshness, lineage and history the feature owns. STRONG: ETL / ELT, a data
+  // pipeline / warehouse / lake / mart, data quality, data contracts, lineage, a data catalog, schema evolution / a schema registry,
+  // slowly changing dimensions, a star schema, fact / dimension tables, dbt models / tests, an Airflow DAG, Spark jobs, the platforms
+  // named in full (BigQuery, Databricks, Amazon Redshift, a Snowflake warehouse / table, Delta Lake, Iceberg tables, Fivetran,
+  // Airbyte), data freshness, late-arriving data, incremental loads. WEAK (anchors): a backfill (also a migration's "backfill the new
+  // column" — its cue makes that one generic), a warehouse (also a building — its cue drops the logistics one), the product names
+  // written with their capital (Snowflake, Redshift, Airflow — a snowflake icon, a galaxy's redshift, a vent's airflow), dbt (also a
+  // therapy), lineage, ingestion, change data capture (+dist's strong phrase too), Parquet / Avro, BI and its tools, data
+  // governance / platform. GENERIC (app-level — every product has them): analytics, a dataset, a partition, a transformation, a
+  // batch / nightly job, ingest, upsert, a materialized view — "analytics events for the signup funnel", "import a CSV of contacts",
+  // "export orders as CSV" and "migrate the users table" stay core ('possible' at most). CONTEXT (corroborating only — one concept):
+  // table, column, rows, SQL, query, schema — "a nightly job that loads the orders table into the warehouse" is +data, "migrate the
+  // users table" is not. HAZARDS: duplicate rows, stale data, schema drift ("without duplicate rows" states the concern).
+  data: {
+    strong: [
+      "etl", "elt", "data pipeline", "ingestion pipeline", "batch pipeline", "data warehouse", "data warehousing", "data lakehouse", "lakehouse",
+      "data lake", "data mart", "data quality", "data-quality", "data contract", "data lineage", "data catalog", "data catalogue", "data mesh",
+      "data engineering", "analytics engineering", "schema evolution", "schema registry", "schema drift",
+      "backfill job", "historical backfill", "slowly changing dimension", "star schema", "snowflake schema", "fact table", "dimension table",
+      "dimensional model", "dimensional modelling", "olap", "dbt model", "dbt project", "dbt test", "dbt run", "dbt job",
+      "dbt cloud", "apache airflow", "airflow dag", "dagster", "apache spark", "pyspark", "spark job", "spark sql", "spark streaming",
+      "databricks", "bigquery", "amazon redshift", "Snowflake warehouse", "Snowflake table", "delta lake", "apache iceberg",
+      "iceberg table", "apache hudi", "parquet file", "fivetran", "airbyte", "data ingestion", "data freshness", "freshness check",
+      "freshness sla", "late-arriving data", "late arriving data", "incremental load", "incremental model", "medallion architecture",
+      "data observability", "great expectations suite", "quarantine table",
+      // PT (the plural of a phrase's first word is generated only for "de" / non-ASCII phrases — "armazéns" is listed)
+      "pipeline de dados", "armazém de dados", "armazéns de dados", "lago de dados", "qualidade de dados", "qualidade dos dados",
+      "contrato de dados", "linhagem de dados", "linhagem dos dados", "catálogo de dados", "engenharia de dados",
+      "evolução do esquema", "evolução de esquema", "evolução dos esquemas", "ingestão de dados", "frescura dos dados", "atualidade dos dados",
+      "esquema em estrela", "tabela de factos", "tabela de fatos", "tabela de dimensão", "carga incremental", "dados que chegam atrasados",
+      // ES
+      "pipeline de datos", "canalización de datos", "almacén de datos", "almacenes de datos", "lago de datos", "calidad de datos",
+      "calidad de los datos", "contrato de datos", "linaje de datos", "linaje de los datos", "catálogo de datos", "ingeniería de datos",
+      "evolución del esquema", "evolución de esquema", "ingesta de datos", "frescura de los datos",
+      "frescura de datos", "esquema en estrella", "tabla de hechos", "tabla de dimensiones", "datos que llegan tarde", "datos tardíos",
+    ],
+    weak: [
+      "backfill", "warehouse", "Snowflake", "Redshift", "Airflow", "dbt", "SCD", "lineage", "ingestion", "change data capture", "CDC pipeline",
+      "parquet", "avro", "streaming pipeline", "batch processing", "data platform", "data governance", "data product", "business intelligence",
+      "BI", "power bi", "looker", "tableau", "metabase", "duplicate rows", "stale data", "uniqueness check", "uniqueness test",
+      // PT
+      "linhagem", "ingestão", "processamento em lote", "plataforma de dados", "governação de dados",
+      "governança de dados", "inteligência de negócio", "produto de dados", "linhas duplicadas", "dados desatualizados",
+      // ES
+      "linaje", "ingesta", "procesamiento por lotes", "plataforma de datos", "gobierno de datos", "gobernanza de datos",
+      "inteligencia de negocio", "producto de datos", "filas duplicadas", "datos obsoletos",
+    ],
+    generic: [
+      // a role names no pipeline work of its own: "the data engineer wants a new column in the users table" (listed before "analytics":
+      // the first keyword matching at a place wins it)
+      "data engineer", "analytics engineer",
+      "analytics", "dataset", "partition", "transformation", "batch job", "nightly job", "ingest", "upsert", "materialized view",
+      // PT
+      "conjunto de dados", "partição", "transformação", "tarefa noturna", "processo noturno", "job noturno", "analítica", "engenheiro de dados",
+      // ES
+      "conjunto de datos", "partición", "transformación", "tarea nocturna", "proceso nocturno", "ingeniero de datos",
+    ],
+    // CONTEXT: the words of the tables a pipeline reads and writes — evidence only beside another (non-negated) strong / weak +data
+    // signal, and one concept (concepts.sql): "the warehouse … the orders table" is two hints, "table … rows … columns" one.
+    context: ["table", "column", "row", "sql", "query", "queries", "schema", "tabela", "coluna", "linhas", "tabla", "columna", "filas"],
+    concepts: {
+      sql: ["table", "column", "row", "sql", "query", "queries", "schema", "tabela", "coluna", "linhas", "tabla", "columna", "filas"],
+      role: ["data engineer", "analytics engineer", "engenheiro de dados", "ingeniero de datos"],
+      ingest: ["ingestion", "ingest", "ingestão", "ingesta"],
+      lineage: ["lineage", "linhagem", "linaje"],
+      bi: ["business intelligence", "BI", "power bi", "looker", "tableau", "metabase", "inteligência de negócio", "inteligencia de negocio"],
+      batch: ["batch job", "nightly job", "batch processing", "processamento em lote", "procesamiento por lotes",
+        "tarefa noturna", "processo noturno", "job noturno", "tarea nocturna", "proceso nocturno"],
+      files: ["parquet", "avro"],
+      cdc: ["change data capture", "CDC pipeline"],
+      platform: ["data platform", "data product", "plataforma de dados", "produto de dados", "plataforma de datos", "producto de datos"],
+      governance: ["data governance", "governação de dados", "governança de dados", "gobierno de datos", "gobernanza de datos"],
+      duplicates: ["duplicate rows", "linhas duplicadas", "filas duplicadas"],
+      stale: ["stale data", "dados desatualizados", "datos obsoletos"],
+      uniqueness: ["uniqueness check", "uniqueness test"],
+      dataset: ["dataset", "conjunto de dados", "conjunto de datos"],
+      partition: ["partition", "partição", "partición"],
+      transform: ["transformation", "transformação", "transformación"],
+      analytics: ["analytics", "analítica"],
+      sqlOps: ["upsert", "materialized view"],
+    },
+    // "without duplicate rows", "no stale data", "sem linhas duplicadas" state the concern (the negation is the requirement).
+    hazards: ["duplicate rows", "linhas duplicadas", "filas duplicadas", "stale data", "dados desatualizados", "datos obsoletos", "schema drift"],
+    // CUES — rules tried in order, the first that fires decides (generic kinds in classify.js):
+    cues: [
+      // a warehouse in a sentence about data (a table, a query, a load, dbt, a pipeline, a schema…) stays an anchor …
+      { kind: "sentence", on: ["warehouse"], then: "keep", edge: "letter",
+        phrases: ["tables?", "quer(?:y|ies)", "sql", "load(?:s|ed|ing)?[^\\S\\n]+into", "snapshots?", "schemas?", "dbt", "pipelines?", "etl", "elt",
+          "columns?", "partitions?", "ingest\\p{L}*", "analytics", "bi"] },
+      // … one about the building (stock, inventory, shelves, picking, pallets, shipping, temperature, shifts…) is no signal at all
+      { kind: "sentence", on: ["warehouse"], then: "none", edge: "letter",
+        phrases: ["stock", "inventor(?:y|ies)", "shel(?:f|ves)", "picking", "pick list", "forklifts?", "pallets?", "shipping", "shipments?",
+          "deliver(?:y|ies)", "dispatch\\p{L}*", "temperatures?", "staff", "shifts?", "trucks?", "goods", "aisles?", "loading docks?", "receiving",
+          "square (?:feet|meters|metres)", "robots?", "packing", "parcels?"] },
+      // a backfill in a sentence about partitions, a pipeline, the warehouse, a DAG or history is data work (an anchor) …
+      { kind: "sentence", on: ["backfill"], then: "keep", edge: "letter",
+        phrases: ["partitions?", "pipelines?", "warehouse", "dbt", "dags?", "historical", "history", "partições", "particiones", "histórico", "históricos",
+          "históricas?"] },
+      // … one in a schema migration ("add a currency column; backfill existing rows") is an app-level word
+      { kind: "sentence", on: ["backfill"], then: "generic", edge: "letter",
+        phrases: ["migrat\\p{L}*", "columns?", "nullable", "alter table", "default values?", "migraç\\p{L}*", "migraci\\p{L}*", "colunas?", "columnas?"] },
+      // data moved into / out of the product is the product: "load the contacts into Snowflake", "export from Redshift", "no Snowflake"
+      { kind: "near", on: ["Snowflake", "Redshift"], then: "strong",
+        before: { words: ["into", "in", "to", "from", "via", "no", "na", "para", "en", "desde", "hacia"], chars: 12, edge: "letter" } },
+      // the product names are something else beside these words: a snowflake icon, a vent's airflow, a galaxy's redshift, DBT therapy
+      { kind: "near", on: ["Snowflake"], then: "none",
+        after: { words: ["icons?", "emojis?", "patterns?", "decorations?", "ornaments?", "animations?", "effects?", "themes?", "shapes?"], chars: 24 } },
+      { kind: "near", on: ["Airflow"], then: "none",
+        after: { words: ["sensors?", "rates?", "meters?", "vents?", "readings?", "measurements?", "direction", "fans?"], chars: 24 } },
+      { kind: "sentence", on: ["Redshift"], then: "none", edge: "letter",
+        phrases: ["galax\\p{L}*", "stars?", "telescopes?", "spectr\\p{L}*", "astronom\\p{L}*", "cosmolog\\p{L}*", "quasars?"] },
+      { kind: "near", on: ["dbt"], then: "none",
+        after: { words: ["therapy", "therapists?", "skills?", "diar(?:y|ies)", "sessions?", "groups?", "programm?e?s?"], chars: 24 },
+        before: { words: ["dialectical behaviou?r therapy", "dialectical"], chars: 40, edge: "letter" } },
+    ],
+  },
 };
 
 module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, parseTracks, normalizeTracks,
@@ -1226,5 +1369,5 @@ module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, p
   detectTracks, savedTracks, headingHasMarker, TRACK_MARKER, MARKER_TRACKS, trackAcIds, normTaskHeading, TASK_HEADINGS,
   trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
   inactiveMarkerLines, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
-  SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, OBS_SECTIONS, TRACK_SECTIONS,
+  SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, OBS_SECTIONS, DATA_SECTIONS, TRACK_SECTIONS,
   activeSectionTracks, activeDesign, __link };

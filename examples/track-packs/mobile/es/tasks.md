@@ -1,0 +1,14 @@
+<!-- El bloque de tareas de una función +mobile en español. -->
+- [ ] Almacenamiento sin conexión y cola de sincronización de {{name}} — cambios reenviados al reconectar, conflictos resueltos según el diseño
+  - _Requirements: {{ac1}}, {{ac2}}_
+  - _Makes green: {{t1}}, {{t2}}_
+- [ ] Bloqueo por versión mínima y el aviso de actualización; el despliegue escalonado en las tiendas con sus criterios de parada
+  - _Requirements: {{ac3}}_
+  - _Makes green: {{t3}}_
+- [ ] Flujos de permisos — la justificación primero, los caminos de denegación y de revocación
+  - _Requirements: {{ac4}}_
+  - _Makes green: {{t4}}_
+- [ ] Notificaciones push — el enlace profundo, la baja, sin datos personales en la pantalla de bloqueo
+  - _Requirements: {{ac5}}_
+  - _Makes green: {{t5}}_
+- [ ] Ejecución en la matriz de dispositivos — el iOS más antiguo soportado y un Android de gama baja: arranque en frío, memoria y batería medidos frente al presupuesto
