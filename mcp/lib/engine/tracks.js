@@ -1416,6 +1416,17 @@ const SIGNALS = {
       { kind: "sentence", on: ["lineage", "linhagem", "linaje"], then: "strong", edge: "letter",
         phrases: ["metrics?", "dashboards?", "columns?", "datasets?", "source tables?", "pipelines?", "kpis?", "métricas?", "indicadores?", "colunas?",
           "conjuntos? de dados", "tabelas de origem", "painéis?", "columnas?", "conjuntos? de datos", "tablas de origen", "cuadros? de mando"] },
+      // 1.21 verify N2: what is ingested named right next to the word — "water / medication ingestion", "ingestão (diária) de água", "ingesta
+      // de agua" — is the everyday sense even beside a CSV file (tried before the data sense)
+      { kind: "near", on: ["ingestion", "ingestão", "ingesta"], then: "none",
+        before: { words: ["water", "fluids?", "medications?", "medicines?", "drugs?", "pills?", "foods?", "calories", "calorie", "meals?", "alcohol",
+          "caffeine", "sugar", "vitamins?", "supplements?", "nutrients?", "protein", "salt"], chars: 20, edge: "letter" },
+        after: { words: [[{ optional: ["diária", "diaria", "daily", "total"] }, ["de", "do", "da", "of", "del"], { optional: ["the", "a", "o", "la", "el"] },
+          ["água", "agua", "water", "líquidos?", "fluids?", "medicaç\\p{L}*", "medicaci\\p{L}*", "medicamentos?", "medications?", "comprimidos?",
+            "pastillas?", "pills?", "alimentos?", "comida", "food", "calorias", "calorías", "calories", "açúcar", "azúcar", "sugar", "álcool",
+            "alcohol", "cafeína", "caffeine", "vitaminas?", "vitamins?", "suplementos?", "supplements?", "sal", "salt", "proteínas?", "protein",
+            "meals?", "refeições", "refeição", "comidas"]]],
+        chars: 40 } },
       // 1.21 verify R4: ingestion of files / feeds / batches / streams into a lake or a warehouse, a slowly changing dimension's type 2
       { kind: "sentence", on: ["ingestion", "ingestão", "ingesta"], then: "strong", edge: "letter",
         phrases: ["csv", "json", "xml", "parquet", "avro", "files?", "ficheiros?", "arquivos?", "ficheros?", "archivos?", "feeds?", "pipelines?",

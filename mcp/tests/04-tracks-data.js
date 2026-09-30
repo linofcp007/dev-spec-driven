@@ -264,7 +264,10 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
       "Linaje de cada campo del informe de ingresos.", "Ingestion of CSV files into the orders table.", "Ingestão dos ficheiros CSV para a tabela de encomendas.",
       "Ingesta de ficheros CSV en la tabla de pedidos.", "SCD type 2 on the customers table."];
     const R34_OFF = ["Mostrar a linhagem de cada cavalo num relatório.", "We do not need a data warehouse.", "We will not build a data pipeline.",
-      "Show the lineage of each horse in the breeding report."];
+      "Show the lineage of each horse in the breeding report.",
+      // 1.21 verify N2: what is ingested named next to the word is the everyday sense, even beside a CSV file
+      "Log the daily water ingestion of each patient in a CSV file.", "Registar a ingestão diária de água de cada utente num ficheiro CSV.",
+      "Registrar la ingesta diaria de agua de cada paciente en un fichero CSV.", "Track medication ingestion per patient and export it as a CSV file."];
     const CORPUS = [
       // positives — EN
       ["data", "Build an ETL pipeline that loads the orders from Postgres into BigQuery every night."], ["data", "A nightly job that recomputes the loyalty points in the warehouse."],
@@ -349,6 +352,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
     ok(!r3.length && !r4.length && !r34Off.length,
       "1.21 verify R3 / R4: 'Lineage between the orders table and the revenue report', 'Field-level lineage for the revenue report', 'Linhagem de cada campo do relatório', 'Linaje de cada campo del informe', 'Ingestion of CSV files into the orders table' (PT / ES) and 'SCD type 2 on the customers table' are +data; a horse's lineage in a report, medication / water / calorie ingestion, SCD patient records and 'We do not need a data warehouse' / 'We will not build a data pipeline' are not (got " +
       js([r3, r4, r34Off]) + ")");
+    // 1.21 verify N2: water / medication ingestion named next to the word stays everyday even beside a CSV file (EN / PT / ES); ingestion of
+    // JSON / CSV files into a bucket, a table or a lake stays data
+    const n2Off = R34_OFF.slice(-4).filter((t) => onOf(t, "data"));
+    const n2On = ["Ingestion of JSON files into the S3 bucket nightly.", "Ingestão de ficheiros JSON para o data lake.", "Ingesta de ficheros CSV en el bucket de S3."].filter((t) => !onOf(t, "data"));
+    ok(!n2Off.length && !n2On.length,
+      "1.21 verify N2: 'Log the daily water ingestion of each patient in a CSV file' (PT 'ingestão diária de água', ES 'ingesta diaria de agua') and 'Track medication ingestion … as a CSV file' are no +data; ingestion of JSON / CSV files into a bucket or a lake is (got " +
+      js([n2Off, n2On]) + ")");
     const b4 = [cls(B3_OFF[15]), cls(B3_OFF[16])];
     ok(b4.every((r) => !r.tracks.includes("data") && !(r.signals.data || []).length) && cls("Load the Stripe payouts into the warehouse tables every hour with Fivetran.").tracks.includes("data"),
       "1.21 review B4: a warehouse in a sentence about stock is the building even with 'in a table' (no +data signal at all) — the keep rule no longer lists tables / columns / queries (got " + js(b4.map((r) => r.signals.data)) + ")");

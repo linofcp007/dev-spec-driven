@@ -240,7 +240,9 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   entries into the lakehouse tables", "Add a freshness check to the grocery orders pipeline", "the column lineage of each
   metric per product family"); 1.21 verify R4: ingestion of CSV / JSON files, feeds, batches or streams into a lake or a
   warehouse ("Ingestion of CSV files into the orders table", PT / ES) and an SCD with its type / a dimension ("SCD type 2 on the
-  customers table") → strong too; then the everyday senses: a lakehouse among lodging words (book / booked / bookings — never
+  customers table") → strong too — unless (1.21 verify N2, a `near` rule tried first) what is ingested is named right next to
+  the word: "daily water ingestion", "medication ingestion", *"ingestão (diária) de água", "ingesta diaria de agua"* → none,
+  even beside a CSV file; then the everyday senses: a lakehouse among lodging words (book / booked / bookings — never
   "bookkeeping" —, rent, cabins, guests, nights…), a freshness check among food words, *carga incremental* in a training plan
   or a structure, a lineage among animals / families, ingestion of water / a medication / calories, parquet among flooring
   words → none; last (1.21 verify R3), a lineage of reports, fields or models → strong ("Field-level lineage for the revenue
@@ -299,49 +301,50 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   carries it on. `NEGATORS` gained the negative conjunctions nor / neither / nem / ni ("sem X nem Y", "ni X ni Y"), and a
   negative conjunction after an item a negator governs negates that item too ("Não vamos usar feature flags nem lançamento
   canário": the negator is three words back). Linear: each gap is read at most twice.
-  **1.21 review B / verify V — what a negation negates (`negationKind()`, one analysis for three readers).** B1: 1.21 read "O
-  sistema não pode perder pagamentos nem duplicar faturas" / "must not lose payments nor duplicate invoices" / "No puede perder
-  pagos ni reembolsos" as exclusions (+tdd off). The words after a negator now decide whether it EXCLUDES what follows or states
-  a REQUIREMENT about it: a noun phrase ("no X", "sem X", "no new X", "Postgres, not MongoDB") → exclude; an ADOPTION verb
-  (`GOVERN_ADOPT`: use / add / need / include / implement / integrate / deploy / run / offer / provide / ship / create / adopt,
-  "necessary", *necessário · necesario, falta* + PT / ES forms; 1.21 verify R2: enable / activate / turn on / install / embed /
-  bundle / expose, *ativar, instalar, incorporar, expor, habilitar · activar, incrustar, exponer*) → exclude, whatever the modal
-  ("must not use X", "should not enable feature flags", "must not expose GraphQL") — except expose / embed (`GOVERN_EXPOSE`) for
-  a +sec / +privacy keyword (`PROTECT_TRACKS` — data to protect: "Logs must not expose personal data" is its requirement); a DEONTIC
-  modal (`GOVERN_DEONTIC`: must / shall / should / can / may, cannot / can't / mustn't; *pode, deve · puede, debe*) — or never /
-  *nunca / jamás / jamais* (`NEVER_WORDS`: a behaviour — "a second write never overwrites the ledger", "Never log personal data")
-  — before another verb → require ("must not lose X", "must never leak X", *"não pode perder X", "no debe perder X"*); a plain
-  auxiliary (`GOVERN_AUX`: will / do / is, *vamos, iremos · vamos, se, hace*…) before another verb → exclude (a plan: "We will not
-  run X" — 1.21 verify V1: the review's first cut let any unknown word block the list and turned these back on); a volition /
-  intention verb (`GOVERN_WANT`: want / plan / intend, *queremos, pretendemos, planeamos · queremos, pensamos*) → exclude a noun
-  (*"Não queremos X"*), but a wished verb is a requirement ("We don't want to lose payments" — 1.21 verify R1); no auxiliary: a
-  verb FORM (-ing, a PT / ES infinitive or gerund — PT / ES whenever the negator or the volition verb is, `PTES_GOVERN_WORDS`: a
-  short ES text the guess reads as English) → require ("without losing X", *"sem perder X"*), any other word → exclude (the 1.20
-  reading). Its three readers: (a) `negationGoverns()` — a list opens (and the item before a nor / nem / ni is marked)
-  only at an exclusion with at most one other word between negator and item (`governingNegator()` — ≤ GOVERN_MAX words back in
-  the comma-free clause, contractions whole: don't / won't / doesn't / didn't; never across a preposition that follows another
-  noun: "We didn't add an LLM TO the checkout" excludes the LLM, not the checkout — `GOVERN_PREP`); a negative conjunction
-  governs only the phrase right after it; (b) `negatorBefore()` — a negative conjunction negates the word right after it only
-  ("nem duplicar faturas" negates the verb), (1.21 verify V5) the "negator + one word" look-back skips a requirement: "The system
-  must not lose payments" keeps its payments as PT "não pode perder pagamentos" always did, "The service must not leak personal
-  data" keeps +privacy, "we will not add payments" / "we do not use X" still exclude; and (1.21 verify R1 — every version before
-  missed it) when neither the two words before the match nor a filler run hold a negator, the governing negator a few words back
-  negates it: "We don't use Kafka", "We won't use Kafka", "We will not add an LLM", "This feature doesn't need an LLM", "We do not
-  plan to use Kafka", *"Não vamos adicionar um LLM", "Nunca usaremos Kafka"* — so a 3-item comma list a nem / ni closes ("Não vamos
-  integrar Kafka, RabbitMQ nem SQS") opens at its first item (a cheap precheck, `RE_NEG_NEAR`, skips the look-back when no
-  negator is within reach); (c) `negatedVerb()` — a conjunction-negated item
-  (`conj` on the hit) that no list carries is un-negated when the clause's last other negator (or "cannot") states a
-  requirement: "Não pode perder pagamentos nem reembolsos", "sem perder dados nem reembolsos"; never after an exclusion ("We use
-  Postgres, not MongoDB nor Kafka", "Usamos Postgres, não SMS nem Kafka" — V1: a bare "not X" after a noun is nominal). A
-  negator negates the whole phrase it precedes: the keywords inside it too ("sem iniciar sessão", "nem iniciar sessão": 'sessão');
-  a HAZARD phrase keeps them un-negated and opens nothing ("We will not add duplicate rows or canary releases": the farther
-  look-back reached 'rows' inside the hazard — 1.21 verify R1).
-  The words are read without a quote's apostrophes ("'not add X or Y'"). B2: once a conjunction has closed the list a later comma
-  ends it; a comma before an article (`LIST_ARTICLES`) joins only an item of one of the list's tracks (1.21 verify V2: "Without an
-  LLM, a vector database or embeddings", "Without Kafka, the RabbitMQ broker or SQS" are one list), and not even that when a
-  predicate — an auxiliary or a modal — follows the closing item ("Without payments, the checkout or a subscription page IS the
-  priority"): another track's item or a predicate makes it a new clause's subject ("No LLM, the checkout or the subscription
-  flow first", "Without an LLM or embeddings, the checkout or a subscription page is the priority" keep +tdd). Measured below.
+  **1.21 review B / verify V · R · N — a negation EXCLUDES a keyword only when it certainly governs it (`negationOf()`, the
+  principle set in verify N).** Anything else keeps the track: a track wrongly switched off loses rigor, an extra one is a
+  one-word removal the human confirms in Phase 0. It certainly governs it when (a) a NOMINAL negator (`NOMINAL_NEGATORS`:
+  without / sem / sin / nor / nem / ni / avoid / skip…, EN "no", a contrast after a comma "Postgres, not MongoDB") has nothing
+  but fillers, articles, quantifiers or modifiers (`GOVERN_NEUTRAL`: new / more / external / longer…, or ONE word right before
+  the keyword: "without real-time X") before it — a plain noun ENDS the negated phrase ("Without payments THE checkout is
+  useless", *"Sem pagamentos o checkout…"*, "Without Kafka the webhook…" keep the checkout / the webhook); or a list it opened
+  carries it on; (b) an ADOPTION verb (`GOVERN_ADOPT`: use / add / need / include / implement / integrate / deploy / run / offer
+  / provide / ship / create / adopt / involve / enable / activate / install / embed / bundle / expose, "necessary", *falta* + PT
+  / ES forms — whatever the modal: "must not use X", "should not enable feature flags", "must not expose GraphQL") or a PLAN /
+  an INTENTION (`GOVERN_AUX` will / do / going to, *vamos / iremos* · `GOVERN_WANT` plan / intend / want, *queremos,
+  pretendemos, planeamos · queremos, pensamos*…) governs it, optionally with an article / a quantifier / one modifier: "We don't
+  use Kafka", "We will not add an LLM", "This feature doesn't need an LLM", "We do not plan to use Kafka", "We no longer use
+  Kafka", "No need for Kafka", *"Não queremos Kafka", "No es necesario Kafka", "Nunca usaremos Kafka"* (contractions whole:
+  don't / won't / doesn't / didn't; the nearest negator ≤ `GOVERN_MAX` words back in the comma-free stretch). Never an
+  exclusion (`negationKind()` → "require" / "none"): an auxiliary or a modal (`GOVERN_DEONTIC`, *devemos / debemos* too) or
+  never / *nunca / jamás* (`NEVER_WORDS`) + any other verb — "The report does not show the LLM cost", "must not lose
+  payments", "a second write never overwrites the ledger", "We do not store / collect personal data" (store / collect are no
+  adoption verbs: +privacy stays for the human to confirm); a verb form (-ing, a PT / ES infinitive — `PTES_GOVERN_WORDS` when
+  the guess reads a short PT / ES text as English): "without losing X", *"sem perder X"*; a wished verb ("We don't want to lose
+  payments"); a HAZARD (`HAZARD_MODS`: "don't want duplicate payments", *"pagamentos duplicados"*, "without duplicate
+  charges"); `negationBlocked()`: a people relative clause (`REL_PRONOUNS` who / quem / quien — "The admin who doesn't have
+  MFA must enable it"; a thing's "que no usa LLM" still excludes), a condition (`COND_BEFORE` if / unless / se / si / caso in
+  the negation's own stretch, not ended by a then — "If we don't add rate limiting, the API will be abused", *"Se não
+  adicionarmos…", "Si no añadimos…"*; `RE_COND_AFTER` "…unless the admin asks", *a menos que, salvo que*), a nominal negator
+  inside a negated predicate ("We won't ship without a canary release", "Nobody should access the admin API without SSO": a
+  double negation — never for nor / nem / ni, which continue one); expose / embed of a protected HEAD noun (`PROTECTED_HEADS`:
+  secrets, keys, tokens, credentials, passwords, personal data, PII, introspection, internals, stack traces + PT / ES — by the
+  phrase's head, never by the keyword's track: "The frontend must not embed OAuth client secrets" keeps +tdd, "The API must not
+  expose GraphQL introspection" keeps +api, "Logs must not expose personal data" +privacy). Its readers: every match's
+  `negatorBefore()` (the look-back — a cheap precheck, `RE_NEG_NEAR`, skips a match with no negator in reach), the list
+  opening (`negationGoverns()`), and `conjExcluded()` — a nor / nem / ni item no list carries keeps its negation unless its
+  clause's other negator negates a VERB ("Não pode perder pagamentos nem reembolsos", "sem perder dados nem reembolsos", "does
+  not show X nor Y" un-negate it; "Não queremos Kafka nem RabbitMQ", "Sem integração externa nem X", "We use Postgres, not
+  MongoDB nor Kafka", the correlative "Nem X nem Y" keep it). A negator negates the whole phrase it precedes: the keywords
+  INSIDE it too ("sem iniciar sessão": 'sessão'), never one starting where it starts (its own reading stands: "must not embed
+  the API key"); a HAZARD phrase keeps its inner keywords un-negated and opens nothing ("We will not add duplicate rows or
+  canary releases"). The words are read without a quote's apostrophes ("'not add X or Y'"). B2: once a conjunction has closed
+  the list a later comma ends it; a comma before an article (`LIST_ARTICLES`) joins only an item of one of the list's tracks
+  (1.21 verify V2: "Without an LLM, a vector database or embeddings", "Without Kafka, the RabbitMQ broker or SQS" are one
+  list), and not even that when a predicate — an auxiliary or a modal — follows the closing item ("Without payments, the
+  checkout or a subscription page IS the priority"): another track's item or a predicate makes it a new clause's subject ("No
+  LLM, the checkout or the subscription flow first", "Without an LLM or embeddings, the checkout or a subscription page is the
+  priority" keep +tdd). Measured below.
   **Measured (1.21 F2):** the verifier's 146 texts: +api 100% / 96.3% → 100% / 100%, +ui 100% / 74.2% → 100% / 100%, +obs
   91.2% / 100% → 100% / 100%; the reviewer's 205: +ui recall 87.0% → 88.9% (a banner), the rest unchanged; the 1.17 +dist
   corpus unchanged (96.8% / 100%). On 37,881 inputs (the logged classify inputs of both suites — 1.19, the 1.19 fix, 1.20 —,
@@ -382,7 +385,18 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   before a verb stating a behaviour (957), a hazard phrase opening no list (10), three gap-keyword oddities of "Sem perder X nem …"
   now read like every other X, and the 38 R test texts; no logged input changed. Against 427cd05 27,466, against 1.20 49,696.
   Every corpus 100% / 100% (+data: 129 texts; F2a: 45). At 200 KB the slowest input classifies in ~0.4 s (a negator precheck,
-  \`RE_NEG_NEAR\`, spares the farther look-back).
+  `RE_NEG_NEAR`, spares the farther look-back).
+  **Measured (1.21 verify N1 – N3):** the verifier's 726 sentences (rv/*.json and the scratch sets) through 1.20 / 427cd05 /
+  290e68c / the change: 36 decisions changed against 290e68c, each N1 – N3 or settled by the principle — the N1 cases back to 1.20
+  (a noun ends the negated phrase, an auxiliary + another verb, a people relative clause, a condition incl. the do-not / PT /
+  ES forms), the double negations ("We won't ship / release without X", "Nobody … without SSO"), the N2 ingestion texts (off), the
+  N3 hazards and protected heads, and six texts whose verb is no adoption verb ("We will not store / We do not collect personal
+  data", "Não recolhemos dados pessoais", "Não vamos guardar cartões…", "The UI does not show personal data", "No se guardan
+  datos personales" — +privacy kept for the human to confirm). The keyword differential (113,205 inputs, a 57-frame sweep):
+  5,712 changed against 290e68c — the N1 frames (does not show 981, a condition 973, a relative clause 964, won't ship without
+  957, without X the checkout 629), N3 (don't want duplicate 949, Logs must not expose 171 — by the head noun), "We no longer
+  use X" 55 (a governed exclusion), the new tests' texts (31) and two gap-keyword oddities; no logged input changed. Against
+  427cd05 29,170, against 1.20 51,871. Every corpus 100% / 100% (+data: 133 texts). 50 / 100 / 200 KB: ≤ 0.15 / 0.3 / 0.62 s.
 - **1.21 F2b — project-level signal overrides (`.specs/classifier.json`, classify.js).** A Phase 0 correction is learned:
   `createFeature` on a NEW plain feature (not a bugfix / spike / import — `cls` is not given) with explicit `tracks` and a
   non-empty summary compares the summary's classification (the suggestion classification.md records) with the chosen tracks
@@ -573,11 +587,12 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   keywords, `classify` emits a conflict note ("+ai is ON although 'llm' appeared negated") for the
   human who confirms Phase 0 — it must never silently drop a negation it computed. A negation reaches every item of the
   coordinated list it opens (1.21 F2 — "not add feature flags or canary releases", "nem … nem", "ni … ni"), never past
-  "and", a contrast word, an unclosed comma or a comma after the closing "or" — and only an EXCLUSION opens one: a deontic modal's
-  negated verb ("must not lose X or Y", "não pode perder X nem Y") is the requirement about X and Y, while a plan's ("will not
-  run X or Y", "Não queremos X nem Y") and an adoption verb's ("must not use X or Y") exclude them (1.21 review B1, verify V1 /
-  V5 — `negationKind()`) — see 1.21 F2a above before widening `listLink()`, `GOVERN_ADOPT` or `GOVERN_AUX`, and prove it with
-  the differential (1.20 / the 1.21 base / the last release candidate / the change) and every B / V / R case in 04-tracks-builtin.js.
+  "and", a contrast word, an unclosed comma or a comma after the closing "or" — and only an EXCLUSION opens one — and a negation excludes only when it certainly governs the keyword (a nominal negator with
+  only fillers / modifiers between, an adoption verb, a plan / an intention); anything else keeps the track: "must not lose X or
+  Y", "does not show X", a relative clause, a condition, a hazard (1.21 review B1, verify V1 / V5 / R1 / N1 — `negationOf()`) —
+  see 1.21 F2a above before widening `listLink()`, `GOVERN_ADOPT` or `GOVERN_AUX`, and prove it with the differential (1.20 /
+  the 1.21 base / the last release candidate / the change), the verifier's sentence sets and every B / V / R / N case in
+  04-tracks-builtin.js.
 - **Project signal overrides are the team's, never the engine's defaults.** A tuning that holds for everyone goes into
   `SIGNALS` (tracks.js); `.specs/classifier.json` is one project's learned or hand-set layer — never read it without a
   projectDir, never write it outside `writeSignalRecords()` (the roadmap lock, the never-rewrite-a-broken-file rule).
