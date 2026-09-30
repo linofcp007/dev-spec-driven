@@ -40,5 +40,10 @@ Bug: $ARGUMENTS
 7. Close with `/spec-finish` (the merge summary carries the root cause and the fix; an unwritten root cause
    blocks it).
 
+**A small, obvious defect (size xs):** `spec_create {kind: "bugfix", size: "xs"}` scaffolds only the red regression test
+and the fix as tasks 1–2 — reproduce and root cause are still written in `bug.md` and still gated (the requirements
+approval needs the Reproduction, the design approval the Root Cause, and while it is empty only task 1 can be ticked);
+fill the whole plan, then approve it in one call (`/spec-ff`).
+
 After three failed fixes, stop and discuss the design with the user. If the fix needs a design decision or
 several stories, it's a feature: say so and move it to `/spec`. Respond in the user's language (EN/PT/ES).

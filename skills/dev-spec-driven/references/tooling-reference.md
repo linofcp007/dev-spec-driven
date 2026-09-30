@@ -16,10 +16,10 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `steering_scaffold` | Create one steering file from its template (incl. `security.md`, `privacy.md`, `distributed.md`, `api.md`, `ui.md`, and `glossary.md` — the terms to use and the words to avoid, `_Avoid:_`) — or a custom scoped one (`api-conventions.md`, front matter `inclusion: always / fileMatch / manual`) |
 | `spec_templates` | The team's own scaffolds in `.specs/templates/`: `list` (built-in vs project per artifact) · `init` (copy the built-in ones to edit) · `check` (validate them) |
 | `spec_tracks` | The team's own tracks (1.15): packs in `.specs/tracks/<name>/` — `list` (built-in + packs, valid or not) · `init <name>` (a commented example pack) · `check` (stable codes, verdict) — see `references/project-tracks.md`; `signals` (1.21) — the classifier's signal overrides of this project (`op` list / set / forget; learned by `spec_create` from Phase 0 corrections, applied after 2 consistent ones) |
-| `spec_create` | Scaffold a feature for its tracks (tracks + lang persisted in `.state.json`; with `tracks` AND a `summary`, a choice that differs from the summary's classification is recorded as a Phase 0 correction — `signalOverrides`); `kind: "bugfix"` → the bugfix flow, `kind: "spike"` (+ `question`, `timebox`) → a spike; `brownfield: true` → + `integration-plan.md`; `flow: "design-first"` |
+| `spec_create` | Scaffold a feature for its tracks (tracks + lang persisted in `.state.json`; with `tracks` AND a `summary`, a choice that differs from the summary's classification is recorded as a Phase 0 correction — `signalOverrides`); `kind: "bugfix"` → the bugfix flow, `kind: "spike"` (+ `question`, `timebox`) → a spike; `size` (1.21: xs · s · m · l — xs = `kind: "change"`, one `change.md`; s = one story, merged weigh sections, core-tier track sections; m / l = the full chain, duplicate track sections merged — `references/workflows.md` → Sizes); `brownfield: true` → + `integration-plan.md`; `flow: "design-first"` |
 | `spec_import` | Import a Kiro / spec-kit / OpenSpec spec, a plan (Claude Code plan mode / Cursor), a Codex ExecPlan, BMAD docs or a fluidplan plan (path inside the project — or, for a plan / ExecPlan / fluidplan PLAN.md, its markdown as `text`: plan mode keeps plans in `~/.claude/plans`) as a NEW feature — IDs remapped (`mapping`), `warnings` listed, source untouched; a fluidplan plan's settled decisions → `decisions.md` |
 | `spec_list` | List all features with track set, phase, and task progress |
-| `spec_status` | One feature: kind (feature / bugfix / spike), flow, phase, artifacts, tasks (with `verified`), each active track's sections present vs filled (`secSections`, `privacySections`, `distSections` …), eval state |
+| `spec_status` | One feature: kind (feature / bugfix / spike / change), flow, phase, artifacts, tasks (with `verified`), each active track's sections present vs filled (`secSections`, `privacySections`, `distSections` …), eval state |
 | `spec_next_action` | "You are here → do this next": one `step`, phase by phase (re-review → for the first unapproved phase: fill → fix → approve, the next phase only after that approval → fix → implement → verify → finish → finished / drift; a spike: fill → implement → decide → promote / archive / pivot) + `changedSinceApproval`; suggests `/spec-ff` when every planning artifact passes its gate |
 | `ears_validate` | Lint criteria: modal verb, stable IDs, vague words, placeholders — issue `code`s `no-modal` · `no-id` · `vague` · `placeholder` · `no-keyword` · `needs-clarification` |
 | `spec_clarify` | Requirement ambiguities/gaps before design (markers, placeholders with file:line, missing sections, IF…THEN, track gaps — tenant isolation, AI quality/cost, access denial, secrets, data subject rights, retention; with a glossary, every avoided word used — `glossary`; queues / events / concurrency / transactions named (two concepts, or one strong phrase; never the template's words) while neither requirements.md nor design.md states a consistency model, delivery guarantee or idempotency — one question, `nudges` `consistency-unstated`) |
@@ -58,8 +58,10 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   defining AC IDs of which no criterion was linted) · `clarifications` (open
   `[NEEDS CLARIFICATION]`) · `ac-uniqueness` · `placeholders` (template text in the current or an earlier phase's
   artifact; a later phase's only warns) · `design` (missing) · `saas-sections` / `ai-sections` / `sec-sections` /
-  `privacy-sections` / `dist-sections` (an active track's mandatory design section missing, empty or still holding its `> **TODO**`
-  sentinel) · `traceability` (every gap kind with its IDs; the kinds a later phase's still-template file would cause
+  `privacy-sections` / `dist-sections` (an active track's mandatory design section missing, empty, still holding its `> **TODO**`
+  sentinel, or — 1.21 — holding nothing but the template's guidance line (a warn on a design approved before); a sized feature: an
+  extended section may be absent at size s or answered `n/a — <reason of 4+ words>`, a section another active track covers counts) ·
+  `change-scope` (a change: 1–3 criteria, 1–3 tasks, core only) · `traceability` (every gap kind with its IDs; the kinds a later phase's still-template file would cause
   are deferred as a warn) · `task-deps` (only when some task declares `_Depends:_`: a value that is no task number, a
   number no active task carries, a self-dependency, a cycle — the tasks approval refuses on it) · bugfix `root-cause` ·
   spike `question` / `decision` · `merge-conflicts` (a `mergeConflicts` list the git merge driver left in the feature's
@@ -145,7 +147,7 @@ init [tracks...] [--lang] [--guard on|off|scope] [--stop-check on|off] [--check 
 steering <file> [--lang]                 templates [list|init|check] [artifact] [--lang]
 tracks [list|init <name>|check] [name] [--lang]
 signals [list | set <track> <word> off|weak|strong | forget <track> <word>] [--lang]
-create "<name>" [tracks...] [--summary] [--kind feature|bugfix|spike] [--lang] [--brownfield] [--flow design-first]
+create "<name>" [tracks...] [--summary] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--lang] [--brownfield] [--flow design-first]
 bugfix "<name>" [--summary]              spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]
 import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--lang] [--tracks …]
 import <plan|execplan|fluidplan> - | --text "<markdown>"   (the document from stdin / inline — a plan outside the project)
@@ -279,12 +281,13 @@ project-root/
         ├── decisions.md          # the decision log (spec_decide) — append-only, committed
         ├── bug.md                # bugfix flow only — reproduction · root cause · fix (its design approval)
         ├── spike.md              # spike only — question · timebox · options · evidence · decision
+        ├── change.md             # change only (size xs) — the whole plan: summary · 1–3 EARS criteria · approach · tasks
         ├── retro.md              # spec_metrics write — the retrospective (never overwritten)
         ├── .history/             # approval snapshots <phase>@<n>.md — commit them with the spec
         └── .execution/           # self-ignoring workspace (briefs, reports, ledger, merge-summary.md)
 ```
 
-`.specs/<feature>/.state.json` records the feature's language, its track set, `kind` (bugfix / spike) and `flow`
+`.specs/<feature>/.state.json` records the feature's language, its track set, `kind` (bugfix / spike / change), `size` (1.21, when given) and `flow`
 (design-first), `createdAt`, the latest approval per phase (with a content fingerprint, and `forced` + `failing` for a
 forced one, `roles` when signed by roles), pending role `signoffs`, `approvalHistory`, the change requests
 (`changes`), verification evidence (`evidence[<task>]`: latest run + history, a red run kept as `red`), when each task

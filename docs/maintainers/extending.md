@@ -22,8 +22,12 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   name.
 - New track → a TEAM's track is a track pack (`.specs/tracks/<name>/`, no code — see Project-defined tracks); a BUILT-IN
   one → The track model (registries and its classifier `SIGNALS`: `engine/tracks.js`, the classifier code in `engine/classify.js`; its builders in the
-  `i18n/<lang>.js` files). New artifact → the resource allowlist, the template allowlist
+  `i18n/<lang>.js` files) — 1.21: its sections' `tier`, any `TRACK_OVERLAPS` / `TRACK_TASK_OVERLAPS` / `CORE_SUPERSEDED_BY`
+  entry (data only). New artifact → the resource allowlist, the template allowlist
   (`TEMPLATE_ARTIFACTS`, `engine/templates.js`) and `templateCorpus()` (`engine/markdown.js`) if it has slots.
+- A size-aware builder (1.21 F5) → the `a.size` branch in EN / PT / ES, NEVER a change to the no-size text (the pinned
+  sha1 in mcp/tests/06-gates-sizes.js fails otherwise — update it only when the no-size scaffold changes on purpose), and
+  its sized renders in `templateCorpus()` (then `npm run build`) and in `glossBuiltinLines()`.
 - New import source → a parser module `engine/import/<tool>.js` (returns the import model — `newImportModel()`,
   `import/common.js` — from the source's text; reuse the shared readers there and plan.js's plan-text helpers), listed in
   `MODULES`; in `engine/import/index.js` its entry in `IMPORT_TOOLS` and `C3_PARSERS` (+ `TEXT_IMPORT_TOOLS` when it

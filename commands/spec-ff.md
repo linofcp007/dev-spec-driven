@@ -7,6 +7,10 @@ Use the **dev-spec-driven** skill approval gate, fast-forward mode.
 
 Args: $ARGUMENTS
 
+**Size xs / s (1.21) — the default way to approve the plan:** `spec_next_action` names this call from the start (its
+`fastForward`): fill the whole plan, then approve it once — a change (size xs) has a single planning approval, `tasks`
+(its `change.md`); size s approves requirements → design → (test-plan → tests) → tasks in order. Each gate still runs.
+
 For a small or well-understood feature whose planning artifacts are already written: instead of one `/approve` per
 phase, approve them all in one go — still **phase by phase, each through its own gate**. Only record approvals the
 user actually gave: say which phases this will approve and get their go-ahead first. Run `spec_next_action` first — when

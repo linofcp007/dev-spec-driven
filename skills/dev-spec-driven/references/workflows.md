@@ -2,6 +2,30 @@
 
 The commands beside the main pipeline (Phase 0 → 6 in `SKILL.md`), what they do and where their depth lives.
 
+## Sizes — right-sized rigor (1.21)
+
+A feature's size decides how much scaffold and how many approvals it costs; the gates that keep a spec honest — EARS on
+every criterion, trace, the evidence gate, the bugfix iron law, phase order, the finish and execution gates — hold at
+every size. `spec_classify` suggests one (`suggestedSize` + a stable `sizeReason`: trivial-change · single-unit ·
+several-tracks · public-api · cross-system · default); the human confirms it in Phase 0 and `spec_create {size}` (CLI
+`--size`) records it in `.state.json`. No size = the pre-1.21 scaffold and rules exactly; `spec_upgrade` never assigns one.
+
+| Size | When | What it scaffolds | Approvals |
+|---|---|---|---|
+| **xs** — a change | a typo, a copy / config tweak, a one-line fix | ONE `change.md`: summary · 1–3 EARS criteria · approach · 1–3 tasks with `_Verify:_`; core only — no classification, design, quickstart or checklist | the plan (`spec_approve {through: "tasks"}`), then execution |
+| **s** | one endpoint / screen / button, at most one track with design sections | one story (AC-1 WHEN · AC-2 IF…THEN + every track criterion), no `classification.md`; the design's weigh sections merged into **Decisions, reuse & risks**; each track's **core-tier** sections (the extended ones optional); a track task per criterion | fill the whole plan, then `spec_approve {through: "tasks"}` in one call (`next_action` says so from the start) |
+| **m** / **l** | a feature with tracks · several tracks, a public API, cross-system | the full chain; the duplicate sections of two active tracks merged (`[SaaS] Observability` / `Performance Budget` → `[OBS]`; `[API] Pagination, Idempotency & Concurrency` → `[DIST]`); the core API Contracts / Error Handling under +api, Security Considerations under +sec, Testing Strategy under +tdd left out | phase by phase (`/spec-ff` when they are all filled) |
+
+- **A change stays XS.** A track, or more than 3 criteria / tasks, is refused (`change-scope`) — create it as a feature of
+  size s instead, never silently. `spec_add_track` refuses a change.
+- **An XS bugfix** (`spec_create {kind: "bugfix", size: "xs"}`) drops the reproduce / root-cause tasks: the requirements
+  gate already needs bug.md → Reproduction and the design gate its Root Cause; only task 1 (the red regression test) can be
+  ticked while Root Cause is empty.
+- **Size s — the extended sections.** Absent is fine; present, it must be filled, or answered by ONE line `n/a — <why it
+  does not apply>` (EN / PT / ES; a reason of at least 4 words).
+- **Every size — a filled section is your own text.** The `> **TODO**` line deleted with the template's guidance bullet
+  left alone is not an answer: a new approval refuses it; a design approved before 1.21 only warns.
+
 ## Supporting workflows
 
 | Command | What it does | Reference |

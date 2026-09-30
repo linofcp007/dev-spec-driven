@@ -1091,8 +1091,10 @@ function reuseQuotedSection(sections, design, reuse) {
 // (the ones naming this task, bounded), omitted (matching ones left out for size), files, more (nearby files beyond the cap),
 // truncated (only when true: a folder was read up to its cap — `more` is "at least") }.
 function briefReuse(projectDir, design, implementsList, acIds) {
-  const body = design == null ? null : weighSection(design, REUSE_SYN);
-  const state = design == null ? "missing" : designWeighState(design, REUSE_SYN, 0).status;
+  // 1.21 F5: a size S design's merged "Decisions, reuse & risks" section answers for a Reuse section it doesn't have
+  const syn = design != null && weighSection(design, REUSE_SYN) == null && weighSection(design, WEIGH_MERGED_SYN) != null ? WEIGH_MERGED_SYN : REUSE_SYN;
+  const body = design == null ? null : weighSection(design, syn);
+  const state = design == null ? "missing" : designWeighState(design, syn, 0).status;
   const t = reuseTargets(projectDir, implementsList);
   const acRe = (acIds || []).length ? new RegExp("(?<![\\p{L}\\p{N}_.-])(?:" + acIds.map(escRe).join("|") + ")(?!\\d)", "u") : null;
   const units = state === "filled" && body != null ? reuseUnits(body) : [];
@@ -1348,7 +1350,7 @@ module.exports = { XAC_DUPLICATE, XAC_CONFLICT, XAC_TRIGGER, XAC_RESPONSE, XAC_M
   glossBuiltinLines, glossProjectLines, glossSpans, glossUserParts, glossaryHits, briefGlossary, TRADEOFFS_SYN,
   RISKS_SYN, DESIGN_WEIGH, DESIGN_WEIGH_IDS, RE_WEIGH_HEADING_REST, weighHeadingMatches, weighSection, weighSectionHead, genericUnit,
   designBody, designEntries, WEIGH_PROSE_WORDS, designWeighState, designWeighChecks, designApprovedBeforeWeigh,
-  REUSE_SYN, DESIGN_WEIGH_STAMPS, designReuseFallback, BRIEF_REUSE_MAX_ENTRIES, BRIEF_REUSE_CHARS, BRIEF_REUSE_MAX_FILES,
+  REUSE_SYN, WEIGH_MERGED_SYN, DESIGN_WEIGH_STAMPS, designReuseFallback, BRIEF_REUSE_MAX_ENTRIES, BRIEF_REUSE_CHARS, BRIEF_REUSE_MAX_FILES,
   BRIEF_REUSE_MAX_DIRS, BRIEF_REUSE_DIR_ENTRIES, RE_REUSE_PATH, reuseUnits, reuseInsideRel, reuseProbe, reuseTargets, reuseEntryMatches,
   readDirBounded, reuseNearbyFiles, reuseQuotedSection, briefReuse,
   RE_RATE_LIMIT, RE_ACCESS_DENIED, RE_SUBJECT_RIGHTS, CONSTRAINT_KINDS, CONSTRAINT_SIGNALS, CONSTRAINT_RE,

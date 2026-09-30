@@ -228,6 +228,12 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `completeTask` ticks exactly the resolved line at its checkbox column (CRLF kept). Tasks are
   story-organized (P1 first) with `[P]` parallel markers + `**Checkpoint:**` lines; the design's
   `Constitution Check` section is checked by `doctor`.
+- **A change's tasks live in its change.md (1.21 F5).** A `kind: "change"` folder has no tasks.md: `readIfExists` /
+  `existsCached` / `writeFileAtomic` alias its `tasks.md` (and `requirements.md`) to `change.md` (`changeAlias()`, files.js),
+  so the scanner, `completeTask` (the tick lands in change.md, its other text kept), the evidence gate, `done --run`, the
+  brief, the observe hook's pre-filter and finish work on it unchanged. A size S scaffold's tasks.md is one core task + each
+  track's tasks that implement a criterion (`sizeTasksText()`); an XS bugfix's is the red regression test + the fix
+  (`bugfixGate()` lets only task 1 through while bug.md → Root Cause is empty — `bugGateFirst`).
 
 ## End-of-turn evidence gate and scope guard (1.14)
 - **`stopCheck(projectDir, {message, agent, stopHookActive})`** (engine; `hooks/stop-hook.js` and `dev-spec stop-check`

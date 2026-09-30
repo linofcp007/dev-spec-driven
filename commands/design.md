@@ -7,6 +7,15 @@ Use the **dev-spec-driven** skill, Phase 2 (Design).
 
 Feature: $ARGUMENTS
 
+**A sized feature** (`spec_status` → size): at **s** the three weigh sections below are ONE section, **Decisions, reuse &
+risks** (one answer each), and each track keeps only its core-tier sections — an extended one may stay out, or be
+answered in one line `n/a — <why it does not apply>`; at **m / l** a section two active tracks both ask for is written
+once (the scaffold says where, e.g. `[OBS] Telemetry` also answers `[SaaS] Observability`), and a core section a track
+owns (API Contracts / Error Handling under +api, Security Considerations under +sec, Testing Strategy under +tdd) is
+left out. **At every size a section is filled with your own text:** deleting the `> **TODO**` line and leaving the
+template's guidance bullet is not an answer (the design approval refuses it). Error Handling points to the IF…THEN
+criteria instead of asking again.
+
 **Every design weighs its choices:** besides the sections below, fill **Alternatives & Trade-offs** — for each
 key decision (strong vs eventual consistency, monolith vs service, sync vs async, optimistic vs pessimistic locking…)
 at least two options, each with its pros, cons and cost of being wrong, the one chosen and why — and **Risks** (risk ·

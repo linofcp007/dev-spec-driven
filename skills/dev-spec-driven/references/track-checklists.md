@@ -61,6 +61,28 @@ problem+json) · Pagination, Idempotency & Concurrency · Rate Limits & Quotas. 
 **+obs adds 5 mandatory `[OBS]` sections** — SLIs & SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health
 & Capacity. See `references/observability-patterns.md`.
 
+**Sizes (1.21 — `references/workflows.md` → Sizes).** Each track's sections carry a tier. At **size s** only the core
+tier is scaffolded and required; an extended section may stay out, or be answered by one line `n/a — <why it does not
+apply>` (4+ words):
+
+| Track | Core tier (every size) | Extended tier (optional at size s) |
+|---|---|---|
+| +saas | Performance Budget · Scale Design · Multi-tenancy | Observability · Cost Envelope |
+| +ai | Model Strategy · Prompt Architecture · Token Economics · Eval Strategy · Safety & Abuse · Fallback & Degradation | Latency Budget · Observability for AI · Model Lifecycle · Multi-modality |
+| +sec | Threat Model · Authentication & Authorization | Security Requirements · Secrets & Key Management · Security Testing |
+| +privacy | Personal Data Inventory · Lawful Basis & Purpose · Retention & Deletion · Data Subject Rights | Processors & International Transfers · DPIA |
+| +dist | Consistency Model · Cross-system Writes · Delivery & Idempotency | Concurrency · Failure Modes |
+| +api | API Contract · Versioning & Compatibility · Error Model | Pagination, Idempotency & Concurrency · Rate Limits & Quotas |
+| +ui | UI States · Accessibility | Design System Usage · Responsiveness & i18n · UI Performance Budget |
+| +obs | SLIs & SLOs · Telemetry · Rollout & Rollback | Alerting & Runbooks · Health & Capacity |
+
+**Two tracks asking the same thing** (any size): with +obs, `[SaaS] Observability` is answered in `[OBS] Telemetry` /
+`Alerting & Runbooks` and `[SaaS] Performance Budget` in `[OBS] SLIs & SLOs`; with +dist, `[API] Pagination, Idempotency &
+Concurrency` in `[DIST] Delivery & Idempotency` / `Concurrency`. A sized scaffold writes the covering section once (a
+comment says what it also answers); a design that keeps both headings is judged on each. The core API Contracts / Error
+Handling (+api), Security Considerations (+sec) and Testing Strategy (+tdd) are left out of a sized design — the track's
+own sections hold them. **Filled means your own text:** the template's guidance bullet left alone is not an answer.
+
 ## Phase 3 — test plan and eval plan additions
 
 - **+tdd test plan:** ≥ 1 test per AC, a negative test for every IF…THEN, boundary tests; each with a stable ID
