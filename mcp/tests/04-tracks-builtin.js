@@ -1450,9 +1450,35 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       ["obs", "Não vamos usar filas nem lançamento canário."], ["obs", "Nem iniciar sessão nem lançamento canário."], ["tdd", "Nem iniciar sessão nem pagamentos."],
       ["obs", "1.21 F2a: 'not add feature flags or canary releases', 'Without Kafka, RabbitMQ or SQS', done"]];
     ok(b1On.every((t) => onOf(t, "tdd")) && b1Off.every(([tr, t]) => !onOf(t, tr)) && !onOf("1.21 F2a: 'not add feature flags or canary releases', 'Without Kafka, RabbitMQ or SQS', done", "dist") &&
-      cls(b1On[2]).negated.tdd.includes("payment") && !cls(b1On[3]).negated.tdd.length,
+      !cls(b1On[2]).negated.tdd.length && !cls(b1On[3]).negated.tdd.length,
       "1.21 review B1: a negated verb never turns its objects into exclusions — 'must not lose payments nor duplicate invoices', PT 'não pode perder … nem', ES 'no debe / no puede perder … ni', 'must never lose payments or refunds' keep +tdd; 'must not use', 'Não precisamos de', 'Não vamos usar', 'Nem … nem' and a quoted \"'not add X or Y'\" still negate the whole list (got " +
       js([b1On.filter((t) => !onOf(t, "tdd")), b1Off.filter(([tr, t]) => onOf(t, tr))]) + ")");
+    // 1.21 verify V1: an EXCLUSION is read after a volition / intention verb, a plan's auxiliary, an adoption verb (integrate, deploy, run,
+    // offer, provide, ship, adopt…) or a "necessary" phrase, EN / PT / ES — the whole list stays negated, as the 1.21 pre-review code read it;
+    // a bare "not X nor Y" after a noun is nominal (a contrast), never a negated verb
+    const v1 = [["ai", "Não queremos usar LLM nem embeddings."], ["ai", "No queremos usar LLM ni embeddings."], ["dist", "Não queremos Kafka nem RabbitMQ."],
+      ["dist", "Não vamos integrar Kafka nem RabbitMQ."], ["dist", "No vamos a integrar Kafka ni RabbitMQ."], ["dist", "Não integraremos Kafka nem RabbitMQ."],
+      ["dist", "Não pretendemos usar Kafka nem RabbitMQ."], ["dist", "Não planeamos usar Kafka nem RabbitMQ."], ["dist", "No pensamos usar Kafka ni RabbitMQ."],
+      ["dist", "No planeamos usar Kafka ni RabbitMQ."], ["dist", "Não iremos adotar Kafka nem RabbitMQ."], ["dist", "No es necesario Kafka ni RabbitMQ."],
+      ["dist", "No hace falta Kafka ni RabbitMQ."], ["dist", "No se usará Kafka ni RabbitMQ."], ["dist", "No vamos a desplegar Kafka ni RabbitMQ."],
+      ["dist", "We will not integrate Kafka or RabbitMQ."], ["dist", "We will not deploy Kafka or RabbitMQ."], ["dist", "We will not run Kafka or RabbitMQ."],
+      ["obs", "We will not offer feature flags or canary releases."], ["obs", "We will not provide feature flags or canary releases."],
+      ["obs", "We will not ship feature flags or canary releases."], ["dist", "We use Postgres, not MongoDB nor Kafka."], ["dist", "Usamos Postgres, não SMS nem Kafka."],
+      ["dist", "Usamos Postgres, no SMS ni Kafka."], ["ai", "Não pretendemos usar LLM nem embeddings."], ["ai", "No es necesario usar LLM ni embeddings."]];
+    const v1r = v1.map(([tr, t]) => [tr, t, cls(t)]);
+    ok(v1r.every(([tr, , r]) => !r.tracks.includes(tr) && !r.signals[tr].length) && b1On.every((t) => onOf(t, "tdd")),
+      "1.21 verify V1: 'Não queremos / pretendemos / planeamos usar X nem Y', 'Não vamos integrar', 'Não iremos adotar', 'No es necesario', 'No hace falta', 'No se usará', 'No vamos a desplegar', 'We will not integrate / deploy / run / offer / provide / ship X or Y' and 'We use Postgres, not MongoDB nor Kafka' (PT / ES too) negate the whole list; the B1 requirements keep +tdd (got " +
+      js(v1r.filter(([tr, , r]) => r.tracks.includes(tr) || r.signals[tr].length).map(([, t, r]) => [t, r.label, r.negated])) + ")");
+    // 1.21 verify V5: EN reads a negated verb's direct object as PT / ES always did — "The system must not lose payments" keeps +tdd (a
+    // deontic modal's verb: the requirement), "must not leak personal data" keeps +privacy; "we will not add payments", "do not use X" and
+    // "Não usa X" still exclude; the phrase a negator precedes is negated whole ("sem iniciar sessão": 'sessão' too)
+    const v5 = [cls("The system must not lose payments."), cls("The system must not lose payments or refunds."), cls("O sistema não pode perder pagamentos."),
+      cls("The service must not leak personal data."), cls("We will not add payments to this report."), cls("We do not use payments here."),
+      cls("Sem iniciar sessão nem embeddings."), cls("Without losing payments or refunds.")];
+    ok(v5[0].tracks.includes("tdd") && !v5[0].negated.tdd.length && v5[1].tracks.includes("tdd") && v5[2].tracks.includes("tdd") && v5[3].tracks.includes("privacy") &&
+      !v5[4].tracks.includes("tdd") && !v5[5].tracks.includes("tdd") && !v5[6].tracks.includes("tdd") && !v5[6].tracks.includes("ai") && v5[7].tracks.includes("tdd"),
+      "1.21 verify V5: 'The system must not lose payments' keeps +tdd like PT 'não pode perder pagamentos'; 'must not leak personal data' keeps +privacy; 'without losing payments or refunds' keeps +tdd; 'we will not add payments' / 'we do not use payments' exclude; 'Sem iniciar sessão nem embeddings' negates the whole phrase (got " +
+      js(v5.map((r) => [r.label, r.negated.tdd])) + ")");
     // 1.21 review B2: a comma after the list's closing conjunction — or one before an article (a new clause's subject) — ends the list
     const b2 = [["tdd", "ai", "Without an LLM or embeddings, the checkout or a subscription page is the priority."],
       ["saas", "dist", "Without Kafka or RabbitMQ, the webhook or a nightly retry job handles delivery."],
@@ -1463,6 +1489,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       coordOff.every(([tr, t]) => !onOf(t, tr)),
       "1.21 review B2: a list has one closing conjunction — 'Without an LLM or embeddings, the checkout or a subscription page…' (EN / PT / ES) keeps +tdd (the LLM and embeddings stay negated), 'Without Kafka or RabbitMQ, the webhook or a nightly retry job…' keeps the webhook; 'Without Kafka, RabbitMQ or SQS' still negates all three (got " +
       js(b2r.map(([, , r]) => [r.label, r.negated])) + ")");
+    // 1.21 verify V2: a comma + an article joins an item of the list's own track ("Without an LLM, a vector database or embeddings",
+    // "Without Kafka, the RabbitMQ broker or SQS", PT "Sem Kafka, o RabbitMQ ou o SQS"); another track's item, or a predicate after the
+    // closing item ("… is the priority"), is a new clause's subject
+    const v2 = [["ai", "Without an LLM, a vector database or embeddings."], ["dist", "Without Kafka, the RabbitMQ broker or SQS."], ["dist", "Sem Kafka, o RabbitMQ ou o SQS."],
+      ["dist", "Sin Kafka, el RabbitMQ o el SQS."]];
+    const v2on = ["Without payments, the checkout or a subscription page is the priority.", "No LLM, the checkout or the subscription flow first."];
+    ok(v2.every(([tr, t]) => !onOf(t, tr)) && v2on.every((t) => onOf(t, "tdd")) && b2r.every(([on, , r]) => r.tracks.includes(on)),
+      "1.21 verify V2: 'Without an LLM, a vector database or embeddings', 'Without Kafka, the RabbitMQ broker or SQS' (PT / ES) are one list; 'Without payments, the checkout or a subscription page is the priority' and 'No LLM, the checkout or the subscription flow first' keep +tdd (got " +
+      js([v2.filter(([tr, t]) => onOf(t, tr)).map(([, t]) => [t, cls(t).label]), v2on.filter((t) => !onOf(t, "tdd"))]) + ")");
     // +ui everyday words: a confirm dialog / toast notification / snackbar is UI work; a widget a display verb shows is strong; errors
     // next to each field and a mobile-friendly screen are anchors; a "snack bar", "the modal verbs", a login FORM alone stay off
     const uiOn = ["Show a confirm dialog before a user deletes a project, with the project name typed to confirm.",

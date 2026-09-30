@@ -218,20 +218,30 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   a partition, a transformation, a batch / nightly job, ingest, upsert, a materialized view, a data / analytics engineer (a
   role — listed before "analytics": the first keyword matching at a place wins it); **context** (one concept `sql`): table,
   column, row, SQL, query / queries, schema (+ PT / ES) — "migrate the users table" names no pipeline; hazards: duplicate rows,
-  stale data, schema drift. **1.21 review B3 — `contextBackedBy: "strong"`** (a per-track table key classify.js's `backedBy`
-  reads): +data's context words back a STRONG signal only, never a lone anchor — a table, a column or a query is on every
-  screen ("in a table", "React Query"), and a lone anchor + "the users table" turned +data on for a horse's lineage, SCD
-  patients, medication ingestion, duplicate rows in the users table (the decision only moves for a lone anchor + a context
-  word: two anchors or an anchor + a generic word were on anyway). The everyday-sense words are tied to data phrases: `ELT`
+  stale data, schema drift. **1.21 review B3 / verify V3 — `everydayAnchors`** (a per-track table key classify.js's
+  `backedBy` reads — `SIGNAL_EVERYDAY`): the +data anchors that also have an everyday sense — lakehouse, lineage / linhagem /
+  linaje, ingestion / ingestão / ingesta, freshness check, `SCD`, duplicate rows, stale data (+ PT / ES) — back no context word:
+  a table, a column or a query is on every screen ("in a table", "React Query"), and one of them + "the users table" turned
+  +data on for a horse's lineage, SCD patients, medication ingestion, duplicate rows in the users table. A data-term anchor
+  still is backed (a warehouse outside its building sense, a backfill outside a migration, a BI dashboard / report, Power BI,
+  parquet, *carga incremental*): "A BI dashboard over the orders table", "Load the orders table into the warehouse every night",
+  "Query the warehouse for monthly revenue" are +data (the review's first cut — context backed by a STRONG signal only — lost
+  them: 1.21 verify V3). The everyday-sense words are tied to data phrases: `ELT`
   only as an ELT pipeline / job / tool / process / workflow (*pipeline / processo / proceso ELT*) — "ELT teachers"; a bare
   lakehouse, a freshness check and PT / ES *carga incremental* are anchors (strong: data lakehouse, freshness SLA, *carga
   incremental de dados / datos*); `BI` only with its tool / dashboard / report / platform / team (*ferramenta / relatório /
-  painel / dashboard de BI · herramienta / informe / panel de BI*) — *o número do BI* is the Portuguese ID card. Cues for the
-  everyday senses FIRST (the first rule that fires decides): a lakehouse among lodging words, a freshness check among food
-  words, *carga incremental* in a training plan or a structure, a lineage among animals / families, ingestion of water / a
-  medication / calories, parquet among flooring words → none; then a lakehouse, a freshness check or a lineage in a sentence
-  about data (tables, the raw zone, Delta / Iceberg, metrics, dashboards, source tables, a pipeline…) → strong ("Track the
-  lineage of every dashboard metric back to its source tables" — it relied on lineage + tables before). **Cues**
+  painel / dashboard de BI · herramienta / informe / panel de BI*) — *o número do BI* is the Portuguese ID card. **A built-in
+  keyword mixing lower-case words with an ALL-CAPS acronym** (`mixedAcronyms()` in classify.js — the BI phrases, `CDC
+  pipeline` / `CDC connector`) matches its words in any case and only the acronym case-sensitively: "Relatório de BI" opens a
+  sentence, "BI Dashboard" is a title, "o relatório de bi" is no BI (1.21 verify V3; a track pack's keyword keeps its exact
+  case). Cues — the DATA sense FIRST (the first rule that fires decides — 1.21 verify V3: an everyday word anywhere in the
+  sentence used to win): a lakehouse, a freshness check or a lineage in a sentence about data (tables, the raw zone / bronze /
+  medallion, Delta / Iceberg, a pipeline, SQL, metrics, dashboards, columns, source tables…) → strong ("Load the bookkeeping
+  entries into the lakehouse tables", "Add a freshness check to the grocery orders pipeline", "the column lineage of each
+  metric per product family"); then the everyday senses: a lakehouse among lodging words (book / booked / bookings — never
+  "bookkeeping" —, rent, cabins, guests, nights…), a freshness check among food words, *carga incremental* in a training plan
+  or a structure, a lineage among animals / families, ingestion of water / a medication / calories, parquet among flooring
+  words → none. **Cues**
   (`SIGNALS.data.cues`): a warehouse in a SENTENCE with data words (SQL, "load … into", snapshots, schemas, dbt, pipelines,
   ETL / ELT, partitions, ingest…, analytics, BI — never tables / columns / queries since the 1.21 review, B4: the keep rule
   came first and "Show stock levels per warehouse in a table" kept the anchor) → keep; with the building's words (stock,
@@ -251,9 +261,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   copy to `.specs/tracks/mobile/` to start; 04-tracks-data.js copies it into a project and runs `tracks check` + a create.
   Its `pt/` and `es/` folders hold all five fragments (the 1.21 review B6 added test-plan.md and steering.md — PT / ES features
   got English rows and steering); pt-BR reads `pt/` (the folder chain — a pack fragment is never passed through toPtBr).
-  **Measured (1.21 review):** the 72-text corpus + the review's 24 (17 everyday texts, 7 data senses) — 96 texts, 100% /
-  100%; the differential below (1.21 review B) found no +data decision changed outside a lone anchor + a context word, the
-  tied words and the warehouse / stock sentences.
+  **Measured (1.21 review + verify):** the 72-text corpus + the review's 24 (17 everyday texts, 7 data senses) + the
+  verification's 19 data sentences — 115 texts, 100% / 100%.
 - **1.21 F2a — the verification's remaining misses, as data where possible.** +ui: the everyday components a text names by
   themselves are strong (confirm / confirmation dialog, confirmation modal, modal dialog / window, toast notification / message,
   `snackbar` — one word: a "snack bar" is a food counter; PT / ES diálogo de confirmação / de confirmación, janela / ventana
@@ -286,26 +295,34 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   carries it on. `NEGATORS` gained the negative conjunctions nor / neither / nem / ni ("sem X nem Y", "ni X ni Y"), and a
   negative conjunction after an item a negator governs negates that item too ("Não vamos usar feature flags nem lançamento
   canário": the negator is three words back). Linear: each gap is read at most twice.
-  **1.21 review B — only an EXCLUSION opens a list.** B1: 1.21 read "O sistema não pode perder pagamentos nem duplicar
-  faturas" / "must not lose payments nor duplicate invoices" / "No puede perder pagos ni reembolsos" as exclusions (+tdd off):
-  any negator earlier in the clause marked the item before a nor / nem / ni, and "nem" two words back negated a verb's object.
-  Now (a) a list opens, and the conjunction's item before it is marked, only where the negator GOVERNS the item
-  (`negationGoverns()` — between them only fillers / articles, `GOVERN_AUX` auxiliaries and modals, `GOVERN_ADOPT` the verbs
-  whose object IS what is excluded: use / add / need / include / implement / have / rely on… + PT / ES, `GOVERN_NEUTRAL`
-  modifiers and prepositions: new / more / external / for / on…; a NOMINAL negator — no, without, sem, sin — may also pass one
-  other word that is no verb form, "without real-time X", never "without losing X" / "sem perder X"; a VERBAL one — not /
-  never / não / n't / ES "no", or any negator an auxiliary or an adoption verb follows — passes nothing else): "must not lose
-  X" negates the VERB, its object stays negated as in 1.20 but opens no list — the negation is the requirement, like a
-  hazard's; (b) a negative conjunction negates only the word right after it (`negatorBefore()` skips a nor / nem / ni two
-  tokens back: "nem duplicar faturas"), and — `conj` on the hit — that negation is kept only while a list carries it: when
-  the clause's last other negator negates a verb (`negatedVerb()` — an auxiliary then a lexical verb, a verbal negator then
-  one, or a nominal one before a verb form; never after an adoption verb, never with only a correlative "nem … nem"), "Não
-  pode perder pagamentos nem reembolsos" / "sem perder dados nem reembolsos" leave the item un-negated; a correlative's
-  negation reaches the keywords inside its phrase ("Nem iniciar sessão …": 'sessão'). The words are read without a quote's
-  apostrophes ("'not add X or Y'"). B2: once a conjunction has closed the list a later comma ends it, and a comma before an
-  article (`LIST_ARTICLES` the / a / an, o / os / as / um / uma, el / la / los / las / un / una — a new clause's subject) is no
-  continuation: "Without an LLM or embeddings, the checkout or a subscription page is the priority" keeps +tdd (1.21: the
-  checkout joined the list). Measured below (1.21 review B).
+  **1.21 review B / verify V — what a negation negates (`negationKind()`, one analysis for three readers).** B1: 1.21 read "O
+  sistema não pode perder pagamentos nem duplicar faturas" / "must not lose payments nor duplicate invoices" / "No puede perder
+  pagos ni reembolsos" as exclusions (+tdd off). The words after a negator now decide whether it EXCLUDES what follows or states
+  a REQUIREMENT about it: a noun phrase ("no X", "sem X", "no new X", "Postgres, not MongoDB") → exclude; an ADOPTION verb
+  (`GOVERN_ADOPT`: use / add / need / include / implement / integrate / deploy / run / offer / provide / ship / create / adopt,
+  "necessary", *necessário · necesario, falta* + PT / ES forms) → exclude, whatever the modal ("must not use X"); a DEONTIC modal
+  (`GOVERN_DEONTIC`: must / shall / should / can / may, cannot / can't / mustn't; *pode, deve · puede, debe*) before another
+  verb → require ("must not lose X", "must never leak X", *"não pode perder X", "no debe perder X"*); a plain auxiliary or a
+  volition / intention verb (`GOVERN_AUX`: will / do / is, *vamos, iremos, queremos, pretendemos, planeamos · vamos, queremos,
+  pensamos, se, hace*…) before another verb → exclude (a plan: "We will not run X", *"Não queremos X", "No pensamos desplegar
+  X"* — 1.21 verify V1: the review's first cut let any unknown word block the list and turned these back on); no auxiliary: a
+  verb FORM (-ing, a PT / ES infinitive or gerund) → require ("without losing X", *"sem perder X"*), any other word → exclude
+  (the 1.20 reading). Its three readers: (a) `negationGoverns()` — a list opens (and the item before a nor / nem / ni is marked)
+  only at an exclusion with at most one other word between negator and item; a negative conjunction governs only the phrase
+  right after it; (b) `negatorBefore()` — a negative conjunction negates the word right after it only ("nem duplicar faturas"
+  negates the verb), and (1.21 verify V5) the "negator + one word" look-back skips a requirement: "The system must not lose
+  payments" keeps its payments as PT "não pode perder pagamentos" always did, "The service must not leak personal data" keeps
+  +privacy, "we will not add payments" / "we do not use X" still exclude; (c) `negatedVerb()` — a conjunction-negated item
+  (`conj` on the hit) that no list carries is un-negated when the clause's last other negator (or "cannot") states a
+  requirement: "Não pode perder pagamentos nem reembolsos", "sem perder dados nem reembolsos"; never after an exclusion ("We use
+  Postgres, not MongoDB nor Kafka", "Usamos Postgres, não SMS nem Kafka" — V1: a bare "not X" after a noun is nominal). A
+  negator negates the whole phrase it precedes: the keywords inside it too ("sem iniciar sessão", "nem iniciar sessão": 'sessão').
+  The words are read without a quote's apostrophes ("'not add X or Y'"). B2: once a conjunction has closed the list a later comma
+  ends it; a comma before an article (`LIST_ARTICLES`) joins only an item of one of the list's tracks (1.21 verify V2: "Without an
+  LLM, a vector database or embeddings", "Without Kafka, the RabbitMQ broker or SQS" are one list), and not even that when a
+  predicate — an auxiliary or a modal — follows the closing item ("Without payments, the checkout or a subscription page IS the
+  priority"): another track's item or a predicate makes it a new clause's subject ("No LLM, the checkout or the subscription
+  flow first", "Without an LLM or embeddings, the checkout or a subscription page is the priority" keep +tdd). Measured below.
   **Measured (1.21 F2):** the verifier's 146 texts: +api 100% / 96.3% → 100% / 100%, +ui 100% / 74.2% → 100% / 100%, +obs
   91.2% / 100% → 100% / 100%; the reviewer's 205: +ui recall 87.0% → 88.9% (a banner), the rest unchanged; the 1.17 +dist
   corpus unchanged (96.8% / 100%). On 37,881 inputs (the logged classify inputs of both suites — 1.19, the 1.19 fix, 1.20 —,
@@ -314,7 +331,7 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   / "sin … ni X" frames, and the logged "sin datos personales ni autenticación": +tdd off); "No X, just …" and "Without X,
   the …" frames change nothing. `1.21 F2a` in mcp/tests/04-tracks-builtin.js embeds the cases (+ a 40-text precision /
   recall assertion, ≥ 95% per track).
-  **Measured (1.21 review B — B1 … B4):** a three-way differential (1.20 at c2ade64, 1.21 at 427cd05, the fix) over 66,621
+  **Measured (1.21 review B — B1 … B4, first cut):** a three-way differential (1.20 at c2ade64, 1.21 at 427cd05, the fix) over 66,621
   distinct inputs — the 2,249 classify inputs both 1.21 suites log, 9,254 string literals of both suites' test files in the
   three trees, the reviewer's texts, and a 31-frame sweep of every built-in keyword (55,115: the F2 frames plus "must not lose
   X nor …", "não pode perder X nem …", "No puede perder X ni …", "Sem perder X nem …", "Without X, the checkout or …",
@@ -327,6 +344,15 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   sweep's five tied words ("We need elt here"), the literals only for the new tests and one test message ("ni autenticación'
   (+tdd off)": "ni" two words back no longer negates "tdd"). +data on the 72 + 24 corpus: 73.8% / 100% → 100% / 100%; the
   +dist (45), 1.19 T8 (133), 1.19 T review (88) and F2a (40) corpora unchanged at 100% / 100%.
+  **Measured (1.21 verify V1 – V5):** the same differential with a 39-frame sweep (+ "Não queremos X nem …", "We will not
+  integrate X or …", "We use Postgres, not X nor Kafka", "Without an LLM, a X or embeddings", "The system must not lose X", "The
+  service must not leak X", "No es necesario X ni …", "Load the X into the warehouse tables…") — 81,075 inputs. Against the
+  review's first cut (a682f55) 11,661 decisions changed, all intended: V1's exclusions negate the whole list again (5,086), V5 /
+  B1 frames keep a deontic modal's object (4,469), data-term anchors + a table / a query are +data again (1,795), the phrase a
+  negator precedes is negated whole (161), same-track article lists (92) and the new tests' texts (58). Against the 1.21 base
+  (427cd05) 18,862 changed — the B1 / V5 requirement frames (12,205), the B2 / V2 frames (6,161), the phrase rule (266), the V1
+  frames' inner phrases (85), the +data everyday words (98), the logged self-match sweep's five tied words and 42 literals, all
+  the reviewers' and the tests' own cases. Every corpus 100% / 100% (+data: 115 texts).
 - **1.21 F2b — project-level signal overrides (`.specs/classifier.json`, classify.js).** A Phase 0 correction is learned:
   `createFeature` on a NEW plain feature (not a bugfix / spike / import — `cls` is not given) with explicit `tracks` and a
   non-empty summary compares the summary's classification (the suggestion classification.md records) with the chosen tracks
@@ -517,9 +543,11 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   keywords, `classify` emits a conflict note ("+ai is ON although 'llm' appeared negated") for the
   human who confirms Phase 0 — it must never silently drop a negation it computed. A negation reaches every item of the
   coordinated list it opens (1.21 F2 — "not add feature flags or canary releases", "nem … nem", "ni … ni"), never past
-  "and", a contrast word, an unclosed comma or a comma after the closing "or" — and only an EXCLUSION opens one: a negator
-  followed by another verb ("must not lose X or Y", "não pode perder X nem Y") negates the verb, the requirement is about X and
-  Y (1.21 review B1) — see 1.21 F2a above before widening `listLink()` or `GOVERN_ADOPT`.
+  "and", a contrast word, an unclosed comma or a comma after the closing "or" — and only an EXCLUSION opens one: a deontic modal's
+  negated verb ("must not lose X or Y", "não pode perder X nem Y") is the requirement about X and Y, while a plan's ("will not
+  run X or Y", "Não queremos X nem Y") and an adoption verb's ("must not use X or Y") exclude them (1.21 review B1, verify V1 /
+  V5 — `negationKind()`) — see 1.21 F2a above before widening `listLink()`, `GOVERN_ADOPT` or `GOVERN_AUX`, and prove it with
+  the three-way differential (1.20 / the 1.21 base / the change) and every B / V case in 04-tracks-builtin.js.
 - **Project signal overrides are the team's, never the engine's defaults.** A tuning that holds for everyone goes into
   `SIGNALS` (tracks.js); `.specs/classifier.json` is one project's learned or hand-set layer — never read it without a
   projectDir, never write it outside `writeSignalRecords()` (the roadmap lock, the never-rewrite-a-broken-file rule).

@@ -263,6 +263,7 @@ const signalLookup = (key, build) => Object.fromEntries(Object.entries(SIGNALS).
 const SIGNAL_CONCEPTS = signalLookup("concepts", conceptMap);
 const SIGNAL_HAZARDS = signalLookup("hazards", (list) => new Set(list));
 const SIGNAL_CUES = signalLookup("cues", cueRules);
+const SIGNAL_EVERYDAY = signalLookup("everydayAnchors", (list) => new Set(list)); // (1.21 verify V3 — see backedBy in classify())
 
 // Words that negate a signal when they appear just before the keyword (EN/PT/ES). 1.21 F2: the negative conjunctions too —
 // "nor" / "neither", PT "nem", ES "ni" ("sem X nem Y", "ni X ni Y": each item they introduce is negated).
@@ -377,16 +378,21 @@ function negatorBefore(text, idx, lang, cased) {
   const prevCased = ((cased || "").slice(Math.max(0, idx - 20), idx).split(/[^\p{L}-]+/u).filter(Boolean).slice(-2)[0]) || "";
   const contraction = tokens[tokens.length - 1] === "no" && /(?:ad|id)[oa]s?$/.test(prev) &&
     (pt || (prev.length >= 6 && prevCased === prevCased.toLowerCase()));
+  const wide = text.slice(Math.max(0, idx - 40), idx).toLowerCase().split(/[^a-zà-ú-]+/).filter(Boolean);
   if (!contraction) {
     const t1 = tokens[tokens.length - 1], t2 = tokens[tokens.length - 2];
     if (t1 && negators.includes(t1)) return t1;
     // 1.21 review B1: a negative conjunction (nor / nem / ni) negates the word right after it only — "nem duplicar faturas",
-    // "nor duplicate invoices" negate the verb (a second predicate), never its object
-    if (t2 && negators.includes(t2) && !LIST_NEG.has(t2)) return t2;
+    // "nor duplicate invoices" negate the verb (a second predicate), never its object. 1.21 verify V5: nor does a negator whose
+    // verb is a requirement's (negationKind) — "The system must not lose payments" keeps its payments, as PT "não pode perder
+    // pagamentos" always did; "we will not add payments", "do not store card numbers" still exclude.
+    if (t2 && negators.includes(t2) && !LIST_NEG.has(t2)) {
+      const j = wide.length - 2;
+      if (!(j >= 0 && wide[j] === t2 && wide[j + 1] === t1 && negationKind(wide, j, wide.length, lang).kind === "require")) return t2;
+    }
   }
   // "sem uso de IA", "sin uso de IA", "no use of AI", "without the use of any AI": a negator a few filler words
   // back still negates — weak signals included (a lone 'ia' used to come back as "Possible +ai").
-  const wide = text.slice(Math.max(0, idx - 40), idx).toLowerCase().split(/[^a-zà-ú-]+/).filter(Boolean);
   let k = wide.length - 1;
   while (k >= 0 && NEG_FILLER.has(wide[k])) k--;
   // Across fillers, "no" negates only before an ENGLISH filler ("no use of AI"): before a PT one it is the
@@ -440,79 +446,113 @@ function listLink(text, from, to, es) {
   if (or) return other <= 1 ? or : null;
   return gap.includes(",") && other === 0 ? "comma" : null;
 }
-// Does a negator GOVERN the item at `start` (1.21 review B1)? Only when nothing but these words stand between them, in the same
-// clause and comma-free stretch: fillers and articles ("no X", "sem o X", "without the use of any X"), auxiliaries and modals
-// (GOVERN_AUX), the verbs whose object IS what the negation excludes — use / add / need / include / implement… (GOVERN_ADOPT: "will
-// not add X", "Não vamos usar X", "No usaremos X", "must not use X") — and a modifier or a preposition (GOVERN_NEUTRAL: "no new X").
-// Another verb ends the search: a negator followed by it negates that VERB ("must not lose X", "não pode perder X", "no debe perder
-// X") — the negation is the requirement about X, like a hazard's, never an exclusion of X, so it opens no list. A VERBAL negation (not
-// / never / não / n't, ES "no" — or any negator an auxiliary or an adoption verb follows: "No puede perder X") passes nothing else; a
-// NOMINAL one (no, without, sem, sin, avoid… before a noun phrase) one modifier of its own ("without real-time X") — never a verb
-// form (-ing, a PT / ES infinitive or gerund: "without losing X", "sem perder X"). A bounded look-back (≤ GOVERN_MAX words, ≤
-// CUE_SPAN characters).
+// WHAT A NEGATION NEGATES (1.21 review B1, 1.21 verify V1 / V5) — negationKind(): the words after a negator decide whether it
+// EXCLUDES what follows (a noun phrase, an adoption verb's object, the verb of a plan or an intention) or states a REQUIREMENT about
+// it (a deontic modal's verb, a verb form after a nominal negator):
+//   - "no X", "sem X", "without the use of any X", "no new X", "Postgres, not MongoDB" — a noun phrase: exclude;
+//   - an ADOPTION verb (GOVERN_ADOPT: use / add / need / include / implement / integrate / deploy / run / offer / provide / ship /
+//     create / adopt, "necessary", + PT / ES) — its object is what is left out, whatever the modal: "will not add X", "must not use
+//     X", "Não vamos integrar X", "No es necesario X": exclude;
+//   - a DEONTIC modal (GOVERN_DEONTIC: must / shall / should / can / may, cannot / can't / mustn't; pode / deve; puede / debe) before
+//     another verb — "must not lose X", "não pode perder X", "no debe perder X", "must never leak X": the requirement about X (like a
+//     hazard's negation), never an exclusion of X;
+//   - a plain AUXILIARY or a volition / intention verb (GOVERN_AUX: will / do / is, vamos / iremos / queremos / pretendemos /
+//     planeamos, vamos / queremos / pensamos / se / hace…) before another verb — a plan: "We will not run X", "Não queremos X",
+//     "No pensamos desplegar X": exclude;
+//   - no auxiliary at all: a verb FORM (-ing, a PT / ES infinitive or gerund) is a requirement ("without losing X", "sem perder X",
+//     "não perder X"), any other word a noun (exclude — the 1.20 reading).
+// → { kind: "exclude" | "require", others } — `others`: the words between the negator and the end that are neither fillers, nor
+// modifiers, nor auxiliaries, nor adoption verbs. words: lower-case, from the negator (at j) to the item (end, exclusive). Linear.
 const GOVERN_MAX = 5;
 const GOVERN_BOUNDARY = /[.!?;:,\n]/;
+const GOVERN_DEONTIC = new Set(["must", "shall", "should", "can", "could", "may", "might", "cannot", "pode", "podem", "poderá", "poderão", "deve",
+  "devem", "deverá", "deverão", "debe", "deben", "deberá", "deberán", "puede", "pueden", "podrá", "podrán"]);
+// the stem of a contracted negator: can't → "ca", mustn't → "must", shouldn't, shan't → "sha" (won't / don't / doesn't: a plain auxiliary)
+const NT_DEONTIC = new Set(["ca", "can", "must", "should", "could", "might", "may", "sha"]);
 const GOVERN_AUX = new Set([
-  "will", "would", "shall", "should", "must", "can", "could", "may", "might", "do", "does", "did", "be", "is", "are", "was", "were", "been",
-  "going", "vamos", "vai", "vão", "iremos", "irá", "irão", "será", "serão", "é", "são", "ser", "pode", "podem", "podemos", "poderá", "deve",
-  "devem", "devemos", "deverá", "va", "van", "es", "son", "debe", "deben", "debemos", "deberá", "puede", "pueden", "podrá",
+  "will", "would", "do", "does", "did", "be", "is", "are", "was", "were", "been", "going", "intend", "intends", "plan", "plans", "planning",
+  "want", "wants", "wish", "vamos", "vai", "vão", "iremos", "irá", "irão", "será", "serão", "é", "são", "ser", "queremos", "quero", "quer",
+  "querem", "querer", "pretendemos", "pretendo", "pretende", "pretendem", "pretender", "planeamos", "planeio", "planeia", "planejamos",
+  "planeja", "planejam", "tencionamos", "tenciona", "va", "van", "es", "son", "se", "hace", "faz", "quiero", "quiere", "quieren",
+  "pensamos", "pienso", "piensa", "piensan", "planeo", "planea", "planean", "tenemos", "previsto",
 ]);
 const GOVERN_ADOPT = new Set([
   "need", "needs", "needed", "require", "requires", "required", "use", "uses", "using", "add", "adds", "adding", "build", "builds", "building",
   "include", "includes", "including", "introduce", "introduces", "introducing", "implement", "implements", "implementing", "support",
-  "supports", "supporting", "have", "has", "having", "want", "adopt", "adopting", "rely", "relying", "depend", "depends", "depending", "set",
+  "supports", "supporting", "have", "has", "having", "adopt", "adopts", "adopting", "rely", "relying", "depend", "depends", "depending",
+  "set", "integrate", "integrates", "integrating", "deploy", "deploys", "deploying", "run", "runs", "running", "offer", "offers",
+  "offering", "provide", "provides", "providing", "ship", "ships", "create", "creates", "creating", "necessary",
   // PT
-  "precisa", "precisam", "precisamos", "precisar", "preciso", "necessita", "necessitam", "necessitamos", "necessitar", "usar", "usa", "usam",
-  "usamos", "usará", "usarão", "usaremos", "utilizar", "utiliza", "utilizam", "utilizamos", "utilizará", "utilizaremos", "adicionar",
-  "adiciona", "adicionamos", "adicionaremos", "acrescentar", "acrescentamos", "incluir", "inclui", "incluem", "incluímos", "incluiremos",
-  "implementar", "implementamos", "implementaremos", "introduzir", "ter", "tem", "têm", "temos", "terá", "teremos", "haver", "há", "haverá",
-  "suportar", "suporta", "depender", "depende", "dependemos", "recorrer",
+  "precisa", "precisam", "precisamos", "precisar", "preciso", "necessita", "necessitam", "necessitamos", "necessitar", "necessário",
+  "necessária", "necessários", "necessárias", "necessidade", "falta", "usar", "usa", "usam", "usamos", "usará", "usarão", "usaremos",
+  "utilizar", "utiliza", "utilizam", "utilizamos", "utilizará", "utilizaremos", "adicionar", "adiciona", "adicionamos", "adicionaremos",
+  "acrescentar", "acrescentamos", "incluir", "inclui", "incluem", "incluímos", "incluiremos", "implementar", "implementamos",
+  "implementaremos", "introduzir", "ter", "tem", "têm", "temos", "terá", "teremos", "haver", "há", "haverá", "suportar", "suporta",
+  "depender", "depende", "dependemos", "recorrer", "integrar", "integra", "integramos", "integraremos", "adotar", "adota", "adotamos",
+  "adotaremos", "implantar", "implanta", "implantamos", "implantaremos", "oferecer", "oferece", "oferecemos", "ofereceremos", "fornecer",
+  "fornece", "fornecemos", "forneceremos", "disponibilizar", "disponibilizamos", "criar", "cria", "criamos", "criaremos",
   // ES
-  "necesita", "necesitan", "necesitamos", "necesitará", "necesitar", "usan", "usará", "utilizan", "añadir", "añade", "añadimos",
-  "añadiremos", "agregar", "agrega", "agregamos", "agregaremos", "incluye", "incluimos", "introducir", "tener", "tiene", "tienen", "tenemos",
-  "tendrá", "tendremos", "hay", "habrá", "haber", "requiere", "requieren", "requerirá", "recurrir", "soportar", "soporta",
+  "necesita", "necesitan", "necesitamos", "necesitará", "necesitar", "necesario", "necesaria", "necesarios", "necesarias", "necesidad",
+  "usan", "usará", "utilizan", "añadir", "añade", "añadimos", "añadiremos", "agregar", "agrega", "agregamos", "agregaremos", "incluye",
+  "incluimos", "introducir", "tener", "tiene", "tienen", "tendrá", "tendremos", "hay", "habrá", "haber", "requiere", "requieren",
+  "requerirá", "recurrir", "soportar", "soporta", "integramos", "adoptar", "adopta", "adoptamos", "adoptaremos", "desplegar", "despliega",
+  "desplegamos", "desplegaremos", "ofrecer", "ofrece", "ofrecemos", "ofreceremos", "proporcionar", "proporciona", "proporcionamos",
+  "proporcionaremos", "crear", "crea", "creamos", "crearemos",
 ]);
 const GOVERN_NEUTRAL = new Set(["on", "for", "to", "up", "yet", "new", "more", "extra", "additional", "external", "separate", "third-party", "ao",
   "novo", "nova", "novos", "novas", "mais", "adicional", "adicionais", "nuevo", "nueva", "nuevos", "nuevas", "más", "adicionales"]);
-const VERBAL_NEGATORS = new Set(["not", "never", "não", "nao"]);
 const isNegatorWord = (w, pt) => (NEGATORS.includes(w) && !(pt && w === "no")) || /n['’]t$/.test(w);
-const verbalNegator = (w, es) => VERBAL_NEGATORS.has(w) || /n['’]t$/.test(w) || (es && w === "no");
 const verbForm = (w, ptes) => (w.length > 4 && /ing$/.test(w)) || (ptes && /(?:[aei]r|ndo)$/.test(w));
+const passWord = (w) => NEG_FILLER.has(w) || LIST_FILLER.has(w) || GOVERN_NEUTRAL.has(w);
+function negationKind(words, j, end, lang) {
+  const base = i18n.baseLang(lang), ptes = base === "pt" || base === "es";
+  const w = words[j];
+  let deontic = false, aux = false;
+  if (/n['’]t$/.test(w)) { if (NT_DEONTIC.has(w.replace(/n['’]t$/, ""))) deontic = true; else aux = true; }
+  else if (w === "cannot") deontic = true;
+  else if (j > 0 && GOVERN_DEONTIC.has(words[j - 1])) deontic = true; // "must not", "should never"
+  else if (j > 0 && GOVERN_AUX.has(words[j - 1])) aux = true; // "will not", "does not"
+  let kind = null, others = 0;
+  for (let i = j + 1; i < end; i++) {
+    const x = words[i];
+    if (LIST_NEG.has(x)) break;
+    if (passWord(x)) continue;
+    if (GOVERN_ADOPT.has(x)) { if (!kind) kind = "exclude"; continue; }
+    if (!kind && GOVERN_DEONTIC.has(x)) { deontic = true; continue; }
+    if (!kind && GOVERN_AUX.has(x)) { aux = true; continue; }
+    others++;
+    // the first other word decides: a deontic modal's verb, or a bare verb form, is a requirement; anything else is excluded
+    if (!kind) kind = deontic || (!aux && verbForm(x, ptes)) ? "require" : "exclude";
+  }
+  return { kind: kind || "exclude", others };
+}
+// Does a negator GOVERN the item at `start` — an EXCLUSION of it (negationKind), with at most one other word between them, in the same
+// clause and comma-free stretch, ≤ GOVERN_MAX words back? A negative conjunction governs only the phrase right after it (fillers
+// between). "No X", "will not add X", "Não queremos X", "No es necesario X", "without real-time X" — yes; "must not lose X", "não pode
+// perder X", "without losing X" — no: they open no list.
 // the clause's words before `start`, lower-case, a quote's apostrophes dropped ("'not add X or Y'")
 const govWords = (text, start, bound) => cueWords(cueBefore(text, start, bound)).map((w) => w.toLowerCase().replace(/^['’]+|['’]+$/g, "")).filter(Boolean);
 function negationGoverns(text, start, lang) {
-  const base = i18n.baseLang(lang), pt = base === "pt", es = base === "es";
+  const pt = i18n.baseLang(lang) === "pt";
   const words = govWords(text, start, GOVERN_BOUNDARY);
-  let other = 0, verbal = false;
   for (let i = words.length - 1, n = 0; i >= 0 && n <= GOVERN_MAX; i--, n++) {
-    const w = words[i];
-    // (a negative conjunction governs only the phrase right after it, as in negatorBefore)
-    if (isNegatorWord(w, pt)) return other === 0 || !(verbal || verbalNegator(w, es) || LIST_NEG.has(w));
-    if (NEG_FILLER.has(w) || LIST_FILLER.has(w) || GOVERN_NEUTRAL.has(w)) continue;
-    if (GOVERN_AUX.has(w) || GOVERN_ADOPT.has(w)) { verbal = true; continue; }
-    if (++other > 1 || verbForm(w, pt || es)) return false;
+    if (!isNegatorWord(words[i], pt)) continue;
+    if (LIST_NEG.has(words[i])) return words.slice(i + 1).every(passWord);
+    const k = negationKind(words, i, words.length, lang);
+    return k.kind === "exclude" && k.others <= 1;
   }
   return false;
 }
-// Does the clause's negator (the last one before `start` that is no negative conjunction) negate a VERB — the requirement a
-// negative conjunction then continues ("Não pode perder pagamentos nem reembolsos", "must not lose data nor refunds", "sem perder
-// dados nem reembolsos")? Not when an adoption verb follows it (its object is excluded: "Não vamos usar filas nem Kafka"), nor for a
-// nominal negator before a noun ("Sem filas nem Kafka"), nor with none but the correlative "nem … nem" / "ni … ni".
+// Does the clause's negator (the last one before `start` that is no negative conjunction — "cannot" too) state a REQUIREMENT
+// (negationKind) — which a negative conjunction then continues ("Não pode perder pagamentos nem reembolsos", "must not lose data nor
+// refunds", "sem perder dados nem reembolsos")? Not an exclusion ("Não queremos Kafka nem RabbitMQ", "We use Postgres, not MongoDB nor
+// Kafka"), nor a clause with only the correlative "nem … nem" / "ni … ni".
 function negatedVerb(text, start, lang) {
-  const base = i18n.baseLang(lang), pt = base === "pt", es = base === "es";
+  const pt = i18n.baseLang(lang) === "pt";
   const words = govWords(text, start, CUE_BOUNDARY);
   let j = words.length - 1;
-  while (j >= 0 && !(isNegatorWord(words[j], pt) && !LIST_NEG.has(words[j]))) j--;
-  if (j < 0) return false;
-  let verbal = verbalNegator(words[j], es);
-  for (let i = j + 1; i < words.length && i <= j + GOVERN_MAX + 1; i++) {
-    const w = words[i];
-    if (LIST_NEG.has(w) || GOVERN_ADOPT.has(w)) return false;
-    if (NEG_FILLER.has(w) || LIST_FILLER.has(w) || GOVERN_NEUTRAL.has(w)) continue;
-    if (GOVERN_AUX.has(w)) { verbal = true; continue; }
-    return verbal || verbForm(w, pt || es);
-  }
-  return false;
+  while (j >= 0 && !((isNegatorWord(words[j], pt) || words[j] === "cannot") && !LIST_NEG.has(words[j]))) j--;
+  return j >= 0 && negationKind(words, j, words.length, lang).kind === "require";
 }
 // The article a new clause's subject starts with (1.21 review B2): a comma followed by one is no list continuation — "Without an LLM
 // or embeddings, the checkout or a subscription page is the priority".
@@ -528,10 +568,12 @@ function coordinatedNegation(hits, text, lang) {
     const last = items[items.length - 1];
     if (last && h.start < last.end) { last.hits.push(h); if (h.end > last.end) last.end = h.end; } else items.push({ start: h.start, end: h.end, hits: [h] });
   }
-  // a negative conjunction negates the whole phrase it precedes — the keywords inside it too ("nem iniciar sessão": 'sessão')
+  // a negator negates the whole phrase it precedes — the keywords inside it too ("nem iniciar sessão", "sem iniciar sessão": 'sessão',
+  // whose own look-back now sees a verb form, 1.21 verify V5)
   for (const it of items) {
-    if (!it.hits.some((h) => h.conj && h.start === it.start)) continue;
-    for (const h of it.hits) if (!h.negBy && !h.hazard) { h.neg = true; h.negBy = "before"; h.conj = true; }
+    const head = it.hits.find((h) => h.start === it.start && h.negBy === "before" && !h.hazard);
+    if (!head) continue;
+    for (const h of it.hits) if (!h.negBy && !h.hazard) { h.neg = true; h.negBy = "before"; h.conj = head.conj; }
   }
   // a hazard's negation is its requirement ("without downtime"), never a list's: it opens none — nor does a negator that governs a
   // verb, not the item (1.21 review B1: "must not lose payments or refunds")
@@ -539,24 +581,40 @@ function coordinatedNegation(hits, text, lang) {
   const mark = (it) => { for (const h of it.hits) if (!h.hazard) { h.neg = true; if (!h.negBy) h.negBy = "list"; } };
   // the gap's first word is an article (1.21 review B2)
   const articleFirst = (from, to) => { const w = cueWords(text.slice(from, to))[0]; return !!w && LIST_ARTICLES.has(w.toLowerCase()); };
-  // closed: a conjunction has closed the list — a later comma ends it (a list has one closing conjunction — 1.21 review B2)
-  let active = false, closed = false, pending = [];
+  // closed: a conjunction has closed the list — a later comma ends it (a list has one closing conjunction — 1.21 review B2).
+  // listTracks: the tracks of the list's items so far — a comma + an article still joins an item of one of them ("Without an LLM, a
+  // vector database or embeddings", "Without Kafka, the RabbitMQ broker or SQS"), never another track's item: that is a new clause's
+  // subject ("No LLM, the checkout or the subscription flow first" — 1.21 verify V2); and a predicate after the closing item (an
+  // auxiliary or a modal: "… IS the priority") makes the article-led items a subject too (articleAt: where they start in `pending`)
+  let active = false, closed = false, pending = [], listTracks = new Set(), articleAt = -1;
+  const join = (it) => { for (const h of it.hits) listTracks.add(h.track); };
+  const open = (it) => { active = true; closed = false; pending = []; articleAt = -1; listTracks = new Set(); join(it); };
+  // an auxiliary or a modal in the clause after the item: a predicate ("is the priority", "são a prioridade", "will handle it")
+  const predicateAfter = (end) => cueWords(cueAfter(text, end, CUE_BOUNDARY)).some((w0) => { const w = w0.toLowerCase(); return GOVERN_AUX.has(w) || GOVERN_DEONTIC.has(w); });
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     if (active) {
       const l = listLink(text, items[i - 1].end, it.start, es);
-      if (l === "comma" && !closed && !articleFirst(items[i - 1].end, it.start)) { pending.push(it); continue; }
-      if (l && l !== "comma") { pending.forEach(mark); pending = []; mark(it); closed = true; continue; }
-      active = false; closed = false; pending = []; // the list ended here: this item may open a new one
+      if (l === "comma" && !closed) {
+        const art = articleFirst(items[i - 1].end, it.start);
+        if (!art || it.hits.some((h) => listTracks.has(h.track))) { if (art && articleAt < 0) articleAt = pending.length; pending.push(it); join(it); continue; }
+      }
+      if (l && l !== "comma") {
+        // … unless a predicate follows the closing item: then the article-led items were a new clause's subject ("Without payments, the
+        // checkout or a subscription page IS the priority") — the list ended before them
+        if (articleAt >= 0 && predicateAfter(it.end)) { pending.slice(0, articleAt).forEach(mark); active = false; closed = false; pending = []; articleAt = -1; continue; }
+        pending.forEach(mark); pending = []; mark(it); join(it); closed = true; continue;
+      }
+      active = false; closed = false; pending = []; articleAt = -1; // the list ended here: this item may open a new one
     } else if (it.hits.some((h) => h.conj) && negatedVerb(text, it.start, lang)) {
-      // 1.21 review B1: a negative conjunction no list carries, in a clause whose negator negates a verb ("Não pode perder pagamentos
-      // nem reembolsos", "No puede perder pagos ni reembolsos"), continues that requirement, not a list of exclusions: its item is not
-      // negated either
+      // 1.21 review B1: a negative conjunction no list carries, in a clause whose negator states a requirement ("Não pode perder
+      // pagamentos nem reembolsos", "No puede perder pagos ni reembolsos"), continues that requirement, not a list of exclusions: its
+      // item is not negated either
       for (const h of it.hits) if (h.conj) { h.neg = false; h.negBy = null; h.conj = false; }
     }
-    if (opens(it)) { active = true; continue; }
+    if (opens(it)) { open(it); continue; }
     // "Não vamos usar X nem Y": a negative conjunction after an item a negator governs (the negator three words back)
-    if (i + 1 < items.length && listLink(text, it.end, items[i + 1].start, es) === "neg" && negationGoverns(text, it.start, lang)) { mark(it); active = true; }
+    if (i + 1 < items.length && listLink(text, it.end, items[i + 1].start, es) === "neg" && negationGoverns(text, it.start, lang)) { mark(it); open(it); }
   }
 }
 
@@ -685,6 +743,20 @@ function keywordPattern(kw, plain) {
   return body + (STEMS.has(kw) ? "\\p{L}*" : !plain && VERB_STEMS.has(kw) ? VERB_STEMS.get(kw) : (kw.length <= 3 ? ACRONYM_INFLECTION : INFLECTION) + ADJ_SUFFIX);
 }
 
+// A keyword's ALL-CAPS acronyms when it mixes them with lower-case words and nothing else ("relatório de BI" → ["BI"], "CDC pipeline" →
+// ["CDC"]) — else null ("STRIDE", "Snowflake warehouse", "X-RateLimit-Remaining" keep their exact case). Cached per keyword.
+const MIXED_ACR = new Map();
+function mixedAcronyms(kw) {
+  if (MIXED_ACR.has(kw)) return MIXED_ACR.get(kw);
+  const toks = kw.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const acr = toks.filter((t) => t.length >= 2 && /\p{Lu}/u.test(t) && t === t.toUpperCase());
+  const ok = acr.length && toks.some((t) => /\p{Ll}/u.test(t)) && toks.every((t) => t === t.toLowerCase() || acr.includes(t));
+  const out = ok ? acr : null;
+  if (MIXED_ACR.size >= KW_CACHE_MAX) MIXED_ACR.clear();
+  MIXED_ACR.set(kw, out);
+  return out;
+}
+
 // Tokens that look like source paths ("src/rag", "lib/auth.ts") must stay opaque to the classifier.
 const PATH_HEADS = new Set(["src", "lib", "app", "apps", "api", "pkg", "packages", "internal", "cmd", "bin", "test", "tests", "docs",
   "components", "modules", "services", "server", "client", "scripts", "config", "routes", "handlers", "controllers", "features",
@@ -746,17 +818,23 @@ function classify(description, opts = {}) {
       for (const kw of table[tier] || []) {
         // A keyword written with upper-case letters ('STRIDE') is an acronym matched CASE-SENSITIVELY, on the original
         // text (C4): the lower-case word is something else (an array stride). `cased` is `text` before toLowerCase().
-        const hay = kw === kw.toLowerCase() ? text : cased;
+        // 1.21 verify V3: a built-in keyword mixing lower-case words with an ALL-CAPS acronym ("relatório de BI", "BI dashboard", "CDC
+        // pipeline") matches its words in any case and only its acronym case-sensitively — "Relatório de BI" opens a sentence, "BI
+        // Dashboard" is a title; "o número do bi" is still no BI.
+        const acr = plain ? null : mixedAcronyms(kw);
+        const kwm = acr ? kw.toLowerCase() : kw;
+        const hay = kwm === kwm.toLowerCase() ? text : cased;
         const rec = ov ? ov.get(kw.toLowerCase()) : undefined;
         if (rec) consumed.add(kw.toLowerCase());
         // A text without the keyword's literal prefix can't match its regex — skipping it spares compiling ~300 unicode
         // regexes on every CLI run (a classify used to cost ~250 ms per process).
-        if (!hay.includes(keywordLiteral(kw, plain))) continue;
-        const re = keywordRe(kw, plain);
+        if (!hay.includes(keywordLiteral(kwm, plain))) continue;
+        const re = keywordRe(kwm, plain);
         re.lastIndex = 0;
         let m;
         while ((m = re.exec(hay)) !== null) {
           if (seenSpan[track].has(m.index)) continue;
+          if (acr) { const ws = cueWords(cased.slice(m.index, m.index + m[0].length)); if (!acr.every((a) => ws.includes(a))) continue; }
           if (rec && rec.effect === "off") { applied.set(signalKey(track, rec.word), rec); continue; }
           seenSpan[track].add(m.index);
           const t2 = rec ? rec.effect : tier;
@@ -821,10 +899,10 @@ function classify(description, opts = {}) {
     counted.push(tier && tier !== h.tier ? Object.assign({}, h, { tier, src: h }) : h);
   }
   const own = (pred) => new Set(counted.filter((h) => h.tier !== "context" && pred(h)).map((h) => h.track));
-  // (1.21 review B3) a track whose table says `contextBackedBy: "strong"` (+data: a table / a column / a query is on every screen) has
-  // its context words backed by a strong signal only, never by a lone anchor
-  const strongOnly = (t) => Object.prototype.hasOwnProperty.call(SIGNALS, t) && SIGNALS[t].contextBackedBy === "strong";
-  const backedBy = own((h) => !h.neg && (strongOnly(h.track) ? h.tier === "strong" : h.tier !== "generic")), mentionedBy = own(() => true);
+  // (1.21 review B3 / verify V3) an anchor its table lists in `everydayAnchors` (+data: a lakehouse, a lineage, ingestion, SCD, duplicate
+  // rows… — words with an everyday sense) backs no context word: a table / a column / a query is on every screen
+  const everyday = (h) => h.tier === "weak" && Object.prototype.hasOwnProperty.call(SIGNAL_EVERYDAY, h.track) && SIGNAL_EVERYDAY[h.track].has(h.kw);
+  const backedBy = own((h) => !h.neg && h.tier !== "generic" && !everyday(h)), mentionedBy = own(() => true);
   for (const h of counted) {
     if (h.tier === "context" && !(h.neg ? mentionedBy : backedBy).has(h.track)) { (h.src || h).final = "unbacked"; continue; }
     const tier = h.tier === "context" ? "weak" : h.tier;
