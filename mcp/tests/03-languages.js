@@ -314,19 +314,34 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
       I.msg(l).drift.hookLine("csv-export", 2), I.msg(l).governance.ffHint("csv-export", "design, tasks")];
     const want = ["done csv-export 2 --run", "finish csv-export --run", "drift csv-export", "approve csv-export --through tasks"];
     const perLang = ["en", "pt", "es", "pt-BR"].map((l) => run(l).every((m, k) => m.includes(I.DEV_SPEC + " " + want[k]) && !/(?<![\w/.-])dev-spec (?:done|finish|drift|approve) /.test(m)));
-    const RE_BARE = /(?<![\w/.-])dev-spec (help|classify|init|bugfix|create|list|status|doctor|trace|ears|next|finish|steering|brief|done|undone|approve|evals|backlog|milestone|roadmap|depend|scan|coverage|clarify|next-action|add-track|feature|rules|import|append-tasks|impact|metrics|catalog|drift|upgrade|prompts|templates|tracks|export|changelog|log|stop-check|spike|decide|mcp-config|statusline)(?![\w-])(?! —)/;
+    // 1.21 review A2: the command list is the CLI's own — every `case "<name>":` label of cli/dev-spec.js (a hand-written list went
+    // stale: `dev-spec signals …` and `dev-spec merge-state --install` slipped through) — and a message builder is called with
+    // several argument shapes (strings, lists, records, numbers), so one that maps a list is swept too, not skipped.
+    const cliCommands = [...new Set([...fs.readFileSync(path.join(__dirname, "..", "..", "cli", "dev-spec.js"), "utf8").matchAll(/^\s*case "([a-z][a-z0-9-]*)":/gm)].map((m) => m[1]))];
+    const RE_BARE = new RegExp("(?<![\\w/.-])dev-spec (" + cliCommands.join("|") + ")(?![\\w-])(?! —)");
     const ALLOWED = new Set(["observed.on", "metrics.retroText.followUpsNote", "catalog.autogen", "approvalGuard.on.ask", "approvalGuard.on.deny", "upgrade.md.autogen",
       "upgrade.md.intro", "trackPacks.initJson", "stakeholderExport.autogen", "rtm.autogen", "releaseNotes.autogen", "gherkin.autogen", "trackerCsv.autogen",
-      "trackerCsv.featureLine", "milestone.notesAutogen", "gitLog.noGit", "decisions.header"]);
+      "trackerCsv.featureLine", "milestone.notesAutogen", "gitLog.noGit", "decisions.header",
+      "mergeState.conflictHead", "mergeState.parseError"]); // the driver's own stderr lines, named by the product ("dev-spec merge-state: <file>: …")
+    const ARG_SHAPES = [["x", "y", "z"], [["x"], ["y"], ["z"]], [[{ word: "w", track: "t", effect: "off", phase: "p" }], "y", "z"], [1, 2, 3], [{ x: 1 }, "y", "z"]];
     const bare = {}, runnable = {};
+    let swept = 0;
     for (const l of ["en", "pt", "es", "pt-BR"]) {
-      const walk = (o, p, d) => { if (d > 4) return; for (const k of Object.keys(o)) { const v = o[k]; let s = null;
-        if (typeof v === "function") { try { s = String(v("x", "y", "z")); } catch { continue; } } else if (typeof v === "string") s = v; else if (v && typeof v === "object") { walk(v, p + k + ".", d + 1); continue; }
-        if (s == null) continue;
-        if (s.includes(I.DEV_SPEC)) runnable[l] = (runnable[l] || 0) + 1;
-        if (RE_BARE.test(s) && !ALLOWED.has(p + k)) (bare[l] = bare[l] || []).push(p + k); } };
+      const walk = (o, p, d) => { if (d > 7) return; for (const k of Object.keys(o)) { const v = o[k]; const outs = [];
+        if (typeof v === "function") { for (const a of ARG_SHAPES) { try { outs.push(String(v(...a))); } catch { /* another shape */ } } }
+        else if (typeof v === "string") outs.push(v); else if (v && typeof v === "object") { walk(v, p + k + ".", d + 1); continue; }
+        if (!outs.length) continue;
+        swept++;
+        if (outs[0].includes(I.DEV_SPEC)) runnable[l] = (runnable[l] || 0) + 1;
+        if (outs.some((s) => RE_BARE.test(s)) && !ALLOWED.has(p + k)) (bare[l] = bare[l] || []).push(p + k); } };
       walk(I.msg(l), "", 0);
     }
+    const listed = ["signals", "merge-state", "classify", "done", "bundle"].every((c) => cliCommands.includes(c));
+    const probe = (l) => [I.msg(l).classify.overridesApplied([{ word: "w", track: "api", effect: "off" }]), I.msg(l).signals.capped(200), I.msg(l).mergeState.teamNote];
+    const probed = ["en", "pt", "es", "pt-BR"].every((l) => probe(l).every((s) => s.includes(I.DEV_SPEC + " ") && !RE_BARE.test(s)));
+    ok(listed && probed && swept > 4000 && !Object.keys(bare).length,
+      "1.21 review A2: the bare-command sweep reads its command list from the CLI's case labels (signals, merge-state … included) and calls each builder with several argument shapes; the signals / classifier-override messages and the merge driver's team note print the runnable line in EN / PT / ES / pt-BR (got " +
+      JSON.stringify({ commands: cliCommands.length, listed, probed, swept, bare, sample: probe("en") }) + ")");
     const br = I.toPtBr("Corre: " + I.DEV_SPEC + " done csv-export 2 --run (a equipa regista-o).");
     ok(I.DEV_SPEC === 'node "' + cloneCli + '"' && perLang.every(Boolean) && !Object.keys(bare).length &&
       ["en", "pt", "es", "pt-BR"].every((l) => runnable[l] >= 60 && runnable[l] === runnable.en) && br.includes(I.DEV_SPEC + " done csv-export 2 --run") && /^Execute: /.test(br) && /equipe/.test(br),

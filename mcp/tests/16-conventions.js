@@ -1096,6 +1096,98 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     const c9 = d9.checks.find((c) => c.id === "merge-conflicts") || {};
     ok(!before && c9.status === "fail" && /^2 conflito\(s\) de merge/.test(c9.detail) && /\.state\.json kind/.test(c9.detail) && /roadmap\.json meta\.guard/.test(c9.detail) && d9.verdict === "fail",
       "1.21 F1a: doctor fails merge-conflicts (in the feature's language) while a conflicted merge's mergeConflicts list is still in its .state.json or in roadmap.json; none → no such check (got " + js(c9) + ")");
+
+    // 1.21 review A1 — the sign-offs' drop rule runs on the 3-way RESULT: only one side changed signoffs (theirs signed tech at T3,
+    // ours approved the phase at T5) → mergeThree used to hand theirs' signoffs back as they were, a stale sign-off next to the
+    // approval; now it is dropped. A sign-off LATER than the approval (a re-sign round under way) stays.
+    const a1b = { ...clone(base), approvals: {} };
+    delete a1b.lastApprovedPhase;
+    const a1o = clone(a1b); a1o.approvals.design = { at: T(5), by: "bo", fingerprint: "d1" }; a1o.approvalHistory.push({ phase: "design", at: T(5), by: "bo", fingerprint: "d1" });
+    const a1t = clone(a1b); a1t.signoffs = { design: { tech: { by: "t", at: T(3), fingerprint: "d1" } } };
+    const a1late = clone(a1b); a1late.signoffs = { design: { tech: { by: "t", at: T(6), fingerprint: "d2" } } };
+    const m1a = M(a1b, a1o, a1t), m1b = M(a1b, a1t, a1o), m1c = M(a1b, a1o, a1late);
+    ok(!m1a.conflicts.length && m1a.merged.approvals.design && !("signoffs" in m1a.merged) && !("signoffs" in m1b.merged) && m1b.merged.approvals.design &&
+      m1c.merged.signoffs && m1c.merged.signoffs.design.tech.at === T(6),
+      "1.21 review A1 (merge): a sign-off only one side made, no later than the other side's approval of the phase, is dropped from the merge (either direction) — the drop rule runs after the 3-way; a later sign-off stays (got " +
+      js([m1a.merged.signoffs, m1b.merged.signoffs, m1c.merged.signoffs]) + ")");
+
+    // 1.21 review A7 — a re-merge while ours still holds the unresolved mergeConflicts list: each conflict listed once
+    const r7b = { meta: { lang: "en" }, features: {} };
+    const r7o = { meta: { lang: "pt" }, features: {} }, r7t = { meta: { lang: "es" }, features: {} };
+    const first7 = S.mergeStateText(js(r7b), js(r7o), js(r7t), { path: ".specs/roadmap.json" });
+    const again7 = S.mergeStateText(js(r7b), first7.text, js(r7t), { path: ".specs/roadmap.json" });
+    const list7 = JSON.parse(again7.text).mergeConflicts;
+    ok(first7.clean === false && JSON.parse(first7.text).mergeConflicts.length === 1 && again7.clean === false && Array.isArray(list7) && list7.length === 1 && list7[0].path === "meta.lang",
+      "1.21 review A7: merging again while the unresolved mergeConflicts list is still in ours lists each conflict ONCE (deduped by its canonical form) (got " + js(list7) + ")");
+  }
+
+  { // 1.21 review A3 — is git's merge driver still THIS clone's? The pure readers (git config text, the driver command) and the
+    // status against a repository's config read AS TEXT (a .git folder, a worktree's .git FILE → gitdir → commondir), then the
+    // SessionStart hook's ONE line when .gitattributes names the driver and the configured script is missing / another copy.
+    const js = JSON.stringify;
+    const cfg = '[core]\n\tbare = false\n[merge "dev-spec-state"]\n\tname = dev-spec: semantic merge\n\tdriver = node \'/old/plugins/cache/m/dev-spec-driven/1.20.0/cli/dev-spec.js\' merge-state %O %A %B %P\n' +
+      '[Merge "Other"]\n\tdriver = cat\n[merge.dev-spec-state]\n\t; a comment\n';
+    const quoted = '[merge "dev-spec-state"]\n  driver = "node \'/a b/#x/cli/dev-spec.js\' merge-state %O %A %B %P" # trailing comment\n  driver = node \\\n\'/c/cli/dev-spec.js\' merge-state %O %A %B %P\n';
+    const got = [S.gitConfigGet(cfg, "merge.dev-spec-state.driver"), S.gitConfigGet(cfg, "MERGE.dev-spec-state.DRIVER"), S.gitConfigGet(cfg, "merge.Other.driver"),
+      S.gitConfigGet(cfg, "merge.other.driver"), S.gitConfigGet(quoted, "merge.dev-spec-state.driver"), S.gitConfigGet('[merge "dev-spec-state"]\n\tdriver = "node \'/a b/#x/cli/dev-spec.js\' merge-state"\n', "merge.dev-spec-state.driver")];
+    const scripts = [S.mergeDriverScript("node '/x/it'\\''s/cli/dev-spec.js' merge-state %O %A %B %P"), S.mergeDriverScript('node "/y z/cli/dev-spec.js" merge-state %O %A %B %P'),
+      S.mergeDriverScript("cat %A"), S.mergeDriverScript(null)];
+    ok(got[0] === "node '/old/plugins/cache/m/dev-spec-driven/1.20.0/cli/dev-spec.js' merge-state %O %A %B %P" && got[1] === got[0] && got[2] === "cat" && got[3] === undefined &&
+      got[4] === "node '/c/cli/dev-spec.js' merge-state %O %A %B %P" && got[5] === "node '/a b/#x/cli/dev-spec.js' merge-state" &&
+      scripts[0] === "/x/it's/cli/dev-spec.js" && scripts[1] === "/y z/cli/dev-spec.js" && scripts[2] === null && scripts[3] === null && S.MERGE_DRIVER_KEY === "merge.dev-spec-state.driver",
+      "1.21 review A3: gitConfigGet reads a git config text as git does (section / key case-insensitive, the subsection exact, quotes and a # inside them, comments, a continued line, the last definition wins); mergeDriverScript names the script before `merge-state` (sh quoting) (got " +
+      js([got, scripts]) + ")");
+
+    // A repository laid out by hand (no git needed): .git/config + a linked worktree whose .git FILE points at gitdir → commondir.
+    const repo = path.join(tmp, "rev-a3-repo");
+    fs.mkdirSync(path.join(repo, ".git", "worktrees", "wt"), { recursive: true });
+    const cliHere = path.resolve(__dirname, "..", "cli", "dev-spec.js").replace(/\\/g, "/");
+    const setDriver = (script) => fs.writeFileSync(path.join(repo, ".git", "config"), '[core]\n\tbare = false\n[merge "dev-spec-state"]\n\tdriver = node \'' + script + '\' merge-state %O %A %B %P\n');
+    S.initProject(repo, ["core"], "en");
+    S.createFeature(repo, "Invoices", ["core"]);
+    const status = () => S.mergeDriverStatus(repo, { cli: cliHere });
+    const s0 = status(); // .gitattributes doesn't name the driver: nothing read, "none"
+    fs.writeFileSync(path.join(repo, ".gitattributes"), "*.png binary\n" + S.MERGE_ATTRIBUTE_LINES.join("\n") + "\n");
+    const s1 = status(); // named, no driver in the config
+    setDriver(cliHere);
+    const s2 = status();
+    const gone = path.join(tmp, "rev-a3-gone", "cli", "dev-spec.js").replace(/\\/g, "/");
+    setDriver(gone);
+    const s3 = status();
+    const other = path.join(tmp, "rev-a3-other", "cli", "dev-spec.js");
+    fs.mkdirSync(path.dirname(other), { recursive: true });
+    fs.writeFileSync(other, "// another copy\n");
+    setDriver(other.replace(/\\/g, "/"));
+    const s4 = status();
+    const wt = path.join(tmp, "rev-a3-wt");
+    fs.mkdirSync(wt, { recursive: true });
+    fs.writeFileSync(path.join(wt, ".git"), "gitdir: " + path.join(repo, ".git", "worktrees", "wt") + "\n");
+    fs.writeFileSync(path.join(repo, ".git", "worktrees", "wt", "commondir"), "../..\n");
+    fs.writeFileSync(path.join(wt, ".gitattributes"), S.MERGE_ATTRIBUTE_LINES.join("\n") + "\n");
+    const s5 = S.mergeDriverStatus(wt, { cli: cliHere });
+    const s6 = S.mergeDriverStatus(repo, { cli: cliHere, driver: "node '" + cliHere + "' merge-state %O %A %B %P" }); // --check passes what git config --get read
+    ok(s0.status === "none" && s0.named === false && s1.status === "not-installed" && s1.named === true && s2.status === "ok" && s2.script === cliHere &&
+      s3.status === "missing" && s3.script === gone && s4.status === "other" && s5.status === "other" && s5.named === true && s6.status === "ok",
+      "1.21 review A3: mergeDriverStatus — none (nothing names the driver) · not-installed (.gitattributes names it, no driver) · ok (this clone's CLI) · missing (the script is gone — a plugin update) · other (another copy); a linked worktree's .git FILE is followed to the common config; a driver the caller read (--check) is used as given (got " +
+      js([s0.status, s1.status, s2.status, s3.status, s4.status, s5.status, s6.status]) + ")");
+
+    // The SessionStart hook: ONE line while the configured script is missing (or another copy), none once it is this clone's.
+    const hookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
+    const session = () => {
+      const r = spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: repo }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: repo, SPEC_PROJECT_DIR: repo } });
+      try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; }
+    };
+    setDriver(gone);
+    const hMissing = session();
+    setDriver(other.replace(/\\/g, "/"));
+    const hOther = session();
+    setDriver(cliHere);
+    const hOk = session();
+    const lineOf = (ctx) => ctx.split("\n").filter((l) => /merge driver/.test(l));
+    ok(lineOf(hMissing).length === 1 && lineOf(hMissing)[0].includes(gone) && /which no longer exists/.test(lineOf(hMissing)[0]) && lineOf(hMissing)[0].includes(S.DEV_SPEC + " merge-state --install") &&
+      lineOf(hOther).length === 1 && /not this plugin's CLI/.test(lineOf(hOther)[0]) && /Invoices|invoices/.test(hOk) && lineOf(hOk).length === 0,
+      "1.21 review A3: the SessionStart hook adds ONE line when .gitattributes names the merge driver and git config runs a missing script (a plugin update) or another copy — the path and the runnable re-install line; none when it runs this clone's CLI (got " +
+      js([lineOf(hMissing), lineOf(hOther), lineOf(hOk)]) + ")");
   }
 
   { // 1.21 F3 — the runnable CLI line (S.DEV_SPEC, i18n/common.js) is safe to paste: quoted for bash AND PowerShell (double quotes,

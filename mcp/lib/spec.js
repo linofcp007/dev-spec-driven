@@ -56,7 +56,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   guardEnabled, guardLevel, impactLines, impactReport, implementsTargets, importSpec, initProject, integrationPlanMd,
   isFeatureFolder, isNetworkPath, isPlaceholderTask, isTemplatePlaceholder, isTestFile, isWslLauncher, listFeatures,
   manageFeature, markdownToHtml, matrixCsv, maybeRefreshCatalog, mdPlainText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
-  MERGE_DRIVER, mergeAttributes, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, milestone,
+  MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, milestone,
   MILESTONE_ACTIONS, MILESTONE_STATUSES, milestoneLine, networkPathInside, nextAction, nextTask, normalizeLang,
   normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, PACK_LIMITS, parseApprovalRolesText,
   parseGitLog, parseTasks, parseTracks, phasePercent, PHASES, placeholderKey, placeholderReport, planBridge, planPaths,
@@ -293,6 +293,11 @@ module.exports = {
   MERGE_DRIVER, // "dev-spec-state" — the git config merge.<driver>.* name
   MERGE_ATTRIBUTE_LINES, // the .gitattributes lines --install writes
   MERGE_CONFLICTS_KEY, // "mergeConflicts" — the list a conflicted merge leaves in the file (doctor fails merge-conflicts)
+  // 1.21 review A3 — is the installed driver still THIS clone's? (a plugin update moves the plugin folder; git then drops theirs)
+  mergeDriverStatus, // (projectDir, {driver?, cli?}) → { status: ok | none | not-installed | other | missing, named, attributes, driver, script, cli } (read only)
+  mergeDriverScript, // the driver command → the script it runs (the word before `merge-state`), or null (pure)
+  gitConfigGet, // (git config file text, "section.sub.key") → the value as git reads it (pure)
+  MERGE_DRIVER_KEY, // "merge.dev-spec-state.driver"
 
   // 1.21 F5 — right-sized rigor (data: the sizes; the sections / tasks two tracks both scaffold — the tiers are TRACK_SECTIONS' own)
   FEATURE_SIZES, // ["xs", "s", "m", "l"] — spec_create {size}

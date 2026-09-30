@@ -743,8 +743,8 @@ function approvalCommand(a, cli) {
 // why (stable): off · no-payload · not-pre-tool-use · not-an-approval · approval. On an approval: `actions` [{kind: approve |
 // remove | guard-down, source: mcp | cli | shell, feature, phase, through, role, by, force, setting (guard-down: approvalGuard |
 // evidence | roles | check | stopCheck | guard | roadmap), from, to, name, removed, project}], `force`, `command` (what the human
-// runs, `!`-prefixed; null when there is none), `reason` (localized — opts.lang: the user reads it for ask, the agent for deny)
-// and, for deny, `userNote` (the line the user sees). opts.cli: the CLI path shown (default: this clone's cli/dev-spec.js);
+// runs, `!`-prefixed — opts.plain: without the `!`, for the MCP server; null when there is none), `reason` (localized — opts.lang:
+// the user reads it for ask, the agent for deny) and, for deny, `userNote` (the line the user sees). opts.cli: the CLI path shown (default: this clone's cli/dev-spec.js);
 // opts.meta: the project's roadmap.json meta (what a spec_init / `init` change is compared with — absent: unknown, fail closed).
 function approvalGuardDecision(payload, level, opts = {}) {
   const lvl = approvalGuardInput(level) || "off";
@@ -772,9 +772,13 @@ function approvalGuardDecision(payload, level, opts = {}) {
   const force = actions.some((a) => a.force);
   const cli = typeof opts.cli === "string" && opts.cli ? opts.cli : i18n.DEV_SPEC_SCRIPT;
   const commands = [...new Set(actions.map((a) => approvalCommand(a, cli)).filter(Boolean))];
-  const command = commands.length ? "! " + commands.join(" && ") : null;
+  // opts.plain (1.21 review A4 — the MCP server, for a client outside Claude Code): the command as a plain runnable line, without
+  // Claude Code's `!` prefix (a PowerShell or cmd.exe user can't run `! node …`), and a deny reason that never mentions it.
+  const plain = opts.plain === true;
+  const command = commands.length ? (plain ? "" : "! ") + commands.join(" && ") : null;
   // summary (1.21 F1b): the actions as one localized line — what the MCP server's elicitation asks the user about.
-  const res = { decision: lvl, why: "approval", level: lvl, tool, actions, force, command, summary: text, reason: lvl === "deny" ? A.deny(text, command) : A.ask(text, force) };
+  const res = { decision: lvl, why: "approval", level: lvl, tool, actions, force, command, summary: text,
+    reason: lvl === "deny" ? (plain ? A.denyMcp(text, command) : A.deny(text, command)) : A.ask(text, force) };
   if (lvl === "deny") res.userNote = A.denyUser(text, command);
   return res;
 }

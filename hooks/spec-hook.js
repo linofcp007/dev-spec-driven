@@ -140,6 +140,15 @@ function handle(raw) {
           lines.push(m.forecast.overlap.hookLine(ov.pairs.length, names));
         }
       } catch { /* best-effort */ }
+      // 1.21 review A3 — the project's .gitattributes names the dev-spec-state merge driver, and git config's driver runs a script that
+      // no longer exists or isn't this plugin's CLI (a plugin update moved the versioned plugin folder): git would keep only ours'
+      // side of a .state.json both branches changed. ONE line. Text reads only (.gitattributes, the repository's config) — no git.
+      try {
+        const md = spec.mergeDriverStatus(pdir, { cli: path.join(__dirname, "..", "cli", "dev-spec.js") });
+        if (md && md.named && (md.status === "missing" || md.status === "other") && m.mergeState && m.mergeState.hookLine) {
+          lines.push(m.mergeState.hookLine(md.script || md.driver, md.status === "missing"));
+        }
+      } catch { /* best-effort */ }
       return emit("SessionStart", h.sessionHeader + "\n" + lines.join("\n"));
     } catch {
       process.exit(0);

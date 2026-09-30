@@ -1174,6 +1174,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, list, __dirname 
       /^fix\(short-one\): /.test(t6) && !/Short summary\./.test(t6),
       "1.21 F3: the merge title is ≤ 72 characters in all — the summary cut at its last , ; — that fits (no ellipsis), else at a word with …; a very long slug keeps a 24-character floor (got " +
       JSON.stringify(all.concat(t6).map((t) => [t, t.length])) + ")");
+    // 1.21 review A5 — the word-boundary fallback (no space: half the budget) used to cut an emoji in two, and a lone high surrogate
+    // landed in merge-summary.md: the cut never splits a surrogate pair. "feat(emoji-cut): " leaves 55 → the fallback cuts at 27,
+    // right inside the emoji at 26–27; one at 25–26 stays whole.
+    const emoji = String.fromCodePoint(0x1f600);
+    const lone = (s) => { for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); if (c >= 0xd800 && c <= 0xdbff) { const d = s.charCodeAt(i + 1); if (!(d >= 0xdc00 && d <= 0xdfff)) return true; i++; } else if (c >= 0xdc00 && c <= 0xdfff) return true; } return false; };
+    const e1 = title("Emoji cut", "a".repeat(26) + emoji + "b".repeat(60));
+    const e2 = title("Emoji two", "a".repeat(25) + emoji + "b".repeat(60));
+    ok(!lone(e1) && e1 === "feat(emoji-cut): " + "a".repeat(26) + "…" && !lone(e2) && e2.includes(emoji) && e2.length <= 72,
+      "1.21 review A5: the merge title never splits an emoji (a UTF-16 surrogate pair) at its cut — no lone surrogate reaches the title / merge-summary.md; a whole emoji before the cut stays (got " +
+      JSON.stringify([e1, e2].map((t) => [t, t.length])) + ")");
   }
 
   { // 1.21 F3 — spec_create {kind: "bugfix"} prefill (reproduction · rootCause · condition · behaviour) + includeBody; the gates unchanged.

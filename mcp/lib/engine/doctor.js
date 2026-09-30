@@ -360,6 +360,7 @@ function nextAction(projectDir, name, opts = {}) {
   let approveExtras = null; // 1.14 B3: {missingRoles?, fastForward?} of the approve step
   let reReviewRefused = null; // the re-review phase whose approve gate would refuse (refusedGate names it)
   let finishedRoles = null; // the roles still to sign the execution phase off (finished step)
+  let finishedComplete = false; // 1.21 review A1: every execution role signed, yet no approval (finished step)
   let suiteMissing = null; // the project checks without a passing run since the last task activity (verify step, finished)
   let depsBlocked = null; // 1.14 F3: [{number, waitsOn}] — open tasks, none can start (fix step)
   // Re-review now only what can be re-approved now: an artifact of a phase AFTER the first pending gate waits for that gate
@@ -500,8 +501,11 @@ function nextAction(projectDir, name, opts = {}) {
         if (signOff && exRoles.length) {
           if (!approvals.execution) {
             const v = roleSignOffs(st, "execution", exRoles, phaseContent(dir, "execution", kind));
-            finishedRoles = v.missing;
-            Object.assign(signOff, { role: v.missing[0] || exRoles[0], missing: v.missing.length ? fm.governance.missing(v.missing) : null, signed: v.signed.join(", ") });
+            const all = !v.missing.length && v.signed.length > 0; // 1.21 review A1: every role signed, no approval — one re-signs
+            finishedRoles = all ? null : v.missing;
+            if (all) finishedComplete = true;
+            Object.assign(signOff, { role: v.missing[0] || v.signed[0] || exRoles[0], missing: all ? fm.governance.signedAll(v.signed.join(", ")) : v.missing.length ? fm.governance.missing(v.missing) : null,
+              signed: all ? "" : v.signed.join(", ") });
           } else signOff.role = exRoles[0];
         }
         recommendation = nx.finished(slug, day, finishedDrift.files, signOff);
@@ -527,6 +531,7 @@ function nextAction(projectDir, name, opts = {}) {
   if (depsBlocked) res.blocked = depsBlocked; // 1.14 F3: stable — the open tasks and the dependencies each waits on
   if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
   if (approveExtras && approveExtras.missingRoles) res.missingRoles = approveExtras.missingRoles; // 1.14 B3: stable — the roles to sign
+  if ((approveExtras && approveExtras.signoffsComplete) || finishedComplete) res.signoffsComplete = true; // 1.21 review A1: stable — every role signed, one re-signs to approve
   if (approveExtras && approveExtras.fastForward) res.fastForward = approveExtras.fastForward; // 1.14 B3: {through, phases, role}
   // 1.21 F5 P3: size XS / S — the one approval call the plan ends with, named from the start (the fill step)
   if (!res.fastForward && planFf && pending && step === "fill" && walk.includes("tasks")) {
@@ -821,6 +826,7 @@ function specDoctor(projectDir, name, opts = {}) {
     const g = approvalChecks(projectDir, slug, dir, pendingGates[0], tracks, kind, lng);
     nextGate = { phase: pendingGates[0], ready: g.artifact && !g.checks.length, failing: g.checks };
     if (rv.pending[pendingGates[0]]) nextGate.missingRoles = rv.pending[pendingGates[0]].missing;
+    if (rv.pending[pendingGates[0]] && rv.pending[pendingGates[0]].signoffsComplete) nextGate.signoffsComplete = true; // 1.21 review A1: re-sign to complete
   }
   // Artifacts edited after THEIR approval (next_action / finish / roadmap's view): re-review, then re-approve —
   // spec_impact lists what the edit touches when the approval has a snapshot.

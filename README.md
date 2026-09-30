@@ -204,7 +204,7 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   `fileMatch` (with `fileMatchPattern: "src/api/**"`) or `manual`. `steering_scaffold` creates custom
   files such as `api-conventions.md`, and each task brief includes the files whose pattern matches the
   task's `_Implements:_` paths.
-- **Teams: git merges the spec state** — `dev-spec merge-state --install` (once per clone; commit the `.gitattributes`
+- **Teams: git merges the spec state** — `dev-spec merge-state --install` (once per clone, and again after a plugin update — `--check` tells; commit the `.gitattributes`
   it writes) makes git merge `.state.json` / `roadmap.json` semantically: two branches' approvals, ticks and evidence are
   united instead of conflicting; a real conflict stays valid JSON (`mergeConflicts`) and doctor fails until it is resolved.
 - **Approvals in other MCP clients** — with `approvalGuard` ask / deny, a client that supports MCP elicitation asks its
@@ -442,7 +442,7 @@ append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revo
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall]
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check]
 ```
 
 ### Why no GitHub Actions
@@ -651,7 +651,7 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   `inclusion: always`, `fileMatch` (com `fileMatchPattern: "src/api/**"`) ou `manual`. O `steering_scaffold`
   cria ficheiros personalizados como `api-conventions.md`, e cada brief de tarefa inclui os ficheiros cujo
   padrão corresponde aos caminhos `_Implements:_` da tarefa.
-- **Equipas: o git combina o estado da spec** — `dev-spec merge-state --install` (uma vez por clone; faz commit do
+- **Equipas: o git combina o estado da spec** — `dev-spec merge-state --install` (uma vez por clone, e de novo após uma atualização do plugin — `--check` diz; faz commit do
   `.gitattributes` que escreve) faz o git combinar `.state.json` / `roadmap.json` pelo significado: as aprovações, tarefas
   concluídas e evidência de dois ramos juntam-se em vez de entrar em conflito; um conflito real fica em JSON válido
   (`mergeConflicts`) e o doctor falha até ser resolvido.
@@ -909,7 +909,7 @@ append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revo
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall]
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check]
 ```
 
 ### Porque não há GitHub Actions
@@ -1122,7 +1122,7 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   `inclusion: always`, `fileMatch` (con `fileMatchPattern: "src/api/**"`) o `manual`. `steering_scaffold`
   crea archivos personalizados como `api-conventions.md`, y cada brief de tarea incluye los archivos cuyo
   patrón coincide con las rutas `_Implements:_` de la tarea.
-- **Equipos: git combina el estado de la spec** — `dev-spec merge-state --install` (una vez por clon; haz commit del
+- **Equipos: git combina el estado de la spec** — `dev-spec merge-state --install` (una vez por clon, y de nuevo tras una actualización del plugin — `--check` lo dice; haz commit del
   `.gitattributes` que escribe) hace que git combine `.state.json` / `roadmap.json` por su significado: las aprobaciones,
   tareas terminadas y evidencia de dos ramas se unen en vez de entrar en conflicto; un conflicto real queda en JSON válido
   (`mergeConflicts`) y doctor falla hasta resolverlo.
@@ -1381,7 +1381,7 @@ append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revo
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall]
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check]
 ```
 
 ### Por qué no hay GitHub Actions

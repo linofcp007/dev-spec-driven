@@ -79,6 +79,7 @@ function codeSpan(s) {
 // end a sentence. A longer sentence is cut at its LAST clause boundary that fits — a comma, a semicolon or a dash (— –) —
 // and reads whole there (no ellipsis); only when no boundary leaves at least a third of the budget is it cut at a word
 // boundary, with "…" (counted in `max`). 1.21 F3: the 1.19 eval run's merge title ran to ~90 characters, cut mid-clause.
+// Lengths are UTF-16 units (an emoji counts two — the line is never longer in code points); a cut never splits a surrogate pair.
 function shortTitle(text, max = 72) {
   const first = String(text || "").split(/(?<!\b(?:e\.g|i\.e|ex|etc|ej|vs|p)\.)(?<=[.!?])\s+(?=\p{Lu})/u)[0].trim();
   if (first.length <= max) return first.replace(/\.$/, "");
@@ -86,11 +87,22 @@ function shortTitle(text, max = 72) {
   let clause = -1;
   for (const m of head.matchAll(/[,;]\s|\s[—–]/g)) if (m.index <= max && m.index >= max / 3) clause = m.index;
   if (clause > 0) return first.slice(0, clause).replace(/[,;:\s—–-]+$/, "");
-  const cut = first.slice(0, max - 1);
-  return cut.slice(0, Math.max(cut.lastIndexOf(" "), Math.floor(max / 2))).replace(/[,;:\s—–-]+$/, "") + "…";
+  const cut = cutAt(first, max - 1);
+  return cutAt(cut, Math.max(cut.lastIndexOf(" "), Math.floor(max / 2))).replace(/[,;:\s—–-]+$/, "") + "…";
 }
-// The merge / commit title: `type(slug): ` + shortTitle, the WHOLE line at most 72 characters — the text gets what the prefix
-// leaves (at least 24, so a very long slug still keeps a readable title).
+// s cut at `end` — one unit earlier when `end` falls inside a surrogate pair (1.21 review A5: the word-boundary fallback cut an emoji
+// in two and merge-summary.md got a lone high surrogate), and without a zero-width joiner left dangling at the end.
+function cutAt(s, end) {
+  const hi = (c) => c >= 0xd800 && c <= 0xdbff, lo = (c) => c >= 0xdc00 && c <= 0xdfff;
+  let e = Math.max(0, Math.min(end, s.length));
+  if (e > 0 && e < s.length && hi(s.charCodeAt(e - 1)) && lo(s.charCodeAt(e))) e--;
+  let out = s.slice(0, e);
+  while (out.length && out.charCodeAt(out.length - 1) === 0x200d) out = out.slice(0, -1);
+  return out;
+}
+// The merge / commit title: `type(slug): ` + shortTitle — the whole line at most 72 characters (COMMIT_TITLE_MAX) whenever the
+// prefix leaves the text at least 24; a longer prefix (a slug over 40 characters) keeps 24 for the text, so the line is
+// prefix + up to 24 (a 60-character slug: up to 92).
 const COMMIT_TITLE_MAX = 72;
 function commitTitle(prefix, text) {
   return prefix + shortTitle(text, Math.max(24, COMMIT_TITLE_MAX - prefix.length));

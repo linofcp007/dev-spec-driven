@@ -534,20 +534,23 @@ const BUG_TEXT_MAX = 20000, BUG_LINE_MAX = 500;
 const RE_BUG_IF_LEAD = /^(?:if|se|si)\s+/i;
 const RE_BUG_THEN_TAIL = /[,;]?\s+(?:then|então|entao|entonces)$/i;
 const RE_BUG_SHALL_LEAD = /^(?:(?:then|então|entao|entonces)\s+)?(?:(?:the system|o sistema|el sistema)\s+(?:shall|must|deve|debe)|shall|deve|debe)\s+/i;
+// The name an input goes by on the caller's surface (1.21 review A8): the MCP key (rootCause), or — opts.cli, the CLI — its flag
+// (--root-cause), so a refusal names what the user typed.
+const bugInputName = (k, opts) => (opts && opts.cli === true ? "--" + k.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()) : k);
 function bugCreateInput(opts, M) {
   const A = M.args;
   const texts = {};
   for (const k of BUG_PREFILL) {
     const v = opts[k];
     if (v == null || (typeof v === "string" && !v.trim())) continue;
-    if (typeof v !== "string") return { error: A.invalid(A.item(k, A.type.string, JSON.stringify(v))) };
+    if (typeof v !== "string") return { error: A.invalid(A.item(bugInputName(k, opts), A.type.string, JSON.stringify(v))) };
     if (k === "condition" || k === "behaviour") {
       let s = v.replace(/\s+/g, " ").trim();
-      if (s.length > BUG_LINE_MAX) return { error: M.bugPrefill.oneLine(k, BUG_LINE_MAX) };
+      if (s.length > BUG_LINE_MAX) return { error: M.bugPrefill.oneLine(bugInputName(k, opts), BUG_LINE_MAX) };
       s = (k === "condition" ? s.replace(RE_BUG_IF_LEAD, "").replace(RE_BUG_THEN_TAIL, "") : s.replace(RE_BUG_SHALL_LEAD, "")).replace(/<!--/g, "&lt;!--").trim();
       if (s) texts[k] = s;
     } else {
-      if (v.length > BUG_TEXT_MAX) return { error: M.decisions.tooLong(k, BUG_TEXT_MAX) };
+      if (v.length > BUG_TEXT_MAX) return { error: M.decisions.tooLong(bugInputName(k, opts), BUG_TEXT_MAX) };
       const s = safeSpecText(v.trim());
       if (s) texts[k] = s;
     }
@@ -619,7 +622,10 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // asked for a bugfix and the folder already has another kind — the kindKept note says so, the inputs are unused).
   const bugMsg = () => i18n.msg(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir)));
   const bugGiven = opts ? BUG_PREFILL.filter((k) => opts[k] != null && String(opts[k]).trim()) : [];
-  if (!bugfix && askedKind !== "bugfix" && bugGiven.length) return { ok: false, error: bugMsg().bugPrefill.bugOnly(bugGiven[0]) };
+  if (!bugfix && askedKind !== "bugfix" && bugGiven.length) {
+    const BP = bugMsg().bugPrefill; // 1.21 review A8: the CLI names its flag and its own way to make a bugfix
+    return { ok: false, error: opts.cli === true ? BP.bugOnlyCli(bugInputName(bugGiven[0], opts)) : BP.bugOnly(bugGiven[0]) };
+  }
   const bugIn = bugfix && bugGiven.length ? bugCreateInput(opts, bugMsg()) : { texts: {} };
   if (bugIn.error) return { ok: false, error: bugIn.error };
   // An EXISTING feature keeps every track it has, plus the new ones asked for — those go through the same
