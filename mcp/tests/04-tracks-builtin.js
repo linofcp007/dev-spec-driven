@@ -1599,6 +1599,26 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     ok(p2Off.every(([tr, t]) => !onOf(t, tr)) && p2On.every(([tr, t]) => onOf(t, tr)),
       "1.21 verify P2: a component subject + a plain negation excludes — 'The importer / scheduler / uploader does not need / use Kafka', 'The crawler won't use an LLM', 'The new search won't use embeddings', 'El importador no necesita Kafka', 'El programador de tareas no usa Kafka', 'O agendador não usa Kafka', 'O nosso importador não vai usar Kafka', 'La versión 2 no añadirá suscripciones' (EN / PT / ES); kept — a permission modal ('The importer can't / cannot / may not use Kafka', 'não pode', 'no puede'), a bare or -s plural ('Suppliers / The importers don't use…', 'Os / Los importadores'), 'A scheduler', a modal on an unread subject ('must not'), a role ('The mobile client', 'Users of the importer', 'The admin approves…') (got " +
       js([p2Off.filter(([tr, t]) => onOf(t, tr)), p2On.filter(([tr, t]) => !onOf(t, tr))]) + ")");
+    // 1.21 verify P3: a negated verb whose object's head noun is data to protect (personal data, PII, a token, a secret, a key, a password,
+    // a card number… + PT / ES) is the requirement — whatever the verb and the subject, the keyword's track stays (EN / PT / ES)
+    const p3On = [["privacy", "The email doesn't include personal data."], ["privacy", "The receipt won't include personal data."],
+      ["privacy", "The export doesn't include personal data."], ["privacy", "The webhook payload won't include personal data."],
+      ["saas", "The webhook payload won't include personal data."], ["tdd", "The URL does not include the session token."],
+      ["privacy", "O email não inclui dados pessoais."], ["privacy", "El correo no incluye datos personales."], ["privacy", "The notification does not include PII."],
+      ["privacy", "The export must not include personal data."], ["privacy", "The API response will not include personal data."],
+      ["privacy", "The chatbot must not use personal data."], ["privacy", "The service must not include personal data in logs."],
+      ["privacy", "O relatório não vai incluir dados pessoais."], ["privacy", "El informe no incluirá datos personales."],
+      ["privacy", "The log does not contain personal data."], ["tdd", "We will not log the payment token."]];
+    const p3Off = [["api", "We must not expose GraphQL."], ["ai", "The MVP must not embed LLMs."], ["saas", "The email doesn't include webhooks."],
+      ["tdd", "We won't use Stripe to store card numbers."], ["privacy", "No personal data."]];
+    // the head, not a modifier or a look-alike: design tokens, a secrets manager, custo de tokens are no data to protect (still excluded);
+    // expose / embed read any protected word as before (N3)
+    const p3Head = [["ui", false, "We won't use design tokens."], ["sec", false, "We don't use a secrets manager."], ["sec", false, "Não vamos usar gestão de segredos."],
+      ["api", false, "We will not add an Idempotency-Key header."], ["sec", true, "Logs must not expose the secrets manager."], ["tdd", true, "We don't use passwords."]];
+    ok(p3On.every(([tr, t]) => onOf(t, tr)) && p3Off.every(([tr, t]) => !onOf(t, tr)) && onOf("The chatbot must not use personal data.", "ai") &&
+      p3Head.every(([tr, on, t]) => onOf(t, tr) === on),
+      "1.21 verify P3: data to protect as a negated verb's object keeps its track — 'The email / receipt / export doesn't include personal data', 'The webhook payload won't include personal data' (+saas +privacy), 'The URL does not include the session token' (+tdd), 'O email não inclui dados pessoais', 'El correo no incluye datos personales', 'The notification does not include PII', 'must not include / use personal data', 'O relatório não vai incluir…', 'El informe no incluirá…'; other objects still exclude — 'We must not expose GraphQL', 'The MVP must not embed LLMs', 'The email doesn't include webhooks', 'We won't use Stripe to store card numbers' (Stripe is the object), a nominal 'No personal data', and a protected word that is no head ('We won't use design tokens', 'We don't use a secrets manager', 'gestão de segredos', 'an Idempotency-Key header'); 'Logs must not expose the secrets manager' keeps +sec (N3) (got " +
+      js([p3On.filter(([tr, t]) => !onOf(t, tr)), p3Off.filter(([tr, t]) => onOf(t, tr)), p3Head.filter(([tr, on, t]) => onOf(t, tr) !== on)]) + ")");
     // 1.21 review B2: a comma after the list's closing conjunction — or one before an article (a new clause's subject) — ends the list
     const b2 = [["tdd", "ai", "Without an LLM or embeddings, the checkout or a subscription page is the priority."],
       ["saas", "dist", "Without Kafka or RabbitMQ, the webhook or a nightly retry job handles delivery."],
