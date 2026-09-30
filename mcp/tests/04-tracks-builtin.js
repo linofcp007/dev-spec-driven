@@ -1579,6 +1579,26 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     ok(p1Subj.every(([tr, on, t]) => onOf(t, tr) === on),
       "1.21 verify P1: the subject reading — 'The service for free users must not use Kafka' excludes (the users are a complement), 'Users of the service can't use webhooks', 'Guests who open the page…', 'We must ensure guests can't…', 'Guests can view the page but can't…', 'Free users, however, can't…' keep; 'For the MVP, don't use Kafka', 'Our team plans not to use Kafka', 'The team doesn't use Kafka', 'The export must not use Kafka' exclude ('the support team' keeps); 'WHEN the month has no invoices' excludes, 'A user who has no subscription cannot use…' keeps (got " +
       js(p1Subj.filter(([tr, on, t]) => onOf(t, tr) !== on)) + ")");
+    // 1.21 verify P2: a singular noun in no list with a definite article, demonstrative or possessive (the / this / our / its, o / a / este /
+    // o nosso, el / la / este / nuestro) is a component of what is being designed — a plain verbal negation excludes; a modal, a bare or
+    // -s plural, an indefinite article and a role / plan keep; the PT / ES 3rd-person future is an adoption verb ("no añadirá")
+    const p2Off = [["dist", "The importer does not need Kafka."], ["dist", "The scheduler does not need Kafka."], ["dist", "The uploader does not use Kafka."],
+      ["dist", "The notifier doesn't use RabbitMQ."], ["ai", "The crawler won't use an LLM."], ["api", "The gateway won't use GraphQL."],
+      ["ai", "The newsletter doesn't use an LLM."], ["ai", "The new search won't use embeddings."], ["dist", "Our importer will not use Kafka."],
+      ["dist", "El importador no necesita Kafka."], ["dist", "El programador de tareas no usa Kafka."], ["dist", "Este importador no usa Kafka."],
+      ["dist", "O agendador não usa Kafka."], ["dist", "O importador não precisa de Kafka."], ["dist", "O nosso importador não vai usar Kafka."],
+      ["tdd", "La versión 2 no añadirá suscripciones."], ["tdd", "A versão 2 não vai adicionar subscrições."], ["tdd", "Version 2 will not add subscriptions."],
+      ["dist", "La primera versión no usará Kafka."]];
+    const p2On = [["tdd", "Drivers don't use the checkout; they get paid by transfer."], ["tdd", "Suppliers don't use the checkout."],
+      ["dist", "The importer can't use Kafka."], ["dist", "The importer cannot use Kafka."], ["dist", "The importer may not use Kafka."],
+      ["dist", "O importador não pode usar Kafka."], ["dist", "El importador no puede usar Kafka."], ["dist", "The importers don't use Kafka."],
+      ["dist", "Os importadores não usam Kafka."], ["dist", "Los importadores no usan Kafka."], ["dist", "A scheduler does not need Kafka."],
+      ["dist", "Kafka consumers must not use auto-commit."], ["ai", "The LLM must not use personal data for training."], ["saas", "The mobile client doesn't need webhooks."],
+      ["dist", "Users of the importer don't need Kafka."], ["dist", "Guests who open the importer don't need Kafka."],
+      ["ai", "The admin approves the invoice and doesn't need an LLM."]];
+    ok(p2Off.every(([tr, t]) => !onOf(t, tr)) && p2On.every(([tr, t]) => onOf(t, tr)),
+      "1.21 verify P2: a component subject + a plain negation excludes — 'The importer / scheduler / uploader does not need / use Kafka', 'The crawler won't use an LLM', 'The new search won't use embeddings', 'El importador no necesita Kafka', 'El programador de tareas no usa Kafka', 'O agendador não usa Kafka', 'O nosso importador não vai usar Kafka', 'La versión 2 no añadirá suscripciones' (EN / PT / ES); kept — a permission modal ('The importer can't / cannot / may not use Kafka', 'não pode', 'no puede'), a bare or -s plural ('Suppliers / The importers don't use…', 'Os / Los importadores'), 'A scheduler', a modal on an unread subject ('must not'), a role ('The mobile client', 'Users of the importer', 'The admin approves…') (got " +
+      js([p2Off.filter(([tr, t]) => onOf(t, tr)), p2On.filter(([tr, t]) => !onOf(t, tr))]) + ")");
     // 1.21 review B2: a comma after the list's closing conjunction — or one before an article (a new clause's subject) — ends the list
     const b2 = [["tdd", "ai", "Without an LLM or embeddings, the checkout or a subscription page is the priority."],
       ["saas", "dist", "Without Kafka or RabbitMQ, the webhook or a nightly retry job handles delivery."],
@@ -1636,7 +1656,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       // 1.21 verify R2: a modal + an enabling / exposing verb excludes an +obs / +api technology (hard negatives)
       ...r2Off.filter(([tr]) => tr === "obs" || tr === "api").map(([, t]) => ["", t]),
       // 1.21 verify P1: a role's negated adoption keeps +obs (EN / PT / ES); the designing subject's excludes it (hard negatives)
-      ...p1On.filter(([tr]) => tr === "obs").map(([, t]) => ["obs", t]), ...p1Off.filter(([tr]) => tr === "obs").map(([, t]) => ["", t])];
+      ...p1On.filter(([tr]) => tr === "obs").map(([, t]) => ["obs", t]), ...p1Off.filter(([tr]) => tr === "obs").map(([, t]) => ["", t]),
+      // 1.21 verify P2: a component's plain negation excludes an +api technology (a hard negative)
+      ...p2Off.filter(([tr]) => tr === "api").map(([, t]) => ["", t])];
     const f2 = ["api", "ui", "obs"].map((tr) => {
       let tp = 0, fp = 0, pos = 0;
       const wrong = [];
