@@ -1,0 +1,130 @@
+"use strict";
+// The single-file engine bundle (1.20): `dev-spec bundle` builds it on demand; with DEV_SPEC_BUNDLE=1 the CLI and the hooks on it
+// print what they print on the modules.
+
+const fs = require("fs");
+const path = require("path");
+const { spawnSync } = require("child_process");
+
+exports.run = ({ ok, run, tmp, CLI, __dirname }) => {
+  const ROOT = path.join(__dirname, "..");
+  const HOOKS = path.join(ROOT, "hooks");
+  // Built by the CLI into tmp (the clone may be read-only — a container's mount): used through DEV_SPEC_BUNDLE_PATH.
+  const bundleFile = path.join(tmp, "p20-bundle", "spec.bundle.js");
+  let built = null;
+  try { built = JSON.parse(run(["bundle", "--out", bundleFile, "--json"]).out); } catch { /* not JSON */ }
+  const human = run(["bundle", "--out", path.join(tmp, "p20-bundle", "second.js")]), badOut = run(["bundle", "--out", "bundle.txt"]), extra = run(["bundle", "now"]);
+  ok(built && built.ok === true && built.file === bundleFile && built.modules >= 30 && built.bytes > 1000000 && fs.existsSync(bundleFile) &&
+    built.env.DEV_SPEC_BUNDLE === "1" && built.env.DEV_SPEC_BUNDLE_PATH === bundleFile && human.code === 0 && /the engine as one file \(\d+ modules/.test(human.out) &&
+    /DEV_SPEC_BUNDLE=1 and DEV_SPEC_BUNDLE_PATH=/.test(human.out) && badOut.code === 1 && /usage: dev-spec bundle \[--out <file\.js>\]/.test(badOut.out) && extra.code === 1,
+    "1.20 dev-spec bundle [--out <file.js>]: builds this clone's engine as one file (the path, its modules and size, the environment to set — --json the same as data); an --out that is no .js file or a stray word is a usage error (got " +
+    JSON.stringify([built && { ...built, file: undefined }, human.out.slice(0, 160), badOut.code, extra.code]) + ")");
+
+  const envOf = (bundle, proj) => {
+    const env = { ...process.env, SPEC_PROJECT_DIR: proj, CLAUDE_PROJECT_DIR: proj };
+    if (bundle) Object.assign(env, { DEV_SPEC_BUNDLE: "1", DEV_SPEC_BUNDLE_PATH: bundleFile }); else { delete env.DEV_SPEC_BUNDLE; delete env.DEV_SPEC_BUNDLE_PATH; }
+    for (const k of ["DEV_SPEC_DEFAULT_LANG", "DEV_SPEC_STOP_CHECK", "DEV_SPEC_GUARD_DEFAULT"]) delete env[k];
+    return env;
+  };
+
+  // The facade takes the bundle on DEV_SPEC_BUNDLE=1 (and only then): one engine file in the require cache instead of ~36.
+  const probe = (bundle) => {
+    const code = "require(" + JSON.stringify(path.join(ROOT, "mcp", "lib", "spec.js")) + ");" +
+      "const k=Object.keys(require.cache);process.stdout.write(JSON.stringify({bundle:k.includes(" + JSON.stringify(bundleFile) + "),modules:k.filter((f)=>/[\\\\/]engine[\\\\/]/.test(f)).length}))";
+    const r = spawnSync(process.execPath, ["-e", code], { encoding: "utf8", env: envOf(bundle, tmp) });
+    try { return JSON.parse(r.stdout); } catch { return { stdout: r.stdout, stderr: String(r.stderr).slice(0, 300) }; }
+  };
+  const onBundle = probe(true), onModules = probe(false);
+  ok(onBundle.bundle === true && onBundle.modules === 0 && onModules.bundle === false && onModules.modules > 20,
+    "1.20 bundle: DEV_SPEC_BUNDLE=1 (+ DEV_SPEC_BUNDLE_PATH) loads the engine from the bundle the CLI built (no engine module file); without it, the modules (got " +
+    JSON.stringify({ onBundle, onModules }) + ")");
+
+  // The same session twice — two fresh projects, one on the modules, one on the bundle: every CLI command and hook prints the
+  // same thing (the project's path and ISO timestamps aside) and leaves the same .specs/ tree.
+  // (the same folder name: the catalog, the roadmap and the release notes print it)
+  const projects = { modules: path.join(tmp, "p20-modules", "app"), bundle: path.join(tmp, "p20-bundle", "app") };
+  Object.values(projects).forEach((p) => fs.mkdirSync(p, { recursive: true }));
+  // a timestamp (ISO, or the export's "2026-09-30 01:05 UTC"), or a date alone (a run across midnight)
+  const iso = /\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z?)?/g;
+  const norm = (s, proj) => {
+    let t = String(s == null ? "" : s);
+    for (const p of [proj, proj.split(path.sep).join("/"), JSON.stringify(proj).slice(1, -1)]) t = t.split(p).join("<proj>");
+    return t.replace(iso, "<ts>");
+  };
+  const reqEn = "# Feature: Login loop\n\n## Summary\nUsers log in with a password.\n\n## User Stories\n\n### US-1 (P1): Log in\n\n#### Acceptance Criteria (EARS)\n" +
+    "1. **US-1.AC-1** — WHEN a user submits a valid email and password THE SYSTEM SHALL start a session\n" +
+    "2. **US-1.AC-2** — IF the password is wrong THEN THE SYSTEM SHALL refuse the login and keep the session closed\n";
+  // task 1's _Verify:_ is runnable: its note-only tick below stays unverified — the stop gate sends "All tasks done" back
+  const tasksEn = "# Tasks: Login loop\n\n## Phase: Build\n- [ ] 1. [US1] Start a session on valid credentials\n  - _Requirements: US-1.AC-1_\n" +
+    "  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Refuse a wrong password\n  - _Requirements: US-1.AC-2_\n  - _Depends: 1_\n";
+  const steps = [
+    ["init", "tdd", "--lang", "en", "--check", "test=node -e \"process.exit(0)\""],
+    ["create", "Login loop", "tdd", "saas", "--summary", "users log in"],
+    ["create", "Relatórios", "privacy", "--lang", "pt", "--summary", "relatórios mensais"],
+    ["spike", "Cache", "--question", "Which cache?", "--timebox", "3d"],
+    ["bugfix", "Crash on save", "--summary", "it crashes when saving"],
+    ["classify", "an llm assistant with tenant billing and gdpr consent"],
+    ["list"], ["status"], ["status", "login-loop"], ["doctor", "login-loop"], ["next-action", "login-loop"], ["clarify", "login-loop"],
+    ["trace", "login-loop", "--matrix"], ["ears", "login-loop"], ["doctor", "relatorios"], ["doctor", "cache"], ["doctor", "crash-on-save"],
+    { write: ["login-loop/requirements.md", reqEn] },
+    ["ears", "login-loop"], ["doctor", "login-loop"], ["approve", "login-loop", "requirements"], ["approve", "login-loop", "design", "--force"],
+    { write: ["login-loop/tasks.md", tasksEn] },
+    ["next-action", "login-loop"], ["brief", "login-loop"], ["next", "login-loop", "--waves"], ["done", "login-loop", "1", "--evidence", "checked by hand"],
+    // (metrics: a feature with no approval — an approved one's lead times are clock time)
+    ["impact", "login-loop"], ["metrics", "relatorios"], ["roadmap"], ["catalog"], ["export", "login-loop", "--md"], ["changelog", "--since", "all"],
+    ["upgrade"], ["drift"], ["finish", "login-loop"], ["stop-check", "--message", "All tasks done."], ["status", "--json"],
+    ["feature", "archive", "cache"], ["init", "--guard", "on", "--approval-guard", "ask"], // (an active spike lets every code edit through)
+    { hook: "spec-hook.js", payload: (p) => ({ hook_event_name: "SessionStart", cwd: p }) },
+    { hook: "spec-hook.js", payload: (p) => ({ hook_event_name: "PostToolUse", tool_name: "Write", cwd: p, tool_input: { file_path: path.join(p, ".specs", "login-loop", "requirements.md") } }) },
+    { hook: "guard-hook.js", payload: (p) => ({ hook_event_name: "PreToolUse", tool_name: "Write", cwd: p, tool_input: { file_path: path.join(p, "src", "app.js"), content: "x" } }) },
+    { hook: "approval-hook.js", payload: (p) => ({ hook_event_name: "PreToolUse", tool_name: "Bash", cwd: p, tool_input: { command: "node cli/dev-spec.js approve login-loop tasks" } }) },
+    { hook: "stop-hook.js", payload: (p) => ({ hook_event_name: "Stop", cwd: p, last_assistant_message: "All tasks done and verified." }) },
+    { hook: "observe-hook.js", payload: (p) => ({ hook_event_name: "PostToolUse", tool_name: "Bash", cwd: p, tool_input: { command: "node -e \"process.exit(0)\"" }, tool_response: { exit_code: 0 } }) },
+    { hook: "plan-hook.js", payload: (p) => ({ hook_event_name: "PostToolUse", tool_name: "ExitPlanMode", cwd: p, tool_input: { plan: "# Plan\n- [ ] add a login page" } }) },
+    ["statusline", "--json"],
+  ];
+  const outs = { modules: [], bundle: [] };
+  for (const [mode, proj] of Object.entries(projects)) {
+    const env = envOf(mode === "bundle", proj);
+    for (const st of steps) {
+      if (st.write) { fs.writeFileSync(path.join(proj, ".specs", st.write[0]), st.write[1]); continue; }
+      const r = st.hook
+        ? spawnSync(process.execPath, [path.join(HOOKS, st.hook)], { encoding: "utf8", env, input: JSON.stringify(st.payload(proj)) })
+        : spawnSync(process.execPath, [CLI, ...st, "--project", proj], { encoding: "utf8", env, cwd: tmp,
+          input: st[0] === "statusline" ? JSON.stringify({ cwd: proj }) : undefined });
+      outs[mode].push({ step: st.hook || st.slice(0, 2).join(" "), code: r.status, out: norm((r.stdout || "") + (r.stderr || ""), proj) });
+    }
+  }
+  const diff = outs.modules.filter((o, i) => o.code !== outs.bundle[i].code || o.out !== outs.bundle[i].out)
+    .map((o) => ({ step: o.step, modules: [o.code, o.out.slice(0, 160)], bundle: [outs.bundle[outs.modules.indexOf(o)].code, outs.bundle[outs.modules.indexOf(o)].out.slice(0, 160)] }));
+  const cli = outs.modules.filter((o) => !/\.js$/.test(o.step));
+  const hooks = outs.modules.filter((o) => /\.js$/.test(o.step));
+  ok(outs.modules.length === outs.bundle.length && diff.length === 0 && cli.length >= 39 && cli.filter((o) => o.out.trim()).length === cli.length &&
+    cli.some((o) => o.code === 1) && cli.some((o) => o.code === 0),
+    "1.20 bundle: " + cli.length + " CLI commands (init, create, bugfix, spike, classify, status, doctor, next-action, trace --matrix, ears, approve, brief, done, impact, " +
+    "metrics, roadmap, catalog, export, changelog, upgrade, drift, finish, stop-check, statusline…) print the same output and exit code on the bundle as on the modules (differ: " +
+    JSON.stringify(diff.filter((d) => !/\.js$/.test(d.step))) + ")");
+  const said = (h, re) => hooks.some((o) => o.step === h && re.test(o.out));
+  ok(diff.every((d) => !/\.js$/.test(d.step)) && hooks.length === 7 && said("spec-hook.js", /login-loop/) && said("guard-hook.js", /"ask"/) &&
+    said("approval-hook.js", /"ask"/) && said("stop-hook.js", /"block"/),
+    "1.20 bundle: the hooks (SessionStart and a requirements.md save, the guard, the approval guard, the stop gate, the observed-run log, the plan bridge) answer the same on the bundle — status lines, ask, ask, block (differ: " +
+    JSON.stringify(diff.filter((d) => /\.js$/.test(d.step))) + ")");
+
+  // …and leave the same .specs/ tree (every file, its content — timestamps aside).
+  const tree = (proj) => {
+    const out = [];
+    const walk = (d) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) walk(p);
+        else out.push(path.relative(proj, p).split(path.sep).join("/") + "\n" + norm(fs.readFileSync(p, "utf8"), proj));
+      }
+    };
+    walk(path.join(proj, ".specs"));
+    return out;
+  };
+  const tm = tree(projects.modules), tb = tree(projects.bundle);
+  const treeDiff = tm.filter((x, i) => x !== tb[i]).map((x) => x.split("\n")[0]);
+  ok(tm.length > 30 && tm.length === tb.length && treeDiff.length === 0,
+    "1.20 bundle: the session leaves the same .specs/ tree on the bundle as on the modules — " + tm.length + " files, byte for byte (timestamps aside) (differ: " + JSON.stringify(treeDiff) + ")");
+};

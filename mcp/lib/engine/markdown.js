@@ -9,16 +9,18 @@
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
+const crypto = require("crypto");
+const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 const { MARKER_TRACKS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, existingFeature, extractAcIds, featureFlow,
-  flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket, markerTracks,
-  OPTIONAL_TRACKS, packRegistry, parseTasks, projectTemplateHas, readIfExists, replaceCodeSpans, stripSupersedes,
-  taskDescription, trackLabel, trackMarker, useTemplateScopeOf, VALID_TRACKS;
-function __link(E) { ({ atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, existingFeature,
+let atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature, extractAcIds,
+  featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket,
+  markerTracks, OPTIONAL_TRACKS, packRegistry, parseTasks, projectTemplateHas, readIfExists, replaceCodeSpans,
+  stripSupersedes, taskDescription, trackLabel, trackMarker, useTemplateScopeOf, VALID_TRACKS;
+function __link(E) { ({ atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature,
   extractAcIds, featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf,
   isPackMarkerBracket, markerTracks, OPTIONAL_TRACKS, packRegistry, parseTasks, projectTemplateHas, readIfExists,
   replaceCodeSpans, stripSupersedes, taskDescription, trackLabel, trackMarker, useTemplateScopeOf, VALID_TRACKS } = E); }
@@ -140,23 +142,32 @@ function clarificationMarkers(md) {
   return out;
 }
 // The scaffold's own +saas/+ai track tasks (every language): their descriptions are template text until the
-// user edits them — "Emit metrics, add dashboard, configure alerts" is not a breakdown yet.
+// user edits them — "Emit metrics, add dashboard, configure alerts" is not a breakdown yet. Built-in: the pre-generated
+// corpus (builtinCorpus) or rendered.
 let TEMPLATE_TASKS = null;
 function templateTaskSet() {
   if (TEMPLATE_TASKS) return TEMPLATE_TASKS;
+  const c = builtinCorpus();
+  return (TEMPLATE_TASKS = new Set(c ? c.tasks : renderTemplateTasks()));
+}
+function renderTemplateTasks() {
   const set = new Set();
   for (const l of i18n.LANGS) {
     for (const t of parseTasks(i18n.tasks({ name: "x", tracks: VALID_TRACKS, label: "", slug: "x" }, l))) set.add(taskDescription(t.text));
   }
-  return (TEMPLATE_TASKS = set);
+  return [...set];
 }
 // The bugfix steps (every language). They ARE the method — kept verbatim, so never placeholders — but on a
 // fresh bugfix they don't mean "broken into tasks" yet: detectPhase counts them once the planning chain is filled.
 let BUG_STEPS = null;
+const renderBugSteps = () => i18n.LANGS.flatMap((l) => parseTasks(i18n.bugTasks("x", l)).map((t) => taskDescription(t.text)));
+function bugStepSet() {
+  if (!BUG_STEPS) { const c = builtinCorpus(); BUG_STEPS = new Set(c ? c.bugSteps : renderBugSteps()); }
+  return BUG_STEPS;
+}
 function isBugStep(text) {
-  if (!BUG_STEPS) BUG_STEPS = new Set(i18n.LANGS.flatMap((l) => parseTasks(i18n.bugTasks("x", l)).map((t) => taskDescription(t.text))));
   const d = taskDescription(text);
-  return BUG_STEPS.has(d) || projectTemplateHas("bugSteps", d); // + the project's bug-tasks template (1.14)
+  return bugStepSet().has(d) || projectTemplateHas("bugSteps", d); // + the project's bug-tasks template (1.14)
 }
 // A scaffold task: its whole description is a [bracketed placeholder] (after the known tags), or it is
 // still the verbatim text of a +saas/+ai template task — or of a task of the project's tasks template (1.14).
@@ -502,6 +513,10 @@ function templateBracketKeys(text, seen) {
 let TEMPLATE_SETS = null;
 function templateSets() {
   if (TEMPLATE_SETS) return TEMPLATE_SETS;
+  const c = builtinCorpus();
+  return (TEMPLATE_SETS = c ? { brackets: new Set(c.brackets), code: new Set(c.code) } : renderTemplateSets());
+}
+function renderTemplateSets() {
   const brackets = new Set(LEGACY_TEMPLATE_PLACEHOLDERS), code = new Set();
   const seen = new Set();
   CTX.BUILTIN_CORPUS_BUILD++; // a process-wide cache: the current call's track packs never shape it (isPackMarkerBracket)
@@ -512,7 +527,7 @@ function templateSets() {
       k.code.forEach((x) => code.add(x));
     }
   } finally { CTX.BUILTIN_CORPUS_BUILD--; }
-  return (TEMPLATE_SETS = { brackets, code });
+  return { brackets, code };
 }
 // pt-BR (1.14 D1) renders every pt template through i18n.toPtBr, whose rules never cross a line: its slots are exactly the
 // pt corpus's visible bracket lines transformed one by one (the corpus is not rendered a fourth time). Built on the first
@@ -520,7 +535,11 @@ function templateSets() {
 let TEMPLATE_SETS_BR = null;
 function templateSetsBr() {
   if (TEMPLATE_SETS_BR) return TEMPLATE_SETS_BR;
-  const base = templateSets(), brackets = new Set(), code = new Set(), seen = new Set(), done = new Set();
+  const c = builtinCorpus();
+  return (TEMPLATE_SETS_BR = c ? { brackets: new Set(c.bracketsBr), code: new Set(c.codeBr) } : renderTemplateSetsBr(templateSets()));
+}
+function renderTemplateSetsBr(base) {
+  const brackets = new Set(), code = new Set(), seen = new Set(), done = new Set();
   CTX.BUILTIN_CORPUS_BUILD++;
   try {
     for (const t of new Set(templateCorpus(["pt"]))) for (const [, line] of visibleLines(t)) {
@@ -533,8 +552,91 @@ function templateSetsBr() {
       k.code.forEach((x) => { if (!base.code.has(x)) code.add(x); });
     }
   } finally { CTX.BUILTIN_CORPUS_BUILD--; }
-  return (TEMPLATE_SETS_BR = { brackets, code });
+  return { brackets, code };
 }
+
+// ---------------------------------------------------------------------------
+// The pre-generated built-in corpus (1.20)
+// ---------------------------------------------------------------------------
+// The built-in part of the corpus — templateSets, templateSetsBr, templateTaskSet, the bug steps — is the same in every
+// process of one engine, and rendering it (1,165 texts, their pt-BR twins through toPtBr: ~200 ms) was the biggest slice of
+// a hook or CLI call. scripts/build.js (`npm run build`) renders it ONCE with the functions above (renderCorpusData) into
+// engine/corpus.generated.json, stamped with the engine version and the hash of CORPUS_SOURCES — every file the render runs
+// through (mcp/test.js proves the list with V8 coverage). A process reads that file (one JSON.parse) only while both stamps
+// match the engine it LOADED (the version read at load, the sources as they were at load — LOADED_STATS below); otherwise —
+// a hand-edited clone that wasn't rebuilt, a missing or broken file, sources updated under a running process — it renders
+// as before: a slower answer, never a wrong one. Inside spec.bundle.js the corpus is the copy the build embedded beside the
+// very sources it was rendered from (module.bundle — undefined under Node's own loader). The per-project part (the
+// project's templates, its track packs: projectTemplateHas, packCorpusSets) stays computed per call. Only .has() is ever
+// asked of these sets.
+const CORPUS_FILE = "corpus.generated.json";
+const CORPUS_KEYS = ["brackets", "code", "bracketsBr", "codeBr", "tasks", "bugSteps"];
+const CORPUS_SOURCES = ["i18n.js", "i18n/common.js", "i18n/en.js", "i18n/es.js", "i18n/pt-br.js", "i18n/pt.js", "engine/core.js",
+  "engine/markdown.js", "engine/packs.js", "engine/tasks.js", "engine/tracks.js"]; // mcp/lib-relative, in hash order
+// A source file's text as the stamp reads it: a leading BOM and CRLF line ends are encoding, not code.
+function sourceText(buf) {
+  if (!buf.includes(13) && !(buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf)) return buf;
+  const s = buf.toString("utf8").replace(/\r\n/g, "\n");
+  return Buffer.from(s.charCodeAt(0) === 0xfeff ? s.slice(1) : s, "utf8");
+}
+// sha1 over CORPUS_SOURCES (each file's path and text) — libDir: the mcp/lib folder (default: this engine's).
+function corpusSourcesHash(libDir) {
+  const dir = libDir || path.join(__dirname, "..");
+  const h = crypto.createHash("sha1");
+  for (const rel of CORPUS_SOURCES) h.update(rel + "\0").update(sourceText(fs.readFileSync(path.join(dir, ...rel.split("/"))))).update("\0");
+  return h.digest("hex");
+}
+// The stamp's inputs as this process LOADED them (1.20 review). A long-lived process — the MCP server — keeps the code it
+// loaded while a `git pull` or `npm run build` rewrites the sources AND the corpus under it: compared with the files as they
+// are at its first placeholder question, the old code would trust a corpus rendered from the NEW sources (a reworded slot of
+// its own fresh scaffold would then read as the user's text). So every source's size, mtime and ctime are taken as the engine
+// loads (one stat each, no read — ~0.5 ms), and the version is the one read at load (engineVersion, upgrade.js); the file is
+// trusted only while every source still has them — its text on disk is then the text this process runs, and the sources
+// hash is compared as before (an edit that keeps a file's size, mtime AND ctime is the accepted limit). A language file loads
+// on its first use (i18n.js): one that loads after the corpus was trusted and has changed since the engine loaded drops the
+// corpus (localeLoaded) — the sets render again, from the code this process now runs. Not in a bundle (its corpus is
+// embedded beside the very sources it was rendered from, which never change under it).
+const sourceStat = (rel) => {
+  try { const st = fs.statSync(path.join(__dirname, "..", ...rel.split("/"))); return st.size + ":" + st.mtimeMs + ":" + st.ctimeMs; } catch { return null; }
+};
+const LOADED_STATS = module.bundle ? null : new Map(CORPUS_SOURCES.map((rel) => [rel, sourceStat(rel)]));
+const sourcesUnchanged = () => !!LOADED_STATS && CORPUS_SOURCES.every((rel) => { const s = LOADED_STATS.get(rel); return s !== null && sourceStat(rel) === s; });
+// The built-in corpus as it renders now → { brackets, code, bracketsBr, codeBr, tasks, bugSteps }: sorted string lists (the
+// sets' members — code-unit order, stable across Node versions). What scripts/build.js writes, and what the tests compare.
+function renderCorpusData() {
+  const sort = (xs) => [...xs].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const base = renderTemplateSets(), br = renderTemplateSetsBr(base);
+  return { brackets: sort(base.brackets), code: sort(base.code), bracketsBr: sort(br.brackets), codeBr: sort(br.code),
+    tasks: sort(renderTemplateTasks()), bugSteps: sort(new Set(renderBugSteps())) };
+}
+let BUILTIN_CORPUS = undefined; // undefined: not looked for yet · null: none usable (render) · else the data
+let BUILTIN_CORPUS_FROM = "render"; // "file" | "bundle" | "render" — where this process's built-in corpus comes from
+function builtinCorpus() {
+  if (BUILTIN_CORPUS !== undefined) return BUILTIN_CORPUS;
+  BUILTIN_CORPUS = null;
+  try {
+    const b = module.bundle; // set by spec.bundle.js's module registry only
+    const data = b ? b.corpus() : JSON.parse(fs.readFileSync(path.join(__dirname, CORPUS_FILE), "utf8"));
+    // The load-time version and (the modules) the sources' hash, the sources unchanged since the engine loaded — stat'ed
+    // AFTER the hash read them, so a file rewritten before or while it was hashed is never trusted.
+    if (data && typeof data === "object" && CORPUS_KEYS.every((k) => Array.isArray(data[k]) && data[k].every((x) => typeof x === "string")) &&
+      data.version === engineVersion() && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
+      BUILTIN_CORPUS = data;
+      BUILTIN_CORPUS_FROM = b ? "bundle" : "file";
+    }
+  } catch { /* missing, unreadable or malformed: render */ }
+  return BUILTIN_CORPUS;
+}
+const builtinCorpusSource = () => { builtinCorpus(); return BUILTIN_CORPUS_FROM; };
+// i18n.js tells us each language file it loads (en / pt / es.js on first use, pt-br.js): one changed since the engine loaded
+// makes a trusted file corpus the corpus of code this process doesn't run — dropped, with the sets built from it.
+function localeLoaded(rel) {
+  if (BUILTIN_CORPUS_FROM !== "file" || !LOADED_STATS.has(rel) || sourceStat(rel) === LOADED_STATS.get(rel)) return;
+  BUILTIN_CORPUS = null; // looked for, none usable: the sets render on their next use
+  BUILTIN_CORPUS_FROM = "render";
+  TEMPLATE_SETS = TEMPLATE_SETS_BR = TEMPLATE_TASKS = BUG_STEPS = null;
+}
+if (LOADED_STATS) i18n.onLocaleLoad(localeLoaded);
 // …and the slots of the project's own templates (.specs/templates/ — projectTemplateHas, 1.14).
 const isTemplatePlaceholder = (inner) => { const k = placeholderKey(inner); return isGenericSlot(inner) || templateSets().brackets.has(k) || templateSetsBr().brackets.has(k) || projectTemplateHas("brackets", k); };
 // A code span is opaque — `[Authorize]`, `[dependencies]`, `[aeiou]`, `[]`, `["a"]` are code — except a template's own
@@ -764,11 +866,12 @@ function bugTemplateSlots() {
 }
 
 module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirementAcIds, planIdText, clarificationMarkers,
-  templateTaskSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
+  templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
   headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, extractSection,
   RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
   RE_LIST_CHECKBOX, placeholderKey, isGenericSlot, unknownSteeringStub, LEGACY_TEMPLATE_PLACEHOLDERS, templateCorpus,
-  templateBracketKeys, templateSets, templateSetsBr, isTemplatePlaceholder, isCodeSlot, visibleLines, placeholderReport,
+  templateBracketKeys, templateSets, templateSetsBr, CORPUS_FILE, CORPUS_SOURCES, corpusSourcesHash, renderCorpusData,
+  builtinCorpusSource, isTemplatePlaceholder, isCodeSlot, visibleLines, placeholderReport,
   bracketPlaceholders, scanBrackets, artifactState, headingsOnly, RE_MANUAL_VERIFY, artifactReport, featurePlaceholders,
   placeholderSummary, chainPlaceholders, hasProseOutsideBrackets, bugPlaceholders, RE_TODO_SENTINEL_LINE,
   bugTemplateSlots, __link };

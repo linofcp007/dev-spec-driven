@@ -2,7 +2,7 @@
 
 /**
  * dev-spec-driven — local spec engine (the facade).
- * Zero-dependency. Pure Node core (fs, path). No network, no cost.
+ * Zero-dependency. Pure Node core (fs, path, module). No network, no cost.
  *
  * Operates on a project's `.specs/` directory. The MCP server (server.js), the CLI and the hooks require THIS file; the
  * logic lives in mcp/lib/engine/ (one module per concern — the module map and the rule are in engine/index.js). This
@@ -14,9 +14,38 @@
 // compiles the engine's modules again — the cache keeps their compiled code between processes (one small file per module
 // and Node version, in NODE_COMPILE_CACHE or <os.tmpdir()>/node-compile-cache; NODE_DISABLE_COMPILE_CACHE=1 turns it off).
 // A quiet optimization: it never throws; the first process after an update writes the cache (once), a cache that can't
-// be written only costs the time it would have saved. Measured and explained in CLAUDE.md ("Few, cohesive files").
+// be written only costs the time it would have saved. Measured and explained in docs/maintainers/architecture.md (The
+// module rule — "Few, cohesive files").
 try { require("module").enableCompileCache?.(); } catch { /* never a reason to fail */ }
-const i18n = require("./i18n.js");
+// 1.20 — where the engine loads from. By default its modules (engine/index.js and i18n.js, ~36 files). With DEV_SPEC_BUNDLE=1
+// (opt-in, for a slow file system — a Docker Desktop bind mount, a network drive, WSL's /mnt/c — where every file costs
+// tens of ms) the same modules from ONE file the user builds (`dev-spec bundle`, never committed): spec.bundle.js here, or
+// DEV_SPEC_BUNDLE_PATH (an absolute path to a .js file; anything else is ignored). Only while it is current: its version
+// stamp is package.json's and every module it holds still has the size and mtime it was built from — one stat per module,
+// no read (a plugin update or an edit since the build). A missing, broken or stale bundle: the modules, silently — hooks
+// and the status line print nothing about it. The bundle runs each module's source verbatim (its own __dirname, the same
+// load order and __link): no behaviour differs. docs/maintainers/architecture.md → The build.
+const { i18n, engine } = loadEngine();
+function loadEngine() {
+  if (/^(?:1|true|yes|on)$/i.test(String(process.env.DEV_SPEC_BUNDLE || "").trim())) {
+    try {
+      const fs = require("fs"), path = require("path");
+      const given = String(process.env.DEV_SPEC_BUNDLE_PATH || "").trim();
+      const b = require(path.isAbsolute(given) && /\.js$/i.test(given) ? given : path.join(__dirname, "spec.bundle.js"));
+      const pkg = fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf8");
+      const version = JSON.parse(pkg.charCodeAt(0) === 0xfeff ? pkg.slice(1) : pkg).version;
+      const current = ([rel, size, mtimeMs]) => {
+        const st = fs.statSync(path.join(__dirname, ...String(rel).split("/")), { throwIfNoEntry: false });
+        return !!st && st.size === size && st.mtimeMs === mtimeMs;
+      };
+      if (b.stamp.version === String(version).trim() && b.stamp.files.length > 0 && b.stamp.files.every(current)) {
+        const req = b.load(__dirname);
+        return { i18n: req("./i18n.js"), engine: req("./engine/index.js") };
+      }
+    } catch { /* missing, broken or foreign: the modules */ }
+  }
+  return { i18n: require("./i18n.js"), engine: require("./engine/index.js") };
+}
 const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalGuardDecision, approvalGuardLevel,
   approvalRolesOf, approvePhase, archiveFeature, artifactState, backlog, BACKLOG_ACTIONS, catalog, changelog,
   checklistMd, clarify, classify, CLI_SWITCHES, compareSemver, completeTask, couldNotRunOutput, coverage, createFeature,
@@ -40,7 +69,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   taskWaves, TEMPLATE_ARTIFACTS, templateBracketKeys, templateKey, templates, templateSets, traceCheck, traceGapLines,
   traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks,
   userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, windowsShellFailure, withFeatureLock, withinRoot,
-  withReadCache, writeRoadmapHtml, writeRoadmapMd } = require("./engine/index.js");
+  withReadCache, writeRoadmapHtml, writeRoadmapMd } = engine;
 
 module.exports = {
   CLI_SWITCHES, // the CLI's boolean switches — ONE list (cli/dev-spec.js BOOL_FLAGS, the approval hook's lexer)

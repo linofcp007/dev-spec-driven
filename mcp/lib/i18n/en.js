@@ -1371,6 +1371,8 @@ const msg = {
       missingValue: (flag) => `missing value for --${flag}`,
       unknownFlag: (flag, suggestion) => `unknown option ${flag}` + (suggestion ? ` — did you mean ${suggestion}?` : ".") + " Run `dev-spec help` for the options.",
       unknownRules: (tool, known) => `unknown tool '${tool}'. Known: ${known}`,
+      bundleWrote: (file, n, kb) => `Wrote ${file} — the engine as one file (${n} modules, ${kb} KB).`,
+      bundleUse: (custom) => `Set DEV_SPEC_BUNDLE=1${custom ? ` and DEV_SPEC_BUNDLE_PATH=${custom}` : ""} in the environment Claude Code / your MCP client starts with to load it. Rebuild after every plugin update: a stale bundle is ignored (the modules load).`,
       scaleSections: (list) => `Scale sections: ${list}`,
       aiSections: (list) => `AI sections: ${list}`,
       dependsOn: (f, deps, order, unknown) => `${f} depends on: ${deps || "(none)"}` + (order != null ? `  order=${order}` : "") + (unknown ? `  ⚠ unknown deps: ${unknown}` : ""),

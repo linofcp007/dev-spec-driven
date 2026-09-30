@@ -102,6 +102,8 @@
  *                                      with this clone's absolute paths, to paste into a project
  *   prompts [name] [--args "…"]        The MCP prompts (one per plugin command): list them, or print one rendered as
  *                                      prompts/get returns it ($ARGUMENTS ← --args, or the words after the name)
+ *   bundle [--out <file.js>]           Build this clone's engine as ONE file (mcp/lib/spec.bundle.js, git-ignored) for a
+ *                                      slow file system — used with DEV_SPEC_BUNDLE=1 (+ DEV_SPEC_BUNDLE_PATH for --out)
  *
  * Flags: --json (raw JSON output) · --project <dir> (project root, default cwd) · --lang en|pt|pt-BR|es
  *        done: --run · --shell bash|<path> · --timeout <s> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
@@ -187,6 +189,7 @@ VALUE_FLAGS.add("flow"); // create --flow design-first · feature flow <name> --
 ["question", "timebox", "title", "decision", "context", "consequences", "affects", "supersedes"].forEach((k) => VALUE_FLAGS.add(k));
 VALUE_FLAGS.add("depends"); // 1.14 F3: append-tasks --depends 3,5 (repeatable) = spec_append_tasks {tasks: [{depends}]}
 ["reason", "expires"].forEach((k) => VALUE_FLAGS.add(k)); // 1.16 U: undone --reason · approve --revoke --reason · approve --force --reason --expires (= spec_complete_task {undo, reason}, spec_approve {revoke, reason, expires})
+VALUE_FLAGS.add("out"); // 1.20: bundle --out <file.js> — the one-file engine written elsewhere (a read-only clone: DEV_SPEC_BUNDLE_PATH)
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -1403,6 +1406,20 @@ function main() {
     case "mcp-config":
       return console.log(mcpConfig(pos[0]));
 
+    case "bundle": {
+      // 1.20: dev-spec bundle [--out <file.js>] — THIS clone's engine as one file (scripts/build.js --bundle), for a slow file
+      // system: loaded only with DEV_SPEC_BUNDLE=1 (DEV_SPEC_BUNDLE_PATH=<file> for --out) and while it is current — rebuild
+      // after every plugin update. Needs no project; never committed (git-ignored).
+      const outFile = typeof flags.out === "string" ? path.resolve(flags.out) : null;
+      if (pos.length || (outFile && !/\.js$/i.test(outFile))) usage("dev-spec bundle [--out <file.js>]");
+      const B = require(path.join(__dirname, "..", "scripts", "build.js"));
+      let r;
+      try { r = B.writeBundle(outFile || B.BUNDLE_PATH); } catch (e) { return die(e.message); }
+      const T = projectText();
+      return out({ ok: true, ...r, env: outFile ? { DEV_SPEC_BUNDLE: "1", DEV_SPEC_BUNDLE_PATH: r.file } : { DEV_SPEC_BUNDLE: "1" } },
+        () => console.log(T.bundleWrote(r.file, r.modules, Math.round(r.bytes / 1024)) + "\n" + T.bundleUse(outFile ? r.file : null)));
+    }
+
     case "statusline": // --print-config (the render path runs before the flag checks, in main)
       return on("print-config") ? statusLineConfig() : statusLineRender();
 
@@ -1595,6 +1612,9 @@ function helpText() {
   rules <tool>                    Print a rule file (cursor|windsurf|copilot|gemini|agents) with this clone's absolute paths
   prompts [name] [--args "…"]     The MCP prompts (one per plugin command — slash commands in MCP clients): list them, or print
                                   one rendered as prompts/get returns it ($ARGUMENTS ← --args, or the words after the name)
+  bundle [--out <file.js>]        Build this clone's engine as ONE file (mcp/lib/spec.bundle.js, git-ignored) for a slow file
+                                  system (Docker bind mount, network drive, WSL /mnt/c): set DEV_SPEC_BUNDLE=1 (with --out, also
+                                  DEV_SPEC_BUNDLE_PATH=<file>); rebuild after every plugin update — a stale bundle is ignored
 
   Flags: --json  --project <dir>  --lang en|pt|pt-BR|es (init/create/steering/roadmap/ears)  --order N (depend)
          --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix|spike (create; spike: --question, --timebox)  --text "…" (ears)

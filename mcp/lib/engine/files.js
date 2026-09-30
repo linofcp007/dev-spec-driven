@@ -5,7 +5,8 @@
  * Project and .specs/ paths, create-only and atomic writes, JSON reads, the per-call read cache (withReadCache: one
  * read per file per engine call — the engine's writers keep it true), path containment (drive roots, 8.3 names,
  * junctions, network paths), and the cross-process locks: the feature lock, the roadmap lock, folder moves under the
- * lock and the .specs/.gitignore lock lines (the mutual-exclusion rules: CLAUDE.md → Conventions & gotchas).
+ * lock and the .specs/.gitignore lock lines (the mutual-exclusion rules: docs/maintainers/conventions.md → Conventions &
+ * gotchas).
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */

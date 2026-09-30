@@ -217,6 +217,12 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
 
+### New in 1.20
+
+- **Easier to maintain, faster to start** — the maintainer notes, the test suites (`--only`, `--list`, parallel) and the
+  track engine are split into smaller files, and the placeholder corpus is pre-generated (SessionStart ~37% faster); an
+  optional one-file engine (`dev-spec bundle`, `DEV_SPEC_BUNDLE=1`) for a slow file system. No behaviour change.
+
 ### New in 1.19
 
 - **Reuse before writing** — every design names what it reuses, extends or adds and where it lives (a Reuse & Integration
@@ -641,6 +647,13 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabalho, aprovações forçadas, pedidos de
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
+
+### Novidades da 1.20
+
+- **Mais fácil de manter, mais rápido a arrancar** — as notas de manutenção, as suites de testes (`--only`, `--list`, em
+  paralelo) e o motor dos tracks passam a ficheiros mais pequenos, e o corpus de placeholders é pré-gerado (SessionStart
+  ~37% mais rápido); um motor opcional num só ficheiro (`dev-spec bundle`, `DEV_SPEC_BUNDLE=1`) para um sistema de ficheiros
+  lento. Sem mudança de comportamento.
 
 ### Novidades da 1.19
 
@@ -1086,6 +1099,13 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
 
+### Novedades de la 1.20
+
+- **Más fácil de mantener, más rápido al arrancar** — las notas de mantenimiento, las suites de pruebas (`--only`, `--list`,
+  en paralelo) y el motor de los tracks pasan a archivos más pequeños, y el corpus de placeholders se genera de antemano
+  (SessionStart ~37% más rápido); un motor opcional en un solo archivo (`dev-spec bundle`, `DEV_SPEC_BUNDLE=1`) para un
+  sistema de archivos lento. Sin cambio de comportamiento.
+
 ### Novedades de la 1.19
 
 - **Reutilizar antes de escribir** — todo diseño dice qué reutiliza, extiende o añade y dónde vive (una sección Reuse &
@@ -1353,14 +1373,16 @@ dev-spec-driven/                      ← plugin root
 │   ├── lib/i18n/                     ← each language's text (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)
-│   └── test.js                       ← smoke test (node mcp/test.js — must end `0 failed`)
-├── scripts/test-docker.js            ← both suites in Linux containers (npm run test:docker)
+│   ├── test.js                       ← the MCP test suite (node mcp/test.js — must end `0 failed`; --only <area>, --list)
+│   └── tests/                        ← its files, one per area (cli/test-cli.js + cli/tests/: the CLI suite)
+├── scripts/                          ← test-runner.js (both suites' runner) · test-docker.js (both suites in Linux containers)
 ├── hooks/                            ← local automation (PostToolUse, SessionStart, Stop/SubagentStop evidence gate, Bash observed-evidence log, opt-in PreToolUse guard + approval guard, pre-commit)
 ├── AGENTS.md                         ← portable workflow (Codex/Gemini/Cursor/Windsurf/…)
 ├── .cursor/ · .windsurf/ · .github/copilot-instructions.md · GEMINI.md   ← per-tool rules
 ├── integrations/                     ← MCP config templates per tool (placeholder path; `mcp-config` fills it)
 ├── examples/demo-project/            ← a worked feature (1.14 shape) that passes doctor + trace
 ├── INTEGRATIONS.md                   ← how to use it in every tool (+ MCP configs)
+├── docs/maintainers/                 ← maintainer notes by topic (CLAUDE.md is their short index)
 ├── package.json · LICENSE · CHANGELOG.md · CLAUDE.md
 └── INSTALL.md
 ```

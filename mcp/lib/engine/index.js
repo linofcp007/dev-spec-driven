@@ -12,10 +12,10 @@
  * in another module (checked here). mcp/test.js ("1.18 module rule") checks the rest.
  */
 
-const MODULES = ["./core.js", "./files.js", "./state.js", "./markdown.js", "./tracks.js", "./templates.js",
-  "./scaffold.js", "./tasks.js", "./evidence.js", "./trace.js", "./gates.js", "./doctor.js", "./quality.js",
-  "./finish.js", "./roadmap-md.js", "./decisions.js", "./export.js", "./guards.js", "./upgrade.js", "./scan.js",
-  "./import/common.js", "./import/kiro.js", "./import/speckit.js", "./import/openspec.js", "./import/plan.js",
+const MODULES = ["./core.js", "./files.js", "./state.js", "./markdown.js", "./tracks.js", "./classify.js", "./packs.js",
+  "./templates.js", "./scaffold.js", "./tasks.js", "./evidence.js", "./trace.js", "./gates.js", "./doctor.js",
+  "./quality.js", "./finish.js", "./roadmap-md.js", "./decisions.js", "./export.js", "./guards.js", "./upgrade.js",
+  "./scan.js", "./import/common.js", "./import/kiro.js", "./import/speckit.js", "./import/openspec.js", "./import/plan.js",
   "./import/bmad.js", "./import/fluidplan.js", "./import/index.js"];
 const E = {};
 const mods = MODULES.map((f) => require(f));

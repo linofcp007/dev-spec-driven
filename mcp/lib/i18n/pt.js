@@ -1345,6 +1345,8 @@ const msg = {
       missingValue: (flag) => `falta o valor de --${flag}`,
       unknownFlag: (flag, suggestion) => `opção desconhecida ${flag}` + (suggestion ? ` — será ${suggestion}?` : ".") + " As opções estão em `dev-spec help`.",
       unknownRules: (tool, known) => `ferramenta desconhecida '${tool}'. Conhecidas: ${known}`,
+      bundleWrote: (file, n, kb) => `Escrito ${file} — o motor num só ficheiro (${n} módulos, ${kb} KB).`,
+      bundleUse: (custom) => `Com DEV_SPEC_BUNDLE=1${custom ? ` e DEV_SPEC_BUNDLE_PATH=${custom}` : ""} no ambiente com que o Claude Code / o teu cliente MCP arranca, o motor passa a ser carregado deste ficheiro. Após cada atualização do plugin, gera um bundle novo: um bundle desatualizado é ignorado e os módulos são carregados.`,
       scaleSections: (list) => `Secções de escala: ${list}`,
       aiSections: (list) => `Secções de IA: ${list}`,
       dependsOn: (f, deps, order, unknown) => `${f} depende de: ${deps || "(nenhuma)"}` + (order != null ? `  ordem=${order}` : "") + (unknown ? `  ⚠ dependências desconhecidas: ${unknown}` : ""),
