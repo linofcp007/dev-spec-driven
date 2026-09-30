@@ -67,8 +67,10 @@ trackers, release notes, milestones).
     `[NEEDS CLARIFICATION]`); checklists, else Cursor todos, else a Steps / Implementation section's items (an Approach / Abordagem / Enfoque section
     only when there is no other), else its
     sub-headings → tasks keeping state; file paths a step names → `_Implements:_` (`planPaths()`: never a URL, absolute or
-    home path, `..`, alias, glob; `:line` / `#L10` dropped); the rest → design.md. A folder holding several plans is
-    refused (name the file).
+    home path, `..`, alias, glob; `:line` / `#L10` dropped; a single backticked name without a folder needs a known
+    extension — `PLAN_FILE_EXT`: since 1.21.1 every `CODE_EXT` / test-only extension (engine/scan.js — `.psm1`, `.bats`,
+    `.cmd`…) but `PLAN_EXT_AMBIGUOUS` (`conf.d`, `this.el`, one-letter ones), plus docs / config / data such as `.psd1`); the
+    rest → design.md. A folder holding several plans is refused (name the file).
   - `execplan` — a Codex ExecPlan (PLANS.md): Validation and Acceptance → criteria; Progress (state kept) + Concrete Steps
     → tasks (deduplicated), a step naming a check command → `_Verify:_`; Decision Log → design.md `## Decisions` (D-1…);
     Purpose → summary; living sections → design.md verbatim.

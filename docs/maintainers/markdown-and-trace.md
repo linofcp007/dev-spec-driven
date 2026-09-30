@@ -39,16 +39,25 @@ matrix.
 - **Secondary IDs are trace WARNINGS, never the verdict**: EC-n / NFR-n need a task or (+tdd) a test-plan
   row, SC-nnn a test-plan row or a real quickstart.md line; compared by number (`SC-1` = `SC-001`); untouched
   template rows don't count. `warnings` = `[{kind, items}]`, excluded from `traceGaps()`.
-- **`trace --code` T-ID convention:** a test names its T-ID — `T-01` anywhere (`test("T-01 …")`), or without
-  the hyphen an uppercase `T` + zero-padded number (`test_T01_…`, `testT01`, `TestT01`, `T01_…`) — see
-  `RE_CODE_TID`. The scan (`scanTestCode()`) is bounded and read-only; a plan row whose File column names a
+- **`trace --code` T-ID convention:** a test names its T-ID — `T-01` anywhere (`test("T-01 …")`, Pester's `It 'T-01 …'`,
+  Bats' `@test "T-01 …"`), or without the hyphen an uppercase `T` + zero-padded number (`test_T01_…`, `testT01`,
+  `TestT01`, `T01_…` — GoogleTest's `TEST(Token, T01_Rejects)`) — see `RE_CODE_TID`. **Which files (1.21.1):** a code file
+  (`isCodeFile()` — `CODE_EXT`, the one list guard mode, the scan and coverage read; a `.bats` suite / Perl's `t/*.t`
+  where they are tests) that `isTestFile()` calls a test — ONE rule (engine/scan.js; trace's `isTestCodePath` is it): the
+  test folders (`TEST_DIRS`; `t/` / `xt/` for a Perl `.t` only) and every language's name convention in `RE_TEST_NAME`
+  (`*.test.*` / `*.spec.*`, `test_*.py` / `*_test.go` / `*Test.java` / `*Tests.cs`, F# / Scala / Groovy / Elixir / Dart,
+  shell `test_*.sh` / `*_test.sh`, C/C++ `*_test.cc` / `*_unittest.cc` / `test_*.c`, busted `*_spec.lua`, testthat
+  `test-*.R`, `*_SUITE.erl` / `*_tests.erl`, hspec `*Spec.hs`, `*_test.clj`, XCTest `*Tests.m`, `*Tests.vb`) and
+  `RE_TEST_NAME_EXTRA` (case-insensitive: Pester's `*.Tests.ps1`, `*.bats`) — anchored, linear, the existing names kept
+  (a name that merely ends in "spec" / "test" is code). Until 1.21.1 the scan read only the scanner's short `CODE_EXT` and
+  a PowerShell project's tests gate never passed. The scan (`scanTestCode()`) is bounded and read-only; a plan row whose File column names a
   concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts; a test file
   ANOTHER feature's plan (active or archived) names in its File column — and this feature's plan does not — never counts
   for this feature's T-IDs (T-IDs restart at T-01 in every feature: a new feature's Phase 4 gate passed on another
   feature's tests). A folder token (`test/`) scopes rows but claims no file, and a claim is the EXACT project-relative path (a suffix match
   made `tests/test_api.py` own a monorepo package's `services/beta/tests/test_api.py`).
   A T-ID whose EVERY row names only non-code artifacts in its File column (`load-test.md`, `evals/*.json`, a
-  `.feature` — any extension outside `GUARD_CODE_EXT`) is run outside test code: `plannedOutsideCode`, never
+  `.feature` — any extension outside `GUARD_CODE_EXT`; a `.ps1`, `.bats` or `t/*.t` row is code) is run outside test code: `plannedOutsideCode`, never
   `plannedNotInCode`, so neither doctor, finish nor the Phase 4 gate expects it in a test file (the scaffold's own
   load/eval rows warned forever). A code path outside a test folder, a template slot or a row without a File cell
   keeps the T-ID expected. Doctor's `tests-in-code` warns only for T-IDs made green by DONE tasks.

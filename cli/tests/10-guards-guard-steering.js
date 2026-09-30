@@ -39,4 +39,18 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const help11 = run(["help"]).out;
   ok(/--guard on\|off/.test(help11) && /custom scoped file/.test(help11) && /--guard on\|off/.test(fs.readFileSync(CLI, "utf8").split("*/")[0]),
     "help and the header docblock document init --guard on|off and custom steering files");
+
+  // 1.21.1 languages: `init --guard on` guards a PowerShell project — the guard hook asks before a .ps1 / .psm1 edit (code) and
+  // stays silent on the .psd1 manifest (data), as spec_init {guard} + the hook do on MCP.
+  const { spawnSync } = require("child_process");
+  const gPs = path.join(tmp, "l121-guard-pwsh");
+  run(["init", "core", "--guard", "on", "--project", gPs]);
+  run(["create", "Greeter", "core", "--project", gPs]);
+  const guardJs = path.join(__dirname, "..", "hooks", "guard-hook.js");
+  const hook = (rel) => spawnSync(process.execPath, [guardJs], { input: JSON.stringify({ session_id: "s", hook_event_name: "PreToolUse", cwd: gPs, tool_name: "Edit",
+    tool_input: { file_path: path.join(gPs, ...rel.split("/")), old_string: "a", new_string: "b" } }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
+  const decision = (r) => { try { return JSON.parse(r.stdout).hookSpecificOutput.permissionDecision; } catch { return r.status === 0 && r.stdout === "" ? "silent" : "?"; } };
+  const psDecisions = ["scripts/deploy.ps1", "src/Greeter/Greeter.psm1", "src/Greeter/Greeter.psd1", "test/deploy.bats", "README.md"].map((f) => decision(hook(f)));
+  ok(JSON.stringify(psDecisions) === '["ask","ask","silent","ask","silent"]',
+    "1.21.1 languages: init --guard on — the guard hook asks before editing a .ps1 / .psm1 script or module and a .bats suite, and stays silent on the .psd1 manifest and docs (got " + JSON.stringify(psDecisions) + ")");
 };

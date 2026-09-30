@@ -10,6 +10,7 @@
 const fs = require("fs");
 const path = require("path");
 const i18n = require("../../i18n.js");
+const { CODE_EXT, TEST_EXTRA_EXT } = require("../scan.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let closesFence, colonLineAnchorAt, earsFromGwt, earsThen, firstParagraph, headRest, indentOf, isObj, isWsUnit,
   mdHeadings, mdRange, newImportModel, RE_FENCE, RE_MD_HR, RE_MODAL, restAfterBlanks, safeReaddir, shortTitle, stripEnd,
@@ -60,10 +61,14 @@ function planItem(l) {
   return rest == null ? null : [l, h[1], box ? box[1] : undefined, rest];
 }
 // A single backticked name reads as a file with one of these extensions (`package.json`); a name with a folder part needs none.
-const PLAN_FILE_EXT = new Set(["js", "mjs", "cjs", "jsx", "ts", "tsx", "mts", "cts", "py", "rb", "go", "rs", "java", "kt", "kts", "scala", "cs", "fs", "php",
-  "swift", "m", "mm", "c", "h", "cc", "cpp", "hpp", "md", "mdx", "json", "jsonc", "yaml", "yml", "toml", "ini", "cfg", "conf", "css", "scss", "sass", "less",
-  "html", "htm", "vue", "svelte", "astro", "sql", "prisma", "graphql", "gql", "proto", "sh", "bash", "zsh", "ps1", "bat", "xml", "gradle", "lock", "txt",
-  "csv", "tf", "hcl", "ex", "exs", "erl", "dart", "lua", "ipynb"]);
+// 1.21.1: the code extensions are CODE_EXT's (engine/scan.js — the one list of code) and the test-only ones (a .bats suite),
+// so a plan's `Greeter.psm1` or `deploy.bats` is a file like its `server.ts` — except the ones a prose token wears as often as
+// a file does (PLAN_EXT_AMBIGUOUS: `conf.d` is a folder, `this.el` a view's element, `x.v` / `a.s` / `re.re` read as code
+// expressions; Perl's .t needs its t/ folder anyway). The rest: documents, config and data a plan names (PowerShell's .psd1).
+const PLAN_EXT_AMBIGUOUS = new Set(["d", "s", "v", "f", "t", "el", "re", "sc"]);
+const PLAN_FILE_EXT = new Set([...[...CODE_EXT, ...TEST_EXTRA_EXT].map((e) => e.slice(1)).filter((e) => !PLAN_EXT_AMBIGUOUS.has(e)),
+  "md", "mdx", "json", "jsonc", "yaml", "yml", "toml", "ini", "cfg", "conf", "css", "scss", "sass", "less", "html", "htm", "prisma", "graphql",
+  "gql", "proto", "xml", "gradle", "lock", "txt", "csv", "tf", "hcl", "psd1"]);
 const PLAN_NOT_FILES = new Set(["node.js", "next.js", "vue.js", "react.js", "nuxt.js", "express.js", "three.js", "d3.js", "chart.js", "nest.js", "ember.js", "backbone.js", "alpine.js", "solid.js"]);
 const PLAN_BARE_FILES = /^(?:Dockerfile|Makefile|Procfile|Gemfile|Rakefile|Jenkinsfile|Containerfile|Justfile)$/;
 // The file paths a step names → its _Implements:_ list: backticked paths / file names, markdown link targets and bare tokens
@@ -606,7 +611,7 @@ function parseExecPlan(dir, read, W, src) {
   return model;
 }
 
-module.exports = { RE_PLAN_CHECKBOX_HEAD, planCheckbox, RE_PLAN_ITEM_HEAD, RE_PLAN_ITEM_BOX, planItem, PLAN_FILE_EXT,
+module.exports = { RE_PLAN_CHECKBOX_HEAD, planCheckbox, RE_PLAN_ITEM_HEAD, RE_PLAN_ITEM_BOX, planItem, PLAN_EXT_AMBIGUOUS, PLAN_FILE_EXT,
   PLAN_NOT_FILES, PLAN_BARE_FILES, planPaths, PLAN_TOKEN_LEAD, PLAN_TOKEN_TRAIL, planTokenTrim, RE_PLAN_RUNNER,
   RE_PLAN_CHECK, planCommand, planCommandOnly, PLAN_COND, earsFromPlanText, planBlocks, checkboxUnits, markUnit,
   unitProse, unitCode, planTaskLines, planDone, planHeadingText, planSections, headingUnit, unusedMarkdown,

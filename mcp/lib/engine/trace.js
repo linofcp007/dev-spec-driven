@@ -12,10 +12,10 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText, CODE_EXT, commentLines,
+let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText, commentLines,
   decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey, duplicateTaskNumbers, evidenceRule,
   existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, gitEvidence, globFiles, GUARD_CODE_EXT,
-  historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord, isImplementsGlob, isObj, isRecord,
+  historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord, isCodeFile, isImplementsGlob, isObj, isRecord,
   isSlashUnit, isTestFile, isWsUnit, italic, latestSnapshot, mdCell, mdPlainText, normWs, oneLiner, ownEvidence,
   packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained, readIfExists, readJson, realLines,
   requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes, retiredDecisions, safeReaddir,
@@ -24,10 +24,10 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
   useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir;
 function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
-  CODE_EXT, commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
+  commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
   duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE,
   gitEvidence, globFiles, GUARD_CODE_EXT, historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord,
-  isImplementsGlob, isObj, isRecord, isSlashUnit, isTestFile, isWsUnit, italic, latestSnapshot, mdCell, mdPlainText,
+  isCodeFile, isImplementsGlob, isObj, isRecord, isSlashUnit, isTestFile, isWsUnit, italic, latestSnapshot, mdCell, mdPlainText,
   normWs, oneLiner, ownEvidence, packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained,
   readIfExists, readJson, realLines, requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes,
   retiredDecisions, safeReaddir, SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile,
@@ -640,11 +640,10 @@ const RE_CODE_TID = /(?<![A-Za-z0-9])T-(\d+)|(?<![A-Za-z0-9])[Tt]est_?T(\d{2,})(
 const CODE_TRACE_CAP = 5000; // files walked
 const CODE_TRACE_READ_CAP = 1500; // test files read
 const CODE_TRACE_FILES_PER_ID = 10; // files listed per ID (every one still counts)
-// Test code in languages scan/coverage don't count as code (CODE_EXT), with their own test-name conventions: F# / Scala /
-// Groovy (FsCheck, ScalaTest, Spock: CodecTests.fs, CodecSpec.scala), Elixir and Dart (codec_test.exs / codec_test.dart).
-const TEST_EXTRA_EXT = new Set([".fs", ".fsx", ".scala", ".groovy", ".exs", ".dart"]);
-const RE_TEST_NAME_EXTRA = /(?:Tests?|Spec|Suite)\.(?:fs|fsx|scala|groovy)$|_test\.(?:exs|dart)$/;
-const isTestCodePath = (rel) => isTestFile(rel) || RE_TEST_NAME_EXTRA.test(rel.split("/").pop());
+// A test file in any language — isTestFile (engine/scan.js), the ONE rule since 1.21.1. Until then F# / Scala / Groovy,
+// Elixir and Dart kept their own conventions here, unknown to the scan, coverage and the guard; scan.js's RE_TEST_NAME holds
+// them now, with PowerShell's, shell's, C/C++'s, Lua's, R's, Erlang's, Haskell's, Clojure's, Objective-C / VB's and Perl's.
+const isTestCodePath = (rel) => isTestFile(rel);
 const tKey = (num) => "T-" + parseInt(num, 10);
 // The feature folders under .specs/ (live, then archived — their tests may still be in the tree).
 function specFeatureDirs(projectDir) {
@@ -653,7 +652,8 @@ function specFeatureDirs(projectDir) {
     .concat(safeReaddir(path.join(root, "_archive")).map((n) => path.join(root, "_archive", n)));
 }
 // One bounded, read-only walk of the project (walkProject: SCAN_IGNORE, hidden dirs and .specs skipped) over its TEST
-// files (isTestFile: test/spec/__tests__ folders, *.test.* / *.spec.*, test_*.py, *_test.go, *Test.java, *Tests.cs …),
+// files — code in any language of CODE_EXT (isCodeFile: a .bats suite and Perl's t/*.t too) that isTestFile says is a test:
+// test/spec/__tests__ folders, *.test.* / *.spec.*, test_*.py, *_test.go, *Test.java, *Tests.cs, Pester's *.Tests.ps1 …),
 // collecting the T-IDs and AC IDs they name — plus each feature's own .specs/<feature>/tests/ (the folder +tdd and bugfix
 // scaffold for the failing tests), within the same caps; the rest of .specs/ stays skipped. Project-level (not per
 // feature), so doctor / finish reuse it; traceTestCode decides which files count for a feature.
@@ -669,9 +669,8 @@ function scanTestCode(projectDir) {
     const e = map.get(key);
     if (!e.files.includes(rel)) e.files.push(rel);
   };
-  const onFile = (rel, full, name) => {
-    const ext = path.extname(name).toLowerCase();
-    if (!(CODE_EXT.has(ext) || TEST_EXTRA_EXT.has(ext)) || !isTestCodePath(rel)) return;
+  const onFile = (rel, full) => {
+    if (!isCodeFile(rel) || !isTestCodePath(rel)) return;
     if (scanned >= CODE_TRACE_READ_CAP) { readCapped = true; return; }
     let txt;
     try { txt = fs.readFileSync(full, "utf8").slice(0, SCAN_READ_BYTES); } catch { return; }
@@ -729,7 +728,7 @@ function pathNames(rel, p) {
 function scannableTestPath(t) {
   if (t.endsWith("/")) return true;
   const ext = path.posix.extname(t).toLowerCase();
-  return ext === "" || CODE_EXT.has(ext) || TEST_EXTRA_EXT.has(ext);
+  return ext === "" || GUARD_CODE_EXT.has(ext); // code in any language, or a test-only extension (.bats, Perl's .t)
 }
 // A File cell token naming a non-code artifact — a document or data file, never source in any language (GUARD_CODE_EXT):
 // `load-test.md`, `evals/golden.json`, `tests/load/plan.md`, a Gherkin `.feature` or a JMeter `.jmx`. The test-code scan
@@ -1307,7 +1306,7 @@ module.exports = { VAGUE_WORDS, VAGUE_RE, VAGUE_RE_ALL, RE_LIST_ITEM, RE_NUMBERE
   TRACE_VERDICT_KINDS, TRACE_TASK_KINDS, TRACE_PLAN_KINDS, traceGaps, traceGapLines, TRACE_WARNING_ORDER,
   TRACE_SECONDARY_KINDS, traceWarnings, traceWarningLines, RE_SECONDARY_ID, RE_SECONDARY_ID_LINE, idKey, secondaryIds,
   secondaryDefinitions, traceSecondary, testPlanEntries, RE_CODE_TID, CODE_TRACE_CAP, CODE_TRACE_READ_CAP,
-  CODE_TRACE_FILES_PER_ID, TEST_EXTRA_EXT, RE_TEST_NAME_EXTRA, isTestCodePath, tKey, specFeatureDirs, scanTestCode,
+  CODE_TRACE_FILES_PER_ID, isTestCodePath, tKey, specFeatureDirs, scanTestCode,
   allPlannedTestKeys, RE_FILE_COLUMN, pathUnder, pathNames, scannableTestPath, nonCodeArtifactPath, codePathToken,
   planFileScopes, fileCellTokens, outsideCodeTemplates, otherPlanTestFiles, traceTestCode, RTM_STATUSES, RTM_KIND_ORDER,
   RTM_TEXT_MAX, acNums, supersededByIndex, shippedSupersedeKeys, featureShipped, rtmEvidence, buildTraceMatrix,

@@ -48,11 +48,26 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   with a one-line note (`runGate.wslBash`), and a run WSL's relay fails is could-not-run `wsl` (nothing recorded).
   `wsl.exe` (named or bare) is no shell — Node runs `<shell> -c "<cmd>"` and wsl.exe rejects `-c` (exit 4294967295: a
   bogus failed run or red proof) — refused before anything runs (`couldNotRun: "wsl-exe"`, `runGate.wslExe`); a quoted
-  path loses its quotes (spawn would miss the file).
+  path loses its quotes (spawn would miss the file). **PowerShell (1.21.1):** `pwsh` / `powershell` (`.exe`, a path to
+  either, any platform — `isPwshShell()`) resolve to `{shell, cmd: false, pwsh: true, args: PWSH_RUN_ARGS}` and the CLI's
+  `b5Exec` runs `spawnSync(<shell>, [-NoProfile, -NonInteractive, -Command, <cmd>])` instead of Node's `<shell> -c` (both
+  accept -c — measured on pwsh 7.6 and Windows PowerShell 5.1 — but it loads the user's profile and may prompt); the
+  command is ONE argument, quoted by Node's Windows rules, which PowerShell reads back intact (`exit 3` → 3, `$x`, `"…"`,
+  single quotes). The script's `exit N` is the run's code; a failing last command → 1 (`exit $LASTEXITCODE` passes a
+  native tool's on).
   On Windows with the default
   shell (cmd.exe) a command in POSIX syntax (`posixShellSyntax()`: a single-quoted string outside double quotes, `$VAR` /
   `${…}` / `$(…)`) is refused before anything runs — cmd.exe has no single quotes, so `node -e 'process.exit(1)'` exits 0
-  and was recorded as a passing run. `--shell bash` runs it; `--shell cmd` runs it under cmd.exe anyway. After a failed
+  and was recorded as a passing run. `--shell bash` runs it; `--shell cmd` runs it under cmd.exe anyway. 1.21.1: a
+  PowerShell program's own script is no POSIX syntax — `$` inside a double-quoted word after pwsh / powershell's `-Command`
+  / `-c` / `/c` (any abbreviation, what `shellScript()` reads), `-CommandWithArgs`, `-EncodedCommand`, or Windows
+  PowerShell's first positional argument (its default is -Command; value options like `-ExecutionPolicy Bypass` skipped) is
+  never flagged: cmd.exe hands `pwsh -NoProfile -Command "…; exit $LASTEXITCODE"` over intact. The program counts only in
+  program position (cmd.exe's `&` `|` `(` `)` and line breaks outside quotes start a command; `^` escapes). Still refused:
+  a single-quoted string outside double quotes (`pwsh -c '…'` — cmd.exe splits it, PowerShell evaluates a string literal:
+  exit 0), a `$` outside double quotes, and the arguments after `-File` / pwsh's positional script path (passed to the
+  script as literal strings — the CALLING shell's syntax, which cmd.exe never expands: `--shell pwsh` runs them). The
+  refusal names `--shell pwsh` for a PowerShell command (`taskDone.posixOnWindows`, `projectChecks.posixOnWindows`). After a failed
   run the `taskDone.shellHint` (retry with `--shell bash`) is printed only when `windowsShellFailure(output, code)` says
   cmd.exe itself failed (exit 9009, "is not recognized as an internal or external command", its syntax errors, "cannot
   find the path specified" — EN/PT/ES wording) — never for a check that ran and failed.
@@ -128,9 +143,18 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   literal runner phrases, linear, NULs dropped — kind `test`: node's "Could not find '…'", "Cannot find module",
   ERR_MODULE_NOT_FOUND, python "can't open file" / ModuleNotFoundError, pytest "file or directory not found" / "no tests
   ran", jest "No tests found", vitest / mocha "No test files found", npm "Missing script" / ENOENT, make "No rule to make
-  target"; kinds `wsl` / `spawn`: WSL's relay, a Node spawn error; the `test` kind never applies to output that shows an
-  assertion failed — `RE_ASSERTION_RAN`: "not ok N", AssertionError, pytest "E   assert", expect(…), "Expected:" — a red run
-  whose message quotes "Cannot find module" is still red) — `spec_complete_task` refuses and records a run whose
+  target", PowerShell (1.21.1) "… is not recognized as a / the name of a cmdlet" (pwsh 7 / 5.1, pwsh's pt-BR / es wording,
+  blanks between the words — 5.1 wraps), "The specified module … was not loaded" (EN / PT / ES), the execution policy
+  ("running scripts is disabled on this system", EN / PT / ES; "is not digitally signed"), a -File path pwsh / powershell
+  can't find, Pester's "No test files were found"; kinds `wsl` / `spawn`: WSL's relay, a Node spawn error; the `test` kind
+  never applies to output that shows an assertion failed — `RE_ASSERTION_RAN`: "not ok N", AssertionError, pytest
+  `E   assert`, expect(…), "Expected:" / "But was:", Pester's failed-test line `[-] <name> 12ms (…)` (never a block's "[-] Error
+  occurred in …" / "[-] Discovery in …" / "[-] <file> failed with:"), "Expected …, but got …" — or `pesterRan()`: Pester's
+  summary "Tests Passed: N, Failed: M>0" (Pester 3: "Passed: N Failed: M") unless "Container failed: N" / a block line says
+  the test never ran (a BeforeAll importing a module that isn't there counts its test failed). A red run whose message
+  quotes "Cannot find module" or "is not recognized" (the Pester function under test not written yet) is still red. Output is
+  read with its ANSI colour / hyperlink codes dropped (`stripAnsi` — pwsh 7 colours captured output; `summarizeRunOutput`
+  drops them too) — `spec_complete_task` refuses and records a run whose
   `summary` shows it (`couldNotRun: "output"`), `done --run` refuses it with nothing recorded, and `cantRunRecord()` keeps
   an older record of either kind from being a red proof (`isRedRun()`). On an `_Expect: fail_` task under `done --run`, a
   line cmd.exe itself could not run (`windowsShellFailure()`, any exit but 9009) is refused with nothing recorded whenever

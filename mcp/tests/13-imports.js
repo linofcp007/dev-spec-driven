@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, rpc, S, tmp, require }) => {
+exports.run = async ({ ok, rpc, payload, S, tmp, require }) => {
 
   { // --- 1.13 WP6: brownfield depth (scan routes/tests/entrypoints/env/migrations, coverage by _Implements:_), spec_import, integration-plan ---
     const call6 = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); let body; try { body = JSON.parse(res.result.content[0].text); } catch { body = { ok: false, error: res.result.content[0].text }; } return { isError: !!res.result.isError, body }; };
@@ -1163,5 +1163,124 @@ exports.run = async ({ ok, rpc, S, tmp, require }) => {
       /<p>a &amp;lt; b \. c &lt; d \\&amp; e \* f <code>x\\-y<\/code> g &lt;b&gt; h<\/p>/.test(S.markdownToHtml("a \\&lt; b \\. c &lt; d \\\\&amp; e \\* f `x\\-y` g \\<b\\> h")),
       "1.17 verify N3: a fluidplan import keeps its inert escapes in requirements.md (NFR\\-2, US-3\\.AC-1, &lt;!-- outside code) but a code span's `<!--` as written; the HTML export shows NFR-2 / US-3.AC-1 / T-800 (any ASCII punctuation escape, CommonMark; `\\&lt;` is the text '&lt;') and `<!--` in code once escaped; the Gherkin, matrix CSV and Jira exports carry no backslash escape nor '&lt;' (an escaped `\\*` is no emphasis); a Kiro criterion's code-span `<!--` stays; trace_check counts every criterion (got " +
       js([g3n.error, tr3n.totalAcs, tr3n.verdict, (body3.match(/.{0,30}\\[-.:].{0,20}/g) || []).slice(0, 3), (gh3.match(/.{0,30}(?:\\[-.:]|&lt;|&gt;).{0,20}/g) || []).slice(0, 3), ktr3.totalAcs, plain3]) + ")");
+  }
+
+  // 1.21.1 languages — ONE notion of code (engine/scan.js CODE_EXT: the guard's broad list) and ONE test-file rule
+  // (isTestFile): the brownfield scan, coverage and the test-code scan knew only JS/TS, Python, Go, Rust, Java, Ruby, PHP,
+  // C#, Kotlin, Swift, C/C++ and Vue/Svelte — a PowerShell project scanned empty, 0 code files, and its tests gate could never pass.
+  {
+    const js = (v) => JSON.stringify(v);
+    const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const call = async (name, args) => payload(await rpc("tools/call", { name, arguments: args }));
+    const E = require("./lib/engine/index.js");
+
+    // 1. The test-name conventions per language, table-driven — positives AND negatives (a name that merely ends in
+    // "spec" / "test" without the separator is code; a t/ folder makes only a Perl .t a test).
+    const TESTS = [
+      ["tests/Greeter.Tests.ps1", true], ["src/Greeter.Tests.ps1", true], ["src/greeter.tests.ps1", true], ["SRC/GREETER.TESTS.PS1", true], // Pester, anywhere, any case
+      ["test/deploy.bats", true], ["scripts/deploy.bats", true], ["scripts/test_deploy.sh", true], ["scripts/test-deploy.sh", true], ["scripts/deploy_test.sh", true], ["scripts/deploy_test.bash", true],
+      ["src/codec_test.cc", true], ["src/codec_test.cpp", true], ["src/codec_test.cxx", true], ["src/codec_test.c", true], ["src/codec_unittest.cc", true], ["src/test_codec.c", true], ["src/test_codec.cpp", true],
+      ["src/a.test.mts", true], ["src/a.spec.cts", true], ["lua/codec_spec.lua", true], ["R/test-codec.R", true], ["R/test_codec.R", true], ["inst/tinytest/test_codec.r", true],
+      ["src/codec_SUITE.erl", true], ["src/codec_tests.erl", true], ["src/CodecSpec.hs", true], ["src/core_test.clj", true], ["src/core_test.cljs", true], ["src/core_test.cljc", true],
+      ["Classes/CodecTests.m", true], ["Classes/CodecTests.mm", true], ["Src/CodecTests.vb", true], ["Src/CodecTest.vb", true],
+      ["test/runtests.jl", true], ["tests/tcodec.nim", true], ["test/test_codec.ml", true], ["tests/testthat/helper-codec.R", true], // by their test folders
+      ["t/basic.t", true], ["xt/pod.t", true], ["t/sub/deep.t", true], // Perl
+      ["src/a.test.js", true], ["UserSpec.kt", true], ["CodecTests.fs", true], ["CodecSpec.scala", true], ["LoginSuite.groovy", true], ["codec_test.exs", true], ["codec_test.dart", true], // kept
+      ["inspect.lua", false], ["src/latest.sh", false], ["src/contest.py", false], ["cli/dev-spec.js", false], ["mcp/lib/spec.js", false], ["src/attest.c", false], ["src/protest.cc", false],
+      ["src/Greeter.psm1", false], ["src/Greeter.ps1", false], ["src/Greeter.psd1", false], ["src/specs.lua", false], ["src/testing.sh", false], ["src/latest_version.R", false],
+      ["notes.t", false], ["lib/t/Helper.pm", false], ["src/Test.hs", false], ["src/Contest.m", false], ["src/Attest.vb", false], ["src/codec_testing.cc", false], ["lib/greatest.bash", false],
+    ];
+    const wrongT = TESTS.filter(([f, want]) => S.isTestFile(f) !== want).map(([f]) => f);
+    const CODE = [["src/a.ps1", true], ["src/a.psm1", true], ["t/basic.t", true], ["test/a.bats", true], ["db/a.sql", true], ["a.sh", true], ["n.ipynb", true], ["a.cc", true], ["a.mts", true],
+      ["src/Greeter.psd1", false], ["notes.t", false], ["README.md", false], ["a.json", false], ["a.yaml", false], ["a.toml", false], ["a.css", false], ["CMakeLists.txt", false]];
+    const wrongC = CODE.filter(([f, want]) => E.isCodeFile(f) !== want).map(([f]) => f);
+    ok(!wrongT.length && !wrongC.length && E.GUARD_CODE_EXT.size === E.CODE_EXT.size + E.TEST_EXTRA_EXT.size && [...E.SCAN_TEXT_EXT].every((x) => E.CODE_EXT.has(x)),
+      "1.21.1 languages: isTestFile knows every language's convention — Pester *.Tests.ps1 (anywhere, any case), Bats, shell test_*.sh / *_test.sh, GoogleTest *_test.cc / *_unittest.cc, test_*.c, " +
+      ".test.mts / .spec.cts, busted *_spec.lua, testthat test-*.R, Common Test *_SUITE.erl / EUnit *_tests.erl, hspec *Spec.hs, clojure.test *_test.clj, XCTest *Tests.m, *Tests.vb, Perl t/*.t, " +
+      "Julia / Nim / OCaml / R by their test folders — never inspect.lua, latest.sh, contest.py, dev-spec.js, notes.t; isCodeFile: CODE_EXT, a .bats / t/*.t test, never a .psd1 or a document (wrong: " +
+      js([wrongT, wrongC]) + ")");
+
+    // 2. A PowerShell project over MCP: spec_scan — stack powershell (a .psd1 module manifest / .ps1 / .psm1 files), test framework
+    // pester, entrypoints (a top-level script, the manifest's RootModule), env names ($env:NAME, [Environment]::GetEnvironmentVariable);
+    // spec_coverage counts the .ps1 / .psm1 files (the .psd1 is data), the Pester files apart — one beside the module, outside tests/.
+    const ps = path.join(tmp, "proj-121-pwsh");
+    put(ps, "src/Greeter/Greeter.psm1", "function Get-Greeting { param([string]$Name) \"Hello, $Name\" }\nExport-ModuleMember -Function Get-Greeting\n");
+    put(ps, "src/Greeter/Greeter.psd1", "@{\n  RootModule = 'Greeter.psm1'\n  ModuleVersion = '0.1.0'\n}\n");
+    put(ps, "scripts/deploy.ps1", "param([string]$Target = $env:DEPLOY_ENV)\n$token = [Environment]::GetEnvironmentVariable('DEPLOY_TOKEN')\nWrite-Host \"deploying to $Target\"\n");
+    put(ps, "tests/Greeter.Tests.ps1", "BeforeAll { Import-Module \"$PSScriptRoot/../src/Greeter/Greeter.psm1\" -Force }\nDescribe 'Get-Greeting' {\n  It 'T-01 greets by name (US-1.AC-1)' { Get-Greeting -Name 'Ana' | Should -Be 'Hello, Ana' }\n}\n");
+    put(ps, "src/Greeter/Greeter.Tests.ps1", "Describe 'Get-Greeting' { It 'T-02 greets nobody' { } }\n");
+    put(ps, "build.ps1", "Invoke-Pester -Path ./tests -CI\n");
+    put(ps, "README.md", "# Greeter\n");
+    const scP = await call("spec_scan", { projectDir: ps });
+    const entP = (scP.entrypoints || []).map((e) => e.file + " (" + e.kind + ")");
+    const covP = await call("spec_coverage", { projectDir: ps });
+    ok(scP.ok && js(scP.stack) === '["powershell"]' && js(scP.testFrameworks) === '["pester"]' && scP.testFiles === 2 &&
+      js(entP) === js(["build.ps1 (powershell script)", "src/Greeter/Greeter.psm1 (powershell module)"]) && js(scP.envVars) === '["DEPLOY_ENV","DEPLOY_TOKEN"]' &&
+      covP.ok && covP.codeFiles === 3 && covP.testFiles === 2 && js(covP.uncoveredSample) === js(["build.ps1", "scripts/deploy.ps1", "src/Greeter/Greeter.psm1"]) &&
+      js(covP.byFolder.map((f) => f.folder + ":" + f.files)) === '[".:1","scripts:1","src:1"]',
+      "1.21.1 languages: a PowerShell project over MCP — spec_scan finds stack powershell, test framework pester, the top-level build.ps1 and the module's RootModule as entrypoints, $env: / [Environment]:: env names; spec_coverage counts its 3 .ps1 / .psm1 files (the .psd1 is data), the 2 Pester files apart — one beside the module (got " +
+      js([scP.stack, scP.testFrameworks, scP.testFiles, entP, scP.envVars, covP.codeFiles, covP.testFiles, covP.uncoveredSample]) + ")");
+    let psN = 0;
+    const psOnly = (files) => { const d = path.join(tmp, "proj-121-pester-" + ++psN); Object.entries(files).forEach(([f, s]) => put(d, f, s)); return S.scanCodebase(d); };
+    const viaBuild = psOnly({ "build.ps1": "Import-Module Pester\ninvoke-pester -Path tests -CI\n" });
+    const viaManifest = psOnly({ "Mod/Mod.psd1": "@{\n  ModuleVersion = '1.0'\n  RequiredModules = @(\n    @{ ModuleName = 'Pester'; ModuleVersion = '5.5.0' }\n  )\n}\n", "Mod/Mod.psm1": "function A {}\n" });
+    const dataOnly = psOnly({ "en-US/Strings.psd1": "ConvertFrom-StringData @'\nHello = Hello\n'@\n", "index.js": "module.exports = 1;\n" });
+    ok(js(viaBuild.testFrameworks) === '["pester"]' && js(viaBuild.stack) === '["powershell"]' && js(viaManifest.testFrameworks) === '["pester"]' && js(viaManifest.stack) === '["powershell"]' &&
+      !dataOnly.stack.includes("powershell") && !dataOnly.testFrameworks.length,
+      "1.21.1 languages: pester also from Invoke-Pester in a script (any case) or Pester in a manifest's RequiredModules; a .psd1 that is plain data (no ModuleVersion / RootModule) is no PowerShell stack (got " +
+      js([viaBuild.testFrameworks, viaManifest.stack, dataOnly.stack]) + ")");
+
+    // 3. The other languages the scan now counts: their manifests (root files, one check each) and a tree mostly of shell or SQL.
+    const st = path.join(tmp, "proj-121-stacks");
+    ["mix.exs", "rebar.config", "build.sbt", "Package.swift", "codec.cabal", "deps.edn", "Project.toml", "build.zig", "dune-project", "codec.nimble", "cpanfile"].forEach((f) => put(st, f, "x\n"));
+    put(st, "pubspec.yaml", "name: app\ndependencies:\n  flutter:\n    sdk: flutter\n");
+    put(st, "DESCRIPTION", "Package: codec\nVersion: 0.1\nSuggests: testthat\n");
+    put(st, "CMakeLists.txt", "project(codec)\nfind_package(GTest)\nenable_testing()\nadd_test(NAME t COMMAND t)\n");
+    put(st, "src/codec.c", "int x;\n");
+    const scS = S.scanCodebase(st);
+    const wantS = ["c/c++ (cmake)", "elixir", "erlang", "dart (flutter)", "scala", "swift", "haskell", "clojure", "r", "julia", "zig", "ocaml", "nim", "perl"];
+    const sh = path.join(tmp, "proj-121-shell");
+    ["bin/install.sh", "bin/update.sh", "lib/common.bash"].forEach((f) => put(sh, f, "echo hi\n"));
+    put(sh, "test/install.bats", "@test \"T-01 installs\" { true; }\n");
+    put(sh, "Makefile", "all:\n\techo\n");
+    const scSh = S.scanCodebase(sh);
+    const sq = path.join(tmp, "proj-121-sql");
+    ["db/001_init.sql", "db/002_users.sql", "db/views.sql"].forEach((f) => put(sq, f, "select 1;\n"));
+    put(sq, "tools/load.py", "import os\n");
+    const scSq = S.scanCodebase(sq);
+    const mk = path.join(tmp, "proj-121-make");
+    put(mk, "Makefile", "all:\n\tcc -o codec codec.c\n");
+    put(mk, "codec.c", "int main(void) { return 0; }\n");
+    put(mk, "tests/codec_test.c", "int main(void) { return 0; }\n");
+    const scMk = S.scanCodebase(mk);
+    ok(js(scS.stack) === js(wantS) && ["googletest", "ctest", "testthat"].every((f) => scS.testFrameworks.includes(f)) &&
+      scSh.stack.includes("shell") && !scSh.stack.includes("c/c++ (make)") && js(scSh.testFrameworks) === '["bats"]' && scSh.testFiles === 1 &&
+      js(scSq.stack) === '["sql"]' && js(scMk.stack) === '["c/c++ (make)"]' && scMk.testFiles === 1,
+      "1.21.1 languages: spec_scan names the stack from CMakeLists.txt, mix.exs, rebar.config, pubspec.yaml (flutter), build.sbt, Package.swift, *.cabal, deps.edn, DESCRIPTION (R), Project.toml, build.zig, dune-project, *.nimble, cpanfile; a Makefile with C sources; shell / SQL when they are at least half the code; googletest / ctest from CMake, testthat from DESCRIPTION, bats from a .bats suite (got " +
+      js([scS.stack, scS.testFrameworks, scSh.stack, scSh.testFrameworks, scSq.stack, scMk.stack]) + ")");
+
+    // 4. An existing project changes only by COUNTING code it didn't count: a JS app's SQL migrations and shell scripts join
+    // coverage's denominator (and the scan's test count), the scan still READS only the languages it has readers for.
+    const ex = path.join(tmp, "proj-121-existing");
+    put(ex, "src/server.js", "const express = require('express');\nconst app = express();\napp.get('/health', h);\nconst port = process.env.PORT;\n");
+    put(ex, "db/migrations/001_init.sql", "create table t (id int);\n");
+    put(ex, "scripts/deploy.sh", "echo $DEPLOY_TARGET\n");
+    put(ex, "scripts/deploy_test.sh", "echo ok\n");
+    put(ex, "docs/notes.md", "# notes\n");
+    const scEx = S.scanCodebase(ex);
+    const covEx = S.coverage(ex);
+    ok(scEx.codeFilesRead === 1 && scEx.candidateEndpoints === 1 && js(scEx.envVars) === '["PORT"]' && scEx.testFiles === 1 && js(scEx.migrations) === '["db/migrations/001_init.sql"]' &&
+      covEx.codeFiles === 3 && covEx.testFiles === 1 && js(covEx.uncoveredSample) === js(["db/migrations/001_init.sql", "scripts/deploy.sh", "src/server.js"]),
+      "1.21.1 languages: an existing JS project — coverage now counts its SQL migration and shell script as code (3 code files, was 1) and scripts/deploy_test.sh as a test; the scan still reads only server.js (routes, env) — nothing else changes (got " +
+      js([scEx.codeFilesRead, scEx.envVars, scEx.testFiles, covEx.codeFiles, covEx.uncoveredSample]) + ")");
+
+    // 5. The plan importer reads a backticked file name with any code extension of the list (and a .psd1, a .bats suite) — not
+    // the few a prose token wears as often (`conf.d`, `this.el`).
+    const bt = (x) => "`" + x + "`";
+    const pp = S.planPaths("Edit " + ["Greeter.psm1", "Greeter.psd1", "deploy.bats", "build.cmd", "codec_test.cc", "core.clj", "this.el", "conf.d", "a.s"].map(bt).join(", "));
+    const missExt = [...E.CODE_EXT, ...E.TEST_EXTRA_EXT].map((x) => x.slice(1)).filter((x) => !E.PLAN_EXT_AMBIGUOUS.has(x) && !E.PLAN_FILE_EXT.has(x));
+    ok(js(pp) === js(["Greeter.psm1", "Greeter.psd1", "deploy.bats", "build.cmd", "codec_test.cc", "core.clj"]) && !missExt.length && E.PLAN_FILE_EXT.has("md") && E.PLAN_FILE_EXT.has("json"),
+      "1.21.1 languages: planPaths reads `Greeter.psm1`, `Greeter.psd1`, `deploy.bats`, `build.cmd` … as files — PLAN_FILE_EXT holds every CODE_EXT / test-only extension but the ambiguous few (`conf.d`, `this.el`, `a.s`) (got " +
+      js([pp, missExt]) + ")");
   }
 };

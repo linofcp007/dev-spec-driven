@@ -156,4 +156,20 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
     g10f && g10f.couldNotRun === "output-too-large" && g10f.check === "big" && !stGa(fb).finishChecks,
     "full review Ga10: --timeout, output over 64 MB (done --run and finish --run) and a cmd.exe failure under --shell cmd on an _Expect: fail_ task are could-not-run — refused, nothing recorded; --timeout 0 is refused before anything runs (got " +
     JSON.stringify([g10tj, g10z.out.slice(0, 120), g10bj && g10bj.couldNotRun, g10c, g10f && g10f.couldNotRun]).slice(0, 600) + ")");
+
+  // 1.21.1 languages: finish --run --shell pwsh runs the project checks as PowerShell (the same b5Exec as done --run): a
+  // passing and a failing check, both recorded with their exit codes. Skipped where pwsh isn't installed (the Linux containers).
+  let hasPwsh = false;
+  try { hasPwsh = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], { encoding: "utf8", windowsHide: true, timeout: 60000 }).status === 0; } catch { /* no pwsh */ }
+  if (hasPwsh) {
+    const gps = path.join(tmp, "l121-finish-pwsh");
+    Sga.initProject(gps, ["core"], "en", { checks: { unit: "$failed = 0; Write-Output \"failed: $failed\"; exit $failed", lint: "exit 4" } });
+    const fps = Sga.createFeature(gps, "Pwsh checks", ["core"], "", undefined, "en");
+    wGa(fps.dir, "tasks.md", "- [x] 1. [US1] Done\n");
+    const fin = jsonGa(rga(gps, ["finish", fps.slug, "--run", "--shell", "pwsh", "--json"]).stdout);
+    const fc = stGa(fps).finishChecks || {};
+    ok(fin && fc.unit && fc.unit.exitCode === 0 && /failed: 0/.test(fc.unit.summary || "") && fc.unit.observed === "cli" && fc.lint && fc.lint.exitCode === 4,
+      "1.21.1 languages: finish --run --shell pwsh runs each project check under PowerShell 7 and records it — `$failed = 0; … exit $failed` → exit 0, `exit 4` → exit 4 (got " +
+      JSON.stringify([fc.unit, fc.lint && fc.lint.exitCode]).slice(0, 400) + ")");
+  } else ok(true, "1.21.1 languages: finish --run --shell pwsh — skipped: pwsh is not installed here");
 };

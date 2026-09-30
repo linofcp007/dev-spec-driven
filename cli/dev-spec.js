@@ -48,7 +48,7 @@
  *   ears <feature|path> | --text "…" | -   Lint EARS in requirements.md, a file, raw text or stdin
  *   next <feature> [--batch] [--max N] Next task whose _Depends:_ are done (+ the [P] tasks that can run beside it);
  *                                      --waves: the execution waves of every open task (+ cycles, blocked tasks)
- *   done <feature> <n>                 Mark task n complete (--run [--shell bash|<path>] · --evidence/--exit/--cmd);
+ *   done <feature> <n>                 Mark task n complete (--run [--shell bash|pwsh|<path>] · --evidence/--exit/--cmd);
  *                                      an _Expect: fail_ task needs a FAILING run (the red proof); --run records the git commit
  *   undone <feature> <n> [--reason "…"]  Untick task n (ticked by mistake): its evidence turns stale — a re-tick needs a new
  *                                      run; recorded in .state.json unticks (= spec_complete_task {undo: true, reason})
@@ -69,7 +69,7 @@
  *   next-action|na <feature>           "You are here → do this next" (+ changed-since-approval)
  *   brief <feature> [n] [--write] [--include-brief]  Self-contained brief for one task (subagent execution)
  *   finish <feature> [--write] [--include-body] [--run]  Readiness report + merge summary (no PRs);
- *                                      --run [--shell bash|<path>] runs the project checks (meta.checks) and records them
+ *                                      --run [--shell bash|pwsh|<path>] runs the project checks (meta.checks) and records them
  *   append-tasks <feature> --task "…" [--req ids] [--implements paths] [--verify "cmd"] [--story US1|shared]
  *                                      [--makes-green T-01,…] [--expect-fail] [--size XS|S|M|L|XL] [--depends 3,5]
  *                                      [--parallel] [--heading "…"]  Append one task to tasks.md (converge)
@@ -115,8 +115,8 @@
  *                                      slow file system — used with DEV_SPEC_BUNDLE=1 (+ DEV_SPEC_BUNDLE_PATH for --out)
  *
  * Flags: --json (raw JSON output) · --project <dir> (project root, default cwd) · --lang en|pt|pt-BR|es
- *        done: --run · --shell bash|<path> · --timeout <s> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
- *        init: --check name="cmd" (repeatable) · finish: --run · --shell bash|<path> · --timeout <s> · log: --max N (default 1000)
+ *        done: --run · --shell bash|pwsh|<path> · --timeout <s> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
+ *        init: --check name="cmd" (repeatable) · finish: --run · --shell bash|pwsh|<path> · --timeout <s> · log: --max N (default 1000)
  *        undone: --reason "…" · approve: --revoke · --reason "…" · --expires YYYY-MM-DD|Nd (with --force: the waiver)
  *        --run: a command that could not run (missing shell, signal, --timeout, WSL's bash launcher) records nothing;
  *        on Windows --shell bash is Git Bash (never WSL's System32 / WindowsApps bash.exe)
@@ -141,7 +141,7 @@ const pos = [];
 // Flags that take a value, as `--flag value` or `--flag=value`. Any other `--flag` is a boolean switch
 // (so `depend a b --order 3` no longer turns "3" into a dependency).
 const VALUE_FLAGS = new Set(["project", "lang", "order", "cap", "by", "summary", "kind", "max", "evidence", "exit", "cmd"]);
-VALUE_FLAGS.add("shell"); // done --run --shell bash|<path>
+VALUE_FLAGS.add("shell"); // done --run --shell bash|pwsh|<path>
 
 VALUE_FLAGS.add("add"); // depend <f> --add x[,y]
 VALUE_FLAGS.add("rm"); // depend <f> --rm x[,y]
@@ -630,7 +630,7 @@ function main() {
 
     case "finish": {
       // dev-spec finish <feature> [--write] [--include-body] — readiness report + merge summary from the spec chain (no PRs)
-      if (!pos[0]) usage("dev-spec finish <feature> [--write] [--include-body] [--run [--shell bash|<path>] [--timeout <s>]]");
+      if (!pos[0]) usage("dev-spec finish <feature> [--write] [--include-body] [--run [--shell bash|pwsh|<path>] [--timeout <s>]]");
       // B5: --run executes the project checks (roadmap.json meta.checks) — only on this explicit flag — and records every run
       // (= spec_finish {evidence}); without meta.checks it is an error, nothing runs.
       let evidence;
@@ -689,7 +689,7 @@ function main() {
     }
 
     case "done": {
-      if (!pos[0] || pos[1] == null) usage("dev-spec done <feature> <task-number> [--run [--shell bash|<path>] [--timeout <s>] | --evidence \"summary\" [--exit N] [--cmd \"command\"]]");
+      if (!pos[0] || pos[1] == null) usage("dev-spec done <feature> <task-number> [--run [--shell bash|pwsh|<path>] [--timeout <s>] | --evidence \"summary\" [--exit N] [--cmd \"command\"]]");
       const D = spec.msg(spec.featureLang(projectDir, pos[0])).taskDone; // human output in the feature's language
       if (!/^\d+$/.test(String(pos[1]).trim())) die(D.numberInt); // before running anything
       const say = flags.json ? console.error : console.log; // --json keeps stdout one JSON document
@@ -1352,10 +1352,13 @@ function main() {
       const CRASH_SIGNALS = ["SIGSEGV", "SIGABRT", "SIGBUS", "SIGFPE", "SIGILL"]; // inside: b5Exec is hoisted above any outer const
       const timeoutS = intFlag("timeout"); // --timeout <seconds>: an integer ≥ 1 (validated before anything runs — first call)
       let run;
+      const runOpts = { cwd: projectDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, windowsHide: true, ...(timeoutS ? { timeout: timeoutS * 1000 } : {}) };
       try {
+        // 1.21.1: a PowerShell shell (--shell pwsh / powershell, DEV_SPEC_SHELL) runs `<shell> -NoProfile -NonInteractive
+        // -Command <cmd>` (sh.args, resolveRunShell) — no profile, no prompt; the command is one argument. Any other shell: Node
+        // runs `<shell> -c "<cmd>"` (cmd.exe: /d /s /c).
         // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
-        run = spawnSync(command, { shell: sh.shell, cwd: projectDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, windowsHide: true,
-          ...(timeoutS ? { timeout: timeoutS * 1000 } : {}) });
+        run = Array.isArray(sh.args) ? spawnSync(String(sh.shell), [...sh.args, command], runOpts) : spawnSync(command, { shell: sh.shell, ...runOpts });
       } catch (e) { run = { status: null, signal: null, error: e }; }
       const output = (run.stdout || "") + (run.stderr || "") + (run.error ? "\n" + run.error.message : "");
       const summary = spec.summarizeRunOutput(output);
@@ -1693,15 +1696,16 @@ function helpText() {
   brief <feature> [n] [--write]   Self-contained brief for task n (default: next open) — ACs, tests, design, DoD;
                                   --write → .specs/<feature>/.execution/task-<n>-brief.md (subagent execution)
   done <feature> <n> [--run]      Mark task n complete; --run executes its _Verify:_ command(s) first and records the evidence
-                                  (a failure leaves it open; --shell bash|<path> or DEV_SPEC_SHELL picks the shell — bash = Git Bash on
-                                  Windows, never WSL's launcher; --timeout <s>; a command that could not run records nothing); or --evidence "…" [--exit N] [--cmd "…"]
+                                  (a failure leaves it open; --shell bash|pwsh|<path> or DEV_SPEC_SHELL picks the shell — bash = Git Bash on
+                                  Windows, never WSL's launcher; pwsh / powershell = PowerShell, run -NoProfile -NonInteractive -Command; --timeout <s>;
+                                  a command that could not run records nothing); or --evidence "…" [--exit N] [--cmd "…"]
                                   A task marked _Expect: fail_ needs a FAILING run (its red test — a pass is refused); --run also
                                   records the git commit (and whether the tree was dirty) when git is available
   undone <feature> <n> [--reason "…"]   Untick task n (ticked by mistake, or its work turned out incomplete): its evidence turns
                                   stale (a re-tick needs a new run), ticks[n] is dropped, .state.json unticks records it
   finish <feature> [--write] [--include-body] [--run]   Readiness report + merge summary from the spec chain (exit 1 if not ready);
                                   --write → .execution/merge-summary.md, --include-body also prints/returns the summary;
-                                  --run [--shell bash|<path>] runs the project checks (meta.checks) and records them — with meta.checks
+                                  --run [--shell bash|pwsh|<path>] runs the project checks (meta.checks) and records them — with meta.checks
                                   set, finish needs a passing run of each since the last task activity
   append-tasks <feature> --task "…"   Append one task to tasks.md, numbered after the last (default phase 'Phase: Convergence'):
                                   --req US-1.AC-2[,…] (must exist) · --implements path[,…] · --verify "<cmd>" · --story US1|shared · --parallel · --heading "…"

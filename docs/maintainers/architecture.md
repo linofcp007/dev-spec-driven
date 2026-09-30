@@ -71,7 +71,8 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
   guards.js                    guard mode (meta.guard, the scope guard), the end-of-turn stop gate, the human approval guard
                                and its shell lexer; CLI_SWITCHES
   upgrade.js                   spec_upgrade (meta.specVersion, the audit, the migrations)
-  scan.js                      the brownfield scan and spec_coverage
+  scan.js                      the brownfield scan and spec_coverage; the ONE notion of code (CODE_EXT, isCodeFile) and of a
+                               test file (isTestFile) the scan, coverage, the test-code scan and guard mode share (1.21.1)
   import/                      spec_import: index.js (the entry point, task import) · common.js (the shared readers) · one
                                parser per tool — kiro.js · speckit.js · openspec.js · plan.js (plan + execplan) · bmad.js ·
                                fluidplan.js

@@ -79,4 +79,24 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   ok(o9n && o9done.code === 0 && !/tests-in-code/.test(o9doc.out) && /planned tests that no test file names[^\n]*T-06/.test(o9fin.out) && !/planned tests that no test file names[^\n]*T-07/.test(o9fin.out) &&
     /tests in code: 0\/6 planned T-ID\(s\) named in 0 test file\(s\) · checked outside test code \(the File column names a non-code artifact\): T-07/.test(o9tr.out),
     "the scaffold's load-test.md row (T-07) is checked outside test code: a done load task leaves no tests-in-code warning (doctor, finish); trace --code lists it apart (got " + o9tr.out + ")");
+
+  // 1.21.1 languages: a +tdd PowerShell feature on the CLI — trace --code and `approve <f> tests` (Phase 4) read the Pester files
+  // (tests/ and beside the module) the plan's File column names; before 1.21.1 they were never read and the gate never passed.
+  const pw = path.join(tmp, "l121-pester");
+  const putPw = (rel, s) => { const p = path.join(pw, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+  run(["init", "core", "tdd", "--project", pw]);
+  run(["create", "Greeter", "core", "tdd", "--project", pw]);
+  putPw(".specs/greeter/test-plan.md", "# Test Plan\n\n| Test ID | Kind | Covers | File |\n|---|---|---|---|\n| T-01 | example | US-1.AC-1 | `tests/Greeter.Tests.ps1` |\n" +
+    "| T-02 | example | US-1.AC-1 | `src/Greeter/Greeter.Tests.ps1` |\n");
+  run(["approve", "greeter", "--through", "test-plan", "--force", "--project", pw]);
+  const trBefore = run(["trace", "greeter", "--code", "--project", pw]);
+  const gateBefore = run(["approve", "greeter", "tests", "--project", pw]);
+  putPw("tests/Greeter.Tests.ps1", "BeforeAll { Import-Module \"$PSScriptRoot/../src/Greeter/Greeter.psm1\" -Force }\nDescribe 'Get-Greeting' {\n  It 'T-01 greets by name (US-1.AC-1)' { Get-Greeting -Name 'Ana' | Should -Be 'Hello, Ana' }\n}\n");
+  putPw("src/Greeter/Greeter.Tests.ps1", "Describe 'Get-Greeting' { It 'T-02 greets nobody' { Get-Greeting | Should -Be 'Hello' } }\n");
+  const trAfter = run(["trace", "greeter", "--code", "--project", pw]);
+  const gateAfter = run(["approve", "greeter", "tests", "--project", pw]);
+  ok(/tests in code: 0\/2 planned T-ID\(s\) named in 0 test file\(s\)/.test(trBefore.out) && gateBefore.code === 1 && /T-01, T-02/.test(gateBefore.out) &&
+    /tests in code: 2\/2 planned T-ID\(s\) named in 2 test file\(s\)/.test(trAfter.out) && gateAfter.code === 0 && !/forced/i.test(gateAfter.out),
+    "1.21.1 languages: trace --code and approve tests on a +tdd PowerShell feature — 0/2 and refused (T-01, T-02) until tests/Greeter.Tests.ps1 and src/Greeter/Greeter.Tests.ps1 name them, then 2/2 and approved unforced (got " +
+    JSON.stringify([trBefore.out.split("\n").filter((l) => /tests in code/.test(l)), gateBefore.out.slice(0, 160), trAfter.out.split("\n").filter((l) => /tests in code/.test(l)), gateAfter.out.slice(0, 120)]) + ")");
 };

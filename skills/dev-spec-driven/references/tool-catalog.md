@@ -24,7 +24,10 @@ with real content from the `references/` templates. No MCP connection (e.g. clau
 
 **The CLI** runs the same engine (`dev-spec <command>` in these docs — its name). A plugin install puts no `dev-spec` on
 PATH: a CLI line you hand the user is the runnable one the tools' messages print, `node "<clone>/cli/dev-spec.js" …`
-with the clone's path resolved (`node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" …` in the command files).
+with the clone's path resolved (`node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" …` in the command files). Its `done <f> <n>
+--run` runs a task's `_Verify:_` in the platform shell (cmd.exe on Windows) or the one `--shell` names — `bash` (Git Bash),
+`pwsh` / `powershell` for a PowerShell command (`_Verify: pwsh -NoProfile -Command "Invoke-Pester -Path tests -CI"_` also
+runs under cmd.exe as written): `references/verification.md`.
 
 Full tool table, the CLI, the hooks, doctor's check ids, the MCP prompts + `specs://` resources other MCP clients get and
 the annotated `.specs/` tree: `references/tooling-reference.md`.

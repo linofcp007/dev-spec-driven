@@ -44,7 +44,8 @@ ask the user to run the test and paste the red output — don't write the fix on
 
 - **`_Verify: <command>_`** on a task (English-stable marker, like `_Requirements:_`) names the command that
   proves it. The scaffold seeds one; give every task that changes behaviour a real one
-  (`npm test -- keys.test.js`, `pytest tests/test_keys.py`, `k6 run load.js`).
+  (`npm test -- keys.test.js`, `pytest tests/test_keys.py`, `k6 run load.js`,
+  `pwsh -NoProfile -Command "Invoke-Pester -Path tests -CI"` — see PowerShell below).
 - **`spec_complete_task {…, evidence: {command, exitCode, summary}}`** records the result in
   `.state.json → evidence[<n>]` — the latest run `{command, exitCode, summary, at}` plus a short `history` of
   runs (for the pass rate), stamped with the task's text and its `_Verify:_` command. A non-zero `exitCode`
@@ -80,14 +81,19 @@ ask the user to run the test and paste the red output — don't write the fix on
 - **CLI:** `dev-spec done <feature> <n> --run` runs the task's `_Verify:_` command(s) from the project root
   and records the evidence; any failure leaves the task open, is recorded, and exits 1 (except on an `_Expect: fail_`
   task, where the failing run is the proof and a passing one is refused). `--shell bash` (or
-  `DEV_SPEC_SHELL`) picks the shell. On Windows `bash` means **Git Bash** (found through `git --exec-path`,
+  `DEV_SPEC_SHELL`) picks the shell; `--shell pwsh` (PowerShell 7) or `--shell powershell` (Windows PowerShell 5.1) runs the
+  command as PowerShell (`-NoProfile -NonInteractive -Command`, below). On Windows `bash` means **Git Bash** (found through `git --exec-path`,
   `%ProgramFiles%\Git` or a non-WSL `bash.exe` on PATH); a bare `bash` never resolves to WSL's launcher (the `bash.exe` in System32 or
   WindowsApps, which runs the command inside a Linux distribution): name that one by its full path to run inside WSL on
   purpose (a run WSL can't start records nothing); `wsl.exe` is no shell and is refused, and so is `--shell bash` with no
   Git Bash installed (pass the full path of a `bash.exe` instead). On Windows the default shell is cmd.exe,
   which has no single quotes and never
   expands `$VAR` — `node -e 'process.exit(1)'` exits 0 there — so a `_Verify:_` in POSIX syntax is refused before
-  anything runs: re-run with `--shell bash` (Git Bash), or `--shell cmd` to run it under cmd.exe anyway. A failed run
+  anything runs: re-run with `--shell bash` (Git Bash), `--shell pwsh` for a PowerShell command, or `--shell cmd` to run it
+  under cmd.exe anyway. A script handed to `pwsh` / `powershell` in double quotes is PowerShell, not POSIX: `pwsh -NoProfile
+  -Command "Invoke-Pester -Path tests -CI; exit $LASTEXITCODE"` runs under cmd.exe as written (cmd.exe passes it on
+  intact); `pwsh -c '…'` is refused (cmd.exe splits the single-quoted script and PowerShell would evaluate a string —
+  exit 0). A failed run
   suggests `--shell bash` only when cmd.exe itself could not run the line (an unknown command, its syntax error); a
   check that ran and failed means fixing the code. **A run that could not happen records nothing:** the shell could not
   be started, the command was killed by a signal, its output passed 64 MB, `--timeout <seconds>` expired, or WSL's relay
@@ -123,7 +129,10 @@ green (the fix), not to this one.
 - Exit **126 / 127 / 9009** means the command could not run at all (not executable / not found) — no red test; it is
   refused like a failed run (`couldNotRun: "exit-code"`). So is a failing run whose output shows the test never ran — a
   missing test file, module or script, nothing collected (node "Could not find", "Cannot find module", python "can't open
-  file", pytest "no tests ran", jest "No tests found", npm "Missing script"…): `spec_complete_task` refuses a run whose
+  file", pytest "no tests ran", jest "No tests found", npm "Missing script", PowerShell "… is not recognized as a name of a
+  cmdlet" / "The specified module … was not loaded" / "running scripts is disabled on this system", Pester "No test files
+  were found"…) — while a test that ran and failed stays red even when its message quotes one of those (Pester's
+  `[-] <test> 12ms`, "Expected …, but got …"): `spec_complete_task` refuses a run whose
   `summary` shows it (`couldNotRun: "output"`), `dev-spec done --run` refuses it with nothing recorded, and an older
   record of that kind is no red proof. Whenever cmd.exe is the shell (the Windows default, or `--shell cmd`), a line
   cmd.exe itself could not run is refused by `done --run` with nothing recorded.
@@ -151,6 +160,30 @@ that sets `pipefail` before the pipe:
 
 Drop the pipe (`npm test`, and read the output), or put `set -o pipefail;` first under bash (`--shell bash`; cmd.exe has
 no pipefail).
+
+## PowerShell `_Verify:_` commands (Pester)
+
+```markdown
+- [ ] 2. [US1] Greet by name
+  - _Requirements: US-1.AC-1_
+  - _Verify: pwsh -NoProfile -Command "Invoke-Pester -Path tests -CI"_
+```
+
+- **Make a failure exit non-zero.** Pester 5+ `-CI` exits non-zero when a test fails (it also writes testResults.xml);
+  on Windows PowerShell 5.1 with Pester 3 / 4 use `-EnableExit`. Without either, `Invoke-Pester` returns normally and the run
+  exits 0 whatever failed. A script's `exit N` is the run's exit code; a last command that failed makes it 1 — add
+  `; exit $LASTEXITCODE` to pass a native tool's own code on (`pwsh -NoProfile -Command "npm test; exit $LASTEXITCODE"`).
+- **Running it with `done --run` / `finish --run`:** the double-quoted form above runs under the default shell (cmd.exe on
+  Windows, `/bin/sh` elsewhere) as written; or pick PowerShell itself — `--shell pwsh` (or `--shell powershell` for Windows
+  PowerShell 5.1, a path to either, `DEV_SPEC_SHELL=pwsh`) — and write the `_Verify:_` in PowerShell directly
+  (`_Verify: Invoke-Pester -Path tests -CI_`). The CLI then runs `<shell> -NoProfile -NonInteractive -Command <cmd>`: no
+  profile, no prompt.
+- **Test names:** Pester runs `*.Tests.ps1` files — tests/, or beside the code (`src/Greeter/Greeter.Tests.ps1`) — and
+  `trace_check {code: true}` reads them: put the T-ID in the `It` name (`It 'T-01 greets by name' { … }`).
+- **Red first (`_Expect: fail_`).** A red run is a test that ran and failed (`[-] Get-Greeting.T-01 … 12ms`, "Expected
+  'Hello, Ana', but got 'Hello'.", or the function under test not written yet). `Invoke-Pester` unknown (Pester not
+  installed), a module the test imports that isn't there ("Container failed" in the summary), a script the execution
+  policy blocks and "No test files were found" are no red test: the run is refused.
 
 ## Project checks and suite evidence
 

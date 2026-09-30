@@ -1253,4 +1253,61 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     ok(hookRuns.every((x) => !x.r.threw) && hookMs < bound && S.classify("x" + "\n".repeat(3) + "Criar o pedido e gravar a fatura").lang === "pt",
       "1.17 linear headings: the stop gate's prose (4,000 unclosed '<!--', a 3,000-backtick run), classify's clause starts after 50,000 blank lines and a git log header with a 100,000-space run stay linear, within the bound above — a hook has 10 s (got " + js({ each: hookRuns.map((x) => x.ms), threw: hookRuns.filter((x) => x.r.threw).map((x) => x.r.error) }) + ")");
   }
+
+  // 1.21.1 languages — the test-code scan reads the tests of every language of the code list (isCodeFile + isTestFile): a
+  // T-ID in a Bats suite, a GoogleTest *_test.cc, a busted *_spec.lua, a testthat test-*.R, a Pester *.Tests.ps1 (beside the
+  // code too), Perl's t/*.t, an EUnit / hspec / clojure.test file — never a source file, nor a .t outside t/. Until 1.21.1 it
+  // read only JS/TS, Python, Go, Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C/C++, Vue/Svelte (+ F#, Scala, Groovy, Elixir, Dart).
+  {
+    const js = (v) => JSON.stringify(v);
+    const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const lp = path.join(tmp, "proj-121-test-scan");
+    put(lp, "test/deploy.bats", "@test \"T-01 deploys\" {\n  run ./deploy.sh\n  [ \"$status\" -eq 0 ]\n}\n");
+    put(lp, "src/codec_test.cc", "TEST(Codec, T02_RoundTrips) { EXPECT_EQ(1, 1); }\n");
+    put(lp, "lua/codec_spec.lua", "describe('codec', function() it('T-03 decodes', function() end) end)\n");
+    put(lp, "R/test-codec.R", "test_that(\"T-04 encodes\", { expect_equal(1, 1) })\n");
+    put(lp, "src/Codec.Tests.ps1", "Describe 'Codec' { It 'T-05 encodes' { 1 | Should -Be 1 } }\n");
+    put(lp, "t/basic.t", "use Test::More;\nok(1, 'T-06 loads');\ndone_testing;\n");
+    put(lp, "src/codec_tests.erl", "%% T-07 round-trips\n-module(codec_tests).\n");
+    put(lp, "src/CodecSpec.hs", "spec = it \"T-08 decodes\" $ True `shouldBe` True\n");
+    put(lp, "src/core_test.clj", "(deftest decodes (testing \"T-09 decodes\" (is true)))\n");
+    put(lp, "notes.t", "T-10 is no test\n");
+    put(lp, "src/codec.lua", "-- T-11 lives in source\n");
+    put(lp, "src/codec.ps1", "# T-12 lives in source\n");
+    const sc = S.scanTestCode(lp);
+    const where = (n) => ((sc.tids.get("T-" + n) || {}).files || []).join();
+    const want = ["test/deploy.bats", "src/codec_test.cc", "lua/codec_spec.lua", "R/test-codec.R", "src/Codec.Tests.ps1", "t/basic.t", "src/codec_tests.erl", "src/CodecSpec.hs", "src/core_test.clj", "", "", ""];
+    const got = want.map((_, i) => where(i + 1));
+    const t0 = Date.now();
+    const lin = [S.isTestFile("test_" + "a.".repeat(100000) + "x"), S.isTestFile("x" + "_test".repeat(20000) + ".q"), S.isTestFile(".test".repeat(20000) + "."), S.isTestFile("t/" + "x".repeat(100000) + ".tests.ps1q")];
+    const linMs = Date.now() - t0;
+    ok(js(got) === js(want) && sc.scanned === 9 && !sc.truncated && lin.join() === "false,false,false,false" && linMs < 3000,
+      "1.21.1 languages: scanTestCode finds T-IDs in a .bats suite, a _test.cc (T02_…), a _spec.lua, a test-x.R, a *.Tests.ps1 outside tests/, Perl's t/basic.t, a _tests.erl, a *Spec.hs and a _test.clj — never in notes.t or a source file; the test-name rule stays linear on 100,000-character names (got " +
+      js([got, sc.scanned, linMs]) + ")");
+
+    // A +tdd PowerShell feature: the tests gate (Phase 4) and trace_check {code} pass once the Pester files — tests/ and beside
+    // the module — and a Bats suite name the planned T-IDs (a .bats row is code: expected in a test file, never "outside code").
+    const pw = path.join(tmp, "proj-121-pester-gate");
+    S.initProject(pw, ["core", "tdd"], "en");
+    const f = S.createFeature(pw, "Greeter", ["core", "tdd"], "", undefined, "en");
+    put(pw, "src/Greeter/Greeter.psm1", "function Get-Greeting { param([string]$Name) throw 'not implemented' }\n");
+    put(f.dir, "test-plan.md", "# Test Plan\n\n| Test ID | Kind | Covers | File |\n|---|---|---|---|\n| T-01 | example | US-1.AC-1 | `tests/Greeter.Tests.ps1` |\n" +
+      "| T-02 | example | US-1.AC-1 | `src/Greeter/Greeter.Tests.ps1` |\n| T-03 | example | US-1.AC-1 | `test/greet.bats` |\n");
+    approveBefore(pw, f.slug, "tests");
+    const before = S.traceCheck(pw, f.slug, { code: true }).code || {};
+    const gate0 = S.approvePhase(pw, f.slug, "tests");
+    put(pw, "tests/Greeter.Tests.ps1", "BeforeAll { Import-Module \"$PSScriptRoot/../src/Greeter/Greeter.psm1\" -Force }\nDescribe 'Get-Greeting' {\n" +
+      "  It 'T-01 greets by name (US-1.AC-1)' { Get-Greeting -Name 'Ana' | Should -Be 'Hello, Ana' }\n}\n");
+    put(pw, "src/Greeter/Greeter.Tests.ps1", "Describe 'Get-Greeting' { It 'T-02 greets nobody' { Get-Greeting | Should -Be 'Hello' } }\n");
+    const mid = S.traceCheck(pw, f.slug, { code: true }).code || {};
+    const gate1 = S.approvePhase(pw, f.slug, "tests");
+    put(pw, "test/greet.bats", "@test \"T-03 greets from the shell\" {\n  run pwsh -NoProfile -Command \"Get-Greeting\"\n}\n");
+    const mcpTr = payload(await rpc("tools/call", { name: "trace_check", arguments: { projectDir: pw, name: f.slug, code: true } }));
+    const gate2 = S.approvePhase(pw, f.slug, "tests");
+    ok(js(before.plannedNotInCode) === '["T-01","T-02","T-03"]' && !(before.plannedOutsideCode || []).length && gate0.refused === true && js(gate0.failing) === '["tests-in-code"]' &&
+      /T-01, T-02, T-03/.test(gate0.error) && js(mid.plannedNotInCode) === '["T-03"]' && gate1.refused === true && /names yet: T-03/.test(gate1.error) &&
+      mcpTr.ok && js(mcpTr.code.plannedNotInCode) === "[]" && mcpTr.code.scanned === 3 && gate2.ok === true && !gate2.forced,
+      "1.21.1 languages: a +tdd PowerShell feature — trace_check {code} and the tests gate (approve tests) name T-01…T-03 missing, then only the Bats one once tests/Greeter.Tests.ps1 and src/Greeter/Greeter.Tests.ps1 name theirs; with the .bats suite the gate passes unforced (MCP trace_check: 3 test files read) (got " +
+      js([before.plannedNotInCode, before.plannedOutsideCode, gate0.error, mid.plannedNotInCode, mcpTr.code, gate2.ok, gate2.error]) + ")");
+  }
 };

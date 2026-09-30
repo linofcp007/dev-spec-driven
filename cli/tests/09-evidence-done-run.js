@@ -135,4 +135,49 @@ const w1CmSt = run(["status", "cm", "--project", w1p]);
 const w1CmDone = run(["done", "cm", "2", "--project", w1p]);
 ok(/Tasks: 1\/3\s+next → #2/.test(w1CmSt.out) && w1CmDone.code === 0 && /Task 2 done\. 2\/3\s+next → #3 Docs/.test(w1CmDone.out),
   "an inline '<!--' in a task's text hides no task below it (status and done agree)");
+
+// 1.21.1 languages: PowerShell as the run shell — --shell pwsh / powershell and DEV_SPEC_SHELL=pwsh run the _Verify:_ as
+// `<shell> -NoProfile -NonInteractive -Command <cmd>` (the exit code propagates, `$` is PowerShell's); under the default cmd.exe
+// a `pwsh -NoProfile -Command "…; exit $LASTEXITCODE"` _Verify:_ runs (1.21.0 refused it as POSIX syntax) while a single-quoted
+// `pwsh -c '…'` is still refused, naming --shell pwsh. Skipped where pwsh / powershell isn't installed (the Linux containers).
+const hasShell = (sh) => { try { return spawnSync(sh, ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], { encoding: "utf8", windowsHide: true, timeout: 60000 }).status === 0; } catch { return false; } };
+const hasPwsh = hasShell("pwsh"), hasWinPs = process.platform === "win32" && hasShell("powershell");
+const lp = path.join(tmp, "l121-pwsh-run");
+run(["create", "Pwsh", "core", "--project", lp]);
+const lpRead = () => fs.readFileSync(path.join(lp, ".specs", "pwsh", "tasks.md"), "utf8");
+const lpEv = () => { try { return JSON.parse(fs.readFileSync(path.join(lp, ".specs", "pwsh", ".state.json"), "utf8")).evidence || {}; } catch { return {}; } };
+fs.writeFileSync(path.join(lp, ".specs", "pwsh", "tasks.md"), [
+  "- [ ] 1. passes under PowerShell", "  - _Verify: $n = 0; Write-Output \"ran $n\"; exit $n_",
+  "- [ ] 2. fails under PowerShell", "  - _Verify: exit 3_",
+  "- [ ] 3. [US1] Write T-01 and watch it fail", "  - _Verify: Invoke-NoSuchCmdletDsd -Path tests_", "  - _Expect: fail_",
+  "- [ ] 4. pwsh under cmd.exe", "  - _Verify: pwsh -NoProfile -Command \"node -e 'process.exit(0)'; exit $LASTEXITCODE\"_",
+  "- [ ] 5. pwsh under cmd.exe, failing", "  - _Verify: pwsh -NoProfile -Command \"node -e 'process.exit(5)'; exit $LASTEXITCODE\"_",
+  "- [ ] 6. a single-quoted script", "  - _Verify: pwsh -c 'exit 0'_",
+  "- [ ] 7. Windows PowerShell 5.1", "  - _Verify: if ($PSVersionTable.PSEdition -eq 'Desktop') { exit 0 } else { exit 9 }_", ""].join("\n"));
+if (hasPwsh) {
+  const r1 = run(["done", "pwsh", "1", "--run", "--shell", "pwsh", "--project", lp]);
+  const r2 = run(["done", "pwsh", "2", "--run", "--shell", "pwsh", "--project", lp]);
+  const r3 = spawnSync(process.execPath, [CLI, "done", "pwsh", "3", "--run", "--project", lp], { encoding: "utf8", env: { ...process.env, DEV_SPEC_SHELL: "pwsh" } });
+  const ev = lpEv();
+  ok(r1.code === 0 && /ran 0/.test(r1.out) && /Task 1 done \(verified\)/.test(r1.out) && ev["1"].exitCode === 0 && ev["1"].observed === "cli" &&
+    r2.code === 1 && ev["2"].exitCode === 3 && /- \[ \] 2\./.test(lpRead()) &&
+    r3.status === 1 && /'Invoke-NoSuchCmdletDsd' is not recognized as a name of a cmdlet/.test(r3.stdout + r3.stderr) && /no red test/.test(r3.stdout + r3.stderr) && !ev["3"] && /- \[ \] 3\./.test(lpRead()),
+    "1.21.1 languages: done --run --shell pwsh runs the _Verify:_ under PowerShell 7 — `$n = 0; … exit $n` passes (verified, observed: cli), `exit 3` is recorded as exit 3; with DEV_SPEC_SHELL=pwsh an _Expect: fail_ run of an unknown cmdlet is no red test (nothing recorded) (got " +
+    JSON.stringify([r1.out.slice(0, 120), r2.out.slice(0, 120), (r3.stdout + r3.stderr).slice(0, 200)]) + ")");
+} else ok(true, "1.21.1 languages: done --run --shell pwsh — skipped: pwsh is not installed here");
+if (process.platform === "win32" && hasPwsh) {
+  const r4 = run(["done", "pwsh", "4", "--run", "--project", lp]);
+  const r5 = run(["done", "pwsh", "5", "--run", "--project", lp]);
+  const r6 = run(["done", "pwsh", "6", "--run", "--project", lp]);
+  const ev = lpEv();
+  ok(r4.code === 0 && /Task 4 done \(verified\)/.test(r4.out) && r5.code === 1 && ev["5"].exitCode === 5 && !/--shell bash \(or set/.test(r5.out) &&
+    r6.code === 1 && /uses POSIX shell syntax \(single quotes/.test(r6.out) && /--shell pwsh for a PowerShell command/.test(r6.out) && !ev["6"],
+    "1.21.1 languages (Windows): under the default cmd.exe, `pwsh -NoProfile -Command \"node … ; exit $LASTEXITCODE\"` runs — exit 0 verifies, exit 5 is recorded as 5 (no cmd.exe hint); `pwsh -c '…'` is refused before anything runs, naming --shell pwsh (got " +
+    JSON.stringify([r4.out.slice(0, 160), r5.out.slice(0, 160), r6.out.slice(0, 120)]) + ")");
+} else ok(true, "1.21.1 languages: a pwsh -Command _Verify:_ under cmd.exe — skipped: Windows with pwsh only");
+if (hasWinPs) {
+  const r7 = run(["done", "pwsh", "7", "--run", "--shell", "powershell", "--project", lp]);
+  ok(r7.code === 0 && /Task 7 done \(verified\)/.test(r7.out) && lpEv()["7"].exitCode === 0,
+    "1.21.1 languages: done --run --shell powershell runs the _Verify:_ under Windows PowerShell 5.1 (PSEdition Desktop → exit 0) (got " + r7.out.slice(0, 160) + ")");
+} else ok(true, "1.21.1 languages: done --run --shell powershell — skipped: Windows PowerShell only");
 };

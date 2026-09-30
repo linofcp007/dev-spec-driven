@@ -97,7 +97,12 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
 - **Tests run on Windows AND Linux** (`npm run test:docker`): a `_Verify:_` a test writes must work under cmd.exe AND
   `/bin/sh` — quote it (`node -e "process.exit(0)"`; the bare `node -e process.exit(0)` is a sh syntax error that cmd.exe
   accepts); don't depend on a case-insensitive file system (assert the Linux counterpart where Windows/macOS fold case)
-  or on the text of a V8 error (Node 18 omits a RegExp's flags in its SyntaxError).
+  or on the text of a V8 error (Node 18 omits a RegExp's flags in its SyntaxError). A test that RUNS PowerShell (1.21.1 —
+  cli/tests/09-evidence-done-run.js: `done --run --shell pwsh`, a `pwsh -Command "…"` `_Verify:_` under cmd.exe, `--shell
+  powershell`) probes the program first (`<shell> -NoProfile -NonInteractive -Command "exit 0"` → 0) and asserts `ok(true,
+  "… skipped: …")` without it — the Docker images have no pwsh, and cmd.exe / Windows PowerShell exist only on Windows. The
+  engine-level PowerShell checks (posixShellSyntax, resolveRunShell, couldNotRunOutput on captured pwsh 7 / 5.1 / Pester
+  3–6 outputs) run everywhere.
 - **Eval harness** (`run-evals.js`) resolves the feature with the engine's resolver (accents, legacy slugs,
   `${VAR}` guard), prints in the feature's language, and treats a wrong-shaped set as invalid (exit 1). It validates
   EVERY item (`itemProblems()`: object, `id`, `input`, a grader in contains|equals|regex|refuse|judge, a value / a regex

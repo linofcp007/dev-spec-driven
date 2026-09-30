@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
+exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => {
 
   { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -910,5 +910,134 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
     const sec11 = S.traceMatrix(r11, "tpl").rows.filter((r) => r.kind !== "ac");
     ok(sec11.length > 0 && sec11.every((r) => r.template === true && r.gaps.length === 0 && r.status !== "untraced") && S.traceCheck(r11, "tpl").warnings.length === 0,
       "feature review R11: template EC/NFR/SC rows carry no gap and are not untraced, as trace_check says nothing about them (got " + JSON.stringify(sec11.map((r) => r.id + ":" + r.status)) + ")");
+  }
+
+  // 1.21.1 languages — PowerShell evidence: the _Verify:_ refusal under cmd.exe, the run shell, could-not-run vs red.
+  {
+    const js = (v) => JSON.stringify(v);
+    const E = require("./lib/engine/index.js");
+    const ESC = String.fromCharCode(27), BS = String.fromCharCode(92);
+    const px = (c) => S.posixShellSyntax(c).join("+");
+    // 1. posixShellSyntax: `$` inside a double-quoted word of a PowerShell program's -Command script (or powershell.exe's positional
+    // command) is PowerShell's — cmd.exe hands it over intact; a single-quoted script, a `$` outside quotes and a -File script's
+    // arguments (literal strings to the script — the calling shell's syntax) stay flagged.
+    const PX = [
+      ['pwsh -NoProfile -Command "Invoke-Pester ./tests -CI; exit $LASTEXITCODE"', ""],
+      ['pwsh -NoProfile -Command "$r = Invoke-Pester ./tests -PassThru; exit $r.FailedCount"', ""],
+      ['pwsh.exe -nop -c "Invoke-Pester -Path tests -CI; exit $LASTEXITCODE"', ""],
+      ['PowerShell.exe -NoProfile -ExecutionPolicy Bypass -Command "Invoke-Pester -EnableExit; exit $LASTEXITCODE"', ""],
+      ['pwsh /c "exit $LASTEXITCODE"', ""],
+      ['pwsh -NoProfile -CommandWithArgs "exit $args[0]" 3', ""],
+      ['powershell -NoProfile "Invoke-Pester -EnableExit; exit $LASTEXITCODE"', ""],
+      ['powershell -ExecutionPolicy Bypass -WindowStyle Hidden "exit $LASTEXITCODE"', ""],
+      ['"C:' + BS + 'Program Files' + BS + 'PowerShell' + BS + '7' + BS + 'pwsh.exe" -NoProfile -Command "exit $LASTEXITCODE"', ""],
+      ['npm run build && pwsh -NoProfile -Command "Invoke-Pester -CI; exit $LASTEXITCODE"', ""],
+      ['pwsh -NoProfile -Command "node -e \'process.exit(0)\'; exit $LASTEXITCODE"', ""],
+      ["pwsh -c 'Invoke-Pester ./tests -CI'", "single-quotes"],
+      ['pwsh -NoProfile -Command Invoke-Pester; exit $LASTEXITCODE', "variable"],
+      ['pwsh -NoProfile -File build.ps1 -Target "$env:DEPLOY_ENV"', "variable"],
+      ['pwsh build.ps1 "$x"', "variable"],
+      ['powershell -ExecutionPolicy Bypass -File build.ps1 "$x"', "variable"],
+      ['pwsh -c "exit 0" && echo "$HOME"', "variable"],
+      ['echo pwsh -c "$x"', "variable"],
+      ['test "$CI" = 1', "variable"],
+    ];
+    const pxWrong = PX.filter(([c, want]) => px(c) !== want).map(([c]) => c + " → " + px(c));
+    ok(!pxWrong.length,
+      "1.21.1 languages: posixShellSyntax lets `$` through inside a double-quoted pwsh / powershell -Command script (-c, /c, -CommandWithArgs, powershell.exe's positional command, any path, after &&) — cmd.exe hands it to PowerShell intact; a single-quoted script, an unquoted `$`, a -File script's arguments and `$` outside PowerShell stay refused (wrong: " +
+      js(pxWrong) + ")");
+
+    // 2. The run shell: --shell pwsh / powershell (a bare name or a path, quoted or not; DEV_SPEC_SHELL too) runs
+    // `<shell> -NoProfile -NonInteractive -Command <cmd>` — on every platform; bash / cmd / the default are unchanged.
+    const ARGS = '["-NoProfile","-NonInteractive","-Command"]';
+    const rs = (req, platform) => S.resolveRunShell(req, { platform, env: {} });
+    const pwP = "C:" + BS + "Program Files" + BS + "PowerShell" + BS + "7" + BS + "pwsh.exe";
+    const shells = [rs("pwsh", "win32"), rs("powershell", "win32"), rs("POWERSHELL.EXE", "win32"), rs(pwP, "win32"), rs('"' + pwP + '"', "win32"), rs("pwsh", "linux"), rs("/usr/bin/pwsh", "darwin")];
+    ok(shells.every((r) => r.pwsh === true && r.cmd === false && js(r.args) === ARGS) && shells[3].shell === pwP && shells[4].shell === pwP && shells[0].shell === "pwsh" && shells[6].shell === "/usr/bin/pwsh" &&
+      !rs("bash", "linux").pwsh && !rs("", "win32").pwsh && rs("", "win32").cmd === true && !rs("cmd", "win32").pwsh && !rs("sh", "win32").args && !rs("zsh", "linux").args &&
+      E.isPwshShell("C:/tools/pwsh-preview/pwsh.exe") && !E.isPwshShell("pwsh-wrapper"),
+      "1.21.1 languages: resolveRunShell — pwsh / powershell(.exe), a path to either (quotes dropped), on Windows and elsewhere → pwsh: true + args -NoProfile -NonInteractive -Command (the CLI runs <shell> <args> <cmd>); bash, sh, zsh, cmd and the default are unchanged (got " +
+      js(shells) + ")");
+
+    // 3. could-not-run vs red — PowerShell's own could-not-run outputs (pwsh 7 / Windows PowerShell 5.1 / pwsh's pt-BR and es
+    // resources; ANSI colours as pwsh 7 writes them), and Pester's red runs — a test that RAN and failed, even on "is not
+    // recognized", stays red (outputs captured from pwsh 7.6, Windows PowerShell 5.1, Pester 3.4 / 5.9 / 6.2).
+    const red = (s) => ESC + "[91m" + s + ESC + "[0m";
+    const cnr = (s) => (S.couldNotRunOutput(s) || {}).kind || null;
+    const CANT = [
+      ESC + "[31;1mInvoke-Pester: " + ESC + "[31;1mThe term 'Invoke-Pester' is not recognized as a name of a cmdlet, function, script file, or executable program." + ESC + "[0m\r\n" + ESC + "[31;1mCheck the spelling of the name.",
+      "Invoke-Pester : The term 'Invoke-Pester' is not recognized as the name of a \r\ncmdlet, function, script file, or operable program. Check the spelling of the name.\r\nAt line:1 char:1",
+      'O termo "Invoke-Pester" não é reconhecido como um nome de um cmdlet, função, arquivo de script ou programa executável.',
+      'El término "Invoke-Pester" no se reconoce como nombre de un cmdlet, función, archivo de script o programa ejecutable.',
+      "Import-Module: The specified module 'Pester' was not loaded because no valid module file was found in any module directory.",
+      'O módulo especificado "Pester" não foi carregado porque nenhum arquivo de módulo válido foi encontrado em nenhum diretório de módulo.',
+      'No se cargó el módulo especificado "Pester" porque no se encontró ningún archivo de módulo válido en ningún directorio de módulos.',
+      "File C:" + BS + "x" + BS + "build.ps1 cannot be loaded because running scripts is \r\ndisabled on this system. For more information, see about_Execution_Policies.",
+      "Não é possível carregar o arquivo C:" + BS + "x" + BS + "b.ps1 porque a execução de scripts está desabilitada neste sistema.",
+      "El archivo C:" + BS + "x" + BS + "b.ps1 no se puede cargar porque la ejecución de scripts está deshabilitada en este sistema.",
+      "File C:" + BS + "x" + BS + "b.ps1 cannot be loaded. The file C:" + BS + "x" + BS + "b.ps1 is not digitally signed. You cannot run this script on the current system.",
+      "The argument 'scripts/nope.ps1' is not recognized as the name of a script file. Check the spelling of the name.\n\nUsage: pwsh[.exe] [-Login]",
+      "The argument 'scripts/nope.ps1' to the -File parameter does not exist. Provide the path to an existing '.ps1' file as an argument to the -File parameter.",
+      "System.Management.Automation.RuntimeException: No test files were found and no scriptblocks were provided. Please ensure that you provided at least one path to a *.Tests.ps1 file.",
+      // Pester 5: a BeforeAll that imports a module that isn't there — its test is COUNTED failed, but "Container failed" says it never ran
+      red("[-] C:" + BS + "x" + BS + "Ba.Tests.ps1 failed with:") + "\nFileNotFoundException: The specified module 'C:/x/../src/Missing.psm1' was not loaded because no valid module file was found in any module directory.\n" +
+        ESC + "[97mTests Passed: 0, " + ESC + "[0m" + ESC + "[91mFailed: 1, " + ESC + "[0m" + ESC + "[90mSkipped: 0, NotRun: 0" + ESC + "[0m\n" + red("Container failed: 1"),
+      // Pester 3: the same, in a Describe block
+      "Describing Missing\n [-] Error occurred in Describe block 378ms\n   FileNotFoundException: The specified module 'x/Missing.psm1' was not loaded because no valid module file was found in any module directory.\nPassed: 0 Failed: 1 Skipped: 0 Pending: 0 Inconclusive: 0",
+    ];
+    const RED = [
+      red("[-] Get-Greeting.T-01 greets by name (US-1.AC-1)") + ESC + "[90m 132ms (114ms|18ms)" + ESC + "[0m\n" + red(" Expected strings to be the same, but they were different.") + "\n" + red(" Expected: 'Hello, Ana'") + "\n" +
+        ESC + "[97mTests Passed: 0, " + ESC + "[0m" + ESC + "[91mFailed: 1, " + ESC + "[0m", // Pester 5, coloured
+      red("[-] Get-Farewell.T-02 says bye") + ESC + "[90m 89ms (72ms|17ms)" + ESC + "[0m\n" + red(" CommandNotFoundException: The term 'Get-Farewell' is not recognized as a name of a cmdlet, function, script file, or executable program.") +
+        "\nTests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0", // the function under test doesn't exist yet: a red test
+      "Describing Get-Farewell\n [-] T-02 says bye 469ms\n   CommandNotFoundException: The term 'Get-Farewell' is not recognized as the name of a cmdlet, function, script file, or operable program.\nPassed: 0 Failed: 1 Skipped: 0 Pending: 0 Inconclusive: 0", // Pester 3
+      "CommandNotFoundException: The term 'Get-Farewell' is not recognized as a name of a cmdlet, function, script file, or executable program.\nTests completed in 747ms\nTests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0", // a summary without the [-] line
+      "[-] Get-Greeting.T-01 greets by name (US-1.AC-1) 129ms\n Expected 'Hello, Ana', but got 'Hello'.\nTests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0", // Pester 6
+      " Expected 'no error', but got 'The term 'foo' is not recognized as a name of a cmdlet, function, script file, or executable program.'", // an assertion quoting it
+    ];
+    const cantWrong = CANT.map((s, i) => [i, cnr(s)]).filter(([, k]) => k !== "test");
+    const redWrong = RED.map((s, i) => [i, cnr(s)]).filter(([, k]) => k !== null);
+    const RA = E.RE_ASSERTION_RAN;
+    ok(!cantWrong.length && !redWrong.length && RA.test("  [-] T-01 greets 12ms") && RA.test("[-] a.b 1.02s (1s|20ms)") && !RA.test(" [-] Error occurred in Describe block 378ms") &&
+      !RA.test("[-] Discovery in C:/x/a.Tests.ps1 failed with:") && !RA.test("[-] C:/x/Ba.Tests.ps1 failed with:") && RA.test("Expected 3, but got 2.") && RA.test("   But was:  {Hello}") &&
+      RA.test("Expected string length 10 but was 5.") && !RA.test("Tests Passed: 0, Failed: 1") && E.pesterRan("Tests Passed: 0, Failed: 1, Skipped: 0") && !E.pesterRan("Tests Passed: 3, Failed: 0") &&
+      !E.pesterRan("Tests Passed: 0, Failed: 1\nContainer failed: 1") && E.pesterRan("Passed: 0 Failed: 2 Skipped: 0"),
+      "1.21.1 languages: couldNotRunOutput knows PowerShell's could-not-run outputs (an unknown command — pwsh 7, Windows PowerShell 5.1 wrapped, pt-BR, es; a missing module; the execution policy; an unsigned script; a -File path that isn't there; Pester's 'No test files were found'; a Pester container / Describe block that failed before its test ran) and never a Pester red run ('[-] … 12ms', 'Expected …, but got …', 'Tests Passed: 0, Failed: 1' — also when the failure quotes 'is not recognized'); ANSI colours read through (wrong: " +
+      js([cantWrong, redWrong]) + ")");
+
+    // 4. What a run records and says: colour codes dropped from the summary; cmd.exe's hint never fires on PowerShell's own
+    // messages; the pipe check reads a pwsh -Command script.
+    const sum = S.summarizeRunOutput(RED[0] + "\n" + ESC + "]8;;file:///C:/x" + ESC + BS + "link" + ESC + "]8;;" + ESC + BS + "\n");
+    const wsf = S.windowsShellFailure;
+    ok(!sum.includes(ESC) && /^\[-\] Get-Greeting\.T-01 greets by name \(US-1\.AC-1\) 132ms \(114ms\|18ms\)$/m.test(sum) && /Tests Passed: 0, Failed: 1,/.test(sum) && /^link$/m.test(sum) &&
+      CANT.slice(0, 4).every((s) => !wsf(s, 1)) && !wsf("Get-ChildItem: Cannot find path 'C:/x' because it does not exist.", 1) && !wsf(RED[1], 1) &&
+      !S.verifyPipeMasked('pwsh -NoProfile -Command "Invoke-Pester -Path tests -CI; exit $LASTEXITCODE"') && !S.verifyPipeMasked('pwsh -NoProfile -Command "$r = Invoke-Pester -PassThru; exit $r.FailedCount"') &&
+      S.verifyPipeMasked('pwsh -NoProfile -Command "Get-ChildItem tests | Invoke-Pester"') && !S.verifyPipeMasked("pwsh -NoProfile -Command \"Write-Output 'a|b'\""),
+      "1.21.1 languages: a run's summary drops ANSI colour and hyperlink codes (pwsh 7 colours captured output); windowsShellFailure (the --shell bash hint) never reads PowerShell's own messages as cmd.exe failing; the pipe check reads a pwsh -Command script (a real pipe flagged, a quoted '|' not) (got " +
+      js([sum]) + ")");
+
+    // 5. spec_complete_task on an _Expect: fail_ task: a Pester run that never ran the test is refused (couldNotRun: output); a
+    // Pester red run — the function under test doesn't exist yet — is the red proof.
+    const pe = path.join(tmp, "proj-121-pester-red");
+    S.initProject(pe, ["core"], "en");
+    const fe = S.createFeature(pe, "Farewell", ["core"], "", undefined, "en");
+    const PCMD = 'pwsh -NoProfile -Command "Invoke-Pester -Path tests -CI; exit $LASTEXITCODE"';
+    fs.writeFileSync(path.join(fe.dir, "tasks.md"), "- [ ] 1. [US1] Write test T-02 and watch it fail\n  - _Verify: " + PCMD + "_\n  - _Expect: fail_\n");
+    const notRun = S.completeTask(pe, fe.slug, 1, { command: PCMD, exitCode: 1, summary: "Invoke-Pester: The term 'Invoke-Pester' is not recognized as a name of a cmdlet, function, script file, or executable program." });
+    const redRun = S.completeTask(pe, fe.slug, 1, { command: PCMD, exitCode: 1, summary: S.summarizeRunOutput(RED[1]) });
+    ok(notRun.ok === false && notRun.couldNotRun === "output" && notRun.recorded === true && /'Invoke-Pester' is not recognized as a name of a cmdlet/.test(notRun.error) &&
+      redRun.ok === true && redRun.redRecorded === true && redRun.verified === true,
+      "1.21.1 languages: an _Expect: fail_ task — a Pester run whose summary shows Invoke-Pester is unknown is refused (couldNotRun: output); a Pester red run (the function under test not written yet — '[-] …', 'Tests Passed: 0, Failed: 1') is the red proof (got " +
+      js([notRun.couldNotRun, notRun.error && notRun.error.slice(0, 160), redRun.ok, redRun.redRecorded]) + ")");
+
+    // 6. Linear on hostile output (the run gate reads up to 200,000 characters of it).
+    const N = 100000;
+    const t0 = Date.now();
+    const hostile = ["[-] " + "x ".repeat(N) + "q", "Expected " + "a".repeat(2 * N), "'".repeat(2 * N), ("is " + " ".repeat(300)).repeat(N / 300) + "not", ("The argument '" + "a".repeat(390) + "' ").repeat(N / 400),
+      ("\"" + "a".repeat(199)).repeat(N / 200) + " is not recognized", ESC + "]" + "a".repeat(2 * N), ("Tests Passed: 1, ").repeat(N / 16)];
+    const hostileKinds = hostile.map((s) => cnr(s));
+    const hostileMs = Date.now() - t0;
+    ok(hostileMs < 5000 && hostileKinds.every((k) => k === null),
+      "1.21.1 languages: couldNotRunOutput stays linear on 200,000-character hostile outputs (a '[-] ' line with no duration, 'Expected ' runs, quote runs, blank runs between the words) (got " + js([hostileMs, hostileKinds]) + ")");
   }
 };

@@ -1450,7 +1450,7 @@ const msg = {
       numberInt: "o número da tarefa tem de ser um inteiro",
       noRunnable: (n) => `a tarefa ${n} não tem um marcador _Verify: <comando>_ executável`,
       shellHint: "Dica: a shell por omissão do Windows (cmd.exe) não conseguiu correr esta linha de comando tal como está escrita. Se o comando _Verify:_ foi escrito para uma shell POSIX, tenta de novo com --shell bash (ou define DEV_SPEC_SHELL=bash).",
-      posixOnWindows: (cmd, kinds) => `o comando _Verify:_ \`${cmd}\` usa sintaxe de shell POSIX (${kinds.map((k) => ({ "single-quotes": "plicas '…'", variable: "$VARIAVEIS" })[k] || k).join(", ")}) que o cmd.exe — a shell por omissão do --run no Windows — lê de outra forma, muitas vezes sem falhar: não tem plicas e nunca expande $VAR, por isso uma verificação partida podia ficar registada como execução bem-sucedida. Nada foi executado; a tarefa continua aberta. Corre de novo com --shell bash (Git Bash; ou define DEV_SPEC_SHELL=bash) — ou --shell cmd para o correr mesmo assim no cmd.exe.`,
+      posixOnWindows: (cmd, kinds) => `o comando _Verify:_ \`${cmd}\` usa sintaxe de shell POSIX (${kinds.map((k) => ({ "single-quotes": "plicas '…'", variable: "$VARIAVEIS" })[k] || k).join(", ")}) que o cmd.exe — a shell por omissão do --run no Windows — lê de outra forma, muitas vezes sem falhar: não tem plicas e nunca expande $VAR, por isso uma verificação partida podia ficar registada como execução bem-sucedida. Nada foi executado; a tarefa continua aberta. Corre de novo com --shell bash (Git Bash; ou define DEV_SPEC_SHELL=bash), com --shell pwsh se for um comando PowerShell (ou dá o script ao PowerShell entre aspas: pwsh -NoProfile -Command "…") — ou --shell cmd para o correr mesmo assim no cmd.exe.`,
     },
 
     tracks: {
@@ -2791,7 +2791,7 @@ const msg = {
       recorded: (n) => `Registada(s) ${n} execução(ões) de verificações do projeto em .state.json → finishChecks.`,
       noneToRun: 'não há verificações do projeto para correr (roadmap.json meta.checks) — define-as: ' + DEV_SPEC + ' init --check test="npm test" [--check lint="npm run lint"]',
       badArg: (v) => `--check espera nome=comando (recebido '${v}') — um comando vazio (nome=) remove essa verificação`,
-      posixOnWindows: (name, cmd, kinds) => `a verificação do projeto '${name}' (\`${cmd}\`) usa sintaxe de shell POSIX (${kinds.map((k) => ({ "single-quotes": "plicas '…'", variable: "$VARIAVEIS" })[k] || k).join(", ")}) que o cmd.exe — a shell por omissão do --run no Windows — lê de outra forma, muitas vezes sem falhar. Nada foi executado. Volta a correr com --shell bash (Git Bash; ou define DEV_SPEC_SHELL=bash) — ou --shell cmd para a correr no cmd.exe mesmo assim.`,
+      posixOnWindows: (name, cmd, kinds) => `a verificação do projeto '${name}' (\`${cmd}\`) usa sintaxe de shell POSIX (${kinds.map((k) => ({ "single-quotes": "plicas '…'", variable: "$VARIAVEIS" })[k] || k).join(", ")}) que o cmd.exe — a shell por omissão do --run no Windows — lê de outra forma, muitas vezes sem falhar. Nada foi executado. Volta a correr com --shell bash (Git Bash; ou define DEV_SPEC_SHELL=bash), com --shell pwsh se for um comando PowerShell (ou dá o script ao PowerShell entre aspas: pwsh -NoProfile -Command "…") — ou --shell cmd para a correr no cmd.exe mesmo assim.`,
     },
     runGate: {
       taskRefused: (cmd, why) => `\`${cmd}\` não pôde correr (${why}) — nada foi registado; a tarefa continua aberta.`,

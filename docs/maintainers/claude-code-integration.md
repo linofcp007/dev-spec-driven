@@ -26,12 +26,17 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   tracks). `hooks/guard-hook.js` (PreToolUse, `Write|Edit|MultiEdit|NotebookEdit`) is **silent unless the
   guard is on** — guard off costs one small raw JSON read, the engine is loaded only for guarded projects —
   and `guardCheck()` reads roadmap.json + each feature's `.state.json` / tasks.md, never a repo walk. "Code" is
-  `GUARD_CODE_EXT` — the scanner's `CODE_EXT` + `TEST_EXTRA_EXT` + `.ipynb` + the source languages the scanner
-  doesn't inventory (`.mts`/`.cts`, `.cc`/`.hpp`, `.sh`/`.ps1`, Windows `.bat`/`.cmd`, `.sql`, `.kts`, CUDA,
-  Fortran, HDL, shaders, code-bearing templates like `.erb`/`.razor`…); never reuse `CODE_EXT` alone there (it
-  waved those through as "not-code"). It is an allow-list, so the docs say "a broad list of languages", never "any
-  source file"; add a language there (and to the guard test) rather than rewording. Docs, config, data, markup and
-  styles stay silent. A code
+  `isCodeFile(rel)` (engine/scan.js) — 1.21.1: ONE notion of code the guard, the brownfield scan, `spec_coverage` and the
+  test-code scan share: `CODE_EXT` (JS/TS incl. `.mts`/`.cts`, Python, Go, Rust, JVM, .NET, C/C++ `.cc`/`.hpp`,
+  PowerShell `.ps1`/`.psm1`, shell, Windows `.bat`/`.cmd`, `.sql`, `.ipynb`, Lua, R, Perl, Elixir/Erlang, Haskell,
+  Clojure, CUDA, Fortran, HDL, shaders, code-bearing templates like `.erb`/`.razor`…) plus a test-only extension
+  (`TEST_EXTRA_EXT`: a `.bats` suite, Perl's `.t`) on a file that IS a test (`isTestFile`: `t/basic.t` yes, `notes.t`
+  no). `GUARD_CODE_EXT` = `CODE_EXT` + `TEST_EXTRA_EXT`, the extension-only allow-list trace's `plannedOutsideCode` and
+  the reuse check read. Until 1.21.1 the scan's `CODE_EXT` was a short list and the guard kept its own broad one — a
+  PowerShell project scanned empty and its tests gate never passed. It is an allow-list, so the docs say "a broad list of
+  languages", never "any source file"; add a language to `CODE_EXT` (and to the guard test — mcp/tests/16-conventions.js
+  — and, when its tests have a naming convention, to `RE_TEST_NAME` + the `isTestFile` matrix in mcp/tests/13-imports.js)
+  rather than rewording. Docs, config, data (a PowerShell `.psd1` manifest), markup and styles stay silent. A code
   edit outside `.specs/` with no non-archived feature holding approved, unfinished tasks gets
   `permissionDecision: "ask"` with a localized reason (a forced tasks approval still counts, with a note). Two exceptions,
   at both levels: a TEST file while some non-archived feature has an approved test plan and is unfinished (why

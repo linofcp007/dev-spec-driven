@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, tmp }) => {
+exports.run = ({ ok, run, tmp, require, __dirname }) => {
   const w6 = path.join(tmp, "wp6-proj");
   const put = (rel, s) => { const p = path.join(w6, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
   run(["init", "core", "--project", w6]);
@@ -33,8 +33,10 @@ exports.run = ({ ok, run, tmp }) => {
   run(["create", "Orders", "core", "--project", w6]);
   fs.writeFileSync(path.join(w6, ".specs", "orders", "tasks.md"), "- [ ] 1. orders endpoint\n  - _Implements: src/server.js_\n");
   const cov = run(["coverage", "--project", w6]);
-  ok(cov.code === 0 && /Spec coverage: 50%  \(1\/2 code files named in _Implements:_\)/.test(cov.out) && /test files \(reported apart, not counted\): 1/.test(cov.out) &&
-    /src\/\s+1\/1\s+100%/.test(cov.out) && /uncovered folders: api/.test(cov.out), "coverage prints the % of code files named in _Implements:_, per folder, and the uncovered folders");
+  // (1.21.1: the SQL migration is code too — one notion of code — so 1/3, was 1/2, and migrations/ is an uncovered folder)
+  ok(cov.code === 0 && /Spec coverage: 33%  \(1\/3 code files named in _Implements:_\)/.test(cov.out) && /test files \(reported apart, not counted\): 1/.test(cov.out) &&
+    /src\/\s+1\/1\s+100%/.test(cov.out) && /migrations\/\s+0\/1\s+0%/.test(cov.out) && /uncovered folders: api, migrations/.test(cov.out),
+    "coverage prints the % of code files named in _Implements:_, per folder, and the uncovered folders");
   const ptCov = run(["coverage", "--project", ptScan]).out;
   ok(/Cobertura de specs: 0%  \(0\/1 ficheiros de código nomeados em _Implements:_\)/.test(ptCov) && /src\/\s+0\/1\s+0%/.test(ptCov) && /pastas sem cobertura: src/.test(ptCov),
     "coverage output is localized (PT)");
@@ -105,4 +107,30 @@ exports.run = ({ ok, run, tmp }) => {
   const cov2 = run(["coverage", "--project", w6]);
   ok(cov2.code === 0 && /⚠ _Implements:_ entries that name nothing on disk: src\/missing\.js$/m.test(cov2.out) && /· _Implements:_ entries naming tests or non-code files \(not counted\): tests\/orders\.test\.js/.test(cov2.out),
     "coverage: a +tdd task naming its (existing) test file is informational; only a missing path is flagged");
+
+  // 1.21.1 languages: a PowerShell project on the CLI — scan and coverage print what spec_scan / spec_coverage return (one
+  // engine): stack powershell, pester, the entrypoints, $env: names; 3 code files (.ps1 / .psm1 — the .psd1 is data), 2 tests.
+  const S = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const ps = path.join(tmp, "l121-pwsh");
+  const putPs = (rel, s) => { const p = path.join(ps, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+  putPs("src/Greeter/Greeter.psm1", "function Get-Greeting { param([string]$Name) \"Hello, $Name\" }\n");
+  putPs("src/Greeter/Greeter.psd1", "@{ RootModule = 'Greeter.psm1'; ModuleVersion = '0.1.0' }\n");
+  putPs("src/Greeter/Greeter.Tests.ps1", "Describe 'Get-Greeting' { It 'T-02 greets nobody' { } }\n");
+  putPs("scripts/deploy.ps1", "param([string]$Target = $env:DEPLOY_ENV)\n");
+  putPs("tests/Greeter.Tests.ps1", "Describe 'Get-Greeting' { It 'T-01 greets by name' { } }\n");
+  putPs("build.ps1", "Invoke-Pester -Path ./tests -CI\n");
+  run(["init", "core", "tdd", "--project", ps]);
+  const psScan = run(["scan", "--project", ps, ps]);
+  let psJ = null, psCov = null;
+  try { psJ = JSON.parse(run(["scan", "--json", "--project", ps, ps]).out); } catch { /* invalid JSON */ }
+  try { psCov = JSON.parse(run(["coverage", "--json", "--project", ps]).out); } catch { /* invalid JSON */ }
+  const psCovTxt = run(["coverage", "--project", ps]);
+  const eng = S.scanCodebase(ps);
+  ok(psScan.code === 0 && /stack: powershell/.test(psScan.out) && /tests: 2 file\(s\) · frameworks: pester/.test(psScan.out) &&
+    /entrypoints: build\.ps1 \(powershell script\), src\/Greeter\/Greeter\.psm1 \(powershell module\)/.test(psScan.out) && /env vars \(names only\): DEPLOY_ENV/.test(psScan.out) &&
+    psJ && JSON.stringify([psJ.stack, psJ.testFrameworks, psJ.entrypoints, psJ.envVars, psJ.testFiles]) === JSON.stringify([eng.stack, eng.testFrameworks, eng.entrypoints, eng.envVars, eng.testFiles]) &&
+    psCov && psCov.codeFiles === 3 && psCov.testFiles === 2 && psCovTxt.code === 0 && /Spec coverage: 0%  \(0\/3 code files named in _Implements:_\)/.test(psCovTxt.out) &&
+    /test files \(reported apart, not counted\): 2/.test(psCovTxt.out),
+    "1.21.1 languages: scan / coverage on a PowerShell project (CLI = MCP): stack powershell, tests 2 · pester, build.ps1 + the module's RootModule as entrypoints, DEPLOY_ENV; 0/3 code files (.ps1 / .psm1), 2 test files (got " +
+    JSON.stringify([psScan.out.split("\n").filter((l) => /stack|tests:|entrypoints|env vars/.test(l)), psCov && psCov.codeFiles, psCovTxt.out.split("\n")[0]]) + ")");
 };

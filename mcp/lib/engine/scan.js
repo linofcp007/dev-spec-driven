@@ -9,7 +9,6 @@
 const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
-const { TEST_EXTRA_EXT } = require("./trace.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isInsideDir, isObj, isSlashUnit, listFeatures,
   projectLang, readDirCached, readIfExists, safeReaddir, specsRoot, stripEnd;
@@ -21,17 +20,20 @@ function __link(E) { ({ FOLD_CASE, implementsPath, implementsRefs, implementsTar
 // ---------------------------------------------------------------------------
 
 const SCAN_IGNORE = new Set([".git", ".specs", ".kiro", "_archive", "node_modules", "dist", "build", ".next", "out", "coverage", "vendor", "target", ".venv", "venv", "__pycache__", ".idea", ".vscode", ".cursor", ".windsurf", ".gemini", ".github"]);
-const CODE_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".go", ".rs", ".java", ".rb", ".php", ".cs", ".kt", ".swift", ".c", ".cpp", ".h", ".vue", ".svelte"]);
-// What guard mode treats as code (guardCheck). Broader than CODE_EXT on purpose: CODE_EXT is the brownfield scanner's
-// inventory (scan/coverage percentages), while the guard prompts for source files in a broad list of languages outside
-// .specs/ — reusing CODE_EXT waved .cc/.hpp, .mts/.cts, .sh/.ps1, .sql, Scala, Dart, Elixir… through silently as "not
-// code", and a shorter list still did for Windows batch (.bat/.cmd), .ksh/.fish, Kotlin script, CoffeeScript, CUDA,
-// Fortran, Pascal, assembly, HDLs, shaders, Elm, Tcl, Nix, Crystal and code-bearing templates (.erb, .jsp, .razor…).
-// It is an allow-list: docs, config, data, markup and styles (.md, .json, .yaml, .html, .css…) are never code.
-const GUARD_CODE_EXT = new Set([...CODE_EXT, ...TEST_EXTRA_EXT, ".ipynb",
-  ".mts", ".cts", ".cc", ".cxx", ".c++", ".hpp", ".hh", ".hxx", ".m", ".mm", ".scala", ".sc", ".dart", ".ex", ".exs", ".erl", ".hrl",
+// ONE notion of code (1.21.1): source files in a broad list of languages. The brownfield scan's inventory, spec_coverage's
+// denominators, the test-code scan (trace --code, the Phase 4 tests gate, doctor's tests-in-code, finish) and guard mode
+// all read it. Until 1.21.1 the scan, coverage and the test scan knew only JS/TS, Python, Go, Rust, Java, Ruby, PHP, C#,
+// Kotlin, Swift, C/C++ and Vue/Svelte — a PowerShell, shell, Lua, R, Erlang… project scanned empty, had 0 code files and a
+// tests gate that could never pass (its test files were never read) — while guard mode kept its own, broader list.
+// It is an allow-list, so the docs say "a broad list of languages", never "any source file": docs, config, data, markup and
+// styles (.md, .json, .yaml, .toml, .html, .css, a PowerShell data / module manifest .psd1…) are never code.
+const CODE_EXT = new Set([
+  // the languages the scan also READS (SCAN_TEXT_EXT: routes, env names, entrypoints, test runners)
+  ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".mts", ".cts", ".py", ".go", ".rs", ".java", ".rb", ".php", ".cs", ".kt", ".swift", ".c", ".cpp", ".h",
+  ".vue", ".svelte", ".ps1", ".psm1",
+  ".ipynb", ".cc", ".cxx", ".c++", ".hpp", ".hh", ".hxx", ".m", ".mm", ".scala", ".sc", ".dart", ".ex", ".exs", ".erl", ".hrl",
   ".hs", ".clj", ".cljs", ".cljc", ".lua", ".pl", ".pm", ".r", ".jl", ".zig", ".nim", ".groovy", ".fs", ".fsx", ".fsi", ".vb", ".ml", ".mli",
-  ".sol", ".sh", ".bash", ".zsh", ".ps1", ".psm1", ".sql",
+  ".sol", ".sh", ".bash", ".zsh", ".sql",
   // shells and scripting (Windows batch included — the platform this plugin must stay safe on)
   ".bat", ".cmd", ".ksh", ".fish", ".csh", ".tcsh", ".awk", ".vbs", ".tcl", ".raku", ".rakumod",
   // JVM / .NET / web-compiled languages
@@ -44,6 +46,18 @@ const GUARD_CODE_EXT = new Set([...CODE_EXT, ...TEST_EXTRA_EXT, ".ipynb",
   ".v", ".sv", ".svh", ".vhd", ".vhdl", ".glsl", ".hlsl", ".wgsl", ".vert", ".frag", ".metal",
   // templates that carry code (not plain markup)
   ".astro", ".razor", ".cshtml", ".jsp", ".erb"]);
+// Test-only extensions: never production code, so never in the inventory or coverage's denominators — a file with one is
+// code only where it is a TEST (isCodeFile): a Bats suite (*.bats, anywhere) or a Perl test (*.t, under t/, xt/ or a test
+// folder — a .t anywhere else is neither).
+const TEST_EXTRA_EXT = new Set([".bats", ".t"]);
+// The extension allow-list with the test-only ones — what a File cell or a path "looks like code" by its extension alone
+// (trace's plannedOutsideCode, the reuse check's neighbours). Guard mode decides per path, with isCodeFile.
+const GUARD_CODE_EXT = new Set([...CODE_EXT, ...TEST_EXTRA_EXT]);
+// The code files whose TEXT the scan reads (routes, env names, entrypoints, the runner a test imports) — the languages it
+// has readers for. Every other code file is counted (inventory, tests, coverage), never read: a tree of SQL migrations or
+// shell scripts would otherwise spend SCAN_READ_CAP before the first route file.
+const SCAN_TEXT_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".mts", ".cts", ".py", ".go", ".rs", ".java", ".rb", ".php", ".cs", ".kt",
+  ".swift", ".c", ".cpp", ".h", ".vue", ".svelte", ".ps1", ".psm1"]);
 const SCAN_READ_CAP = 1500; // code files whose text is read (routes, env names, test/entrypoint hints)
 const SCAN_READ_BYTES = 200000;
 const SCAN_ROUTE_CAP = 200; // routes listed — candidateEndpoints still counts every one found
@@ -84,19 +98,44 @@ function walkProject(root, cap, onFile, opts = {}) {
   return { total, truncated: !stopped && total >= cap };
 }
 
-// Test code: under a test folder, or named like a test in its language. Reported apart by scan and coverage.
+// Test code: under a test folder, or named like a test in its language. Reported apart by scan and coverage. ONE rule —
+// isTestFile — for the scan, coverage, the test-code scan (trace's isTestCodePath is this), the guard's tests-phase and
+// scope levels, the reuse check's neighbours and the status line's tests gate. Julia (test/runtests.jl), Nim (tests/),
+// OCaml (dune's test/), Rust (tests/) and R (tests/testthat/) keep their tests in these folders.
 const TEST_DIRS = new Set(["test", "tests", "__tests__", "__test__", "spec", "e2e"]);
-// Only the conventions: foo.test.ts / foo.spec.js, test_x.py / x_test.py / tests.py, x_test.go, x_spec.rb, FooTest(s).java|cs…,
-// FooSpec.kt, test-x.js. A module that merely ends in "spec" (dev-spec.js, lib/spec.js) is code.
-const RE_TEST_NAME = /\.(?:test|spec)\.[a-z0-9]+$|^tests?\.(?:[cm]?[jt]s|py)$|^test[-_][^/]*\.(?:[cm]?[jt]s|py)$|_test\.(?:go|py)$|_spec\.rb$|(?:Tests?|IT)\.(?:java|kt|cs|swift|php|scala)$|Spec\.kt$/;
+// Perl's test folders — for a .t file only (t/basic.t, xt/pod.t): a t/ folder of another language is no test folder.
+const PERL_TEST_DIRS = new Set(["t", "xt"]);
+// Only the conventions — every alternative anchored, the names are one path segment (linear):
+//   foo.test.ts · foo.spec.js · foo.test.mts / .spec.cts (any language) · test.js / tests.py
+//   test-x.js · test_x.py · test_x.sh / test-x.bash · test_x.c / .cc / .cpp / .cxx (Unity, Catch) · test-x.R / test_x.R (testthat)
+//   x_test.go · x_test.py · x_test.c / .cc / .cpp / .cxx (GoogleTest) · x_unittest.cc (Chromium) · x_test.sh (shunit2)
+//   x_test.exs (ExUnit) · x_test.dart · core_test.clj / .cljs / .cljc (clojure.test)
+//   x_spec.rb (RSpec) · x_spec.lua (busted) · x_SUITE.erl (Common Test) · x_tests.erl (EUnit)
+//   FooTest(s).java / .kt / .cs / .swift / .php / .scala · FooIT.java · FooTests.fs / FooSpec.scala / FooSuite.groovy (F#,
+//   ScalaTest, Spock) · FooTests.m / .mm (XCTest) / FooTests.vb · FooSpec.kt · FooSpec.hs (hspec)
+// A module that merely ends in "spec" / "test" without the separator is code: dev-spec.js, lib/spec.js, latest.sh,
+// contest.py, inspect.lua, attest.c.
+const RE_TEST_NAME = /\.(?:test|spec)\.[a-z0-9]+$|^tests?\.(?:[cm]?[jt]s|py)$|^test[-_][^/]*\.(?:[cm]?[jt]s|py|sh|bash|zsh|c|cc|cpp|cxx|[Rr])$|_test\.(?:go|py|c|cc|cpp|cxx|sh|bash|exs|dart|clj|cljs|cljc)$|_unittest\.(?:c|cc|cpp|cxx)$|_spec\.(?:rb|lua)$|_(?:SUITE|tests)\.erl$|(?:Tests?|IT)\.(?:java|kt|cs|swift|php|scala)$|(?:Tests?|Spec|Suite)\.(?:fs|fsx|scala|groovy)$|Tests?\.(?:m|mm|vb)$|Spec\.(?:kt|hs)$/;
+// The conventions whose case doesn't matter (Windows file systems): Pester's *.Tests.ps1 (Invoke-Pester's default filter,
+// anywhere in the tree) and a Bats suite (*.bats).
+const RE_TEST_NAME_EXTRA = /\.tests\.ps1$|\.bats$/i;
 function isTestFile(rel) {
-  const parts = rel.split("/");
+  const parts = String(rel).split("/");
   const name = parts.pop();
-  return parts.some((p) => TEST_DIRS.has(p.toLowerCase())) || RE_TEST_NAME.test(name);
+  if (RE_TEST_NAME.test(name) || RE_TEST_NAME_EXTRA.test(name)) return true;
+  if (parts.some((p) => TEST_DIRS.has(p.toLowerCase()))) return true;
+  return /\.t$/i.test(name) && parts.some((p) => PERL_TEST_DIRS.has(p.toLowerCase()));
+}
+// Is this project-relative (forward-slash) path code? Its extension is in CODE_EXT, or it is a test-only one
+// (TEST_EXTRA_EXT) on a file that IS a test. The scan, coverage, the test-code scan and guard mode ask this.
+function isCodeFile(rel) {
+  const r = String(rel);
+  const ext = path.posix.extname(r.slice(r.lastIndexOf("/") + 1)).toLowerCase();
+  return CODE_EXT.has(ext) || (TEST_EXTRA_EXT.has(ext) && isTestFile(rel));
 }
 
 // --- routes (method + path + file:line), one matcher set per framework family --------------------------------
-const JS_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
+const JS_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".mts", ".cts"]);
 const FRONTEND_EXT = new Set([".jsx", ".tsx"]); // `api.get('/users')` there is a client call, not a route
 // Express / Koa router / Fastify / Hono: <owner>.<verb>('/path' — only owners that name a server or router
 // (axios.get('/x') and map.get('k') are not routes), and the path must start with '/' (app.get('env') reads a setting).
@@ -352,6 +391,8 @@ const RE_ENV_READS = [
   /\$_ENV\[\s*['"]([A-Za-z_]\w*)['"]\s*\]/g,
   /(?<![\w>$:])env\(\s*['"]([A-Z_][A-Z0-9_]*)['"]/g, // Laravel env('APP_KEY') — upper-case names only
   /\benv::var(?:_os)?\(\s*"([A-Za-z_]\w*)"/g, // Rust
+  /\$\{?env:([A-Za-z_][A-Za-z0-9_]*)/gi, // PowerShell $env:NAME / ${env:NAME} (any case)
+  /\[(?:System\.)?Environment\]::GetEnvironmentVariable\(\s*['"]([A-Za-z_]\w*)['"]/gi, // PowerShell [Environment]::…('NAME')
 ];
 const ENV_EXAMPLE_FILES = new Set([".env.example", ".env.sample", ".env.template", ".env.dist", ".env.defaults", "env.example", "example.env", "sample.env"]);
 function envNamesIn(text, into) {
@@ -376,6 +417,9 @@ const PY_ENTRY = new Set(["main.py", "app.py", "manage.py", "wsgi.py", "asgi.py"
 const NODE_ROOT_ENTRY = new Set(["index.js", "server.js", "app.js", "main.js", "index.mjs", "server.mjs", "index.ts", "server.ts", "app.ts", "main.ts"]);
 function entryKind(rel, name, depth) {
   if (PY_ENTRY.has(name) && depth <= 2) return "python";
+  // a top-level PowerShell script (build.ps1, deploy.ps1 — Pester's *.Tests.ps1 is a test); a module's RootModule comes
+  // from its .psd1 manifest (scanCodebase)
+  if (depth === 0 && /\.ps1$/i.test(name) && !isTestFile(rel)) return "powershell script";
   if (name === "main.go" && (depth === 0 || /(?:^|\/)cmd\/[^/]+\/main\.go$/.test(rel))) return "go main";
   if (name === "Program.cs") return ".NET Program.cs";
   if (/(?:^|\/)src\/main\.rs$/.test(rel) || /(?:^|\/)src\/bin\/[^/]+\.rs$/.test(rel)) return "rust main";
@@ -409,6 +453,8 @@ function scanCodebase(projectDir, opts = {}) {
   const testFws = new Set();
   const frameworks = new Set();
   const csproj = [];
+  const psd1 = []; // PowerShell data files (≤ 20 read): a module manifest names its RootModule and RequiredModules
+  const langs = { code: 0, shell: 0, sql: 0, c: 0, powershell: 0 }; // non-test code files, per family (the stack's "mostly" rules)
   let testFiles = 0;
   let read = 0;
   let readCapped = false;
@@ -416,10 +462,12 @@ function scanCodebase(projectDir, opts = {}) {
   let phpunitConfig = false;
   const addEntry = (file, kind) => { if (!entrypoints.some((e) => e.file === file && e.kind === kind)) entrypoints.push({ file, kind }); };
 
-  // top-level dirs (candidate modules)
+  // top-level dirs (candidate modules) and files (manifests named by extension: *.cabal, *.nimble)
+  const rootFiles = [];
   try {
     for (const e of fs.readdirSync(root, { withFileTypes: true })) {
       if (e.isDirectory() && !SCAN_IGNORE.has(e.name) && !e.name.startsWith(".")) topDirs.push(e.name);
+      else if (e.isFile() && rootFiles.length < 500) rootFiles.push(e.name);
     }
   } catch {}
 
@@ -469,6 +517,13 @@ function scanCodebase(projectDir, opts = {}) {
   [["phpunit/phpunit", "phpunit"], ["pestphp/pest", "pest"]].forEach(([k, v]) => { if (composer.includes(k)) testFws.add(v); });
   const cargo = has("Cargo.toml") ? text("Cargo.toml") : "";
   [["actix-web", "actix"], ["axum", "axum"], ["rocket", "rocket"]].forEach(([k, v]) => { if (new RegExp("^[^\\S\\n\\r\\u2028\\u2029]*" + k + "\\s*=", "m").test(cargo)) frameworks.add(v); }); // the indent within its line (1.17 H)
+  // 1.21.1 — C / C++ (CMake's test drivers) and R (a package's DESCRIPTION: testthat in Suggests)
+  const cmake = has("CMakeLists.txt") ? text("CMakeLists.txt") : "";
+  if (/\b(?:GTest|gtest|googletest)\b/.test(cmake)) testFws.add("googletest");
+  if (/\b(?:enable_testing|add_test)\s*\(/.test(cmake)) testFws.add("ctest");
+  const rDescription = has("DESCRIPTION") ? text("DESCRIPTION") : "";
+  const rPackage = /^Package:/m.test(rDescription);
+  if (rPackage && /\btestthat\b/.test(rDescription)) testFws.add("testthat");
 
   // bounded recursive walk
   const walk = walkProject(root, cap, (rel, full, name) => {
@@ -491,19 +546,35 @@ function scanCodebase(projectDir, opts = {}) {
     if (name === "conftest.py" || name === "pytest.ini") pytestConfig = true;
     if (/^phpunit\.xml(?:\.dist)?$/.test(name)) phpunitConfig = true;
     if (ext === ".csproj" && csproj.length < 20) csproj.push(full);
-    if (!CODE_EXT.has(ext)) return;
+    if (ext === ".psd1" && psd1.length < 20) psd1.push({ rel, full });
+    if (!isCodeFile(rel)) return;
     const test = isTestFile(rel);
     if (test) {
       testFiles++;
+      // the runner a test file's NAME gives away
       if (/_test\.go$/.test(name)) testFws.add("go test");
       if (/_spec\.rb$/.test(name)) testFws.add("rspec");
+      if (/\.tests\.ps1$/i.test(name)) testFws.add("pester");
+      if (ext === ".bats") testFws.add("bats");
+      if (/_spec\.lua$/.test(name)) testFws.add("busted");
+      if (ext === ".r" && dirsLc.includes("testthat")) testFws.add("testthat");
+      if (/Spec\.hs$/.test(name)) testFws.add("hspec");
+      if (/_test\.exs$/.test(name)) testFws.add("exunit");
+    } else {
+      langs.code++;
+      if (ext === ".sh" || ext === ".bash" || ext === ".zsh" || ext === ".ksh" || ext === ".fish" || ext === ".csh" || ext === ".tcsh") langs.shell++;
+      else if (ext === ".sql") langs.sql++;
+      else if (ext === ".ps1" || ext === ".psm1") langs.powershell++;
+      else if (ext === ".c" || ext === ".h" || ext === ".cc" || ext === ".cpp" || ext === ".cxx" || ext === ".c++" || ext === ".hpp" || ext === ".hh" || ext === ".hxx") langs.c++;
     }
+    if (!SCAN_TEXT_EXT.has(ext)) return; // counted, never read: the scan has no reader for its language
     if (read >= SCAN_READ_CAP) { readCapped = true; return; }
     read++;
     let txt;
     try { txt = fs.readFileSync(full, "utf8").slice(0, SCAN_READ_BYTES); } catch { return; }
     envNamesIn(txt, env);
     if (ext === ".rs" && /#\[(?:test|cfg\(test\))\]/.test(txt)) testFws.add("cargo test");
+    if ((ext === ".ps1" || ext === ".psm1") && /\bInvoke-Pester\b/i.test(txt)) testFws.add("pester"); // build.ps1 runs the suite
     if (test) {
       // The runner a test file imports (the manifests above only cover declared dependencies).
       [[/['"]node:test['"]/, "node:test"], [/from\s+['"]vitest['"]/, "vitest"], [/['"]@jest\/globals['"]/, "jest"], [/^[^\S\n\r\u2028\u2029]*(?:import|from)\s+pytest\b/m, "pytest"],
@@ -532,6 +603,23 @@ function scanCodebase(projectDir, opts = {}) {
   }
   if (pytestConfig) testFws.add("pytest");
   if (phpunitConfig) testFws.add("phpunit");
+  // PowerShell module manifests (.psd1 — data, never code): the module's RootModule is an entrypoint, Pester in its
+  // RequiredModules is the test runner. A .psd1 without ModuleVersion / RootModule is plain data (a localized strings file).
+  let psManifest = false;
+  for (const f of psd1) {
+    let t = "";
+    try { t = fs.readFileSync(f.full, "utf8").slice(0, SCAN_READ_BYTES); } catch {}
+    const root1 = t.match(/\b(?:RootModule|ModuleToProcess)\s*=\s*['"]([^'"\r\n]{1,260})['"]/i);
+    if (!root1 && !/\bModuleVersion\s*=/i.test(t)) continue;
+    psManifest = true;
+    if (root1) {
+      const dir = f.rel.includes("/") ? f.rel.slice(0, f.rel.lastIndexOf("/")) : "";
+      const target = path.posix.normalize((dir ? dir + "/" : "") + normEntry(root1[1]));
+      if (!target.startsWith("../")) addEntry(target, "powershell module");
+    }
+    const req = t.search(/\bRequiredModules\s*=/i);
+    if (req !== -1 && /\bPester\b/i.test(t.slice(req, req + 600))) testFws.add("pester");
+  }
 
   // Stack from manifests; Python also from imports (FastAPI/Flask apps often ship without a manifest).
   const pyFw = ["fastapi", "flask", "django"].filter((f) => frameworks.has(f));
@@ -542,6 +630,28 @@ function scanCodebase(projectDir, opts = {}) {
   if (has("pom.xml") || has("build.gradle") || has("build.gradle.kts")) stackHints.push("java/jvm");
   if (has("Gemfile")) stackHints.push("ruby");
   if (csproj.length) stackHints.push(".net");
+  // 1.21.1 — the other languages the scan now counts: one existence check (or the root listing) per manifest.
+  const rootHas = (re) => rootFiles.some((n) => re.test(n));
+  if (has("CMakeLists.txt")) stackHints.push("c/c++ (cmake)");
+  else if (has("meson.build")) stackHints.push("c/c++ (meson)");
+  else if (langs.c && (has("Makefile") || has("makefile") || has("GNUmakefile") || has("configure.ac"))) stackHints.push("c/c++ (make)");
+  if (has("mix.exs")) stackHints.push("elixir");
+  if (has("rebar.config")) stackHints.push("erlang");
+  if (has("pubspec.yaml")) stackHints.push(/^[ \t]*flutter\s*:/m.test(text("pubspec.yaml")) ? "dart (flutter)" : "dart");
+  if (has("build.sbt")) stackHints.push("scala");
+  if (has("Package.swift")) stackHints.push("swift");
+  if (has("stack.yaml") || has("cabal.project") || rootHas(/\.cabal$/)) stackHints.push("haskell");
+  if (has("deps.edn") || has("project.clj") || has("shadow-cljs.edn")) stackHints.push("clojure");
+  if (rPackage) stackHints.push("r");
+  if (has("Project.toml")) stackHints.push("julia");
+  if (has("build.zig")) stackHints.push("zig");
+  if (has("dune-project")) stackHints.push("ocaml");
+  if (rootHas(/\.nimble$/)) stackHints.push("nim");
+  if (has("cpanfile") || has("Makefile.PL") || has("Build.PL")) stackHints.push("perl");
+  if (psManifest || langs.powershell) stackHints.push("powershell");
+  // a tree that is mostly shell scripts or SQL (at least half of its code files, tests apart)
+  if (langs.shell && langs.shell * 2 >= langs.code) stackHints.push("shell");
+  if (langs.sql && langs.sql * 2 >= langs.code) stackHints.push("sql");
 
   const extList = Object.entries(byExt).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => (k || "(none)") + ":" + v);
   const envList = [...env].sort();
@@ -577,8 +687,8 @@ function scanCodebase(projectDir, opts = {}) {
   return res;
 }
 
-// Spec coverage: the share of code files (CODE_EXT, tests apart) named in any _Implements:_ marker of any
-// feature — active or archived — with a per-top-level-folder breakdown. Compatible fields, meaning since 1.13:
+// Spec coverage: the share of code files (isCodeFile — every language of CODE_EXT since 1.21.1 —, tests apart) named in any
+// _Implements:_ marker of any feature — active or archived — with a per-top-level-folder breakdown. Compatible fields, meaning since 1.13:
 // coveragePercent = covered code files / code files (was: top-level folders whose NAME matched a feature slug);
 // modulesTotal = top-level folders holding code ("." = the root); documented / undocumented = those folders
 // with at least one / no covered file (undocumented is also returned as uncoveredFolders); features = the
@@ -597,8 +707,8 @@ function coverage(projectDir) {
   const code = new Map(); // fold(rel) → rel
   const other = new Map(); // every other walked file (tests, docs, config) — an _Implements:_ naming one is not a gap
   let testFiles = 0;
-  const walk = walkProject(root, COVERAGE_CAP, (rel, full, name) => {
-    if (!CODE_EXT.has(path.extname(name).toLowerCase())) other.set(fold(rel), rel);
+  const walk = walkProject(root, COVERAGE_CAP, (rel) => {
+    if (!isCodeFile(rel)) other.set(fold(rel), rel);
     else if (isTestFile(rel)) { testFiles++; other.set(fold(rel), rel); }
     else code.set(fold(rel), rel);
   });
@@ -663,8 +773,9 @@ function coverage(projectDir) {
   };
 }
 
-module.exports = { SCAN_IGNORE, CODE_EXT, GUARD_CODE_EXT, SCAN_READ_CAP, SCAN_READ_BYTES, SCAN_ROUTE_CAP, SCAN_LIST_CAP,
-  COVERAGE_CAP, WALK_STOP, walkProject, TEST_DIRS, RE_TEST_NAME, isTestFile, JS_EXT, FRONTEND_EXT, JS_ROUTE_OWNERS,
+module.exports = { SCAN_IGNORE, CODE_EXT, TEST_EXTRA_EXT, GUARD_CODE_EXT, SCAN_TEXT_EXT, SCAN_READ_CAP, SCAN_READ_BYTES,
+  SCAN_ROUTE_CAP, SCAN_LIST_CAP, COVERAGE_CAP, WALK_STOP, walkProject, TEST_DIRS, PERL_TEST_DIRS, RE_TEST_NAME,
+  RE_TEST_NAME_EXTRA, isTestFile, isCodeFile, JS_EXT, FRONTEND_EXT, JS_ROUTE_OWNERS,
   RE_JS_OWNER_SUFFIX, RE_JS_ROUTE, RE_JS_ROUTE_CHAIN, RE_JS_ROUTE_OPEN, RE_JS_LEAD_STRING, RE_JS_CHAIN_VERB,
   RE_JS_IMPORT, RE_JS_CLIENT_IMPORT, RE_JS_CLIENT_DEF, JS_GENERIC_OWNERS, RE_NEST_ROUTE, RE_NEST_CTRL, RE_NEXT_APP,
   RE_NEXT_PAGES, RE_NEXT_EXPORT, RE_PY_ROUTE, RE_PY_METHODS, PY_ROUTE_OWNERS, RE_PY_OWNER_SUFFIX, RE_PY_APP_DEF,

@@ -1482,7 +1482,7 @@ const msg = {
       numberInt: "task number must be an integer",
       noRunnable: (n) => `task ${n} has no runnable _Verify: <command>_ marker`,
       shellHint: "Hint: the default Windows shell (cmd.exe) could not run this command line as written. If the _Verify:_ command is written for a POSIX shell, retry with --shell bash (or set DEV_SPEC_SHELL=bash).",
-      posixOnWindows: (cmd, kinds) => `the _Verify:_ command \`${cmd}\` uses POSIX shell syntax (${kinds.map((k) => ({ "single-quotes": "single quotes '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) that cmd.exe — the default shell of --run on Windows — reads differently, often without failing: it has no single quotes and never expands $VAR, so a broken check could be recorded as a passing run. Nothing was run; the task stays open. Re-run with --shell bash (Git Bash; or set DEV_SPEC_SHELL=bash) — or --shell cmd to run it under cmd.exe anyway.`,
+      posixOnWindows: (cmd, kinds) => `the _Verify:_ command \`${cmd}\` uses POSIX shell syntax (${kinds.map((k) => ({ "single-quotes": "single quotes '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) that cmd.exe — the default shell of --run on Windows — reads differently, often without failing: it has no single quotes and never expands $VAR, so a broken check could be recorded as a passing run. Nothing was run; the task stays open. Re-run with --shell bash (Git Bash; or set DEV_SPEC_SHELL=bash), with --shell pwsh for a PowerShell command (or hand PowerShell the script in double quotes: pwsh -NoProfile -Command "…") — or --shell cmd to run it under cmd.exe anyway.`,
     },
 
     tracks: {
@@ -2925,7 +2925,7 @@ const msg = {
       recorded: (n) => `Recorded ${n} project check run(s) in .state.json → finishChecks.`,
       noneToRun: 'no project checks to run (roadmap.json meta.checks) — set them: ' + DEV_SPEC + ' init --check test="npm test" [--check lint="npm run lint"]',
       badArg: (v) => `--check expects name=command (got '${v}') — an empty command (name=) removes that check`,
-      posixOnWindows: (name, cmd, kinds) => `the project check '${name}' (\`${cmd}\`) uses POSIX shell syntax (${kinds.map((k) => ({ "single-quotes": "single quotes '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) that cmd.exe — the default shell of --run on Windows — reads differently, often without failing. Nothing was run. Re-run with --shell bash (Git Bash; or set DEV_SPEC_SHELL=bash) — or --shell cmd to run it under cmd.exe anyway.`,
+      posixOnWindows: (name, cmd, kinds) => `the project check '${name}' (\`${cmd}\`) uses POSIX shell syntax (${kinds.map((k) => ({ "single-quotes": "single quotes '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) that cmd.exe — the default shell of --run on Windows — reads differently, often without failing. Nothing was run. Re-run with --shell bash (Git Bash; or set DEV_SPEC_SHELL=bash), with --shell pwsh for a PowerShell command (or hand PowerShell the script in double quotes: pwsh -NoProfile -Command "…") — or --shell cmd to run it under cmd.exe anyway.`,
     },
     // full review Ga1 / Ga9 / Ga10 — `done --run` / `finish --run`: a command that could not run (the shell never started, a
     // signal, --timeout, output over the buffer, WSL's bash launcher) is refused and NOTHING is recorded (never an exit 1).
