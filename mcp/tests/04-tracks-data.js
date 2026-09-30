@@ -257,6 +257,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
       "Add a freshness check to the grocery orders pipeline.", "Show the column lineage of each metric per product family.",
       "Relatório de BI sobre as vendas com backfill mensal.", "Informe de BI con backfill mensual.", "Herramienta de BI con backfill mensual.",
       "Ferramenta de BI com backfill mensal.", "BI Dashboard with a monthly backfill.", "Relatório de BI com backfill mensal."];
+    // 1.21 verify R3 / R4: a lineage of reports / fields (after the animals and families), ingestion of files / feeds into a table or a lake,
+    // a type-2 SCD — and their everyday twins; R1: a data phrase an exclusion negates
+    const R34_ON = ["Lineage between the orders table and the revenue report.", "Lineage from the orders table to the revenue report.",
+      "Field-level lineage for the revenue report.", "Show the lineage of each field in the revenue report.", "Linhagem de cada campo do relatório de receitas.",
+      "Linaje de cada campo del informe de ingresos.", "Ingestion of CSV files into the orders table.", "Ingestão dos ficheiros CSV para a tabela de encomendas.",
+      "Ingesta de ficheros CSV en la tabla de pedidos.", "SCD type 2 on the customers table."];
+    const R34_OFF = ["Mostrar a linhagem de cada cavalo num relatório.", "We do not need a data warehouse.", "We will not build a data pipeline.",
+      "Show the lineage of each horse in the breeding report."];
     const CORPUS = [
       // positives — EN
       ["data", "Build an ETL pipeline that loads the orders from Postgres into BigQuery every night."], ["data", "A nightly job that recomputes the loyalty points in the warehouse."],
@@ -303,6 +311,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
       ["", "Sincronizar el stock entre los almacenes."], ["", "Informe mensual de ventas en PDF."],
       // 1.21 review B3 / B4 — words that mean something else in everyday text (hard negatives) and their data senses (positives)
       ...B3_OFF.map((t) => ["", t]), ...B3_ON.map((t) => ["data", t]), ...V3_ON.map((t) => ["data", t]),
+      ...R34_ON.map((t) => ["data", t]), ...R34_OFF.map((t) => ["", t]),
     ];
     let tp = 0, fp = 0, pos = 0;
     const wrong = [];
@@ -332,6 +341,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
       S.trackSignals("data").weak.includes("warehouse") && !B3_OFF.some((t) => onOf(t, "data")),
       "1.21 verify V3: 'A BI dashboard over the orders table', 'Load the orders table into the warehouse every night', 'Backfill the orders table…', 'Query the warehouse…', 'A Power BI report over the sales table', 'Nightly export of the orders table to parquet', 'Carga incremental diária da tabela de encomendas' are +data; a lakehouse / freshness check / lineage beside bookkeeping, guests, nights, stays, grocery or a product family is +data; 'Relatório de BI' / 'Informe de BI' / 'Herramienta de BI' / 'Ferramenta de BI' / 'BI Dashboard' match (a lower-case 'bi' never does); every everyday negative stays off (got " +
       js([v3Off, guest.label, bi.signals.data, biLower.signals.data]) + ")");
+    // 1.21 verify R3: the lineage of reports / fields / models is data work — tried after the animals / families (a horse's lineage in a
+    // report stays off); R4: ingestion of CSV files / feeds into a table or a lake and a type-2 SCD are strong (medication / water ingestion,
+    // SCD patients stay off); R1: "We do not need a data warehouse", "We will not build a data pipeline" exclude +data
+    const r3 = R34_ON.slice(0, 6).filter((t) => !onOf(t, "data")), r4 = R34_ON.slice(6).filter((t) => !onOf(t, "data"));
+    const r34Off = [...R34_OFF, B3_OFF[4], B3_OFF[5], B3_OFF[8], B3_OFF[12]].filter((t) => onOf(t, "data"));
+    ok(!r3.length && !r4.length && !r34Off.length,
+      "1.21 verify R3 / R4: 'Lineage between the orders table and the revenue report', 'Field-level lineage for the revenue report', 'Linhagem de cada campo do relatório', 'Linaje de cada campo del informe', 'Ingestion of CSV files into the orders table' (PT / ES) and 'SCD type 2 on the customers table' are +data; a horse's lineage in a report, medication / water / calorie ingestion, SCD patient records and 'We do not need a data warehouse' / 'We will not build a data pipeline' are not (got " +
+      js([r3, r4, r34Off]) + ")");
     const b4 = [cls(B3_OFF[15]), cls(B3_OFF[16])];
     ok(b4.every((r) => !r.tracks.includes("data") && !(r.signals.data || []).length) && cls("Load the Stripe payouts into the warehouse tables every hour with Fivetran.").tracks.includes("data"),
       "1.21 review B4: a warehouse in a sentence about stock is the building even with 'in a table' (no +data signal at all) — the keep rule no longer lists tables / columns / queries (got " + js(b4.map((r) => r.signals.data)) + ")");

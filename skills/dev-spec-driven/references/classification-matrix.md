@@ -69,12 +69,19 @@ is a draft for the human, who confirms Phase 0.
   **What a negation negates:** a modal's negated verb — must / should / can, *pode / deve · puede / debe* — is a REQUIREMENT
   about its objects, like a hazard: "The system must not lose payments nor duplicate invoices", "The system must not lose
   payments", "The service must not leak personal data", *"Não pode perder pagamentos nem reembolsos"*, *"No puede perder pagos
-  ni reembolsos"*, "without losing payments or refunds" keep their tracks. An EXCLUSION is a noun phrase ("no payments",
-  "Postgres, not MongoDB nor Kafka"), an adoption verb's object whatever the modal (use / add / need / include / implement /
-  integrate / deploy / run / offer / provide / ship / adopt, "necessary" — *usar, adicionar, integrar, adotar, precisar ·
-  usar, añadir, integrar, desplegar, necesitar, es necesario, hace falta*: "must not use X or Y") or a plan's verb (will / do,
-  a volition or intention verb — "We will not run Kafka or RabbitMQ", *"Não queremos / pretendemos usar LLM nem embeddings",
-  "No pensamos usar Kafka ni RabbitMQ", "No se usará…"*).
+  ni reembolsos"*, "without losing payments or refunds", "a second write never overwrites the ledger", "We don't want to lose
+  payments" keep their tracks. An EXCLUSION is a noun phrase ("no payments", "Postgres, not MongoDB nor Kafka"), an adoption
+  verb's object whatever the modal (use / add / need / include / implement / integrate / deploy / run / offer / provide / ship /
+  adopt / enable / activate / install / embed / bundle / expose, "necessary" — *usar, adicionar, integrar, adotar, ativar,
+  instalar, expor, precisar · usar, añadir, integrar, desplegar, activar, exponer, necesitar, es necesario, hace falta*: "must
+  not use X or Y", "We should not enable feature flags yet", "We must not expose GraphQL", *"O serviço não deve instalar
+  Kafka"*) or a plan's verb (will / do, a volition or intention verb before a noun — "We will not run Kafka or RabbitMQ",
+  *"Não queremos / pretendemos usar LLM nem embeddings", "No pensamos usar Kafka ni RabbitMQ", "No se usará…"*). Personal data
+  and secrets are data to protect: "Logs must not expose personal data", "The client must not embed the API key or the access token" keep
+  +privacy / +sec. The negator may sit a few words back and be contracted: "We don't use Kafka", "We won't use Kafka", "This feature
+  doesn't need an LLM", "We will not add an LLM", "We do not plan to use Kafka", *"Não vamos adicionar um LLM", "Nunca / Jamás
+  usaremos Kafka"* exclude (so does a 3-item list: *"Não vamos integrar Kafka, RabbitMQ nem SQS"*) — never across a preposition
+  after another noun ("We didn't add an LLM to the checkout" keeps +tdd).
 - **This project's own corrections** (1.21): when the human confirms Phase 0 with other tracks than suggested — `spec_create`
   with `tracks` and the same description as `summary` — the words that drove the suggestion are recorded in
   `.specs/classifier.json`. After **two consistent corrections** a word the team keeps rejecting for a track stops turning it on
@@ -502,9 +509,11 @@ rows") is app-level, one about partitions, a pipeline, the warehouse or history 
 `Snowflake` / `Redshift` ("into Snowflake", "from Redshift") is the product — strong; DBT therapy, an Airflow reading,
 a galaxy's Redshift are none. A lakehouse, a freshness check or a lineage in a sentence about data (tables, metrics,
 dashboards, a pipeline, the raw zone…) is strong — even beside an everyday word ("Load the bookkeeping entries into the
-lakehouse tables", "Add a freshness check to the grocery orders pipeline"); otherwise the everyday senses are no signal — a
-lakehouse to rent, a kitchen's freshness check, a training plan's *carga incremental*, a horse's lineage, the ingestion of
-water or a medication, parquet flooring. A
+lakehouse tables", "Add a freshness check to the grocery orders pipeline"), and so is ingestion of files / feeds / batches into
+a table or a lake ("Ingestion of CSV files into the orders table") and an SCD with its type ("SCD type 2 on the customers
+table"); otherwise the everyday senses are no signal — a lakehouse to rent, a kitchen's freshness check, a training plan's
+*carga incremental*, a horse's lineage, the ingestion of water or a medication, parquet flooring; then a lineage of reports or
+fields is strong ("Field-level lineage for the revenue report" — a horse's lineage in a report stays none). A
 warehouse's sentence about data never counts a table, a column or a query ("Show stock levels per warehouse in a table" is
 the building). Shared phrases: an ETL job / data pipeline is also +obs's technical target, a CDC pipeline
 +dist's strong phrase, data retention +privacy's (a phrase may serve two tracks). `analytics` is never a reserved pack

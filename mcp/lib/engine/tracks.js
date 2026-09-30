@@ -1416,6 +1416,14 @@ const SIGNALS = {
       { kind: "sentence", on: ["lineage", "linhagem", "linaje"], then: "strong", edge: "letter",
         phrases: ["metrics?", "dashboards?", "columns?", "datasets?", "source tables?", "pipelines?", "kpis?", "métricas?", "indicadores?", "colunas?",
           "conjuntos? de dados", "tabelas de origem", "painéis?", "columnas?", "conjuntos? de datos", "tablas de origen", "cuadros? de mando"] },
+      // 1.21 verify R4: ingestion of files / feeds / batches / streams into a lake or a warehouse, a slowly changing dimension's type 2
+      { kind: "sentence", on: ["ingestion", "ingestão", "ingesta"], then: "strong", edge: "letter",
+        phrases: ["csv", "json", "xml", "parquet", "avro", "files?", "ficheiros?", "arquivos?", "ficheros?", "archivos?", "feeds?", "pipelines?",
+          "batch(?:es)?", "lotes?", "streams?", "streaming", "lakes?", "lakehouse", "warehouse", "buckets?", "s3", "topics?", "kafka",
+          "raw (?:zones?|layers?)"] },
+      { kind: "sentence", on: ["SCD"], then: "strong", edge: "letter",
+        phrases: ["type[^\\S\\n]*[123]", "tipo[^\\S\\n]*[123]", "dimensions?", "dimensão", "dimensões", "dimensión", "dimensiones", "surrogate keys?",
+          "valid[_ ]from", "valid[_ ]to", "effective dates?"] },
       // … then the everyday senses: a lakehouse to rent, a kitchen's freshness check, a training plan's "carga incremental", a horse's
       // lineage, the ingestion of water or a medication, parquet flooring — no signal at all
       { kind: "sentence", on: ["lakehouse"], then: "none", edge: "letter",
@@ -1433,6 +1441,10 @@ const SIGNALS = {
         phrases: ["horses?", "dogs?", "cats?", "breed\\p{L}*", "pedigrees?", "cattle", "livestock", "famil(?:y|ies)", "ancestors?", "ancestry",
           "genealog\\p{L}*", "royal", "dynast\\p{L}*", "cavalos?", "cães", "cão", "gatos?", "raças?", "gado", "família", "famílias", "antepassados?",
           "caballos?", "perros?", "razas?", "ganado", "familias?", "antepasados?"] },
+      // 1.21 verify R3: a lineage of reports, fields or models is data work too — tried AFTER the animals / families ("a horse's lineage in
+      // the report" stays none), never among the first data words (a report is everyday text)
+      { kind: "sentence", on: ["lineage", "linhagem", "linaje"], then: "strong", edge: "letter",
+        phrases: ["reports?", "fields?", "models?", "relatórios?", "campos?", "modelos?", "informes?", "reportes?"] },
       { kind: "sentence", on: ["ingestion", "ingestão", "ingesta"], then: "none", edge: "letter",
         phrases: ["medicat\\p{L}*", "medicines?", "drugs?", "pills?", "doses?", "water", "foods?", "calories", "meals?", "nutri\\p{L}*", "intake",
           "fluids?", "alcohol", "caffeine", "sugar", "vitamins?", "supplements?", "água", "alimentos?", "calorias", "refeiç\\p{L}*", "medicaç\\p{L}*",

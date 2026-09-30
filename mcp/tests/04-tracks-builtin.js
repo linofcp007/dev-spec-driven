@@ -1479,6 +1479,31 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       !v5[4].tracks.includes("tdd") && !v5[5].tracks.includes("tdd") && !v5[6].tracks.includes("tdd") && !v5[6].tracks.includes("ai") && v5[7].tracks.includes("tdd"),
       "1.21 verify V5: 'The system must not lose payments' keeps +tdd like PT 'não pode perder pagamentos'; 'must not leak personal data' keeps +privacy; 'without losing payments or refunds' keeps +tdd; 'we will not add payments' / 'we do not use payments' exclude; 'Sem iniciar sessão nem embeddings' negates the whole phrase (got " +
       js(v5.map((r) => [r.label, r.negated.tdd])) + ")");
+    // 1.21 verify R1: a single-item exclusion a few words back — a contraction (don't / won't / doesn't / didn't), an adoption verb before an
+    // article, a plan verb two words back, nunca / jamás — and a 3-item comma list a nem / ni closes; a requirement stays on its track
+    // (mustn't / can't / shouldn't, must not, não pode / no debe, without losing / sem perder, "never overwrites"), a hazard opens nothing
+    const r1Off = [["dist", "We don't use Kafka."], ["dist", "We won't use Kafka."], ["dist", "We don't use Kafka or RabbitMQ."], ["ai", "We will not add an LLM."],
+      ["ai", "Não vamos adicionar um LLM."], ["ai", "No vamos a añadir un LLM."], ["ai", "This feature doesn't need an LLM."], ["dist", "We do not plan to use Kafka."],
+      ["dist", "Nunca usaremos Kafka."], ["dist", "Jamás usaremos Kafka."], ["dist", "Nunca usaremos Kafka nem RabbitMQ."], ["dist", "Não vamos integrar Kafka, RabbitMQ nem SQS."],
+      ["dist", "No usaremos Kafka, RabbitMQ ni SQS."], ["ai", "We didn't add an LLM to the checkout."]];
+    const r1On = [["tdd", "The system mustn't lose payments."], ["tdd", "The system can't lose payments nor refunds."], ["tdd", "The system must not lose payments."],
+      ["tdd", "O sistema não pode perder pagamentos."], ["tdd", "El sistema no debe perder pagos."], ["tdd", "Without losing payments or refunds."],
+      ["tdd", "Sem perder pagamentos nem reembolsos."], ["tdd", "The system shouldn't duplicate payments."], ["tdd", "a second write never overwrites the ledger"],
+      ["tdd", "We do not want to lose payments or refunds."], ["tdd", "We didn't add an LLM to the checkout."], ["obs", "We will not add duplicate rows or canary releases."],
+      ["privacy", "Never log personal data."]];
+    ok(r1Off.every(([tr, t]) => !onOf(t, tr)) && r1On.every(([tr, t]) => onOf(t, tr)),
+      "1.21 verify R1: 'We don't / won't use Kafka', 'We will not add an LLM', 'Não vamos adicionar um LLM', 'This feature doesn't need an LLM', 'We do not plan to use Kafka', 'Nunca / Jamás usaremos Kafka', 'Não vamos integrar Kafka, RabbitMQ nem SQS' exclude; 'mustn't / can't / must not lose', 'não pode / no debe perder', 'without losing', 'never overwrites the ledger', 'don't want to lose', a hazard's list and 'We didn't add an LLM to the checkout' (+tdd) keep their tracks (got " +
+      js([r1Off.filter(([tr, t]) => onOf(t, tr)), r1On.filter(([tr, t]) => !onOf(t, tr))]) + ")");
+    // 1.21 verify R2: a modal + an enabling / installing / embedding / exposing verb excludes the technology (EN / PT / ES); for a +sec /
+    // +privacy keyword — data to protect — "must not expose / embed" is the requirement
+    const r2Off = [["obs", "We should not enable feature flags yet."], ["obs", "We should not activate feature flags yet."],
+      ["obs", "The first release must not enable canary releases."], ["dist", "The service must not install Kafka."], ["ai", "The MVP must not embed LLMs."],
+      ["dist", "The app should not bundle Kafka."], ["api", "We must not expose GraphQL."], ["dist", "O serviço não deve instalar Kafka."],
+      ["obs", "No debemos activar feature flags todavía."]];
+    const r2On = [["privacy", "Logs must not expose personal data."], ["privacy", "The service must not leak personal data."], ["tdd", "The system must not corrupt payments."]];
+    ok(r2Off.every(([tr, t]) => !onOf(t, tr)) && r2On.every(([tr, t]) => onOf(t, tr)),
+      "1.21 verify R2: 'must not / should not enable / activate / install / embed / bundle / expose X' and PT 'não deve instalar', ES 'no debemos activar' exclude X; 'Logs must not expose personal data', 'must not leak personal data', 'must not corrupt payments' keep their tracks (got " +
+      js([r2Off.filter(([tr, t]) => onOf(t, tr)), r2On.filter(([tr, t]) => !onOf(t, tr))]) + ")");
     // 1.21 review B2: a comma after the list's closing conjunction — or one before an article (a new clause's subject) — ends the list
     const b2 = [["tdd", "ai", "Without an LLM or embeddings, the checkout or a subscription page is the priority."],
       ["saas", "dist", "Without Kafka or RabbitMQ, the webhook or a nightly retry job handles delivery."],
@@ -1532,7 +1557,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       ["obs", "Despliegue canario del nuevo motor de precios con plan de reversión."], ["obs", "No feature flags, just a canary release behind a manual switch."],
       ["", "Expose the admin page's API so the mobile app can fetch the same stats."], ["ui", "Settings page where users can change their notification preferences."],
       ["api", "Design a versioned REST API for partners with an OpenAPI document."], ["", "Fetch exchange rates from the ECB's API every morning."],
-      ["ui", "Painel de administração para gerir utilizadores: pesquisa, filtros e desativação em massa."], ["", "Monitor stock levels and send alerts to the purchasing team."]];
+      ["ui", "Painel de administração para gerir utilizadores: pesquisa, filtros e desativação em massa."], ["", "Monitor stock levels and send alerts to the purchasing team."],
+      // 1.21 verify R2: a modal + an enabling / exposing verb excludes an +obs / +api technology (hard negatives)
+      ...r2Off.filter(([tr]) => tr === "obs" || tr === "api").map(([, t]) => ["", t])];
     const f2 = ["api", "ui", "obs"].map((tr) => {
       let tp = 0, fp = 0, pos = 0;
       const wrong = [];
