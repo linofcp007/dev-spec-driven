@@ -24,7 +24,8 @@ code and output summary — evidence before claims (`references/verification.md`
 - a task whose `_Verify:_` holds a runnable command is **verified only by `{command, exitCode: 0}`** — a text
   note ticks it but leaves it unverified (`unverifiedReason: manual-note-on-runnable-verify`);
 - the `command` must be the `_Verify:_` command itself — with several, ALL of them in one run joined with ` && ` (a
-  leading `cd <dir> &&`, `set -o pipefail;` or `VAR=value` of your own, or a trailing `2>&1`, is fine; a prefix the
+  leading `cd <project root> &&`, `set -o pipefail;` or `VAR=value` of your own, or a trailing `2>&1`, is fine (a `cd` into
+  any other folder runs it there: another run); a prefix the
   `_Verify:_` holds must stay) — a run of any other command, or of one of its commands alone, ticks it unverified
   (`command-mismatch`);
 - a **non-zero exit code refuses the tick** (except on an `_Expect: fail_` task, whose failing run is its proof) and the failed run is **recorded** (a failed re-check of a ticked task

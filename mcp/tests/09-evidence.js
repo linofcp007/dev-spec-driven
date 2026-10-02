@@ -1271,16 +1271,19 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
   // command was accepted. Now: command-mismatch (ticked, unverified) / changed (the finish check).
   {
     const js = JSON.stringify;
-    const PV = (cmd, verify, extra) => S.runProvesVerify({ command: cmd, ...extra }, verify);
+    // (review 3: a run's own cd counts only when it ends at the project root — the fourth argument; `cd sub; npm test` runs npm
+    // test in sub/, no run of the root's `npm test`)
+    const PV = (cmd, verify, extra, root) => S.runProvesVerify({ command: cmd, ...extra }, verify, root);
+    const rootOf = (c) => { const m = /^cd (?:\/d )?"?([^"&;]*?)"? *(?:&&|;)/.exec(c); return m ? m[1] : undefined; };
     const yes = ["npm test", "  npm   test ", "`npm test`", '"npm test"', "'npm test'", "cd /x/y && npm test", 'cd "C:/My Proj" && npm test', "cd /d C:\\x && npm test",
-      "cd sub; npm test", "set -o pipefail; npm test", "set -euo pipefail; npm test", "set -e -o pipefail && npm test", "CI=1 npm test", 'NODE_ENV="test" CI=1 npm test', "npm test 2>&1",
+      "set -o pipefail; npm test", "set -euo pipefail; npm test", "set -e -o pipefail && npm test", "CI=1 npm test", 'NODE_ENV="test" CI=1 npm test', "npm test 2>&1",
       "cd /x && CI=1 npm test 2>&1"];
     const no = ["echo hello", "npm test -- --grep x", "npm run test", "npm test; echo ok", "npm test || true", "npm test | tee log", "echo npm test", "cd x", "npm test && echo ok",
-      "npm testing", "", "node -e \"process.exit(0)\""];
+      "npm testing", "", "node -e \"process.exit(0)\"", "cd sub; npm test"];
     const two = ["npm test", "npm run lint"];
     // (review 2: "npm run lint" alone used to prove both — a run must cover EVERY _Verify:_ command of the task, see below)
-    const pvWrong = yes.filter((c) => !PV(c, ["npm test"])).map((c) => "refused: " + c).concat(no.filter((c) => PV(c, ["npm test"])).map((c) => "accepted: " + c))
-      .concat(["npm test && npm run lint", "cd /p && npm run lint && npm test"].filter((c) => !PV(c, two)).map((c) => "refused (2): " + c))
+    const pvWrong = yes.filter((c) => !PV(c, ["npm test"], {}, rootOf(c))).map((c) => "refused: " + c).concat(no.filter((c) => PV(c, ["npm test"], {}, "/r")).map((c) => "accepted: " + c))
+      .concat(["npm test && npm run lint", "cd /p && npm run lint && npm test"].filter((c) => !PV(c, two, {}, "/p")).map((c) => "refused (2): " + c))
       .concat(["npm test && echo x", "npm test && npm run lint && rm -rf x", "npm run lint"].filter((c) => PV(c, two)).map((c) => "accepted (2): " + c));
     ok(!pvWrong.length && PV("anything at all", ["npm test"], { observed: "cli" }) && !PV("echo hi", ["npm test"], { observed: true }),
       "1.22 review: runProvesVerify — a run proves a _Verify:_ only when it runs its commands (all of them): whitespace / backticks / surrounding quotes, a leading cd <dir> && · set -o pipefail; · VAR=value and a trailing 2>&1 are fine, the ` && ` join of its commands too, and the CLI's own run (observed \"cli\"); anything else is not (wrong: " + js(pvWrong) + ")");
@@ -1349,8 +1352,8 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
   {
     const js = JSON.stringify;
     const BS = String.fromCharCode(92);
-    const PV = (cmd, verify) => S.runProvesVerify({ command: cmd }, verify);
-    const wrongOf = (cases) => cases.filter(([c, v, want]) => PV(c, v) !== want).map(([c, v, want]) => (want ? "refused: " : "accepted: ") + c + " vs " + js(v));
+    const PV = (cmd, verify, root) => S.runProvesVerify({ command: cmd }, verify, root); // (review 3: root — the project folder a run's cds resolve from)
+    const wrongOf = (cases) => cases.filter(([c, v, want, root]) => PV(c, v, root) !== want).map(([c, v, want]) => (want ? "refused: " : "accepted: ") + c + " vs " + js(v));
     const mkTasks = (p, slug, tasks) => {
       const f = S.createFeature(p, slug, ["core"], "", undefined, "en");
       fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + tasks);
@@ -1449,7 +1452,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     // 3 — a _Verify:_ that itself holds ` && ` is ONE key of the join (the run was split on every ` && `); the observed lookup too.
     const vb = ["npm run build && npm test", "npm run lint"];
     const w3 = wrongOf([["npm run build && npm test && npm run lint", vb, true], ["npm run lint && npm run build && npm test", vb, true],
-      ["cd /p && npm run lint && cd /p && npm run build && npm test", vb, true], ["npm run build && npm run lint && npm test", vb, false], ["npm run build && npm test", vb, false],
+      ["cd /p && npm run lint && cd /p && npm run build && npm test", vb, true, "/p"], ["npm run build && npm run lint && npm test", vb, false], ["npm run build && npm test", vb, false],
       ['bash -c "a && b"', ['bash -c "a && b"'], true], ['bash -c "a && b"', ["a", "b"], false]]);
     const fJ = mkTasks(pR, "Join", "- [ ] 1. [US1] A\n  - _Verify: npm run build && npm test_\n  - _Verify: npm run lint_\n");
     S.observeRun(pR, { command: "npm run build && npm test", exitCode: 0 });
@@ -1463,13 +1466,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const w4 = wrongOf([["npm test", ["cd packages/api && npm test"], false], ["cd packages/web && npm test", ["cd packages/api && npm test"], false],
       ["cd packages/api && npm test", ["cd packages/api && npm test"], true], ["cd packages/api/ && npm test", ["cd packages/api && npm test"], true],
       ["cd packages" + BS + "api && npm test", ["cd packages/api && npm test"], true], ['cd "packages/api" && npm test', ["cd packages/api && npm test"], true],
-      ["cd packages/api; npm test", ["cd packages/api && npm test"], true], ["cd /repo && cd packages/api && npm test", ["cd packages/api && npm test"], true],
+      ["cd packages/api; npm test", ["cd packages/api && npm test"], true], ["cd /repo && cd packages/api && npm test", ["cd packages/api && npm test"], true, "/repo"],
       ["cd packages/api && cd sub && npm test", ["cd packages/api && npm test"], false],
       ["npm test | tee out.log", ["set -o pipefail; npm test | tee out.log"], false], ["set -euo pipefail; npm test | tee out.log", ["set -o pipefail; npm test | tee out.log"], true],
       ["set -o pipefail; npm test | tee out.log", ["npm test | tee out.log"], true],
       ["npm test", ["NODE_ENV=production npm test"], false], ["NODE_ENV=test npm test", ["NODE_ENV=production npm test"], false],
       ["CI=1 NODE_ENV=production npm test", ["NODE_ENV=production npm test"], true], ["NODE_ENV=production CI=1 npm test", ["NODE_ENV=production npm test"], true],
-      ["cd /x && CI=1 npm test 2>&1", ["npm test"], true]]);
+      ["cd /x && CI=1 npm test 2>&1", ["npm test"], true, "/x"]]);
     const fP = mkTasks(pR, "Mono", "- [ ] 1. [US1] API\n  - _Verify: cd packages/api && npm test_\n");
     const p1 = S.completeTask(pR, "mono", 1, { command: "cd packages/web && npm test", exitCode: 0 });
     const finP = S.finishFeature(pR, "mono", { evidence: [{ name: "api", command: "npm test", exitCode: 0 }] });
@@ -1504,6 +1507,89 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     S.runProvesVerify({ command: "cd x && ".repeat(25000) + "npm test" }, ["npm test"]);
     const msH = Date.now() - t0;
     ok(msH < 1500, "1.22 review 2: runProvesVerify stays bounded on hostile inputs (199 steps × 12 nested keys, 200,000 quotes, 50,000 assignments, 25,000 cds) — " + msH + " ms");
+  }
+
+  // 1.22 review 3 (4) — `cd` folders are resolved from the project root: the absolute form of the _Verify:_'s folder, `./x`, a
+  // folder's drive-letter case all prove it; a run's own cd counts only when it ends at the project root — `cd ../other-project &&
+  // npm test` and `cd .. && cd packages/web && npm test` used to prove `npm test` / `cd packages/web && npm test`. A run with an
+  // absolute cd is stamped with the project root (`root`), so the verdict is the same on another machine and for a git worktree
+  // of the project; a dev-spec project of another repository holding the same feature name is no worktree.
+  // (5) `cd # && npm test` (bash: a comment — npm test never runs) and a cd inside a substitution (``cd `: && npm test` ``) prove
+  // nothing; a substitution is never split (a _Verify:_ holding one matches the same text).
+  {
+    const js = JSON.stringify;
+    const BS = String.fromCharCode(92);
+    const p4 = path.join(tmp, "proj-122r3-cd");
+    S.initProject(p4, ["core"], "en");
+    const f4 = S.createFeature(p4, "Mono", ["core"], "", undefined, "en");
+    const web = "- [ ] N. [US1] Web\n  - _Verify: cd packages/web && npm test_\n", root = "- [ ] N. [US1] Root\n  - _Verify: npm test_\n";
+    const tasks = [web, web, web, web, root, web, root, root, root, root, web, web].map((t, i) => t.replace("N.", (i + 1) + ".")).join("");
+    fs.writeFileSync(path.join(f4.dir, "tasks.md"), "# Tasks\n\n" + tasks);
+    const fwd = p4.split(BS).join("/");
+    const drive = /^[A-Za-z]:/.test(fwd) ? (fwd[0] === fwd[0].toUpperCase() ? fwd[0].toLowerCase() : fwd[0].toUpperCase()) + fwd.slice(1) : fwd;
+    const run = (n, command) => S.completeTask(p4, "mono", n, { command, exitCode: 0, summary: "ok" });
+    const r = [
+      run(1, "cd " + fwd + "/packages/web && npm test"), run(2, "cd ./packages/web && npm test"), run(3, "cd " + p4 + BS + "packages" + BS + "web && npm test"),
+      run(4, "cd " + drive + "/packages/web && npm test"), run(5, "cd ../other-project && npm test"), run(6, "cd .. && cd packages/web && npm test"),
+      run(7, "cd # && npm test"), run(8, "cd /d # && npm test"), run(9, "cd `: && npm test`"), run(10, "cd " + fwd + " && npm test"),
+      run(11, "cd " + fwd + "/packages/web/../web && npm test"), run(12, "cd " + fs.realpathSync.native(p4) + "/packages/web && npm test"), // (the long form of an 8.3 short name)
+    ];
+    const want = [true, true, true, process.platform === "win32" || process.platform === "darwin", false, false, false, false, false, true, true, true];
+    const got = r.map((x) => x.ok && x.verified === true);
+    const st4 = JSON.parse(fs.readFileSync(path.join(f4.dir, ".state.json"), "utf8")).evidence;
+    ok(js(got) === js(want) && r.filter((x, i) => !want[i]).every((x) => x.unverifiedReason === "command-mismatch") &&
+      st4["1"].root === path.resolve(p4) && st4["10"].root === path.resolve(p4) && !("root" in st4["2"]) && !("root" in st4["5"]),
+      "1.22 review 3 (4, 5): cd folders resolved from the project root — the absolute, ./ and \\ forms of the _Verify:_'s folder (drive-letter case where the file system folds it) prove it; `cd ../other-project && npm test`, `cd .. && cd packages/web && npm test`, `cd # && npm test`, `cd /d # && …` and ``cd `: && npm test` `` do not (command-mismatch); a run with an absolute cd is stamped root (got " +
+      js([got, r.map((x) => x.unverifiedReason || null), st4["1"].root, st4["2"].root]) + ")");
+    // the root stamp travels: the same record read on another machine (its paths) still proves the task
+    const sf = path.join(f4.dir, ".state.json"), st = JSON.parse(fs.readFileSync(sf, "utf8"));
+    st.evidence["1"].command = "cd /home/someone/proj/packages/web && npm test";
+    st.evidence["1"].root = "/home/someone/proj";
+    st.evidence["1"].history = [];
+    fs.writeFileSync(sf, JSON.stringify(st, null, 2));
+    const un = S.verificationStatus(p4, "mono", f4.dir).unverifiedDetail.map((d) => d.number);
+    ok(!un.includes(1) && js(un) === js([5, 6, 7, 8, 9]),
+      "1.22 review 3 (4): a record whose command cds into ANOTHER machine's checkout (root stamp /home/someone/proj) still proves `cd packages/web && npm test` — the stamp, not this machine's folder, anchors it (got " + js(un) + ")");
+    // pure: substitutions are never split; `#` kills the line; an unknown folder is equal only to itself
+    const PV = (c, v, rt) => S.runProvesVerify({ command: c }, v, rt);
+    const w5 = [["node --test $(ls tests/*.js && echo x)", ["node --test $(ls tests/*.js && echo x)"], true], ["echo `npm test`", ["npm test"], false],
+      ["cd $(: && npm test)", ["npm test"], false], ["npm test && cd #", ["npm test"], true], ["cd $HOME && npm test", ["npm test"], false],
+      ["cd $HOME && npm test", ["cd $HOME && npm test"], true], ["`npm test` && `npm run lint`", ["npm test", "npm run lint"], false], ["``npm test``", ["npm test"], true],
+      ["cd packages/web && npm test && npm run lint", ["cd packages/web && npm test", "npm run lint"], false], ["npm run lint && cd packages/web && npm test", ["cd packages/web && npm test", "npm run lint"], true],
+      ["cd /x && npm test", ["npm test"], false]].filter(([c, v, want]) => PV(c, v, "/r") !== want).map(([c, v]) => c + " vs " + js(v));
+    ok(!w5.length, "1.22 review 3 (5): a substitution ($(…), `…`) is never split or stripped — it matches only the same text; a run's commands after `cd # ` never count; an unknown folder ($HOME) equals only itself; commands run in the folder the run left them in (wrong: " + js(w5) + ")");
+    // a git worktree of the SAME repository holding the feature is the run's root; another repository's project with the same feature is not
+    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.22 review 3 (4): worktree root — skipped: no git");
+    else {
+      const repo = path.join(tmp, "proj-122r3-wt-main"), wt = path.join(tmp, "proj-122r3-wt-task"), other = path.join(tmp, "proj-122r3-wt-other");
+      const git = (cwd, ...a) => spawnSync("git", a, { cwd, encoding: "utf8" });
+      for (const d of [repo, other]) {
+        S.initProject(d, ["core"], "en");
+        const f = S.createFeature(d, "Auth", ["core"], "", undefined, "en");
+        fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] A\n  - _Verify: npm test_\n- [ ] 2. [US1] B\n  - _Verify: npm test_\n");
+        git(d, "init", "-q");
+        git(d, "-c", "user.email=t@t", "-c", "user.name=t", "add", "-A");
+        git(d, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "x");
+      }
+      git(repo, "worktree", "add", "-q", wt);
+      const a = S.completeTask(repo, "auth", 1, { command: "cd " + wt + " && npm test", exitCode: 0 });
+      const b = S.completeTask(repo, "auth", 2, { command: "cd " + other + " && npm test", exitCode: 0 });
+      const ev = JSON.parse(fs.readFileSync(path.join(repo, ".specs", "auth", ".state.json"), "utf8")).evidence;
+      ok(fs.existsSync(path.join(wt, ".specs", "auth")) && a.verified === true && ev["1"].root === path.resolve(wt) && b.verified === false && b.unverifiedReason === "command-mismatch" &&
+        ev["2"].root === path.resolve(repo),
+        "1.22 review 3 (4): `cd <git worktree of the project> && npm test` proves `npm test` (root stamped: the worktree); `cd <another repository's project holding the same feature> && npm test` does not (got " +
+        js([a.verified, a.unverifiedReason, ev["1"].root, b.verified, ev["2"].root]) + ")");
+    }
+    // hostile, 1 MB each: bounded
+    const MB = 1024 * 1024;
+    const t0 = Date.now();
+    for (const h of ["`".repeat(MB), "$(".repeat(MB / 2), "cd ".repeat(MB / 3), "'\"".repeat(MB / 2), "cd x/ && ".repeat(MB / 9) + "npm test", "a && ".repeat(MB / 5),
+      "cd " + "../".repeat(MB / 3) + " && npm test", "#".repeat(MB), "CI=1 ".repeat(MB / 5) + "npm test", "$(" + "(".repeat(MB) + ")"]) {
+      PV(h, ["npm test"], "/r");
+      PV("npm test", [h], "/r");
+    }
+    const msH = Date.now() - t0;
+    ok(msH < 4000, "1.22 review 3: runProvesVerify stays bounded on 1 MB hostile commands and _Verify:_ values (backticks, $(, cd chains, quotes, ` && `, `#`, assignments) — " + msH + " ms");
   }
 
   // 1.22 review (finding 6) — ONE `cd <root> &&` stripping (spec.stripCdPrefix) for the observe hook's log and the reported run's

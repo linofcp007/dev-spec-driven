@@ -313,7 +313,10 @@ with `nothingToVerify: true` (and no reason code) — nothing was run or atteste
 
 **Which run proves it.** The recorded `command` is compared with the task's `_Verify:_`: whitespace, backticks, quotes
 around the whole command or around a plain argument (`"tests/x.test.js"`), `\` for `/` (`tests\x.test.js`) and a
-trailing `2>&1` don't matter, nor does a leading `cd <dir> &&`, `set -o pipefail;` or `VAR=value` of the run's own — but
+trailing `2>&1` don't matter, nor does a leading `cd <project root> &&` (absolute, relative or `./`, any drive-letter case on
+Windows), `set -o pipefail;` or `VAR=value` of the run's own — a `cd` that ends anywhere else (`cd ../other-project`, `cd ..
+&& cd packages/web`) runs the command there: another run; `cd #` (a comment in bash) and a `cd` inside `` `…` `` / `$(…)` prove
+nothing — but
 a prefix the `_Verify:_` itself holds must be there: `cd packages/web && npm test` is no run of `cd packages/api && npm
 test`, `npm test` none of `NODE_ENV=production npm test`. A task with several `_Verify:_` commands needs ONE run of
 every one of them, joined with ` && ` in any order (that is how `done --run` reports them; a `_Verify:_` that itself

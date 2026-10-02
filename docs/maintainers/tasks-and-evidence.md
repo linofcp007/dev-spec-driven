@@ -118,26 +118,52 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   without its exit code are rejected; "exit 0" without a command is kept as a note. A non-zero run refuses
   the tick and is recorded — a failed re-check of a ticked task makes it unverified until a later pass.
 - **Which run proves it (1.22 review).** Until 1.22 the reported `command` was never compared with the `_Verify:_`:
-  `{command: "echo hello", exitCode: 0}` verified a task whose `_Verify:_` is `npm test`. `runProvesVerify(run, verify)`
-  (evidence.js) is now part of the ONE verdict (`taskEvidenceIssue`, after `evidenceIssue` passed it): the proving run —
+  `{command: "echo hello", exitCode: 0}` verified a task whose `_Verify:_` is `npm test`. `runProvesVerify(run, verify,
+  root)` (evidence.js) is now part of the ONE verdict (`taskEvidenceIssue`, after `evidenceIssue` passed it): the proving run —
   the latest passing run, an `_Expect: fail_` task's red proof — must run the task's `_Verify:_` commands, EVERY one of
   them (review 2: a run of one of two verified the task — `done --run` runs them all, and spec-implementer.md records
   several as ONE run `cmd1 && cmd2`; nothing documented an "any one" rule), and nothing else; a run stamped
-  `observed: "cli"` (`done --run` ran it) always counts. Both sides are read by `proofSteps()`: `flatCommand` (backticks,
-  whitespace), quotes around the WHOLE command dropped, then (review 2) `\` read as `/` and the quotes around a plain
-  argument (`RE_PLAIN_ARG`, `unquotePlainArgs()` — a left-to-right scan, a quote inside another kept) dropped — `node
-  --test tests\x.test.js`, `node --test "tests/x.test.js"` and `node --test tests/x.test.js` are one command —, split at
-  ` && ` outside quotes (`splitAndSteps()`) into STEPS: a `cd <dir>` (cmd.exe's `cd /d`; the folder without its quotes or
-  a trailing slash), a `set … -o pipefail`, or a command with its leading `NAME=value` assignments apart and a trailing
-  `2>&1` dropped (a `cd <dir>;` / `set -o pipefail;` at a step's start is a step of its own). `stepsCoverVerify()` then
-  reads the run's steps as the `_Verify:_` commands in sequence — each a WHOLE key (review 2: the run was split on every
-  ` && `, so a `_Verify:_` that itself holds one — `npm run build && npm test` next to `npm run lint` — never matched its
-  documented join), any order, a key may repeat — plus the run's OWN `cd` / pipefail steps, passed over: a prefix is
-  stripped from the RUN only (review 2: it was stripped from both sides, so `cd packages/web && npm test` proved `_Verify: cd
-  packages/api && npm test_`, `npm test | tee log` proved `set -o pipefail; npm test | tee log`, `npm test` proved
-  `NODE_ENV=production npm test`); a command step matches with every assignment the `_Verify:_` makes (the run may add its
-  own). A forward walk over (position, keys covered) — n × 2^k × k at most, `PROOF_MAX_STEPS` = 200 / `PROOF_MAX_KEYS` = 12.
-  `proofKey(cmd)` is the steps as one string. Anything else ticks but reads **`command-mismatch`**
+  `observed: "cli"` (`done --run` ran it) always counts. Both sides are read by `proofSteps()`: whitespace folded, a code
+  span (`` `…` `` — `proofUnwrapCode`, linear) or quotes around the WHOLE command dropped, then (review 2) `\` read as `/`
+  and the quotes around a plain argument (`RE_PLAIN_ARG`, `unquotePlainArgs()` — a left-to-right scan, a quote inside another
+  kept) dropped — `node --test tests\x.test.js`, `node --test "tests/x.test.js"` and `node --test tests/x.test.js` are one
+  command —, split at ` && ` outside quotes (`splitAndSteps()`) into STEPS: a `cd <dir>` (cmd.exe's `cd /d`; the folder
+  without its quotes), a `set … -o pipefail`, or a command with its leading `NAME=value` assignments apart and a trailing
+  `2>&1` dropped (a `cd <dir>;` / `set -o pipefail;` at a step's start is a step of its own). **Review 3 — substitutions:**
+  `flatCommand` dropped EVERY backtick first, so ``cd `: && npm test` `` read as `cd :` + `npm test` (bash runs npm test
+  inside the substitution; the exit code is cd's). A backtick span or `$(…)` (`proofSubstAt` / `proofSubstEnd`, balanced,
+  quotes inside skipped, linear) is now never split, unquoted or stripped: it is equal only to the same text. **Review 3 —
+  folders (`proofCommands()`):** cd folders were compared as TEXT — `cd C:/…/proj/packages/web && npm test` and `cd
+  ./packages/web && npm test` were no run of `cd packages/web && npm test`, and a run's own cd was passed over wherever it
+  went (`cd ../other-project && npm test` proved `npm test`; `cd .. && cd packages/web && npm test` proved `cd packages/web
+  && npm test`). Both sides are now walked from the project root (`proofBase(root)` — evidenceRule's `root`, the project
+  folder; a record's own `root` stamp first), each cd resolved IN ORDER (`cdInto`: `.` / `..` folded, an absolute path
+  replaces the folder, Git Bash's `/c/…` is `C:/…` under a Windows root, a trailing slash ignored) and every command
+  compared in the folder it runs in (`proofFolderKey`: `./rel` inside the root, else the absolute path; case folded under a
+  Windows root, else `FOLD_CASE`). A `_Verify:_` with no cd runs at the root, so a run's own cd counts only when it ends
+  there; each `_Verify:_` command is resolved from the root on its own (as `done --run` runs each one), so `cd packages/web
+  && npm test && npm run lint` is no run of [`cd packages/web && npm test`, `npm run lint`] — lint ran in packages/web. A
+  folder the matcher can't know (`RE_PROOF_OPAQUE_DIR`: `~`, `-`, `$VAR`, `%VAR%`, a glob, a substitution; cmd.exe's bare
+  `C:`) is an opaque token equal only to the same token; one starting with `#` (bash: the rest of the line is a comment —
+  `cd # && npm test` never runs npm test) is no folder at all — nothing after it matches. Without a root (a pure call) the
+  walk starts at a folder no absolute path equals. `commandsCoverVerify()` then reads the run's COMMANDS as the `_Verify:_`
+  commands in sequence — each a WHOLE key (review 2: the run was split on every ` && `, so a `_Verify:_` that itself holds
+  one — `npm run build && npm test` next to `npm run lint` — never matched its documented join), any order, a key may repeat
+  — and nothing else; a cd / pipefail of the run's own only sets the folder / pipefail of the commands after it (review 2: a
+  prefix was stripped from both sides, so `cd packages/web && npm test` proved `_Verify: cd packages/api && npm test_`,
+  `npm test | tee log` proved `set -o pipefail; npm test | tee log`, `npm test` proved `NODE_ENV=production npm test`); a
+  command matches with every assignment the `_Verify:_` makes (the run may add its own) and the pipefail it sets. A
+  `_Verify:_` that is only a `cd` is matched by no run. A forward walk over (position, keys covered) — n × 2^k × k at most,
+  `PROOF_MAX_STEPS` = 200 (a run — or a `_Verify:_` — of more steps proves nothing) / `PROOF_MAX_KEYS` = 12; the folder key
+  is computed once per folder and a cd chain extends one folder in place (a copy per cd was quadratic: 1 MB of `cd x/ && `
+  as a `_Verify:_` took 60 s). **The root stamp:** a run whose command holds an absolute cd is stored with `root`
+  (`runRootStamp()`, completeTask and the finish checks; `runOf` keeps it): the project folder — as the RUN spells it when
+  that differs (an 8.3 short name, a link: `realpathSync.native`) —, or a git worktree of the SAME repository (the same
+  common git dir, `gitCommonDir()`) holding the feature's folder that the run's first absolute cd lands in (a subagent's
+  `cd <worktree> && npm test`; another repository's project with the same feature name is no worktree). The verdict reads
+  the stamp, so a record made on another machine (`cd /home/someone/proj/packages/web && …`, root `/home/someone/proj`)
+  proves the same task here. A run field: the merge driver needs no rule for it. `proofKey(cmd, root)` is the resolved
+  commands as one string. Anything else ticks but reads **`command-mismatch`**
   (`evidenceGate.commandMismatch`, EN/PT/ES — the note names the command recorded and the `_Verify:_`; with several, all of
   them in one ` && ` run). A run's command is kept up to `OBSERVED_MAX_COMMAND` (4000 — review 2: `normalizeEvidence` and
   the finish runs cut it at 500 BEFORE the comparison, so a faithful long `_Verify:_`, or a join past 500, read
@@ -188,7 +214,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `{exitCode: 0}` is a claim, not a run: a note replaces it as the summary). `stale: true` is set by
   `spec_impact --reopen`; only a new run (or, without a runnable `_Verify:_`, a new note) clears it. 1.14 F1: every run
   (the latest and each `history` entry) carries `observed: true | false | "cli"` (`runOf()` keeps it; older records have
-  none); 1.22 review 3: and `cmdRule: 1` (recorded under the command rule — see Which run proves it).
+  none); 1.22 review 3: and `cmdRule: 1` (recorded under the command rule), plus `root` on a run with an absolute cd (see Which
+  run proves it).
 - **Without a runnable `_Verify:_`** a task is outside the run gate: no record passes, a bare legacy
   `{exitCode: 0}` or a summary verifies, and `verificationStatus()` skips a `no-evidence` record there —
   only `failed-run` / `stale-evidence` / `duplicate-number` count against it.

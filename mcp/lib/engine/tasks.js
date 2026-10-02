@@ -23,7 +23,7 @@ let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDeci
   ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf;
+  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp;
 function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
@@ -34,7 +34,7 @@ function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, b
   REPRO_SYN, ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf } = E); }
+  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
 // scanner — so status/next/phase can never count a task that complete/brief/finish don't see.
@@ -482,12 +482,16 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   // 1.14 F1: every run {command, exitCode} is stamped observed: true | false (the harness's log) | "cli" (`done --run`), and
   // every result of this call carries it (stable).
   const verifyCmds = taskMarkers(task).verify;
+  // Review 3: a run whose command holds an absolute `cd` is stamped with the project root it was read against (runRootStamp — the
+  // project, or a git worktree of it holding this feature): its verdict is then the same on another machine.
+  const runRoot = ev && ev.command && ev.exitCode != null ? runRootStamp(ev.command, projectDir, f.slug) : undefined;
+  if (runRoot) ev.root = runRoot;
   const observed = observedStamp(projectDir, f.slug, ev, opts && opts.ranBy, verifyCmds); // an observed run of ITS _Verify:_ (1.22 review)
   if (observed !== undefined) ev.observed = observed;
   const withObserved = (r) => (observed !== undefined ? Object.assign(r, { observed }) : r);
   // _Expect: fail_ (B5): a red run {command, exitCode ≠ 0} is the proof; a passing run is refused unless a red run of this
   // _Verify:_ was recorded before it (the fix made the test green); a could-not-run exit (127, 9009…) is refused like a failure.
-  const xf = expectsFail(task) ? expectFailRun(ev, ownEvidence(state.evidence || {}, task, dup), verifyCmds) : null;
+  const xf = expectsFail(task) ? expectFailRun(ev, ownEvidence(state.evidence || {}, task, dup), verifyCmds, projectDir) : null;
   // The run is stored with expected: "fail" (metrics count a red run as a pass, an unexpected pass as a failure) — except the
   // pass after the red run: a plain passing run that keeps the red run as the record's proof (recordEvidence).
   // Any run that is not itself the red proof (a pass after it, a could-not-run exit, a refused pass) carries the red run on
@@ -509,7 +513,7 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     state.evidence = state.evidence || {};
     // Only THIS task's record is extended; another task's record under the same number is kept aside.
     const run = ev.exitCode != null;
-    state.evidence[key] = storeEvidence(state.evidence[key], task, dup, ev, run && cliStart ? cliStart.at : now, run ? ranVerify : undefined);
+    state.evidence[key] = storeEvidence(state.evidence[key], task, dup, ev, run && cliStart ? cliStart.at : now, run ? ranVerify : undefined, projectDir);
   }
   const ticks = !alreadyDone && !failed;
   if (ticks) {
@@ -685,7 +689,7 @@ function untickTask(projectDir, name, number, opts = {}) {
   const runnable = taskMarkers(task).verify.length > 0;
   // 1.16 U review 1: an _Expect: fail_ task keeps its red run (redProof reads through staleBy "undo"): once the fix is in, the
   // re-tick's passing run is the fix going green — the note must not ask for a red run that can no longer happen. redKept: stable.
-  const red = staled && expectsFail(task) ? redProof(rec, taskMarkers(task).verify, rec) : null; // (rec's own pass: review 2's grandfathering)
+  const red = staled && expectsFail(task) ? redProof(rec, taskMarkers(task).verify, rec, projectDir) : null; // (rec's own pass: review 2's grandfathering)
   const notes = [U.unticked(n, f.slug, runnable, staled && !red)];
   if (red) notes.push(U.redKept(n, f.slug, String(red.at || "?").slice(0, 10)));
   if (isObj(state.finished) || (isRecord(state.approvals) && isRecord(state.approvals.execution))) notes.push(U.reopened(f.slug));

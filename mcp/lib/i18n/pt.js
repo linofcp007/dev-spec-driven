@@ -1435,7 +1435,7 @@ const msg = {
         "unexpected-pass": "a execução passou, mas o _Expect: fail_ precisa de uma execução vermelha",
         unobserved: "execução não observada pelo harness",
         "command-mismatch": "a execução registada não é o comando _Verify:_" },
-      commandMismatch: (n, slug, ran, verify, red) => `Tarefa ${n}: a execução registada (\`${ran}\`) não é uma execução do seu comando _Verify:_ (${verify}) — fica marcada, mas continua não verificada até se registar uma execução ${red ? "QUE FALHE " : ""}desse comando (tal como está escrito — com vários comandos _Verify:_, todos eles numa SÓ execução unidos com \` && \`; um \`cd <pasta> &&\`, \`set -o pipefail;\` ou VAR=valor teu à frente serve, mas nunca tires um que o _Verify:_ tenha)` +
+      commandMismatch: (n, slug, ran, verify, red) => `Tarefa ${n}: a execução registada (\`${ran}\`) não é uma execução do seu comando _Verify:_ (${verify}) — fica marcada, mas continua não verificada até se registar uma execução ${red ? "QUE FALHE " : ""}desse comando (tal como está escrito — com vários comandos _Verify:_, todos eles numa SÓ execução unidos com \` && \`; um \`cd <raiz do projeto> &&\`, \`set -o pipefail;\` ou VAR=valor teu à frente serve (um cd para outra pasta é outra execução), mas nunca tires um que o _Verify:_ tenha)` +
         (red ? ` — regista-a ANTES de a correção entrar, enquanto o teste ainda falha: ${DEV_SPEC} done ${slug} ${n} --run (uma execução vermelha de outro comando nunca conta; com a correção já feita, põe-na de parte — git stash — para essa execução e depois repõe-na).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
       duplicateTasks: (list) => `números de tarefa repetidos: ${list} — o complete/brief escolhem a primeira por fazer; renumera-as`,
     },
