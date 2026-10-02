@@ -1576,5 +1576,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
       js(pure) === '["US-1.AC-1","US-1.AC-2","US-1.AC-3"]',
       "1.22 review 2: 'P1/US-1.AC-1', 'US-1 / US-1.AC-2', '1.1/US-1.AC-3', the feature's own 'own-ids/US-1.AC-4' and 'Step-2/US-1.AC-5' (no such feature) stay required ACs — 5, all covered; 'checkout/US-3.AC-2' (a feature) does not; without a feature folder the reader keeps P1 / US-1 / 1.1 (got " +
       js([trO.verdict, trO.totalAcs, trO.uncoveredByTasks, trO.unidentifiedCriteria, chk(docO, "ears").status, pure]) + ")");
+    // …and a criterion whose only ID is that other feature's (or a _Supersedes:_ reference) has no ID of its own: still named
+    const fo = S.createFeature(d, "Foreign only", ["core"], "", undefined, "en");
+    put(fo.dir, "requirements.md", reqOf(["1. WHEN a user pays THE SYSTEM SHALL apply the rules of checkout/US-3.AC-2 unchanged."]));
+    put(fo.dir, "tasks.md", tasksOf("US-3.AC-2"));
+    const trFo = S.traceCheck(d, fo.slug), docFo = S.specDoctor(d, fo.slug);
+    ok(js(trFo.unidentifiedCriteria) === '["L5"]' && trFo.totalAcs === 0 && chk(docFo, "ears").status === "fail" &&
+      js(E.criteriaBareIds("1. **AC-1** — WHEN x THE SYSTEM SHALL keep checkout/US-3.AC-2 as it is.")) === '["AC-1"]',
+      "1.22 review 2: a criterion whose only ID is another feature's (checkout/US-3.AC-2) has no stable ID of its own — trace names it, doctor's ears fails; a bare AC-1 beside such a reference is still a bare ID (got " +
+      js([trFo.unidentifiedCriteria, trFo.totalAcs, chk(docFo, "ears").status]) + ")");
   }
 };

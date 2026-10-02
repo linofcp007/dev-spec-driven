@@ -20,7 +20,7 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained, readIfExists, readJson, realLines,
   requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes, retiredDecisions, safeReaddir,
   SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile, statePath, stripEnd, stripEnds,
-  stripStart, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
+  stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
   useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir;
 function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
@@ -31,7 +31,7 @@ function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atx
   normWs, oneLiner, ownEvidence, packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained,
   readIfExists, readJson, realLines, requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes,
   retiredDecisions, safeReaddir, SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile,
-  statePath, stripEnd, stripEnds, stripStart, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
+  statePath, stripEnd, stripEnds, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
   taskMarkerValues, taskProse, tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds,
   trackLabel, trackMarker, unitIn, useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews,
   isChangeDir } = E); }
@@ -282,22 +282,26 @@ const shortIdList = (xs) => xs.slice(0, 5).join(", ") + (xs.length > 5 ? " …" 
 // and the requirements approval. → the criteria as labels — each one's bare AC ID, else "L<line>" — in document order
 // (the full list), else null. trace_check reports them as a gap (unidentifiedCriteria); doctor's `ears` and the requirements /
 // change-plan approvals fail on them. Only a criterion with NO stable ID counts (review 2): an NFR-n / EC-n / SC-nnn one has
-// its own (trace_check's secondary warnings read it) — a performance spec of NFR-1, NFR-2 alone failed every gate.
+// its own (trace_check's secondary warnings read it) — a performance spec of NFR-1, NFR-2 alone failed every gate. Its own:
+// another feature's `checkout/US-3.AC-2` or a `_Supersedes:_` reference in its text is none (ownStableId).
 function earsUnidentified(reqText, ears, dir) {
   if (!ears || !ears.summary || !(ears.summary.criteriaDetected > 0)) return null;
   if (requirementAcIds(reqText || "", dir).size) return null;
-  const out = (ears.criteria || []).filter((c) => !RE_FULL_ID.test(c.text))
+  const out = (ears.criteria || []).filter((c) => !ownStableId(c.text, dir))
     .map((c) => { const bare = c.text.match(RE_BARE_AC); return bare ? bare[0] : "L" + c.line; });
   return out.length ? out : null;
 }
-// The bare `AC-n` IDs the criteria are numbered with — each linted criterion with no stable ID that carries one — in document
-// order, once each ([] when none). spec_upgrade's renumber item (review 2): a feature approved before 1.22 with AC-1, AC-2 …
-// fails doctor's ears / traceability now, with no warning path.
-function criteriaBareIds(reqText) {
+// A criterion's text carries a stable ID of its OWN (US-n.AC-m, T-, EC-, NFR-, SC-) — never one in a _Supersedes:_ marker or
+// another feature's `<feature>/US-n.AC-m` (requirementAcIds' reading; `dir` resolves the feature, as there).
+const ownStableId = (text, dir) => RE_FULL_ID.test(stripForeignAcRefs(stripSupersedes(text), dir));
+// The bare `AC-n` IDs the criteria are numbered with — each linted criterion with no stable ID of its own that carries one — in
+// document order, once each ([] when none). spec_upgrade's renumber item (review 2): a feature approved before 1.22 with AC-1,
+// AC-2 … fails doctor's ears / traceability now, with no warning path. `dir`: the feature's folder (see ownStableId).
+function criteriaBareIds(reqText, dir) {
   const ev = earsValidate(reqText || "", "en");
   const out = [];
   for (const c of (ev.ok && ev.criteria) || []) {
-    if (RE_FULL_ID.test(c.text)) continue;
+    if (ownStableId(c.text, dir)) continue;
     const m = c.text.match(RE_BARE_AC);
     if (m && !out.includes(m[0])) out.push(m[0]);
   }

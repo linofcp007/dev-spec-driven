@@ -42,7 +42,8 @@ matrix.
   ACs)". A spec numbered AC-1, AC-2 used to trace 0 ACs and pass everything ("all 0 ACs covered"). **Only a criterion with NO
   stable ID counts (review 2):** one carrying `NFR-n` / `EC-n` / `SC-nnn` (`RE_FULL_ID`) has its own — trace's secondary
   warnings read it — so a performance spec of NFR-1, NFR-2 alone passes (it failed doctor, trace and the requirements approval);
-  a criterion with no ID beside them is still named. `criteriaBareIds(reqText)` (the bare IDs the criteria are numbered with)
+  a criterion with no ID beside them is still named, and so is one whose only ID is another feature's (`checkout/US-3.AC-2`) or
+  a `_Supersedes:_` reference (`ownStableId` — requirementAcIds' reading). `criteriaBareIds(reqText)` (the bare IDs the criteria are numbered with)
   feeds spec_upgrade's renumber item (lifecycle.md → Upgrade).
   **`<feature>/US-n.AC-m` is another feature's (1.22 review):** `requirementAcIds` drops it (`stripForeignAcRefs` — the
   `_Supersedes:_` / `_Affects:_` syntax written in prose: "rules of checkout/US-3.AC-2 stay as they are" was a required AC no

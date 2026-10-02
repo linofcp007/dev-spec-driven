@@ -237,7 +237,7 @@ function upgradeFeature(projectDir, s, ctx) {
   if (reservedPacks.length || reservedMarkers.length) attention.push("track-pack-reserved");
   // 1.22 review 2: criteria numbered with bare AC-n IDs (approved before 1.22: doctor's ears / traceability fail on them now) —
   // renumber them US-<story>.AC-<n>, their references too, then re-approve. Never edited here: the audit names them.
-  const bareAcIds = criteriaBareIds(criteriaText(s.dir) || "");
+  const bareAcIds = criteriaBareIds(criteriaText(s.dir) || "", s.dir);
   if (bareAcIds.length) attention.push("bare-ac-ids");
   // 1.17 A review 3: the design weigh warns (design-tradeoffs / design-risks) are listed, never an upgrade to-do on their own.
   if (warns.some((c) => !DESIGN_WEIGH_IDS.has(c.id))) attention.push("warnings");
