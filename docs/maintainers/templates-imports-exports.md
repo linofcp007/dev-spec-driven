@@ -137,13 +137,23 @@ trackers, release notes, milestones).
     pass no `counts`: every file counts, as before.
   - **Generated folders** (`gitignoreRules()`): the ROOT `.gitignore`'s plain directory patterns — a name, a leading / trailing
     `/`, a path of names (a slash inside anchors it), simple classes (`[Bb]in/`, `[a-z]`), folded where the file system folds
-    case — skip a folder (and a top-level module); negations, wildcards, escapes and negated classes are ignored (a pattern
-    read wrongly would hide code). A folder (not the root) whose own `.gitignore` ignores everything (`gitignoresAll`: `*`,
+    case — skip a folder (and a top-level module); wildcards, escapes and negated classes are ignored (a pattern
+    read wrongly would hide code). **Negations (review 2):** a pattern a negation could re-include is not applied — the Python
+    template's `lib/` with `!frontend/src/lib/` hid a SvelteKit app's `frontend/src/lib/*.ts` (coverage 4 → 2 code files, its
+    `_Implements:_` "non-code"). `gitignoreNegationReincludes()` compares the negation's LAST name (after `!`, `/`, a trailing
+    `/` or `/**` — Git re-includes nothing under a folder that stays excluded, so `!lib/keep.txt` brings back no `lib/`) with the
+    pattern's last name: the same name, or a wildcard / class (`!b*/`, `!*`) that could match it — a DP over the pattern's
+    units, exact for its classes; Visual Studio's `!**/[Pp]ackages/build/`, `!?*.[Cc]ache/` keep `[Bb]in/` / `[Oo]bj/`. The
+    line order is not read (a negation before its pattern loses in Git — dropping that pattern only shows more code). Bounded:
+    over `GITIGNORE_MAX_NEGATIONS` (200) negations or `GITIGNORE_NEGATION_BUDGET` unit comparisons, no pattern is applied.
+    A folder (not the root) whose own `.gitignore` ignores everything (`gitignoresAll`: `*`,
     re-including at most `.gitignore` / `.gitkeep` / `.keep`) is skipped too (Laravel's storage/framework/views). Never a
     built-in `bin` (Ruby / Node keep code there). `testdata/` is a fixture folder (`isTestFixture`).
   - **Manifests:** a root one is read only as a file or a link that stays inside the project (`projectFileInside`); nested
-    ones (`NESTED_MANIFESTS` — a package's manifest, never a per-folder CMakeLists / Makefile; never under fixtures /
-    testdata) join the stack by name and the first `NESTED_MANIFEST_CAP` (20) are read for frameworks / test runners; the
+    ones (`NESTED_MANIFESTS` — a package's manifest, never a per-folder CMakeLists / Makefile; never under a
+    `MANIFEST_FIXTURE_DIRS` folder: fixtures / `__fixtures__` / testdata and — review 2 — docs / doc / examples / example /
+    samples / sample: a Node app's Sphinx `docs/requirements.txt`, Jekyll `docs/Gemfile` and `examples/flask-client/` made its
+    stack "python (flask)" and "ruby") join the stack by name and the first `NESTED_MANIFEST_CAP` (20) are read for frameworks / test runners; the
     root package.json alone gives entrypoints (listed first).
   - **ASP.NET tokens:** `[controller]` = the class name minus "Controller", `[action]` = the decorated method
     (`aspActionName`, its "Async" suffix dropped); one it can't name stays. **A projectDir that is no folder** → ok: false

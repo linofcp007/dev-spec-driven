@@ -51,7 +51,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require }) => {
       "GET /users/:id src/users.controller.ts:4", "POST /users src/users.controller.ts:6", "GET /api/items src/app/api/items/route.ts:1",
       "GET /items/{item_id} api/main.py:4", "POST /v1/users api/main.py:6", "GET /login web/app.py:4", "POST /login web/app.py:4", "GET /me/profile web/app.py:6",
       "ANY /cart/ shop/urls.py:3", "GET /api/orders svc/src/main/java/com/x/OrderController.java:5", "POST /api/orders svc/src/main/java/com/x/OrderController.java:7",
-      "GET /api/Items/{id} net/Controllers/ItemsController.cs:4", "GET /ping net/Program.cs:2", // [controller] → Items (1.22 review) "GET /about config/routes.rb:2", "RESOURCES /orders config/routes.rb:3",
+      "GET /api/Items/{id} net/Controllers/ItemsController.cs:4", "GET /ping net/Program.cs:2", "GET /about config/routes.rb:2", "RESOURCES /orders config/routes.rb:3", // [controller] → Items (1.22 review)
       "GET /dashboard routes/web.php:2", "POST /posts routes/web.php:3", "GET /home src/Controller/HomeController.php:3", "ANY /healthz cmd/api/main.go:4", "GET /v1/users cmd/api/main.go:6",
       "GET /f src/f.js:2", "POST /h src/h.ts:3", "PUT /koa src/k.js:3", "GET /chi cmd/chi/main.go:5", "PUT /api/orders/{id} svc/src/main/java/com/x/OrderController.java:9"];
     ok(scan6.ok && wantRoutes.every((k) => routeKeys.includes(k)) && scan6.candidateEndpoints === 30 && scan6.candidateEndpoints === scan6.routes.length && scan6.endpointFiles === 17,
