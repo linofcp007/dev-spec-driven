@@ -437,6 +437,22 @@ exports.run = async ({
       JSON.stringify({ bareRun, runnableCmds: runnableCmds.length, bareHandOff, noSubagent, signOff, prefill }) + ")");
   }
 
+  { // 1.22 review (prose) — one assertion per finding the independent review verified in the docs the agents read.
+    const sub = docsWs(docsRef("subagent-execution.md")), impl = docsWs(docsRead("agents", "spec-implementer.md")), skillW = docsWs(docsSkill);
+    const cut = (t, a, b) => (t.split(a)[1] || "").split(b)[0];
+    const par = cut(sub, "## Parallel mode", "## Where autonomy stops");
+    // P2: the Agent tool's worktree isolation bases the worktree on the default branch — the controller makes each one by
+    // hand from the recorded BASE and the implementer checks its HEAD before it starts.
+    ok(/git worktree add <path> -b task-N <BASE>/.test(par) && /Never the Agent tool's `isolation: "worktree"`/.test(par) &&
+      !/each with worktree isolation/.test(sub) && /made by hand from the wave's BASE/.test(par) &&
+      /\*\*Dispatched into a worktree\?\*\*[^#]*`git rev-parse HEAD` there equals the BASE you were given/.test(cut(impl, "## Before you begin", "1. Read the brief")),
+      "1.22 review P2: parallel mode and waves create each worktree by hand from BASE (never isolation: \"worktree\"); spec-implementer checks HEAD = BASE before it begins");
+    // P3: SKILL.md's subagent loop names the verify pass, still ≤ 5,000 words.
+    ok(/send the diff to \*\*`dev-spec-driven:spec-reviewer`\*\*, verify each ❌ \/ Critical \/ Important finding \(a verify-mode `spec-reviewer` per finding; only 80\+ opens a fix round\)/.test(skillW) &&
+      docsSkill.split(/\s+/).filter(Boolean).length <= 5000,
+      "1.22 review P3: SKILL.md's subagent loop verifies each ❌ / Critical / Important finding before a fix round (80+), within 5,000 words (got " + docsSkill.split(/\s+/).filter(Boolean).length + ")");
+  }
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;

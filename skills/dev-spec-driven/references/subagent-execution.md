@@ -227,9 +227,14 @@ own git worktree, so they never share a working tree. Adapted from superpowers' 
    `_Implements:_`, a shared file (`src/a.js:12`, `src/a.js#L40`, `./src/a.js` are one file; a folder shares every
    file under it), a task waiting on an open dependency, a non-`[P]` task or a section
    boundary ends the batch — then run sequentially. The pre-flight scan must agree (no shared interface).
-2. Record BASE, write each task's brief, and dispatch the implementers **in one message**, each with
-   worktree isolation (Claude Code: the Agent tool's `isolation: "worktree"`). Each commits on its own
-   worktree branch.
+2. Record BASE (`git rev-parse HEAD` on the feature branch), write each task's brief, and **create each worktree by
+   hand from that BASE**: `git worktree add <path> -b task-N <BASE>`. Never the Agent tool's `isolation: "worktree"` —
+   it bases the worktree on the default branch, not on the feature branch's HEAD, so the implementer would start
+   without the earlier tasks and the Phase 4 failing tests. Dispatch the implementers **in one message**, each with its
+   worktree path and the BASE it was made from, and the brief and report paths written out absolute, in the main
+   checkout (`.execution/` ignores itself, so a worktree has no copy — and the SubagentStop gate reads the report
+   there). Each implementer checks `git rev-parse HEAD` in its worktree equals that BASE before it starts, and commits
+   on its own `task-N` branch.
 3. **Merge one at a time** into the feature branch (fast-forward or rebase — never a merge that rewrites
    the others' work). After EACH merge, run the full suite; a conflict or a red suite takes that task out
    of the batch: re-run it sequentially on the updated branch.
@@ -257,7 +262,8 @@ them):
   plan (re-approve the tasks phase).
 
 Per wave: write each task's brief, dispatch a wave of one sequentially as usual, and a wider wave as in the parallel
-mode above (one worktree per implementer, merge one at a time, full suite after each merge, review each diff,
+mode above (one worktree per implementer, made by hand from the wave's BASE — `git worktree add <path> -b task-N
+<BASE>`, never `isolation: "worktree"` —, merge one at a time, full suite after each merge, review each diff,
 complete each with its own evidence). Ask for the waves again after each wave — a merge conflict re-run sequentially
 or a task that turned out to need another changes them. Only a task's own `_Depends:_` can take it ahead of an
 earlier section's checkpoint: still stop at every `**Checkpoint:**` once that section's tasks are done.

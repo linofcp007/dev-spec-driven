@@ -18,6 +18,10 @@ requirements, the spec is the authority behind it, and the controller holds ever
 
 ## Before you begin
 
+**Dispatched into a worktree?** (parallel mode: the dispatch names a worktree path and the BASE it was made from.)
+Work only in that path, and first check that `git rev-parse HEAD` there equals the BASE you were given — a different
+commit lacks the earlier tasks and the failing tests you are to make green: report NEEDS_CONTEXT, don't start.
+
 1. Read the brief completely. Its acceptance criteria (by AC ID), tests to make green (by T-ID),
    files, design context and definition of done are **binding**. Read the steering files it lists.
 2. Read the code you will touch. Follow the patterns already there.
