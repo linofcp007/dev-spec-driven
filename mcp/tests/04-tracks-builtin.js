@@ -63,10 +63,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const sweep = [];
     // (full review Pb5: a VERB stem matches only with one of its endings — probed as its infinitive)
     const verbStem = { encript: "encriptar", cifr: "cifrar", criptograf: "criptografar" };
+    // (1.22 review 2: the factor words count only next to an auth word — a +sec cue — so each is probed beside one)
+    const authProbe = { "dois fatores": "autenticação de dois fatores", multifator: "autenticação multifator", "dos factores": "autenticación de dos factores",
+      "doble factor": "doble factor de autenticación", "multi-factor": "multi-factor authentication", multifactor: "multifactor authentication" };
     for (const tr of ["sec", "privacy"]) {
       const sg = S.trackSignals(tr);
       for (const tier of ["strong", "weak"]) for (const kw of sg[tier]) {
-        const r = S.classify("We need " + (verbStem[kw] || kw) + " here");
+        const r = S.classify("We need " + (verbStem[kw] || (tr === "sec" && authProbe[kw]) || kw) + " here");
         if (!r.signals[tr].some((m) => m === kw || m.includes(kw)) || (tier === "strong" && !r.tracks.includes(tr))) sweep.push(tr + ":" + kw);
       }
     }

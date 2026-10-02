@@ -547,7 +547,20 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   6,756 string literals of both trees' test files and evals + a 20-frame sweep of every built-in keyword (1,782, incl. "Add K and
   multi-factor sign-in", "Adicionar K com dois fatores", "Añadir K con dos factores", "autenticação K de dois fatores"): 1,863
   decisions changed, ALL +sec switched on in an input holding one of the new words (the sweep's frames and the review's 7 test
-  texts); no track switched off, no existing literal changed. **Reasoning:** a track kept off with weak / app-level words
+  texts); no track switched off, no existing literal changed. **Review 2 — the factor words count only as authentication:**
+  "depende de dois fatores", "depende de dos factores", "doble factor de ponderación", "a multi-factor risk model" were a weak
+  +sec signal (a "Possible +sec", and ON with one more weak word: "… dois fatores e da segurança da entrega"). Two +sec cue
+  rules (data, `SIGNALS.sec.cues`): `near` an auth word — before (authentication / auth / login / sign-in / SSO / verification /
+  autenticação / verificação / início de sessão / acesso / autenticación / verificación / inicio de sesión / acceso, a link word
+  between allowed: de / em / com / por / en / con / with / via …) or after ("… de autenticação", "… of authentication", "… for
+  the login") — `keep`; else the catch-all `sentence` rule (the hit's own sentence always holds the hit) — `none`. Only the
+  1.22 words (`multi-factor`, `multifactor`, PT `dois fatores`, `multifator`, ES `dos factores`, `doble factor`); `two-factor`,
+  `2fa`, `mfa` keep their reading. **Measured:** the differential (7cf3843 vs the fix) over 32,719 inputs — 11,113 string
+  literals of both trees' test files and evals (0 track decisions changed; 4 reasonings, all holding a factor word: "weak
+  signal only ('dois fatores')" → "no signals matched") + a 13-frame sweep of every built-in keyword (the other 21,606 texts:
+  1,943 +sec switched OFF, every one in a frame holding a factor word; 0 switched on; 9,668 more reasonings changed — no input
+  without a factor word changed at all). The A2 self-match sweep probes each factor word beside an auth word.
+  **Reasoning:** a track kept off with weak / app-level words
   (`signals[t]` non-empty) reads `classify.offWeak` ("+api: off — weak signal only ('endpoint'), not enough on its own.", EN /
   PT / ES), never "no signals matched" beside a "Possible +api" note.
 - **Tracks are persisted in `.state.json` `tracks`** (create / add_track / add_track --remove write them)
