@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI }) => {
+exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
 // 1.13 WP1: `done --run` verifies the very task it ticks; zero-padded numbers; --exit alone; --shell; localized output
 const w1p = path.join(tmp, "wp1-proj");
 const w1Read = (f) => fs.readFileSync(path.join(w1p, ".specs", f, "tasks.md"), "utf8");
@@ -276,4 +276,27 @@ ok(cm1.code === 0 && /Task 1 done\. 1\/2/.test(cm1.out) && !/\(verified\)/.test(
   cm1j.verified === false && cm1j.unverifiedReason === "command-mismatch" && cm2.code === 0 && /Task 2 done \(verified\)/.test(cm2.out),
   "1.22 review: done --cmd \"echo hello\" --exit 0 on a task whose _Verify:_ is another command ticks it unverified (no '(verified)', the command-mismatch note; --json: unverifiedReason command-mismatch); done --run verifies (got " +
   JSON.stringify([cm1.out, cm1j.unverifiedReason, cm2.out]) + ")");
+
+// 1.22 review 2: a run must cover EVERY _Verify:_ command of a task (one of two verified it) — `done --run` on a task with two of
+// them, and on a Windows-path _Verify:_ (`node t\ok.js` under cmd.exe; `node t/ok.js` elsewhere), records a run the rule accepts:
+// verified, and the recorded command proves the task on its own too (without the "cli" stamp); `--cmd` with one of the two does not.
+const SR2 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+const dm = path.join(tmp, "122r2-done-run-multi");
+run(["create", "Multi", "core", "--project", dm]);
+fs.mkdirSync(path.join(dm, "t"), { recursive: true });
+fs.writeFileSync(path.join(dm, "t", "ok.js"), "process.exit(0)\n");
+const winPath = process.platform === "win32" ? "node t" + String.fromCharCode(92) + "ok.js" : "node t/ok.js";
+fs.writeFileSync(path.join(dm, ".specs", "multi", "tasks.md"), "- [ ] 1. a\n  - _Verify: node -e \"process.exit(0)\"_\n  - _Verify: node --version_\n" +
+  "- [ ] 2. b\n  - _Verify: " + winPath + "_\n  - _Verify: node --version_\n- [ ] 3. c\n  - _Verify: node -e \"process.exit(0)\"_\n  - _Verify: node --version_\n");
+// (run() hands back stdout and stderr together: the JSON document, then the commands it ran)
+const dmJ = (n) => { const r = run(["done", "multi", n, "--run", "--json", "--project", dm]); try { return JSON.parse(r.out.slice(0, r.out.indexOf("\n}") + 2)); } catch { return { raw: r.out }; } };
+const dm1 = dmJ("1"), dm2 = dmJ("2");
+const dm3 = JSON.parse(run(["done", "multi", "3", "--cmd", "node --version", "--exit", "0", "--json", "--project", dm]).out);
+const evDm = JSON.parse(fs.readFileSync(path.join(dm, ".specs", "multi", ".state.json"), "utf8")).evidence;
+const vDm = (n) => SR2.taskBrief(dm, "multi", n).verify;
+ok(dm1.ok && dm1.verified === true && dm2.ok && dm2.verified === true && evDm["1"].observed === "cli" &&
+  SR2.runProvesVerify({ command: evDm["1"].command }, vDm(1)) && SR2.runProvesVerify({ command: evDm["2"].command }, vDm(2)) &&
+  dm3.verified === false && dm3.unverifiedReason === "command-mismatch",
+  "1.22 review 2: done --run on a task with two _Verify:_ commands and on a Windows-path _Verify:_ verifies it, and the command it records (the commands joined) proves the task on its own; done --cmd with one of the two is command-mismatch (got " +
+  JSON.stringify([dm1, dm2, evDm["1"] && evDm["1"].command, evDm["2"] && evDm["2"].command, dm3.unverifiedReason]) + ")");
 };

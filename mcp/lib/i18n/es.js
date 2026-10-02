@@ -1434,7 +1434,8 @@ const msg = {
         "unexpected-pass": "la ejecución pasó, pero _Expect: fail_ necesita una ejecución en rojo",
         unobserved: "ejecución no observada por el harness",
         "command-mismatch": "la ejecución registrada no es su comando _Verify:_" },
-      commandMismatch: (n, slug, ran, verify, red) => `Tarea ${n}: la ejecución registrada (\`${ran}\`) no es una ejecución de su comando _Verify:_ (${verify}) — queda marcada, pero sigue sin verificar hasta que se registre una ejecución ${red ? "QUE FALLE " : ""}de ese comando (tal como está escrito; un \`cd <carpeta> &&\`, \`set -o pipefail;\` o VAR=valor delante, o la unión con \` && \` de sus comandos, valen): ${DEV_SPEC} done ${slug} ${n} --run`,
+      commandMismatch: (n, slug, ran, verify, red) => `Tarea ${n}: la ejecución registrada (\`${ran}\`) no es una ejecución de su comando _Verify:_ (${verify}) — queda marcada, pero sigue sin verificar hasta que se registre una ejecución ${red ? "QUE FALLE " : ""}de ese comando (tal como está escrito — con varios comandos _Verify:_, todos ellos en UNA sola ejecución unidos con \` && \`; un \`cd <carpeta> &&\`, \`set -o pipefail;\` o VAR=valor tuyo delante vale, pero nunca quites uno que tenga el _Verify:_)` +
+        (red ? ` — regístrala ANTES de que entre la corrección, mientras la prueba aún falla: ${DEV_SPEC} done ${slug} ${n} --run. Con la corrección ya hecha, no la rompas de nuevo: registra la ejecución que pasa del comando _Verify:_ tal como está escrito — la ejecución roja registrada cuenta entonces.` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
       duplicateTasks: (list) => `números de tarea repetidos: ${list} — complete/brief eligen la primera pendiente; renuméralas`,
     },
     observed: {
@@ -2867,7 +2868,7 @@ const msg = {
       taskLine: (slug, list) => `  - ${slug}: ${list}`,
       suiteLine: (slug, list) => `  - ${slug}: verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: ${list}`,
       more: (n) => `+${n} más`,
-      todoTasks: (slug, n, file = "tasks.md") => `Registra la evidencia antes de afirmarlo: lee el comando _Verify:_ de cada tarea listada en .specs/${slug}/${file} (primero la tarea ${n}), ejecútalo sobre el código final solo si es seguro hacerlo y registra esa ejecución con spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
+      todoTasks: (slug, n, file = "tasks.md") => `Registra la evidencia antes de afirmarlo: lee el comando _Verify:_ de cada tarea listada en .specs/${slug}/${file} (primero la tarea ${n}) — una tarea con varios: todos ellos, en UNA sola ejecución unidos con \` && \` —, ejecútalo sobre el código final solo si es seguro hacerlo y registra esa ejecución (el comando tal como está escrito) con spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
       todoSuite: (slug) => `Las verificaciones del proyecto de ${slug} no tienen ninguna ejecución que pase: léelas en .specs/roadmap.json (meta.checks), ejecútalas solo si es seguro hacerlo y registra las ejecuciones con spec_finish {evidence}.`,
       plainly: "O di claramente cuáles de ellas no están verificadas.",
       implementer: {

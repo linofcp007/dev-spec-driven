@@ -685,7 +685,7 @@ function untickTask(projectDir, name, number, opts = {}) {
   const runnable = taskMarkers(task).verify.length > 0;
   // 1.16 U review 1: an _Expect: fail_ task keeps its red run (redProof reads through staleBy "undo"): once the fix is in, the
   // re-tick's passing run is the fix going green — the note must not ask for a red run that can no longer happen. redKept: stable.
-  const red = staled && expectsFail(task) ? redProof(rec, taskMarkers(task).verify) : null;
+  const red = staled && expectsFail(task) ? redProof(rec, taskMarkers(task).verify, rec) : null; // (rec's own pass: review 2's grandfathering)
   const notes = [U.unticked(n, f.slug, runnable, staled && !red)];
   if (red) notes.push(U.redKept(n, f.slug, String(red.at || "?").slice(0, 10)));
   if (isObj(state.finished) || (isRecord(state.approvals) && isRecord(state.approvals.execution))) notes.push(U.reopened(f.slug));

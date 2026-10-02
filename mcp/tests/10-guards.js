@@ -360,7 +360,8 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     ok(sBlock.ok && sBlock.block === true && sBlock.why === "unverified" && sBlock.features.length === 1 && sBlock.features[0].feature === "billing" &&
       JSON.stringify(sBlock.features[0].unverified) === JSON.stringify([{ number: 1, reason: "no-evidence" }]) &&
       /^dev-spec evidence gate: your last message says the work is done or verified, but tasks are ticked without verification evidence:\n {2}- billing: #1 \(no evidence\)\n/.test(sBlock.reason) &&
-      /read each listed task's _Verify:_ command in \.specs\/billing\/tasks\.md \(task 1 first\), run it on the final code only if it is safe to run/.test(sBlock.reason) && !/--run/.test(sBlock.reason) &&
+      // (1.22 review 2: a task with several _Verify:_ commands is recorded as ONE run of all of them — the rule accepts nothing less)
+      /read each listed task's _Verify:_ command in \.specs\/billing\/tasks\.md \(task 1 first\) — a task with several: all of them, in ONE run joined with ` && ` —, run it on the final code only if it is safe to run/.test(sBlock.reason) && !/--run/.test(sBlock.reason) &&
       /spec_complete_task \{name, number, evidence: \{command, exitCode, summary\}\}/.test(sBlock.reason) && /say plainly/.test(sBlock.reason) &&
       sNoClaim.block === false && sNoClaim.why === "no-claim" && sActive.block === false && sActive.why === "stop-hook-active" && sAdmit.block === false && sAdmit.why === "admitted",
       "C1 stopCheck: a claim + a recently ticked task without evidence → block, naming the feature, the task and its reason and what to do (read the _Verify:_ in tasks.md, run it if safe, record it with spec_complete_task / say it plainly); no claim, stop_hook_active or an honest admission → allowed; the reason never hands over a `--run` command (got " +
@@ -443,7 +444,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     c1Tasks(fEs, "- [x] 1. [US1] Cobrar\n  - _Verify: npm test_\n"); // ticked by hand after the failed run
     const sEs = S.stopCheck(pEs, { message: "Listo: todas las pruebas pasan." });
     ok(sPt.block && sPt.lang === "pt" && /^dev-spec — gate de evidência: a tua última mensagem diz que o trabalho está feito ou verificado, mas há tarefas marcadas sem evidência de verificação:\n {2}- pagamentos: #1 \(sem evidência\)/.test(sPt.reason) &&
-      /Regista a evidência antes de o afirmar/.test(sPt.reason) && /em \.specs\/pagamentos\/tasks\.md \(primeiro a tarefa 1\); corre esse comando no código final só se for seguro/.test(sPt.reason) && !/--run/.test(sPt.reason) && /Ou diz claramente/.test(sPt.reason) &&
+      /Regista a evidência antes de o afirmar/.test(sPt.reason) && /em \.specs\/pagamentos\/tasks\.md \(primeiro a tarefa 1\) — uma tarefa com vários: todos eles, numa SÓ execução unidos com ` && ` —; corre esse comando no código final só se for seguro/.test(sPt.reason) && !/--run/.test(sPt.reason) && /Ou diz claramente/.test(sPt.reason) &&
       sEs.block && /^dev-spec — gate de evidencia: tu último mensaje dice que el trabajo está hecho o verificado, pero hay tareas marcadas sin evidencia de verificación:\n {2}- pagos: #1 \(la última ejecución falló\)/.test(sEs.reason) &&
       /O di claramente/.test(sEs.reason) && S.stopCheck(pPt, { message: "Os testes ainda não passam; a tarefa 1 não está verificada." }).block === false,
       "C1 stopCheck PT / ES: the claim is read in either language and the reason is in the project language (PT: no evidence; ES: failed run); an honest PT answer is allowed (got " +

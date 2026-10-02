@@ -308,14 +308,19 @@ with `nothingToVerify: true` (and no reason code) — nothing was run or atteste
 | `duplicate-number` | Another task shares this number and the record isn't this task's | Renumber the tasks (doctor warns `duplicate-tasks`) |
 | `unexpected-pass` | The task is marked `_Expect: fail_`, but its latest run passed with no red run before it | Make the test fail for the right reason and record that run (or drop the marker) |
 | `unobserved` | Only with `meta.evidence: "observed"`: the run that proves it was reported, but the harness never saw it (nor did the CLI make it) | Run the command with the Bash tool in Claude Code and record it again, or `dev-spec done <feature> <n> --run` |
-| `command-mismatch` | The run recorded is not a run of the task's `_Verify:_` command (`echo ok` for `npm test`, `npm test -- --grep x`) — on an `_Expect: fail_` task, its red run | Run the `_Verify:_` command as written and record that run (`dev-spec done <feature> <n> --run`) |
+| `command-mismatch` | The run recorded is not a run of the task's `_Verify:_` command (`echo ok` for `npm test`, `npm test -- --grep x`, one of its two `_Verify:_` commands alone) — on an `_Expect: fail_` task, its red run | Run the `_Verify:_` command as written — all of them, joined with ` && `, when there are several — and record that run (`dev-spec done <feature> <n> --run`); an `_Expect: fail_` task: before the fix lands (once it is in, record the passing run of the `_Verify:_`: the red run on record then counts) |
 
-**Which run proves it.** The recorded `command` is compared with the task's `_Verify:_`: whitespace, backticks and
-quotes around the whole command don't matter, nor does a leading `cd <dir> &&`, `set -o pipefail;` or `VAR=value`, or a
-trailing `2>&1`; the ` && ` join of several of its `_Verify:_` commands counts (that is how `done --run` reports them),
-and so does the CLI's own `done --run`. Any other command ticks the task but leaves it unverified (`command-mismatch`). A
-project check's run (`spec_finish {evidence}`) is compared with its `meta.checks` command the same way — another command
-reads `changed`.
+**Which run proves it.** The recorded `command` is compared with the task's `_Verify:_`: whitespace, backticks, quotes
+around the whole command or around a plain argument (`"tests/x.test.js"`), `\` for `/` (`tests\x.test.js`) and a
+trailing `2>&1` don't matter, nor does a leading `cd <dir> &&`, `set -o pipefail;` or `VAR=value` of the run's own — but
+a prefix the `_Verify:_` itself holds must be there: `cd packages/web && npm test` is no run of `cd packages/api && npm
+test`, `npm test` none of `NODE_ENV=production npm test`. A task with several `_Verify:_` commands needs ONE run of
+every one of them, joined with ` && ` in any order (that is how `done --run` reports them; a `_Verify:_` that itself
+holds ` && ` stays whole) — a run of one of them alone proves nothing. The CLI's own `done --run` always counts. Any other
+command ticks the task but leaves it unverified (`command-mismatch`). On an `_Expect: fail_` task, record the red run of
+the `_Verify:_` BEFORE the fix lands; a red run recorded as another command still counts once a passing run of the
+`_Verify:_` itself follows it (the fix going green) — never break the fix again to re-make it. A project check's run
+(`spec_finish {evidence}`) is compared with its `meta.checks` command the same way — another command reads `changed`.
 
 **Duplicate numbers.** `spec_complete_task`, `spec_task_brief` and `done --run` resolve a duplicated number to
 its first **open** task, and evidence is stamped per task, so one "3." never borrows the other's passing run.
