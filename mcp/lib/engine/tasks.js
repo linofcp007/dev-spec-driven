@@ -683,9 +683,11 @@ function untickTask(projectDir, name, number, opts = {}) {
 // under and the **Checkpoint:** that closes its section. This is the ONE task scanner: parseTasks() (the
 // line-only view public through spec_status) projects it, and completeTask ticks the line it resolves.
 // Task-looking lines inside HTML comments (single- or multi-line) or fenced code are NOT tasks.
-// A task line → [line, lead, box, number, text] | null: /^(\s*-\s*\[)([ xX])\]\s*(\d+)\.(?!\d)\s*(.*)$/ ("1.1 sub-step" is
-// not task 1), its text read by headRest (\s*(.*)$ rescanned a long blank run before a line terminator — 1.17 H).
-const RE_TASK_LINE_HEAD = /^(\s*-\s*\[)([ xX])\]\s*(\d+)\.(?!\d)/;
+// A task line → [line, lead, box, number, text] | null: /^(\s*[-*+]\s*\[)([ xX])\]\s*(\d+)\.(?!\d)\s*(.*)$/ ("1.1 sub-step" is
+// not task 1), its text read by headRest (\s*(.*)$ rescanned a long blank run before a line terminator — 1.17 H). Any GFM bullet
+// (1.22 review: `* [ ] 1.` / `+ [ ] 1.` read as ZERO tasks, silently); an ordered-list checkbox (`1. [ ] text`) is no task —
+// doctor's unread-tasks names it (unreadTaskLines).
+const RE_TASK_LINE_HEAD = /^(\s*[-*+]\s*\[)([ xX])\]\s*(\d+)\.(?!\d)/;
 const taskLine = (s) => headRest(s, RE_TASK_LINE_HEAD, false);
 const RE_CHECKPOINT = /^\s*\*\*Checkpoint:?\*\*:?\s*/i;
 const COMMENT_MASK = "\u0001";
@@ -915,6 +917,25 @@ function scanTaskBlocks(tasksText, ownLines) {
   return blocks;
 }
 
+// 1.22 review — checkbox list lines the ONE scanner does not read as tasks: an ordered-list checkbox (`1. [ ] text`), an
+// unnumbered one outside every task block (`- [ ] text`) — never ticked, briefed or verified (a sub-step checkbox in a task's
+// body is that task's). Comments and fenced code hold none. → [{ line (1-based), text }] — doctor's unread-tasks warn.
+const RE_LIST_BOX_LINE = /^\s*(?:[-*+]|\d{1,9}[.)])\s*\[[ xX]\]/;
+function unreadTaskLines(tasksText) {
+  const src = String(tasksText || "");
+  const held = new Array(src.split("\n").length).fill(false);
+  scanTaskBlocks(src, held);
+  const out = [];
+  scanTaskLines(src).forEach((ln, i) => {
+    if (!ln.code && !ln.task && !held[i] && RE_LIST_BOX_LINE.test(ln.vis)) out.push({ line: i + 1, text: ln.vis.trim().slice(0, 80) });
+  });
+  return out;
+}
+// …as the doctor names them ("L5 `1. [ ] Build the parser`, L9 …", at most 8, then "+N"), or null when there is none.
+function unreadTasksDetail(tasksText) {
+  const u = unreadTaskLines(tasksText);
+  return u.length ? u.slice(0, 8).map((x) => "L" + x.line + " `" + x.text + "`").join(", ") + (u.length > 8 ? ", +" + (u.length - 8) : "") : null;
+}
 // Duplicated numbers: the FIRST OPEN task with that number, else the first one. completeTask, taskBrief and
 // the CLI's `done --run` all resolve through here, so the _Verify:_ that runs belongs to the task that ticks.
 function resolveTask(tasks, n) {
@@ -1767,7 +1788,7 @@ module.exports = { parseTasks, taskDescription, nextTask, parallelBatch, RE_DEP_
   taskDepsWaitList, taskDepsIssues, taskDepsCheck, RE_ROOT_CAUSE_TASK, bugfixGate, rootCauseTaskIndex, blockPosition,
   taskNumber, completeTask, UNDO_REASON_MAX, reasonInput, untickTask, RE_TASK_LINE_HEAD, taskLine, RE_CHECKPOINT,
   COMMENT_MASK, RE_TASK_FENCE_OPEN, RE_PARA_BREAK, scanTaskLines, fenceLine, indentOf, hasOutsideCode, backtickRuns,
-  TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, taskBlocks, scanTaskBlocks, resolveTask, duplicateTaskNumbers, taskProse,
+  TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, taskBlocks, scanTaskBlocks, RE_LIST_BOX_LINE, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse,
   RE_RED_PHASE_TASK, redPhaseTask, redPhaseHint, tasksProseText, changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, RE_TASK_MARKER_OPEN,
   MARKER_CLOSE_PUNCT, taskMarkerSpans, taskMarkerValues, withoutTaskMarkers, WHOLE_VALUE_MARKERS, taskMarkers,
   RE_MARKER_WORD, MARKER_WORD_LABEL, malformedMarkers, RE_GLOBAL_CONSTRAINTS, globalConstraints, isPromptTask,

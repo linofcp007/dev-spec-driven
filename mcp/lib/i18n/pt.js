@@ -2304,6 +2304,7 @@ const msg = {
     },
 
     markerSyntax: {
+      unreadTasks: (list) => `linhas com caixa de verificação que não são tarefas: ${list} — uma linha de tarefa é "- [ ] N. texto" (um marcador -, * ou +, depois o número); estas nunca são marcadas, incluídas num brief nem verificadas. Numera-as (ou torna-as subpassos de uma tarefa).`,
       doctor: (list) => `texto com forma de marcador numa linha de tarefa não dá nenhum marcador: ${list} — as ferramentas não leem nada aí (nenhuma verificação é executada, nenhum ficheiro é rastreado). Escreve-o como _Verify: <comando>_ / _Implements: <caminho>_ / _Depends: 3_ (em itálico, com o valor lá dentro).`,
     },
     outsideCode: {

@@ -177,13 +177,20 @@ const sha1Hex = (text) => require("crypto").createHash("sha1").update(text).dige
 function fingerprintMatches(raw, phase, stored) {
   if (raw == null || typeof stored !== "string" || !stored) return false;
   const text = fingerprintText(raw, phase);
-  return sha1Hex(text) === stored || sha1Hex(BOM_CHAR + text) === stored;
+  if (sha1Hex(text) === stored || sha1Hex(BOM_CHAR + text) === stored) return true;
+  if (phase !== "tasks") return false;
+  // An approval recorded before 1.22 normalized only `- [x]` ticks: the same content still matches it (a `* [x]` / `+ [x]` line
+  // kept its tick in that fingerprint).
+  const legacy = uncheckDashTasks(String(raw).replace(/^\uFEFF/, "").replace(/\r\n/g, "\n"));
+  return legacy !== text && (sha1Hex(legacy) === stored || sha1Hex(BOM_CHAR + legacy) === stored);
 }
 const BOM_CHAR = String.fromCharCode(0xfeff);
 const artifactMatches = (file, phase, stored) => fingerprintMatches(readIfExists(file), phase, stored);
 // Checkbox state is not content. The indent is read within its line ([^\S\n\r\u2028\u2029], not \s): from each line start of a
-// long blank run \s* rescanned the whole run (1.17 H) — the lines above keep their text either way ($1 puts it back).
-const uncheckTasks = (text) => text.replace(/^([^\S\n\r\u2028\u2029]*-\s*\[)[xX](\])/gm, "$1 $2");
+// long blank run \s* rescanned the whole run (1.17 H) — the lines above keep their text either way ($1 puts it back). Any GFM
+// bullet (1.22 review: `* [ ] 1.` / `+ [ ] 1.` are task lines too — the scanner reads them).
+const uncheckTasks = (text) => text.replace(/^([^\S\n\r\u2028\u2029]*[-*+]\s*\[)[xX](\])/gm, "$1 $2");
+const uncheckDashTasks = (text) => text.replace(/^([^\S\n\r\u2028\u2029]*-\s*\[)[xX](\])/gm, "$1 $2"); // the pre-1.22 rule (legacy fingerprints)
 // The artifact a phase's approval signs off: a bugfix has no design of its own — its design approval signs off bug.md
 // (the Root Cause the gate checks). approvePhase records it as `file` on the approval, so changedSinceApproval
 // compares the right file (an approval without `file` signed off PHASE_FILE's, as before).

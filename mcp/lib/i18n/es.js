@@ -2303,6 +2303,7 @@ const msg = {
     },
 
     markerSyntax: {
+      unreadTasks: (list) => `líneas con casilla que no son tareas: ${list} — una línea de tarea es "- [ ] N. texto" (una viñeta -, * o +, luego su número); estas nunca se marcan, ni entran en un brief, ni se verifican. Numéralas (o conviértelas en subpasos de una tarea).`,
       doctor: (list) => `un texto con forma de marcador en una línea de tarea no da ningún marcador: ${list} — las herramientas no leen nada ahí (no se ejecuta ninguna comprobación, no se rastrea ningún archivo). Escríbelo como _Verify: <comando>_ / _Implements: <ruta>_ / _Depends: 3_ (en cursiva, con el valor dentro).`,
     },
     outsideCode: {

@@ -2407,6 +2407,8 @@ const msg = {
 
     // Marker-shaped text on a task line that yields no marker (doctor malformed-markers, 1.14 full review Pa1).
     markerSyntax: {
+      // 1.22 review — checkbox lines the task scanner does not read as tasks (doctor unread-tasks).
+      unreadTasks: (list) => `checkbox lines that are not tasks: ${list} — a task line is "- [ ] N. text" (a -, * or + bullet, then its number); these are never ticked, briefed or verified. Number them (or make them sub-steps of a task).`,
       doctor: (list) => `marker-shaped text on a task line yields no marker: ${list} — the tools read nothing there (no check runs, no file is traced). Write it as _Verify: <command>_ / _Implements: <path>_ / _Depends: 3_ (italics, the value inside).`,
     },
     // A T-ID the test plan checks outside test code (load-test.md, evals/*.json) whose artifact is still the scaffold (doctor

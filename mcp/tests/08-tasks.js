@@ -776,4 +776,31 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       sameW.waves.length === N && tokW.invalid.length === 1 && elapsed < 15000,
       "feature F3: linear on adversarial input — a 60 000-number _Depends:_, a 4 000-task cycle and chain (iterative walks, no stack overflow), 4 000 [P] tasks sharing one file, a 120 000-digit token (" + elapsed + " ms)");
   }
+
+  // 1.22 review (finding 8) — `* [ ] 1.` / `+ [ ] 1.` (valid GFM) read as ZERO tasks, silently. Any bullet is a task line now; an
+  // ordered-list checkbox (`1. [ ] text`) or an unnumbered checkbox outside every task is named by doctor's unread-tasks warn.
+  {
+    const js = JSON.stringify;
+    const p = path.join(tmp, "proj-122-bullets");
+    S.initProject(p, ["core"], "en");
+    const f = S.createFeature(p, "Bullets", ["core"], "", undefined, "en");
+    const tf = path.join(f.dir, "tasks.md");
+    fs.writeFileSync(tf, "# Tasks\n\n* [ ] 1. [US1] Star\n  - _Verify: node -e \"process.exit(0)\"_\n+ [ ] 2. [US1] Plus\n  - [ ] sub-step (the task's body)\n");
+    const st = S.statusFeature(p, "bullets").tasks;
+    const c1 = S.completeTask(p, "bullets", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0 });
+    const text1 = fs.readFileSync(tf, "utf8");
+    const docClean = S.specDoctor(p, "bullets").checks.find((c) => c.id === "unread-tasks");
+    // the tasks approval's fingerprint ignores a `*` tick like a `-` one
+    S.approvePhase(p, "bullets", "tasks", "tester", { force: true });
+    S.completeTask(p, "bullets", 2);
+    const changed = (S.specDoctor(p, "bullets").checks.find((c) => c.id === "changed-since-approval") || {}).status;
+    const o = S.createFeature(p, "Ordered", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(o.dir, "tasks.md"), "# Tasks\n\n1. [ ] Build the parser\n2. [x] Write the docs\n- [ ] Unnumbered\n\n```md\n1. [ ] fenced example\n```\n<!-- 3. [ ] commented -->\n");
+    const oSt = S.statusFeature(p, "ordered").tasks;
+    const oDoc = S.specDoctor(p, "ordered").checks.find((c) => c.id === "unread-tasks");
+    ok(st.total === 2 && c1.ok && c1.verified && /^\* \[x\] 1\. \[US1\] Star$/m.test(text1) && /^\+ \[ \] 2\./m.test(text1) && !docClean && changed !== "warn" && changed !== "fail" &&
+      oSt.total === 0 && oDoc && oDoc.status === "warn" && /L3 `1\. \[ \] Build the parser`, L4 `2\. \[x\] Write the docs`, L5 `- \[ \] Unnumbered`/.test(oDoc.detail) && !/fenced|commented/.test(oDoc.detail),
+      "1.22 review: `* [ ] 1.` / `+ [ ] 1.` are task lines (status, complete ticks the `*` line at its box; a tick on them is no change since approval); `1. [ ] text` and an unnumbered checkbox outside a task are no tasks — doctor warns unread-tasks naming the lines (never a fenced or commented one, nor a task's sub-step) (got " +
+      js([st, c1.verified, docClean, changed, oSt, oDoc]) + ")");
+  }
 };

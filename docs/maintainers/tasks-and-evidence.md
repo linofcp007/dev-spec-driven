@@ -296,7 +296,12 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 - **Tasks: ONE scanner.** `taskBlocks()` (over `scanTaskLines()`) reads tasks.md like a markdown reader —
   HTML comments (a line-start `<!--` may span lines) and fenced code never hold tasks; `<!--`/`-->` inside
   code spans don't count. `parseTasks()` is its line-only projection (its shape is public through
-  `spec_status`), so status/next/complete/brief/finish can never disagree. Task numbers are numeric (`01.` is
+  `spec_status`), so status/next/complete/brief/finish can never disagree. A task line is `[-*+] [ ] N. text` — 1.22 review:
+  `* [ ] 1.` / `+ [ ] 1.` (valid GFM) read as ZERO tasks, silently; the tasks fingerprint's tick normalization (`uncheckTasks`,
+  state.js) takes the same bullets, and an approval fingerprinted the pre-1.22 way (`- [x]` only) still matches. A checkbox line
+  the scanner doesn't read — an ordered-list checkbox `1. [ ] text`, an unnumbered `- [ ] text` outside every task block (a
+  sub-step in a task's body is the task's; fences and comments hold none) — is named by doctor's `unread-tasks` warn
+  (`unreadTaskLines()`, `CHECK_PHASE` 5; the feature and the spike doctor). Task numbers are numeric (`01.` is
   task 1); `resolveTask()` picks the first OPEN task of a duplicated number (doctor warns `duplicate-tasks`);
   `completeTask` ticks exactly the resolved line at its checkbox column (CRLF kept). Tasks are
   story-organized (P1 first) with `[P]` parallel markers + `**Checkpoint:**` lines; the design's
