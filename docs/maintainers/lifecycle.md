@@ -155,7 +155,17 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   `renderRoadmapMd`/`renderRoadmapHtml` (both take `lang`) build the output; `ROADMAP_I18N` holds
   EN/PT/ES chrome; `meta.roadmapLang` (else `meta.lang`) in `roadmap.json` persists the language for auto-refresh.
   `maybeRefreshRoadmap` (in every mutator) writes MD always + HTML if it exists + SPECS.md if it exists —
-  best-effort. The PostToolUse hook does the same for hand-edits, skipping when the changed file IS a
+  best-effort. **The refresh's cost (1.22 review):** every tick recomputed every feature's row (30 features × 40 tasks: 313
+  ms a tick against 13.8 without the refresh). `roadmapRow()` results are cached IN PROCESS (`ROW_CACHE`, ≤ 500 — the MCP
+  server; a one-shot CLI / hook never calls twice, so the first `roadmapData` of a process signs nothing), keyed on every
+  input the row reads: each entry of the feature folder (size, mtime, ctime, inode; `.history/` one level down; `.execution/`,
+  the lock and temp files skipped), roadmap.json and the steering / templates / tracks folders (two levels), the row's
+  `f` and its overlaps. git's racy rule: a file stamped within `ROW_OPTS.racyMs` (3 s) of now is never trusted (a coarse
+  clock can give two same-size writes one stamp), and a spike's row or one with a waiver (date-dependent) is never stored.
+  The marker readers are memoized by text (`taskMarkerSpans` by line — frozen, shared; `taskMarkers` by the block's prose —
+  copies; bounded). Measured on 30 × 40, in process: a tick with its refresh ~185 → ~65 ms (no refresh: ~10), roadmapData
+  ~180 → ~58; a one-shot `done` / tasks.md save ~470 → ~440. mcp/tests/08-tasks.js renders ROADMAP.md after each kind of
+  change from the cache and fresh and compares them byte for byte. The PostToolUse hook does the same for hand-edits, skipping when the changed file IS a
   `ROADMAP.*`. HTML must stay **offline** — no CDN/external URLs (test asserts it). Backlog lives in
   `roadmap.json` `backlog: [{name,note}]`; `spec_create` drops the backlog item with the same slug. Name and note are one
   line (`flatText()` on add and when rendered — a line break became a heading in ROADMAP.md); a name an ACTIVE feature

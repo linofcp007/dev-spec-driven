@@ -1028,10 +1028,27 @@ const MARKER_CLOSE_PUNCT = new Set([".", ",", ";", ":", "!", "?", ")", "]"]);
 // A closer followed directly by whitespace / the end ("plain") wins over one followed by closing punctuation, when one exists
 // before the next marker opener (else the end of the line): `_Verify: python -c "import a_; print(1)"_` keeps its whole
 // command, `(_Verify: npm test_), _Implements: a.js_` still closes at "test_)" (full review R7 — Pa1 cut the first at "a_;").
+// 1.22 review — memoized by line (bounded; a line past MARKER_MEMO_LINE_MAX characters is scanned every time): one ROADMAP.md
+// refresh reads the same task lines over and over (status, the schedule, verification, sizes, every roadmap row) and each scan
+// built a RegExp and two passes — ~45 ms of every refresh on 30 features × 40 tasks. The result is FROZEN: callers share it.
+const MARKER_SPANS_MEMO = new Map();
+const MARKER_SPANS_MEMO_MAX = 8192;
+const MARKER_MEMO_LINE_MAX = 4000;
+const NO_MARKER_SPANS = Object.freeze([]);
 function taskMarkerSpans(line) {
   const s = String(line == null ? "" : line);
+  if (!s.includes(":")) return NO_MARKER_SPANS;
+  if (s.length > MARKER_MEMO_LINE_MAX) return Object.freeze(scanMarkerSpans(s).map(Object.freeze));
+  let hit = MARKER_SPANS_MEMO.get(s);
+  if (!hit) {
+    hit = Object.freeze(scanMarkerSpans(s).map(Object.freeze));
+    if (MARKER_SPANS_MEMO.size >= MARKER_SPANS_MEMO_MAX) MARKER_SPANS_MEMO.clear();
+    MARKER_SPANS_MEMO.set(s, hit);
+  }
+  return hit;
+}
+function scanMarkerSpans(s) {
   const out = [];
-  if (!s.includes(":")) return out;
   const re = new RegExp(RE_TASK_MARKER_OPEN.source, RE_TASK_MARKER_OPEN.flags); // its own lastIndex
   const opens = [];
   let m;
@@ -1083,10 +1100,28 @@ function withoutTaskMarkers(line) {
   return out + s.slice(at);
 }
 const WHOLE_VALUE_MARKERS = new Set(["emits metrics", "affects evals", "verify", "expect"]); // commas belong to the value
+// 1.22 review — memoized by the block's own lines (taskProse, bounded); every caller gets its own copy of the lists.
+const TASK_MARKERS_MEMO = new Map();
+const TASK_MARKERS_MEMO_MAX = 4096;
 function taskMarkers(block) {
+  const prose = taskProse(block);
+  const key = prose.join("\n");
+  let m = key.length <= 4 * MARKER_MEMO_LINE_MAX ? TASK_MARKERS_MEMO.get(key) : undefined;
+  if (!m) {
+    m = scanTaskMarkers(prose);
+    if (key.length <= 4 * MARKER_MEMO_LINE_MAX) {
+      if (TASK_MARKERS_MEMO.size >= TASK_MARKERS_MEMO_MAX) TASK_MARKERS_MEMO.clear();
+      TASK_MARKERS_MEMO.set(key, m);
+    }
+  }
+  const out = {};
+  for (const k of Object.keys(m)) out[k] = m[k].slice();
+  return out;
+}
+function scanTaskMarkers(prose) {
   const out = { requirements: [], "makes green": [], "affects evals": [], "emits metrics": [], implements: [], verify: [], expect: [], depends: [] };
   const seen = {}; // per key: what out[key] holds — a long `_Depends: 1, 2, …_` list stays linear (no includes() per value)
-  for (const line of taskProse(block)) {
+  for (const line of prose) {
     for (const sp of taskMarkerSpans(line)) {
       const key = sp.key;
       if (!out[key]) continue; // _Size:_ — taskSize reads it
@@ -1790,7 +1825,8 @@ module.exports = { parseTasks, taskDescription, nextTask, parallelBatch, RE_DEP_
   COMMENT_MASK, RE_TASK_FENCE_OPEN, RE_PARA_BREAK, scanTaskLines, fenceLine, indentOf, hasOutsideCode, backtickRuns,
   TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, taskBlocks, scanTaskBlocks, RE_LIST_BOX_LINE, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse,
   RE_RED_PHASE_TASK, redPhaseTask, redPhaseHint, tasksProseText, changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, RE_TASK_MARKER_OPEN,
-  MARKER_CLOSE_PUNCT, taskMarkerSpans, taskMarkerValues, withoutTaskMarkers, WHOLE_VALUE_MARKERS, taskMarkers,
+  MARKER_CLOSE_PUNCT, MARKER_SPANS_MEMO, MARKER_SPANS_MEMO_MAX, MARKER_MEMO_LINE_MAX, NO_MARKER_SPANS, taskMarkerSpans, scanMarkerSpans,
+  taskMarkerValues, withoutTaskMarkers, WHOLE_VALUE_MARKERS, TASK_MARKERS_MEMO, TASK_MARKERS_MEMO_MAX, taskMarkers, scanTaskMarkers,
   RE_MARKER_WORD, MARKER_WORD_LABEL, malformedMarkers, RE_GLOBAL_CONSTRAINTS, globalConstraints, isPromptTask,
   RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections, BRIEF_DESIGN_BUDGET, taskBrief, RE_NEW_TASK_TAGS,
   RE_THEMATIC_BREAK, unwrapCodeSpan, newTaskSpec, appendTasks, __link };
