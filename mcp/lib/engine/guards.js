@@ -1198,7 +1198,10 @@ function implementerStopCheck(pdir, message, cl, res) {
   const prose = statusProse(message);
   if (STATUS_NOT_DONE_RE.test(prose)) return res(false, "not-done");
   if (!cl.claim && !STATUS_DONE_RE.test(prose)) return res(false, "no-claim");
-  const m = message.slice(-STOP_MESSAGE_MAX).match(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+task-(\d+)-(?:report|brief)\.md/i);
+  // 1.22 review: the LAST task-N-report.md path the reply names (a report wins over a brief) — "Task 2 builds on task 1 (see
+  // …/task-1-report.md). Report: …/task-2-report.md" was checked against task 1's report and passed.
+  const paths = [...message.slice(-STOP_MESSAGE_MAX).matchAll(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+task-(\d+)-(report|brief)\.md/gi)];
+  const m = paths.filter((x) => x[3].toLowerCase() === "report").pop() || paths.pop();
   if (!m) return res(false, "no-task", { claims: cl.claims });
   const f = existingFeature(pdir, m[1]);
   if (!f.ok) return res(false, "no-task", { claims: cl.claims });

@@ -134,4 +134,25 @@ exports.run = async ({ ok, S, tmp, __dirname }) => {
       "1.22 review: the approval guard reads cmd /c /k /r and pwsh / powershell -Command / -c (and Windows PowerShell's positional script) unquoted — the rest of the line is the script — plus winpty, flock (its lock file; -c), script -c, find -exec and Start-Process -ArgumentList (array or string): approve / --force / init --approval-guard off are caught at deny (the hook too); a quoted script is one action; status / next, echo and pwsh -File stay allowed (wrong: " +
       js(wrong) + ", " + js([once.actions.length, force.force, down.actions, hd, ms]) + ")");
   }
+
+  // 1.22 review (finding 7) — the implementer's SubagentStop gate checked the FIRST task path in its reply: "Task 2 builds on task 1
+  // (see …/task-1-report.md). Report: …/task-2-report.md", with task 2's report at exit 1, read task 1's report → report-ok.
+  {
+    const p = path.join(tmp, "g122-impl");
+    S.initProject(p, ["core"], "en");
+    const f = S.createFeature(p, "Auth", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), "- [ ] 1. [US1] A\n  - _Verify: npm test_\n- [ ] 2. [US1] B\n  - _Verify: npm run e2e_\n");
+    const ex = path.join(f.dir, ".execution");
+    fs.mkdirSync(ex, { recursive: true });
+    fs.writeFileSync(path.join(ex, "task-1-report.md"), "# Task 1\n`npm test` → exit 0 (12 passing)\n");
+    fs.writeFileSync(path.join(ex, "task-2-report.md"), "# Task 2\n`npm run e2e` → exit 1 (1 failing)\n");
+    const agent = "dev-spec-driven:spec-implementer";
+    const r1 = S.stopCheck(p, { agent, message: "**Status:** DONE\nTask 2 builds on task 1 (see .specs/auth/.execution/task-1-report.md). Report: .specs/auth/.execution/task-2-report.md" });
+    const r2 = S.stopCheck(p, { agent, message: "**Status:** DONE\nReport: .specs/auth/.execution/task-2-report.md (brief: .specs/auth/.execution/task-1-brief.md)" });
+    const r3 = S.stopCheck(p, { agent, message: "**Status:** DONE\nSee .specs/auth/.execution/task-2-report.md, then task 1: .specs/auth/.execution/task-1-report.md" });
+    ok(r1.block === true && r1.why === "implementer-evidence" && r1.task === 2 && /task-2-report\.md/.test(r1.reason) &&
+      r2.block === true && r2.task === 2 && r3.block === false && r3.why === "report-ok" && r3.task === 1,
+      "1.22 review: the implementer's gate reads the LAST task-N-report.md its reply names (a report over a brief) — task 2's failing report blocks even when task 1's report is cited first (got " +
+      js([[r1.why, r1.task], [r2.why, r2.task], [r3.why, r3.task]]) + ")");
+  }
 };

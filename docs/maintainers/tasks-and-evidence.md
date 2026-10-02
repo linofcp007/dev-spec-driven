@@ -349,7 +349,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   language, add its six lists (claims, negators, admissions, fixed, zeroes, passNow — the regex ones are raw for pt-BR:
   i18n.js `defineDerivedLocale(MSG, {stopGate: …})`).
 - **spec-implementer (SubagentStop):** it never ticks tasks, so its gate is its REPORT: a DONE / DONE_WITH_CONCERNS for a
-  task whose `_Verify:_` is runnable needs `.specs/<f>/.execution/task-N-report.md` (the path named in its reply) to carry
+  task whose `_Verify:_` is runnable needs `.specs/<f>/.execution/task-N-report.md` (the LAST such path named in its reply,
+  a report over a brief — 1.22 review: the first one was read, so a reply citing task 1's report before its own passed) to carry
   every one of those commands (backticks / whitespace flattened) and the exit code the task needs ("exit 0", "exit code:
   1", "exited with code 0", "exit status 2", PT "código de saída", ES "código de salida"): an exit 0 for a must-pass
   `_Verify:_` (`notPassing` — "DONE … exit code: 1" was allowed), a non-zero exit for an `_Expect: fail_` task
