@@ -394,7 +394,10 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `^(dev-spec-driven:)?spec-(implementer|simplifier)$` — plugin subagents IGNORE a `hooks` block in their own frontmatter, so it must
   live in the plugin's hooks.json. It reads `last_assistant_message` (a bounded transcript tail for older payloads),
   honours `stop_hook_active` (never sends the same stop back twice in a row), answers `{"decision": "block", "reason"}`,
-  is silent when there is nothing to say, when `.specs/` isn't dev-spec's, or when `roadmap.json → meta.stopCheck` is
+  is silent when there is nothing to say, when `.specs/` isn't dev-spec's, when (Stop only — 1.22 review) no feature folder's
+  `.state.json` holds a string that parses as a date within the last `STOP_RECENT_HOURS` (and ≤ 5 min ahead) — a raw
+  pre-filter, a superset of `stopActivity()`, run BEFORE the engine loads (30 idle features: ~235 → ~88 ms a turn; the
+  hook's own `STOP_RECENT_HOURS` is checked against the engine's) —, or when `roadmap.json → meta.stopCheck` is
   exactly `false` (on by default — `spec_init {stopCheck}` / `init --stop-check on|off`; the result always reports it), and
   exits 0 on any error. CLI: `dev-spec stop-check [--message "<text>"|-] [--agent <type>]` (exit 1 = would send it back).
 - **Scope guard:** `meta.guard` is `false | true | "scope"` (`guardLevel()`; the hook reads the same raw value;

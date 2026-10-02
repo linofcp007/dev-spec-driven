@@ -177,4 +177,39 @@ exports.run = async ({ ok, S, tmp, __dirname }) => {
     ok(js(got) === js([[0, "false"], [0, "false"], [0, "false"], [0, "true"], [0, "true"]]),
       "1.22 review: the spec-hook loads the engine only for a .specs/ file it checks (and SessionStart) — never for an edit outside .specs/, an .execution/ scratch file or another event (got " + js(got) + ")");
   }
+
+  // 1.22 review (12) — the Stop hook loaded the engine at the end of EVERY turn in a dev-spec project, though the gate can only
+  // block when some feature recorded activity in the last STOP_RECENT_HOURS: a raw pre-filter of the .state.json stamps first.
+  // Its answer must be stopCheck's: activity → the same block; none, or only a future stamp → silent (and no engine load).
+  {
+    const stopJs = path.join(__dirname, "..", "hooks", "stop-hook.js");
+    const probe = path.join(tmp, "g122-stop-probe.js"), out = path.join(tmp, "g122-stop-probe.out");
+    fs.writeFileSync(probe, "process.on('exit', () => require('fs').writeFileSync(" + js(out) + ", String(Object.keys(require.cache).some((k) => /[\\\\/]mcp[\\\\/]lib[\\\\/]spec\\.js$/.test(k)))));\n");
+    const hook = (cwd, message) => {
+      try { fs.unlinkSync(out); } catch { /* none */ }
+      const r = spawnSync(process.execPath, ["-r", probe, stopJs], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" },
+        input: js({ session_id: "s", cwd, hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: message }) });
+      let reason = null; try { reason = JSON.parse(r.stdout).reason; } catch { /* silent */ }
+      return { status: r.status, stdout: r.stdout, reason, loaded: fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "?" };
+    };
+    const p = path.join(tmp, "g122-stop-pre");
+    S.initProject(p, ["core"], "en");
+    const f = S.createFeature(p, "Old", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), "- [x] 1. [US1] A\n  - _Verify: npm test_\n");
+    const stamp = (iso) => { const st = JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8")); const set = (v) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v) ? iso : Array.isArray(v) ? v.map(set) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, set(x)])) : v);
+      fs.writeFileSync(path.join(f.dir, ".state.json"), js({ ...set(st), lastTickAt: iso, ticks: { 1: iso } })); };
+    const msg = "All tasks done.";
+    stamp(new Date(Date.now() - 10 * 3600 * 1000).toISOString());
+    const oldHook = hook(p, msg), oldEngine = S.stopCheck(p, { message: msg });
+    stamp(new Date(Date.now() + 2 * 3600 * 1000).toISOString());
+    const futHook = hook(p, msg), futEngine = S.stopCheck(p, { message: msg });
+    stamp(new Date(Date.now() - 60 * 1000).toISOString());
+    const nowHook = hook(p, msg), nowEngine = S.stopCheck(p, { message: msg });
+    const hc = Number((/const STOP_RECENT_HOURS = (\d+)/.exec(fs.readFileSync(stopJs, "utf8")) || [])[1]);
+    ok(oldHook.status === 0 && oldHook.stdout === "" && oldHook.loaded === "false" && oldEngine.block === false && oldEngine.why === "no-recent" &&
+      futHook.stdout === "" && futHook.loaded === "false" && futEngine.block === false &&
+      nowHook.reason && nowEngine.block === true && nowHook.reason === nowEngine.reason && nowHook.loaded === "true" && hc === S.STOP_RECENT_HOURS,
+      "1.22 review: the Stop hook's pre-filter — no feature active in the window (old stamps, or only a future one) → silent without loading the engine, as stopCheck answers; recent activity → stopCheck's very block; its window is spec.STOP_RECENT_HOURS (got " +
+      js([oldHook, oldEngine.why, futHook, futEngine.why, nowHook.loaded, !!nowHook.reason, nowEngine.block, hc]) + ")");
+  }
 };
