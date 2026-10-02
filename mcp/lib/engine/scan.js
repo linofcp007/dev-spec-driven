@@ -75,8 +75,10 @@ const WALK_ENTRY_CAP = 200000;
 // opts.counts(rel, name) (1.22 review): only the files it says yes to count toward `cap` (every other file is still visited),
 // opts.entryCap (default WALK_ENTRY_CAP) bounds the entries examined, and `truncated` means a counted file — or, past entryCap,
 // any entry — was left unvisited. Without it every file counts and `truncated` is "the cap was reached" (the other walks).
-// opts.gitignore (gitignoreRules — the scan and coverage): a folder its `dir(rel)` names is skipped, and so is one (not the
-// root) whose own .gitignore ignores everything in it. → { total (counted files), files (visited), truncated }.
+// opts.gitignore (gitignoreRules — the scan and coverage): a folder its `dir(rel, off)` names is skipped, and so is one (not the
+// root) whose own .gitignore ignores everything in it; 1.22 review 3: a folder's own .gitignore whose negation could re-include a
+// root pattern's name turns that pattern off for the folder's subtree (`reincluded` → `off`, carried down the walk).
+// → { total (counted files), files (visited), truncated }.
 // Folder listings come from the per-call read cache (readDirCached). `full` is absolute (under path.resolve(root)) and
 // both paths are built by concatenation — path.relative / path.join cost ~15 µs a file on Windows, most of a `**` walk.
 const WALK_STOP = Symbol("walk-stop");
@@ -86,22 +88,27 @@ function walkProject(root, cap, onFile, opts = {}) {
   const counts = typeof opts.counts === "function" ? opts.counts : null;
   const entryCap = counts ? opts.entryCap || WALK_ENTRY_CAP : Infinity;
   const gi = opts.gitignore || null;
-  const stack = [[path.resolve(root), 0, ""]]; // [absolute folder, depth, its forward-slash path from the root]
+  const stack = [[path.resolve(root), 0, "", null]]; // [absolute folder, depth, its forward-slash path from the root, the root patterns off below it]
   let stopped = false, over = false;
   while (stack.length && !stopped && (counts ? !over : total < cap)) {
-    const [d, depth, relDir] = stack.pop();
+    const [d, depth, relDir, offAbove] = stack.pop();
     const entries = readDirCached(d);
     if (!entries) continue;
     const pre = d.endsWith(path.sep) ? d : d + path.sep; // a drive / file-system root already ends in a separator
     const relPre = relDir ? relDir + "/" : "";
-    if (gi && relDir && gitignoredFolder(entries, pre)) continue;
+    let off = offAbove;
+    if (gi && relDir) {
+      const own = folderGitignore(entries, pre, !!gi.reincluded);
+      if (own != null && gitignoresAll(own.slice(0, 4000))) continue;
+      if (own != null && gi.reincluded) off = gitignoreOffMerge(off, gi.reincluded(own));
+    }
     const dirs = [];
     for (const e of entries) {
       if (counts) { if (seen++ >= entryCap) { over = true; break; } } else if (total >= cap) break;
       if (e.isDirectory() && (e.name.startsWith(".") || SCAN_IGNORE.has(e.name))) {
         if (!(opts.allowDir && opts.allowDir(e.name))) continue; // hidden dirs: VCS, tool caches, worktrees
       } else if (SCAN_IGNORE.has(e.name)) continue;
-      if (e.isDirectory()) { if (depth < maxDepth && !(gi && gi.dir && gi.dir(relPre + e.name))) dirs.push(e.name); continue; }
+      if (e.isDirectory()) { if (depth < maxDepth && !(gi && gi.dir && gi.dir(relPre + e.name, off))) dirs.push(e.name); continue; }
       if (!e.isFile()) continue;
       const rel = relPre + e.name;
       if (!counts) total++;
@@ -109,7 +116,7 @@ function walkProject(root, cap, onFile, opts = {}) {
       files++;
       if (onFile(rel, pre + e.name, e.name) === WALK_STOP) { stopped = true; break; }
     }
-    if (!stopped && !over) for (let i = dirs.length - 1; i >= 0; i--) stack.push([pre + dirs[i], depth + 1, relPre + dirs[i]]);
+    if (!stopped && !over) for (let i = dirs.length - 1; i >= 0; i--) stack.push([pre + dirs[i], depth + 1, relPre + dirs[i], off]);
   }
   return { total, files, truncated: counts ? over : !stopped && total >= cap };
 }
@@ -268,20 +275,61 @@ function gitignoreNameMatch(units, name) {
   }
   return true;
 }
-// The rules of the project's ROOT .gitignore (read only when it is a file inside the project) → { dir(relFolder) | null } for
-// walkProject's opts.gitignore. `dir` gets a folder's forward-slash path from the root; its parents were already let in.
+// The rules of the project's ROOT .gitignore (read only when it is a file inside the project) → { dir(relFolder, off) | null,
+// reincluded(text) | null } for walkProject's opts.gitignore. `dir` gets a folder's forward-slash path from the root (its parents
+// were already let in) and `off` — the patterns turned off where it sits (a Set of their indices, or GITIGNORE_ALL_OFF).
+// 1.22 review 3 — `reincluded(text)`: a NESTED .gitignore's negations, read as the root's are (gitignoreNegationReincludes on the
+// last name): root `lib/` with `frontend/.gitignore` holding `!src/lib/` — Git tracks frontend/src/lib/api.ts, and the scan and
+// coverage hid it (only the root .gitignore's negations were read). → the root patterns such a negation could re-include, off
+// below that folder (null: none). Bounded: at most GITIGNORE_NESTED_MAX nested files weighed and one GITIGNORE_NEGATION_BUDGET
+// over all of them, a file longer than GITIGNORE_MAX_CHARS or with more than GITIGNORE_MAX_NEGATIONS negations — past any of
+// these, every root pattern is off below it (never hide code Git may track).
+const GITIGNORE_NESTED_MAX = 200;
+const GITIGNORE_ALL_OFF = "all";
 function gitignoreRules(root, realRoot) {
   const file = path.join(root, ".gitignore");
   const pats = projectFileInside(realRoot || root, file) ? gitignoreDirPatterns(readFileHead(file, GITIGNORE_MAX_CHARS) || "") : [];
-  const floating = pats.filter((p) => !p.anchored).map((p) => p.names[0]);
-  const anchored = pats.filter((p) => p.anchored).map((p) => p.names);
-  const dir = (rel) => {
+  const dir = (rel, off) => {
+    if (off === GITIGNORE_ALL_OFF) return false;
     const segs = (FOLD_CASE ? String(rel).toLowerCase() : String(rel)).split("/");
     const last = segs[segs.length - 1];
-    if (floating.some((u) => gitignoreNameMatch(u, last))) return true;
-    return anchored.some((names) => names.length === segs.length && names.every((u, k) => gitignoreNameMatch(u, segs[k])));
+    return pats.some((p, i) => !(off && off.has(i)) && (p.anchored
+      ? p.names.length === segs.length && p.names.every((u, k) => gitignoreNameMatch(u, segs[k]))
+      : gitignoreNameMatch(p.names[0], last)));
   };
-  return { dir: pats.length ? dir : null };
+  let nested = 0, budget = GITIGNORE_NEGATION_BUDGET;
+  const reincluded = (text) => {
+    const s = String(text);
+    if (!/^[ \t]*!/m.test(s)) return null; // no negation: nothing re-included
+    if (s.length > GITIGNORE_MAX_CHARS || ++nested > GITIGNORE_NESTED_MAX) return GITIGNORE_ALL_OFF;
+    const negs = [];
+    for (const raw of s.split(/\r?\n/)) {
+      let l = raw.trim();
+      if (l[0] !== "!") continue;
+      if (FOLD_CASE) l = l.toLowerCase();
+      const tokens = gitignoreNegationTokens(l.slice(1));
+      if (tokens === undefined) continue;
+      if (negs.length >= GITIGNORE_MAX_NEGATIONS) return GITIGNORE_ALL_OFF;
+      negs.push(tokens);
+    }
+    const off = new Set();
+    for (let i = 0; i < pats.length; i++) {
+      const last = pats[i].names[pats[i].names.length - 1];
+      for (const t of negs) {
+        budget -= (t ? t.length : 1) * last.length + 1;
+        if (budget < 0) return GITIGNORE_ALL_OFF;
+        if (gitignoreNegationReincludes(t, last)) { off.add(i); break; }
+      }
+    }
+    return off.size ? off : null;
+  };
+  return { dir: pats.length ? dir : null, reincluded: pats.length ? reincluded : null };
+}
+// The patterns off below a folder: those above it, plus its own .gitignore's (a new Set — never the parent's, which siblings share).
+function gitignoreOffMerge(above, mine) {
+  if (!mine || above === GITIGNORE_ALL_OFF) return above;
+  if (mine === GITIGNORE_ALL_OFF || !above) return mine;
+  return new Set([...above, ...mine]);
 }
 // A .gitignore that ignores everything in its folder: '*' (or '/*', '**', '/**', '**/*'), re-including at most the
 // placeholder files that keep the empty folder in git. Any other rule → no (a narrower or a mixed list).
@@ -296,9 +344,11 @@ function gitignoresAll(text) {
   }
   return all;
 }
-function gitignoredFolder(entries, pre) {
+// A folder's own .gitignore text (its head: 4000 characters, or — when its negations are weighed — GITIGNORE_MAX_CHARS + 1),
+// null when it has none.
+function folderGitignore(entries, pre, whole) {
   const g = entries.find((e) => e.name === ".gitignore");
-  return !!g && g.isFile() && gitignoresAll(readFileHead(pre + ".gitignore", 4000) || "");
+  return g && g.isFile() ? readFileHead(pre + ".gitignore", whole ? GITIGNORE_MAX_CHARS + 1 : 4000) || "" : null;
 }
 // A ROOT file the scan reads (a manifest, the .gitignore): a regular file, or a link whose real path stays inside the project —
 // a committed `package.json -> /home/me/.npmrc` is never read (1.22 review; the walk itself never follows a link). realRoot: the
@@ -1119,7 +1169,7 @@ module.exports = { SCAN_IGNORE, CODE_EXT, TEST_EXTRA_EXT, GUARD_CODE_EXT, SCAN_T
   SCAN_ROUTE_CAP, SCAN_LIST_CAP, COVERAGE_CAP, WALK_ENTRY_CAP, WALK_STOP, walkProject, GITIGNORE_MAX_CHARS,
   GITIGNORE_MAX_PATTERNS, GITIGNORE_MAX_NAME, GITIGNORE_MAX_NEGATIONS, GITIGNORE_NEGATION_BUDGET, gitignoreNegationTokens,
   gitignoreNegationReincludes, gitignoreName, gitignoreDirPatterns, gitignoreNameMatch, gitignoreRules, gitignoresAll,
-  gitignoredFolder, projectFileInside, TEST_DIRS, PERL_TEST_DIRS, RE_TEST_NAME,
+  folderGitignore, gitignoreOffMerge, GITIGNORE_NESTED_MAX, GITIGNORE_ALL_OFF, projectFileInside, TEST_DIRS, PERL_TEST_DIRS, RE_TEST_NAME,
   RE_TEST_NAME_EXTRA, isTestFile, TEST_DATA_EXT, RE_TEST_DATA_NAME, testNamed, extOf, RE_TESTDATA_DIR, isTestFixture, isCodeFile, JS_EXT, FRONTEND_EXT, JS_ROUTE_OWNERS,
   RE_JS_OWNER_SUFFIX, RE_JS_ROUTE, RE_JS_ROUTE_CHAIN, RE_JS_ROUTE_OPEN, RE_JS_LEAD_STRING, RE_JS_CHAIN_VERB,
   RE_JS_IMPORT, RE_JS_CLIENT_IMPORT, RE_JS_CLIENT_DEF, JS_GENERIC_OWNERS, RE_NEST_ROUTE, RE_NEST_CTRL, RE_NEXT_APP,

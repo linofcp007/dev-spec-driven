@@ -146,6 +146,14 @@ trackers, release notes, milestones).
     units, exact for its classes; Visual Studio's `!**/[Pp]ackages/build/`, `!?*.[Cc]ache/` keep `[Bb]in/` / `[Oo]bj/`. The
     line order is not read (a negation before its pattern loses in Git — dropping that pattern only shows more code). Bounded:
     over `GITIGNORE_MAX_NEGATIONS` (200) negations or `GITIGNORE_NEGATION_BUDGET` unit comparisons, no pattern is applied.
+    **Nested negations (review 3):** only the ROOT .gitignore's negations were read — root `lib/` with `frontend/.gitignore`
+    holding `!src/lib/` (Git tracks frontend/src/lib/api.ts) still hid it. While walking, a folder's own .gitignore is read once
+    (`folderGitignore` — its head, the ignore-all test too) and `reincluded(text)` (gitignoreRules) turns OFF, for that folder's
+    subtree, every root pattern one of its negations could re-include (the same last-name rule); `walkProject` carries the set
+    down the stack (`gitignoreOffMerge` — a new set per folder, siblings never share one) and `dir(rel, off)` skips those. A
+    root pattern stays on elsewhere (`backend/lib/`). Bounded: `GITIGNORE_NESTED_MAX` (200) nested files weighed and ONE
+    `GITIGNORE_NEGATION_BUDGET` over all of them; a file over `GITIGNORE_MAX_CHARS`, over `GITIGNORE_MAX_NEGATIONS`
+    negations, past the cap or the budget turns every root pattern off below it (`GITIGNORE_ALL_OFF` — never hide code).
     A folder (not the root) whose own `.gitignore` ignores everything (`gitignoresAll`: `*`,
     re-including at most `.gitignore` / `.gitkeep` / `.keep`) is skipped too (Laravel's storage/framework/views). Never a
     built-in `bin` (Ruby / Node keep code there). `testdata/` is a fixture folder (`isTestFixture`).

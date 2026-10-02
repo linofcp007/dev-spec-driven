@@ -65,4 +65,36 @@ exports.run = async ({ ok, S, tmp, require }) => {
       "1.22 review 2: a manifest under docs/ / doc/ / examples/ / samples/ (Sphinx requirements.txt, Jekyll Gemfile, an example's flask, a sample's go.mod / Cargo.toml) never joins the stack; services/billing/go.mod does (got " +
       js([ndScan.stack, ndScan.frameworks]) + ")");
   }
+
+  { // 1.22 review 3 — a NESTED .gitignore's negation: root `lib/` + frontend/.gitignore `!src/lib/` — Git tracks frontend/src/lib/api.ts
+    const js = (v) => JSON.stringify(v);
+    const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const E = require("./lib/engine/index.js");
+    const nn = path.join(tmp, "proj-122r3-nested-negation");
+    put(nn, ".gitignore", "lib/\n__pycache__/\n");
+    put(nn, "frontend/.gitignore", "!src/lib/\n");
+    put(nn, "frontend/package.json", js({ name: "fe", dependencies: { "@sveltejs/kit": "1" } }));
+    put(nn, "frontend/src/lib/api.ts", "export const get = () => fetch('/api');\n");
+    put(nn, "frontend/src/routes/+page.svelte", "<script>import { get } from '$lib/api';</script>\n");
+    put(nn, "backend/app.py", "from flask import Flask\napp = Flask(__name__)\n");
+    put(nn, "backend/lib/gen.py", "x = 1\n"); // no negation above it: still left out
+    put(nn, "pyproject.toml", "[project]\nname = 'x'\n");
+    S.initProject(nn, ["core"], "en");
+    const fe = S.createFeature(nn, "Front", ["core"], "x", undefined, "en");
+    fs.writeFileSync(path.join(fe.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. The API client\n  - _Requirements: US-1.AC-1_\n  - _Implements: frontend/src/lib/api.ts_\n");
+    const cov = S.coverage(nn);
+    const scan = S.scanCodebase(nn);
+    // bounded: 300 nested .gitignore files with hostile negations under a root of 1,000 patterns — every subtree past the cap keeps its code
+    const hb = path.join(tmp, "proj-122r3-nested-hostile");
+    put(hb, ".gitignore", Array.from({ length: 1000 }, (_, i) => "a".repeat(40) + i + "/").join("\n") + "\nlib/\n");
+    for (let i = 0; i < 300; i++) put(hb, "m" + i + "/.gitignore", Array.from({ length: 150 }, () => "!" + "*a".repeat(120)).join("\n") + "\n");
+    put(hb, "m299/lib/x.ts", "export const x = 1;\n");
+    const t0 = process.hrtime.bigint();
+    const covH = S.coverage(hb);
+    const secs = Number(process.hrtime.bigint() - t0) / 1e9;
+    ok(cov.codeFiles === 3 && cov.coveredFiles === 1 && js(cov.nonCodeImplements) === "[]" && !cov.uncoveredSample.includes("backend/lib/gen.py") &&
+      (scan.byExtension || []).includes(".ts:1") && covH.codeFiles === 1 && secs < 10 && E.GITIGNORE_NESTED_MAX === 200,
+      "1.22 review 3 (7): root `lib/` + frontend/.gitignore `!src/lib/` — the scan and coverage read frontend/src/lib/api.ts (3 code files, api.ts covered); backend/lib/ is still left out; 300 hostile nested negation files stay bounded and keep their code (got " +
+      js([cov.codeFiles, cov.coveredFiles, cov.nonCodeImplements, cov.uncoveredSample, scan.byExtension, covH.codeFiles, +secs.toFixed(3)]) + ")");
+  }
 };
