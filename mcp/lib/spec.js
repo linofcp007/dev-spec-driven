@@ -69,7 +69,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   supersedesWarnings, taskBlocks, taskBrief, taskCommits, taskDependsSpec, taskMarkers, taskSchedule, taskSize,
   taskWaves, TEMPLATE_ARTIFACTS, templateBracketKeys, templateKey, templates, templateSets, traceCheck, traceGapLines,
   traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks, FEATURE_SIZES, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS,
-  changeViews,
+  changeViews, decodeText,
   userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, windowsShellFailure, withFeatureLock, withinRoot,
   withReadCache, writeRoadmapHtml, writeRoadmapMd } = engine;
 
@@ -100,6 +100,7 @@ module.exports = {
   taskBrief: featureLocked(taskBrief, (a) => !!(a[3] && a[3].write)), // write: .execution/ resolved and written under the lock (a move waits)
   taskBlocks,
   taskMarkers, // a task block's English-stable markers ({ requirements, "makes green", …, verify, expect }) — taskMarkerSpans' reading
+  decodeText, // a file's bytes as text: a UTF-16 BOM (FF FE / FE FF) decides, else UTF-8 (1.22 review — the hooks, the resources, `ears <file>`)
   stripHtmlComments, // text minus HTML comments as every reader sees it (code spans and fenced code keep their "<!--")
   globalConstraints,
   taskDependsSpec, // 1.14 F3: a task block's _Depends:_ → { declared, numbers, invalid }

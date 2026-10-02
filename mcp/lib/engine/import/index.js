@@ -14,14 +14,14 @@ const { parseBmad } = require("./bmad.js"); // load time
 const { parseFluidplan } = require("./fluidplan.js"); // load time
 const { parseExecPlan, parsePlan } = require("./plan.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let BOM_CHAR, classify, closesFence, configuredLang, createFeature, decisionEntryLines, DECISIONS_FILE, extractAcIds,
+let BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines, DECISIONS_FILE, extractAcIds,
   fenceStep, headingHasMarker, indentOf, inertOutsideCode, insertPackRequirements, isInsideDir, isLtUnit, isPackTrack,
   isWsUnit, markerTracks, maybeRefreshRoadmap, normalizeLang, own, packOf, packRequirementsBlock, packTaskBlock,
   parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE, RE_TESTABILITY, readIfExists,
   requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines, slugify, stripHtmlComments, testIndex,
   toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs, unknownTracksError, withTrackBlocks,
   writeFileAtomic;
-function __link(E) { ({ BOM_CHAR, classify, closesFence, configuredLang, createFeature, decisionEntryLines,
+function __link(E) { ({ BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines,
   DECISIONS_FILE, extractAcIds, fenceStep, headingHasMarker, indentOf, inertOutsideCode, insertPackRequirements,
   isInsideDir, isLtUnit, isPackTrack, isWsUnit, markerTracks, maybeRefreshRoadmap, normalizeLang, own, packOf,
   packRequirementsBlock, packTaskBlock, parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE,
@@ -299,7 +299,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
         const real = fs.realpathSync.native(file);
         if (!isInsideDir(realRoot, real)) { readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file)))); return null; }
         if (!fs.statSync(real).isFile()) return null;
-        return fs.readFileSync(real, "utf8").slice(0, IMPORT_MAX_BYTES).replace(/^\uFEFF/, "");
+        return decodeText(fs.readFileSync(real)).slice(0, IMPORT_MAX_BYTES).replace(/^\uFEFF/, "");
       } catch { return null; }
     };
   } // inline (1.16 C4) or a path

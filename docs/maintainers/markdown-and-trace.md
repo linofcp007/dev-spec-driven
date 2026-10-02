@@ -24,11 +24,25 @@ matrix.
   fenced code — a json / yaml / mermaid block answers a section, 1.21 review C2) — it fails a new approval and warns on an approved design; a sized
   feature's `na` / `na-short` (an `n/a — <reason>` answer) and `covered` (TRACK_OVERLAPS) — every gate reads them through
   `trackSectionReport()` + `sectionVerdict()` (gates-and-approvals.md → Right-sized rigor).
+  **Linear (1.22 review):** `inTrackContext` (a loose synonym under a marked ancestor) reads every heading's answer from ONE stack
+  pass, like `inOtherTrackContext` — the back-walk per loose heading (`heads.indexOf` + a scan up) made 200 KB of "### Processors"
+  with no `[PRIVACY]` heading cost status 9 s (now ~0.15 s).
 - **A change's one file (1.21 review C1):** change.md holds the criteria AND the tasks — every reader takes its two views
   (`changeViews` / `criteriaText` / `tasksIdText`, tasks.js — gates-and-approvals.md → Right-sized rigor): trace_check's
   required ACs never include a task's `_Requirements:_` reference, and EARS never lints a task block.
 - **AC/test IDs**: `US-<n>.AC-<n>` and `T-<n>`. Extraction uses a lookbehind guard, NOT `\b` —
   markdown italics (`_US-1.AC-1_`) make `\b` fail because `_` is a word char. Don't reintroduce `\b`.
+  **A bare `AC-n` is no ID (1.22 review):** EARS still LINTS a unit led by one (`RE_LIST_DEFINES_AC` / `RE_LEAD_DEFINES_AC`), but
+  its stable-ID check reads `RE_FULL_ID` (US-n.AC-n, T-, EC-, NFR-, SC-) — a bare one is `no-id` with `ears.bareAcId` ("write
+  US-<story>.AC-<n>"). And the mirror of `earsUnlinted`: `earsUnidentified(reqText, ears)` — EARS linted criteria but
+  `requirementAcIds` is empty (bare IDs, or none) → the criteria as labels (each one's bare ID, else `L<line>`, from the
+  result's non-enumerable `criteria`). trace_check reports them as the gap `unidentifiedCriteria` (first in `TRACE_GAP_ORDER`, a
+  verdict kind; only present when non-empty, so every other result is unchanged), doctor's `ears` fails (`earsNoAcIds`), so do
+  the requirements approval and a change's plan approval; the pre-commit check names them instead of "traceability clean (0
+  ACs)". A spec numbered AC-1, AC-2 used to trace 0 ACs and pass everything ("all 0 ACs covered").
+  **`<feature>/US-n.AC-m` is another feature's (1.22 review):** `requirementAcIds` drops it (`stripForeignAcRefs` — the
+  `_Supersedes:_` / `_Affects:_` syntax written in prose: "rules of checkout/US-3.AC-2 stay as they are" was a required AC no
+  task covered); a token that is itself an ID keeps the pair ("US-1.AC-1/US-1.AC-2"). tasks.md's references are read as before.
   A test-plan row covering an AC requirements.md doesn't define is a gap (`phantomAcsInTests`, +tdd; fenced examples
   excluded), like a phantom AC in tasks — doctor fails and the test-plan approval is refused. Every reader of
   test-plan.md's IDs goes through `planIdText()` (comments AND fenced code out): coverage, planned T-IDs, the code
@@ -67,7 +81,12 @@ matrix.
   scan collects its candidates, reads them all in walk order below `CODE_TRACE_READ_CAP`, above it the test-NAMED ones
   first, and reads each through `readFileHead()` (files.js — the first `SCAN_READ_BYTES` CHARACTERS, as the slice it replaced:
   one bounded read of up to 4 bytes a character, decoded, then sliced — review 2: a byte cap lost a T-ID behind 150,000
-  'é'; never the whole file then a slice; the brownfield scan and the status line's tests gate too). Until 1.21.1 the scan read only the scanner's
+  'é'; never the whole file then a slice; the brownfield scan and the status line's tests gate too). **UTF-16 (1.22
+  review):** `readFileHead` and `readRaw` — so every `readIfExists` / `readContained` — decode through `decodeText()`: a BOM
+  FF FE is UTF-16LE, FE FF UTF-16BE (swapped), anything else UTF-8. Windows PowerShell 5.1's `>` / Out-File writes UTF-16LE: a
+  Pester `tests/Login.Tests.ps1` naming T-01 was never found, a UTF-16 requirements.md traced 0 ACs. The BOM stays the U+FEFF
+  every reader drops (a rewrite of such a file is UTF-8); the importer, the specs:// resources, the requirements.md save hook,
+  `dev-spec ears <file>` and the observe hook's pre-filter read the same way. Until 1.21.1 the scan read only the scanner's
   short `CODE_EXT` and a PowerShell project's tests gate never passed. The scan (`scanTestCode()`) is bounded and read-only; a plan row whose File column names a
   concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts; a test file
   ANOTHER feature's plan (active or archived) names in its File column — and this feature's plan does not — never counts
@@ -92,7 +111,13 @@ matrix.
   lines, headings, tables, HR and fenced code (fence *state* is tracked, so `const shall = 1` inside
   ` ``` ` is code, not an AC) — and only then lints each joined criterion. A comment-only line does
   **not** split a criterion. Issues report the criterion's start `line` (plus `endLine` when it spans
-  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`). Every unit
+  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`). `vague`
+  skips a VERB use of clean / limpa / limpia (`VAGUE_VERB_NEXT`: followed by up / out / an article / a possessive / a
+  quantifier / old / temporary / expired… — "THE SYSTEM SHALL clean up its temporary files"); "a clean UI" stays vague. A
+  sub-list continues its parent only when the parent reads as a criterion: that modal test is cached per block (`curModal` —
+  once true it stays true; until then only the untested parts plus the two before them, a modal phrase spanning at most three
+  parts) — re-testing the whole joined block per sub-line was quadratic (200 KB of nested "- … SHALL x": trace + matrix 12 s,
+  now ~0.2 s). Every unit
   that DEFINES an AC is its own criterion for the linter: an ID-led line or checkbox item, a heading led by an AC ID (its
   body absorbed) and a table row with a cell that is exactly an AC ID (under an Acceptance Criteria / story heading, with no
   heading, or carrying a modal — elsewhere it is a summary table). Such a unit is a REFERENCE, never linted, when a list

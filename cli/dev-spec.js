@@ -610,7 +610,7 @@ function main() {
       if (typeof flags.text === "string") return report(spec.earsValidate(flags.text, textLang), cliText(textLang));
       if (pos[0] === "-") return readStdin((txt) => report(spec.earsValidate(txt, textLang), cliText(textLang)));
       const isFile = fs.existsSync(pos[0]) && fs.statSync(pos[0]).isFile();
-      if (isFile) return report(spec.earsValidate(fs.readFileSync(pos[0], "utf8"), textLang), cliText(textLang));
+      if (isFile) return report(spec.earsValidate(spec.decodeText(fs.readFileSync(pos[0])), textLang), cliText(textLang)); // UTF-16 too
       return report(spec.earsFeature(projectDir, pos[0]), featureText(pos[0]));
     }
 

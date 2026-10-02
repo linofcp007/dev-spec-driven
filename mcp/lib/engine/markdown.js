@@ -122,9 +122,20 @@ function stripFencedCode(s) {
   return String(s || "").split("\n").map((line) => (fenceStep(st, line) ? "" : line)).join("\n");
 }
 // requirements.md's own AC IDs as the tools read them: outside HTML comments and fenced code, `_Supersedes:_`
-// references (another feature's ACs) left out.
+// references (another feature's ACs) left out — and so is any `<feature>/US-n.AC-m` (the _Supersedes:_ / _Affects:_ syntax)
+// written in prose: "rules of checkout/US-3.AC-2 stay as they are" names checkout's criterion, never one of this feature's
+// (1.22 review: it was a required AC no task covered).
 function requirementAcIds(reqText) {
-  return extractAcIds(stripSupersedes(stripFencedCode(stripHtmlComments(reqText))));
+  return extractAcIds(stripForeignAcRefs(stripSupersedes(stripFencedCode(stripHtmlComments(reqText)))));
+}
+// `<slug>/US-n.AC-m` (blanks around the slash allowed, as _Supersedes:_ reads it) → removed. The slug is one token starting at a
+// token start; a token that is itself an ID ("US-1.AC-1/US-1.AC-2", "AC-1 / US-1.AC-2") pairs two of this feature's IDs — kept.
+// Linear: a match starts only at a token start.
+const RE_FOREIGN_AC = /(?<![\p{L}\p{N}_.-])([\p{L}\p{N}][\p{L}\p{N}_.-]*)[^\S\n]*\/[^\S\n]*US-\d+\.AC-\d+(?!\d)/gu;
+const RE_ID_TOKEN_END = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)$/;
+function stripForeignAcRefs(text) {
+  const s = String(text || "");
+  return s.includes("/") ? s.replace(RE_FOREIGN_AC, (whole, slug) => (RE_ID_TOKEN_END.test(slug) ? whole : "")) : s;
 }
 // test-plan.md as every reader of its IDs sees it — trace_check's coverage and planned T-IDs, its test-code scan, the
 // Phase 4 gate, doctor, finish, the brief and impact: outside HTML comments AND fenced code. A fenced example row
@@ -273,16 +284,24 @@ function extractSection(md, synonyms, marker, loose) {
   const heads = headingIndex(lines);
   const matches = (i, list) => headingMatches(lines[i], list || syns, !!marker); // a track section's heading may inflect its name
   const level = (l) => (lines[l].match(/^(#{1,6})\s/) || ["", "######"])[1].length;
-  // The nearest enclosing heading (a lower level, above i) carries the marker: the heading sits in the track's context.
+  // An enclosing heading (a lower level, above i — its parent, the parent's parent…) carries the marker: the heading sits in the
+  // track's context. Every heading's answer comes from ONE linear pass (a stack of the enclosing headings), on first use — the
+  // back-walk from each loose-synonym heading (heads.indexOf + a scan up) was quadratic: a 200 KB design.md of "### Processors"
+  // with no [PRIVACY] heading took status 9 s.
+  let inCtx = null;
   const inTrackContext = (i) => {
-    let lv = level(i);
-    for (let k = heads.indexOf(i) - 1; k >= 0 && lv > 1; k--) {
-      const h = heads[k];
-      if (level(h) >= lv) continue;
-      if (lines[h].includes(marker)) return true;
-      lv = level(h);
+    if (!inCtx) {
+      inCtx = new Map();
+      const stack = [];
+      for (const h of heads) {
+        const lv = level(h);
+        while (stack.length && stack[stack.length - 1].lv >= lv) stack.pop();
+        const inside = stack.length > 0 && stack[stack.length - 1].marked;
+        inCtx.set(h, inside);
+        stack.push({ lv, marked: inside || lines[h].includes(marker) });
+      }
     }
-    return false;
+    return inCtx.get(i) === true;
   };
   const MARKERS = markerTracks().map((t) => trackMarker(t)); // + the track packs' (1.15)
   // 1.21 review B5 — the mirror of inTrackContext: the nearest enclosing heading that carries a marker carries ANOTHER track's — the
@@ -1033,7 +1052,7 @@ function bugTemplateSlots() {
   return (BUG_SLOTS = set);
 }
 
-module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirementAcIds, planIdText, clarificationMarkers,
+module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirementAcIds, stripForeignAcRefs, planIdText, clarificationMarkers,
   templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
   headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, extractSection,
   RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionLineKey, sectionOwnLines, RE_NA_LEAD, NA_REASON_WORDS, naAnswer,

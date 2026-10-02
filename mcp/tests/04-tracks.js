@@ -877,4 +877,25 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname 
       "1.21 F2b: spec_classify {explain} lists every match (table tier → final tier, a cue, the negation: before / a negated list) and the project's overrides with their state (got " +
       js([ex.explain.matches, ex.explain.overrides]) + ")");
   }
+
+  { // 1.22 review — +sec's two-factor / multi-factor signal in PT / ES too; the reasoning of a track kept off by a lone weak signal
+    const js = (x) => JSON.stringify(x);
+    const on = (t) => S.classify(t).tracks.includes("sec");
+    const pos = ["Add two-factor authentication to the login", "Adicionar autenticação de dois fatores ao login", "Añadir autenticación de dos factores al inicio de sesión",
+      "Añadir autenticación de doble factor para administradores", "Add multi-factor authentication for admins", "Add multifactor authentication for admins",
+      "Adicionar autenticação multifator para administradores", "Añadir autenticación multifactor para administradores"];
+    const lone = S.classify("Ativar dois fatores para os administradores");
+    ok(pos.every(on) && !lone.tracks.includes("sec") && js(lone.signals.sec) === '["dois fatores"]' && !on("Os dois fatores principais do relatório") && !on("Uma doença multifatorial"),
+      "1.22 review: 'autenticação de dois fatores', 'autenticación de dos factores / de doble factor', 'multi-factor / multifactor / multifator' are +sec's weak signal like 'two-factor' (+ the auth word: ON); alone only a hint (got " +
+      js(pos.filter((t) => !on(t))) + ")");
+    const api = S.classify("add a flag to the export endpoint");
+    const apiPt = S.classify("adicionar uma flag ao endpoint de exportação", { lang: "pt" });
+    const apiEs = S.classify("añadir un indicador al endpoint de exportación", { lang: "es" });
+    const line = (r, t) => r.reasoning.split("\n").find((l) => l.startsWith("+" + t + ":")) || "";
+    ok(js(api.signals.api) === '["endpoint"]' && !api.tracks.includes("api") && line(api, "api") === "+api: off — weak signal only ('endpoint'), not enough on its own." &&
+      /^\+api: inativo — só sinais fracos \('endpoint'\)/.test(line(apiPt, "api")) && /^\+api: inactivo — solo señales débiles \('endpoint'\)/.test(line(apiEs, "api")) &&
+      line(api, "ai") === "+ai: off — no signals matched.",
+      "1.22 review: a track kept off with a weak signal says so in the reasoning (EN / PT / ES) — never 'no signals matched' beside a 'Possible +api' note (got " +
+      js([line(api, "api"), line(apiPt, "api"), line(apiEs, "api")]) + ")");
+  }
 };

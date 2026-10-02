@@ -15,7 +15,7 @@ const { featureLocked } = require("./files.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, artifactReport, artifactState,
   bugPlaceholders, clarificationMarkers, criterionBlocks, designSections, detectTracks, duplicateTaskNumbers,
-  earsUnlinted, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection, extractTestIds,
+  earsUnlinted, earsUnidentified, shortIdList, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection, extractTestIds,
   featureLang, fingerprintMatches, finishFeature, hasProseOutsideBrackets, headingsOnly, inactiveTaskLines, isBugStep,
   isInsideDir, isObj, isPlaceholderTask, isRecord, isSpikeDir, loadRoadmap, maybeRefreshRoadmap, normalizeLang, own,
   ownRecord, parseTasks, PHASE_FILE, phaseFile, PHASES, placeholderReport, placeholderSummary, planIdText, projectLang,
@@ -28,7 +28,7 @@ let acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, ar
   CHANGE_FILE, requirementAcIds, changeViews, isChangeDir;
 function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, artifactReport,
   artifactState, bugPlaceholders, clarificationMarkers, criterionBlocks, designSections, detectTracks,
-  duplicateTaskNumbers, earsUnlinted, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection,
+  duplicateTaskNumbers, earsUnlinted, earsUnidentified, shortIdList, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection,
   extractTestIds, featureLang, fingerprintMatches, finishFeature, hasProseOutsideBrackets, headingsOnly,
   inactiveTaskLines, isBugStep, isInsideDir, isObj, isPlaceholderTask, isRecord, isSpikeDir, loadRoadmap,
   maybeRefreshRoadmap, normalizeLang, own, ownRecord, parseTasks, PHASE_FILE, phaseFile, PHASES, placeholderReport,
@@ -1487,6 +1487,8 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
       need("ears", !errs.length, errs.slice(0, 3).map((i) => `L${i.line} ${i.msg}`).join("; "));
       const unlinted = earsUnlinted(reqs, ev); // AC IDs trace_check counts, none linted (doctor's rule — Pa2)
       need("ears", !unlinted, unlinted ? m.earsNoCriteria(unlinted) : "");
+      const unidentified = earsUnidentified(reqs, ev); // …and the mirror: criteria, but no AC ID trace_check counts (1.22 review)
+      need("ears", !unidentified, unidentified ? m.earsNoAcIds(shortIdList(unidentified)) : "");
       noPlaceholders("requirements.md");
       const mk = clarificationMarkers(reqs);
       need("clarifications", !mk.length, m.clarificationsOpen(mk.length));
@@ -1544,6 +1546,8 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
         need("ears", !errs.length, errs.slice(0, 3).map((i) => `L${i.line} ${i.msg}`).join("; "));
         const unlinted = earsUnlinted(crit, ev);
         need("ears", !unlinted, unlinted ? m.earsNoCriteria(unlinted, CHANGE_FILE) : "");
+        const unidentified = earsUnidentified(crit, ev);
+        need("ears", !unidentified, unidentified ? m.earsNoAcIds(shortIdList(unidentified), CHANGE_FILE) : "");
         noPlaceholders(CHANGE_FILE);
         const mk = clarificationMarkers(text);
         need("clarifications", !mk.length, m.clarificationsOpenPlan(mk.length)); // (1.21 verify V7: no design to resolve them before)

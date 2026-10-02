@@ -629,7 +629,8 @@ const SIGNALS = {
     weak: [
       "authentication", "authorization", "rbac", "abac", "access control", "access token", "refresh token",
       "api key", "credential", "encryption", "encrypt", "tls", "cors", "csp", "audit log", "audit trail", "sanitiz",
-      "input validation", "security", "hardening", "least privilege", "mfa", "2fa", "two-factor", "firewall", "secrets",
+      "input validation", "security", "hardening", "least privilege", "mfa", "2fa", "two-factor", "multi-factor", "multifactor",
+      "firewall", "secrets",
       "brute force", "brute-force", // weak: also an algorithm ("a brute-force search") — the attack phrase is strong
       // C4: the STRIDE methodology only as the upper-case acronym (an upper-case keyword is matched case-sensitively, see
       // classify): a lower-case "stride" is an array stride or a running stride. "STRIDE threat model" stays strong through
@@ -639,9 +640,13 @@ const SIGNALS = {
       "autenticação", "autenticacao", "autorização", "autorizacao", "controlo de acesso", "controle de acesso",
       "token de acesso", "chave de api", "credencial", "credenciais", "encriptação", "cifragem", "criptografia", "segurança",
       "registo de auditoria", "trilho de auditoria", "registro de auditoria", "trilha de auditoria", "privilégio mínimo", "menor privilégio", "validação de entrada", "força bruta",
+      // 1.22 review — the two-factor / multi-factor signal (EN "two-factor", "multi-factor") in PT / ES too: "autenticação de dois fatores"
+      // is autenticação + dois fatores, two weak signals like "two-factor authentication" (never ONE phrase: it would shadow the second)
+      "dois fatores", "multifator",
       // ES
       "autenticación", "autorización", "control de acceso", "token de acceso", "clave de api",
       "cifrado", "encriptación", "seguridad", "registro de auditoría", "privilegio mínimo", "validación de entrada", "fuerza bruta",
+      "dos factores", "doble factor", // (ES "multifactor" is the EN word above)
       // full review Pb5 — the encryption VERBS, PT / pt-BR / ES (EN has "encrypt" + its inflections): encriptar, cifrar,
       // criptografar as VERB_STEMS — their conjugations only, one signal per verb (like encrypt / encryption). Never a bare
       // "cifra": PT/ES also a figure, an amount ("as cifras do trimestre").

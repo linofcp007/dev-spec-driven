@@ -214,7 +214,7 @@ function handle(raw) {
       // The EARS lines of a criteria file — requirements.md, or a change's change.md (1.21 F5: its criteria AND its tasks; the
       // criteria view alone is linted — a task line is no criterion, the engine's own rule) — or null.
       const earsText = (fileName) => {
-        const text = fs.readFileSync(filePath, "utf8");
+        const text = spec.decodeText(fs.readFileSync(filePath)); // a UTF-16 file too (Windows PowerShell 5.1 — 1.22 review)
         const lang = spec.featureLang(pdir, feature);
         const r = spec.earsValidate(fileName === "change.md" ? spec.changeViews(text).criteria : text, lang); // issue messages in the spec's language
         if (!r.ok) return null;

@@ -218,8 +218,9 @@ ASVS, secrets management, encryption at rest / in transit, security audit / revi
 privilege escalation, SSRF, credential stuffing, zero trust, mTLS, content security policy (and their PT/ES forms:
 *modelo de ameaças, teste de intrusão, gestão de segredos · modelo de amenazas, prueba de penetración*). **Weak:**
 authentication, authorization, RBAC, access control, access / refresh token, API key, credential, encryption, TLS,
-CORS, audit log, input validation, security, hardening, least privilege, MFA / 2FA, brute force, `STRIDE` (and the
-encryption verbs *encriptar, cifrar, criptografar*).
+CORS, audit log, input validation, security, hardening, least privilege, MFA / 2FA, two-factor / multi-factor (*dois
+fatores, multifator · dos factores, doble factor, multifactor*), brute force, `STRIDE` (and the encryption verbs
+*encriptar, cifrar, criptografar*) — "two-factor authentication" is two weak signals, so +sec turns on.
 **Corroborating only:** permission, at rest, in transit. Never a bare "injection" (dependency injection) or "https".
 
 Skip `+sec` when the feature crosses no trust boundary and handles nothing sensitive (a static page, an internal
