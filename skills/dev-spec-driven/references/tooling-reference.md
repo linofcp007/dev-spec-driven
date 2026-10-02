@@ -195,9 +195,12 @@ while it points at a missing script or another copy.
 `spec_approve` (approve, revoke, fast-forward, force), `spec_feature` remove and a `spec_init` that lowers a protection:
 a client that supports MCP **elicitation** gets an `elicitation/create` question for its user (the action, the gate —
 forced checks, the waiver —, an Approve box and a note); only an explicit approve records it, with `confirmed {via:
-"elicitation", at, note}`; decline, cancel or no answer within 5 min (`DEV_SPEC_ELICIT_TIMEOUT_MS`) → `declined: true`,
-nothing recorded. Without elicitation `ask` runs as before and `deny` is refused (`humanRequired: true` + the `command`).
-The Claude Code plugin's server leaves this to the approval hook (`SPEC_MCP_APPROVAL_HOOK=on` in `mcp/servers.json`).
+"elicitation", at, note}`, and only the version the question showed — an artifact edited while the user decided (or, forced,
+a gate failing more checks) → `changedSincePreview: true`, nothing recorded: ask again; decline, cancel or no answer within
+5 min (`DEV_SPEC_ELICIT_TIMEOUT_MS`) → `declined: true`, nothing recorded. Without elicitation `ask` runs as before and `deny`
+is refused (`humanRequired: true` + the `command`). The Claude Code plugin's server leaves `ask` to the approval hook
+(`SPEC_MCP_APPROVAL_HOOK=on` in `mcp/servers.json`); a `deny`-level call that still reaches it got past no hook and is
+guarded as above.
 
 `done --run` runs the task's own `_Verify:_` command(s) from the project root and records the evidence (with the git
 commit and whether the tree was dirty, when git is available); `finish --run` runs the project checks

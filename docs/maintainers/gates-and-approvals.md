@@ -50,7 +50,10 @@ flows, the bugfix kind.
 - **next_action step order — phase by phase:** `re-review` (an artifact changed since ITS approval and re-approvable
   now — one of a phase after the first pending gate waits for it, approve would refuse it on `phase-order`; `impact`
   when a snapshot exists; when that phase's gate would refuse it, `refusedGate` {phase, failing} and the check ids are
-  named — never an approval that would be refused) → the FIRST phase of `gateWalk()` not approved yet (PHASES order, `execution` apart; `tests` only
+  named — never an approval that would be refused; an approved artifact that was DELETED (1.22 review) is listed in
+  `missingApproved` and the text says restore it or revoke its approval — `next.approvedMissing`, never "re-approve" nor a
+  spec_impact hint: `snapshotPhases()` skips a missing file, impact answers `missing` on it) → the FIRST phase of `gateWalk()`
+  not approved yet — in force: `approvalsInForce()` (PHASES order, `execution` apart; `tests` only
   when `testsGateDue()`; classification only when classification.md exists): `fill` (one of its `gateArtifacts()` is
   missing / a template; `file`) → `fix` (its `approvalChecks()` fail — `refusedGate`, so it never recommends an
   approval that would be refused) → `approve`; the next phase only after that approval (1.13 filled the whole chain
@@ -66,7 +69,11 @@ flows, the bugfix kind.
   nowPresent, drifted}) — it looped on "close the feature with /spec-finish" and a re-finish replaced a drifted
   baseline silently; `recordFinishBaseline()` now returns `replaced` for the drift it accepts. A baseline is STALE
   (`staleFinish()`) once a change request or a re-approval of another phase is newer than `finished.at`, or an active
-  task's `_Implements:_` file isn't in it: then the step stays `finish` (re-run spec_finish `{write}`) with
+  task's `_Implements:_` file isn't in it — **never a re-approval of the same content** (1.22 review: a byte-identical
+  re-approval or a role re-signing marked the finish stale, drift `stale`, the execution sign-off stale): `changesSince()`
+  skips an approval whose `fingerprint` (+ `designFingerprint`) equals the record of its phase in force at that time
+  (`approvalInForceAt()` — the latest approval record at or before it, unless a revocation followed; a phase without a
+  fingerprint, `tests`, always counts), and a revocation of that phase in between (back as it was): then the step stays `finish` (re-run spec_finish `{write}`) with
   `staleBaseline` {finishedAt, since, newFiles} — it said "finished — nothing left to do" on the old baseline — and an
   execution sign-off older than such a change is asked for again (`executionSignOffStale()`). The recorded files are
   hashed even then: a stale baseline with drift answers `drift` (+ `staleBaseline`, `nx.driftedStale`) — the decision
@@ -88,11 +95,30 @@ flows, the bugfix kind.
   task is progress, not a spec edit. CRLF and a leading BOM are encoding, not content (`textFingerprint`): a
   "UTF-8 with BOM" re-save is no change. Compare through `fingerprintMatches` / `artifactMatches`, never `!==` —
   they also accept a fingerprint recorded (before the BOM was ignored) over a BOM-prefixed file.
+- **A deleted approved artifact is a change since its approval** (1.22 review — `changedSinceApproval()` skipped a missing
+  file, so deleting an approved test-plan.md and its T-IDs read as "nothing changed" and the Phase 4 gate vanished; the
+  tasks were approvable at once). It is listed like an edit (doctor's changed-since-approval, finish's blocker, the roadmap,
+  next_action's re-review with `missingApproved`), a bugfix's bug.md included. The documented exception stays: a bugfix's
+  deleted **design.md** (it only ever held a track's sections — spec_impact's rule) is never a change. The way out is to
+  restore the file, or to revoke that approval (`approve <f> <phase> --revoke`).
 - **Pending gates walk `PHASES` in order** (`specDoctor` → `pendingGates`, which next_action / finish / gatesOk read):
   a phase is due once the file `phaseFile(ph, kind)` names exists — a bugfix's `design` gate is `bug.md` (it used to
   look for design.md, so it was never asked for) — and Phase 4 `tests` (no artifact) via `testsGateDue()`: +tdd with
-  test-plan.md or +ai with eval-plan.md, never a bugfix (its failing regression test is a task). `phaseActive('tests')`
-  is tdd||ai. **Approving `tests` checks what Phase 4 produces** (`approvalChecks`): +tdd `tests-in-code` — every
+  test-plan.md or +ai with eval-plan.md — or that plan APPROVED (1.22 review: a deleted approved plan keeps the gate due;
+  `approve tests` then answers nothing-to-approve, the tasks are refused on phase-order) —, never a bugfix (its failing
+  regression test is a task). `phaseActive('tests')`
+  is tdd||ai. **A `tests` approval covers the plan it was given (1.22 review):** it records `testsPlan` {tests: the T-IDs
+  test-plan.md planned then, plans: {test-plan / eval-plan (the active ones): the fingerprint of that plan's approval then, or
+  null}} (`testsPlanStamp()`, on the approval and its history record — a field of the approval record: the merge driver's
+  approvals / approvalHistory rules carry it). `testsSignOffStale()` → {at, missing, plans} once a T-ID planned NOW is missing
+  from it (`tKey`: T-1 = T-01) or an active plan's approval in force now has another fingerprint (re-approved with other
+  content, approved since, revoked — like `executionSignOffStale()`). A stale `tests` approval is no approval for the gate
+  walk: **`approvalsInForce()`** (the approvals minus it) is what `pendingGateList`, next_action (its `pending`, the plan
+  fast-forward), `fastForwardPlan`, `approveThrough`'s chain, the status line (`statusNext`), doctor's role view and a role
+  sign-off's `recordRoleSignOff` read — so doctor lists `tests` pending again with the reason (`gates.testsStale`, also first
+  in next_action's Phase 4 text — `next.signOffTests` on an executing feature), finish blocks on it and the tasks can't be
+  re-approved past it (phase-order). An approval recorded before 1.22 carries no stamp and is **never** flagged (the
+  design's weigh / reuse rule) — the demo's api-keys keeps its legacy one. **Approving `tests` checks what Phase 4 produces** (`approvalChecks`): +tdd `tests-in-code` — every
   planned T-ID named by a test file (trace_check's code scan); +ai `eval-sets` — evals/golden.json is a set of the
   feature's own (not the scaffold's sample, not empty). Nothing to approve on a core-only feature. next_action keeps
   the Phase 4 wording (`/writeTests`) plus what the gate checks — but on an executing / complete feature (tasks ticked,
@@ -106,7 +132,8 @@ flows, the bugfix kind.
 ## Change history (1.13)
 - **Approval history.** `approvals[phase]` stays the latest approval (with its content `fingerprint`);
   every approval is ALSO appended to `.state.json → approvalHistory` `{phase, at, by, fingerprint, forced?,
-  failing?, snapshot, file?, designSnapshot?}` and the approved artifact is saved to
+  failing?, snapshot, file?, designSnapshot?, designFingerprint? (1.22 review — changesSince compares a re-approval with the
+  record in force before it), testsPlan? (a `tests` approval, 1.22 review)}` and the approved artifact is saved to
   `.specs/<f>/.history/<phase>@<n>.md` (tasks with checkboxes normalized; never overwrites an existing
   snapshot). `.history/` is **not** self-ignored — it is meant to be committed with the spec. Approvals made
   before the history are seeded as `legacy` records on the next approval.
@@ -181,7 +208,11 @@ flows, the bugfix kind.
   flagged `batch: true` (`metrics.batchApprovals`). It stops at the first refused gate (`ok: false`, `refused`,
   `stoppedAt`, `failing`, `checks`; the phases before it stay approved, listed in `approved`) or at a phase still waiting
   for another role (`ok: true`, `complete: false`). `phase` is optional only with `through`. next_action suggests it
-  when every planning artifact through tasks is filled and passes its gate.
+  when every planning artifact through tasks is filled and passes its gate. **ROADMAP.md is refreshed ONCE, after the run**
+  (1.22 review — once per phase was 93% of an `approve --through tasks` on 30 features × 40 tasks: 1.2 s → 0.38 s for 6
+  phases): each phase's approvePhase
+  gets the internal `noRefresh` (never a tool argument nor a CLI flag) and approveThrough refreshes when a phase wrote — a
+  run stopped at a later gate too.
 
 ## Undo, revoke, waivers, MCP-only gates (1.16 U)
 - **Undo a tick** — `completeTask(…, {undo, reason})` → `untickTask` (`spec_complete_task {undo}` / `dev-spec undone <f> <n>
@@ -209,7 +240,8 @@ flows, the bugfix kind.
   `isApprovalRecord()`** — never `partial !== true` alone (a revoked record is no approval). The approval guard reads a
   revoke as an approval action (`revoke: true`; the human's command is `approve … --revoke`). `changesSince()` also emits
   each revocation newer than t (`{kind: "revoke", phase, at}` — a record that removed an approval, never `partial`, never of
-  the `except` phase = `execution`), so a finish / execution sign-off older than it is stale (drift verdict `stale`,
+  the `except` phase = `execution`; 1.22 review: not when the phase was approved again since with the content in force before —
+  nothing changed), so a finish / execution sign-off older than it is stale (drift verdict `stale`,
   `revoke.driftWhy` in the CLI line; `revokedSinceList()` drops a phase re-approved since — it reads "re-approved"). The
   catalog's `finished` also needs no pending gate (`pendingGateList`, existence checks only): SPECS.md reads ☑ complete.
 - **Waivers** — `force` + `reason` / `expires` (`waiverInput()`: `YYYY-MM-DD` from today up to 3650 days, or `Nd`) →
@@ -231,9 +263,17 @@ flows, the bugfix kind.
   waiting sign-off and a revocation record; a fast-forward passes it to every phase it approves. No reader branches on it — it is
   the audit trail of WHO approved (the human, in the client), next to `by`.
 - **`opts.dryRun`** — approvePhase runs everything up to its write and returns `{ok: true, dryRun: true, feature, phase, failing,
-  checks, role?, waiver?}` (revoke: `{dryRun, revoke: true}` after its own checks; through: `{dryRun, chain}` — the phases it
-  would walk, each gate running only when approved); a refusal / error comes back exactly as without it. Only the server passes it
-  (the preview before it asks the user — a gate that refuses anyway asks nobody); never a tool argument or a CLI flag.
+  checks, fingerprint, designFingerprint?, role?, waiver?}` (revoke: `{dryRun, revoke: true}` after its own checks; through:
+  `{dryRun, chain, fingerprints: {<phase>: {fingerprint, designFingerprint?}}}` — the phases it would walk, each gate running only
+  when approved, and each one's content, `phaseContent()`); a refusal / error comes back exactly as without it. Only the server
+  passes it (the preview before it asks the user — a gate that refuses anyway asks nobody); never a tool argument or a CLI flag.
+- **`opts.preview`** (1.22 review — the server waits up to minutes for the user, then approved whatever was on disk: an edit
+  meanwhile was recorded as "confirmed via elicitation") — the server passes back what the dry run judged: `{fingerprint,
+  designFingerprint?, failing}` (an approval) or `{chain, fingerprints}` (a fast-forward). `previewMismatch()`: another content
+  (the same read the approval records — fingerprint and snapshot are that version), or — forced — a check failing now that the
+  preview didn't name, refuses with `{ok: false, changedSincePreview: true, code: "changed-since-preview", newFailing?}` and the
+  localized `gates.changedSincePreview`, nothing written; a fast-forward compares the chain and every phase's content BEFORE it
+  approves anything (then each phase again, stopReason `changed-since-preview`). Server-only, like dryRun and confirmation.
 
 ## Flows (1.14 — from Import sources and flows)
 - **Flows:** `.state.json → flow: "design-first"` (`spec_create {flow}` / `create --flow`; changed with

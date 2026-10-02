@@ -1381,6 +1381,8 @@ const msg = {
     next: {
       fixChecks: (ids, slug) => `Fix blocking checks (${ids}) — run /spec-doctor ${slug} for details.`,
       reReview: (files) => `Re-review: ${files} changed after the last approval — re-approve the affected phase.`,
+      // 1.22 review: an approved artifact that was deleted — nothing to re-approve until it is back
+      approvedMissing: (files, slug, phase) => `${files} was approved but no longer exists — restore it (it was deleted after its approval) or, if it is gone for good, withdraw that approval: /approve ${slug} ${phase} --revoke.`,
       approveRequirements: (slug) => `Review & approve requirements — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Review & approve design — /approve ${slug} design.`,
       approveTasks: (slug) => `Review & approve the task breakdown — /approve ${slug} tasks.`,
@@ -1746,6 +1748,12 @@ const msg = {
       evalSetsSample: "evals/golden.json is still the scaffold's sample set — write this feature's golden cases, run the harness and record the baseline",
       evalSetsMissing: "evals/golden.json is missing or holds no eval items ({\"items\": […]}) — write this feature's golden set first",
       testsGateChecks: (ids) => `(the approve gate checks this: ${ids})`,
+      // 1.22 review: a Phase 4 sign-off the plan outgrew (a T-ID planned since, a plan whose approval changed since) — pending again.
+      testsStale: (day, missing, plans) => `The Phase 4 sign-off of ${day} no longer covers the plan (${[missing ? `planned since: ${missing}` : null, plans ? `approval changed since: ${plans}` : null].filter(Boolean).join("; ")}) — the tests phase is to be approved again.`,
+      // 1.22 review: an approval the user confirmed over MCP whose content (or, forced, its failing checks) changed after the question.
+      changedSincePreview: (phase, slug, grown) => (grown
+        ? `Nothing recorded: since the user was asked to confirm '${phase}' of '${slug}', its gate fails more checks (${grown}) than the question named — ask them again.`
+        : `Nothing recorded: '${phase}' of '${slug}' changed after the user was asked to confirm it — their confirmation covered the version they were shown. Ask them again, so they confirm what is there now.`),
       clarifyPlaceholders: (file, n, list) => `Replace the ${n} template placeholder(s)/TBD in ${file}: ${list}`,
       hookPlaceholders: (n, list, file = "requirements.md") => `Template placeholders: ${n} left in ${file} (${list}) — replace them before approving the ${file === "change.md" ? "plan" : "requirements"}.`,
     },
