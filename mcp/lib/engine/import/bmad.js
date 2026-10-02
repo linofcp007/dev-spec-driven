@@ -262,7 +262,11 @@ function parseBmad(dir, read0, W, src) {
     const units = checkboxUnits(st.tasks.lines, st.tasks.lo, st.tasks.hi);
     if (!units.length) return;
     out.push("", `## US-${n}: ${st.title}`);
+    // 1.22 review — BMAD writes the (AC: n) references on a task, not on each of its subtasks: a nested unit that names none
+    // of its own carries its parent's (the nearest unit above it with a smaller indent; a grandchild its inherited ones).
+    const parents = []; // [{ indent, req }] the open units above the current one
     units.forEach((u, j) => {
+      while (parents.length && parents[parents.length - 1].indent >= u.indent) parents.pop();
       // /\(\s*ACs?\s*[:#]?\s*([^)]*)\)/i, read up to the last ')' (no match can end later: each "(AC" rescanned the rest of a
       // text with no ')' after it) with \s*(?:[:#]\s*)? (blank runs meeting with no ':' / '#' between them) — 1.17 H.
       const refM = u.text.slice(0, u.text.lastIndexOf(")") + 1).match(/\(\s*ACs?\s*(?:[:#]\s*)?([^)]*)\)/i);
@@ -274,6 +278,8 @@ function parseBmad(dir, read0, W, src) {
       const req = [], unknown = [];
       nums.forEach((x) => { if (byNumber.has(x)) { if (!req.includes(byNumber.get(x))) req.push(byNumber.get(x)); } else unknown.push(x); });
       if (unknown.length) model.warnings.push(P.wUnknownAc(key, shortTitle(u.text, 40), unknown.join(", ")));
+      if (!refM && parents.length) req.push(...parents[parents.length - 1].req);
+      parents.push({ indent: u.indent, req: req.slice() });
       const text = refM && !unknown.length ? u.text.replace(refM[0], "").replace(/\s{2,}/g, " ").trim() : u.text;
       const label = (u.text.match(/^(?:sub)?task\s+[\d.]+/i) || [`item ${j + 1}`])[0];
       out.push(...planTaskLines(st.tasks.lines, u, { done: planDone(u.box), tag: `[US${n}]`, text: text.replace(/^\[US\d+\]\s*/, ""), req, paths: planPaths(unitProse(st.tasks.lines, u)) }));
@@ -288,8 +294,13 @@ function parseBmad(dir, read0, W, src) {
   const design = [arch != null ? arch.trimEnd() : null, ...(designParts.length ? ["", ...designParts] : [])].filter((x) => x != null);
   if (tidyLines(design).length) model.design = { text: tidyLines(design).join("\n"), file: archFile ? path.basename(archFile) : "Dev Notes" };
   else model.warnings.push(W.wNoDesign("architecture.md"));
+  model.nameFallback = model.nameHint; // the folder's name: for a title that slugifies to nothing (importSpec, 1.22 review)
   if (model.title) model.nameHint = model.title; // the product's name, not "docs"
-  if (storyFiles.length === 1 && !prdFiles.length && ordered.length === 1) { model.sourceFile = storyFiles[0]; model.nameHint = ordered[0].title; }
+  if (storyFiles.length === 1 && !prdFiles.length && ordered.length === 1) {
+    model.sourceFile = storyFiles[0];
+    model.nameHint = ordered[0].title;
+    model.nameFallback = path.basename(storyFiles[0]).replace(/\.md$/i, "");
+  }
   return model;
 }
 

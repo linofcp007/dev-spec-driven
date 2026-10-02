@@ -133,7 +133,10 @@ function planCommandOnly(text) {
   const t = String(text).replace(/\*\*|__/g, "").trim();
   // \s*:?\s* → \s*(?::\s*)? and \s*(?:word)?\s* → \s*(?:word\s*)? (the same lines): blank runs meeting around an absent
   // token backtracked quadratically (1.17 H).
-  const m = t.match(/^(?:run|execute|corre|correr|executa|executar|ejecuta|ejecutar)?\s*(?::\s*)?`([^`]+)`\s*(?:(?:passes|succeeds|is green|should pass|passa|pasa)\s*)?[.;]?$/i);
+  // 1.22 review — and a trailing "and expect …" clause ("Run `npm test` and expect all tests to pass."; PT "e esperar …", ES
+  // "y esperar …"): what the run should show, still no criterion. One start (^); the clause opens on a comma or a letter, never
+  // on a blank (no two blank runs meet around it); `[^`]*` then an optional [.;] and $: linear.
+  const m = t.match(/^(?:run|execute|corre|correr|executa|executar|ejecuta|ejecutar)?\s*(?::\s*)?`([^`]+)`\s*(?:(?:passes|succeeds|is green|should pass|passa|pasa)\s*)?(?:,\s*)?(?:(?:and|e|y)\s+(?:expect|esperar|espera|confirm|check|verify|verificar|verifica|comprobar|comprueba)\b[^`]*)?[.;]?$/i);
   return !!(m && RE_PLAN_RUNNER.test(m[1].trim().replace(/^\$\s+/, "")));
 }
 // A criterion as written in a plan → EARS when it already reads like one: a modal requirement (kept), Given/When/Then, or a
@@ -414,6 +417,7 @@ function parsePlan(dir, read, W, src) {
   model.title = (typeof fmData.name === "string" && fmData.name.trim()) || cleanTitle(h1 && h1.text) || null;
   const stem = path.basename(doc.file).replace(/\.md$/i, "").replace(/\.plan$/i, "").replace(/[-_][0-9a-f]{6,}$/i, "");
   model.nameHint = model.title || stem;
+  model.nameFallback = stem; // a title that slugifies to nothing names the feature after its file (importSpec, 1.22 review)
   // The title is no section ("# Plan: Add dark mode" is not a Plan-of-work heading its sub-sections inherit).
   const stepsHead = (t) => !RE_PLAN_CRITERIA.test(t) && RE_PLAN_STEPS.test(t);
   const approachSteps = !hs.some((h) => h !== h1 && stepsHead(planHeadingText(h.text))); // no Steps section: an Approach is one
@@ -525,7 +529,8 @@ function parseExecPlan(dir, read, W, src) {
   const used = new Set();
   const h1 = hs[0] && hs[0].level === 1 ? hs[0] : null; // the title: a first heading of level 1 (never a later '# Steps')
   if (h1) { used.add(h1.i); model.title = h1.text.replace(/^exec\s*plan\s*[:—–-]\s*/i, "").trim() || null; }
-  model.nameHint = model.title || path.basename(doc.file).replace(/\.md$/i, "");
+  model.nameFallback = path.basename(doc.file).replace(/\.md$/i, ""); // a title that slugifies to nothing (1.22 review)
+  model.nameHint = model.title || model.nameFallback;
   const sec = planSections(lines, hs, (t, h) => (h === h1 ? null : (RE_EXEC_SECTION.find(([, re]) => re.test(t)) || [null])[0]));
   const ranges = (kind) => hs.map((h, k) => (sec.kinds[k] === kind ? sec.direct(k) : null)).filter(Boolean);
   if (!hs.some((h, k) => sec.kinds[k])) model.warnings.push(P.wNotExecPlan);

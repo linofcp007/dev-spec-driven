@@ -901,6 +901,7 @@ function main() {
     case "scan": {
       const root = pos[0] ? path.resolve(pos[0]) : projectDir;
       const r = spec.scanCodebase(root, { cap: intFlag("cap") });
+      if (!r.ok) return fail(r); // a path that is no folder (1.22 review): exit 1, never an empty codebase
       const T = cliText(spec.projectLang(root)); // same language as the engine's note
       const B = spec.msg(spec.projectLang(root)).brownfield;
       return out(r, (r) => {
@@ -923,6 +924,7 @@ function main() {
 
     case "coverage": {
       const r = spec.coverage(projectDir);
+      if (!r.ok) return fail(r);
       const T = projectText();
       const B = spec.msg(spec.projectLang(projectDir)).brownfield;
       const folder = (x) => (x === "." ? B.root : x);

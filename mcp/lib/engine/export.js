@@ -21,7 +21,7 @@ let acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM
   normalizeLang, own, pendingGateList, PHASE_FILE, phaseActive, phaseFile, PHASES, placeholderReport, projectLang,
   RE_FENCE, RE_LIST_ITEM, readContained, readRoadmap, replaceCodeSpans, requirementIndex, resolveSupersedes, roadmap,
   roadmapError, ROOT_CAUSE_SYN, rtmMarkdown, rtmProjectMarkdown, sectionFirstParagraph, sha1Hex, SIZE_POINTS, slugify,
-  specsRoot, SPIKE_FILE, spikeInfo, stateFromFile, statePath, statusFeature, storyContext, stripEnd, stripEnds,
+  specsRoot, specsWriteContained, SPIKE_FILE, spikeInfo, stateFromFile, statePath, statusFeature, storyContext, stripEnd, stripEnds,
   stripHtmlComments, supersededByIndex, supersedesMarkers, taskBlocks, taskProse, taskSize, timeOf, trackAcIds,
   trackLabel, trackMarker, verificationStatus, withoutTaskMarkers, withRoadmapLock, writeFileAtomic, writeRoadmap,
   wsOrUnitIn, changeViews, CHANGE_FILE;
@@ -33,7 +33,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeadin
   maybeRefreshRoadmap, normalizeLang, own, pendingGateList, PHASE_FILE, phaseActive, phaseFile, PHASES,
   placeholderReport, projectLang, RE_FENCE, RE_LIST_ITEM, readContained, readRoadmap, replaceCodeSpans,
   requirementIndex, resolveSupersedes, roadmap, roadmapError, ROOT_CAUSE_SYN, rtmMarkdown, rtmProjectMarkdown,
-  sectionFirstParagraph, sha1Hex, SIZE_POINTS, slugify, specsRoot, SPIKE_FILE, spikeInfo, stateFromFile, statePath,
+  sectionFirstParagraph, sha1Hex, SIZE_POINTS, slugify, specsRoot, specsWriteContained, SPIKE_FILE, spikeInfo, stateFromFile, statePath,
   statusFeature, storyContext, stripEnd, stripEnds, stripHtmlComments, supersededByIndex, supersedesMarkers, taskBlocks,
   taskProse, taskSize, timeOf, trackAcIds, trackLabel, trackMarker, verificationStatus, withoutTaskMarkers,
   withRoadmapLock, writeFileAtomic, writeRoadmap, wsOrUnitIn, changeViews, CHANGE_FILE } = E); }
@@ -666,6 +666,9 @@ function exportSpecs(projectDir, opts = {}) {
   if (tracker) res.records = doc.records.length; // work items: features + stories + tasks
   if (!opts.write) { res.content = content; return res; }
   const exDir = path.dirname(file);
+  // 1.22 review — never through a link: .specs/exports/ (or the document) linked or resolving outside .specs/ is refused
+  // before anything is read or written through it (every format, the project's documents too).
+  if (!specsWriteContained(projectDir, file)) return { ...res, ok: false, error: i18n.msg(doc.lang).stakeholderExport.exportsLinked(".specs/" + EXPORT_DIR + "/" + base + "." + ext) };
   // A feature folder named 'exports' from before the name was reserved: never drop documents into someone's spec.
   if (["requirements.md", ".state.json"].some((n) => fs.existsSync(path.join(exDir, n)))) return { ...res, ok: false, error: i18n.msg(doc.lang).stakeholderExport.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
   if (!isGeneratedOrAbsent(file)) return { ...res, ok: false, skipped: true, error: i18n.msg(doc.lang).err.notGenerated(".specs/" + EXPORT_DIR + "/" + base + "." + ext) };
@@ -705,6 +708,9 @@ function exportGherkin(projectDir, opts, pl) {
     return res;
   }
   const exDir = path.join(root, EXPORT_DIR);
+  // 1.22 review — all-or-nothing: a linked .specs/exports/ or one linked target refuses the whole export, named.
+  const linked = docs.find((d) => !specsWriteContained(projectDir, d.file));
+  if (linked) return { ...res, ok: false, error: i18n.msg(lang).stakeholderExport.exportsLinked(".specs/" + EXPORT_DIR + "/" + path.basename(linked.file)) };
   if (["requirements.md", ".state.json"].some((n) => fs.existsSync(path.join(exDir, n)))) return { ...res, ok: false, error: i18n.msg(lang).stakeholderExport.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
   const hand = docs.find((d) => !isGeneratedOrAbsent(d.file));
   if (hand) return { ...res, ok: false, skipped: true, error: i18n.msg(lang).err.notGenerated(".specs/" + EXPORT_DIR + "/" + path.basename(hand.file)) };

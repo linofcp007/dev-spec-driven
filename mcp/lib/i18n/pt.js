@@ -1700,6 +1700,7 @@ const msg = {
     },
 
     brownfield: {
+      notFolder: (p) => `${p} não é uma pasta (não existe, ou é um ficheiro) — nada para analisar; verifica o caminho.`,
       frameworks: (list) => `  frameworks: ${list}`,
       routeLine: (method, p, loc) => `    ${method.padEnd(7)} ${p}  (${loc})`,
       moreRoutes: (n) => `    … mais ${n} (--json lista-as, até ao limite)`,
@@ -1726,6 +1727,7 @@ const msg = {
       notFound: (p) => `'${p}' não encontrado.`,
       nothing: (tool, p) => `Não foram encontrados ficheiros de spec ${tool} em '${p}'.`,
       exists: (slug) => `A feature '${slug}' já existe — a importação nunca a substitui. Indica outro nome.`,
+      noUsableTitle: (title) => `O título do documento '${title}' não tem caracteres utilizáveis (a-z, 0-9) para nome de pasta — indica o nome da feature (name; CLI: --name "<feature>").`,
       featureTitle: (name) => `# Feature: ${name}`,
       tasksTitle: (name) => `# Tasks: ${name}`,
       summary: "## Resumo",
@@ -2518,6 +2520,7 @@ const msg = {
       print: "Imprimir",
       wrote: (file) => `✎ gerado ${file}`,
       exportsIsFeature: (dir) => `${dir} é uma pasta de feature anterior à reserva do nome 'exports' pelo dev-spec (contém requirements.md / .state.json) — move ou renomeia essa pasta à mão e volta a exportar.`,
+      exportsLinked: (rel) => `Recusei escrever ${rel}: .specs/exports/ ou esse ficheiro é uma ligação (simbólica, ou uma junction) ou aponta para fora de .specs/ — substitui-a por uma pasta / um ficheiro normal e volta a exportar. Nada foi escrito.`,
     },
     rtm: {
       title: "Matriz de rastreabilidade",

@@ -133,4 +133,16 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
     /test files \(reported apart, not counted\): 2/.test(psCovTxt.out),
     "1.21.1 languages: scan / coverage on a PowerShell project (CLI = MCP): stack powershell, tests 2 · pester, build.ps1 + the module's RootModule as entrypoints, DEPLOY_ENV; 0/3 code files (.ps1 / .psm1), 2 test files (got " +
     JSON.stringify([psScan.out.split("\n").filter((l) => /stack|tests:|entrypoints|env vars/.test(l)), psCov && psCov.codeFiles, psCovTxt.out.split("\n")[0]]) + ")");
+
+  // 1.22 review — scan / coverage on a path that is no folder (a typo): exit 1 with the error, never "files: 0 | stack: unknown".
+  const missing = path.join(tmp, "wp6-missing-folder");
+  const scM = run(["scan", "--project", w6, missing]);
+  let scMj = null;
+  try { scMj = JSON.parse(run(["scan", "--json", "--project", w6, missing]).out); } catch { /* invalid JSON */ }
+  const covM = run(["coverage", "--project", missing]);
+  const scF = run(["scan", "--project", w6, path.join(w6, "package.json")]);
+  ok(scM.code === 1 && /is not a folder \(it doesn't exist, or it is a file\)/.test(scM.out) && !/stack: unknown|files: 0/.test(scM.out) &&
+    scMj && scMj.ok === false && /is not a folder/.test(scMj.error) && covM.code === 1 && /is not a folder/.test(covM.out) && scF.code === 1 && !fs.existsSync(missing),
+    "1.22 review: `scan <missing>` / `scan <a file>` / `coverage --project <missing>` exit 1 with 'is not a folder' (--json: ok false), never an empty codebase (got " +
+    JSON.stringify([scM.code, scM.out.slice(0, 120), covM.code, scF.code]) + ")");
 };
