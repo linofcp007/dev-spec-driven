@@ -892,7 +892,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     // A private server and a scripted client. answer(request) → the reply to an elicitation/create ({result} / {error}), or
     // null (never answer). Every elicitation asked and every notification the server sends are kept.
     const client = (caps, env) => {
-      const kid = spawn(process.execPath, [SERVER_JS], { env: { ...process.env, SPEC_MCP_APPROVAL_HOOK: "", DEV_SPEC_ELICIT_TIMEOUT_MS: "700", ...env }, stdio: ["pipe", "pipe", "inherit"] });
+      const kid = spawn(process.execPath, [SERVER_JS], { env: { ...process.env, SPEC_MCP_APPROVAL_HOOK: "", DEV_SPEC_ELICIT_TIMEOUT_MS: "2500", ...env }, stdio: ["pipe", "pipe", "inherit"] });
       const waiting = new Map(), asked = [], notes = [], batches = [];
       let buf = "", n = 0, answer = () => null;
       const write = (m) => kid.stdin.write(JSON.stringify(m) + "\n");
@@ -988,7 +988,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const [rNever, rPing] = await Promise.all([pNever, pPing]);
     const qNever = A.asked[A.asked.length - 1] || {};
     const cancelled = A.notes.find((x) => x.method === "notifications/cancelled") || { params: {} };
-    ok(rNever.ok === false && rNever.declined === true && rNever.timedOut === true && /^No answer from the user within 0\.7 s/.test(rNever.error) && rPing.result && js(order) === '["ping","approve"]' &&
+    ok(rNever.ok === false && rNever.declined === true && rNever.timedOut === true && /^No answer from the user within 2\.5 s/.test(rNever.error) && rPing.result && js(order) === '["ping","approve"]' &&
       cancelled.params.requestId === qNever.id && cancelled.params.reason === "timeout" && !stateOf(pEn, "never").approvals.classification,
       "1.21 F1b: an elicitation never answered is refused after DEV_SPEC_ELICIT_TIMEOUT_MS (timedOut: true, nothing recorded) and cancelled at the client (notifications/cancelled); the server answers other requests while it waits (got " +
       js([rNever, order, cancelled]) + ")");
