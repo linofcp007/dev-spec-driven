@@ -451,6 +451,39 @@ exports.run = async ({
     ok(/send the diff to \*\*`dev-spec-driven:spec-reviewer`\*\*, verify each ❌ \/ Critical \/ Important finding \(a verify-mode `spec-reviewer` per finding; only 80\+ opens a fix round\)/.test(skillW) &&
       docsSkill.split(/\s+/).filter(Boolean).length <= 5000,
       "1.22 review P3: SKILL.md's subagent loop verifies each ❌ / Critical / Important finding before a fix round (80+), within 5,000 words (got " + docsSkill.split(/\s+/).filter(Boolean).length + ")");
+    // P4: since 1.21 the MCP server guards approvals too (elicitation, or a refusal under deny) — AGENTS.md says so and how
+    // to answer a declined / humanRequired result.
+    const agentsW = docsWs(docsAgents), guardItem = cut(agentsW, "**The approval guard: a Claude Code hook, and the MCP server.**", "- **Alongside superpowers.**");
+    ok(/elicitation/.test(guardItem) && /`declined: true`[^.]*record nothing, ask what should change/.test(guardItem) && /`humanRequired: true` refusal[^.]*names a `command`/.test(guardItem) &&
+      /never approve on your own/.test(guardItem) && !/nothing enforces it|enforced by Claude Code hooks only/.test(agentsW),
+      "1.22 review P4: AGENTS.md — the approval guard is the hook AND the MCP server (elicitation / deny); declined → record nothing, humanRequired → the user runs its command");
+    // P5: spec_create's tracks is an array — a comma string is refused ("tracks must be an array").
+    const mdDirs = [["commands"], ["agents"], ["skills", "dev-spec-driven", "references"]];
+    const strTracks = mdDirs.flatMap((d) => fs.readdirSync(path.join(root, ...d)).filter((f) => f.endsWith(".md") && /\btracks: "/.test(docsRead(...d, f))).map((f) => d.join("/") + "/" + f));
+    ok(!strTracks.length && /tracks: \["tdd", "a11y"\]/.test(docsRead("commands", "spec-tracks.md")),
+      "1.22 review P5: no command, agent or reference passes spec_create a comma string for tracks (got " + JSON.stringify(strTracks) + ")");
+    // P6: SubagentStop matches spec-(implementer|simplifier) — no doc says the implementer only.
+    const hooksJson = docsRead("hooks", "hooks.json");
+    ok(/spec-\(implementer\|simplifier\)/.test(hooksJson) && /SubagentStop\*\* \(the `spec-implementer` and `spec-simplifier` agents only\)/.test(docsRef("verification.md")) &&
+      /SubagentStop for the `spec-implementer` and `spec-simplifier` agents/.test(docsWs(docsRead("INSTALL.md"))) &&
+      !/\(the `spec-implementer` agent only\)|SubagentStop for the `spec-implementer` agent\)/.test(docsWs(docsRef("verification.md") + docsRead("INSTALL.md"))),
+      "1.22 review P6: verification.md and INSTALL.md name both SubagentStop agents (spec-implementer, spec-simplifier), as hooks.json matches");
+    // P7: /approve and /spec-doctor list every built-in track's sections check and a pack's; /spec-doctor the 1.14–1.21 ids;
+    // the critic checks the +api / +ui / +obs / +data design sections. Every id named is one the engine emits.
+    const engineSrc = libSources().map((f) => fs.readFileSync(f, "utf8")).join("\n");
+    const apW = docsWs(docsRead("commands", "approve.md")), drW = docsWs(docsRead("commands", "spec-doctor.md"));
+    const secIds = ["api-sections", "ui-sections", "obs-sections", "data-sections"];
+    const drIds = ["task-deps", "change-scope", "merge-conflicts", "design-tradeoffs", "design-risks", "design-reuse", "waiver-expired", "track-pack-missing"];
+    const criticTracks = (docsRead("agents", "spec-critic.md").match(/^\| \*\*Tracks\*\* \|.*$/m) || [""])[0];
+    ok(secIds.every((id) => apW.includes("`" + id + "`") && drW.includes("`" + id + "`") && engineSrc.includes('"' + id + '"')) &&
+      apW.includes("`<pack>-sections`") && drW.includes("`<pack>-sections`") && /`task-deps`/.test(cut(apW, "; tasks: ", "; tests (")) &&
+      drIds.every((id) => drW.includes("`" + id + "`") && engineSrc.includes('"' + id + '"')) &&
+      ["+api: the `[API]`", "+ui: the `[UI]`", "+obs: the `[OBS]`", "+data: the `[DATA]`"].every((w) => criticTracks.includes(w)),
+      "1.22 review P7: /approve and /spec-doctor name api- / ui- / obs- / data- / <pack>-sections; /spec-doctor task-deps, change-scope, merge-conflicts and the design-tradeoffs / risks / reuse, waiver-expired, track-pack-missing warnings (each an engine id); the critic's Tracks row covers +api / +ui / +obs / +data");
+    // P8: the observe hook logs PowerShell runs (with an explicit exit code) — its row no longer says the opposite.
+    const obsRow = (docsRef("tooling-reference.md").match(/^\| `hooks\/observe-hook\.js` \|.*$/m) || [""])[0];
+    ok(/or PowerShell, with an explicit exit code/.test(obsRow) && !/PowerShell runs are not observed/.test(obsRow),
+      "1.22 review P8: tooling-reference's observe-hook row says PowerShell runs are logged (explicit exit code) — no contradicting tail");
   }
 
   // Release hygiene: the three version fields agree.

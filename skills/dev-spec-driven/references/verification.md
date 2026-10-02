@@ -276,11 +276,14 @@ tasks.md, run it if it is safe to run, record the evidence, or **say plainly wha
 claim to slip past it. "Active" means activity the engine recorded (ticks, evidence) — never a file date, so a fresh
 clone of someone else's repo doesn't trip it — and the reason never hands you a `--run` command to execute blindly.
 
-- **SubagentStop** (the `spec-implementer` agent only): its DONE is checked against its report — the report file
-  `.specs/<feature>/.execution/task-N-report.md` (named in the reply) must carry each runnable `_Verify:_` command of the
-  task and the exit code it needs — `exit 0` for a must-pass `_Verify:_`, a non-zero exit for an `_Expect: fail_` task.
-  BLOCKED / NEEDS_CONTEXT, or a task without a runnable `_Verify:_`, pass
-  (`references/subagent-execution.md`).
+- **SubagentStop** (the `spec-implementer` and `spec-simplifier` agents only): an implementer's DONE is checked against
+  its report — the report file `.specs/<feature>/.execution/task-N-report.md` (named in the reply) must carry each
+  runnable `_Verify:_` command of the task and the exit code it needs — `exit 0` for a must-pass `_Verify:_`, a non-zero
+  exit for an `_Expect: fail_` task. BLOCKED / NEEDS_CONTEXT, or a task without a runnable `_Verify:_`, pass
+  (`references/subagent-execution.md`). A simplifier's DONE needs its `.specs/<feature>/.execution/simplify-report.md`
+  to end with a `## Final runs` section where every run shows an exit 0 and, with project checks set, each check's
+  command is one of them. NO_CHANGES / BLOCKED / NEEDS_CONTEXT pass (`references/subagent-execution.md` → The
+  simplification pass).
 - It never sends the same stop back twice in a row, stays silent in a project without a dev-spec `.specs/`, and never
   blocks on its own error.
 - **Opt out** per project: `spec_init {stopCheck: false}` (CLI `dev-spec init --stop-check off`; `roadmap.json →

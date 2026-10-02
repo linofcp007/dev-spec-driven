@@ -153,7 +153,7 @@ prints feature status plus one line per finished feature whose files drifted sin
 turn them off, disable the plugin (or empty `hooks/hooks.json`).
 
 **Evidence gate at the end of a turn (on by default).** A Stop hook (`hooks/stop-hook.js`, also on SubagentStop for the
-`spec-implementer` agent) sends Claude back to work — once — when its closing message says a task or feature is done or
+`spec-implementer` and `spec-simplifier` agents, checked on their reports) sends Claude back to work — once — when its closing message says a task or feature is done or
 verified while a feature active in the last hours has ticked tasks without passing evidence. It is silent otherwise and
 never blocks on its own errors. To turn it off for a project:
 

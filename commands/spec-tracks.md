@@ -28,7 +28,7 @@ What to tell the user when they write a pack (details: `references/project-track
   plan's six cells. `{{ac1}}`… / `{{acs}}` name the pack's criteria as the feature numbers them, `{{t1}}`… / `{{tests}}`
   their planned tests. A `<lang>/` subfolder's fragment wins over the pack root's. `[bracketed]` slots stay template
   placeholders until a feature fills them; the `[MARKER]` never is one.
-- Using it: name it like any track — `spec_create {tracks: "tdd,a11y"}`, `/add-track <feature> a11y`, or let
+- Using it: name it like any track — `spec_create {tracks: ["tdd", "a11y"]}`, `/add-track <feature> a11y`, or let
   `spec_classify` pick it from its signals (confirm in Phase 0). doctor then fails `<name>-sections` and the design
   approval is refused until every `## [MARKER] <section>` is filled.
 - A feature whose saved track names a pack that is gone or invalid keeps it inactive; doctor warns `track-pack-missing`.

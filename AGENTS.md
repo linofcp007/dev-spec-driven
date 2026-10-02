@@ -54,7 +54,7 @@ dev-spec classify "<feature description>" [--name "<feature>"]   # recommend tra
 dev-spec init [tracks...] [--lang en|pt|pt-BR|es] [--guard on|off|scope]   # scaffold .specs/steering (incl. constitution.md); --lang sets the project default
 dev-spec init --check test="npm test" [--check lint="npm run lint"]   # the project's check commands: finish needs a passing run of each
 dev-spec init --roles requirements=product,design=tech+security   # approvals by role (--roles none clears); --stop-check on|off
-dev-spec init [--evidence reported|observed] [--approval-guard off|ask|deny]   # opt-ins enforced by Claude Code hooks only (see Gates and evidence)
+dev-spec init [--evidence reported|observed] [--approval-guard off|ask|deny]   # opt-ins: observed evidence needs Claude Code's hook; the approval guard its hook or the MCP server (see Gates and evidence)
 dev-spec steering <file> [--lang]              # one steering file from its template (constitution.md, tech.md, …) or a custom scoped one (api-rules.md)
 dev-spec templates [list|init|check] [artifact] [--lang]   # the team's own scaffolds in .specs/templates/ (replace the built-in ones)
 dev-spec tracks [list|init <name>|check] [name] [--lang]   # the team's own tracks: packs in .specs/tracks/<name>/ (marker tracks like +sec)
@@ -252,9 +252,15 @@ next, `dev-spec next-action <feature>` names the single next step.
   while a feature's test plan is approved (Phase 4) and code while an active spike exists (its prototype); `--guard
   scope`: also before a code file no open task names in `_Implements:_`. In other tools, follow the same rule yourself:
   no implementation before the tasks are approved, and no code outside the plan without a converge task.
-- **The approval guard is a Claude Code hook too.** `dev-spec init --approval-guard ask|deny` makes Claude Code ask the
-  user before an agent's approval (`spec_approve`, `dev-spec approve` through its shell, a feature removal, lowering the
-  guard) or refuse it. In other tools nothing enforces it: approvals are the user's — never approve on your own.
+- **The approval guard: a Claude Code hook, and the MCP server.** `dev-spec init --approval-guard ask|deny` makes Claude
+  Code ask the user before an agent's approval (`spec_approve`, `dev-spec approve` through its shell, a feature removal,
+  lowering the guard) or refuse it. In other MCP clients the server guards its own tools (`spec_approve`, `spec_feature`
+  remove, `spec_init` lowering a guard): when the client supports elicitation it asks the user itself (a question with an
+  Approve box and a note — only their explicit approve is recorded, as `confirmed`); a `declined: true` result means the
+  user said no (or didn't answer): record nothing, ask what should change. A `humanRequired: true` refusal (`deny`, a
+  client that can't ask) names a `command`: give it to the user to run themselves and wait — never retry it another way.
+  Where nothing asks (`ask` in a client without elicitation, the CLI outside Claude Code), approvals are still the
+  user's — never approve on your own.
 - **Alongside superpowers.** If the superpowers skills are installed in your tool too, this workflow replaces
   their planning, TDD, debugging, execution, verification, review and branch-finishing skills for feature work.
   Put the precedence block of the `spec-superpowers` command (`dev-spec prompts spec-superpowers` prints it) into your
