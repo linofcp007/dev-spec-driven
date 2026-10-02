@@ -29,7 +29,9 @@ function normalizeEvidence(ev) {
   if (typeof ev === "string") return ev.trim() ? { summary: ev.slice(0, 2000), manual: true } : null;
   if (typeof ev !== "object") return null;
   const out = {};
-  if (ev.command != null && String(ev.command).trim()) out.command = String(ev.command).slice(0, 500);
+  // Kept up to OBSERVED_MAX_COMMAND (review 2: cut at 500, a faithful report of a long _Verify:_ — or of the ` && ` join of a
+  // task's commands — was compared truncated and read command-mismatch); still bounded, like the observed log's commands.
+  if (ev.command != null && String(ev.command).trim()) out.command = String(ev.command).slice(0, OBSERVED_MAX_COMMAND);
   if (ev.exitCode != null && ev.exitCode !== "") {
     const raw = String(ev.exitCode).trim();
     if (!/^-?\d+$/.test(raw)) return { error: "badExit", value: raw };
@@ -68,38 +70,118 @@ function evidenceIssue(e, runnable, expectFail) {
 }
 // 1.22 review — WHICH command a run proves. The reported command was never compared with the task's _Verify:_ (nor a finish
 // run's with its project check): `{command: "echo hello", exitCode: 0}` verified a task whose _Verify:_ is `npm test`. A run
-// proves a runnable _Verify:_ only when it is a run of one of its commands, compared as proofKey() reads both: flattened
-// (flatCommand: backticks dropped, whitespace folded), quotes around the WHOLE command dropped, and what only sets the stage
-// before it — a leading `cd <dir> &&` (or `;`, cmd.exe's `cd /d`), `set -o pipefail;` (`set -euo pipefail;` …), `NAME=value`
-// assignments — or a trailing `2>&1` taken out. The ` && ` join of several of its commands (how `done --run` reports a task
-// with more than one) counts too, and so does the CLI's own run (`done --run` / `finish --run` — observed "cli": it ran the
-// command itself). Anything else ticks but stays unverified — reason `command-mismatch` (a finish run of another command
-// reads `changed`).
-const RE_PROOF_CD = /^cd\s+(?:\/d\s+)?(?:"[^"]*"|'[^']*'|[^\s;&|"']+)\s*(?:&&|;)\s*/i;
-const RE_PROOF_CD_ONLY = /^cd\s+(?:\/d\s+)?(?:"[^"]*"|'[^']*'|[^\s;&|"']+)$/i;
-const RE_PROOF_PIPEFAIL = /^set\s+(?:-[A-Za-z]+\s+){0,4}-[A-Za-z]*o\s+pipefail\s*(?:&&|;)\s*/;
-const RE_PROOF_ENV = /^[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s"'`;&|]*)\s+/;
-function proofKey(cmd) {
-  let s = flatCommand(cmd);
-  for (let i = 0; i < 16; i++) { // a few prefixes at most — bounded, each step shortens s
-    const q = /^(["'])([\s\S]*)\1$/.exec(s);
-    const t = (q && !q[2].includes(q[1]) ? q[2] : s).trim().replace(RE_PROOF_CD, "").replace(RE_PROOF_PIPEFAIL, "").replace(RE_PROOF_ENV, "")
-      .replace(/\s+2>&1$/, "").trim();
-    if (t === s) break;
-    s = t;
+// proves a task's runnable _Verify:_ only when it runs EVERY one of its commands (review 2: one of two proved both — `done
+// --run` runs them all, joined with ` && `, and that is how a run of several is recorded), each compared as proofSteps()
+// reads it, and nothing else; the CLI's own run (`done --run` / `finish --run` — observed "cli": it ran the commands itself)
+// always counts. Anything else ticks but stays unverified — reason `command-mismatch` (a finish run of another command reads
+// `changed`).
+// proofSteps(cmd): the command flattened (flatCommand: backticks dropped, whitespace folded), quotes around the WHOLE command
+// dropped, then (review 2) `\` read as `/` and the quotes around a plain argument dropped — `node --test tests\x.test.js`,
+// `node --test "tests/x.test.js"` and `node --test tests/x.test.js` are one command (a Windows report of the _Verify:_ read as
+// another one, and an _Expect: fail_ task's red run then proved nothing) —, split at ` && ` outside quotes into STEPS: a
+// `cd <dir>` (cmd.exe's `cd /d` too; the folder without its quotes or a trailing slash), a `set … -o pipefail`, or a command
+// with its leading NAME=value assignments apart and a trailing `2>&1` dropped (a `cd <dir>;` / `set -o pipefail;` at a step's
+// start is a step of its own).
+const RE_PLAIN_ARG = /^[A-Za-z0-9_.\/:@%+,=-]+$/; // an argument that means the same quoted or not
+const RE_PROOF_CD = /^cd\s+(?:\/d\s+)?("[^"]*"|'[^']*'|[^\s;&|"']+)\s*(?:;\s*|$)/i;
+const RE_PROOF_PIPEFAIL = /^set\s+(?:-[A-Za-z]+\s+){0,4}-[A-Za-z]*o\s+pipefail\s*(?:;\s*|$)/;
+const RE_PROOF_ENV = /^([A-Za-z_][A-Za-z0-9_]*)=("[^"]*"|'[^']*'|[^\s"'`;&|]*)\s+/;
+const PROOF_MAX_STEPS = 200; // a run of more steps proves nothing (bounded matching)
+const PROOF_MAX_KEYS = 12; // distinct _Verify:_ commands a run is matched against, at most
+// `"x"` / `'x'` → x when x is a plain argument (RE_PLAIN_ARG) — a left-to-right scan (a quote inside another one is kept), linear.
+function unquotePlainArgs(s) {
+  let out = "", i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (c !== '"' && c !== "'") { out += c; i++; continue; }
+    const j = s.indexOf(c, i + 1);
+    if (j === -1) { out += s.slice(i); break; }
+    const inner = s.slice(i + 1, j);
+    out += RE_PLAIN_ARG.test(inner) ? inner : s.slice(i, j + 1);
+    i = j + 1;
   }
-  return s;
+  return out;
 }
-// Does run r prove one of the commands in `verify` (the task's runnable _Verify:_ values, or [a project check's command])?
+// s split at ` && ` outside quotes (linear).
+function splitAndSteps(s) {
+  const parts = [];
+  let q = "", from = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (q) { if (c === q) q = ""; continue; }
+    if (c === '"' || c === "'") { q = c; continue; }
+    if (c === " " && s.startsWith(" && ", i)) { parts.push(s.slice(from, i)); from = i + 4; i += 3; }
+  }
+  parts.push(s.slice(from));
+  return parts.map((p) => p.trim());
+}
+const proofDir = (d) => { const u = /^(["'])([\s\S]*)\1$/.exec(d); const x = u ? u[2] : d; return x.length > 1 && !/^[A-Za-z]:\/$/.test(x) ? x.replace(/\/+$/, "") : x; };
+function proofSteps(cmd) {
+  let s = flatCommand(cmd);
+  const q = /^(["'])([\s\S]*)\1$/.exec(s);
+  if (q && !q[2].includes(q[1])) s = q[2].trim(); // quotes around the WHOLE command
+  s = unquotePlainArgs(s.split(String.fromCharCode(92)).join("/"));
+  const steps = [];
+  for (let part of splitAndSteps(s)) {
+    const env = [];
+    for (let guard = 0; part && guard < 64; guard++) { // each step shortens part
+      let m;
+      if (!env.length && (m = RE_PROOF_CD.exec(part))) { steps.push({ t: "cd", dir: proofDir(m[1]) }); part = part.slice(m[0].length).trim(); continue; }
+      if (!env.length && (m = RE_PROOF_PIPEFAIL.exec(part))) { steps.push({ t: "pf" }); part = part.slice(m[0].length).trim(); continue; }
+      if ((m = RE_PROOF_ENV.exec(part))) { env.push([m[1], m[2]]); part = part.slice(m[0].length).trim(); continue; }
+      break;
+    }
+    const body = part.replace(/\s+2>&1$/, "").trim();
+    if (body) steps.push({ t: "cmd", env, body });
+    else if (env.length) steps.push({ t: "cmd", env: [], body: env.map(([k, v]) => k + "=" + v).join(" ") }); // only assignments: a command of its own
+  }
+  return steps;
+}
+// The run's step r is the _Verify:_'s step v: the same cd folder, a pipefail, or the same command with every assignment the
+// _Verify:_ makes (the run may add its own: `CI=1 npm test` runs `npm test`; `npm test` does not run `NODE_ENV=production npm test`).
+function proofStepIs(r, v) {
+  if (r.t !== v.t) return false;
+  if (r.t === "cd") return r.dir === v.dir;
+  if (r.t === "pf") return true;
+  return r.body === v.body && v.env.every(([k, val]) => r.env.some(([k2, val2]) => k2 === k && val2 === val));
+}
+// The run's steps cover EVERY _Verify:_ command (each one a whole key, matched in sequence — the longest first at each
+// position, so a _Verify:_ that itself holds ` && ` stays one key; any order, a key may repeat) and nothing else, but a
+// `cd <dir>` or `set -o pipefail` of the run's own (a prefix only ever stripped from the RUN: a _Verify:_ keeps its own —
+// `cd packages/web && npm test` never runs `cd packages/api && npm test`, nor `npm test | tee log` the _Verify:_
+// `set -o pipefail; npm test | tee log`).
+// Every way through is tried (a forward walk over (position, keys covered) — n × 2^k × k at most, no backtracking blow-up).
+function stepsCoverVerify(run, keys) {
+  if (!keys.length) return true;
+  const n = run.length, size = 1 << keys.length, full = size - 1;
+  if (!n || n > PROOF_MAX_STEPS || keys.length > PROOF_MAX_KEYS) return false;
+  const at = []; // at[i]: the keys whose steps start at run step i
+  for (let i = 0; i < n; i++) at.push(keys.map((v, k) => k).filter((k) => i + keys[k].length <= n && keys[k].every((s, j) => proofStepIs(run[i + j], s))));
+  const reach = new Uint8Array((n + 1) * size); // reach[i * size + mask]: run steps 0..i-1 read, covering the keys in mask
+  reach[0] = 1;
+  for (let i = 0; i < n; i++) {
+    const own = run[i].t === "cd" || run[i].t === "pf"; // a run-only cd / pipefail step may be passed over
+    for (let mask = 0; mask < size; mask++) {
+      if (!reach[i * size + mask]) continue;
+      for (const k of at[i]) reach[(i + keys[k].length) * size + (mask | (1 << k))] = 1;
+      if (own) reach[(i + 1) * size + mask] = 1;
+    }
+  }
+  return reach[n * size + full] === 1;
+}
+// Two commands with the same proofKey are one command to the evidence gate.
+const proofKey = (cmd) => JSON.stringify(proofSteps(cmd));
+// Does run r prove `verify` — the task's runnable _Verify:_ values (every one of them), or [a project check's command]?
 function runProvesVerify(r, verify) {
   if (!isRecord(r) || typeof r.command !== "string") return false;
-  if (r.observed === "cli") return true; // `done --run` / `finish --run` ran exactly that command
-  const want = new Set((verify || []).map(proofKey).filter(Boolean));
-  if (!want.size) return true;
-  const got = proofKey(r.command);
-  if (want.has(got)) return true;
-  const parts = got.split(" && ").map(proofKey).filter((p) => p && !RE_PROOF_CD_ONLY.test(p));
-  return parts.length > 1 && parts.every((p) => want.has(p));
+  if (r.observed === "cli") return true; // `done --run` / `finish --run` ran exactly those commands
+  const keys = [];
+  const known = new Set();
+  for (const v of verify || []) {
+    const st = proofSteps(v), key = JSON.stringify(st);
+    if (st.length && !known.has(key)) { known.add(key); keys.push(st); }
+  }
+  return stepsCoverVerify(proofSteps(r.command), keys);
 }
 // Evidence is keyed by task NUMBER and stamped with its task: `task` (the text) and `verify` (the task's
 // runnable _Verify:_ command(s) when it was recorded). A stamped record counts only while that _Verify:_ is
@@ -130,9 +212,12 @@ function taskEvidenceIssue(evidence, block, dup) {
   const verify = taskMarkers(block).verify;
   const xf = expectsFail(block);
   const reason = evidenceIssue(e, verify.length > 0, xf);
-  // 1.22 review: the run that proves a runnable _Verify:_ must BE a run of one of its commands (runProvesVerify) — `echo hello`
-  // with exit 0 verified a task whose _Verify:_ is `npm test`. It ticks, but stays unverified: command-mismatch.
-  if (reason === null && verify.length && !runProvesVerify(xf ? redProof(e, verify) : e, verify)) return "command-mismatch";
+  // 1.22 review: the run that proves a runnable _Verify:_ must BE a run of its commands (runProvesVerify) — `echo hello` with
+  // exit 0 verified a task whose _Verify:_ is `npm test`. It ticks, but stays unverified: command-mismatch. An _Expect: fail_
+  // task: its red proof (redProof — a red run of its _Verify:_, or, once a passing run of the _Verify:_ is the latest, the red
+  // run it carries of any command: review 2's grandfathering). Its latest run a pass (of another command) with no such red proof
+  // is still unexpected-pass — a red run of another command carried forward (recordEvidence) doesn't change that.
+  if (reason === null && verify.length && !(xf ? redProof(e, verify, e) : runProvesVerify(e, verify))) return xf && e.exitCode === 0 ? "unexpected-pass" : "command-mismatch";
   if (reason !== "no-evidence" || e !== undefined || !evidenceRecords(evidence[String(block.number)]).length) return reason;
   // The number HAS records, none of them this task's: another task shares the number (duplicate-number), or
   // they are for an earlier _Verify:_ command / a task that held the number before a renumbering.
@@ -180,8 +265,11 @@ function recordEvidence(prev, ev, at, stamp, verify) {
   const run = runOf({ ...ev, at });
   const rec = { ...run, history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
   // B5: an _Expect: fail_ task's red run stays its proof (`red`) when a later run passes — its fix made the test green.
-  // (verify — the task's _Verify:_ values, 1.22 review: the red run of THAT command, never a red run of another one)
-  const keep = ev.keepRed === true ? redProof(p, verify) : null;
+  // (verify — the task's _Verify:_ values, 1.22 review: the red run of THAT command, never a red run of another one — unless
+  // this run is a passing run of the _Verify:_: then the red run on record, of any command, is kept — redProof's grandfathering).
+  // Review 2: with none of the _Verify:_, a red run of another command is carried forward too (an exit 127 in between dropped it,
+  // and the fix's passing run was then refused again); it proves nothing until a passing run of the _Verify:_ follows it.
+  const keep = ev.keepRed === true ? redProof(p, verify, ev) || redProof(p) : null;
   if (keep) rec.red = keep;
   return stamped(rec);
 }
@@ -810,10 +898,17 @@ function isRedRun(r) {
 // passAfterRed), and the red run is carried into the new record as `red`. Callers pass the task's OWN record (ownEvidence /
 // ownRecord), which an edited _Verify:_ no longer matches — its red run proves nothing for the new command.
 // verify (1.22 review): the task's runnable _Verify:_ values — given, a red run of ANOTHER command proves nothing (runProvesVerify).
-function redProof(e, verify) {
+// pass (review 2 — grandfathering, as observedProof's R2): a passing run of the _Verify:_ itself (runProvesVerify — the CLI's
+// "cli" stamp too) — the record's own latest run, or the run being recorded; given, the red run on record of ANY command counts:
+// a red run reported in another form than the _Verify:_ (`tests\x.test.js`, a pre-1.22 run) left the task stuck once the fix
+// was in — its passing `done --run` was refused as unexpected-pass, and the only way out was reverting the fix.
+function redProof(e, verify, pass) {
   if (!isRecord(e) || (e.stale === true && e.staleBy !== "undo")) return null;
   const red = (r) => isRedRun(r) && (!verify || runProvesVerify(r, verify));
-  return red(e) ? runOf(e) : red(e.red) ? runOf(e.red) : null;
+  if (red(e)) return runOf(e);
+  if (red(e.red)) return runOf(e.red);
+  if (!verify || !isRecord(pass) || pass.exitCode !== 0 || !runProvesVerify(pass, verify)) return null;
+  return isRedRun(e) ? runOf(e) : isRedRun(e.red) ? runOf(e.red) : null;
 }
 // evidenceIssue() for an _Expect: fail_ task: verified by a red run {command, exitCode ≠ 0} (or the red run kept after the
 // fix made it pass); a passing run with no red run before it is `unexpected-pass` (the test doesn't fail: it tests nothing
@@ -833,10 +928,11 @@ function expectFailIssue(e, runnable) {
 // `passAfterRed` — a pass once the red run is on record (the fix made the test green: the red run stays the proof).
 // verify (1.22 review): the task's _Verify:_ values — a red run of ANOTHER command still ticks (it is no could-not-run run) but
 // is no red proof (`red` false: the red run already on record is carried forward), and only a red run of the _Verify:_ itself
-// makes a later pass "the fix going green".
+// makes a later pass "the fix going green" — or (review 2) a red run of any command, when this pass is a run of the _Verify:_
+// itself (redProof's grandfathering).
 function expectFailRun(ev, prev, verify) {
   const run = !!ev && ev.exitCode != null && !!ev.command;
-  const before = redProof(prev, verify);
+  const before = redProof(prev, verify, ev);
   const red = run && isRedRun(ev);
   const pass = run && ev.exitCode === 0;
   return { refused: run && (pass ? !before : !red), red: red && (!verify || runProvesVerify(ev, verify)), passAfterRed: pass && before ? before : null };
@@ -863,7 +959,8 @@ function redGreenGaps(blocks, evidence) {
   for (const b of blocks) if (b.done) for (const id of extractTestIds(taskMarkers(b)["makes green"].join(" "))) if (!greened.has(tKey(id.slice(2)))) greened.set(tKey(id.slice(2)), id);
   const proven = new Set();
   for (const b of blocks) {
-    if (!expectsFail(b) || !redProof(ownEvidence(evidence, b, dups.has(b.number)), taskMarkers(b).verify)) continue;
+    const own = ownEvidence(evidence, b, dups.has(b.number));
+    if (!expectsFail(b) || !redProof(own, taskMarkers(b).verify, own)) continue;
     for (const id of extractTestIds(taskProse(b).join(" "))) proven.add(tKey(id.slice(2)));
   }
   return { greened: [...greened.values()], missing: [...greened].filter(([k]) => !proven.has(k)).map(([, id]) => id) };
@@ -986,8 +1083,14 @@ function observedRun(projectDir, slug, command, exitCode, opts = {}) {
   const hit = latest(key);
   if (hit) return hit.exitCode === code ? { observed: true, at: hit.at } : { observed: false, latestExitCode: hit.exitCode };
   if (code === 0 && key.includes(" && ")) {
-    const hits = key.split(" && ").map((p) => p.trim()).filter(Boolean).map(latest);
-    if (hits.length > 1 && hits.every((h) => h && h.exitCode === 0)) return { observed: true, at: hits.map((h) => h.at).sort().pop() };
+    // each part's latest run — or (review 2) each EXPECTED command's, already known to make up the report (runProvesVerify above):
+    // a _Verify:_ that itself holds ` && ` is logged whole (`npm run build && npm test`), never as its parts
+    const lists = [key.split(" && ")];
+    if (Array.isArray(opts.expected) && opts.expected.length > 1) lists.push(opts.expected.map((c) => flatCommand(c)));
+    for (const list of lists) {
+      const hits = list.map((p) => p.trim()).filter(Boolean).map(latest);
+      if (hits.length > 1 && hits.every((h) => h && h.exitCode === 0)) return { observed: true, at: hits.map((h) => h.at).sort().pop() };
+    }
   }
   return { observed: false };
 }
@@ -1045,7 +1148,7 @@ function specsProjectOf(dir) {
 // task's command — or another check's — proves nothing here).
 function observedProof(e, expectFail, since, verify) {
   const seen = (r) => isRecord(r) && (r.observed === true || r.observed === "cli") && (!verify || runProvesVerify(r, verify));
-  const run = expectFail ? redProof(e, verify) : e;
+  const run = expectFail ? redProof(e, verify, e) : e;
   if (seen(run)) return true;
   return !!(expectFail && since != null && isRecord(run) && timeOf(run.at) != null && timeOf(run.at) < since && seen(e) && e.exitCode === 0);
 }
@@ -1223,7 +1326,7 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStar
     if (typeof it.command !== "string" || !it.command.trim()) return bad(P.needsCommand);
     const code = it.exitCode == null ? "" : String(it.exitCode).trim();
     if (!/^-?\d+$/.test(code)) return bad(P.needsExit);
-    const run = { command: it.command.trim().slice(0, 500), exitCode: parseInt(code, 10), ...gitEvidence(it) };
+    const run = { command: it.command.trim().slice(0, OBSERVED_MAX_COMMAND), exitCode: parseInt(code, 10), ...gitEvidence(it) }; // (review 2: never cut before it is compared)
     run.observed = observedStamp(projectDir, null, run, ranBy, [byName.get(it.name)]); // 1.14 F1 — an observed run of THIS check's command (1.22 review)
     if (typeof it.summary === "string" && it.summary.trim()) run.summary = it.summary.slice(0, 2000);
     // (a CLI run's `check` is the command it ran — meta.checks when it started; edited meanwhile, the run reads `changed`)
@@ -1520,7 +1623,8 @@ module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isR
   gitEvidence, OBSERVED_LOG, OBSERVED_MAX_BYTES, OBSERVED_WINDOW_MS, OBSERVED_MAX_COMMAND, OBSERVED_MAX_FEATURES,
   EVIDENCE_MODES, flatCommand, evidenceMode, evidenceSince, evidenceRule, evidenceModeInput, setEvidenceMode,
   observedLogFile, readObservedLog, observedRun, observedAny, observedStamp, RE_CD_STRIP, stripCdPrefix, specsProjectOf,
-  RE_PROOF_CD, RE_PROOF_CD_ONLY, RE_PROOF_PIPEFAIL, RE_PROOF_ENV, proofKey, runProvesVerify, observedProof, verifyCommandSet,
+  RE_PLAIN_ARG, RE_PROOF_CD, RE_PROOF_PIPEFAIL, RE_PROOF_ENV, PROOF_MAX_STEPS, PROOF_MAX_KEYS, unquotePlainArgs, splitAndSteps,
+  proofSteps, proofStepIs, stepsCoverVerify, proofKey, runProvesVerify, observedProof, verifyCommandSet,
   observeRun, appendObserved, trimObservedLog, lastTaskActivity, CHECK_NAME_RE, CHECKS_MAX, validCheckName,
   validCheckCmd, projectChecks, checksInput, checksPlanError, writeChecks, recordFinishChecks, suiteStatus,
   suiteCodeStamp, runStartStamp, runStartOf, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, GITLOG_MAX_COMMITS, parseGitLog,

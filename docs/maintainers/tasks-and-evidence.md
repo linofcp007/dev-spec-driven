@@ -120,17 +120,42 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 - **Which run proves it (1.22 review).** Until 1.22 the reported `command` was never compared with the `_Verify:_`:
   `{command: "echo hello", exitCode: 0}` verified a task whose `_Verify:_` is `npm test`. `runProvesVerify(run, verify)`
   (evidence.js) is now part of the ONE verdict (`taskEvidenceIssue`, after `evidenceIssue` passed it): the proving run —
-  the latest passing run, an `_Expect: fail_` task's red proof — must be a run of one of the task's `_Verify:_` commands,
-  both sides read by `proofKey()`: `flatCommand` (backticks, whitespace), quotes around the WHOLE command dropped, a leading
-  `cd <dir> &&` / `;` (cmd.exe's `cd /d` too), `set -o pipefail;` (`set -euo pipefail;` …) and `NAME=value` assignments
-  and a trailing `2>&1` taken out, repeatedly (bounded); the ` && ` join of several of its commands (a pure `cd <dir>` part
-  dropped) counts, and so does a run stamped `observed: "cli"` (`done --run` ran it). Anything else ticks but reads
-  **`command-mismatch`** (`evidenceGate.commandMismatch`, EN/PT/ES — the note names the command recorded and the
-  `_Verify:_`). An `_Expect: fail_` task: a red run of another command ticks (it is no could-not-run run) but is NO red
+  the latest passing run, an `_Expect: fail_` task's red proof — must run the task's `_Verify:_` commands, EVERY one of
+  them (review 2: a run of one of two verified the task — `done --run` runs them all, and spec-implementer.md records
+  several as ONE run `cmd1 && cmd2`; nothing documented an "any one" rule), and nothing else; a run stamped
+  `observed: "cli"` (`done --run` ran it) always counts. Both sides are read by `proofSteps()`: `flatCommand` (backticks,
+  whitespace), quotes around the WHOLE command dropped, then (review 2) `\` read as `/` and the quotes around a plain
+  argument (`RE_PLAIN_ARG`, `unquotePlainArgs()` — a left-to-right scan, a quote inside another kept) dropped — `node
+  --test tests\x.test.js`, `node --test "tests/x.test.js"` and `node --test tests/x.test.js` are one command —, split at
+  ` && ` outside quotes (`splitAndSteps()`) into STEPS: a `cd <dir>` (cmd.exe's `cd /d`; the folder without its quotes or
+  a trailing slash), a `set … -o pipefail`, or a command with its leading `NAME=value` assignments apart and a trailing
+  `2>&1` dropped (a `cd <dir>;` / `set -o pipefail;` at a step's start is a step of its own). `stepsCoverVerify()` then
+  reads the run's steps as the `_Verify:_` commands in sequence — each a WHOLE key (review 2: the run was split on every
+  ` && `, so a `_Verify:_` that itself holds one — `npm run build && npm test` next to `npm run lint` — never matched its
+  documented join), any order, a key may repeat — plus the run's OWN `cd` / pipefail steps, passed over: a prefix is
+  stripped from the RUN only (review 2: it was stripped from both sides, so `cd packages/web && npm test` proved `_Verify: cd
+  packages/api && npm test_`, `npm test | tee log` proved `set -o pipefail; npm test | tee log`, `npm test` proved
+  `NODE_ENV=production npm test`); a command step matches with every assignment the `_Verify:_` makes (the run may add its
+  own). A forward walk over (position, keys covered) — n × 2^k × k at most, `PROOF_MAX_STEPS` = 200 / `PROOF_MAX_KEYS` = 12.
+  `proofKey(cmd)` is the steps as one string. Anything else ticks but reads **`command-mismatch`**
+  (`evidenceGate.commandMismatch`, EN/PT/ES — the note names the command recorded and the `_Verify:_`; with several, all of
+  them in one ` && ` run). A run's command is kept up to `OBSERVED_MAX_COMMAND` (4000 — review 2: `normalizeEvidence` and
+  the finish runs cut it at 500 BEFORE the comparison, so a faithful long `_Verify:_`, or a join past 500, read
+  command-mismatch). An `_Expect: fail_` task: a red run of another command ticks (it is no could-not-run run) but is NO red
   proof — `expectFailRun(ev, prev, verify)` answers `red: false`, so the red run on record is carried forward (`keepRed`)
-  and a later pass is "the fix going green" only after a red run of the `_Verify:_` itself; `redProof(e, verify)`,
-  `recordEvidence`'s kept `red`, `redGreenGaps` and `observedProof` all take the verify list. A finish check's run is held
-  to its `meta.checks` command the same way (`suiteStatus` → `changed`).
+  and a later pass is "the fix going green" after a red run of the `_Verify:_` itself — or (review 2, grandfathering as
+  observedProof's R2) when that pass is itself a run of the `_Verify:_` (`runProvesVerify`, the "cli" stamp too), after a
+  red run of ANY command on record: `redProof(e, verify, pass)` takes that passing run (the run being recorded in
+  `expectFailRun` / `recordEvidence`; the record's own latest run in the verdict, `observedProof`, `redGreenGaps` and the
+  untick's `redKept`). A red run reported in another form (pre-1.22, or a variant the steps don't fold) left the task stuck
+  for good: the fix's passing `done --run` was refused as unexpected-pass, and the only way out was reverting the fix.
+  `recordEvidence`'s `keepRed` carries the red run of the `_Verify:_` — or, with none, a red run of another command (an exit
+  127 in between dropped it), which proves nothing until such a pass follows; a record whose latest run is a pass of another
+  command with no red proof still reads `unexpected-pass` (taskEvidenceIssue), never command-mismatch. The
+  `_Expect: fail_` note says to record the red run BEFORE the fix lands, and once it is in, the passing run of the
+  `_Verify:_` (no `--run` offered for it). A finish check's run is held to its `meta.checks` command the same way
+  (`suiteStatus` → `changed`). `observedRun`'s join lookup also tries the EXPECTED commands' logged runs (a `_Verify:_`
+  holding ` && ` is logged whole).
 - **Reason codes** (stable): `no-evidence` · `failed-run` · `manual-note-on-runnable-verify` ·
   `duplicate-number` · `stale-evidence` · `unexpected-pass` (1.14, `_Expect: fail_`) · `unobserved` (1.14 F1, only
   with `meta.evidence: "observed"` — see Harness-observed evidence) · `command-mismatch` (1.22 review — above). They are RETURNED in

@@ -1278,11 +1278,12 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const no = ["echo hello", "npm test -- --grep x", "npm run test", "npm test; echo ok", "npm test || true", "npm test | tee log", "echo npm test", "cd x", "npm test && echo ok",
       "npm testing", "", "node -e \"process.exit(0)\""];
     const two = ["npm test", "npm run lint"];
+    // (review 2: "npm run lint" alone used to prove both — a run must cover EVERY _Verify:_ command of the task, see below)
     const pvWrong = yes.filter((c) => !PV(c, ["npm test"])).map((c) => "refused: " + c).concat(no.filter((c) => PV(c, ["npm test"])).map((c) => "accepted: " + c))
-      .concat(["npm test && npm run lint", "cd /p && npm run lint && npm test", "npm run lint"].filter((c) => !PV(c, two)).map((c) => "refused (2): " + c))
-      .concat(["npm test && echo x", "npm test && npm run lint && rm -rf x"].filter((c) => PV(c, two)).map((c) => "accepted (2): " + c));
+      .concat(["npm test && npm run lint", "cd /p && npm run lint && npm test"].filter((c) => !PV(c, two)).map((c) => "refused (2): " + c))
+      .concat(["npm test && echo x", "npm test && npm run lint && rm -rf x", "npm run lint"].filter((c) => PV(c, two)).map((c) => "accepted (2): " + c));
     ok(!pvWrong.length && PV("anything at all", ["npm test"], { observed: "cli" }) && !PV("echo hi", ["npm test"], { observed: true }),
-      "1.22 review: runProvesVerify — a run proves a _Verify:_ only when it is one of its commands: whitespace / backticks / surrounding quotes, a leading cd <dir> && · set -o pipefail; · VAR=value and a trailing 2>&1 are fine, the ` && ` join of its commands too, and the CLI's own run (observed \"cli\"); anything else is not (wrong: " + js(pvWrong) + ")");
+      "1.22 review: runProvesVerify — a run proves a _Verify:_ only when it runs its commands (all of them): whitespace / backticks / surrounding quotes, a leading cd <dir> && · set -o pipefail; · VAR=value and a trailing 2>&1 are fine, the ` && ` join of its commands too, and the CLI's own run (observed \"cli\"); anything else is not (wrong: " + js(pvWrong) + ")");
 
     const pM = path.join(tmp, "proj-122-mismatch");
     S.initProject(pM, ["core"], "en", { checks: { test: "npm test" } });
@@ -1323,11 +1324,12 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
 
     // observed mode: an observed run of another task's / check's command is not this one's.
     S.observeRun(pM, { command: "npm run lint", exitCode: 0 });
+    // (review 2: one of two expected commands alone is no run of the task's _Verify:_ any more — false; the lint task's own: true)
     const look = [S.observedRun(pM, "proof", "npm run lint", 0).observed, S.observedRun(pM, "proof", "npm run lint", 0, { expected: ["npm test"] }).observed,
-      S.observedRun(pM, "proof", "npm run lint", 0, { expected: two }).observed];
+      S.observedRun(pM, "proof", "npm run lint", 0, { expected: two }).observed, S.observedRun(pM, "proof", "npm run lint", 0, { expected: ["npm run lint"] }).observed];
     S.initProject(pM, ["core"], "en", { evidence: "observed" });
     const o5 = S.completeTask(pM, "proof", 5, { command: "npm run lint", exitCode: 0 });
-    ok(js(look) === js([true, false, true]) && o5.ok && o5.observed === false && o5.verified === false && o5.unverifiedReason === "command-mismatch",
+    ok(js(look) === js([true, false, false, true]) && o5.ok && o5.observed === false && o5.verified === false && o5.unverifiedReason === "command-mismatch",
       "1.22 review: observedRun looks up the EXPECTED command — another task's observed run (npm run lint) is not observed for a task whose _Verify:_ is npm test; under meta.evidence observed it neither verifies nor counts as observed (got " +
       js([look, o5.observed, o5.unverifiedReason]) + ")");
 
@@ -1339,6 +1341,143 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     ok(mP.unverifiedReason === "command-mismatch" && /a execução registada \(`echo ola`\) não é uma execução do seu comando _Verify:_/.test(mP.note) &&
       mE.unverifiedReason === "command-mismatch" && /la ejecución registrada \(`echo hola`\) no es una ejecución de su comando _Verify:_/.test(mE.note),
       "1.22 review: the command-mismatch note in PT / ES (got " + js([mP.note, mE.note]) + ")");
+  }
+
+  // 1.22 review 2 — the evidence rule's own defects (command-mismatch): a Windows report of an _Expect: fail_ task's red run left
+  // it stuck for good once the fix was in; a long command was cut BEFORE the comparison; a _Verify:_ holding ` && ` broke the
+  // documented join; a prefix the _Verify:_ holds counted for nothing; one of two _Verify:_ commands proved both.
+  {
+    const js = JSON.stringify;
+    const BS = String.fromCharCode(92);
+    const PV = (cmd, verify) => S.runProvesVerify({ command: cmd }, verify);
+    const wrongOf = (cases) => cases.filter(([c, v, want]) => PV(c, v) !== want).map(([c, v, want]) => (want ? "refused: " : "accepted: ") + c + " vs " + js(v));
+    const mkTasks = (p, slug, tasks) => {
+      const f = S.createFeature(p, slug, ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + tasks);
+      return f;
+    };
+    const pR = path.join(tmp, "proj-122r2-evidence");
+    S.initProject(pR, ["core"], "en", { checks: { api: "cd packages/api && npm test", long: "node --test " + "tests/unit/a-long-test-file-name.test.js ".repeat(11).trim() } });
+
+    // 1a — `\` for `/`, quotes around a plain argument: the same command.
+    const w1 = wrongOf([["node --test tests" + BS + "x.test.js", ["node --test tests/x.test.js"], true], ['node --test "tests/x.test.js"', ["node --test tests/x.test.js"], true],
+      ["node --test 'tests/x.test.js'", ["node --test tests" + BS + "x.test.js"], true], ['node --test "tests/x.test.js"', ['node --test "tests/x.test.js"'], true],
+      ["node -e process.exit(1)", ['node -e "process.exit(1)"'], false], ['node --test "tests/a b.test.js"', ["node --test tests/a b.test.js"], false]]);
+    const fA = mkTasks(pR, "Stuck", "- [ ] 1. [US1] Write the failing regression test T-01 and watch it fail\n  - _Verify: node --test tests/x.test.js_\n  - _Expect: fail_\n" +
+      "- [ ] 2. [US1] Fix it\n  - _Verify: node --test tests/x.test.js_\n");
+    const a1 = S.completeTask(pR, "stuck", 1, { command: "node --test tests" + BS + "x.test.js", exitCode: 1, summary: "not ok 1 - T-01" });
+    ok(!w1.length && a1.ok && a1.verified === true && a1.redRecorded === true,
+      "1.22 review 2 (1a): `\\` for `/` and quotes around a plain argument don't make another command — an _Expect: fail_ task's red run reported as `node --test tests\\x.test.js` is its red proof (got " + js([w1, a1.verified, a1.unverifiedReason]) + ")");
+
+    // 1b — a red run of another form already on record (pre-1.22, or a variant): the passing run of the _Verify:_ itself — the fix
+    // going green — accepts it (grandfathering); a pass of ANOTHER command still doesn't.
+    const fB = mkTasks(pR, "Upgrade", "- [ ] 1. [US1] Write the failing regression test T-01 and watch it fail\n  - _Verify: node --test tests/x.test.js_\n  - _Expect: fail_\n" +
+      "- [ ] 2. [US1] Fix it\n  - _Verify: node --test tests/x.test.js_\n- [ ] 3. [US1] Red, too\n  - _Verify: node --test tests/y.test.js_\n  - _Expect: fail_\n" +
+      "- [ ] 4. [US1] Red, three\n  - _Verify: node --test tests/z.test.js_\n  - _Expect: fail_\n- [ ] 5. [US1] Red, four\n  - _Verify: node --test tests/w.test.js_\n  - _Expect: fail_\n");
+    const b1 = S.completeTask(pR, "upgrade", 1, { command: "node --test --test-reporter=spec tests/x.test.js", exitCode: 1, summary: "not ok 1 - T-01" });
+    // task 5: a could-not-run run between the red run (of another form) and the fix's pass never drops that red run
+    S.completeTask(pR, "upgrade", 5, { command: "node --test --test-reporter=tap tests/w.test.js", exitCode: 1, summary: "not ok 1" });
+    const b5c = S.completeTask(pR, "upgrade", 5, { command: "node --test tests/w.test.js", exitCode: 127, summary: "node: not found" });
+    const b5g = S.completeTask(pR, "upgrade", 5, { command: "node --test tests/w.test.js", exitCode: 0, summary: "ok 1" });
+    S.completeTask(pR, "upgrade", 2, { command: "node --test tests/x.test.js", exitCode: 0, summary: "ok 1 - T-01" }, { ranBy: "cli" });
+    const b1g = S.completeTask(pR, "upgrade", 1, { command: "node --test tests/x.test.js", exitCode: 0, summary: "ok 1 - T-01" }, { ranBy: "cli", startedAt: new Date().toISOString(), ranVerify: ["node --test tests/x.test.js"] });
+    const recB = JSON.parse(fs.readFileSync(path.join(fB.dir, ".state.json"), "utf8")).evidence["1"];
+    S.completeTask(pR, "upgrade", 3, { command: "node --test --test-reporter=tap tests/y.test.js", exitCode: 1, summary: "not ok 1" });
+    const b3g = S.completeTask(pR, "upgrade", 3, { command: "node --test tests/y.test.js", exitCode: 0, summary: "ok 1" }); // reported (MCP), the _Verify:_ itself
+    S.completeTask(pR, "upgrade", 4, { command: "node --test --test-reporter=tap tests/z.test.js", exitCode: 1, summary: "not ok 1" });
+    const b4x = S.completeTask(pR, "upgrade", 4, { command: "echo ok", exitCode: 0 }); // a pass of ANOTHER command: no grandfathering
+    const unB = S.verificationStatus(pR, "upgrade", fB.dir).unverifiedDetail;
+    const finB = S.finishFeature(pR, "upgrade").blockers.filter((b) => /without verification evidence/.test(b));
+    const undoB = S.completeTask(pR, "upgrade", 1, undefined, { undo: true });
+    ok(b1.verified === false && b1.unverifiedReason === "command-mismatch" && b1g.ok && b1g.verified === true && !b1g.unverifiedReason && recB.red && recB.red.exitCode === 1 &&
+      b3g.ok && b3g.verified === true && b4x.ok === false && b4x.unexpectedPass === true && js(unB.map((d) => [d.number, d.reason])) === js([[4, "unexpected-pass"]]) &&
+      finB.length === 1 && /#4/.test(finB[0]) && !/#1|#3|#5/.test(finB[0]) && undoB.ok && undoB.redKept === true && b5c.ok === false && b5c.couldNotRun === "exit-code" &&
+      b5g.ok && b5g.verified === true,
+      "1.22 review 2 (1b): an _Expect: fail_ task whose red run is on record as another command is no longer stuck once the fix is in — the passing run of its _Verify:_ (done --run, or reported) is the fix going green and keeps that red run (an exit 127 in between doesn't drop it); a pass of another command is still unexpected-pass; undo keeps it (redKept) (got " +
+      js([b1.unverifiedReason, b1g.error || b1g.verified, recB.red, b3g.error || b3g.verified, b4x.unverifiedReason || b4x.error, unB, undoB.redKept, b5c.couldNotRun, b5g.error || b5g.verified]) + ")");
+
+    // 1c — the _Expect: fail_ command-mismatch note: the red run BEFORE the fix lands; once it is in, no --run offered.
+    const notes = ["en", "pt", "es", "pt-BR"].map((l) => S.msg(l).evidenceGate.commandMismatch(1, "f", "x", "y", true));
+    const after = (t) => t.split(/Once the fix is in|Com a corre..o j. feita|Con la correcci.n ya hecha/)[1];
+    ok(/BEFORE the fix lands, while the test still fails: .*done upgrade 1 --run\. Once the fix is in, don't break it again: record the passing run of the _Verify:_ command as written/.test(b1.note) &&
+      notes.every((t) => /--run/.test(t) && after(t) && !/--run/.test(after(t))) && /ANTES de a correção entrar/.test(notes[1]) && /ANTES de que entre la corrección/.test(notes[2]) &&
+      !/BEFORE the fix lands/.test(S.msg("en").evidenceGate.commandMismatch(1, "f", "x", "y", false)),
+      "1.22 review 2 (1c): the _Expect: fail_ command-mismatch note says to record the failing run BEFORE the fix lands and offers no --run once the fix is in (EN/PT/ES/pt-BR) (got " + js([b1.note, notes]) + ")");
+
+    // 2 — a long command is compared whole (it was cut at 500 first): a faithful report of a long _Verify:_, a join past 500, a
+    // finish run with a cd in front of a long check.
+    const longV = "node --test " + Array.from({ length: 40 }, (_, i) => "tests/unit/module-number-" + i + ".test.js").join(" ");
+    const fL = mkTasks(pR, "Long", "- [ ] 1. [US1] A\n  - _Verify: " + longV + "_\n- [ ] 2. [US1] B\n  - _Verify: " + longV.slice(0, 300) + "_\n  - _Verify: npm run lint -- " + "x".repeat(300) + "_\n" +
+      "- [ ] 3. [US1] C\n  - _Verify: npm test_\n");
+    const l1 = S.completeTask(pR, "long", 1, { command: longV, exitCode: 0 });
+    const l2 = S.completeTask(pR, "long", 2, { command: longV.slice(0, 300) + " && npm run lint -- " + "x".repeat(300), exitCode: 0 });
+    S.completeTask(pR, "long", 3, { command: "npm test " + "x".repeat(9000), exitCode: 0 });
+    const recL = JSON.parse(fs.readFileSync(path.join(fL.dir, ".state.json"), "utf8")).evidence;
+    const longCheck = "node --test " + "tests/unit/a-long-test-file-name.test.js ".repeat(11).trim();
+    const finL = S.finishFeature(pR, "long", { evidence: [{ name: "long", command: "cd " + pR + " && " + longCheck, exitCode: 0 }] });
+    ok(longV.length > 500 && l1.verified === true && l2.verified === true && recL["1"].command === longV && (recL["3"].command || "").length === 4000 &&
+      finL.ok && finL.suiteChecks.find((c) => c.name === "long").status === "pass",
+      "1.22 review 2 (2): a command over 500 characters is compared whole — a faithful report of a long _Verify:_ (or of a join past 500) verifies, a long check's run passes; the stored command stays bounded (4000, OBSERVED_MAX_COMMAND) (got " +
+      js([l1.unverifiedReason, l2.unverifiedReason, (recL["1"].command || "").length, (recL["3"].command || "").length, finL.suiteChecks]) + ")");
+
+    // 3 — a _Verify:_ that itself holds ` && ` is ONE key of the join (the run was split on every ` && `); the observed lookup too.
+    const vb = ["npm run build && npm test", "npm run lint"];
+    const w3 = wrongOf([["npm run build && npm test && npm run lint", vb, true], ["npm run lint && npm run build && npm test", vb, true],
+      ["cd /p && npm run lint && cd /p && npm run build && npm test", vb, true], ["npm run build && npm run lint && npm test", vb, false], ["npm run build && npm test", vb, false],
+      ['bash -c "a && b"', ['bash -c "a && b"'], true], ['bash -c "a && b"', ["a", "b"], false]]);
+    const fJ = mkTasks(pR, "Join", "- [ ] 1. [US1] A\n  - _Verify: npm run build && npm test_\n  - _Verify: npm run lint_\n");
+    S.observeRun(pR, { command: "npm run build && npm test", exitCode: 0 });
+    S.observeRun(pR, { command: "npm run lint", exitCode: 0 });
+    const o3 = S.observedRun(pR, "join", "npm run build && npm test && npm run lint", 0, { expected: vb }).observed;
+    const j1 = S.completeTask(pR, "join", 1, { command: "npm run build && npm test && npm run lint", exitCode: 0 });
+    ok(!w3.length && o3 === true && j1.verified === true && fJ.ok !== false,
+      "1.22 review 2 (3): the ` && ` join is matched against WHOLE _Verify:_ commands (one holding ` && ` stays one), any order; the observed lookup finds each expected command's logged run (got " + js([w3, o3, j1.unverifiedReason]) + ")");
+
+    // 4 — a prefix is stripped from the RUN only: the _Verify:_ keeps its own (cd folder, pipefail, assignments).
+    const w4 = wrongOf([["npm test", ["cd packages/api && npm test"], false], ["cd packages/web && npm test", ["cd packages/api && npm test"], false],
+      ["cd packages/api && npm test", ["cd packages/api && npm test"], true], ["cd packages/api/ && npm test", ["cd packages/api && npm test"], true],
+      ["cd packages" + BS + "api && npm test", ["cd packages/api && npm test"], true], ['cd "packages/api" && npm test', ["cd packages/api && npm test"], true],
+      ["cd packages/api; npm test", ["cd packages/api && npm test"], true], ["cd /repo && cd packages/api && npm test", ["cd packages/api && npm test"], true],
+      ["cd packages/api && cd sub && npm test", ["cd packages/api && npm test"], false],
+      ["npm test | tee out.log", ["set -o pipefail; npm test | tee out.log"], false], ["set -euo pipefail; npm test | tee out.log", ["set -o pipefail; npm test | tee out.log"], true],
+      ["set -o pipefail; npm test | tee out.log", ["npm test | tee out.log"], true],
+      ["npm test", ["NODE_ENV=production npm test"], false], ["NODE_ENV=test npm test", ["NODE_ENV=production npm test"], false],
+      ["CI=1 NODE_ENV=production npm test", ["NODE_ENV=production npm test"], true], ["NODE_ENV=production CI=1 npm test", ["NODE_ENV=production npm test"], true],
+      ["cd /x && CI=1 npm test 2>&1", ["npm test"], true]]);
+    const fP = mkTasks(pR, "Mono", "- [ ] 1. [US1] API\n  - _Verify: cd packages/api && npm test_\n");
+    const p1 = S.completeTask(pR, "mono", 1, { command: "cd packages/web && npm test", exitCode: 0 });
+    const finP = S.finishFeature(pR, "mono", { evidence: [{ name: "api", command: "npm test", exitCode: 0 }] });
+    ok(!w4.length && p1.verified === false && p1.unverifiedReason === "command-mismatch" && finP.ok && finP.suiteChecks.find((c) => c.name === "api").status === "changed" && fP.ok !== false,
+      "1.22 review 2 (4): a cd / pipefail / VAR=value prefix is stripped from the RUN only — `cd packages/web && npm test` (or `npm test`) is no run of `cd packages/api && npm test`, nor `npm test | tee out.log` of `set -o pipefail; npm test | tee out.log`, nor `npm test` of `NODE_ENV=production npm test`; the same folder (separators, trailing slash, quotes) is (got " +
+      js([w4, p1.unverifiedReason, finP.suiteChecks]) + ")");
+
+    // 5 — a task with several _Verify:_ commands needs a run of EVERY one (one of them alone verified it); the join in any order,
+    // and exactly what `done --run` records for it (the commands joined) proves it on the engine path too, with no "cli" stamp —
+    // a Windows-path _Verify:_ as well.
+    const two = ["npm run lint", "npm test"];
+    const w5 = wrongOf([["npm run lint", two, false], ["npm test", two, false], ["npm run lint && npm test", two, true], ["npm test && npm run lint", two, true],
+      ["npm test && npm test", ["npm test", "npm test"], true]]);
+    const fM = mkTasks(pR, "Multi", "- [ ] 1. [US1] A\n  - _Verify: npm run lint_\n  - _Verify: npm test_\n- [ ] 2. [US1] B\n  - _Verify: npm run lint_\n  - _Verify: npm test_\n" +
+      "- [ ] 3. [US1] C\n  - _Verify: node tests" + BS + "ok.js_\n  - _Verify: node -e \"process.exit(0)\"_\n");
+    const m1 = S.completeTask(pR, "multi", 1, { command: "npm run lint", exitCode: 0 });
+    const brief2 = S.taskBrief(pR, "multi", 2), brief3 = S.taskBrief(pR, "multi", 3);
+    const m2 = S.completeTask(pR, "multi", 2, { command: brief2.verify.join(" && "), exitCode: 0 });
+    const m3 = S.completeTask(pR, "multi", 3, { command: brief3.verify.join(" && "), exitCode: 0 });
+    const stopAdvice = ["en", "pt", "es", "pt-BR"].map((l) => S.msg(l).stopGate.todoTasks("f", 1));
+    ok(!w5.length && m1.verified === false && m1.unverifiedReason === "command-mismatch" && /every one of them in ONE run joined with ` && `/.test(m1.note) &&
+      m2.verified === true && m3.verified === true && fM.ok !== false && stopAdvice.every((t) => /` && `/.test(t) && !/--run/.test(t)),
+      "1.22 review 2 (5): a run of ONE of a task's two _Verify:_ commands no longer verifies it (command-mismatch, the note asks for all of them in one ` && ` run); the join in any order does, and so does exactly what done --run records (also for a Windows-path _Verify:_); the Stop gate's advice says to join them (got " +
+      js([w5, m1.unverifiedReason, m2.unverifiedReason, m3.unverifiedReason, stopAdvice]) + ")");
+
+    // …and the matching stays bounded: keys that are prefixes of each other, 199 steps, 12 commands.
+    const keysH = Array.from({ length: 12 }, (_, i) => "a" + " && a".repeat(i));
+    const t0 = Date.now();
+    S.runProvesVerify({ command: Array.from({ length: 199 }, () => "a").join(" && ") + " && z" }, keysH);
+    S.runProvesVerify({ command: '"'.repeat(200000) }, ["npm test"]);
+    S.runProvesVerify({ command: "A=1 ".repeat(50000) + "npm test" }, ["npm test"]);
+    S.runProvesVerify({ command: "cd x && ".repeat(25000) + "npm test" }, ["npm test"]);
+    const msH = Date.now() - t0;
+    ok(msH < 1500, "1.22 review 2: runProvesVerify stays bounded on hostile inputs (199 steps × 12 nested keys, 200,000 quotes, 50,000 assignments, 25,000 cds) — " + msH + " ms");
   }
 
   // 1.22 review (finding 6) — ONE `cd <root> &&` stripping (spec.stripCdPrefix) for the observe hook's log and the reported run's
