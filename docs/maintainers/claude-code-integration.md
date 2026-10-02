@@ -92,8 +92,17 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   options and a timeout — never as another program's argument (`echo dev-spec approve x`, `git commit -m "…"`).
   `cliApprovalAction()` reads the words after it with `CLI_SWITCHES` (a `--flag` that is no switch takes the next word),
   then again with every flag as a switch. A word holding whitespace and `dev-spec` after an `APPROVAL_SHELLS` program
-  (bash, sh, zsh, cmd, powershell, pwsh, eval, iex, Invoke-Expression, Start-Process, wsl, su, watch…) is lexed as a script
-  in turn, up to `APPROVAL_SHELL_DEPTH` = 3; at most `APPROVAL_COMMAND_MAX` (64 K) characters are read.
+  (bash, sh, zsh, cmd, powershell, pwsh, eval, iex, Invoke-Expression, Start-Process, wsl, su, watch, flock, script…) is lexed
+  as a script in turn, up to `APPROVAL_SHELL_DEPTH` = 3; at most `APPROVAL_COMMAND_MAX` (64 K) characters are read. **1.22
+  review — the unquoted forms** (all allowed at deny before): where cmd / pwsh / powershell RUNS (the program position, or a
+  `find -exec` command), the words after cmd's `/c` `/k` `/r` or pwsh's `-Command` / `-c` (any abbreviation, `pwshOption()`;
+  Windows PowerShell's first positional — its default is -Command; pwsh 7's is -File: none) are joined (`restScript()`, a
+  word holding whitespace quoted again) and lexed as that shell's script — `cmd /c node cli\dev-spec.js approve alpha tasks`;
+  `Start-Process` / `saps` / PowerShell's `start` → its -FilePath + -ArgumentList (a string, a comma list, an `@( … )` array —
+  the lexer's next segment; `startProcessLine()`), lexed as cmd.exe would; `find … -exec <cmd> … ;` → that command
+  (`findExecActions()`); `winpty` and `flock` are launchers (flock's lock file is a positional, `APPROVAL_POSITIONALS`; its
+  `-c` script and `script -c "…"` are read as shells' scripts). A simple command's nested actions are deduplicated (a quoted
+  script is read as a word AND as the joined rest). `echo cmd /c … approve` stays text.
 - **ask** → `permissionDecision: "ask"`: the user confirms or declines; the reason names the feature, phase(s), role, the
   `by` and, loudly, `--force`. Claude Code's auto / bypass permission modes may skip the prompt. **deny** →
   `permissionDecision: "deny"` (holds in every mode): the reason tells the agent approvals are the human's (stop and ask);

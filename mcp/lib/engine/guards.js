@@ -157,7 +157,9 @@ CLI_SWITCHES.add("explain"); // 1.21 F2: classify "<text>" --explain (= spec_cla
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "pnpx", "npm", "pnpm", "yarn", "sudo", "doas", "env", "nohup",
   "time", "exec", "command", "call", "start", "timeout", "nice", "ionice", "setsid", "stdbuf", "wsl", "xargs", "!", "if", "then", "else", "elif",
-  "do", "while", "until"]);
+  "do", "while", "until", "winpty", "flock"]); // winpty, flock: 1.22 review
+// Wrappers whose first N plain words are theirs, not the program: flock <lockfile> <command> (1.22 review).
+const APPROVAL_POSITIONALS = new Map([["flock", 1]]);
 // Launchers that run a package's bin through a subcommand only: npm exec / npm x, pnpm dlx / pnpm exec, yarn dlx / yarn exec,
 // bun x / bun run, deno run (`yarn dev-spec …` — the CLI named directly — is found as it is). Any other subcommand runs no bin.
 const APPROVAL_SUBCOMMANDS = new Map([["npm", ["exec", "x"]], ["pnpm", ["dlx", "exec"]], ["yarn", ["dlx", "exec"]], ["bun", ["x", "run"]], ["deno", ["run"]]]);
@@ -182,13 +184,14 @@ const APPROVAL_OPTION_VALUES = new Map(Object.entries({
   stdbuf: "-i -o -e --input --output --error",
   xargs: "-I -n -P -L -d -E -s -a --max-args --max-procs --delimiter --arg-file --max-lines --max-chars --eof --replace",
   wsl: "-d -u --distribution --user --cd --shell-type",
+  flock: "-w --wait --timeout -E --conflict-exit-code -c --command", // -c: its script, read as one (APPROVAL_SHELLS)
 }).map(([p, list]) => [p, new Set(list.split(" "))]));
 APPROVAL_OPTION_VALUES.set("nodejs", APPROVAL_OPTION_VALUES.get("node"));
 APPROVAL_OPTION_VALUES.set("pnpx", APPROVAL_OPTION_VALUES.get("npx"));
 // Programs whose quoted argument is itself a script: bash -c "…", cmd /c "…", pwsh -Command "…", eval "…", Start-Process … "…",
 // env -S "…", npx -c "…" — read in that program's syntax (cmd → cmd.exe, the PowerShell ones → PowerShell, the rest → Bash).
 const APPROVAL_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "eval", "iex", "invoke-expression",
-  "start-process", "wsl", "su", "watch", "env", "npx", "pnpx", "npm", "pnpm", "yarn"]);
+  "start-process", "wsl", "su", "watch", "env", "npx", "pnpx", "npm", "pnpm", "yarn", "flock", "script"]); // flock / script -c "…": 1.22 review
 const APPROVAL_PS_SHELLS = new Set(["powershell", "pwsh", "iex", "invoke-expression", "start-process"]);
 // The shells that run a heredoc / here-string fed to them as their script (`bash <<'EOF' … EOF`, `sh <<< "…"`).
 const APPROVAL_STDIN_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "wsl", "su"]);
@@ -283,7 +286,7 @@ function shellCommandWords(cmd, mode) {
 // an unknown substitution / variable) → its index, or -1. A launcher that needs a subcommand (npm exec) returns the word that
 // stands where the subcommand should be when it is another one (`npm run …` → "run": no bin run).
 function programAt(words, raw) {
-  let prog = null, sub = null;
+  let prog = null, sub = null, positional = 0;
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
     if (w === "" || RE_APPROVAL_VAR_WORD.test(w)) continue;
@@ -292,6 +295,7 @@ function programAt(words, raw) {
       if (vals && vals.has(w)) i++;
       continue;
     }
+    if (positional > 0) { positional--; continue; } // flock's lock file
     if (sub) {
       const need = sub;
       sub = null;
@@ -303,6 +307,7 @@ function programAt(words, raw) {
     if (APPROVAL_WRAPPERS.has(p) && !RE_DEVSPEC_WORD.test(w) && !RE_DEVSPEC_WORD.test((raw && raw[i]) || "")) {
       prog = p;
       sub = APPROVAL_SUBCOMMANDS.get(p) || null;
+      positional = APPROVAL_POSITIONALS.get(p) || 0;
       continue;
     }
     return i;
@@ -662,23 +667,110 @@ function cliApprovalAction(args, level, meta) {
 }
 // Every approval / guard-down action a shell command runs (each simple command; the scripts of bash -c / cmd /c / pwsh -Command
 // …, of a heredoc / here-string fed to a shell; a write to .specs/roadmap.json).
+// 1.22 review: + the UNQUOTED forms — `cmd /c node cli\dev-spec.js approve …`, `pwsh -Command node cli/dev-spec.js approve …`
+// (the words after cmd's /c /k /r or pwsh / powershell's -Command / -c, joined: restScript), `Start-Process node -ArgumentList
+// 'cli/dev-spec.js','approve',…` (startProcessLine), `find … -exec node cli/dev-spec.js approve … ;` (findExecActions), and the
+// wrappers winpty / flock (+ `flock … -c "…"`, `script -c "…"`) — all allowed at deny before. One simple command's nested
+// actions are deduplicated (a quoted script is read both as a word and as the joined rest).
 function shellApprovalActions(command, level, depth, mode, meta) {
   const out = [];
-  for (const words of shellCommandWords(command, mode)) {
+  const segs = shellCommandWords(command, mode);
+  segs.forEach((words, si) => {
     const raw = words.raw || words;
     const at = devSpecWordAt(words, raw);
     if (at >= 0) out.push(...cliApprovalAction(words.slice(at + 1), level, meta));
     const w = roadmapWriteAction(words, raw);
     if (w) out.push(w);
-    if (depth >= APPROVAL_SHELL_DEPTH) continue;
+    if (depth >= APPROVAL_SHELL_DEPTH) return;
+    const nested = [], seen = new Set();
+    const add = (acts) => { for (const a of acts) { const k = JSON.stringify(a); if (!seen.has(k)) { seen.add(k); nested.push(a); } } };
+    const lex = (script, m) => { if (script && approvalCandidate(script)) add(shellApprovalActions(script, level, depth + 1, m, meta)); };
     const end = at >= 0 ? at : words.length;
+    const prog = at >= 0 ? -1 : programAt(words, raw);
     let shell = null;
     for (let j = 0; j < end; j++) {
-      if (shell && /\s/.test(words[j]) && approvalCandidate(words[j])) out.push(...shellApprovalActions(words[j], level, depth + 1, shell, meta));
+      if (shell && /\s/.test(words[j]) && approvalCandidate(words[j])) add(shellApprovalActions(words[j], level, depth + 1, shell, meta));
       const p = approvalProgram(words[j]);
       if (APPROVAL_SHELLS.has(p)) shell = approvalShellMode(p);
+      // the unquoted forms only where the word RUNS — the program (after launchers) or a find -exec's command: `echo cmd /c …` is text
+      // (PowerShell's `start` is Start-Process — programAt reads it as cmd.exe's launcher and points past it)
+      const psStart = p === "start" && mode === "ps" && words.slice(0, j).every((x) => x === "");
+      if (j !== prog && !psStart && !/^-(?:exec|execdir|ok|okdir)$/.test(words[j - 1] || "")) continue;
+      const rest = restScript(words, raw, j, p);
+      if (rest) lex(rest.script, rest.mode);
+      if (APPROVAL_START_PROCESS.has(p) && (p !== "start" || mode === "ps")) lex(startProcessLine(words, raw, j, segs[si + 1]), "cmd");
     }
-    if (words.stdinShell) for (const h of words.herestrings || []) if (approvalCandidate(h)) out.push(...shellApprovalActions(h, level, depth + 1, words.stdinShell, meta));
+    add(findExecActions(words, raw, level, meta));
+    if (words.stdinShell) for (const h of words.herestrings || []) if (approvalCandidate(h)) add(shellApprovalActions(h, level, depth + 1, words.stdinShell, meta));
+    out.push(...nested);
+  });
+  return out;
+}
+// A word of a joined script: one holding whitespace is quoted again ("C:\My Tools\cli\dev-spec.js"), so the script keeps its words.
+const joinScriptWords = (list) => list.map((w) => (/\s/.test(w) && !w.includes('"') ? '"' + w + '"' : w)).join(" ");
+// cmd's /c /k /r — or pwsh / powershell's -Command / -c (any abbreviation, `-` or `/`), -CommandWithArgs, -EncodedCommand
+// (pwshOption), Windows PowerShell's first positional (its default is -Command; pwsh 7's is -File: none) — at words[j] (program
+// p): the rest of the words is the script, joined (the raw words: a Windows path keeps its backslashes). → { script, mode } | null
+function restScript(words, raw, j, p) {
+  if (p === "cmd") {
+    for (let k = j + 1; k < words.length && /^\//.test(words[k]); k++) {
+      if (/^\/[ckr]$/i.test(words[k])) return k + 1 < words.length ? { script: joinScriptWords(raw.slice(k + 1)), mode: "cmd" } : null;
+    }
+    return null;
+  }
+  if (p !== "pwsh" && p !== "powershell") return null;
+  for (let k = j + 1; k < words.length; k++) {
+    const w = words[k];
+    if (/^[-/]/.test(w)) {
+      const o = pwshOption(w);
+      if (o === "script") return k + 1 < words.length ? { script: joinScriptWords(raw.slice(k + 1)), mode: "ps" } : null;
+      if (o === "file") return null;
+      if (o === "value") k++;
+      continue;
+    }
+    return p === "powershell" ? { script: joinScriptWords(raw.slice(k)), mode: "ps" } : null;
+  }
+  return null;
+}
+// Start-Process (saps; PowerShell's `start`) at words[j] → the command line it starts: -FilePath (or the first positional) and
+// -ArgumentList / -Args (or the second positional) — a string, a comma list ('a','b' — the lexer joins it as a,b), or an
+// @( … ) / ( … ) array (the lexer's next segment) — joined with spaces, as PowerShell hands them to the process. Or null.
+const APPROVAL_START_PROCESS = new Set(["start-process", "saps", "start"]);
+const START_PROCESS_VALUES = ["credential", "workingdirectory", "redirectstandarderror", "redirectstandardinput", "redirectstandardoutput",
+  "windowstyle", "verb", "environment"];
+function startProcessLine(words, raw, j, nextSeg) {
+  let file = null, args = null, argsFlag = false, pos = 0;
+  for (let k = j + 1; k < words.length; k++) {
+    const w = words[k];
+    if (/^-[A-Za-z]/.test(w)) {
+      const n = w.slice(1).toLowerCase().replace(/:$/, "");
+      if (n === "path" || n === "pspath" || (n.length >= 1 && "filepath".startsWith(n))) file = raw[++k] != null ? raw[k] : null;
+      else if (n === "args" || (n.length >= 1 && "argumentlist".startsWith(n))) { argsFlag = true; args = raw[++k] != null ? raw[k] : null; }
+      else if (["rse", "rsi", "rso", "wd"].includes(n) || (n.length >= 3 && START_PROCESS_VALUES.some((v) => v.startsWith(n)))) k++;
+      continue;
+    }
+    if (pos === 0) file = raw[k];
+    else if (pos === 1) { args = raw[k]; argsFlag = true; }
+    pos++;
+  }
+  if (!file) return null;
+  if (argsFlag && (args == null || args === "@") && nextSeg) args = (nextSeg.raw || nextSeg).join(",");
+  const list = args == null ? [] : String(args).split(",").map((a) => a.trim()).filter(Boolean);
+  return joinScriptWords([file]) + (list.length ? " " + list.join(" ") : "");
+}
+// find … -exec / -execdir / -ok / -okdir <command> … ; (or +) → the actions of each such command (the CLI in its program position).
+function findExecActions(words, raw, level, meta) {
+  const k0 = programAt(words, raw);
+  if (k0 < 0 || approvalProgram(words[k0]) !== "find") return [];
+  const out = [];
+  for (let k = k0 + 1; k < words.length; k++) {
+    if (!/^-(?:exec|execdir|ok|okdir)$/.test(words[k])) continue;
+    let e = k + 1;
+    while (e < words.length && words[e] !== ";" && words[e] !== "+") e++;
+    const sub = words.slice(k + 1, e), subRaw = raw.slice(k + 1, e);
+    const at = devSpecWordAt(sub, subRaw);
+    if (at >= 0) out.push(...cliApprovalAction(sub.slice(at + 1), level, meta));
+    k = e;
   }
   return out;
 }
@@ -1295,6 +1387,7 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, RE
   lowersApprovalGuard, ANSI_C_ESCAPES, ansiCEscape, PS_ESCAPES, shellCommandWords, programAt, stdinShellMode,
   shellLexList, shellSubstitutionsIn, approvalProgram, devSpecWordAt, roadmapWriteAction, approvalStr, approvalTruthy,
   guardRank, guardName, initGuardDowns, initRolesInput, initChecksInput, cliApprovalAction, shellApprovalActions,
+  APPROVAL_POSITIONALS, joinScriptWords, restScript, APPROVAL_START_PROCESS, START_PROCESS_VALUES, startProcessLine, findExecActions,
   approvalExtras, mcpApprovalAction, approvalCommand, approvalGuardDecision, STOP_RECENT_HOURS, STOP_MESSAGE_MAX,
   STOP_MAX_FEATURES, STOP_TASKS_SHOWN, STOP_REPORT_MAX, STOP_WINDOW, guardLevel, guardInput, stopCheckEnabled,
   setStopCheck, stopPatterns, STOP_CLAUSE_SPAN, stopClauseStart, RE_ES_NO_NEXT, RE_ES_SE_NEXT, stopNegates,

@@ -88,4 +88,50 @@ exports.run = async ({ ok, S, tmp, __dirname }) => {
       "1.22 review: stopCheck reads every feature's activity and checks the 50 most recently active — an active 'zeta' after 51 other features is no longer skipped (got " +
       js([s.block, s.why, s.features.map((x) => x.feature)]) + ", " + ms + " ms)");
   }
+
+  // 1.22 review (finding 5) — the approval guard lexed a nested script only when it was ONE word: unquoted `cmd /c …` /
+  // `pwsh -Command …` forms, winpty / flock / script -c / find -exec and Start-Process -ArgumentList were allowed even at deny.
+  {
+    const BS = String.fromCharCode(92);
+    const meta = { approvalGuard: "deny" };
+    const dec = (tool, command) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: { command } }, "deny", { meta });
+    const denied = [
+      ["Bash", "cmd /c node cli" + BS + "dev-spec.js approve alpha tasks"], ["PowerShell", "cmd /c node cli" + BS + "dev-spec.js approve alpha tasks"],
+      ["Bash", "cmd /c node cli" + BS + "dev-spec.js approve alpha tasks --force"], ["Bash", "cmd.exe /d /c node cli/dev-spec.js approve alpha tasks"],
+      ["Bash", "CMD /K node \"C:" + BS + "My Tools" + BS + "cli" + BS + "dev-spec.js\" approve alpha tasks"],
+      ["Bash", "pwsh -Command node cli/dev-spec.js approve alpha tasks"], ["PowerShell", "pwsh -Command node cli/dev-spec.js approve alpha tasks"],
+      ["PowerShell", "powershell -c node cli/dev-spec.js approve alpha tasks"], ["PowerShell", "powershell -NoProfile -ExecutionPolicy Bypass node cli/dev-spec.js approve alpha tasks"],
+      ["Bash", "cmd /c node cli" + BS + "dev-spec.js init --approval-guard off"],
+      ["Bash", "winpty node cli/dev-spec.js approve alpha tasks"], ["Bash", "flock /tmp/x.lock node cli/dev-spec.js approve alpha tasks"],
+      ["Bash", "flock -w 5 /tmp/x.lock -c \"node cli/dev-spec.js approve alpha tasks\""], ["Bash", "script -q -c \"node cli/dev-spec.js approve alpha tasks\" /dev/null"],
+      ["Bash", "find . -maxdepth 0 -exec node cli/dev-spec.js approve alpha tasks " + BS + ";"], ["Bash", "find . -maxdepth 0 -exec cmd /c node cli/dev-spec.js approve alpha tasks " + BS + ";"],
+      ["PowerShell", "Start-Process node -ArgumentList 'cli/dev-spec.js','approve','alpha','tasks'"],
+      ["PowerShell", "Start-Process -FilePath node -ArgumentList @('cli/dev-spec.js','approve','alpha','tasks') -Wait"],
+      ["PowerShell", "Start-Process node -ArgumentList \"cli/dev-spec.js approve alpha tasks\" -NoNewWindow"], ["PowerShell", "start node cli/dev-spec.js,approve,alpha,tasks"],
+      ["PowerShell", "Start-Process -FilePath cli/dev-spec.cmd -ArgumentList approve,alpha,tasks"],
+    ];
+    const allowed = [["Bash", "cmd /c node cli" + BS + "dev-spec.js status alpha"], ["Bash", "pwsh -Command node cli/dev-spec.js next alpha"], ["Bash", "find . -name dev-spec -exec cat {} ;"],
+      ["PowerShell", "Start-Process node -ArgumentList 'cli/dev-spec.js','status'"], ["Bash", "flock /tmp/x.lock node cli/dev-spec.js status"],
+      ["Bash", "echo cmd /c node cli/dev-spec.js approve alpha tasks"], ["Bash", "pwsh -File run.ps1 node cli/dev-spec.js approve alpha tasks"]];
+    const wrong = denied.filter(([t, c]) => dec(t, c).decision !== "deny").map(([t, c]) => "allowed: " + t + " " + c)
+      .concat(allowed.filter(([t, c]) => dec(t, c).decision !== "allow").map(([t, c]) => "denied: " + t + " " + c));
+    const once = dec("Bash", "cmd /c \"node cli/dev-spec.js approve alpha tasks\"");
+    const force = dec("Bash", "cmd /c node cli" + BS + "dev-spec.js approve alpha tasks --force");
+    const down = dec("Bash", "cmd /c node cli" + BS + "dev-spec.js init --approval-guard off");
+    // …through the hook too (PreToolUse, Bash): a project at deny
+    const p = path.join(tmp, "g122-approval");
+    S.initProject(p, ["core"], "en", { approvalGuard: "deny" });
+    const hookJs = path.join(__dirname, "..", "hooks", "approval-hook.js");
+    const h = spawnSync(process.execPath, [hookJs], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" },
+      input: js({ session_id: "s", cwd: p, hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "cmd /c node cli" + BS + "dev-spec.js approve alpha tasks" } }) });
+    let hd = null; try { hd = JSON.parse(h.stdout).hookSpecificOutput.permissionDecision; } catch { /* none */ }
+    // linear enough: a long unquoted cmd /c line
+    const t0 = Date.now();
+    dec("Bash", "cmd /c " + "x ".repeat(20000) + "node cli/dev-spec.js approve a tasks");
+    const ms = Date.now() - t0;
+    ok(!wrong.length && once.actions.length === 1 && force.force === true && down.actions[0].kind === "guard-down" && down.actions[0].setting === "approvalGuard" &&
+      h.status === 0 && hd === "deny" && ms < 3000,
+      "1.22 review: the approval guard reads cmd /c /k /r and pwsh / powershell -Command / -c (and Windows PowerShell's positional script) unquoted — the rest of the line is the script — plus winpty, flock (its lock file; -c), script -c, find -exec and Start-Process -ArgumentList (array or string): approve / --force / init --approval-guard off are caught at deny (the hook too); a quoted script is one action; status / next, echo and pwsh -File stay allowed (wrong: " +
+      js(wrong) + ", " + js([once.actions.length, force.force, down.actions, hd, ms]) + ")");
+  }
 };
