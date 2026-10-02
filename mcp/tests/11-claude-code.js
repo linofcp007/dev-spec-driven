@@ -444,7 +444,11 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
     S.approvePhase(revX.p, revX.f, "execution", "t");
     S.approvePhase(revX.p, revX.f, "execution", "t", { revoke: true });
     const revR = pCase("execution sign-off revoked", revX, "sign-off");
-    { const x = pFinished(); S.approvePhase(x.p, x.f, "execution", "t"); S.approvePhase(x.p, x.f, "design", "t"); pCase("design re-approved after the finish", x, "finish"); }
+    { // (1.22 review: the same content approved again changes nothing — still finished; an edit re-approved makes it stale)
+      const x = pFinished(); S.approvePhase(x.p, x.f, "execution", "t"); S.approvePhase(x.p, x.f, "design", "t"); pCase("design re-approved unchanged after the finish", x, "finished");
+      pWrite(x.dir, "design.md", fs.readFileSync(path.join(x.dir, "design.md"), "utf8") + "\nOne more note on the session cookie.\n");
+      S.approvePhase(x.p, x.f, "design", "t"); pCase("design edited and re-approved after the finish", x, "finish");
+    }
     const driftX = pFinished();
     S.approvePhase(driftX.p, driftX.f, "execution", "t");
     pWrite(driftX.p, "src/login.js", "module.exports = 2;\n");
@@ -473,8 +477,8 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
     pCase("spike, go", spikeP({ done: true, decision: true, outcome: "go" }), "promote");
     pCase("spike, no-go", spikeP({ done: true, decision: true, outcome: "no-go" }), "archive");
     pCase("spike, pivot", spikeP({ done: true, decision: true, outcome: "pivot" }), "pivot");
-    ok(parity.length === 27 && parity.every((c) => c.ok),
-      "1.16 C review (parity): the status line's step maps to spec_next_action's in 27 states — scaffold, pending / forced / revoked approvals, design-first, Phase 4, executing, unverified, bugfix gate, finish, sign-off, undo, drift, project checks, spikes (got " +
+    ok(parity.length === 28 && parity.every((c) => c.ok),
+      "1.16 C review (parity): the status line's step maps to spec_next_action's in 28 states — scaffold, pending / forced / revoked approvals, design-first, Phase 4, executing, unverified, bugfix gate, finish, sign-off, undo, drift, project checks, spikes (got " +
       JSON.stringify(parity.filter((c) => !c.ok).map((c) => [c.label, "want " + c.want, "sl " + c.sl, "na " + c.na])) + ")");
     ok(bugR.next.phase === "design" && bugR.next.file === "bug.md" && bugR.line.endsWith("next: write the root cause in bug.md") && !/task 3/.test(bugR.line) &&
       bug3.ok === false && bug3.gated === "root-cause" && forcedR.next.phase === "requirements" && forcedR.next.failing.includes("clarifications"),

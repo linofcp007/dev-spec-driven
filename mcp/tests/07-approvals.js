@@ -452,6 +452,61 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       "1.16 U1: undoing a tick of a finished, signed-off feature reopens it (drift: reopened; next_action: implement); re-ticked, its finish baseline is stale (since: untick #2 — drift verdict stale, next_action finish) (got " +
       js([dr3.reopened, na3.step, dr3b.verdict, dr3b.stale[0] && dr3b.stale[0].why, na3b.step]) + ")");
 
+    // 1.22 review — a re-approval of byte-identical content after a finish (or a role re-signing it, or a revoke + the same
+    // approval again) changed nothing: the finish and the execution sign-off stay current. An edit re-approved still counts.
+    const p3r = uDir("reapprove-same");
+    S.initProject(p3r, ["core"], "en");
+    const f3r = uFeature(p3r, "login");
+    S.approvePhase(p3r, "login", null, "u", { through: "tasks" });
+    [1, 2].forEach((n) => S.completeTask(p3r, "login", n, { command: uRun, exitCode: 0 }));
+    const fin3r = S.finishFeature(p3r, "login", { write: true });
+    const ex3r = S.approvePhase(p3r, "login", "execution", "u");
+    const tLater = () => { const t0 = Date.now(); while (Date.now() === t0) { /* a later millisecond */ } };
+    tLater();
+    const same1 = S.approvePhase(p3r, "login", "requirements", "u");
+    S.initProject(p3r, ["core"], undefined, { approvalRoles: { tasks: ["tech"] } });
+    const resign = S.approvePhase(p3r, "login", "tasks", "t", { role: "tech" });
+    const rvk = S.approvePhase(p3r, "login", "design", "u", { revoke: true, reason: "check" });
+    const back = S.approvePhase(p3r, "login", "design", "u");
+    const naR = S.nextAction(p3r, "login");
+    const drR = S.drift(p3r, "login");
+    const catR = (S.catalog(p3r).features || []).find((x) => x.feature === "login") || {};
+    const stR = uSt(f3r.dir);
+    ok(fin3r.readyToFinish && ex3r.ok && same1.ok && resign.ok && resign.complete === true && rvk.ok && back.ok &&
+      Date.parse(stR.approvals.requirements.at) > Date.parse(stR.finished.at) && naR.step === "finished" && !naR.staleBaseline && /Nothing left to do here/.test(naR.recommendation) &&
+      drR.verdict === "clean" && drR.stale.length === 0 && catR.status === "finished",
+      "1.22 review: re-approving byte-identical requirements after a finish, a role re-signing the tasks, a revoke + the same design approved again — none of them makes the finish or the execution sign-off stale (next_action finished, drift clean, the catalog finished) (got " +
+      js([naR.step, naR.staleBaseline, drR.verdict, drR.stale, catR.status]) + ")");
+    uW(f3r.dir, "requirements.md", uR(f3r.dir, "requirements.md").replace("Users log in with email and password.", "Users log in with an email and a password."));
+    S.approvePhase(p3r, "login", "requirements", "u");
+    const naE = S.nextAction(p3r, "login");
+    const drE = S.drift(p3r, "login");
+    ok(naE.step === "finish" && naE.staleBaseline && naE.staleBaseline.since.some((x) => x.kind === "approval" && x.phase === "requirements") && drE.verdict === "stale",
+      "1.22 review: an edited requirements.md re-approved after the finish still makes it stale (next_action finish again, drift stale) (got " + js([naE.step, naE.staleBaseline, drE.verdict]) + ")");
+
+    // 1.22 review — the fast-forward writes ROADMAP.md ONCE, after its last phase (it refreshed it after every phase: 93% of an
+    // approve --through tasks on 30 features); a run stopped by a refused gate refreshes it once too, for what it approved.
+    const pFf = uDir("ff-refresh-once");
+    S.initProject(pFf, ["core"], "en");
+    const fFf = uFeature(pFf, "login");
+    uFeature(pFf, "signup");
+    S.roadmapReport(pFf, { write: true });
+    const realRename = fs.renameSync;
+    let roadmapWrites = 0;
+    const counted = (fn) => { roadmapWrites = 0; fs.renameSync = function (a, b) { if (/ROADMAP\.md$/.test(String(b))) roadmapWrites++; return realRename.apply(this, arguments); }; try { return fn(); } finally { fs.renameSync = realRename; } };
+    const ffF = counted(() => S.approvePhase(pFf, "login", null, "u", { through: "tasks" }));
+    const writesF = roadmapWrites;
+    const mdFf = uR(path.join(pFf, ".specs"), "ROADMAP.md");
+    S.roadmapReport(pFf, { write: true });
+    const mdFresh = uR(path.join(pFf, ".specs"), "ROADMAP.md"); // what a refresh now writes: the run's last write came after its last approval
+    uW(path.join(pFf, ".specs", "signup"), "design.md", "# Design: signup\n\n## Overview\n> **TODO** — later\n");
+    const ffFb = counted(() => S.approvePhase(pFf, "signup", null, "u", { through: "tasks" }));
+    const writesFb = roadmapWrites;
+    ok(ffF.ok && ffF.approved.length === 4 && writesF === 1 && mdFf === mdFresh && js(uSt(fFf.dir).approvals.tasks ? 1 : 0) === "1" &&
+      ffFb.ok === false && js(ffFb.approved) === '["classification","requirements"]' && writesFb === 1,
+      "1.22 review: approve --through tasks (4 phases) writes ROADMAP.md once, after the last approval (it reads as a fresh render); a run stopped at a refused gate writes it once for the phases it approved (got " +
+      js([ffF.approved, writesF, ffFb.approved, writesFb]) + ")");
+
     // Bugfix: an undo is never gated (it completes nothing); a spike's investigation task unticks like any other.
     const p4 = uDir("undo-kinds");
     S.initProject(p4, ["core"], "en");
@@ -741,6 +796,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     uPut(path.join(pR3, ".specs", "login"), hiddenR3);
     const c2R3 = catR3();
     uPut(path.join(pR3, ".specs", "login"), stR3);
+    // (1.22 review: re-approved with an edit — the same content approved again would change nothing: no re-finish then)
+    const reqR3 = path.join(pR3, ".specs", "login", "requirements.md");
+    fs.writeFileSync(reqR3, fs.readFileSync(reqR3, "utf8").replace("Users log in with email and password.", "Users log in with their email and password."));
     S.approvePhase(pR3, "login", "requirements", "u");
     const naR3 = S.nextAction(pR3, "login");
     S.finishFeature(pR3, "login", { write: true });
@@ -996,6 +1054,42 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       "1.21 review A6: a failed run the user confirmed (a fast-forward stopped at a later gate) carries no `confirmed` — the phase it approved keeps its own in .state.json; an accept without approve: true is reported as such (not 'declined'), localized (got " +
       js([rThru.ok, rThru.stoppedAt, rThru.confirmed, sThru.approvals.classification && sThru.approvals.classification.confirmed, rNo.error, unapproved]) + ")");
 
+    // 1.22 review — the confirmation covers the version the preview judged: an edit while the question waits (approve, a
+    // fast-forward), or — forced — a gate failing on a check the question didn't name, is refused (changedSincePreview), nothing
+    // recorded. The dry run carries the content fingerprint(s).
+    const filledFeature = (slug) => {
+      const f = S.createFeature(pEn, slug, ["core"]);
+      const cls = path.join(f.dir, "classification.md");
+      fs.writeFileSync(cls, fs.readFileSync(cls, "utf8").split("\n").map((l) => (/^- /.test(l) ? l : l.replace(/\[[^\]]*\]/g, "filled"))).join("\n"));
+      return { f, cls };
+    };
+    const E22 = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const ed = filledFeature("edited");
+    const dry = S.approvePhase(pEn, "edited", "classification", "u", { dryRun: true });
+    A.setAnswer(() => { fs.appendFileSync(ed.cls, "\nEdited while the question waited.\n"); return accept()(); });
+    const rEd = await A.call("spec_approve", { name: "edited", phase: "classification", projectDir: pEn });
+    const ff22 = filledFeature("ff-edited");
+    const dryFf = S.approvePhase(pEn, "ff-edited", null, "u", { through: "classification", dryRun: true });
+    A.setAnswer(() => { fs.appendFileSync(ff22.cls, "\nEdited too.\n"); return accept()(); });
+    const rFf = await A.call("spec_approve", { name: "ff-edited", through: "classification", projectDir: pEn });
+    filledFeature("grown");
+    S.approvePhase(pEn, "grown", "classification", "u");
+    A.setAnswer(() => { S.approvePhase(pEn, "grown", "classification", "u", { revoke: true }); return accept()(); });
+    const rGrown = await A.call("spec_approve", { name: "grown", phase: "requirements", force: true, projectDir: pEn });
+    const st22 = (s) => stateOf(pEn, s);
+    filledFeature("same");
+    A.setAnswer(accept());
+    const rSame = await A.call("spec_approve", { name: "same", phase: "classification", projectDir: pEn });
+    ok(dry.ok && dry.dryRun && dry.fingerprint === E22.textFingerprint(fs.readFileSync(path.join(pEn, ".specs", "edited", "classification.md"), "utf8").replace(/\nEdited while the question waited\.\n$/, ""), "classification") &&
+      dryFf.ok && dryFf.dryRun && dryFf.fingerprints && typeof dryFf.fingerprints.classification.fingerprint === "string" &&
+      rEd.ok === false && rEd.changedSincePreview === true && rEd.code === "changed-since-preview" && /^Nothing recorded: 'classification' of 'edited' changed after the user was asked to confirm it/.test(rEd.error) &&
+      !st22("edited").approvals.classification && !(st22("edited").approvalHistory || []).length &&
+      rFf.ok === false && rFf.changedSincePreview === true && JSON.stringify(rFf.approved) === "[]" && !st22("ff-edited").approvals.classification &&
+      rGrown.ok === false && rGrown.changedSincePreview === true && JSON.stringify(rGrown.newFailing) === '["phase-order"]' && /fails more checks \(phase-order\)/.test(rGrown.error) &&
+      !st22("grown").approvals.requirements && rSame.ok === true && rSame.confirmed && st22("same").approvals.classification.fingerprint === S.approvePhase(pEn, "same", "classification", "u", { dryRun: true }).fingerprint,
+      "1.22 review: an approval confirmed over MCP records only what its preview judged — an edit while the question waited (approve, fast-forward) or a forced gate that fails more checks since (phase-order) is refused: changedSincePreview, code changed-since-preview, nothing recorded; an unchanged one is recorded as before; the dry run carries the fingerprint(s) (got " +
+      js([dry.fingerprint, dryFf.fingerprints, rEd, rFf.error, rGrown.newFailing, rGrown.error, rSame.ok]) + ")");
+
     // PT (deny: with elicitation the user's explicit approve still records it) and ES (ask): the question and the refusal in the
     // feature's language
     const pPt = project("pt-deny", "pt", "deny", ["faturas", "recibos"]);
@@ -1026,19 +1120,34 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     await C.init();
     const rOff = await C.call("spec_approve", { name: "solo", phase: "classification", projectDir: pOff });
     await C.stop();
-    // the Claude Code plugin's server (SPEC_MCP_APPROVAL_HOOK=on — its PreToolUse hook guards the call): no question, no refusal
-    const pHook = project("hook", "en", "deny", ["hooked"]);
+    // the Claude Code plugin's server (SPEC_MCP_APPROVAL_HOOK=on — its PreToolUse hook asks at `ask`): no question, no refusal
+    const pHook = project("hook", "en", "ask", ["hooked"]);
     const H = client({ elicitation: {} }, { SPEC_MCP_APPROVAL_HOOK: "on" });
     await H.init();
     const rHook = await H.call("spec_approve", { name: "hooked", phase: "classification", projectDir: pHook });
+    const hookAskedAtAsk = H.asked.length;
+    // 1.22 review — at `deny` the hook refuses every agent approval: one that still reaches the server got past no hook
+    // (disableAllHooks, a managed policy, a hook that failed open) — refused without elicitation (humanRequired), asked with it.
+    const pHookDeny = project("hook-deny", "en", "deny", ["denied", "asked"]);
+    const N = client({}, { SPEC_MCP_APPROVAL_HOOK: "on" });
+    await N.init();
+    const rHookDeny = await N.call("spec_approve", { name: "denied", phase: "classification", force: true, projectDir: pHookDeny });
+    await N.stop();
+    H.setAnswer(decline);
+    const rHookAsked = await H.call("spec_approve", { name: "asked", phase: "classification", projectDir: pHookDeny });
+    const hookAskedAtDeny = H.asked.length - hookAskedAtAsk;
     await H.stop();
     await B.stop();
     ok(rAsk.ok === true && rAsk.approved === "classification" && !rAsk.confirmed && B.asked.length === 0 &&
       rDeny.ok === false && rDeny.humanRequired === true && rDeny.approvalGuard === "deny" && /approve two classification --force/.test(rDeny.command || "") &&
       /^dev-spec approval guard: refused — approvals are the human's/.test(rDeny.error) && !stateOf(pB, "two").approvals.classification &&
-      rOff.ok === true && !rOff.confirmed && C.asked.length === 0 && rHook.ok === true && !rHook.confirmed && H.asked.length === 0,
-      "1.21 F1b: without elicitation, ask keeps today's behaviour (recorded, nobody asked) and deny is refused (humanRequired + the command the user runs, nothing recorded); approvalGuard off asks nobody; SPEC_MCP_APPROVAL_HOOK=on (the Claude Code plugin — its hook guards the call) leaves the call as it was (got " +
+      rOff.ok === true && !rOff.confirmed && C.asked.length === 0 && rHook.ok === true && !rHook.confirmed && hookAskedAtAsk === 0,
+      "1.21 F1b: without elicitation, ask keeps today's behaviour (recorded, nobody asked) and deny is refused (humanRequired + the command the user runs, nothing recorded); approvalGuard off asks nobody; SPEC_MCP_APPROVAL_HOOK=on (the Claude Code plugin — its hook asks) leaves an `ask` call as it was (got " +
       js([rAsk.approved, rDeny, rOff.approved, rHook.approved]) + ")");
+    ok(rHookDeny.ok === false && rHookDeny.humanRequired === true && rHookDeny.approvalGuard === "deny" && !stateOf(pHookDeny, "denied").approvals.classification &&
+      rHookAsked.ok === false && rHookAsked.declined === true && hookAskedAtDeny === 1 && !stateOf(pHookDeny, "asked").approvals.classification,
+      "1.22 review: SPEC_MCP_APPROVAL_HOOK=on no longer waves a deny-level approval through — one that reaches the server got past no hook: refused without elicitation (humanRequired), asked with it (declined → nothing recorded) (got " +
+      js([rHookDeny, rHookAsked, hookAskedAtDeny]) + ")");
     // 1.21 review A4 — over MCP (a client outside Claude Code) the refusal's command is the plain runnable line — no `!` (Claude
     // Code's prefix: PowerShell can't run `! node …`) — and its text never tells the user to type `!`; the Claude Code hook's own
     // decision keeps the `!` form. EN here; PT / ES from the same engine call.

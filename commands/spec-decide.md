@@ -23,7 +23,7 @@ Decisions and discoveries made while planning or implementing get lost in chat a
    English-stable markers `_Kind:_`, `_Date:_`, `_Affects:_`, `_Supersedes:_`. The log is append-only: an entry is
    never renumbered or rewritten — to change a decision, record a new one that supersedes it.
 3. An unknown `affects` reference is refused (`unknownAffects`, nothing written): fix the typo, or name the section as
-   the design spells it.
+   the design spells it — a heading holding a comma (`Decisions, reuse & risks`) is named as it is, and written quoted.
 4. Say where it now shows up: the task brief of every task citing those ACs / T-IDs, the merge summary
    (`/spec-finish`), the stakeholder export, the catalog. If `spec_doctor` then warns `decision-affects-approved`
    (the decision came after requirements / design were approved), re-review with `/spec-impact`, update the spec and

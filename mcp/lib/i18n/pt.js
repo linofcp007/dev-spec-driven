@@ -1358,6 +1358,7 @@ const msg = {
     next: {
       fixChecks: (ids, slug) => `Corrige as verificações bloqueantes (${ids}) — corre /spec-doctor ${slug} para detalhes.`,
       reReview: (files) => `Nova revisão: ${files} alterado(s) após a última aprovação — volta a aprovar a fase afetada.`,
+      approvedMissing: (files, slug, phase) => `${files} foi aprovado mas já não existe — restaura-o (foi apagado depois da aprovação) ou, se desapareceu de vez, retira essa aprovação: /approve ${slug} ${phase} --revoke.`,
       approveRequirements: (slug) => `Revê e aprova os requisitos — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Revê e aprova o design — /approve ${slug} design.`,
       approveTasks: (slug) => `Revê e aprova a divisão de tarefas — /approve ${slug} tasks.`,
@@ -1695,6 +1696,10 @@ const msg = {
       evalSetsSample: "o evals/golden.json ainda é o conjunto de exemplo do scaffold — escreve os casos golden desta feature, corre o harness e regista a baseline",
       evalSetsMissing: "o evals/golden.json não existe ou não tem itens de eval ({\"items\": […]}) — escreve primeiro o conjunto golden desta feature",
       testsGateChecks: (ids) => `(o gate de aprovação verifica isto: ${ids})`,
+      testsStale: (day, missing, plans) => `A aprovação da Fase 4 de ${day} já não cobre o plano (${[missing ? `planeados depois: ${missing}` : null, plans ? `aprovação alterada depois: ${plans}` : null].filter(Boolean).join("; ")}) — a fase tests tem de ser aprovada de novo.`,
+      changedSincePreview: (phase, slug, grown) => (grown
+        ? `Nada registado: desde que se pediu ao utilizador para confirmar '${phase}' de '${slug}', o gate falha mais verificações (${grown}) do que a pergunta indicava — volta a pedir a confirmação ao utilizador.`
+        : `Nada registado: '${phase}' de '${slug}' mudou depois de se pedir ao utilizador para a confirmar — a confirmação cobria a versão que lhe foi mostrada. Volta a pedir a confirmação ao utilizador, para que confirme o que existe agora.`),
       clarifyPlaceholders: (file, n, list) => `Substitui os ${n} placeholder(s)/TBD do template em ${file}: ${list}`,
       hookPlaceholders: (n, list, file = "requirements.md") => `Placeholders do template: ${n} por preencher em ${file} (${list}) — substitui-os antes de aprovar ${file === "change.md" ? "o plano" : "os requisitos"}.`,
     },

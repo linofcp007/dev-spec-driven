@@ -444,6 +444,7 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
       const notes = [];
       if (a.forced === true) notes.push(X.forced((Array.isArray(a.failing) ? a.failing.join(", ") : "") || "—"));
       if (PHASE_FILE[p] && (changed.includes(phaseFile(p, kind)) || (p === "design" && changed.includes("design.md")))) notes.push(X.changedSince);
+      if (p === "tests" && pending.has(p)) notes.push(X.changedSince); // 1.22 review: a Phase 4 sign-off the plan outgrew (pending again)
       aRows.push(`| ${phaseLabel(p)} | ${mdCell(a.by == null ? "—" : String(a.by))} | ${utcStamp(a.at)} | ${mdCell(notes.join("; ") || "—")} |`);
     } else if (pending.has(p)) aRows.push(`| ${phaseLabel(p)} | — | — | ${X.pending} |`);
   }
