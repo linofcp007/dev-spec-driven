@@ -472,12 +472,13 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const key = String(n);
   // 1.14 F1: every run {command, exitCode} is stamped observed: true | false (the harness's log) | "cli" (`done --run`), and
   // every result of this call carries it (stable).
-  const observed = observedStamp(projectDir, f.slug, ev, opts && opts.ranBy);
+  const verifyCmds = taskMarkers(task).verify;
+  const observed = observedStamp(projectDir, f.slug, ev, opts && opts.ranBy, verifyCmds); // an observed run of ITS _Verify:_ (1.22 review)
   if (observed !== undefined) ev.observed = observed;
   const withObserved = (r) => (observed !== undefined ? Object.assign(r, { observed }) : r);
   // _Expect: fail_ (B5): a red run {command, exitCode ≠ 0} is the proof; a passing run is refused unless a red run of this
   // _Verify:_ was recorded before it (the fix made the test green); a could-not-run exit (127, 9009…) is refused like a failure.
-  const xf = expectsFail(task) ? expectFailRun(ev, ownEvidence(state.evidence || {}, task, dup)) : null;
+  const xf = expectsFail(task) ? expectFailRun(ev, ownEvidence(state.evidence || {}, task, dup), verifyCmds) : null;
   // The run is stored with expected: "fail" (metrics count a red run as a pass, an unexpected pass as a failure) — except the
   // pass after the red run: a plain passing run that keeps the red run as the record's proof (recordEvidence).
   // Any run that is not itself the red proof (a pass after it, a could-not-run exit, a refused pass) carries the red run on
@@ -550,6 +551,8 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
       : reason === "duplicate-number" ? EG.duplicateNumber(n)
       : reason === "stale-evidence" ? (entry && entry.stale ? (entry.staleBy === "undo" ? i18n.msg(lng).undo.staleNote(n, f.slug, runnable) : i18n.msg(lng).impact.staleNote(n, f.slug, runnable)) : EG.staleEvidence(n, f.slug, runnable))
       : reason === "unexpected-pass" ? i18n.msg(lng).redGreen.unexpectedPassNote(n, f.slug) // B5: _Expect: fail_, but the latest run passed
+      // 1.22 review: the run recorded is not a run of the task's _Verify:_ command(s)
+      : reason === "command-mismatch" ? EG.commandMismatch(n, f.slug, String((ev && ev.command) || (entry && entry.command) || ""), verifyCmds.join(" · "), expectsFail(task))
       // 1.14 F1 (meta.evidence "observed"): the harness never saw the run — and, when it never saw any run here, why (no hook)
       : reason === "unobserved" ? (expectsFail(task) ? i18n.msg(lng).observed.unobservedRedNote(n, f.slug) : i18n.msg(lng).observed.unobservedNote(n, f.slug)) +
         (observedAny(projectDir) ? "" : " " + i18n.msg(lng).observed.neverObserved) // an _Expect: fail_ task: its RED run must be observed
@@ -666,7 +669,7 @@ function untickTask(projectDir, name, number, opts = {}) {
   const runnable = taskMarkers(task).verify.length > 0;
   // 1.16 U review 1: an _Expect: fail_ task keeps its red run (redProof reads through staleBy "undo"): once the fix is in, the
   // re-tick's passing run is the fix going green — the note must not ask for a red run that can no longer happen. redKept: stable.
-  const red = staled && expectsFail(task) ? redProof(rec) : null;
+  const red = staled && expectsFail(task) ? redProof(rec, taskMarkers(task).verify) : null;
   const notes = [U.unticked(n, f.slug, runnable, staled && !red)];
   if (red) notes.push(U.redKept(n, f.slug, String(red.at || "?").slice(0, 10)));
   if (isObj(state.finished) || (isRecord(state.approvals) && isRecord(state.approvals.execution))) notes.push(U.reopened(f.slug));

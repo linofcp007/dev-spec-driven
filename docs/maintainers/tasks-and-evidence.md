@@ -117,9 +117,23 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `{command, exitCode: 0}`; a note ticks it but leaves it unverified. `{exitCode}` alone and a command
   without its exit code are rejected; "exit 0" without a command is kept as a note. A non-zero run refuses
   the tick and is recorded — a failed re-check of a ticked task makes it unverified until a later pass.
+- **Which run proves it (1.22 review).** Until 1.22 the reported `command` was never compared with the `_Verify:_`:
+  `{command: "echo hello", exitCode: 0}` verified a task whose `_Verify:_` is `npm test`. `runProvesVerify(run, verify)`
+  (evidence.js) is now part of the ONE verdict (`taskEvidenceIssue`, after `evidenceIssue` passed it): the proving run —
+  the latest passing run, an `_Expect: fail_` task's red proof — must be a run of one of the task's `_Verify:_` commands,
+  both sides read by `proofKey()`: `flatCommand` (backticks, whitespace), quotes around the WHOLE command dropped, a leading
+  `cd <dir> &&` / `;` (cmd.exe's `cd /d` too), `set -o pipefail;` (`set -euo pipefail;` …) and `NAME=value` assignments
+  and a trailing `2>&1` taken out, repeatedly (bounded); the ` && ` join of several of its commands (a pure `cd <dir>` part
+  dropped) counts, and so does a run stamped `observed: "cli"` (`done --run` ran it). Anything else ticks but reads
+  **`command-mismatch`** (`evidenceGate.commandMismatch`, EN/PT/ES — the note names the command recorded and the
+  `_Verify:_`). An `_Expect: fail_` task: a red run of another command ticks (it is no could-not-run run) but is NO red
+  proof — `expectFailRun(ev, prev, verify)` answers `red: false`, so the red run on record is carried forward (`keepRed`)
+  and a later pass is "the fix going green" only after a red run of the `_Verify:_` itself; `redProof(e, verify)`,
+  `recordEvidence`'s kept `red`, `redGreenGaps` and `observedProof` all take the verify list. A finish check's run is held
+  to its `meta.checks` command the same way (`suiteStatus` → `changed`).
 - **Reason codes** (stable): `no-evidence` · `failed-run` · `manual-note-on-runnable-verify` ·
   `duplicate-number` · `stale-evidence` · `unexpected-pass` (1.14, `_Expect: fail_`) · `unobserved` (1.14 F1, only
-  with `meta.evidence: "observed"` — see Harness-observed evidence). They are RETURNED in
+  with `meta.evidence: "observed"` — see Harness-observed evidence) · `command-mismatch` (1.22 review — above). They are RETURNED in
   `spec_complete_task`'s `unverifiedReason` (set
   exactly when `verified` is false) and in `spec_impact`'s per-task `evidence` (`impacted[].tasks[]`,
   `affectedTasks[]`: a code, or `verified`) — both public surfaces; callers branch on these, never on the
@@ -207,7 +221,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   than 5 minutes in the future ignored (as `stopActivity()`). `suiteStatus(projectDir, state, dir)` (dir: the feature
   folder the stamp is compared with) → blocker `suite-evidence` (finish + the execution gate), doctor warn `suite-evidence`
   (once every task is done) and the stop gate: a check without a passing run since the last task activity on the code as
-  it is now. `suiteChecks` status codes (stable): `pass` · `no-run` · `failed` · `changed` · `before-last-tick` ·
+  it is now. `suiteChecks` status codes (stable): `pass` · `no-run` · `failed` · `changed` (the configured command changed
+  since the run, or — 1.22 review — the run is of another command: `runProvesVerify(run, [check])`) · `before-last-tick` ·
   `code-changed` (a passing run whose `code` stamp no longer matches — code edited after the checks ran; an unstamped run
   keeps the older rules) · `unobserved` (1.14 F1, only with `meta.evidence: "observed"`: a passing run whose `observed` is
   neither `true` nor `"cli"`; each item also carries the run's `observed`). next_action's `finish` / `drift` steps name `dev-spec finish <f> --run` / `spec_finish
@@ -389,14 +404,22 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   interrupted run (`is_interrupt`, `interrupted`), a backgrounded one (`run_in_background`, `backgroundTaskId`,
   `backgroundedByUser`) and a run with no explicit code but a `returnCodeInterpretation` (a non-zero exit the Bash tool read
   as no error — grep's "No matches found") are no run. A leading `cd <project root> &&` (or `;`) is stripped (Git Bash
-  `/c/…` paths read as `C:/…`); any other folder keeps the whole command, which then matches nothing. The engine is loaded
+  `/c/…` paths read as `C:/…`) by ONE engine function, `stripCdPrefix(cmd, roots, cwd)` (1.22 review): `observeRun(pdir,
+  {command, cwd, roots})` strips a cd into this project OR any project the run belongs to (the hook passes every project it
+  found — a subagent's `cd <worktree> && npm test` is logged as `npm test` in the main project's log too, not only in the
+  worktree's git-ignored one), and `observedRun` strips the REPORTED command against the project (+ the project holding the
+  process's cwd) the same way — the hook used to strip while the lookup didn't, so reporting the exact command that ran read
+  unobserved. Any other folder keeps the whole command, which then matches nothing. The hook's pre-filter key drops a leading
+  `cd <dir> &&` whatever the folder (a superset — the engine decides). The engine is loaded
   only after a plain-text pre-filter (the flattened command — or each part of a ` && ` join — appears in some feature's tasks.md — ≤ 2 MB each, dot / `_`
   folders skipped — or equals a meta.checks command); it prints nothing, reads stdin asynchronously (≤ 4 MB, else
   ignored), and exits 0 on any error.
-- **The stamp.** `observedRun(projectDir, slug | null, command, exitCode)` → `{observed, at?}`: true when the LATEST
+- **The stamp.** `observedRun(projectDir, slug | null, command, exitCode, {expected})` → `{observed, at?}`: true when the LATEST
   logged run of the same flattened command within `OBSERVED_WINDOW_MS` (24 h; a stamp more than 5 min in the future
   ignored) exited with the same code — a report of exit 0 after an observed exit 1 is not what the harness saw
-  (`latestExitCode`); a reported `a && b` with exit 0 also counts when each part's latest logged run passed.
+  (`latestExitCode`); a reported `a && b` with exit 0 also counts when each part's latest logged run passed. `expected`
+  (1.22 review — `observedStamp` passes the task's `_Verify:_` values / `[the check's command]`): a reported run that is
+  not one of them (`runProvesVerify`) is never observed — another task's or check's logged run used to count.
   `observedStamp()`: every run `{command, exitCode}` that `spec_complete_task` / `done` and `spec_finish {evidence}` record
   is stamped `observed: true | false`; `done --run` / `finish --run` pass `ranBy: "cli"` → `observed: "cli"` (the CLI ran it
   itself; counts as observed). The MCP server never passes `ranBy`, and `normalizeEvidence()` keeps no caller-given

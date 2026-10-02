@@ -58,7 +58,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   manageFeature, markdownToHtml, matrixCsv, maybeRefreshCatalog, mdPlainText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
   MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, milestone,
   MILESTONE_ACTIONS, MILESTONE_STATUSES, milestoneLine, networkPathInside, nextAction, nextTask, normalizeLang,
-  normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, PACK_LIMITS, parseApprovalRolesText,
+  normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, PACK_LIMITS, parseApprovalRolesText, runProvesVerify, stripCdPrefix,
   parseGitLog, parseTasks, parseTracks, phasePercent, PHASES, placeholderKey, placeholderReport, planBridge, planPaths,
   posixPwshScript, posixShellSyntax, projectChecks, projectLang, pwshParseFailure, runsPwsh, readRoadmap, readState, removeFeature, removeTrack, renameFeature,
   renderRoadmapHtml, renderRoadmapMd, resolveFeature, resolveProjectDir, resolveRunShell, resolveTask, restoreFeature,
@@ -286,6 +286,8 @@ module.exports = {
   // 1.14 F1 — harness-observed evidence
   observeRun, // hooks/observe-hook.js: log a Bash run of a _Verify:_ / project-check command (.specs/<f>/.execution/observed.jsonl, .specs/.execution/observed.jsonl)
   observedRun, // was this reported run observed? (latest observed run of the same command, same exit code, recent) → { observed, at? }
+  runProvesVerify, // 1.22 review: is a run {command, observed?} a run of one of these _Verify:_ / check commands? (else command-mismatch / changed)
+  stripCdPrefix, // 1.22 review: `cd <dir> && cmd` → cmd when <dir> is one of the given project roots — the observe hook's log and observedRun alike
   evidenceMode, // roadmap.json meta.evidence → "reported" (default) | "observed"
   OBSERVED_MAX_BYTES, // the log's size bound
 

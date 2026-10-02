@@ -263,4 +263,17 @@ ok(rm1.code === 0 && /red run recorded for task 1/.test(rm1.out) && rmEv()["1"] 
   rmq.code === 0 && /red run recorded for task 2/.test(rmq.out) && rmEv()["2"] && rmEv()["2"].exitCode === 1 && /- \[x\] 1\./.test(rmTasks) && /- \[x\] 2\./.test(rmTasks),
   "1.21.1 languages (review 2): done --run on _Expect: fail_ tasks — a mixed Pester run (one block's BeforeAll failed, another block's test failed on its assertion) and a test whose thrown message quotes '[-] Describe Foo failed' are recorded as the red proof (exit 3 / 1, ticked); the stored summary keeps the '[-] Greeter.T-01 … 121ms' line (got " +
   JSON.stringify([rm1.code, rm1.out.slice(-160), rmq.code, rmq.out.slice(-160), rmEv()]) + ")");
+
+// 1.22 review (finding 1): `done --cmd <another command> --exit 0` ticks the task WITHOUT "(verified)" and says why
+// (command-mismatch); `--run` (the CLI runs the _Verify:_ itself) verifies.
+const cm = path.join(tmp, "122-cmd-mismatch");
+run(["create", "Proof", "core", "--project", cm]);
+fs.writeFileSync(path.join(cm, ".specs", "proof", "tasks.md"), "- [ ] 1. a\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. b\n  - _Verify: node -e \"process.exit(0)\"_\n");
+const cm1 = run(["done", "proof", "1", "--cmd", "echo hello", "--exit", "0", "--project", cm]);
+const cm1j = JSON.parse(run(["done", "proof", "1", "--cmd", "echo hello", "--exit", "0", "--json", "--project", cm]).out);
+const cm2 = run(["done", "proof", "2", "--run", "--project", cm]);
+ok(cm1.code === 0 && /Task 1 done\. 1\/2/.test(cm1.out) && !/\(verified\)/.test(cm1.out) && /is not a run of its _Verify:_ command/.test(cm1.out) &&
+  cm1j.verified === false && cm1j.unverifiedReason === "command-mismatch" && cm2.code === 0 && /Task 2 done \(verified\)/.test(cm2.out),
+  "1.22 review: done --cmd \"echo hello\" --exit 0 on a task whose _Verify:_ is another command ticks it unverified (no '(verified)', the command-mismatch note; --json: unverifiedReason command-mismatch); done --run verifies (got " +
+  JSON.stringify([cm1.out, cm1j.unverifiedReason, cm2.out]) + ")");
 };

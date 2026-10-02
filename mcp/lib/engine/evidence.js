@@ -13,12 +13,12 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs, existingFeature,
   extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest, isBacktickUnit,
-  isDirSafe, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, readIfExists, readRoadmap,
+  isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, readIfExists, readRoadmap,
   readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers, taskProse, timeOf, tKey, toPosix,
   traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap;
 function __link(E) { ({ activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
   existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest,
-  isBacktickUnit, isDirSafe, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS,
+  isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
   taskProse, timeOf, tKey, toPosix, traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap } = E); }
 
@@ -49,7 +49,8 @@ function normalizeEvidence(ev) {
 // Why a task is NOT verified — a stable reason code (null = verified):
 //   no-evidence · failed-run (the latest recorded run failed; only a later PASSING run clears it) ·
 //   manual-note-on-runnable-verify (the task's _Verify:_ holds a command, but only a note was given) ·
-//   duplicate-number · stale-evidence (see taskEvidenceIssue).
+//   duplicate-number · stale-evidence · command-mismatch (1.22 review: the passing run — an _Expect: fail_ task's red run — is
+//   not a run of the task's _Verify:_ command; see taskEvidenceIssue / runProvesVerify).
 // `runnable` = the task's _Verify:_ is a real command (not a [bracketed placeholder/manual note]): then
 // only {command, exitCode: 0} verifies it. A check with no command may be attested by a summary. An exit
 // code only proves a RUNNABLE _Verify:_ next to the command that produced it (a v1.12 record could hold a bare
@@ -64,6 +65,41 @@ function evidenceIssue(e, runnable, expectFail) {
   if (e.exitCode != null && e.exitCode !== 0) return "failed-run";
   if (runnable) return e.command && e.exitCode === 0 ? null : "manual-note-on-runnable-verify";
   return e.exitCode === 0 || !!e.summary ? null : "no-evidence";
+}
+// 1.22 review — WHICH command a run proves. The reported command was never compared with the task's _Verify:_ (nor a finish
+// run's with its project check): `{command: "echo hello", exitCode: 0}` verified a task whose _Verify:_ is `npm test`. A run
+// proves a runnable _Verify:_ only when it is a run of one of its commands, compared as proofKey() reads both: flattened
+// (flatCommand: backticks dropped, whitespace folded), quotes around the WHOLE command dropped, and what only sets the stage
+// before it — a leading `cd <dir> &&` (or `;`, cmd.exe's `cd /d`), `set -o pipefail;` (`set -euo pipefail;` …), `NAME=value`
+// assignments — or a trailing `2>&1` taken out. The ` && ` join of several of its commands (how `done --run` reports a task
+// with more than one) counts too, and so does the CLI's own run (`done --run` / `finish --run` — observed "cli": it ran the
+// command itself). Anything else ticks but stays unverified — reason `command-mismatch` (a finish run of another command
+// reads `changed`).
+const RE_PROOF_CD = /^cd\s+(?:\/d\s+)?(?:"[^"]*"|'[^']*'|[^\s;&|"']+)\s*(?:&&|;)\s*/i;
+const RE_PROOF_CD_ONLY = /^cd\s+(?:\/d\s+)?(?:"[^"]*"|'[^']*'|[^\s;&|"']+)$/i;
+const RE_PROOF_PIPEFAIL = /^set\s+(?:-[A-Za-z]+\s+){0,4}-[A-Za-z]*o\s+pipefail\s*(?:&&|;)\s*/;
+const RE_PROOF_ENV = /^[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s"'`;&|]*)\s+/;
+function proofKey(cmd) {
+  let s = flatCommand(cmd);
+  for (let i = 0; i < 16; i++) { // a few prefixes at most — bounded, each step shortens s
+    const q = /^(["'])([\s\S]*)\1$/.exec(s);
+    const t = (q && !q[2].includes(q[1]) ? q[2] : s).trim().replace(RE_PROOF_CD, "").replace(RE_PROOF_PIPEFAIL, "").replace(RE_PROOF_ENV, "")
+      .replace(/\s+2>&1$/, "").trim();
+    if (t === s) break;
+    s = t;
+  }
+  return s;
+}
+// Does run r prove one of the commands in `verify` (the task's runnable _Verify:_ values, or [a project check's command])?
+function runProvesVerify(r, verify) {
+  if (!isRecord(r) || typeof r.command !== "string") return false;
+  if (r.observed === "cli") return true; // `done --run` / `finish --run` ran exactly that command
+  const want = new Set((verify || []).map(proofKey).filter(Boolean));
+  if (!want.size) return true;
+  const got = proofKey(r.command);
+  if (want.has(got)) return true;
+  const parts = got.split(" && ").map(proofKey).filter((p) => p && !RE_PROOF_CD_ONLY.test(p));
+  return parts.length > 1 && parts.every((p) => want.has(p));
 }
 // Evidence is keyed by task NUMBER and stamped with its task: `task` (the text) and `verify` (the task's
 // runnable _Verify:_ command(s) when it was recorded). A stamped record counts only while that _Verify:_ is
@@ -91,7 +127,12 @@ function ownEvidence(evidence, block, dup) {
 }
 function taskEvidenceIssue(evidence, block, dup) {
   const e = ownEvidence(evidence, block, dup);
-  const reason = evidenceIssue(e, taskMarkers(block).verify.length > 0, expectsFail(block));
+  const verify = taskMarkers(block).verify;
+  const xf = expectsFail(block);
+  const reason = evidenceIssue(e, verify.length > 0, xf);
+  // 1.22 review: the run that proves a runnable _Verify:_ must BE a run of one of its commands (runProvesVerify) — `echo hello`
+  // with exit 0 verified a task whose _Verify:_ is `npm test`. It ticks, but stays unverified: command-mismatch.
+  if (reason === null && verify.length && !runProvesVerify(xf ? redProof(e, verify) : e, verify)) return "command-mismatch";
   if (reason !== "no-evidence" || e !== undefined || !evidenceRecords(evidence[String(block.number)]).length) return reason;
   // The number HAS records, none of them this task's: another task shares the number (duplicate-number), or
   // they are for an earlier _Verify:_ command / a task that held the number before a renumbering.
@@ -110,7 +151,7 @@ function taskVerification(evidence, block, dup, mode) {
   const rule = typeof mode === "string" ? { mode } : mode || {}; // evidenceRule(): { mode, since }
   if (taskMarkers(block).verify.length) {
     const reason = taskEvidenceIssue(evidence, block, dup);
-    if (reason || rule.mode !== "observed" || observedProof(ownEvidence(evidence, block, dup), expectsFail(block), rule.since)) return { reason, nothingToVerify: false };
+    if (reason || rule.mode !== "observed" || observedProof(ownEvidence(evidence, block, dup), expectsFail(block), rule.since, taskMarkers(block).verify)) return { reason, nothingToVerify: false };
     return { reason: "unobserved", nothingToVerify: false };
   }
   const reason = ownEvidence(evidence, block, dup) == null ? "no-evidence" : taskEvidenceIssue(evidence, block, dup);
@@ -122,7 +163,7 @@ function taskVerification(evidence, block, dup, mode) {
 // was a claim, not a run: a note after it becomes the record's summary (attaching it as `note` left it unreadable).
 const EVIDENCE_HISTORY = 5;
 const EVIDENCE_OTHERS = 5;
-function recordEvidence(prev, ev, at, stamp) {
+function recordEvidence(prev, ev, at, stamp, verify) {
   const p = isRecord(prev) ? prev : null;
   const pRun = p && p.exitCode != null;
   const stamped = (r) => { const o = { ...r, ...stamp }; if (!stamp.shared) delete o.shared; delete o.others; return o; };
@@ -139,7 +180,8 @@ function recordEvidence(prev, ev, at, stamp) {
   const run = runOf({ ...ev, at });
   const rec = { ...run, history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
   // B5: an _Expect: fail_ task's red run stays its proof (`red`) when a later run passes — its fix made the test green.
-  const keep = ev.keepRed === true ? redProof(p) : null;
+  // (verify — the task's _Verify:_ values, 1.22 review: the red run of THAT command, never a red run of another one)
+  const keep = ev.keepRed === true ? redProof(p, verify) : null;
   if (keep) rec.red = keep;
   return stamped(rec);
 }
@@ -150,7 +192,7 @@ function storeEvidence(slot, block, dup, ev, at) {
   const own = ownRecord(slot, block, dup);
   const stamp = { task: taskStamp(block), verify: verifyStamp(block) };
   if (dup) stamp.shared = true;
-  const rec = recordEvidence(own, ev, at, stamp);
+  const rec = recordEvidence(own, ev, at, stamp, taskMarkers(block).verify);
   const others = evidenceRecords(slot).filter((r) => r !== own).map(({ others: _nested, ...r }) => r).slice(0, EVIDENCE_OTHERS);
   return others.length ? { ...rec, others } : rec;
 }
@@ -766,9 +808,11 @@ function isRedRun(r) {
 // (evidenceIssue checks `stale` first), so a re-tick needs a new run: a pass is then the fix going green (expectFailRun's
 // passAfterRed), and the red run is carried into the new record as `red`. Callers pass the task's OWN record (ownEvidence /
 // ownRecord), which an edited _Verify:_ no longer matches — its red run proves nothing for the new command.
-function redProof(e) {
+// verify (1.22 review): the task's runnable _Verify:_ values — given, a red run of ANOTHER command proves nothing (runProvesVerify).
+function redProof(e, verify) {
   if (!isRecord(e) || (e.stale === true && e.staleBy !== "undo")) return null;
-  return isRedRun(e) ? runOf(e) : isRedRun(e.red) ? runOf(e.red) : null;
+  const red = (r) => isRedRun(r) && (!verify || runProvesVerify(r, verify));
+  return red(e) ? runOf(e) : red(e.red) ? runOf(e.red) : null;
 }
 // evidenceIssue() for an _Expect: fail_ task: verified by a red run {command, exitCode ≠ 0} (or the red run kept after the
 // fix made it pass); a passing run with no red run before it is `unexpected-pass` (the test doesn't fail: it tests nothing
@@ -777,7 +821,7 @@ function expectFailIssue(e, runnable) {
   // A could-not-run latest run is a failed re-check even while the red run it carries forward stays on record (so the
   // pass after the fix is still accepted as the green one).
   const cantRun = cantRunRecord(e); // full review Ga2: a could-not-run OUTPUT too (a missing test file…)
-  if (!cantRun && redProof(e)) return null;
+  if (!cantRun && redProof(e)) return null; // (taskEvidenceIssue then asks whether that red run is one of the _Verify:_ commands)
   if (e.command && e.exitCode === 0) return "unexpected-pass";
   if (e.command && e.exitCode != null) return "failed-run";
   if (runnable) return "manual-note-on-runnable-verify";
@@ -786,12 +830,15 @@ function expectFailIssue(e, runnable) {
 // completeTask's reading of one run on an _Expect: fail_ task (prev = the task's own record before it): `refused` — a pass
 // with no red run of this _Verify:_ on record, or a command that could not run; `red` — this run is the red proof;
 // `passAfterRed` — a pass once the red run is on record (the fix made the test green: the red run stays the proof).
-function expectFailRun(ev, prev) {
+// verify (1.22 review): the task's _Verify:_ values — a red run of ANOTHER command still ticks (it is no could-not-run run) but
+// is no red proof (`red` false: the red run already on record is carried forward), and only a red run of the _Verify:_ itself
+// makes a later pass "the fix going green".
+function expectFailRun(ev, prev, verify) {
   const run = !!ev && ev.exitCode != null && !!ev.command;
-  const before = redProof(prev);
+  const before = redProof(prev, verify);
   const red = run && isRedRun(ev);
   const pass = run && ev.exitCode === 0;
-  return { refused: run && (pass ? !before : !red), red, passAfterRed: pass && before ? before : null };
+  return { refused: run && (pass ? !before : !red), red: red && (!verify || runProvesVerify(ev, verify)), passAfterRed: pass && before ? before : null };
 }
 function expectFailRefusal(n, ev, ticked, lng) {
   const X = i18n.msg(lng).redGreen;
@@ -815,7 +862,7 @@ function redGreenGaps(blocks, evidence) {
   for (const b of blocks) if (b.done) for (const id of extractTestIds(taskMarkers(b)["makes green"].join(" "))) if (!greened.has(tKey(id.slice(2)))) greened.set(tKey(id.slice(2)), id);
   const proven = new Set();
   for (const b of blocks) {
-    if (!expectsFail(b) || !redProof(ownEvidence(evidence, b, dups.has(b.number)))) continue;
+    if (!expectsFail(b) || !redProof(ownEvidence(evidence, b, dups.has(b.number)), taskMarkers(b).verify)) continue;
     for (const id of extractTestIds(taskProse(b).join(" "))) proven.add(tKey(id.slice(2)));
   }
   return { greened: [...greened.values()], missing: [...greened].filter(([k]) => !proven.has(k)).map(([, id]) => id) };
@@ -920,8 +967,14 @@ function readObservedLog(file) {
 // (flatCommand) within OBSERVED_WINDOW_MS exited with this code (a report of exit 0 after an observed exit 1 is not what the
 // harness saw). A command `a && b` — how `done --run` reports a task with several _Verify:_ commands — also counts when each
 // part's latest observed run passed and the report is exit 0. slug: the feature's log; null: the project checks' log.
+// opts.expected (1.22 review): the commands the run must be one of — the task's _Verify:_ values, or [the check's command]; a
+// reported run of another command (another task's or check's, which the harness may well have seen) is never observed here.
+// The reported command loses a leading `cd <project root> &&` as the hook's log does (stripCdPrefix — the same function; the
+// roots: the project and the project holding the process's cwd, plus opts.roots).
 function observedRun(projectDir, slug, command, exitCode, opts = {}) {
-  const key = flatCommand(command);
+  if (Array.isArray(opts.expected) && opts.expected.length && !runProvesVerify({ command: String(command == null ? "" : command) }, opts.expected)) return { observed: false };
+  const roots = [projectDir, specsProjectOf(process.cwd()), ...(Array.isArray(opts.roots) ? opts.roots : [])];
+  const key = flatCommand(stripCdPrefix(command, roots, typeof opts.cwd === "string" && opts.cwd ? opts.cwd : projectDir));
   const code = typeof exitCode === "number" ? exitCode : /^\s*-?\d+\s*$/.test(String(exitCode)) ? parseInt(String(exitCode), 10) : NaN;
   if (!key || !Number.isInteger(code)) return { observed: false };
   const file = observedLogFile(projectDir, slug);
@@ -943,19 +996,55 @@ function observedAny(projectDir) {
     .map((f) => path.join(f.dir, ".execution", OBSERVED_LOG))];
   return files.some((f) => { try { return fs.statSync(f).size > 0; } catch { return false; } });
 }
-// The stamp of a reported run: "cli" when the CLI ran it itself (`done --run`, `finish --run`), else what the log says.
-function observedStamp(projectDir, slug, ev, ranBy) {
+// The stamp of a reported run: "cli" when the CLI ran it itself (`done --run`, `finish --run`), else what the log says about a
+// run of the EXPECTED command (expected: the task's _Verify:_ values / [the check's command] — observedRun).
+function observedStamp(projectDir, slug, ev, ranBy, expected) {
   if (!ev || typeof ev.command !== "string" || !ev.command.trim() || !Number.isInteger(ev.exitCode)) return undefined;
-  return ranBy === "cli" ? "cli" : observedRun(projectDir, slug, ev.command, ev.exitCode).observed;
+  return ranBy === "cli" ? "cli" : observedRun(projectDir, slug, ev.command, ev.exitCode, { expected }).observed;
+}
+// 1.22 review — `cd <dir> && <cmd>` (or `;`) → <cmd> when <dir> — resolved from cwd; Git Bash's /c/… read as C:/… on Windows —
+// is one of `roots` (project folders); any other folder keeps the whole command (another run, which then matches nothing).
+// ONE function for both sides: the observe hook's log (observeRun: the project AND the project holding the run's cwd — a
+// subagent in a git worktree logs `cd <worktree> && npm test` in the main project's log too) and the reported run's lookup
+// (observedRun) — the hook used to strip it while the lookup didn't, so reporting the exact command that ran read unobserved.
+const RE_CD_STRIP = /^cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;&|]+))\s*(?:&&|;)\s*([\s\S]+)$/;
+function stripCdPrefix(cmd, roots, cwd) {
+  const s = String(cmd == null ? "" : cmd).trim();
+  const m = RE_CD_STRIP.exec(s);
+  if (!m) return s;
+  let target = m[1] != null ? m[1] : m[2] != null ? m[2] : m[3];
+  if (process.platform === "win32") target = target.replace(/^\/([a-zA-Z])(?=\/|$)/, (_, d) => d + ":");
+  const norm = (p) => {
+    const r = path.resolve(p).replace(/[\\/]+$/, "");
+    return process.platform === "win32" || process.platform === "darwin" ? r.toLowerCase() : r;
+  };
+  const list = (Array.isArray(roots) ? roots : [roots]).filter((r) => typeof r === "string" && r.trim()).map(norm);
+  if (!list.length) return s;
+  const at = norm(path.resolve(typeof cwd === "string" && cwd ? cwd : list[0], target));
+  return list.includes(at) ? m[4].trim() : s;
+}
+// The nearest folder at or above dir that holds a .specs/ folder (≤ 12 levels; a network path is never stat'ed) — or null.
+function specsProjectOf(dir) {
+  if (typeof dir !== "string" || !dir || isNetworkPath(dir)) return null;
+  let d = path.resolve(dir);
+  for (let i = 0; i < 12; i++) {
+    if (isDirSafe(path.join(d, ".specs"))) return d;
+    const up = path.dirname(d);
+    if (up === d) break;
+    d = up;
+  }
+  return null;
 }
 // meta.evidence "observed": the run that proves a runnable _Verify:_ — the latest passing run, or an _Expect: fail_ task's red
 // proof — was observed by the harness (true) or made by the CLI itself ("cli").
 // An _Expect: fail_ task whose red proof was recorded BEFORE the project switched to "observed" (since) counts once the fix's
 // passing run of it was observed: re-making the red run would mean breaking the fixed code again (feature review R2 — the task
 // stayed unobserved for good and the note sent the user round in circles).
-function observedProof(e, expectFail, since) {
-  const seen = (r) => isRecord(r) && (r.observed === true || r.observed === "cli");
-  const run = expectFail ? redProof(e) : e;
+// verify (1.22 review): the task's _Verify:_ values — only an observed run OF one of them proves it (an observed run of another
+// task's command — or another check's — proves nothing here).
+function observedProof(e, expectFail, since, verify) {
+  const seen = (r) => isRecord(r) && (r.observed === true || r.observed === "cli") && (!verify || runProvesVerify(r, verify));
+  const run = expectFail ? redProof(e, verify) : e;
   if (seen(run)) return true;
   return !!(expectFail && since != null && isRecord(run) && timeOf(run.at) != null && timeOf(run.at) < since && seen(e) && e.exitCode === 0);
 }
@@ -972,11 +1061,14 @@ function verifyCommandSet(tasksText) {
 // hooks/observe-hook.js, once its cheap text pre-filter found the command in a tasks.md or meta.checks: one log line per
 // target the run belongs to — each non-archived feature with a task whose runnable _Verify:_ is this command, and the project
 // log when it is a project check. Never creates a feature folder (a feature renamed or removed meanwhile stays gone), never
-// throws. run: {command, exitCode, event?, session?, at?} → { recorded: [{feature | null, file}] }
+// throws. run: {command, exitCode, event?, session?, at?, cwd?, roots?} → { recorded: [{feature | null, file}] }
+// A leading `cd <dir> &&` is stripped when <dir> (from run.cwd) is this project or one of run.roots — the hook passes every
+// project the run belongs to (a worktree's and the main one): stripCdPrefix, the same function observedRun applies.
 function observeRun(projectDir, run) {
   const pdir = path.resolve(projectDir);
   const root = specsRoot(pdir);
-  const key = flatCommand(run && run.command);
+  const roots = [pdir, ...(run && Array.isArray(run.roots) ? run.roots : [])];
+  const key = flatCommand(stripCdPrefix(run && run.command, roots, run && typeof run.cwd === "string" && run.cwd ? run.cwd : pdir));
   const code = run && Number.isInteger(run.exitCode) ? run.exitCode : null;
   if (!key || key.length > OBSERVED_MAX_COMMAND || code == null || !isDirSafe(root)) return { recorded: [] };
   const entry = { command: key, exitCode: code, at: typeof run.at === "string" && Number.isFinite(Date.parse(run.at)) ? run.at : new Date().toISOString() };
@@ -1127,7 +1219,7 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy) {
     const code = it.exitCode == null ? "" : String(it.exitCode).trim();
     if (!/^-?\d+$/.test(code)) return bad(P.needsExit);
     const run = { command: it.command.trim().slice(0, 500), exitCode: parseInt(code, 10), ...gitEvidence(it) };
-    run.observed = observedStamp(projectDir, null, run, ranBy); // 1.14 F1
+    run.observed = observedStamp(projectDir, null, run, ranBy, [byName.get(it.name)]); // 1.14 F1 — an observed run of THIS check's command (1.22 review)
     if (typeof it.summary === "string" && it.summary.trim()) run.summary = it.summary.slice(0, 2000);
     runs.push({ name: it.name, check: byName.get(it.name), run });
   }
@@ -1150,7 +1242,7 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy) {
 }
 // Each project check's standing (spec_finish's suite-evidence blocker, doctor's warn): pass — its latest run exited 0, for
 // the command meta.checks names now, at or after the feature's last task activity · no-run · failed · changed (meta.checks'
-// command changed since the run) · before-last-tick · code-changed (full review Ga3: the run's `code` stamp no longer matches
+// command changed since the run, or the run is of another command — 1.22 review) · before-last-tick · code-changed (full review Ga3: the run's `code` stamp no longer matches
 // the feature's implementing files — code edited after the checks ran; a run recorded without a stamp keeps the older rule).
 // dir: the feature folder (the stamp is only compared with it). → { items, missing (not pass), invalid, lastActivity }
 // · unobserved (1.14 F1, only with roadmap.json meta.evidence "observed": a passing run the harness never saw — observed is
@@ -1172,7 +1264,9 @@ function suiteStatus(projectDir, state, dir) {
     const it = { name, command, exitCode: r.exitCode, at: typeof r.at === "string" ? r.at : null, ranCommand: r.command, ...runOf({ summary: r.summary, ...gitEvidence(r) }) };
     if (r.observed === true || r.observed === false || r.observed === "cli") it.observed = r.observed; // 1.14 F1
     const t = Date.parse(r.at);
-    it.status = r.check !== command ? "changed" : r.exitCode !== 0 ? "failed" : last != null && !(Number.isFinite(t) && t >= last) ? "before-last-tick"
+    // changed: meta.checks' command changed since the run — or (1.22 review) the run was of ANOTHER command (runProvesVerify:
+    // `{name: "test", command: "echo ok"}` made check test pass)
+    it.status = r.check !== command || !runProvesVerify(r, [command]) ? "changed" : r.exitCode !== 0 ? "failed" : last != null && !(Number.isFinite(t) && t >= last) ? "before-last-tick"
       : codeChanged(r) ? "code-changed" : observedOnly && r.observed !== true && r.observed !== "cli" ? "unobserved" : "pass";
     return it;
   });
@@ -1402,7 +1496,8 @@ module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isR
   cantRunRecord, isRedRun, redProof, expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps,
   gitEvidence, OBSERVED_LOG, OBSERVED_MAX_BYTES, OBSERVED_WINDOW_MS, OBSERVED_MAX_COMMAND, OBSERVED_MAX_FEATURES,
   EVIDENCE_MODES, flatCommand, evidenceMode, evidenceSince, evidenceRule, evidenceModeInput, setEvidenceMode,
-  observedLogFile, readObservedLog, observedRun, observedAny, observedStamp, observedProof, verifyCommandSet,
+  observedLogFile, readObservedLog, observedRun, observedAny, observedStamp, RE_CD_STRIP, stripCdPrefix, specsProjectOf,
+  RE_PROOF_CD, RE_PROOF_CD_ONLY, RE_PROOF_PIPEFAIL, RE_PROOF_ENV, proofKey, runProvesVerify, observedProof, verifyCommandSet,
   observeRun, appendObserved, trimObservedLog, lastTaskActivity, CHECK_NAME_RE, CHECKS_MAX, validCheckName,
   validCheckCmd, projectChecks, checksInput, checksPlanError, writeChecks, recordFinishChecks, suiteStatus,
   suiteCodeStamp, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, GITLOG_MAX_COMMITS, parseGitLog,

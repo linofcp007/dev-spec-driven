@@ -15,7 +15,8 @@
  *   - PostToolUse: tool_response.exit_code (or exitCode / code; a response text starting "Exit code N"); none → 0 (the event
  *     fires after a tool call succeeds). An interrupted or backgrounded run is no run.
  *   - PostToolUseFailure: the same fields, else the exit code named in `error` ("… exit code 1"), else 1 — never 0.
- * A command `cd <project root> && <cmd>` counts as <cmd> (the Bash tool often prefixes the folder it runs in).
+ * A command `cd <project root> && <cmd>` counts as <cmd> (the Bash tool often prefixes the folder it runs in) — the root of any
+ * project the run belongs to (a worktree's too), stripped by the engine's stripCdPrefix, the function observedRun applies.
  *
  * Cheap and silent, like every dev-spec hook: it exits at once unless the tool is Bash and the project has a .specs/ dev-spec
  * owns; the engine is loaded only when the command's text appears in a feature's tasks.md or in meta.checks (a plain text
@@ -120,20 +121,11 @@ function exitCodeOf(payload, failure, strict) {
   return nonZero(m ? parseInt(m[1], 10) : 1);
 }
 
-// `cd <project root> && <cmd>` (or `;`) → <cmd>: the Bash tool often runs a command from the project root that way. Any
-// other folder is another run (kept whole, so it matches nothing).
-function stripCdPrefix(cmd, pdir, cwd) {
-  const m = /^cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;&|]+))\s*(?:&&|;)\s*([\s\S]+)$/.exec(cmd);
-  if (!m) return cmd;
-  let target = m[1] != null ? m[1] : m[2] != null ? m[2] : m[3];
-  // Git Bash / MSYS paths on Windows: /c/Users/… → C:/Users/…
-  if (process.platform === "win32") target = target.replace(/^\/([a-zA-Z])(?=\/|$)/, (_, d) => d + ":");
-  const norm = (p) => {
-    const r = path.resolve(p).replace(/[\\/]+$/, "");
-    return process.platform === "win32" || process.platform === "darwin" ? r.toLowerCase() : r;
-  };
-  return norm(path.resolve(cwd || pdir, target)) === norm(pdir) ? m[4].trim() : cmd;
-}
+// The pre-filter's key: a leading `cd <dir> &&` (or `;`) dropped WHATEVER the folder — the Bash tool often runs a command from
+// the project root that way. Only a filter (a superset): the engine decides, with the ONE stripping function the reported run's
+// lookup uses too (spec.stripCdPrefix — the folder must be one of the run's projects: this one, or the one holding the cwd, a
+// worktree's), what is logged (1.22 review — the hook stripped, the lookup didn't; a worktree's run reached only its own log).
+const looseKey = (cmd) => flat(cmd.replace(/^cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)\s*/, ""));
 
 // The plain-text pre-filter: is the command written in a feature's tasks.md or in meta.checks at all? Only then is the
 // engine loaded (it parses the tasks for real and skips archived features).
@@ -192,13 +184,18 @@ function main(raw) {
   if (exitCode == null) return finish();
 
   let spec = null;
-  for (const pdir of projectDirsOf(payload)) {
-    const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : pdir;
-    const key = flat(stripCdPrefix(command, pdir, cwd));
+  const dirs = projectDirsOf(payload);
+  const key = looseKey(command);
+  for (const pdir of dirs) {
     if (!key || !mentioned(pdir, key)) continue;
+    const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : pdir;
     spec = spec || require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+    // The engine strips a `cd <dir> &&` whose folder is this project or another one the run belongs to (dirs: a worktree's and
+    // the main project), from the run's cwd — any other folder keeps the whole command, which then matches nothing.
     spec.observeRun(pdir, {
-      command: key,
+      command,
+      cwd,
+      roots: dirs,
       exitCode,
       event: event || (failure ? "PostToolUseFailure" : "PostToolUse"),
       session: typeof payload.session_id === "string" ? payload.session_id : undefined,

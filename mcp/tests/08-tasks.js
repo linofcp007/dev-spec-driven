@@ -33,7 +33,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
   const w1b1 = S.taskBrief(w1, "scan", 1);
   ok(S.statusFeature(w1, "scan").tasks.list.map((t) => t.number).join() === "1,2" && S.nextTask(w1, "scan").next.number === 1 && w1b1.task.number === 1 && w1b1.verify.length === 1,
     "zero-padded '01.' is task 1 in status, next and brief");
-  const w1z1 = S.completeTask(w1, "scan", 1, { command: "node -e 0", exitCode: 0 }), w1z2 = S.completeTask(w1, "scan", "02");
+  const w1z1 = S.completeTask(w1, "scan", 1, { command: 'node -e "process.exit(0)"', exitCode: 0 }), w1z2 = S.completeTask(w1, "scan", "02");
   ok(w1z1.ok && w1z1.verified && w1z2.ok && w1z2.next === null && /- \[x\] 01\. First\n[\s\S]*- \[x\] 02\. Second/.test(fs.readFileSync(w1Tasks, "utf8")),
     "complete_task finds zero-padded tasks by number (1) or by '02'");
   // 3. Duplicated numbers: ONE resolver — the first OPEN task with that number, else the first.

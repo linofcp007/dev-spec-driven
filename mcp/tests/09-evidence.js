@@ -305,7 +305,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const chg7 = S.finishFeature(d7, f7.slug);
     ok(fix7.ok && fix7.suiteChecks.every((c) => c.status === "pass") && !fix7.blockers.some((b) => /project checks/.test(b)) && !(gate7b.failing || []).includes("suite-evidence") &&
       docOk7.status === "pass" && late7.suiteChecks.every((c) => c.status === "before-last-tick") && late7.blockers.some((b) => /test \(ran before the last task activity\)/.test(b)) &&
-      chg7.suiteChecks.find((c) => c.name === "lint").status === "changed" && chg7.blockers.some((b) => /lint \(its command changed since the run\)/.test(b)),
+      chg7.suiteChecks.find((c) => c.name === "lint").status === "changed" && chg7.blockers.some((b) => /lint \(the run is not of its command \(or the command changed since\)\)/.test(b)),
       "B5 suite-evidence clears once every check passed since the last task activity (doctor pass, the execution gate no longer names it); a later tick makes the runs 'before-last-tick', an edited meta.checks command makes its run 'changed' (got " +
       JSON.stringify([late7.suiteChecks, chg7.suiteChecks]).slice(0, 300) + ")");
     const fPt7 = S.createFeature(d7, "Suite Pt", ["core"], "", undefined, "pt");
@@ -1264,5 +1264,109 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     ok(!ppWrong.length && !rpWrong.length && !vpWrong.length && !slowC.length,
       "1.21.1 languages (review 2): posixPwshScript leaves a redirection's target, an fd number and a comment to the outer shell, reads pwsh's script behind sudo / doas / timeout / nice / nohup / time and their options, and follows a POSIX shell's -c script (bash -c \"pwsh -c \\\"$x\\\"\" is refused); runsPwsh and verifyPipeMasked skip the same wrappers; all linear on 200,000-character inputs (wrong: " +
       js([ppWrong, rpWrong, vpWrong, slowC]) + ")");
+  }
+
+  // 1.22 review (finding 1) — the run must BE a run of the task's _Verify:_ (or of the check's command): `echo hello` with exit 0
+  // verified a task whose _Verify:_ is `npm test`, `echo ok` passed check test (`npm test`), an observed run of another task's
+  // command was accepted. Now: command-mismatch (ticked, unverified) / changed (the finish check).
+  {
+    const js = JSON.stringify;
+    const PV = (cmd, verify, extra) => S.runProvesVerify({ command: cmd, ...extra }, verify);
+    const yes = ["npm test", "  npm   test ", "`npm test`", '"npm test"', "'npm test'", "cd /x/y && npm test", 'cd "C:/My Proj" && npm test', "cd /d C:\\x && npm test",
+      "cd sub; npm test", "set -o pipefail; npm test", "set -euo pipefail; npm test", "set -e -o pipefail && npm test", "CI=1 npm test", 'NODE_ENV="test" CI=1 npm test', "npm test 2>&1",
+      "cd /x && CI=1 npm test 2>&1"];
+    const no = ["echo hello", "npm test -- --grep x", "npm run test", "npm test; echo ok", "npm test || true", "npm test | tee log", "echo npm test", "cd x", "npm test && echo ok",
+      "npm testing", "", "node -e \"process.exit(0)\""];
+    const two = ["npm test", "npm run lint"];
+    const pvWrong = yes.filter((c) => !PV(c, ["npm test"])).map((c) => "refused: " + c).concat(no.filter((c) => PV(c, ["npm test"])).map((c) => "accepted: " + c))
+      .concat(["npm test && npm run lint", "cd /p && npm run lint && npm test", "npm run lint"].filter((c) => !PV(c, two)).map((c) => "refused (2): " + c))
+      .concat(["npm test && echo x", "npm test && npm run lint && rm -rf x"].filter((c) => PV(c, two)).map((c) => "accepted (2): " + c));
+    ok(!pvWrong.length && PV("anything at all", ["npm test"], { observed: "cli" }) && !PV("echo hi", ["npm test"], { observed: true }),
+      "1.22 review: runProvesVerify — a run proves a _Verify:_ only when it is one of its commands: whitespace / backticks / surrounding quotes, a leading cd <dir> && · set -o pipefail; · VAR=value and a trailing 2>&1 are fine, the ` && ` join of its commands too, and the CLI's own run (observed \"cli\"); anything else is not (wrong: " + js(pvWrong) + ")");
+
+    const pM = path.join(tmp, "proj-122-mismatch");
+    S.initProject(pM, ["core"], "en", { checks: { test: "npm test" } });
+    const fM = S.createFeature(pM, "Proof", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fM.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] A\n  - _Verify: npm test_\n- [ ] 2. [US1] B\n  - _Verify: npm test_\n" +
+      "- [ ] 3. [US1] C\n  - _Verify: npm test_\n  - _Verify: npm run lint_\n- [ ] 4. [US1] Red first\n  - _Verify: node t01.js_\n  - _Expect: fail_\n- [ ] 5. [US1] D\n  - _Verify: npm test_\n");
+    const m1 = S.completeTask(pM, "proof", 1, { command: "echo hello", exitCode: 0 });
+    const m2 = S.completeTask(pM, "proof", 2, { command: "cd " + pM + " && CI=1 npm test", exitCode: 0, summary: "3 passing" });
+    const m3 = S.completeTask(pM, "proof", 3, { command: "npm test && npm run lint", exitCode: 0 }, { ranBy: "cli" });
+    const doc = S.specDoctor(pM, "proof").checks.find((c) => c.id === "verification");
+    const st = S.statusFeature(pM, "proof").tasks.list;
+    ok(m1.ok && m1.verified === false && m1.unverifiedReason === "command-mismatch" && /the run recorded \(`echo hello`\) is not a run of its _Verify:_ command \(npm test\) — it is ticked/.test(m1.note) &&
+      /done proof 1 --run/.test(m1.note) && m2.verified === true && !m2.unverifiedReason && m3.verified === true &&
+      doc && /#1 \(the run recorded is not its _Verify:_ command\)/.test(doc.detail) && !/#2|#3/.test(doc.detail) && st[0].verified === false && st[1].verified === true &&
+      S.finishFeature(pM, "proof").blockers.some((b) => /#1 \(the run recorded is not its _Verify:_ command\)/.test(b)),
+      "1.22 review: spec_complete_task with a run of ANOTHER command than the task's _Verify:_ ticks it but leaves it unverified — unverifiedReason command-mismatch + a note; doctor, status and finish say so; a cd / env prefix and the CLI's join verify (got " +
+      js([m1.unverifiedReason, m1.note, m2.unverifiedReason, m3.unverifiedReason, doc && doc.detail]) + ")");
+
+    // _Expect: fail_: a red run of another command ticks, but is no red proof — and never displaces the real one later.
+    const r1 = S.completeTask(pM, "proof", 4, { command: "node -e \"process.exit(1)\"", exitCode: 1, summary: "1 failing" });
+    const r2 = S.completeTask(pM, "proof", 4, { command: "node t01.js", exitCode: 1, summary: "not ok 1 T-01" });
+    const r3 = S.completeTask(pM, "proof", 4, { command: "node -e \"process.exit(2)\"", exitCode: 2, summary: "1 failing" });
+    const r4 = S.completeTask(pM, "proof", 4, { command: "node t01.js", exitCode: 0, summary: "ok 1 T-01" });
+    const rec4 = JSON.parse(fs.readFileSync(path.join(fM.dir, ".state.json"), "utf8")).evidence["4"];
+    ok(r1.ok && r1.verified === false && r1.unverifiedReason === "command-mismatch" && !r1.redRecorded && /until a FAILING run of that command/.test(r1.note) &&
+      r2.ok && r2.verified === true && r2.redRecorded === true && r3.ok && r3.verified === true && !r3.redRecorded && r4.ok && r4.verified === true &&
+      rec4.red && rec4.red.command === "node t01.js",
+      "1.22 review: an _Expect: fail_ task — a red run of another command ticks it (command-mismatch, no redRecorded); the red run of its _Verify:_ is the proof, a later red run of another command never displaces it, and the fix's pass keeps it (got " +
+      js([r1.unverifiedReason, r2.verified, r3.verified, r4.verified, rec4.red]) + ")");
+
+    // finish: a run of another command than the configured check reads `changed`; the check's own command (a cd prefix) passes.
+    const fin1 = S.finishFeature(pM, "proof", { evidence: [{ name: "test", command: "echo ok", exitCode: 0 }] });
+    const fin2 = S.finishFeature(pM, "proof", { evidence: [{ name: "test", command: "cd " + pM + " && npm test", exitCode: 0 }] });
+    ok(fin1.ok && fin1.suiteChecks.find((c) => c.name === "test").status === "changed" && fin1.blockers.some((b) => /test \(the run is not of its command/.test(b)) &&
+      fin2.ok && fin2.suiteChecks.find((c) => c.name === "test").status === "pass",
+      "1.22 review: spec_finish {evidence} — a check's run of ANOTHER command (`echo ok` for `npm test`) reads changed and blocks; the check's command itself passes (got " +
+      js([fin1.suiteChecks, fin2.suiteChecks]) + ")");
+
+    // observed mode: an observed run of another task's / check's command is not this one's.
+    S.observeRun(pM, { command: "npm run lint", exitCode: 0 });
+    const look = [S.observedRun(pM, "proof", "npm run lint", 0).observed, S.observedRun(pM, "proof", "npm run lint", 0, { expected: ["npm test"] }).observed,
+      S.observedRun(pM, "proof", "npm run lint", 0, { expected: two }).observed];
+    S.initProject(pM, ["core"], "en", { evidence: "observed" });
+    const o5 = S.completeTask(pM, "proof", 5, { command: "npm run lint", exitCode: 0 });
+    ok(js(look) === js([true, false, true]) && o5.ok && o5.observed === false && o5.verified === false && o5.unverifiedReason === "command-mismatch",
+      "1.22 review: observedRun looks up the EXPECTED command — another task's observed run (npm run lint) is not observed for a task whose _Verify:_ is npm test; under meta.evidence observed it neither verifies nor counts as observed (got " +
+      js([look, o5.observed, o5.unverifiedReason]) + ")");
+
+    // PT / ES wording.
+    const fP = S.createFeature(pM, "Prova", ["core"], "", undefined, "pt"), fE = S.createFeature(pM, "Prueba", ["core"], "", undefined, "es");
+    for (const f of [fP, fE]) fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] x\n  - _Verify: npm test_\n");
+    S.initProject(pM, ["core"], "en", { evidence: "reported" });
+    const mP = S.completeTask(pM, "prova", 1, { command: "echo ola", exitCode: 0 }), mE = S.completeTask(pM, "prueba", 1, { command: "echo hola", exitCode: 0 });
+    ok(mP.unverifiedReason === "command-mismatch" && /a execução registada \(`echo ola`\) não é uma execução do seu comando _Verify:_/.test(mP.note) &&
+      mE.unverifiedReason === "command-mismatch" && /la ejecución registrada \(`echo hola`\) no es una ejecución de su comando _Verify:_/.test(mE.note),
+      "1.22 review: the command-mismatch note in PT / ES (got " + js([mP.note, mE.note]) + ")");
+  }
+
+  // 1.22 review (finding 6) — ONE `cd <root> &&` stripping (spec.stripCdPrefix) for the observe hook's log and the reported run's
+  // lookup: reporting the exact command that ran (`cd <root> && node t1.js`) read unobserved, and a subagent's run in a git
+  // worktree (`cd <worktree> && node t1.js`) reached only the worktree's (git-ignored, never merged) log.
+  {
+    const js = JSON.stringify;
+    const obsJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
+    const mk = (dir) => {
+      S.initProject(dir, ["core"], "en");
+      const f = S.createFeature(dir, "Auth", ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Login\n  - _Verify: node t1.js_\n");
+      return f;
+    };
+    const pMain = path.join(tmp, "proj-122-cd-main"), pWt = path.join(tmp, "proj-122-cd-wt", "wt");
+    const fMain = mk(pMain), fWt = mk(pWt);
+    const logOf = (dir) => { try { return fs.readFileSync(path.join(dir, ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } };
+    const hook = (cwd, command, envDir) => spawnSync(process.execPath, [obsJs], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: envDir, SPEC_PROJECT_DIR: "" },
+      input: JSON.stringify({ session_id: "s", cwd, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command }, tool_response: { exit_code: 0 } }) });
+    const h1 = hook(pWt, "cd " + pWt + " && node t1.js", pMain);
+    const h2 = hook(pMain, "cd " + path.join(tmp, "elsewhere") + " && node t1.js", pMain);
+    const main = logOf(fMain.dir), wt = logOf(fWt.dir);
+    const look = [S.observedRun(pMain, "auth", "cd " + pMain + " && node t1.js", 0).observed, S.observedRun(pMain, "auth", "node t1.js", 0).observed,
+      S.observedRun(pMain, "auth", "cd " + path.join(tmp, "elsewhere") + " && node t1.js", 0).observed,
+      S.stripCdPrefix("cd sub && npm test", [path.join(pMain, "sub")], pMain), S.stripCdPrefix("cd sub && npm test", [pMain], pMain)];
+    ok(h1.status === 0 && h2.status === 0 && js(main.map((e) => e.command)) === js(["node t1.js"]) && js(wt.map((e) => e.command)) === js(["node t1.js"]) &&
+      js(look) === js([true, true, false, "npm test", "cd sub && npm test"]),
+      "1.22 review: a worktree's `cd <worktree> && node t1.js` is logged as `node t1.js` in the worktree's log AND the main project's (a cd into another folder is logged nowhere); observedRun strips `cd <root> &&` from the reported command too — one stripCdPrefix (got " +
+      js([main, wt, look]) + ")");
   }
 };
