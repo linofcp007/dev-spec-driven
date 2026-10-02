@@ -45,7 +45,8 @@ and U+FEFF gotchas are in CLAUDE.md.
   append-only lists (`approvalHistory`, `changes`, `unticks`) → the union by identity (`HISTORY_ID` phase/at/by/revoked/partial/role
   · `CHANGE_ID` · `UNTICK_ID`; the same record with different fields — upgrade's seeded snapshot — gets both sides' fields),
   chronological once theirs added one; `evidence[n]` / `finishChecks[name]` → the record with the latest run `at` (a tie is the same
-  run: its note and stale mark merged), histories merged, deduped, bounded by `EVIDENCE_HISTORY`; `ticks[n]` / `lastTickAt` / `lastEditAt` (1.22 review: the spec-hook's stamp of a hand-saved tasks.md) → the
+  run: its note and stale mark merged), histories merged, deduped, bounded by `EVIDENCE_HISTORY` (a run's own fields — `observed`,
+  1.22 review 3's `cmdRule` — travel with it: no rule of their own); `ticks[n]` / `lastTickAt` / `lastEditAt` (1.22 review: the spec-hook's stamp of a hand-saved tasks.md) → the
   later; `finished` → the later (firstAt the earliest); `createdAt` → the earlier; `approvals[phase]` → the later approval unless
   a revocation record (`revoked: true`, not `partial`) is later — **revocations win by time**; `signoffs[phase][role]` → the later,
   dropped when a revocation or the phase's merged approval is no earlier; `lastApprovedPhase` follows the merged approvals (never its

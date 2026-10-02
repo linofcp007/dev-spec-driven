@@ -1468,9 +1468,10 @@ const msg = {
         "command-mismatch": "the run recorded is not its _Verify:_ command" }, // 1.22 review
       // 1.22 review — the run recorded for a task is not a run of its _Verify:_ command(s): it ticks, but proves nothing.
       // review 2: several _Verify:_ commands → every one of them, in one run; a prefix the _Verify:_ holds is never dropped; an
-      // _Expect: fail_ task: the red run BEFORE the fix lands — once the fix is in, the passing run of the _Verify:_ (no --run offered)
+      // _Expect: fail_ task: the red run BEFORE the fix lands (review 3: a red run of another command never counts — with the fix in,
+      // it is set aside for the red run)
       commandMismatch: (n, slug, ran, verify, red) => `Task ${n}: the run recorded (\`${ran}\`) is not a run of its _Verify:_ command (${verify}) — it is ticked, but stays unverified until a ${red ? "FAILING " : ""}run of that command is recorded (the command as written — with several _Verify:_ commands, every one of them in ONE run joined with \` && \`; a \`cd <dir> &&\`, \`set -o pipefail;\` or VAR=value of your own in front is fine, but never drop one the _Verify:_ holds)` +
-        (red ? ` — record it BEFORE the fix lands, while the test still fails: ${DEV_SPEC} done ${slug} ${n} --run. Once the fix is in, don't break it again: record the passing run of the _Verify:_ command as written — the red run on record then counts.` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
+        (red ? ` — record it BEFORE the fix lands, while the test still fails: ${DEV_SPEC} done ${slug} ${n} --run (a red run of another command never counts; with the fix already in, set it aside — git stash — for that run, then restore it).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
       duplicateTasks: (list) => `task numbers used more than once: ${list} — complete/brief pick the first open one; renumber them`,
     },
     // 1.14 F1 — harness-observed evidence (hooks/observe-hook.js; roadmap.json meta.evidence "reported" | "observed").

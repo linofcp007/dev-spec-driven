@@ -215,7 +215,8 @@ function taskEvidenceIssue(evidence, block, dup) {
   // 1.22 review: the run that proves a runnable _Verify:_ must BE a run of its commands (runProvesVerify) — `echo hello` with
   // exit 0 verified a task whose _Verify:_ is `npm test`. It ticks, but stays unverified: command-mismatch. An _Expect: fail_
   // task: its red proof (redProof — a red run of its _Verify:_, or, once a passing run of the _Verify:_ is the latest, the red
-  // run it carries of any command: review 2's grandfathering). Its latest run a pass (of another command) with no such red proof
+  // run it carries of any command recorded before the command rule: review 2's grandfathering, narrowed by review 3 to runs
+  // without the cmdRule stamp). Its latest run a pass (of another command) with no such red proof
   // is still unexpected-pass — a red run of another command carried forward (recordEvidence) doesn't change that.
   if (reason === null && verify.length && !(xf ? redProof(e, verify, e) : runProvesVerify(e, verify))) return xf && e.exitCode === 0 ? "unexpected-pass" : "command-mismatch";
   if (reason !== "no-evidence" || e !== undefined || !evidenceRecords(evidence[String(block.number)]).length) return reason;
@@ -262,14 +263,17 @@ function recordEvidence(prev, ev, at, stamp, verify) {
   }
   let hist = p && Array.isArray(p.history) ? p.history.filter((h) => h && typeof h === "object") : [];
   if (!hist.length && pRun) hist = [runOf(p)]; // a v1.12 record: its run seeds the history
-  const run = runOf({ ...ev, at });
+  // Review 3: every run recorded from now on is stamped `cmdRule` (CMD_RULE) — it was recorded under the command rule (runProvesVerify),
+  // so redProof never grandfathers it as a red proof of another command.
+  const run = runOf({ ...ev, at, cmdRule: CMD_RULE });
   const rec = { ...run, history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
   // B5: an _Expect: fail_ task's red run stays its proof (`red`) when a later run passes — its fix made the test green.
   // (verify — the task's _Verify:_ values, 1.22 review: the red run of THAT command, never a red run of another one — unless
-  // this run is a passing run of the _Verify:_: then the red run on record, of any command, is kept — redProof's grandfathering).
-  // Review 2: with none of the _Verify:_, a red run of another command is carried forward too (an exit 127 in between dropped it,
-  // and the fix's passing run was then refused again); it proves nothing until a passing run of the _Verify:_ follows it.
-  const keep = ev.keepRed === true ? redProof(p, verify, ev) || redProof(p) : null;
+  // this run is a passing run of the _Verify:_ and the red run on record predates the command rule: redProof's grandfathering).
+  // Review 2: with none of the _Verify:_, such a pre-rule red run of another command is carried forward too (an exit 127 in
+  // between dropped it, and the fix's passing run was then refused again); review 3: a red run recorded under the rule (cmdRule)
+  // of another command is never carried — it can never prove anything.
+  const keep = ev.keepRed === true ? redProof(p, verify, ev) || legacyRedRun(p) : null;
   if (keep) rec.red = keep;
   return stamped(rec);
 }
@@ -288,8 +292,9 @@ function storeEvidence(slot, block, dup, ev, at, verifyRan) {
 function runOf(e) {
   const r = {};
   // expected: "fail" (_Expect: fail_), commit / dirty (the git state `done --run` saw) — B5; observed (true | false | "cli": the
-  // harness — or the CLI itself — saw the run, 1.14 F1); absent on older records
-  for (const k of ["command", "exitCode", "summary", "at", "expected", "commit", "dirty", "observed"]) if (e[k] != null) r[k] = e[k];
+  // harness — or the CLI itself — saw the run, 1.14 F1); absent on older records. Review 3: cmdRule (recorded under the command
+  // rule — never grandfathered by redProof).
+  for (const k of ["command", "exitCode", "summary", "at", "expected", "commit", "dirty", "observed", "cmdRule"]) if (e[k] != null) r[k] = e[k];
   return r;
 }
 function stateEvidence(projectDir, slug) {
@@ -899,16 +904,30 @@ function isRedRun(r) {
 // ownRecord), which an edited _Verify:_ no longer matches — its red run proves nothing for the new command.
 // verify (1.22 review): the task's runnable _Verify:_ values — given, a red run of ANOTHER command proves nothing (runProvesVerify).
 // pass (review 2 — grandfathering, as observedProof's R2): a passing run of the _Verify:_ itself (runProvesVerify — the CLI's
-// "cli" stamp too) — the record's own latest run, or the run being recorded; given, the red run on record of ANY command counts:
-// a red run reported in another form than the _Verify:_ (`tests\x.test.js`, a pre-1.22 run) left the task stuck once the fix
-// was in — its passing `done --run` was refused as unexpected-pass, and the only way out was reverting the fix.
+// "cli" stamp too) — the record's own latest run, or the run being recorded; given, a red run on record of another command that
+// was recorded BEFORE the command rule existed counts (review 3: only one without the `cmdRule` stamp recordEvidence puts on
+// every run since — `npm test -- tests/other.test.js` or `false` with exit 1, then the passing run of the _Verify:_, verified a
+// task with no red run of its own test). A pre-rule red run reported in another form than the _Verify:_ (`tests\x.test.js`,
+// `--test-reporter=tap`) left the task stuck once the fix was in — its passing `done --run` was refused as unexpected-pass,
+// and the only way out was reverting the fix.
 function redProof(e, verify, pass) {
   if (!isRecord(e) || (e.stale === true && e.staleBy !== "undo")) return null;
   const red = (r) => isRedRun(r) && (!verify || runProvesVerify(r, verify));
   if (red(e)) return runOf(e);
   if (red(e.red)) return runOf(e.red);
   if (!verify || !isRecord(pass) || pass.exitCode !== 0 || !runProvesVerify(pass, verify)) return null;
-  return isRedRun(e) ? runOf(e) : isRedRun(e.red) ? runOf(e.red) : null;
+  return legacyRedRun(e);
+}
+// Review 3 — the version of the command rule a run was recorded under (recordEvidence stamps `cmdRule` on every run); a run
+// without it predates the rule (redProof's grandfathering, recordEvidence's carry-forward). Never taken from a caller
+// (normalizeEvidence copies no such field).
+const CMD_RULE = 1;
+// The red run of ANY command a record holds (its latest run, else the red run it carries) that was recorded BEFORE the command
+// rule (no cmdRule) — what redProof grandfathers once the _Verify:_ itself passes. A stale record (not an undo's) holds none.
+function legacyRedRun(e) {
+  if (!isRecord(e) || (e.stale === true && e.staleBy !== "undo")) return null;
+  const legacy = (r) => isRedRun(r) && r.cmdRule == null;
+  return legacy(e) ? runOf(e) : legacy(e.red) ? runOf(e.red) : null;
 }
 // evidenceIssue() for an _Expect: fail_ task: verified by a red run {command, exitCode ≠ 0} (or the red run kept after the
 // fix made it pass); a passing run with no red run before it is `unexpected-pass` (the test doesn't fail: it tests nothing
@@ -928,8 +947,8 @@ function expectFailIssue(e, runnable) {
 // `passAfterRed` — a pass once the red run is on record (the fix made the test green: the red run stays the proof).
 // verify (1.22 review): the task's _Verify:_ values — a red run of ANOTHER command still ticks (it is no could-not-run run) but
 // is no red proof (`red` false: the red run already on record is carried forward), and only a red run of the _Verify:_ itself
-// makes a later pass "the fix going green" — or (review 2) a red run of any command, when this pass is a run of the _Verify:_
-// itself (redProof's grandfathering).
+// makes a later pass "the fix going green" — or (review 2) a red run of any command recorded before the command rule (review 3:
+// no cmdRule stamp), when this pass is a run of the _Verify:_ itself (redProof's grandfathering).
 function expectFailRun(ev, prev, verify) {
   const run = !!ev && ev.exitCode != null && !!ev.command;
   const before = redProof(prev, verify, ev);
@@ -1619,7 +1638,7 @@ module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isR
   verifyPipeMasked, POSIX_SHELLS, PWSH_SHELLS, SHELL_WRAPPERS, WRAPPER_ARG_OPTS, lexShell, programName, setPipefail,
   shellScript, pipeMaskedIn, verifyPipes, expectsFail, CANT_RUN_EXIT, CANT_RUN_OUTPUT, RE_ASSERTION_RAN,
   RE_PESTER_FAILED, RE_PESTER_NOT_RUN, pesterRan, couldNotRunOutput, RE_PWSH_PARSE_FAILURE, pwshParseFailure, runsPwsh,
-  cantRunRecord, isRedRun, redProof, expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps,
+  cantRunRecord, isRedRun, redProof, CMD_RULE, legacyRedRun, expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps,
   gitEvidence, OBSERVED_LOG, OBSERVED_MAX_BYTES, OBSERVED_WINDOW_MS, OBSERVED_MAX_COMMAND, OBSERVED_MAX_FEATURES,
   EVIDENCE_MODES, flatCommand, evidenceMode, evidenceSince, evidenceRule, evidenceModeInput, setEvidenceMode,
   observedLogFile, readObservedLog, observedRun, observedAny, observedStamp, RE_CD_STRIP, stripCdPrefix, specsProjectOf,

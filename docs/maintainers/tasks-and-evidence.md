@@ -145,15 +145,22 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   proof — `expectFailRun(ev, prev, verify)` answers `red: false`, so the red run on record is carried forward (`keepRed`)
   and a later pass is "the fix going green" after a red run of the `_Verify:_` itself — or (review 2, grandfathering as
   observedProof's R2) when that pass is itself a run of the `_Verify:_` (`runProvesVerify`, the "cli" stamp too), after a
-  red run of ANY command on record: `redProof(e, verify, pass)` takes that passing run (the run being recorded in
-  `expectFailRun` / `recordEvidence`; the record's own latest run in the verdict, `observedProof`, `redGreenGaps` and the
-  untick's `redKept`). A red run reported in another form (pre-1.22, or a variant the steps don't fold) left the task stuck
-  for good: the fix's passing `done --run` was refused as unexpected-pass, and the only way out was reverting the fix.
-  `recordEvidence`'s `keepRed` carries the red run of the `_Verify:_` — or, with none, a red run of another command (an exit
-  127 in between dropped it), which proves nothing until such a pass follows; a record whose latest run is a pass of another
-  command with no red proof still reads `unexpected-pass` (taskEvidenceIssue), never command-mismatch. The
-  `_Expect: fail_` note says to record the red run BEFORE the fix lands, and once it is in, the passing run of the
-  `_Verify:_` (no `--run` offered for it). A finish check's run is held to its `meta.checks` command the same way
+  red run of another command recorded BEFORE the command rule existed: `redProof(e, verify, pass)` takes that passing run (the
+  run being recorded in `expectFailRun` / `recordEvidence`; the record's own latest run in the verdict, `observedProof`,
+  `redGreenGaps` and the untick's `redKept`). A pre-rule red run reported in another form (pre-1.22, a variant the steps don't
+  fold) left the task stuck for good: the fix's passing `done --run` was refused as unexpected-pass, and the only way out was
+  reverting the fix. **Review 3 — only a PRE-RULE red run:** the grandfathering took ANY red run on record — `npm test --
+  tests/other.test.js` (or `false`) with exit 1, then the passing run of the `_Verify:_`, verified a task with no red run of its
+  own test, and the note told agents to do just that. `recordEvidence` now stamps every run it records `cmdRule: 1`
+  (`CMD_RULE`; `runOf` keeps it, `normalizeEvidence` never takes it from a caller), and `legacyRedRun(e)` — the red run redProof
+  grandfathers — is one WITHOUT that stamp. The stamp is a field of a run, so the merge driver needs no rule for it: an
+  `evidence[n]` record merges whole (the later run), its `history` deduped by content (conventions.md). `recordEvidence`'s
+  `keepRed` carries the red run of the `_Verify:_` — or, with none, a pre-rule red run of another command (an exit 127 in
+  between dropped it), which proves nothing until such a pass follows; a red run of another command recorded under the rule
+  is never carried (it can prove nothing). A record whose latest run is a pass of another command with no red proof still
+  reads `unexpected-pass` (taskEvidenceIssue), never command-mismatch. The `_Expect: fail_` note says to record the red run
+  BEFORE the fix lands, that a red run of another command never counts, and — the fix already in — to set it aside (git stash)
+  for that run. A finish check's run is held to its `meta.checks` command the same way
   (`suiteStatus` → `changed`). `observedRun`'s join lookup also tries the EXPECTED commands' logged runs (a `_Verify:_`
   holding ` && ` is logged whole).
 - **Reason codes** (stable): `no-evidence` · `failed-run` · `manual-note-on-runnable-verify` ·
@@ -181,7 +188,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `{exitCode: 0}` is a claim, not a run: a note replaces it as the summary). `stale: true` is set by
   `spec_impact --reopen`; only a new run (or, without a runnable `_Verify:_`, a new note) clears it. 1.14 F1: every run
   (the latest and each `history` entry) carries `observed: true | false | "cli"` (`runOf()` keeps it; older records have
-  none).
+  none); 1.22 review 3: and `cmdRule: 1` (recorded under the command rule — see Which run proves it).
 - **Without a runnable `_Verify:_`** a task is outside the run gate: no record passes, a bare legacy
   `{exitCode: 0}` or a summary verifies, and `verificationStatus()` skips a `no-evidence` record there —
   only `failed-run` / `stale-evidence` / `duplicate-number` count against it.

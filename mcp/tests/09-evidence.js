@@ -1369,22 +1369,32 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     ok(!w1.length && a1.ok && a1.verified === true && a1.redRecorded === true,
       "1.22 review 2 (1a): `\\` for `/` and quotes around a plain argument don't make another command — an _Expect: fail_ task's red run reported as `node --test tests\\x.test.js` is its red proof (got " + js([w1, a1.verified, a1.unverifiedReason]) + ")");
 
-    // 1b — a red run of another form already on record (pre-1.22, or a variant): the passing run of the _Verify:_ itself — the fix
-    // going green — accepts it (grandfathering); a pass of ANOTHER command still doesn't.
+    // 1b — a red run of another form already on record from BEFORE the command rule (pre-1.22: no `cmdRule` stamp — simulated by
+    // removing it): the passing run of the _Verify:_ itself — the fix going green — accepts it (grandfathering); a pass of ANOTHER
+    // command still doesn't.
     const fB = mkTasks(pR, "Upgrade", "- [ ] 1. [US1] Write the failing regression test T-01 and watch it fail\n  - _Verify: node --test tests/x.test.js_\n  - _Expect: fail_\n" +
       "- [ ] 2. [US1] Fix it\n  - _Verify: node --test tests/x.test.js_\n- [ ] 3. [US1] Red, too\n  - _Verify: node --test tests/y.test.js_\n  - _Expect: fail_\n" +
       "- [ ] 4. [US1] Red, three\n  - _Verify: node --test tests/z.test.js_\n  - _Expect: fail_\n- [ ] 5. [US1] Red, four\n  - _Verify: node --test tests/w.test.js_\n  - _Expect: fail_\n");
+    const preRule = (dir, n) => { // the record as a pre-1.22 engine wrote it: no cmdRule on any run
+      const sf = path.join(dir, ".state.json"), st = JSON.parse(fs.readFileSync(sf, "utf8")), rec = st.evidence[String(n)];
+      for (const r of [rec, rec.red, ...(rec.history || [])]) if (r) delete r.cmdRule;
+      fs.writeFileSync(sf, JSON.stringify(st, null, 2));
+    };
     const b1 = S.completeTask(pR, "upgrade", 1, { command: "node --test --test-reporter=spec tests/x.test.js", exitCode: 1, summary: "not ok 1 - T-01" });
+    preRule(fB.dir, 1);
     // task 5: a could-not-run run between the red run (of another form) and the fix's pass never drops that red run
     S.completeTask(pR, "upgrade", 5, { command: "node --test --test-reporter=tap tests/w.test.js", exitCode: 1, summary: "not ok 1" });
+    preRule(fB.dir, 5);
     const b5c = S.completeTask(pR, "upgrade", 5, { command: "node --test tests/w.test.js", exitCode: 127, summary: "node: not found" });
     const b5g = S.completeTask(pR, "upgrade", 5, { command: "node --test tests/w.test.js", exitCode: 0, summary: "ok 1" });
     S.completeTask(pR, "upgrade", 2, { command: "node --test tests/x.test.js", exitCode: 0, summary: "ok 1 - T-01" }, { ranBy: "cli" });
     const b1g = S.completeTask(pR, "upgrade", 1, { command: "node --test tests/x.test.js", exitCode: 0, summary: "ok 1 - T-01" }, { ranBy: "cli", startedAt: new Date().toISOString(), ranVerify: ["node --test tests/x.test.js"] });
     const recB = JSON.parse(fs.readFileSync(path.join(fB.dir, ".state.json"), "utf8")).evidence["1"];
     S.completeTask(pR, "upgrade", 3, { command: "node --test --test-reporter=tap tests/y.test.js", exitCode: 1, summary: "not ok 1" });
+    preRule(fB.dir, 3);
     const b3g = S.completeTask(pR, "upgrade", 3, { command: "node --test tests/y.test.js", exitCode: 0, summary: "ok 1" }); // reported (MCP), the _Verify:_ itself
     S.completeTask(pR, "upgrade", 4, { command: "node --test --test-reporter=tap tests/z.test.js", exitCode: 1, summary: "not ok 1" });
+    preRule(fB.dir, 4);
     const b4x = S.completeTask(pR, "upgrade", 4, { command: "echo ok", exitCode: 0 }); // a pass of ANOTHER command: no grandfathering
     const unB = S.verificationStatus(pR, "upgrade", fB.dir).unverifiedDetail;
     const finB = S.finishFeature(pR, "upgrade").blockers.filter((b) => /without verification evidence/.test(b));
@@ -1396,13 +1406,29 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
       "1.22 review 2 (1b): an _Expect: fail_ task whose red run is on record as another command is no longer stuck once the fix is in — the passing run of its _Verify:_ (done --run, or reported) is the fix going green and keeps that red run (an exit 127 in between doesn't drop it); a pass of another command is still unexpected-pass; undo keeps it (redKept) (got " +
       js([b1.unverifiedReason, b1g.error || b1g.verified, recB.red, b3g.error || b3g.verified, b4x.unverifiedReason || b4x.error, unB, undoB.redKept, b5c.couldNotRun, b5g.error || b5g.verified]) + ")");
 
-    // 1c — the _Expect: fail_ command-mismatch note: the red run BEFORE the fix lands; once it is in, no --run offered.
+    // 1c — the _Expect: fail_ command-mismatch note: the red run BEFORE the fix lands; (review 3) a red run of another command never
+    // counts — it no longer says "record the passing run … the red run on record then counts" (the grandfathering it advertised
+    // verified a task with no red run of its own test).
     const notes = ["en", "pt", "es", "pt-BR"].map((l) => S.msg(l).evidenceGate.commandMismatch(1, "f", "x", "y", true));
-    const after = (t) => t.split(/Once the fix is in|Com a corre..o j. feita|Con la correcci.n ya hecha/)[1];
-    ok(/BEFORE the fix lands, while the test still fails: .*done upgrade 1 --run\. Once the fix is in, don't break it again: record the passing run of the _Verify:_ command as written/.test(b1.note) &&
-      notes.every((t) => /--run/.test(t) && after(t) && !/--run/.test(after(t))) && /ANTES de a correção entrar/.test(notes[1]) && /ANTES de que entre la corrección/.test(notes[2]) &&
+    ok(/BEFORE the fix lands, while the test still fails: .*done upgrade 1 --run \(a red run of another command never counts; with the fix already in, set it aside — git stash — for that run, then restore it\)\.$/.test(b1.note) &&
+      !notes.some((t) => /then counts|passa então a contar|cuenta entonces/.test(t)) && /ANTES de a correção entrar.*nunca conta; com a correção já feita, põe-na de parte — git stash/.test(notes[1]) &&
+      /ANTES de que entre la corrección.*nunca cuenta; con la corrección ya hecha, apártala — git stash/.test(notes[2]) && /nunca conta/.test(notes[3]) &&
       !/BEFORE the fix lands/.test(S.msg("en").evidenceGate.commandMismatch(1, "f", "x", "y", false)),
-      "1.22 review 2 (1c): the _Expect: fail_ command-mismatch note says to record the failing run BEFORE the fix lands and offers no --run once the fix is in (EN/PT/ES/pt-BR) (got " + js([b1.note, notes]) + ")");
+      "1.22 review 3 (1): the _Expect: fail_ command-mismatch note says to record the failing run BEFORE the fix lands, that a red run of another command never counts (the fix set aside with git stash), and no longer that the red run on record counts once the _Verify:_ passes (EN/PT/ES/pt-BR) (got " + js([b1.note, notes]) + ")");
+    // review 3 (1) — grandfathering only for red runs recorded BEFORE the command rule: every run is stamped `cmdRule` now, and a red run
+    // of ANOTHER test file (or `false`) recorded under the rule, then the passing run of the _Verify:_, is no red proof — unexpected-pass.
+    const fG = mkTasks(pR, "Grand", "- [ ] 1. [US1] Red A\n  - _Verify: npm test -- tests/a.test.js_\n  - _Expect: fail_\n" +
+      "- [ ] 2. [US1] Red B\n  - _Verify: npm test -- tests/b.test.js_\n  - _Expect: fail_\n");
+    const g1 = S.completeTask(pR, "grand", 1, { command: "npm test -- tests/other.test.js", exitCode: 1, summary: "not ok 1", cmdRule: null });
+    const g1p = S.completeTask(pR, "grand", 1, { command: "npm test -- tests/a.test.js", exitCode: 0, summary: "ok 1" });
+    const g2 = S.completeTask(pR, "grand", 2, { command: "false", exitCode: 1 });
+    const g2p = S.completeTask(pR, "grand", 2, { command: "npm test -- tests/b.test.js", exitCode: 0 });
+    const recG = JSON.parse(fs.readFileSync(path.join(fG.dir, ".state.json"), "utf8")).evidence;
+    const unG = S.verificationStatus(pR, "grand", fG.dir).unverifiedDetail.map((d) => [d.number, d.reason]);
+    ok(g1.ok && g1.unverifiedReason === "command-mismatch" && g1p.ok === false && g1p.unexpectedPass === true && g2.ok && g2p.ok === false && g2p.unexpectedPass === true &&
+      [recG["1"], recG["2"]].every((r) => r.cmdRule === 1 && r.history.every((h) => h.cmdRule === 1) && !r.red) && js(unG) === js([[1, "unexpected-pass"], [2, "unexpected-pass"]]),
+      "1.22 review 3 (1): a red run of another test file (or `false`) recorded under the command rule (cmdRule: 1 on every run, a caller's value ignored), then the passing run of the _Verify:_, is NO red proof — refused as unexpected-pass, nothing carried as `red`, both tasks unverified (got " +
+      js([g1.unverifiedReason, g1p.error || g1p.verified, g2p.error || g2p.verified, recG["1"], unG]) + ")");
 
     // 2 — a long command is compared whole (it was cut at 500 first): a faithful report of a long _Verify:_, a join past 500, a
     // finish run with a cd in front of a long check.

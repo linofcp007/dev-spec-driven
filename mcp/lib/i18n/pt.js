@@ -1436,7 +1436,7 @@ const msg = {
         unobserved: "execução não observada pelo harness",
         "command-mismatch": "a execução registada não é o comando _Verify:_" },
       commandMismatch: (n, slug, ran, verify, red) => `Tarefa ${n}: a execução registada (\`${ran}\`) não é uma execução do seu comando _Verify:_ (${verify}) — fica marcada, mas continua não verificada até se registar uma execução ${red ? "QUE FALHE " : ""}desse comando (tal como está escrito — com vários comandos _Verify:_, todos eles numa SÓ execução unidos com \` && \`; um \`cd <pasta> &&\`, \`set -o pipefail;\` ou VAR=valor teu à frente serve, mas nunca tires um que o _Verify:_ tenha)` +
-        (red ? ` — regista-a ANTES de a correção entrar, enquanto o teste ainda falha: ${DEV_SPEC} done ${slug} ${n} --run. Com a correção já feita, não a estragues de novo: regista a execução que passa do comando _Verify:_ tal como está escrito — a execução vermelha registada passa então a contar.` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
+        (red ? ` — regista-a ANTES de a correção entrar, enquanto o teste ainda falha: ${DEV_SPEC} done ${slug} ${n} --run (uma execução vermelha de outro comando nunca conta; com a correção já feita, põe-na de parte — git stash — para essa execução e depois repõe-na).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
       duplicateTasks: (list) => `números de tarefa repetidos: ${list} — o complete/brief escolhem a primeira por fazer; renumera-as`,
     },
     observed: {
