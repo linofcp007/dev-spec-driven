@@ -600,6 +600,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       siCodeStatus.block && siCodeStatus.why === "simplifier-evidence" && sImCode.block && sImCode.why === "implementer-evidence",
       "1.22 review 2: '# pass 212' output (indented or not) never ends '## Final runs', a revert round under it without a new heading counts, an indented backticked word is output, fences count from the heading, a ``double-backtick`` command matches its check, a code span holding 'blocked' is no status (got " +
       JSON.stringify([siTap.why, siTap0.why, siRevertNoHead.why, siIndented.why, siFenceWindow.why, siTickCmd.why, siCodeStatus.why, sImCode.why]) + ")");
+    // review 3: a run nested under a group bullet (indented: a bullet, a command, its exit code) counts — a failing one was
+    // skipped as output; a status token in backticks is a status only on a line that starts with "Status"
+    const siNested = siW("## Final runs\n- Project checks:\n  - `npm test` → exit code 1 (2 failing)\n- `node --test test/cart.test.js` → exit 0\n");
+    const siNestedOk = siW("## Final runs\n- Project checks:\n  - `npm test` → exit 0 (212 passing)\n    ℹ pass 212\n");
+    const siNested2 = si2("## Final runs\n- `npm test` → exit 0\n- `npm run lint` → exit 0\n" + probe + "- Re-run _Verify:_:\n  - `node --test test/cart.test.js` → exit code 1\n");
+    const siMidStatus = siW("## Final runs\n- `npm test` → exit code 1\n", "**Status:** DONE\nCommits: a1b2c3d fix: lock out with status `blocked`\nReport: .specs/checkout/.execution/simplify-report.md");
+    ok(siNested.block && /fail: `npm test` — /.test(siNested.reason) && siNestedOk.why === "simplify-ok" && siNested2.block && /fail: `node --test test\/cart\.test\.js`/.test(siNested2.reason) &&
+      siMidStatus.block && siMidStatus.why === "simplifier-evidence",
+      "1.22 review 3: a failing run nested under a group bullet blocks (with and without project checks), a passing nested run with indented output is allowed; 'with status `blocked`' inside a commit line is no status (got " +
+      JSON.stringify([siNested.why, siNestedOk.why, siNested2.why, siMidStatus.why]) + ")");
     const siNoChange = si("**Status:** NO_CHANGES\nNothing on the list was worth a change.\nReport: .specs/checkout/.execution/simplify-report.md");
     const siNoChangeBt = si("**Status:** `NO_CHANGES`\nReport: .specs/checkout/.execution/simplify-report.md");
     const siBlocked = si("**Status:** BLOCKED\nThe baseline is red: 2 failing.");

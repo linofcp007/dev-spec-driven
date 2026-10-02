@@ -54,14 +54,14 @@ local, no pull requests, no CI.
 
 ### Fixed
 - An implementer's "**Status:** `DONE`" (the status in backticks) read as no claim, so its report was never checked; a
-  status token in inline code is read now — any other code span still isn't ("`order.status === "blocked"`" in a commit
-  line is no status).
+  status token in inline code on the status line is read now — any other code span still isn't ("`order.status ===
+  "blocked"`" or "with status `blocked`" in a commit line is no status).
 
 ### Tests
-- `node mcp/test.js` 1687 assertions (was 1680), `node cli/test-cli.js` 523 (was 522): the simplifier's SubagentStop gate
+- `node mcp/test.js` 1688 assertions (was 1680), `node cli/test-cli.js` 523 (was 522): the simplifier's SubagentStop gate
   — its `## Final runs` section: no report, a baseline only, a red run, a failed run hidden by a later passing one, a code
   quoted in output or in a fenced block, a check never run or without its code, a longer command starting with a
-  check's, a check listed twice, "# pass 212" output lines, a revert round with and without a new heading, a 256 KB
+  check's, a check listed twice, a run nested under a group bullet, "# pass 212" output lines, a revert round with and without a new heading, a 256 KB
   report read from its end (also when the window starts inside a fence), a double-backtick command, a status in
   backticks vs a code span holding "blocked"; NO_CHANGES / BLOCKED / no report path allowed; the hook's reason = the
   engine's; EN / PT / pt-BR / ES strings; `stop-check --agent spec-simplifier` in PT —, the hooks.json matcher, 4 agents

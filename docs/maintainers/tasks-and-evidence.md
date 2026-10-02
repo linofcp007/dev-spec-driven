@@ -336,16 +336,21 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   ES "Ejecuciones finales" too) to the END of the file — the section is the report's last, so an output line like
   "# pass 212" never ends it and a revert round written below it without a new heading still counts. A run is ONE line
   at the margin: an optional bullet, the command in backticks (``double`` when it holds one), then its exit code
-  (`reportExitCodes()` on the rest of that line); indented lines are output and fenced blocks are skipped (fences counted
-  from the heading — the 256 KB tail window may start inside one). Every run must exit 0 (`notPassing`), every project
+  (`reportExitCodes()` on the rest of that line) — or an INDENTED bullet with a command and its exit code (a run nested
+  under a group bullet: review 3, a failing one was skipped as output); every other indented line is output, and fenced
+  blocks are skipped (fences counted from the heading — the 256 KB tail window may start inside one). Known limits of a
+  text read (all but the first block, none wrongly allows a realistic report): a run pasted only inside a fenced
+  transcript is not seen; a backticked bullet in a section written after the final runs reads as a run; a `## Final
+  runs` quoted inside a fence after the real one becomes the one that counts. Every run must exit 0 (`notPassing`), every project
   check (`projectChecks()`, flattened, deduplicated) must be one of the runs AS A WHOLE COMMAND — `npm test --
   t/x.test.js` is another run — with a code (`noRun`, also for a run line without one), and a report with no such
   heading (a baseline only) is `noFinal`. The report is read from its END (`readStopReport(file, true)`, ≤
   `STOP_REPORT_MAX`). STATUS BLOCKED / NEEDS_CONTEXT (`not-done`), NO_CHANGES (`no-changes`), no claim, or no
   simplify-report path (or an unknown feature) in the reply (`no-report`) → allowed; `simplify-ok` / `simplifier-evidence`.
-  Both subagent gates read the status through `statusProse()`: a status TOKEN in inline code is unwrapped ("**Status:**
-  `DONE`" is a claim — it used to skip the implementer's report), every other code span still drops out with
-  `stopProse` (review 2: unwrapping all of them made "`order.status === "blocked"`" a BLOCKED status). The hard gate
+  Both subagent gates read the status through `statusProse()`: a status TOKEN in inline code is unwrapped on a line that
+  STARTS with "Status" ("**Status:** `DONE`" is a claim — it used to skip the implementer's report); every other code
+  span still drops out with `stopProse` (reviews 2–3: unwrapping more made "`order.status === "blocked"`" or "with status
+  `blocked`" in a commit line a BLOCKED status). The hard gate
   stays `spec_finish`'s `code-changed`, which sees only the tasks' `_Implements:_` files — /spec-simplify records the
   project checks again after the pass for that reason. Shared helpers: `readStopReport()`, `flatReport()`,
   `reportExitCodes()` (the implementer's gate reads through them unchanged).

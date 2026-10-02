@@ -51,7 +51,8 @@ then dispatch one `dev-spec-driven:spec-reviewer` in **verify** mode per finding
 base and HEAD, the feature folder — in parallel, cheapest tier (standard for a security, concurrency or data-loss
 finding); without one, check each yourself and say the findings are self-verified.
 Report the findings rated **80 or more** by severity; list the rest in one line each under "Unconfirmed (below 80)" —
-never dropped silently.
+never dropped silently. An AC with no code goes by its verdict, not a rating: confirmed → reported as a finding; refuted
+→ dropped only with the file:line that satisfies the AC.
 
 Run `trace_check` to confirm coverage. Report findings grouped by severity.
 For an audit trail, `trace_check {name, matrix: true}` (CLI `dev-spec trace <feature> --matrix`; `--csv` for a

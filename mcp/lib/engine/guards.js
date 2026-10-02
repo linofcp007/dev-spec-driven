@@ -1047,10 +1047,10 @@ function stopCheck(projectDir, opts = {}) {
     reason: lines.join("\n"),
   });
 }
-// A subagent's status as the gates read it: its prose (stopProse) with a status TOKEN in inline code unwrapped first —
-// "**Status:** `DONE`" is a status, not code — while every other code span still drops out ("`order.status ===
-// "blocked"`" in a commit line is no status; 1.22 review 2).
-const statusProse = (message) => stopProse(String(message).replace(/`\s*(done_with_concerns|done|blocked|needs_context|no_changes)\s*`/gi, "$1"));
+// A subagent's status as the gates read it: its prose (stopProse) with a status TOKEN in inline code unwrapped first — only
+// on a line that starts with "Status" ("**Status:** `DONE`" is a status, not code) — while every other code span still
+// drops out ("`order.status === "blocked"`" or "with status `blocked`" in a commit line is no status; 1.22 reviews 2–3).
+const statusProse = (message) => stopProse(String(message).replace(/^([ \t>*_#+-]*status\W{0,8})`\s*(done_with_concerns|done|blocked|needs_context|no_changes)\s*`/gim, "$1$2"));
 const STATUS_DONE_RE = /(?<![\p{L}_])status\W{0,8}done(?:_with_concerns)?(?![\p{L}_])/iu;
 const STATUS_NOT_DONE_RE = /(?<![\p{L}_])status\W{0,8}(?:blocked|needs_context)(?![\p{L}_])/iu;
 // A spec-implementer's stop (SubagentStop): it never ticks tasks (the controller does, after review), so its gate is its
@@ -1118,9 +1118,10 @@ function reportExitCodes(body) {
 // the END of the file — the section is the report's last, so nothing after it ends it: a "# pass 212" output line can't,
 // and a revert round written below it without a new heading still counts. A run is ONE line at the margin: an optional
 // bullet, the command in backticks (``double`` when it holds one), then its exit code — "- `npm test` → exit 0 (212
-// passing)". Indented lines are its output and fenced blocks (counted from the heading — the read window may start inside
-// one) are skipped, so a code quoted in output never counts, and a command that starts with a check's
-// (`npm test -- t/x.test.js`) is another command.
+// passing)" — or an indented bullet with both (a run nested under a group). Other indented lines are output and fenced
+// blocks (counted from the heading — the read window may start inside one) are skipped, so a code quoted in output never
+// counts, and a command that starts with a check's (`npm test -- t/x.test.js`) is another command. Text reads have
+// limits — a run pasted only inside a fenced transcript is not seen; spec_finish's code-changed is the hard gate.
 // → null without such a heading, else [{command (flattened), code (null: the line names none)}] — a command's last line wins.
 function finalRuns(report) {
   const lines = report.split(/\r?\n/);
@@ -1132,10 +1133,13 @@ function finalRuns(report) {
   for (let i = start + 1; i < lines.length; i++) {
     if (/^\s{0,3}(?:`{3,}|~{3,})/.test(lines[i])) { fence = !fence; continue; }
     if (fence) continue;
-    const m = lines[i].match(/^(?:[-*+]\s+|\d+[.)]\s+)?(?:``\s?(.+?)\s?``|`([^`]+)`)(.*)$/);
+    const m = lines[i].match(/^(\s*)((?:[-*+]|\d+[.)])\s+)?(?:``\s?(.+?)\s?``|`([^`]+)`)(.*)$/);
     if (!m) continue;
-    const command = flatReport(m[1] !== undefined ? m[1] : m[2]);
-    const code = (reportExitCodes(flatReport(m[3]))[0] || {}).code;
+    const code = (reportExitCodes(flatReport(m[5]))[0] || {}).code;
+    // indented, only a bullet + a command + its exit code is a run (one nested under a group bullet — review 3: a failing one
+    // was skipped as output); any other indented line is output
+    if (m[1] && !(m[2] && code !== undefined)) continue;
+    const command = flatReport(m[3] !== undefined ? m[3] : m[4]);
     runs.delete(command);
     runs.set(command, code === undefined ? null : code);
   }
