@@ -100,8 +100,11 @@ ok(frb.code === 1 && /roadmap\.json/.test(frb.out) && !/Would permanently delete
 // rules <tool>: the rule file with this clone's absolute paths (nothing relative left to break when pasted).
 const ROOT4 = path.resolve(__dirname, "..").replace(/\\/g, "/");
 const rulesOut = ["cursor", "windsurf", "copilot", "gemini", "agents"].map((t) => ({ t, r: run(["rules", t]) }));
-ok(rulesOut.every(({ r }) => r.code === 0 && r.out.includes(ROOT4 + "/") && !/(?<![\w./-])(?:\.\.\/)*(?:cli\/dev-spec\.js|mcp\/server\.js|AGENTS\.md|skills\/dev-spec-driven)/.test(r.out)),
+ok(rulesOut.every(({ r }) => r.code === 0 && r.out.includes(ROOT4 + "/") && !/(?<![\w./-])(?:\.\.\/)*(?:cli\/dev-spec\.js|mcp\/server\.js|AGENTS\.md|skills\/dev-spec-driven|agents\/[\w.-]+\.md|commands\/[\w.-]+\.md)/.test(r.out)),
   "rules <cursor|windsurf|copilot|gemini|agents> prints each rule file with absolute paths only");
+// 1.22 review: AGENTS.md cites the plugin's agents/ and commands/ files — `rules agents` makes them absolute too.
+ok(["agents/spec-reviewer.md", "commands/spec-review-feedback.md", "commands/spec-simplify.md"].every((p) => rulesOut[4].r.out.includes(ROOT4 + "/" + p)),
+  "rules agents: agents/spec-reviewer.md, commands/spec-review-feedback.md and commands/spec-simplify.md printed with this clone's absolute path");
 const rc4 = rulesOut[0].r.out;
 ok(rc4.includes('node "' + ROOT4 + '/cli/dev-spec.js"') && rc4.includes(ROOT4 + "/AGENTS.md") && !rc4.includes("../../") && /alwaysApply: true/.test(rc4) &&
   rulesOut[4].r.out.includes(ROOT4 + "/skills/dev-spec-driven/references/classification-matrix.md"), "rules: quoted node command, absolute AGENTS.md link, skill references resolved");

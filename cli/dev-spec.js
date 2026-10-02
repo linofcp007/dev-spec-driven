@@ -1027,9 +1027,10 @@ function main() {
       const ROOT = path.resolve(__dirname, "..").replace(/\\/g, "/"); // forward slashes: valid in markdown and on Windows
       const raw = fs.readFileSync(path.join(__dirname, "..", RULE_FILES[tool]), "utf8");
       // One pass (so skills/…/references/x.md is never rewritten twice). `../../AGENTS.md` (the Cursor link)
-      // and bare `references/x.md` (relative to the skill) resolve too. Commands get quoted paths and link
-      // targets get <…> when the clone path has spaces.
-      const re = /(\bnode\s+|\]\()?(?<![\w./-])(?:\.\.\/)*(cli\/dev-spec\.js|mcp\/server\.js|AGENTS\.md|skills\/dev-spec-driven(?:\/[\w.-]+)*\/?|references\/(?:[\w.-]+\.md)?)/g;
+      // and bare `references/x.md` (relative to the skill) resolve too, as do the plugin's `agents/x.md` and
+      // `commands/x.md` (AGENTS.md cites the reviewer's Verify mode, /spec-review-feedback and /spec-simplify).
+      // Commands get quoted paths and link targets get <…> when the clone path has spaces.
+      const re = /(\bnode\s+|\]\()?(?<![\w./-])(?:\.\.\/)*(cli\/dev-spec\.js|mcp\/server\.js|AGENTS\.md|skills\/dev-spec-driven(?:\/[\w.-]+)*\/?|references\/(?:[\w.-]+\.md)?|(?:agents|commands)\/[\w.-]+\.md)/g;
       const text = raw.replace(re, (m, lead, rel) => {
         const abs = ROOT + "/" + (rel.startsWith("references/") ? "skills/dev-spec-driven/" + rel : rel);
         if (lead && /^node/.test(lead)) return lead + JSON.stringify(abs);
