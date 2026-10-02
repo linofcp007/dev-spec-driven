@@ -328,6 +328,8 @@ the `_Verify:_` BEFORE the fix lands; a red run recorded as another command (ano
 with the fix already in, set it aside (`git stash`), record the failing run, then restore it. (Only a red run recorded
 by a dev-spec older than this rule still counts once a passing run of the `_Verify:_` itself follows it.) A project check's run
 (`spec_finish {evidence}`) is compared with its `meta.checks` command the same way — another command reads `changed`.
+Runs recorded by a dev-spec older than 1.22 (before this rule) keep the verdict they had: a plugin update never turns a task
+it verified — or a project check's run — unverified; every new run is held to the rule.
 
 **Duplicate numbers.** `spec_complete_task`, `spec_task_brief` and `done --run` resolve a duplicated number to
 its first **open** task, and evidence is stamped per task, so one "3." never borrows the other's passing run.

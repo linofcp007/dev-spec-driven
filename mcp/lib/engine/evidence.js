@@ -328,7 +328,11 @@ function taskEvidenceIssue(evidence, block, dup, root) {
   // run it carries of any command recorded before the command rule: review 2's grandfathering, narrowed by review 3 to runs
   // without the cmdRule stamp). Its latest run a pass (of another command) with no such red proof
   // is still unexpected-pass — a red run of another command carried forward (recordEvidence) doesn't change that.
-  if (reason === null && verify.length && !(xf ? redProof(e, verify, e, root) : runProvesVerify(e, verify, root))) return xf && e.exitCode === 0 ? "unexpected-pass" : "command-mismatch";
+  // Review 4 (upgrade safety): a record whose latest run predates the rule (preRuleRun: no cmdRule stamp — recorded by a dev-spec
+  // older than 1.22) keeps the verdict it had then: any command with exit 0 (an _Expect: fail_ task: any red run on record)
+  // proves it. Judging it now turned tasks an earlier release verified (`npx jest x` for `_Verify: npm test -- x`, a Windows
+  // path) unverified after a plugin update, and blocked /spec-finish; only runs recorded under the rule are held to it.
+  if (reason === null && verify.length && !preRuleRun(e) && !(xf ? redProof(e, verify, e, root) : runProvesVerify(e, verify, root))) return xf && e.exitCode === 0 ? "unexpected-pass" : "command-mismatch";
   if (reason !== "no-evidence" || e !== undefined || !evidenceRecords(evidence[String(block.number)]).length) return reason;
   // The number HAS records, none of them this task's: another task shares the number (duplicate-number), or
   // they are for an earlier _Verify:_ command / a task that held the number before a renumbering.
@@ -1035,6 +1039,10 @@ function redProof(e, verify, pass, root) {
 // without it predates the rule (redProof's grandfathering, recordEvidence's carry-forward). Never taken from a caller
 // (normalizeEvidence copies no such field).
 const CMD_RULE = 1;
+// Review 4 — a run recorded BEFORE the command rule (no cmdRule stamp): its verdict is the pre-1.22 one, any command proves it
+// (taskEvidenceIssue, observedProof, suiteStatus — upgrade safety). Only the runs recordEvidence / recordFinishChecks stamp are
+// judged by runProvesVerify.
+const preRuleRun = (r) => isRecord(r) && r.cmdRule == null;
 // The red run of ANY command a record holds (its latest run, else the red run it carries) that was recorded BEFORE the command
 // rule (no cmdRule) — what redProof grandfathers once the _Verify:_ itself passes. A stale record (not an undo's) holds none.
 function legacyRedRun(e) {
@@ -1092,7 +1100,8 @@ function redGreenGaps(blocks, evidence, root) {
   const proven = new Set();
   for (const b of blocks) {
     const own = ownEvidence(evidence, b, dups.has(b.number));
-    if (!expectsFail(b) || !redProof(own, taskMarkers(b).verify, own, root)) continue;
+    // (review 4: a record whose latest run predates the command rule is read by the pre-1.22 rule — any red run on record)
+    if (!expectsFail(b) || !redProof(own, preRuleRun(own) ? null : taskMarkers(b).verify, own, root)) continue;
     for (const id of extractTestIds(taskProse(b).join(" "))) proven.add(tKey(id.slice(2)));
   }
   return { greened: [...greened.values()], missing: [...greened].filter(([k]) => !proven.has(k)).map(([, id]) => id) };
@@ -1349,9 +1358,12 @@ function specsProjectOf(dir) {
 // stayed unobserved for good and the note sent the user round in circles).
 // verify (1.22 review): the task's _Verify:_ values — only an observed run OF one of them proves it (an observed run of another
 // task's command — or another check's — proves nothing here).
+// Review 4: a run recorded before the command rule (preRuleRun) is read as it was then — any observed run of any command; a record
+// whose latest run predates the rule is judged as a whole by the pre-1.22 rule (its red proof: any red run on record).
 function observedProof(e, expectFail, since, verify, root) {
-  const seen = (r) => isRecord(r) && (r.observed === true || r.observed === "cli") && (!verify || runProvesVerify(r, verify, root));
-  const run = expectFail ? redProof(e, verify, e, root) : e;
+  const v = preRuleRun(e) ? null : verify;
+  const seen = (r) => isRecord(r) && (r.observed === true || r.observed === "cli") && (!v || preRuleRun(r) || runProvesVerify(r, v, root));
+  const run = expectFail ? redProof(e, v, e, root) : e;
   if (seen(run)) return true;
   return !!(expectFail && since != null && isRecord(run) && timeOf(run.at) != null && timeOf(run.at) < since && seen(e) && e.exitCode === 0);
 }
@@ -1562,7 +1574,7 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStar
   const code = start ? start.code : suiteCodeStamp(projectDir, dir);
   for (const r of runs) {
     const prev = Object.prototype.hasOwnProperty.call(fc, r.name) && isRecord(fc[r.name]) ? fc[r.name] : null;
-    const run = runOf({ ...r.run, at });
+    const run = runOf({ ...r.run, at, cmdRule: CMD_RULE }); // review 4: recorded under the command rule (suiteStatus judges it by it)
     const hist = prev && prev.check === r.check && Array.isArray(prev.history) ? prev.history.filter(isRecord) : [];
     fc[r.name] = { ...run, check: r.check, ...(code ? { code } : {}), history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
   }
@@ -1595,8 +1607,9 @@ function suiteStatus(projectDir, state, dir) {
     if (r.observed === true || r.observed === false || r.observed === "cli") it.observed = r.observed; // 1.14 F1
     const t = Date.parse(r.at);
     // changed: meta.checks' command changed since the run — or (1.22 review) the run was of ANOTHER command (runProvesVerify:
-    // `{name: "test", command: "echo ok"}` made check test pass)
-    it.status = r.check !== command || !runProvesVerify(r, [command], projectDir) ? "changed" : r.exitCode !== 0 ? "failed" : last != null && !(Number.isFinite(t) && t >= last) ? "before-last-tick"
+    // `{name: "test", command: "echo ok"}` made check test pass); review 4: a run recorded before that rule (no cmdRule stamp —
+    // preRuleRun) keeps the pre-1.22 reading (its `check` stamp alone), as a task's run does
+    it.status = r.check !== command || (!preRuleRun(r) && !runProvesVerify(r, [command], projectDir)) ? "changed" : r.exitCode !== 0 ? "failed" : last != null && !(Number.isFinite(t) && t >= last) ? "before-last-tick"
       : codeChanged(r) ? "code-changed" : observedOnly && r.observed !== true && r.observed !== "cli" ? "unobserved" : "pass";
     return it;
   });

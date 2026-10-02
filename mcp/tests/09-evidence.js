@@ -1597,6 +1597,68 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
       ms16 + " → " + ms64 + " ms); past 64 KB nothing is matched, at once (" + msBig + " ms)");
   }
 
+  // 1.22 review 4 (0) — upgrade safety: the command rule judged evidence RECORDED BEFORE it existed — after a plugin update, tasks an
+  // earlier release verified (`npx jest x` for `_Verify: npm test -- x`, a Windows path…) turned unverified (command-mismatch) and
+  // blocked /spec-finish, and so did a project check's run of another form. A run without the cmdRule stamp keeps the pre-1.22 verdict
+  // (any command with exit 0; an _Expect: fail_ task: any red run), in reported and observed mode; only stamped runs are judged by the
+  // rule — the same record stamped reads command-mismatch (a check's: changed), and a NEW run is stamped and judged.
+  {
+    const js = JSON.stringify;
+    const BS = String.fromCharCode(92);
+    const pU = path.join(tmp, "proj-122r4-upgrade");
+    S.initProject(pU, ["core"], "en", { checks: { test: "npm test" } });
+    const fU = S.createFeature(pU, "Legacy", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fU.dir, "tasks.md"), "# Tasks\n\n- [x] 1. [US1] A\n  - _Verify: npm test -- tests/x.test.js_\n" +
+      "- [x] 2. [US1] B\n  - _Verify: node --test tests/y.test.js_\n- [x] 3. [US1] Red first\n  - _Verify: node --test tests/z.test.js_\n  - _Expect: fail_\n");
+    const stF = path.join(fU.dir, ".state.json");
+    const at = new Date(Date.now() - 120000).toISOString(), atCheck = new Date(Date.now() - 60000).toISOString();
+    const run = (command, exitCode, extra) => ({ command, exitCode, summary: exitCode ? "not ok 1" : "ok 1", at, observed: true, ...extra });
+    const rec = (task, verify, r) => ({ ...r, task, verify, history: [{ ...r }] });
+    const writeState = (cmdRule) => { // the records as a pre-1.22 engine wrote them (no cmdRule) — or stamped
+      const st = JSON.parse(fs.readFileSync(stF, "utf8"));
+      const s = (r) => (cmdRule ? { ...r, cmdRule } : r);
+      st.evidence = {
+        1: rec("[US1] A", "npm test -- tests/x.test.js", s(run("npx jest tests/x.test.js", 0))),
+        2: rec("[US1] B", "node --test tests/y.test.js", s(run("node --test ." + BS + "tests" + BS + "y.test.js", 0))),
+        3: rec("[US1] Red first", "node --test tests/z.test.js", s(run("node --test --test-reporter=tap tests/z.test.js", 1, { expected: "fail" }))),
+      };
+      for (const k of ["1", "2", "3"]) st.evidence[k].history = [s(st.evidence[k].history[0])];
+      st.lastTickAt = at;
+      st.finishChecks = { test: { ...s({ command: "npx jest", exitCode: 0, summary: "12 passing", at: atCheck, observed: true }), check: "npm test", history: [s({ command: "npx jest", exitCode: 0, at: atCheck })] } };
+      fs.writeFileSync(stF, JSON.stringify(st, null, 2));
+    };
+    const verdicts = () => {
+      const un = S.verificationStatus(pU, "legacy", fU.dir).unverifiedDetail.map((d) => [d.number, d.reason]);
+      const doc = (S.specDoctor(pU, "legacy").checks || []).find((c) => c.id === "verification") || {};
+      const fin = S.finishFeature(pU, "legacy");
+      const up = (S.specUpgrade(pU).features || []).find((x) => x.name === "legacy") || {};
+      return { un, doc: doc.status, finUnverified: (fin.blockers || []).some((b) => /without verification evidence/.test(b)),
+        suite: (fin.suiteChecks || []).map((c) => c.status), up: (up.unverified || []).map((d) => [d.number, d.reason]),
+        status: S.statusFeature(pU, "legacy").tasks.list.map((t) => t.verified) };
+    };
+    writeState(null);
+    const pre = verdicts();
+    S.initProject(pU, ["core"], "en", { evidence: "observed" });
+    const preObserved = S.verificationStatus(pU, "legacy", fU.dir).unverifiedDetail.map((d) => [d.number, d.reason]);
+    const preSuiteObserved = S.finishFeature(pU, "legacy").suiteChecks.map((c) => c.status);
+    S.initProject(pU, ["core"], "en", { evidence: "reported" });
+    writeState(1);
+    const ruled = verdicts();
+    // a NEW run of the same other command is recorded under the rule (stamped) and judged by it
+    writeState(null);
+    const again = S.completeTask(pU, "legacy", 1, { command: "npx jest tests/x.test.js", exitCode: 0 });
+    const recAgain = JSON.parse(fs.readFileSync(stF, "utf8")).evidence["1"];
+    const finAgain = S.finishFeature(pU, "legacy", { evidence: [{ name: "test", command: "npx jest", exitCode: 0 }] });
+    const chkAgain = JSON.parse(fs.readFileSync(stF, "utf8")).finishChecks.test;
+    ok(js(pre) === js({ un: [], doc: "pass", finUnverified: false, suite: ["pass"], up: [], status: [true, true, true] }) && js(preObserved) === "[]" && js(preSuiteObserved) === '["pass"]' &&
+      js(ruled.un) === js([[1, "command-mismatch"], [2, "command-mismatch"], [3, "command-mismatch"]]) && ruled.doc === "warn" && ruled.finUnverified === true &&
+      js(ruled.suite) === '["changed"]' && js(ruled.up) === js(ruled.un) && js(ruled.status) === "[false,false,false]" &&
+      again.verified === false && again.unverifiedReason === "command-mismatch" && recAgain.cmdRule === 1 &&
+      finAgain.suiteChecks[0].status === "changed" && chkAgain.cmdRule === 1 && chkAgain.history[chkAgain.history.length - 1].cmdRule === 1,
+      "1.22 review 4 (0): records made before the command rule (no cmdRule stamp) whose commands differ from the _Verify:_ (`npx jest x`, `.\\tests\\y.test.js`, an _Expect: fail_ red run of another form) and a project check's run of another form keep their pre-1.22 verdict — verified / pass in status, doctor, finish, spec_upgrade, observed mode too; the same records stamped read command-mismatch / changed; a new run is stamped (task and finish check) and judged (got " +
+      js([pre, preObserved, preSuiteObserved, ruled, again.unverifiedReason, recAgain.cmdRule, finAgain.suiteChecks, chkAgain.cmdRule]) + ")");
+  }
+
   // 1.22 review 3 (3) — observed mode sees the forms the matcher accepts: the observe hook's log (observeRun) and the lookup
   // (observedRun) use runProvesVerify too — `node --test tests\x.test.js`, the reversed join `npm test && npm run build`, `CI=1 npm
   // run lint` were verified in reported mode and `unobserved` in observed mode (the log took only the _Verify:_ as written or its
