@@ -118,8 +118,8 @@ function walkProject(root, cap, onFile, opts = {}) {
 // deps/ and _build/, iOS Pods/…: their AssemblyInfo.cs / GlobalUsings.g.cs were production code, and their routes phantom
 // ones): the project ROOT .gitignore's plain directory patterns — a name, optionally with a leading and / or trailing '/',
 // or a path of such names (a slash inside anchors it to the root, as in git), each name literal or with simple character
-// classes ([Bb]in/, [Oo]bj/, [a-z]) — matched against folders only. Negations, wildcards (* ? **), escapes and negated classes
-// are left out: a pattern read wrongly would hide real code. And a folder (never the root) whose OWN .gitignore ignores
+// classes ([Bb]in/, [Oo]bj/, [a-z]) — matched against folders only. Wildcards (* ? **), escapes and negated classes are left
+// out, and so is a pattern a negation could re-include (review 2): a pattern read wrongly would hide real code. And a folder (never the root) whose OWN .gitignore ignores
 // everything in it — '*', re-including at most .gitignore / .gitkeep / .keep — as Laravel's storage/framework/views/ and
 // bootstrap/cache/ do. Never a built-in name list: Ruby and Node keep real code in bin/.
 const GITIGNORE_MAX_CHARS = 100000;
@@ -151,23 +151,114 @@ function gitignoreName(s) {
   return units;
 }
 // .gitignore text → [{ anchored, names: [units…] }] (the plain directory patterns above; folded where the file system folds case).
+// 1.22 review 2 — a NEGATION re-includes what a pattern left out, and Git then tracks it: `lib/` (the Python template) with
+// `!frontend/src/lib/` (a SvelteKit app's code) hid frontend/src/lib/*.ts from the scan and coverage. A pattern a negation could
+// re-include is never applied (conservative — never hide code Git tracks): one whose LAST name the negation's last name could
+// be (`gitignoreNegationReincludes` — the same name, or a wildcard / class that could match it). Only the last name: Git
+// re-includes nothing below a folder that stays excluded, so `!lib/keep/` brings back no `lib/` (dropping it would only show
+// more code). The line order is not read (a negation BEFORE its pattern loses in Git — dropping that one is conservative too).
 function gitignoreDirPatterns(text) {
-  const out = [];
+  const pos = [], negs = [];
+  let negOverflow = false;
   for (const raw of String(text).split(/\r?\n/)) {
     let l = raw.trim();
-    if (!l || l[0] === "#" || l[0] === "!") continue;
+    if (!l || l[0] === "#") continue;
     if (FOLD_CASE) l = l.toLowerCase();
+    if (l[0] === "!") {
+      const tokens = gitignoreNegationTokens(l.slice(1));
+      if (tokens === undefined) continue; // names nothing a folder could be called
+      if (negs.length >= GITIGNORE_MAX_NEGATIONS) { negOverflow = true; break; }
+      negs.push(tokens);
+      continue;
+    }
+    if (pos.length >= GITIGNORE_MAX_PATTERNS) continue; // keep reading: a negation further down still counts
     let anchored = false;
     if (l[0] === "/") { anchored = true; l = l.slice(1); }
     if (l.endsWith("/")) l = l.slice(0, -1);
     const segs = l.split("/");
     if (segs.length > 1) anchored = true; // a slash inside the pattern anchors it to the .gitignore's folder (git)
     const names = segs.map(gitignoreName);
-    if (!names.length || names.some((n) => !n)) continue;
-    out.push({ anchored, names });
-    if (out.length >= GITIGNORE_MAX_PATTERNS) break;
+    if (!names.length || names.some((n) => !n) || names[names.length - 1].length > GITIGNORE_MAX_NAME) continue;
+    pos.push({ anchored, names });
+  }
+  if (negOverflow) return []; // too many negations to weigh: apply none of the patterns rather than guess
+  if (!negs.length) return pos;
+  let budget = GITIGNORE_NEGATION_BUDGET;
+  const out = [];
+  for (const p of pos) {
+    const last = p.names[p.names.length - 1];
+    let reincluded = false;
+    for (const t of negs) {
+      budget -= (t ? t.length : 1) * last.length + 1;
+      if (budget < 0) return []; // a hostile file: apply none of the patterns rather than spend the walk on it
+      if (gitignoreNegationReincludes(t, last)) { reincluded = true; break; }
+    }
+    if (!reincluded) out.push(p);
   }
   return out;
+}
+const GITIGNORE_MAX_NAME = 255; // a longer name is no folder name (every file system's limit)
+const GITIGNORE_MAX_NEGATIONS = 200;
+const GITIGNORE_NEGATION_BUDGET = 4000000; // name-unit comparisons over all pattern × negation pairs
+// A negation's LAST name (after `!`, a leading `/`, a trailing `/` or `/**`) → its glob tokens ({ lit } · { one } · { star } ·
+// { set, neg }; a class it can't read is { one }: any character), or undefined when it could be no folder name (empty, `.` /
+// `..`, longer than any name can be). (gitignoreNegationReincludes reads a missing token list as "any name".)
+function gitignoreNegationTokens(l) {
+  let s = l.trim();
+  while (s.endsWith("/**")) s = s.slice(0, -3);
+  s = s.replace(/\/+$/, "");
+  const last = s.slice(s.lastIndexOf("/") + 1);
+  if (!last || last === "." || last === "..") return undefined;
+  const tokens = [];
+  let fixed = 0;
+  for (let i = 0; i < last.length; i++) {
+    const c = last[i];
+    if (c === "*") { if (!tokens.length || !tokens[tokens.length - 1].star) tokens.push({ star: true }); continue; }
+    fixed++;
+    if (c === "?") { tokens.push({ one: true }); continue; }
+    if (c === "\\") { if (i + 1 < last.length) i++; tokens.push({ lit: last[i] }); continue; }
+    if (c !== "[") { tokens.push({ lit: c }); continue; }
+    let j = i + 1;
+    const neg = last[j] === "!" || last[j] === "^";
+    if (neg) j++;
+    const close = last.indexOf("]", last[j] === "]" ? j + 1 : j); // a ']' first in the class is a member
+    if (close === -1) { tokens.push({ lit: "[" }); continue; }
+    const body = last.slice(j, close);
+    i = close;
+    if (body.includes("\\") || body.includes("[")) { tokens.push({ one: true }); continue; } // unread: any one character
+    const set = new Set();
+    for (let k = 0; k < body.length; k++) {
+      if (body[k + 1] === "-" && k + 2 < body.length) {
+        const a = body.charCodeAt(k), b = body.charCodeAt(k + 2);
+        if (b < a || b - a > 256) { set.clear(); break; }
+        for (let x = a; x <= b; x++) set.add(String.fromCharCode(x));
+        k += 2;
+      } else set.add(body[k]);
+    }
+    tokens.push(set.size ? { set, neg } : { one: true });
+  }
+  if (fixed > GITIGNORE_MAX_NAME) return undefined;
+  return tokens;
+}
+// Could the negation's last name (its tokens) be a name the pattern's last name (its units — a character or a class's Set)
+// matches? One pass over the units per token (a star: any run) — exact for the units' per-position choices.
+function gitignoreNegationReincludes(tokens, units) {
+  if (!tokens) return true;
+  const fits = (t, u) => {
+    if (t.one) return true;
+    const chars = typeof u === "string" ? [u] : u;
+    for (const c of chars) if (t.lit != null ? c === t.lit : t.set.has(c) !== t.neg) return true;
+    return false;
+  };
+  let prev = new Array(units.length + 1).fill(false);
+  prev[0] = true;
+  for (const t of tokens) {
+    const cur = new Array(units.length + 1).fill(false);
+    if (t.star) { let any = false; for (let j = 0; j <= units.length; j++) { any = any || prev[j]; cur[j] = any; } }
+    else for (let j = 1; j <= units.length; j++) cur[j] = prev[j - 1] && fits(t, units[j - 1]);
+    prev = cur;
+  }
+  return prev[units.length];
 }
 function gitignoreNameMatch(units, name) {
   if (units.length !== name.length) return false;
@@ -629,13 +720,15 @@ const isManifestName = (name) => MANIFEST_NAMES.has(name) || /\.(?:csproj|psd1|c
 const scanCounts = (rel, name) => (isCodeFile(rel) && !isTestFixture(rel)) || isManifestName(name);
 // 1.22 review — monorepos: the manifests read BELOW the root too (apps/web/package.json, apps/api/pyproject.toml,
 // services/billing/go.mod) — a package's own manifest, never a per-folder build file (CMakeLists.txt, Makefile) — at most
-// NESTED_MANIFEST_CAP of them read (every name found still counts for the stack); never one in a fixtures / testdata folder.
+// NESTED_MANIFEST_CAP of them read (every name found still counts for the stack); never one in a fixtures / testdata folder,
+// nor (review 2) in a docs / examples / samples folder: a Node app's docs/requirements.txt (Sphinx), docs/Gemfile (Jekyll) and
+// examples/flask-client/requirements.txt made its stack "python (flask)" and "ruby".
 const NESTED_MANIFESTS = new Set(["package.json", "requirements.txt", "requirements-dev.txt", "pyproject.toml", "setup.py", "setup.cfg",
   "Pipfile", "go.mod", "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile", "composer.json", "Cargo.toml", "mix.exs",
   "rebar.config", "pubspec.yaml", "build.sbt", "Package.swift", "stack.yaml", "deps.edn", "project.clj", "Project.toml",
   "build.zig", "dune-project", "cpanfile"]);
 const NESTED_MANIFEST_CAP = 20;
-const MANIFEST_FIXTURE_DIRS = new Set(["fixtures", "__fixtures__", "testdata"]);
+const MANIFEST_FIXTURE_DIRS = new Set(["fixtures", "__fixtures__", "testdata", "docs", "doc", "examples", "example", "samples", "sample"]);
 
 function scanCodebase(projectDir, opts = {}) {
   const root = path.resolve(projectDir);
@@ -1024,7 +1117,8 @@ function coverage(projectDir, opts = {}) {
 
 module.exports = { SCAN_IGNORE, CODE_EXT, TEST_EXTRA_EXT, GUARD_CODE_EXT, SCAN_TEXT_EXT, SCAN_READ_CAP, SCAN_READ_BYTES,
   SCAN_ROUTE_CAP, SCAN_LIST_CAP, COVERAGE_CAP, WALK_ENTRY_CAP, WALK_STOP, walkProject, GITIGNORE_MAX_CHARS,
-  GITIGNORE_MAX_PATTERNS, gitignoreName, gitignoreDirPatterns, gitignoreNameMatch, gitignoreRules, gitignoresAll,
+  GITIGNORE_MAX_PATTERNS, GITIGNORE_MAX_NAME, GITIGNORE_MAX_NEGATIONS, GITIGNORE_NEGATION_BUDGET, gitignoreNegationTokens,
+  gitignoreNegationReincludes, gitignoreName, gitignoreDirPatterns, gitignoreNameMatch, gitignoreRules, gitignoresAll,
   gitignoredFolder, projectFileInside, TEST_DIRS, PERL_TEST_DIRS, RE_TEST_NAME,
   RE_TEST_NAME_EXTRA, isTestFile, TEST_DATA_EXT, RE_TEST_DATA_NAME, testNamed, extOf, RE_TESTDATA_DIR, isTestFixture, isCodeFile, JS_EXT, FRONTEND_EXT, JS_ROUTE_OWNERS,
   RE_JS_OWNER_SUFFIX, RE_JS_ROUTE, RE_JS_ROUTE_CHAIN, RE_JS_ROUTE_OPEN, RE_JS_LEAD_STRING, RE_JS_CHAIN_VERB,

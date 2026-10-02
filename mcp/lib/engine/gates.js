@@ -1445,7 +1445,7 @@ const CHANGE_MAX_ACS = 3, CHANGE_MAX_TASKS = 3;
 function changeScope(dir, tracks, lang) {
   const text = readIfExists(path.join(dir, CHANGE_FILE)) || "";
   // 1.21 review C1: the criteria are change.md WITHOUT its task blocks — a task's _Requirements:_ reference defines none
-  const acs = requirementAcIds(changeViews(text).criteria).size;
+  const acs = requirementAcIds(changeViews(text).criteria, dir).size;
   const tasks = parseTasks(text).length;
   const extra = (tracks || []).filter((t) => t !== "core");
   const ok = acs >= 1 && acs <= CHANGE_MAX_ACS && tasks >= 1 && tasks <= CHANGE_MAX_TASKS && !extra.length;
@@ -1591,9 +1591,9 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
       const ev = earsValidate(reqs, lang);
       const errs = (ev.issues || []).filter((i) => i.severity === "error");
       need("ears", !errs.length, errs.slice(0, 3).map((i) => `L${i.line} ${i.msg}`).join("; "));
-      const unlinted = earsUnlinted(reqs, ev); // AC IDs trace_check counts, none linted (doctor's rule — Pa2)
+      const unlinted = earsUnlinted(reqs, ev, dir); // AC IDs trace_check counts, none linted (doctor's rule — Pa2)
       need("ears", !unlinted, unlinted ? m.earsNoCriteria(unlinted) : "");
-      const unidentified = earsUnidentified(reqs, ev); // …and the mirror: criteria, but no AC ID trace_check counts (1.22 review)
+      const unidentified = earsUnidentified(reqs, ev, dir); // …and the mirror: criteria, but no AC ID trace_check counts (1.22 review)
       need("ears", !unidentified, unidentified ? m.earsNoAcIds(shortIdList(unidentified)) : "");
       noPlaceholders("requirements.md");
       const mk = clarificationMarkers(reqs);
@@ -1650,9 +1650,9 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
         const ev = earsValidate(crit, lang);
         const errs = (ev.issues || []).filter((i) => i.severity === "error");
         need("ears", !errs.length, errs.slice(0, 3).map((i) => `L${i.line} ${i.msg}`).join("; "));
-        const unlinted = earsUnlinted(crit, ev);
+        const unlinted = earsUnlinted(crit, ev, dir);
         need("ears", !unlinted, unlinted ? m.earsNoCriteria(unlinted, CHANGE_FILE) : "");
-        const unidentified = earsUnidentified(crit, ev);
+        const unidentified = earsUnidentified(crit, ev, dir);
         need("ears", !unidentified, unidentified ? m.earsNoAcIds(shortIdList(unidentified), CHANGE_FILE) : "");
         noPlaceholders(CHANGE_FILE);
         const mk = clarificationMarkers(text);

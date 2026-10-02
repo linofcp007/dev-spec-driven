@@ -657,6 +657,25 @@ const SIGNALS = {
     // Full review Pb5: "at rest" / "in transit" (EN / PT / ES) the same way — beside "encrypt" they name data encryption
     // ("Encrypt customer PII at rest and in transit"), alone they are a patient at rest or a parcel in transit.
     context: ["permission", "permissão", "permiso", "at rest", "in transit", "em repouso", "em trânsito", "em transito", "en reposo", "en tránsito", "en transito"],
+    // CUES (1.22 review 2) — the 1.22 factor words count only as AUTHENTICATION: "depende de dois fatores", "depende de dos factores",
+    // "doble factor de ponderación", "a multi-factor risk model" were a weak +sec signal (one more weak word turned +sec on). Next
+    // to an auth word — "autenticação de dois fatores", "login com dois fatores", "autenticación de doble factor", "doble factor de
+    // autenticación", "multi-factor authentication", "multi-factor sign-in" — they stay weak (the auth word is the other signal, as
+    // in English); anywhere else they are no signal at all. "two-factor", "2fa" and "mfa" (pre-1.22) keep their reading.
+    cues: [
+      { kind: "near", on: ["dois fatores", "multifator", "dos factores", "doble factor", "multi-factor", "multifactor"], then: "keep",
+        before: { words: [[["authenticat\\p{L}*", "auth", "log-?ins?", "sign-?ins?", "sign in", "sso", "verification", "autenticaç\\p{L}*",
+          "autenticac\\p{L}*", "autenticar", "verificaç\\p{L}*", "verificac\\p{L}*", "início de sessão", "inicio de sessao", "inicio de sesión",
+          "inicio de sesion", "acesso", "acceso"], { optional: ["de", "em", "com", "por", "a", "en", "con", "with", "via", "using", "by"] }]],
+        chars: 48, edge: "letter" },
+        after: { words: [[{ optional: ["de", "do", "da", "del", "para", "for", "of", "on", "no", "na", "en", "em"] }, { optional: ["o", "a", "the", "el", "la"] },
+          ["authenticat\\p{L}*", "auth", "log-?ins?", "sign-?ins?", "sign in", "sso", "verification", "autenticaç\\p{L}*", "autenticac\\p{L}*",
+            "verificaç\\p{L}*", "verificac\\p{L}*", "início de sessão", "inicio de sessao", "inicio de sesión", "inicio de sesion", "acesso", "acceso"]]],
+        chars: 48 } },
+      // … anywhere else, no signal: the catch-all — the hit's own sentence always holds the hit, so this rule always fires
+      { kind: "sentence", on: ["dois fatores", "multifator", "dos factores", "doble factor", "multi-factor", "multifactor"], then: "none",
+        edge: "letter", phrases: ["dois fatores", "multifator(?:es)?", "dos factores", "doble factor(?:es)?", "multi-?factors?"] },
+    ],
   },
   // +privacy (1.14): GDPR / RGPD. The regulation names moved here from +saas — one concept, one track.
   privacy: {

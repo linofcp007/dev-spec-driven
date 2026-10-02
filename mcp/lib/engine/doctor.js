@@ -626,8 +626,8 @@ function specDoctor(projectDir, name, opts = {}) {
     // Zero criteria is not a pass — an empty requirements.md must not read as "EARS clean". And requirements.md whose AC
     // IDs trace_check counts while EARS linted none of them fails (1.14 full review Pa2): nothing was checked.
     // The mirror (1.22 review): criteria linted, but no AC ID trace_check reads (bare AC-1 IDs, or none) — it traced 0 ACs.
-    const unlinted = earsUnlinted(reqs, e);
-    const unidentified = unlinted ? null : earsUnidentified(reqs, e);
+    const unlinted = earsUnlinted(reqs, e, dir);
+    const unidentified = unlinted ? null : earsUnidentified(reqs, e, dir);
     const file = isChange ? CHANGE_FILE : undefined;
     add("ears", nErr || unlinted || unidentified ? "fail" : nCrit === 0 ? "warn" : "pass",
       unlinted ? m.earsNoCriteria(unlinted, file) : unidentified ? m.earsNoAcIds(shortIdList(unidentified), file)
@@ -856,7 +856,9 @@ function specDoctor(projectDir, name, opts = {}) {
   // (1.22 review: a stale Phase 4 sign-off lends no role a current sign-off — the view reads the approvals in force)
   const inForce = approvalsInForce(dir, tracks, approvals);
   const rv = roleGateView(projectDir, dir, inForce === approvals ? state : Object.assign({}, state, { approvals: inForce }), execDue ? pendingGates.concat("execution") : pendingGates, tracks, kind, lng);
-  const testsStale = inForce === approvals ? null : testsStaleText(dir, tracks, approvals, lng); // 1.22 review: why `tests` is pending again
+  // 1.22 review: why `tests` is pending again — only while it IS pending (review 2: a test plan deleted, then its approval
+  // revoked, leaves the stale tests sign-off with nothing to approve again: "approve tests" answers "Nothing to approve")
+  const testsStale = inForce === approvals || !pendingGates.includes("tests") ? null : testsStaleText(dir, tracks, approvals, lng);
   const shownPending = rv.pending.execution ? pendingGates.concat("execution") : pendingGates;
   if (pendingGates.length) {
     const g = approvalChecks(projectDir, slug, dir, pendingGates[0], tracks, kind, lng);

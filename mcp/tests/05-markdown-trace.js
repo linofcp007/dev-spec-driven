@@ -1461,6 +1461,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
       "1.22 review: the bare-ID messages in PT / ES (got " + js([pB.msg, eB2.msg]) + ")");
 
     // 3. `<feature>/US-n.AC-m` in prose is another feature's criterion (the _Supersedes:_ / _Affects:_ syntax) — never a required AC.
+    // (review 2: when <feature> IS another feature of the project — checkout and billing exist here)
+    S.createFeature(d, "Checkout", ["core"], "", undefined, "en");
+    S.createFeature(d, "Billing", ["core"], "", undefined, "en");
     const fr = S.createFeature(d, "Foreign", ["core"], "", undefined, "en");
     put(fr.dir, "requirements.md", reqOf(["1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y.", "", "## Assumptions", "", "- rules of checkout/US-3.AC-2 stay as they are; see billing / US-2.AC-4 too"]));
     put(fr.dir, "tasks.md", tasksOf("US-1.AC-1"));
@@ -1526,5 +1529,61 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     ok(procSec("# D\n\n## [PRIVACY] Processing\n\n### Data\n\n#### Processors\nStripe (US, SCCs)\n") === "Stripe (US, SCCs)\n" &&
       procSec("# D\n\n## Processors and queues\nRedis\n") === null && procSec("# D\n\n## [PRIVACY] Processing\n\n## Architecture\n\n### Processors\nRedis\n") === null,
       "1.22 review: extractSection's track context (one pass) — '#### Processors' two levels under '## [PRIVACY] …' is the section; a core '## Processors…', or one under a sibling '## Architecture', is not");
+  }
+
+  { // 1.22 review 2 (markdown) — NFR-only requirements pass the gates; the feature's own IDs after a slash stay its IDs
+    const js = (v) => JSON.stringify(v);
+    const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const chk = (doc, id) => (doc.checks || []).find((c) => c.id === id) || {};
+    const d = path.join(tmp, "proj-122r2-markdown");
+    S.initProject(d, ["core"], "en");
+    const reqOf = (lines) => "# Requirements\n\n## Acceptance Criteria (EARS)\n\n" + lines.join("\n") + "\n";
+    const tasksOf = (ids) => "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: " + ids + "_\n";
+
+    // F2. A criterion with a stable ID of its own (NFR-n, EC-n, SC-nnn) is no "criterion with no ID": an NFR-only spec traced 0 ACs,
+    // so earsUnidentified named every NFR — doctor's ears and trace failed, the requirements approval was refused. A criterion with
+    // no ID at all beside them still is one.
+    const nfr = S.createFeature(d, "Perf", ["core"], "", undefined, "en");
+    put(nfr.dir, "requirements.md", "# Requirements: Perf\n\n## Summary\n\nMake the API faster.\n\n## Non-Functional Requirements\n\n" +
+      "- **NFR-1** — THE SYSTEM SHALL answer GET /orders within 200 ms at p95.\n- **NFR-2** — THE SYSTEM SHALL keep its memory under 512 MB.\n");
+    put(nfr.dir, "tasks.md", tasksOf("NFR-1, NFR-2"));
+    const trP = S.traceCheck(d, nfr.slug), docP = S.specDoctor(d, nfr.slug);
+    approveBefore(d, nfr.slug, "requirements");
+    const apP = S.approvePhase(d, nfr.slug, "requirements");
+    const mix = S.createFeature(d, "Perf mix", ["core"], "", undefined, "en");
+    put(mix.dir, "requirements.md", reqOf(["- **NFR-1** — THE SYSTEM SHALL answer within 200 ms.", "- THE SYSTEM SHALL log each call."]));
+    put(mix.dir, "tasks.md", tasksOf("NFR-1"));
+    const trM = S.traceCheck(d, mix.slug);
+    ok(trP.verdict === "pass" && !("unidentifiedCriteria" in trP) && chk(docP, "ears").status === "pass" && chk(docP, "traceability").status !== "fail" &&
+      !(apP.failing || []).includes("ears") && js(trM.unidentifiedCriteria) === '["L6"]' && trM.verdict === "gaps-found",
+      "1.22 review 2: requirements of NFR-1, NFR-2 only — trace passes, doctor's ears passes, the requirements approval doesn't fail on ears; a criterion with no ID beside an NFR still is one (got " +
+      js([trP.verdict, trP.unidentifiedCriteria, chk(docP, "ears"), chk(docP, "traceability").status, apP.failing, trM.unidentifiedCriteria]) + ")");
+
+    // F3. `<x>/US-n.AC-m` is another feature's only when <x> resolves to ANOTHER feature of the project (as _Supersedes:_ resolves it):
+    // a priority (P1/), a story (US-1 /), a number (1.1/), the feature's own slug, or a word that names no feature stay this feature's
+    // IDs — every required AC went to 0 and the new 'no AC ID' failure fired. checkout (a feature here) is still stripped.
+    S.createFeature(d, "Checkout", ["core"], "", undefined, "en");
+    const own = S.createFeature(d, "Own ids", ["core"], "", undefined, "en");
+    put(own.dir, "requirements.md", reqOf(["1. **P1/US-1.AC-1** — WHEN a user saves THE SYSTEM SHALL store the draft.",
+      "2. US-1 / US-1.AC-2 — WHEN a user saves THE SYSTEM SHALL show a toast.", "3. 1.1/US-1.AC-3 — WHEN a user leaves THE SYSTEM SHALL keep the draft.",
+      "4. own-ids/US-1.AC-4 — WHEN a user returns THE SYSTEM SHALL restore the draft.", "5. Step-2/US-1.AC-5 — WHEN the draft is stale THE SYSTEM SHALL say so.",
+      "", "## Assumptions", "", "- the rules of checkout/US-3.AC-2 stay as they are"]));
+    put(own.dir, "tasks.md", tasksOf("US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-1.AC-5"));
+    const trO = S.traceCheck(d, own.slug), docO = S.specDoctor(d, own.slug);
+    const E = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const pure = [...E.requirementAcIds("1. **P1/US-1.AC-1** — x.\n2. US-1 / US-1.AC-2 — y.\n3. 1.1/US-1.AC-3 — z.\n4. see checkout/US-3.AC-2.")];
+    ok(trO.verdict === "pass" && trO.totalAcs === 5 && js(trO.uncoveredByTasks) === "[]" && chk(docO, "ears").status === "pass" &&
+      js(pure) === '["US-1.AC-1","US-1.AC-2","US-1.AC-3"]',
+      "1.22 review 2: 'P1/US-1.AC-1', 'US-1 / US-1.AC-2', '1.1/US-1.AC-3', the feature's own 'own-ids/US-1.AC-4' and 'Step-2/US-1.AC-5' (no such feature) stay required ACs — 5, all covered; 'checkout/US-3.AC-2' (a feature) does not; without a feature folder the reader keeps P1 / US-1 / 1.1 (got " +
+      js([trO.verdict, trO.totalAcs, trO.uncoveredByTasks, trO.unidentifiedCriteria, chk(docO, "ears").status, pure]) + ")");
+    // …and a criterion whose only ID is that other feature's (or a _Supersedes:_ reference) has no ID of its own: still named
+    const fo = S.createFeature(d, "Foreign only", ["core"], "", undefined, "en");
+    put(fo.dir, "requirements.md", reqOf(["1. WHEN a user pays THE SYSTEM SHALL apply the rules of checkout/US-3.AC-2 unchanged."]));
+    put(fo.dir, "tasks.md", tasksOf("US-3.AC-2"));
+    const trFo = S.traceCheck(d, fo.slug), docFo = S.specDoctor(d, fo.slug);
+    ok(js(trFo.unidentifiedCriteria) === '["L5"]' && trFo.totalAcs === 0 && chk(docFo, "ears").status === "fail" &&
+      js(E.criteriaBareIds("1. **AC-1** — WHEN x THE SYSTEM SHALL keep checkout/US-3.AC-2 as it is.")) === '["AC-1"]',
+      "1.22 review 2: a criterion whose only ID is another feature's (checkout/US-3.AC-2) has no stable ID of its own — trace names it, doctor's ears fails; a bare AC-1 beside such a reference is still a bare ID (got " +
+      js([trFo.unidentifiedCriteria, trFo.totalAcs, chk(docFo, "ears").status]) + ")");
   }
 };

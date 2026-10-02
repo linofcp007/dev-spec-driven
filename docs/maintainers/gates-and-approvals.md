@@ -115,7 +115,9 @@ flows, the bugfix kind.
   content, approved since, revoked — like `executionSignOffStale()`). A stale `tests` approval is no approval for the gate
   walk: **`approvalsInForce()`** (the approvals minus it) is what `pendingGateList`, next_action (its `pending`, the plan
   fast-forward), `fastForwardPlan`, `approveThrough`'s chain, the status line (`statusNext`), doctor's role view and a role
-  sign-off's `recordRoleSignOff` read — so doctor lists `tests` pending again with the reason (`gates.testsStale`, also first
+  sign-off's `recordRoleSignOff` read — so doctor lists `tests` pending again with the reason (`gates.testsStale` — only while
+  `tests` IS pending, review 2: test-plan.md deleted and its approval revoked leaves a stale sign-off with nothing to approve, and
+  the note said "to be approved again" while `approve tests` answered "Nothing to approve"; also first
   in next_action's Phase 4 text — `next.signOffTests` on an executing feature), finish blocks on it and the tasks can't be
   re-approved past it (phase-order). An approval recorded before 1.22 carries no stamp and is **never** flagged (the
   design's weigh / reuse rule) — the demo's api-keys keeps its legacy one. **Approving `tests` checks what Phase 4 produces** (`approvalChecks`): +tdd `tests-in-code` — every

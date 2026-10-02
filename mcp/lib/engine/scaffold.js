@@ -1116,7 +1116,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
 // the track's first template criterion) — a track added after the requirements brings none. spec_add_track and
 // spec_create (new or existing feature) share it, so both give the same plan.
 function testPlanTracks(dir, tracks, reqIds) {
-  const ids = reqIds || requirementAcIds(readIfExists(path.join(dir, "requirements.md")) || "");
+  const ids = reqIds || requirementAcIds(readIfExists(path.join(dir, "requirements.md")) || "", dir);
   return tracks.filter((x) => { const first = trackTemplateAcs(x)[0]; return !first || ids.has(first); });
 }
 // A track's own template criteria (the requirements template's IDs for it, in order) — [] for core / tdd.
@@ -1134,7 +1134,7 @@ function trackTemplateAcs(tr) {
 // Pa4). Only a missing / blank requirements.md still gets the template rows.
 function scaffoldTestPlan(dir, name, lng, tracks, size) {
   const reqText = readIfExists(path.join(dir, "requirements.md"));
-  const reqIds = requirementAcIds(reqText || "");
+  const reqIds = requirementAcIds(reqText || "", dir);
   const t = testPlanTracks(dir, tracks, reqIds);
   const tmpl = i18n.templateAcIds(t, size); // 1.21 F5: a size S scaffold's two core criteria
   // A track pack's criteria (1.15) are the pack's scaffold, not written requirements: they get the pack's own rows (withTrackBlocks).

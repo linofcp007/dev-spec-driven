@@ -20,7 +20,7 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained, readIfExists, readJson, realLines,
   requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes, retiredDecisions, safeReaddir,
   SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile, statePath, stripEnd, stripEnds,
-  stripStart, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
+  stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
   useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir;
 function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
@@ -31,7 +31,7 @@ function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atx
   normWs, oneLiner, ownEvidence, packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained,
   readIfExists, readJson, realLines, requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes,
   retiredDecisions, safeReaddir, SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile,
-  statePath, stripEnd, stripEnds, stripStart, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
+  statePath, stripEnd, stripEnds, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
   taskMarkerValues, taskProse, tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds,
   trackLabel, trackMarker, unitIn, useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews,
   isChangeDir } = E); }
@@ -271,9 +271,9 @@ function earsFeature(projectDir, name) {
 // requirements.md defines AC IDs (trace_check's reading, requirementAcIds) but EARS linted no criterion at all: the IDs,
 // shortened ("US-1.AC-1, US-1.AC-2 …"), else null. Doctor's `ears` check and the requirements approval gate fail on it
 // (1.14 full review Pa2) — an AC written only mid-sentence, or in a summary table, is counted yet never checked.
-function earsUnlinted(reqText, ears) {
+function earsUnlinted(reqText, ears, dir) {
   if (!ears || !ears.summary || ears.summary.criteriaDetected > 0) return null;
-  const ids = [...requirementAcIds(reqText || "")];
+  const ids = [...requirementAcIds(reqText || "", dir)];
   return ids.length ? shortIdList(ids) : null;
 }
 const shortIdList = (xs) => xs.slice(0, 5).join(", ") + (xs.length > 5 ? " …" : ""); // "US-1.AC-1, US-1.AC-2 …"
@@ -281,11 +281,31 @@ const shortIdList = (xs) => xs.slice(0, 5).join(", ") + (xs.length > 5 ? " …" 
 // bare `AC-1`, `AC-2` (EARS took them as stable IDs) or with none at all traced 0 ACs, passed trace_check ("all 0 ACs covered")
 // and the requirements approval. → the criteria as labels — each one's bare AC ID, else "L<line>" — in document order
 // (the full list), else null. trace_check reports them as a gap (unidentifiedCriteria); doctor's `ears` and the requirements /
-// change-plan approvals fail on them.
-function earsUnidentified(reqText, ears) {
+// change-plan approvals fail on them. Only a criterion with NO stable ID counts (review 2): an NFR-n / EC-n / SC-nnn one has
+// its own (trace_check's secondary warnings read it) — a performance spec of NFR-1, NFR-2 alone failed every gate. Its own:
+// another feature's `checkout/US-3.AC-2` or a `_Supersedes:_` reference in its text is none (ownStableId).
+function earsUnidentified(reqText, ears, dir) {
   if (!ears || !ears.summary || !(ears.summary.criteriaDetected > 0)) return null;
-  if (requirementAcIds(reqText || "").size) return null;
-  return (ears.criteria || []).map((c) => { const bare = c.text.match(RE_BARE_AC); return bare ? bare[0] : "L" + c.line; });
+  if (requirementAcIds(reqText || "", dir).size) return null;
+  const out = (ears.criteria || []).filter((c) => !ownStableId(c.text, dir))
+    .map((c) => { const bare = c.text.match(RE_BARE_AC); return bare ? bare[0] : "L" + c.line; });
+  return out.length ? out : null;
+}
+// A criterion's text carries a stable ID of its OWN (US-n.AC-m, T-, EC-, NFR-, SC-) — never one in a _Supersedes:_ marker or
+// another feature's `<feature>/US-n.AC-m` (requirementAcIds' reading; `dir` resolves the feature, as there).
+const ownStableId = (text, dir) => RE_FULL_ID.test(stripForeignAcRefs(stripSupersedes(text), dir));
+// The bare `AC-n` IDs the criteria are numbered with — each linted criterion with no stable ID of its own that carries one — in
+// document order, once each ([] when none). spec_upgrade's renumber item (review 2): a feature approved before 1.22 with AC-1,
+// AC-2 … fails doctor's ears / traceability now, with no warning path. `dir`: the feature's folder (see ownStableId).
+function criteriaBareIds(reqText, dir) {
+  const ev = earsValidate(reqText || "", "en");
+  const out = [];
+  for (const c of (ev.ok && ev.criteria) || []) {
+    if (ownStableId(c.text, dir)) continue;
+    const m = c.text.match(RE_BARE_AC);
+    if (m && !out.includes(m[0])) out.push(m[0]);
+  }
+  return out;
 }
 // Issues carry a stable `code` (no-modal · no-id · vague · no-keyword · needs-clarification · placeholder) —
 // callers branch on it, never on the (localized) `msg`.
@@ -416,7 +436,7 @@ function traceCheck(projectDir, name, opts = {}) {
   const testPlan = planIdText(rawPlan); // comments out, fenced examples blanked — like the tasks
   const tracks = detectTracks(dir);
 
-  const requiredAcs = requirementAcIds(rawReqs);
+  const requiredAcs = requirementAcIds(rawReqs, dir);
   const acsInTasks = extractAcIds(tasks);
   const acsInTestPlan = extractAcIds(testPlan);
 
@@ -424,7 +444,7 @@ function traceCheck(projectDir, name, opts = {}) {
   // Reverse direction: AC IDs referenced by tasks that don't exist in requirements (typos).
   const phantomAcsInTasks = [...acsInTasks].filter((id) => !requiredAcs.has(id));
   // 1.22 review: criteria EARS lints but no AC ID this reader counts (a bare AC-1, or none) — 0 ACs used to be "all covered".
-  const unidentified = requiredAcs.size || !rawReqs.trim() ? null : earsUnidentified(rawReqs, earsValidate(rawReqs, "en"));
+  const unidentified = requiredAcs.size || !rawReqs.trim() ? null : earsUnidentified(rawReqs, earsValidate(rawReqs, "en"), dir);
 
   // Spec ↔ code: tasks may carry `_Implements: path/to/file_` markers. Verify the files exist.
   const implFiles = [];
@@ -1119,7 +1139,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
 
   // The rows: trace_check's AC set (requirementAcIds) in document order, then the secondary IDs (trace's secondaryDefinitions).
   const rows = [];
-  for (const id of requirementAcIds(reqs)) {
+  for (const id of requirementAcIds(reqs, dir)) {
     const e = idx.get(id);
     rows.push({ id, key: id, kind: "ac", raw: e ? e.text : "", line: e ? e.line : Infinity });
   }
@@ -1158,7 +1178,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const planSec = new Set(entries.flatMap((e) => [...e.sec.keys()]));
   const quickSec = secondaryIds(realLines(read("quickstart.md") || "", RE_SECONDARY_ID_LINE).join("\n"));
   let code = null;
-  if (opts.code && planOn) code = traceTestCode(projectDir, dir, planText, requirementAcIds(reqs), opts.scan);
+  if (opts.code && planOn) code = traceTestCode(projectDir, dir, planText, requirementAcIds(reqs, dir), opts.scan);
   const inCode = new Map(code ? Object.entries(code.testsInCode).map(([id, files]) => [tKey(id.slice(2)), files]) : []);
   const outside = new Set(code ? code.plannedOutsideCode.map((id) => tKey(id.slice(2))) : []);
 
@@ -1414,7 +1434,7 @@ function rtmProjectMarkdown(projectDir, lang, features) {
 module.exports = { VAGUE_WORDS, VAGUE_RE, VAGUE_RE_ALL, RE_LIST_ITEM, RE_NUMBERED, RE_BLOCK_BREAK, B, E, RE_MODAL_EN,
   RE_MODAL_CAPS, RE_MODAL_SYSTEM, RE_LIST_DEFINES_AC, RE_MODAL, RE_MODAL_LOOSE, RE_AC_SHAPE, RE_AC_HEADING,
   RE_EARS_CAPS, RE_EARS_KEYWORD, RE_UBIQUITOUS, RE_STABLE_ID, RE_FULL_ID, RE_BARE_AC, RE_LEAD_DEFINES_AC, RE_CELL_AC, criterionBlocks,
-  VAGUE_VERB_NEXT, vagueTermsOf, earsFeature, earsUnlinted, earsUnidentified, shortIdList, earsValidate, extractAcIds, extractTestIds, traceCheck, TRACE_INFO_FIELDS, TRACE_GAP_ORDER,
+  VAGUE_VERB_NEXT, vagueTermsOf, earsFeature, earsUnlinted, earsUnidentified, criteriaBareIds, shortIdList, earsValidate, extractAcIds, extractTestIds, traceCheck, TRACE_INFO_FIELDS, TRACE_GAP_ORDER,
   TRACE_VERDICT_KINDS, TRACE_TASK_KINDS, TRACE_PLAN_KINDS, traceGaps, traceGapLines, TRACE_WARNING_ORDER,
   TRACE_SECONDARY_KINDS, traceWarnings, traceWarningLines, RE_SECONDARY_ID, RE_SECONDARY_ID_LINE, idKey, secondaryIds,
   secondaryDefinitions, traceSecondary, testPlanEntries, RE_CODE_TID, CODE_TRACE_CAP, CODE_TRACE_READ_CAP,

@@ -1340,4 +1340,22 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     ok(js(before) === "[]" && js(noDesign) === "[]" && js(gone.slice().sort()) === '["bug.md","requirements.md"]',
       "1.22 review: changedSinceApproval reports a deleted approved bug.md / requirements.md, never a bugfix's deleted design.md (got " + js([before, noDesign, gone]) + ")");
   }
+
+  { // 1.22 review 2 — doctor names the stale Phase 4 sign-off ("the tests phase is to be approved again") only while `tests` IS
+    // pending: a stamped tests approval, then test-plan.md deleted and its approval revoked (the way out next_action gives) left
+    // the note while `approve tests` answered "Nothing to approve".
+    const js = JSON.stringify;
+    const p = path.join(tmp, "proj-122r2-stale-tests");
+    fs.cpSync(path.join(root, "examples", "demo-project"), p, { recursive: true });
+    const rT = S.approvePhase(p, "api-keys", "tests", "u"); // stamped (testsPlan)
+    fs.rmSync(path.join(p, ".specs", "api-keys", "test-plan.md"));
+    const rv = S.approvePhase(p, "api-keys", "test-plan", "u", { revoke: true, reason: "the plan is gone for good" });
+    const doc = S.specDoctor(p, "api-keys");
+    const gates = doc.checks.find((c) => c.id === "approval-gates") || {};
+    const at = S.approvePhase(p, "api-keys", "tests", "u", { force: true });
+    ok(rT.ok && rT.approvals.tests.testsPlan && rv.ok && !doc.pendingGates.includes("tests") && !/approved again|no longer covers the plan/.test(gates.detail || "") &&
+      at.ok === false && /^Nothing to approve/.test(at.error || ""),
+      "1.22 review 2: with test-plan.md deleted and its approval revoked, `tests` is not pending and doctor's approval-gates no longer says the tests phase is to be approved again (approve tests: nothing to approve) (got " +
+      js([rT.ok, rv.ok, doc.pendingGates, gates.detail, at.error]) + ")");
+  }
 };

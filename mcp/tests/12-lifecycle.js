@@ -791,6 +791,36 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
       "upgrade messages exist in EN / PT / ES with the same keys; spec_upgrade {apply: 'yes'} is an argument error; a project without .specs/ is an error (nothing created)");
   }
 
+  { // 1.22 review 2 — a feature approved before 1.22 with bare AC-n IDs fails doctor's ears / traceability now: the upgrade audit names
+    // them (attention bare-ac-ids, an item to renumber them US-<story>.AC-<n> with their references, then re-approve — in UPGRADE.md
+    // too) and never edits the spec. On a copy of the demo whose api-keys criteria, tasks and plan were numbered AC-11, AC-12 …
+    const js = JSON.stringify;
+    const p = path.join(tmp, "proj-122r2-bare-upgrade");
+    fs.cpSync(path.join(root, "examples", "demo-project"), p, { recursive: true });
+    const dir = path.join(p, ".specs", "api-keys");
+    for (const f of ["requirements.md", "design.md", "test-plan.md", "tasks.md"]) {
+      const fp = path.join(dir, f);
+      if (fs.existsSync(fp)) fs.writeFileSync(fp, fs.readFileSync(fp, "utf8").replace(/US-(\d+)\.AC-(\d+)/g, (m, a, b) => "AC-" + a + b));
+    }
+    const rmFile = path.join(p, ".specs", "roadmap.json"); // stamped by 1.21.1: the apply below stamps it again and writes UPGRADE.md
+    fs.writeFileSync(rmFile, fs.readFileSync(rmFile, "utf8").replace(/"specVersion": "[^"]*"/, '"specVersion": "1.21.1"'));
+    const reqBefore = fs.readFileSync(path.join(dir, "requirements.md"), "utf8");
+    const au = payload(await rpc("tools/call", { name: "spec_upgrade", arguments: { projectDir: p } }));
+    const fa = (au.features || []).find((f) => f.name === "api-keys") || {};
+    const fu = (au.features || []).find((f) => f.name === "usage-metering") || {};
+    const ap = S.specUpgrade(p, { apply: true });
+    const md = fs.readFileSync(path.join(p, ".specs", "UPGRADE.md"), "utf8");
+    const U = (l) => S.msg(l).upgrade.item.bareAcIds("AC-1, AC-2", "x");
+    ok(js(fa.bareAcIds) === '["AC-11","AC-12","AC-13","AC-14","AC-21"]' && (fa.attention || []).includes("bare-ac-ids") && fa.group === "blocked" &&
+      js(fu.bareAcIds) === "[]" && !(fu.attention || []).includes("bare-ac-ids") &&
+      au.lines.some((l) => /^ {6}- Renumber the criteria requirements\.md numbers with bare IDs \(AC-11, AC-12, AC-13, AC-14, AC-21\) as US-<story>\.AC-<n> — and their references in tasks\.md and test-plan\.md — then re-approve/.test(l)) &&
+      /^- \[ \] Renumber the criteria requirements\.md numbers with bare IDs \(AC-11/m.test(md) && fs.readFileSync(path.join(dir, "requirements.md"), "utf8") === reqBefore && ap.ok &&
+      /^Renumera os critérios que o requirements\.md identifica com IDs soltos \(AC-1, AC-2\) como US-<história>\.AC-<n>/.test(U("pt")) &&
+      /^Renumera los criterios que requirements\.md identifica con IDs sueltos \(AC-1, AC-2\) como US-<historia>\.AC-<n>/.test(U("es")),
+      "1.22 review 2: spec_upgrade names criteria numbered with bare AC-n IDs (bareAcIds, attention bare-ac-ids, an item to renumber them US-<story>.AC-<n> with their tasks / test-plan references, then re-approve — EN / PT / ES, in UPGRADE.md too) and never edits the spec; a US-n.AC-m feature has none (got " +
+      js([fa.bareAcIds, fa.attention, fu.bareAcIds, au.lines.filter((l) => /Renumber/.test(l))]) + ")");
+  }
+
   { // 1.14 B4.1 — forecasts on the roadmap: _Size:_ points, tick timestamps, velocity, ETA (dependencies chained), surfaces
     const callB4 = (name, args) => rpc("tools/call", { name, arguments: args });
     const setStateB4 = (dir, patch) => {

@@ -17,7 +17,8 @@ If the plugin itself isn't updated yet, say how (above) and stop.
 1. **Audit (read-only).** Call the `spec_upgrade` MCP tool `{}` (CLI: `dev-spec upgrade`). Show the result grouped
    like its `lines`: the summary, then **blocked** (doctor fails), **needs attention** and **ok** — per feature its
    status (not started · planning · executing · complete · finished), what the rules flag (failing checks, pending
-   gates, artifacts changed since approval, approvals without history, unverified tasks, drift), next_action's step
+   gates, artifacts changed since approval, approvals without history, unverified tasks, drift, criteria with bare
+   `AC-n` IDs to renumber `US-<story>.AC-<n>`), next_action's step
    and the review recommendation. Then list `plan`: what apply would change.
 2. **Apply — only after the user says yes** (skip it if `$ARGUMENTS` has no `--apply` and they decline, or `plan` is
    empty). Call `spec_upgrade {apply: true}` (CLI `dev-spec upgrade --apply`). It never edits an artifact, approves,

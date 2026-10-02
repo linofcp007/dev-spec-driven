@@ -2151,6 +2151,7 @@ const msg = {
         stale: (slug) => `Cambió después del cierre — ciérrala de nuevo: /spec-finish ${slug}`,
         packReserved: (list, slug, since) => `Cambia el nombre de su(s) track pack(s) anterior(es) a la ${since || "1.17"} — ${list}: el nombre está reservado ahora, así que el track está inactivo (detalles: ${DEV_SPEC} doctor ${slug}, comprobación track-pack-missing)`,
         packMarkerReserved: (list, slug, since, tracks) => `Cambia el marcador de su(s) track pack(s) anterior(es) a la ${since || "1.19"} — ${list}: el marcador es ahora el de un track de serie, así que el pack está inactivo; o usa el track de serie: ${DEV_SPEC} add-track ${slug} ${tracks} (detalles: ${DEV_SPEC} doctor ${slug}, comprobación track-pack-missing)`,
+        bareAcIds: (list, slug, file = "requirements.md") => `Renumera los criterios que ${file} identifica con IDs sueltos (${list}) como US-<historia>.AC-<n> — y sus referencias en tasks.md y test-plan.md — y vuelve a aprobar: desde la 1.22 un AC-n suelto no es un ID que trace_check lea, así que doctor (ears, traceability) falla y la aprobación se rechaza (detalles: ${DEV_SPEC} doctor ${slug})`,
         critic: (files) => `Revísala con el agente spec-critic (solo lectura), fase a fase: ${files || "—"}`,
         converge: (files) => "Ejecuta la pasada de convergencia del spec-reviewer (las tareas hechas frente a sus ACs)" + (files ? `, después el agente spec-critic sobre ${files}` : ""),
         none: "No necesita revisión de la spec — todas las tareas están hechas",

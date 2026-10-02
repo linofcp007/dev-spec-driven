@@ -242,7 +242,7 @@ function decisionTargets(dir, kind) {
     }
   }
   return {
-    acs: requirementAcIds(req),
+    acs: requirementAcIds(req, dir),
     secondary: secondaryDefinitions(req).all,
     tests: new Set([...extractTestIds(planIdText(read("test-plan.md")))].map((id) => tKey(id.slice(2)))),
     sections,

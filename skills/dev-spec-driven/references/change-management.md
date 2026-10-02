@@ -198,8 +198,9 @@ nothing). While it is absent or older than the engine, the SessionStart hook pri
 
 1. **Audit** — `spec_upgrade {}` (CLI `dev-spec upgrade`, read-only): per active feature its status (not started ·
    planning · executing · complete · finished), what doctor fails / warns on, pending gates, artifacts changed since
-   approval, approvals without a history baseline (`legacyApprovals`, `history.skip`), unverified tasks, drift, the
-   next step and a `review`: `critic` when no task is ticked (run the read-only `spec-critic` agent over the
+   approval, approvals without a history baseline (`legacyApprovals`, `history.skip`), unverified tasks, drift,
+   criteria numbered with bare `AC-n` IDs (`bareAcIds` — since 1.22 no ID trace_check reads: renumber them
+   `US-<story>.AC-<n>`, their references in tasks.md / test-plan.md too, then re-approve), the next step and a `review`: `critic` when no task is ticked (run the read-only `spec-critic` agent over the
    artifacts, phase by phase), `converge` mid-execution (the spec-reviewer converge pass + the critic on changed /
    unapproved artifacts), `none` once complete. Grouped blocked (doctor fails) · attention · ok; `plan` = what apply
    changes.

@@ -884,10 +884,25 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname 
     const pos = ["Add two-factor authentication to the login", "Adicionar autenticação de dois fatores ao login", "Añadir autenticación de dos factores al inicio de sesión",
       "Añadir autenticación de doble factor para administradores", "Add multi-factor authentication for admins", "Add multifactor authentication for admins",
       "Adicionar autenticação multifator para administradores", "Añadir autenticación multifactor para administradores"];
-    const lone = S.classify("Ativar dois fatores para os administradores");
+    // (review 2: a factor word counts only next to an auth word — "login com dois fatores" is a lone hint; login is +tdd's, not +sec's)
+    const lone = S.classify("Adicionar login com dois fatores para os administradores");
     ok(pos.every(on) && !lone.tracks.includes("sec") && js(lone.signals.sec) === '["dois fatores"]' && !on("Os dois fatores principais do relatório") && !on("Uma doença multifatorial"),
       "1.22 review: 'autenticação de dois fatores', 'autenticación de dos factores / de doble factor', 'multi-factor / multifactor / multifator' are +sec's weak signal like 'two-factor' (+ the auth word: ON); alone only a hint (got " +
       js(pos.filter((t) => !on(t))) + ")");
+    // 1.22 review 2 — the factor words in everyday phrases are no +sec signal at all (they were a weak one: a "Possible +sec" note, and
+    // with one more weak word +sec turned ON): PT "depende de dois fatores", ES "depende de dos factores", "doble factor de ponderación",
+    // EN "a multi-factor risk model". Next to an auth word they still count (above).
+    const secSig = (t) => S.classify(t).signals.sec;
+    const everyday = ["O cálculo do frete depende de dois fatores: o peso da encomenda e a distância até ao cliente.",
+      "El precio final depende de dos factores: el volumen del pedido y la región del cliente.",
+      "Build a multi-factor risk model that scores loan applicants from income and credit history.",
+      "Ativar dois fatores para os administradores", "Os dois fatores principais do relatório"];
+    const withWeak = ["O frete depende de dois fatores e da segurança da entrega.",
+      "El descuento se calcula con doble factor de ponderación según la antigüedad del cliente y su credencial de socio."];
+    ok(everyday.every((t) => !secSig(t).length) && withWeak.every((t) => !on(t) && secSig(t).length === 1) &&
+      ["Adicionar autenticação de dois fatores", "Añadir doble factor de autenticación", "Add multi-factor sign-in"].every((t) => secSig(t).some((w) => /fator|factor/.test(w))),
+      "1.22 review 2: 'depende de dois fatores' / 'depende de dos factores' / 'doble factor de ponderación' / 'a multi-factor risk model' are no +sec signal (one more weak word no longer turns +sec on); next to an auth word they are (got " +
+      js([everyday.map(secSig), withWeak.map((t) => [on(t), secSig(t)])]) + ")");
     const api = S.classify("add a flag to the export endpoint");
     const apiPt = S.classify("adicionar uma flag ao endpoint de exportação", { lang: "pt" });
     const apiEs = S.classify("añadir un indicador al endpoint de exportación", { lang: "es" });
