@@ -819,6 +819,21 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
       /^Renumera los criterios que requirements\.md identifica con IDs sueltos \(AC-1, AC-2\) como US-<historia>\.AC-<n>/.test(U("es")),
       "1.22 review 2: spec_upgrade names criteria numbered with bare AC-n IDs (bareAcIds, attention bare-ac-ids, an item to renumber them US-<story>.AC-<n> with their tasks / test-plan references, then re-approve — EN / PT / ES, in UPGRADE.md too) and never edits the spec; a US-n.AC-m feature has none (got " +
       js([fa.bareAcIds, fa.attention, fu.bareAcIds, au.lines.filter((l) => /Renumber/.test(l))]) + ")");
+    // review 3 — a CHANGE has no tasks.md nor test-plan.md (its tasks live in change.md): the item names its tasks' _Requirements:_
+    const pc = path.join(tmp, "proj-122r3-bare-change");
+    S.initProject(pc, ["core"], "en");
+    const ch = S.createFeature(pc, "Tweak", undefined, "", undefined, "en", undefined, { size: "xs" });
+    const chFile = path.join(ch.dir, "change.md");
+    fs.writeFileSync(chFile, fs.readFileSync(chFile, "utf8").replace(/US-(\d+)\.AC-(\d+)/g, (m, a, b) => "AC-" + a + b));
+    const auC = S.specUpgrade(pc);
+    const fc = (auC.features || []).find((f) => f.name === ch.slug) || {};
+    const lineC = (auC.lines || []).find((l) => /Renumber/.test(l)) || "";
+    const UC = (l) => S.msg(l).upgrade.item.bareAcIds("AC-1", "x", "change.md");
+    ok(fc.criteriaFile === "change.md" && (fc.bareAcIds || []).length > 0 && /Renumber the criteria change\.md numbers with bare IDs .* — and their references in its tasks' _Requirements:_ \(in change\.md too\) — then re-approve/.test(lineC) &&
+      !/tasks\.md and test-plan\.md/.test(lineC) && /nos _Requirements:_ das suas tarefas \(também no change\.md\)/.test(UC("pt")) && !/test-plan/.test(UC("pt")) &&
+      /en los _Requirements:_ de sus tareas \(también en change\.md\)/.test(UC("es")) && !/test-plan/.test(UC("es")) && /tasks\.md and test-plan\.md/.test(U("en")),
+      "1.22 review 3 (9): the bare-ID upgrade item for a change names its tasks' _Requirements:_ in change.md — never tasks.md / test-plan.md, which a change has not (EN / PT / ES); a feature's item is unchanged (got " +
+      js([fc.criteriaFile, fc.bareAcIds, lineC, UC("pt"), UC("es")]) + ")");
   }
 
   { // 1.14 B4.1 — forecasts on the roadmap: _Size:_ points, tick timestamps, velocity, ETA (dependencies chained), surfaces
