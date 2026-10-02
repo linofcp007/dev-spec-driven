@@ -7,6 +7,9 @@ Use the **dev-spec-driven** skill to finish a feature.
 
 Feature: $ARGUMENTS
 
+A simplification pass (`/spec-simplify`, optional) changes code: run it before this, not after — the written finish
+records the drift baseline and needs the project checks green on the final code.
+
 1. Run `spec_finish {name, write: true}` (CLI: `dev-spec finish <feature> --write`). If `readyToFinish` is
    false, show the **blockers** and stop — fix those first: failing doctor checks, open tasks, tasks ticked
    without a passing run (no evidence, only a note on a runnable `_Verify:_`, a failed or stale run, an

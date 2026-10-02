@@ -11,10 +11,12 @@
  *     `{"decision": "block", "reason": …}` — Claude Code keeps the turn going with that reason (localized, project
  *     language): run the task's _Verify:_ (`dev-spec done <f> <n> --run`), record the evidence, or say plainly what is not
  *     verified.
- *   - SubagentStop, matcher ^(dev-spec-driven:)?spec-implementer$: the implementer never ticks tasks (the controller does,
- *     after review), so its DONE is checked against its report — the task's runnable _Verify:_ commands and an exit code
- *     must be in .specs/<feature>/.execution/task-N-report.md. (Plugin subagents ignore `hooks` in their frontmatter, so
- *     the plugin's hooks.json is where this lives.)
+ *   - SubagentStop, matcher ^(dev-spec-driven:)?spec-(implementer|simplifier)$: the implementer never ticks tasks (the
+ *     controller does, after review), so its DONE is checked against its report — the task's runnable _Verify:_ commands
+ *     and an exit code must be in .specs/<feature>/.execution/task-N-report.md; the simplifier (1.22) rewrites code already
+ *     verified, so its DONE needs .specs/<feature>/.execution/simplify-report.md to end with the passing runs of the
+ *     project checks. (Plugin subagents ignore `hooks` in their frontmatter, so the plugin's hooks.json is where this
+ *     lives.)
  * The decision is the engine's (spec.stopCheck — `dev-spec stop-check` prints the same one).
  *
  * It never sends a stop back twice in a row (`stop_hook_active`), is silent (exit 0, no output) when there is nothing to
@@ -137,7 +139,8 @@ function main(raw) {
   if (!message.trim()) return finish();
 
   const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
-  // hooks.json registers SubagentStop for the spec-implementer only: a payload without agent_type (older versions) is that agent.
+  // hooks.json registers SubagentStop for the spec-implementer and the spec-simplifier: a payload without agent_type (older
+  // versions) is read as the implementer — a simplifier's reply names no task report, so that check lets it through.
   const agent = !sub ? "" : typeof payload.agent_type === "string" && payload.agent_type.trim() ? payload.agent_type : "spec-implementer";
   const r = spec.stopCheck(pdir, { message, agent });
   if (r && r.block === true && typeof r.reason === "string" && r.reason) return finish({ decision: "block", reason: r.reason });

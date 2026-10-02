@@ -11,9 +11,10 @@ mcp/servers.json               registers the `spec-driven` stdio server (plugin.
 skills/dev-spec-driven/SKILL.md the workflow (track routing engine, prose) — the decision-time rules, ≤ 5,000 words (1.21)
 skills/.../references/          deep library, read on demand — index.md lists every file; tool-catalog.md · track-checklists.md ·
                                workflows.md hold what SKILL.md points to (1.21)
-commands/*.md                  54 slash commands (thin wrappers that invoke the skill/MCP) — also served as the MCP prompts
+commands/*.md                  55 slash commands (thin wrappers that invoke the skill/MCP) — also served as the MCP prompts
 agents/*.md                    plugin subagents, auto-discovered and dispatched as `dev-spec-driven:spec-implementer` /
-                               `dev-spec-driven:spec-reviewer` (subagent execution) / `dev-spec-driven:spec-critic` (--deep)
+                               `dev-spec-driven:spec-reviewer` (subagent execution, its verify / simplify modes) /
+                               `dev-spec-driven:spec-critic` (--deep) / `dev-spec-driven:spec-simplifier` (/spec-simplify, 1.22)
 evals/                         plugin evals for `claude plugin eval` — maintainer-side, results ignored: triggering cases
                                (tags triggering / negative) and behavioural cases (tag behavior: <case>/case.yaml + fixture.sh,
                                built from evals/fixtures/ — lib.sh + project trees — with this plugin's own CLI); evals/README.md
@@ -95,7 +96,7 @@ scripts/test-docker.js         both suites in Linux containers — `npm run test
 hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|MultiEdit|NotebookEdit) + approval-hook.js
                                (^(Bash|PowerShell|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$) · PostToolUse → spec-hook.js
                                (Write|Edit) + observe-hook.js (Bash) + plan-hook.js (ExitPlanMode) · PostToolUseFailure (Bash) → observe-hook.js ·
-                               SessionStart → spec-hook.js · Stop + SubagentStop (matcher ^(dev-spec-driven:)?spec-implementer$)
+                               SessionStart → spec-hook.js · Stop + SubagentStop (matcher ^(dev-spec-driven:)?spec-(implementer|simplifier)$)
                                → stop-hook.js
 hooks/guard-hook.js            opt-in guard mode (asks before code edits while no feature has approved tasks; scope level)
 hooks/approval-hook.js         opt-in human approval guard (meta.approvalGuard ask|deny: an agent's approval asks / is refused)

@@ -1408,7 +1408,7 @@ function main() {
     case "stop-check": {
       // = the Stop / SubagentStop hook's decision (spec.stopCheck): the closing message from --message "<text>", the words
       // after the command, or stdin (--message - / a lone -); --agent <subagent type> (a spec-implementer is checked on its
-      // report). Exit 1 when the turn would be sent back (scriptable, like doctor); --json prints the result.
+      // report, a spec-simplifier on its simplification report). Exit 1 when the turn would be sent back (scriptable, like doctor); --json prints the result.
       const runCheck = (message) => {
         const r = spec.stopCheck(projectDir, { message, agent: typeof flags.agent === "string" ? flags.agent : "" });
         if (flags.json) console.log(JSON.stringify(r, null, 2));
@@ -1778,7 +1778,8 @@ function helpText() {
   stop-check [--message "<text>"|-] [--agent <type>]   The Stop hook's evidence gate: does a closing message claim done /
                                   verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without verification
                                   evidence? Prints the reason it would send the turn back (exit 1) or why it lets it end; - reads stdin;
-                                  --agent spec-implementer checks the task report named in the message instead
+                                  --agent spec-implementer checks the task report named in the message instead,
+                                  --agent spec-simplifier the simplification report (it must end with the passing checks)
   log <feature> [--max N] [-]     Per task, the commits whose message cites it — "task #N" / "#N" with the feature name (as /spec-commit
                                   writes "Part of .specs/<feature>/ task #N."), or its T-/AC IDs ("Makes T-01 green") — and, +tdd, a
                                   red-first check (implementation committed before its test?); reads git log (read-only, local, --max

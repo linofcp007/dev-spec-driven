@@ -17,7 +17,12 @@ the brief is regenerated, `ledger.md` is created once and only ever appended by 
 keeps paths + identifiers (`refs`, `loop`, `inlineOnly`, `verify`, gate) and drops the spec text the brief
 quotes unless `includeBrief`. The PostToolUse hook exits early for `/.execution/` paths. The protocol is prose in
 `references/subagent-execution.md` + `agents/spec-implementer.md` / `agents/spec-reviewer.md`; the engine
-never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (MIT). 1.14 adds to the brief:
+never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (MIT). 1.22 (prose only, from Anthropic's
+`code-review` / `code-simplifier` plugins): the reviewer rates each Critical / Important finding 0–100, lists what is not a
+finding, and gains a **verify** mode (one finding, judged fresh — only 80+ opens a fix round; 50–79 is ledgered as
+unconfirmed, below 50 refuted) and a **simplify** mode (the diff of `/spec-simplify`), plus §5 written rules (constitution,
+CLAUDE.md / AGENTS.md, code comments — quoted) and the history of rewritten lines; `agents/spec-simplifier.md` does the
+simplification pass. The engine's only part is the simplifier's SubagentStop gate (below). 1.14 adds to the brief:
 `verifyPipes` (the `_Verify:_` commands that pipe), `expect: "fail"` for an `_Expect: fail_` task, `projectChecks`
 (meta.checks, in the definition of done), `decisions` (the current decisions.md entries citing the task's ACs / T-IDs,
 bounded: 5 entries / 2000 characters) and, for a task proving a `[SEC]` / `[PRIVACY]` criterion, that track's design
@@ -325,8 +330,18 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `_Verify:_` (`notPassing` — "DONE … exit code: 1" was allowed), a non-zero exit for an `_Expect: fail_` task
   (`notFailing`); any matching code in the report counts, so a report showing the red run and then the green one passes.
   STATUS BLOCKED / NEEDS_CONTEXT, no report path, or no runnable `_Verify:_` → allowed.
+- **spec-simplifier (SubagentStop, 1.22):** it rewrites code already reviewed and verified, so its DONE /
+  DONE_WITH_CONCERNS needs `.specs/<f>/.execution/simplify-report.md` (named in its reply) to END with the proof: with
+  project checks (`projectChecks()`), each command (flattened) and the first exit code written AFTER its last mention —
+  never one inside the command (`node -e "process.exit(0)"`) — must be 0, so a baseline run higher up never stands in
+  (`noRun` for a check never followed by a code, `notPassing` for a red one); without project checks, the report's LAST
+  exit code must be 0 (`noSuite`). STATUS BLOCKED / NEEDS_CONTEXT (`not-done`), NO_CHANGES (`no-changes`), no claim, or no
+  simplify-report path (or an unknown feature) in the reply (`no-report`) → allowed; `simplify-ok` / `simplifier-evidence`.
+  It reads text — a final-runs list that leaves a check out, with that check's baseline run above, passes it; the hard
+  gate is `spec_finish`'s `code-changed` (a project check run before the pass's commits never counts). Shared helpers:
+  `readStopReport()`, `flatReport()`, `reportExitCodes()` (the implementer's gate reads through them unchanged).
 - **The hook** (`hooks/stop-hook.js`): registered in hooks.json for **Stop** (no matcher) and **SubagentStop** with matcher
-  `^(dev-spec-driven:)?spec-implementer$` — plugin subagents IGNORE a `hooks` block in their own frontmatter, so it must
+  `^(dev-spec-driven:)?spec-(implementer|simplifier)$` — plugin subagents IGNORE a `hooks` block in their own frontmatter, so it must
   live in the plugin's hooks.json. It reads `last_assistant_message` (a bounded transcript tail for older payloads),
   honours `stop_hook_active` (never sends the same stop back twice in a row), answers `{"decision": "block", "reason"}`,
   is silent when there is nothing to say, when `.specs/` isn't dev-spec's, or when `roadmap.json → meta.stopCheck` is

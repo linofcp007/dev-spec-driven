@@ -194,7 +194,7 @@ exports.run = async ({
     !/^## Pull requests/m.test(docsContrib) && /^## Before merging/m.test(docsContrib),
     "INSTALL: always-on via a local marketplace (no copy into the plugin cache); INSTALL + CONTRIBUTING validate plugin.json AND the marketplace");
   ok(/model: sonnet/.test(docsRef("subagent-execution.md")) && !/inherits the session/.test(docsRef("subagent-execution.md")) &&
-    ["spec-critic.md", "spec-implementer.md", "spec-reviewer.md"].every((a) => /^model: sonnet$/m.test(docsRead("agents", a))) &&
+    ["spec-critic.md", "spec-implementer.md", "spec-reviewer.md", "spec-simplifier.md"].every((a) => /^model: sonnet$/m.test(docsRead("agents", a))) &&
     /baseline green/.test(docsRead("commands", "executeTask.md")) && /Vocabulary map/.test(docsRef("classification-examples-saas.md")) &&
     /Vocabulary map/.test(docsRef("classification-examples-ai.md")) && !/`node mcp\/evals\/run-evals\.js/.test(docsRef("eval-suite-patterns.md")),
     "references agree with the code: agents default to sonnet, --subagents needs a green baseline, Fast/Rigor vocabulary mapped, eval harness path resolvable");
@@ -214,17 +214,18 @@ exports.run = async ({
   const agentsDir = path.join(root, "agents");
   const agentFiles = fs.readdirSync(agentsDir).filter((x) => x.endsWith(".md"));
   // The read-only critic is limited to Read/Grep/Glob; the reviewer adds Bash (a focused test, read-only git); the
-  // implementer edits files and runs commands — neither gets the Agent tool (they never dispatch subagents).
+  // implementer and the 1.22 simplifier edit files and run commands — none gets the Agent tool (they never dispatch subagents).
   const agentTools = (x) => (fs.readFileSync(path.join(agentsDir, x), "utf8").split(/^---\r?$/m)[1] || "").match(/^tools:.*?(?=\r?$)/gm) || [];
-  ok(agentFiles.sort().join() === "spec-critic.md,spec-implementer.md,spec-reviewer.md" &&
+  ok(agentFiles.sort().join() === "spec-critic.md,spec-implementer.md,spec-reviewer.md,spec-simplifier.md" &&
     agentTools("spec-critic.md").join() === "tools: Read, Grep, Glob" &&
     agentTools("spec-reviewer.md").join() === "tools: Read, Grep, Glob, Bash" &&
-    agentTools("spec-implementer.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash",
-    "3 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer adds Bash, the implementer Write/Edit/Bash — none gets the Agent tool");
+    agentTools("spec-implementer.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash" &&
+    agentTools("spec-simplifier.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash",
+    "4 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer adds Bash, the implementer and the simplifier Write/Edit/Bash — none gets the Agent tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
-  ok(cmdFiles.length === 54 && ["spec-statusline.md", "spec-milestone.md", "spec-tracks.md", "spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
+  ok(cmdFiles.length === 55 && ["spec-simplify.md", "spec-statusline.md", "spec-milestone.md", "spec-tracks.md", "spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
-    "54 commands incl. the 1.16 /spec-statusline, /spec-milestone, the 1.15 /spec-tracks, the 1.14 /spec-tour, /spec-decide, /spec-spike, /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
+    "55 commands incl. the 1.22 /spec-simplify, the 1.16 /spec-statusline, /spec-milestone, the 1.15 /spec-tracks, the 1.14 /spec-tour, /spec-decide, /spec-spike, /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
   const evalRoot = path.join(root, "evals");
   // `fixtures/` holds the behavioural cases' shared scaffold (lib.sh + project trees) — not a case. Behavioural cases
   // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below.
@@ -335,8 +336,8 @@ exports.run = async ({
       }
     }
     const d4Catalog = require("./lib/prompts-resources.js").listPrompts().find((x) => x.name === "spec-catalog");
-    ok(d4Files.length === 58 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
-      "full review D4: all 54 commands + 3 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
+    ok(d4Files.length === 60 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
+      "full review D4: all 55 commands + 4 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
     // D5: guard is a string enum on | off | scope — the docs told agents to pass guard: true / false.
     const d5Docs = [dRead("commands", "spec-guard.md"), dRead("commands", "spec-init.md"), dRef("tooling-reference.md")];
     const d5Schema = list.result.tools.find((t) => t.name === "spec_init").inputSchema.properties.guard;

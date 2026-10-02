@@ -511,15 +511,70 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     ok(sBlockedIm.why === "not-done" && sNoPath.why === "no-task" && sNoVerify.why === "nothing-to-verify" && silent(sActiveIm) && sActiveIm2.block === false &&
       [sBlockedIm, sNoPath, sNoVerify].every((r) => r.block === false),
       "C1 SubagentStop (spec-implementer): BLOCKED / NEEDS_CONTEXT, a reply naming no task report, a task with no runnable _Verify:_ and stop_hook_active are never sent back");
+
+    // --- 1.22 SubagentStop: the spec-simplifier rewrites verified code — its DONE needs its report to END with the proof.
+    const pSi = c1Dir("simplify");
+    S.initProject(pSi, ["core"], "en");
+    const fSi = S.createFeature(pSi, "Checkout", ["core"], "", undefined, "en");
+    const siEx = path.join(fSi.dir, ".execution");
+    fs.mkdirSync(siEx, { recursive: true });
+    const siRep = path.join(siEx, "simplify-report.md");
+    const siReply = "**Status:** DONE\nCommits: a1b2c3d refactor(checkout): guard clauses — no behaviour change\n212/212 passing\nReport: .specs/checkout/.execution/simplify-report.md";
+    const siAgent = "dev-spec-driven:spec-simplifier";
+    const si = (message, agent) => S.stopCheck(pSi, { message: message || siReply, agent: agent || siAgent });
+    const siNoRep = si();
+    const siPayload = () => ({ ...subPayload(siReply, siAgent), cwd: pSi, transcript_path: path.join(pSi, "t.jsonl"), agent_transcript_path: path.join(pSi, "sub.jsonl") });
+    const hSiNoRep = blocked(runHook(stopJs, siPayload()));
+    // no project checks: the LAST exit code in the report is the final run — a baseline exit 0 above a red final run is not proof
+    fs.writeFileSync(siRep, "## Baseline\n- `npm test` → exit 0 (212 passing)\n## Changes\n- a1b2c3d src/cart.js:12 Deep nesting → guard clauses\n## Final runs\n- `npm test` → exit code 1 (1 failing)\n");
+    const siRed = si();
+    fs.writeFileSync(siRep, "## Baseline\n- `npm test` → exit 0\n## Final runs\n- `npm test` → exit 0 (212 passing)\n");
+    const siOk = si(), siBare = si(undefined, "spec-simplifier");
+    const hSiOk = runHook(stopJs, siPayload());
+    ok(siNoRep.block && siNoRep.why === "simplifier-evidence" && siNoRep.feature === "checkout" && siNoRep.report === ".specs/checkout/.execution/simplify-report.md" &&
+      /^dev-spec evidence gate: you report the simplification pass of 'checkout' as DONE, but its report \(\.specs\/checkout\/\.execution\/simplify-report\.md\) does not exist\./.test(siNoRep.reason) &&
+      hSiNoRep === siNoRep.reason && siRed.block && /doesn't end with a passing test run/.test(siRed.reason) && /revert the change that broke a check/.test(siRed.reason) &&
+      siOk.block === false && siOk.why === "simplify-ok" && siBare.why === "simplify-ok" && silent(hSiOk),
+      "1.22 SubagentStop (spec-simplifier): DONE with no report, or a report whose last run fails → block naming the report; a report ending with exit 0 → allowed (namespaced or not; the hook prints the engine's reason) (got " +
+      JSON.stringify([siNoRep.why, siRed.why, siOk.why, siBare.why]) + ")");
+    // with project checks: each command's first exit code AFTER its last mention must be 0 — never one inside the command itself
+    const pSim = c1Dir("simplify-checks");
+    S.initProject(pSim, ["core"], "en", { checks: { test: "npm test", lint: "npm run lint", probe: "node -e \"process.exit(0)\"" } });
+    const fSim = S.createFeature(pSim, "Checkout", ["core"], "", undefined, "en");
+    fs.mkdirSync(path.join(fSim.dir, ".execution"), { recursive: true });
+    const si2Rep = path.join(fSim.dir, ".execution", "simplify-report.md");
+    const si2 = () => S.stopCheck(pSim, { message: siReply, agent: siAgent });
+    const base = "## Baseline\n- `npm test` → exit 0\n- `npm run lint` → exit 0\n- `node -e \"process.exit(0)\"` → exit 0\n## Final runs\n";
+    fs.writeFileSync(si2Rep, base + "- `npm test` → exit code 1\n- `npm run lint` → exit 0\n- `node -e \"process.exit(0)\"` → exit code 3\n");
+    const siFail = si2();
+    fs.writeFileSync(si2Rep, "## Final runs\n- `npm test` → exit 0\n- `node -e \"process.exit(0)\"` → exit 0\n");
+    const siUnrun = si2();
+    fs.writeFileSync(si2Rep, base + "- `npm test` → exit 0 (212 passing)\n- `npm run lint` → exit 0\n- `node -e \"process.exit(0)\"` → exit 0\n");
+    const siOk2 = si2();
+    ok(siFail.block && /shows no passing final run \(exit 0\) of `npm test`, `node -e "process\.exit\(0\)"` — a simplification must leave every check green/.test(siFail.reason) && !/npm run lint/.test(siFail.reason) &&
+      siUnrun.block && /doesn't show the final run of each project check — the exact command followed by its exit code: `npm run lint`\./.test(siUnrun.reason) &&
+      siOk2.block === false && siOk2.why === "simplify-ok",
+      "1.22 SubagentStop (spec-simplifier) with project checks: a red final run (also one whose command holds 'exit(0)') or a check never run → block naming exactly those; every check followed by exit 0 → allowed (got " +
+      JSON.stringify([siFail.why, siUnrun.why, siOk2.why]) + ")");
+    const siNoChange = si("**Status:** NO_CHANGES\nNothing on the list was worth a change.\nReport: .specs/checkout/.execution/simplify-report.md");
+    const siBlocked = si("**Status:** BLOCKED\nThe baseline is red: 2 failing.");
+    const siNoPath = si("**Status:** DONE\n212/212 passing");
+    const siOther = si("**Status:** DONE\nReport: .specs/nope/.execution/simplify-report.md");
+    const siTaskRep = si("**Status:** DONE\nReport: .specs/checkout/.execution/task-1-report.md");
+    ok(siNoChange.why === "no-changes" && siBlocked.why === "not-done" && siNoPath.why === "no-report" && siOther.why === "no-report" && siTaskRep.why === "no-report" &&
+      [siNoChange, siBlocked, siNoPath, siOther, siTaskRep].every((r) => r.block === false) &&
+      S.msg("en").stopGate.allow["no-changes"]() && S.msg("pt").stopGate.allow["simplify-ok"]({ slug: "x" }).includes("'x'") && S.msg("es").stopGate.simplifier.head("x").includes("'x'"),
+      "1.22 SubagentStop (spec-simplifier): NO_CHANGES, BLOCKED, a reply naming no simplification report (or an unknown feature, or a task report) are never sent back; the strings exist in EN / PT / ES");
     const hooksCfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
     const stopCfg = ((hooksCfg.Stop || [])[0] || {});
     const subCfg = ((hooksCfg.SubagentStop || [])[0] || {});
     const cmd = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.js"';
     const re = new RegExp(subCfg.matcher || "^$");
     ok(stopCfg.matcher === undefined && stopCfg.hooks[0].command === cmd && stopCfg.hooks[0].timeout === 10 && subCfg.hooks[0].command === cmd && subCfg.hooks[0].timeout === 10 &&
-      re.test("dev-spec-driven:spec-implementer") && re.test("spec-implementer") && !re.test("dev-spec-driven:spec-reviewer") && !re.test("Explore") && !re.test("general-purpose") &&
+      re.test("dev-spec-driven:spec-implementer") && re.test("spec-implementer") && re.test("dev-spec-driven:spec-simplifier") && re.test("spec-simplifier") &&
+      !re.test("dev-spec-driven:spec-reviewer") && !re.test("dev-spec-driven:spec-critic") && !re.test("spec-simplifier-x") && !re.test("Explore") && !re.test("general-purpose") &&
       hooksCfg.PreToolUse && hooksCfg.PostToolUse && hooksCfg.SessionStart,
-      "C1 hooks.json: Stop (no matcher — it fires on every stop) and SubagentStop matching only the spec-implementer (plugin-scoped or copied) run hooks/stop-hook.js (timeout 10), beside the existing hooks");
+      "C1 hooks.json: Stop (no matcher — it fires on every stop) and SubagentStop matching only the spec-implementer and the spec-simplifier (plugin-scoped or copied) run hooks/stop-hook.js (timeout 10), beside the existing hooks");
 
     // --- C1.2 the scope guard (meta.guard = "scope").
     const pSc = c1Dir("scope");

@@ -30,6 +30,7 @@ and the review), [red-flags.md](red-flags.md) ("while I'm here I'll also refacto
 | Tasks | `_Implements:_` names the existing files a task extends, not only the new ones — the task brief's **Reuse** section quotes the design's entries for those files (or the task's criteria) and lists the existing source files next to them |
 | Implementation | search first; reuse or extend; report what was reused, extended or created, and why (below) |
 | Review | new code compared with the **existing codebase**: a new helper that duplicates one is a finding (below) |
+| Before finishing | the optional **simplification pass** (`/spec-simplify`) cleans up the smells the reviews deferred, in the feature's own lines only, proven by its tests (below) |
 | Afterwards | smells outside the task go to the refactor-candidate backlog, never into the task |
 
 ---
@@ -354,6 +355,39 @@ ship with a "we'll consolidate later".
 
 ---
 
+## The simplification pass
+
+The task-by-task loop leaves its own residue: the smells the reviews deferred as Minor, a helper that only forwards,
+nesting that grew over fix rounds. Once every task is done — and **before** `/spec-finish`, which records the drift
+baseline and needs the project checks green on the final code — `/spec-simplify <feature>` cleans that up without
+changing behaviour, and proves it. (The idea comes from Anthropic's `code-simplifier` plugin; this pass adds the scope
+and the proof.)
+
+| Rule | Why |
+|---|---|
+| Only lines the feature's branch added or changed (`git diff MERGE_BASE..HEAD`) | code the feature didn't write is a refactor candidate — an improvement spec with characterization tests, not a side effect of finishing |
+| Never a test, fixture or snapshot | the tests are the proof; a test edited in the same pass proves nothing |
+| Never a contract — an exported signature, a route, a status or error code, a schema, a config key, user-facing text, a log line or metric something reads | that is a behaviour change for whoever depends on it |
+| No new dependency, no new shared file, no prompt file (+ai) | a shared helper is a design decision; a prompt change is eval-gated (`/promptReview`) |
+| One simplification at a time: the covering tests, then its own commit (`refactor(<feature>): … — no behaviour change`) | a red test points at one change; any one can be reverted alone (Beck's *Tidy First?*: structure changes apart from behaviour changes) |
+| A red test → undo the change, never edit the test | a cleanup that isn't safe as written is dropped |
+| The baseline green first; the project checks (or the full suite) again at the end; each changed task's `_Verify:_` re-run | the claim "behaviour unchanged" needs the runs — a run made before the pass reads `code-changed` at `/spec-finish` |
+| A review of the pass (the reviewer's **simplify** mode); a confirmed finding is reverted, not repaired | same behaviour and simpler are both claims |
+
+What to simplify: the smells table above (deep nesting → guard clauses, a long function → Extract Function, dead code,
+speculative generality, a mysterious name, comments that say *what*), plus two rules of clarity — **no nested ternary**
+(an if / else chain or a switch) and **no dense one-liner** where named steps read better. Clarity beats brevity: don't
+merge unrelated concerns, don't remove an abstraction that names a concept, keep what helps debugging. Code the spec
+asks for stays, however odd it looks (a comment citing an AC or a decision).
+
+With subagents the `dev-spec-driven:spec-simplifier` agent does the pass and writes
+`.specs/<feature>/.execution/simplify-report.md`; in Claude Code a SubagentStop hook sends back its DONE when that report
+lacks the final passing runs — each project check followed by an exit 0 (with no project checks, its last run passing).
+Inline, the session does the same loop; Claude Code's built-in `/simplify` can suggest candidates, and each one still
+goes through it.
+
+---
+
 ## The refactor-candidate backlog
 
 - **One entry per candidate**, in the roadmap backlog (`dev-spec backlog add "refactor-<topic>" "refactor: <note>"`,
@@ -406,3 +440,8 @@ ship with a "we'll consolidate later".
 12. Every new unit in the diff searched against the codebase; duplicates of existing code, swallowed errors and
     dependency violations raised as Important.
 13. Out-of-scope refactor ideas deferred to the backlog, not added to the fix loop.
+
+**Before finishing (optional)**
+
+14. The simplification pass: the feature's own lines only, no test or contract touched, one commit per cleanup, the
+    tests after each, the checks green at the end, the pass reviewed — confirmed findings reverted.

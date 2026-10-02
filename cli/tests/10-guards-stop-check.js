@@ -93,6 +93,27 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
     "stop-check allow lines (verified, no recent activity, off, no .specs/), --agent spec-implementer checks the task report (exit 1 without the run, 0 with it), PT / ES lines (got " +
     JSON.stringify([scVer.out.slice(0, 140), scOld.out.slice(0, 120), scImp.out.slice(0, 160), scEs.out.slice(0, 120)]) + ")");
 
+  // 1.22 --agent spec-simplifier: its simplification report must END with the passing project checks (exit 1 otherwise).
+  const p6 = path.join(tmp, "c1-simplify");
+  Sc1.initProject(p6, ["core"], "pt", { checks: { test: "npm test" } });
+  const f6 = Sc1.createFeature(p6, "Carrinho", ["core"], "", undefined, "pt");
+  const ex6 = path.join(f6.dir, ".execution");
+  fs.mkdirSync(ex6, { recursive: true });
+  const rep6 = path.join(ex6, "simplify-report.md");
+  const reply6 = "**Status:** DONE\nCommits: a1b2c3d refactor(carrinho): guard clauses\nReport: .specs/" + f6.slug + "/.execution/simplify-report.md";
+  fs.writeFileSync(rep6, "## Baseline\n- `npm test` → exit 0\n## Final runs\n- `npm test` → exit code 1 (1 failing)\n");
+  const scSim = rc1(["stop-check", "--message", reply6, "--agent", "dev-spec-driven:spec-simplifier", "--project", p6]);
+  const scSimJ = jc1(rc1(["stop-check", "--message", reply6, "--agent", "spec-simplifier", "--json", "--project", p6]).stdout);
+  fs.writeFileSync(rep6, "## Baseline\n- `npm test` → exit 0\n## Final runs\n- `npm test` → código de saída 0 (212 a passar)\n");
+  const scSimOk = rc1(["stop-check", "--message", reply6, "--agent", "spec-simplifier", "--project", p6]);
+  const scSimNone = rc1(["stop-check", "--message", "**Status:** NO_CHANGES\nNada a simplificar.", "--agent", "spec-simplifier", "--project", p6]);
+  ok(scSim.code === 1 && /reportas a passagem de simplificação de 'carrinho' como DONE, mas o relatório \(\.specs\/carrinho\/\.execution\/simplify-report\.md\) não mostra nenhuma execução final com sucesso \(exit 0\) de `npm test`/.test(scSim.out) &&
+    scSimJ && scSimJ.why === "simplifier-evidence" && scSimJ.feature === "carrinho" && scSimJ.lang === "pt" &&
+    scSimOk.code === 0 && /o relatório de simplificação de 'carrinho' termina com as execuções com sucesso — permitido/.test(scSimOk.stdout) &&
+    scSimNone.code === 0 && /o simplificador reporta NO_CHANGES/.test(scSimNone.stdout),
+    "1.22 stop-check --agent spec-simplifier: a report whose final project-check run fails → exit 1 with the reason (PT); a final exit 0 ('código de saída 0') → exit 0 and the allow line; NO_CHANGES → allowed (got " +
+    JSON.stringify([scSim.out.slice(0, 200), scSimOk.out.slice(0, 160), scSimNone.out.slice(0, 120)]) + ")");
+
   // help and the header docblock document stop-check, --stop-check and --guard scope.
   const hC1 = rc1(["help"]).out;
   const docC1 = fs.readFileSync(CLI, "utf8").split("*/")[0];

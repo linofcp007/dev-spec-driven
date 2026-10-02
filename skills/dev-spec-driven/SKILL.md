@@ -305,8 +305,8 @@ them). Present for review. Work found after approval is appended, never renumber
 
 ## Phase 6: Execute (`/executeTask`)
 
-Before any code, re-read steering, requirements, design, (test/eval plans), and tasks; summarize your understanding to
-confirm alignment. **Search before you write:** the design's Reuse & Integration, the brief's Reuse section, the codebase by
+Before any code, re-read steering, requirements, design, (test/eval plans) and tasks; summarize your understanding.
+**Search before you write:** the design's Reuse & Integration, the brief's Reuse section, the codebase by
 concept and synonyms — reuse, else extend, else create; a refactor outside the task goes to the backlog (`refactor:` note;
 `references/code-reuse-and-quality.md`). Then work tasks **in order** — the next is `spec_next_task`'s: the first open
 task whose `_Depends:_` are all done — choosing the loop per task:
@@ -334,6 +334,7 @@ your closing message claims done / verified while a recently active feature has 
 
 Track-gated "done" checks before a feature is finished (load test, cost and safety, scans, subject rights, failure
 injection, contract tests, accessibility, a staged alert…): `references/track-checklists.md`; `spec_finish` lists them.
+Before `/spec-finish`, optionally `/spec-simplify`: a behaviour-preserving cleanup, proven by the tests.
 
 If blocked, pause and discuss — don't improvise outside the design. If a test/measurement reveals a gap, go back to
 that phase, not the implementation. If a "green" test is actually wrong, pause, explain, fix the plan with approval,
@@ -397,7 +398,7 @@ supporting command (`/spec-upgrade`, `/spec-import`, `/prReview`, `/spec-commit`
 local automation behind them: `references/workflows.md`.
 
 ## Environment Notes
-- **Claude Code / Cowork:** full support — the local MCP server scaffolds and tracks, git versions everything.
+- **Claude Code / Cowork:** full support (the local MCP server, git).
 - **claude.ai:** present artifacts in code blocks to copy; the MCP server and test/load/eval runs need a real
   environment — describe the expected results, and never tick a task on a run nobody made (Principle 6).
 

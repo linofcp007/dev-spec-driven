@@ -3,6 +3,54 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.22.0] — 2026-10-02
+
+Reviews you can trust, and an optional simplification pass before finishing. Both ideas come from Anthropic's
+`code-review` and `code-simplifier` plugins (claude-plugins-official), rebuilt around the spec and the evidence gate:
+local, no pull requests, no CI.
+
+### Added
+- **Every finding is verified before it costs a fix round.** The `spec-reviewer` agent rates each Critical / Important
+  finding 0–100 and lists what is not a finding: a problem that was already there, one on lines the diff left alone,
+  what an AC, the design or a decision asks for, what a green check already answers, a rule switched off on purpose, a
+  nitpick. Its new **verify** mode takes ONE finding and judges it fresh — does it exist at HEAD, did this diff
+  introduce it, is it intended, is it already answered? In `/executeTask --subagents` the controller sends every ❌ and
+  Critical / Important finding to a verify pass (one cheap reviewer per finding, in parallel): **80+** opens a fix round,
+  **50–79** is ledgered as unconfirmed (shown at the checkpoint, triaged by the final review), **under 50** is refuted.
+  The facts the report or the diff settle (a missing run, a non-zero exit, a changed planned test) skip it.
+- **`/prReview` verifies before it reports** — the same questions per finding (a verify-mode reviewer each, or checked
+  inline and labelled self-verified); only 80+ is reported as a finding, the rest listed as "Unconfirmed (below 80)".
+- **Two review angles a diff-only read misses:** the project's written rules — the constitution, the `CLAUDE.md` /
+  `AGENTS.md` of the touched directories, the comments around the changed code ("keep in sync with…"), each quoted with
+  its file:line — and the history of the lines a change rewrites (`git log -L`, `git blame`): a fix there must survive,
+  and a finished bugfix in `.specs/` whose tasks implement the file keeps its Root Cause away and its regression test
+  unchanged. A fixed bug brought back is Critical.
+- **`/spec-simplify`** (55 commands) — an optional pass after the last task and **before** `/spec-finish`:
+  behaviour-preserving cleanups of the lines the feature's branch added or changed (the deferred minor smells first),
+  one commit each, the covering tests after every change and the project checks at the end. Never a test, a contract, a
+  dependency, a prompt file or code the feature didn't write. The pass is reviewed (the reviewer's new **simplify**
+  mode), a confirmed finding is **reverted**, never repaired, and each changed task's `_Verify:_` is re-recorded (a
+  failing re-check makes the task unverified). next_action's "all tasks done" step mentions it.
+- **The `spec-simplifier` agent** (4 plugin agents) does the pass under `--subagents`, and the SubagentStop gate now
+  covers it (hooks.json matcher `^(dev-spec-driven:)?spec-(implementer|simplifier)$`): its DONE is sent back unless
+  `.specs/<feature>/.execution/simplify-report.md` ends with the passing runs — each project check's command followed by
+  an exit 0 (a baseline run higher up never counts), or, without project checks, a last run that passes. `dev-spec
+  stop-check --agent spec-simplifier` and `spec_stop_check {agent}` give the same decision (`why`: `simplify-ok` ·
+  `simplifier-evidence` · `no-changes` · `no-report`; EN / PT / pt-BR / ES).
+
+### Changed
+- `references/subagent-execution.md`: step 6 "Verify the findings" before the fix loop (now step 7), the simplification
+  pass before closing, the verify and simplifier rows in model selection, three new rationalizations.
+- `references/code-reuse-and-quality.md`: "The simplification pass" (the rules and why), a checklist item.
+- The evidence gate's "not-done" line now says "the subagent" (it covers the simplifier too).
+
+### Tests
+- `node mcp/test.js` 1684 assertions (was 1680), `node cli/test-cli.js` 523 (was 522): the simplifier's SubagentStop gate
+  (no report, a red final run, a check never run, a baseline run that never stands in, a code inside the command, NO_CHANGES /
+  BLOCKED / no report path allowed, the hook's reason = the engine's, EN / PT / ES strings, `stop-check --agent
+  spec-simplifier` in PT), the hooks.json matcher, 4 agents and 55 commands, and the prose of the verify pass, the
+  written rules and history, the simplify mode and the simplification pass.
+
 ## [1.21.1] — 2026-09-30
 
 PowerShell projects — and every language outside the old short list — work end to end.

@@ -34,7 +34,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_append_tasks` | Converge: append new tasks under "Phase: Convergence" (existing tasks never renumbered; each task may carry `_Requirements:_`, `_Makes green:_`, `_Implements:_`, `_Verify:_`, `_Expect: fail_`, `_Size:_`, `_Depends:_`; unknown AC IDs, unplanned T-IDs, or a `depends` naming no task / closing a cycle refuse the call; `needsReapproval`) |
 | `spec_finish` | Close a feature: blockers (incl. `suite-evidence` with project checks) + warnings + fresh checks + a merge summary from the spec chain; `evidence` records the project checks you ran; `write: true` on a ready feature records the drift baseline |
 | `spec_drift` | Implementing files of finished features changed / missing / now present since the finish baseline |
-| `spec_stop_check` | The end-of-turn evidence gate for MCP-only clients (= the Stop hook, `stop-check --json`): `message` → `block` + `reason` when it claims done / verified while recently active features have unverified ticks (or project checks without a passing run); `why` otherwise; `agent: "spec-implementer"` checks the task report |
+| `spec_stop_check` | The end-of-turn evidence gate for MCP-only clients (= the Stop hook, `stop-check --json`): `message` → `block` + `reason` when it claims done / verified while recently active features have unverified ticks (or project checks without a passing run); `why` otherwise; `agent: "spec-implementer"` checks the task report, `agent: "spec-simplifier"` the simplification report |
 | `spec_log` | Git-linked evidence from `gitLog` — the `git log --name-only --relative` text the client passes (the server never runs git): the commits citing each task + the +tdd red-first check (= `log <f> - --json`); `max` = the window it was read with |
 | `spec_metrics` | Lead times, rework, forced and batch approvals, change requests, evidence pass rate, velocity; `write: true` (with `name`) → `retro.md` (never overwritten) |
 | `spec_catalog` | The living catalog: every feature + AC (superseded ones marked), spikes, decisions, possible duplicate / conflicting criteria across active features (`crossAcs`); `write: true` → `.specs/SPECS.md` (AUTO-GENERATED) |
@@ -232,7 +232,7 @@ clone's absolute paths, to paste into another project; `mcp-config <client>` pri
 | `hooks/observe-hook.js` | PostToolUse + PostToolUseFailure (Bash, PowerShell) | Logs a Bash (or PowerShell, with an explicit exit code) run of a task's runnable `_Verify:_` command (or its `&&` join) or of a `meta.checks` command — `{command, exitCode, at, event, session}` — to `.specs/<feature>/.execution/observed.jsonl` / `.specs/.execution/observed.jsonl` (git-ignored, ≤ 64 KB); interrupted or backgrounded runs are skipped. The engine then stamps each reported run `observed: true / false`. Prints nothing; PowerShell runs are not observed |
 | `hooks/stop-hook.js` | Stop | The end-of-turn evidence gate: when the closing message claims done / verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without passing evidence (or, all tasks done, project checks without a passing run), sends the turn back with the reason; never twice in a row; off with `meta.stopCheck: false` |
 | `hooks/plan-hook.js` | PostToolUse (`ExitPlanMode`) | The plan-mode bridge: when the user approves a plan in a dev-spec project, one line of context suggests `/spec-import` of it (`spec_import {tool: "plan", text}` — or `{path}` when the plan file is inside the project); never imports by itself, silent elsewhere |
-| `hooks/stop-hook.js` | SubagentStop (`spec-implementer` only) | A DONE for a task with a runnable `_Verify:_` needs its report (`task-N-report.md`, named in the reply) to carry each `_Verify:_` command and the exit code the task needs (exit 0; a non-zero exit for an `_Expect: fail_` task), else the stop is sent back |
+| `hooks/stop-hook.js` | SubagentStop (`spec-implementer`, `spec-simplifier`) | An implementer's DONE for a task with a runnable `_Verify:_` needs its report (`task-N-report.md`, named in the reply) to carry each `_Verify:_` command and the exit code the task needs (exit 0; a non-zero exit for an `_Expect: fail_` task); a simplifier's DONE needs `simplify-report.md` to show each project check's command followed by an exit 0 (no project checks: its last run passing) — else the stop is sent back |
 
 `hooks/precommit-check.js` is an optional git pre-commit validator (staged EARS errors, phantom references). The
 evidence rules behind the Stop hooks: `references/verification.md`.
@@ -341,7 +341,7 @@ A `ROADMAP.md`/`ROADMAP.html` that dev-spec did **not** generate (no `AUTO-GENER
 marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chrome language
 (`meta.roadmapLang`); the project language (`meta.lang`) is set by `spec_init`.
 
-## Command reference (54 commands)
+## Command reference (55 commands)
 
 | Command | Phase | What it does |
 |---|---|---|
@@ -386,12 +386,13 @@ marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chr
 | `/coverage` | brownfield | Spec coverage of existing code via `_Implements:_` (uses `spec_coverage`) |
 | `/spec-import` | brownfield | Import a Kiro / spec-kit / OpenSpec spec, a plan, a Codex ExecPlan, BMAD docs or a fluidplan plan as a new feature (uses `spec_import`) |
 | `/spec-bugfix` | bugfix | Reproduce → root cause (with evidence) → approval → failing regression test (`_Expect: fail_`) → fix → verify (uses `spec_create {kind:"bugfix"}`) |
+| `/spec-simplify` | close | Optional, before `/spec-finish`: behaviour-preserving cleanups of the feature's own lines, one commit each, proven by the tests and reviewed; `--subagents` → the `spec-simplifier` agent |
 | `/spec-finish` | close | Blockers + warnings + fresh checks + a merge summary from the spec chain; then merge locally / keep (uses `spec_finish`) |
 | `/spec-drift` | after | Implementing files changed since finish, and what to do about it (uses `spec_drift`) |
 | `/spec-metrics` | after | Lead times, rework, forced approvals, change requests, pass rate, velocity; `--write` → retro.md (uses `spec_metrics`) |
 | `/spec-review-feedback` | support | Classify review comments against the spec: fix AC violations, route spec changes, push back on out-of-scope |
 | `/spec-commit` | support | Conventional commits referencing spec + tests + evals (format below) |
-| `/prReview` | support | Track-aware local pre-merge review against the full chain |
+| `/prReview` | support | Track-aware local pre-merge review against the full chain, the project's written rules and the history of rewritten lines; each finding verified (confidence 80+) before it is reported |
 | `/promptReview` | support | (+ai) gate prompt changes on eval/cost/version |
 | `/migrateModel` | support | (+ai) eval-gated model migration |
 | `/spec-status` | any | Mode, tracks, phase, task/test/eval state (uses `spec_status`/`spec_list`) |

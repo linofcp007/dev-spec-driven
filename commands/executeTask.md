@@ -70,6 +70,8 @@ preconditions (`spec_doctor` ready + tasks approved, not on the default branch, 
 baseline green: run the full suite once and ledger the result),
 then per task `spec_task_brief {write:true}` → dispatch the `dev-spec-driven:spec-implementer` agent with the brief and
 report paths → write the diff to `.execution/task-N-review.diff` → dispatch the `dev-spec-driven:spec-reviewer` agent →
+verify each ❌ and Critical / Important finding with a verify-mode reviewer (one per finding, in parallel; only a
+confidence of 80 or more opens a fix round, the rest is ledgered — the protocol's "Verify the findings") →
 fix loop (max 5 rounds) → `spec_complete_task` only after a clean review, with the evidence from the implementer's
 report (the SubagentStop hook sends back a DONE whose report lacks each `_Verify:_` command with the exit code the task
 needs — 0, or non-zero on an `_Expect: fail_` task). The report carries a **Reuse** block (searched, reused, extended,
@@ -83,7 +85,8 @@ worktrees (`spec_next_task {batch:true}`, parallel mode in the protocol) — or 
 `spec_next_task {waves:true}` (CLI `dev-spec next <feature> --waves`) lists the waves (a wave's tasks have their
 dependencies done or in earlier waves and share no `_Implements:_` file); run one wave, merge and review it, then the next.
 
-When the last task is done, run `/spec-converge` if you doubt every AC is delivered, then close with `/spec-finish`.
+When the last task is done, run `/spec-converge` if you doubt every AC is delivered, optionally `/spec-simplify` (a
+behaviour-preserving cleanup of the feature's own lines, proven by its tests), then close with `/spec-finish`.
 
 Either way: honor the track-gated "done" checks before finishing the feature: load test + observability
 validation (+saas), cost + safety validation (+ai), security scans + threat model re-check (+sec), data subject

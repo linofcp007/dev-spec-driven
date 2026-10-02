@@ -1389,7 +1389,7 @@ const msg = {
       signOffTests: (slug, what) => `Phase 4 sign-off: the implementation has already started, so the tests are no longer written first — ${({ tdd: "check that every planned test exists with its T-ID in the test's name (test(\"T-01 …\")) so tests-in-code finds it", ai: `check that the eval set is the feature's own and record the baseline (/eval ${slug} --set-baseline)`, both: `check that every planned test exists with its T-ID in the test's name (test("T-01 …")) and that the eval set is the feature's own, and record the baseline (/eval ${slug} --set-baseline)` })[what]}. Then approve — /approve ${slug} tests.`,
       approveTests: (slug, what) => `Phase 4, the hard gate: ${({ tdd: "write every planned test and confirm each fails for the right reason", ai: "write the deterministic tests and the eval harness, and record the baseline", both: "write every planned test (each failing for the right reason) and the eval harness, and record the baseline" })[what]} — /writeTests ${slug}; no implementation code until then. Then approve — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implement task #${n}: ${text} — /executeTask ${slug}.`,
-      allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary.`,
+      allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary. Optional, before it: /spec-simplify ${slug} — a behaviour-preserving cleanup of the feature's own code, proven by its tests.`,
       breakIntoTasks: (slug) => `Break the design into tasks — /createTask ${slug}.`,
       drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (${DEV_SPEC} drift ${slug}). Decide: the spec is now wrong → /spec-impact ${slug} (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
       // signOff: null (signed off — nothing left), {} (no execution approval yet) or {at, why} (an execution approval exists
@@ -3015,6 +3015,15 @@ const msg = {
         notFailing: (file, cmds) => `its report (${file}) shows no failing run (a non-zero exit code) of ${cmds} — the task is marked _Expect: fail_: its proof is the red run.`,
         todo: "Run the command on the final code and put the command, its exit code and the last lines of its output in the report — or report BLOCKED / NEEDS_CONTEXT if it can't pass. (Evidence before claims: the controller ticks the task only with that run.)",
       },
+      // 1.22 — the spec-simplifier's DONE (SubagentStop): its report must end with the final passing runs.
+      simplifier: {
+        head: (slug) => `dev-spec evidence gate: you report the simplification pass of '${slug}' as DONE, but`,
+        noReport: (file) => `its report (${file}) does not exist.`,
+        noRun: (file, cmds) => `its report (${file}) doesn't show the final run of each project check — the exact command followed by its exit code: ${cmds}.`,
+        notPassing: (file, cmds) => `its report (${file}) shows no passing final run (exit 0) of ${cmds} — a simplification must leave every check green.`,
+        noSuite: (file) => `its report (${file}) doesn't end with a passing test run — the command and its exit 0 as the last run in the file.`,
+        todo: "Run the project checks (or the full test suite) on the final code and put each command, its exit code and the last lines of its output at the end of the report — or revert the change that broke a check, or report BLOCKED. (\"Behaviour unchanged\" is a claim: the runs are its proof.)",
+      },
       // `dev-spec stop-check` when nothing is sent back (the why code → one line).
       allow: {
         off: () => "evidence gate: off (roadmap.json meta.stopCheck: false) — nothing checked.",
@@ -3024,7 +3033,10 @@ const msg = {
         admitted: () => "evidence gate: the message says plainly what is not verified (or failing) — allowed.",
         "no-recent": (i) => `evidence gate: no feature was active in the last ${i.hours} h (a task ticked, evidence recorded or tasks.md edited) — allowed.`,
         verified: (i) => `evidence gate: every ticked task of the recently active features has passing evidence (${i.list}) — allowed.`,
-        "not-done": () => "evidence gate: the implementer reports BLOCKED / NEEDS_CONTEXT — allowed.",
+        "not-done": () => "evidence gate: the subagent reports BLOCKED / NEEDS_CONTEXT — allowed.",
+        "no-changes": () => "evidence gate: the simplifier reports NO_CHANGES — nothing to prove, allowed.",
+        "no-report": () => "evidence gate: the message names no simplification report (.specs/<feature>/.execution/simplify-report.md) — allowed.",
+        "simplify-ok": (i) => `evidence gate: the simplification report of '${i.slug}' ends with its passing runs — allowed.`,
         "no-task": () => "evidence gate: the message names no task report (.specs/<feature>/.execution/task-N-report.md) — allowed.",
         "nothing-to-verify": (i) => `evidence gate: task ${i.n} of '${i.slug}' has no runnable _Verify:_ command — allowed.`,
         "report-ok": (i) => `evidence gate: the report of task ${i.n} of '${i.slug}' shows its _Verify:_ run — allowed.`,

@@ -702,6 +702,32 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
       "1.19 R3: spec-implementer searches before it writes (a hard step: concept + synonyms, reuse → extend → create, no copy-paste) and reports a Reuse block; spec-reviewer checks every new unit against the existing codebase (a duplicate is Important, smells Minor); the controller files refactor candidates in the backlog (subagent-execution.md, /executeTask); red-flags, /design, AGENTS.md and SKILL.md (≤ 5,000 words — 1.21 F3) name them; no PR / CI steering in the new text (got " +
       js([implSearch.length, implReuse.length, revQuality.length, subRefactor.length, execReuse.length, skill.split(/\s+/).filter(Boolean).length]) + ")");
 
+    // 1.22 — the prose of the verify pass, the written-rules / history angle and the simplification pass (adapted from
+    // Anthropic's code-review / code-simplifier plugins): the reviewer rates findings and lists what is not one, the
+    // controller verifies each before a fix round (80+), /prReview verifies before it reports, the simplifier keeps the
+    // feature's lines, never a test, one commit each, and proves it — and none of the new text steers toward PRs or CI.
+    const simp = rRd("agents", "spec-simplifier.md"), scmd = rRd("commands", "spec-simplify.md"), prr = rRd("commands", "prReview.md");
+    const revNot = cut(rev, "**Not a finding**", "## Re-review mode"), revVerify = cut(rev, "## Verify mode", "## Final mode");
+    const revRules = cut(rev, "### 5. Written rules and history", "### Calibration"), revSimp = cut(rev, "## Simplify mode", "## Verify mode");
+    const subVerify = cut(sub, "### 6. Verify the findings", "### 7. Fix loop"), subSimp = cut(sub, "## The simplification pass", "## Closing");
+    const guideSimp = cut(guide, "## The simplification pass", "## The refactor-candidate backlog");
+    ok(["**Pre-existing**", "**Outside the diff's lines**", "**Intended**", "**Disproved by a run**", "**Silenced on purpose**", "**A nitpick**"].every((w) => revNot.includes(w)) &&
+      /only \*\*80 or more\*\* there opens a fix round/.test(revNot) && /adapted from Anthropic's `code-review` plugin/.test(revNot) &&
+      ["**Exists at HEAD?**", "**Introduced by this diff?**", "**Intended?**", "**Already answered?**"].every((w) => revVerify.includes(w)) && /CONFIRMED \(80\+\) \| UNCONFIRMED \(50–79\) \| REFUTED \(under 50\)/.test(cut(rev, "Verify mode replaces them with:", "Simplify mode keeps")) &&
+      /quotes the rule with its file:line/.test(revRules) && /git blame -L <start>,<end> BASE -- <file>/.test(revRules) && /A fixed bug brought back is\s+\*\*Critical\*\*/.test(revRules) &&
+      /no test file, fixture or snapshot in the diff \(any is \*\*Critical\*\*/.test(revSimp) &&
+      /\*\*80 or more\*\* → confirmed/.test(subVerify) && /\*\*50–79\*\* → unconfirmed/.test(subVerify) && /\*\*Under 50\*\* → refuted/.test(subVerify) && /Task 3: refuted \(20, pre-existing\)/.test(sub) &&
+      /\*\*reverted\*\*, not repaired/.test(subSimp) && /dev-spec-driven:spec-simplifier/.test(subSimp) && /Verify pass \(one finding\) \| cheapest/.test(sub) &&
+      /\*\*Verify before you report\.\*\*/.test(prr) && /"Unconfirmed \(below 80\)"/.test(prr) && /\*\*History\*\*/.test(prr) && /\*\*Written rules\*\*/.test(prr) &&
+      /Only lines the branch added or changed/.test(simp) && /\*\*Never a test\*\*/.test(simp) && /\*\*Never a contract:\*\*/.test(simp) && /commit it alone/.test(simp) &&
+      /never edit the test, never fix forward/.test(simp) && /\*\*Final runs\*\* — LAST in the file/.test(simp) && /NO_CHANGES/.test(simp) && /Adapted from Anthropic's `code-simplifier` plugin/.test(simp) &&
+      /\*\*before\*\*\s+`\/spec-finish`/.test(scmd) && /\*\*reverted\*\* \(`git revert <sha>`\)/.test(scmd) && /done <feature> <n> --run/.test(scmd) && /Never "behaviour unchanged" without the runs/.test(scmd) &&
+      /\| Never a test, fixture or snapshot \|/.test(guideSimp) && /\/spec-simplify/.test(skill) && /\/spec-simplify/.test(exec) && /verify-mode reviewer/.test(exec) &&
+      /agents\/spec-reviewer\.md` → Verify mode/.test(agentsMd) && /commands\/spec-simplify\.md/.test(agentsMd) &&
+      [revNot, revVerify, revRules, revSimp, subVerify, subSimp, guideSimp, simp, scmd].every((t) => t.length > 200 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
+      "1.22: spec-reviewer rates findings, lists what is not one, verifies one finding fresh (verify mode), checks the written rules + history and a simplification diff (simplify mode); the controller verifies each finding before a fix round (80+ confirmed, 50–79 unconfirmed, < 50 refuted) and runs the simplification pass (reverted, not repaired); /prReview verifies before it reports; the simplifier keeps the feature's lines, never a test or contract, one commit each, the final runs last; /spec-simplify, /executeTask, SKILL.md, AGENTS.md and the guide name them; no PR / CI steering (got " +
+      js([revNot.length, revVerify.length, revRules.length, revSimp.length, subVerify.length, subSimp.length, guideSimp.length, simp.length, scmd.length]) + ")");
+
     // R4 — steering: structure.md gains Module Boundaries and Shared Code slots, the constitution's example principles a reuse rule
     // (EN / PT / ES / pt-BR) — slots, so a fresh stub still reads as a template.
     const steerWant = { en: ["## Module Boundaries", "## Shared Code", "[e.g., Search before you write: extend an existing module before adding a new one.]"],

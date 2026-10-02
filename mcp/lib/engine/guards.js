@@ -16,14 +16,14 @@ const i18n = require("../i18n.js");
 let activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords, existingFeature,
   expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher, guessLang,
   implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
-  isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectLang, readIfExists, readJson,
+  isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
   validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile;
 function __link(E) { ({ activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
-  isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectLang, readIfExists, readJson,
+  isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
   validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile } = E); }
@@ -989,8 +989,8 @@ function stopTaskLabel(d, lng) {
 // verificationStatus reports unverified (a failed run, a note on a runnable _Verify:_, stale evidence, an unexpected pass,
 // no evidence for a runnable _Verify:_…) or, every active task done, project checks without a passing run since the last
 // task activity (suiteStatus). opts: { message, agent (the subagent type — a spec-implementer is checked on its REPORT: it
-// never ticks tasks), stopHookActive (the hook already sent this stop back once: never twice in a row) }. The reason is in
-// the project language (an implementer's: its feature's). Read-only and bounded; a feature whose .state.json is unreadable
+// never ticks tasks; 1.22: a spec-simplifier on its simplification report), stopHookActive (the hook already sent this
+// stop back once: never twice in a row) }. The reason is in the project language (a subagent's: its feature's). Read-only and bounded; a feature whose .state.json is unreadable
 // is skipped — the gate never blocks on its own trouble.
 // → { ok, block, why, lang, claims, features: [{feature, unverified: [{number, reason}], suite: [{name, status}]}], reason? }
 function stopCheck(projectDir, opts = {}) {
@@ -1004,6 +1004,7 @@ function stopCheck(projectDir, opts = {}) {
   const cl = stopClaims(opts.message);
   const agent = typeof opts.agent === "string" ? opts.agent.trim() : "";
   if (agent && /(?:^|:)spec-implementer$/i.test(agent)) return implementerStopCheck(pdir, String(opts.message == null ? "" : opts.message), cl, res);
+  if (agent && /(?:^|:)spec-simplifier$/i.test(agent)) return simplifierStopCheck(pdir, String(opts.message == null ? "" : opts.message), cl, res);
   if (!cl.claim) return res(false, "no-claim");
   if (cl.admitted) return res(false, "admitted", { claims: cl.claims });
   const since = Date.now() - STOP_RECENT_HOURS * 3600 * 1000;
@@ -1065,22 +1066,14 @@ function implementerStopCheck(pdir, message, cl, res) {
   if (!verify.length) return res(false, "nothing-to-verify", info);
   const file = path.join(f.dir, ".execution", `task-${n}-report.md`);
   const rel = toPosix(path.relative(pdir, file));
-  let report = null;
-  try {
-    const fd = fs.openSync(file, "r");
-    try {
-      const buf = Buffer.alloc(Math.min(STOP_REPORT_MAX, fs.fstatSync(fd).size));
-      report = buf.toString("utf8", 0, fs.readSync(fd, buf, 0, buf.length, 0));
-    } finally { fs.closeSync(fd); }
-  } catch { report = null; }
+  const report = readStopReport(file);
   const X = i18n.msg(lng).stopGate.implementer;
-  const flat = (s) => s.replace(/`/g, "").replace(/\s+/g, " ").trim();
+  const flat = flatReport;
   let problem = null;
   if (report == null) problem = X.noReport(rel);
   else {
     const body = flat(report);
-    // "exit 0", "exit code: 1", "exitCode 0", "exited with code 0", "exit status 2", PT "código de saída 0", ES "código de salida 0"
-    const codes = [...body.matchAll(/(?<![\p{L}_])(?:exit(?:ed)?(?:\s+with)?(?:[\s_-]*(?:code|status))?|c[óo]digo\s+de\s+(?:sa[íi]da|salida))\W{0,4}(-?\d+)/giu)].map((x) => parseInt(x[1], 10));
+    const codes = reportExitCodes(body).map((x) => x.code);
     const missing = verify.filter((c) => !body.includes(flat(c)));
     const cmds = (missing.length ? missing : verify).map((c) => "`" + c + "`").join(", ");
     if (missing.length || !codes.length) problem = X.noRun(rel, cmds);
@@ -1091,6 +1084,69 @@ function implementerStopCheck(pdir, message, cl, res) {
   }
   if (!problem) return res(false, "report-ok", info);
   return res(true, "implementer-evidence", { ...info, report: rel, reason: [X.head(n, f.slug) + " " + problem, X.todo].join("\n") });
+}
+// A subagent's report, its first STOP_REPORT_MAX bytes (null when it can't be read) — the stop gates read one file each.
+function readStopReport(file) {
+  try {
+    const fd = fs.openSync(file, "r");
+    try {
+      const buf = Buffer.alloc(Math.min(STOP_REPORT_MAX, fs.fstatSync(fd).size));
+      return buf.toString("utf8", 0, fs.readSync(fd, buf, 0, buf.length, 0));
+    } finally { fs.closeSync(fd); }
+  } catch { return null; }
+}
+// A report or a command as the gates compare them: backticks dropped, whitespace runs collapsed.
+const flatReport = (s) => s.replace(/`/g, "").replace(/\s+/g, " ").trim();
+// The exit codes a (flattened) report writes out, in order, with where each sits: "exit 0", "exit code: 1", "exitCode 0",
+// "exited with code 0", "exit status 2", PT "código de saída 0", ES "código de salida 0".
+function reportExitCodes(body) {
+  return [...body.matchAll(/(?<![\p{L}_])(?:exit(?:ed)?(?:\s+with)?(?:[\s_-]*(?:code|status))?|c[óo]digo\s+de\s+(?:sa[íi]da|salida))\W{0,4}(-?\d+)/giu)]
+    .map((x) => ({ code: parseInt(x[1], 10), index: x.index }));
+}
+// 1.22 — a spec-simplifier's stop (SubagentStop): it rewrites code that is already reviewed and verified, so its DONE (or
+// DONE_WITH_CONCERNS) needs its report (.specs/<feature>/.execution/simplify-report.md, named in the reply) to end with the
+// proof. With project checks (meta.checks): each command, and the first exit code written AFTER its last mention must be 0
+// — a baseline run higher up in the file never stands in for the final one. Without: the report's last exit code is 0.
+// BLOCKED / NEEDS_CONTEXT / NO_CHANGES, no claim, or no report path in the reply → allowed.
+function simplifierStopCheck(pdir, message, cl, res) {
+  const prose = stopProse(message);
+  if (/(?<![\p{L}_])status\W{0,8}(?:blocked|needs_context)(?![\p{L}_])/iu.test(prose)) return res(false, "not-done");
+  if (/(?<![\p{L}_])status\W{0,8}no_changes(?![\p{L}_])/iu.test(prose)) return res(false, "no-changes");
+  if (!cl.claim) return res(false, "no-claim");
+  const m = message.slice(-STOP_MESSAGE_MAX).match(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+simplify-report\.md/i);
+  if (!m) return res(false, "no-report", { claims: cl.claims });
+  const f = existingFeature(pdir, m[1]);
+  if (!f.ok) return res(false, "no-report", { claims: cl.claims });
+  const lng = featureLang(pdir, f.slug);
+  const info = { claims: cl.claims, lang: lng, feature: f.slug };
+  const file = path.join(f.dir, ".execution", "simplify-report.md");
+  const rel = toPosix(path.relative(pdir, file));
+  const report = readStopReport(file);
+  const X = i18n.msg(lng).stopGate.simplifier;
+  const checks = projectChecks(pdir).checks.map((c) => c.command);
+  let problem = null;
+  if (report == null) problem = X.noReport(rel);
+  else {
+    const body = flatReport(report);
+    const codes = reportExitCodes(body);
+    if (!checks.length) {
+      if (!codes.length || codes[codes.length - 1].code !== 0) problem = X.noSuite(rel);
+    } else {
+      const unrun = [], failing = [];
+      for (const c of checks) {
+        const cmd = flatReport(c), at = body.lastIndexOf(cmd);
+        // the code written after the command — never one inside it (`node -e "process.exit(0)"`)
+        const after = at < 0 ? undefined : codes.find((x) => x.index >= at + cmd.length);
+        if (!after) unrun.push(c);
+        else if (after.code !== 0) failing.push(c);
+      }
+      const list = (a) => a.map((c) => "`" + c + "`").join(", ");
+      if (unrun.length) problem = X.noRun(rel, list(unrun));
+      else if (failing.length) problem = X.notPassing(rel, list(failing));
+    }
+  }
+  if (!problem) return res(false, "simplify-ok", info);
+  return res(true, "simplifier-evidence", { ...info, report: rel, reason: [X.head(f.slug) + " " + problem, X.todo].join("\n") });
 }
 
 // The scope guard's decision for a code file once some feature has approved, unfinished tasks (guardCheck, level "scope"):

@@ -90,7 +90,7 @@
     ],
     "SubagentStop": [
       {
-        "matcher": "^(dev-spec-driven:)?spec-implementer$",
+        "matcher": "^(dev-spec-driven:)?spec-(implementer|simplifier)$",
         "hooks": [
           {
             "type": "command",
