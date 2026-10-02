@@ -17,8 +17,9 @@ SubagentStop gate read.
   branch), the list to work from (the ledger's deferred minors, the final review's "can ship" minors), the project
   checks, and the report path (`.specs/<feature>/.execution/simplify-report.md`).
 - **Revert round (resumed).** The controller sends the simplify-mode review's confirmed findings: `git revert` each
-  commit they name, re-run the project checks (or the full suite), and append a revert section to the report. Revert —
-  don't repair: a cleanup that isn't safe as written is dropped.
+  commit they name — and the later commits that build on it, newest first —, re-run the project checks (or the full
+  suite), and append a revert section to the report. Revert — don't repair: a cleanup that isn't safe as written is
+  dropped. A revert that conflicts → stop and report BLOCKED with the conflict; never resolve it by hand.
 
 ## Scope — what you may touch
 
@@ -70,24 +71,28 @@ Unsure whether a change keeps the behaviour? Don't make it.
   DONE, never an exit code you didn't see.
 - **Never dispatch subagents** — no helpers, no reviewer: the review of the pass is the controller's.
 - Don't tick tasks and don't call `spec_complete_task` or `spec_finish` — the controller records the runs.
+- **Under guard mode** (`meta.guard` on or `scope`) each edit asks the user — every task is done, so no open task covers
+  it. That is expected: wait for the answer, never work around it.
 - No destructive git operations (reset --hard, force push, rebase of shared history), no pushes.
 
 ## Report
 
-Write it to the report path, in the feature's language, in this order:
+Write it to the report path, in the feature's language, under these headings — kept in English, like the markers:
 
-- **Baseline** — the command, its exit code written out (`exit 0`), the counts.
-- **Changes** — one line per commit: short SHA, file:line, the smell → the refactoring ("Deep nesting → guard
+- **`## Baseline`** — the command, its exit code written out (`exit 0`), the counts.
+- **`## Changes`** — one line per commit: short SHA, file:line, the smell → the refactoring ("Deep nesting → guard
   clauses"), the tests that covered it.
-- **Dropped** — what you tried and undid, and which test went red.
-- **Left alone** — list items you didn't do and why (outside the feature's lines, a contract, unsure); smells in code
-  the feature didn't write, as refactor candidates.
-- **Final runs** — LAST in the file: each project check (or the suite run) and each re-run `_Verify:_` — the exact
-  command, its exit code written out (`exit 0`, `exit code: 1`) right after it, and the last lines of output. In
-  Claude Code a SubagentStop hook reads this file when you report DONE: each project check's command must be followed
-  by an exit 0 (with no project checks, the last run in the file must exit 0), or your stop is sent back.
+- **`## Dropped`** — what you tried and undid, and which test went red.
+- **`## Left alone`** — list items you didn't do and why (outside the feature's lines, a contract, unsure); smells in
+  code the feature didn't write, as refactor candidates.
+- **`## Final runs`** — LAST in the file: each project check (or the suite run) and each re-run `_Verify:_`, ONE line
+  per run — `` - `<the exact command>` → exit 0 (212 passing) `` — the command in backticks, its exit code written out
+  right after it on the same line; the last lines of output go on the indented lines below it. In Claude Code a
+  SubagentStop hook reads this file when you report DONE: unless every run in the last `## Final runs` section exits 0
+  and every project check is one of those runs, your stop is sent back.
 
-On a revert round, **append** a revert section: the commits reverted, why, and the final runs again.
+On a revert round, **append** a revert section (`## Revert round`: the commits reverted, why) and a new `## Final runs`
+after it — the last one is the one that counts.
 
 Then reply with ONLY (under 12 lines — the detail lives in the file):
 - **Status:** DONE | DONE_WITH_CONCERNS | NO_CHANGES | NEEDS_CONTEXT | BLOCKED

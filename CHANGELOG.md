@@ -17,7 +17,9 @@ local, no pull requests, no CI.
   introduce it, is it intended, is it already answered? In `/executeTask --subagents` the controller sends every ❌ and
   Critical / Important finding to a verify pass (one cheap reviewer per finding, in parallel): **80+** opens a fix round,
   **50–79** is ledgered as unconfirmed (shown at the checkpoint, triaged by the final review), **under 50** is refuted.
-  The facts the report or the diff settle (a missing run, a non-zero exit, a changed planned test) skip it.
+  The facts the report or the diff settle (a missing run, a non-zero exit, a changed planned test) skip it. An ❌ comes
+  back confirmed or refuted with the file:line that satisfies the AC — never unconfirmed: an AC with no code is never
+  "pre-existing". A break the diff causes on lines it didn't touch (a caller of a contract it changed) is the diff's.
 - **`/prReview` verifies before it reports** — the same questions per finding (a verify-mode reviewer each, or checked
   inline and labelled self-verified); only 80+ is reported as a finding, the rest listed as "Unconfirmed (below 80)".
 - **Two review angles a diff-only read misses:** the project's written rules — the constitution, the `CLAUDE.md` /
@@ -29,12 +31,17 @@ local, no pull requests, no CI.
   behaviour-preserving cleanups of the lines the feature's branch added or changed (the deferred minor smells first),
   one commit each, the covering tests after every change and the project checks at the end. Never a test, a contract, a
   dependency, a prompt file or code the feature didn't write. The pass is reviewed (the reviewer's new **simplify**
-  mode), a confirmed finding is **reverted**, never repaired, and each changed task's `_Verify:_` is re-recorded (a
-  failing re-check makes the task unverified). next_action's "all tasks done" step mentions it.
+  mode), a confirmed finding is **reverted** (with the commits that build on it), never repaired, and each changed task's
+  `_Verify:_` and the project checks are recorded again (a failing re-check makes the task unverified). With guard mode
+  on, each edit of the pass asks the user — every task is done, so no open task covers it. Claude Code's built-in
+  `/simplify` is not run inside the pass (it applies its cleanups in one go). next_action's "all tasks done" step
+  mentions it.
 - **The `spec-simplifier` agent** (4 plugin agents) does the pass under `--subagents`, and the SubagentStop gate now
   covers it (hooks.json matcher `^(dev-spec-driven:)?spec-(implementer|simplifier)$`): its DONE is sent back unless
-  `.specs/<feature>/.execution/simplify-report.md` ends with the passing runs — each project check's command followed by
-  an exit 0 (a baseline run higher up never counts), or, without project checks, a last run that passes. `dev-spec
+  `.specs/<feature>/.execution/simplify-report.md` ends with a `## Final runs` section — one line per run, ``- `<command>`
+  → exit 0`` — in which every run passes and every project check is one of the runs (as a whole command: a longer one
+  that starts with it, like a re-run `_Verify:_`, never stands in). A baseline run, a code quoted in output, a fenced
+  block or a failed run followed by a passing one never pass it; the report is read from its end. `dev-spec
   stop-check --agent spec-simplifier` and `spec_stop_check {agent}` give the same decision (`why`: `simplify-ok` ·
   `simplifier-evidence` · `no-changes` · `no-report`; EN / PT / pt-BR / ES).
 
@@ -43,10 +50,13 @@ local, no pull requests, no CI.
   pass before closing, the verify and simplifier rows in model selection, three new rationalizations.
 - `references/code-reuse-and-quality.md`: "The simplification pass" (the rules and why), a checklist item.
 - The evidence gate's "not-done" line now says "the subagent" (it covers the simplifier too).
+- **Fixed:** an implementer's "**Status:** `DONE`" (the status in backticks) read as no claim, so its report was never
+  checked; a status in inline code is read now.
 
 ### Tests
-- `node mcp/test.js` 1685 assertions (was 1680), `node cli/test-cli.js` 523 (was 522): the simplifier's SubagentStop gate
-  (no report, a red final run, a check never run, a report past the read cap read from its end, a baseline run that never stands in, a code inside the command, NO_CHANGES /
+- `node mcp/test.js` 1686 assertions (was 1680), `node cli/test-cli.js` 523 (was 522): the simplifier's SubagentStop gate
+  (its `## Final runs` section: no report, a baseline only, a failed run hidden by a later passing one, a code quoted in
+  output, a longer command starting with a check's, a fenced block, a revert round's later section; no report, a red final run, a check never run, a report past the read cap read from its end, a baseline run that never stands in, a code inside the command, NO_CHANGES /
   BLOCKED / no report path allowed, the hook's reason = the engine's, EN / PT / ES strings, `stop-check --agent
   spec-simplifier` in PT), the hooks.json matcher, 4 agents and 55 commands, and the prose of the verify pass, the
   written rules and history, the simplify mode and the simplification pass.

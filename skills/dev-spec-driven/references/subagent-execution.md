@@ -168,13 +168,14 @@ plugin: each issue rated by a separate agent, only the confident ones kept.)
   missing, a non-zero exit, a piped exit code with no unpiped run, a planned test's expectation changed.
 - **How:** one `dev-spec-driven:spec-reviewer` in **verify** mode per finding, all dispatched in one message (they are
   independent), on the cheapest tier — standard for a security, concurrency or data-loss finding — with the finding
-  verbatim, the package path, BASE/HEAD and the brief path. Never the first review's reasoning, never the answer you
-  expect.
+  verbatim, the package path, BASE/HEAD, the brief path and the implementer's report path. Never the first review's
+  reasoning, never the answer you expect.
 - **Then, by its confidence:** **80 or more** → confirmed: it enters the fix loop. **50–79** → unconfirmed: no fix
   round — ledger `unconfirmed (NN)`, show it at the next checkpoint; the final review triages it with the deferred
   minors. **Under 50** → refuted: ledger `refuted (NN, <why>)` and drop it.
-- A refuted ❌ means the reviewer missed where the AC lives: the verify answer cites it (file:line) — read that line
-  before you count the AC as satisfied.
+- **An ❌ comes back CONFIRMED or REFUTED, never unconfirmed** (an AC with no code is never pre-existing): a refuted ❌
+  cites the file:line that satisfies the AC — read that line before you count the AC as satisfied; a refutation without
+  one is a confirmed ❌, and a confirmed ❌ enters the fix loop.
 - **An implementer that disputes a finding** in a fix round, with evidence, gets the same verify pass — not your
   hunch.
 
@@ -326,17 +327,23 @@ plugin — with the proof added: its own tests after every change, one commit ea
    final review's "can ship" minors —, the project checks and the report path
    (`.specs/<feature>/.execution/simplify-report.md`). It touches only lines `MERGE_BASE..HEAD` added or changed —
    never a test, a contract, a dependency or code the feature didn't write — runs the covering tests after each change,
-   commits each one alone, and ends with the project checks (or the full suite) on the final code. In Claude Code the
-   SubagentStop hook sends back a DONE whose report lacks those final passing runs.
-2. Package `SIMPLIFY_BASE..HEAD` (as in §4) and dispatch `dev-spec-driven:spec-reviewer` in **simplify** mode: is the
-   behaviour unchanged, no test and no contract touched, the change inside the feature's lines, and actually simpler?
-   Verify its Critical / Important findings (§6). A confirmed one is **reverted**, not repaired: resume the simplifier to
-   `git revert` that commit and re-run the suite — a cleanup that isn't safe as written is dropped, and there is no
-   fix loop.
+   commits each one alone, and ends its report with a `## Final runs` section: the project checks (or the full suite)
+   and the changed tasks' `_Verify:_` on the final code, one line each. In Claude Code the SubagentStop hook sends back
+   a DONE whose `## Final runs` lacks a project check or shows a run that fails. **Guard mode** (`meta.guard` on or
+   `scope`): once every task is done no open task covers an edit, so each edit of the pass asks the user — tell them
+   before you dispatch; a handful of approvals, never a reason to lower the guard.
+2. Package `SIMPLIFY_BASE..HEAD` (as in §4) and dispatch `dev-spec-driven:spec-reviewer` in **simplify** mode with the
+   package path, MERGE_BASE, SIMPLIFY_BASE, the report path and the feature folder: is the behaviour unchanged, no test
+   and no contract touched, the change inside the feature's lines, and actually simpler? Verify its Critical / Important
+   findings (§6). A confirmed one is **reverted**, not repaired: resume the simplifier to `git revert` that commit — and
+   the later ones that build on it, newest first — and re-run the suite; a revert that conflicts stops the pass
+   (BLOCKED), never a hand-resolved merge. A cleanup that isn't safe as written is dropped, and there is no fix loop.
 3. Re-record the `_Verify:_` run of each done task whose `_Implements:_` files the pass changed, from the report
    (`spec_complete_task {name, number, evidence}` — on a ticked task it is a re-check: a failing one makes it
-   unverified; not an `_Expect: fail_` task, whose red run stays its proof). Ledger
-   `Simplify: N commits (a1b2c3d..e4f5a6b), M dropped, review clean`.
+   unverified; not an `_Expect: fail_` task, whose red run stays its proof), then the project checks on this code
+   (`spec_finish {name, evidence}` with the report's final runs, or `dev-spec finish <feature> --run`): `/spec-finish`'s
+   `code-changed` rule sees only the files the tasks implement, so a pass that touched another file would leave an older
+   passing run standing. Ledger `Simplify: N commits (a1b2c3d..e4f5a6b), M dropped, review clean`.
 
 Skip it for a small feature or a review with no deferred smells. `NO_CHANGES` is a fine result.
 

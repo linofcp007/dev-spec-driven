@@ -2865,10 +2865,10 @@ const msg = {
       simplifier: {
         head: (slug) => `dev-spec — gate de evidencia: informas la pasada de simplificación de '${slug}' como DONE, pero`,
         noReport: (file) => `su informe (${file}) no existe.`,
-        noRun: (file, cmds) => `su informe (${file}) no muestra la ejecución final de cada verificación del proyecto — el comando exacto seguido de su exit code: ${cmds}.`,
-        notPassing: (file, cmds) => `su informe (${file}) no muestra ninguna ejecución final correcta (exit 0) de ${cmds} — una simplificación debe dejar todas las verificaciones en verde.`,
-        noSuite: (file) => `su informe (${file}) no termina con una ejecución correcta de las pruebas — el comando y su exit 0 como la última ejecución del fichero.`,
-        todo: "Ejecuta las verificaciones del proyecto (o la batería de pruebas completa) sobre el código final y pon al final del informe cada comando, su exit code y las últimas líneas de su salida — o revierte el cambio que rompió una verificación, o informa BLOCKED. (\"Comportamiento sin cambios\" es una afirmación: las ejecuciones son su prueba.)",
+        noFinal: (file) => `su informe (${file}) no tiene una sección "## Final runs" con ejecuciones — la última sección, una línea por ejecución: - \`<comando>\` → exit <código>.`,
+        noRun: (file, cmds) => `la sección "## Final runs" de su informe (${file}) no muestra estas ejecuciones con su exit code: ${cmds} — todas las verificaciones del proyecto deben estar, una línea por ejecución: - \`<comando>\` → exit <código>.`,
+        notPassing: (file, cmds) => `las ejecuciones finales de su informe (${file}) fallan: ${cmds} — una simplificación debe dejar todas las ejecuciones en verde.`,
+        todo: "Ejecuta las verificaciones del proyecto (o la batería de pruebas completa) y el _Verify:_ de las tareas cambiadas sobre el código final y ponlos al final del informe, en \"## Final runs\", una línea cada uno (- `<comando>` → exit <código>, luego las últimas líneas de la salida) — o revierte el cambio que hizo fallar una ejecución, o informa BLOCKED. (\"Comportamiento sin cambios\" es una afirmación: las ejecuciones son su prueba.)",
       },
       allow: {
         off: () => "gate de evidencia: desactivado (roadmap.json meta.stopCheck: false) — nada comprobado.",

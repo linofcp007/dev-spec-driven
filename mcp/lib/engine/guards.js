@@ -1047,13 +1047,20 @@ function stopCheck(projectDir, opts = {}) {
     reason: lines.join("\n"),
   });
 }
+// A subagent's status line as the gates read it: its prose (stopProse) with inline code unwrapped first — "**Status:**
+// `DONE`" is a status, not code; fenced blocks still drop out.
+const statusProse = (message) => stopProse(String(message).replace(/(?<!`)`([^`\n]+)`(?!`)/g, "$1"));
+const STATUS_DONE_RE = /(?<![\p{L}_])status\W{0,8}done(?:_with_concerns)?(?![\p{L}_])/iu;
+const STATUS_NOT_DONE_RE = /(?<![\p{L}_])status\W{0,8}(?:blocked|needs_context)(?![\p{L}_])/iu;
 // A spec-implementer's stop (SubagentStop): it never ticks tasks (the controller does, after review), so its gate is its
 // REPORT — reporting DONE (or DONE_WITH_CONCERNS) for a task whose _Verify:_ holds a runnable command needs the report file
 // (.specs/<feature>/.execution/task-N-report.md, named in the reply as the protocol asks) to carry each command and an exit
 // code. BLOCKED / NEEDS_CONTEXT, no report path in the reply, or no runnable _Verify:_ → allowed.
 function implementerStopCheck(pdir, message, cl, res) {
-  if (/(?<![\p{L}_])status\W{0,8}(?:blocked|needs_context)(?![\p{L}_])/iu.test(stopProse(message))) return res(false, "not-done");
-  if (!cl.claim) return res(false, "no-claim");
+  // 1.22 review: a status in backticks (`DONE`) is a status too — it used to read as no claim and skip the report
+  const prose = statusProse(message);
+  if (STATUS_NOT_DONE_RE.test(prose)) return res(false, "not-done");
+  if (!cl.claim && !STATUS_DONE_RE.test(prose)) return res(false, "no-claim");
   const m = message.slice(-STOP_MESSAGE_MAX).match(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+task-(\d+)-(?:report|brief)\.md/i);
   if (!m) return res(false, "no-task", { claims: cl.claims });
   const f = existingFeature(pdir, m[1]);
@@ -1105,16 +1112,47 @@ function reportExitCodes(body) {
   return [...body.matchAll(/(?<![\p{L}_])(?:exit(?:ed)?(?:\s+with)?(?:[\s_-]*(?:code|status))?|c[óo]digo\s+de\s+(?:sa[íi]da|salida))\W{0,4}(-?\d+)/giu)]
     .map((x) => ({ code: parseInt(x[1], 10), index: x.index }));
 }
+// The runs a simplification report proves its claim with: the lines of its LAST "## Final runs" section (any heading level;
+// the heading is English-stable like a marker — PT "Execuções finais" / ES "Ejecuciones finales" are read too), up to the
+// next heading. A run is ONE line: an optional bullet, the command in backticks, then its exit code — "- `npm test` → exit 0
+// (212 passing)". Output lines (no backticked command first) and fenced blocks are no runs, so a code quoted in a test's
+// output never counts, and a command that starts with a check's (`npm test -- t/x.test.js`) is another command.
+// → null without such a section, else [{command (flattened), code (null: the line names none)}] — a command's last line wins.
+function finalRuns(report) {
+  const lines = report.split(/\r?\n/);
+  const heading = (s) => /^\s{0,3}#{1,6}\s/.test(s);
+  let start = -1, fence = false;
+  lines.forEach((s, i) => {
+    if (/^\s{0,3}(?:`{3,}|~{3,})/.test(s)) fence = !fence;
+    else if (!fence && /^\s{0,3}#{1,6}\s*(?:final runs|execu[çc][õo]es finais|ejecuciones finales)(?![\p{L}])/iu.test(s)) start = i;
+  });
+  if (start < 0) return null;
+  const runs = new Map();
+  fence = false;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^\s{0,3}(?:`{3,}|~{3,})/.test(lines[i])) { fence = !fence; continue; }
+    if (fence) continue;
+    if (heading(lines[i])) break;
+    const m = lines[i].match(/^\s*(?:[-*+]\s+|\d+[.)]\s+)?`([^`]+)`(.*)$/);
+    if (!m) continue;
+    const command = flatReport(m[1]);
+    const code = (reportExitCodes(flatReport(m[2]))[0] || {}).code;
+    runs.delete(command);
+    runs.set(command, code === undefined ? null : code);
+  }
+  return [...runs].map(([command, code]) => ({ command, code }));
+}
 // 1.22 — a spec-simplifier's stop (SubagentStop): it rewrites code that is already reviewed and verified, so its DONE (or
-// DONE_WITH_CONCERNS) needs its report (.specs/<feature>/.execution/simplify-report.md, named in the reply) to end with the
-// proof. With project checks (meta.checks): each command, and the first exit code written AFTER its last mention must be 0
-// — a baseline run higher up in the file never stands in for the final one. Without: the report's last exit code is 0.
-// BLOCKED / NEEDS_CONTEXT / NO_CHANGES, no claim, or no report path in the reply → allowed.
+// DONE_WITH_CONCERNS) needs its report (.specs/<feature>/.execution/simplify-report.md, named in the reply) to END with the
+// proof — a "## Final runs" section (finalRuns) where every run exits 0 and, with project checks (meta.checks), each check's
+// command is one of them. A baseline run higher up never stands in, a failed run never hides behind a later passing one,
+// and a run line without its exit code is no proof. BLOCKED / NEEDS_CONTEXT / NO_CHANGES, no claim, or no report path in
+// the reply → allowed.
 function simplifierStopCheck(pdir, message, cl, res) {
-  const prose = stopProse(message);
-  if (/(?<![\p{L}_])status\W{0,8}(?:blocked|needs_context)(?![\p{L}_])/iu.test(prose)) return res(false, "not-done");
+  const prose = statusProse(message);
+  if (STATUS_NOT_DONE_RE.test(prose)) return res(false, "not-done");
   if (/(?<![\p{L}_])status\W{0,8}no_changes(?![\p{L}_])/iu.test(prose)) return res(false, "no-changes");
-  if (!cl.claim) return res(false, "no-claim");
+  if (!cl.claim && !STATUS_DONE_RE.test(prose)) return res(false, "no-claim");
   const m = message.slice(-STOP_MESSAGE_MAX).match(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+simplify-report\.md/i);
   if (!m) return res(false, "no-report", { claims: cl.claims });
   const f = existingFeature(pdir, m[1]);
@@ -1125,24 +1163,17 @@ function simplifierStopCheck(pdir, message, cl, res) {
   const rel = toPosix(path.relative(pdir, file));
   const report = readStopReport(file, true);
   const X = i18n.msg(lng).stopGate.simplifier;
-  const checks = projectChecks(pdir).checks.map((c) => c.command);
+  const checks = [...new Set(projectChecks(pdir).checks.map((c) => flatReport(c.command)))];
   let problem = null;
   if (report == null) problem = X.noReport(rel);
   else {
-    const body = flatReport(report);
-    const codes = reportExitCodes(body);
-    if (!checks.length) {
-      if (!codes.length || codes[codes.length - 1].code !== 0) problem = X.noSuite(rel);
-    } else {
-      const unrun = [], failing = [];
-      for (const c of checks) {
-        const cmd = flatReport(c), at = body.lastIndexOf(cmd);
-        // the code written after the command — never one inside it (`node -e "process.exit(0)"`)
-        const after = at < 0 ? undefined : codes.find((x) => x.index >= at + cmd.length);
-        if (!after) unrun.push(c);
-        else if (after.code !== 0) failing.push(c);
-      }
+    const runs = finalRuns(report);
+    if (!runs || !runs.length) problem = X.noFinal(rel);
+    else {
+      const code = new Map(runs.map((r) => [r.command, r.code]));
       const list = (a) => a.map((c) => "`" + c + "`").join(", ");
+      const unrun = checks.filter((c) => code.get(c) == null).concat(runs.filter((r) => r.code == null && !checks.includes(r.command)).map((r) => r.command));
+      const failing = runs.filter((r) => r.code != null && r.code !== 0).map((r) => r.command);
       if (unrun.length) problem = X.noRun(rel, list(unrun));
       else if (failing.length) problem = X.notPassing(rel, list(failing));
     }

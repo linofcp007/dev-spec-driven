@@ -1779,7 +1779,7 @@ function helpText() {
                                   verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without verification
                                   evidence? Prints the reason it would send the turn back (exit 1) or why it lets it end; - reads stdin;
                                   --agent spec-implementer checks the task report named in the message instead,
-                                  --agent spec-simplifier the simplification report (it must end with the passing checks)
+                                  --agent spec-simplifier the simplification report (its last '## Final runs' must all pass)
   log <feature> [--max N] [-]     Per task, the commits whose message cites it — "task #N" / "#N" with the feature name (as /spec-commit
                                   writes "Part of .specs/<feature>/ task #N."), or its T-/AC IDs ("Makes T-01 green") — and, +tdd, a
                                   red-first check (implementation committed before its test?); reads git log (read-only, local, --max

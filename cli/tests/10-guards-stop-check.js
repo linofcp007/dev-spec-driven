@@ -107,7 +107,7 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
   fs.writeFileSync(rep6, "## Baseline\n- `npm test` → exit 0\n## Final runs\n- `npm test` → código de saída 0 (212 a passar)\n");
   const scSimOk = rc1(["stop-check", "--message", reply6, "--agent", "spec-simplifier", "--project", p6]);
   const scSimNone = rc1(["stop-check", "--message", "**Status:** NO_CHANGES\nNada a simplificar.", "--agent", "spec-simplifier", "--project", p6]);
-  ok(scSim.code === 1 && /reportas a passagem de simplificação de 'carrinho' como DONE, mas o relatório \(\.specs\/carrinho\/\.execution\/simplify-report\.md\) não mostra nenhuma execução final com sucesso \(exit 0\) de `npm test`/.test(scSim.out) &&
+  ok(scSim.code === 1 && /reportas a passagem de simplificação de 'carrinho' como DONE, mas as execuções finais do relatório \(\.specs\/carrinho\/\.execution\/simplify-report\.md\) falham: `npm test` — uma simplificação tem de deixar todas as execuções a passar/.test(scSim.out) &&
     scSimJ && scSimJ.why === "simplifier-evidence" && scSimJ.feature === "carrinho" && scSimJ.lang === "pt" &&
     scSimOk.code === 0 && /o relatório de simplificação de 'carrinho' termina com as execuções com sucesso — permitido/.test(scSimOk.stdout) &&
     scSimNone.code === 0 && /o simplificador reporta NO_CHANGES/.test(scSimNone.stdout),

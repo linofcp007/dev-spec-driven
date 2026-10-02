@@ -245,7 +245,7 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   added — the smells the reviews deferred first —, one commit each, its own tests after every change and the project
   checks at the end; never a test, a contract or code the feature didn't write; the pass is reviewed and a confirmed
   finding is reverted. With `--subagents` a new `spec-simplifier` agent does it, and the SubagentStop gate sends its DONE
-  back without the final passing runs. Both ideas come from Anthropic's `code-review` and `code-simplifier` plugins,
+  back until its report's `## Final runs` shows every run passing. Both ideas come from Anthropic's `code-review` and `code-simplifier` plugins,
   rebuilt around the spec and the evidence gate.
 
 ### New in 1.21
@@ -586,8 +586,8 @@ exemplo) — e as specs do projeto como **recursos** só de leitura: `specs://ro
 `/executeTask <feature> --subagents` guarda o contexto da sessão principal para a coordenação: por tarefa
 escreve um brief (`spec_task_brief`), despacha o agente **`dev-spec-driven:spec-implementer`** do plugin,
 envia o diff ao agente **`dev-spec-driven:spec-reviewer`** (veredicto por AC ID + qualidade + verificações do
-track + as regras escritas do projeto), põe um revisor independente a verificar cada finding (só uma confiança de 80
-ou mais custa uma ronda de correções), faz um ciclo de correções de no máximo 5 rondas e só depois marca a tarefa. Avança sozinho dentro de
+track + as regras escritas do projeto), põe um revisor independente a verificar cada problema apontado (só uma confiança de
+80 ou mais custa uma ronda de correções), faz um ciclo de correções de no máximo 5 rondas e só depois marca a tarefa. Avança sozinho dentro de
 uma história, para em cada `**Checkpoint:**` para a tua revisão e nunca muda um AC, o design ou um teste sem
 voltar a essa fase. Gasta cerca de 2–3× os tokens da execução inline, por isso compensa em funcionalidades
 com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/subagent-execution.md`. Adaptado da
@@ -715,20 +715,20 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 
 ### Novidades da 1.22
 
-- **Revisões em que se pode confiar** — o revisor dá a cada finding Critical / Important uma confiança de 0 a 100 e sabe o
-  que não é um finding (o que já existia, o que está fora do diff, o que a spec pediu, o que uma verificação verde já
-  responde); cada um é verificado por um revisor independente antes de poder custar uma ronda de correções — só uma
-  confiança de 80 ou mais a abre, o resto fica no ledger como não confirmado. O `/prReview` verifica antes de reportar.
-  Dois ângulos novos: as regras escritas do projeto (a constituição, `CLAUDE.md` / `AGENTS.md`, os comentários no código
-  — citados) e o histórico das linhas que uma alteração reescreve (uma correção desfeita, a causa raiz de um bugfix de
-  volta).
+- **Revisões em que se pode confiar** — o revisor dá a cada problema Critical / Important que aponta uma confiança de 0 a
+  100 e sabe o que não conta como problema (o que já existia, o que está fora do diff, o que a spec pediu, o que uma
+  verificação a verde já responde); cada um é verificado por um revisor independente antes de poder custar uma ronda de
+  correções — só uma confiança de 80 ou mais a abre, o resto fica no ledger como não confirmado. O `/prReview` verifica
+  antes de reportar. Dois ângulos novos: as regras escritas do projeto (a constituição, `CLAUDE.md` / `AGENTS.md`, os
+  comentários no código — citados) e o histórico das linhas que uma alteração reescreve (uma correção desfeita, o regresso
+  da causa raiz de um bug já corrigido).
 - **`/spec-simplify`** — uma passagem opcional antes do `/spec-finish`: limpezas que não mudam o comportamento do código
-  que a funcionalidade acrescentou — primeiro os smells que as revisões adiaram —, um commit cada, os seus testes depois
-  de cada alteração e as verificações do projeto no fim; nunca um teste, um contrato ou código que a funcionalidade não
-  escreveu; a passagem é revista e um finding confirmado é revertido. Com `--subagents` é um novo agente,
-  `spec-simplifier`, que a faz, e o gate SubagentStop devolve o DONE dele se faltarem as execuções finais com sucesso. As
-  duas ideias vêm dos plugins `code-review` e `code-simplifier` da Anthropic, reconstruídas à volta da spec e do gate de
-  evidência.
+  que a funcionalidade acrescentou — primeiro os smells que as revisões adiaram —, um commit por limpeza, os testes da
+  funcionalidade depois de cada alteração e as verificações do projeto no fim; nunca um teste, um contrato ou código que a
+  funcionalidade não escreveu; a passagem é revista e um problema confirmado é revertido. Com `--subagents` é um novo
+  agente, `spec-simplifier`, que a faz, e o gate SubagentStop devolve o DONE dele enquanto a secção `## Final runs` do
+  relatório não mostrar todas as execuções a passar. As duas ideias vêm dos plugins `code-review` e `code-simplifier` da
+  Anthropic, reconstruídas à volta da spec e do gate de evidência.
 
 ### Novidades da 1.21
 
@@ -1229,7 +1229,7 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   código que añadió la función — primero los smells que las revisiones aplazaron —, un commit cada una, sus pruebas tras
   cada cambio y las verificaciones del proyecto al final; nunca una prueba, un contrato ni código que la función no
   escribió; la pasada se revisa y un hallazgo confirmado se revierte. Con `--subagents` la hace un nuevo agente,
-  `spec-simplifier`, y la puerta SubagentStop devuelve su DONE si faltan las ejecuciones finales correctas. Las dos ideas
+  `spec-simplifier`, y la puerta SubagentStop devuelve su DONE mientras la sección `## Final runs` de su informe no muestre todas las ejecuciones en verde. Las dos ideas
   vienen de los plugins `code-review` y `code-simplifier` de Anthropic, reconstruidas en torno a la spec y la puerta de
   evidencia.
 
@@ -1510,7 +1510,7 @@ dev-spec-driven/                      ← plugin root
 ├── skills/dev-spec-driven/
 │   ├── SKILL.md                      ← trilingual track-based workflow
 │   └── references/                   ← deep library (EARS, scale, eval, safety, …)
-├── commands/                         ← 54 slash commands (trilingual descriptions; also the MCP prompts)
+├── commands/                         ← 55 slash commands (trilingual descriptions; also the MCP prompts)
 ├── agents/                           ← spec-implementer + spec-reviewer + spec-critic + spec-simplifier
 ├── evals/                            ← plugin evals for `claude plugin eval` (triggering EN/PT/ES + behavioural, with fixtures)
 ├── cli/dev-spec.js                   ← universal CLI (works in any tool / shell)

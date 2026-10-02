@@ -3019,10 +3019,10 @@ const msg = {
       simplifier: {
         head: (slug) => `dev-spec evidence gate: you report the simplification pass of '${slug}' as DONE, but`,
         noReport: (file) => `its report (${file}) does not exist.`,
-        noRun: (file, cmds) => `its report (${file}) doesn't show the final run of each project check — the exact command followed by its exit code: ${cmds}.`,
-        notPassing: (file, cmds) => `its report (${file}) shows no passing final run (exit 0) of ${cmds} — a simplification must leave every check green.`,
-        noSuite: (file) => `its report (${file}) doesn't end with a passing test run — the command and its exit 0 as the last run in the file.`,
-        todo: "Run the project checks (or the full test suite) on the final code and put each command, its exit code and the last lines of its output at the end of the report — or revert the change that broke a check, or report BLOCKED. (\"Behaviour unchanged\" is a claim: the runs are its proof.)",
+        noFinal: (file) => `its report (${file}) has no "## Final runs" section with a run in it — the last section, one line per run: - \`<command>\` → exit <code>.`,
+        noRun: (file, cmds) => `the "## Final runs" section of its report (${file}) doesn't show these runs with their exit code: ${cmds} — every project check must be there, one line per run: - \`<command>\` → exit <code>.`,
+        notPassing: (file, cmds) => `the final runs in its report (${file}) fail: ${cmds} — a simplification must leave every run green.`,
+        todo: "Run the project checks (or the full test suite) and the changed tasks' _Verify:_ on the final code and list them last in the report, under \"## Final runs\", one line each (- `<command>` → exit <code>, then the last lines of output) — or revert the change that made a run fail, or report BLOCKED. (\"Behaviour unchanged\" is a claim: the runs are its proof.)",
       },
       // `dev-spec stop-check` when nothing is sent back (the why code → one line).
       allow: {

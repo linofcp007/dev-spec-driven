@@ -720,10 +720,19 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
       /\*\*reverted\*\*, not repaired/.test(subSimp) && /dev-spec-driven:spec-simplifier/.test(subSimp) && /Verify pass \(one finding\) \| cheapest/.test(sub) &&
       /\*\*Verify before you report\.\*\*/.test(prr) && /"Unconfirmed \(below 80\)"/.test(prr) && /\*\*History\*\*/.test(prr) && /\*\*Written rules\*\*/.test(prr) &&
       /Only lines the branch added or changed/.test(simp) && /\*\*Never a test\*\*/.test(simp) && /\*\*Never a contract:\*\*/.test(simp) && /commit it alone/.test(simp) &&
-      /never edit the test, never fix forward/.test(simp) && /\*\*Final runs\*\* — LAST in the file/.test(simp) && /NO_CHANGES/.test(simp) && /Adapted from Anthropic's `code-simplifier` plugin/.test(simp) &&
-      /\*\*before\*\*\s+`\/spec-finish`/.test(scmd) && /\*\*reverted\*\* \(`git revert <sha>`\)/.test(scmd) && /done <feature> <n> --run/.test(scmd) && /Never "behaviour unchanged" without the runs/.test(scmd) &&
+      /never edit the test, never fix forward/.test(simp) && /\*\*`## Final runs`\*\* — LAST in the file/.test(simp) && /ONE line\s+per run/.test(simp) && /NO_CHANGES/.test(simp) && /Adapted from Anthropic's `code-simplifier` plugin/.test(simp) &&
+      /\*\*before\*\*\s+`\/spec-finish`/.test(scmd) && /\*\*reverted\*\*\s+\(`git revert <sha>`/.test(scmd) && /done <feature> <n> --run/.test(scmd) && /Never "behaviour unchanged" without the runs/.test(scmd) &&
       /\| Never a test, fixture or snapshot \|/.test(guideSimp) && /\/spec-simplify/.test(skill) && /\/spec-simplify/.test(exec) && /verify-mode reviewer/.test(exec) &&
       /agents\/spec-reviewer\.md` → Verify mode/.test(agentsMd) && /commands\/spec-simplify\.md/.test(agentsMd) &&
+      // review 1: an ❌ is never unconfirmed (nor pre-existing), a break on untouched lines is the diff's, the verifier gets the
+      // report, the simplify pass records the checks again, documents guard mode, never runs the built-in /simplify, and the
+      // simplify reviewer gets its inputs; reverts take the dependent commits and stop on a conflict; AGENTS.md scopes the rule
+      /An ❌ is never pre-existing and never UNCONFIRMED/.test(revVerify) && /\*\*An ❌ is never pre-existing:\*\*/.test(revNot) && /broken by it on lines it didn't touch/.test(revVerify) &&
+      /\*\*An ❌ comes back CONFIRMED or REFUTED, never unconfirmed\*\*/.test(subVerify) && /the implementer's report path/.test(subVerify) &&
+      /finish <feature> --run/.test(scmd) && /\*\*guard mode\*\*/.test(scmd) && /Don't run Claude Code's built-in `\/simplify` inside the pass/.test(scmd) && /after an inline pass too/.test(scmd) &&
+      /package path, MERGE_BASE, SIMPLIFY_BASE, the report path and the feature folder/.test(subSimp) && /a revert that conflicts stops the pass/.test(subSimp) &&
+      /A revert that conflicts → stop and report BLOCKED/.test(simp) && /review\.diff/.test(prr) && /A person's review comments go through/.test(agentsMd) &&
+      /\.specs\/_archive\//.test(revRules) && !/can suggest candidates/.test(scmd + guideSimp) &&
       [revNot, revVerify, revRules, revSimp, subVerify, subSimp, guideSimp, simp, scmd].every((t) => t.length > 200 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
       "1.22: spec-reviewer rates findings, lists what is not one, verifies one finding fresh (verify mode), checks the written rules + history and a simplification diff (simplify mode); the controller verifies each finding before a fix round (80+ confirmed, 50–79 unconfirmed, < 50 refuted) and runs the simplification pass (reverted, not repaired); /prReview verifies before it reports; the simplifier keeps the feature's lines, never a test or contract, one commit each, the final runs last; /spec-simplify, /executeTask, SKILL.md, AGENTS.md and the guide name them; no PR / CI steering (got " +
       js([revNot.length, revVerify.length, revRules.length, revSimp.length, subVerify.length, subSimp.length, guideSimp.length, simp.length, scmd.length]) + ")");

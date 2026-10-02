@@ -2866,10 +2866,10 @@ const msg = {
       simplifier: {
         head: (slug) => `dev-spec — gate de evidência: reportas a passagem de simplificação de '${slug}' como DONE, mas`,
         noReport: (file) => `o relatório (${file}) não existe.`,
-        noRun: (file, cmds) => `o relatório (${file}) não mostra a execução final de cada verificação do projeto — o comando exato seguido do seu exit code: ${cmds}.`,
-        notPassing: (file, cmds) => `o relatório (${file}) não mostra nenhuma execução final com sucesso (exit 0) de ${cmds} — uma simplificação tem de deixar todas as verificações a passar.`,
-        noSuite: (file) => `o relatório (${file}) não termina com uma execução dos testes com sucesso — o comando e o seu exit 0 como a última execução do ficheiro.`,
-        todo: "Corre as verificações do projeto (ou a bateria de testes completa) no código final e põe no fim do relatório cada comando, o exit code e as últimas linhas do output — ou reverte a alteração que partiu uma verificação, ou reporta BLOCKED. (\"Comportamento inalterado\" é uma afirmação: as execuções são a prova.)",
+        noFinal: (file) => `o relatório (${file}) não tem uma secção "## Final runs" com execuções — a última secção, uma linha por execução: - \`<comando>\` → exit <código>.`,
+        noRun: (file, cmds) => `a secção "## Final runs" do relatório (${file}) não mostra estas execuções com o seu exit code: ${cmds} — todas as verificações do projeto têm de lá estar, uma linha por execução: - \`<comando>\` → exit <código>.`,
+        notPassing: (file, cmds) => `as execuções finais do relatório (${file}) falham: ${cmds} — uma simplificação tem de deixar todas as execuções a passar.`,
+        todo: "Corre as verificações do projeto (ou a bateria de testes completa) e o _Verify:_ das tarefas alteradas no código final e põe-nos no fim do relatório, em \"## Final runs\", uma linha cada (- `<comando>` → exit <código>, depois as últimas linhas do output) — ou reverte a alteração que fez falhar uma execução, ou reporta BLOCKED. (\"Comportamento inalterado\" é uma afirmação: as execuções são a prova.)",
       },
       allow: {
         off: () => "gate de evidência: desligado (roadmap.json meta.stopCheck: false) — nada verificado.",

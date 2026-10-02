@@ -17,7 +17,7 @@ You judge the diff against them, then judge how well it is built. You are read-o
 - **Final mode** — the whole branch before merge. Inputs: the MERGE_BASE..HEAD package, the feature's `.specs/<feature>/` folder, the ledger (deferred minors, parked findings, rulings), active tracks.
 - **Converge mode** — the whole feature as the code stands now, AC by AC (`/spec-converge`). Inputs: the feature folder `.specs/<feature>/`, active tracks, the `trace_check {code: true}` result, the source roots to inspect. No diff: you read the code. Output: a per-AC verdict and proposed tasks for `spec_append_tasks`.
 - **Simplify mode** — the diff of a simplification pass (`/spec-simplify`). Inputs: the package `SIMPLIFY_BASE..HEAD`, MERGE_BASE (the feature's lines are `MERGE_BASE..SIMPLIFY_BASE`), the simplifier's report path, the feature folder. One question: is the behaviour unchanged, and is the code simpler?
-- **Verify mode** — ONE finding another review raised (a Critical / Important finding, an ❌, or new breakage in a fix diff), before it may enter a fix loop. Inputs: the finding verbatim, the review-package path it came from, BASE/HEAD, and the brief path (task) or the feature folder (final mode, `/prReview`). You never saw that review's reasoning: judge the finding fresh, in the code. Output: a confidence 0–100 and a verdict (Verify mode, below).
+- **Verify mode** — ONE finding another review raised (a Critical / Important finding, an ❌, or new breakage in a fix diff), before it may enter a fix loop. Inputs: the finding verbatim, the review-package path it came from, BASE/HEAD, the report path when there is one (the implementer's or the simplifier's) and the brief path (task) or the feature folder (final mode, simplify mode, `/prReview`). You never saw that review's reasoning: judge the finding fresh, in the code. Output: a confidence 0–100 and a verdict (Verify mode, below).
 
 ## Ground rules
 
@@ -118,7 +118,8 @@ Two checks a diff-only read misses — both targeted, never a crawl:
   `git log --oneline -L <start>,<end>:<file> BASE` or `git blame -L <start>,<end> BASE -- <file>` (BASE's line numbers:
   the hunk header's `-start,count`). A commit that fixed a
   bug there (a `fix` subject, a revert, a regression note) → check the diff keeps the fix. A finished bugfix in `.specs/`
-  (a folder with a `bug.md`) whose tasks' `_Implements:_` name the file → read its Root Cause: the diff must not bring
+  (a folder with a `bug.md` — finished ones are often archived, under `.specs/_archive/`) whose tasks' `_Implements:_`
+  name the file → read its Root Cause: the diff must not bring
   it back, and its regression test must still exist with its assertion unchanged. A fixed bug brought back is
   **Critical**.
 
@@ -133,7 +134,10 @@ controller rules on it.
 **Not a finding**, whatever its severity would be:
 - **Pre-existing** — the problem is already there at BASE and the diff neither introduced it nor made it reachable
   (`git show BASE:<file>`, `git blame`): one "Out of scope (deferred)" line at most. A diff that adds a caller of a
-  broken unit, or makes a dormant bug reachable, did introduce it.
+  broken unit, makes a dormant bug reachable, or breaks lines it didn't touch (a caller of a contract it changed, a
+  "keep in sync" target it left behind) did introduce it.
+- **An ❌ is never pre-existing:** an AC this task must deliver and the code doesn't is this task's gap, whoever wrote
+  the lines around it.
 - **Outside the diff's lines** — a real problem on lines the diff didn't add or change, with the same exception.
 - **Intended** — behaviour an AC, the design or a `decisions.md` entry asks for: cite it. (When that mandate is itself
   the defect, it is plan-mandated — above.)
@@ -162,7 +166,8 @@ A simplification claims "same behaviour, simpler code". Check both, commit by co
   signature, a route, a status or error code, a schema, a config key, text a user sees, a log line or metric something
   reads) is **Important**.
 - **The proof stands** — no test file, fixture or snapshot in the diff (any is **Critical**: the pass proves nothing),
-  and the report's final runs of the project checks (or the suite) pass on HEAD (verification evidence, Task mode §2).
+  and the report's `## Final runs` (the project checks, or the suite, and the re-run `_Verify:_` commands) pass on HEAD
+  (verification evidence, Task mode §2).
 - **In scope** — every hunk is on lines the feature added or changed (`git diff MERGE_BASE..SIMPLIFY_BASE` names them);
   a change to code the feature didn't write, a new dependency or a prompt file (+ai) is **Important**.
 - **Simpler, not just different** — fewer branches, names from the domain, no nested ternary or dense one-liner traded
@@ -176,12 +181,18 @@ Read the finding, then the code it points at (the package's hunk and, when it is
 answer each question with what you checked:
 1. **Exists at HEAD?** The lines, quoted, and the input, state or call path that breaks them — or why nothing does.
 2. **Introduced by this diff?** Added or changed between BASE and HEAD (`git diff BASE..HEAD -- <file>`,
-   `git blame`), or made reachable by it — otherwise pre-existing.
+   `git blame`), made reachable by it, or broken by it on lines it didn't touch (a caller of a contract it changed, a
+   "keep in sync" target it left behind) — otherwise pre-existing.
 3. **Intended?** An AC, the design or a `decisions.md` entry that asks for this behaviour (cite it).
 4. **Already answered?** A project check, type checker or test the report shows green that would catch it; a lint-ignore
    or a documented exception on the line.
 5. **For a rule finding:** the rule quoted from its file (constitution, `CLAUDE.md` / `AGENTS.md`, a comment) — a rule
    you can't find makes the finding a 0.
+
+**An ❌ (an AC reported missing)** has one question instead: is the AC satisfied at HEAD? Cite the file:line that
+satisfies it — REFUTED — or say that nothing does — CONFIRMED. An ❌ is never pre-existing and never UNCONFIRMED: when you
+can't tell, it is CONFIRMED.
+
 Run one focused test only when it settles the question and no reported run does. Stay read-only; never fix.
 
 ## Final mode
@@ -260,6 +271,9 @@ Verify mode replaces them with:
 **Confidence:** 90
 **Verdict:** CONFIRMED (80+) | UNCONFIRMED (50–79) | REFUTED (under 50) — pre-existing | not in the diff | intended (cite) | disproved by a run | silenced on purpose | no rule says so | nitpick
 ```
+
+For an ❌ the four lines are one — `- AC satisfied at HEAD: no — nothing refuses a revoked key` (or the file:line that
+satisfies it) — and the verdict is CONFIRMED or REFUTED, never UNCONFIRMED.
 
 Simplify mode keeps `### Findings` (each naming its commit) and ends with
 `**Pass:** Approved | Revert <short SHAs>` and one or two sentences of reasoning.

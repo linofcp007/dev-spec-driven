@@ -36,15 +36,20 @@ Review the given scope — by default the branch, `git diff <merge-base>..HEAD` 
   touches, and the comments around the changed code ("never…", "keep in sync with…"): a break quotes the rule with its
   file:line (a rule you can't quote is not one; how-to-work instructions for an agent are no review rule).
 - **History** — the lines the branch rewrites or deletes (not lines it added): `git log --oneline -L <start>,<end>:<file>
-  <merge-base>` / `git blame`; a fix made there must survive, and a finished bugfix in `.specs/` whose tasks implement
-  the file keeps its Root Cause away and its regression test unchanged — a fixed bug brought back is Critical.
+  <merge-base>` / `git blame`; a fix made there must survive, and a finished bugfix in `.specs/` (or `.specs/_archive/`)
+  whose tasks implement the file keeps its Root Cause away and its regression test unchanged — a fixed bug brought back
+  is Critical.
 
 **Verify before you report.** Each Critical / Important finding is a claim until checked: does it exist at HEAD (the
-input or call path that breaks it), did this branch introduce it or make it reachable (not pre-existing, not on lines
-the branch left alone), is it what an AC, the design or `decisions.md` asks for, does a green check or a documented
-exception already answer it? Rate it 0–100 (the scale in the `spec-reviewer` agent → Calibration). With a subagent tool,
-dispatch one `dev-spec-driven:spec-reviewer` in **verify** mode per finding, in parallel, cheapest tier (standard for a
-security, concurrency or data-loss finding); without one, check each yourself and say the findings are self-verified.
+input or call path that breaks it), did this branch introduce it, make it reachable or break unchanged lines with it (a
+caller of a contract it changed) — not pre-existing —, is it what an AC, the design or `decisions.md` asks for, does a
+green check or a documented exception already answer it? An AC with no code is never pre-existing: it is confirmed, or
+refuted with the file:line that satisfies it. Rate each 0–100 (the scale in the `spec-reviewer` agent → Calibration).
+With a subagent tool, write the branch diff to a file first (`git diff -U10 <merge-base>..HEAD` into
+`.specs/<feature>/.execution/review.diff` — a missing `.execution/` gets a `.gitignore` holding `*` — or a temp file),
+then dispatch one `dev-spec-driven:spec-reviewer` in **verify** mode per finding — the finding, that file, the merge
+base and HEAD, the feature folder — in parallel, cheapest tier (standard for a security, concurrency or data-loss
+finding); without one, check each yourself and say the findings are self-verified.
 Report the findings rated **80 or more** by severity; list the rest in one line each under "Unconfirmed (below 80)" —
 never dropped silently.
 

@@ -371,7 +371,7 @@ and the proof.)
 | No new dependency, no new shared file, no prompt file (+ai) | a shared helper is a design decision; a prompt change is eval-gated (`/promptReview`) |
 | One simplification at a time: the covering tests, then its own commit (`refactor(<feature>): … — no behaviour change`) | a red test points at one change; any one can be reverted alone (Beck's *Tidy First?*: structure changes apart from behaviour changes) |
 | A red test → undo the change, never edit the test | a cleanup that isn't safe as written is dropped |
-| The baseline green first; the project checks (or the full suite) again at the end; each changed task's `_Verify:_` re-run | the claim "behaviour unchanged" needs the runs — a run made before the pass reads `code-changed` at `/spec-finish` |
+| The baseline green first; the project checks (or the full suite) again at the end and recorded; each changed task's `_Verify:_` re-run | the claim "behaviour unchanged" needs the runs — and `/spec-finish`'s `code-changed` rule sees only the files the tasks implement |
 | A review of the pass (the reviewer's **simplify** mode); a confirmed finding is reverted, not repaired | same behaviour and simpler are both claims |
 
 What to simplify: the smells table above (deep nesting → guard clauses, a long function → Extract Function, dead code,
@@ -381,10 +381,11 @@ merge unrelated concerns, don't remove an abstraction that names a concept, keep
 asks for stays, however odd it looks (a comment citing an AC or a decision).
 
 With subagents the `dev-spec-driven:spec-simplifier` agent does the pass and writes
-`.specs/<feature>/.execution/simplify-report.md`; in Claude Code a SubagentStop hook sends back its DONE when that report
-lacks the final passing runs — each project check followed by an exit 0 (with no project checks, its last run passing).
-Inline, the session does the same loop; Claude Code's built-in `/simplify` can suggest candidates, and each one still
-goes through it.
+`.specs/<feature>/.execution/simplify-report.md`; in Claude Code a SubagentStop hook sends back its DONE unless that
+report ends with a `## Final runs` section — one line per run, `` - `<command>` → exit 0 `` — in which every run passes
+and every project check is one of the runs. Inline, the session does the same loop and writes the same report. Don't run
+Claude Code's built-in `/simplify` inside the pass: it applies its cleanups in one go, over its own idea of the changed
+code. With guard mode on, each edit of the pass asks the user (once every task is done, no open task covers it).
 
 ---
 
