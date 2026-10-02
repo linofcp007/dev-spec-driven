@@ -2266,6 +2266,8 @@ const msg = {
         packReserved: (list, slug, since) => `Rename its track pack(s) from before ${since || "1.17"} — ${list}: the name is reserved now, so the track is inactive (details: ${DEV_SPEC} doctor ${slug}, check track-pack-missing)`,
         // 1.19 T review: a pack whose marker is a built-in track's now
         packMarkerReserved: (list, slug, since, tracks) => `Change the marker of its track pack(s) from before ${since || "1.19"} — ${list}: the marker is a built-in track's now, so the pack is inactive; or adopt the built-in track: ${DEV_SPEC} add-track ${slug} ${tracks} (details: ${DEV_SPEC} doctor ${slug}, check track-pack-missing)`,
+        // 1.22 review 2: criteria numbered with bare AC-n IDs (approved before 1.22) — renumber, then re-approve
+        bareAcIds: (list, slug, file = "requirements.md") => `Renumber the criteria ${file} numbers with bare IDs (${list}) as US-<story>.AC-<n> — and their references in tasks.md and test-plan.md — then re-approve: since 1.22 a bare AC-n is no ID trace_check reads, so doctor (ears, traceability) fails and the approval is refused (details: ${DEV_SPEC} doctor ${slug})`,
         critic: (files) => `Review it with the spec-critic agent (read-only), phase by phase: ${files || "—"}`,
         converge: (files) => "Run the spec-reviewer converge pass (the done tasks against their ACs)" + (files ? `, then the spec-critic agent on ${files}` : ""),
         none: "No spec review needed — every task is done",

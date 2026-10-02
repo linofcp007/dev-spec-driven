@@ -70,7 +70,12 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   for the whole call: `traceTestCode()` accepts a function for `scan`, called only when a feature needs it. Stable codes (never
   localized): `status` not-started · planning · executing · complete · finished (= phase complete + a finish baseline),
   `review` critic (no task ticked) · converge (some done, some open) · none, `group` blocked (doctor fail) · attention · ok,
-  `attention` codes, history skip `reason`s. `lines` (and UPGRADE.md) are rendered in the PROJECT language by
+  `attention` codes, history skip `reason`s. **Bare AC-n IDs (1.22 review 2):** a feature approved before 1.22 with criteria
+  numbered `AC-1`, `AC-2` fails doctor's `ears` / `traceability` now (a bare ID is no ID trace_check reads); the audit lists them
+  (`bareAcIds` — `criteriaBareIds()` over the criteria, a change's change.md included — and `criteriaFile`), attention
+  `bare-ac-ids`, and an item (`upgrade.item.bareAcIds`, EN / PT / ES, in UPGRADE.md too): renumber them US-<story>.AC-<n>, their
+  references in tasks.md / test-plan.md too, then re-approve. It never renumbers anything itself (the audit edits no spec).
+  `lines` (and UPGRADE.md) are rendered in the PROJECT language by
   `upgradeLines()` / `renderUpgradeMd()` over one item list (`upgradeItems()`); next_action's recommendation stays in the
   feature's language, as everywhere.
 - **The migrations** (`apply: true`) never edit an artifact, approve, tick, untick or delete. Per feature, under its lock,
