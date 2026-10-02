@@ -728,11 +728,18 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
       // report, the simplify pass records the checks again, documents guard mode, never runs the built-in /simplify, and the
       // simplify reviewer gets its inputs; reverts take the dependent commits and stop on a conflict; AGENTS.md scopes the rule
       /An ❌ is never pre-existing and never UNCONFIRMED/.test(revVerify) && /\*\*An ❌ is never pre-existing:\*\*/.test(revNot) && /broken by it on lines it didn't touch/.test(revVerify) &&
-      /\*\*An ❌ comes back CONFIRMED or REFUTED, never unconfirmed\*\*/.test(subVerify) && /the implementer's report path/.test(subVerify) &&
-      /finish <feature> --run/.test(scmd) && /\*\*guard mode\*\*/.test(scmd) && /Don't run Claude Code's built-in `\/simplify` inside the pass/.test(scmd) && /after an inline pass too/.test(scmd) &&
-      /package path, MERGE_BASE, SIMPLIFY_BASE, the report path and the feature folder/.test(subSimp) && /a revert that conflicts stops the pass/.test(subSimp) &&
-      /A revert that conflicts → stop and report BLOCKED/.test(simp) && /review\.diff/.test(prr) && /A person's review comments go through/.test(agentsMd) &&
+      /\*\*An ❌ comes back CONFIRMED or REFUTED, never unconfirmed\*\*/.test(subVerify) && /the report path \(the implementer's, or the simplifier's\)/.test(subVerify) &&
+      /finish <feature> --run/.test(scmd) && /\*\*guard\s+mode\*\*/.test(scmd) && /Don't run Claude Code's built-in `\/simplify` inside the pass/.test(scmd) && /after an inline pass too/.test(scmd) &&
+      /package path, MERGE_BASE, SIMPLIFY_BASE, the report path and the feature folder/.test(subSimp) &&
+      /review\.diff/.test(prr) && /A person's review comments go through/.test(agentsMd) &&
       /\.specs\/_archive\//.test(revRules) && !/can suggest candidates/.test(scmd + guideSimp) &&
+      // review 2: a conflicting revert is aborted, the simplifier runs in the foreground under guard mode, the checks are
+      // recorded under their meta.checks names (and never invented), an ❌ carries no confidence, the run lines sit at the
+      // margin with their output indented, and the section runs to the end of the file
+      [simp, scmd, subSimp].every((t) => /git revert --abort/.test(t)) && /run_in_background: false/.test(scmd) && /run_in_background: false/.test(subSimp) &&
+      /each under its `meta\.checks` name/.test(scmd) && /never add checks just to record a run/.test(scmd) && /Never add\s+checks to record a run/.test(subSimp) &&
+      /with no `\*\*Confidence:\*\*` line/.test(rev) && /its verdict\s+decides, not a confidence/.test(subVerify) &&
+      /at the margin/.test(simp) && /INDENTED lines/.test(simp) && /to the end of the file/.test(simp) &&
       [revNot, revVerify, revRules, revSimp, subVerify, subSimp, guideSimp, simp, scmd].every((t) => t.length > 200 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
       "1.22: spec-reviewer rates findings, lists what is not one, verifies one finding fresh (verify mode), checks the written rules + history and a simplification diff (simplify mode); the controller verifies each finding before a fix round (80+ confirmed, 50–79 unconfirmed, < 50 refuted) and runs the simplification pass (reverted, not repaired); /prReview verifies before it reports; the simplifier keeps the feature's lines, never a test or contract, one commit each, the final runs last; /spec-simplify, /executeTask, SKILL.md, AGENTS.md and the guide name them; no PR / CI steering (got " +
       js([revNot.length, revVerify.length, revRules.length, revSimp.length, subVerify.length, subSimp.length, guideSimp.length, simp.length, scmd.length]) + ")");

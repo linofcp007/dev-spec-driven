@@ -19,7 +19,8 @@ SubagentStop gate read.
 - **Revert round (resumed).** The controller sends the simplify-mode review's confirmed findings: `git revert` each
   commit they name — and the later commits that build on it, newest first —, re-run the project checks (or the full
   suite), and append a revert section to the report. Revert — don't repair: a cleanup that isn't safe as written is
-  dropped. A revert that conflicts → stop and report BLOCKED with the conflict; never resolve it by hand.
+  dropped. A revert that conflicts → `git revert --abort`, then report BLOCKED with the conflict; never resolve it by
+  hand.
 
 ## Scope — what you may touch
 
@@ -86,10 +87,11 @@ Write it to the report path, in the feature's language, under these headings —
 - **`## Left alone`** — list items you didn't do and why (outside the feature's lines, a contract, unsure); smells in
   code the feature didn't write, as refactor candidates.
 - **`## Final runs`** — LAST in the file: each project check (or the suite run) and each re-run `_Verify:_`, ONE line
-  per run — `` - `<the exact command>` → exit 0 (212 passing) `` — the command in backticks, its exit code written out
-  right after it on the same line; the last lines of output go on the indented lines below it. In Claude Code a
-  SubagentStop hook reads this file when you report DONE: unless every run in the last `## Final runs` section exits 0
-  and every project check is one of those runs, your stop is sent back.
+  per run, at the margin — `` - `<the exact command>` → exit 0 (212 passing) `` — the command in backticks (double
+  backticks when it holds one), its exit code written out right after it on the same line; the last lines of output go
+  on INDENTED lines below it. In Claude Code a SubagentStop hook reads this file when you report DONE: everything after
+  the last `## Final runs` heading counts, to the end of the file — unless every run there exits 0 and every project
+  check is one of those runs, your stop is sent back.
 
 On a revert round, **append** a revert section (`## Revert round`: the commits reverted, why) and a new `## Final runs`
 after it — the last one is the one that counts.

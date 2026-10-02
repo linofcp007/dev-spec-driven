@@ -273,7 +273,8 @@ Verify mode replaces them with:
 ```
 
 For an ❌ the four lines are one — `- AC satisfied at HEAD: no — nothing refuses a revoked key` (or the file:line that
-satisfies it) — and the verdict is CONFIRMED or REFUTED, never UNCONFIRMED.
+satisfies it) — with no `**Confidence:**` line: the verdict is CONFIRMED or REFUTED, never UNCONFIRMED, and it alone
+decides.
 
 Simplify mode keeps `### Findings` (each naming its commit) and ends with
 `**Pass:** Approved | Revert <short SHAs>` and one or two sentences of reasoning.

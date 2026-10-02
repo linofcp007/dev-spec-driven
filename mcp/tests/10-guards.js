@@ -576,6 +576,30 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       siOk2.block === false && siOk2.why === "simplify-ok" && ![siFail, siUnrun, siPrefix, siLintNoCode].some((r) => /`npm test`, `npm test`/.test(r.reason || "")),
       "1.22 SubagentStop (spec-simplifier) with project checks: a red check (also one whose command holds 'exit(0)'), a check missing or without its code → block naming exactly those; a longer command starting with a check's never stands in; all green → allowed (got " +
       JSON.stringify([siFail.why, siUnrun.why, siPrefix.why, siLintNoCode.why, siOk2.why]) + ")");
+    // review 2: the section runs from the last heading to the END — an output "# pass 212" line (indented or not) never cuts
+    // it short, a revert round written under it without a new heading still counts; runs start at the margin (an indented
+    // "`foo` is deprecated" is output); fences are counted from the heading (the 256 KB window may start inside one); a
+    // ``double-backtick`` span holds a command with a backtick.
+    const siTap = siW("## Final runs\n- `npm test` → exit 0\n  # pass 212\n  # fail 0\n- `node --test test/cart.test.js` → exit code 1\n");
+    const siTap0 = siW("## Final runs\n- `npm test` → exit 0\n# pass 212\n- `node --test test/cart.test.js` → exit code 1\n");
+    const siRevertNoHead = siW("## Final runs\n- `npm test` → exit 0\n## Revert round\n- reverted b2c3d4e\n- `npm test` → exit code 1\n");
+    const siIndented = siW("## Final runs\n- `npm test` → exit 0\n  `foo` is deprecated\n");
+    fs.writeFileSync(siRep, "## Baseline\n```\n" + "  ok 1 - cart totals\n".repeat(16000) + "```\n## Final runs\n- `npm test` → exit 0\n");
+    const siFenceWindow = si(), siFenceSize = fs.statSync(siRep).size;
+    const pTick = c1Dir("simplify-backtick");
+    S.initProject(pTick, ["core"], "en", { checks: { stamp: "echo `date`" } });
+    const fTick = S.createFeature(pTick, "Checkout", ["core"], "", undefined, "en");
+    fs.mkdirSync(path.join(fTick.dir, ".execution"), { recursive: true });
+    fs.writeFileSync(path.join(fTick.dir, ".execution", "simplify-report.md"), "## Final runs\n- `` echo `date` `` → exit 0\n");
+    const siTickCmd = S.stopCheck(pTick, { message: siReply, agent: siAgent });
+    // a code span that merely holds the word "blocked" is no status — the claim stands and the report is read
+    const siCodeStatus = siW("## Final runs\n- `npm test` → exit code 1\n", "**Status:** DONE\nCommits: a1b2c3d refactor: reject when `order.status === \"blocked\"`\nReport: .specs/checkout/.execution/simplify-report.md");
+    const sImCode = S.stopCheck(pIm, { message: "**Status:** DONE\nCommits: abc1234 feat(auth): reject when `order.status === \"blocked\"`\nReport: .specs/auth/.execution/task-1-report.md", agent: "spec-implementer" });
+    ok(siTap.block && /fail: `node --test test\/cart\.test\.js`/.test(siTap.reason) && siTap0.block && siRevertNoHead.block && /fail: `npm test`/.test(siRevertNoHead.reason) &&
+      siIndented.why === "simplify-ok" && siFenceWindow.why === "simplify-ok" && siFenceSize > 256 * 1024 && siTickCmd.why === "simplify-ok" &&
+      siCodeStatus.block && siCodeStatus.why === "simplifier-evidence" && sImCode.block && sImCode.why === "implementer-evidence",
+      "1.22 review 2: '# pass 212' output (indented or not) never ends '## Final runs', a revert round under it without a new heading counts, an indented backticked word is output, fences count from the heading, a ``double-backtick`` command matches its check, a code span holding 'blocked' is no status (got " +
+      JSON.stringify([siTap.why, siTap0.why, siRevertNoHead.why, siIndented.why, siFenceWindow.why, siTickCmd.why, siCodeStatus.why, sImCode.why]) + ")");
     const siNoChange = si("**Status:** NO_CHANGES\nNothing on the list was worth a change.\nReport: .specs/checkout/.execution/simplify-report.md");
     const siNoChangeBt = si("**Status:** `NO_CHANGES`\nReport: .specs/checkout/.execution/simplify-report.md");
     const siBlocked = si("**Status:** BLOCKED\nThe baseline is red: 2 failing.");

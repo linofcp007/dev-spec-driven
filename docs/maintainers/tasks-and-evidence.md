@@ -332,19 +332,23 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   STATUS BLOCKED / NEEDS_CONTEXT, no report path, or no runnable `_Verify:_` → allowed.
 - **spec-simplifier (SubagentStop, 1.22):** it rewrites code already reviewed and verified, so its DONE /
   DONE_WITH_CONCERNS needs `.specs/<f>/.execution/simplify-report.md` (named in its reply) to END with the proof:
-  `finalRuns()` reads the LAST `## Final runs` section (any heading level; PT "Execuções finais" / ES "Ejecuciones
-  finales" too; fenced blocks skipped) up to the next heading — a run is ONE line, an optional bullet, the command in
-  backticks, then its exit code (`reportExitCodes()` on the rest of that line); output lines are no runs. Every run must
-  exit 0 (`notPassing`), every project check (`projectChecks()`, flattened, deduplicated) must be one of the runs AS A
-  WHOLE COMMAND — `npm test -- t/x.test.js` is another run — with a code (`noRun`, also for a run line without one), and
-  a report with no such section (a baseline only) is `noFinal`. The report is read from its END (`readStopReport(file,
-  true)`, ≤ `STOP_REPORT_MAX`). STATUS BLOCKED / NEEDS_CONTEXT (`not-done`), NO_CHANGES (`no-changes`), no claim, or no
+  `finalRuns()` reads everything after the LAST `## Final runs` heading (at the margin, any level; PT "Execuções finais" /
+  ES "Ejecuciones finales" too) to the END of the file — the section is the report's last, so an output line like
+  "# pass 212" never ends it and a revert round written below it without a new heading still counts. A run is ONE line
+  at the margin: an optional bullet, the command in backticks (``double`` when it holds one), then its exit code
+  (`reportExitCodes()` on the rest of that line); indented lines are output and fenced blocks are skipped (fences counted
+  from the heading — the 256 KB tail window may start inside one). Every run must exit 0 (`notPassing`), every project
+  check (`projectChecks()`, flattened, deduplicated) must be one of the runs AS A WHOLE COMMAND — `npm test --
+  t/x.test.js` is another run — with a code (`noRun`, also for a run line without one), and a report with no such
+  heading (a baseline only) is `noFinal`. The report is read from its END (`readStopReport(file, true)`, ≤
+  `STOP_REPORT_MAX`). STATUS BLOCKED / NEEDS_CONTEXT (`not-done`), NO_CHANGES (`no-changes`), no claim, or no
   simplify-report path (or an unknown feature) in the reply (`no-report`) → allowed; `simplify-ok` / `simplifier-evidence`.
-  Both subagent gates read the status through `statusProse()` (inline code unwrapped: "**Status:** `DONE`" is a claim —
-  1.22 review 1; it used to skip the implementer's report). The hard gate stays `spec_finish`'s `code-changed`, which
-  sees only the tasks' `_Implements:_` files — /spec-simplify records the project checks again after the pass for that
-  reason. Shared helpers: `readStopReport()`, `flatReport()`, `reportExitCodes()` (the implementer's gate reads
-  through them unchanged).
+  Both subagent gates read the status through `statusProse()`: a status TOKEN in inline code is unwrapped ("**Status:**
+  `DONE`" is a claim — it used to skip the implementer's report), every other code span still drops out with
+  `stopProse` (review 2: unwrapping all of them made "`order.status === "blocked"`" a BLOCKED status). The hard gate
+  stays `spec_finish`'s `code-changed`, which sees only the tasks' `_Implements:_` files — /spec-simplify records the
+  project checks again after the pass for that reason. Shared helpers: `readStopReport()`, `flatReport()`,
+  `reportExitCodes()` (the implementer's gate reads through them unchanged).
 - **The hook** (`hooks/stop-hook.js`): registered in hooks.json for **Stop** (no matcher) and **SubagentStop** with matcher
   `^(dev-spec-driven:)?spec-(implementer|simplifier)$` — plugin subagents IGNORE a `hooks` block in their own frontmatter, so it must
   live in the plugin's hooks.json. It reads `last_assistant_message` (a bounded transcript tail for older payloads),

@@ -38,10 +38,11 @@ local, no pull requests, no CI.
   mentions it.
 - **The `spec-simplifier` agent** (4 plugin agents) does the pass under `--subagents`, and the SubagentStop gate now
   covers it (hooks.json matcher `^(dev-spec-driven:)?spec-(implementer|simplifier)$`): its DONE is sent back unless
-  `.specs/<feature>/.execution/simplify-report.md` ends with a `## Final runs` section — one line per run, ``- `<command>`
-  → exit 0`` — in which every run passes and every project check is one of the runs (as a whole command: a longer one
-  that starts with it, like a re-run `_Verify:_`, never stands in). A baseline run, a code quoted in output, a fenced
-  block or a failed run followed by a passing one never pass it; the report is read from its end. `dev-spec
+  `.specs/<feature>/.execution/simplify-report.md` ends with a `## Final runs` section — everything after its last such
+  heading, one line per run at the margin, ``- `<command>` → exit 0``, output indented below — in which every run passes
+  and every project check is one of the runs (as a whole command: a longer one that starts with it, like a re-run
+  `_Verify:_`, never stands in). A baseline run, a code quoted in output, a fenced block or a failed run followed by a
+  passing one never pass it; the report is read from its end. `dev-spec
   stop-check --agent spec-simplifier` and `spec_stop_check {agent}` give the same decision (`why`: `simplify-ok` ·
   `simplifier-evidence` · `no-changes` · `no-report`; EN / PT / pt-BR / ES).
 
@@ -50,16 +51,22 @@ local, no pull requests, no CI.
   pass before closing, the verify and simplifier rows in model selection, three new rationalizations.
 - `references/code-reuse-and-quality.md`: "The simplification pass" (the rules and why), a checklist item.
 - The evidence gate's "not-done" line now says "the subagent" (it covers the simplifier too).
-- **Fixed:** an implementer's "**Status:** `DONE`" (the status in backticks) read as no claim, so its report was never
-  checked; a status in inline code is read now.
+
+### Fixed
+- An implementer's "**Status:** `DONE`" (the status in backticks) read as no claim, so its report was never checked; a
+  status token in inline code is read now — any other code span still isn't ("`order.status === "blocked"`" in a commit
+  line is no status).
 
 ### Tests
-- `node mcp/test.js` 1686 assertions (was 1680), `node cli/test-cli.js` 523 (was 522): the simplifier's SubagentStop gate
-  (its `## Final runs` section: no report, a baseline only, a failed run hidden by a later passing one, a code quoted in
-  output, a longer command starting with a check's, a fenced block, a revert round's later section; no report, a red final run, a check never run, a report past the read cap read from its end, a baseline run that never stands in, a code inside the command, NO_CHANGES /
-  BLOCKED / no report path allowed, the hook's reason = the engine's, EN / PT / ES strings, `stop-check --agent
-  spec-simplifier` in PT), the hooks.json matcher, 4 agents and 55 commands, and the prose of the verify pass, the
-  written rules and history, the simplify mode and the simplification pass.
+- `node mcp/test.js` 1687 assertions (was 1680), `node cli/test-cli.js` 523 (was 522): the simplifier's SubagentStop gate
+  — its `## Final runs` section: no report, a baseline only, a red run, a failed run hidden by a later passing one, a code
+  quoted in output or in a fenced block, a check never run or without its code, a longer command starting with a
+  check's, a check listed twice, "# pass 212" output lines, a revert round with and without a new heading, a 256 KB
+  report read from its end (also when the window starts inside a fence), a double-backtick command, a status in
+  backticks vs a code span holding "blocked"; NO_CHANGES / BLOCKED / no report path allowed; the hook's reason = the
+  engine's; EN / PT / pt-BR / ES strings; `stop-check --agent spec-simplifier` in PT —, the hooks.json matcher, 4 agents
+  and 55 commands, and the prose of the verify pass, the written rules and history, the simplify mode and the
+  simplification pass.
 
 ## [1.21.1] — 2026-09-30
 

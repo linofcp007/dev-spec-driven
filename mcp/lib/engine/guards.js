@@ -1047,9 +1047,10 @@ function stopCheck(projectDir, opts = {}) {
     reason: lines.join("\n"),
   });
 }
-// A subagent's status line as the gates read it: its prose (stopProse) with inline code unwrapped first — "**Status:**
-// `DONE`" is a status, not code; fenced blocks still drop out.
-const statusProse = (message) => stopProse(String(message).replace(/(?<!`)`([^`\n]+)`(?!`)/g, "$1"));
+// A subagent's status as the gates read it: its prose (stopProse) with a status TOKEN in inline code unwrapped first —
+// "**Status:** `DONE`" is a status, not code — while every other code span still drops out ("`order.status ===
+// "blocked"`" in a commit line is no status; 1.22 review 2).
+const statusProse = (message) => stopProse(String(message).replace(/`\s*(done_with_concerns|done|blocked|needs_context|no_changes)\s*`/gi, "$1"));
 const STATUS_DONE_RE = /(?<![\p{L}_])status\W{0,8}done(?:_with_concerns)?(?![\p{L}_])/iu;
 const STATUS_NOT_DONE_RE = /(?<![\p{L}_])status\W{0,8}(?:blocked|needs_context)(?![\p{L}_])/iu;
 // A spec-implementer's stop (SubagentStop): it never ticks tasks (the controller does, after review), so its gate is its
@@ -1112,31 +1113,29 @@ function reportExitCodes(body) {
   return [...body.matchAll(/(?<![\p{L}_])(?:exit(?:ed)?(?:\s+with)?(?:[\s_-]*(?:code|status))?|c[óo]digo\s+de\s+(?:sa[íi]da|salida))\W{0,4}(-?\d+)/giu)]
     .map((x) => ({ code: parseInt(x[1], 10), index: x.index }));
 }
-// The runs a simplification report proves its claim with: the lines of its LAST "## Final runs" section (any heading level;
-// the heading is English-stable like a marker — PT "Execuções finais" / ES "Ejecuciones finales" are read too), up to the
-// next heading. A run is ONE line: an optional bullet, the command in backticks, then its exit code — "- `npm test` → exit 0
-// (212 passing)". Output lines (no backticked command first) and fenced blocks are no runs, so a code quoted in a test's
-// output never counts, and a command that starts with a check's (`npm test -- t/x.test.js`) is another command.
-// → null without such a section, else [{command (flattened), code (null: the line names none)}] — a command's last line wins.
+// The runs a simplification report proves its claim with: everything after its LAST "## Final runs" heading (a heading at
+// the margin, any level; English-stable like a marker — PT "Execuções finais" / ES "Ejecuciones finales" are read too) to
+// the END of the file — the section is the report's last, so nothing after it ends it: a "# pass 212" output line can't,
+// and a revert round written below it without a new heading still counts. A run is ONE line at the margin: an optional
+// bullet, the command in backticks (``double`` when it holds one), then its exit code — "- `npm test` → exit 0 (212
+// passing)". Indented lines are its output and fenced blocks (counted from the heading — the read window may start inside
+// one) are skipped, so a code quoted in output never counts, and a command that starts with a check's
+// (`npm test -- t/x.test.js`) is another command.
+// → null without such a heading, else [{command (flattened), code (null: the line names none)}] — a command's last line wins.
 function finalRuns(report) {
   const lines = report.split(/\r?\n/);
-  const heading = (s) => /^\s{0,3}#{1,6}\s/.test(s);
-  let start = -1, fence = false;
-  lines.forEach((s, i) => {
-    if (/^\s{0,3}(?:`{3,}|~{3,})/.test(s)) fence = !fence;
-    else if (!fence && /^\s{0,3}#{1,6}\s*(?:final runs|execu[çc][õo]es finais|ejecuciones finales)(?![\p{L}])/iu.test(s)) start = i;
-  });
+  let start = -1;
+  lines.forEach((s, i) => { if (/^#{1,6}\s*(?:final runs|execu[çc][õo]es finais|ejecuciones finales)(?![\p{L}])/iu.test(s)) start = i; });
   if (start < 0) return null;
   const runs = new Map();
-  fence = false;
+  let fence = false;
   for (let i = start + 1; i < lines.length; i++) {
     if (/^\s{0,3}(?:`{3,}|~{3,})/.test(lines[i])) { fence = !fence; continue; }
     if (fence) continue;
-    if (heading(lines[i])) break;
-    const m = lines[i].match(/^\s*(?:[-*+]\s+|\d+[.)]\s+)?`([^`]+)`(.*)$/);
+    const m = lines[i].match(/^(?:[-*+]\s+|\d+[.)]\s+)?(?:``\s?(.+?)\s?``|`([^`]+)`)(.*)$/);
     if (!m) continue;
-    const command = flatReport(m[1]);
-    const code = (reportExitCodes(flatReport(m[2]))[0] || {}).code;
+    const command = flatReport(m[1] !== undefined ? m[1] : m[2]);
+    const code = (reportExitCodes(flatReport(m[3]))[0] || {}).code;
     runs.delete(command);
     runs.set(command, code === undefined ? null : code);
   }
