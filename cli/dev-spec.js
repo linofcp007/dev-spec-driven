@@ -124,6 +124,7 @@
  *        prompts: --args "…" (the command's arguments, = prompts/get {arguments: {args}})
  *        import: --text "<markdown>" (a plan / ExecPlan's text, = spec_import {text}) · statusline: --print-config
  *        Switches: --x or --x=true|false (1/0, yes/no, on/off). --json prints a refusal's {ok:false,…} result on stdout (exit 1).
+ *        help, rules, mcp-config and evals print text only: --json there is a usage error (exit 1).
  */
 
 const fs = require("fs");
@@ -337,6 +338,8 @@ function mcpConfig(client) {
 
 // ---- dispatch --------------------------------------------------------------
 const CLI_LANGS = spec.LANGS; // = the MCP tools' `lang` enum (en · pt · es · pt-BR)
+// The commands whose output is text only — no structured result — so --json is refused there (main; the help too).
+const TEXT_ONLY_COMMANDS = new Set(["rules", "mcp-config", "evals"]);
 
 // ---- statusline (1.16 C1) ----------------------------------------------------
 // Claude Code runs the settings.json "statusLine" command after every assistant message (debounced, cancelled when a newer
@@ -416,6 +419,11 @@ function main() {
     flags.lang = l;
   }
   normalizeBoolFlags(); // `--run=false` is false, `--run=maybe` an error — before any command runs
+  // 1.22 review: --json on what prints text only — the help (`help`, no command, `--help` anywhere), `rules`, `mcp-config`, and
+  // `evals` (the harness's text report; its flags go to run-evals.js, which refuses a --json given to it directly too) — is a
+  // usage error, before anything runs: it printed the text on stdout with exit 0, and a script parsing it failed far away.
+  const helpOnly = cmd === undefined || cmd === "help" || cmd === "-h" || cmd === "--help" || (on("help") && cmd !== "evals");
+  if (on("json") && (helpOnly || TEXT_ONLY_COMMANDS.has(cmd))) die(projectText().noJson(helpOnly ? "help" : cmd));
   if (on("help") && cmd !== "evals") return console.log(helpText()); // `<command> --help` prints the help, runs nothing
   switch (cmd) {
     case undefined:
@@ -691,7 +699,13 @@ function main() {
     case "done": {
       if (!pos[0] || pos[1] == null) usage("dev-spec done <feature> <task-number> [--run [--shell bash|pwsh|<path>] [--timeout <s>] | --evidence \"summary\" [--exit N] [--cmd \"command\"]]");
       const D = spec.msg(spec.featureLang(projectDir, pos[0])).taskDone; // human output in the feature's language
-      if (!/^\d+$/.test(String(pos[1]).trim())) die(D.numberInt); // before running anything
+      // The task number: an integer ≥ 1 (spec_complete_task's schema) — refused BEFORE anything runs (an empty word would brief
+      // the NEXT task and run its _Verify:_), in the MCP validator's words, as the engine refuses it for undone / brief (1.22 review:
+      // `0` / `-1` read "Task 0 not found" / "must be an integer"). A refusal like the engine's: --json prints it on stdout.
+      if (!/^\s*\d+\s*$/.test(String(pos[1])) || !(Number(pos[1]) >= 1)) {
+        const A = spec.msg(spec.featureLang(projectDir, pos[0])).args;
+        return fail({ ok: false, error: A.invalid(A.item("number", A.type.integer + " " + A.atLeast(1), JSON.stringify(String(pos[1])))) });
+      }
       const say = flags.json ? console.error : console.log; // --json keeps stdout one JSON document
       let evidence;
       let hint = null;
@@ -819,7 +833,10 @@ function main() {
       if (!pos[0]) usage("dev-spec evals <feature> [--dry-run] [--set-baseline]");
       const passthru = argv.slice(argv.indexOf(pos[0]) + 1);
       const res = spawnSync(process.execPath, [EVALS, pos[0], "--project", projectDir, ...passthru], { stdio: "inherit" });
-      return process.exit(res.status || 0);
+      // A harness that never ran (spawn error) or was killed by a signal has no status — that is a failure, never exit 0
+      // (1.22 review: `res.status || 0` passed a killed run).
+      if (res.error) console.error("dev-spec: " + res.error.message);
+      return process.exit(res.error || res.status == null ? 1 : res.status);
     }
 
     case "backlog": {
@@ -1839,6 +1856,7 @@ function helpText() {
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
          With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1.
+         help, rules, mcp-config and evals print text only: --json there is a usage error (exit 1).
 
   Works the same in Claude Code, Cursor, Windsurf, Copilot, Gemini/Codex CLI, or a plain shell.`;
 }

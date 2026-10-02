@@ -158,7 +158,10 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   assembled `BUILD` / `MSG` through `__link` from `i18n.js`. The tables hold their `en` · `pt` · `es` keys from the start,
   in that order; a language's file loads on the FIRST read of any table's entry for it (`loadLocale`: its blocks replace
   the getters, then the `sectionNames` / `quality` / `designWeigh` merges, then its link) — a process pays only for the
-  languages it speaks. pt-BR is derived from pt on its first use (`defineDerivedLocale`), as before, and `i18n/pt-br.js`
+  languages it speaks — so engine code that needs a text of EVERY language (a heading matched in any language) reads it from
+  the pre-generated corpus, never by asking each language's table: the built-in tracks' task-block headings (`trackTaskHeadings`
+  → `builtinTaskHeadings`, 1.22 review) loaded pt.js, es.js and pt-BR into every English `list` (50–65 ms). pt-BR is derived
+  from pt on its first use (`defineDerivedLocale`), as before, and `i18n/pt-br.js`
   itself loads only then (a table's `pt-BR` entry, `toPtBr`, `derivePtBr` — `ptbr()` in i18n.js). A group with raw entries
   (MSG `stopGate`: the claim patterns) is derived entry by entry, so the stop gate's claim scan reads pt-BR's patterns
   without a single toPtBr (its first call compiles the pt-BR word maps: ~17 ms).
@@ -178,7 +181,9 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   mcp/test.js ("1.20 build") fails with "run npm run build" until the regenerated file is committed; nothing at runtime goes
   wrong meanwhile (below), it only goes slower. On a merge conflict in the file, take either side and run `npm run build`.
 - **The corpus.** The built-in part of the placeholder corpus (docs/maintainers/gates-and-approvals.md → Gates) —
-  `templateSets()`, `templateSetsBr()`, `templateTaskSet()`, the bug steps (`bugStepSet()`) — is the same in every process of
+  `templateSets()`, `templateSetsBr()`, `templateTaskSet()`, the bug steps (`bugStepSet()`) — and the built-in tracks' task-block
+  headings in every language (`taskHeadings` {track: [heading…]}, read by `trackTaskHeadings` — 1.22 review: rendering them
+  loaded every language's file; `localeLoaded` clears tracks.js's `TASK_HEADINGS` with the corpus) — is the same in every process of
   one engine, and rendering it (1,165 texts plus pt-BR's twins through toPtBr: ~200 ms) was the largest slice of a hook or
   CLI call (1.19's SessionStart was ~20% slower than 1.18's for it). The build renders it ONCE with the engine's own
   functions (`renderCorpusData()`: the sets' members, sorted) into the JSON file, stamped `version` (package.json) and

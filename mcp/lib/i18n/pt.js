@@ -1238,7 +1238,6 @@ const msg = {
       roadmapBusy: "Outro processo dev-spec está a atualizar o .specs/roadmap.json neste momento (.specs/.roadmap.lock) — nada foi alterado; tenta de novo daqui a pouco. Se nenhum outro editor ou comando dev-spec estiver a correr, apaga esse ficheiro.",
       folderInUse: (rel) => `A pasta ${rel} está a ser usada por outro programa (um editor, um indexador ou antivírus, um terminal aberto lá dentro) — nada foi movido nem apagado; fecha-o e tenta de novo.`,
       lockStuck: (rel) => `Um lock dev-spec abandonado (${rel}) não pôde ser removido — o ficheiro (ou uma pasta com esse nome) está aberto noutro programa, é só de leitura ou não é um ficheiro. Nada foi alterado. Apaga ${rel} à mão (verifica as permissões) e tenta de novo.`,
-      numberInt: "o número tem de ser um inteiro",
       noText: "Nenhum texto fornecido.",
       unknownPhase: (phase, known) => `Fase desconhecida '${phase}'. Conhecidas: ${known}`,
       alreadyArchived: (slug) => `'${slug}' já está arquivada (.specs/_archive/${slug}). Remove-a de lá primeiro.`,
@@ -1447,7 +1446,6 @@ const msg = {
       already: (n, verified, done, total) => `A tarefa ${n} já estava feita${verified ? " (verificada)" : ""}. ${done}/${total}`,
       next: (n, text) => `  próxima → #${n} ${text}`,
       allDone: "  — tudo feito ✓",
-      numberInt: "o número da tarefa tem de ser um inteiro",
       noRunnable: (n) => `a tarefa ${n} não tem um marcador _Verify: <comando>_ executável`,
       shellHint: "Dica: a shell por omissão do Windows (cmd.exe) não conseguiu correr esta linha de comando tal como está escrita. Se o comando _Verify:_ foi escrito para uma shell POSIX, tenta de novo com --shell bash (ou define DEV_SPEC_SHELL=bash).",
       posixOnWindows: (cmd, kinds) => `o comando _Verify:_ \`${cmd}\` usa sintaxe de shell POSIX (${kinds.map((k) => ({ "single-quotes": "plicas '…'", variable: "$VARIAVEIS" })[k] || k).join(", ")}) que o cmd.exe — a shell por omissão do --run no Windows — lê de outra forma, muitas vezes sem falhar: não tem plicas e nunca expande $VAR, por isso uma verificação partida podia ficar registada como execução bem-sucedida. Nada foi executado; a tarefa continua aberta. Corre de novo com --shell bash (Git Bash; ou define DEV_SPEC_SHELL=bash), com --shell pwsh se for um comando PowerShell (ou dá o script ao PowerShell entre aspas: pwsh -NoProfile -Command "…") — ou --shell cmd para o correr mesmo assim no cmd.exe.`,
@@ -1505,7 +1503,6 @@ const msg = {
     },
     depend: {
       unknown: (list) => `Cada dependência tem de ser uma feature existente — não encontrada(s): ${list}`,
-      orderInt: (v) => `order tem de ser um inteiro (recebido: '${v}').`,
     },
     evals: {
       usage: "Uso: node run-evals.js <feature> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
@@ -1646,6 +1643,7 @@ const msg = {
       usage: (syntax) => `uso: ${syntax}`,
       unknownCommand: (c) => `comando desconhecido '${c}'. Corre \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `cliente desconhecido '${c}'. Conhecidos: ${known}`,
+      noJson: (c) => `--json não está disponível para '${c}': só imprime texto. Corre-o sem --json.`,
     },
 
     gates: {

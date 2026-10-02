@@ -434,6 +434,14 @@ function taskNumber(v) {
   const n = parseInt(v, 10);
   return Number.isSafeInteger(n) ? n : NaN;
 }
+// The task number a caller ASKED FOR (spec_complete_task / spec_task_brief {number}, the CLI's done / undone / brief word) →
+// the integer, or NaN: an integer ≥ 1 — the tools' schema minimum (1.22 review: `-1` read "must be an integer", `0` "Task 0
+// not found"). A refusal says it in the MCP validator's words (args), so both surfaces refuse the same values alike.
+function askedTaskNumber(v) { const n = taskNumber(v); return n >= 1 ? n : NaN; }
+function taskNumberError(lang, v) {
+  const A = i18n.msg(lang).args;
+  return A.invalid(A.item("number", A.type.integer + " " + A.atLeast(1), JSON.stringify(typeof v === "number" ? v : String(v))));
+}
 // opts.ranBy "cli" (1.14 F1): the CLI's `done --run` ran the command itself — the record's observed stamp is "cli". The MCP
 // server never passes it (and normalizeEvidence keeps no caller-given `observed`): a reported run is looked up in the
 // harness's log (observedRun).
@@ -447,8 +455,8 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const text = readIfExists(file);
   const E = errs(projectDir, f.slug);
   if (text == null) return { ok: false, error: E.tasksMissing(f.slug) };
-  const n = taskNumber(number); // "01" is task 1, like the "01." it names
-  if (!Number.isFinite(n)) return { ok: false, error: E.numberInt };
+  const n = askedTaskNumber(number); // "01" is task 1, like the "01." it names
+  if (!Number.isFinite(n)) return { ok: false, error: taskNumberError(featureLang(projectDir, f.slug), number) };
   // The same scanner + resolver as status/brief/`done --run`: a "- [ ] N." inside a comment or a code fence
   // is never ticked, "1.1" is not task 1, and a duplicated number resolves to its first OPEN task.
   const blocks = taskBlocks(text);
@@ -618,8 +626,8 @@ function untickTask(projectDir, name, number, opts = {}) {
   const file = path.join(f.dir, "tasks.md");
   const text = readIfExists(file);
   if (text == null) return { ok: false, error: E.tasksMissing(f.slug) };
-  const n = taskNumber(number);
-  if (!Number.isFinite(n)) return { ok: false, error: E.numberInt };
+  const n = askedTaskNumber(number);
+  if (!Number.isFinite(n)) return { ok: false, error: taskNumberError(lng, number) };
   const reason = reasonInput(opts.reason, lng);
   if (reason.error) return { ok: false, error: reason.error };
   const blocks = taskBlocks(text);
@@ -1237,8 +1245,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     }
     if (!block) return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, note: t.allDone };
   } else {
-    const n = taskNumber(number);
-    if (!Number.isFinite(n)) return { ok: false, error: E.numberInt };
+    const n = askedTaskNumber(number);
+    if (!Number.isFinite(n)) return { ok: false, error: taskNumberError(lng, number) };
     block = resolveTask(blocks, n); // the task completeTask would tick (first OPEN one of a duplicated number)
     if (!block) return { ok: false, error: E.taskNotFound(n, tasksFileName(dir)) };
   }

@@ -71,7 +71,9 @@ has its own text, `elicit.unapproved`: the user answered without ticking Approve
 **Argument validation (server.js).** Before dispatch, `tools/call` arguments are checked against the
 tool's advertised `inputSchema`: required keys (`missingArgs`), then types (`invalidArgs` — `integer` means
 a *safe* integer, so `1.9` / `1e21` never become task 1), `enum`, `minimum`, array `items` and nested
-object properties. It iterates the SCHEMA's keys, never the caller's (`__proto__` arguments are ignored);
+object properties. A task `number` (spec_task_brief, spec_complete_task) carries `minimum: 1` (1.22 review — `-1` read "must
+be an integer", `0` "Task 0 not found"); the engine refuses the CLI's raw word in these same words (`msg(lang).args` —
+conventions.md → CLI boolean switches), and a roadmap `order` past the safe range alike. It iterates the SCHEMA's keys, never the caller's (`__proto__` arguments are ignored);
 an absent or `null` value means "not given". `arguments` that isn't an object, a relative `..` in
 `projectDir`, or a network `projectDir` (`isNetworkPath`: UNC `\\host\share`, `//host/share`, `\\?\UNC\…`,
 `\\.\UNC\…` and other device paths — refused before ANY fs call, argument errors included, so a tool call can't make

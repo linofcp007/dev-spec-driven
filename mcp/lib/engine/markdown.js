@@ -18,13 +18,14 @@ const { MARKER_TRACKS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature, extractAcIds,
   featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket,
-  markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists, replaceCodeSpans,
-  stripSupersedes, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf, VALID_TRACKS, wildcardMatch;
+  markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists, renderTrackTaskHeadings,
+  replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf,
+  VALID_TRACKS, wildcardMatch;
 function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature,
   extractAcIds, featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf,
   isPackMarkerBracket, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists,
-  replaceCodeSpans, stripSupersedes, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf, VALID_TRACKS,
-  wildcardMatch } = E); }
+  renderTrackTaskHeadings, replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS,
+  useTemplateScopeOf, VALID_TRACKS, wildcardMatch } = E); }
 
 // The text minus its HTML comments (commentLines' reading: a "<!--" in fenced code or an inline code span is text, one
 // that never closes is text). A comment spanning lines takes its line breaks with it, as the old regex did.
@@ -762,8 +763,13 @@ function renderCorpusData() {
   const sort = (xs) => [...xs].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const base = renderTemplateSets(), br = renderTemplateSetsBr(base);
   return { brackets: sort(base.brackets), code: sort(base.code), bracketsBr: sort(br.brackets), codeBr: sort(br.code),
-    tasks: sort(renderTemplateTasks()), bugSteps: sort(new Set(renderBugSteps())) };
+    tasks: sort(renderTemplateTasks()), bugSteps: sort(new Set(renderBugSteps())),
+    // 1.22 review: every built-in track's template task headings, all languages (trackTaskHeadings — tracks.js)
+    taskHeadings: Object.fromEntries(VALID_TRACKS.map((t) => [t, sort(renderTrackTaskHeadings(t))])) };
 }
+// The corpus's task headings: { track: [heading…] } — strings only, own keys.
+const taskHeadingsShape = (h) => !!h && typeof h === "object" && !Array.isArray(h) &&
+  Object.values(h).every((v) => Array.isArray(v) && v.every((x) => typeof x === "string"));
 let BUILTIN_CORPUS = undefined; // undefined: not looked for yet · null: none usable (render) · else the data
 let BUILTIN_CORPUS_FROM = "render"; // "file" | "bundle" | "render" — where this process's built-in corpus comes from
 function builtinCorpus() {
@@ -775,7 +781,7 @@ function builtinCorpus() {
     // The load-time version and (the modules) the sources' hash, the sources unchanged since the engine loaded — stat'ed
     // AFTER the hash read them, so a file rewritten before or while it was hashed is never trusted.
     if (data && typeof data === "object" && CORPUS_KEYS.every((k) => Array.isArray(data[k]) && data[k].every((x) => typeof x === "string")) &&
-      data.version === engineVersion() && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
+      taskHeadingsShape(data.taskHeadings) && data.version === engineVersion() && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
       BUILTIN_CORPUS = data;
       BUILTIN_CORPUS_FROM = b ? "bundle" : "file";
     }
@@ -783,6 +789,12 @@ function builtinCorpus() {
   return BUILTIN_CORPUS;
 }
 const builtinCorpusSource = () => { builtinCorpus(); return BUILTIN_CORPUS_FROM; };
+// A built-in track's template task headings from the trusted corpus (normalized, every language), or null: trackTaskHeadings
+// renders them then (1.22 review — rendered, they load pt.js, es.js and pt-BR into an English process).
+function builtinTaskHeadings(tr) {
+  const c = builtinCorpus();
+  return c && Object.prototype.hasOwnProperty.call(c.taskHeadings, tr) ? c.taskHeadings[tr] : null;
+}
 // i18n.js tells us each language file it loads (en / pt / es.js on first use, pt-br.js): one changed since the engine loaded
 // makes a trusted file corpus the corpus of code this process doesn't run — dropped, with the sets built from it.
 function localeLoaded(rel) {
@@ -790,6 +802,7 @@ function localeLoaded(rel) {
   BUILTIN_CORPUS = null; // looked for, none usable: the sets render on their next use
   BUILTIN_CORPUS_FROM = "render";
   TEMPLATE_SETS = TEMPLATE_SETS_BR = TEMPLATE_TASKS = BUG_STEPS = null;
+  TASK_HEADINGS.clear(); // tracks.js's per-track sets, read from it (1.22 review)
 }
 if (LOADED_STATS) i18n.onLocaleLoad(localeLoaded);
 // …and the slots of the project's own templates (.specs/templates/ — projectTemplateHas, 1.14).
@@ -1027,7 +1040,7 @@ module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirement
   trackSectionReport, sectionVerdict, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
   RE_LIST_CHECKBOX, placeholderKey, isGenericSlot, unknownSteeringStub, LEGACY_TEMPLATE_PLACEHOLDERS, templateCorpus,
   templateBracketKeys, templateSets, templateSetsBr, CORPUS_FILE, CORPUS_SOURCES, corpusSourcesHash, renderCorpusData,
-  builtinCorpusSource, isTemplatePlaceholder, isCodeSlot, visibleLines, placeholderReport,
+  builtinCorpusSource, builtinTaskHeadings, isTemplatePlaceholder, isCodeSlot, visibleLines, placeholderReport,
   bracketPlaceholders, scanBrackets, artifactState, headingsOnly, RE_MANUAL_VERIFY, artifactReport, featurePlaceholders,
   placeholderSummary, chainPlaceholders, hasProseOutsideBrackets, bugPlaceholders, RE_TODO_SENTINEL_LINE,
   bugTemplateSlots, __link };
