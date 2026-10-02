@@ -1592,6 +1592,54 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     ok(msH < 4000, "1.22 review 3: runProvesVerify stays bounded on 1 MB hostile commands and _Verify:_ values (backticks, $(, cd chains, quotes, ` && `, `#`, assignments) — " + msH + " ms");
   }
 
+  // 1.22 review 3 (3) — observed mode sees the forms the matcher accepts: the observe hook's log (observeRun) and the lookup
+  // (observedRun) use runProvesVerify too — `node --test tests\x.test.js`, the reversed join `npm test && npm run build`, `CI=1 npm
+  // run lint` were verified in reported mode and `unobserved` in observed mode (the log took only the _Verify:_ as written or its
+  // in-order join). The hook's cheap pre-filter is a copy of the engine's observedNorm / observedBodies.
+  {
+    const js = JSON.stringify;
+    const BS = String.fromCharCode(92);
+    const obsJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
+    const p3 = path.join(tmp, "proj-122r3-observed");
+    S.initProject(p3, ["core"], "en", { checks: { lint: "npm run lint" } });
+    const f3 = S.createFeature(p3, "Feat", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(f3.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] a\n  - _Verify: node --test tests/x.test.js_\n" +
+      "- [ ] 2. [US1] b\n  - _Verify: npm run build_\n  - _Verify: npm test_\n- [ ] 3. [US1] c\n  - _Verify: npm run typecheck_\n  - _Verify: npm run format_\n" +
+      "- [ ] 4. [US1] d\n  - _Verify: npm run lint_\n- [ ] 5. [US1] e\n  - _Verify: cd packages/web && npm test_\n- [ ] 6. [US1] f\n  - _Verify: npm run e2e_\n");
+    S.initProject(p3, ["core"], "en", { evidence: "observed" });
+    const hook = (command, code) => spawnSync(process.execPath, [obsJs], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" },
+      input: js({ session_id: "s", cwd: p3, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command }, tool_response: { exit_code: code } }) });
+    for (const [c, x] of [["node --test tests" + BS + "x.test.js", 0], ["npm test && npm run build", 0], ["npm run typecheck", 0], ["npm run format", 0], ["CI=1 npm run lint", 0],
+      ["cd ./packages/web && npm test", 0], ["cd ../elsewhere && npm run e2e", 0], ["CI=1 npm run e2e", 1]]) hook(c, x);
+    const pick = (r) => [r.ok, r.verified, r.unverifiedReason || null, r.observed];
+    const c1 = S.completeTask(p3, "feat", 1, { command: "node --test tests" + BS + "x.test.js", exitCode: 0 });
+    const c2 = S.completeTask(p3, "feat", 2, { command: "npm test && npm run build", exitCode: 0 });
+    const c3 = S.completeTask(p3, "feat", 3, { command: "npm run typecheck && npm run format", exitCode: 0 }); // run as two Bash calls
+    const c4 = S.completeTask(p3, "feat", 4, { command: "CI=1 npm run lint", exitCode: 0 });
+    const c4b = S.completeTask(p3, "feat", 4, { command: "npm run lint", exitCode: 0 }); // the latest logged run OF it passed
+    const c5 = S.completeTask(p3, "feat", 5, { command: "cd packages/web && npm test", exitCode: 0 });
+    const c6 = S.completeTask(p3, "feat", 6, { command: "npm run e2e", exitCode: 0 }); // the harness saw it fail (and a run elsewhere)
+    const logged = fs.readFileSync(path.join(f3.dir, ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).command);
+    const projLog = fs.readFileSync(path.join(p3, ".specs", ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).command);
+    ok(js([c1, c2, c3, c4, c4b, c5].map(pick)) === js(Array(6).fill([true, true, null, true])) && c6.verified === false && c6.observed === false &&
+      !logged.includes("cd ../elsewhere && npm run e2e") && logged.includes("node --test tests" + BS + "x.test.js") && js(projLog) === js(["CI=1 npm run lint"]),
+      "1.22 review 3 (3): under meta.evidence observed, runs in the forms the matcher accepts are logged and found — `node --test tests\\x.test.js`, `npm test && npm run build` (reversed), two separate Bash runs reported joined, `CI=1 npm run lint` (task and project check), `cd ./packages/web && npm test`; a run in another folder is logged nowhere and the harness's failed run stays failed (got " +
+      js([[c1, c2, c3, c4, c4b, c5, c6].map(pick), logged, projLog]) + ")");
+    // the hook's pre-filter is the engine's: the same functions, and a superset of the matcher on the probe commands
+    const E3 = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const hookSrc = fs.readFileSync(obsJs, "utf8"), engSrc = fs.readFileSync(path.join(__dirname, "lib", "engine", "evidence.js"), "utf8");
+    const grab = (src, from, to) => { const a = src.indexOf(from), b = src.indexOf(to, a); return a < 0 || b < 0 ? null : src.slice(a, b); };
+    const hookFns = (grab(hookSrc, "const norm = ", "\n}\n") || "").replace(/\bnorm\b/g, "observedNorm").replace(/\bRE_ENV\b/g, "RE_OBSERVED_ENV").replace(/\bbodies\b/g, "observedBodies");
+    const engFns = grab(engSrc, "const observedNorm = ", "\n}\n") || "";
+    const strip = (s) => s.replace(/\s+/g, " ").trim();
+    const probes = [["node --test tests" + BS + "x.test.js", "node --test tests/x.test.js"], ['X="a b" npm test', "npm test"], ["CI=1 npm run lint 2>&1", "npm run lint"],
+      ["cd /x && set -o pipefail; npm test | tee log", "set -o pipefail; npm test | tee log"], ["`npm test`", "npm test"], ['node --test "tests/x.test.js"', "node --test tests/x.test.js"],
+      ["npm test && npm run build", "npm run build"]];
+    const notSuperset = probes.filter(([run, v]) => { const t = E3.observedNorm(v + " " + "npm test"); return !E3.observedBodies(run).every((b) => t.includes(b)); });
+    ok(hookFns && strip(hookFns) === strip(engFns) && !notSuperset.length,
+      "1.22 review 3 (3): hooks/observe-hook.js's pre-filter (norm / RE_ENV / bodies) is the engine's observedNorm / RE_OBSERVED_ENV / observedBodies, and reads every probe run as mentioned by its _Verify:_ (got " + js([!!hookFns, strip(hookFns) === strip(engFns), notSuperset]) + ")");
+  }
+
   // 1.22 review (finding 6) — ONE `cd <root> &&` stripping (spec.stripCdPrefix) for the observe hook's log and the reported run's
   // lookup: reporting the exact command that ran (`cd <root> && node t1.js`) read unobserved, and a subagent's run in a git
   // worktree (`cd <worktree> && node t1.js`) reached only the worktree's (git-ignored, never merged) log.

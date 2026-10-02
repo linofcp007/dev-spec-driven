@@ -235,8 +235,10 @@ every such run of a task's runnable
 git-ignored, size-bounded log (`.specs/<feature>/.execution/observed.jsonl`, `.specs/.execution/observed.jsonl` for
 project checks). Interrupted and backgrounded runs are not logged.
 
-- **Every recorded run is stamped** `observed: true | false` — true when the latest logged run of the same command in
-  the last 24 hours exited with the same code (a reported exit 0 after an observed exit 1 is not observed). `dev-spec
+- **Every recorded run is stamped** `observed: true | false` — true when the latest logged run of the task's `_Verify:_`
+  (read as the evidence gate reads it — `tests\x.test.js`, a `CI=1` prefix, the commands joined in any order — see
+  "Which run proves it") in the last 24 hours exited with the same code (a reported exit 0 after an observed exit 1 is not
+  observed). `dev-spec
   done --run` / `finish --run` stamp `"cli"` (the CLI ran it itself). The MCP tools never take the stamp from the caller.
   `spec_complete_task` returns it, and so do the finish's `suiteChecks` items and the traceability matrix's task
   evidence (`trace_check {matrix}`).

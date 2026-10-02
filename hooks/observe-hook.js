@@ -43,8 +43,24 @@ function finish() {
   process.exit(0);
 }
 
-// The same key the engine compares (flatCommand, engine/evidence.js): backticks dropped, whitespace runs flattened.
-const flat = (s) => String(s == null ? "" : s).replace(/`/g, "").replace(/\s+/g, " ").trim();
+// The pre-filter's reading — a copy of the engine's observedNorm / observedBodies (engine/evidence.js; mcp/tests/09-evidence.js
+// checks the two agree): the run's command bodies — split at ` && ` and `;`, a `cd` / `set … pipefail` part dropped, leading
+// NAME=value assignments (quotes honoured) and a trailing 2>&1 dropped, then backticks and quotes dropped, `\` read as `/`,
+// whitespace folded — must each appear in a tasks.md (or a meta.checks command) read the same way. A SUPERSET of the engine's
+// matcher (runProvesVerify — review 3: `node --test tests\x.test.js`, `CI=1 npm run lint`, a reversed join used to miss it): the
+// engine decides. Cheap: a few string passes, no parse.
+const norm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim();
+const RE_ENV = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s"'`;&|]*)\s+)+/;
+function bodies(cmd) {
+  const out = [];
+  for (let part of String(cmd == null ? "" : cmd).replace(/\s+/g, " ").split(/ && |;/)) {
+    part = part.trim();
+    if (!part || /^cd(?:\s|$)/i.test(part) || /^set\s.*pipefail\s*$/.test(part)) continue;
+    const b = norm(part.replace(RE_ENV, "").replace(/\s+2>&1$/, ""));
+    if (b) out.push(b);
+  }
+  return out;
+}
 
 // The hooks run in EVERY project: only a .specs/ that dev-spec owns (roadmap.json, steering/, a generated ROADMAP.md, or a
 // feature folder with its .state.json / classification.md).
@@ -121,11 +137,10 @@ function exitCodeOf(payload, failure, strict) {
   return nonZero(m ? parseInt(m[1], 10) : 1);
 }
 
-// The pre-filter's key: a leading `cd <dir> &&` (or `;`) dropped WHATEVER the folder — the Bash tool often runs a command from
-// the project root that way. Only a filter (a superset): the engine decides, with the ONE stripping function the reported run's
-// lookup uses too (spec.stripCdPrefix — the folder must be one of the run's projects: this one, or the one holding the cwd, a
-// worktree's), what is logged (1.22 review — the hook stripped, the lookup didn't; a worktree's run reached only its own log).
-const looseKey = (cmd) => flat(cmd.replace(/^cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)\s*/, ""));
+// A `cd <dir>` part is dropped WHATEVER the folder — the Bash tool often runs a command from the project root that way. Only a
+// filter (a superset): the engine decides, with the ONE stripping function the reported run's lookup uses too
+// (spec.stripCdPrefix — the folder must be one of the run's projects: this one, or the one holding the cwd, a worktree's), and
+// then its matcher, what is logged (1.22 review — the hook stripped, the lookup didn't; a worktree's run reached only its own log).
 
 // A tasks.md written as UTF-16 (a BOM: FF FE / FE FF — Windows PowerShell 5.1) is read as the engine reads it (files.js
 // decodeText, 1.22 review) without loading the engine for this pre-filter; anything else is UTF-8.
@@ -134,17 +149,17 @@ function utf16OrUtf8(buf) {
   if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return Buffer.from(buf.subarray(0, buf.length - (buf.length % 2))).swap16().toString("utf16le");
   return buf.toString("utf8");
 }
-// The plain-text pre-filter: is the command written in a feature's tasks.md or in meta.checks at all? Only then is the
-// engine loaded (it parses the tasks for real and skips archived features).
-function mentioned(pdir, key) {
+// The plain-text pre-filter: are the command's bodies written in a feature's tasks.md or in a meta.checks command at all? Only
+// then is the engine loaded (it parses the tasks for real and skips archived features).
+function mentioned(pdir, parts) {
   const root = path.join(pdir, ".specs");
-  const parts = key.split(" && ").map((x) => x.trim()).filter(Boolean);
+  const has = (text) => { const t = norm(text); return parts.every((x) => t.includes(x)); };
   try {
     let raw = fs.readFileSync(path.join(root, "roadmap.json"), "utf8");
     if (raw.startsWith(BOM)) raw = raw.slice(1);
     const rm = JSON.parse(raw);
     const checks = rm && rm.meta && typeof rm.meta === "object" ? rm.meta.checks : null;
-    if (checks && typeof checks === "object" && Object.values(checks).some((c) => typeof c === "string" && flat(c) === key)) return true;
+    if (checks && typeof checks === "object" && Object.values(checks).some((c) => typeof c === "string" && has(c))) return true;
   } catch { /* no or broken roadmap.json: no project checks */ }
   let dirs = [];
   try {
@@ -159,9 +174,8 @@ function mentioned(pdir, key) {
     const raw = readTasksText(path.join(root, d.name, "tasks.md"));
     const got = raw === null ? readTasksText(path.join(root, d.name, "change.md")) : raw;
     if (typeof got !== "string") continue;
-    const text = flat(got);
-    // The " && " join of a task's commands (how done --run reports them) is never written whole: every part is (review R6).
-    if (text.includes(key) || (parts.length > 1 && parts.every((x) => text.includes(x)))) return true;
+    // (the " && " join of a task's commands — how done --run reports them — is never written whole: every part is, review R6)
+    if (has(got)) return true;
   }
   return false;
 }
@@ -207,9 +221,9 @@ function main(raw) {
 
   let spec = null;
   const dirs = projectDirsOf(payload);
-  const key = looseKey(command);
+  const parts = bodies(command);
   for (const pdir of dirs) {
-    if (!key || !mentioned(pdir, key)) continue;
+    if (!parts.length || !mentioned(pdir, parts)) continue;
     const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : pdir;
     spec = spec || require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
     // The engine strips a `cd <dir> &&` whose folder is this project or another one the run belongs to (dirs: a worktree's and

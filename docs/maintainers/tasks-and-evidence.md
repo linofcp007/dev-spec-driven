@@ -469,11 +469,14 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 
 ## Harness-observed evidence (1.14 F1)
 - **The log.** `hooks/observe-hook.js` (hooks.json **PostToolUse** and **PostToolUseFailure**, matcher `^(Bash|PowerShell)$` —
-  a PowerShell run only with an EXPLICIT exit code, its response shape being undocumented) logs a run of a task's runnable `_Verify:_` command (or the ` && ` join of
-  a task's several commands — `verifyCommandSet()`, how `done --run` reports them) or of a `meta.checks` command.
-  `spec.observeRun()` appends ONE JSON line `{command, exitCode, at, event, session}` (command flattened by `flatCommand()`:
-  backticks dropped, whitespace runs folded — the implementer gate's rule) to `.specs/<feature>/.execution/observed.jsonl`
-  for each non-archived feature whose tasks.md holds that `_Verify:_`, and to `.specs/.execution/observed.jsonl` for a
+  a PowerShell run only with an EXPLICIT exit code, its response shape being undocumented) logs a run of a task's runnable `_Verify:_` command (or of
+  all of a task's several commands joined, how `done --run` reports them) or of a `meta.checks` command — **1.22 review 3: as
+  the evidence gate's matcher reads it** (`runProvesVerify` from the project root: one `_Verify:_` command, or all of a task's
+  in any order; it used to log only the `_Verify:_` as written or its in-order join, so `node --test tests\x.test.js`, `npm test
+  && npm run build`, `CI=1 npm run lint` — verified in reported mode — read `unobserved` in observed mode).
+  `spec.observeRun()` appends ONE JSON line `{command, exitCode, at, event, session}` (the command with its whitespace folded,
+  `observedKey` — review 3: backticks kept, a substitution is no plain text) to `.specs/<feature>/.execution/observed.jsonl`
+  for each non-archived feature with a task it is a run of, and to `.specs/.execution/observed.jsonl` for a
   project check (a dot folder is never a feature; each `.execution/` gets its self-ignoring `.gitignore` `*`). It never
   creates a feature folder. Bounded: past `OBSERVED_MAX_BYTES` (64 KB) the log keeps its newest lines up to half of that
   (replaced atomically; a concurrent append can lose one line — that run then reads unobserved and is run again); a
@@ -492,21 +495,28 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   found — a subagent's `cd <worktree> && npm test` is logged as `npm test` in the main project's log too, not only in the
   worktree's git-ignored one), and `observedRun` strips the REPORTED command against the project (+ the project holding the
   process's cwd) the same way — the hook used to strip while the lookup didn't, so reporting the exact command that ran read
-  unobserved. Any other folder keeps the whole command, which then matches nothing. The hook's pre-filter key drops a leading
-  `cd <dir> &&` whatever the folder (a superset — the engine decides); it opens each folder's tasks.md once (its size read
+  unobserved. Any other folder keeps the whole command, which then matches nothing. The hook's pre-filter drops a `cd <dir>`
+  part whatever the folder (a superset — the engine decides); it opens each folder's tasks.md once (its size read
   from the open file) and probes change.md only where there is no tasks.md — the engine's own rule (1.22 review: a stat, a
   read and a change.md probe per folder cost +133 ms a Bash call at 150 features; measured 226 → 192 ms there). A cache of
   the flat `_Verify:_` list keyed on each tasks.md's stats was left out: in a one-shot hook it would need a written index,
   and a stale one silently drops observations. The engine is loaded
-  only after a plain-text pre-filter (the flattened command — or each part of a ` && ` join — appears in some feature's tasks.md — ≤ 2 MB each, dot / `_`
-  folders skipped — or equals a meta.checks command); it prints nothing, reads stdin asynchronously (≤ 4 MB, else
+  only after a plain-text pre-filter — review 3: a copy of the engine's `observedNorm` / `observedBodies` (mcp/tests/09-evidence.js
+  compares the sources): the command's BODIES (split at ` && ` and `;`, a `cd` / `set … pipefail` part dropped, leading
+  NAME=value assignments — quotes honoured — and a trailing 2>&1 dropped, then backticks and quotes dropped, `\` read as `/`,
+  whitespace folded) each appear in some feature's tasks.md read the same way (≤ 2 MB each, dot / `_` folders skipped) or in a
+  meta.checks command — a SUPERSET of the matcher (each step keeps a body a substring of its `_Verify:_`'s normalized text),
+  as cheap as the flat-text test it replaced; observeRun runs the same test before it parses a tasks.md; it prints nothing, reads stdin asynchronously (≤ 4 MB, else
   ignored), and exits 0 on any error.
-- **The stamp.** `observedRun(projectDir, slug | null, command, exitCode, {expected})` → `{observed, at?}`: true when the LATEST
-  logged run of the same flattened command within `OBSERVED_WINDOW_MS` (24 h; a stamp more than 5 min in the future
-  ignored) exited with the same code — a report of exit 0 after an observed exit 1 is not what the harness saw
-  (`latestExitCode`); a reported `a && b` with exit 0 also counts when each part's latest logged run passed. `expected`
-  (1.22 review — `observedStamp` passes the task's `_Verify:_` values / `[the check's command]`): a reported run that is
-  not one of them (`runProvesVerify`) is never observed — another task's or check's logged run used to count.
+- **The stamp.** `observedRun(projectDir, slug | null, command, exitCode, {expected, root})` → `{observed, at?}`: true when the
+  LATEST logged run within `OBSERVED_WINDOW_MS` (24 h; a stamp more than 5 min in the future ignored) that is itself a run of
+  the expected commands (review 3: `runProvesVerify` from the project root, the matcher of the verdict — it used to need the
+  same flattened text as the report) exited with the reported code — a report of exit 0 after an observed exit 1 is not what
+  the harness saw (`latestExitCode`); a passing report also counts when each expected command's latest logged run passed (a
+  join run as separate Bash calls) — or, for one of several plain ` && ` steps (no cd / pipefail: `proofPlainParts`), each
+  step's. `expected` (1.22 review — `observedStamp` passes the task's `_Verify:_` values / `[the check's command]`; none → the
+  reported command itself): a reported run that is not one of them (`runProvesVerify`) is never observed — another task's or
+  check's logged run used to count. `root`: the run's `root` stamp (a worktree's), also a root `stripCdPrefix` strips.
   `observedStamp()`: every run `{command, exitCode}` that `spec_complete_task` / `done` and `spec_finish {evidence}` record
   is stamped `observed: true | false`; `done --run` / `finish --run` pass `ranBy: "cli"` → `observed: "cli"` (the CLI ran it
   itself; counts as observed). The MCP server never passes `ranBy`, and `normalizeEvidence()` keeps no caller-given

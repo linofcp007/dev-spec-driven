@@ -1122,8 +1122,6 @@ const OBSERVED_WINDOW_MS = 24 * 3600 * 1000; // an observed run counts for this 
 const OBSERVED_MAX_COMMAND = 4000; // a longer Bash command is never logged (no _Verify:_ / check command is that long)
 const OBSERVED_MAX_FEATURES = 200; // feature folders an observed run is matched against, at most
 const EVIDENCE_MODES = ["reported", "observed"];
-// A command as the log and the lookup compare it: backticks dropped, whitespace runs flattened (the implementer gate's rule).
-const flatCommand = (s) => String(s == null ? "" : s).replace(/`/g, "").replace(/\s+/g, " ").trim();
 // roadmap.json meta.evidence → "observed" | "reported" (absent or anything else: reported — the default, today's rule).
 // Fails CLOSED: a roadmap.json that doesn't parse (one stray byte appended) keeps "observed" when its raw text says so — it
 // used to read as "reported", and a single write switched the rule off (feature review R1).
@@ -1190,39 +1188,58 @@ function readObservedLog(file) {
   }
   return out;
 }
-// Did the harness observe this run? → { observed: boolean, at? } — true when the LATEST observed run of the same command
-// (flatCommand) within OBSERVED_WINDOW_MS exited with this code (a report of exit 0 after an observed exit 1 is not what the
-// harness saw). A command `a && b` — how `done --run` reports a task with several _Verify:_ commands — also counts when each
-// part's latest observed run passed and the report is exit 0. slug: the feature's log; null: the project checks' log.
+// Did the harness observe this run? → { observed: boolean, at? } — true when the LATEST observed run of the command within
+// OBSERVED_WINDOW_MS exited with this code (a report of exit 0 after an observed exit 1 is not what the harness saw). slug: the
+// feature's log; null: the project checks' log.
 // opts.expected (1.22 review): the commands the run must be one of — the task's _Verify:_ values, or [the check's command]; a
 // reported run of another command (another task's or check's, which the harness may well have seen) is never observed here.
+// Review 3 — ONE matcher on both sides: the logged run that counts is the latest one that is itself a run of the expected
+// commands (runProvesVerify, from the project root — what the matcher accepts in reported mode: `node --test tests\x.test.js`,
+// `npm test && npm run build` for [build, test], `CI=1 npm run lint`), never only one spelled the same as the report — those read
+// `unobserved` in observed mode while reported mode verified them. With no `expected`, the reported command itself is what the
+// logged run must be a run of. A passing report also counts when each expected command's latest logged run passed (a join run
+// as separate Bash calls), or — for a command of several plain ` && ` steps — each step's.
 // The reported command loses a leading `cd <project root> &&` as the hook's log does (stripCdPrefix — the same function; the
-// roots: the project and the project holding the process's cwd, plus opts.roots).
+// roots: the project, the project holding the process's cwd, the run's own `root` stamp — a worktree's —, plus opts.roots).
 function observedRun(projectDir, slug, command, exitCode, opts = {}) {
-  if (Array.isArray(opts.expected) && opts.expected.length && !runProvesVerify({ command: String(command == null ? "" : command), root: opts.root }, opts.expected, projectDir)) return { observed: false };
+  const reported = String(command == null ? "" : command);
+  const expected = Array.isArray(opts.expected) && opts.expected.length ? opts.expected : null;
+  if (expected && !runProvesVerify({ command: reported, root: opts.root }, expected, projectDir)) return { observed: false };
   const roots = [projectDir, specsProjectOf(process.cwd()), ...(typeof opts.root === "string" && opts.root ? [opts.root] : []), ...(Array.isArray(opts.roots) ? opts.roots : [])];
-  const key = flatCommand(stripCdPrefix(command, roots, typeof opts.cwd === "string" && opts.cwd ? opts.cwd : projectDir));
+  const key = observedKey(stripCdPrefix(reported, roots, typeof opts.cwd === "string" && opts.cwd ? opts.cwd : projectDir));
   const code = typeof exitCode === "number" ? exitCode : /^\s*-?\d+\s*$/.test(String(exitCode)) ? parseInt(String(exitCode), 10) : NaN;
   if (!key || !Number.isInteger(code)) return { observed: false };
   const file = observedLogFile(projectDir, slug);
   if (!file) return { observed: false };
   const now = Number.isFinite(opts.now) ? opts.now : Date.now();
   const entries = readObservedLog(file).filter((e) => { const t = Date.parse(e.at); return Number.isFinite(t) && t >= now - OBSERVED_WINDOW_MS && t <= now + 5 * 60 * 1000; });
-  const latest = (k) => { for (let i = entries.length - 1; i >= 0; i--) if (flatCommand(entries[i].command) === k) return entries[i]; return null; };
-  const hit = latest(key);
+  const want = expected || [key];
+  const latest = (list) => { for (let i = entries.length - 1; i >= 0; i--) if (runProvesVerify({ command: entries[i].command }, list, projectDir)) return entries[i]; return null; };
+  const hit = latest(want);
   if (hit) return hit.exitCode === code ? { observed: true, at: hit.at } : { observed: false, latestExitCode: hit.exitCode };
-  if (code === 0 && key.includes(" && ")) {
-    // each part's latest run — or (review 2) each EXPECTED command's, already known to make up the report (runProvesVerify above):
-    // a _Verify:_ that itself holds ` && ` is logged whole (`npm run build && npm test`), never as its parts
-    const lists = [key.split(" && ")];
-    if (Array.isArray(opts.expected) && opts.expected.length > 1) lists.push(opts.expected.map((c) => flatCommand(c)));
-    for (const list of lists) {
-      const hits = list.map((p) => p.trim()).filter(Boolean).map(latest);
-      if (hits.length > 1 && hits.every((h) => h && h.exitCode === 0)) return { observed: true, at: hits.map((h) => h.at).sort().pop() };
-    }
-  }
-  return { observed: false };
+  if (code !== 0) return { observed: false };
+  // a passing report: each expected command's own latest logged run passed — or, for one of several plain ` && ` steps (no cd, no
+  // pipefail), each step's (a _Verify:_ that holds ` && `, run step by step)
+  const passAt = (v, deep) => {
+    const h = latest([v]);
+    if (h) return h.exitCode === 0 ? h.at : null;
+    const parts = deep ? proofPlainParts(v) : null;
+    if (!parts) return null;
+    const ats = parts.map((p) => passAt(p, false));
+    return ats.every(Boolean) ? ats.sort().pop() : null;
+  };
+  const ats = want.map((v) => passAt(v, true));
+  return ats.every(Boolean) ? { observed: true, at: ats.sort().pop() } : { observed: false };
 }
+// The plain ` && ` steps of a command — each one a command with no cd / pipefail around it — as commands of their own; null when
+// it holds one step only, or any cd / pipefail (a step's folder would then not be the root's).
+function proofPlainParts(cmd) {
+  const steps = proofSteps(cmd);
+  if (steps.length < 2 || steps.length > PROOF_MAX_STEPS || !steps.every((s) => s.t === "cmd")) return null;
+  return steps.map((s) => [...s.env.map(([k, v]) => k + "=" + v), s.body].join(" "));
+}
+// A command as the log stores it: whitespace runs folded (review 3: backticks are kept — a substitution is no plain text).
+const observedKey = (s) => String(s == null ? "" : s).replace(/\s+/g, " ").trim();
 // Was any run ever observed in this project (a log with an entry, project or active feature)? The "MCP-only client" note.
 function observedAny(projectDir) {
   const files = [observedLogFile(projectDir, null), ...featureDirs(projectDir).filter((f) => !f.archived).slice(0, OBSERVED_MAX_FEATURES)
@@ -1334,41 +1351,56 @@ function observedProof(e, expectFail, since, verify, root) {
   if (seen(run)) return true;
   return !!(expectFail && since != null && isRecord(run) && timeOf(run.at) != null && timeOf(run.at) < since && seen(e) && e.exitCode === 0);
 }
-// Every runnable _Verify:_ command of a tasks.md (flattened), plus the " && " join of a task's commands when it has several.
-function verifyCommandSet(tasksText) {
-  const set = new Set();
-  for (const b of taskBlocks(tasksText)) {
-    const v = taskMarkers(b).verify.map(flatCommand).filter(Boolean);
-    v.forEach((c) => set.add(c));
-    if (v.length > 1) set.add(v.join(" && "));
+// Review 3 — the cheap text test run before a tasks.md is parsed (here, and — a copy, as it runs before the engine loads — in
+// hooks/observe-hook.js): the run's command bodies as no matcher reading tells apart — split at ` && ` and `;`, a `cd` /
+// `set … pipefail` part dropped, leading NAME=value assignments (quotes honoured) and a trailing 2>&1 dropped, then backticks and
+// quotes dropped, `\` read as `/`, whitespace folded (observedNorm) — must each appear in the normalized text. A SUPERSET of
+// runProvesVerify (every transformation keeps a body a substring of its _Verify:_'s normalized text): a run the matcher accepts
+// always passes it. → the bodies ([] — a run of cds / pipefail only — matches nothing).
+const observedNorm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim();
+const RE_OBSERVED_ENV = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s"'`;&|]*)\s+)+/;
+function observedBodies(cmd) {
+  const out = [];
+  for (let part of String(cmd == null ? "" : cmd).replace(/\s+/g, " ").split(/ && |;/)) {
+    part = part.trim();
+    if (!part || /^cd(?:\s|$)/i.test(part) || /^set\s.*pipefail\s*$/.test(part)) continue;
+    const b = observedNorm(part.replace(RE_OBSERVED_ENV, "").replace(/\s+2>&1$/, ""));
+    if (b) out.push(b);
   }
-  return set;
+  return out;
 }
-// hooks/observe-hook.js, once its cheap text pre-filter found the command in a tasks.md or meta.checks: one log line per
-// target the run belongs to — each non-archived feature with a task whose runnable _Verify:_ is this command, and the project
-// log when it is a project check. Never creates a feature folder (a feature renamed or removed meanwhile stays gone), never
-// throws. run: {command, exitCode, event?, session?, at?, cwd?, roots?} → { recorded: [{feature | null, file}] }
+// hooks/observe-hook.js, once its cheap text pre-filter found the command's bodies in a tasks.md or meta.checks: one log line per
+// target the run belongs to — each non-archived feature with a task the run is a run of (review 3: runProvesVerify, the matcher
+// the verdict uses — one of its runnable _Verify:_ commands, or all of them joined in any order; `node --test tests\x.test.js`,
+// `npm test && npm run build`, `CI=1 npm run lint` were logged nowhere: the log took only the _Verify:_ as written or its in-order
+// join), and the project log when it is a run of a project check. Never creates a feature folder (a feature renamed or removed
+// meanwhile stays gone), never throws. run: {command, exitCode, event?, session?, at?, cwd?, roots?} → { recorded: [{feature |
+// null, file}] }
 // A leading `cd <dir> &&` is stripped when <dir> (from run.cwd) is this project or one of run.roots — the hook passes every
-// project the run belongs to (a worktree's and the main one): stripCdPrefix, the same function observedRun applies.
+// project the run belongs to (a worktree's and the main one): stripCdPrefix, the same function observedRun applies. The line keeps
+// the command with its whitespace folded (observedKey — backticks kept).
 function observeRun(projectDir, run) {
   const pdir = path.resolve(projectDir);
   const root = specsRoot(pdir);
   const roots = [pdir, ...(run && Array.isArray(run.roots) ? run.roots : [])];
-  const key = flatCommand(stripCdPrefix(run && run.command, roots, run && typeof run.cwd === "string" && run.cwd ? run.cwd : pdir));
+  const key = observedKey(stripCdPrefix(run && run.command, roots, run && typeof run.cwd === "string" && run.cwd ? run.cwd : pdir));
   const code = run && Number.isInteger(run.exitCode) ? run.exitCode : null;
   if (!key || key.length > OBSERVED_MAX_COMMAND || code == null || !isDirSafe(root)) return { recorded: [] };
+  const bodies = observedBodies(key);
+  if (!bodies.length) return { recorded: [] };
+  const mentions = (text) => { const t = observedNorm(text); return bodies.every((b) => t.includes(b)); };
+  const proves = (list) => runProvesVerify({ command: key }, list, pdir);
   const entry = { command: key, exitCode: code, at: typeof run.at === "string" && Number.isFinite(Date.parse(run.at)) ? run.at : new Date().toISOString() };
   if (typeof run.event === "string" && run.event) entry.event = run.event.slice(0, 40);
   if (typeof run.session === "string" && run.session) entry.session = run.session.slice(0, 200);
   const targets = [];
   for (const f of featureDirs(pdir).filter((x) => !x.archived).slice(0, OBSERVED_MAX_FEATURES)) {
     const text = readIfExists(path.join(f.dir, "tasks.md"));
-    // The cheap text check first — a task's " && " join is never written whole, only its parts are (review R6).
-    const flatTasks = text ? flatCommand(text) : "";
-    const inText = flatTasks.includes(key) || (key.includes(" && ") && key.split(" && ").every((p) => !p.trim() || flatTasks.includes(p.trim())));
-    if (text && inText && verifyCommandSet(text).has(key)) targets.push({ feature: f.slug, dir: path.join(f.dir, ".execution") });
+    if (!text || !mentions(text)) continue; // the cheap text check first
+    const ran = taskBlocks(text).some((b) => { const v = taskMarkers(b).verify; return v.length > 0 && (v.some((c) => proves([c])) || (v.length > 1 && proves(v))); });
+    if (ran) targets.push({ feature: f.slug, dir: path.join(f.dir, ".execution") });
   }
-  if (projectChecks(pdir).checks.some((c) => flatCommand(c.command) === key)) targets.push({ feature: null, dir: path.join(root, ".execution") });
+  if (projectChecks(pdir).checks.some((c) => mentions(c.command) && proves([c.command]))) targets.push({ feature: null, dir: path.join(root, ".execution") });
   const recorded = [];
   for (const t of targets) {
     const file = appendObserved(t.dir, entry);
@@ -1805,12 +1837,12 @@ module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isR
   RE_PESTER_FAILED, RE_PESTER_NOT_RUN, pesterRan, couldNotRunOutput, RE_PWSH_PARSE_FAILURE, pwshParseFailure, runsPwsh,
   cantRunRecord, isRedRun, redProof, CMD_RULE, legacyRedRun, expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps,
   gitEvidence, OBSERVED_LOG, OBSERVED_MAX_BYTES, OBSERVED_WINDOW_MS, OBSERVED_MAX_COMMAND, OBSERVED_MAX_FEATURES,
-  EVIDENCE_MODES, flatCommand, evidenceMode, evidenceSince, evidenceRule, evidenceModeInput, setEvidenceMode,
+  EVIDENCE_MODES, evidenceMode, evidenceSince, evidenceRule, evidenceModeInput, setEvidenceMode,
   observedLogFile, readObservedLog, observedRun, observedAny, observedStamp, RE_CD_STRIP, stripCdPrefix, runRootStamp, gitCommonDir, specsProjectOf,
   RE_PLAIN_ARG, RE_PROOF_CD, RE_PROOF_PIPEFAIL, RE_PROOF_ENV, PROOF_MAX_STEPS, PROOF_MAX_KEYS, unquotePlainArgs, splitAndSteps,
   proofSteps, proofSubstAt, proofSubstEnd, proofUnwrapCode, parseProofDir, joinProofDir, RE_PROOF_OPAQUE_DIR, cdInto, proofBase,
-  proofFolderKey, proofCommands, proofCommandIs, commandsCoverVerify, proofKey, runProvesVerify, observedProof, verifyCommandSet,
-  observeRun, appendObserved, trimObservedLog, lastTaskActivity, CHECK_NAME_RE, CHECKS_MAX, validCheckName,
+  proofFolderKey, proofCommands, proofCommandIs, commandsCoverVerify, proofKey, runProvesVerify, observedProof,
+  observeRun, observedNorm, RE_OBSERVED_ENV, observedBodies, observedKey, proofPlainParts, appendObserved, trimObservedLog, lastTaskActivity, CHECK_NAME_RE, CHECKS_MAX, validCheckName,
   validCheckCmd, projectChecks, checksInput, checksPlanError, writeChecks, recordFinishChecks, suiteStatus,
   suiteCodeStamp, runStartStamp, runStartOf, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, GITLOG_MAX_COMMITS, parseGitLog,
   taskCommits, unverifiedLabel, specChangedSince, untickedSince, __link };
