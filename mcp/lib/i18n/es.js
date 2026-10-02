@@ -1432,7 +1432,9 @@ const msg = {
       reason: { "no-evidence": "sin evidencia", "failed-run": "la última ejecución falló", "manual-note-on-runnable-verify": "solo una nota, comando _Verify:_ sin ejecutar", "duplicate-number": "número compartido con otra tarea",
         "stale-evidence": "evidencia de otra tarea o de otro comando _Verify:_",
         "unexpected-pass": "la ejecución pasó, pero _Expect: fail_ necesita una ejecución en rojo",
-        unobserved: "ejecución no observada por el harness" },
+        unobserved: "ejecución no observada por el harness",
+        "command-mismatch": "la ejecución registrada no es su comando _Verify:_" },
+      commandMismatch: (n, slug, ran, verify, red) => `Tarea ${n}: la ejecución registrada (\`${ran}\`) no es una ejecución de su comando _Verify:_ (${verify}) — queda marcada, pero sigue sin verificar hasta que se registre una ejecución ${red ? "QUE FALLE " : ""}de ese comando (tal como está escrito; un \`cd <carpeta> &&\`, \`set -o pipefail;\` o VAR=valor delante, o la unión con \` && \` de sus comandos, valen): ${DEV_SPEC} done ${slug} ${n} --run`,
       duplicateTasks: (list) => `números de tarea repetidos: ${list} — complete/brief eligen la primera pendiente; renuméralas`,
     },
     observed: {
@@ -2311,6 +2313,7 @@ const msg = {
     },
 
     markerSyntax: {
+      unreadTasks: (list) => `líneas con casilla que no son tareas: ${list} — una línea de tarea es "- [ ] N. texto" (una viñeta -, * o +, luego su número); estas nunca se marcan, ni entran en un brief, ni se verifican. Numéralas (o conviértelas en subpasos de una tarea).`,
       doctor: (list) => `un texto con forma de marcador en una línea de tarea no da ningún marcador: ${list} — las herramientas no leen nada ahí (no se ejecuta ninguna comprobación, no se rastrea ningún archivo). Escríbelo como _Verify: <comando>_ / _Implements: <ruta>_ / _Depends: 3_ (en cursiva, con el valor dentro).`,
     },
     outsideCode: {
@@ -2790,7 +2793,7 @@ const msg = {
       unknownCheck: (name, list) => `'${name}' no es una verificación del proyecto — una de: ${list}`,
       needsCommand: "falta el comando que se ejecutó",
       needsExit: "falta su exit code (un entero)",
-      status: (i) => ({ "no-run": "ninguna ejecución registrada", failed: `la última ejecución falló (exit ${i.exitCode})`, changed: "su comando cambió desde la ejecución", "before-last-tick": "se ejecutó antes de la última actividad en las tareas", "code-changed": "los ficheros de implementación cambiaron desde la ejecución", unobserved: "la ejecución no fue observada por el harness" })[i.status] || i.status,
+      status: (i) => ({ "no-run": "ninguna ejecución registrada", failed: `la última ejecución falló (exit ${i.exitCode})`, changed: "la ejecución no es de su comando (o el comando cambió desde entonces)", "before-last-tick": "se ejecutó antes de la última actividad en las tareas", "code-changed": "los ficheros de implementación cambiaron desde la ejecución", unobserved: "la ejecución no fue observada por el harness" })[i.status] || i.status,
       blocker: (list, slug) => `verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: ${list} — ejecútalas: ${DEV_SPEC} finish ${slug} --run (o registra las ejecuciones con spec_finish {evidence})`,
       doctorWarn: (list, slug) => `todas las tareas están hechas, pero hay verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: ${list} — spec_finish rechaza hasta que pasen: ${DEV_SPEC} finish ${slug} --run`,
       doctorOk: (n) => `todas las verificaciones del proyecto (${n}) tienen una ejecución correcta desde la última actividad en las tareas`,
@@ -2857,6 +2860,8 @@ const msg = {
       ],
       fixed: ["corregí", "corregimos", "corregido", "corregida", "corregidos", "corregidas", "arreglé", "arreglamos", "arreglado", "arreglada", "arreglados", "arregladas",
         "resolví", "resolvimos", "resuelto", "resuelta", "resueltos", "resueltas", "anteriormente"],
+      zeroes: [String.raw`0|cero|ning[uú]n(?:[oa]s?)?(?:\s+de\s+l[oa]s)?`],
+      passNow: [String.raw`ahora\s+(?:pasan|pasa|est[áa]n\s+en\s+verde|est[áa]\s+en\s+verde)`],
       head: "dev-spec — gate de evidencia: tu último mensaje dice que el trabajo está hecho o verificado, pero hay tareas marcadas sin evidencia de verificación:",
       headSuite: "dev-spec — gate de evidencia: tu último mensaje dice que el trabajo está hecho o verificado, pero las verificaciones del proyecto no tienen una ejecución correcta desde la última actividad en las tareas:",
       taskLine: (slug, list) => `  - ${slug}: ${list}`,

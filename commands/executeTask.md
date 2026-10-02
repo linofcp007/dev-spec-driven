@@ -23,6 +23,9 @@ task, run its `_Verify:_` command fresh and call `spec_complete_task {…, evide
 code and output summary — evidence before claims (`references/verification.md`). The rules the engine applies:
 - a task whose `_Verify:_` holds a runnable command is **verified only by `{command, exitCode: 0}`** — a text
   note ticks it but leaves it unverified (`unverifiedReason: manual-note-on-runnable-verify`);
+- the `command` must be the `_Verify:_` command itself (a leading `cd <dir> &&`, `set -o pipefail;`, `VAR=value`, a
+  trailing `2>&1` or the ` && ` join of its commands are fine) — a run of any other command ticks it unverified
+  (`command-mismatch`);
 - a **non-zero exit code refuses the tick** (except on an `_Expect: fail_` task, whose failing run is its proof) and the failed run is **recorded** (a failed re-check of a ticked task
   makes it unverified until a passing run is recorded) — a failing run means the task is not done;
 - evidence marked **stale** by `/spec-impact --reopen` (or recorded for an earlier `_Verify:_` command) no longer

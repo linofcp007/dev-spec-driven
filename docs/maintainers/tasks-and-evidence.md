@@ -117,9 +117,23 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `{command, exitCode: 0}`; a note ticks it but leaves it unverified. `{exitCode}` alone and a command
   without its exit code are rejected; "exit 0" without a command is kept as a note. A non-zero run refuses
   the tick and is recorded — a failed re-check of a ticked task makes it unverified until a later pass.
+- **Which run proves it (1.22 review).** Until 1.22 the reported `command` was never compared with the `_Verify:_`:
+  `{command: "echo hello", exitCode: 0}` verified a task whose `_Verify:_` is `npm test`. `runProvesVerify(run, verify)`
+  (evidence.js) is now part of the ONE verdict (`taskEvidenceIssue`, after `evidenceIssue` passed it): the proving run —
+  the latest passing run, an `_Expect: fail_` task's red proof — must be a run of one of the task's `_Verify:_` commands,
+  both sides read by `proofKey()`: `flatCommand` (backticks, whitespace), quotes around the WHOLE command dropped, a leading
+  `cd <dir> &&` / `;` (cmd.exe's `cd /d` too), `set -o pipefail;` (`set -euo pipefail;` …) and `NAME=value` assignments
+  and a trailing `2>&1` taken out, repeatedly (bounded); the ` && ` join of several of its commands (a pure `cd <dir>` part
+  dropped) counts, and so does a run stamped `observed: "cli"` (`done --run` ran it). Anything else ticks but reads
+  **`command-mismatch`** (`evidenceGate.commandMismatch`, EN/PT/ES — the note names the command recorded and the
+  `_Verify:_`). An `_Expect: fail_` task: a red run of another command ticks (it is no could-not-run run) but is NO red
+  proof — `expectFailRun(ev, prev, verify)` answers `red: false`, so the red run on record is carried forward (`keepRed`)
+  and a later pass is "the fix going green" only after a red run of the `_Verify:_` itself; `redProof(e, verify)`,
+  `recordEvidence`'s kept `red`, `redGreenGaps` and `observedProof` all take the verify list. A finish check's run is held
+  to its `meta.checks` command the same way (`suiteStatus` → `changed`).
 - **Reason codes** (stable): `no-evidence` · `failed-run` · `manual-note-on-runnable-verify` ·
   `duplicate-number` · `stale-evidence` · `unexpected-pass` (1.14, `_Expect: fail_`) · `unobserved` (1.14 F1, only
-  with `meta.evidence: "observed"` — see Harness-observed evidence). They are RETURNED in
+  with `meta.evidence: "observed"` — see Harness-observed evidence) · `command-mismatch` (1.22 review — above). They are RETURNED in
   `spec_complete_task`'s `unverifiedReason` (set
   exactly when `verified` is false) and in `spec_impact`'s per-task `evidence` (`impacted[].tasks[]`,
   `affectedTasks[]`: a code, or `verified`) — both public surfaces; callers branch on these, never on the
@@ -203,11 +217,17 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   readiness is computed; stamped `check` = the configured command, so an edited command reads `changed`, and `code` =
   `suiteCodeStamp()` — one sha1 over the feature's ACTIVE tasks' `_Implements:_` set as the finish baseline records it
   (`baselineFiles()` + each file's `fileHash()`), no stamp when that walk hit its cap; a failed run is recorded too).
+  1.22 review: `finish --run` takes its stamps BEFORE the checks run (`runStartStamp()` → `finishFeature {runStart: {at,
+  code}}`, CLI only — `runStartOf()` validates it): the run's `at` is its start, `code` the files as they were then and
+  `check` the command that ran, so an edit made while a long suite ran reads `code-changed` / `changed` (stamped after the
+  run, it read as tested). `done --run` likewise passes `startedAt` (the run record's `at`) and `ranVerify` (its `verify`
+  stamp: a `_Verify:_` edited while it ran makes the record `stale-evidence`).
   `completeTask` stamps `lastTickAt`; `lastTaskActivity()` = the latest of it and every recorded task run, a stamp more
   than 5 minutes in the future ignored (as `stopActivity()`). `suiteStatus(projectDir, state, dir)` (dir: the feature
   folder the stamp is compared with) → blocker `suite-evidence` (finish + the execution gate), doctor warn `suite-evidence`
   (once every task is done) and the stop gate: a check without a passing run since the last task activity on the code as
-  it is now. `suiteChecks` status codes (stable): `pass` · `no-run` · `failed` · `changed` · `before-last-tick` ·
+  it is now. `suiteChecks` status codes (stable): `pass` · `no-run` · `failed` · `changed` (the configured command changed
+  since the run, or — 1.22 review — the run is of another command: `runProvesVerify(run, [check])`) · `before-last-tick` ·
   `code-changed` (a passing run whose `code` stamp no longer matches — code edited after the checks ran; an unstamped run
   keeps the older rules) · `unobserved` (1.14 F1, only with `meta.evidence: "observed"`: a passing run whose `observed` is
   neither `true` nor `"cli"`; each item also carries the run's `observed`). next_action's `finish` / `drift` steps name `dev-spec finish <f> --run` / `spec_finish
@@ -281,7 +301,12 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 - **Tasks: ONE scanner.** `taskBlocks()` (over `scanTaskLines()`) reads tasks.md like a markdown reader —
   HTML comments (a line-start `<!--` may span lines) and fenced code never hold tasks; `<!--`/`-->` inside
   code spans don't count. `parseTasks()` is its line-only projection (its shape is public through
-  `spec_status`), so status/next/complete/brief/finish can never disagree. Task numbers are numeric (`01.` is
+  `spec_status`), so status/next/complete/brief/finish can never disagree. A task line is `[-*+] [ ] N. text` — 1.22 review:
+  `* [ ] 1.` / `+ [ ] 1.` (valid GFM) read as ZERO tasks, silently; the tasks fingerprint's tick normalization (`uncheckTasks`,
+  state.js) takes the same bullets, and an approval fingerprinted the pre-1.22 way (`- [x]` only) still matches. A checkbox line
+  the scanner doesn't read — an ordered-list checkbox `1. [ ] text`, an unnumbered `- [ ] text` outside every task block (a
+  sub-step in a task's body is the task's; fences and comments hold none) — is named by doctor's `unread-tasks` warn
+  (`unreadTaskLines()`, `CHECK_PHASE` 5; the feature and the spike doctor). Task numbers are numeric (`01.` is
   task 1); `resolveTask()` picks the first OPEN task of a duplicated number (doctor warns `duplicate-tasks`);
   `completeTask` ticks exactly the resolved line at its checkbox column (CRLF kept). Tasks are
   story-organized (P1 first) with `[P]` parallel markers + `**Checkpoint:**` lines; the design's
@@ -297,8 +322,12 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 - **`stopCheck(projectDir, {message, agent, stopHookActive})`** (engine; `hooks/stop-hook.js` and `dev-spec stop-check`
   print the same decision) sends a turn back (`block: true`, `reason`) ONLY when (a) the closing message CLAIMS the work
   is done or verified and (b) a non-archived feature active in the last `STOP_RECENT_HOURS` = 4 h (lastTickAt, ticks,
-  evidence `at` / `noteAt` / history — only what the engine recorded, never a file date (a fresh clone stamps tasks.md
-  "now"), and a stamp in the future is ignored; at most 50 features) has ticked tasks `verificationStatus()`
+  evidence `at` / `noteAt` / history, and — 1.22 review — `lastEditAt`: the PostToolUse spec-hook stamps it through
+  `recordSpecEdit()` (under the feature lock, a 2 s wait, busy → nothing) whenever tasks.md / change.md is saved with the
+  Write / Edit tool, so tasks ticked by hand count (they read `no-recent` before); only what the engine recorded, never a
+  file date (a fresh clone stamps tasks.md "now"), and a stamp in the future is ignored. Every feature's `.state.json` is
+  read for its activity (cheap); the `STOP_MAX_FEATURES` = 50 MOST RECENTLY active are checked, in folder order — the cap
+  used to cut the folder list first, so a feature after the 50th alphabetically was never examined) has ticked tasks `verificationStatus()`
   reports unverified — or, every active task done, project checks without a passing run since the last task activity
   (`suiteStatus().missing` — any status but `pass`, `code-changed` included).
   Stable `why` codes: `stop-hook-active` · `no-specs` · `off` · `no-claim` · `admitted` · `verified` · `no-recent` ·
@@ -314,7 +343,12 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   word — a fixing verb or "previously", never an auxiliary ("was", "had", PT "havia", ES "había": "2 tests failed and I
   was unable to fix them" is an honest admission) — sits within 4 words of it in its clause with no negator anywhere in
   that window (`stopPastFailure()`: "I fixed the 2 failing tests", "previously 4 failed"; "I haven't fixed the 2 failing
-  tests", "the 3 failing tests were not fixed" stay admissions). The look-back and the question tail are bounded
+  tests", "the 3 failing tests were not fixed" stay admissions) — or (1.22 review) a `passNow` phrase follows it in its
+  clause with no negator before it ("Fixed the bug; the 2 failing tests now pass": the `;` had cut the fixed word off; PT
+  "agora passam", ES "ahora pasan"). A count of ZERO right before an admission makes it none (`stopZeroCount()`, i18n
+  `stopGate.zeroes`, read on ≤ 60 characters of its clause before it: 0 / zero / no / none (of the); PT nenhum(a)(s) (dos);
+  ES ninguno(a)(s) (de los)) — "All tasks done. 0 tests failing.", "no tests fail", "none of the tests fail" were read as
+  admissions and the gate stayed silent. The look-back and the question tail are bounded
   (`STOP_CLAUSE_SPAN`) — slicing the whole text per hit was quadratic. A noun + done claim ("Feature complete") must end
   its clause ("the implementation done so far" claims nothing). The negator window is cut at
   `:` and dashes; "no" and "se" are read by language (`stopNegates()`: "no" negates in EN, in ES only before a verb or
@@ -322,9 +356,11 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   Spanish auxiliary or preterite). Claims include "All tasks
   done", "All green", ranges ("Tasks 1-3 done"), "Feature complete" and an emoji ✅ ✓ ✔ around done. A spike is never
   held to the project checks here; a reason listing only checks has its own head line (`headSuite`). When you add a
-  language, add its four lists (claims, negators, admissions, fixed).
+  language, add its six lists (claims, negators, admissions, fixed, zeroes, passNow — the regex ones are raw for pt-BR:
+  i18n.js `defineDerivedLocale(MSG, {stopGate: …})`).
 - **spec-implementer (SubagentStop):** it never ticks tasks, so its gate is its REPORT: a DONE / DONE_WITH_CONCERNS for a
-  task whose `_Verify:_` is runnable needs `.specs/<f>/.execution/task-N-report.md` (the path named in its reply) to carry
+  task whose `_Verify:_` is runnable needs `.specs/<f>/.execution/task-N-report.md` (the LAST such path named in its reply,
+  a report over a brief — 1.22 review: the first one was read, so a reply citing task 1's report before its own passed) to carry
   every one of those commands (backticks / whitespace flattened) and the exit code the task needs ("exit 0", "exit code:
   1", "exited with code 0", "exit status 2", PT "código de saída", ES "código de salida"): an exit 0 for a must-pass
   `_Verify:_` (`notPassing` — "DONE … exit code: 1" was allowed), a non-zero exit for an `_Expect: fail_` task
@@ -358,7 +394,10 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `^(dev-spec-driven:)?spec-(implementer|simplifier)$` — plugin subagents IGNORE a `hooks` block in their own frontmatter, so it must
   live in the plugin's hooks.json. It reads `last_assistant_message` (a bounded transcript tail for older payloads),
   honours `stop_hook_active` (never sends the same stop back twice in a row), answers `{"decision": "block", "reason"}`,
-  is silent when there is nothing to say, when `.specs/` isn't dev-spec's, or when `roadmap.json → meta.stopCheck` is
+  is silent when there is nothing to say, when `.specs/` isn't dev-spec's, when (Stop only — 1.22 review) no feature folder's
+  `.state.json` holds a string that parses as a date within the last `STOP_RECENT_HOURS` (and ≤ 5 min ahead) — a raw
+  pre-filter, a superset of `stopActivity()`, run BEFORE the engine loads (30 idle features: ~235 → ~88 ms a turn; the
+  hook's own `STOP_RECENT_HOURS` is checked against the engine's) —, or when `roadmap.json → meta.stopCheck` is
   exactly `false` (on by default — `spec_init {stopCheck}` / `init --stop-check on|off`; the result always reports it), and
   exits 0 on any error. CLI: `dev-spec stop-check [--message "<text>"|-] [--agent <type>]` (exit 1 = would send it back).
 - **Scope guard:** `meta.guard` is `false | true | "scope"` (`guardLevel()`; the hook reads the same raw value;
@@ -389,14 +428,26 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   interrupted run (`is_interrupt`, `interrupted`), a backgrounded one (`run_in_background`, `backgroundTaskId`,
   `backgroundedByUser`) and a run with no explicit code but a `returnCodeInterpretation` (a non-zero exit the Bash tool read
   as no error — grep's "No matches found") are no run. A leading `cd <project root> &&` (or `;`) is stripped (Git Bash
-  `/c/…` paths read as `C:/…`); any other folder keeps the whole command, which then matches nothing. The engine is loaded
+  `/c/…` paths read as `C:/…`) by ONE engine function, `stripCdPrefix(cmd, roots, cwd)` (1.22 review): `observeRun(pdir,
+  {command, cwd, roots})` strips a cd into this project OR any project the run belongs to (the hook passes every project it
+  found — a subagent's `cd <worktree> && npm test` is logged as `npm test` in the main project's log too, not only in the
+  worktree's git-ignored one), and `observedRun` strips the REPORTED command against the project (+ the project holding the
+  process's cwd) the same way — the hook used to strip while the lookup didn't, so reporting the exact command that ran read
+  unobserved. Any other folder keeps the whole command, which then matches nothing. The hook's pre-filter key drops a leading
+  `cd <dir> &&` whatever the folder (a superset — the engine decides); it opens each folder's tasks.md once (its size read
+  from the open file) and probes change.md only where there is no tasks.md — the engine's own rule (1.22 review: a stat, a
+  read and a change.md probe per folder cost +133 ms a Bash call at 150 features; measured 226 → 192 ms there). A cache of
+  the flat `_Verify:_` list keyed on each tasks.md's stats was left out: in a one-shot hook it would need a written index,
+  and a stale one silently drops observations. The engine is loaded
   only after a plain-text pre-filter (the flattened command — or each part of a ` && ` join — appears in some feature's tasks.md — ≤ 2 MB each, dot / `_`
   folders skipped — or equals a meta.checks command); it prints nothing, reads stdin asynchronously (≤ 4 MB, else
   ignored), and exits 0 on any error.
-- **The stamp.** `observedRun(projectDir, slug | null, command, exitCode)` → `{observed, at?}`: true when the LATEST
+- **The stamp.** `observedRun(projectDir, slug | null, command, exitCode, {expected})` → `{observed, at?}`: true when the LATEST
   logged run of the same flattened command within `OBSERVED_WINDOW_MS` (24 h; a stamp more than 5 min in the future
   ignored) exited with the same code — a report of exit 0 after an observed exit 1 is not what the harness saw
-  (`latestExitCode`); a reported `a && b` with exit 0 also counts when each part's latest logged run passed.
+  (`latestExitCode`); a reported `a && b` with exit 0 also counts when each part's latest logged run passed. `expected`
+  (1.22 review — `observedStamp` passes the task's `_Verify:_` values / `[the check's command]`): a reported run that is
+  not one of them (`runProvesVerify`) is never observed — another task's or check's logged run used to count.
   `observedStamp()`: every run `{command, exitCode}` that `spec_complete_task` / `done` and `spec_finish {evidence}` record
   is stamped `observed: true | false`; `done --run` / `finish --run` pass `ranBy: "cli"` → `observed: "cli"` (the CLI ran it
   itself; counts as observed). The MCP server never passes `ranBy`, and `normalizeEvidence()` keeps no caller-given

@@ -119,7 +119,8 @@ function finishFeature(projectDir, name, opts = {}) {
   // the feature ready); all-or-nothing, under the feature lock.
   let recordedChecks = null;
   if (opts.evidence != null) {
-    const rc = recordFinishChecks(projectDir, slug, dir, opts.evidence, lng, opts.ranBy); // ranBy "cli": `finish --run` (1.14 F1; never from MCP)
+    // ranBy "cli": `finish --run` (1.14 F1; never from MCP) — with runStart {at, code} (1.22 review): the stamps taken BEFORE it ran
+    const rc = recordFinishChecks(projectDir, slug, dir, opts.evidence, lng, opts.ranBy, opts.ranBy === "cli" ? opts.runStart : undefined);
     if (rc.error) return { ok: false, error: rc.error };
     recordedChecks = rc.recorded;
   }

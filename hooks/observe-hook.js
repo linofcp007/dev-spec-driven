@@ -15,7 +15,8 @@
  *   - PostToolUse: tool_response.exit_code (or exitCode / code; a response text starting "Exit code N"); none → 0 (the event
  *     fires after a tool call succeeds). An interrupted or backgrounded run is no run.
  *   - PostToolUseFailure: the same fields, else the exit code named in `error` ("… exit code 1"), else 1 — never 0.
- * A command `cd <project root> && <cmd>` counts as <cmd> (the Bash tool often prefixes the folder it runs in).
+ * A command `cd <project root> && <cmd>` counts as <cmd> (the Bash tool often prefixes the folder it runs in) — the root of any
+ * project the run belongs to (a worktree's too), stripped by the engine's stripCdPrefix, the function observedRun applies.
  *
  * Cheap and silent, like every dev-spec hook: it exits at once unless the tool is Bash and the project has a .specs/ dev-spec
  * owns; the engine is loaded only when the command's text appears in a feature's tasks.md or in meta.checks (a plain text
@@ -120,20 +121,11 @@ function exitCodeOf(payload, failure, strict) {
   return nonZero(m ? parseInt(m[1], 10) : 1);
 }
 
-// `cd <project root> && <cmd>` (or `;`) → <cmd>: the Bash tool often runs a command from the project root that way. Any
-// other folder is another run (kept whole, so it matches nothing).
-function stripCdPrefix(cmd, pdir, cwd) {
-  const m = /^cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;&|]+))\s*(?:&&|;)\s*([\s\S]+)$/.exec(cmd);
-  if (!m) return cmd;
-  let target = m[1] != null ? m[1] : m[2] != null ? m[2] : m[3];
-  // Git Bash / MSYS paths on Windows: /c/Users/… → C:/Users/…
-  if (process.platform === "win32") target = target.replace(/^\/([a-zA-Z])(?=\/|$)/, (_, d) => d + ":");
-  const norm = (p) => {
-    const r = path.resolve(p).replace(/[\\/]+$/, "");
-    return process.platform === "win32" || process.platform === "darwin" ? r.toLowerCase() : r;
-  };
-  return norm(path.resolve(cwd || pdir, target)) === norm(pdir) ? m[4].trim() : cmd;
-}
+// The pre-filter's key: a leading `cd <dir> &&` (or `;`) dropped WHATEVER the folder — the Bash tool often runs a command from
+// the project root that way. Only a filter (a superset): the engine decides, with the ONE stripping function the reported run's
+// lookup uses too (spec.stripCdPrefix — the folder must be one of the run's projects: this one, or the one holding the cwd, a
+// worktree's), what is logged (1.22 review — the hook stripped, the lookup didn't; a worktree's run reached only its own log).
+const looseKey = (cmd) => flat(cmd.replace(/^cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)\s*/, ""));
 
 // A tasks.md written as UTF-16 (a BOM: FF FE / FE FF — Windows PowerShell 5.1) is read as the engine reads it (files.js
 // decodeText, 1.22 review) without loading the engine for this pre-filter; anything else is UTF-8.
@@ -161,18 +153,33 @@ function mentioned(pdir, key) {
     return false;
   }
   for (const d of dirs) {
-    // tasks.md — or a change's change.md, which holds its tasks (1.21 F5)
-    for (const name of ["tasks.md", "change.md"]) {
-      const file = path.join(root, d.name, name);
-      try {
-        if (fs.statSync(file).size > MAX_TASKS_BYTES) continue;
-        const text = flat(utf16OrUtf8(fs.readFileSync(file)));
-        // The " && " join of a task's commands (how done --run reports them) is never written whole: every part is (review R6).
-        if (text.includes(key) || (parts.length > 1 && parts.every((x) => text.includes(x)))) return true;
-      } catch { /* no such file */ }
-    }
+    // tasks.md — or, only when there is none, a change's change.md, which holds its tasks (1.21 F5). 1.22 review: one open per
+    // feature (its size read from the open file) — a stat, a read and a change.md probe per feature cost +133 ms a Bash call
+    // at 150 features.
+    const raw = readTasksText(path.join(root, d.name, "tasks.md"));
+    const got = raw === null ? readTasksText(path.join(root, d.name, "change.md")) : raw;
+    if (typeof got !== "string") continue;
+    const text = flat(got);
+    // The " && " join of a task's commands (how done --run reports them) is never written whole: every part is (review R6).
+    if (text.includes(key) || (parts.length > 1 && parts.every((x) => text.includes(x)))) return true;
   }
   return false;
+}
+// A tasks file's text → the text, null when there is no such file, false when it can't be read or passes MAX_TASKS_BYTES.
+function readTasksText(file) {
+  let fd;
+  try { fd = fs.openSync(file, "r"); } catch (e) { return e && e.code === "ENOENT" ? null : false; }
+  try {
+    const size = fs.fstatSync(fd).size;
+    if (size > MAX_TASKS_BYTES) return false;
+    const buf = Buffer.alloc(size);
+    const n = fs.readSync(fd, buf, 0, size, 0);
+    return utf16OrUtf8(n === size ? buf : buf.subarray(0, n)); // a UTF-16 (BOM) file too — Windows PowerShell 5.1 writes them
+  } catch {
+    return false;
+  } finally {
+    try { fs.closeSync(fd); } catch { /* closed */ }
+  }
 }
 
 function main(raw) {
@@ -199,13 +206,18 @@ function main(raw) {
   if (exitCode == null) return finish();
 
   let spec = null;
-  for (const pdir of projectDirsOf(payload)) {
-    const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : pdir;
-    const key = flat(stripCdPrefix(command, pdir, cwd));
+  const dirs = projectDirsOf(payload);
+  const key = looseKey(command);
+  for (const pdir of dirs) {
     if (!key || !mentioned(pdir, key)) continue;
+    const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : pdir;
     spec = spec || require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+    // The engine strips a `cd <dir> &&` whose folder is this project or another one the run belongs to (dirs: a worktree's and
+    // the main project), from the run's cwd — any other folder keeps the whole command, which then matches nothing.
     spec.observeRun(pdir, {
-      command: key,
+      command,
+      cwd,
+      roots: dirs,
       exitCode,
       event: event || (failure ? "PostToolUseFailure" : "PostToolUse"),
       session: typeof payload.session_id === "string" ? payload.session_id : undefined,

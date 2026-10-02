@@ -1433,7 +1433,9 @@ const msg = {
       reason: { "no-evidence": "sem evidência", "failed-run": "a última execução falhou", "manual-note-on-runnable-verify": "só uma nota, comando _Verify:_ por correr", "duplicate-number": "número partilhado com outra tarefa",
         "stale-evidence": "evidência de outra tarefa ou de outro comando _Verify:_",
         "unexpected-pass": "a execução passou, mas o _Expect: fail_ precisa de uma execução vermelha",
-        unobserved: "execução não observada pelo harness" },
+        unobserved: "execução não observada pelo harness",
+        "command-mismatch": "a execução registada não é o comando _Verify:_" },
+      commandMismatch: (n, slug, ran, verify, red) => `Tarefa ${n}: a execução registada (\`${ran}\`) não é uma execução do seu comando _Verify:_ (${verify}) — fica marcada, mas continua não verificada até se registar uma execução ${red ? "QUE FALHE " : ""}desse comando (tal como está escrito; um \`cd <pasta> &&\`, \`set -o pipefail;\` ou VAR=valor à frente, ou a junção com \` && \` dos seus comandos, servem): ${DEV_SPEC} done ${slug} ${n} --run`,
       duplicateTasks: (list) => `números de tarefa repetidos: ${list} — o complete/brief escolhem a primeira por fazer; renumera-as`,
     },
     observed: {
@@ -2312,6 +2314,7 @@ const msg = {
     },
 
     markerSyntax: {
+      unreadTasks: (list) => `linhas com caixa de verificação que não são tarefas: ${list} — uma linha de tarefa é "- [ ] N. texto" (um marcador -, * ou +, depois o número); estas nunca são marcadas, incluídas num brief nem verificadas. Numera-as (ou torna-as subpassos de uma tarefa).`,
       doctor: (list) => `texto com forma de marcador numa linha de tarefa não dá nenhum marcador: ${list} — as ferramentas não leem nada aí (nenhuma verificação é executada, nenhum ficheiro é rastreado). Escreve-o como _Verify: <comando>_ / _Implements: <caminho>_ / _Depends: 3_ (em itálico, com o valor lá dentro).`,
     },
     outsideCode: {
@@ -2791,7 +2794,7 @@ const msg = {
       unknownCheck: (name, list) => `'${name}' não é uma verificação do projeto — uma de: ${list}`,
       needsCommand: "falta o comando que correu",
       needsExit: "falta o exit code (um inteiro)",
-      status: (i) => ({ "no-run": "nenhuma execução registada", failed: `a última execução falhou (exit ${i.exitCode})`, changed: "o comando mudou desde a execução", "before-last-tick": "correu antes da última atividade nas tarefas", "code-changed": "os ficheiros de implementação mudaram desde a execução", unobserved: "a execução não foi observada pelo harness" })[i.status] || i.status,
+      status: (i) => ({ "no-run": "nenhuma execução registada", failed: `a última execução falhou (exit ${i.exitCode})`, changed: "a execução não é do seu comando (ou o comando mudou desde então)", "before-last-tick": "correu antes da última atividade nas tarefas", "code-changed": "os ficheiros de implementação mudaram desde a execução", unobserved: "a execução não foi observada pelo harness" })[i.status] || i.status,
       blocker: (list, slug) => `verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: ${list} — corre-as: ${DEV_SPEC} finish ${slug} --run (ou regista as execuções com spec_finish {evidence})`,
       doctorWarn: (list, slug) => `todas as tarefas estão feitas, mas há verificações do projeto sem uma execução bem-sucedida desde a última atividade nas tarefas: ${list} — o spec_finish recusa até passarem: ${DEV_SPEC} finish ${slug} --run`,
       doctorOk: (n) => `todas as verificações do projeto (${n}) têm uma execução bem-sucedida desde a última atividade nas tarefas`,
@@ -2858,6 +2861,8 @@ const msg = {
       ],
       fixed: ["corrigi", "corrigimos", "corrigido", "corrigida", "corrigidos", "corrigidas", "resolvi", "resolvemos", "resolvido", "resolvida", "resolvidos", "resolvidas",
         "reparei", "reparado", "reparada", "anteriormente"],
+      zeroes: [String.raw`0|zero|nenhu(?:m|ns|ma|mas)(?:\s+d[oa]s)?`],
+      passNow: [String.raw`agora\s+(?:passam|passa|est[ãa]o\s+a\s+passar|est[áa]\s+a\s+passar|est[ãa]o\s+verdes|est[áa]\s+verde)`],
       head: "dev-spec — gate de evidência: a tua última mensagem diz que o trabalho está feito ou verificado, mas há tarefas marcadas sem evidência de verificação:",
       headSuite: "dev-spec — gate de evidência: a tua última mensagem diz que o trabalho está feito ou verificado, mas as verificações do projeto não têm uma execução bem-sucedida desde a última atividade nas tarefas:",
       taskLine: (slug, list) => `  - ${slug}: ${list}`,

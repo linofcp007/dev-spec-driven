@@ -70,14 +70,82 @@ function cleanTaskText(t) {
   return String(t || "").replace(/^(?:\[[^\]]*\]\s*)+/, "");
 }
 
+// 1.22 review — the per-feature ROW cache (in process: the MCP server refreshes ROADMAP.md after every tick, and on 30 features ×
+// 40 tasks a tick took 313 ms against 13.8 without the refresh). A row is recomputed unless every input it reads is unchanged:
+// the feature's folder (each entry's size, mtime, ctime and inode — `.history/` one level down; `.execution/`, the lock and
+// temp files are scratch), the project inputs (roadmap.json, steering/, templates/, tracks/ — two levels), the feature's
+// roadmap view (`f`, its overlaps). A file stamped within ROW_OPTS.racyMs (3 s) of now (mtime or ctime) is never trusted — git's
+// "racy" rule: a coarse file system clock can give two writes of the same size one stamp —, and a row whose answer depends
+// on the date (a spike's timebox, a waiver's expiry) is never stored. Bounded (ROW_CACHE_MAX). ROADMAP.md / .html stay byte
+// for byte what a fresh computation writes (mcp/tests/08-tasks.js compares them).
+const fs = require("fs");
+const ROW_CACHE = new Map();
+const ROW_CACHE_MAX = 500;
+const ROW_CALLS = { n: 0, hits: 0 }; // roadmapData calls in this process; rows served from the cache
+const ROW_OPTS = { racyMs: 3000 }; // the racy window (tests narrow it)
+const ROW_SCRATCH = /^(?:\.execution|\.lock(?:\.reclaim)?|.*\.tmp)$/;
+function rowStatSig(dir, depth, now, acc) {
+  let ents;
+  try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { acc.push("-"); return; }
+  ents.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const e of ents.slice(0, 400)) {
+    if (ROW_SCRATCH.test(e.name)) continue;
+    const p = path.join(dir, e.name);
+    let s;
+    try { s = fs.statSync(p); } catch { acc.push(e.name + ":?"); continue; }
+    if (Math.max(s.mtimeMs, s.ctimeMs) > now - ROW_OPTS.racyMs) acc.racy = true;
+    acc.push(e.name + ":" + (s.isDirectory() ? "d" : s.size) + ":" + s.mtimeMs + ":" + s.ctimeMs + ":" + s.ino);
+    if (s.isDirectory() && depth > 0) { acc.push("{"); rowStatSig(p, depth - 1, now, acc); acc.push("}"); }
+  }
+  if (ents.length > 400) acc.racy = true; // too many to sign: never trusted
+}
+function rowProjectSig(root, now) {
+  const acc = [];
+  for (const f of ["roadmap.json"]) { try { const s = fs.statSync(path.join(root, f)); if (Math.max(s.mtimeMs, s.ctimeMs) > now - ROW_OPTS.racyMs) acc.racy = true; acc.push(f + ":" + s.size + ":" + s.mtimeMs + ":" + s.ctimeMs + ":" + s.ino); } catch { acc.push(f + ":-"); } }
+  for (const d of ["steering", "templates", "tracks"]) { acc.push(d + "{"); rowStatSig(path.join(root, d), 2, now, acc); acc.push("}"); }
+  return { sig: acc.join("\n"), racy: !!acc.racy };
+}
 // Shared computation for both renderers. opts.now: "today" for the forecasts (tests).
 function roadmapData(projectDir, opts = {}) {
   const rmv = roadmapExtras(projectDir, roadmap(projectDir), opts); // + velocity, each feature's forecast, overlaps
   const root = specsRoot(projectDir);
   let tasksDone = 0;
   let tasksTotal = 0;
+  const now = Date.now();
+  // The first call of a process signs nothing: a one-shot process (the CLI, a hook) never calls twice, and the stats would only
+  // add to its time; a long-lived one (the MCP server) caches from its second refresh on.
+  const sign = ROW_CALLS.n++ > 0;
+  const proj = sign ? rowProjectSig(root, now) : null;
   const rows = rmv.features.map((f) => {
     const dir = path.join(root, f.name);
+    if (!proj) {
+      const row = roadmapRow(projectDir, dir, f, rmv);
+      tasksDone += row.done;
+      tasksTotal += row.total;
+      return row;
+    }
+    const acc = [];
+    rowStatSig(dir, 1, now, acc);
+    const key = path.resolve(dir) + "\n" + JSON.stringify(f) + "\n" + JSON.stringify((rmv.overlaps || []).filter((p) => p.a === f.name)) + "\n" + proj.sig + "\n" + acc.join("\n");
+    const hit = !proj.racy && !acc.racy ? ROW_CACHE.get(path.resolve(dir)) : undefined;
+    let row;
+    if (hit && hit.key === key) { row = hit.row; ROW_CALLS.hits++; }
+    else {
+      row = roadmapRow(projectDir, dir, f, rmv);
+      if (!proj.racy && !acc.racy && f.kind !== "spike" && !Object.keys(row.waivers).length) {
+        if (ROW_CACHE.size >= ROW_CACHE_MAX) ROW_CACHE.clear();
+        ROW_CACHE.set(path.resolve(dir), { key, row });
+      } else ROW_CACHE.delete(path.resolve(dir));
+    }
+    tasksDone += row.done;
+    tasksTotal += row.total;
+    return row;
+  });
+  return { rmv, rows, tasksDone, tasksTotal };
+}
+// One feature's row of roadmapData (what the renderers read; f: its roadmap() view). Pure on its inputs (rowStatSig's).
+function roadmapRow(projectDir, dir, f, rmv) {
+  {
     const raw = { "requirements.md": readIfExists(path.join(dir, "requirements.md")), "design.md": readIfExists(path.join(dir, "design.md")), "tasks.md": readIfExists(path.join(dir, "tasks.md")) };
     const reqs = raw["requirements.md"] || "";
     const design = raw["design.md"] || "";
@@ -86,8 +154,6 @@ function roadmapData(projectDir, opts = {}) {
     const designTodo = /^>\s*\*\*TODO\*\*/m.test(activeDesign(design, tracks));
     const tasks = parseTasks(activeTasks(raw["tasks.md"], tracks));
     const done = tasks.filter((t) => t.done).length;
-    tasksDone += done;
-    tasksTotal += tasks.length;
     const sch = taskSchedule(taskBlocks(activeTasks(raw["tasks.md"], tracks) || "")); // 1.14 F3: next_task's rule
     const next = sch.next;
     // Open tasks, none of which can start (a cycle, a _Depends:_ naming no task): shown blocked, never "ready" (review R7).
@@ -116,8 +182,7 @@ function roadmapData(projectDir, opts = {}) {
     const roleWait = roleWaitList(projectDir, dir, st, tracks); // 1.14 B3: sign-off rounds under way (some roles signed, some not)
     const spikeTimebox = f.kind === "spike" ? spikeInfo(dir).timeboxPassed : null; // 1.14 C2: a spike past its timebox with no decision
     return { f, clar, done, total: tasks.length, next, depsBlocked, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced, waivers, overlaps, roleWait, spikeTimebox };
-  });
-  return { rmv, rows, tasksDone, tasksTotal };
+  }
 }
 
 function buildAttention(rows, t, lang) {
@@ -695,7 +760,8 @@ function overlapDoctorDetail(pairs, slug, lang) {
   return [act.length ? O.doctorActive(act.join("; "), slug) : null, fin.length ? O.doctorFinished(fin.join("; "), slug) : null].filter(Boolean).join(" · ");
 }
 
-module.exports = { progressBar, mid, ROADMAP_I18N, i18nLang, htmlEsc, cleanTaskText, roadmapData, buildAttention,
+module.exports = { progressBar, mid, ROADMAP_I18N, i18nLang, htmlEsc, cleanTaskText, ROW_CACHE, ROW_CACHE_MAX, ROW_CALLS, ROW_OPTS,
+  ROW_SCRATCH, rowStatSig, rowProjectSig, roadmapData, roadmapRow, buildAttention,
   roadmapTaskText, roadmapPhaseName, renderRoadmapMd, renderRoadmapHtml, SIZE_POINTS, RE_SIZE_VALUE,
   FORECAST_WINDOW_DAYS, FORECAST_MIN_TASKS, FORECAST_SPREAD, FC_DAY_MS, taskSize, taskCompletedAt, fcDay, fcWeekend,
   fcIso, fcWorkingDays, fcAddWorkingDays, velocityOf, forecastInput, forecastData, featureVelocity, roadmapExtras,

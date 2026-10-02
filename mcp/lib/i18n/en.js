@@ -1464,7 +1464,10 @@ const msg = {
       reason: { "no-evidence": "no evidence", "failed-run": "latest run failed", "manual-note-on-runnable-verify": "note only, _Verify:_ command not run", "duplicate-number": "number shared with another task",
         "stale-evidence": "evidence is for another task or _Verify:_ command",
         "unexpected-pass": "run passed, but _Expect: fail_ needs a red run",
-        unobserved: "run not observed by the harness" }, // 1.14 F1 (meta.evidence: observed)
+        unobserved: "run not observed by the harness", // 1.14 F1 (meta.evidence: observed)
+        "command-mismatch": "the run recorded is not its _Verify:_ command" }, // 1.22 review
+      // 1.22 review — the run recorded for a task is not a run of its _Verify:_ command(s): it ticks, but proves nothing.
+      commandMismatch: (n, slug, ran, verify, red) => `Task ${n}: the run recorded (\`${ran}\`) is not a run of its _Verify:_ command (${verify}) — it is ticked, but stays unverified until a ${red ? "FAILING " : ""}run of that command is recorded (the command as written; a leading \`cd <dir> &&\`, \`set -o pipefail;\` or VAR=value, or the \` && \` join of its commands, is fine): ${DEV_SPEC} done ${slug} ${n} --run`,
       duplicateTasks: (list) => `task numbers used more than once: ${list} — complete/brief pick the first open one; renumber them`,
     },
     // 1.14 F1 — harness-observed evidence (hooks/observe-hook.js; roadmap.json meta.evidence "reported" | "observed").
@@ -2418,6 +2421,8 @@ const msg = {
 
     // Marker-shaped text on a task line that yields no marker (doctor malformed-markers, 1.14 full review Pa1).
     markerSyntax: {
+      // 1.22 review — checkbox lines the task scanner does not read as tasks (doctor unread-tasks).
+      unreadTasks: (list) => `checkbox lines that are not tasks: ${list} — a task line is "- [ ] N. text" (a -, * or + bullet, then its number); these are never ticked, briefed or verified. Number them (or make them sub-steps of a task).`,
       doctor: (list) => `marker-shaped text on a task line yields no marker: ${list} — the tools read nothing there (no check runs, no file is traced). Write it as _Verify: <command>_ / _Implements: <path>_ / _Depends: 3_ (italics, the value inside).`,
     },
     // A T-ID the test plan checks outside test code (load-test.md, evals/*.json) whose artifact is still the scaffold (doctor
@@ -2929,7 +2934,7 @@ const msg = {
       unknownCheck: (name, list) => `'${name}' is not a project check — one of: ${list}`,
       needsCommand: "the command that ran is required",
       needsExit: "its exit code (an integer) is required",
-      status: (i) => ({ "no-run": "no run recorded", failed: `latest run failed (exit ${i.exitCode})`, changed: "its command changed since the run", "before-last-tick": "ran before the last task activity", "code-changed": "the implementing files changed since the run", unobserved: "the run was not observed by the harness" })[i.status] || i.status,
+      status: (i) => ({ "no-run": "no run recorded", failed: `latest run failed (exit ${i.exitCode})`, changed: "the run is not of its command (or the command changed since)", "before-last-tick": "ran before the last task activity", "code-changed": "the implementing files changed since the run", unobserved: "the run was not observed by the harness" })[i.status] || i.status,
       blocker: (list, slug) => `project checks without a passing run since the last task activity: ${list} — run them: ${DEV_SPEC} finish ${slug} --run (or record the runs with spec_finish {evidence})`,
       doctorWarn: (list, slug) => `every task is done, but project checks have no passing run since the last task activity: ${list} — spec_finish refuses until they pass: ${DEV_SPEC} finish ${slug} --run`,
       doctorOk: (n) => `every project check (${n}) has a passing run since the last task activity`,
@@ -3014,6 +3019,11 @@ const msg = {
       // A failure named after (or before) one of these words is history, not an admission: "I fixed the 2 failing tests",
       // "Previously 4 tests failed", "the 3 failures from yesterday are fixed" (stopPastFailure — a negator before the word keeps it).
       fixed: ["fixed", "resolved", "repaired", "addressed", "previously", "formerly", "earlier"],
+      // 1.22 review — a count of ZERO right before an admission makes it none ("0 tests failing", "no tests fail", "none of the
+      // tests fail", "zero tests failed"): it says nothing is failing. Regex sources, read just before the admission.
+      zeroes: [String.raw`0|zero|no|none(?:\s+of(?:\s+(?:the|these|those|them|my|our))?)?`],
+      // …and a failure that "now passes" in the same clause is one already fixed ("the 2 failing tests now pass").
+      passNow: [String.raw`now\s+(?:pass|passes|passing|green|succeed|succeeds)`],
       head: "dev-spec evidence gate: your last message says the work is done or verified, but tasks are ticked without verification evidence:",
       headSuite: "dev-spec evidence gate: your last message says the work is done or verified, but the project checks have no passing run since the last task activity:",
       taskLine: (slug, list) => `  - ${slug}: ${list}`,

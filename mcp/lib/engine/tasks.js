@@ -23,7 +23,7 @@ let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDeci
   ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE;
+  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf;
 function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
@@ -34,7 +34,7 @@ function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, b
   REPRO_SYN, ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE } = E); }
+  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
 // scanner — so status/next/phase can never count a task that complete/brief/finish don't see.
@@ -481,12 +481,13 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const key = String(n);
   // 1.14 F1: every run {command, exitCode} is stamped observed: true | false (the harness's log) | "cli" (`done --run`), and
   // every result of this call carries it (stable).
-  const observed = observedStamp(projectDir, f.slug, ev, opts && opts.ranBy);
+  const verifyCmds = taskMarkers(task).verify;
+  const observed = observedStamp(projectDir, f.slug, ev, opts && opts.ranBy, verifyCmds); // an observed run of ITS _Verify:_ (1.22 review)
   if (observed !== undefined) ev.observed = observed;
   const withObserved = (r) => (observed !== undefined ? Object.assign(r, { observed }) : r);
   // _Expect: fail_ (B5): a red run {command, exitCode ≠ 0} is the proof; a passing run is refused unless a red run of this
   // _Verify:_ was recorded before it (the fix made the test green); a could-not-run exit (127, 9009…) is refused like a failure.
-  const xf = expectsFail(task) ? expectFailRun(ev, ownEvidence(state.evidence || {}, task, dup)) : null;
+  const xf = expectsFail(task) ? expectFailRun(ev, ownEvidence(state.evidence || {}, task, dup), verifyCmds) : null;
   // The run is stored with expected: "fail" (metrics count a red run as a pass, an unexpected pass as a failure) — except the
   // pass after the red run: a plain passing run that keeps the red run as the record's proof (recordEvidence).
   // Any run that is not itself the red proof (a pass after it, a could-not-run exit, a refused pass) carries the red run on
@@ -498,10 +499,17 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const failed = !!ev && ev.exitCode != null && (xf ? xf.refused : ev.exitCode !== 0);
   const alreadyDone = task.done;
   const now = new Date().toISOString();
+  // 1.22 review — `done --run` (ranBy "cli") hands over the stamps taken BEFORE its run: when it started (the run's `at`) and
+  // the _Verify:_ commands it ran (the record's `verify` stamp: a _Verify:_ edited while it ran makes the record stale-evidence).
+  // They were taken after the run — an edit made meanwhile read as tested.
+  const cli = !!opts && opts.ranBy === "cli";
+  const cliStart = cli ? runStartOf({ at: opts.startedAt }) : null;
+  const ranVerify = cli && Array.isArray(opts.ranVerify) ? opts.ranVerify.filter((c) => typeof c === "string").join("\n").slice(0, 1000) : undefined;
   if (ev) { // every run is recorded — a failure too (never ticked), so a later note can't paper over it
     state.evidence = state.evidence || {};
     // Only THIS task's record is extended; another task's record under the same number is kept aside.
-    state.evidence[key] = storeEvidence(state.evidence[key], task, dup, ev, now);
+    const run = ev.exitCode != null;
+    state.evidence[key] = storeEvidence(state.evidence[key], task, dup, ev, run && cliStart ? cliStart.at : now, run ? ranVerify : undefined);
   }
   const ticks = !alreadyDone && !failed;
   if (ticks) {
@@ -559,6 +567,8 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
       : reason === "duplicate-number" ? EG.duplicateNumber(n)
       : reason === "stale-evidence" ? (entry && entry.stale ? (entry.staleBy === "undo" ? i18n.msg(lng).undo.staleNote(n, f.slug, runnable) : i18n.msg(lng).impact.staleNote(n, f.slug, runnable)) : EG.staleEvidence(n, f.slug, runnable))
       : reason === "unexpected-pass" ? i18n.msg(lng).redGreen.unexpectedPassNote(n, f.slug) // B5: _Expect: fail_, but the latest run passed
+      // 1.22 review: the run recorded is not a run of the task's _Verify:_ command(s)
+      : reason === "command-mismatch" ? EG.commandMismatch(n, f.slug, String((ev && ev.command) || (entry && entry.command) || ""), verifyCmds.join(" · "), expectsFail(task))
       // 1.14 F1 (meta.evidence "observed"): the harness never saw the run — and, when it never saw any run here, why (no hook)
       : reason === "unobserved" ? (expectsFail(task) ? i18n.msg(lng).observed.unobservedRedNote(n, f.slug) : i18n.msg(lng).observed.unobservedNote(n, f.slug)) +
         (observedAny(projectDir) ? "" : " " + i18n.msg(lng).observed.neverObserved) // an _Expect: fail_ task: its RED run must be observed
@@ -675,7 +685,7 @@ function untickTask(projectDir, name, number, opts = {}) {
   const runnable = taskMarkers(task).verify.length > 0;
   // 1.16 U review 1: an _Expect: fail_ task keeps its red run (redProof reads through staleBy "undo"): once the fix is in, the
   // re-tick's passing run is the fix going green — the note must not ask for a red run that can no longer happen. redKept: stable.
-  const red = staled && expectsFail(task) ? redProof(rec) : null;
+  const red = staled && expectsFail(task) ? redProof(rec, taskMarkers(task).verify) : null;
   const notes = [U.unticked(n, f.slug, runnable, staled && !red)];
   if (red) notes.push(U.redKept(n, f.slug, String(red.at || "?").slice(0, 10)));
   if (isObj(state.finished) || (isRecord(state.approvals) && isRecord(state.approvals.execution))) notes.push(U.reopened(f.slug));
@@ -689,9 +699,11 @@ function untickTask(projectDir, name, number, opts = {}) {
 // under and the **Checkpoint:** that closes its section. This is the ONE task scanner: parseTasks() (the
 // line-only view public through spec_status) projects it, and completeTask ticks the line it resolves.
 // Task-looking lines inside HTML comments (single- or multi-line) or fenced code are NOT tasks.
-// A task line → [line, lead, box, number, text] | null: /^(\s*-\s*\[)([ xX])\]\s*(\d+)\.(?!\d)\s*(.*)$/ ("1.1 sub-step" is
-// not task 1), its text read by headRest (\s*(.*)$ rescanned a long blank run before a line terminator — 1.17 H).
-const RE_TASK_LINE_HEAD = /^(\s*-\s*\[)([ xX])\]\s*(\d+)\.(?!\d)/;
+// A task line → [line, lead, box, number, text] | null: /^(\s*[-*+]\s*\[)([ xX])\]\s*(\d+)\.(?!\d)\s*(.*)$/ ("1.1 sub-step" is
+// not task 1), its text read by headRest (\s*(.*)$ rescanned a long blank run before a line terminator — 1.17 H). Any GFM bullet
+// (1.22 review: `* [ ] 1.` / `+ [ ] 1.` read as ZERO tasks, silently); an ordered-list checkbox (`1. [ ] text`) is no task —
+// doctor's unread-tasks names it (unreadTaskLines).
+const RE_TASK_LINE_HEAD = /^(\s*[-*+]\s*\[)([ xX])\]\s*(\d+)\.(?!\d)/;
 const taskLine = (s) => headRest(s, RE_TASK_LINE_HEAD, false);
 const RE_CHECKPOINT = /^\s*\*\*Checkpoint:?\*\*:?\s*/i;
 const COMMENT_MASK = "\u0001";
@@ -921,6 +933,25 @@ function scanTaskBlocks(tasksText, ownLines) {
   return blocks;
 }
 
+// 1.22 review — checkbox list lines the ONE scanner does not read as tasks: an ordered-list checkbox (`1. [ ] text`), an
+// unnumbered one outside every task block (`- [ ] text`) — never ticked, briefed or verified (a sub-step checkbox in a task's
+// body is that task's). Comments and fenced code hold none. → [{ line (1-based), text }] — doctor's unread-tasks warn.
+const RE_LIST_BOX_LINE = /^\s*(?:[-*+]|\d{1,9}[.)])\s*\[[ xX]\]/;
+function unreadTaskLines(tasksText) {
+  const src = String(tasksText || "");
+  const held = new Array(src.split("\n").length).fill(false);
+  scanTaskBlocks(src, held);
+  const out = [];
+  scanTaskLines(src).forEach((ln, i) => {
+    if (!ln.code && !ln.task && !held[i] && RE_LIST_BOX_LINE.test(ln.vis)) out.push({ line: i + 1, text: ln.vis.trim().slice(0, 80) });
+  });
+  return out;
+}
+// …as the doctor names them ("L5 `1. [ ] Build the parser`, L9 …", at most 8, then "+N"), or null when there is none.
+function unreadTasksDetail(tasksText) {
+  const u = unreadTaskLines(tasksText);
+  return u.length ? u.slice(0, 8).map((x) => "L" + x.line + " `" + x.text + "`").join(", ") + (u.length > 8 ? ", +" + (u.length - 8) : "") : null;
+}
 // Duplicated numbers: the FIRST OPEN task with that number, else the first one. completeTask, taskBrief and
 // the CLI's `done --run` all resolve through here, so the _Verify:_ that runs belongs to the task that ticks.
 function resolveTask(tasks, n) {
@@ -1013,10 +1044,27 @@ const MARKER_CLOSE_PUNCT = new Set([".", ",", ";", ":", "!", "?", ")", "]"]);
 // A closer followed directly by whitespace / the end ("plain") wins over one followed by closing punctuation, when one exists
 // before the next marker opener (else the end of the line): `_Verify: python -c "import a_; print(1)"_` keeps its whole
 // command, `(_Verify: npm test_), _Implements: a.js_` still closes at "test_)" (full review R7 — Pa1 cut the first at "a_;").
+// 1.22 review — memoized by line (bounded; a line past MARKER_MEMO_LINE_MAX characters is scanned every time): one ROADMAP.md
+// refresh reads the same task lines over and over (status, the schedule, verification, sizes, every roadmap row) and each scan
+// built a RegExp and two passes — ~45 ms of every refresh on 30 features × 40 tasks. The result is FROZEN: callers share it.
+const MARKER_SPANS_MEMO = new Map();
+const MARKER_SPANS_MEMO_MAX = 8192;
+const MARKER_MEMO_LINE_MAX = 4000;
+const NO_MARKER_SPANS = Object.freeze([]);
 function taskMarkerSpans(line) {
   const s = String(line == null ? "" : line);
+  if (!s.includes(":")) return NO_MARKER_SPANS;
+  if (s.length > MARKER_MEMO_LINE_MAX) return Object.freeze(scanMarkerSpans(s).map(Object.freeze));
+  let hit = MARKER_SPANS_MEMO.get(s);
+  if (!hit) {
+    hit = Object.freeze(scanMarkerSpans(s).map(Object.freeze));
+    if (MARKER_SPANS_MEMO.size >= MARKER_SPANS_MEMO_MAX) MARKER_SPANS_MEMO.clear();
+    MARKER_SPANS_MEMO.set(s, hit);
+  }
+  return hit;
+}
+function scanMarkerSpans(s) {
   const out = [];
-  if (!s.includes(":")) return out;
   const re = new RegExp(RE_TASK_MARKER_OPEN.source, RE_TASK_MARKER_OPEN.flags); // its own lastIndex
   const opens = [];
   let m;
@@ -1068,10 +1116,28 @@ function withoutTaskMarkers(line) {
   return out + s.slice(at);
 }
 const WHOLE_VALUE_MARKERS = new Set(["emits metrics", "affects evals", "verify", "expect"]); // commas belong to the value
+// 1.22 review — memoized by the block's own lines (taskProse, bounded); every caller gets its own copy of the lists.
+const TASK_MARKERS_MEMO = new Map();
+const TASK_MARKERS_MEMO_MAX = 4096;
 function taskMarkers(block) {
+  const prose = taskProse(block);
+  const key = prose.join("\n");
+  let m = key.length <= 4 * MARKER_MEMO_LINE_MAX ? TASK_MARKERS_MEMO.get(key) : undefined;
+  if (!m) {
+    m = scanTaskMarkers(prose);
+    if (key.length <= 4 * MARKER_MEMO_LINE_MAX) {
+      if (TASK_MARKERS_MEMO.size >= TASK_MARKERS_MEMO_MAX) TASK_MARKERS_MEMO.clear();
+      TASK_MARKERS_MEMO.set(key, m);
+    }
+  }
+  const out = {};
+  for (const k of Object.keys(m)) out[k] = m[k].slice();
+  return out;
+}
+function scanTaskMarkers(prose) {
   const out = { requirements: [], "makes green": [], "affects evals": [], "emits metrics": [], implements: [], verify: [], expect: [], depends: [] };
   const seen = {}; // per key: what out[key] holds — a long `_Depends: 1, 2, …_` list stays linear (no includes() per value)
-  for (const line of taskProse(block)) {
+  for (const line of prose) {
     for (const sp of taskMarkerSpans(line)) {
       const key = sp.key;
       if (!out[key]) continue; // _Size:_ — taskSize reads it
@@ -1773,9 +1839,10 @@ module.exports = { parseTasks, taskDescription, nextTask, parallelBatch, RE_DEP_
   taskDepsWaitList, taskDepsIssues, taskDepsCheck, RE_ROOT_CAUSE_TASK, bugfixGate, rootCauseTaskIndex, blockPosition,
   taskNumber, completeTask, UNDO_REASON_MAX, reasonInput, untickTask, RE_TASK_LINE_HEAD, taskLine, RE_CHECKPOINT,
   COMMENT_MASK, RE_TASK_FENCE_OPEN, RE_PARA_BREAK, scanTaskLines, fenceLine, indentOf, hasOutsideCode, backtickRuns,
-  TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, taskBlocks, scanTaskBlocks, resolveTask, duplicateTaskNumbers, taskProse,
+  TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, taskBlocks, scanTaskBlocks, RE_LIST_BOX_LINE, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse,
   RE_RED_PHASE_TASK, redPhaseTask, redPhaseHint, tasksProseText, changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, RE_TASK_MARKER_OPEN,
-  MARKER_CLOSE_PUNCT, taskMarkerSpans, taskMarkerValues, withoutTaskMarkers, WHOLE_VALUE_MARKERS, taskMarkers,
+  MARKER_CLOSE_PUNCT, MARKER_SPANS_MEMO, MARKER_SPANS_MEMO_MAX, MARKER_MEMO_LINE_MAX, NO_MARKER_SPANS, taskMarkerSpans, scanMarkerSpans,
+  taskMarkerValues, withoutTaskMarkers, WHOLE_VALUE_MARKERS, TASK_MARKERS_MEMO, TASK_MARKERS_MEMO_MAX, taskMarkers, scanTaskMarkers,
   RE_MARKER_WORD, MARKER_WORD_LABEL, malformedMarkers, RE_GLOBAL_CONSTRAINTS, globalConstraints, isPromptTask,
   RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections, BRIEF_DESIGN_BUDGET, taskBrief, RE_NEW_TASK_TAGS,
   RE_THEMATIC_BREAK, unwrapCodeSpan, newTaskSpec, appendTasks, __link };

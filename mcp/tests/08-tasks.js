@@ -33,7 +33,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
   const w1b1 = S.taskBrief(w1, "scan", 1);
   ok(S.statusFeature(w1, "scan").tasks.list.map((t) => t.number).join() === "1,2" && S.nextTask(w1, "scan").next.number === 1 && w1b1.task.number === 1 && w1b1.verify.length === 1,
     "zero-padded '01.' is task 1 in status, next and brief");
-  const w1z1 = S.completeTask(w1, "scan", 1, { command: "node -e 0", exitCode: 0 }), w1z2 = S.completeTask(w1, "scan", "02");
+  const w1z1 = S.completeTask(w1, "scan", 1, { command: 'node -e "process.exit(0)"', exitCode: 0 }), w1z2 = S.completeTask(w1, "scan", "02");
   ok(w1z1.ok && w1z1.verified && w1z2.ok && w1z2.next === null && /- \[x\] 01\. First\n[\s\S]*- \[x\] 02\. Second/.test(fs.readFileSync(w1Tasks, "utf8")),
     "complete_task finds zero-padded tasks by number (1) or by '02'");
   // 3. Duplicated numbers: ONE resolver — the first OPEN task with that number, else the first.
@@ -775,5 +775,82 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       ringW.blocked.length === N && ringS.next === null && chainW.waves.length === N && chainW.waves.every((w, k) => w.length === 1 && w[0] === k + 1) &&
       sameW.waves.length === N && tokW.invalid.length === 1 && elapsed < 15000,
       "feature F3: linear on adversarial input — a 60 000-number _Depends:_, a 4 000-task cycle and chain (iterative walks, no stack overflow), 4 000 [P] tasks sharing one file, a 120 000-digit token (" + elapsed + " ms)");
+  }
+
+  // 1.22 review (finding 8) — `* [ ] 1.` / `+ [ ] 1.` (valid GFM) read as ZERO tasks, silently. Any bullet is a task line now; an
+  // ordered-list checkbox (`1. [ ] text`) or an unnumbered checkbox outside every task is named by doctor's unread-tasks warn.
+  {
+    const js = JSON.stringify;
+    const p = path.join(tmp, "proj-122-bullets");
+    S.initProject(p, ["core"], "en");
+    const f = S.createFeature(p, "Bullets", ["core"], "", undefined, "en");
+    const tf = path.join(f.dir, "tasks.md");
+    fs.writeFileSync(tf, "# Tasks\n\n* [ ] 1. [US1] Star\n  - _Verify: node -e \"process.exit(0)\"_\n+ [ ] 2. [US1] Plus\n  - [ ] sub-step (the task's body)\n");
+    const st = S.statusFeature(p, "bullets").tasks;
+    const c1 = S.completeTask(p, "bullets", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0 });
+    const text1 = fs.readFileSync(tf, "utf8");
+    const docClean = S.specDoctor(p, "bullets").checks.find((c) => c.id === "unread-tasks");
+    // the tasks approval's fingerprint ignores a `*` tick like a `-` one
+    S.approvePhase(p, "bullets", "tasks", "tester", { force: true });
+    S.completeTask(p, "bullets", 2);
+    const changed = (S.specDoctor(p, "bullets").checks.find((c) => c.id === "changed-since-approval") || {}).status;
+    const o = S.createFeature(p, "Ordered", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(o.dir, "tasks.md"), "# Tasks\n\n1. [ ] Build the parser\n2. [x] Write the docs\n- [ ] Unnumbered\n\n```md\n1. [ ] fenced example\n```\n<!-- 3. [ ] commented -->\n");
+    const oSt = S.statusFeature(p, "ordered").tasks;
+    const oDoc = S.specDoctor(p, "ordered").checks.find((c) => c.id === "unread-tasks");
+    ok(st.total === 2 && c1.ok && c1.verified && /^\* \[x\] 1\. \[US1\] Star$/m.test(text1) && /^\+ \[ \] 2\./m.test(text1) && !docClean && changed !== "warn" && changed !== "fail" &&
+      oSt.total === 0 && oDoc && oDoc.status === "warn" && /L3 `1\. \[ \] Build the parser`, L4 `2\. \[x\] Write the docs`, L5 `- \[ \] Unnumbered`/.test(oDoc.detail) && !/fenced|commented/.test(oDoc.detail),
+      "1.22 review: `* [ ] 1.` / `+ [ ] 1.` are task lines (status, complete ticks the `*` line at its box; a tick on them is no change since approval); `1. [ ] text` and an unnumbered checkbox outside a task are no tasks — doctor warns unread-tasks naming the lines (never a fenced or commented one, nor a task's sub-step) (got " +
+      js([st, c1.verified, docClean, changed, oSt, oDoc]) + ")");
+  }
+
+  // 1.22 review (finding 10) — every tick refreshed ROADMAP.md over ALL features (313 ms vs 13.8 ms without, 30 features × 40
+  // tasks). The rows are cached in process, keyed on their inputs' stats (+ the racy rule), and the marker readers are memoized.
+  // The output must be byte for byte what a fresh computation writes — after every kind of change.
+  {
+    const js = JSON.stringify;
+    const E = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const p = path.join(tmp, "proj-122-rowcache");
+    S.initProject(p, ["core"], "en");
+    const fs3 = ["Alpha", "Beta", "Gamma"].map((n) => S.createFeature(p, n, ["core"], "", undefined, "en"));
+    fs3.forEach((f, i) => fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + [1, 2, 3].map((n) => `- [ ] ${n}. [US1] ${f.slug} task ${n}\n  - _Verify: node -e "process.exit(0)" --t${i}${n}_\n  - _Implements: src/${f.slug}/m${n}.js_\n`).join("")));
+    const racy = E.ROW_OPTS.racyMs;
+    E.ROW_OPTS.racyMs = -1e12; // every stamp trusted: the test controls its edits (each changes a size or a stamp)
+    const render = () => S.renderRoadmapMd(p, "en", S.roadmapData(p));
+    const fresh = () => { E.ROW_CACHE.clear(); return render(); };
+    const wrong = [];
+    const step = (name, fn) => {
+      fn();
+      render(); // signs and caches (the first call of a process signs nothing)
+      const hits0 = E.ROW_CALLS.hits;
+      const cached = render();
+      const hits = E.ROW_CALLS.hits - hits0;
+      const exact = fresh();
+      if (cached !== exact) wrong.push(name + ": differs");
+      if (hits < 1) wrong.push(name + ": no cache hit");
+    };
+    try {
+      step("start", () => {});
+      step("tick", () => S.completeTask(p, "alpha", 1, { command: "node -e \"process.exit(0)\" --t01", exitCode: 0 }));
+      step("tick without evidence", () => S.completeTask(p, "beta", 2));
+      step("hand edit (same size)", () => { const f = path.join(fs3[2].dir, "tasks.md"); fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace("- [ ] 3.", "- [x] 3.")); });
+      step("design TODO", () => fs.appendFileSync(path.join(fs3[1].dir, "design.md"), "\n> **TODO** fill this\n"));
+      step("dependency", () => S.setDependency(p, "gamma", ["alpha"]));
+      step("approval", () => S.approvePhase(p, "alpha", "requirements", "tester", { force: true }));
+      step("requirements edit", () => fs.appendFileSync(path.join(fs3[0].dir, "requirements.md"), "\n[NEEDS CLARIFICATION: which unit?]\n"));
+      step("evidence mode", () => S.initProject(p, ["core"], "en", { evidence: "observed" }));
+      step("project template", () => { fs.mkdirSync(path.join(p, ".specs", "templates"), { recursive: true }); fs.writeFileSync(path.join(p, ".specs", "templates", "tasks.md"), "# Tasks\n\n- [ ] 1. [placeholder]\n"); });
+      step("undo", () => S.completeTask(p, "alpha", 1, undefined, { undo: true }));
+    } finally {
+      E.ROW_OPTS.racyMs = racy;
+    }
+    // …and with the default racy window, rows of files written just now are never served from the cache
+    const h0 = E.ROW_CALLS.hits;
+    fs.writeFileSync(path.join(fs3[0].dir, "tasks.md"), fs.readFileSync(path.join(fs3[0].dir, "tasks.md"), "utf8").replace("- [ ] 2.", "- [x] 2."));
+    const racyCached = render(); render();
+    const racyHits = E.ROW_CALLS.hits - h0;
+    ok(!wrong.length && racyCached === fresh() && racyHits <= 2 * (fs3.length - 1),
+      "1.22 review: the roadmap row cache — after a tick, a hand edit of the same size, a design / requirements edit, a dependency, an approval, the evidence mode, a project template, an undo, ROADMAP.md is byte for byte a fresh computation and the unchanged rows come from the cache; a file stamped within the racy window is never trusted (wrong: " +
+      js(wrong) + ", racy hits " + racyHits + ")");
   }
 };
