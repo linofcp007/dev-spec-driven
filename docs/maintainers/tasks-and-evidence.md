@@ -329,7 +329,12 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   word — a fixing verb or "previously", never an auxiliary ("was", "had", PT "havia", ES "había": "2 tests failed and I
   was unable to fix them" is an honest admission) — sits within 4 words of it in its clause with no negator anywhere in
   that window (`stopPastFailure()`: "I fixed the 2 failing tests", "previously 4 failed"; "I haven't fixed the 2 failing
-  tests", "the 3 failing tests were not fixed" stay admissions). The look-back and the question tail are bounded
+  tests", "the 3 failing tests were not fixed" stay admissions) — or (1.22 review) a `passNow` phrase follows it in its
+  clause with no negator before it ("Fixed the bug; the 2 failing tests now pass": the `;` had cut the fixed word off; PT
+  "agora passam", ES "ahora pasan"). A count of ZERO right before an admission makes it none (`stopZeroCount()`, i18n
+  `stopGate.zeroes`, read on ≤ 60 characters of its clause before it: 0 / zero / no / none (of the); PT nenhum(a)(s) (dos);
+  ES ninguno(a)(s) (de los)) — "All tasks done. 0 tests failing.", "no tests fail", "none of the tests fail" were read as
+  admissions and the gate stayed silent. The look-back and the question tail are bounded
   (`STOP_CLAUSE_SPAN`) — slicing the whole text per hit was quadratic. A noun + done claim ("Feature complete") must end
   its clause ("the implementation done so far" claims nothing). The negator window is cut at
   `:` and dashes; "no" and "se" are read by language (`stopNegates()`: "no" negates in EN, in ES only before a verb or
@@ -337,7 +342,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   Spanish auxiliary or preterite). Claims include "All tasks
   done", "All green", ranges ("Tasks 1-3 done"), "Feature complete" and an emoji ✅ ✓ ✔ around done. A spike is never
   held to the project checks here; a reason listing only checks has its own head line (`headSuite`). When you add a
-  language, add its four lists (claims, negators, admissions, fixed).
+  language, add its six lists (claims, negators, admissions, fixed, zeroes, passNow — the regex ones are raw for pt-BR:
+  i18n.js `defineDerivedLocale(MSG, {stopGate: …})`).
 - **spec-implementer (SubagentStop):** it never ticks tasks, so its gate is its REPORT: a DONE / DONE_WITH_CONCERNS for a
   task whose `_Verify:_` is runnable needs `.specs/<f>/.execution/task-N-report.md` (the path named in its reply) to carry
   every one of those commands (backticks / whitespace flattened) and the exit code the task needs ("exit 0", "exit code:

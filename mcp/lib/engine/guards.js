@@ -858,6 +858,10 @@ function stopPatterns() {
     admissions: all("admissions").map(word),
     negators: new Set(all("negators").map((w) => w.toLowerCase())),
     fixed: new Set(all("fixed").map((w) => w.toLowerCase())),
+    // 1.22 review: a zero count right before an admission ("0 tests failing", "none of the tests fail") — read on the few
+    // characters before it, so `\s+$` anchors it to the admission; "now pass(es)" after a failure in its clause (fixed).
+    zero: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + all("zeroes").join("|") + ")\\s+$", "iu"),
+    passNow: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + all("passNow").join("|") + ")(?![\\p{L}\\p{N}_])", "iu"),
   };
   return STOP_PATTERNS;
 }
@@ -895,13 +899,23 @@ function stopNegates(words, i, langs, lang) {
 // verbs and "previously" — never an auxiliary like "was" / "had", which any honest "2 tests failed and I was unable to fix
 // them" holds) among the 4 words before it in its clause, or the 4 words after it before the clause ends — and no negator
 // anywhere in that window ("I haven't fixed the 2 failing tests", "the 3 failing tests were not fixed").
+// 1.22 review: …or a "now pass(es)" (i18n stopGate.passNow) after it in its clause with no negator before it ("Fixed the bug;
+// the 2 failing tests now pass" — the `;` cut the fixed word off, and it read as an admission).
 function stopPastFailure(text, start, end, wordsOf) {
   const P = stopPatterns();
   const neg = (w) => P.negators.has(w) || /n['’]t$/.test(w);
   const before = wordsOf(text.slice(stopClauseStart(text, start) + 1, start)).slice(-4).map((w) => w.toLowerCase());
-  const after = wordsOf((text.slice(end, end + STOP_CLAUSE_SPAN).match(/^[^\n.!?;:,—–]*/) || [""])[0]).slice(0, 4).map((w) => w.toLowerCase());
+  const tail = (text.slice(end, end + STOP_CLAUSE_SPAN).match(/^[^\n.!?;:,—–]*/) || [""])[0];
+  const after = wordsOf(tail).slice(0, 4).map((w) => w.toLowerCase());
   const fixedIn = (ws) => ws.some((w) => P.fixed.has(w)) && !ws.some(neg);
-  return fixedIn(before) || fixedIn(after);
+  const now = P.passNow.exec(tail);
+  return fixedIn(before) || fixedIn(after) || (!!now && !wordsOf(tail.slice(0, now.index)).some((w) => neg(w.toLowerCase())));
+}
+// 1.22 review: is the admission at `start` counted as ZERO ("0 tests failing", "no tests fail", "none of the tests fail", PT
+// "nenhum teste falha", ES "ninguna prueba falla")? A zero word (i18n stopGate.zeroes) right before it in its clause.
+function stopZeroCount(text, start) {
+  const from = Math.max(stopClauseStart(text, start) + 1, start - 60);
+  return stopPatterns().zero.test(text.slice(from, start));
 }
 // The message as prose: its last STOP_MESSAGE_MAX characters without fenced code, inline code, HTML comments and quoted
 // lines (> …) — a pasted command output or a quoted instruction claims nothing.
@@ -946,12 +960,15 @@ function stopClaims(message) {
     if (tail && tail[1] === "?") continue; // a question claims nothing
     if (found.length < 10) found.push(h.text.trim());
   }
-  // An admission counts unless it names a failure already fixed ("I fixed the 2 failing tests", "Previously 4 tests failed").
+  // An admission counts unless it names a failure already fixed ("I fixed the 2 failing tests", "Previously 4 tests failed",
+  // "the 2 failing tests now pass") or a count of zero ("0 tests failing", "none of the tests fail" — 1.22 review: those
+  // were read as admissions and the gate stayed silent on "All tasks done. 0 tests failing.").
   const admitted = P.admissions.some((re) => {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(text)) !== null) {
       if (m[0] === "") { re.lastIndex++; continue; }
+      if (stopZeroCount(text, m.index)) continue;
       if (!stopPastFailure(text, m.index, m.index + m[0].length, wordsOf)) return true;
     }
     return false;
@@ -1254,5 +1271,5 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, RE
   approvalExtras, mcpApprovalAction, approvalCommand, approvalGuardDecision, STOP_RECENT_HOURS, STOP_MESSAGE_MAX,
   STOP_MAX_FEATURES, STOP_TASKS_SHOWN, STOP_REPORT_MAX, STOP_WINDOW, guardLevel, guardInput, stopCheckEnabled,
   setStopCheck, stopPatterns, STOP_CLAUSE_SPAN, stopClauseStart, RE_ES_NO_NEXT, RE_ES_SE_NEXT, stopNegates,
-  stopPastFailure, stopProse, stopClaims, stopActivity, stopTaskLabel, stopCheck, implementerStopCheck,
+  stopPastFailure, stopZeroCount, stopProse, stopClaims, stopActivity, stopTaskLabel, stopCheck, implementerStopCheck,
   scopeGuardDecision, __link };

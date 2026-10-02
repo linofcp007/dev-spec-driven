@@ -2849,6 +2849,8 @@ const msg = {
       ],
       fixed: ["corrigi", "corrigimos", "corrigido", "corrigida", "corrigidos", "corrigidas", "resolvi", "resolvemos", "resolvido", "resolvida", "resolvidos", "resolvidas",
         "reparei", "reparado", "reparada", "anteriormente"],
+      zeroes: [String.raw`0|zero|nenhu(?:m|ns|ma|mas)(?:\s+d[oa]s)?`],
+      passNow: [String.raw`agora\s+(?:passam|passa|est[ãa]o\s+a\s+passar|est[áa]\s+a\s+passar|est[ãa]o\s+verdes|est[áa]\s+verde)`],
       head: "dev-spec — gate de evidência: a tua última mensagem diz que o trabalho está feito ou verificado, mas há tarefas marcadas sem evidência de verificação:",
       headSuite: "dev-spec — gate de evidência: a tua última mensagem diz que o trabalho está feito ou verificado, mas as verificações do projeto não têm uma execução bem-sucedida desde a última atividade nas tarefas:",
       taskLine: (slug, list) => `  - ${slug}: ${list}`,

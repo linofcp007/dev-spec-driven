@@ -3002,6 +3002,11 @@ const msg = {
       // A failure named after (or before) one of these words is history, not an admission: "I fixed the 2 failing tests",
       // "Previously 4 tests failed", "the 3 failures from yesterday are fixed" (stopPastFailure — a negator before the word keeps it).
       fixed: ["fixed", "resolved", "repaired", "addressed", "previously", "formerly", "earlier"],
+      // 1.22 review — a count of ZERO right before an admission makes it none ("0 tests failing", "no tests fail", "none of the
+      // tests fail", "zero tests failed"): it says nothing is failing. Regex sources, read just before the admission.
+      zeroes: [String.raw`0|zero|no|none(?:\s+of(?:\s+(?:the|these|those|them|my|our))?)?`],
+      // …and a failure that "now passes" in the same clause is one already fixed ("the 2 failing tests now pass").
+      passNow: [String.raw`now\s+(?:pass|passes|passing|green|succeed|succeeds)`],
       head: "dev-spec evidence gate: your last message says the work is done or verified, but tasks are ticked without verification evidence:",
       headSuite: "dev-spec evidence gate: your last message says the work is done or verified, but the project checks have no passing run since the last task activity:",
       taskLine: (slug, list) => `  - ${slug}: ${list}`,

@@ -201,8 +201,9 @@ defineDerivedLocale(BUILD);
 defineDerivedLocale(STEERING);
 defineDerivedLocale(EVALS_README);
 defineDerivedLocale(BRIEF);
-defineDerivedLocale(MSG, { stopGate: { claims: true, negators: true, admissions: true, fixed: true } }, {
-  stopGate: { claims: (v) => [...v, ...ptbr().PTBR_STOP_EXTRA.claims], admissions: (v) => [...v, ...ptbr().PTBR_STOP_EXTRA.admissions] },
+defineDerivedLocale(MSG, { stopGate: { claims: true, negators: true, admissions: true, fixed: true, zeroes: true, passNow: true } }, {
+  stopGate: { claims: (v) => [...v, ...ptbr().PTBR_STOP_EXTRA.claims], admissions: (v) => [...v, ...ptbr().PTBR_STOP_EXTRA.admissions],
+    passNow: (v) => [...v, ...ptbr().PTBR_STOP_EXTRA.passNow] },
 });
 
 
