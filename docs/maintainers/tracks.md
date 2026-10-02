@@ -560,6 +560,18 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   signal only ('dois fatores')" → "no signals matched") + a 13-frame sweep of every built-in keyword (the other 21,606 texts:
   1,943 +sec switched OFF, every one in a frame holding a factor word; 0 switched on; 9,668 more reasonings changed — no input
   without a factor word changed at all). The A2 self-match sweep probes each factor word beside an auth word.
+  **Review 3 — the natural phrasings:** "Iniciar sesión con doble factor", "Os administradores passam a entrar com dois fatores",
+  "Require multifactor at login" were no signal at all (their English twin "Admins sign in with multi-factor" is a weak one): the
+  `near` cue's auth words gain the verbs `iniciar sesión` / `iniciar sessão` (+ unaccented), `entrar`, `log in` (`sign in` was
+  there), in both directions, and the AFTER connectors `at`, PT `ao`, ES `al` ("doble factor al iniciar sesión") — still only
+  RIGHT NEXT to the factor word (`entrar no mercado com dois fatores` stays none). **Measured:** the differential (f67e2ff vs the
+  fix) over 53,462 inputs — 7,168 string literals of both trees' test files and evals + a 27-frame sweep of every built-in keyword
+  (7 new frames: "Iniciar sesión con K", "Os administradores passam a entrar com K", "Require K at login", "K al iniciar
+  sesión", "K ao entrar", "Admins log in with K", "Vamos entrar com K"): 66 decisions changed, every one an input holding a factor
+  word next to a new auth verb / connector — 62 gained the weak +sec signal (a "Possible +sec" note) and 4 switched +sec ON
+  ("autenticação iniciar sessão de dois fatores": the auth word is the second signal); 0 literals changed, 0 tracks switched off.
+  Known cost: "entrar" is also everyday PT / ES ("O preço vai entrar com dois fatores de risco" reads a weak signal — a note,
+  never ON alone).
   **Reasoning:** a track kept off with weak / app-level words
   (`signals[t]` non-empty) reads `classify.offWeak` ("+api: off — weak signal only ('endpoint'), not enough on its own.", EN /
   PT / ES), never "no signals matched" beside a "Possible +api" note.
