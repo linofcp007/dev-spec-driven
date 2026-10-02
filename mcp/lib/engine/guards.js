@@ -19,14 +19,14 @@ let activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
-  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile;
+  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption;
 function __link(E) { ({ activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
-  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile } = E); }
+  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption } = E); }
 
 // roadmap.json meta.guard — the opt-in guard mode read by hooks/guard-hook.js (PreToolUse): true, or "scope" (1.14 C1 — the
 // stricter level, guardLevel()).
@@ -790,9 +790,9 @@ function approvalGuardDecision(payload, level, opts = {}) {
 // and the scope guard (roadmap.json meta.guard = "scope": a code edit no open task plans in _Implements:_ asks).
 // ---------------------------------------------------------------------------
 
-const STOP_RECENT_HOURS = 4; // "recently active": a task ticked, evidence recorded or tasks.md edited within these hours
+const STOP_RECENT_HOURS = 4; // "recently active": a task ticked, evidence recorded or tasks.md edited (lastEditAt) within these hours
 const STOP_MESSAGE_MAX = 20000; // the message's LAST characters are read (the claim sits in the closing lines)
-const STOP_MAX_FEATURES = 50; // feature folders looked at, at most (bounded: the hook runs at the end of every turn)
+const STOP_MAX_FEATURES = 50; // recently active features checked, at most — the most recent first (bounded: the hook runs at the end of every turn)
 const STOP_TASKS_SHOWN = 8; // task numbers listed per feature in the reason
 const STOP_REPORT_MAX = 256 * 1024; // bytes of an implementer's report read
 const STOP_WINDOW = 3; // words before a claim, in its sentence, looked at for a negator / condition
@@ -979,11 +979,14 @@ function stopClaims(message) {
 // the records kept aside under `others` included) — only what the engine RECORDED. Never a file date: a fresh clone stamps
 // every tasks.md "now", and a repo someone else wrote then made the gate fire on unrelated work and hand the agent that repo's
 // _Verify:_ commands. A stamp in the future (a committed .state.json can hold any date) is ignored.
+// 1.22 review: + lastEditAt — tasks.md / change.md saved through the Write / Edit tool (recordSpecEdit, the PostToolUse spec-hook):
+// a box ticked by hand never counted, so "All tasks done" after hand ticks read `no-recent`.
 function stopActivity(state) {
   let best = null;
   const horizon = Date.now() + 5 * 60 * 1000; // clock skew tolerated
   const see = (v) => { const t = typeof v === "string" ? Date.parse(v) : NaN; if (Number.isFinite(t) && t <= horizon && (best == null || t > best)) best = t; };
   see(state.lastTickAt);
+  see(state.lastEditAt);
   if (isRecord(state.ticks)) Object.values(state.ticks).forEach(see);
   for (const slot of Object.values(isRecord(state.evidence) ? state.evidence : {})) {
     for (const r of evidenceRecords(slot)) {
@@ -993,6 +996,23 @@ function stopActivity(state) {
     }
   }
   return best;
+}
+// 1.22 review — a feature's tasks.md (a change's change.md) saved through the Write / Edit tool is activity the stop gate sees:
+// hooks/spec-hook.js (PostToolUse) stamps `lastEditAt` in the feature's .state.json — under its lock, with a short wait (a hook
+// has 10 s; busy → nothing stamped, never an error). What the engine RECORDS, never a file date (a fresh clone stamps every file
+// "now"). git's merge driver keeps the later stamp (state.js). → { ok: true, feature, at } | { ok: false, … }
+const SPEC_EDIT_LOCK_WAIT_MS = 2000;
+function recordSpecEdit(projectDir, name) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  return withFeatureLock(f.dir, () => {
+    const state = readState(projectDir, f.slug);
+    if (state.invalid) return { ok: false, error: state.invalid }; // never "repaired"
+    const at = new Date().toISOString();
+    state.lastEditAt = at;
+    writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
+    return { ok: true, feature: f.slug, at };
+  }, { waitMs: SPEC_EDIT_LOCK_WAIT_MS, onBusy: () => ({ ok: false, busy: true }) });
 }
 // One unverified task as the reason lists it: "#3 (latest run failed)".
 function stopTaskLabel(d, lng) {
@@ -1027,12 +1047,19 @@ function stopCheck(projectDir, opts = {}) {
   const since = Date.now() - STOP_RECENT_HOURS * 3600 * 1000;
   const features = [];
   const clean = [];
-  for (const f of featureDirs(pdir).filter((x) => !x.archived).slice(0, STOP_MAX_FEATURES)) {
-    const tasksFile = path.join(f.dir, "tasks.md");
+  // 1.22 review: the activity of EVERY non-archived feature (one .state.json read each — cheap), then the STOP_MAX_FEATURES most
+  // recently active are checked (verificationStatus / suiteStatus — the costly part), in folder order. The cap used to apply
+  // to the folders first: the 51st feature alphabetically ("zeta", ticked a minute ago) was never looked at — `no-recent`.
+  const recent = [];
+  featureDirs(pdir).filter((x) => !x.archived).forEach((f, order) => {
     const state = readState(pdir, f.slug);
-    if (state.invalid) continue; // unreadable state: never block on it (doctor reports it)
+    if (state.invalid) return; // unreadable state: never block on it (doctor reports it)
     const last = stopActivity(state);
-    if (last == null || last < since) continue;
+    if (last != null && last >= since) recent.push({ f, state, last, order });
+  });
+  const checked = recent.sort((a, b) => b.last - a.last || a.order - b.order).slice(0, STOP_MAX_FEATURES).sort((a, b) => a.order - b.order);
+  for (const { f, state } of checked) {
+    const tasksFile = path.join(f.dir, "tasks.md");
     const tracks = detectTracks(f.dir);
     const blocks = taskBlocks(activeTasks(readIfExists(tasksFile) || "", tracks) || "");
     const vs = verificationStatus(pdir, f.slug, f.dir);
@@ -1271,5 +1298,5 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, RE
   approvalExtras, mcpApprovalAction, approvalCommand, approvalGuardDecision, STOP_RECENT_HOURS, STOP_MESSAGE_MAX,
   STOP_MAX_FEATURES, STOP_TASKS_SHOWN, STOP_REPORT_MAX, STOP_WINDOW, guardLevel, guardInput, stopCheckEnabled,
   setStopCheck, stopPatterns, STOP_CLAUSE_SPAN, stopClauseStart, RE_ES_NO_NEXT, RE_ES_SE_NEXT, stopNegates,
-  stopPastFailure, stopZeroCount, stopProse, stopClaims, stopActivity, stopTaskLabel, stopCheck, implementerStopCheck,
+  stopPastFailure, stopZeroCount, stopProse, stopClaims, stopActivity, SPEC_EDIT_LOCK_WAIT_MS, recordSpecEdit, stopTaskLabel, stopCheck, implementerStopCheck,
   scopeGuardDecision, __link };

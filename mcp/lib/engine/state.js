@@ -660,7 +660,7 @@ function locateFeatures(projectDir, name) {
 //   · append-only lists (approvalHistory, changes, unticks) → the union by identity (a record both sides hold once; the same
 //     record with different fields — spec_upgrade seeding a snapshot — gets both sides' fields), in chronological order;
 //   · evidence[n] / finishChecks[name] → the record with the latest run `at` (a tie is the same run: its note and stale mark
-//     merged), both histories merged, deduped, bounded by EVIDENCE_HISTORY; ticks[n] and lastTickAt → the later time;
+//     merged), both histories merged, deduped, bounded by EVIDENCE_HISTORY; ticks[n], lastTickAt and lastEditAt → the later time;
 //     `finished` → the later baseline (firstAt: the earliest finish); createdAt → the earlier;
 //   · approvals[phase] → the later approval, unless a revocation (an approvalHistory record, revoked: true) is later than it —
 //     revocations win by time; signoffs[phase][role] → the later sign-off, dropped when a revocation or the phase's merged
@@ -907,7 +907,7 @@ function mergeFeatureState(b, o, t, ctx) {
     approvalHistory: () => H, approvals: () => A, signoffs: () => SO, lastApprovedPhase: lastApproved,
     changes: mergeHistoryBy(CHANGE_ID), unticks: mergeHistoryBy(UNTICK_ID), [MERGE_CONFLICTS_KEY]: mergeHistoryBy(mergeCanon),
     evidence: mergeMapWith(mergeRunRecord), finishChecks: mergeMapWith(mergeRunRecord), ticks: mergeMapWith(mergeLaterTime),
-    finished: mergeFinished, tracks: mergeSet, createdAt: mergeEarlierTime, lastTickAt: mergeLaterTime,
+    finished: mergeFinished, tracks: mergeSet, createdAt: mergeEarlierTime, lastTickAt: mergeLaterTime, lastEditAt: mergeLaterTime, // lastEditAt: 1.22 review (the spec-hook's stamp)
   };
   const out = mergeObject(b, o, t, [], ctx, (k) => (own(FIELDS, k) ? FIELDS[k] : null));
   // lastApprovedPhase follows the merged approvals, never its own 3-way (ours unchanged + theirs revoked would drop it while a

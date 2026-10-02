@@ -11,7 +11,8 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
 - **Hooks never block and stay cheap.** Every hook exits 0 on any error or irrelevant event, emits at most
   one JSON object, has a 10 s timeout, and only acts on a `.specs/` dev-spec owns (`isDevSpecProject` — checked by
   PostToolUse AND SessionStart: another tool's `.specs/` gets no status block in every session). The PostToolUse hook:
-  requirements.md → EARS + placeholders, tasks.md → every trace gap + EC/NFR/SC warnings, design.md →
+  requirements.md → EARS + placeholders, tasks.md → every trace gap + EC/NFR/SC warnings (and, tasks.md / change.md, the
+  feature's `.state.json lastEditAt` stamp the stop gate reads as activity — `recordSpecEdit()`, 1.22 review), design.md →
   `designSaveCheck()` (active tracks' marker sections, Constitution Check, placeholders); it skips `/.execution/`,
   `.specs/templates/` (unless that folder is a pre-1.14 feature), `.specs/tracks/` (1.15, the same exception) and generated files. The Stop / SubagentStop hook
   follows the same rules (see End-of-turn evidence gate), and so do the 1.14 observe hook (it prints nothing at all and

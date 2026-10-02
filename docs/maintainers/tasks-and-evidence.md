@@ -312,8 +312,12 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 - **`stopCheck(projectDir, {message, agent, stopHookActive})`** (engine; `hooks/stop-hook.js` and `dev-spec stop-check`
   print the same decision) sends a turn back (`block: true`, `reason`) ONLY when (a) the closing message CLAIMS the work
   is done or verified and (b) a non-archived feature active in the last `STOP_RECENT_HOURS` = 4 h (lastTickAt, ticks,
-  evidence `at` / `noteAt` / history — only what the engine recorded, never a file date (a fresh clone stamps tasks.md
-  "now"), and a stamp in the future is ignored; at most 50 features) has ticked tasks `verificationStatus()`
+  evidence `at` / `noteAt` / history, and — 1.22 review — `lastEditAt`: the PostToolUse spec-hook stamps it through
+  `recordSpecEdit()` (under the feature lock, a 2 s wait, busy → nothing) whenever tasks.md / change.md is saved with the
+  Write / Edit tool, so tasks ticked by hand count (they read `no-recent` before); only what the engine recorded, never a
+  file date (a fresh clone stamps tasks.md "now"), and a stamp in the future is ignored. Every feature's `.state.json` is
+  read for its activity (cheap); the `STOP_MAX_FEATURES` = 50 MOST RECENTLY active are checked, in folder order — the cap
+  used to cut the folder list first, so a feature after the 50th alphabetically was never examined) has ticked tasks `verificationStatus()`
   reports unverified — or, every active task done, project checks without a passing run since the last task activity
   (`suiteStatus().missing` — any status but `pass`, `code-changed` included).
   Stable `why` codes: `stop-hook-active` · `no-specs` · `off` · `no-claim` · `admitted` · `verified` · `no-recent` ·

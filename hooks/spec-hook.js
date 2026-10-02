@@ -188,6 +188,11 @@ function handle(raw) {
     if (!isDevSpecProject(pdir)) process.exit(0);
 
     const feature = path.basename(path.dirname(filePath));
+    // 1.22 review: a tasks.md / change.md saved by hand (a box ticked with the Edit tool) is activity the stop gate must see —
+    // stamped in the feature's .state.json (lastEditAt, under its lock), never read from a file date. Best-effort, silent.
+    if (base === "tasks.md" || base === "change.md") {
+      try { spec.recordSpecEdit(pdir, feature); } catch { /* best-effort */ }
+    }
     const h = spec.msg(spec.featureLang(pdir, feature)).hook; // localized in the feature's language
 
     // Keep the roadmap current on any hand-edit of a spec file (not the roadmap files themselves).
