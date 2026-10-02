@@ -20,7 +20,7 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained, readIfExists, readJson, realLines,
   requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes, retiredDecisions, safeReaddir,
   SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile, statePath, stripEnd, stripEnds,
-  stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
+  criterionLabel, notASlug, featureRefTest, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
   useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir;
 function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
@@ -31,7 +31,7 @@ function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atx
   normWs, oneLiner, ownEvidence, packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained,
   readIfExists, readJson, realLines, requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes,
   retiredDecisions, safeReaddir, SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile,
-  statePath, stripEnd, stripEnds, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
+  statePath, stripEnd, stripEnds, criterionLabel, notASlug, featureRefTest, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
   taskMarkerValues, taskProse, tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds,
   trackLabel, trackMarker, unitIn, useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews,
   isChangeDir } = E); }
@@ -123,6 +123,8 @@ const RE_STABLE_ID = /(?<![A-Za-z0-9])(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d
 // …of which a criterion's OWN ID is one trace_check reads: never a bare `AC-n` (RE_BARE_AC — not the AC-n of a US-n.AC-n).
 const RE_FULL_ID = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
 const RE_BARE_AC = /(?<![A-Za-z0-9]|US-\d+\.)AC-\d+(?!\d)/;
+// …and the stable IDs a criterion with no label may carry anywhere (EARS's no-id lint): never a T- ID (a test's — review 3).
+const RE_FULL_ID_NO_T = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
 
 // A unit that DEFINES an AC for the EARS linter (criterionBlocks {acUnits}) — 1.14 full review Pa2: only list items were
 // linted, so an AC written as a table row, a bold paragraph, a heading or a checkbox item was never EARS-checked while
@@ -283,17 +285,32 @@ const shortIdList = (xs) => xs.slice(0, 5).join(", ") + (xs.length > 5 ? " …" 
 // (the full list), else null. trace_check reports them as a gap (unidentifiedCriteria); doctor's `ears` and the requirements /
 // change-plan approvals fail on them. Only a criterion with NO stable ID counts (review 2): an NFR-n / EC-n / SC-nnn one has
 // its own (trace_check's secondary warnings read it) — a performance spec of NFR-1, NFR-2 alone failed every gate. Its own:
-// another feature's `checkout/US-3.AC-2` or a `_Supersedes:_` reference in its text is none (ownStableId).
+// the ID that LABELS it (ownStableId — review 3).
 function earsUnidentified(reqText, ears, dir) {
   if (!ears || !ears.summary || !(ears.summary.criteriaDetected > 0)) return null;
   if (requirementAcIds(reqText || "", dir).size) return null;
-  const out = (ears.criteria || []).filter((c) => !ownStableId(c.text, dir))
-    .map((c) => { const bare = c.text.match(RE_BARE_AC); return bare ? bare[0] : "L" + c.line; });
+  const out = (ears.criteria || []).filter((c) => !ownStableId(c.text, dir)).map((c) => bareLabel(c.text) || "L" + c.line);
   return out.length ? out : null;
 }
-// A criterion's text carries a stable ID of its OWN (US-n.AC-m, T-, EC-, NFR-, SC-) — never one in a _Supersedes:_ marker or
-// another feature's `<feature>/US-n.AC-m` (requirementAcIds' reading; `dir` resolves the feature, as there).
-const ownStableId = (text, dir) => RE_FULL_ID.test(stripForeignAcRefs(stripSupersedes(text), dir));
+// A criterion has a stable ID of its OWN when the ID that LABELS it (criterionLabel — its lead, or a table row's ID cell) is a
+// US-n.AC-m, EC-n, NFR-n or SC-nnn of this feature: not behind another feature's slug (`checkout/US-3.AC-2` — resolved as
+// requirementAcIds resolves it, `dir`), never in a `_Supersedes:_` marker. Review 3: ANY ID mentioned in the criterion counted —
+// `- AC-1: WHEN … SHALL redirect (see EC-1)` or `… (T-01)` had "its own" ID (earsUnidentified null, doctor's ears passed, trace
+// counted 0 ACs with no gap, spec_upgrade's bareAcIds was []). A bare AC-n label is no ID whatever else the criterion cites, and
+// a T- ID (a test's) is never a criterion's.
+const RE_OWN_LABEL_ID = /^(?:US-\d+\.AC-\d+|EC-\d+|NFR-\d+|SC-\d+)$/;
+function ownStableId(text, dir) {
+  const lab = criterionLabel(stripSupersedes(text));
+  if (!lab || !RE_OWN_LABEL_ID.test(lab.id)) return false;
+  return !lab.slug || notASlug(lab.slug) || featureRefTest(dir)(lab.slug) !== "other";
+}
+// The bare AC-n a criterion is numbered with: its label when that is one, else (no other label) a bare AC-n in its text.
+function bareLabel(text) {
+  const lab = criterionLabel(text);
+  if (lab) return /^AC-\d+$/.test(lab.id) ? lab.id : null;
+  const m = String(text || "").match(RE_BARE_AC);
+  return m ? m[0] : null;
+}
 // The bare `AC-n` IDs the criteria are numbered with — each linted criterion with no stable ID of its own that carries one — in
 // document order, once each ([] when none). spec_upgrade's renumber item (review 2): a feature approved before 1.22 with AC-1,
 // AC-2 … fails doctor's ears / traceability now, with no warning path. `dir`: the feature's folder (see ownStableId).
@@ -302,8 +319,8 @@ function criteriaBareIds(reqText, dir) {
   const out = [];
   for (const c of (ev.ok && ev.criteria) || []) {
     if (ownStableId(c.text, dir)) continue;
-    const m = c.text.match(RE_BARE_AC);
-    if (m && !out.includes(m[0])) out.push(m[0]);
+    const b = bareLabel(c.text);
+    if (b && !out.includes(b)) out.push(b);
   }
   return out;
 }
@@ -359,10 +376,13 @@ function earsValidate(text, lang) {
 
     // A bare `AC-1` is no stable ID: trace_check reads US-<story>.AC-<n> only (requirementAcIds) — a spec numbered AC-1, AC-2 …
     // traced 0 ACs and passed. Flagged no-id, naming the form to write.
-    if (RE_FULL_ID.test(b.text)) withId++;
+    // Review 3: the ID that LABELS the criterion decides (criterionLabel — `- AC-1: … (see EC-1)` is numbered with a bare AC-1
+    // whatever it cites; a T- ID is a test's, never a criterion's); with no label, a stable ID anywhere in it still counts here.
+    const lab = criterionLabel(b.text);
+    if (lab ? RE_OWN_LABEL_ID.test(lab.id) : RE_FULL_ID_NO_T.test(b.text)) withId++;
     else {
-      const bare = b.text.match(RE_BARE_AC);
-      add("warn", "no-id", bare ? M.bareAcId(bare[0]) : M.noId);
+      const bare = bareLabel(b.text);
+      add("warn", "no-id", bare ? M.bareAcId(bare) : M.noId);
     }
 
     // Every distinct vague term, not just the first ("rápida e amigável" is two things to quantify) — "clean up" is a verb.
@@ -1433,7 +1453,7 @@ function rtmProjectMarkdown(projectDir, lang, features) {
 
 module.exports = { VAGUE_WORDS, VAGUE_RE, VAGUE_RE_ALL, RE_LIST_ITEM, RE_NUMBERED, RE_BLOCK_BREAK, B, E, RE_MODAL_EN,
   RE_MODAL_CAPS, RE_MODAL_SYSTEM, RE_LIST_DEFINES_AC, RE_MODAL, RE_MODAL_LOOSE, RE_AC_SHAPE, RE_AC_HEADING,
-  RE_EARS_CAPS, RE_EARS_KEYWORD, RE_UBIQUITOUS, RE_STABLE_ID, RE_FULL_ID, RE_BARE_AC, RE_LEAD_DEFINES_AC, RE_CELL_AC, criterionBlocks,
+  RE_EARS_CAPS, RE_EARS_KEYWORD, RE_UBIQUITOUS, RE_STABLE_ID, RE_FULL_ID, RE_BARE_AC, RE_FULL_ID_NO_T, RE_OWN_LABEL_ID, ownStableId, bareLabel, RE_LEAD_DEFINES_AC, RE_CELL_AC, criterionBlocks,
   VAGUE_VERB_NEXT, vagueTermsOf, earsFeature, earsUnlinted, earsUnidentified, criteriaBareIds, shortIdList, earsValidate, extractAcIds, extractTestIds, traceCheck, TRACE_INFO_FIELDS, TRACE_GAP_ORDER,
   TRACE_VERDICT_KINDS, TRACE_TASK_KINDS, TRACE_PLAN_KINDS, traceGaps, traceGapLines, TRACE_WARNING_ORDER,
   TRACE_SECONDARY_KINDS, traceWarnings, traceWarningLines, RE_SECONDARY_ID, RE_SECONDARY_ID_LINE, idKey, secondaryIds,

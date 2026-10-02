@@ -132,38 +132,83 @@ function requirementAcIds(reqText, dir) {
 // The slug is one token starting at a token start (linear: a match starts only there). Never a feature (review 2 — the
 // feature's own ID was dropped, its required ACs went to 0): a token that is itself an ID ("US-1.AC-1/US-1.AC-2", "AC-1 /
 // US-1.AC-2"), a story ("US-1 / US-1.AC-1"), a priority ("**P1/US-1.AC-1**"), a number ("1.1/US-1.AC-1"), no letter at all.
-// With `dir` — a feature folder under <project>/.specs/ (or its _archive/) — the slug must resolve, as _Supersedes:_ validation
-// resolves it (locateFeatures: active or archived), to a feature other than this one: "Step-2/US-1.AC-1" or the feature's own
-// "login/US-1.AC-1" stay its IDs. Without one (a pure reader: a template, a pack's numbering, an import's task fitting) every
-// token of a slug's shape counts — the limit: there "Step-2/US-1.AC-1" reads as another feature's.
-const RE_FOREIGN_AC = /(?<![\p{L}\p{N}_.-])([\p{L}\p{N}][\p{L}\p{N}_.-]*)[^\S\n]*\/[^\S\n]*US-\d+\.AC-\d+(?!\d)/gu;
+// With `dir` — a feature folder under <project>/.specs/ (or its _archive/) — the slug is resolved as _Supersedes:_ validation
+// resolves it (locateFeatures: active or archived): another feature → removed; this feature (`login/US-1.AC-1`) → kept; NO
+// feature of that name (review 3 — "keep the rules of billing/US-3.AC-2" with no billing feature was a required AC no task
+// covered) → this feature's only when the same ID LABELS one of the text's criteria (criterionLabelIds: "5. Step-2/US-1.AC-5 —
+// WHEN …"), else a foreign reference, removed. Without `dir` (a pure reader: a template, a pack's numbering, an import's task
+// fitting) every token of a slug's shape counts as another feature's — the limit: there "Step-2/US-1.AC-1" reads as one.
+const RE_FOREIGN_AC = /(?<![\p{L}\p{N}_.-])([\p{L}\p{N}][\p{L}\p{N}_.-]*)[^\S\n]*\/[^\S\n]*(US-\d+\.AC-\d+)(?!\d)/gu;
 const RE_ID_TOKEN_END = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)$/;
 const RE_NOT_A_SLUG = /^(?:\d+(?:[._-]\d+)*|p\d+|(?:us|ac|t|ec|nfr|sc)-\d+)$/i;
+// A token before a slash that names no feature by its shape (an ID, a priority, a number, no letter): the ID after it is the text's own.
+const notASlug = (slug) => RE_ID_TOKEN_END.test(slug) || RE_NOT_A_SLUG.test(slug) || !/\p{L}/u.test(slug);
 function stripForeignAcRefs(text, dir) {
   const s = String(text || "");
   if (!s.includes("/")) return s;
-  let other = null;
-  return s.replace(RE_FOREIGN_AC, (whole, slug) => {
-    if (RE_ID_TOKEN_END.test(slug) || RE_NOT_A_SLUG.test(slug) || !/\p{L}/u.test(slug)) return whole;
-    if (!other) other = otherFeatureTest(dir);
-    return other(slug) ? "" : whole;
+  let kind = null, labels = null;
+  return s.replace(RE_FOREIGN_AC, (whole, slug, id) => {
+    if (notASlug(slug)) return whole;
+    if (!kind) kind = featureRefTest(dir);
+    const k = kind(slug);
+    if (k === "self") return whole;
+    if (k === "other") return "";
+    if (!labels) labels = criterionLabelIds(s, kind);
+    return labels.has(id) ? whole : "";
   });
 }
-// dir (a feature folder) → slug → does it name ANOTHER feature of its project (active or archived)? No dir, or one outside a
-// .specs/ folder → every slug-shaped token does (the pure reader).
-function otherFeatureTest(dir) {
+// dir (a feature folder) → slug → "other" (ANOTHER feature of its project, active or archived) · "self" (this feature) · null
+// (no feature of that name). No dir, or one outside a .specs/ folder → "other" for every slug-shaped token (the pure reader).
+function featureRefTest(dir) {
   const proj = dir ? featureProjectDir(dir) : null;
-  if (!proj) return () => true;
+  if (!proj) return () => "other";
   const self = dirKey(dir);
   const memo = new Map();
   return (slug) => {
     if (!memo.has(slug)) {
-      let hit = false;
-      try { hit = locateFeatures(proj, slug).some((t) => dirKey(t.dir) !== self); } catch { /* unreadable: none */ }
+      let hit = null;
+      try {
+        const found = locateFeatures(proj, slug);
+        hit = found.some((t) => dirKey(t.dir) !== self) ? "other" : found.length ? "self" : null;
+      } catch { /* unreadable: none */ }
       memo.set(slug, hit);
     }
     return memo.get(slug);
   };
+}
+// The pre-review-3 reading (does the slug name ANOTHER feature?) — kept for its callers.
+function otherFeatureTest(dir) {
+  const k = featureRefTest(dir);
+  return (slug) => k(slug) === "other";
+}
+// Review 3 — the ID that LABELS a criterion: the one that leads it (after a heading mark, a list marker, a checkbox, an emphasis /
+// bracket opener — `- **US-1.AC-1** — WHEN …`, `1. NFR-2: THE SYSTEM SHALL …`, `### US-1.AC-3: …`, `- [ ] (EC-1) IF …`), with the
+// token before a slash in front of it (`login/US-1.AC-1`, `P1/US-1.AC-1`); for a table row with no lead label, its cell that is
+// exactly such an ID. An ID cited later in the criterion ("… (see EC-1)", "… (T-01)") labels nothing. → {id, slug} | null.
+const RE_LEAD_LABEL = /^[ \t]*(?:#{1,6}[ \t]+)?(?:(?:\d+[.)]|[-*+])[ \t]+)?(?:\[[ xX]\][ \t]+)?(?:\*\*|__|\*|_|`|\[|\()?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?!\d)/u;
+const RE_CELL_LABEL = /^(?:\*\*|__|\*|_|`)?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?:\*\*|__|\*|_|`)?$/u;
+function criterionLabel(text) {
+  const s = String(text || "");
+  const m = RE_LEAD_LABEL.exec(s);
+  if (m) return { id: m[2], slug: m[1] || null };
+  if (!s.includes("|")) return null;
+  for (const cell of s.replace(/^[ \t]*\|/, "").split("|").slice(0, 64)) {
+    const c = RE_CELL_LABEL.exec(cell.trim());
+    if (c) return { id: c[2], slug: c[1] || null };
+  }
+  return null;
+}
+// The US-n.AC-m IDs that label a criterion line of the text (criterionLabel, line by line — the table rows too), its own: no slug,
+// a slug that names no feature by its shape, this feature or no feature at all (kind: featureRefTest's answer). Linear.
+function criterionLabelIds(text, kind) {
+  const ids = new Set();
+  for (const line of String(text || "").split("\n")) {
+    if (!line.includes("US-")) continue;
+    const lab = criterionLabel(line);
+    if (!lab || !/^US-/.test(lab.id)) continue;
+    if (!lab.slug || notASlug(lab.slug) || kind(lab.slug) !== "other") ids.add(lab.id);
+  }
+  return ids;
 }
 // <project>/.specs/<f> or <project>/.specs/_archive/<f> → <project>; anything else → null. (Lexical — nothing is stat'ed.)
 function featureProjectDir(dir) {
@@ -1092,7 +1137,8 @@ function bugTemplateSlots() {
   return (BUG_SLOTS = set);
 }
 
-module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirementAcIds, stripForeignAcRefs, RE_NOT_A_SLUG,
+module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirementAcIds, stripForeignAcRefs, RE_NOT_A_SLUG, RE_ID_TOKEN_END,
+  notASlug, featureRefTest, RE_LEAD_LABEL, RE_CELL_LABEL, criterionLabel, criterionLabelIds,
   otherFeatureTest, featureProjectDir, planIdText, clarificationMarkers,
   templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
   headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, extractSection,

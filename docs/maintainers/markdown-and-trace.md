@@ -43,8 +43,17 @@ matrix.
   stable ID counts (review 2):** one carrying `NFR-n` / `EC-n` / `SC-nnn` (`RE_FULL_ID`) has its own — trace's secondary
   warnings read it — so a performance spec of NFR-1, NFR-2 alone passes (it failed doctor, trace and the requirements approval);
   a criterion with no ID beside them is still named, and so is one whose only ID is another feature's (`checkout/US-3.AC-2`) or
-  a `_Supersedes:_` reference (`ownStableId` — requirementAcIds' reading). `criteriaBareIds(reqText)` (the bare IDs the criteria are numbered with)
-  feeds spec_upgrade's renumber item (lifecycle.md → Upgrade).
+  a `_Supersedes:_` reference (`ownStableId` — requirementAcIds' reading). **Review 3 — the LABEL, never a mention:** any ID
+  anywhere in the criterion counted, so `- AC-1: WHEN … SHALL redirect (see EC-1)` or `… (T-01)` had "its own" ID (earsUnidentified
+  null, doctor's ears passed, trace counted 0 ACs with no gap, spec_upgrade's bareAcIds []). `criterionLabel(text)` (markdown.js)
+  reads the ID that LABELS a criterion — its lead after a heading mark, a list marker, a checkbox, an emphasis / bracket opener
+  (`RE_LEAD_LABEL`; `- **US-1.AC-1** —`, `1. NFR-2:`, `### US-1.AC-3:`, `- [ ] (EC-1)`), with the token before a slash in front of
+  it (`P1/US-1.AC-4`), or, with no lead, a table row's cell that is exactly such an ID (`RE_CELL_LABEL`). `ownStableId` is a
+  US-n.AC-m / EC / NFR / SC label not behind another feature's slug (`featureRefTest`); a bare AC-n label is no ID whatever the
+  criterion cites, a T- ID (a test's) never a criterion's, and an ID that trails the text (`… (NFR-1)`) labels nothing — the
+  limit: write the ID first (the templates do). EARS's no-id lint reads the same label (with none, a non-T stable ID anywhere —
+  `RE_FULL_ID_NO_T`). `criteriaBareIds(reqText)` (the bare IDs the criteria are numbered with — `bareLabel`: the label, else a
+  bare AC-n in a criterion with no label) feeds spec_upgrade's renumber item (lifecycle.md → Upgrade).
   **`<feature>/US-n.AC-m` is another feature's (1.22 review):** `requirementAcIds` drops it (`stripForeignAcRefs` — the
   `_Supersedes:_` / `_Affects:_` syntax written in prose: "rules of checkout/US-3.AC-2 stay as they are" was a required AC no
   task covered); a token that is itself an ID keeps the pair ("US-1.AC-1/US-1.AC-2"). tasks.md's references are read as before.
@@ -52,8 +61,11 @@ matrix.
   (`1.1/US-1.AC-1`) or a token with no letter (`RE_NOT_A_SLUG`) — every required AC of such a spec went to 0. With the feature's
   folder (`requirementAcIds(text, dir)` — trace_check, the matrix, doctor's / the approvals' `earsUnlinted` / `earsUnidentified`,
   a change's scope, decisions' targets, the test-plan scaffold, the importer's no-criteria warning) the token must resolve as
-  `_Supersedes:_` resolves it (`locateFeatures`, active or archived, `otherFeatureTest`) to a feature OTHER than this one: the
-  feature's own `login/US-1.AC-1` and an unknown `Step-2/US-1.AC-1` stay its IDs. **The limit:** a reader with no folder (a
+  `_Supersedes:_` resolves it (`locateFeatures`, active or archived — `featureRefTest`: "other" · "self" · null) to a feature
+  OTHER than this one; the feature's own `login/US-1.AC-1` stays its ID. **Review 3 — a token that names NO feature:** it counted
+  as this feature's, so "keep the rules of billing/US-3.AC-2" with no billing feature was a required AC no task covered. It is
+  this feature's only when the same ID LABELS one of the text's criteria (`criterionLabelIds` — `5. Step-2/US-1.AC-5 — WHEN …`,
+  and then every `<x>/US-1.AC-5` citing it); otherwise a foreign reference, dropped. **The limit:** a reader with no folder (a
   template, a pack's numbering, the importer's task fitting) can't resolve — there every slug-shaped token counts as another
   feature's.
   A test-plan row covering an AC requirements.md doesn't define is a gap (`phantomAcsInTests`, +tdd; fenced examples

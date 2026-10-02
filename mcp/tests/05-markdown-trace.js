@@ -1586,4 +1586,47 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
       "1.22 review 2: a criterion whose only ID is another feature's (checkout/US-3.AC-2) has no stable ID of its own — trace names it, doctor's ears fails; a bare AC-1 beside such a reference is still a bare ID (got " +
       js([trFo.unidentifiedCriteria, trFo.totalAcs, chk(docFo, "ears").status]) + ")");
   }
+
+  { // 1.22 review 3 (markdown) — a criterion's own ID is the one that LABELS it; an unresolved <x>/ID is this feature's only when it labels a criterion
+    const js = (v) => JSON.stringify(v);
+    const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const chk = (doc, id) => (doc.checks || []).find((c) => c.id === id) || {};
+    const d = path.join(tmp, "proj-122r3-markdown");
+    S.initProject(d, ["core"], "en");
+    const reqOf = (lines) => "# Requirements\n\n## Acceptance Criteria (EARS)\n\n" + lines.join("\n") + "\n";
+    const E = require(path.join(__dirname, "lib", "engine", "index.js"));
+
+    // F2. ownStableId accepted ANY ID mentioned in a criterion: `- AC-1: … (see EC-1)` / `… (T-01)` had "its own" ID — earsUnidentified
+    // null, doctor's ears passed, trace counted 0 ACs with no gap, spec_upgrade's bareAcIds was []. Only the LABEL counts now; a bare
+    // AC-n label is unidentified whatever it cites, and a T- ID is never a criterion's.
+    const see = S.createFeature(d, "See ec", ["core"], "", undefined, "en");
+    put(see.dir, "requirements.md", reqOf(["- AC-1: WHEN the user logs in THE SYSTEM SHALL redirect (see EC-1)", "- EC-1: IF the session expired THEN THE SYSTEM SHALL ask again"]));
+    put(see.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: EC-1_\n");
+    const tcite = S.createFeature(d, "T cite", ["core"], "", undefined, "en");
+    put(tcite.dir, "requirements.md", reqOf(["- AC-1: WHEN the user logs in THE SYSTEM SHALL redirect to /home (T-01)", "- AC-2: IF the password is wrong THEN THE SYSTEM SHALL show an error (T-02)"]));
+    put(tcite.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n");
+    const trS = S.traceCheck(d, see.slug), docS = S.specDoctor(d, see.slug), trT = S.traceCheck(d, tcite.slug), docT = S.specDoctor(d, tcite.slug);
+    const reqT = fs.readFileSync(path.join(tcite.dir, "requirements.md"), "utf8");
+    const noIdT = S.earsValidate(reqT, "en").issues.filter((i) => i.code === "no-id").map((i) => /'(AC-\d+)'/.exec(i.msg || "") ? /'(AC-\d+)'/.exec(i.msg)[1] : i.msg);
+    const lab = (t) => { const l = E.criterionLabel(t); return l && (l.slug ? l.slug + "/" : "") + l.id; };
+    ok(js(trS.unidentifiedCriteria) === '["AC-1"]' && trS.verdict === "gaps-found" && chk(docS, "ears").status === "fail" &&
+      js(trT.unidentifiedCriteria) === '["AC-1","AC-2"]' && chk(docT, "ears").status === "fail" && js(noIdT) === '["AC-1","AC-2"]' &&
+      js(E.criteriaBareIds(reqT, tcite.dir)) === '["AC-1","AC-2"]' && js(E.criteriaBareIds(fs.readFileSync(path.join(see.dir, "requirements.md"), "utf8"), see.dir)) === '["AC-1"]' &&
+      js(["- **US-1.AC-1** — WHEN x", "1. NFR-2: THE SYSTEM SHALL y", "### US-1.AC-3: WHEN", "- [ ] (EC-1) IF x", "2. P1/US-1.AC-4 — x", "- WHEN x THE SYSTEM SHALL y (NFR-1)", "1 | US-1.AC-5 | WHEN x"].map(lab)) ===
+        '["US-1.AC-1","NFR-2","US-1.AC-3","EC-1","P1/US-1.AC-4",null,"US-1.AC-5"]',
+      "1.22 review 3 (2): a criterion's own stable ID is the one that LABELS it — `- AC-1: … (see EC-1)` and `- AC-1: … (T-01)` are criteria with no US-n.AC-m ID (trace gaps-found, doctor's ears fails, EARS no-id names the bare AC-n, spec_upgrade's bareAcIds lists them); an EC-1 / NFR-2 / table-cell / slugged label is one (got " +
+      js([trS.unidentifiedCriteria, trS.verdict, chk(docS, "ears").status, trT.unidentifiedCriteria, chk(docT, "ears").status, noIdT]) + ")");
+
+    // F6. `<x>/US-n.AC-m` where <x> names NO feature counted as this feature's criterion: "keep the rules of billing/US-3.AC-2" with no
+    // billing feature → a required AC no task covered. It is this feature's only when the same ID labels one of its criteria.
+    const ref = S.createFeature(d, "Ref", ["core"], "", undefined, "en");
+    put(ref.dir, "requirements.md", reqOf(["- US-1.AC-1: WHEN the user logs in THE SYSTEM SHALL keep the rules of billing/US-3.AC-2",
+      "- Step-2/US-1.AC-2: WHEN the draft is stale THE SYSTEM SHALL say so (as legacy/US-1.AC-2 did)"]));
+    put(ref.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n");
+    const trR = S.traceCheck(d, ref.slug);
+    const ids = [...E.requirementAcIds(fs.readFileSync(path.join(ref.dir, "requirements.md"), "utf8"), ref.dir)];
+    ok(trR.verdict === "pass" && trR.totalAcs === 2 && js(trR.uncoveredByTasks) === "[]" && js(ids) === '["US-1.AC-1","US-1.AC-2"]',
+      "1.22 review 3 (6): 'billing/US-3.AC-2' with no billing feature is a foreign reference (no required AC); 'Step-2/US-1.AC-2' labels a criterion — this feature's, and so is 'legacy/US-1.AC-2' citing the same ID (got " +
+      js([trR.verdict, trR.totalAcs, trR.uncoveredByTasks, ids]) + ")");
+  }
 };
