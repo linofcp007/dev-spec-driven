@@ -135,6 +135,13 @@ function stripCdPrefix(cmd, pdir, cwd) {
   return norm(path.resolve(cwd || pdir, target)) === norm(pdir) ? m[4].trim() : cmd;
 }
 
+// A tasks.md written as UTF-16 (a BOM: FF FE / FE FF — Windows PowerShell 5.1) is read as the engine reads it (files.js
+// decodeText, 1.22 review) without loading the engine for this pre-filter; anything else is UTF-8.
+function utf16OrUtf8(buf) {
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.toString("utf16le", 0, buf.length - (buf.length % 2));
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return Buffer.from(buf.subarray(0, buf.length - (buf.length % 2))).swap16().toString("utf16le");
+  return buf.toString("utf8");
+}
 // The plain-text pre-filter: is the command written in a feature's tasks.md or in meta.checks at all? Only then is the
 // engine loaded (it parses the tasks for real and skips archived features).
 function mentioned(pdir, key) {
@@ -159,7 +166,7 @@ function mentioned(pdir, key) {
       const file = path.join(root, d.name, name);
       try {
         if (fs.statSync(file).size > MAX_TASKS_BYTES) continue;
-        const text = flat(fs.readFileSync(file, "utf8"));
+        const text = flat(utf16OrUtf8(fs.readFileSync(file)));
         // The " && " join of a task's commands (how done --run reports them) is never written whole: every part is (review R6).
         if (text.includes(key) || (parts.length > 1 && parts.every((x) => text.includes(x)))) return true;
       } catch { /* no such file */ }

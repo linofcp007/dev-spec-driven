@@ -21,6 +21,10 @@ trackers, release notes, milestones).
   `{{lang}}` `{{date}}`; an unknown `{{x}}` is left as is; no summary → the language's generic slot (`[TBD]` /
   `[a definir]` / `[por definir]`) so the scaffold still reads 'placeholder'. For steering, `{{name}}` / `{{slug}}` are the
   project folder's name and `{{tracks}}` the tracks init was given. For a spike, `{{summary}}` is its question.
+  **The summary is written through `safeSpecText`** (1.22 review) — into `{{summary}}` and every built-in scaffold that holds it
+  (requirements.md, classification.md, change.md, bug.md, the bug requirements), as the bug prefill and the spike question
+  are: its `<!--` paired with the scaffold's closing EARS-guidance `-->` and hid every criterion (placeholders 30 → 0, trace
+  5 ACs → 0, EARS 0 criteria). `createFeature` keeps the RAW text for the classifier (`writtenSummary` is only what is written).
 - **Track-block rule — ONE rule for an overridden design / requirements / tasks / test-plan:** every active track still
   gets what the built-in template would hold for it, appended at the end as spec_add_track appends it
   (`trackDesignBlock`, `trackRequirementsBlock` — renumbered after the template's own US-1 ACs when an ID would collide —,

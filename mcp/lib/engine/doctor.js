@@ -16,7 +16,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled, chainPlaceholders,
   changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN, crossAcDoctorDetail,
   crossFeatureAcs, decisionDoctorChecks, designApprovedBeforeWeigh, designWeighChecks, detectPhase, detectTracks,
-  duplicateTaskNumbers, earsUnlinted, earsValidate, evidenceRule, executionSignOffStale, existingFeature, expectsFail,
+  duplicateTaskNumbers, earsUnlinted, earsUnidentified, shortIdList, earsValidate, evidenceRule, executionSignOffStale, existingFeature, expectsFail,
   extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText, flowPhaseIndex,
   FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority, hasSuccessCriteria,
   headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord, isSpikeDir, isTestCodePath,
@@ -39,7 +39,7 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
   crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designApprovedBeforeWeigh, designWeighChecks, detectPhase,
-  detectTracks, duplicateTaskNumbers, earsUnlinted, earsValidate, evidenceRule, executionSignOffStale, existingFeature,
+  detectTracks, duplicateTaskNumbers, earsUnlinted, earsUnidentified, shortIdList, earsValidate, evidenceRule, executionSignOffStale, existingFeature,
   expectsFail, extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText,
   flowPhaseIndex, FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority,
   hasSuccessCriteria, headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord,
@@ -612,9 +612,13 @@ function specDoctor(projectDir, name, opts = {}) {
     const nCrit = e.summary ? e.summary.criteriaDetected : 0;
     // Zero criteria is not a pass — an empty requirements.md must not read as "EARS clean". And requirements.md whose AC
     // IDs trace_check counts while EARS linted none of them fails (1.14 full review Pa2): nothing was checked.
+    // The mirror (1.22 review): criteria linted, but no AC ID trace_check reads (bare AC-1 IDs, or none) — it traced 0 ACs.
     const unlinted = earsUnlinted(reqs, e);
-    add("ears", nErr || unlinted ? "fail" : nCrit === 0 ? "warn" : "pass",
-      unlinted ? m.earsNoCriteria(unlinted, isChange ? CHANGE_FILE : undefined) : m.earsDetail(nCrit, nErr, e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0));
+    const unidentified = unlinted ? null : earsUnidentified(reqs, e);
+    const file = isChange ? CHANGE_FILE : undefined;
+    add("ears", nErr || unlinted || unidentified ? "fail" : nCrit === 0 ? "warn" : "pass",
+      unlinted ? m.earsNoCriteria(unlinted, file) : unidentified ? m.earsNoAcIds(shortIdList(unidentified), file)
+        : m.earsDetail(nCrit, nErr, e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0));
     // Clarifications gate — design is blocked while any [NEEDS CLARIFICATION] remains.
     const markers = clarificationMarkers(reqsFull);
     add("clarifications", markers.length ? "fail" : "pass", markers.length ? (isChange ? m.clarificationsOpenPlan : m.clarificationsOpen)(markers.length) : m.clarificationsNone); // a change has no design (1.21 verify V7)
@@ -730,7 +734,7 @@ function specDoctor(projectDir, name, opts = {}) {
       ...(laterFiles.includes("test-plan.md") ? TRACE_PLAN_KINDS : []),
       // C3: design-first — requirements.md is a LATER phase's template at the design gate: its template ACs are no gap yet
       // (the checks involving the requirements run once they are written).
-      ...(laterFiles.includes("requirements.md") ? [...TRACE_TASK_KINDS, ...TRACE_PLAN_KINDS].filter((k) => k !== "missingImplFiles") : []),
+      ...(laterFiles.includes("requirements.md") ? [...TRACE_TASK_KINDS, ...TRACE_PLAN_KINDS, "unidentifiedCriteria"].filter((k) => k !== "missingImplFiles") : []),
     ]);
     const kept = Object.fromEntries(Object.entries(tr).filter(([k]) => !deferKinds.has(k)));
     const gapLines = traceGapLines(kept, lng);

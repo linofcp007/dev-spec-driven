@@ -186,7 +186,7 @@ function specsGuard(root) {
 }
 function readText(file) {
   try {
-    return fs.readFileSync(file, "utf8").replace(RE_BOM, "");
+    return spec.decodeText(fs.readFileSync(file)).replace(RE_BOM, ""); // a UTF-16 spec file too (1.22 review)
   } catch {
     return null;
   }

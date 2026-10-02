@@ -539,6 +539,17 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   (`consent`, `retention period` / `retention policy` and twins) are weak; encryption in transit and security testing
   are strong in EN/PT/ES alike — keep the three languages aligned when you add a signal. `keywordLiteral()` is a literal
   precheck (a keyword pluralize() leaves alone is its own whole literal) so a text without it never compiles its regex.
+  **1.22 review — +sec's two-factor signal in PT / ES:** `two-factor` had no PT / ES twin, so "Adicionar autenticação de dois
+  fatores" was `core +tdd` while its English twin was +sec. sec.weak gained `multi-factor`, `multifactor` (EN = ES), PT `dois
+  fatores`, `multifator`, ES `dos factores`, `doble factor` — each a separate word, never the whole "autenticação de dois
+  fatores" phrase (it would win its place and shadow the auth word: ONE signal where English has two). A lone one is a
+  "possible +sec" note ("os dois fatores principais"). **Measured:** the differential (e2bb4d1 vs the fix) over 40,579 inputs —
+  6,756 string literals of both trees' test files and evals + a 20-frame sweep of every built-in keyword (1,782, incl. "Add K and
+  multi-factor sign-in", "Adicionar K com dois fatores", "Añadir K con dos factores", "autenticação K de dois fatores"): 1,863
+  decisions changed, ALL +sec switched on in an input holding one of the new words (the sweep's frames and the review's 7 test
+  texts); no track switched off, no existing literal changed. **Reasoning:** a track kept off with weak / app-level words
+  (`signals[t]` non-empty) reads `classify.offWeak` ("+api: off — weak signal only ('endpoint'), not enough on its own.", EN /
+  PT / ES), never "no signals matched" beside a "Possible +api" note.
 - **Tracks are persisted in `.state.json` `tracks`** (create / add_track / add_track --remove write them)
   and `detectTracks()` reads them first. Only features without a saved list (pre-1.13) fall back to
   their files, and there a `[SaaS]`/`[AI]` marker counts only on a real markdown heading (a Mermaid node

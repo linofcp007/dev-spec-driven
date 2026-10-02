@@ -25,8 +25,8 @@ budget file is where that per-project tuning lives.
 Turn each target into EARS acceptance criteria, phrased against the metric, and add a hard behaviour
 guard so "cleaner" never means "broken". Give them the same stable `US-n.AC-m` IDs as any other spec:
 `trace_check`, the tasks' `_Requirements:_` and the approval gates follow only those — a bare `AC-1`
-heading is invisible to them (the feature would trace **0** ACs). Keep the baseline/target note as a
-sub-line of its criterion:
+is no ID to them: EARS flags it (`no-id`), and while no criterion carries a `US-n.AC-m` ID `trace_check`, `spec_doctor`
+and the requirements approval fail (`unidentifiedCriteria`). Keep the baseline/target note as a sub-line of its criterion:
 
 ```markdown
 # Feature: Refactor checkout module

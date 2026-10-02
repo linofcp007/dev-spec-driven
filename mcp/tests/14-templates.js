@@ -271,4 +271,30 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
       input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: tw(pk, "pt/design.md", "# D\n") } }), encoding: "utf8" });
     ok(hkTpl.status === 0 && hkTpl.stdout.trim() === "", "B1: the PostToolUse hook stays silent for .specs/templates/ files (pt/design.md is not feature 'pt''s design)");
   }
+
+  { // 1.22 review — the summary is written through safeSpecText (built-in scaffolds AND a project template's {{summary}}): its "<!--"
+    // paired with the scaffold's closing EARS-guidance "-->" and hid every criterion (placeholders 30 → 0, trace 5 ACs → 0, EARS 0 criteria)
+    const js = (v) => JSON.stringify(v);
+    const p = path.join(tmp, "proj-122-summary");
+    S.initProject(p, ["core"], "en");
+    const sum = "Escape a stray <!-- in imported markdown";
+    const rd = (dir, f) => fs.readFileSync(path.join(dir, f), "utf8");
+    const ph = (slug, f) => (S.featurePlaceholders(p, slug, f) || { items: [] }).items.length;
+    const fe = S.createFeature(p, "escape", undefined, sum, undefined, "en");
+    const ch = S.createFeature(p, "escape change", ["core"], sum, undefined, "en", "change");
+    const bg = S.createFeature(p, "escape bug", ["tdd"], sum, undefined, "en", "bugfix");
+    const pT = path.join(tmp, "proj-122-summary-template");
+    S.initProject(pT, ["core"], "en");
+    const tpl = path.join(pT, ".specs", "templates", "requirements.md");
+    fs.mkdirSync(path.dirname(tpl), { recursive: true });
+    fs.writeFileSync(tpl, "# Requirements — {{name}}\n\n## Summary\n{{summary}}\n\n## Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behaviour].\n\n<!-- one EARS criterion per line -->\n");
+    const tf = S.createFeature(pT, "templated", ["core"], sum, undefined, "en");
+    const got = [S.traceCheck(p, fe.slug).totalAcs, S.earsFeature(p, fe.slug).summary.criteriaDetected, ph(fe.slug, "requirements.md"),
+      S.traceCheck(p, ch.slug).totalAcs, S.traceCheck(p, bg.slug).totalAcs, ph(bg.slug, "bug.md"), S.traceCheck(pT, tf.slug).totalAcs];
+    ok(got[0] === 5 && got[1] === 5 && got[2] >= 5 && got[3] > 0 && got[4] > 0 && got[5] > 0 && got[6] === 1 &&
+      [[fe.dir, "requirements.md"], [fe.dir, "classification.md"], [ch.dir, "change.md"], [bg.dir, "bug.md"], [bg.dir, "requirements.md"], [tf.dir, "requirements.md"]]
+        .every(([dir, f]) => rd(dir, f).includes("stray &lt;!-- in") && !rd(dir, f).includes("stray <!--")) &&
+      js(fe.tracks) === js(S.classify(sum).tracks),
+      "1.22 review: a summary holding '<!--' is written neutralized (&lt;!--) into requirements.md / classification.md, change.md, bug.md and a template's {{summary}} — every criterion still read (trace, EARS, placeholders); the classifier reads the raw text (got " + js(got) + ")");
+  }
 };

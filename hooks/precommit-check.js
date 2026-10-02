@@ -115,7 +115,10 @@ for (const f of files) {
         out.push(PF.phantom(f, phantom.length, phantom.join(", ")));
       }
       if (tr.uncoveredByTasks.length) out.push(PF.uncovered(f, tr.uncoveredByTasks.length, tr.uncoveredByTasks.join(", ")));
-      if (!phantom.length && !tr.uncoveredByTasks.length) out.push(PF.traceClean(f, tr.totalAcs));
+      // criteria with no US-n.AC-n ID (bare AC-1, or none): traceability counts none of them — never "clean (0 ACs)"
+      const unid = tr.unidentifiedCriteria || [];
+      if (unid.length) out.push(PF.unidentified(f, unid.length, unid.join(", ")));
+      if (!phantom.length && !tr.uncoveredByTasks.length && !unid.length) out.push(PF.traceClean(f, tr.totalAcs));
     }
   }
 }
