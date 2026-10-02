@@ -184,7 +184,7 @@ and U+FEFF gotchas are in CLAUDE.md.
   The engine refuses what the MCP schema refuses where the CLI passes raw strings: `taskNumber()` (digits only — `"1.9"` / `"2abc"` are not
   task 1 / 2), `createFeature` kind ∈ feature|bugfix|spike, `backlog` action ∈ add|rm|remove|list. **In the validator's own words**
   (`msg(lang).args`, 1.22 review) where the schema bounds a value: a task number asked for (`askedTaskNumber()` — done / undone /
-  brief, spec_complete_task / spec_task_brief `{number}`, schema `minimum: 1`) is an integer ≥ 1 (`taskNumberError()`: `-1` read
-  "must be an integer", `0` "Task 0 not found"; `done` checks it itself before `--run` runs anything — an empty word would brief
-  the NEXT task); a roadmap `order` (depend `--order`, spec_depend's `{type: "integer"}`) is a SAFE
+  brief, spec_complete_task / spec_task_brief `{number}`, schema `minimum: 0`) is an integer ≥ 0 (`taskNumberError()`: `-1` read
+  "must be an integer"; not ≥ 1 — the scanner reads a hand-written "0." task and next serves it, so refusing 0 would loop next →
+  complete; `done` checks it itself before `--run` runs anything — an empty word would brief the NEXT task); a roadmap `order` (depend `--order`, spec_depend's `{type: "integer"}`) is a SAFE
   integer (`orderInput()` — `99999999999999999999` matched the digits and was stored as 1e20).

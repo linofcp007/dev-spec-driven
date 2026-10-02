@@ -435,12 +435,13 @@ function taskNumber(v) {
   return Number.isSafeInteger(n) ? n : NaN;
 }
 // The task number a caller ASKED FOR (spec_complete_task / spec_task_brief {number}, the CLI's done / undone / brief word) →
-// the integer, or NaN: an integer ≥ 1 — the tools' schema minimum (1.22 review: `-1` read "must be an integer", `0` "Task 0
-// not found"). A refusal says it in the MCP validator's words (args), so both surfaces refuse the same values alike.
-function askedTaskNumber(v) { const n = taskNumber(v); return n >= 1 ? n : NaN; }
+// the integer, or NaN: an integer ≥ 0 — the tools' schema minimum (1.22 review: `-1` read "must be an integer"). Not ≥ 1: the
+// scanner reads a hand-written "0." task and next serves it, so refusing 0 would loop next → complete. A refusal says it in
+// the MCP validator's words (args), so both surfaces refuse the same values alike.
+function askedTaskNumber(v) { const n = taskNumber(v); return n >= 0 ? n : NaN; }
 function taskNumberError(lang, v) {
   const A = i18n.msg(lang).args;
-  return A.invalid(A.item("number", A.type.integer + " " + A.atLeast(1), JSON.stringify(typeof v === "number" ? v : String(v))));
+  return A.invalid(A.item("number", A.type.integer + " " + A.atLeast(0), JSON.stringify(typeof v === "number" ? v : String(v))));
 }
 // opts.ranBy "cli" (1.14 F1): the CLI's `done --run` ran the command itself — the record's observed stamp is "cli". The MCP
 // server never passes it (and normalizeEvidence keeps no caller-given `observed`): a reported run is looked up in the

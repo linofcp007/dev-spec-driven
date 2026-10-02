@@ -699,12 +699,12 @@ function main() {
     case "done": {
       if (!pos[0] || pos[1] == null) usage("dev-spec done <feature> <task-number> [--run [--shell bash|pwsh|<path>] [--timeout <s>] | --evidence \"summary\" [--exit N] [--cmd \"command\"]]");
       const D = spec.msg(spec.featureLang(projectDir, pos[0])).taskDone; // human output in the feature's language
-      // The task number: an integer ≥ 1 (spec_complete_task's schema) — refused BEFORE anything runs (an empty word would brief
-      // the NEXT task and run its _Verify:_), in the MCP validator's words, as the engine refuses it for undone / brief (1.22 review:
-      // `0` / `-1` read "Task 0 not found" / "must be an integer"). A refusal like the engine's: --json prints it on stdout.
-      if (!/^\s*\d+\s*$/.test(String(pos[1])) || !(Number(pos[1]) >= 1)) {
+      // The task number: an integer ≥ 0 (spec_complete_task's schema; a hand-written "0." task is one next can serve) — refused
+      // BEFORE anything runs (an empty word would brief the NEXT task and run its _Verify:_), in the MCP validator's words, as the
+      // engine refuses it for undone / brief (1.22 review: `-1` read "must be an integer"). --json prints the refusal on stdout.
+      if (!/^\s*\d+\s*$/.test(String(pos[1])) || !(Number(pos[1]) >= 0)) {
         const A = spec.msg(spec.featureLang(projectDir, pos[0])).args;
-        return fail({ ok: false, error: A.invalid(A.item("number", A.type.integer + " " + A.atLeast(1), JSON.stringify(String(pos[1])))) });
+        return fail({ ok: false, error: A.invalid(A.item("number", A.type.integer + " " + A.atLeast(0), JSON.stringify(String(pos[1])))) });
       }
       const say = flags.json ? console.error : console.log; // --json keeps stdout one JSON document
       let evidence;

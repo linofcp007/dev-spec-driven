@@ -106,14 +106,14 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
         "1.22 review: evals whose harness is killed by a signal (SIGKILL) exits 1, never 0 (got " + JSON.stringify([ev22.status, ev22.signal, ev22.stderr.trim().slice(0, 120)]) + ")");
     }
   }
-  // 1.22 review: a task number is an integer ≥ 1 (spec_task_brief / spec_complete_task's schema minimum) — done / undone / brief
-  // refuse 0 and -1 in the MCP validator's words (they answered "Task 0 not found" / "must be an integer"), before anything runs.
-  const num22 = [["done", "billing", "0", "--run"], ["done", "billing", "-1"], ["undone", "billing", "0"], ["brief", "billing", "0", "--write"], ["brief", "billing", "-1"]]
+  // 1.22 review: a task number is an integer ≥ 0 (spec_task_brief / spec_complete_task's schema minimum; a hand-written "0."
+  // task is one next serves) — done / undone / brief refuse -1 / 1.5 in the MCP validator's words, before anything runs.
+  const num22 = [["done", "billing", "-1", "--run"], ["done", "billing", "1.5"], ["undone", "billing", "-1"], ["brief", "billing", "-1", "--write"], ["brief", "billing", "x"]]
     .map((a) => run([...a, "--project", b13]));
-  const numJ22 = runJ(["done", "billing", "0", "--json", "--project", b13]);
-  ok(num22.every((r) => r.code === 1 && /Invalid argument\(s\): number must be an integer ≥ 1 \(got "(?:0|-1)"\)/.test(r.out) && !/^\$ /m.test(r.out)) &&
-    !fs.existsSync(path.join(ex13, "task-0-brief.md")) && numJ22.code === 1 && numJ22.j && numJ22.j.ok === false && /≥ 1 \(got "0"\)/.test(numJ22.j.error),
-    "1.22 review: done 0 --run / done -1 / undone 0 / brief 0 / brief -1 exit 1 — 'number must be an integer ≥ 1', as MCP refuses them; nothing runs or is written; --json prints the refusal (got " +
+  const numJ22 = runJ(["done", "billing", "-1", "--json", "--project", b13]);
+  ok(num22.every((r) => r.code === 1 && /Invalid argument\(s\): number must be an integer ≥ 0 \(got "(?:-1|1\.5|x)"\)/.test(r.out) && !/^\$ /m.test(r.out)) &&
+    !fs.existsSync(path.join(ex13, "task--1-brief.md")) && numJ22.code === 1 && numJ22.j && numJ22.j.ok === false && /≥ 0 \(got "-1"\)/.test(numJ22.j.error),
+    "1.22 review: done -1 --run / done 1.5 / undone -1 / brief -1 / brief x exit 1 — 'number must be an integer ≥ 0', as MCP refuses them; nothing runs or is written; --json prints the refusal (got " +
     JSON.stringify(num22.map((r) => [r.code, r.out.trim().slice(0, 80)])) + ")");
   // PT / ES: every line of status, doctor, depend, add-track, ears, usage and unknown command in the project/feature language.
   const pt13 = path.join(tmp, "wp13-pt");

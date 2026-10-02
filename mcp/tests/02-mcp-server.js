@@ -25,7 +25,7 @@ exports.run = async ({
 
     // 1. Argument types are checked against the advertised inputSchema before dispatch.
     const r19 = await call("spec_complete_task", { name: "arg-check", number: 1.9, projectDir: w3 });
-    ok(r19.result.isError && /number must be an integer ≥ 1 \(got 1\.9\)/.test(errText(r19)) && S.nextTask(w3, "arg-check").next.number === 1,
+    ok(r19.result.isError && /number must be an integer ≥ 0 \(got 1\.9\)/.test(errText(r19)) && S.nextTask(w3, "arg-check").next.number === 1,
       "MCP rejects number 1.9 (not an integer) instead of ticking task 1");
     const rObj = await call("spec_create", { name: { a: 1 }, projectDir: w3 });
     ok(rObj.result.isError && /name must be a string/.test(errText(rObj)) && !fs.existsSync(path.join(w3, ".specs", "object-object")),
@@ -78,21 +78,28 @@ exports.run = async ({
     ok(rBig.result.isError && /number must be an integer/.test(errText(rBig)) && /- \[ \] 1\./.test(fs.readFileSync(w3Tasks, "utf8")) &&
       rBigBrief.result.isError && /number must be an integer/.test(errText(rBigBrief)),
       "MCP rejects number 1e21 / 2e300 (parseInt('1e+21') is 1 — task 1 stays open, no brief for the wrong task)");
-    // 1.22 review: a task number is an integer ≥ 1 — the schemas say so (minimum: 1, enforced by the validator): -1 read "number
-    // must be an integer", 0 "Task 0 not found". The engine refuses the CLI's raw word (done / undone / brief) in the same words.
+    // 1.22 review: a task number is an integer ≥ 0 — the schemas say so (minimum: 0, enforced by the validator): -1 read "number
+    // must be an integer". Not ≥ 1: a hand-written "0." task is read and served by next, so refusing 0 would loop next → complete.
+    // The engine refuses the CLI's raw word (done / undone / brief) in the same words.
     const numMin = ["spec_task_brief", "spec_complete_task"].map((n) => ((list.result.tools.find((t) => t.name === n) || {}).inputSchema.properties.number || {}).minimum);
     const tasksBefore22 = fs.readFileSync(w3Tasks, "utf8");
     const rNeg22 = await call("spec_task_brief", { name: "arg-check", number: -1, projectDir: w3 });
+    const rNegTick22 = await call("spec_complete_task", { name: "arg-check", number: -1, evidence: { command: "x", exitCode: 0 }, projectDir: w3 });
     const rZero22 = await call("spec_complete_task", { name: "arg-check", number: 0, evidence: { command: "x", exitCode: 0 }, projectDir: w3 });
-    const rUndo22 = await call("spec_complete_task", { name: "arg-check", number: 0, undo: true, projectDir: w3 });
-    const eng22 = [safe(() => S.completeTask(w3, "arg-check", "0")), safe(() => S.taskBrief(w3, "arg-check", "-1")), safe(() => S.completeTask(w3, "arg-check", 0, undefined, { undo: true })),
+    const eng22 = [safe(() => S.completeTask(w3, "arg-check", "-1")), safe(() => S.taskBrief(w3, "arg-check", "-1")), safe(() => S.completeTask(w3, "arg-check", -2, undefined, { undo: true })),
       safe(() => S.taskBrief(w3, "arg-check", "1.9"))];
-    ok(numMin.every((m) => m === 1) && rNeg22.result.isError && /number must be an integer ≥ 1 \(got -1\)/.test(errText(rNeg22)) &&
-      [rZero22, rUndo22].every((r) => r.result.isError && /number must be an integer ≥ 1 \(got 0\)/.test(errText(r))) &&
-      eng22.every((r, i) => r.ok === false && new RegExp("^Invalid argument\\(s\\): number must be an integer ≥ 1 \\(got " + ['"0"', '"-1"', "0", '"1.9"'][i] + "\\)$").test(r.error)) &&
-      fs.readFileSync(w3Tasks, "utf8") === tasksBefore22,
-      "1.22 review: spec_task_brief / spec_complete_task {number} are integers ≥ 1 (schema minimum, enforced): -1 and 0 (tick and undo) are refused as such — and the engine refuses '0' / '-1' / 0 / '1.9' from the CLI in the validator's words; nothing ticked (got " +
-      JSON.stringify([numMin, errText(rNeg22), errText(rZero22), eng22.map((r) => r.error)]) + ")");
+    const w0 = path.join(tmp, "task-zero");
+    S.initProject(w0, ["core"], "en");
+    const f0 = S.createFeature(w0, "Zero", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(f0.dir, "tasks.md"), "- [ ] 0. [US1] Zeroth\n- [ ] 1. [US1] First\n");
+    const next0 = S.nextTask(w0, f0.slug), tick0 = await call("spec_complete_task", { name: f0.slug, number: 0, evidence: { summary: "done" }, projectDir: w0 }), next1 = S.nextTask(w0, f0.slug);
+    ok(numMin.every((m) => m === 0) && [rNeg22, rNegTick22].every((r) => r.result.isError && /number must be an integer ≥ 0 \(got -1\)/.test(errText(r))) &&
+      !/must be an integer/.test(errText(rZero22) || JSON.stringify(rZero22.result)) &&
+      eng22.every((r, i) => r.ok === false && new RegExp("^Invalid argument\\(s\\): number must be an integer ≥ 0 \\(got " + ['"-1"', '"-1"', "-2", '"1.9"'][i] + "\\)$").test(r.error)) &&
+      fs.readFileSync(w3Tasks, "utf8") === tasksBefore22 &&
+      next0.next && next0.next.number === 0 && !tick0.result.isError && next1.next && next1.next.number === 1,
+      "1.22 review: spec_task_brief / spec_complete_task {number} are integers ≥ 0 (schema minimum, enforced): -1 is refused as such, the engine refuses '-1' / -2 / '1.9' from the CLI in the validator's words, nothing ticked; a hand-written task 0 that next serves can be ticked (no next → complete loop) (got " +
+      JSON.stringify([numMin, errText(rNeg22), errText(rZero22), eng22.map((r) => r.error), next0.next, next1.next]) + ")");
 
     // 2. User-controlled keys never index Object.prototype.
     const protoRes = [];
