@@ -155,4 +155,26 @@ exports.run = async ({ ok, S, tmp, __dirname }) => {
       "1.22 review: the implementer's gate reads the LAST task-N-report.md its reply names (a report over a brief) — task 2's failing report blocks even when task 1's report is cited first (got " +
       js([[r1.why, r1.task], [r2.why, r2.task], [r3.why, r3.task]]) + ")");
   }
+
+  // 1.22 review (finding 9) — the spec-hook loaded the engine before its `/.specs/` path check: ~100 ms on every Write / Edit in
+  // every project. It loads it lazily now: never for a file outside .specs/ (or in .execution/), still for a spec file and SessionStart.
+  {
+    const specJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
+    const probe = path.join(tmp, "g122-probe.js");
+    const out = path.join(tmp, "g122-probe.out");
+    fs.writeFileSync(probe, "process.on('exit', () => require('fs').writeFileSync(" + js(out) + ", String(Object.keys(require.cache).some((k) => /[\\\\/]mcp[\\\\/]lib[\\\\/]spec\\.js$/.test(k)))));\n");
+    const p = path.join(tmp, "g122-lazy");
+    S.initProject(p, ["core"], "en");
+    const f = S.createFeature(p, "Lazy", ["core"], "", undefined, "en");
+    const loads = (payload) => {
+      try { fs.unlinkSync(out); } catch { /* none */ }
+      const r = spawnSync(process.execPath, ["-r", probe, specJs], { input: js(payload), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
+      return [r.status, fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "?"];
+    };
+    const edit = (file) => ({ hook_event_name: "PostToolUse", tool_name: "Edit", cwd: p, tool_input: { file_path: file, old_string: "a", new_string: "b" }, tool_response: {} });
+    const got = [loads(edit(path.join(p, "src", "app.js"))), loads(edit(path.join(f.dir, ".execution", "task-1-report.md"))), loads({ hook_event_name: "Notification", cwd: p }),
+      loads(edit(path.join(f.dir, "tasks.md"))), loads({ hook_event_name: "SessionStart", cwd: p })];
+    ok(js(got) === js([[0, "false"], [0, "false"], [0, "false"], [0, "true"], [0, "true"]]),
+      "1.22 review: the spec-hook loads the engine only for a .specs/ file it checks (and SessionStart) — never for an edit outside .specs/, an .execution/ scratch file or another event (got " + js(got) + ")");
+  }
 };
