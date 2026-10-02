@@ -391,7 +391,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
   put("requirements.md", req.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n"); // trimEnd: no /\s*$/ backtracking
   // A source with no criteria at all (an OpenSpec change of proposal.md + tasks.md): requirements.md defines no AC — said
   // once, so no one approves requirements that trace nothing (1.14 full review Pa4).
-  if (!requirementAcIds(readIfExists(path.join(cr.dir, "requirements.md")) || "").size) warnings.push(W.wNoCriteriaAtAll);
+  if (!requirementAcIds(readIfExists(path.join(cr.dir, "requirements.md")) || "", cr.dir).size) warnings.push(W.wNoCriteriaAtAll);
   // 1.15 track packs (F4 review R8): the import replaced the scaffold's requirements.md — each pack's [MARKER] criteria go back in,
   // after the imported US-1 criteria, as spec_create writes them (a pack's scaffold always has its criteria); its test rows and its
   // task block follow below, citing the IDs the criteria got here.

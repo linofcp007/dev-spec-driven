@@ -16,14 +16,14 @@ const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 const { MARKER_TRACKS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature, extractAcIds,
-  featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket,
-  markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists, renderTrackTaskHeadings,
+let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, engineVersion, existingFeature, extractAcIds,
+  featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket,
+  locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists, renderTrackTaskHeadings,
   replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf,
   VALID_TRACKS, wildcardMatch;
-function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature,
-  extractAcIds, featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf,
-  isPackMarkerBracket, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists,
+function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, engineVersion, existingFeature,
+  extractAcIds, featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf,
+  isPackMarkerBracket, locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists,
   renderTrackTaskHeadings, replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS,
   useTemplateScopeOf, VALID_TRACKS, wildcardMatch } = E); }
 
@@ -124,18 +124,58 @@ function stripFencedCode(s) {
 // requirements.md's own AC IDs as the tools read them: outside HTML comments and fenced code, `_Supersedes:_`
 // references (another feature's ACs) left out — and so is any `<feature>/US-n.AC-m` (the _Supersedes:_ / _Affects:_ syntax)
 // written in prose: "rules of checkout/US-3.AC-2 stay as they are" names checkout's criterion, never one of this feature's
-// (1.22 review: it was a required AC no task covered).
-function requirementAcIds(reqText) {
-  return extractAcIds(stripForeignAcRefs(stripSupersedes(stripFencedCode(stripHtmlComments(reqText)))));
+// (1.22 review: it was a required AC no task covered). `dir`: the feature's folder — see stripForeignAcRefs.
+function requirementAcIds(reqText, dir) {
+  return extractAcIds(stripForeignAcRefs(stripSupersedes(stripFencedCode(stripHtmlComments(reqText))), dir));
 }
-// `<slug>/US-n.AC-m` (blanks around the slash allowed, as _Supersedes:_ reads it) → removed. The slug is one token starting at a
-// token start; a token that is itself an ID ("US-1.AC-1/US-1.AC-2", "AC-1 / US-1.AC-2") pairs two of this feature's IDs — kept.
-// Linear: a match starts only at a token start.
+// `<slug>/US-n.AC-m` (blanks around the slash allowed, as _Supersedes:_ reads it) → removed when <slug> names ANOTHER feature.
+// The slug is one token starting at a token start (linear: a match starts only there). Never a feature (review 2 — the
+// feature's own ID was dropped, its required ACs went to 0): a token that is itself an ID ("US-1.AC-1/US-1.AC-2", "AC-1 /
+// US-1.AC-2"), a story ("US-1 / US-1.AC-1"), a priority ("**P1/US-1.AC-1**"), a number ("1.1/US-1.AC-1"), no letter at all.
+// With `dir` — a feature folder under <project>/.specs/ (or its _archive/) — the slug must resolve, as _Supersedes:_ validation
+// resolves it (locateFeatures: active or archived), to a feature other than this one: "Step-2/US-1.AC-1" or the feature's own
+// "login/US-1.AC-1" stay its IDs. Without one (a pure reader: a template, a pack's numbering, an import's task fitting) every
+// token of a slug's shape counts — the limit: there "Step-2/US-1.AC-1" reads as another feature's.
 const RE_FOREIGN_AC = /(?<![\p{L}\p{N}_.-])([\p{L}\p{N}][\p{L}\p{N}_.-]*)[^\S\n]*\/[^\S\n]*US-\d+\.AC-\d+(?!\d)/gu;
 const RE_ID_TOKEN_END = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)$/;
-function stripForeignAcRefs(text) {
+const RE_NOT_A_SLUG = /^(?:\d+(?:[._-]\d+)*|p\d+|(?:us|ac|t|ec|nfr|sc)-\d+)$/i;
+function stripForeignAcRefs(text, dir) {
   const s = String(text || "");
-  return s.includes("/") ? s.replace(RE_FOREIGN_AC, (whole, slug) => (RE_ID_TOKEN_END.test(slug) ? whole : "")) : s;
+  if (!s.includes("/")) return s;
+  let other = null;
+  return s.replace(RE_FOREIGN_AC, (whole, slug) => {
+    if (RE_ID_TOKEN_END.test(slug) || RE_NOT_A_SLUG.test(slug) || !/\p{L}/u.test(slug)) return whole;
+    if (!other) other = otherFeatureTest(dir);
+    return other(slug) ? "" : whole;
+  });
+}
+// dir (a feature folder) → slug → does it name ANOTHER feature of its project (active or archived)? No dir, or one outside a
+// .specs/ folder → every slug-shaped token does (the pure reader).
+function otherFeatureTest(dir) {
+  const proj = dir ? featureProjectDir(dir) : null;
+  if (!proj) return () => true;
+  const self = dirKey(dir);
+  const memo = new Map();
+  return (slug) => {
+    if (!memo.has(slug)) {
+      let hit = false;
+      try { hit = locateFeatures(proj, slug).some((t) => dirKey(t.dir) !== self); } catch { /* unreadable: none */ }
+      memo.set(slug, hit);
+    }
+    return memo.get(slug);
+  };
+}
+// <project>/.specs/<f> or <project>/.specs/_archive/<f> → <project>; anything else → null. (Lexical — nothing is stat'ed.)
+function featureProjectDir(dir) {
+  const isSpecs = (p) => (FOLD_CASE ? path.basename(p).toLowerCase() : path.basename(p)) === ".specs";
+  let d = path.resolve(dir);
+  for (let i = 0; i < 2; i++) {
+    const up = path.dirname(d);
+    if (up === d) return null;
+    if (isSpecs(up)) return path.dirname(up);
+    d = up;
+  }
+  return null;
 }
 // test-plan.md as every reader of its IDs sees it — trace_check's coverage and planned T-IDs, its test-code scan, the
 // Phase 4 gate, doctor, finish, the brief and impact: outside HTML comments AND fenced code. A fenced example row
@@ -1052,7 +1092,8 @@ function bugTemplateSlots() {
   return (BUG_SLOTS = set);
 }
 
-module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirementAcIds, stripForeignAcRefs, planIdText, clarificationMarkers,
+module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirementAcIds, stripForeignAcRefs, RE_NOT_A_SLUG,
+  otherFeatureTest, featureProjectDir, planIdText, clarificationMarkers,
   templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
   headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, extractSection,
   RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionLineKey, sectionOwnLines, RE_NA_LEAD, NA_REASON_WORDS, naAnswer,

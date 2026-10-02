@@ -626,8 +626,8 @@ function specDoctor(projectDir, name, opts = {}) {
     // Zero criteria is not a pass — an empty requirements.md must not read as "EARS clean". And requirements.md whose AC
     // IDs trace_check counts while EARS linted none of them fails (1.14 full review Pa2): nothing was checked.
     // The mirror (1.22 review): criteria linted, but no AC ID trace_check reads (bare AC-1 IDs, or none) — it traced 0 ACs.
-    const unlinted = earsUnlinted(reqs, e);
-    const unidentified = unlinted ? null : earsUnidentified(reqs, e);
+    const unlinted = earsUnlinted(reqs, e, dir);
+    const unidentified = unlinted ? null : earsUnidentified(reqs, e, dir);
     const file = isChange ? CHANGE_FILE : undefined;
     add("ears", nErr || unlinted || unidentified ? "fail" : nCrit === 0 ? "warn" : "pass",
       unlinted ? m.earsNoCriteria(unlinted, file) : unidentified ? m.earsNoAcIds(shortIdList(unidentified), file)

@@ -39,10 +39,22 @@ matrix.
   result's non-enumerable `criteria`). trace_check reports them as the gap `unidentifiedCriteria` (first in `TRACE_GAP_ORDER`, a
   verdict kind; only present when non-empty, so every other result is unchanged), doctor's `ears` fails (`earsNoAcIds`), so do
   the requirements approval and a change's plan approval; the pre-commit check names them instead of "traceability clean (0
-  ACs)". A spec numbered AC-1, AC-2 used to trace 0 ACs and pass everything ("all 0 ACs covered").
+  ACs)". A spec numbered AC-1, AC-2 used to trace 0 ACs and pass everything ("all 0 ACs covered"). **Only a criterion with NO
+  stable ID counts (review 2):** one carrying `NFR-n` / `EC-n` / `SC-nnn` (`RE_FULL_ID`) has its own — trace's secondary
+  warnings read it — so a performance spec of NFR-1, NFR-2 alone passes (it failed doctor, trace and the requirements approval);
+  a criterion with no ID beside them is still named. `criteriaBareIds(reqText)` (the bare IDs the criteria are numbered with)
+  feeds spec_upgrade's renumber item (lifecycle.md → Upgrade).
   **`<feature>/US-n.AC-m` is another feature's (1.22 review):** `requirementAcIds` drops it (`stripForeignAcRefs` — the
   `_Supersedes:_` / `_Affects:_` syntax written in prose: "rules of checkout/US-3.AC-2 stay as they are" was a required AC no
   task covered); a token that is itself an ID keeps the pair ("US-1.AC-1/US-1.AC-2"). tasks.md's references are read as before.
+  **Review 2 — only ANOTHER feature's:** never a priority (`**P1/US-1.AC-1**`), a story (`US-1 / US-1.AC-1`), a number
+  (`1.1/US-1.AC-1`) or a token with no letter (`RE_NOT_A_SLUG`) — every required AC of such a spec went to 0. With the feature's
+  folder (`requirementAcIds(text, dir)` — trace_check, the matrix, doctor's / the approvals' `earsUnlinted` / `earsUnidentified`,
+  a change's scope, decisions' targets, the test-plan scaffold, the importer's no-criteria warning) the token must resolve as
+  `_Supersedes:_` resolves it (`locateFeatures`, active or archived, `otherFeatureTest`) to a feature OTHER than this one: the
+  feature's own `login/US-1.AC-1` and an unknown `Step-2/US-1.AC-1` stay its IDs. **The limit:** a reader with no folder (a
+  template, a pack's numbering, the importer's task fitting) can't resolve — there every slug-shaped token counts as another
+  feature's.
   A test-plan row covering an AC requirements.md doesn't define is a gap (`phantomAcsInTests`, +tdd; fenced examples
   excluded), like a phantom AC in tasks — doctor fails and the test-plan approval is refused. Every reader of
   test-plan.md's IDs goes through `planIdText()` (comments AND fenced code out): coverage, planned T-IDs, the code
