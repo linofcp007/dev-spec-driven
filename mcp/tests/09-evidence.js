@@ -1534,7 +1534,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
       run(7, "cd # && npm test"), run(8, "cd /d # && npm test"), run(9, "cd `: && npm test`"), run(10, "cd " + fwd + " && npm test"),
       run(11, "cd " + fwd + "/packages/web/../web && npm test"), run(12, "cd " + fs.realpathSync.native(p4) + "/packages/web && npm test"), // (the long form of an 8.3 short name)
     ];
-    const want = [true, true, true, process.platform === "win32" || process.platform === "darwin", false, false, false, false, false, true, true, true];
+    // run 4 flips a drive letter's case: the same folder where the file system folds case — and, with no drive letter (Linux),
+    // the very same path as run 1
+    const want = [true, true, true, drive === fwd || process.platform === "win32" || process.platform === "darwin", false, false, false, false, false, true, true, true];
     const got = r.map((x) => x.ok && x.verified === true);
     const st4 = JSON.parse(fs.readFileSync(path.join(f4.dir, ".state.json"), "utf8")).evidence;
     ok(js(got) === js(want) && r.filter((x, i) => !want[i]).every((x) => x.unverifiedReason === "command-mismatch") &&
@@ -1580,16 +1582,19 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
         "1.22 review 3 (4): `cd <git worktree of the project> && npm test` proves `npm test` (root stamped: the worktree); `cd <another repository's project holding the same feature> && npm test` does not (got " +
         js([a.verified, a.unverifiedReason, ev["1"].root, b.verified, ev["2"].root]) + ")");
     }
-    // hostile, 1 MB each: bounded
-    const MB = 1024 * 1024;
-    const t0 = Date.now();
-    for (const h of ["`".repeat(MB), "$(".repeat(MB / 2), "cd ".repeat(MB / 3), "'\"".repeat(MB / 2), "cd x/ && ".repeat(MB / 9) + "npm test", "a && ".repeat(MB / 5),
-      "cd " + "../".repeat(MB / 3) + " && npm test", "#".repeat(MB), "CI=1 ".repeat(MB / 5) + "npm test", "$(" + "(".repeat(MB) + ")"]) {
-      PV(h, ["npm test"], "/r");
-      PV("npm test", [h], "/r");
-    }
-    const msH = Date.now() - t0;
-    ok(msH < 4000, "1.22 review 3: runProvesVerify stays bounded on 1 MB hostile commands and _Verify:_ values (backticks, $(, cd chains, quotes, ` && `, `#`, assignments) — " + msH + " ms");
+    // hostile input: LINEAR (64 KB costs ~4× 16 KB — a quadratic matcher would cost ~16×), measured as a ratio so a slow machine
+    // or a container doesn't flake; past PROOF_MAX_CHARS (64 KB) a command or _Verify:_ is never matched, at once.
+    const hostile = (n) => ["`".repeat(n), "$(".repeat(n / 2), "cd ".repeat(n / 3), "'\"".repeat(n / 2), "cd x/ && ".repeat(n / 9) + "npm test", "a && ".repeat(n / 5),
+      "cd " + "../".repeat(n / 3) + " && npm test", "#".repeat(n), "CI=1 ".repeat(n / 5) + "npm test", "$(" + "(".repeat(n) + ")"];
+    const timeAll = (n) => { const t = Date.now(); for (const h of hostile(n)) { PV(h, ["npm test"], "/r"); PV("npm test", [h], "/r"); } return Date.now() - t; };
+    timeAll(4096); // warm up
+    const ms16 = Math.max(timeAll(16 * 1024), 5), ms64 = timeAll(64 * 1000);
+    const tBig = Date.now();
+    const big = [PV("`".repeat(1024 * 1024), ["npm test"], "/r"), PV("npm test", ["a && ".repeat(200000)], "/r"), PV("npm test " + "x".repeat(70000), ["npm test " + "x".repeat(70000)], "/r")];
+    const msBig = Date.now() - tBig;
+    ok(ms64 / ms16 < 12 && ms64 < 15000 && big.every((x) => x === false) && msBig < 200,
+      "1.22 review 3: runProvesVerify is linear on hostile commands and _Verify:_ values (backticks, $(, cd chains, quotes, ` && `, `#`, assignments) — 64 KB costs < 12× 16 KB (got " +
+      ms16 + " → " + ms64 + " ms); past 64 KB nothing is matched, at once (" + msBig + " ms)");
   }
 
   // 1.22 review 3 (3) — observed mode sees the forms the matcher accepts: the observe hook's log (observeRun) and the lookup

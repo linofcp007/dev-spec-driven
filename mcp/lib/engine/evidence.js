@@ -273,9 +273,13 @@ const proofKey = (cmd, root) => JSON.stringify(proofCommands(proofSteps(cmd), pr
 // the project folder both are walked from — the run's own `root` stamp first (runRootStamp: the folder it was recorded from,
 // maybe on another machine or in a git worktree of the project), else the given one (the project's), else none (an absolute
 // `cd` then never reads as the root).
+// A command or _Verify:_ value longer than PROOF_MAX_CHARS is never matched (no real command is that long — runs are stored
+// up to 4,000 characters): the matcher is linear, but on a slow machine 1 MB of hostile text still costs seconds.
+const PROOF_MAX_CHARS = 64 * 1024;
 function runProvesVerify(r, verify, root) {
   if (!isRecord(r) || typeof r.command !== "string") return false;
   if (r.observed === "cli") return true; // `done --run` / `finish --run` ran exactly those commands
+  if (r.command.length > PROOF_MAX_CHARS || (verify || []).some((v) => typeof v === "string" && v.length > PROOF_MAX_CHARS)) return false;
   const base = proofBase(typeof r.root === "string" && r.root ? r.root : root);
   const keys = [];
   const known = new Set();

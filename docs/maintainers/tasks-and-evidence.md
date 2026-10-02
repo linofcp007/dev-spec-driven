@@ -167,7 +167,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   (`evidenceGate.commandMismatch`, EN/PT/ES — the note names the command recorded and the `_Verify:_`; with several, all of
   them in one ` && ` run). A run's command is kept up to `OBSERVED_MAX_COMMAND` (4000 — review 2: `normalizeEvidence` and
   the finish runs cut it at 500 BEFORE the comparison, so a faithful long `_Verify:_`, or a join past 500, read
-  command-mismatch). An `_Expect: fail_` task: a red run of another command ticks (it is no could-not-run run) but is NO red
+  command-mismatch); a command or `_Verify:_` over `PROOF_MAX_CHARS` (64 KB) is never matched (the matcher is linear, but
+  1 MB of hostile text cost seconds in a Linux container — its test checks linearity as a 16 KB → 64 KB ratio, not a
+  wall-clock bound). An `_Expect: fail_` task: a red run of another command ticks (it is no could-not-run run) but is NO red
   proof — `expectFailRun(ev, prev, verify)` answers `red: false`, so the red run on record is carried forward (`keepRed`)
   and a later pass is "the fix going green" after a red run of the `_Verify:_` itself — or (review 2, grandfathering as
   observedProof's R2) when that pass is itself a run of the `_Verify:_` (`runProvesVerify`, the "cli" stamp too), after a
