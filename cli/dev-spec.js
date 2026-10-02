@@ -633,13 +633,14 @@ function main() {
       if (!pos[0]) usage("dev-spec finish <feature> [--write] [--include-body] [--run [--shell bash|pwsh|<path>] [--timeout <s>]]");
       // B5: --run executes the project checks (roadmap.json meta.checks) — only on this explicit flag — and records every run
       // (= spec_finish {evidence}); without meta.checks it is an error, nothing runs.
-      let evidence;
+      let evidence, runStart;
       if (on("run")) {
+        runStart = spec.runStartStamp(projectDir, pos[0]); // 1.22 review: `at` and the code stamp BEFORE the checks run
         const rc = b5RunChecks(pos[0]);
         if (!rc.ok) return fail(rc, rc.hint);
         evidence = rc.evidence;
       }
-      const r = spec.finishFeature(projectDir, pos[0], { write: on("write"), includeBody: boolFlag("include-body"), evidence, ...(on("run") ? { ranBy: "cli" } : {}) }); // = spec_finish {includeBody, evidence}; ranBy: the runs are observed by the CLI itself (1.14 F1)
+      const r = spec.finishFeature(projectDir, pos[0], { write: on("write"), includeBody: boolFlag("include-body"), evidence, ...(on("run") ? { ranBy: "cli", runStart } : {}) }); // = spec_finish {includeBody, evidence}; ranBy: the runs are observed by the CLI itself (1.14 F1)
       if (!r.ok) return fail(r);
       if (!r.readyToFinish) process.exitCode = 1; // scriptable: blockers → non-zero
       const T = featureText(r.feature);
@@ -695,6 +696,7 @@ function main() {
       const say = flags.json ? console.error : console.log; // --json keeps stdout one JSON document
       let evidence;
       let hint = null;
+      let runStartedAt = null, ranVerify = null; // 1.22 review: the stamps taken BEFORE the run (its start, the _Verify:_ it ran)
       if (on("run")) {
         // Evidence before claims: run the task's own _Verify:_ command(s) from the project root; any failure
         // leaves the task open. taskBrief resolves the SAME task completeTask ticks (first open one of a
@@ -726,6 +728,8 @@ function main() {
         // A pipe masks the check's exit code (a pipeline reports its LAST command's): one hint line — it still runs.
         cmds.filter(spec.verifyPipeMasked).forEach((c) => say(M.verifyPipe.runHint(c)));
         const git = b5GitState(); // B5: the commit the run is made on (+ dirty outside .specs/) — read-only git, skipped without it
+        runStartedAt = new Date().toISOString(); // 1.22 review: the run's `at` is when it STARTED (an edit made meanwhile isn't tested)
+        ranVerify = b.verify.slice(); // …and its verify stamp the _Verify:_ as it was then (edited meanwhile → stale-evidence)
         for (const cmd of cmds) {
           say("$ " + cmd);
           const x = b5Exec(cmd, sh, M);
@@ -764,7 +768,7 @@ function main() {
         evidence = { command: flags.cmd, exitCode: flags.exit, summary: typeof flags.evidence === "string" ? flags.evidence : undefined };
       }
       // 1.14 F1: a run --run made is observed by the CLI itself (observed: "cli"); a reported one is looked up in the harness's log.
-      const r = spec.completeTask(projectDir, pos[0], pos[1], evidence, { ...(on("run") ? { ranBy: "cli" } : {}), ...(flags.reason !== undefined ? { reason: flags.reason } : {}) }); // --reason: only undone takes it (refused here, as MCP)
+      const r = spec.completeTask(projectDir, pos[0], pos[1], evidence, { ...(on("run") ? { ranBy: "cli", startedAt: runStartedAt, ranVerify } : {}), ...(flags.reason !== undefined ? { reason: flags.reason } : {}) }); // --reason: only undone takes it (refused here, as MCP)
       if (!r.ok) return fail(r, hint); // --json: {ok:false, recorded:true, …} on stdout, as spec_complete_task returns it
       return out(r, (r) => {
         // "(verified)" only when something was run or attested — nothingToVerify is verified with nothing checked

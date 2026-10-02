@@ -23,7 +23,7 @@ let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDeci
   ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE;
+  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf;
 function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
@@ -34,7 +34,7 @@ function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, b
   REPRO_SYN, ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE } = E); }
+  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
 // scanner — so status/next/phase can never count a task that complete/brief/finish don't see.
@@ -490,10 +490,17 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const failed = !!ev && ev.exitCode != null && (xf ? xf.refused : ev.exitCode !== 0);
   const alreadyDone = task.done;
   const now = new Date().toISOString();
+  // 1.22 review — `done --run` (ranBy "cli") hands over the stamps taken BEFORE its run: when it started (the run's `at`) and
+  // the _Verify:_ commands it ran (the record's `verify` stamp: a _Verify:_ edited while it ran makes the record stale-evidence).
+  // They were taken after the run — an edit made meanwhile read as tested.
+  const cli = !!opts && opts.ranBy === "cli";
+  const cliStart = cli ? runStartOf({ at: opts.startedAt }) : null;
+  const ranVerify = cli && Array.isArray(opts.ranVerify) ? opts.ranVerify.filter((c) => typeof c === "string").join("\n").slice(0, 1000) : undefined;
   if (ev) { // every run is recorded — a failure too (never ticked), so a later note can't paper over it
     state.evidence = state.evidence || {};
     // Only THIS task's record is extended; another task's record under the same number is kept aside.
-    state.evidence[key] = storeEvidence(state.evidence[key], task, dup, ev, now);
+    const run = ev.exitCode != null;
+    state.evidence[key] = storeEvidence(state.evidence[key], task, dup, ev, run && cliStart ? cliStart.at : now, run ? ranVerify : undefined);
   }
   const ticks = !alreadyDone && !failed;
   if (ticks) {

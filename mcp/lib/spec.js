@@ -59,7 +59,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, milestone,
   MILESTONE_ACTIONS, MILESTONE_STATUSES, milestoneLine, networkPathInside, nextAction, nextTask, normalizeLang,
   normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, PACK_LIMITS, parseApprovalRolesText, runProvesVerify, stripCdPrefix,
-  recordSpecEdit,
+  recordSpecEdit, runStartStamp,
   parseGitLog, parseTasks, parseTracks, phasePercent, PHASES, placeholderKey, placeholderReport, planBridge, planPaths,
   posixPwshScript, posixShellSyntax, projectChecks, projectLang, pwshParseFailure, runsPwsh, readRoadmap, readState, removeFeature, removeTrack, renameFeature,
   renderRoadmapHtml, renderRoadmapMd, resolveFeature, resolveProjectDir, resolveRunShell, resolveTask, restoreFeature,
@@ -292,6 +292,7 @@ module.exports = {
   stripCdPrefix, // 1.22 review: `cd <dir> && cmd` → cmd when <dir> is one of the given project roots — the observe hook's log and observedRun alike
   evidenceMode, // roadmap.json meta.evidence → "reported" (default) | "observed"
   OBSERVED_MAX_BYTES, // the log's size bound
+  runStartStamp, // 1.22 review: (projectDir, feature) → { ok, at, code } — the stamps `finish --run` takes BEFORE its checks run
 
   // 1.21 F1a — git's merge driver for the spec state (`dev-spec merge-state %O %A %B %P`, installed by `merge-state --install`)
   mergeStateJson, // (base, ours, theirs, kind) → { kind, merged, conflicts } — the semantic 3-way merge of a .state.json / roadmap.json (pure)

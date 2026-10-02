@@ -217,6 +217,11 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   readiness is computed; stamped `check` = the configured command, so an edited command reads `changed`, and `code` =
   `suiteCodeStamp()` — one sha1 over the feature's ACTIVE tasks' `_Implements:_` set as the finish baseline records it
   (`baselineFiles()` + each file's `fileHash()`), no stamp when that walk hit its cap; a failed run is recorded too).
+  1.22 review: `finish --run` takes its stamps BEFORE the checks run (`runStartStamp()` → `finishFeature {runStart: {at,
+  code}}`, CLI only — `runStartOf()` validates it): the run's `at` is its start, `code` the files as they were then and
+  `check` the command that ran, so an edit made while a long suite ran reads `code-changed` / `changed` (stamped after the
+  run, it read as tested). `done --run` likewise passes `startedAt` (the run record's `at`) and `ranVerify` (its `verify`
+  stamp: a `_Verify:_` edited while it ran makes the record `stale-evidence`).
   `completeTask` stamps `lastTickAt`; `lastTaskActivity()` = the latest of it and every recorded task run, a stamp more
   than 5 minutes in the future ignored (as `stopActivity()`). `suiteStatus(projectDir, state, dir)` (dir: the feature
   folder the stamp is compared with) → blocker `suite-evidence` (finish + the execution gate), doctor warn `suite-evidence`

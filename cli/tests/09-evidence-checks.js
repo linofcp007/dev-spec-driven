@@ -172,4 +172,32 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
       "1.21.1 languages: finish --run --shell pwsh runs each project check under PowerShell 7 and records it — `$failed = 0; … exit $failed` → exit 0, `exit 4` → exit 4 (got " +
       JSON.stringify([fc.unit, fc.lint && fc.lint.exitCode]).slice(0, 400) + ")");
   } else ok(true, "1.21.1 languages: finish --run --shell pwsh — skipped: pwsh is not installed here");
+
+  // 1.22 review (finding 11) — `done --run` / `finish --run` stamped `at`, the verify stamp and the code stamp AFTER the run: an edit
+  // made while a long run went on read as tested. Now they are taken before it runs.
+  {
+    // finish --run: a check that edits an implementing file WHILE it runs → code-changed (it read pass)
+    const p11 = path.join(tmp, "l122-runstart");
+    Sga.initProject(p11, ["core"], "en", { checks: { test: "node -e \"require('fs').appendFileSync('src/a.js', '// edited during the run')\"" } });
+    const f11 = Sga.createFeature(p11, "Stamps", ["core"], "", undefined, "en");
+    wGa(p11, "src/a.js", "module.exports = 1;\n");
+    wGa(f11.dir, "tasks.md", "- [x] 1. [US1] A\n  - _Implements: src/a.js_\n");
+    const fin = jsonGa(rga(p11, ["finish", f11.slug, "--run", "--json"]).stdout);
+    const chk = fin && (fin.suiteChecks || []).find((c) => c.name === "test");
+    // done --run: the run's `at` is when it STARTED (a 1.5 s run)
+    wGa(f11.dir, "tasks.md", "- [x] 1. [US1] A\n  - _Implements: src/a.js_\n- [ ] 2. [US1] Slow\n  - _Verify: node -e \"setTimeout(() => {}, 1500)\"_\n" +
+      "- [ ] 3. [US1] Edits its own _Verify:_\n  - _Verify: node edit.js_\n");
+    const t0 = Date.now();
+    const d2 = rga(p11, ["done", f11.slug, "2", "--run"]);
+    const t1 = Date.now();
+    const ev2 = (stGa(f11).evidence || {})["2"];
+    const at2 = Date.parse(ev2 ? ev2.at : "");
+    // done --run: a _Verify:_ edited while it ran → the record is for the command that ran (stale-evidence), never verified
+    wGa(p11, "edit.js", "const fs = require('fs'); const p = '.specs/" + f11.slug + "/tasks.md'; fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace('node edit.js', 'node edit2.js'));\n");
+    const d3 = jsonGa(rga(p11, ["done", f11.slug, "3", "--run", "--json"]).stdout);
+    ok(chk && chk.status === "code-changed" && d2.code === 0 && Number.isFinite(at2) && at2 - t0 < (t1 - t0) - 1000 &&
+      d3 && d3.ok && d3.verified === false && d3.unverifiedReason === "stale-evidence",
+      "1.22 review: finish --run stamps the code BEFORE the checks run (a check editing an implementing file reads code-changed); done --run's run `at` is its start and its verify stamp the _Verify:_ it ran (edited meanwhile → stale-evidence) (got " +
+      JSON.stringify([chk, d2.code, at2 - t0, t1 - t0, d3 && [d3.verified, d3.unverifiedReason]]).slice(0, 600) + ")");
+  }
 };

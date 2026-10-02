@@ -188,9 +188,10 @@ function recordEvidence(prev, ev, at, stamp, verify) {
 // evidence[n] after a run/note for `block`: its own record, updated, becomes the latest; every OTHER task's
 // record under that number is kept in `others` (newest first, bounded) — never discarded, so a renumbering
 // can't hand one task's passing run to the other, nor lose the other's failed run.
-function storeEvidence(slot, block, dup, ev, at) {
+// verifyRan (1.22 review — `done --run`): the verify stamp of the commands that RAN (read before the run), not of tasks.md now.
+function storeEvidence(slot, block, dup, ev, at, verifyRan) {
   const own = ownRecord(slot, block, dup);
-  const stamp = { task: taskStamp(block), verify: verifyStamp(block) };
+  const stamp = { task: taskStamp(block), verify: typeof verifyRan === "string" ? verifyRan : verifyStamp(block) };
   if (dup) stamp.shared = true;
   const rec = recordEvidence(own, ev, at, stamp, taskMarkers(block).verify);
   const others = evidenceRecords(slot).filter((r) => r !== own).map(({ others: _nested, ...r }) => r).slice(0, EVIDENCE_OTHERS);
@@ -1202,8 +1203,12 @@ function writeChecks(projectDir, nc) {
 // plus a short history. A failed run is recorded too (it stays a blocker). → { recorded } | { error }
 // ranBy "cli" (1.14 F1): `finish --run` ran the checks itself — each run is stamped observed: "cli"; otherwise the harness's
 // project-check log says whether it saw each run (observed: true | false).
-function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy) {
+// runStart (1.22 review — `finish --run` only, ranBy "cli"): { at, code } taken BEFORE the checks ran (runStartStamp) — the run's
+// `at` is when it started and its `code` stamp the implementing files as they were then, so an edit made while a long suite ran
+// reads code-changed (it used to be stamped after the run: tested); its `check` stamp is the command that ran.
+function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStart) {
   const P = i18n.msg(lng).projectChecks;
+  const start = ranBy === "cli" ? runStartOf(runStart) : null;
   if (!Array.isArray(evidence)) return { error: P.evidenceNotList };
   if (!evidence.length) return { recorded: [] };
   const { checks } = projectChecks(projectDir);
@@ -1221,15 +1226,17 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy) {
     const run = { command: it.command.trim().slice(0, 500), exitCode: parseInt(code, 10), ...gitEvidence(it) };
     run.observed = observedStamp(projectDir, null, run, ranBy, [byName.get(it.name)]); // 1.14 F1 — an observed run of THIS check's command (1.22 review)
     if (typeof it.summary === "string" && it.summary.trim()) run.summary = it.summary.slice(0, 2000);
-    runs.push({ name: it.name, check: byName.get(it.name), run });
+    // (a CLI run's `check` is the command it ran — meta.checks when it started; edited meanwhile, the run reads `changed`)
+    runs.push({ name: it.name, check: start ? run.command : byName.get(it.name), run });
   }
   const state = readState(projectDir, slug);
   if (state.invalid) return { error: state.invalid };
-  const at = new Date().toISOString();
+  const at = start ? start.at : new Date().toISOString();
   const fc = isObj(state.finishChecks) ? state.finishChecks : {};
   // full review Ga3: each run is stamped `code` — a hash of the feature's implementing files as they are now (the set the
   // finish baseline records); code edited after the run makes it `code-changed`. No stamp when the walk was capped.
-  const code = suiteCodeStamp(projectDir, dir);
+  // 1.22 review: `finish --run` passes the stamp taken BEFORE the checks ran.
+  const code = start ? start.code : suiteCodeStamp(projectDir, dir);
   for (const r of runs) {
     const prev = Object.prototype.hasOwnProperty.call(fc, r.name) && isRecord(fc[r.name]) ? fc[r.name] : null;
     const run = runOf({ ...r.run, at });
@@ -1284,6 +1291,22 @@ function suiteCodeStamp(projectDir, dir) {
   const h = require("crypto").createHash("sha1");
   for (const rel of files.slice().sort()) h.update(rel + "\u0000" + (fileHash(path.resolve(root, rel)) || "-") + "\n");
   return h.digest("hex");
+}
+// 1.22 review — the stamps of a CLI run taken BEFORE it runs (`done --run` / `finish --run`): { ok, at (now, ISO), code (the
+// feature's suiteCodeStamp, or null when the walk was capped) }. They were taken after the run, so an edit made while a long
+// run went on read as tested (a code stamp of the edited files; a later `at`).
+function runStartStamp(projectDir, name) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  return { ok: true, at: new Date().toISOString(), code: suiteCodeStamp(projectDir, f.dir) };
+}
+// A runStart the CLI hands back → { at, code } — at: an ISO time not in the future (5 min of skew tolerated), else null (the
+// caller's own clock is used).
+function runStartOf(rs) {
+  if (!isRecord(rs) || typeof rs.at !== "string") return null;
+  const t = Date.parse(rs.at);
+  if (!Number.isFinite(t) || t > Date.now() + 5 * 60 * 1000) return null;
+  return { at: new Date(t).toISOString(), code: typeof rs.code === "string" && /^[0-9a-f]{40}$/.test(rs.code) ? rs.code : null };
 }
 function suiteLabel(items, lng) {
   const P = i18n.msg(lng).projectChecks;
@@ -1500,5 +1523,5 @@ module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isR
   RE_PROOF_CD, RE_PROOF_CD_ONLY, RE_PROOF_PIPEFAIL, RE_PROOF_ENV, proofKey, runProvesVerify, observedProof, verifyCommandSet,
   observeRun, appendObserved, trimObservedLog, lastTaskActivity, CHECK_NAME_RE, CHECKS_MAX, validCheckName,
   validCheckCmd, projectChecks, checksInput, checksPlanError, writeChecks, recordFinishChecks, suiteStatus,
-  suiteCodeStamp, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, GITLOG_MAX_COMMITS, parseGitLog,
+  suiteCodeStamp, runStartStamp, runStartOf, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, GITLOG_MAX_COMMITS, parseGitLog,
   taskCommits, unverifiedLabel, specChangedSince, untickedSince, __link };
