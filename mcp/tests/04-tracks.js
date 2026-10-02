@@ -913,4 +913,20 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname 
       "1.22 review: a track kept off with a weak signal says so in the reasoning (EN / PT / ES) — never 'no signals matched' beside a 'Possible +api' note (got " +
       js([line(api, "api"), line(apiPt, "api"), line(apiEs, "api")]) + ")");
   }
+
+  { // 1.22 review 3 — natural phrasings of a factor word next to an auth VERB / connector: "Iniciar sesión con doble factor", "passam a
+    // entrar com dois fatores", "Require multifactor at login" were no signal at all (their English twin "Admins sign in with
+    // multi-factor" is +sec's weak signal); with the auth word they are +sec's weak signal, with another +sec word +sec is ON.
+    const js = (x) => JSON.stringify(x);
+    const sig = (t, lang) => S.classify(t, { lang }).signals.sec;
+    const on = (t, lang) => S.classify(t, { lang }).tracks.includes("sec");
+    const natural = [["Iniciar sesión con doble factor", "es"], ["Os administradores passam a entrar com dois fatores", "pt"], ["Require multifactor at login", "en"],
+      ["Doble factor al iniciar sesión", "es"], ["Dois fatores ao entrar", "pt"], ["Admins log in with multi-factor", "en"]];
+    const stillNone = [["O preço depende de dois fatores", "pt"], ["Vamos entrar no mercado com dois fatores de preço", "pt"], ["The risk model weighs multi-factor at random", "en"],
+      ["El modelo al entrar usa dos factores de ponderación", "es"]];
+    ok(natural.every(([t, l]) => sig(t, l).length === 1 && /fator|factor/.test(sig(t, l)[0])) && stillNone.every(([t, l]) => !sig(t, l).length) &&
+      on("Iniciar sesión con doble factor y registro de auditoría", "es") && on("Require multifactor at login and encrypt the session tokens", "en"),
+      "1.22 review 3 (8): 'iniciar sesión con doble factor', 'entrar com dois fatores', 'multifactor at login' (and 'al iniciar sesión', 'ao entrar', 'log in with') are +sec's weak signal next to the auth verb / connector; ON beside another +sec word; a factor word away from one stays none (got " +
+      js([natural.map(([t, l]) => sig(t, l)), stillNone.map(([t, l]) => sig(t, l))]) + ")");
+  }
 };

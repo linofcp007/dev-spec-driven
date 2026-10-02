@@ -662,15 +662,20 @@ const SIGNALS = {
     // to an auth word — "autenticação de dois fatores", "login com dois fatores", "autenticación de doble factor", "doble factor de
     // autenticación", "multi-factor authentication", "multi-factor sign-in" — they stay weak (the auth word is the other signal, as
     // in English); anywhere else they are no signal at all. "two-factor", "2fa" and "mfa" (pre-1.22) keep their reading.
+    // Review 3 — the natural phrasings the auth-word list missed: the VERBS "iniciar sesión" / "iniciar sessão", "entrar", "log in" /
+    // "sign in" ("Iniciar sesión con doble factor", "passam a entrar com dois fatores"), and the connectors "at" / PT "ao" / ES "al"
+    // before one ("Require multifactor at login", "doble factor al iniciar sesión") — still only RIGHT NEXT to the factor word.
     cues: [
       { kind: "near", on: ["dois fatores", "multifator", "dos factores", "doble factor", "multi-factor", "multifactor"], then: "keep",
-        before: { words: [[["authenticat\\p{L}*", "auth", "log-?ins?", "sign-?ins?", "sign in", "sso", "verification", "autenticaç\\p{L}*",
+        before: { words: [[["authenticat\\p{L}*", "auth", "log-?ins?", "log in", "sign-?ins?", "sign in", "sso", "verification", "autenticaç\\p{L}*",
           "autenticac\\p{L}*", "autenticar", "verificaç\\p{L}*", "verificac\\p{L}*", "início de sessão", "inicio de sessao", "inicio de sesión",
-          "inicio de sesion", "acesso", "acceso"], { optional: ["de", "em", "com", "por", "a", "en", "con", "with", "via", "using", "by"] }]],
+          "inicio de sesion", "iniciar sessão", "iniciar sessao", "iniciar sesión", "iniciar sesion", "entrar", "acesso", "acceso"],
+        { optional: ["de", "em", "com", "por", "a", "en", "con", "with", "via", "using", "by"] }]],
         chars: 48, edge: "letter" },
-        after: { words: [[{ optional: ["de", "do", "da", "del", "para", "for", "of", "on", "no", "na", "en", "em"] }, { optional: ["o", "a", "the", "el", "la"] },
-          ["authenticat\\p{L}*", "auth", "log-?ins?", "sign-?ins?", "sign in", "sso", "verification", "autenticaç\\p{L}*", "autenticac\\p{L}*",
-            "verificaç\\p{L}*", "verificac\\p{L}*", "início de sessão", "inicio de sessao", "inicio de sesión", "inicio de sesion", "acesso", "acceso"]]],
+        after: { words: [[{ optional: ["de", "do", "da", "del", "para", "for", "of", "on", "at", "no", "na", "ao", "al", "en", "em"] }, { optional: ["o", "a", "the", "el", "la"] },
+          ["authenticat\\p{L}*", "auth", "log-?ins?", "log in", "sign-?ins?", "sign in", "sso", "verification", "autenticaç\\p{L}*", "autenticac\\p{L}*",
+            "verificaç\\p{L}*", "verificac\\p{L}*", "início de sessão", "inicio de sessao", "inicio de sesión", "inicio de sesion", "iniciar sessão",
+            "iniciar sessao", "iniciar sesión", "iniciar sesion", "entrar", "acesso", "acceso"]]],
         chars: 48 } },
       // … anywhere else, no signal: the catch-all — the hit's own sentence always holds the hit, so this rule always fires
       { kind: "sentence", on: ["dois fatores", "multifator", "dos factores", "doble factor", "multi-factor", "multifactor"], then: "none",
