@@ -44,7 +44,9 @@ Review the given scope — by default the branch, `git diff <merge-base>..HEAD` 
 input or call path that breaks it), did this branch introduce it, make it reachable or break unchanged lines with it (a
 caller of a contract it changed) — not pre-existing —, is it what an AC, the design or `decisions.md` asks for, does a
 green check or a documented exception already answer it? An AC with no code is never pre-existing: it is confirmed, or
-refuted with the file:line that satisfies it. Rate each 0–100 (the scale in the `spec-reviewer` agent → Calibration).
+refuted with the file:line that satisfies it. Rate each 0–100: **0** not real (or pre-existing) · **25** might be real,
+unverified · **50** verified but minor or rare in practice · **75** verified and likely hit (or a spec / written rule
+names it) · **100** direct evidence (a failing input, a run, the line that does it).
 With a subagent tool, write the branch diff to a file first (`git diff -U10 <merge-base>..HEAD` into
 `.specs/<feature>/.execution/review.diff` — a missing `.execution/` gets a `.gitignore` holding `*` — or a temp file),
 then dispatch one `dev-spec-driven:spec-reviewer` in **verify** mode per finding — the finding, that file, the merge

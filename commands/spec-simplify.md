@@ -28,12 +28,18 @@ Feature: $ARGUMENTS
      green on HEAD (red → stop: not a simplification problem). Then one simplification at a time: the change, the tests
      covering it, its own commit (`refactor(<feature>): <what> — no behaviour change`); a test turns red → undo that
      change, never edit the test. At the end, the project checks (or the full suite) and the changed tasks' `_Verify:_`
-     again. Write the same report the agent writes — `.specs/<feature>/.execution/simplify-report.md`, its sections as
-     `agents/spec-simplifier.md` → Report lists them, `## Final runs` last. Don't run Claude Code's built-in `/simplify` inside the pass: it applies its
+     again. Write the same report the agent writes — `.specs/<feature>/.execution/simplify-report.md`, under these
+     headings (kept in English): `## Baseline` (the command, its exit code written out, the counts) · `## Changes` (one
+     line per commit: short SHA, file:line, the smell → the refactoring, the covering tests) · `## Dropped` (tried and
+     undone, the test that went red) · `## Left alone` (and why; smells outside the feature's lines as refactor
+     candidates) · `## Final runs` LAST — one line per run (each project check or the suite, each re-run `_Verify:_`) at
+     the margin, `` - `<the exact command>` → exit 0 (212 passing) ``: the command in backticks, its exit code written
+     out on the same line, the output's last lines indented below it. Don't run Claude Code's built-in `/simplify` inside the pass: it applies its
      cleanups in one go, over its own idea of the changed code — this loop needs one change, one test run and one commit
      at a time.
    - **`--subagents`:** dispatch `dev-spec-driven:spec-simplifier` with the feature, MERGE_BASE, the list, the project
-     checks and the report path `.specs/<feature>/.execution/simplify-report.md`. Its DONE needs a `## Final runs`
+     checks, the report path `.specs/<feature>/.execution/simplify-report.md` and the plugin's references folder path
+     (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/`). Its DONE needs a `## Final runs`
      section in that report in which every run passes and every project check is one of them (the SubagentStop gate
      sends it back otherwise). Under guard mode, dispatch it in the foreground (Claude Code: `run_in_background: false`)
      so its edit questions reach the user.

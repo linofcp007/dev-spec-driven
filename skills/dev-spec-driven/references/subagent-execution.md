@@ -105,7 +105,10 @@ The dispatch contains only:
 3. interfaces/decisions from earlier tasks the brief cannot know, and pointers to ledger rulings or
    parked findings that touch this task's files;
 4. your resolution of any ambiguity you noticed;
-5. the report path (`paths.report`) — the implementer names it in its reply.
+5. the report path (`paths.report`) — the implementer names it in its reply;
+6. the references folder path — this folder, the plugin's `skills/dev-spec-driven/references/`, absolute: the agent's
+   guides (`code-reuse-and-quality.md`, `test-patterns.md`) live there, and a subagent can't resolve a bare
+   `references/…`.
 
 Never paste prior-task history or the whole spec into a dispatch. Never dispatch two implementers on
 the same working tree — they conflict. Concurrency is only for the parallel mode below (one worktree
@@ -152,7 +155,7 @@ last commit of a multi-commit task.)
 ### 5. Dispatch the reviewer
 
 Dispatch **`dev-spec-driven:spec-reviewer`** in **task** mode with: the brief path, the report path, the diff
-path, BASE/HEAD, and the active tracks. The reviewer returns a verdict **per AC ID** (✅ / ❌ / ⚠️ cannot
+path, BASE/HEAD, the active tracks and the references folder path. The reviewer returns a verdict **per AC ID** (✅ / ❌ / ⚠️ cannot
 verify from the diff), track checks, the project's written rules and the history of rewritten lines, and Critical /
 Important / Minor findings, each Critical / Important one rated 0–100. Never tell a reviewer what not to flag. Resolve
 every ⚠️ yourself (you hold the cross-task context); a confirmed gap is a failed spec review.
@@ -316,7 +319,10 @@ a conflict between two tasks' file plans — you decide, and ledger the ruling.
 ## Final review
 
 After the last task: package `MERGE_BASE..HEAD` (`git merge-base <default-branch> HEAD`) and dispatch
-`dev-spec-driven:spec-reviewer` in **final** mode on the most capable model — it runs the `/prReview` checklist
+`dev-spec-driven:spec-reviewer` in **final** mode on the most capable model, with the package path, the feature folder,
+the ledger, the active tracks, the references folder path and, on +tdd, the `spec_log {name, gitLog}` output (you run
+`git log --name-only --relative` and pass its text — the server never runs git; the reviewer can't call MCP tools) — it
+runs the `/prReview` checklist
 (track-aware: spec compliance, red-first evidence, tenant isolation, eval deltas, security, the project's written rules
 and the history of rewritten lines) and triages the ledger's deferred minors, unconfirmed and parked findings. If it
 returns findings: verify each Critical / Important one (§6), then ONE fix dispatch with the confirmed list, ONE scoped
@@ -332,8 +338,8 @@ plugin — with the proof added: its own tests after every change, one commit ea
 1. Record `SIMPLIFY_BASE = git rev-parse HEAD` and `MERGE_BASE` (as for the final review). No `.execution/` yet (the
    feature ran inline)? Create it with a `.gitignore` holding `*` — the folder ignores itself. Dispatch
    **`dev-spec-driven:spec-simplifier`** with the feature, MERGE_BASE, the list — the ledger's deferred minors and the
-   final review's "can ship" minors —, the project checks and the report path
-   (`.specs/<feature>/.execution/simplify-report.md`). It touches only lines `MERGE_BASE..HEAD` added or changed —
+   final review's "can ship" minors —, the project checks, the report path
+   (`.specs/<feature>/.execution/simplify-report.md`) and the references folder path. It touches only lines `MERGE_BASE..HEAD` added or changed —
    never a test, a contract, a dependency or code the feature didn't write — runs the covering tests after each change,
    commits each one alone, and ends its report with a `## Final runs` section: the project checks (or the full suite)
    and the changed tasks' `_Verify:_` on the final code, one line each. In Claude Code the SubagentStop hook sends back

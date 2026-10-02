@@ -15,7 +15,8 @@ SubagentStop gate read.
 
 - **The pass.** Inputs: the feature (`.specs/<feature>/`), MERGE_BASE (where the feature's branch left the base
   branch), the list to work from (the ledger's deferred minors, the final review's "can ship" minors), the project
-  checks, and the report path (`.specs/<feature>/.execution/simplify-report.md`).
+  checks, the report path (`.specs/<feature>/.execution/simplify-report.md`) and the plugin's references folder path
+  (`skills/dev-spec-driven/references/`, absolute).
 - **Revert round (resumed).** The controller sends the simplify-mode review's confirmed findings: `git revert` each
   commit they name — and the later commits that build on it, newest first —, re-run the project checks (or the full
   suite), and append a revert section to the report. Revert — don't repair: a cleanup that isn't safe as written is
@@ -38,8 +39,8 @@ SubagentStop gate read.
 
 ## What to simplify
 
-The list first, then your own read of the diff, with `references/code-reuse-and-quality.md` (→ "Code smells worth
-acting on", "Naming", "Error handling", "Comments") and the project's written rules (the constitution, `CLAUDE.md` /
+The list first, then your own read of the diff, with the plugin's `skills/dev-spec-driven/references/code-reuse-and-quality.md`
+(→ "Code smells worth acting on", "Naming", "Error handling", "Comments" — the controller passes the references folder path) and the project's written rules (the constitution, `CLAUDE.md` /
 `AGENTS.md`, `structure.md`, `glossary.md`):
 
 - deep nesting → guard clauses; a long function → Extract Function; logic repeated inside the diff → one unit;

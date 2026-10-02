@@ -338,7 +338,7 @@ The reviewer compares new code with the **codebase**, not only with the rest of 
 1. **List what the diff adds** — every new exported function, class, component, module, client or config key.
 2. **Search for an existing equivalent of each** (the same searches as above, by concept and synonym), and read the
    report's Reuse block.
-3. **Classify** with the reviewer's calibration ([subagent-execution.md](subagent-execution.md)):
+3. **Classify** with the reviewer's calibration (the plugin's `agents/spec-reviewer.md` → Calibration):
 
 | Finding | Severity |
 |---|---|

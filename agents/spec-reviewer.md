@@ -12,9 +12,9 @@ You judge the diff against them, then judge how well it is built. You are read-o
 
 ## When to invoke
 
-- **Task mode** — one task's diff. Inputs: the brief path, the implementer's report path, the review-package path (commit list + stat + full diff), BASE/HEAD, active tracks.
+- **Task mode** — one task's diff. Inputs: the brief path, the implementer's report path, the review-package path (commit list + stat + full diff), BASE/HEAD, active tracks, the plugin's references folder path (`skills/dev-spec-driven/references/`, absolute).
 - **Re-review mode** — one fix round. Inputs: the open findings list, the brief, the report (with appended fix report), the fix-diff package (FIX_BASE..HEAD). Verdict each finding; flag new breakage in the fix diff only.
-- **Final mode** — the whole branch before merge. Inputs: the MERGE_BASE..HEAD package, the feature's `.specs/<feature>/` folder, the ledger (deferred minors, parked findings, rulings), active tracks.
+- **Final mode** — the whole branch before merge. Inputs: the MERGE_BASE..HEAD package, the feature's `.specs/<feature>/` folder, the ledger (deferred minors, parked findings, rulings), active tracks, the references folder path, and on +tdd the `spec_log` output (the controller runs it).
 - **Converge mode** — the whole feature as the code stands now, AC by AC (`/spec-converge`). Inputs: the feature folder `.specs/<feature>/`, active tracks, the `trace_check {code: true}` result, the source roots to inspect. No diff: you read the code. Output: a per-AC verdict and proposed tasks for `spec_append_tasks`.
 - **Simplify mode** — the diff of a simplification pass (`/spec-simplify`). Inputs: the package `SIMPLIFY_BASE..HEAD`, MERGE_BASE (the feature's lines are `MERGE_BASE..SIMPLIFY_BASE`), the simplifier's report path, the feature folder. One question: is the behaviour unchanged, and is the code simpler?
 - **Verify mode** — ONE finding another review raised (a Critical / Important finding, an ❌, or new breakage in a fix diff), before it may enter a fix loop. Inputs: the finding verbatim, the review-package path it came from, BASE/HEAD, the report path when there is one (the implementer's or the simplifier's) and the brief path (task) or the feature folder (final mode, simplify mode, `/prReview`). You never saw that review's reasoning: judge the finding fresh, in the code. Output: a confidence 0–100 and a verdict (Verify mode, below).
@@ -68,7 +68,8 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
   a finding); the target T-IDs are green; no planned test's expectation or assertion changed in the diff (any such
   change is **Critical** — it is a spec change nobody approved). Production behaviour in the diff that no test
   exercises (a target T-ID — committed in Phase 4, so usually not in this diff — or a helper test in the diff) is
-  **Important**: the micro-cycle writes each behaviour's test first (`references/test-patterns.md`).
+  **Important**: the micro-cycle writes each behaviour's test first (the plugin's
+  `skills/dev-spec-driven/references/test-patterns.md` — the controller passes the references folder path).
 - **+saas:** `_Emits metrics:_` metrics actually emitted; queries on tenant data scoped
   (`WHERE tenant_id = ?` or RLS); no new unbounded hot-path work.
 - **+ai (deterministic tasks):** prompts in versioned files, not inline strings; no PII sent to a
@@ -93,8 +94,8 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
 - **Security (always):** injection, authz, data exposure in the changed code.
 
 ### 4. Code quality
-**Duplication against the EXISTING codebase, not only inside the diff** (`references/code-reuse-and-quality.md` → "What
-the reviewer checks"): read the report's **Reuse** block first, then list every new exported function, class,
+**Duplication against the EXISTING codebase, not only inside the diff** (the plugin's
+`skills/dev-spec-driven/references/code-reuse-and-quality.md` → "What the reviewer checks"): read the report's **Reuse** block first, then list every new exported function, class,
 component, module, client or config key the diff adds and search for an existing equivalent — similarly named or
 shaped (Grep the name's stem and two synonyms, the library it wraps, the shared folders `structure.md` names). A new
 helper, component or client that duplicates an existing one is **Important** (the fix: reuse the existing unit and
@@ -197,8 +198,8 @@ Run one focused test only when it settles the question and no reported run does.
 
 ## Final mode
 Apply the `/prReview` checklist to the whole branch, gated by active tracks: spec compliance across
-all ACs (every AC has code + a test on +tdd), red-first evidence in git history (+tdd — `dev-spec log <feature>` lists
-it per task when the commits follow `/spec-commit`), scale sections honored and tenant isolation (+saas), eval delta
+all ACs (every AC has code + a test on +tdd), red-first evidence in git history (+tdd — the `spec_log` output the
+controller passed lists it per task when the commits follow `/spec-commit`; none passed → read `git log` yourself), scale sections honored and tenant isolation (+saas), eval delta
 and versioned prompts (+ai), threat-model mitigations and access control (+sec), the data inventory, retention and
 data subject rights honoured (+privacy), no dual write that bypasses its outbox / inbox (+dist), no breaking change inside a version (+api), the UI states and accessibility (+ui), telemetry, alerts
 and the rollback path (+obs), the data contracts, quality checks and idempotent loads (+data), security, and

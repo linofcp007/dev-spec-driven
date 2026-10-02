@@ -484,6 +484,23 @@ exports.run = async ({
     const obsRow = (docsRef("tooling-reference.md").match(/^\| `hooks\/observe-hook\.js` \|.*$/m) || [""])[0];
     ok(/or PowerShell, with an explicit exit code/.test(obsRow) && !/PowerShell runs are not observed/.test(obsRow),
       "1.22 review P8: tooling-reference's observe-hook row says PowerShell runs are logged (explicit exit code) — no contradicting tail");
+    // P9: a subagent (or an MCP prompt) can't resolve a bare `references/…`, run `dev-spec` or follow "agent X → section":
+    // the agents name the plugin's skills/dev-spec-driven/references/ (the controller passes the folder), the final review
+    // gets spec_log's output, /spec-simplify and /prReview carry the report headings and the 0–100 scale inline.
+    const agentDocs = ["spec-implementer.md", "spec-reviewer.md", "spec-simplifier.md", "spec-critic.md"].map((a) => [a, docsRead("agents", a)]);
+    const bareRefs = agentDocs.filter(([, t]) => /(?<!skills\/dev-spec-driven\/)references\/[\w.-]+\.md/.test(t)).map(([a]) => a);
+    const revW = docsWs(docsRead("agents", "spec-reviewer.md")), simpW = docsWs(docsRead("commands", "spec-simplify.md")), prrW = docsWs(docsRead("commands", "prReview.md"));
+    ok(!bareRefs.length && !/dev-spec log/.test(revW) && /the `spec_log` output the controller passed/.test(revW) &&
+      /6\. the references folder path/.test(sub) && /the `spec_log \{name, gitLog\}` output/.test(cut(sub, "## Final review", "## The simplification pass")) &&
+      /the report path \(`\.specs\/<feature>\/\.execution\/simplify-report\.md`\) and the references folder path/.test(sub) &&
+      !/agents\/spec-simplifier\.md` → Report/.test(simpW) && ["`## Baseline`", "`## Changes`", "`## Dropped`", "`## Left alone`", "`## Final runs` LAST"].every((h) => simpW.includes(h)) &&
+      /`` - `<the exact command>` → exit 0 \(212 passing\) ``/.test(simpW) &&
+      !/agent → Calibration/.test(prrW) && /Rate each 0–100: \*\*0\*\* not real[^.]*\*\*25\*\* might be real, unverified · \*\*50\*\* verified but minor[^.]*\*\*75\*\*[^.]*\*\*100\*\* direct evidence/.test(prrW),
+      "1.22 review P9: the agents cite the plugin's skills/dev-spec-driven/references/ (the controller passes the folder; bare: " + JSON.stringify(bareRefs) + "); the final review gets spec_log's output, never a bare dev-spec log; /spec-simplify inlines the report headings and the Final-runs line; /prReview the 0–100 scale");
+    // P10: the reviewer's calibration lives in agents/spec-reviewer.md → Calibration, not in subagent-execution.md.
+    ok(/\*\*Classify\*\* with the reviewer's calibration \(the plugin's `agents\/spec-reviewer\.md` → Calibration\)/.test(docsRef("code-reuse-and-quality.md")) &&
+      /^### Calibration$/m.test(docsRead("agents", "spec-reviewer.md")),
+      "1.22 review P10: code-reuse-and-quality.md points the calibration at agents/spec-reviewer.md → Calibration");
   }
 
   // Release hygiene: the three version fields agree.
