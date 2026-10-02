@@ -161,8 +161,9 @@ and U+FEFF gotchas are in CLAUDE.md.
 - **CLI exit codes are scriptable**: `doctor` (FAIL), `trace` (gaps), `ears` (errors), `finish` (not ready),
   `drift` (drift, a stale baseline or an error) and any refused operation exit 1. The eval harness
   (`mcp/evals/run-evals.js`, also `dev-spec evals`) exits 2 on a usage error (a `--max-items` that isn't an
-  integer ≥ 1 — it graded nothing and scored 0/0 = 100% — or a `--json`: its report is text) and 1 on an invalid set (an empty
-  one included); `dev-spec evals` exits with the harness's status, and 1 when it has none (a spawn error, a signal — 1.22
+  integer ≥ 1 — it graded nothing and scored 0/0 = 100% — or, run directly, a `--json`: its report is text) and 1 on an
+  invalid set (an empty one included); `dev-spec evals --json` never reaches the harness — the CLI refuses it first
+  (`TEXT_ONLY_COMMANDS`, exit 1, below); `dev-spec evals` exits with the harness's status, and 1 when it has none (a spawn error, a signal — 1.22
   review: `status || 0` passed a killed run). An engine refusal goes through `fail(r)`, never
   `die(r.error)`: with `--json` the whole `{ok: false, error, …}` result (`recorded`, `neverApproved`, `gated`…) is
   the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only. **`--json` on a command

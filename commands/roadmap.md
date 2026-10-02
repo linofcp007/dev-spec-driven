@@ -30,5 +30,5 @@ Relay the **needs attention** items: blocked dependencies, open clarifications, 
 (`[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]`), template placeholders in the current phase, artifacts changed since
 their approval, **forced** approvals, missing role sign-offs, overlaps, a spike past its timebox, and ticked tasks
 without a passing run (each task with its reason — latest run failed, note only, stale or shared-number evidence, an
-unexpected pass), and late or at-risk milestones. The roadmap is auto-generated on every mutation and by a hook, so it's normally already up to date —
+unexpected pass, a run of another command than its `_Verify:_`), and late or at-risk milestones. The roadmap is auto-generated on every mutation and by a hook, so it's normally already up to date —
 never hand-edit it. Respond in the user's language (EN/PT/ES).

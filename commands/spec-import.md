@@ -27,8 +27,9 @@ reads stdin, `--text "…"` takes it inline):
 - `text` — `plan` / `execplan` / `fluidplan` only, never with `path`: the document itself (fluidplan: its `PLAN.md`, `DECISIONS.md` may follow it). Same mapping, same guarantees; the note
   reads "Imported from plan (inline text)", the result has `inline: true` and `source: null`;
 - `name` — defaults to the source folder name (spec-kit's number prefix dropped); a plan / ExecPlan takes its title,
-  BMAD the PRD's title (one story file: the story's title); an existing feature with that slug is an error (import
-  never writes over a feature);
+  BMAD the PRD's title (one story file: the story's title), fluidplan the plan's title; a title with no letter a-z or
+  digit (`# Добавить тёмную тему`) falls back to the file's (or folder's) name, and inline `text` with no usable title is
+  refused (nothing written) — pass `name`; an existing feature with that slug is an error (import never writes over a feature);
 - `tracks` — omit to auto-classify from the imported requirements; `lang` — the generated headings/notes
   (the imported text is kept as written).
 

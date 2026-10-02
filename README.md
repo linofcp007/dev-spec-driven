@@ -145,7 +145,9 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   the user explicitly asks for one. Failed runs are kept in a short history, and a task reopened after a spec
   change has **stale** evidence until it is re-run. `spec_complete_task` returns a stable reason code
   (`unverifiedReason`: `failed-run`, `manual-note-on-runnable-verify`, `duplicate-number`,
-  `stale-evidence`, `unexpected-pass`, `no-evidence`); `doctor`, `spec_finish` and the `ROADMAP.md` "Needs attention" line
+  `stale-evidence`, `unexpected-pass`, `no-evidence`, `unobserved` — under `meta.evidence: "observed"`, a run the
+  harness never saw —, `command-mismatch` — the run recorded is not a run of the task's `_Verify:_` command);
+  `doctor`, `spec_finish` and the `ROADMAP.md` "Needs attention" line
   list each unverified task with a localized reason. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — a light spec for a defect: reproduce → **root cause with evidence** → failing
   regression test → fix → verify. `doctor` fails until the root cause is written, and the tasks after the
@@ -619,7 +621,9 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   para quando o utilizador a pede explicitamente. As execuções falhadas ficam num histórico curto, e uma tarefa
   reaberta depois de uma alteração à spec fica com evidência **desatualizada** até voltar a correr. O
   `spec_complete_task` devolve um código de motivo estável (`unverifiedReason`: `failed-run`,
-  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `unexpected-pass`, `no-evidence`); o `doctor`, o `spec_finish` e a linha "Precisa de
+  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `unexpected-pass`, `no-evidence`,
+  `unobserved` — com `meta.evidence: "observed"`, uma execução que o harness nunca viu —, `command-mismatch` — a
+  execução registada não é uma execução do comando `_Verify:_` da tarefa); o `doctor`, o `spec_finish` e a linha "Precisa de
   atenção" do `ROADMAP.md` listam cada tarefa por verificar com o motivo. CLI:
   `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — uma spec leve para um defeito: reproduzir → **causa raiz com evidência** → teste de
@@ -1120,7 +1124,9 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   verificar y es para cuando el usuario la pide explícitamente. Las ejecuciones fallidas quedan en un historial
   corto, y una tarea reabierta tras un cambio en la spec tiene evidencia **obsoleta** hasta volver a ejecutarse.
   `spec_complete_task` devuelve un código de motivo estable (`unverifiedReason`: `failed-run`,
-  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `unexpected-pass`, `no-evidence`); el `doctor`,
+  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `unexpected-pass`, `no-evidence`,
+  `unobserved` — con `meta.evidence: "observed"`, una ejecución que el harness nunca vio —, `command-mismatch` — la
+  ejecución registrada no es una ejecución del comando `_Verify:_` de la tarea); el `doctor`,
   `spec_finish` y la línea "Necesita atención" del `ROADMAP.md` listan cada tarea sin verificar con su
   motivo. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — una spec ligera para un defecto: reproducir → **causa raíz con evidencia** → prueba de

@@ -68,8 +68,8 @@ don't translate the scaffold. Keep the **structural tokens** as they are in ever
    per-run cost. Specs live in `.specs/` and are versioned in your git repo.
 6. **Evidence before claims.** Nothing is "done", "passing" or "fixed" until a command proved it on the final code. Tick
    tasks only through `spec_complete_task {evidence}` — never by editing the checkbox. A task whose `_Verify:_` names a
-   runnable command counts as verified only with `{command, exitCode: 0}` (on an `_Expect: fail_` task: its failing red
-   run); a failed run is recorded and refuses the tick; a text note ticks it but leaves it unverified. **Can't run the
+   runnable command counts as verified only with `{command, exitCode: 0}` of its `_Verify:_` command (on an `_Expect: fail_` task:
+   its failing red run; another command's run → `command-mismatch`); a failed run is recorded and refuses the tick; a text note ticks it but leaves it unverified. **Can't run the
    command yourself** (no shell, no environment)? Don't tick the task — not bare, not with a note, never with an exit
    code you didn't see — and don't send a subagent to look for a shell: name the `_Verify:_` command and ask the user
    for its output (or to run `node "<clone>/cli/dev-spec.js" done <feature> <n> --run`, the line the tool's note prints

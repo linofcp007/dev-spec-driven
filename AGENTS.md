@@ -257,7 +257,9 @@ next, `dev-spec next-action <feature>` names the single next step.
   lowering the guard) or refuse it. In other MCP clients the server guards its own tools (`spec_approve`, `spec_feature`
   remove, `spec_init` lowering a guard): when the client supports elicitation it asks the user itself (a question with an
   Approve box and a note — only their explicit approve is recorded, as `confirmed`); a `declined: true` result means the
-  user said no (or didn't answer): record nothing, ask what should change. A `humanRequired: true` refusal (`deny`, a
+  user said no (or didn't answer): record nothing, ask what should change. A `changedSincePreview: true` result means
+  the artifact (or, forced, its failing checks) changed while they decided: nothing was recorded — preview it again and
+  ask again. A `humanRequired: true` refusal (`deny`, a
   client that can't ask) names a `command`: give it to the user to run themselves and wait — never retry it another way.
   Where nothing asks (`ask` in a client without elicitation, the CLI outside Claude Code), approvals are still the
   user's — never approve on your own.

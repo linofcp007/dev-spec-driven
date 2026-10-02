@@ -11,7 +11,9 @@ Run the `spec_doctor` MCP tool for this feature (CLI `dev-spec doctor <feature>`
 result clearly: each check (pass/warn/fail), the recorded phase approvals, and the `readyToAdvance` verdict.
 
 - **Fails** (block advancing): `ears` errors (or requirements.md cites AC IDs but no criterion was linted — write each AC
-  as a list item, heading or line that starts with its ID, or a table row under an Acceptance Criteria heading),
+  as a list item, heading or line that starts with its ID, or a table row under an Acceptance Criteria heading — or it
+  has criteria but no `US-n.AC-m` ID trace_check reads: number each one `US-1.AC-1`, `US-1.AC-2` …; a bare `AC-1` is
+  not one),
   `clarifications` still open, `ac-uniqueness`, `placeholders` (template
   text left in the current phase's artifact or an earlier one — including a `[bracketed placeholder]` left inside
   a track section, which the design approval refuses; only a bracket whose text the templates write — the built-in
@@ -32,7 +34,8 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   to nothing — the catalog shows the AC they meant to replace as current), `tests-in-code` (T-IDs made green by done tasks that
   no test file names), `verification` (ticked tasks without a passing run — the reason per task: no evidence,
   note on a runnable `_Verify:_`, failed run, stale evidence, duplicate number, unexpected pass on an
-  `_Expect: fail_` task), `red-green` (+tdd: T-IDs made green with no recorded red run — a test that never failed
+  `_Expect: fail_` task, a run of another command than its `_Verify:_` — `command-mismatch` —, a run the harness never
+  saw under `meta.evidence: "observed"`), `red-green` (+tdd: T-IDs made green with no recorded red run — a test that never failed
   proves nothing; only `_Makes green:_` IDs count, so a bugfix's guard test T-02 appears here only on a bugfix
   scaffolded before 1.14, whose task 4 still lists it — remove T-02 from that `_Makes green:_`), `suite-evidence`
   (project checks without a passing run since the last task activity, or run before the implementing files changed —
@@ -40,7 +43,9 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   `malformed-markers` (text on a task line shaped like a marker that yields none — `**Verify:** npm test`, a bare
   `Verify:` — so no check runs and no file is traced: write `_Verify: <command>_`), `outside-code-artifacts` (+tdd: a
   test planned outside test code — `load-test.md`, an eval set — whose artifact is still the scaffold),
-  `duplicate-tasks`, `integration-plan` (still the template), `changed-since-approval` (re-review → `/spec-impact`, then re-approve), `decision-affects` / `decision-affects-approved` (a decision's
+  `duplicate-tasks`, `unread-tasks` (checkbox lines the task scanner does not read as tasks — an ordered-list
+  `1. [ ] text`, an unnumbered `- [ ] text` outside every task: never ticked, briefed or verified; a task line is
+  `- [ ] N. text` with a `-`, `*` or `+` bullet), `integration-plan` (still the template), `changed-since-approval` (re-review → `/spec-impact`, then re-approve), `decision-affects` / `decision-affects-approved` (a decision's
   `_Affects:_` naming nothing, or recorded after the approval of what it affects → `/spec-impact`),
   `cross-feature-overlap` (another active feature's open tasks plan the same files → `/depend` or re-plan),
   `cross-feature-acs` (this feature's acceptance criteria read like another ACTIVE feature's — a near-duplicate — or may
@@ -54,7 +59,9 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   `design-tradeoffs` / `design-risks` / `design-reuse` (design.md has no Alternatives & Trade-offs with ≥ 2 options per
   key decision, no Risks, or no Reuse & Integration — never a fail), `waiver-expired` (a forced approval whose waiver's
   expiry passed while it still stands forced), `track-pack-missing` (a saved track names a pack that is gone or invalid),
-  `approval-gates` (pending phases — a bugfix's `design` on `bug.md`, Phase 4 `tests` on +tdd/+ai, a phase still
+  `approval-gates` (pending phases — a bugfix's `design` on `bug.md`, Phase 4 `tests` on +tdd/+ai once its plan exists
+  or was approved, again once its sign-off no longer covers the plan — a T-ID planned since, a plan re-approved with
+  other content —, a phase still
   missing a role's sign-off — the gate the next approval would fail, forced approvals), a bugfix's `reproduction`, a
   spike's `timebox`.
 

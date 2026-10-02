@@ -30,7 +30,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_decide` | Append one entry to the decision log `decisions.md` (`D-n`, `_Kind:_`, `_Date:_`, `_Affects:_` validated against the feature, `_Supersedes:_`) — append-only |
 | `spec_next_task` | The next task — the first open one whose `_Depends:_` are all done (`skipped` / `blocked` `[{number, waitsOn}]` when dependencies are in play; `next: null` + a note when none can start); `batch: true` → + the `[P]` tasks that can run beside it; `waves: true` → the execution waves of every open task + `cycles` + `blocked` |
 | `spec_task_brief` | Self-contained brief for one task (ACs + tests resolved, design context, a Reuse section — the design's Reuse & Integration entries for the task and the source files next to its own —, scoped steering, decisions, project checks, `_Expect: fail_`, pipe warnings, its `_Depends:_` and where each stands, DoD); default = the next task by `spec_next_task`'s rule; `write: true` → `.specs/<feature>/.execution/` |
-| `spec_complete_task` | The only way to tick task N, with `evidence {command, exitCode, summary}` — a failed run is recorded and refuses the tick; a runnable `_Verify:_` counts as verified only with `{command, exitCode: 0}`; an `_Expect: fail_` task needs a failing run (a pass → `unexpectedPass`; a run that never reached the test — exit 126/127/9009, a missing test file or module — → `couldNotRun`); a piped command → `pipeMasked`; every run stamped `observed` (true / false; `"cli"` for `done --run`) — with `meta.evidence: "observed"` an unobserved run leaves it unverified (`unobserved`); a task ticked before its `_Depends:_` → `waitsOn` + a note (never refused); `undo: true` (+ `reason`) unticks it — its evidence turns stale (`staleBy: "undo"`, a re-tick needs a new run), `ticks[n]` dropped, `.state.json → unticks` {n, at, reason} |
+| `spec_complete_task` | The only way to tick task N, with `evidence {command, exitCode, summary}` — a failed run is recorded and refuses the tick; a runnable `_Verify:_` counts as verified only with `{command, exitCode: 0}` of its `_Verify:_` command (a run of another command ticks it unverified: `command-mismatch`); an `_Expect: fail_` task needs a failing run (a pass → `unexpectedPass`; a run that never reached the test — exit 126/127/9009, a missing test file or module — → `couldNotRun`); a piped command → `pipeMasked`; every run stamped `observed` (true / false; `"cli"` for `done --run`) — with `meta.evidence: "observed"` an unobserved run leaves it unverified (`unobserved`); a task ticked before its `_Depends:_` → `waitsOn` + a note (never refused); `undo: true` (+ `reason`) unticks it — its evidence turns stale (`staleBy: "undo"`, a re-tick needs a new run), `ticks[n]` dropped, `.state.json → unticks` {n, at, reason} |
 | `spec_append_tasks` | Converge: append new tasks under "Phase: Convergence" (existing tasks never renumbered; each task may carry `_Requirements:_`, `_Makes green:_`, `_Implements:_`, `_Verify:_`, `_Expect: fail_`, `_Size:_`, `_Depends:_`; unknown AC IDs, unplanned T-IDs, or a `depends` naming no task / closing a cycle refuse the call; `needsReapproval`) |
 | `spec_finish` | Close a feature: blockers (incl. `suite-evidence` with project checks) + warnings + fresh checks + a merge summary from the spec chain; `evidence` records the project checks you ran; `write: true` on a ready feature records the drift baseline |
 | `spec_drift` | Implementing files of finished features changed / missing / now present since the finish baseline |
@@ -54,8 +54,8 @@ input schema (a wrong type or unknown value is refused with a clear message).
 
 Each check is pass / warn / fail; `readyToAdvance` means no fail.
 
-- **Fail when broken:** `requirements` (missing) · `ears` (a criterion without a modal verb, or requirements.md
-  defining AC IDs of which no criterion was linted) · `clarifications` (open
+- **Fail when broken:** `requirements` (missing) · `ears` (a criterion without a modal verb, requirements.md
+  defining AC IDs of which no criterion was linted, or criteria with no `US-n.AC-m` ID — a bare `AC-1` is none) · `clarifications` (open
   `[NEEDS CLARIFICATION]`) · `ac-uniqueness` · `placeholders` (template text in the current or an earlier phase's
   artifact; a later phase's only warns) · `design` (missing) · `saas-sections` / `ai-sections` / `sec-sections` /
   `privacy-sections` / `dist-sections` / `api-sections` / `ui-sections` / `obs-sections` / `data-sections` / `<pack>-sections` (an active track's mandatory design section missing, empty, still holding its `> **TODO**`
@@ -78,7 +78,8 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   too under `meta.evidence: "observed"`) ·
   `red-green` (+tdd: T-IDs made green with no recorded red run of an `_Expect: fail_` task) · `suite-evidence`
   (project checks without a passing run since the last task activity — or run before the implementing files changed —
-  once every task is done) · `duplicate-tasks` · `verify-pipes` (a `_Verify:_` that pipes) · `malformed-markers`
+  once every task is done) · `duplicate-tasks` · `unread-tasks` (checkbox lines the task scanner does not read as tasks —
+  an ordered-list `1. [ ] text`, an unnumbered `- [ ] text` outside every task) · `verify-pipes` (a `_Verify:_` that pipes) · `malformed-markers`
   (text on a task line shaped like a marker that yields none — `**Verify:** …`, a bare `Verify:` — so nothing runs or is
   traced) · `outside-code-artifacts` (+tdd: a test planned outside test code — `load-test.md`, an eval set — whose
   artifact is still the scaffold once a done task makes it green or every task is done; `spec_finish` repeats it as a
@@ -92,7 +93,8 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   requirements.md / design.md) · spike `timebox` (past its date with no decision) · `waiver-expired` (a forced approval still standing whose
   waiver's `expires` date has passed).
 - **`approval-gates`** — pending phases (every phase whose artifact exists, a bugfix's `design` on `bug.md`, Phase 4
-  `tests` on +tdd / +ai once its plan exists, a phase still missing a role's sign-off), forced approvals with their
+  `tests` on +tdd / +ai once its plan exists or was approved — again once its sign-off no longer covers the plan: a T-ID
+  planned since, or a plan re-approved with other content —, a phase still missing a role's sign-off), forced approvals with their
   failing checks, and what the next approval would refuse (`nextGate {phase, ready, failing, missingRoles}`).
 
 ## MCP prompts and resources (other MCP clients)

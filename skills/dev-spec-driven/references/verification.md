@@ -214,7 +214,7 @@ Task runs prove tasks; a feature is done when the **whole project's checks** pas
 - Once they are set, **`spec_finish` needs a passing recorded run of each since the feature's last task activity**
   (the last tick or task run), on the code as it is now — blocker **`suite-evidence`**, with `suiteChecks`
   [{name, command, status}] where status is `pass` · `no-run` · `failed` · `changed` (the configured command changed
-  since the run) · `before-last-tick` · `code-changed` (the feature's implementing files — its tasks' `_Implements:_` —
+  since the run, or the run was of another command — `echo ok` recorded as check `test`) · `before-last-tick` · `code-changed` (the feature's implementing files — its tasks' `_Implements:_` —
   changed since the run; each recorded run is stamped with a hash of them) · `unobserved` (only with
   `meta.evidence: "observed"` — a passing run the harness never saw, see below). Doctor warns `suite-evidence` once every
   task is done; the execution sign-off refuses it too, and `/next-action`'s finish step says how to run and record them.
@@ -273,7 +273,8 @@ back with the reason: which feature, which tasks and why (`#3 (latest run failed
 a question, a negated or conditional claim ("not verified yet", "once the tests pass"), quoted or code text, or an
 honest admission ("task 3 is not verified", "2 failing") — the right answer is to read the task's `_Verify:_` in
 tasks.md, run it if it is safe to run, record the evidence, or **say plainly what is not verified**; never reword a
-claim to slip past it. "Active" means activity the engine recorded (ticks, evidence) — never a file date, so a fresh
+claim to slip past it. "Active" means activity the engine recorded (ticks, evidence, and a save of tasks.md / change.md
+through the Write / Edit tool — `lastEditAt`, stamped by the plugin's PostToolUse hook) — never a file date, so a fresh
 clone of someone else's repo doesn't trip it — and the reason never hands you a `--run` command to execute blindly.
 
 - **SubagentStop** (the `spec-implementer` and `spec-simplifier` agents only): an implementer's DONE is checked against
