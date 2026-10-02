@@ -1041,7 +1041,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | Herramienta | Qué hace |
 |---|---|
 | `spec_classify` | Recomienda tracks desde una descripción (heurística multilingüe, ponderada) |
-| `spec_init` | Crea `.specs/steering/` para los tracks; `lang` fija el idioma del proyecto, `guard` on · off · scope, `stopCheck` la puerta de evidencia al final del turno, `checks` los comandos de comprobación del proyecto, `approvalRoles` quién aprueba cada fase, `evidence` reported · observed (solo verifican las ejecuciones que el harness vio), `approvalGuard` off · ask · deny (la aprobación de un agente te pregunta / se rechaza) |
+| `spec_init` | Crea `.specs/steering/` para los tracks; `lang` fija el idioma del proyecto, `guard` on · off · scope, `stopCheck` el gate de evidencia al final del turno, `checks` los comandos de comprobación del proyecto, `approvalRoles` quién aprueba cada fase, `evidence` reported · observed (solo verifican las ejecuciones que el harness vio), `approvalGuard` off · ask · deny (la aprobación de un agente te pregunta / se rechaza) |
 | `spec_create` | Crea la carpeta de la función para los tracks activos (`kind: "bugfix"` para el flujo de bugfix, `kind: "spike"` para una investigación con plazo, `brownfield: true` añade `integration-plan.md`, `flow: "design-first"` pone el diseño antes de los requisitos) |
 | `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas; un plan puede llegar como `text` — el plan mode guarda los planes fuera del proyecto) |
 | `spec_templates` | Plantillas del proyecto: lista, copia (`init`) o comprueba (`check`) los scaffolds del equipo en `.specs/templates/`, que sustituyen a los de origen |
@@ -1065,7 +1065,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders — o la matriz de trazabilidad en CSV (`format: "csv"`), un `.feature` Gherkin por función (`"gherkin"`: un escenario por criterio de aceptación, con las cláusulas EARS como Dado / Cuando / Entonces) o un CSV para el importador de Jira / Linear (`"jira"` · `"linear"`: la función, sus historias, sus tareas); `write` → `.specs/exports/` |
 | `spec_changelog` | Notas de la versión desde las specs — Added / Changed / Fixed desde una fecha o desde las últimas notas; `milestone` las limita a las funciones de un hito; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Archivos de implementación cambiados, ausentes o nuevos desde que `spec_finish` registró la línea base |
-| `spec_stop_check` | La puerta de evidencia del final del turno para clientes solo MCP: ¿este mensaje final ("hecho", "verificado") se devolvería — tareas marcadas sin evidencia, comprobaciones del proyecto sin una ejecución correcta? |
+| `spec_stop_check` | El gate de evidencia del final del turno para clientes solo MCP: ¿este mensaje final ("hecho", "verificado") se devolvería — tareas marcadas sin evidencia, comprobaciones del proyecto sin una ejecución correcta? |
 | `spec_log` | Los commits que citan cada tarea (+ la comprobación red-first de +tdd) a partir del texto de `git log` que pasa el cliente — el servidor nunca ejecuta git |
 | `spec_upgrade` | Tras actualizar el plugin: audita cada función activa frente a las reglas actuales (estado, lo que señala el doctor, siguiente paso, una revisión critic / converge); `apply` guarda los tracks deducidos, da a las aprobaciones anteriores a la 1.13 una línea base en el historial, sella `meta.specVersion` y escribe `.specs/UPGRADE.md` — nunca edita una spec |
 | `spec_roadmap` / `spec_depend` | Hoja de ruta + dependencias (detecta ciclos; `add` / `remove` editan la lista), una ETA por función a partir de la velocidad de las tareas marcadas y los archivos que las tareas abiertas de dos funciones planifican a la vez; `write:true` → `.specs/ROADMAP.md` (+ `html:true` para el `.html` con la marca, offline, claro/oscuro; `lang`) |
@@ -1379,7 +1379,7 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **Hooks** (`hooks/hooks.json`): al guardar `requirements.md` → valida EARS + placeholders; al guardar
   `tasks.md` → comprueba la trazabilidad; al guardar `design.md` → las secciones obligatorias de los tracks
   activos; al iniciar la sesión → estado de las funciones + drift + funciones que se solapan; al final de un turno
-  (y de un subagente `spec-implementer` o `spec-simplifier`) → la puerta de evidencia; tras cada ejecución Bash → el registro de la
+  (y de un subagente `spec-implementer` o `spec-simplifier`) → el gate de evidencia; tras cada ejecución Bash → el registro de la
   evidencia observada (silencioso). El modo guardia opcional se ejecuta antes de las ediciones de código, la guardia
   opcional de las aprobaciones antes de la aprobación de un agente. Más un validador `pre-commit` opcional de git.
 - **Harness de evals** (`mcp/evals/run-evals.js`): ejecuta los conjuntos
@@ -1435,7 +1435,7 @@ escritura de skills):
 | executing-plans, subagent-driven-development | `/executeTask [--subagents]` |
 | test-driven-development | el track `+tdd` y su microciclo red-green-refactor dentro de cada tarea |
 | systematic-debugging | `/spec-bugfix` |
-| verification-before-completion | la puerta de evidencia (`_Verify:_`, `dev-spec done --run`) |
+| verification-before-completion | el gate de evidencia (`_Verify:_`, `dev-spec done --run`) |
 | requesting / receiving-code-review | `/prReview`, `/spec-review-feedback` |
 | finishing-a-development-branch | `/spec-finish` (merge local; sin pull requests, sin CI) |
 

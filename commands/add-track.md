@@ -1,5 +1,5 @@
 ---
-description: Escalate an existing feature to a new track (+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data), additive only — or turn one off with --remove (no file deleted). PT - adiciona (ou remove) um track de uma feature. ES - añade (o quita) un track de una feature.
+description: Escalate an existing feature to a new track (+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data), additive only — or turn one off with --remove (no file deleted). PT - adiciona (ou remove) um track de uma feature. ES - añade (o quita) un track de una función.
 argument-hint: "[feature name] [tdd|saas|ai|sec|privacy|dist|api|ui|obs|data] [--remove]"
 ---
 

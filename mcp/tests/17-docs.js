@@ -509,6 +509,18 @@ exports.run = async ({
       /`spec_stop_check \{message\}`/.test(catalog) && /`spec_log \{name, gitLog\}`/.test(catalog) && list.result.tools.some((t) => t.name === "spec_stop_check") && list.result.tools.some((t) => t.name === "spec_log") &&
       docsRules.slice(0, 4).every(([f]) => /Below, `dev-spec <command>` stands for `node cli\/dev-spec\.js <command>`/.test(docsWs(docsRead(f))) && /`spec_stop_check \{message\}`/.test(docsRead(f))),
       "1.22 review P11: INTEGRATIONS' stop-gate row names spec_stop_check first (CLI as the alternative); tool-catalog.md lists spec_stop_check and spec_log; the Cursor / Windsurf / Copilot / Gemini rule files spell out `dev-spec <command>` and the MCP stop-check");
+    // P12: Spanish terminology follows es.js — "el gate de evidencia" (never "la puerta" outside the release notes the
+    // controller owns), and a command's ES description says "función", never "feature" (languages.md → Terminology).
+    const esBlock = (docsReadme.split("\n## Español\n")[1] || "").split("\n## What's in the box")[0];
+    const esOutsideNews = esBlock.split(/\n### Novedades de la [\d.]+\n/).map((s, i) => (i ? s.split(/\n### /).slice(1).join("\n### ") : s)).join("\n");
+    const esDescFeature = fs.readdirSync(path.join(root, "commands")).filter((f) => f.endsWith(".md")).filter((f) => {
+      const d = (docsRead("commands", f).match(/^description: (.*)$/m) || [, ""])[1];
+      return / ES - /.test(d) && /\bfeatures?\b/i.test(d.split(" ES - ").pop());
+    });
+    const esJs = docsRead("mcp", "lib", "i18n", "es.js");
+    ok(/gate de evidencia/.test(esJs) && !/puerta de evidencia/.test(esJs) &&
+      !/la puerta de evidencia|La puerta de evidencia/.test(esOutsideNews) && /el gate de evidencia/.test(esOutsideNews) && !esDescFeature.length,
+      "1.22 review P12: README's ES block says 'el gate de evidencia' (as es.js) outside the release notes; no command's ES description says 'feature' (got " + JSON.stringify(esDescFeature) + ")");
   }
 
   // Release hygiene: the three version fields agree.
