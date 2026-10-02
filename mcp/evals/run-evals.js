@@ -24,11 +24,12 @@
  *   --max-items=<N>      grade at most N items per set (an integer >= 1; default 200) — anything else exits 2
  *   Switches (--dry-run, --set-baseline, --require-live) follow the CLI's rule: --flag, or --flag=true|false
  *   (1/0, yes/no, on/off); any other value exits 2.
+ *   The report is text only: --json is a usage error (exit 2; --json=false is accepted, as the CLI reads it).
  *
  * Exit code: 0 normally; 1 if a set falls below its threshold (real run only) or a set / thresholds.json
  * is invalid (dry or live — then no model is called; a set with no items is invalid too: it can't pass what it never
  * graded) — handy for a manual pre-push gate. 2 for a usage error (no feature, a bad --max-items or switch value,
- * --require-live without a key).
+ * --require-live without a key, --json).
  * Thresholds: evals/thresholds.json or defaults (golden 0.85, adversarial 1.0, regression 1.0).
  */
 
@@ -202,6 +203,20 @@ async function main() {
   // (an unexpanded "${VAR}" is ignored) > cwd.
   const projectDir = spec.resolveProjectDir(typeof flags.project === "string" ? flags.project : undefined);
   T = spec.msg(spec.projectLang(projectDir)).evals;
+  // --json (1.22 review): the harness prints a text report only — a JSON request is a usage error (exit 2) before anything
+  // runs, never that report on stdout as if it were the JSON asked for. --json=false is the switch off (the CLI's rule).
+  if (flags.json !== undefined) {
+    const v = flags.json === true ? "true" : String(flags.json).trim().toLowerCase();
+    const M = spec.msg(spec.projectLang(projectDir));
+    if (["true", "1", "yes", "on"].includes(v)) {
+      console.error(M.cliOutput.noJson("evals"));
+      process.exit(2);
+    }
+    if (!["false", "0", "no", "off"].includes(v)) {
+      console.error(M.args.invalid(M.args.item("--json", M.args.type.boolean, JSON.stringify(flags.json))));
+      process.exit(2);
+    }
+  }
   if (!pos[0]) {
     console.error(T.usage);
     process.exit(2);

@@ -18,6 +18,19 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   ok(unk.code === 1 && /not found: nope, steering/.test(unk.out) && depsOfA() === "c,b", "depend with unknown/reserved features exits 1, names them and stores nothing");
   ok(run(["depend", "a", "--order", "x", "--project", dp]).code === 1 && run(["depend", "a", "--project", dp, "--add"]).code === 1,
     "depend --order x (not an integer) and --add without a value exit 1");
+  // 1.22 review: --order is a SAFE integer, like spec_depend's (MCP refuses 1e20): "99999999999999999999" matched the digits and was
+  // stored as 1e20 (exit 0). Refused in the MCP validator's words, nothing written; MAX_SAFE_INTEGER and a negative are stored.
+  const orderOf = () => { try { return JSON.parse(fs.readFileSync(path.join(dp, ".specs", "roadmap.json"), "utf8")).features.a.order; } catch { return "unreadable"; } };
+  const ord0 = orderOf();
+  const big22 = [run(["depend", "a", "--order", "99999999999999999999", "--project", dp]), run(["depend", "a", "--order=9007199254740992", "--project", dp])];
+  const bigOrd22 = orderOf();
+  const safe22 = run(["depend", "a", "--order", "9007199254740991", "--project", dp]);
+  const safeOrd22 = orderOf();
+  const neg22 = run(["depend", "a", "--order", "-2", "--project", dp]);
+  ok(big22.every((r) => r.code === 1 && /order must be an integer \(got "(?:99999999999999999999|9007199254740992)"\)/.test(r.out)) && bigOrd22 === ord0 &&
+    safe22.code === 0 && safeOrd22 === 9007199254740991 && neg22.code === 0 && orderOf() === -2,
+    "1.22 review: depend --order 99999999999999999999 / 2^53 exit 1 (an integer past the safe range, refused as over MCP) and store nothing; MAX_SAFE_INTEGER and -2 are stored (got " +
+    JSON.stringify([big22.map((r) => [r.code, r.out.trim()]), bigOrd22, safeOrd22, orderOf()]) + ")");
   ok(run(["depend", "a", "--clear", "--project", dp]).code === 0 && depsOfA() === "", "depend --clear empties the list explicitly");
   // A repeated flag used to keep only its last value (`--add b --add c` added c alone, exit 0).
   const rep = run(["depend", "a", "--add", "b", "--add=c", "--project", dp]);

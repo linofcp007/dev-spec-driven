@@ -25,7 +25,7 @@ exports.run = async ({
 
     // 1. Argument types are checked against the advertised inputSchema before dispatch.
     const r19 = await call("spec_complete_task", { name: "arg-check", number: 1.9, projectDir: w3 });
-    ok(r19.result.isError && /number must be an integer \(got 1\.9\)/.test(errText(r19)) && S.nextTask(w3, "arg-check").next.number === 1,
+    ok(r19.result.isError && /number must be an integer ≥ 1 \(got 1\.9\)/.test(errText(r19)) && S.nextTask(w3, "arg-check").next.number === 1,
       "MCP rejects number 1.9 (not an integer) instead of ticking task 1");
     const rObj = await call("spec_create", { name: { a: 1 }, projectDir: w3 });
     ok(rObj.result.isError && /name must be a string/.test(errText(rObj)) && !fs.existsSync(path.join(w3, ".specs", "object-object")),
@@ -78,6 +78,21 @@ exports.run = async ({
     ok(rBig.result.isError && /number must be an integer/.test(errText(rBig)) && /- \[ \] 1\./.test(fs.readFileSync(w3Tasks, "utf8")) &&
       rBigBrief.result.isError && /number must be an integer/.test(errText(rBigBrief)),
       "MCP rejects number 1e21 / 2e300 (parseInt('1e+21') is 1 — task 1 stays open, no brief for the wrong task)");
+    // 1.22 review: a task number is an integer ≥ 1 — the schemas say so (minimum: 1, enforced by the validator): -1 read "number
+    // must be an integer", 0 "Task 0 not found". The engine refuses the CLI's raw word (done / undone / brief) in the same words.
+    const numMin = ["spec_task_brief", "spec_complete_task"].map((n) => ((list.result.tools.find((t) => t.name === n) || {}).inputSchema.properties.number || {}).minimum);
+    const tasksBefore22 = fs.readFileSync(w3Tasks, "utf8");
+    const rNeg22 = await call("spec_task_brief", { name: "arg-check", number: -1, projectDir: w3 });
+    const rZero22 = await call("spec_complete_task", { name: "arg-check", number: 0, evidence: { command: "x", exitCode: 0 }, projectDir: w3 });
+    const rUndo22 = await call("spec_complete_task", { name: "arg-check", number: 0, undo: true, projectDir: w3 });
+    const eng22 = [safe(() => S.completeTask(w3, "arg-check", "0")), safe(() => S.taskBrief(w3, "arg-check", "-1")), safe(() => S.completeTask(w3, "arg-check", 0, undefined, { undo: true })),
+      safe(() => S.taskBrief(w3, "arg-check", "1.9"))];
+    ok(numMin.every((m) => m === 1) && rNeg22.result.isError && /number must be an integer ≥ 1 \(got -1\)/.test(errText(rNeg22)) &&
+      [rZero22, rUndo22].every((r) => r.result.isError && /number must be an integer ≥ 1 \(got 0\)/.test(errText(r))) &&
+      eng22.every((r, i) => r.ok === false && new RegExp("^Invalid argument\\(s\\): number must be an integer ≥ 1 \\(got " + ['"0"', '"-1"', "0", '"1.9"'][i] + "\\)$").test(r.error)) &&
+      fs.readFileSync(w3Tasks, "utf8") === tasksBefore22,
+      "1.22 review: spec_task_brief / spec_complete_task {number} are integers ≥ 1 (schema minimum, enforced): -1 and 0 (tick and undo) are refused as such — and the engine refuses '0' / '-1' / 0 / '1.9' from the CLI in the validator's words; nothing ticked (got " +
+      JSON.stringify([numMin, errText(rNeg22), errText(rZero22), eng22.map((r) => r.error)]) + ")");
 
     // 2. User-controlled keys never index Object.prototype.
     const protoRes = [];
@@ -194,6 +209,19 @@ exports.run = async ({
     const dStale = await dep({ remove: ["gone"] });
     ok(dStale.ok && dStale.dependsOn.join() === "b", "a stale dependency (feature deleted by hand) can still be removed");
     ok(/order must be an integer/.test(safe(() => S.setDependency(dp, "a", undefined, "abc")).error || ""), "a non-integer order is refused by the engine (same as MCP's integer check)");
+    // 1.22 review: an order past Number.MAX_SAFE_INTEGER — MCP's integer is a SAFE integer; the CLI's word "99999999999999999999"
+    // matched the digits and was stored as 1e20. Refused on both surfaces, in the same words; a safe one (negative too) is stored.
+    const ordBefore = fs.readFileSync(dpRm, "utf8");
+    const oMcp = await call("spec_depend", { name: "a", order: 1e20, projectDir: dp });
+    const oEng = [safe(() => S.setDependency(dp, "a", undefined, "99999999999999999999")), safe(() => S.setDependency(dp, "a", undefined, 1e20)),
+      safe(() => S.setDependency(dp, "a", undefined, "9007199254740992"))];
+    const ordAfter = fs.readFileSync(dpRm, "utf8");
+    const oSafe = [safe(() => S.setDependency(dp, "a", undefined, "9007199254740991")).order, safe(() => S.setDependency(dp, "a", undefined, "-3")).order];
+    ok(oMcp.result.isError && /^Invalid argument\(s\): order must be an integer \(got 100000000000000000000\)$/.test(errText(oMcp)) &&
+      oEng.every((r) => r.ok === false && /^Invalid argument\(s\): order must be an integer \(got "?(?:99999999999999999999|100000000000000000000|9007199254740992)"?\)$/.test(r.error)) &&
+      ordAfter === ordBefore && oSafe[0] === 9007199254740991 && oSafe[1] === -3 && S.readRoadmap(dp).features.a.order === -3,
+      "1.22 review: spec_depend / depend refuse an unsafe order (1e20, '99999999999999999999', 2^53) in the MCP validator's words, nothing written; a safe one (MAX_SAFE_INTEGER, -3) is stored (got " +
+      JSON.stringify([errText(oMcp), oEng.map((r) => r.error), oSafe]) + ")");
 
     // 5. One default approver on both surfaces.
     const expectBy = process.env.USER || process.env.USERNAME || "user";
@@ -302,6 +330,15 @@ exports.run = async ({
       rlFalse.status === 0 && /DRY-RUN/.test(rlFalse.stdout) && !rlFalse.called && rlOn.status === 2 && /--require-live/.test(rlOn.stderr),
       "run-evals switches: --set-baseline=false / =0 write no baseline, --dry-run=false with a key runs live, =yes writes it; --dry-run=maybe is a usage error (exit 2, localized) before any call; --require-live=false without a key dry-runs, =on refuses (got " +
       JSON.stringify([sbFalse, sbZero, sbYes, drBad, sbBad, rlFalse, rlOn].map((r) => [r.status, r.called, r.baseline])) + ")");
+    // 1.22 review: the report is text only — --json is a usage error (exit 2, localized) before anything runs, with or without a
+    // feature; it was accepted silently (the text report on stdout, exit 0). --json=false is the switch off, =maybe a bad switch.
+    const evJson = [runEv(["Análise Avançada", "--dry-run", "--json", "--project", evp]), runEv(["--json", "--project", evp])];
+    const evJsonBad = runEv(["Análise Avançada", "--dry-run", "--json=maybe", "--project", evp]);
+    const evJsonOff = runEv(["Análise Avançada", "--dry-run", "--json=false", "--project", evp]);
+    ok(evJson.every((r) => r.status === 2 && r.stdout === "" && /--json não está disponível para 'evals': só imprime texto/.test(r.stderr)) &&
+      evJsonBad.status === 2 && /--json tem de ser um booleano/.test(evJsonBad.stderr) && evJsonOff.status === 0 && /Dry run concluído/.test(evJsonOff.stdout),
+      "1.22 review: run-evals --json is a usage error (exit 2, localized, nothing on stdout) — the report is text; --json=false runs, --json=maybe is a bad switch (got " +
+      JSON.stringify([...evJson, evJsonBad, evJsonOff].map((r) => [r.status, r.stderr.trim().slice(0, 70)])) + ")");
 
     // 7. Pre-commit: NUL-separated staged paths (accents/spaces) and named IDs.
     if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) {
@@ -338,6 +375,27 @@ exports.run = async ({
         /✓ \.specs\/search\/requirements\.md: EARS clean \(1 criteria\)/.test(pcC.stdout) &&
         /sem erros EARS \(2 critérios\), mas 1 aviso\(s\) e 3 placeholder/.test(S.msg("pt").precommit.earsWarnings("x", 2, 1, 3)) && /pero 2 aviso\(s\) — no bloquea/.test(S.msg("es").precommit.earsWarnings("x", 1, 2, 0)),
         "pre-commit never says 'EARS clean' for a template: warnings + staged placeholders are named (exit 0); a real requirements.md is clean (EN/PT/ES)");
+      // 1.22 review: the engine loads only once a staged spec file needs it — a commit staging none (a README, a design.md) exits 0
+      // without it (it cost ~130 ms per commit). A preload records whether mcp/lib/spec.js was loaded when the hook exits.
+      const probe = path.join(tmp, "precommit-probe.js"), probeOut = path.join(tmp, "precommit-probe.txt");
+      fs.writeFileSync(probe, "process.on('exit', () => require('fs').writeFileSync(process.env.PROBE_OUT, Object.keys(require.cache).some((f) => f.split(require('path').sep).join('/').endsWith('/mcp/lib/spec.js')) ? 'engine' : 'none'));\n");
+      const probed = (cwd) => {
+        try { fs.rmSync(probeOut); } catch { /* none yet */ }
+        const r = spawnSync(process.execPath, ["-r", probe, path.join(__dirname, "..", "hooks", "precommit-check.js")], { cwd, encoding: "utf8", env: { ...process.env, PROBE_OUT: probeOut } });
+        let loaded = null;
+        try { loaded = fs.readFileSync(probeOut, "utf8"); } catch { /* the probe never ran */ }
+        return { code: r.status, out: r.stdout, loaded };
+      };
+      const repo3 = path.join(tmp, "proj-22-precommit-lazy");
+      fs.mkdirSync(path.join(repo3, ".specs", "x"), { recursive: true });
+      fs.writeFileSync(path.join(repo3, "README.md"), "# x\n");
+      fs.writeFileSync(path.join(repo3, ".specs", "x", "design.md"), "# Design\n");
+      spawnSync("git", ["init", "-q"], { cwd: repo3 });
+      spawnSync("git", ["add", "-A"], { cwd: repo3 });
+      const lazy = probed(repo3), needed = probed(repo2);
+      ok(lazy.code === 0 && lazy.out === "" && lazy.loaded === "none" && needed.code === pcC.status && needed.loaded === "engine" && needed.out === pcC.stdout,
+        "1.22 review: the pre-commit hook loads the engine only when a staged requirements.md / tasks.md / change.md needs it — none staged (README.md, a design.md): exit 0, nothing loaded; a staged spec file is checked as before (got " +
+        JSON.stringify([lazy, needed.loaded, needed.code]) + ")");
     }
 
     // 8. No invisible code points in this file (the BOM test writes it as an escape).

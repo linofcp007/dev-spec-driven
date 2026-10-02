@@ -13,10 +13,10 @@
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acIndex, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName, noteGhostPacks, packOf, packTracks,
-  readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf;
-function __link(E) { ({ acIndex, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName, noteGhostPacks,
-  packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf } = E); }
+let acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName, noteGhostPacks, packOf,
+  packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf;
+function __link(E) { ({ acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName,
+  noteGhostPacks, packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf } = E); }
 
 const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
@@ -163,12 +163,23 @@ function trackAcIds(reqText, tr) {
 }
 // The heading of a track's template task block as it appears in tasks.md (in any language), or null.
 const normTaskHeading = (l) => l.replace(/^#{1,6}\s+/, "").replace(/\s+/g, " ").trim().toLowerCase();
-const TASK_HEADINGS = new Map(); // built-in track → its template task headings (static i18n text: built once per process)
+// built-in track → its template task headings (static i18n text: built once per process; markdown.js clears it with the
+// corpus it came from — localeLoaded)
+const TASK_HEADINGS = new Map();
+// A track's template task headings in every language (normalized, unique), rendered from the i18n tables — each language's
+// taskBlock. The pre-generated corpus holds them for the built-in tracks (renderCorpusData's taskHeadings).
+function renderTrackTaskHeadings(tr) {
+  return [...new Set(i18n.LANGS.map((l) => (i18n.msg(l).tracks.taskBlock(tr, 1).match(/^#{1,6}\s.*$/m) || [""])[0]).filter(Boolean).map(normTaskHeading))];
+}
 function trackTaskHeadings(tr) {
   if (isPackTrack(tr)) return new Set(); // a track pack's block is found by its marker (trackTaskHeadingIs)
   let set = TASK_HEADINGS.get(tr);
   if (!set) {
-    set = new Set(i18n.LANGS.map((l) => (i18n.msg(l).tracks.taskBlock(tr, 1).match(/^#{1,6}\s.*$/m) || [""])[0]).filter(Boolean).map(normTaskHeading));
+    // A built-in track's come from the pre-generated corpus when this process trusts it (builtinTaskHeadings): rendering them
+    // loads every language's file — pt.js, es.js and the derived pt-BR, 50–65 ms of an English `list` (1.22 review: a process
+    // pays only for the languages it speaks). Else, and for any other name, rendered.
+    const built = VALID_TRACKS.includes(tr) ? builtinTaskHeadings(tr) : null;
+    set = new Set(built || renderTrackTaskHeadings(tr));
     if (VALID_TRACKS.includes(tr)) TASK_HEADINGS.set(tr, set);
   }
   return set;
@@ -1471,7 +1482,7 @@ const SIGNALS = {
 module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, parseTracks, normalizeTracks,
   TRACK_ALIASES, suggestTrack, unknownTracksError, trackLabel, SIGNALS, allTracks, optionalTracks, markerTracks, trackMarker, trackSectionTable, trackSteeringFiles, trackSignalTable,
   detectTracks, savedTracks, headingHasMarker, TRACK_MARKER, MARKER_TRACKS, trackAcIds, normTaskHeading, TASK_HEADINGS,
-  trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
+  renderTrackTaskHeadings, trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
   inactiveMarkerLines, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
   SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, OBS_SECTIONS, DATA_SECTIONS, TRACK_SECTIONS,
   TRACK_OVERLAPS, TRACK_TASK_OVERLAPS, activeSectionTracks, activeDesign, __link };

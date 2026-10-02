@@ -70,6 +70,51 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     ij13.code === 1 && ij13.j && ij13.j.ok === false && ij13.j.neverApproved === true && JSON.stringify(ij13.j) === JSON.stringify(S13.impactReport(b13, "billing", {})) &&
     sj13.code === 1 && sj13.j && sj13.j.ok === false && typeof sj13.j.error === "string",
     "--json on a refusal prints the engine result on stdout (recorded / neverApproved kept, = MCP) and exits 1");
+  // 1.22 review: --json where the output is text only — the help (help, no command, --help anywhere), rules, mcp-config, evals —
+  // is a usage error (exit 1, nothing on stdout, localized): it printed the text on stdout with exit 0 (evals handed it on to
+  // run-evals.js, which took it silently). --json=false still prints them.
+  const raw22 = (args, project = b13) => spawnSync(process.execPath, [CLI, ...args, "--project", project], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } });
+  const txt22 = [["help", "--json"], ["--json"], ["status", "--help", "--json"], ["rules", "agents", "--json"], ["mcp-config", "cursor", "--json"],
+    ["evals", "billing", "--json"], ["evals", "--json", "billing"]].map((a) => raw22(a));
+  const what22 = ["help", "help", "help", "rules", "mcp-config", "evals", "evals"];
+  const pj22 = path.join(tmp, "wp22-json-pt");
+  run(["init", "--lang", "pt", "--project", pj22]);
+  const ptTxt22 = raw22(["mcp-config", "--json"], pj22);
+  const off22 = [raw22(["help", "--json=false"]), raw22(["rules", "agents", "--json=false"]), raw22(["mcp-config", "cursor", "--json=false"])];
+  ok(txt22.every((r, i) => r.status === 1 && r.stdout === "" && r.stderr.trim() === "dev-spec: --json is not available for '" + what22[i] + "': it prints text only. Run it without --json.") &&
+    ptTxt22.status === 1 && ptTxt22.stdout === "" && /--json não está disponível para 'mcp-config': só imprime texto/.test(ptTxt22.stderr) &&
+    off22.every((r) => r.status === 0 && r.stdout.length > 50),
+    "1.22 review: --json on help / no command / --help, rules, mcp-config and evals exits 1 with a localized usage error and nothing on stdout (never their text as if it were JSON); --json=false prints them (got " +
+    JSON.stringify(txt22.map((r) => [r.status, r.stdout.slice(0, 20), r.stderr.trim().slice(0, 60)]).concat([[ptTxt22.status, ptTxt22.stderr.trim().slice(0, 60)]], off22.map((r) => r.status))) + ")");
+  // 1.22 review: evals exits 1 when the harness never ran (a spawn error) or was killed by a signal — `res.status || 0` made both
+  // exit 0. Windows: a command line past CreateProcess's limit (32,767 characters) can't start run-evals.js (ENAMETOOLONG) while
+  // the CLI's own — shorter by the `--project <dir>` it adds — still starts; elsewhere a preload kills the harness (SIGKILL).
+  {
+    let ev22;
+    if (process.platform === "win32") {
+      const q = (a) => (/[\s"]/.test(a) ? a.length + 2 : a.length); // libuv's quoting of a path (spaces, no quotes, no trailing backslash)
+      const head = [process.execPath, CLI, "evals", "billing"].reduce((n, a) => n + q(a) + 1, 0);
+      const filler = "x".repeat(32766 - 12 - head); // the CLI's command line: 12 characters under the limit
+      ev22 = spawnSync(process.execPath, [CLI, "evals", "billing", filler], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: b13 } });
+      ok(ev22.status === 1 && /ENAMETOOLONG/.test(ev22.stderr),
+        "1.22 review: evals whose harness can't start (a spawn error: ENAMETOOLONG) exits 1, never 0 (got " + JSON.stringify([ev22.status, ev22.stderr.trim().slice(0, 120)]) + ")");
+    } else {
+      const kill22 = path.join(tmp, "kill-run-evals.js");
+      fs.writeFileSync(kill22, "if (/run-evals\\.js$/.test(process.argv[1] || '')) process.kill(process.pid, 'SIGKILL');\n");
+      ev22 = spawnSync(process.execPath, [CLI, "evals", "billing", "--dry-run", "--project", b13], { encoding: "utf8", env: { ...process.env, NODE_OPTIONS: "--require \"" + kill22 + "\"" } });
+      ok(ev22.status === 1,
+        "1.22 review: evals whose harness is killed by a signal (SIGKILL) exits 1, never 0 (got " + JSON.stringify([ev22.status, ev22.signal, ev22.stderr.trim().slice(0, 120)]) + ")");
+    }
+  }
+  // 1.22 review: a task number is an integer ≥ 1 (spec_task_brief / spec_complete_task's schema minimum) — done / undone / brief
+  // refuse 0 and -1 in the MCP validator's words (they answered "Task 0 not found" / "must be an integer"), before anything runs.
+  const num22 = [["done", "billing", "0", "--run"], ["done", "billing", "-1"], ["undone", "billing", "0"], ["brief", "billing", "0", "--write"], ["brief", "billing", "-1"]]
+    .map((a) => run([...a, "--project", b13]));
+  const numJ22 = runJ(["done", "billing", "0", "--json", "--project", b13]);
+  ok(num22.every((r) => r.code === 1 && /Invalid argument\(s\): number must be an integer ≥ 1 \(got "(?:0|-1)"\)/.test(r.out) && !/^\$ /m.test(r.out)) &&
+    !fs.existsSync(path.join(ex13, "task-0-brief.md")) && numJ22.code === 1 && numJ22.j && numJ22.j.ok === false && /≥ 1 \(got "0"\)/.test(numJ22.j.error),
+    "1.22 review: done 0 --run / done -1 / undone 0 / brief 0 / brief -1 exit 1 — 'number must be an integer ≥ 1', as MCP refuses them; nothing runs or is written; --json prints the refusal (got " +
+    JSON.stringify(num22.map((r) => [r.code, r.out.trim().slice(0, 80)])) + ")");
   // PT / ES: every line of status, doctor, depend, add-track, ears, usage and unknown command in the project/feature language.
   const pt13 = path.join(tmp, "wp13-pt");
   run(["init", "--lang", "pt", "--project", pt13]);

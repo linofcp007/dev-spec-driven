@@ -700,6 +700,36 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
       "1.20 build: this process reads the committed corpus (source 'file' — its version and sources stamps match this engine) and every built-in set is exactly the rendered one: templateSets, templateSetsBr, templateTaskSet, the bug steps (got " +
       js({ source: E.builtinCorpusSource(), sizes: pairs.map(([s, l]) => [s.size, l.length]) }) + ")");
 
+    // 1.22 review: the built-in tracks' template task headings (trackTaskHeadings — which tasks.md block belongs to a track that
+    // is off) come from the corpus: rendered, they loaded pt.js, es.js and the derived pt-BR into every English process that
+    // lists features (50–65 ms). They are exactly the live i18n's, track × language; an English `list` loads no other language.
+    const fileCorpus = JSON.parse(fs.readFileSync(path.join(libDir, "engine", E.CORPUS_FILE), "utf8"));
+    const headLive = (t, l) => { const m = I.msg(l).tracks.taskBlock(t, 1).match(/^#{1,6}\s.*$/m); return m ? E.normTaskHeading(m[0]) : null; };
+    const headDiff = [];
+    for (const t of E.VALID_TRACKS) {
+      const got = E.trackTaskHeadings(t), live = sorted(new Set(I.LANGS.map((l) => headLive(t, l)).filter(Boolean)));
+      for (const l of I.LANGS) if (headLive(t, l) !== null && !got.has(headLive(t, l))) headDiff.push([t, l]);
+      if (js(sorted(got)) !== js(live) || js((fileCorpus.taskHeadings || {})[t]) !== js(live) || js(fresh.taskHeadings[t]) !== js(live)) headDiff.push([t, "set"]);
+    }
+    const proj22 = path.join(tmp, "p22-list-en");
+    S.initProject(proj22, ["core"], "en");
+    ["core", "saas", "ai", "data"].forEach((t, i) => S.createFeature(proj22, "Feature " + i, [t], "", undefined, "en"));
+    const offTrack = S.removeTrack(proj22, "feature-1", "saas"); // its [SaaS] task block stays on disk, inactive
+    const listChild = function (lib, proj) {
+      const path = require("path");
+      const S = require(path.join(lib, "spec.js")), E = require(path.join(lib, "engine", "index.js"));
+      const r = S.listFeatures(proj);
+      const loaded = Object.keys(require.cache).map((f) => f.split(path.sep).join("/")).filter((f) => f.includes("/lib/i18n/")).map((f) => path.posix.basename(f)).sort();
+      process.stdout.write(JSON.stringify({ features: r.features.map((f) => [f.name, f.phase, f.tasksDone, f.tasks]), loaded, source: E.builtinCorpusSource() }));
+    };
+    const listed = spawnJson([script("p22-list.js", listChild, "process.argv[2], process.argv[3]"), libDir, proj22], process.env);
+    const here22 = S.listFeatures(proj22).features.map((f) => [f.name, f.phase, f.tasksDone, f.tasks]);
+    ok(headDiff.length === 0 && E.MARKER_TRACKS.every((t) => E.trackTaskHeadings(t).size >= 3) && offTrack.ok &&
+      Array.isArray(listed.loaded) && listed.loaded.includes("common.js") && !listed.loaded.some((f) => ["pt.js", "es.js", "pt-br.js"].includes(f)) &&
+      listed.source === "file" && js(listed.features) === js(here22) && here22.length === 4,
+      "1.22 review: every built-in track's task headings (corpus, file and rendered) are exactly the live i18n's for each language; listing the features of an English project (a turned-off [SaaS] block included) loads no pt.js, es.js or pt-br.js and lists exactly what this process does (got " +
+      js({ headDiff, loaded: listed.loaded, source: listed.source, features: listed.features, here22 }) + ")");
+
     // CORPUS_SOURCES — what the sources stamp hashes — lists every mcp/lib file whose functions run while the corpus renders (V8
     // coverage of renderCorpusData, the counters reset once every language has loaded): a render that came to depend on another
     // module would otherwise keep a stale corpus after an edit there.

@@ -1262,7 +1262,6 @@ const msg = {
       roadmapBusy: "Another dev-spec process is updating .specs/roadmap.json right now (.specs/.roadmap.lock) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.",
       folderInUse: (rel) => `The folder ${rel} is in use by another program (an editor, a file indexer or antivirus, a terminal opened inside it) — nothing was moved or deleted; close it and try again.`,
       lockStuck: (rel) => `A stale dev-spec lock (${rel}) could not be removed — the file (or a folder of that name) is held open by another program, read-only, or not a file. Nothing was changed. Delete ${rel} by hand (check its permissions), then retry.`,
-      numberInt: "number must be an integer",
       noText: "No text provided.",
       unknownPhase: (phase, known) => `Unknown phase '${phase}'. Known: ${known}`,
       alreadyArchived: (slug) => `'${slug}' is already archived (.specs/_archive/${slug}). Remove it there first.`,
@@ -1479,7 +1478,6 @@ const msg = {
       already: (n, verified, done, total) => `Task ${n} was already done${verified ? " (verified)" : ""}. ${done}/${total}`,
       next: (n, text) => `  next → #${n} ${text}`,
       allDone: "  — all done ✓",
-      numberInt: "task number must be an integer",
       noRunnable: (n) => `task ${n} has no runnable _Verify: <command>_ marker`,
       shellHint: "Hint: the default Windows shell (cmd.exe) could not run this command line as written. If the _Verify:_ command is written for a POSIX shell, retry with --shell bash (or set DEV_SPEC_SHELL=bash).",
       posixOnWindows: (cmd, kinds) => `the _Verify:_ command \`${cmd}\` uses POSIX shell syntax (${kinds.map((k) => ({ "single-quotes": "single quotes '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) that cmd.exe — the default shell of --run on Windows — reads differently, often without failing: it has no single quotes and never expands $VAR, so a broken check could be recorded as a passing run. Nothing was run; the task stays open. Re-run with --shell bash (Git Bash; or set DEV_SPEC_SHELL=bash), with --shell pwsh for a PowerShell command (or hand PowerShell the script in double quotes: pwsh -NoProfile -Command "…") — or --shell cmd to run it under cmd.exe anyway.`,
@@ -1542,7 +1540,6 @@ const msg = {
     },
     depend: {
       unknown: (list) => `Every dependency must be an existing feature — not found: ${list}`,
-      orderInt: (v) => `order must be an integer (got '${v}').`,
     },
     // mcp/evals/run-evals.js human output (in the feature's language).
     evals: {
@@ -1689,6 +1686,8 @@ const msg = {
       usage: (syntax) => `usage: ${syntax}`,
       unknownCommand: (c) => `unknown command '${c}'. Run \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `unknown client '${c}'. Known: ${known}`,
+      // 1.22 review: --json on a command that prints text only (help, rules, mcp-config, evals) — a usage error, never that text
+      noJson: (c) => `--json is not available for '${c}': it prints text only. Run it without --json.`,
     },
 
     // Gates: template placeholders, the approve gate (+ force), finish blockers, the bugfix execution gate,

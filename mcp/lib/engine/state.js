@@ -354,6 +354,12 @@ function setDependency(projectDir, name, dependsOn, order, edits) {
   if (r.ok) delete r.changed;
   return r;
 }
+// A roadmap order as a caller gave it (a number over MCP, the raw word on the CLI) → the safe integer, or null.
+function orderInput(v) {
+  if (typeof v === "number") return Number.isSafeInteger(v) ? v : null;
+  const s = String(v).trim();
+  return /^-?\d+$/.test(s) && Number.isSafeInteger(Number(s)) ? Number(s) : null;
+}
 function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
   edits = edits || {};
   const f = existingFeature(projectDir, name);
@@ -378,7 +384,14 @@ function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
   const replaced = dependsOn === undefined || dependsOn === null ? null : resolveDeps(dependsOn);
   const added = resolveDeps(edits.add);
   if (unknownNames.length) return { ok: false, error: D.unknown(unknownNames.join(", ")) };
-  if (order != null && !/^-?\d+$/.test(String(order).trim())) return { ok: false, error: D.orderInt(order) };
+  // order: a SAFE integer, as spec_depend's schema ({type: "integer"} — no bound) — the CLI passes the raw word, and
+  // `--order 99999999999999999999` matched the digits and was stored as 1e20 (1.22 review). Refused with the MCP
+  // validator's own message (args), so both surfaces refuse the same values alike.
+  const orderNum = order == null ? null : orderInput(order);
+  if (order != null && orderNum === null) {
+    const A = i18n.msg(projectLang(projectDir)).args;
+    return { ok: false, error: A.invalid(A.item("order", A.type.integer, JSON.stringify(typeof order === "number" ? order : String(order)))) };
+  }
   // Removals match the slug as typed, transliterated or legacy — a stale dep on a deleted feature can go too.
   const drop = new Set(names(edits.remove).flatMap((d) => [d, slugify(d), resolveFeature(projectDir, d).slug]).filter(Boolean));
 
@@ -402,7 +415,7 @@ function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
 
   rm.features[slug] = rm.features[slug] || {};
   rm.features[slug].dependsOn = finalDeps;
-  if (order != null) rm.features[slug].order = parseInt(String(order).trim(), 10);
+  if (orderNum !== null) rm.features[slug].order = orderNum;
   writeRoadmap(projectDir, rm);
   return { ok: true, changed: true, feature: slug, dependsOn: finalDeps, order: rm.features[slug].order, unknownDeps: unknown };
 }
