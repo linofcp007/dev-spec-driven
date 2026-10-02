@@ -10,9 +10,9 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isInsideDir, isObj, isSlashUnit, listFeatures,
+let FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isDirSafe, isInsideDir, isObj, isSlashUnit, listFeatures,
   projectLang, readDirCached, readFileHead, readIfExists, safeReaddir, specsRoot, stripEnd;
-function __link(E) { ({ FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isInsideDir, isObj, isSlashUnit,
+function __link(E) { ({ FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isDirSafe, isInsideDir, isObj, isSlashUnit,
   listFeatures, projectLang, readDirCached, readFileHead, readIfExists, safeReaddir, specsRoot, stripEnd } = E); }
 
 // ---------------------------------------------------------------------------
@@ -62,40 +62,165 @@ const SCAN_READ_CAP = 1500; // code files whose text is read (routes, env names,
 const SCAN_READ_BYTES = 200000;
 const SCAN_ROUTE_CAP = 200; // routes listed — candidateEndpoints still counts every one found
 const SCAN_LIST_CAP = 100; // entrypoints / migrations listed (env names: twice that)
-const COVERAGE_CAP = 20000; // files walked by coverage()
+const COVERAGE_CAP = 20000; // code files walked by coverage() (every file, for the other walks that default to it)
+// 1.22 review — a COUNTING walk (opts.counts: the scan, coverage) bounds the files that count (code, manifests) by its cap and
+// every folder entry it examines by this one: 6,000 PNGs in assets/ before src/ no longer use up the cap before the first code
+// file, and a huge tree still ends.
+const WALK_ENTRY_CAP = 200000;
 
 // Bounded, read-only, alphabetical walk (hidden dirs and SCAN_IGNORE skipped; symlinks never followed — a link
 // out of the project is not read). onFile(rel, full, name) gets a forward-slash path relative to the root.
 // opts.maxDepth: folder levels below the root to enter (0 = the root's own files); onFile returning WALK_STOP ends the walk.
 // opts.allowDir(name): a hidden / SCAN_IGNORE folder this walk enters anyway (a glob that spells `dist` or `.generated`).
+// opts.counts(rel, name) (1.22 review): only the files it says yes to count toward `cap` (every other file is still visited),
+// opts.entryCap (default WALK_ENTRY_CAP) bounds the entries examined, and `truncated` means a counted file — or, past entryCap,
+// any entry — was left unvisited. Without it every file counts and `truncated` is "the cap was reached" (the other walks).
+// opts.gitignore (gitignoreRules — the scan and coverage): a folder its `dir(rel)` names is skipped, and so is one (not the
+// root) whose own .gitignore ignores everything in it. → { total (counted files), files (visited), truncated }.
 // Folder listings come from the per-call read cache (readDirCached). `full` is absolute (under path.resolve(root)) and
 // both paths are built by concatenation — path.relative / path.join cost ~15 µs a file on Windows, most of a `**` walk.
 const WALK_STOP = Symbol("walk-stop");
 function walkProject(root, cap, onFile, opts = {}) {
-  let total = 0;
+  let total = 0, files = 0, seen = 0;
   const maxDepth = opts.maxDepth == null ? Infinity : opts.maxDepth;
+  const counts = typeof opts.counts === "function" ? opts.counts : null;
+  const entryCap = counts ? opts.entryCap || WALK_ENTRY_CAP : Infinity;
+  const gi = opts.gitignore || null;
   const stack = [[path.resolve(root), 0, ""]]; // [absolute folder, depth, its forward-slash path from the root]
-  let stopped = false;
-  while (stack.length && total < cap && !stopped) {
+  let stopped = false, over = false;
+  while (stack.length && !stopped && (counts ? !over : total < cap)) {
     const [d, depth, relDir] = stack.pop();
     const entries = readDirCached(d);
     if (!entries) continue;
     const pre = d.endsWith(path.sep) ? d : d + path.sep; // a drive / file-system root already ends in a separator
     const relPre = relDir ? relDir + "/" : "";
+    if (gi && relDir && gitignoredFolder(entries, pre)) continue;
     const dirs = [];
     for (const e of entries) {
-      if (total >= cap) break;
+      if (counts) { if (seen++ >= entryCap) { over = true; break; } } else if (total >= cap) break;
       if (e.isDirectory() && (e.name.startsWith(".") || SCAN_IGNORE.has(e.name))) {
         if (!(opts.allowDir && opts.allowDir(e.name))) continue; // hidden dirs: VCS, tool caches, worktrees
       } else if (SCAN_IGNORE.has(e.name)) continue;
-      if (e.isDirectory()) { if (depth < maxDepth) dirs.push(e.name); continue; }
+      if (e.isDirectory()) { if (depth < maxDepth && !(gi && gi.dir && gi.dir(relPre + e.name))) dirs.push(e.name); continue; }
       if (!e.isFile()) continue;
-      total++;
-      if (onFile(relPre + e.name, pre + e.name, e.name) === WALK_STOP) { stopped = true; break; }
+      const rel = relPre + e.name;
+      if (!counts) total++;
+      else if (counts(rel, e.name)) { if (total >= cap) { over = true; break; } total++; }
+      files++;
+      if (onFile(rel, pre + e.name, e.name) === WALK_STOP) { stopped = true; break; }
     }
-    if (!stopped) for (let i = dirs.length - 1; i >= 0; i--) stack.push([pre + dirs[i], depth + 1, relPre + dirs[i]]);
+    if (!stopped && !over) for (let i = dirs.length - 1; i >= 0; i--) stack.push([pre + dirs[i], depth + 1, relPre + dirs[i]]);
   }
-  return { total, truncated: !stopped && total >= cap };
+  return { total, files, truncated: counts ? over : !stopped && total >= cap };
+}
+
+// 1.22 review — generated and vendored folders the scan and coverage walks leave out beyond SCAN_IGNORE (.NET obj/, Elixir
+// deps/ and _build/, iOS Pods/…: their AssemblyInfo.cs / GlobalUsings.g.cs were production code, and their routes phantom
+// ones): the project ROOT .gitignore's plain directory patterns — a name, optionally with a leading and / or trailing '/',
+// or a path of such names (a slash inside anchors it to the root, as in git), each name literal or with simple character
+// classes ([Bb]in/, [Oo]bj/, [a-z]) — matched against folders only. Negations, wildcards (* ? **), escapes and negated classes
+// are left out: a pattern read wrongly would hide real code. And a folder (never the root) whose OWN .gitignore ignores
+// everything in it — '*', re-including at most .gitignore / .gitkeep / .keep — as Laravel's storage/framework/views/ and
+// bootstrap/cache/ do. Never a built-in name list: Ruby and Node keep real code in bin/.
+const GITIGNORE_MAX_CHARS = 100000;
+const GITIGNORE_MAX_PATTERNS = 2000;
+// One name of a pattern → its units (a character, or the Set a class allows), or null when it holds anything else.
+function gitignoreName(s) {
+  if (!s || s === "." || s === "..") return null;
+  const units = [];
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "*" || c === "?" || c === "]" || c === "\\") return null;
+    if (c !== "[") { units.push(c); continue; }
+    const close = s.indexOf("]", i + 1);
+    if (close <= i + 1) return null;
+    const body = s.slice(i + 1, close);
+    if (body[0] === "!" || body[0] === "^" || body.includes("[") || body.includes("\\")) return null;
+    const set = new Set();
+    for (let j = 0; j < body.length; j++) {
+      if (body[j + 1] === "-" && j + 2 < body.length) {
+        const a = body.charCodeAt(j), b = body.charCodeAt(j + 2);
+        if (b < a || b - a > 256) return null;
+        for (let k = a; k <= b; k++) set.add(String.fromCharCode(k));
+        j += 2;
+      } else set.add(body[j]);
+    }
+    units.push(set);
+    i = close;
+  }
+  return units;
+}
+// .gitignore text → [{ anchored, names: [units…] }] (the plain directory patterns above; folded where the file system folds case).
+function gitignoreDirPatterns(text) {
+  const out = [];
+  for (const raw of String(text).split(/\r?\n/)) {
+    let l = raw.trim();
+    if (!l || l[0] === "#" || l[0] === "!") continue;
+    if (FOLD_CASE) l = l.toLowerCase();
+    let anchored = false;
+    if (l[0] === "/") { anchored = true; l = l.slice(1); }
+    if (l.endsWith("/")) l = l.slice(0, -1);
+    const segs = l.split("/");
+    if (segs.length > 1) anchored = true; // a slash inside the pattern anchors it to the .gitignore's folder (git)
+    const names = segs.map(gitignoreName);
+    if (!names.length || names.some((n) => !n)) continue;
+    out.push({ anchored, names });
+    if (out.length >= GITIGNORE_MAX_PATTERNS) break;
+  }
+  return out;
+}
+function gitignoreNameMatch(units, name) {
+  if (units.length !== name.length) return false;
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    if (typeof u === "string" ? u !== name[i] : !u.has(name[i])) return false;
+  }
+  return true;
+}
+// The rules of the project's ROOT .gitignore (read only when it is a file inside the project) → { dir(relFolder) | null } for
+// walkProject's opts.gitignore. `dir` gets a folder's forward-slash path from the root; its parents were already let in.
+function gitignoreRules(root, realRoot) {
+  const file = path.join(root, ".gitignore");
+  const pats = projectFileInside(realRoot || root, file) ? gitignoreDirPatterns(readFileHead(file, GITIGNORE_MAX_CHARS) || "") : [];
+  const floating = pats.filter((p) => !p.anchored).map((p) => p.names[0]);
+  const anchored = pats.filter((p) => p.anchored).map((p) => p.names);
+  const dir = (rel) => {
+    const segs = (FOLD_CASE ? String(rel).toLowerCase() : String(rel)).split("/");
+    const last = segs[segs.length - 1];
+    if (floating.some((u) => gitignoreNameMatch(u, last))) return true;
+    return anchored.some((names) => names.length === segs.length && names.every((u, k) => gitignoreNameMatch(u, segs[k])));
+  };
+  return { dir: pats.length ? dir : null };
+}
+// A .gitignore that ignores everything in its folder: '*' (or '/*', '**', '/**', '**/*'), re-including at most the
+// placeholder files that keep the empty folder in git. Any other rule → no (a narrower or a mixed list).
+function gitignoresAll(text) {
+  let all = false;
+  for (const raw of String(text).split(/\r?\n/)) {
+    const l = raw.trim();
+    if (!l || l[0] === "#") continue;
+    if (l === "*" || l === "/*" || l === "**" || l === "/**" || l === "**/*") { all = true; continue; }
+    if (/^!\/?\.(?:gitignore|gitkeep|keep)$/.test(l)) continue;
+    return false;
+  }
+  return all;
+}
+function gitignoredFolder(entries, pre) {
+  const g = entries.find((e) => e.name === ".gitignore");
+  return !!g && g.isFile() && gitignoresAll(readFileHead(pre + ".gitignore", 4000) || "");
+}
+// A ROOT file the scan reads (a manifest, the .gitignore): a regular file, or a link whose real path stays inside the project —
+// a committed `package.json -> /home/me/.npmrc` is never read (1.22 review; the walk itself never follows a link). realRoot: the
+// project's real path.
+function projectFileInside(realRoot, full) {
+  try {
+    const st = fs.lstatSync(full);
+    if (!st.isSymbolicLink()) return st.isFile();
+    const real = fs.realpathSync.native(full);
+    return isInsideDir(realRoot, real) && fs.statSync(real).isFile();
+  } catch {
+    return false;
+  }
 }
 
 // Test code: under a test folder, or named like a test in its language. Reported apart by scan and coverage. ONE rule —
@@ -143,8 +268,11 @@ function testNamed(rel) {
     (/\.t$/i.test(name) && parts.some((p) => PERL_TEST_DIRS.has(p.toLowerCase())));
 }
 const extOf = (rel) => { const r = String(rel); return path.posix.extname(r.slice(r.lastIndexOf("/") + 1)).toLowerCase(); };
+// 1.22 review — and every file under a testdata/ folder (Go's convention: the toolchain ignores it — fixture sources, golden
+// files): neither code nor a test, never read for routes (a fixture's http.HandleFunc was a phantom route).
+const RE_TESTDATA_DIR = /(?:^|\/)testdata\//i;
 function isTestFixture(rel) {
-  return TEST_DATA_EXT.has(extOf(rel)) && isTestFile(rel) && !testNamed(rel);
+  return RE_TESTDATA_DIR.test(String(rel)) || (TEST_DATA_EXT.has(extOf(rel)) && isTestFile(rel) && !testNamed(rel));
 }
 // Is this project-relative (forward-slash) path code? Its extension is in CODE_EXT, or it is a test-only one
 // (TEST_EXTRA_EXT) on a file that IS a test. The scan, coverage, the test-code scan and guard mode ask this (the first three
@@ -241,6 +369,32 @@ function springPaths(args) {
   const src = named ? named[1] : lead ? lead[1] : "";
   const lits = [...src.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
   return lits.length ? lits : [""];
+}
+
+// The action an ASP.NET route attribute on line i decorates: the first public / internal / protected method declared on that
+// line (after its attributes) or the next few — its name, without the "Async" suffix ASP.NET Core drops by default. null: none.
+function aspActionName(lines, i) {
+  for (let j = i; j < lines.length && j <= i + 8; j++) {
+    const l = lines[j];
+    if (l.length > 4000) return null;
+    const m = /(?:^|[\s\]])(?:public|internal|protected)\s/.exec(l);
+    if (!m) {
+      const t = l.trim(); // between the attribute and its method: blank lines, more attributes, comments
+      if (j > i && t && !t.startsWith("[") && !t.startsWith("//")) return null;
+      continue;
+    }
+    const decl = l.slice(m.index);
+    let e = decl.indexOf("(");
+    if (e === -1) return null;
+    while (e > 0 && /\s/.test(decl[e - 1])) e--;
+    if (decl[e - 1] === ">") { const lt = decl.lastIndexOf("<", e - 1); if (lt === -1) return null; e = lt; while (e > 0 && /\s/.test(decl[e - 1])) e--; }
+    let b = e;
+    while (b > 0 && /\w/.test(decl[b - 1])) b--;
+    if (b === e) return null;
+    const name = decl.slice(b, e);
+    return name.replace(/Async$/, "") || name;
+  }
+  return null;
 }
 
 // The routes one (non-test) source file declares: [{ method, path, file, line, framework }].
@@ -344,12 +498,23 @@ function scanRoutes(rel, text) {
     });
   } else if (ext === ".cs") {
     const classLine = lines.findIndex((l) => /\bclass\s+\w+/.test(l));
+    // ASP.NET's route tokens (1.22 review — "/api/[controller]/{id}" was listed as written): [controller] is the class name
+    // without its "Controller" suffix, [action] the method the attribute decorates (aspActionName); one it can't name stays.
+    const cls = classLine === -1 ? null : lines[classLine].match(/\bclass\s+(\w+)/)[1];
+    const ctrl = cls ? cls.replace(/Controller$/, "") || cls : null;
+    const tokens = (p, i) => {
+      let s = p;
+      if (ctrl && /\[controller\]/i.test(s)) s = s.replace(/\[controller\]/gi, () => ctrl);
+      if (/\[action\]/i.test(s)) { const a = aspActionName(lines, i); if (a) s = s.replace(/\[action\]/gi, () => a); }
+      return s;
+    };
     let prefix = "";
     lines.forEach((l, i) => {
       if (skipLine(l)) return;
       const r = l.match(RE_ASP_ROUTE_ATTR);
       if (r && (classLine === -1 || i < classLine)) prefix = r[1]; // [Route("api/[controller]")] on the controller
-      each(RE_ASP_ATTR, l, (m) => add(m[1], joinRoute(prefix, m[2] || ""), i, "aspnet"));
+      // the class-level [Route] prefixes every method-level [HttpGet("x")] below it
+      each(RE_ASP_ATTR, l, (m) => add(m[1], tokens(joinRoute(prefix, m[2] || ""), i), i, "aspnet"));
       each(RE_ASP_MAP, l, (m) => add(m[1] || "ANY", m[2], i, "aspnet")); // minimal APIs: app.MapGet("/x", …)
     });
   } else if (ext === ".rb") {
@@ -453,6 +618,24 @@ const normEntry = (p) => String(p).trim().replace(/\\/g, "/").replace(/^\.\//, "
 
 const NODE_FRAMEWORKS = { express: "express", koa: "koa", "@koa/router": "koa", "koa-router": "koa", fastify: "fastify", hono: "hono", "@nestjs/core": "nestjs", next: "next.js", "@hapi/hapi": "hapi", restify: "restify" };
 const NODE_TEST_RUNNERS = { jest: "jest", vitest: "vitest", mocha: "mocha", ava: "ava", jasmine: "jasmine", tap: "tap", "@playwright/test": "playwright", cypress: "cypress", uvu: "uvu" };
+// The manifests the scan reads at the root (by name; *.csproj, *.psd1, *.cabal, *.nimble by extension) — the files its cap
+// counts besides code (scanCounts, 1.22 review: a cap spent on 6,000 PNGs read no code at all).
+const MANIFEST_NAMES = new Set(["package.json", "requirements.txt", "requirements-dev.txt", "pyproject.toml", "setup.py", "setup.cfg",
+  "Pipfile", "go.mod", "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile", "composer.json", "Cargo.toml", "CMakeLists.txt",
+  "meson.build", "Makefile", "makefile", "GNUmakefile", "configure.ac", "DESCRIPTION", "mix.exs", "rebar.config", "pubspec.yaml",
+  "build.sbt", "Package.swift", "stack.yaml", "cabal.project", "deps.edn", "project.clj", "shadow-cljs.edn", "Project.toml",
+  "build.zig", "dune-project", "cpanfile", "Makefile.PL", "Build.PL", "pytest.ini", "phpunit.xml", "phpunit.xml.dist"]);
+const isManifestName = (name) => MANIFEST_NAMES.has(name) || /\.(?:csproj|psd1|cabal|nimble)$/i.test(name);
+const scanCounts = (rel, name) => (isCodeFile(rel) && !isTestFixture(rel)) || isManifestName(name);
+// 1.22 review — monorepos: the manifests read BELOW the root too (apps/web/package.json, apps/api/pyproject.toml,
+// services/billing/go.mod) — a package's own manifest, never a per-folder build file (CMakeLists.txt, Makefile) — at most
+// NESTED_MANIFEST_CAP of them read (every name found still counts for the stack); never one in a fixtures / testdata folder.
+const NESTED_MANIFESTS = new Set(["package.json", "requirements.txt", "requirements-dev.txt", "pyproject.toml", "setup.py", "setup.cfg",
+  "Pipfile", "go.mod", "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile", "composer.json", "Cargo.toml", "mix.exs",
+  "rebar.config", "pubspec.yaml", "build.sbt", "Package.swift", "stack.yaml", "deps.edn", "project.clj", "Project.toml",
+  "build.zig", "dune-project", "cpanfile"]);
+const NESTED_MANIFEST_CAP = 20;
+const MANIFEST_FIXTURE_DIRS = new Set(["fixtures", "__fixtures__", "testdata"]);
 
 function scanCodebase(projectDir, opts = {}) {
   const root = path.resolve(projectDir);
@@ -461,6 +644,8 @@ function scanCodebase(projectDir, opts = {}) {
   const cap = Number.isSafeInteger(opts.cap) && opts.cap >= 1 ? opts.cap : 5000;
   const lang = projectLang(projectDir);
   const B = i18n.msg(lang).brownfield;
+  // 1.22 review — a path that is no folder (a typo, a file) is an error, never an empty codebase ("0 files, stack: unknown").
+  if (!isDirSafe(root)) return { ok: false, root, error: B.notFolder(root) };
   const byExt = {};
   const topDirs = [];
   const routes = [];
@@ -482,71 +667,24 @@ function scanCodebase(projectDir, opts = {}) {
   let phpunitConfig = false;
   const addEntry = (file, kind) => { if (!entrypoints.some((e) => e.file === file && e.kind === kind)) entrypoints.push({ file, kind }); };
 
-  // top-level dirs (candidate modules) and files (manifests named by extension: *.cabal, *.nimble)
+  // top-level dirs (candidate modules — never a folder the root .gitignore names) and files (manifests named by extension:
+  // *.cabal, *.nimble)
+  let realRoot = root;
+  try { realRoot = fs.realpathSync.native(root); } catch { /* the text path stands */ }
+  const gitignore = gitignoreRules(root, realRoot); // 1.22 review: obj/, deps/, _build/, Pods/… are not the project's code
   const rootFiles = [];
   try {
     for (const e of fs.readdirSync(root, { withFileTypes: true })) {
-      if (e.isDirectory() && !SCAN_IGNORE.has(e.name) && !e.name.startsWith(".")) topDirs.push(e.name);
+      if (e.isDirectory() && !SCAN_IGNORE.has(e.name) && !e.name.startsWith(".") && !(gitignore.dir && gitignore.dir(e.name))) topDirs.push(e.name);
       else if (e.isFile() && rootFiles.length < 500) rootFiles.push(e.name);
     }
   } catch {}
+  // 1.22 review — monorepos: the manifests BELOW the root (apps/web/package.json, services/billing/go.mod) join the stack and
+  // the test frameworks — every name found counts for the stack, the first NESTED_MANIFEST_CAP are read (frameworks, runners).
+  const nestedSeen = new Set();
+  const nested = []; // [{ name, full }]
 
-  // Root manifests: stack, frameworks, test runners, package.json entrypoints.
-  const has = (f) => fs.existsSync(path.join(root, f));
-  // (every reader below reads at most its cap from disk — readFileHead, never the whole file then a slice)
-  const text = (f) => readFileHead(path.join(root, f), SCAN_READ_BYTES) || "";
-  const stackHints = [];
-  if (has("package.json")) {
-    try {
-      const pj = JSON.parse(text("package.json").replace(/^\uFEFF/, ""));
-      const all = { ...(pj.dependencies || {}), ...(pj.devDependencies || {}) };
-      const deps = Object.keys(all);
-      stackHints.push("node (" + deps.slice(0, 12).join(", ") + (deps.length > 12 ? ", …" : "") + ")");
-      deps.forEach((d) => {
-        if (Object.prototype.hasOwnProperty.call(NODE_FRAMEWORKS, d)) frameworks.add(NODE_FRAMEWORKS[d]);
-        if (Object.prototype.hasOwnProperty.call(NODE_TEST_RUNNERS, d)) testFws.add(NODE_TEST_RUNNERS[d]);
-      });
-      const scripts = isObj(pj.scripts) ? pj.scripts : {};
-      // /\bnode\s+(?:[^|&;]*\s)?--test\b/, one command at a time: that pattern rescanned the command from each "node" and
-      // each of a long blank run's units (1.17 H).
-      const nodeTest = (seg) => { const m = /\bnode\s/.exec(seg); return !!m && /\s--test\b/.test(seg.slice(m.index + 4)); };
-      if (typeof scripts.test === "string" && scripts.test.split(/[|&;]/).some(nodeTest)) testFws.add("node:test");
-      if (typeof pj.main === "string" && pj.main.trim()) addEntry(normEntry(pj.main), "package.json main");
-      if (typeof pj.bin === "string" && pj.bin.trim()) addEntry(normEntry(pj.bin), "package.json bin");
-      else if (isObj(pj.bin)) Object.values(pj.bin).filter((v) => typeof v === "string" && v.trim()).forEach((v) => addEntry(normEntry(v), "package.json bin"));
-      if (typeof scripts.start === "string" && scripts.start.trim()) {
-        const m = scripts.start.match(/(?:^|\s)(?:node|nodemon|ts-node|tsx|bun(?:\s+run)?|deno\s+run)\s+(?:--?[\w-]+(?:=\S+)?\s+)*([^\s&|;]+\.[cm]?[jt]s)\b/);
-        addEntry(m ? normEntry(m[1]) : scripts.start.trim(), "npm start");
-      }
-    } catch { stackHints.push("node"); }
-  }
-  const pyManifest = ["requirements.txt", "requirements-dev.txt", "pyproject.toml", "setup.py", "setup.cfg", "Pipfile"].filter(has).map(text).join("\n").toLowerCase();
-  const hasPyManifest = has("requirements.txt") || has("pyproject.toml") || has("setup.py");
-  for (const fw of ["fastapi", "flask", "django"]) if (new RegExp("\\b" + fw + "\\b").test(pyManifest)) frameworks.add(fw);
-  if (/\bpytest\b/.test(pyManifest)) testFws.add("pytest");
-  const goMod = has("go.mod") ? text("go.mod") : "";
-  [["gin-gonic/gin", "gin"], ["labstack/echo", "echo"], ["go-chi/chi", "chi"], ["gofiber/fiber", "fiber"], ["gorilla/mux", "gorilla/mux"]].forEach(([k, v]) => { if (goMod.includes(k)) frameworks.add(v); });
-  const jvm = ["pom.xml", "build.gradle", "build.gradle.kts"].filter(has).map(text).join("\n").toLowerCase();
-  if (/spring-boot/.test(jvm)) frameworks.add("spring");
-  [["junit", "junit"], ["testng", "testng"], ["kotest", "kotest"]].forEach(([k, v]) => { if (jvm.includes(k)) testFws.add(v); });
-  const gemfile = has("Gemfile") ? text("Gemfile") : "";
-  if (/['"]rails['"]/.test(gemfile)) frameworks.add("rails");
-  if (/['"]sinatra['"]/.test(gemfile)) frameworks.add("sinatra");
-  [["rspec", "rspec"], ["minitest", "minitest"]].forEach(([k, v]) => { if (gemfile.includes(k)) testFws.add(v); });
-  const composer = has("composer.json") ? text("composer.json") : "";
-  [["laravel/framework", "laravel"], ["symfony/framework-bundle", "symfony"]].forEach(([k, v]) => { if (composer.includes(k)) frameworks.add(v); });
-  [["phpunit/phpunit", "phpunit"], ["pestphp/pest", "pest"]].forEach(([k, v]) => { if (composer.includes(k)) testFws.add(v); });
-  const cargo = has("Cargo.toml") ? text("Cargo.toml") : "";
-  [["actix-web", "actix"], ["axum", "axum"], ["rocket", "rocket"]].forEach(([k, v]) => { if (new RegExp("^[^\\S\\n\\r\\u2028\\u2029]*" + k + "\\s*=", "m").test(cargo)) frameworks.add(v); }); // the indent within its line (1.17 H)
-  // 1.21.1 — C / C++ (CMake's test drivers) and R (a package's DESCRIPTION: testthat in Suggests)
-  const cmake = has("CMakeLists.txt") ? text("CMakeLists.txt") : "";
-  if (/\b(?:GTest|gtest|googletest)\b/.test(cmake)) testFws.add("googletest");
-  if (/\b(?:enable_testing|add_test)\s*\(/.test(cmake)) testFws.add("ctest");
-  const rDescription = has("DESCRIPTION") ? text("DESCRIPTION") : "";
-  const rPackage = /^Package:/m.test(rDescription);
-  if (rPackage && /\btestthat\b/.test(rDescription)) testFws.add("testthat");
-
-  // bounded recursive walk
+  // bounded recursive walk — its cap counts code files and manifests (scanCounts), never images, docs or data (1.22 review)
   const walk = walkProject(root, cap, (rel, full, name) => {
     const ext = path.extname(name).toLowerCase();
     byExt[ext] = (byExt[ext] || 0) + 1;
@@ -562,13 +700,18 @@ function scanCodebase(projectDir, opts = {}) {
         }
       } catch {}
     }
-    const kind = entryKind(rel, name, parts.length - 1);
+    const fixture = isTestFixture(rel); // tests/fixtures/seed.sql, pkg/testdata/** — data: no code, test, route or entrypoint
+    const kind = fixture ? null : entryKind(rel, name, parts.length - 1);
     if (kind) addEntry(rel, kind);
     if (name === "conftest.py" || name === "pytest.ini") pytestConfig = true;
     if (/^phpunit\.xml(?:\.dist)?$/.test(name)) phpunitConfig = true;
     if (ext === ".csproj" && csproj.length < 20) csproj.push(full);
     if (ext === ".psd1" && psd1.length < 20) psd1.push({ rel, full });
-    if (!isCodeFile(rel) || isTestFixture(rel)) return; // a test fixture (tests/fixtures/seed.sql) is data, no test
+    if (parts.length > 1 && NESTED_MANIFESTS.has(name) && !dirsLc.some((d) => MANIFEST_FIXTURE_DIRS.has(d))) {
+      nestedSeen.add(name);
+      if (nested.length < NESTED_MANIFEST_CAP) nested.push({ name, full });
+    }
+    if (!isCodeFile(rel) || fixture) return; // a test fixture (tests/fixtures/seed.sql) is data, no test
     const test = isTestFile(rel);
     if (test) {
       testFiles++;
@@ -615,7 +758,7 @@ function scanCodebase(projectDir, opts = {}) {
       if (!AMBIGUOUS_FRAMEWORK.has(r.framework)) frameworks.add(r.framework);
       if (routes.length < SCAN_ROUTE_CAP) routes.push(r);
     }
-  });
+  }, { counts: scanCounts, gitignore });
   for (const f of csproj) {
     const t = (readFileHead(f, SCAN_READ_BYTES) || "").toLowerCase();
     if (/microsoft\.net\.sdk\.web|microsoft\.aspnetcore/.test(t)) frameworks.add("aspnet");
@@ -639,6 +782,77 @@ function scanCodebase(projectDir, opts = {}) {
     const req = t.search(/\bRequiredModules\s*=/i);
     if (req !== -1 && /\bPester\b/i.test(t.slice(req, req + 600))) testFws.add("pester");
   }
+
+  // Manifests: the root's (a file, or a link that stays in the project — hasRoot, 1.22 review) and the nested ones the walk met
+  // (monorepos) → stack, frameworks, test runners; the ROOT package.json's entrypoints (listed first). Every reader reads at
+  // most its cap from disk — readFileHead, never the whole file then a slice.
+  const rootMemo = new Map();
+  const hasRoot = (f) => { if (!rootMemo.has(f)) rootMemo.set(f, projectFileInside(realRoot, path.join(root, f))); return rootMemo.get(f); };
+  const has = (f) => hasRoot(f) || nestedSeen.has(f);
+  const head = (full) => readFileHead(full, SCAN_READ_BYTES) || "";
+  const rootText = (f) => (hasRoot(f) ? head(path.join(root, f)) : "");
+  const text = (f) => [rootText(f), ...nested.filter((n) => n.name === f).map((n) => head(n.full))].filter(Boolean).join("\n");
+  const stackHints = [];
+  const pkgEntries = [];
+  const addPkgEntry = (file, kind) => { if (!pkgEntries.some((e) => e.file === file && e.kind === kind)) pkgEntries.push({ file, kind }); };
+  if (has("package.json")) {
+    const deps = new Set();
+    let parsed = false;
+    const pjs = [...(hasRoot("package.json") ? [{ text: rootText("package.json"), root: true }] : []),
+      ...nested.filter((n) => n.name === "package.json").map((n) => ({ text: head(n.full), root: false }))];
+    // /\bnode\s+(?:[^|&;]*\s)?--test\b/, one command at a time: that pattern rescanned the command from each "node" and
+    // each of a long blank run's units (1.17 H).
+    const nodeTest = (seg) => { const m = /\bnode\s/.exec(seg); return !!m && /\s--test\b/.test(seg.slice(m.index + 4)); };
+    for (const p of pjs) {
+      let pj;
+      try { pj = JSON.parse(p.text.charCodeAt(0) === 0xfeff ? p.text.slice(1) : p.text); } catch { continue; }
+      if (!isObj(pj)) continue;
+      parsed = true;
+      for (const d of Object.keys({ ...(isObj(pj.dependencies) ? pj.dependencies : {}), ...(isObj(pj.devDependencies) ? pj.devDependencies : {}) })) deps.add(d);
+      const scripts = isObj(pj.scripts) ? pj.scripts : {};
+      if (typeof scripts.test === "string" && scripts.test.split(/[|&;]/).some(nodeTest)) testFws.add("node:test");
+      if (!p.root) continue;
+      if (typeof pj.main === "string" && pj.main.trim()) addPkgEntry(normEntry(pj.main), "package.json main");
+      if (typeof pj.bin === "string" && pj.bin.trim()) addPkgEntry(normEntry(pj.bin), "package.json bin");
+      else if (isObj(pj.bin)) Object.values(pj.bin).filter((v) => typeof v === "string" && v.trim()).forEach((v) => addPkgEntry(normEntry(v), "package.json bin"));
+      if (typeof scripts.start === "string" && scripts.start.trim()) {
+        const m = scripts.start.match(/(?:^|\s)(?:node|nodemon|ts-node|tsx|bun(?:\s+run)?|deno\s+run)\s+(?:--?[\w-]+(?:=\S+)?\s+)*([^\s&|;]+\.[cm]?[jt]s)\b/);
+        addPkgEntry(m ? normEntry(m[1]) : scripts.start.trim(), "npm start");
+      }
+    }
+    const depList = [...deps];
+    depList.forEach((d) => {
+      if (Object.prototype.hasOwnProperty.call(NODE_FRAMEWORKS, d)) frameworks.add(NODE_FRAMEWORKS[d]);
+      if (Object.prototype.hasOwnProperty.call(NODE_TEST_RUNNERS, d)) testFws.add(NODE_TEST_RUNNERS[d]);
+    });
+    stackHints.push(parsed ? "node (" + depList.slice(0, 12).join(", ") + (depList.length > 12 ? ", …" : "") + ")" : "node");
+  }
+  entrypoints.unshift(...pkgEntries);
+  const pyManifest = ["requirements.txt", "requirements-dev.txt", "pyproject.toml", "setup.py", "setup.cfg", "Pipfile"].map(text).join("\n").toLowerCase();
+  const hasPyManifest = has("requirements.txt") || has("pyproject.toml") || has("setup.py");
+  for (const fw of ["fastapi", "flask", "django"]) if (new RegExp("\\b" + fw + "\\b").test(pyManifest)) frameworks.add(fw);
+  if (/\bpytest\b/.test(pyManifest)) testFws.add("pytest");
+  const goMod = text("go.mod");
+  [["gin-gonic/gin", "gin"], ["labstack/echo", "echo"], ["go-chi/chi", "chi"], ["gofiber/fiber", "fiber"], ["gorilla/mux", "gorilla/mux"]].forEach(([k, v]) => { if (goMod.includes(k)) frameworks.add(v); });
+  const jvm = ["pom.xml", "build.gradle", "build.gradle.kts"].map(text).join("\n").toLowerCase();
+  if (/spring-boot/.test(jvm)) frameworks.add("spring");
+  [["junit", "junit"], ["testng", "testng"], ["kotest", "kotest"]].forEach(([k, v]) => { if (jvm.includes(k)) testFws.add(v); });
+  const gemfile = text("Gemfile");
+  if (/['"]rails['"]/.test(gemfile)) frameworks.add("rails");
+  if (/['"]sinatra['"]/.test(gemfile)) frameworks.add("sinatra");
+  [["rspec", "rspec"], ["minitest", "minitest"]].forEach(([k, v]) => { if (gemfile.includes(k)) testFws.add(v); });
+  const composer = text("composer.json");
+  [["laravel/framework", "laravel"], ["symfony/framework-bundle", "symfony"]].forEach(([k, v]) => { if (composer.includes(k)) frameworks.add(v); });
+  [["phpunit/phpunit", "phpunit"], ["pestphp/pest", "pest"]].forEach(([k, v]) => { if (composer.includes(k)) testFws.add(v); });
+  const cargo = text("Cargo.toml");
+  [["actix-web", "actix"], ["axum", "axum"], ["rocket", "rocket"]].forEach(([k, v]) => { if (new RegExp("^[^\\S\\n\\r\\u2028\\u2029]*" + k + "\\s*=", "m").test(cargo)) frameworks.add(v); }); // the indent within its line (1.17 H)
+  // 1.21.1 — C / C++ (CMake's test drivers) and R (a package's DESCRIPTION: testthat in Suggests) — the root's only
+  const cmake = rootText("CMakeLists.txt");
+  if (/\b(?:GTest|gtest|googletest)\b/.test(cmake)) testFws.add("googletest");
+  if (/\b(?:enable_testing|add_test)\s*\(/.test(cmake)) testFws.add("ctest");
+  const rDescription = rootText("DESCRIPTION");
+  const rPackage = /^Package:/m.test(rDescription);
+  if (rPackage && /\btestthat\b/.test(rDescription)) testFws.add("testthat");
 
   // Stack from manifests; Python also from imports (FastAPI/Flask apps often ship without a manifest).
   const pyFw = ["fastapi", "flask", "django"].filter((f) => frameworks.has(f));
@@ -679,8 +893,9 @@ function scanCodebase(projectDir, opts = {}) {
   const res = {
     ok: true,
     root,
-    filesScanned: walk.total,
-    truncated: walk.truncated,
+    filesScanned: walk.files, // every file visited — the cap counts only code and manifests (codeFilesCounted)
+    codeFilesCounted: walk.total,
+    truncated: walk.truncated, // a code file or a manifest was left unscanned (the cap, or the entry cap of a huge tree)
     topLevelDirs: topDirs.sort(),
     byExtension: extList,
     stack: stackHints,
@@ -715,8 +930,12 @@ function scanCodebase(projectDir, opts = {}) {
 // with at least one / no covered file (undocumented is also returned as uncoveredFolders); features = the
 // active features (unchanged). unmatchedImplements = entries naming nothing on disk (a gap);
 // nonCodeImplements = entries naming an existing test / non-code file (informational, never counted).
-function coverage(projectDir) {
+// opts.cap: the code files the walk counts (default COVERAGE_CAP) — engine-internal (tests), never a tool argument.
+function coverage(projectDir, opts = {}) {
   const root = path.resolve(projectDir);
+  const cap = Number.isSafeInteger(opts.cap) && opts.cap >= 1 ? opts.cap : COVERAGE_CAP;
+  const lang = projectLang(projectDir);
+  if (!isDirSafe(root)) return { ok: false, root, error: i18n.msg(lang).brownfield.notFolder(root) }; // 1.22 review (as scan)
   const specs = specsRoot(root);
   const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
   const active = listFeatures(projectDir).features.map((f) => f.name);
@@ -728,12 +947,21 @@ function coverage(projectDir) {
   const code = new Map(); // fold(rel) → rel
   const other = new Map(); // every other walked file (tests, docs, config) — an _Implements:_ naming one is not a gap
   let testFiles = 0;
-  const walk = walkProject(root, COVERAGE_CAP, (rel) => {
+  let realRoot = root;
+  try { realRoot = fs.realpathSync.native(root); } catch { /* the text path stands */ }
+  // The cap counts code files (tests included) only, and the root .gitignore's generated folders are left out — as the scan's
+  // walk (1.22 review).
+  const walk = walkProject(root, cap, (rel) => {
     if (!isCodeFile(rel) || isTestFixture(rel)) other.set(fold(rel), rel); // a test fixture (tests/fixtures/seed.sql) is data
     else if (isTestFile(rel)) { testFiles++; other.set(fold(rel), rel); }
     else code.set(fold(rel), rel);
-  });
+  }, { counts: (rel) => isCodeFile(rel) && !isTestFixture(rel), gitignore: gitignoreRules(root, realRoot) });
 
+  // 1.22 review — a reference that names no file is a folder: its files are found by a binary search of the keys, sorted once
+  // here (two scans of every key per reference cost 1.2 s of 1.9 s on 18k code files × 2,160 references). The same files.
+  const codeKeys = [...code.keys()].sort();
+  let otherKeys = null;
+  const otherSorted = () => otherKeys || (otherKeys = [...other.keys()].sort());
   const covered = new Set();
   const byFeature = [];
   const unmatched = [];
@@ -748,11 +976,11 @@ function coverage(projectDir) {
     const refs = implementsRefs(readIfExists(path.join(s.dir, "tasks.md")));
     const mine = new Set();
     for (const ref of refs) {
-      const hits = implementsTargets(root, ref, code, fold);
+      const hits = implementsTargets(root, ref, code, fold, codeKeys);
       // No code file: a test / doc / config target that exists is informational (a +tdd task names its test file);
       // only an entry that names nothing on disk is a gap — the same reading as trace_check.
       if (!hits.length) {
-        const list = implementsTargets(root, ref, other, fold).length || onDisk(ref) ? nonCode : unmatched;
+        const list = implementsTargets(root, ref, other, fold, otherSorted()).length || onDisk(ref) ? nonCode : unmatched;
         if (list.length < 50) list.push({ feature: s.feature, ref });
       }
       hits.forEach((k) => { mine.add(k); covered.add(k); });
@@ -790,13 +1018,15 @@ function coverage(projectDir) {
     unmatchedImplements: unmatched,
     nonCodeImplements: nonCode,
     truncated: walk.truncated,
-    note: i18n.msg(projectLang(projectDir)).notes.coverage,
+    note: i18n.msg(lang).notes.coverage,
   };
 }
 
 module.exports = { SCAN_IGNORE, CODE_EXT, TEST_EXTRA_EXT, GUARD_CODE_EXT, SCAN_TEXT_EXT, SCAN_READ_CAP, SCAN_READ_BYTES,
-  SCAN_ROUTE_CAP, SCAN_LIST_CAP, COVERAGE_CAP, WALK_STOP, walkProject, TEST_DIRS, PERL_TEST_DIRS, RE_TEST_NAME,
-  RE_TEST_NAME_EXTRA, isTestFile, TEST_DATA_EXT, RE_TEST_DATA_NAME, testNamed, extOf, isTestFixture, isCodeFile, JS_EXT, FRONTEND_EXT, JS_ROUTE_OWNERS,
+  SCAN_ROUTE_CAP, SCAN_LIST_CAP, COVERAGE_CAP, WALK_ENTRY_CAP, WALK_STOP, walkProject, GITIGNORE_MAX_CHARS,
+  GITIGNORE_MAX_PATTERNS, gitignoreName, gitignoreDirPatterns, gitignoreNameMatch, gitignoreRules, gitignoresAll,
+  gitignoredFolder, projectFileInside, TEST_DIRS, PERL_TEST_DIRS, RE_TEST_NAME,
+  RE_TEST_NAME_EXTRA, isTestFile, TEST_DATA_EXT, RE_TEST_DATA_NAME, testNamed, extOf, RE_TESTDATA_DIR, isTestFixture, isCodeFile, JS_EXT, FRONTEND_EXT, JS_ROUTE_OWNERS,
   RE_JS_OWNER_SUFFIX, RE_JS_ROUTE, RE_JS_ROUTE_CHAIN, RE_JS_ROUTE_OPEN, RE_JS_LEAD_STRING, RE_JS_CHAIN_VERB,
   RE_JS_IMPORT, RE_JS_CLIENT_IMPORT, RE_JS_CLIENT_DEF, JS_GENERIC_OWNERS, RE_NEST_ROUTE, RE_NEST_CTRL, RE_NEXT_APP,
   RE_NEXT_PAGES, RE_NEXT_EXPORT, RE_PY_ROUTE, RE_PY_METHODS, PY_ROUTE_OWNERS, RE_PY_OWNER_SUFFIX, RE_PY_APP_DEF,
@@ -805,4 +1035,5 @@ module.exports = { SCAN_IGNORE, CODE_EXT, TEST_EXTRA_EXT, GUARD_CODE_EXT, SCAN_T
   RE_GO_TITLE, GO_CLIENTS, RE_SLASH_COMMENT_LINE, RE_HASH_COMMENT_LINE, AMBIGUOUS_FRAMEWORK, SCAN_JOIN_LINES,
   joinOpenCall, normRoutePath, joinRoute, springPaths, scanRoutes, RE_ENV_READS, ENV_EXAMPLE_FILES, envNamesIn,
   MIGRATION_DIRS, isMigrationFile, PY_ENTRY, NODE_ROOT_ENTRY, entryKind, normEntry, NODE_FRAMEWORKS, NODE_TEST_RUNNERS,
+  MANIFEST_NAMES, isManifestName, scanCounts, NESTED_MANIFESTS, NESTED_MANIFEST_CAP, MANIFEST_FIXTURE_DIRS, aspActionName,
   scanCodebase, coverage, __link };

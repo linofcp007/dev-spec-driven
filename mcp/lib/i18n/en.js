@@ -1748,6 +1748,7 @@ const msg = {
 
     // Brownfield depth: scan / coverage CLI lines and the integration-plan doctor check.
     brownfield: {
+      notFolder: (p) => `${p} is not a folder (it doesn't exist, or it is a file) — nothing to scan; check the path.`,
       frameworks: (list) => `  frameworks: ${list}`,
       routeLine: (method, p, loc) => `    ${method.padEnd(7)} ${p}  (${loc})`,
       moreRoutes: (n) => `    … ${n} more (--json lists them, up to the cap)`,
@@ -1776,6 +1777,7 @@ const msg = {
       notFound: (p) => `'${p}' not found.`,
       nothing: (tool, p) => `No ${tool} spec files found in '${p}'.`,
       exists: (slug) => `Feature '${slug}' already exists — import never overwrites it. Pass another name.`,
+      noUsableTitle: (title) => `The document's title '${title}' has no usable characters (a-z, 0-9) for a folder name — pass the feature's name (name; CLI: --name "<feature>").`,
       featureTitle: (name) => `# Feature: ${name}`,
       tasksTitle: (name) => `# Tasks: ${name}`,
       summary: "## Summary",
@@ -2630,6 +2632,7 @@ const msg = {
       print: "Print",
       wrote: (file) => `✎ wrote ${file}`,
       exportsIsFeature: (dir) => `${dir} is a feature folder from before dev-spec reserved the name 'exports' (it holds requirements.md / .state.json) — move or rename that folder by hand, then export again.`,
+      exportsLinked: (rel) => `Refused to write ${rel}: .specs/exports/ or that file is a link (a symbolic link, a junction) or resolves outside .specs/ — replace it with a plain folder / file, then export again. Nothing was written.`,
     },
     // Requirements traceability matrix (trace_check {matrix} / `dev-spec trace --matrix | --csv` / spec_export {format: "csv"}):
     // labels only — the IDs, the kind column (AC / EC / NFR / SC) and the JSON codes (status, gaps, reason) stay English.

@@ -52,7 +52,7 @@ matrix.
   the 1.21.1 review dropped the name-only `test_*.sh` / `test_*.c` / `*Spec.hs` rules — `scripts/test_data.sh`,
   `src/test_utils.c`, `lib/DevSpec.hs` are code; in a test folder they are tests). **Fixtures:** `isTestFixture()` — a
   `TEST_DATA_EXT` file (`.sql`, `.ipynb`) in a test folder whose NAME follows no convention (`testNamed()`, + pgTAP's
-  `test_*.sql` / `*_test.sql`) is data: the scan, coverage and the test-code scan skip it (1,600 `tests/fixtures/*.sql`
+  `test_*.sql` / `*_test.sql`) is data — and so is every file under a `testdata/` folder (Go's convention; 1.22 review): the scan, coverage and the test-code scan skip it (1,600 `tests/fixtures/*.sql`
   exhausted the read cap; a 'T-01' in a seed counted as the test); guard mode still asks before editing one — unless a
   plan claims it (review 2): the test-code scan reads a fixture some feature's test plan claims in its File column
   (`fixtureClaim()` over every plan's `planFileScopes().scopes`) — pgTAP's `test/sql/users.sql`, a numbered

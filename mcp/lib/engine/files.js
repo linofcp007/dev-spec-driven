@@ -506,6 +506,31 @@ function specsFileContainedNow(projectDir, file) {
     return false;
   }
 }
+// 1.22 review — a file the engine is about to WRITE below .specs/ (an export's document): no folder between .specs/ and it,
+// nor the file itself, is a link (a symbolic link, a junction), and each resolves inside the real .specs/ — a committed
+// `.specs/exports -> /etc` or `.specs/exports/project.html -> ~/.bashrc` is refused, nothing written. A part that doesn't
+// exist yet passes (it will be created inside); a path outside .specs/ → false. Uncached: a write's own check.
+function specsWriteContained(projectDir, file) {
+  const root = specsRoot(projectDir);
+  let realRoot;
+  try { realRoot = fs.realpathSync.native(root); } catch { return true; } // no .specs/ yet: nothing in it is a link
+  const rel = path.relative(root, path.resolve(file));
+  if (!rel || rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel)) return false;
+  let cur = root;
+  for (const seg of rel.split(path.sep)) {
+    cur = path.join(cur, seg);
+    let st;
+    try { st = fs.lstatSync(cur); } catch (e) { return !!e && e.code === "ENOENT"; } // absent: it and what follows are created
+    if (st.isSymbolicLink()) return false;
+    try {
+      const real = fs.realpathSync.native(cur);
+      if (real === realRoot || !withinRoot(realRoot, real)) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
 // readIfExists for such a file: null when it is not contained (skipped, as if absent).
 function readContained(projectDir, file) {
   const f = (!existsRaw(file) && changeAlias(file)) || file; // 1.21 F5: a change's change.md is checked as itself
@@ -756,6 +781,6 @@ module.exports = { resolveProjectDir, specsRoot, ensureDir, writeIfAbsent, RENAM
   featureBusyResult, withMoveLock, DIR_RENAME_RETRY_MS, renameDirSync, moveDirOrBusy, ROADMAP_LOCK_FILE,
   LOCK_IGNORE_LINES, ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel,
   shapeError, withReadCache, readCacheKey, EXISTS_KEY, DIR_KEY, CONTAINED_KEY, specsFileContained,
-  specsFileContainedNow, readContained, readIfExists, readFileHead, readRaw, existsCached, existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, globWalkReaches,
+  specsFileContainedNow, specsWriteContained, readContained, readIfExists, readFileHead, readRaw, existsCached, existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, globWalkReaches,
   invalidateReadCache, safeReaddir, withinRoot, isDirSafe, FOLD_CASE, toPosix, isInsideDir, realPathLoose, plainUnc,
   networkPathInside, insideDirAlias, isNetworkPath, __link };

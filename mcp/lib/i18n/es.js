@@ -1699,6 +1699,7 @@ const msg = {
     },
 
     brownfield: {
+      notFolder: (p) => `${p} no es una carpeta (no existe, o es un archivo) — nada que analizar; revisa la ruta.`,
       frameworks: (list) => `  frameworks: ${list}`,
       routeLine: (method, p, loc) => `    ${method.padEnd(7)} ${p}  (${loc})`,
       moreRoutes: (n) => `    … ${n} más (--json las lista, hasta el límite)`,
@@ -1725,6 +1726,7 @@ const msg = {
       notFound: (p) => `'${p}' no encontrado.`,
       nothing: (tool, p) => `No se encontraron ficheros de spec ${tool} en '${p}'.`,
       exists: (slug) => `La función '${slug}' ya existe — la importación nunca la sobrescribe. Indica otro nombre.`,
+      noUsableTitle: (title) => `El título del documento '${title}' no tiene caracteres utilizables (a-z, 0-9) para un nombre de carpeta — indica el nombre de la función (name; CLI: --name "<función>").`,
       featureTitle: (name) => `# Función: ${name}`,
       tasksTitle: (name) => `# Tareas: ${name}`,
       summary: "## Resumen",
@@ -2517,6 +2519,7 @@ const msg = {
       print: "Imprimir",
       wrote: (file) => `✎ generado ${file}`,
       exportsIsFeature: (dir) => `${dir} es una carpeta de función anterior a que dev-spec reservara el nombre 'exports' (contiene requirements.md / .state.json) — mueve o renombra esa carpeta a mano y vuelve a exportar.`,
+      exportsLinked: (rel) => `Me niego a escribir ${rel}: .specs/exports/ o ese archivo es un enlace (simbólico, o una junction) o apunta fuera de .specs/ — sustitúyelo por una carpeta / un archivo normal y vuelve a exportar. No se escribió nada.`,
     },
     rtm: {
       title: "Matriz de trazabilidad",

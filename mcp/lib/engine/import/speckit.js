@@ -100,7 +100,10 @@ function parseSpecKit(dir, read, W) {
       // nothing between them backtracked exponentially (1.17 H).
       const at = body.findIndex((l) => /^\s*(?:\*\*|__)?acceptance scenarios(?:\*\*|__)?\s*(?::\s*)?(?:(?:\*\*|__)\s*)?(?::\s*)?$/i.test(l));
       const off = at === -1 ? 0 : at + 1;
-      const scen = mdListItems(body.slice(off), true).filter((it) => at !== -1 || /\bthen\b|\bent[ãa]o\b|\bentonces\b/i.test(it.text));
+      let scen = mdListItems(body.slice(off), true).filter((it) => at !== -1 || /\bthen\b|\bent[ãa]o\b|\bentonces\b/i.test(it.text));
+      // Bulleted scenarios when there are no numbered ones — only under the explicit label, where a bullet can't be a note
+      // in the story's prose (kiro.js reads its criteria the same way; 1.22 review: they gave 0 criteria).
+      if (!scen.length && at !== -1) scen = mdListItems(body.slice(off), false);
       const inScen = new Set(scen.flatMap((it) => it.at.map((r) => r + off)));
       const keep = (l, r) => !inScen.has(r) && !RE_MD_HR.test(l);
       const prose = tidyLines(body.slice(0, at === -1 ? body.length : at).filter(keep));

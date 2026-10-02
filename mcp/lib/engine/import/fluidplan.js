@@ -906,7 +906,8 @@ function parseFluidplan(dir, read, W, src) {
   if (!fp.title && !fp.tasks.length && !fp.decisions.size) return null;
   const model = fpImportModel(fp, P, PP, W, src, warnings);
   model.sourceFile = sourceFile;
-  model.nameHint = model.title || fp.id || path.basename(planDir || dir);
+  model.nameFallback = fp.id || path.basename(planDir || dir); // a title that slugifies to nothing (importSpec, 1.22 review)
+  model.nameHint = model.title || model.nameFallback;
   const roundsDir = planDir ? path.join(planDir, "rounds") : null;
   if ((roundsDir && isDirL(roundsDir)) || (fp.round && fp.round > 1)) model.warnings.push(P.wRounds);
   return model;

@@ -10,10 +10,13 @@ Folder: $ARGUMENTS
 Run the `spec_scan` MCP tool for a local, read-only, zero-cost inventory. It takes no path argument: it scans
 `projectDir` — omit it to scan the project root; to scan another local folder (a sub-module, a sibling service),
 pass that folder as `projectDir`, written as an absolute path (a relative one resolves against the server's working
-directory, not the project). `cap` bounds the files walked (default 5000). CLI: `dev-spec scan [path] [--cap N]`.
+directory, not the project). `cap` bounds the code and manifest files scanned (default 5000 — images, docs and data
+don't count; `truncated` = a code file was left unscanned). A folder that doesn't exist is an error, not an empty
+codebase. The scan skips the generated folders the root `.gitignore` names (`obj/`, `/_build/`, `Pods/`…) and treats
+`testdata/` as fixtures. CLI: `dev-spec scan [path] [--cap N]`.
 It reports:
-- **stack** and web **frameworks** (from manifests; FastAPI/Flask/Django also from imports), top-level modules,
-  file mix by extension;
+- **stack** and web **frameworks** (from manifests — a monorepo's nested ones too; FastAPI/Flask/Django also from
+  imports), top-level modules, file mix by extension;
 - **HTTP routes** with method + path + `file:line` (`routes`; `candidateEndpoints` counts every route found,
   `routesTruncated` when the list is capped);
 - **test frameworks** and the test-file count; **entrypoints**; **migration/schema files**;
