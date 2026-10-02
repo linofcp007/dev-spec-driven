@@ -339,7 +339,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   simplify-report path (or an unknown feature) in the reply (`no-report`) → allowed; `simplify-ok` / `simplifier-evidence`.
   It reads text — a final-runs list that leaves a check out, with that check's baseline run above, passes it; the hard
   gate is `spec_finish`'s `code-changed` (a project check run before the pass's commits never counts). Shared helpers:
-  `readStopReport()`, `flatReport()`, `reportExitCodes()` (the implementer's gate reads through them unchanged).
+  `readStopReport()` (≤ `STOP_REPORT_MAX`: the implementer's report from its start, the simplifier's from its END — its final
+  runs), `flatReport()`, `reportExitCodes()` (the implementer's gate reads through them unchanged).
 - **The hook** (`hooks/stop-hook.js`): registered in hooks.json for **Stop** (no matcher) and **SubagentStop** with matcher
   `^(dev-spec-driven:)?spec-(implementer|simplifier)$` — plugin subagents IGNORE a `hooks` block in their own frontmatter, so it must
   live in the plugin's hooks.json. It reads `last_assistant_message` (a bounded transcript tail for older payloads),

@@ -531,6 +531,11 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     fs.writeFileSync(siRep, "## Baseline\n- `npm test` → exit 0\n## Final runs\n- `npm test` → exit 0 (212 passing)\n");
     const siOk = si(), siBare = si(undefined, "spec-simplifier");
     const hSiOk = runHook(stopJs, siPayload());
+    // a report past the read cap (256 KB): its END is read — the final runs are there, not the baseline at the top
+    fs.writeFileSync(siRep, "## Baseline\n- `npm test` → exit code 1\n## Changes\n" + "- a1b2c3d src/cart.js:12 Deep nesting → guard clauses\n".repeat(6000) + "## Final runs\n- `npm test` → exit 0\n");
+    const siBig = si();
+    ok(siBig.why === "simplify-ok" && fs.statSync(siRep).size > 256 * 1024,
+      "1.22 SubagentStop (spec-simplifier): a report larger than the read cap is read from its END — the final passing run counts, not a red baseline at the top (got " + siBig.why + ")");
     ok(siNoRep.block && siNoRep.why === "simplifier-evidence" && siNoRep.feature === "checkout" && siNoRep.report === ".specs/checkout/.execution/simplify-report.md" &&
       /^dev-spec evidence gate: you report the simplification pass of 'checkout' as DONE, but its report \(\.specs\/checkout\/\.execution\/simplify-report\.md\) does not exist\./.test(siNoRep.reason) &&
       hSiNoRep === siNoRep.reason && siRed.block && /doesn't end with a passing test run/.test(siRed.reason) && /revert the change that broke a check/.test(siRed.reason) &&

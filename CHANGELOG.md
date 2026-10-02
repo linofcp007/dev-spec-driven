@@ -45,8 +45,8 @@ local, no pull requests, no CI.
 - The evidence gate's "not-done" line now says "the subagent" (it covers the simplifier too).
 
 ### Tests
-- `node mcp/test.js` 1684 assertions (was 1680), `node cli/test-cli.js` 523 (was 522): the simplifier's SubagentStop gate
-  (no report, a red final run, a check never run, a baseline run that never stands in, a code inside the command, NO_CHANGES /
+- `node mcp/test.js` 1685 assertions (was 1680), `node cli/test-cli.js` 523 (was 522): the simplifier's SubagentStop gate
+  (no report, a red final run, a check never run, a report past the read cap read from its end, a baseline run that never stands in, a code inside the command, NO_CHANGES /
   BLOCKED / no report path allowed, the hook's reason = the engine's, EN / PT / ES strings, `stop-check --agent
   spec-simplifier` in PT), the hooks.json matcher, 4 agents and 55 commands, and the prose of the verify pass, the
   written rules and history, the simplify mode and the simplification pass.

@@ -1085,13 +1085,15 @@ function implementerStopCheck(pdir, message, cl, res) {
   if (!problem) return res(false, "report-ok", info);
   return res(true, "implementer-evidence", { ...info, report: rel, reason: [X.head(n, f.slug) + " " + problem, X.todo].join("\n") });
 }
-// A subagent's report, its first STOP_REPORT_MAX bytes (null when it can't be read) — the stop gates read one file each.
-function readStopReport(file) {
+// A subagent's report, at most STOP_REPORT_MAX bytes of it (null when it can't be read) — the stop gates read one file
+// each: the implementer's from its start, the simplifier's from its END (`tail`), where its final runs are.
+function readStopReport(file, tail) {
   try {
     const fd = fs.openSync(file, "r");
     try {
-      const buf = Buffer.alloc(Math.min(STOP_REPORT_MAX, fs.fstatSync(fd).size));
-      return buf.toString("utf8", 0, fs.readSync(fd, buf, 0, buf.length, 0));
+      const size = fs.fstatSync(fd).size;
+      const buf = Buffer.alloc(Math.min(STOP_REPORT_MAX, size));
+      return buf.toString("utf8", 0, fs.readSync(fd, buf, 0, buf.length, tail ? size - buf.length : 0));
     } finally { fs.closeSync(fd); }
   } catch { return null; }
 }
@@ -1121,7 +1123,7 @@ function simplifierStopCheck(pdir, message, cl, res) {
   const info = { claims: cl.claims, lang: lng, feature: f.slug };
   const file = path.join(f.dir, ".execution", "simplify-report.md");
   const rel = toPosix(path.relative(pdir, file));
-  const report = readStopReport(file);
+  const report = readStopReport(file, true);
   const X = i18n.msg(lng).stopGate.simplifier;
   const checks = projectChecks(pdir).checks.map((c) => c.command);
   let problem = null;
