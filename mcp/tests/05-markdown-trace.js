@@ -1628,5 +1628,39 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     ok(trR.verdict === "pass" && trR.totalAcs === 2 && js(trR.uncoveredByTasks) === "[]" && js(ids) === '["US-1.AC-1","US-1.AC-2"]',
       "1.22 review 3 (6): 'billing/US-3.AC-2' with no billing feature is a foreign reference (no required AC); 'Step-2/US-1.AC-2' labels a criterion — this feature's, and so is 'legacy/US-1.AC-2' citing the same ID (got " +
       js([trR.verdict, trR.totalAcs, trR.uncoveredByTasks, ids]) + ")");
+
+    // 1.22 review 4 (1): with NO label, a criterion's own stable ID may sit anywhere in it — `… in 200 ms (NFR-1)`, `**Latency (NFR-1):**`,
+    // `**[NFR-1]**`, `a. NFR-1:` — as earsValidate counts it (withStableId): ownStableId disagreed, so earsUnidentified named them, doctor's
+    // ears failed and the requirements approval was refused (they passed at c3c13ef). A bare AC-n label, another feature's
+    // `<slug>/US-n.AC-m` and a _Supersedes:_ reference are still no ID of its own.
+    const nfrAny = S.createFeature(d, "Nfr anywhere", ["core"], "", undefined, "en");
+    put(nfrAny.dir, "requirements.md", "# Requirements: latency\n\n## Summary\nThe API must stay fast.\n\n## Non-Functional Requirements\n\n" +
+      "- THE SYSTEM SHALL answer GET /orders within 200 ms at p95 (NFR-1)\n- **Availability (NFR-2):** THE SYSTEM SHALL keep 99.9% monthly availability\n" +
+      "- **[NFR-3]** THE SYSTEM SHALL keep its memory under 512 MB\n\na. NFR-4: THE SYSTEM SHALL start within 2 s\n");
+    put(nfrAny.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: NFR-1, NFR-2, NFR-3, NFR-4_\n");
+    const reqN = fs.readFileSync(path.join(nfrAny.dir, "requirements.md"), "utf8");
+    const evN = S.earsValidate(reqN, "en"), docN = S.specDoctor(d, nfrAny.slug), trN = S.traceCheck(d, nfrAny.slug);
+    approveBefore(d, nfrAny.slug, "requirements");
+    const apN = S.approvePhase(d, nfrAny.slug, "requirements");
+    const ownNo = ["- AC-1: WHEN x THE SYSTEM SHALL y (NFR-1)", "- WHEN x THE SYSTEM SHALL keep checkout/US-3.AC-2", "- WHEN x THE SYSTEM SHALL y _Supersedes: checkout/US-1.AC-1_"]
+      .map((t) => E.earsUnidentified(reqOf([t]), S.earsValidate(reqOf([t]), "en"), path.join(d, ".specs", "ref")));
+    ok(evN.summary.criteriaDetected === 4 && evN.summary.withStableId === 4 && E.earsUnidentified(reqN, evN, nfrAny.dir) === null && chk(docN, "ears").status === "pass" &&
+      !("unidentifiedCriteria" in trN) && !(apN.failing || []).includes("ears") && ownNo.every((u) => Array.isArray(u) && u.length === 1),
+      "1.22 review 4 (1): a criterion whose only ID is NOT at its start — `(NFR-1)` at the end, `**Availability (NFR-2):**`, `**[NFR-3]**`, `a. NFR-4:` — has its own stable ID (earsUnidentified null, doctor's ears passes, trace names no unidentified criterion, the approval doesn't fail on ears); a bare AC-n label, another feature's ID and a _Supersedes:_ reference still don't (got " +
+      js([evN.summary, E.earsUnidentified(reqN, evN, nfrAny.dir), chk(docN, "ears"), trN.unidentifiedCriteria, apN.failing, ownNo]) + ")");
+
+    // 1.22 review 4 (6): `- AC-1: … (see US-1.AC-9)` — any US-n.AC-m in the document returned null early, so the criterion numbered with a
+    // bare AC-1 escaped while the CITED ID became the only required criterion. Each criterion is judged by its own ID now; one with no ID at
+    // all beside US-n.AC-m criteria is still EARS's no-id warn only.
+    const cite = S.createFeature(d, "Cite us", ["core"], "", undefined, "en");
+    put(cite.dir, "requirements.md", reqOf(["- AC-1: WHEN the user logs in THE SYSTEM SHALL redirect (see US-1.AC-9)", "- US-1.AC-2: IF wrong THEN THE SYSTEM SHALL show an error",
+      "- THE SYSTEM SHALL log each attempt"]));
+    put(cite.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-9, US-1.AC-2_\n");
+    const reqC = fs.readFileSync(path.join(cite.dir, "requirements.md"), "utf8");
+    const trC = S.traceCheck(d, cite.slug), docC = S.specDoctor(d, cite.slug);
+    ok(js(E.earsUnidentified(reqC, S.earsValidate(reqC, "en"), cite.dir)) === '["AC-1"]' && js(trC.unidentifiedCriteria) === '["AC-1"]' && trC.verdict === "gaps-found" &&
+      chk(docC, "ears").status === "fail" && /\(AC-1\)/.test(chk(docC, "ears").detail || ""),
+      "1.22 review 4 (6): a criterion numbered with a bare AC-1 is unidentified even when the document cites a US-n.AC-m elsewhere (trace gaps-found, doctor's ears fails naming AC-1); an unnumbered one beside US-n.AC-m criteria is not listed (got " +
+      js([E.earsUnidentified(reqC, S.earsValidate(reqC, "en"), cite.dir), trC.unidentifiedCriteria, trC.verdict, chk(docC, "ears")]) + ")");
   }
 };
