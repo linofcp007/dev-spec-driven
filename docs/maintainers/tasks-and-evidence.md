@@ -434,7 +434,11 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   worktree's git-ignored one), and `observedRun` strips the REPORTED command against the project (+ the project holding the
   process's cwd) the same way — the hook used to strip while the lookup didn't, so reporting the exact command that ran read
   unobserved. Any other folder keeps the whole command, which then matches nothing. The hook's pre-filter key drops a leading
-  `cd <dir> &&` whatever the folder (a superset — the engine decides). The engine is loaded
+  `cd <dir> &&` whatever the folder (a superset — the engine decides); it opens each folder's tasks.md once (its size read
+  from the open file) and probes change.md only where there is no tasks.md — the engine's own rule (1.22 review: a stat, a
+  read and a change.md probe per folder cost +133 ms a Bash call at 150 features; measured 226 → 192 ms there). A cache of
+  the flat `_Verify:_` list keyed on each tasks.md's stats was left out: in a one-shot hook it would need a written index,
+  and a stale one silently drops observations. The engine is loaded
   only after a plain-text pre-filter (the flattened command — or each part of a ` && ` join — appears in some feature's tasks.md — ≤ 2 MB each, dot / `_`
   folders skipped — or equals a meta.checks command); it prints nothing, reads stdin asynchronously (≤ 4 MB, else
   ignored), and exits 0 on any error.

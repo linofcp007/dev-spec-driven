@@ -1369,4 +1369,38 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
       "1.22 review: a worktree's `cd <worktree> && node t1.js` is logged as `node t1.js` in the worktree's log AND the main project's (a cd into another folder is logged nowhere); observedRun strips `cd <root> &&` from the reported command too — one stripCdPrefix (got " +
       js([main, wt, look]) + ")");
   }
+
+  // 1.22 review (13) — the observe hook's pre-filter stat'ed, read and probed change.md in every feature folder on every Bash call
+  // (+133 ms at 150 features). It opens tasks.md once and looks at change.md only when there is no tasks.md; what it finds is
+  // unchanged (a change's change.md is still read, an oversized tasks.md still skipped).
+  {
+    const js = JSON.stringify;
+    const obsJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
+    const probe = path.join(tmp, "o122-probe.js"), out = path.join(tmp, "o122-probe.out");
+    fs.writeFileSync(probe, "const fs = require('fs'); let n = 0; for (const k of ['statSync', 'openSync', 'readFileSync', 'existsSync']) { const o = fs[k]; fs[k] = function (p, ...r) { if (typeof p === 'string' && /change\\.md$/.test(p)) n++; return o.call(this, p, ...r); }; }\n" +
+      "process.on('exit', () => require('fs').writeFileSync(" + js(out) + ", String(n)));\n");
+    const p = path.join(tmp, "o122-prefilter");
+    S.initProject(p, ["core"], "en");
+    for (let i = 0; i < 5; i++) {
+      const f = S.createFeature(p, "Feat " + i, ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "- [ ] 1. t\n  - _Verify: node t" + i + ".js_\n");
+    }
+    const big = S.createFeature(p, "Big", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(big.dir, "tasks.md"), "- [ ] 1. t\n  - _Verify: node big.js_\n" + "x".repeat(2 * 1024 * 1024 + 10) + "\n");
+    const ch = S.createFeature(p, "Tweak", undefined, "", undefined, "en", undefined, { size: "xs" });
+    fs.writeFileSync(path.join(ch.dir, "change.md"), fs.readFileSync(path.join(ch.dir, "change.md"), "utf8").replace(/_Verify: [^_\n]*_/, "_Verify: node change.js_"));
+    const hook = (command) => {
+      try { fs.unlinkSync(out); } catch { /* none */ }
+      spawnSync(process.execPath, ["-r", probe, obsJs], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" },
+        input: js({ session_id: "s", cwd: p, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command }, tool_response: { exit_code: 0 } }) });
+      return Number(fs.existsSync(out) ? fs.readFileSync(out, "utf8") : NaN);
+    };
+    const logged = (dir) => { try { return fs.readFileSync(path.join(dir, ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).command); } catch { return []; } };
+    const probes = hook("ls -la");
+    hook("node change.js");
+    hook("node big.js");
+    ok(probes === 2 && js(logged(ch.dir)) === js(["node change.js"]) && js(logged(big.dir)) === "[]",
+      "1.22 review: the observe hook's pre-filter touches change.md only in the folders without a tasks.md (the change's and steering/: 2 probes for 8 folders, not one or two each); a change's _Verify:_ is still logged, an oversized tasks.md still skipped (got " +
+      js([probes, logged(ch.dir), logged(big.dir)]) + ")");
+  }
 };

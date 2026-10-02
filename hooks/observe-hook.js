@@ -146,18 +146,33 @@ function mentioned(pdir, key) {
     return false;
   }
   for (const d of dirs) {
-    // tasks.md — or a change's change.md, which holds its tasks (1.21 F5)
-    for (const name of ["tasks.md", "change.md"]) {
-      const file = path.join(root, d.name, name);
-      try {
-        if (fs.statSync(file).size > MAX_TASKS_BYTES) continue;
-        const text = flat(fs.readFileSync(file, "utf8"));
-        // The " && " join of a task's commands (how done --run reports them) is never written whole: every part is (review R6).
-        if (text.includes(key) || (parts.length > 1 && parts.every((x) => text.includes(x)))) return true;
-      } catch { /* no such file */ }
-    }
+    // tasks.md — or, only when there is none, a change's change.md, which holds its tasks (1.21 F5). 1.22 review: one open per
+    // feature (its size read from the open file) — a stat, a read and a change.md probe per feature cost +133 ms a Bash call
+    // at 150 features.
+    const raw = readTasksText(path.join(root, d.name, "tasks.md"));
+    const got = raw === null ? readTasksText(path.join(root, d.name, "change.md")) : raw;
+    if (typeof got !== "string") continue;
+    const text = flat(got);
+    // The " && " join of a task's commands (how done --run reports them) is never written whole: every part is (review R6).
+    if (text.includes(key) || (parts.length > 1 && parts.every((x) => text.includes(x)))) return true;
   }
   return false;
+}
+// A tasks file's text → the text, null when there is no such file, false when it can't be read or passes MAX_TASKS_BYTES.
+function readTasksText(file) {
+  let fd;
+  try { fd = fs.openSync(file, "r"); } catch (e) { return e && e.code === "ENOENT" ? null : false; }
+  try {
+    const size = fs.fstatSync(fd).size;
+    if (size > MAX_TASKS_BYTES) return false;
+    const buf = Buffer.alloc(size);
+    const n = fs.readSync(fd, buf, 0, size, 0);
+    return buf.toString("utf8", 0, n);
+  } catch {
+    return false;
+  } finally {
+    try { fs.closeSync(fd); } catch { /* closed */ }
+  }
 }
 
 function main(raw) {
