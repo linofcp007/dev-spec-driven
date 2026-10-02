@@ -15,7 +15,11 @@ with real content from the `references/` templates. No MCP connection (e.g. clau
   the phase's checks fail; `role`, `through`; only on the user's explicit yes for that phase) · `spec_next_action`
   (you are here, one ordered next step).
 - **Execute:** `spec_next_task` (`waves: true` → the parallel execution waves) · `spec_task_brief` ·
-  `spec_complete_task {evidence}` · `spec_append_tasks` (converge) · `spec_finish`.
+  `spec_complete_task {evidence}` · `spec_append_tasks` (converge) · `spec_finish` · `spec_stop_check {message}` (the
+  end-of-turn evidence gate for clients without Claude Code's Stop hook: pass your closing message before you say done /
+  verified — `block: true` means ticked tasks still lack passing evidence) · `spec_log {name, gitLog}` (the commits citing
+  each task, + a red-first check on +tdd, from the `git log --name-only --relative` text you pass — the server never runs
+  git).
 - **Change & after:** `spec_impact` (an edit after approval → what it touches; reopen) · `spec_decide` (decision log) ·
   `spec_drift` · `spec_metrics` · `spec_catalog` · `spec_export` · `spec_changelog`.
 - **Project:** `spec_list` / `spec_status` · `spec_roadmap` / `spec_depend` / `spec_backlog` / `spec_milestone` ·

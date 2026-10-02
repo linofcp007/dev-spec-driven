@@ -20,6 +20,8 @@ When the task is non-trivial, follow the spec-driven workflow in `AGENTS.md` (re
 - Use the local engine for mechanical steps (zero-dependency, no CI):
   `node cli/dev-spec.js classify|init|create|next-action|doctor|trace|ears|next|brief|done|approve|impact|append-tasks|decide|finish|stop-check|evals`
   (full list: `node cli/dev-spec.js help`).
+  Below, `dev-spec <command>` stands for `node cli/dev-spec.js <command>` (a bare `dev-spec` works only when it is on
+  PATH).
   The `spec-driven` MCP server (VS Code agent mode, `.vscode/mcp.json`) exposes the same operations, and the plugin's
   commands as MCP prompts (`/` in Copilot Chat).
 - Artifacts go in `.specs/<feature>/`. Keep AC IDs and task markers stable. Run `dev-spec doctor`
@@ -28,7 +30,8 @@ When the task is non-trivial, follow the spec-driven workflow in `AGENTS.md` (re
   A task whose `_Verify:_` names a runnable command is verified only by a recorded run of it — a passing one, or
   a failing one on an `_Expect: fail_` task (`dev-spec done <feature> <n> --run`); if you can't run it, don't tick:
   ask for its output. After editing an approved spec, run `dev-spec impact <feature>`.
-  Before saying a task or feature is done, run `dev-spec stop-check --message "…"` (exit 1 = unverified ticks).
+  Before saying a task or feature is done, run `dev-spec stop-check --message "…"` (exit 1 = unverified ticks; over
+  MCP: `spec_stop_check {message}`, `block: true`).
 - **No GitHub Actions / no paid CI / no pull requests** — tests, load tests, and evals run locally when
   chosen; integrate by merging locally.
 - **Respond in the user's language** (EN/PT/ES — European or Brazilian Portuguese), including artifact prose. EARS

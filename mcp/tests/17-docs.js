@@ -501,6 +501,14 @@ exports.run = async ({
     ok(/\*\*Classify\*\* with the reviewer's calibration \(the plugin's `agents\/spec-reviewer\.md` → Calibration\)/.test(docsRef("code-reuse-and-quality.md")) &&
       /^### Calibration$/m.test(docsRead("agents", "spec-reviewer.md")),
       "1.22 review P10: code-reuse-and-quality.md points the calibration at agents/spec-reviewer.md → Calibration");
+    // P11: an MCP-only client's stop gate is the spec_stop_check tool — INTEGRATIONS names it first, the tool catalog lists it
+    // and spec_log; the short rule files say what `dev-spec <command>` stands for (`rules <tool>` makes it this clone's).
+    const integrRow = (docsRead("INTEGRATIONS.md").match(/^\| End-of-turn evidence gate.*$/m) || [""])[0];
+    const catalog = docsRef("tool-catalog.md");
+    ok(/\| — \(call the `spec_stop_check \{message\}` MCP tool before claiming done — or the CLI `dev-spec stop-check/.test(integrRow) &&
+      /`spec_stop_check \{message\}`/.test(catalog) && /`spec_log \{name, gitLog\}`/.test(catalog) && list.result.tools.some((t) => t.name === "spec_stop_check") && list.result.tools.some((t) => t.name === "spec_log") &&
+      docsRules.slice(0, 4).every(([f]) => /Below, `dev-spec <command>` stands for `node cli\/dev-spec\.js <command>`/.test(docsWs(docsRead(f))) && /`spec_stop_check \{message\}`/.test(docsRead(f))),
+      "1.22 review P11: INTEGRATIONS' stop-gate row names spec_stop_check first (CLI as the alternative); tool-catalog.md lists spec_stop_check and spec_log; the Cursor / Windsurf / Copilot / Gemini rule files spell out `dev-spec <command>` and the MCP stop-check");
   }
 
   // Release hygiene: the three version fields agree.

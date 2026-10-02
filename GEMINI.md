@@ -10,6 +10,8 @@ Follow the spec-driven workflow in `AGENTS.md` (repo root). In short:
 - Use the local engine for the mechanical steps (zero-dependency, no CI, no cost):
   `node cli/dev-spec.js classify|init|create|next-action|doctor|trace|ears|next|brief|done|approve|impact|append-tasks|decide|finish|stop-check|evals`
   (full list: `node cli/dev-spec.js help`).
+  Below, `dev-spec <command>` stands for `node cli/dev-spec.js <command>` (a bare `dev-spec` works only when it is on
+  PATH).
   If MCP is configured (`~/.gemini/settings.json`), the `spec-driven` server exposes the same tools (and the plugin's
   commands as MCP prompts).
 - Artifacts live under `.specs/<feature>/`. Keep AC IDs (`US-1.AC-1`) and task markers stable.
@@ -18,7 +20,8 @@ Follow the spec-driven workflow in `AGENTS.md` (repo root). In short:
   A task whose `_Verify:_` names a runnable command is verified only by a recorded run of it — a passing one, or
   a failing one on an `_Expect: fail_` task (`dev-spec done <feature> <n> --run`); if you can't run it, don't tick:
   ask for its output. After editing an approved spec, run `dev-spec impact <feature>`.
-  Before saying a task or feature is done, run `dev-spec stop-check --message "…"` (exit 1 = unverified ticks).
+  Before saying a task or feature is done, run `dev-spec stop-check --message "…"` (exit 1 = unverified ticks; over
+  MCP: `spec_stop_check {message}`, `block: true`).
 - **No GitHub Actions / no paid CI / no pull requests** — everything runs locally; integrate by merging locally.
 - **Respond in the user's language** (EN/PT/ES — European or Brazilian Portuguese), including artifact prose. EARS
   keywords work in all of them (`SHALL`/`DEVE`/`DEBE`).
