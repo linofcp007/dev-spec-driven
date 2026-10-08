@@ -22,7 +22,7 @@ Legend: ✅ done · 🟡 in progress · ⛔ blocked · 📋 planned · ⬜ not s
 
 ```mermaid
 graph LR
-  api_keys["api-keys"] --> usage_metering["usage-metering"]
+  f_api_keys["api-keys"] --> f_usage_metering["usage-metering"]
 ```
 
 ## ⚠ Needs attention
