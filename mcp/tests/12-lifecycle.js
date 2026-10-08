@@ -715,6 +715,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const stampInit16 = S.readRoadmap(n16).meta.specVersion;
     S.createFeature(n16, "First", ["core"]);
     const n16b = path.join(tmp, "proj-wp16-new-create");
+    fs.mkdirSync(n16b, { recursive: true }); // an existing (empty) folder: a projectDir names one (1.24 r6 A3)
     await call("spec_create", { name: "Solo", tracks: ["core"], projectDir: n16b });
     const g16 = path.join(tmp, "proj-wp16-legacy-create");
     legacy16(g16, "en");
@@ -784,9 +785,10 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const keys16 = (o, pre = "") => Object.entries(o).flatMap(([k, v]) => (v && typeof v === "object" && !Array.isArray(v) ? keys16(v, pre + k + ".") : [pre + k])).sort();
     const en16 = JSON.stringify(keys16(S.msg("en").upgrade));
     const badArg16 = await call("spec_upgrade", { apply: "yes", projectDir: p16 });
+    fs.mkdirSync(path.join(tmp, "proj-wp16-empty"), { recursive: true }); // an existing folder without .specs/ (a missing one: project-missing, 1.24 r6 A3)
     const noSpecs16 = await call("spec_upgrade", { projectDir: path.join(tmp, "proj-wp16-empty") });
     ok(["pt", "es"].every((l) => JSON.stringify(keys16(S.msg(l).upgrade)) === en16) && badArg16.result.isError && /apply must be a boolean/.test(badArg16.result.content[0].text) &&
-      noSpecs16.result.isError && /No \.specs\/ at/.test(noSpecs16.result.content[0].text) && !fs.existsSync(path.join(tmp, "proj-wp16-empty")),
+      noSpecs16.result.isError && /No \.specs\/ at/.test(noSpecs16.result.content[0].text) && !fs.existsSync(path.join(tmp, "proj-wp16-empty", ".specs")),
       "upgrade messages exist in EN / PT / ES with the same keys; spec_upgrade {apply: 'yes'} is an argument error; a project without .specs/ is an error (nothing created)");
   }
 

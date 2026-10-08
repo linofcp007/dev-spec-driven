@@ -1518,9 +1518,17 @@ const msg = {
       arrayOf: (t) => `an array (each item ${t})`,
       oneOf: (list) => `one of: ${list}`,
       atLeast: (n) => `≥ ${n}`,
+      atMost: (n) => `≤ ${n}`, // 1.24 r6 A5: a schema `maximum`
+      between: (lo, hi) => `between ${lo} and ${hi}`, // 1.24 r6 A5: `minimum` and `maximum`
+      // 1.24 r6 A1: a top-level argument the tool's inputSchema doesn't list (it was dropped, and the call did something else)
+      unknownArgs: (tool, items, valid) => `Unknown argument${items.length > 1 ? "s" : ""} for ${tool}: ${items.map((u) => u.argument + (u.didYouMean ? ` (did you mean ${u.didYouMean}?)` : "")).join(", ")} — nothing was done. ${tool} takes: ${valid}.`,
       notObject: "arguments must be a JSON object.",
       dotdot: "projectDir must not contain '..' path segments.",
       network: (dir) => `projectDir must be a local folder — a network or device path (${dir}) is refused, so a tool call can never point this local server at another machine; open the project locally (or start the server with it as the working directory).`,
+      // 1.24 r6 A3: projectDir names an existing folder (the CLI's --project rule) — spec_init alone creates one
+      projectMissing: (dir) => `projectDir ${dir}: no such folder — check the path (only spec_init creates a project folder).`,
+      projectNotDir: (dir) => `projectDir ${dir} is a file, not a folder.`,
+      projectUri: (uri) => `projectDir ${uri} is not a local file:// URI of a folder (file:///C:/path on Windows, file:///path elsewhere).`,
       // tools/call naming no tool of tools/list (JSON-RPC -32602 Invalid params) — 1.14 full review S2.
       unknownTool: (name) => `Unknown tool: ${name} — tools/list lists the tools this server provides.`,
       noTool: "tools/call needs params.name — the tool to call (tools/list lists them).",
@@ -2199,6 +2207,8 @@ const msg = {
       forced: (ids) => `⚠ FORCED: the phase's checks fail (${ids}) — it would be recorded as approved anyway.`,
       waiver: (reason, expires) => "Waiver: " + [reason ? `"${reason}"` : null, expires ? `until ${expires}` : null].filter(Boolean).join(" ") + ".",
       phases: (list) => `Phases to approve, in order: ${list}.`,
+      // 1.24 r6 A-I8: what a spec_feature remove deletes (remove's preview: wouldDelete.files)
+      removeSize: (n, rel) => `This deletes ${rel} for good — ${n} file${n === 1 ? "" : "s"}.`,
       approveTitle: "Approve",
       approveDesc: "Tick it to record this; leave it unticked (or decline) to refuse.",
       noteTitle: "Note",

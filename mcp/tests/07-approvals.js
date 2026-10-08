@@ -1199,6 +1199,20 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       /^dev-spec: un agente pide aprobar la fase classification de 'facturas'\. Las comprobaciones de la fase pasan\./.test(qEs.params.message) &&
       qEs.params.requestedSchema.properties.note.title === "Nota" && /^El usuario lo rechazó en el cliente MCP: no se registró nada/.test(rEs.error) && !stateOf(pEs, "facturas").approvals.classification,
       "1.21 F1b: the question and the refusals speak the feature's language — PT (deny: an explicit approve in the client records it), ES (ask) (got " + js([qPt.params.message, rPtNo.error, qEs.params.message, rEs.error]) + ")");
+
+    { // 1.24 r6 A-I8: the remove question says how much it deletes — remove's preview file count (a scratch folder and weeks of work read alike)
+      const big = S.createFeature(pEn, "sizable", ["core"]);
+      for (let i = 0; i < 3; i++) fs.writeFileSync(path.join(big.dir, "notes-" + i + ".md"), "x\n");
+      const pre = S.manageFeature(pEn, "remove", "sizable");
+      A.setAnswer(decline);
+      const rBig = await A.call("spec_feature", { action: "remove", name: "sizable", confirm: true, projectDir: pEn });
+      const qBig = A.asked[A.asked.length - 1] || { params: {} };
+      const I24 = require(path.join(__dirname, "lib", "i18n.js"));
+      const n = pre.wouldDelete ? pre.wouldDelete.files : -1;
+      ok(rBig.declined === true && n > 3 && new RegExp("This deletes \\.specs/sizable/ for good — " + n + " files\\.").test(qBig.params.message || "") && fs.existsSync(big.dir) &&
+        ["pt", "pt-BR", "es"].every((l) => { try { return /\.specs\/x\/.*7/.test(I24.msg(l).elicit.removeSize(7, ".specs/x/")); } catch { return false; } }),
+        "1.24 r6 A-I8: spec_feature remove's question names what it deletes — '.specs/sizable/ … N files' from remove's preview (EN / PT / pt-BR / ES) (got " + js([n, qBig.params.message]) + ")");
+    }
     await A.stop();
 
     // --- a client WITHOUT elicitation: ask and off → today's behaviour (recorded, nobody asked); deny → refused, the command given

@@ -13,9 +13,9 @@
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName, noteGhostPacks, packOf,
+let acIndex, builtinTaskHeadings, closestName, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName, noteGhostPacks, packOf,
   packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf;
-function __link(E) { ({ acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName,
+function __link(E) { ({ acIndex, builtinTaskHeadings, closestName, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName,
   noteGhostPacks, packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf } = E); }
 
 const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
@@ -69,22 +69,8 @@ const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd",
 function suggestTrack(token) {
   // Own keys only: a plain-object lookup matched 'constructor' / '__proto__' and suggested Object itself.
   if (Object.prototype.hasOwnProperty.call(TRACK_ALIASES, token)) return TRACK_ALIASES[token];
-  // Optimal-string-alignment distance: a transposition ('sasa', 'ia') costs 1.
-  const dist = (a, b) => {
-    const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-    for (let j = 1; j <= b.length; j++) d[0][j] = j;
-    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
-    }
-    return d[a.length][b.length];
-  };
-  let best = null;
-  for (const t of allTracks()) {
-    const n = dist(token, t);
-    if (n <= Math.max(1, Math.floor(token.length / 2)) && (!best || n < best.n)) best = { t, n };
-  }
-  return best ? best.t : null;
+  // The optimal-string-alignment distance (core.js — a transposition, 'sasa' / 'ia', costs 1), up to half the token's length.
+  return closestName(token, allTracks(), (t, w) => Math.max(1, Math.floor(w.length / 2)));
 }
 function unknownTracksError(lang, unknown) {
   return i18n.msg(lang).tracks.unknown(unknown, allTracks().join(", "));

@@ -61,6 +61,7 @@ exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, SERVER, child, r
       S.trackSignals("sec").context.includes("permission") && !S.trackSignals("sec").weak.includes("permission") && !S.trackSignals("sec").weak.includes("stride"),
       "C4.2.3 classify: 'array stride' / 'file permission bits' (alone or together) give no +sec signal or note; upper-case STRIDE is the methodology (weak; strong with 'threat model'); 'permission' corroborates another +sec signal (RBAC permissions) but is no evidence alone, negated or not (" +
       [both, strideTm, strideAlone, rbacPerm].map((r) => r.label).join(" · ") + ")");
+    fs.mkdirSync(c4("mcp"), { recursive: true }); // a projectDir names an existing folder (1.24 r6 A3)
     const mcpC4 = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "A GDPR-compliant signup form with an array stride", projectDir: c4("mcp") } }));
     ok(mcpC4.label === "core +privacy" && !mcpC4.signals.sec.length, "C4.2.1/3 spec_classify (MCP) = the engine (" + mcpC4.label + ")");
 

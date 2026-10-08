@@ -81,8 +81,8 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
       "createFeature refuses an unknown kind (nothing scaffolded), backlog an unknown action (= the MCP enums); scanCodebase with cap -3 falls back to the default (never 0 files)");
     const mx13 = await call("spec_next_task", { name: "billing", batch: true, max: 0, projectDir: n13 });
     const mxOk13 = await call("spec_next_task", { name: "billing", batch: true, max: 2, projectDir: n13 });
-    ok(mx13.result.isError === true && /max must be an integer ≥ 1 \(got 0\)/.test(payload(mx13).error) && !mxOk13.result.isError,
-      "spec_next_task {max: 0} is refused like the CLI's --max 0 (max is an integer ≥ 1)");
+    ok(mx13.result.isError === true && /max must be an integer between 1 and 8 \(got 0\)/.test(payload(mx13).error) && !mxOk13.result.isError,
+      "spec_next_task {max: 0} is refused like the CLI's --max 0 (max is an integer between 1 and 8 — 1.24 r6 A5: its maximum)");
   }
 
   { // --- 1.13 batch 5: no stray .tmp files, network projectDir refused, SessionStart gate, BOM-only re-save, cross-process feature lock ---
@@ -135,7 +135,9 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     const ext14 = process.platform === "win32" ? payload(await call("spec_list", { projectDir: "\\\\?\\" + t14 })) : { exists: true, features: [{ name: "alpha" }] };
     ok(netRes14.every((r) => r.result.isError && /projectDir must be a local folder — a network or device path/.test(errText(r))) &&
       netArg14.result.isError && /name must be a string/.test(errText(netArg14)) && netMs14 < 5000 &&
-      wsl14.every((r) => !r.result.isError) && ext14.exists === true && ext14.features.some((f) => f.name === "alpha"),
+      // a WSL host is no network path: accepted — or, where that distribution's folder doesn't exist here, refused as missing
+      // (1.24 r6 A3: projectDir names an existing folder), never as a network path
+      wsl14.every((r) => !r.result.isError || payload(r).code === "project-missing") && ext14.exists === true && ext14.features.some((f) => f.name === "alpha"),
       "MCP refuses a network projectDir (\\\\host\\share, //host/share, \\\\?\\UNC\\…, \\\\.\\UNC\\…, device paths) before any fs call, argument errors don't touch it (" + netMs14 +
       " ms); \\\\wsl$ / \\\\wsl.localhost and \\\\?\\C:\\… stay accepted (got " +
       JSON.stringify([netRes14.map((r) => errText(r).slice(0, 60)), errText(netArg14), wsl14.map((r) => !!r.result.isError), ext14.exists, (ext14.features || []).length]) + ")");

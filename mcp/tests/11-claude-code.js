@@ -248,7 +248,12 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
       JSON.stringify(tl.filter((t) => !t.annotations || t.annotations.destructiveHint === true).map((t) => t.name).concat(roTools)) + ")");
     const roBefore = cSnap(path.join(sl, ".specs"));
     const roCalls = [];
-    for (const n of roTools) roCalls.push(await rpc("tools/call", { name: n, arguments: { name: "billing", description: "billing invoices", code: true, matrix: true, message: "All done.", gitLog: "commit 0123456789abcdef0123456789abcdef01234567", projectDir: sl } }));
+    const roArgs = { name: "billing", description: "billing invoices", code: true, matrix: true, message: "All done.", gitLog: "commit 0123456789abcdef0123456789abcdef01234567", projectDir: sl };
+    for (const n of roTools) {
+      // each tool gets the arguments its schema lists (1.24 r6 A1: another one is refused — unknown-argument)
+      const props = tl.find((t) => t.name === n).inputSchema.properties || {};
+      roCalls.push(await rpc("tools/call", { name: n, arguments: Object.fromEntries(Object.entries(roArgs).filter(([k]) => Object.prototype.hasOwnProperty.call(props, k))) }));
+    }
     ok(roCalls.every((m) => m.result && !m.result.isError) && cSnap(path.join(sl, ".specs")) === roBefore,
       "1.16 C3: the read-only tools leave .specs/ exactly as it was — every file, size and date (got " + JSON.stringify(roCalls.filter((m) => !m.result || m.result.isError).map((m) => JSON.stringify(m).slice(0, 120))) + ")");
     const cs = cServer(sl, { SPEC_MCP_PROMPTS: "" });

@@ -1432,8 +1432,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require }) => {
     const msScan = S.scanCodebase(missing), msCov = S.coverage(missing), msFile = S.scanCodebase(path.join(cp, "src", "util.js"));
     const msMcp = await raw("spec_scan", { projectDir: missing }), msMcpCov = await raw("spec_coverage", { projectDir: missing });
     const i18n = require("./lib/i18n.js");
-    ok(!msScan.ok && /is not a folder/.test(msScan.error) && !msCov.ok && /is not a folder/.test(msCov.error) && !msFile.ok && msMcp.isError && /is not a folder/.test(msMcp.body.error) &&
-      msMcpCov.isError && !fs.existsSync(missing) && /não é uma pasta/.test(i18n.msg("pt").brownfield.notFolder("x")) && /no es una carpeta/.test(i18n.msg("es").brownfield.notFolder("x")),
+    // over MCP the server refuses it first (1.24 r6 A3: projectDir names an existing folder — code project-missing)
+    ok(!msScan.ok && /is not a folder/.test(msScan.error) && !msCov.ok && /is not a folder/.test(msCov.error) && !msFile.ok && msMcp.isError && /no such folder/.test(msMcp.body.error) &&
+      msMcp.body.code === "project-missing" && msMcpCov.isError && msMcpCov.body.code === "project-missing" && !fs.existsSync(missing) && /não é uma pasta/.test(i18n.msg("pt").brownfield.notFolder("x")) && /no es una carpeta/.test(i18n.msg("es").brownfield.notFolder("x")),
       "1.22 review F12: spec_scan / spec_coverage on a missing folder (or a file) return ok: false with a localized 'is not a folder' error — never ok: true, 0 files (got " +
       js([msScan.ok, msScan.error, msCov.ok, msFile.ok, msMcp.isError]) + ")");
 
