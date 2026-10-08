@@ -43,11 +43,18 @@ flows, the bugfix kind.
   `checks`) while any fails. `force:true` (CLI `--force`) records it anyway with `forced: true` + the failing
   ids — doctor's `approval-gates` and the roadmap keep flagging it; a clean re-approval replaces it. A phase
   with no artifact (eval-plan without +ai, test-plan without +tdd, `tests` on a core-only feature, a missing file) is an
-  error even with force. `tests` and `execution` have checks too (see Pending gates below). **Phase order:** approving a
+  error even with force — and so is one that exists but can't be read (r5 review: a folder of that name, EACCES, EBUSY —
+  `approvalChecks`' `exists` is present AND readable; `nothing()` flags `unreadable` and approve answers
+  `gates.approveUnreadable`; it threw a TypeError on the null text in approve, doctor, next_action and finish). `tests` and `execution` have checks too (see Pending gates below). **Phase order:** approving a
   phase while an EARLIER one is in `pendingGateList()` (doctor's pending gates — only phases with an artifact, so a
   missing file never blocks forever) adds the failing check `phase-order` (`gates.phaseOrder`, EN/PT/ES) — refused
   unless force (recorded as forced with it). Not for `execution`: its gate (finish's blockers) already names them.
-- **next_action step order — phase by phase:** `re-review` (an artifact changed since ITS approval and re-approvable
+- **next_action step order — phase by phase:** first (r5 review) a `.state.json` readState marks `invalid` (not JSON — a git
+  text merge's conflict markers, a truncated write — or the wrong shape) is the ONE step: `fix` with `stateInvalid: true`
+  (`next.stateInvalid`: repair or restore it). Read as empty it listed every gate pending and said "approve" — which every
+  mutator refuses on that file: a loop. Doctor fails `state` (the localized `state.invalid` as its detail), spec_finish blocks
+  on `state` first (and reports no pending gate / change since approval from the unknown approvals), the status line's
+  statusNext answers `{step: fix, file: .state.json}`. Then `re-review` (an artifact changed since ITS approval and re-approvable
   now — one of a phase after the first pending gate waits for it, approve would refuse it on `phase-order`; `impact`
   when a snapshot exists; when that phase's gate would refuse it, `refusedGate` {phase, failing} and the check ids are
   named — never an approval that would be refused; an approved artifact that was DELETED (1.22 review) is listed in
@@ -411,7 +418,9 @@ iron law, phase order, the finish / execution gate, every track criterion scaffo
 - **`kind: "bugfix"`** is stored in `.state.json`; `createFeature` scaffolds `bug.md` +
   bug requirements/test plan/tasks (always +tdd), `specDoctor` swaps the design checks for
   `reproduction` (warn) and `root-cause` (**fail** until filled — the iron law, enforced at execution by
-  `bugfixGate()`).
+  `bugfixGate()`). bug.md IS its design (r5 review): an open `[NEEDS CLARIFICATION]` there refuses the design gate
+  (`doctor.clarificationsOpenBug` when only bug.md holds them), one in its Reproduction the requirements gate; doctor's
+  `clarifications` check and spec_clarify read bug.md too (a Root Cause "probably X [NEEDS CLARIFICATION: …]" was approved).
 - **Bugfix prefill (1.21 F3)** — `spec_create {kind: "bugfix", reproduction, rootCause, condition, behaviour}` (CLI
   `--reproduction`, `--root-cause`, `--condition`, `--behaviour`): `bugCreateInput()` (engine/scaffold.js) validates them
   BEFORE anything is written (strings; condition / behaviour one line ≤ 500 characters, whitespace folded, a leading

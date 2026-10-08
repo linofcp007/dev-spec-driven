@@ -1278,6 +1278,8 @@ function clarify(projectDir, name) {
 
   // Author-marked ambiguities take priority — resolve every [NEEDS CLARIFICATION] first (a change: anywhere in change.md).
   const markers = clarificationMarkers(full);
+  // r5 review: a bugfix's bug.md too — its Reproduction / Root Cause are what its requirements / design gates sign off (they refuse on these)
+  if (kind === "bugfix") markers.push(...clarificationMarkers(readIfExists(path.join(dir, "bug.md")) || ""));
   markers.forEach((mk) => add(q.resolveMarker(mk)));
 
   // Spec-Kit-style structure checks (headings matched EN/PT/ES) — a change has no stories, success criteria or priorities

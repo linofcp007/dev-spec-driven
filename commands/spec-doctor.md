@@ -14,7 +14,7 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   as a list item, heading or line that starts with its ID, or a table row under an Acceptance Criteria heading — or it
   has criteria but no `US-n.AC-m` ID trace_check reads: number each one `US-1.AC-1`, `US-1.AC-2` …; a bare `AC-1` is
   not one),
-  `clarifications` still open, `ac-uniqueness`, `placeholders` (template
+  `clarifications` still open (a bugfix: in `bug.md` too), `ac-uniqueness`, `placeholders` (template
   text left in the current phase's artifact or an earlier one — including a `[bracketed placeholder]` left inside
   a track section, which the design approval refuses; only a bracket whose text the templates write — the built-in
   ones or the project's own `.specs/templates/` — or TODO / TBD / FIXME / `…`, is a placeholder — real values such as

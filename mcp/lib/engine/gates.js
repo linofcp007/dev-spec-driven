@@ -168,7 +168,8 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   const G = i18n.msg(lng).gates;
   const tracks = detectTracks(f.dir);
   const gate = approvalChecks(projectDir, f.slug, f.dir, p, tracks, state.kind || "feature", lng);
-  if (!gate.artifact) return { ok: false, nothingToApprove: true, error: G.approveNothing(p, f.slug, gate.file) };
+  if (!gate.artifact) return gate.unreadable ? { ok: false, nothingToApprove: true, unreadable: true, error: G.approveUnreadable(p, f.slug, gate.file) } // r5 review
+    : { ok: false, nothingToApprove: true, error: G.approveNothing(p, f.slug, gate.file) };
   // 1.14 B3 — approvals by role: the role this sign-off is for (required while roadmap.json meta.approvalRoles lists the phase).
   const rc = approvalRole(projectDir, f.slug, p, opts.role, lng);
   if (rc.error) return rc.error;
@@ -1572,12 +1573,14 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
   const fm = i18n.msg(lang);
   const m = fm.doctor, G = fm.gates;
   const read = (x) => readIfExists(path.join(dir, x));
-  const exists = (x) => fs.existsSync(path.join(dir, x));
+  // r5 review: an artifact that exists but can't be read (a folder of that name, no permission, a file another program holds)
+  // is no artifact to judge — nothing to approve, flagged `unreadable` (approve says so) — never a TypeError on its null text.
+  const exists = (x) => fs.existsSync(path.join(dir, x)) && read(x) != null;
   const checks = [];
   const need = (id, ok, detail) => { if (!ok && !checks.some((c) => c.id === id)) checks.push({ id, detail }); };
   const noPlaceholders = (x) => { const r = artifactReport(dir, x, tracks); need("placeholders", r.state !== "placeholder", placeholderSummary([r], lang)); };
   const gaps = (tr, kinds) => traceGapLines({ ...Object.fromEntries(kinds.map((k) => [k, tr[k] || []])), removedAcs: tr.removedAcs }, lang).join("; ");
-  const nothing = (file) => ({ artifact: false, file, checks });
+  const nothing = (file) => ({ artifact: false, file, checks, ...(fs.existsSync(path.join(dir, file)) ? { unreadable: true } : {}) });
   const bugfix = kind === "bugfix";
   const label = (s) => `${fm.sectionNames[s.section] || s.section}:${fm.sectionStatus[s.status] || s.status}`;
   switch (phase) {
@@ -1596,7 +1599,8 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
       const unidentified = earsUnidentified(reqs, ev, dir); // …and the mirror: criteria, but no AC ID trace_check counts (1.22 review)
       need("ears", !unidentified, unidentified ? m.earsNoAcIds(shortIdList(unidentified)) : "");
       noPlaceholders("requirements.md");
-      const mk = clarificationMarkers(reqs);
+      // r5 review: a bugfix's requirements gate also needs bug.md → Reproduction (below) — an open question there is no reproduction
+      const mk = [...clarificationMarkers(reqs), ...(bugfix ? clarificationMarkers(extractSection(read("bug.md") || "", REPRO_SYN) || "") : [])];
       need("clarifications", !mk.length, m.clarificationsOpen(mk.length));
       need("success-criteria", hasSuccessCriteria(activeDesign(reqs, tracks)), m.scMissing);
       need("priorities", hasPriority(activeDesign(reqs, tracks)), m.prioritiesMissing);
@@ -1627,8 +1631,10 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
       }
       // C3: a design-first design is approved BEFORE the requirements are written — only its own open questions block it.
       const reqMarkers = featureFlow(dir, kind) === "design-first" ? [] : clarificationMarkers(read("requirements.md") || "");
-      const mk = [...reqMarkers, ...clarificationMarkers(design || "")];
-      need("clarifications", !mk.length, m.clarificationsOpen(mk.length));
+      // r5 review: a bugfix's design IS bug.md — "Root Cause: probably X [NEEDS CLARIFICATION: …]" was approved (the gate read design.md)
+      const bugMarkers = bugfix ? clarificationMarkers(read("bug.md") || "") : [];
+      const mk = [...reqMarkers, ...bugMarkers, ...clarificationMarkers(design || "")];
+      need("clarifications", !mk.length, bugMarkers.length && mk.length === bugMarkers.length ? m.clarificationsOpenBug(mk.length) : m.clarificationsOpen(mk.length));
       break;
     }
     case "test-plan": {

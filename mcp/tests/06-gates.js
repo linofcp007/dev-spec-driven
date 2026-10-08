@@ -1408,5 +1408,57 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     ok(naPt.step === "fix" && /Until it is repaired/.test(naPt.recommendation) && /Enquanto não for reparado/.test(naPt2.recommendation) && /Mientras no se repare/.test(naEs2.recommendation),
       "r5 review M1: next_action's repair step is localized (the feature's language — EN, PT, ES) (got " + js([naPt2.recommendation.slice(0, 90), naEs2.recommendation.slice(0, 90)]) + ")");
 
+    // The crash: an artifact that exists but can't be read (a folder named requirements.md) — approve, doctor, next_action, finish and
+    // the fast-forward answer (approve: unreadable, localized) instead of a TypeError.
+    const c = filled("unreadable");
+    S.approvePhase(c.p, "widget", "classification", "u");
+    fs.rmSync(path.join(c.f.dir, "requirements.md"));
+    fs.mkdirSync(path.join(c.f.dir, "requirements.md"));
+    const run = (fn) => { try { return fn(); } catch (e) { return { threw: e.message }; } };
+    const cAp = run(() => S.approvePhase(c.p, "widget", "requirements", "u")), cDoc = run(() => S.specDoctor(c.p, "widget"));
+    const cNa = run(() => S.nextAction(c.p, "widget")), cFin = run(() => S.finishFeature(c.p, "widget", {}));
+    const cFf = run(() => S.approvePhase(c.p, "widget", null, "u", { through: "tasks" }));
+    ok(cAp.ok === false && cAp.unreadable === true && cAp.nothingToApprove === true && /^Nothing to approve: requirements\.md in 'widget' can't be read/.test(cAp.error) &&
+      cDoc.ok === true && cNa.ok === true && cFin.ok === true && cFin.readyToFinish === false && cFf.ok === false && cFf.stopReason === "nothing-to-approve",
+      "r5 review: an artifact that exists but can't be read (a folder named requirements.md) — approve answers a localized 'can't be read' (unreadable), doctor / next_action / finish / the fast-forward answer instead of throwing (got " +
+      js([cAp, cDoc.threw, cNa.threw, cFin.threw, cFf.stopReason || cFf.threw]) + ")");
+    // the same after its approval: next_action says restore it (missingApproved), never "re-approve"
+    const c2 = filled("unreadable-approved");
+    for (const ph of ["classification", "requirements"]) S.approvePhase(c2.p, "widget", ph, "u");
+    fs.rmSync(path.join(c2.f.dir, "requirements.md"));
+    fs.mkdirSync(path.join(c2.f.dir, "requirements.md"));
+    const c2Na = run(() => S.nextAction(c2.p, "widget"));
+    ok(c2Na.step === "re-review" && js(c2Na.missingApproved) === '["requirements.md"]' && /was approved but no longer exists — restore it/.test(c2Na.recommendation),
+      "r5 review: an approved artifact that can't be read any more → next_action's re-review names it in missingApproved (restore it or revoke) (got " + js([c2Na.step, c2Na.missingApproved, c2Na.threw]) + ")");
+
+    // M11: a bugfix's bug.md is its design — an open [NEEDS CLARIFICATION] in its Root Cause (or Reproduction) refuses the approval;
+    // doctor's clarifications check and spec_clarify see it too.
+    const bp = path.join(tmp, "proj-r5g-bug");
+    S.initProject(bp, ["core"], "en");
+    const bf = S.createFeature(bp, "Login fails", ["core"], undefined, undefined, "en", "bugfix");
+    const bw = (rel, re, by) => fs.writeFileSync(path.join(bf.dir, rel), fs.readFileSync(path.join(bf.dir, rel), "utf8").replace(re, by));
+    fs.writeFileSync(path.join(bf.dir, "requirements.md"), "# Bugfix: Login fails\n\n## Summary\nLogin fails.\n\n### US-1 (P1 — fix): Login fails\n**Independent Test:** T-01.\n\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — IF the e-mail holds an accented letter THEN THE SYSTEM SHALL log the user in\n2. **US-1.AC-2** — THE SYSTEM SHALL keep plain e-mails logging in unchanged\n\n## Success Criteria\n- **SC-001** — the bug no longer reproduces.\n");
+    bw("bug.md", /## Summary\n\[[^\]]*\]/, "## Summary\nLogin fails for accented e-mails.");
+    bw("bug.md", /## Reproduction\n> \*\*TODO\*\*[^\n]*/, "## Reproduction\nLog in as josé@example.com: 401 [NEEDS CLARIFICATION: which browser?]");
+    bw("bug.md", /- \*\*Expected:\*\* \[[^\]]*\]/, "- **Expected:** logged in");
+    bw("bug.md", /- \*\*Actual:\*\* \[[^\]]*\]/, "- **Actual:** 401");
+    bw("bug.md", /## Fix\n\[[^\]]*\]/, "## Fix\nNormalize with NFC.");
+    const bReq1 = S.approvePhase(bp, "login-fails", "requirements", "u");
+    bw("bug.md", " [NEEDS CLARIFICATION: which browser?]", "");
+    const bReq2 = S.approvePhase(bp, "login-fails", "requirements", "u");
+    bw("bug.md", /## Root Cause\n> \*\*TODO\*\*[^\n]*/, "## Root Cause\nProbably the stored NFD form [NEEDS CLARIFICATION: confirm it in the DB]");
+    const bDes1 = S.approvePhase(bp, "login-fails", "design", "u");
+    const bDoc = S.specDoctor(bp, "login-fails");
+    const bCl = S.clarify(bp, "login-fails");
+    bw("bug.md", "Probably the stored NFD form [NEEDS CLARIFICATION: confirm it in the DB]", "The DB stores NFD (users.email, checked in psql); the lookup compares NFC.");
+    const bDes2 = S.approvePhase(bp, "login-fails", "design", "u");
+    const bClar = bDoc.checks.find((x) => x.id === "clarifications") || {};
+    ok(bReq1.ok === false && bReq1.failing.includes("clarifications") && bReq2.ok && bDes1.ok === false && js(bDes1.failing) === '["clarifications"]' &&
+      /1 unresolved \[NEEDS CLARIFICATION\] in bug\.md/.test(bDes1.checks[0].detail) && bClar.status === "fail" && /in bug\.md/.test(bClar.detail) &&
+      bCl.questions.some((q) => /confirm it in the DB/.test(q)) && bDes2.ok,
+      "r5 review M11: a bugfix's [NEEDS CLARIFICATION] in bug.md → Reproduction refuses the requirements gate, in its Root Cause the design gate (bug.md is its design); doctor's clarifications check fails and spec_clarify asks it (got " +
+      js([bReq1.failing, bDes1.failing, bClar, bCl.questions]) + ")");
+
   }
 };

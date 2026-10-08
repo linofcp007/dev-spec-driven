@@ -28,14 +28,15 @@ check ids — e.g. requirements: `ears`, `placeholders`, `clarifications`, `succ
 `ac-uniqueness` (bugfix: `reproduction`); design: `placeholders`, `constitution-check`, the active
 `saas-sections` / `ai-sections` / `sec-sections` / `privacy-sections` / `dist-sections` / `api-sections` /
 `ui-sections` / `obs-sections` / `data-sections` and a project track pack's `<pack>-sections`, `clarifications`
-(bugfix: `root-cause` — its design approval signs off `bug.md`); test-plan: `placeholders`, `traceability` (every AC
+(bugfix: `root-cause` — its design approval signs off `bug.md`, so an open `[NEEDS CLARIFICATION]` in `bug.md` refuses it too,
+and one in its Reproduction refuses the requirements); test-plan: `placeholders`, `traceability` (every AC
 has a test row, and no row cites an AC requirements.md doesn't define); eval-plan: `placeholders`; tasks:
 `placeholders` (no placeholder tasks), `traceability` (every AC covered by a task, no phantom AC / T-IDs in tasks),
 `task-deps` (a `_Depends:_` naming no task, or a cycle; a change's plan also `change-scope`); tests (the Phase 4 sign-off —
 failing tests / eval harness written and red): +tdd `tests-in-code` (every planned T-ID named by a test file),
 +ai `eval-sets` (`evals/golden.json` is the feature's own set, not the scaffold's sample) — nothing to approve on a
-core-only feature; execution (the sign-off after a ready `/spec-finish`): spec_finish's blockers — `doctor`,
-`root-cause`, `placeholders`, `changed-since-approval`, `tasks`, `open-tasks`, `verification`, `suite-evidence`
+core-only feature; execution (the sign-off after a ready `/spec-finish`): spec_finish's blockers — `state` (a
+`.state.json` that can't be read), `doctor`, `root-cause`, `placeholders`, `changed-since-approval`, `tasks`, `open-tasks`, `verification`, `suite-evidence`
 (project checks without a passing run since the last tick, on the current code), `approval-gates`.
 `tests` is pending on a +tdd / +ai feature once its test or eval plan exists or was approved (never on a bugfix), so
 `gatesOk` stays false and `spec_next_action` asks for it until it is approved — and again once the test plan gains a T-ID
