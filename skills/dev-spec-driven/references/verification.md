@@ -340,8 +340,9 @@ it verified — or a project check's run — unverified; every new run is held t
 its first **open** task, and evidence is stamped per task, so one "3." never borrows the other's passing run.
 Humans still read them as one task — renumber when doctor warns. `01` is task 1.
 
-**Bugfix gate.** In a bugfix, tasks after the root-cause task are refused (nothing recorded, nothing ticked)
-until `bug.md → Root Cause` is filled (`references/bugfix.md`).
+**Bugfix gate.** In a bugfix, the fix — every task after task 1, the red regression test (after the root-cause task,
+in a tasks.md that has one) — is refused (nothing recorded, nothing ticked) until `bug.md → Root Cause` is filled
+(`references/bugfix.md`).
 
 ## Claims and what proves them
 

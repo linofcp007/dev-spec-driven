@@ -3,8 +3,9 @@
 `/spec-bugfix` — or `spec_create {kind: "bugfix"}` / `dev-spec bugfix "<name>"` — scaffolds a light spec
 for a defect: `bug.md` (reproduction · expected vs actual · **root cause** · fix · regression test), a
 one-story `requirements.md` whose criterion is the corrected behaviour as `IF … THEN THE SYSTEM SHALL …`,
-a regression test plan (`T-01` reproduces the bug, `T-02` guards the neighbouring behaviour) and a
-fixed task order. It sits between Vibe (no discipline) and a full Spec (too heavy for one defect), and
+a regression test plan (`T-01` reproduces the bug, `T-02` guards the neighbouring behaviour) and two
+tasks — the failing regression test, then the fix (the reproduction and the root cause are written in `bug.md` and
+gated by its approvals, not tasks). It sits between Vibe (no discipline) and a full Spec (too heavy for one defect), and
 it is not Bounded mode either: Bounded (a short design in chat for a contained change to an existing flow)
 has no reproduction, root cause or regression test — a real defect needs all three.
 Adapted from the `systematic-debugging` skill of [obra/superpowers](https://github.com/obra/superpowers) (MIT).
@@ -37,46 +38,50 @@ The engine enforces it at every step, not only in doctor:
   not a `design.md`), so `spec_next_action` asks for it, `gatesOk` counts it and `spec_finish` blocks without it.
   Its snapshot and fingerprint are `bug.md`'s, so an edit to the root cause after approval shows up as
   `changed-since-approval` and in `spec_impact --phase design` (sections keyed `bug.md: Root Cause`). A bugfix has
-  no Phase 4 (`tests`) gate: its failing regression test is task 3. Once the user has reviewed `bug.md`, the test
+  no Phase 4 (`tests`) gate: its failing regression test is task 1. Once the user has reviewed `bug.md`, the test
   plan and the tasks and says go, `/spec-ff` (`spec_approve {through: "tasks"}`) records requirements → design →
   test-plan → tasks in one call, each through its own gate.
-- **Execution gate.** While `Root Cause` is unfilled, `spec_complete_task` (and `dev-spec done --run`, which then
-  runs nothing) **refuses every task positioned after the task that writes the root cause** — the regression
-  test, the fix, the verification — with nothing recorded and nothing ticked. "The task that writes it" is the
-  first task naming `bug.md` and the root cause that carries no `_Makes green:_` / `_Verify:_` (the scaffold's
-  task 2); without one, only the first task can be completed. That task itself can be ticked — it is the one that
-  writes the section — but while `Root Cause` is still empty the result carries `rootCausePending: true` and a note,
-  and a later task's refusal says the section is still empty (never "do task 2 first" for a task already ticked).
+- **Execution gate.** While `Root Cause` is unfilled (a design approval forced over it, or the section emptied
+  since), `spec_complete_task` (and `dev-spec done --run`, which then runs nothing) **refuses the fix** — every task
+  after task 1, the regression test — with nothing recorded and nothing ticked. A tasks.md that has a task writing
+  the root cause (the first task naming `bug.md` and the root cause that carries no `_Makes green:_` / `_Verify:_` —
+  task 2 of a bugfix scaffolded with four tasks) moves the line there: every task after it is refused instead. That
+  task itself can be ticked, but while `Root Cause` is still empty the result carries `rootCausePending: true` and a
+  note, and a later task's refusal says the section is still empty (never "do task 2 first" for a task already ticked).
 - **Finish.** `spec_finish` blocks on an unwritten root cause; the merge summary quotes the Root Cause and Fix.
 
-## The four phases (= the scaffolded tasks)
+## The four phases
 
-1. **Reproduce** (task 1). Read the error completely — message, stack trace, line numbers. Find the exact
-   steps / input / environment that trigger it *every time*. Can't reproduce? Gather more data (logs,
+Phases 1 and 2 are written in `bug.md` and signed off by the requirements and design approvals — no task stands for
+them; phases 3 and 4 are the two scaffolded tasks, so after the tasks approval `spec_next_action` names task 1, the
+regression test. (A bugfix scaffolded before this had four tasks — 1 reproduce, 2 root cause, 3 the red test, 4 the
+fix; it stays valid as it is: tick 1 and 2 with a note, `dev-spec done <f> 1 --evidence "…"`, once `bug.md` holds them.)
+
+1. **Reproduce** (`bug.md → Reproduction`). Read the error completely — message, stack trace, line numbers. Find the
+   exact steps / input / environment that trigger it *every time*. Can't reproduce? Gather more data (logs,
    inputs, versions); don't guess. Check what changed recently (`git log`, dependency bumps, config).
-   Write the steps in `bug.md → Reproduction`, then tick task 1 with a note of what you ran and saw
-   (`dev-spec done <f> 1 --evidence "…"` — it has no `_Verify:_`, so the note is its evidence).
-2. **Root cause** (task 2). Trace the bad value backwards to where it originates. In a multi-component
+   Write the steps in `bug.md → Reproduction` — the requirements approval checks it.
+2. **Root cause** (`bug.md → Root Cause`). Trace the bad value backwards to where it originates. In a multi-component
    path (API → service → DB, build → package → deploy), instrument each boundary once and run it, so the
    evidence shows WHERE it breaks before you theorise WHY. Compare with a working example of the same
    pattern in the codebase and list every difference. Form ONE hypothesis ("X is the cause because Y"),
-   test it with the smallest possible change, and keep the evidence. Fill `bug.md → Root Cause`, then tick task 2
-   the same way — tasks 1 and 2 ticked is what makes task 3 the next one `spec_next_action` names.
+   test it with the smallest possible change, and keep the evidence. Fill `bug.md → Root Cause` — the design
+   approval is refused until it is.
 
    **→ Gate: STOP here.** Fill the criterion (`US-1.AC-1`: the real condition and the correct behaviour), the test
    plan's File column and the tasks' `_Verify:_` commands, run `spec_doctor`, and present the reproduction, the root
    cause and its evidence for the approvals (requirements, design = `bug.md`, test-plan, tasks). Wait for the yes.
-3. **Failing regression test** (task 3). Write `T-01` so it reproduces the bug and watch it fail *for the
-   right reason* (the wrong behaviour, not a typo or a missing import). The scaffold marks task 3 **`_Expect: fail_`**
+3. **Failing regression test** (task 1). Write `T-01` so it reproduces the bug and watch it fail *for the
+   right reason* (the wrong behaviour, not a typo or a missing import). The scaffold marks task 1 **`_Expect: fail_`**
    with a `_Verify: [command that runs T-01]_` slot — fill in the real command (and add guard test `T-02`):
-   its failing run is then the recorded proof (`node "<clone>/cli/dev-spec.js" done <f> 3 --run` while the test
+   its failing run is then the recorded proof (`node "<clone>/cli/dev-spec.js" done <f> 1 --run` while the test
    fails — the line the tool's note prints, path resolved; a passing run is
    refused — `unexpected-pass`, the test doesn't reproduce the bug yet; so is a failure whose output shows the test
    never ran, such as a missing test file or module — `couldNotRun`). Paste the red output in the report. This
    is the proof the fix fixes *this* bug. **No shell to run it?** Ask the user to run the test and paste the output
    — don't write the fix on a red you haven't seen, and don't send a subagent (or a tool search) to find a shell:
    stop and ask.
-4. **Fix** (task 4). One change that removes the root cause — not a bundle of "while I'm here"
+4. **Fix** (task 2). One change that removes the root cause — not a bundle of "while I'm here"
    improvements. Run `T-01`, `T-02` and the full suite (`_Verify:_` records the evidence). Consider
    defence in depth: should the invalid value also be rejected at the boundary where it entered?
 
@@ -84,7 +89,7 @@ The engine enforces it at every step, not only in doctor:
 with `/spec-finish` — the merge summary carries the root cause and the fix from `bug.md`.
 
 `T-02` guards behaviour that already works, so it passes before the fix too: it sits in no task's `_Makes green:_`
-(only `T-01` does, on task 4), so doctor's `red-green` check asks no red run for it. Never make a guard test fail
+(only `T-01` does, on task 2 — the fix), so doctor's `red-green` check asks no red run for it. Never make a guard test fail
 artificially — and never list it under `_Makes green:_`, or `red-green` will (rightly) ask for a red run it can't have.
 
 ## When a fix doesn't work

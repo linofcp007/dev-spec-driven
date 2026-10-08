@@ -139,7 +139,7 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **Evidence before claims.** Tasks declare `_Verify: <command>_`; `spec_complete_task` records the
   command, exit code and output summary. A task with a runnable `_Verify:_` counts as verified only with a
   recorded run of it: a passing one — or, for a task marked `_Expect: fail_` (a red test, such as a bugfix's
-  task 3), a failing one (a passing run of it is refused: `unexpected-pass`); any other failure refuses the
+  task 1), a failing one (a passing run of it is refused: `unexpected-pass`); any other failure refuses the
   tick. **Can't run the command yourself?** Don't tick — not bare, not with a note: name the command and ask
   for its output (or `dev-spec done <feature> <n> --run`); a note-only tick stays unverified and is for when
   the user explicitly asks for one. Failed runs are kept in a short history, and a task reopened after a spec
@@ -150,8 +150,9 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   `doctor`, `spec_finish` and the `ROADMAP.md` "Needs attention" line
   list each unverified task with a localized reason. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — a light spec for a defect: reproduce → **root cause with evidence** → failing
-  regression test → fix → verify. `doctor` fails until the root cause is written, and the tasks after the
-  root-cause task can't be completed before that. What you already know goes in with the scaffold
+  regression test → fix → verify. The reproduction and the root cause are written in `bug.md` and gated by its
+  approvals, so the tasks are just two: the failing regression test, then the fix. `doctor` fails until the root
+  cause is written, and the fix can't be completed before that. What you already know goes in with the scaffold
   (`spec_create {kind: "bugfix", reproduction, rootCause, condition, behaviour, includeBody}` / `--reproduction`,
   `--root-cause`, `--condition`, `--behaviour`) — no read-back and rewrite of the four files.
 - **`/spec-finish`** — blocks on doctor failures, an artifact changed since its approval, placeholders
@@ -637,7 +638,7 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   (testes a falhar / harness de evals, `approve <f> tests`) é um gate que pede antes de implementar qualquer tarefa.
 - **Evidência antes de afirmações.** As tarefas declaram `_Verify: <comando>_`; `spec_complete_task` regista
   o comando, o código de saída e um resumo. Uma tarefa com um `_Verify:_` executável só fica verificada com uma
-  execução registada: uma que passe — ou, numa tarefa marcada `_Expect: fail_` (um teste vermelho, como a tarefa 3
+  execução registada: uma que passe — ou, numa tarefa marcada `_Expect: fail_` (um teste vermelho, como a tarefa 1
   de um bugfix), uma que falhe (uma que passe é recusada: `unexpected-pass`); qualquer outra falha recusa a
   marcação. **Não consegues correr o comando?** Não marques a tarefa — nem sem nada, nem com uma nota: indica o
   comando e pede o output (ou `dev-spec done <feature> <n> --run`); uma marcação só com nota fica por verificar e é
@@ -650,8 +651,9 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   atenção" do `ROADMAP.md` listam cada tarefa por verificar com o motivo. CLI:
   `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — uma spec leve para um defeito: reproduzir → **causa raiz com evidência** → teste de
-  regressão a falhar → correção → verificação. O `doctor` falha até a causa raiz estar escrita, e as tarefas
-  depois da tarefa da causa raiz não podem ser concluídas antes disso. O que já sabes entra com o scaffold
+  regressão a falhar → correção → verificação. A reprodução e a causa raiz escrevem-se no `bug.md` e passam pelas
+  aprovações dele, por isso as tarefas são só duas: o teste de regressão a falhar e depois a correção. O `doctor`
+  falha até a causa raiz estar escrita, e a correção não pode ser concluída antes disso. O que já sabes entra com o scaffold
   (`spec_create {kind: "bugfix", reproduction, rootCause, condition, behaviour, includeBody}` / `--reproduction`,
   `--root-cause`, `--condition`, `--behaviour`) — sem reler e reescrever os quatro ficheiros.
 - **`/spec-finish`** — bloqueia com falhas do doctor, um artefacto alterado depois da aprovação, placeholders
@@ -1166,7 +1168,7 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **Evidencia antes que afirmaciones.** Las tareas declaran `_Verify: <comando>_`; `spec_complete_task`
   registra el comando, el código de salida y un resumen. Una tarea con un `_Verify:_` ejecutable solo queda
   verificada con una ejecución registrada: una que pase — o, en una tarea marcada `_Expect: fail_` (una prueba en
-  rojo, como la tarea 3 de un bugfix), una que falle (una que pase se rechaza: `unexpected-pass`); cualquier otro
+  rojo, como la tarea 1 de un bugfix), una que falle (una que pase se rechaza: `unexpected-pass`); cualquier otro
   fallo rechaza la marca. **¿No puedes ejecutar el comando?** No marques la tarea — ni sin nada, ni con una nota:
   indica el comando y pide su salida (o `dev-spec done <feature> <n> --run`); una marca solo con nota queda sin
   verificar y es para cuando el usuario la pide explícitamente. Las ejecuciones fallidas quedan en un historial
@@ -1178,8 +1180,9 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   `spec_finish` y la línea "Necesita atención" del `ROADMAP.md` listan cada tarea sin verificar con su
   motivo. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — una spec ligera para un defecto: reproducir → **causa raíz con evidencia** → prueba de
-  regresión en rojo → corrección → verificación. El `doctor` falla hasta que la causa raíz esté escrita, y
-  las tareas posteriores a la de la causa raíz no se pueden completar antes. Lo que ya sabes entra con el
+  regresión en rojo → corrección → verificación. La reproducción y la causa raíz se escriben en `bug.md` y pasan
+  por sus aprobaciones, así que las tareas son solo dos: la prueba de regresión en rojo y después la corrección. El
+  `doctor` falla hasta que la causa raíz esté escrita, y la corrección no se puede completar antes. Lo que ya sabes entra con el
   scaffold (`spec_create {kind: "bugfix", reproduction, rootCause, condition, behaviour, includeBody}` /
   `--reproduction`, `--root-cause`, `--condition`, `--behaviour`) — sin releer y reescribir los cuatro archivos.
 - **`/spec-finish`** — bloquea con fallos del doctor, un artefacto cambiado tras su aprobación, placeholders en
