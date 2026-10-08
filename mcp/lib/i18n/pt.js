@@ -1659,6 +1659,7 @@ const msg = {
       projectEnvMissing: (name, dir) => `${name}=${dir}: essa pasta não existe — corrige a variável ou remove-a (só o init cria a pasta de um projeto).`,
       projectEnvNotDir: (name, dir) => `${name}=${dir} é um ficheiro, não uma pasta — corrige a variável ou remove-a.`,
       projectIsSpecs: (label, parent) => `${label} é a pasta .specs do projeto ${parent} — indica a própria pasta do projeto: ${parent}`,
+      bundleNotOurs: (file) => `${file} já existe e não é um bundle do dev-spec — nada foi escrito. Escolhe outro --out, ou junta --force para o substituir.`,
       flagTwice: (flag) => `${flag} foi indicada mais de uma vez — esta opção só aceita um valor: indica-a uma vez.`,
       atMost: (n) => `, no máximo ${n}`,
       runHeldOpen: (code) => `⚠ o comando terminou (${code}), mas um processo que ele lançou em segundo plano manteve a saída aberta — a execução ficou registada nesse fim; o que esse processo imprimir depois não está na evidência.`,
