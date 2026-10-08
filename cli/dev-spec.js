@@ -385,6 +385,17 @@ function fail(r, hint) {
   if (hint) console.error(hint);
   process.exit(1);
 }
+// 1.24 r6 B2 — stdout's reader went away (`export --md | head -1`, a pager quit): an EPIPE / EOF / ERR_STREAM_DESTROYED is the end
+// of the output, never a crash — exit quietly with the status the command set (the MCP server's rule since 1.22); any other stdout
+// error is one stderr line, exit 1. console.log swallows its own write errors, but process.stdout.write (export, catalog,
+// changelog, rules, trace --csv, prompts…) raised an unhandled 'error' — a stack trace and exit 1. Installed by main() after
+// the status line's render path, which keeps its own (exit 0 always).
+function stdoutError(e) {
+  const code = e && e.code;
+  if (code === "EPIPE" || code === "EOF" || code === "ERR_STREAM_DESTROYED") process.exit(process.exitCode || 0);
+  try { fs.writeSync(2, "dev-spec: " + (e && e.message ? e.message : String(e)) + "\n"); } catch { /* stderr gone too */ }
+  process.exit(1);
+}
 // A usage line: the syntax stays as typed, the "usage:" prefix is in the project language.
 function usage(syntax) {
   die(projectText().usage(syntax));
@@ -580,6 +591,7 @@ function statusLineConfig() {
 async function main() {
   // 1.16 C1: the status line's render path runs before any flag / usage check — it must print its line or nothing, exit 0.
   if (cmd === "statusline" && !("print-config" in flags) && !("help" in flags)) return statusLineRender();
+  process.stdout.on("error", stdoutError); // 1.24 r6 B2: a reader that closed early ends the output quietly
   refuseUnknownFlags(); // `--rnu` is an error (did you mean --run?), never a silent switch
   // 1.21 review A3: `merge-state --check` is a switch there — `--check` is init's VALUE flag (init --check name="cmd"), so it can't
   // join spec.CLI_SWITCHES (normalizeBoolFlags would refuse `init --check test="npm test"`, and the approval hook's lexer would read

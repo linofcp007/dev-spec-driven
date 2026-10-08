@@ -185,7 +185,12 @@ and U+FEFF gotchas are in CLAUDE.md.
   has flushed — on a Linux pipe, docker or `| tee`, writes go async past the 64 KB buffer and the tail, FAIL lines and the
   total, was dropped) and for the MCP server (on stdin close it flushes its queued replies first — a slow reader on Linux
   got 0 of 8; a stdout EPIPE / EOF / ERR_STREAM_DESTROYED exits quietly 0, any other stdout error prints one stderr line
-  and exits 1). Never `process.exit()` right after a write (the CLI's `die()` under `--json` writes its small document with
+  and exits 1). **The CLI the same (1.24 r6 B2):** `stdoutError()`, installed by main() after the status line's render path
+  (which keeps its own exit-0 handler) — a reader that stops early (`export --md | head -1`, a pager quit) ends the output
+  quietly with the status the command set (`process.exitCode || 0`: `trace --csv | head` keeps trace's 1); any other stdout
+  error is one `dev-spec: <message>` line, exit 1. `console.log` swallows its own write errors, but `process.stdout.write`
+  (export, catalog, changelog, rules, trace --csv, prompts) raised an unhandled `'error'` — a stack trace and exit 1.
+  Never `process.exit()` right after a write (the CLI's `die()` under `--json` writes its small document with
   `fs.writeSync(1, …)` first). The CLI's stdin (`ears -`, `import <plan> -`, `log <f> -`, `stop-check -`) is collected as
   BYTES and decoded like a file (`readStdin` → `decodeText`: a UTF-16 BOM decides, else UTF-8 — 1.23 review: a UTF-16 document,
   what Windows PowerShell 5.1's `>` writes, read as "0 criteria, pass" in `ears -`). The pre-commit validator reads staged
