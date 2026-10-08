@@ -42,7 +42,8 @@ slash commands are the same files — without it Claude Code lists every command
 - **Error codes**: an unknown prompt or bad prompt arguments, and an invalid / refused URI → `-32602` (Invalid params);
   a well-formed URI naming nothing → `-32002` (Resource not found); a `resources/read` error carries `data.uri`
   (JSON-RPC `error()` takes an optional `data`). Prompts and resources use the default project (SPEC_PROJECT_DIR /
-  CLAUDE_PROJECT_DIR / cwd) — neither request carries a projectDir — and speak its language.
+  CLAUDE_PROJECT_DIR / the nearest dev-spec project at or above cwd / cwd — `resolveProjectDir`, conventions.md) — neither
+  request carries a projectDir — and speak its language.
 
 **Human approvals over MCP elicitation (1.21 F1b).** A client that declares `capabilities.elicitation` in `initialize`
 (`clientElicits`) gets, while `roadmap.json → meta.approvalGuard` is `ask` or `deny`, an `elicitation/create` request before

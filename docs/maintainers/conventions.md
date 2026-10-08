@@ -13,6 +13,19 @@ and U+FEFF gotchas are in CLAUDE.md.
   transliterates accents (`Autenticação` → `autenticacao`) and falls back to the pre-1.11 slug
   (`autentica-o`) so old folders are still found. `slugify(undefined)` is `""`, never `"undefined"`.
   `listFeatures` skips dot-folders and non-slug folders (reported as `ignored`).
+- **The project folder: `resolveProjectDir()` (files.js) — every surface's default.** The explicit argument (CLI `--project`, a
+  tool's `projectDir`) > `SPEC_PROJECT_DIR` > `CLAUDE_PROJECT_DIR` > **the nearest folder at or above the working folder that
+  holds a dev-spec .specs/** (`nearestProject()`: `isDevSpecDir` — roadmap.json, steering/ or a feature's .state.json — the
+  working folder itself also with any `.specs/`, one made by hand before init; never walked up a network path; at most 64
+  levels; 1.23 review: run from a subfolder, `create` / `backlog add` started a SECOND, nested .specs/ there) > the working
+  folder. A value holding a variable left unexpanded — any `${`, a leading `$NAME`, a `%NAME%` (`unexpandedVar()`) — is
+  unusable and falls through (1.23 review: `SPEC_PROJECT_DIR="${CLAUDE_PROJECT_DIR}/"`, `$CLAUDE_PROJECT_DIR` or
+  `%CLAUDE_PROJECT_DIR%` created that literal folder; only a whole `${VAR}` was caught). A separate project INSIDE another one
+  needs `--project .` (or its own `.specs/` first — an empty one is enough). The CLI validates `--project` itself (below); a
+  PATH argument (`scan <path>`, `ears <file>`, `import <tool> <path>`) is read from the project when it was NAMED (`--project`
+  or the env — as import always read it), else from the working folder (`argPath()`: a path typed in a subfolder is relative
+  to it, as in git; import hands the engine that path relative to the project, which still refuses one outside it), and
+  `scan <subfolder>` reports in the project's language (`scanCodebase {lang}`).
 - **`spec_feature remove` needs `confirm: true`** (CLI `--yes`). Without it nothing is deleted and the
   result (an error with `needsConfirm`) lists what would be — `removePreview()` checks roadmap.json first
   and uses `lstat` (a symlink/junction is one entry, never followed). Prefer archive (reversible).

@@ -1254,4 +1254,36 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
       " (and bash / PowerShell where present); a committed UPGRADE.md keeps `dev-spec`, the audit's lines the runnable form (got " +
       JSON.stringify({ quoting, viaShell, viaBash, viaPs, portOk, upMd: (upMd.match(/.*dev-spec done.*/) || [])[0] }) + ")");
   }
+
+  { // --- 1.23 review: the project folder with no projectDir / env — the nearest dev-spec project at or above the working folder ---
+    // (run from a subfolder, a command started a SECOND, nested .specs/ there) — and a SPEC_PROJECT_DIR holding a variable left
+    // unexpanded ("${CLAUDE_PROJECT_DIR}/", "$CLAUDE_PROJECT_DIR", "%CLAUDE_PROJECT_DIR%") falls through instead of naming a folder.
+    const wu = path.join(tmp, "proj-123-walkup");
+    S.initProject(wu, ["core"], "en");
+    const sub = path.join(wu, "src", "deep");
+    const bare = path.join(tmp, "proj-123-no-project", "x");
+    const handmade = path.join(tmp, "proj-123-handmade");
+    [sub, bare, path.join(handmade, ".specs"), path.join(handmade, "lib")].forEach((d) => fs.mkdirSync(d, { recursive: true }));
+    const env0 = { ...process.env };
+    delete env0.SPEC_PROJECT_DIR;
+    delete env0.CLAUDE_PROJECT_DIR;
+    const same = (a, b) => (process.platform === "win32" ? String(a).toLowerCase() === String(b).toLowerCase() : a === b);
+    const resolved = (cwd, env) => spawnSync(process.execPath, ["-e", "process.stdout.write(require(process.argv[1]).resolveProjectDir())", path.join(__dirname, "lib", "spec.js")],
+      { cwd, env: { ...env0, ...(env || {}) }, encoding: "utf8" }).stdout;
+    // (an empty .specs/ made by hand counts in the working folder itself — init fills it — never as an ancestor's project)
+    const fromSub = resolved(sub), fromBare = resolved(bare), fromHand = resolved(handmade), fromHandSub = resolved(path.join(handmade, "lib"));
+    const unexp = ["${CLAUDE_PROJECT_DIR}/", "$CLAUDE_PROJECT_DIR", "%CLAUDE_PROJECT_DIR%\\x", "${HOME}"].map((v) => resolved(sub, { SPEC_PROJECT_DIR: v }));
+    const named = resolved(sub, { SPEC_PROJECT_DIR: bare });
+    // The MCP server started in the subfolder with no env: its tools work in the project above (spec_list's specsDir).
+    const msgs = [{ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } } },
+      { jsonrpc: "2.0", method: "notifications/initialized" }, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "spec_list", arguments: {} } }];
+    const srv = spawnSync(process.execPath, [path.join(__dirname, "server.js")], { cwd: sub, env: env0, encoding: "utf8", input: msgs.map((m) => JSON.stringify(m)).join("\n") + "\n", timeout: 20000 });
+    let listed = null;
+    try { listed = JSON.parse(JSON.parse(srv.stdout.trim().split("\n").find((l) => /"id":2/.test(l))).result.content[0].text); } catch { /* no reply */ }
+    ok(same(fromSub, wu) && same(fromBare, bare) && same(fromHand, handmade) && same(fromHandSub, path.join(handmade, "lib")) && unexp.every((d) => same(d, wu)) && same(named, bare) &&
+      ["${X}/a", "$HOME/x", "%APPDATA%\\x", "a${B}"].every((v) => S.unexpandedVar(v)) && !["C:\\100%\\x", "/srv/app", "a$b", "c$"].some((v) => S.unexpandedVar(v)) &&
+      listed && same(listed.specsDir, path.join(wu, ".specs")) && !fs.existsSync(path.join(sub, ".specs")),
+      "1.23 review: with no projectDir / env the project is the nearest dev-spec .specs/ at or above the working folder (else the folder itself; a hand-made .specs/ in it counts) — the MCP server's fallback too; a SPEC_PROJECT_DIR with an unexpanded ${VAR}, $VAR or %VAR% falls through (got " +
+      JSON.stringify({ fromSub, fromBare, fromHand, fromHandSub, unexp, named, listed: listed && listed.specsDir }) + ")");
+  }
 };

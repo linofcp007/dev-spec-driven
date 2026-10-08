@@ -62,7 +62,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   recordSpecEdit, runStartStamp,
   parseGitLog, parseTasks, parseTracks, phasePercent, PHASES, placeholderKey, placeholderReport, planBridge, planPaths,
   posixPwshScript, posixShellSyntax, projectChecks, projectLang, pwshParseFailure, runsPwsh, readRoadmap, readState, removeFeature, removeTrack, renameFeature,
-  renderRoadmapHtml, renderRoadmapMd, resolveFeature, resolveProjectDir, resolveRunShell, resolveTask, restoreFeature,
+  renderRoadmapHtml, renderRoadmapMd, resolveFeature, resolveProjectDir, unexpandedVar, resolveRunShell, resolveTask, restoreFeature,
   roadmap, roadmapData, roadmapReport, roadmapTailLines, RTM_STATUSES, scaffoldSteeringFile, scanCodebase, scanTestCode,
   setDependency, SIGNAL_CONCEPTS, SIGNALS, SIZE_POINTS, slugify, specDoctor, specsRoot, specUpgrade, specVersionStatus,
   spikeInfo, statusFeature, statusLine, statusLineProject, steeringFingerprints, steeringFrontMatter, steeringGlobMatch,
@@ -80,7 +80,8 @@ module.exports = {
   portableCli: i18n.portableCli, // the runnable line → `dev-spec`, for text meant to be committed
   VALID_TRACKS,
   PHASES,
-  resolveProjectDir,
+  resolveProjectDir, // --project / projectDir > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest dev-spec project at or above cwd > cwd
+  unexpandedVar, // 1.23 review: a value holding a variable left unexpanded ("${…}", a leading $NAME, %NAME%) — never a folder name
   specsRoot,
   slugify,
   normalizeTracks,
