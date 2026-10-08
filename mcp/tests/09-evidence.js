@@ -463,6 +463,29 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
       "full review Ga2: an _Expect: fail_ run whose summary shows the test never ran is refused (recorded, couldNotRun: output, task open; PT); an assertion failure is the red proof; an old 'spawnSync … ENOENT' record proves nothing (got " +
       JSON.stringify([miss2.couldNotRun, miss2.error && miss2.error.slice(0, 120), red2.redRecorded, vs2b.unverifiedDetail, pt2.error && pt2.error.slice(0, 80)]) + ")");
 
+    // 1.23 review (L7): a run that CRASHED — 128 + SIGILL / SIGABRT / SIGBUS / SIGFPE / SIGSEGV as a POSIX shell reports it, a
+    // Windows NTSTATUS crash code read unsigned or signed — is a failed run (recorded), never the red proof of an _Expect: fail_
+    // task: refused with couldNotRun "crash" (MCP = the engine), the task stays open; an assertion failure still proves it.
+    const crashes = [132, 134, 135, 136, 139, 0xC0000005, 0xC0000005 - 0x100000000, 0xC0000409, 0xC00000FD, 0xC000001D, 0xC0000094, 0x80000003, 0x80000003 - 0x100000000];
+    const kills = [0, 1, 2, 3, 126, 127, 130, 137, 143, 255, 9009];
+    const fCr = S.createFeature(p2, "Red crash", ["core"], "", undefined, "en");
+    const CR_CMD = "node --test test/crash.test.js";
+    gaW(fCr.dir, "tasks.md", "- [ ] 1. [US1] Write test T-01 and watch it fail\n  - _Verify: " + CR_CMD + "_\n  - _Expect: fail_\n");
+    const segv = S.completeTask(p2, fCr.slug, 1, { command: CR_CMD, exitCode: 139, summary: "Segmentation fault (core dumped)" });
+    const av = payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { name: fCr.slug, number: 1, evidence: { command: CR_CMD, exitCode: -1073741819 }, projectDir: p2 } }));
+    const openCr = /- \[ \] 1\./.test(gaTasks(fCr));
+    const fCrPt = S.createFeature(p2, "Crash pt", ["core"], "", undefined, "pt");
+    gaW(fCrPt.dir, "tasks.md", "- [ ] 1. [US1] Escrever T-01\n  - _Verify: " + CR_CMD + "_\n  - _Expect: fail_\n");
+    const ptCr = S.completeTask(p2, fCrPt.slug, 1, { command: CR_CMD, exitCode: 3221225477 });
+    const redCr = S.completeTask(p2, fCr.slug, 1, { command: CR_CMD, exitCode: 1, summary: "✖ T-01 (1.1ms)\nAssertionError [ERR_ASSERTION]: 'a' !== 'A'\nℹ fail 1" });
+    ok(crashes.every((c) => S.crashExit(c)) && !kills.some((c) => S.crashExit(c)) &&
+      segv.ok === false && segv.recorded === true && segv.couldNotRun === "crash" && /Task 1: the run crashed \(exit 139/.test(segv.error) &&
+      av.ok === false && av.couldNotRun === "crash" && /exit -1073741819/.test(av.error) && openCr &&
+      ptCr.ok === false && ptCr.couldNotRun === "crash" && /a execução crashou \(exit 3221225477/.test(ptCr.error) &&
+      redCr.ok === true && redCr.redRecorded === true && /- \[x\] 1\./.test(gaTasks(fCr)),
+      "1.23 review: a crash (exit 139, 0xC0000005 signed / unsigned…) is no red proof of an _Expect: fail_ task — refused (recorded, couldNotRun: crash; MCP and PT), the task stays open; an assertion failure is the red proof (got " +
+      JSON.stringify([segv.couldNotRun, av.couldNotRun, ptCr.couldNotRun, segv.error && segv.error.slice(0, 80), redCr.redRecorded]) + ")");
+
     // Ga3: a project check run is stamped with the code it tested (a hash of the implementing files): code edited after the
     // run → suiteChecks status `code-changed` — a finish blocker, doctor's suite-evidence warn and the stop gate's suite line —
     // never "ready" on an old run. A run recorded without the stamp keeps the older rule.

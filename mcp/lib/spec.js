@@ -48,7 +48,7 @@ function loadEngine() {
 }
 const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalGuardDecision, approvalGuardLevel,
   approvalRolesOf, approvePhase, archiveFeature, artifactState, backlog, BACKLOG_ACTIONS, catalog, changelog,
-  checklistMd, clarify, classify, CLI_SWITCHES, compareSemver, completeTask, couldNotRunOutput, coverage, createFeature,
+  checklistMd, clarify, classify, CLI_SWITCHES, compareSemver, completeTask, couldNotRunOutput, coverage, crashExit, createFeature,
   crossFeatureAcs, csvCell, decide, decisionLog, designSaveCheck, detectPhase, detectTracks, drift, earsFeature,
   earsSteps, earsValidate, engineVersion, etaText, evidenceMode, existingFeature, expectsFail, EXPORT_FORMATS,
   exportSpecs, extractSection, featureFlow, featureLang, featureLocked, featureOverlaps, featurePercent,
@@ -149,6 +149,7 @@ module.exports = {
   resolveRunShell, // full review Ga9: `done --run` / `finish --run` — the shell (a bare bash → Git Bash on Windows; WSL's launcher refused)
   isWslLauncher,
   couldNotRunOutput, // full review Ga2 / Ga9: a run's output shows it never exercised the check (WSL relay, spawn error, missing test file…)
+  crashExit, // 1.23 review: a crash's exit code (128 + SIGILL/ABRT/BUS/FPE/SEGV, a Windows NTSTATUS crash) — a failed run, never a red test
   posixPwshScript, // 1.21.1 review: a pwsh script whose `$…` / backticks a POSIX shell (/bin/sh, bash) would expand first — refused
   pwshParseFailure, // 1.21.1 review: PowerShell's own parse error (the script never ran) — no red test when PowerShell runs the line
   runsPwsh, // does a command line run pwsh / powershell (program position)?
