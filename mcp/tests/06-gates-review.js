@@ -93,8 +93,11 @@ exports.run = async ({ ok, S, tmp }) => {
       fin.readyToFinish === false && fin.blockers.some((b) => /roadmap\.json/.test(b)),
       "1.24 r6 E4: doctor fails `roadmap`, next_action's one step is fix (roadmapInvalid — never an approval nor a role-less /spec-ff), backlog list refuses, spec_finish blocks on it (got " +
       js([check(doc, "roadmap"), na.step, na.recommendation.slice(0, 120), bl.ok, fin.blockers]) + ")");
-    // the execution gate (spec_finish's blockers) names it too
+    // the execution gate (spec_finish's blockers) names it too; the status line says repair it
     const gate = S.finishFeature(p, f.slug, { gateOnly: true });
+    const sl = S.statusLine(p);
+    ok(sl.next && sl.next.step === "fix" && sl.next.file === "roadmap.json" && /repair roadmap\.json/.test(sl.line),
+      "1.24 r6 E4: the status line's next step is to repair roadmap.json (got " + js([sl.next, sl.line]) + ")");
     fs.writeFileSync(rp, good);
     const back = S.approvePhase(p, f.slug, "requirements", "mallory");
     const doc2 = S.specDoctor(p, f.slug);
