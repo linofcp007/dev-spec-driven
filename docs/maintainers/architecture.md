@@ -250,6 +250,10 @@ Two distinct distribution targets, deliberately kept separate — never conflate
   references, never a machine path, so `git clone`/download Just Works:
   - `mcp/servers.json` (referenced by `plugin.json` → `mcpServers`) → `${CLAUDE_PLUGIN_ROOT}/mcp/server.js` (env:
     `SPEC_PROJECT_DIR`, `SPEC_MCP_PROMPTS=off`, `SPEC_MCP_APPROVAL_HOOK=on` — 1.21: the plugin's hook guards approvals there).
+    Only `command` / `args` / `env` (1.23 review 5): Claude Code substitutes `${…}` in a plugin stdio server's command, args and
+    env only and documents no `cwd` field — the `"cwd": "${CLAUDE_PROJECT_DIR}"` it carried was ignored, and honoured
+    unexpanded it would stop the server from starting; `SPEC_PROJECT_DIR` already names the project (and the server skips an
+    unexpanded `${VAR}` — resolveProjectDir).
     It is deliberately NOT a root `.mcp.json`: when this repo is opened as a normal project, Claude Code
     reads a root `.mcp.json` as a *project* server where `${CLAUDE_PLUGIN_ROOT}` is undefined, so it
     failed with CONNECTION_CLOSED in every maintainer session (v1.11 moved it).

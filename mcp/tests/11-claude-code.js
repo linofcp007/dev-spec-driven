@@ -223,12 +223,16 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
     // The manifest declares NO userConfig (a configuration dialog on every install, and an older Claude Code validating option
     // fields strictly would refuse the plugin) and mcp/servers.json passes no ${user_config.*}; still no hooks key.
     const man = JSON.parse(cRead(path.join(root, ".claude-plugin", "plugin.json")));
-    const srvEnv = JSON.parse(cRead(path.join(root, "mcp", "servers.json"))).mcpServers["spec-driven"].env;
+    const srv = JSON.parse(cRead(path.join(root, "mcp", "servers.json"))).mcpServers["spec-driven"];
+    const srvEnv = srv.env;
     // 1.21 F1b: + SPEC_MCP_APPROVAL_HOOK=on — in Claude Code the plugin's approval hook guards spec_approve (no elicitation there).
+    // 1.23 review 5 (L22): no `cwd` — Claude Code substitutes ${…} in a plugin stdio server's command / args / env only, and no
+    // `cwd` field is documented: an unexpanded "${CLAUDE_PROJECT_DIR}" honoured as the spawn folder would stop the server.
     ok(!("userConfig" in man) && !("hooks" in man) && Object.keys(srvEnv).sort().join() === "SPEC_MCP_APPROVAL_HOOK,SPEC_MCP_PROMPTS,SPEC_PROJECT_DIR" &&
-      srvEnv.SPEC_MCP_APPROVAL_HOOK === "on" && !/user_config|CLAUDE_PLUGIN_OPTION/.test(JSON.stringify(srvEnv)),
-      "1.16 C2: plugin.json declares no userConfig and no hooks key; mcp/servers.json passes only SPEC_PROJECT_DIR / SPEC_MCP_PROMPTS / SPEC_MCP_APPROVAL_HOOK=on (got " +
-      JSON.stringify([Object.keys(man), srvEnv]) + ")");
+      srvEnv.SPEC_MCP_APPROVAL_HOOK === "on" && srvEnv.SPEC_PROJECT_DIR === "${CLAUDE_PROJECT_DIR}" && !/user_config|CLAUDE_PLUGIN_OPTION/.test(JSON.stringify(srvEnv)) &&
+      Object.keys(srv).sort().join() === "args,command,env",
+      "1.16 C2: plugin.json declares no userConfig and no hooks key; mcp/servers.json passes only SPEC_PROJECT_DIR / SPEC_MCP_PROMPTS / SPEC_MCP_APPROVAL_HOOK=on and sets only command / args / env (1.23: no cwd) (got " +
+      JSON.stringify([Object.keys(man), Object.keys(srv), srvEnv]) + ")");
 
     // --- C3: MCP tool annotations and completion/complete ---
     const tl = (await rpc("tools/list", {})).result.tools;

@@ -218,10 +218,10 @@ exports.run = async ({
   const agentTools = (x) => (fs.readFileSync(path.join(agentsDir, x), "utf8").split(/^---\r?$/m)[1] || "").match(/^tools:.*?(?=\r?$)/gm) || [];
   ok(agentFiles.sort().join() === "spec-critic.md,spec-implementer.md,spec-reviewer.md,spec-simplifier.md" &&
     agentTools("spec-critic.md").join() === "tools: Read, Grep, Glob" &&
-    agentTools("spec-reviewer.md").join() === "tools: Read, Grep, Glob, Bash" &&
-    agentTools("spec-implementer.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash" &&
-    agentTools("spec-simplifier.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash",
-    "4 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer adds Bash, the implementer and the simplifier Write/Edit/Bash — none gets the Agent tool");
+    agentTools("spec-reviewer.md").join() === "tools: Read, Grep, Glob, Bash, PowerShell" &&
+    agentTools("spec-implementer.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell" &&
+    agentTools("spec-simplifier.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell",
+    "4 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer adds a shell, the implementer and the simplifier Write/Edit and a shell — Bash and (1.23 review 5) PowerShell: Claude Code on Windows without Git Bash has only the PowerShell tool, and a tools list with an unresolved entry still launches — none gets the Agent tool");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
   ok(cmdFiles.length === 55 && ["spec-simplify.md", "spec-statusline.md", "spec-milestone.md", "spec-tracks.md", "spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
