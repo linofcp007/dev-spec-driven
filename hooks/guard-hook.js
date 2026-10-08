@@ -25,6 +25,16 @@
 const fs = require("fs");
 const path = require("path");
 
+// A JSON file as the engine reads it: UTF-8, or UTF-16 with a BOM (1.24 review 6, C3 — Windows PowerShell 5.1's Out-File: a UTF-16
+// file read as UTF-8 didn't parse), decoded by hook-utils.js — required only for such a file (the hot path stays cheap). Throws on a
+// missing or broken file.
+function readJsonFile(file) {
+  const buf = fs.readFileSync(file);
+  if (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff))) return require("./hook-utils.js").jsonOf(buf);
+  const t = buf.toString("utf8");
+  return JSON.parse(t.charCodeAt(0) === 0xfeff ? t.slice(1) : t);
+}
+
 let done = false;
 let ran = false;
 // At most one JSON object, and exit only after it is flushed (Windows pipes truncate otherwise).
@@ -69,7 +79,7 @@ function devSpecWithoutRoadmap(dir) {
 function guardOn(dir) {
   if (userGuardDefault() && devSpecWithoutRoadmap(dir)) return true;
   try {
-    const j = JSON.parse(fs.readFileSync(path.join(dir, ".specs", "roadmap.json"), "utf8").replace(/^\uFEFF/, ""));
+    const j = readJsonFile(path.join(dir, ".specs", "roadmap.json"));
     if (!j || typeof j !== "object" || Array.isArray(j)) return false;
     const meta = j.meta && typeof j.meta === "object" && !Array.isArray(j.meta) ? j.meta : {};
     return meta.guard === true || meta.guard === "scope" || (meta.guard === undefined && userGuardDefault());
@@ -125,8 +135,20 @@ function main(raw) {
   if (r.decision === "ask") {
     return finish({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: r.reason } });
   }
-  // Allowed by a FORCED approval only: say so to the user (systemMessage never changes the permission flow).
-  if (r.note) return finish({ systemMessage: r.note });
+  // Allowed by a FORCED approval only: say so to the user (systemMessage never changes the permission flow) — once a session (1.24
+  // review 6, C-I8: it was printed on every code edit). Keyed by the payload's session_id: a marker in the OS temp folder holding the
+  // note (another set of forced features shows it again); no session_id → every time, as before.
+  if (r.note) {
+    const sid = typeof payload.session_id === "string" && payload.session_id.trim() ? payload.session_id : null;
+    if (sid) {
+      const flag = require("./hook-utils.js").sessionFlagFile("forced-note", sid);
+      let seen = null;
+      try { seen = fs.readFileSync(flag, "utf8"); } catch { seen = null; }
+      if (seen === r.note) return finish();
+      try { fs.writeFileSync(flag, r.note); } catch { /* not writable: shown again next time */ }
+    }
+    return finish({ systemMessage: r.note });
+  }
   return finish();
 }
 
