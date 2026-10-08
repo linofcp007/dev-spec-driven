@@ -1131,6 +1131,7 @@ const msg = {
       badExit: (v) => `exitCode debe ser un entero (recibido '${v}').`,
       needsExit: "Una evidencia que indica un comando necesita su exit code — o da solo un resumen, para una verificación manual.",
       unknownExpect: (n, values) => `La tarea ${n} lleva ${values.map((v) => "_Expect: " + v + "_").join(", ")} — el marcador solo conoce \`fail\`, así que, tal como está escrita, la tarea debe PASAR. Si su ejecución debe fallar (una prueba escrita antes de su arreglo), escribe _Expect: fail_.`,
+      noTests: (n, what) => `Tarea ${n}: la ejecución pasó, pero su salida muestra que no se ejecutó ninguna prueba (${what}) — una ejecución que no prueba nada no demuestra nada (un glob, una ruta o un filtro que no encuentra ninguna prueba). No se registró nada; la tarea sigue pendiente. Corrige el comando _Verify:_ (o la prueba que indica) y luego registra una ejecución que ejecute la prueba.`,
     },
     finish: {
       ready: (slug) => `'${slug}' está lista para cerrar — confirma las verificaciones de abajo y luego haz merge local o mantén la rama.`,
@@ -2857,6 +2858,7 @@ const msg = {
       },
       wslBash: (p) => `--shell ${p} es el lanzador bash.exe de WSL: ejecuta el comando dentro de una distribución Linux (o falla con "execvpe(/bin/bash) failed"), no en una shell de esta máquina — se usa como pediste; una ejecución que WSL no pueda arrancar no se registra. Para una shell de esta máquina usa Git Bash: --shell bash lo encuentra (Git for Windows).`,
       wslExe: (p) => `--shell ${p} es wsl.exe, que no es una shell (rechaza el -c que usa toda ejecución en una shell) — rechazado, no se ejecutó nada. Indica la ruta del bash.exe de WSL para ejecutar dentro de WSL, o --shell bash para Git Bash.`,
+      noTests: (cmd, what) => `\`${cmd}\` pasó, pero su salida muestra que no se ejecutó ninguna prueba (${what}) — una ejecución que no prueba nada no demuestra nada (un glob, una ruta o un filtro que no encuentra ninguna prueba). No se registró nada; la tarea sigue pendiente. Corrige el comando _Verify:_ (o la prueba que indica) y luego vuelve a ejecutar done --run.`,
       noGitBash: "--shell bash: no se encontró ningún Git Bash (git --exec-path, %ProgramFiles%\\Git\\bin\\bash.exe, PATH) — un bash.exe en System32 o WindowsApps es el lanzador de WSL, que ejecuta el comando dentro de una distribución Linux, así que nunca se usa. No se ejecutó nada. Instala Git for Windows, o indica en --shell la ruta completa de un bash.exe.",
     },
     gitLog: {

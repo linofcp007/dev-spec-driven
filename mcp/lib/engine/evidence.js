@@ -527,8 +527,16 @@ const RE_COUNT_LINE = new RegExp(`(?<![\\p{L}\\p{N}_])(?:\\d+\\s*${RE_COUNT_KW}|
 const ESC = String.fromCharCode(27), BEL = String.fromCharCode(7);
 const RE_ANSI = new RegExp(ESC + "\\[[0-9;?]*[ -/]*[@-~]|" + ESC + "\\][^" + BEL + ESC + "]{0,2000}(?:" + BEL + "|" + ESC + "\\\\)?", "g");
 const stripAnsi = (s) => (s.indexOf(ESC) === -1 ? s : s.replace(RE_ANSI, ""));
+// 1.24 r6 D8 — a test file that doesn't parse: the caret line and the "SyntaxError:" line under it (CANT_RUN_OUTPUT's caret frame)
+// are kept like the assertion line below, so the stored summary still reads could-not-run (completeTask and cantRunRecord re-read
+// it); a caret line longer than a summary line keeps its caret (its padding dropped).
+const RE_CARET_LINE = /^[ \t#]{0,400}\^{1,400}$/;
+const RE_SYNTAX_ERROR_LINE = /^[ \t#]{0,8}SyntaxError: /;
 function summarizeRunOutput(output, max = 500) {
-  const lines = stripAnsi(String(output || "")).split(/\r?\n/).map((l) => l.trimEnd().slice(0, 200)).filter((l) => l.trim());
+  const lines = stripAnsi(String(output || "")).split(/\r?\n/).map((l) => { const t = l.trimEnd(); return t.length > 200 && /^[ \t#]*\^+$/.test(t) ? t.trim() : t.slice(0, 200); })
+    .filter((l) => l.trim());
+  const frameAt = lines.findIndex((l, i) => i > 0 && RE_SYNTAX_ERROR_LINE.test(l) && RE_CARET_LINE.test(lines[i - 1]));
+  const frame = frameAt > 0 && !RE_ASSERTION_RAN.test(lines.join("\n")) ? [frameAt - 1, frameAt] : [];
   // (1.21.1 review: Pester's "a block / file failed before its tests" lines — RE_PESTER_NOT_RUN — are kept like count lines, so a
   // recorded summary still shows the test never ran)
   const counts = lines.map((l, i) => (RE_COUNT_LINE.test(l) || RE_PESTER_NOT_RUN.test(l) ? i : -1)).filter((i) => i >= 0).slice(-3);
@@ -540,10 +548,11 @@ function summarizeRunOutput(output, max = 500) {
   let keepAt = -1;
   const base = [...new Set([...counts, ...lines.map((_, i) => i).slice(-5)])];
   if (!shows(base)) keepAt = lines.findIndex((l) => RE_ASSERTION_RAN.test(l));
-  const idx = [...new Set([...base, ...(keepAt >= 0 ? [keepAt] : [])])].sort((a, b) => a - b);
+  const idx = [...new Set([...base, ...(keepAt >= 0 ? [keepAt] : []), ...frame])].sort((a, b) => a - b);
   const seen = new Set();
-  const picked = idx.reverse().filter((i) => !seen.has(lines[i]) && seen.add(lines[i])).reverse()
-    .map((i) => ({ text: lines[i], count: counts.includes(i) || i === keepAt, keep: i === keepAt }));
+  const kept = (i) => i === keepAt || frame.includes(i);
+  const picked = idx.reverse().filter((i) => (frame.includes(i) || !seen.has(lines[i])) && seen.add(lines[i])).reverse()
+    .map((i) => ({ text: lines[i], count: counts.includes(i) || kept(i), keep: kept(i) }));
   const size = () => picked.reduce((s, p) => s + p.text.length + 1, -1);
   while (picked.length > 1 && size() > max) {
     const plain = picked.findIndex((p) => !p.count);
@@ -1000,22 +1009,22 @@ const CANT_RUN_EXIT = new Set([126, 127, 9009]);
 // refused (`done --run` records nothing, spec_complete_task refuses a run whose summary shows it). Conservative: literal
 // phrases of the runners' own messages, every pattern linear (bounded classes, no nested quantifier), over ≤ 200 000 chars.
 const CANT_RUN_OUTPUT = [
-  ["wsl", /<\d>WSL \(\d+[^)\n]{0,40}\) ERROR:[^\n]{0,200}/], // "<3>WSL (10 - Relay) ERROR: CreateProcessCommon:818: execvpe(/bin/bash) failed…"
-  ["wsl", /execvpe\([^)\n]{0,300}\) failed[^\n]{0,120}/],
-  ["wsl", /Windows Subsystem for Linux (?:has no installed distributions|is not installed|must be updated)[^\n]{0,120}/i],
-  ["spawn", /\bspawn(?:Sync)? [^\n]{1,300} (?:ENOENT|EACCES|ENOEXEC)\b/], // Node: the shell itself could not be started
-  ["test", /^[ \t]*Could not find '[^'\n]{1,400}'/m], // node --test <missing file>
-  ["test", /\bCannot find module '[^'\n]{1,400}'/], // node / jest / ts: a module the test loads doesn't exist
-  ["test", /\bERR_MODULE_NOT_FOUND\b/],
-  ["test", /can't open file '[^'\n]{1,400}': \[Errno 2\]/], // python <missing file>
-  ["test", /\bModuleNotFoundError: No module named\b[^\n]{0,200}/],
-  ["test", /\bERROR: file or directory not found: [^\n]{0,300}/], // pytest <missing path>
-  ["test", /\bno tests ran in \d/], // pytest: nothing collected (exit 5)
-  ["test", /\bNo tests found, exiting with code \d/], // jest
-  ["test", /\bNo test files found\b[^\n]{0,200}/i], // vitest / mocha
-  ["test", /\bMissing script: [^\n]{0,120}/], // npm run / npm test without that script
-  ["test", /\bNo rule to make target [^\n]{0,200}/], // make <missing target>
-  ["test", /\bnpm (?:ERR!|error) (?:code )?ENOENT\b/], // npm with no package.json
+  ["wsl", /<\d>WSL \(\d+[^)\n]{0,40}\) ERROR:[^\n]{0,200}/, "wsl relay"], // "<3>WSL (10 - Relay) ERROR: CreateProcessCommon:818: execvpe(/bin/bash) failed…"
+  ["wsl", /execvpe\([^)\n]{0,300}\) failed[^\n]{0,120}/, "wsl execvpe"],
+  ["wsl", /Windows Subsystem for Linux (?:has no installed distributions|is not installed|must be updated)[^\n]{0,120}/i, "wsl not installed"],
+  ["spawn", /\bspawn(?:Sync)? [^\n]{1,300} (?:ENOENT|EACCES|ENOEXEC)\b/, "node spawn"], // Node: the shell itself could not be started
+  ["test", /^[ \t]*Could not find '[^'\n]{1,400}'/m, "node --test missing file"], // node --test <missing file>
+  ["test", /\bCannot find module '[^'\n]{1,400}'/, "node missing module"], // node / jest / ts: a module the test loads doesn't exist
+  ["test", /\bERR_MODULE_NOT_FOUND\b/, "node ESM missing module"],
+  ["test", /can't open file '[^'\n]{1,400}': \[Errno 2\]/, "python missing file"], // python <missing file>
+  ["test", /\bModuleNotFoundError: No module named\b[^\n]{0,200}/, "python missing import"],
+  ["test", /\bERROR: file or directory not found: [^\n]{0,300}/, "pytest missing path"], // pytest <missing path>
+  ["test", /\bno tests ran in \d/, "pytest nothing collected"], // pytest: nothing collected (exit 5)
+  ["test", /\bNo tests found, exiting with code \d/, "jest no tests"], // jest
+  ["test", /\bNo test files found\b[^\n]{0,200}/i, "vitest / mocha no test files"], // vitest / mocha
+  ["test", /\bMissing script: [^\n]{0,120}/, "npm missing script"], // npm run / npm test without that script
+  ["test", /\bNo rule to make target [^\n]{0,200}/, "make missing target"], // make <missing target>
+  ["test", /\bnpm (?:ERR!|error) (?:code )?ENOENT\b/, "npm no package.json"], // npm with no package.json
   // PowerShell (1.21.1) — the command is unknown (Invoke-Pester without Pester installed, a typo): pwsh 7 "…is not recognized
   // as a name of a cmdlet", Windows PowerShell 5.1 "…as the name of a cmdlet" (its console wraps long lines, so blanks between
   // the words), pwsh's pt-BR / es wording ("não é reconhecido como um nome de um cmdlet", "no se reconoce como nombre de un
@@ -1025,11 +1034,32 @@ const CANT_RUN_OUTPUT = [
   // red (RE_ASSERTION_RAN / pesterRan below). Every blank run between words is followed by a literal (1.21.1 review: `de\s+
   // (?:um\s+)?\s*cmdlet` — two blank runs meeting — took 58 s on 200,000 blanks). Review 4: an accented class takes U+FFFD too
   // (Windows PowerShell 5.1 writes in the OEM code page, decoded as UTF-8 — see RE_CMD_SHELL_FAILURE).
-  ["test", /(?:['"][^'"\r\n]{1,200}['"]\s+)?(?:is\s+not\s+recognized\s+as\s+(?:a|the)\s+name\s+of\s+a|n[ãa\uFFFD]o\s+[ée\uFFFD]\s+reconhecido\s+como\s+(?:um\s+)?nome\s+de(?:\s+um)?|no\s+se\s+reconoce\s+como\s+(?:el\s+)?nombre\s+de(?:\s+un)?)\s+cmdlet\b/i],
-  ["test", /\bThe\s+specified\s+module\s+['"][^'"\r\n]{1,300}['"]\s+was\s+not\s+loaded\b|\bO\s+m[óo\uFFFD]dulo\s+especificado\s+['"][^'"\r\n]{1,300}['"]\s+n[ãa\uFFFD]o\s+foi\s+carregado\b|\bNo\s+se\s+carg[óo\uFFFD]\s+el\s+m[óo\uFFFD]dulo\s+especificado\s+['"][^'"\r\n]{1,300}['"]/i],
-  ["test", /\bcannot\s+be\s+loaded\s+because\s+running\s+scripts\s+is\s+disabled\s+on\s+this\s+system\b|\bporque\s+a\s+execu[çc\uFFFD][ãa\uFFFD]o\s+de\s+scripts\s+(?:est[áa\uFFFD]|foi)\s+(?:desabilitad|desativad)[ao]\s+neste\s+sistema\b|\bporque\s+la\s+ejecuci[óo\uFFFD]n\s+de\s+scripts\s+est[áa\uFFFD]\s+deshabilitada\s+en\s+este\s+sistema\b|\bis\s+not\s+digitally\s+signed\.\s+You\s+cannot\s+run\s+this\s+script\b/i],
-  ["test", /\bThe\s+argument\s+['"][^'"\r\n]{1,400}['"]\s+(?:is\s+not\s+recognized\s+as\s+(?:the|a)\s+name\s+of\s+a\s+script\s+file|to\s+the\s+-File\s+parameter\s+does\s+not\s+exist)\b/i],
-  ["test", /\bNo test files were found and no scriptblocks were provided\b/], // Pester 5 / 6: no *.Tests.ps1 under the path
+  ["test", /(?:['"][^'"\r\n]{1,200}['"]\s+)?(?:is\s+not\s+recognized\s+as\s+(?:a|the)\s+name\s+of\s+a|n[ãa\uFFFD]o\s+[ée\uFFFD]\s+reconhecido\s+como\s+(?:um\s+)?nome\s+de(?:\s+um)?|no\s+se\s+reconoce\s+como\s+(?:el\s+)?nombre\s+de(?:\s+un)?)\s+cmdlet\b/i, "pwsh unknown command"],
+  ["test", /\bThe\s+specified\s+module\s+['"][^'"\r\n]{1,300}['"]\s+was\s+not\s+loaded\b|\bO\s+m[óo\uFFFD]dulo\s+especificado\s+['"][^'"\r\n]{1,300}['"]\s+n[ãa\uFFFD]o\s+foi\s+carregado\b|\bNo\s+se\s+carg[óo\uFFFD]\s+el\s+m[óo\uFFFD]dulo\s+especificado\s+['"][^'"\r\n]{1,300}['"]/i, "pwsh module not loaded"],
+  ["test", /\bcannot\s+be\s+loaded\s+because\s+running\s+scripts\s+is\s+disabled\s+on\s+this\s+system\b|\bporque\s+a\s+execu[çc\uFFFD][ãa\uFFFD]o\s+de\s+scripts\s+(?:est[áa\uFFFD]|foi)\s+(?:desabilitad|desativad)[ao]\s+neste\s+sistema\b|\bporque\s+la\s+ejecuci[óo\uFFFD]n\s+de\s+scripts\s+est[áa\uFFFD]\s+deshabilitada\s+en\s+este\s+sistema\b|\bis\s+not\s+digitally\s+signed\.\s+You\s+cannot\s+run\s+this\s+script\b/i, "pwsh execution policy"],
+  ["test", /\bThe\s+argument\s+['"][^'"\r\n]{1,400}['"]\s+(?:is\s+not\s+recognized\s+as\s+(?:the|a)\s+name\s+of\s+a\s+script\s+file|to\s+the\s+-File\s+parameter\s+does\s+not\s+exist)\b/i, "pwsh -File path"],
+  ["test", /\bNo test files were found and no scriptblocks were provided\b/, "Pester no test files"], // Pester 5 / 6: no *.Tests.ps1 under the path
+  // 1.24 r6 D5 — a runner that is not there, or a project that is none (each was recorded as an _Expect: fail_ task's red proof):
+  // `python -m <runner>` without it ("<python>: No module named pytest" — a test's own import is ModuleNotFoundError above), PHP's
+  // missing script (vendor/bin/phpunit before composer install), npm / npx's unknown package (E404) or bin, dash's script it can't
+  // open (`sh <missing>.sh`, exit 2), go without a module, cargo without a manifest, dotnet without a project, ruby's missing
+  // library, maven without a POM. Literal phrases, each quantifier bounded.
+  ["test", /\bpython[0-9.]{0,8}(?:\.exe)?: No module named [^\n]{1,200}/i, "python -m missing module"],
+  ["test", /\bCould not open input file: [^\n]{1,300}/, "php missing script"],
+  ["test", /\bnpm (?:ERR!|error) (?:code )?E404\b/, "npm E404"],
+  ["test", /\bcould not determine executable to run\b/, "npx no executable"],
+  ["test", /\b(?:sh|dash): \d{1,9}: (?:cannot|Can't) open [^\n]{1,300}/, "dash cannot open"],
+  ["test", /\bgo: cannot find main module\b[^\n]{0,200}/, "go no main module"],
+  ["test", /\bgo\.mod file not found in current directory or any parent directory\b/, "go no go.mod"],
+  ["test", /\bcould not find `Cargo\.toml` in [^\n]{0,300}/, "cargo no Cargo.toml"],
+  ["test", /\berror MSB100[39]: [^\n]{0,200}/, "dotnet no project"],
+  ["test", /\bcannot load such file -- [^\n]{1,300}/, "ruby cannot load"],
+  ["test", /\bthere is no POM in this directory\b[^\n]{0,200}/, "maven no POM"],
+  // 1.24 r6 D8 — a test file that doesn't parse: the compiler's caret frame, then "SyntaxError:" (node — CJS and ESM —, python), as
+  // node --test shows it under either reporter (each line "# "-prefixed in TAP). A SyntaxError a test RAN into (JSON.parse in the
+  // code under test) has no caret frame — still red. pytest says a test file failed to import / parse as a collection error.
+  ["test", /^[ \t#]{0,400}\^{1,400}[ \t]{0,40}\r?\n(?:[ \t#]{0,8}\r?\n)?[ \t#]{0,8}SyntaxError: [^\r\n]{0,200}/m, "syntax error (caret frame)"],
+  ["test", /\bInterrupted: \d{1,9} errors? during collection\b/, "pytest collection error"],
 ];
 // → null | { kind: "wsl" | "spawn" | "test", text: "<the matched text, ≤ 160 chars>" }. NUL bytes are dropped first (the WSL
 // launcher writes UTF-16).
@@ -1040,7 +1070,11 @@ const CANT_RUN_OUTPUT = [
 // a block's "[-] Error occurred in Describe block …" / "[-] Discovery in … failed" / "[-] <file> failed with:"), "Expected
 // 'Hello, Ana', but got 'Hello'." / "Expected strings to be the same, but they were different." / Pester 3's "Expected string
 // length 10 but was 5.", and "But was:" (Pester, NUnit). Every quantifier next to another one is bounded (1.21.1 review).
-const RE_ASSERTION_RAN = /^[ \t]*not ok \d|\bAssertionError\b|^[ \t]*E[ \t]{2,}assert\b|\bexpect\(|^[ \t]*(?:Expected|Received|But was):|^[ \t]*\[-\] (?!Error occurred in |Discovery in )[^\r\n]{1,500}? \d{1,9}(?:\.\d{1,6})?m?s(?: \([^\r\n)]{0,40}\))?[ \t]{0,40}$|\bExpected [^\r\n]{1,400}?,? but (?:got|was|they were|no exception)\b/m;
+// 1.24 r6 D8: node --test's FILE-level `not ok 1 - tests/x.test.js` (the subtest named after a .js / .mjs / .cjs / .ts / .mts /
+// .cts / .jsx / .tsx file: it failed outside any test — a missing import, a syntax error) is no assertion that ran: under the TAP
+// reporter (Node 18–22's default when piped) such a broken file was the red proof, under the spec reporter could-not-run. A test
+// whose own name ends in such a file name reads the same (a known limit).
+const RE_ASSERTION_RAN = /^[ \t]*not ok \d{1,9}(?!\d)(?! - [^\r\n]{0,500}\.[cm]?[jt]sx?[ \t]*$)|\bAssertionError\b|^[ \t]*E[ \t]{2,}assert\b|\bexpect\(|^[ \t]*(?:Expected|Received|But was):|^[ \t]*\[-\] (?!Error occurred in |Discovery in )[^\r\n]{1,500}? \d{1,9}(?:\.\d{1,6})?m?s(?: \([^\r\n)]{0,40}\))?[ \t]{0,40}$|\bExpected [^\r\n]{1,400}?,? but (?:got|was|they were|no exception)\b/m;
 // Pester's summary ("Tests Passed: 0, Failed: 1" — Pester 4–6; Pester 3: "Passed: 0 Failed: 1") counts a test whose block never
 // ran as failed too — a BeforeAll that failed on a module that isn't there, a test file that doesn't parse. RE_PESTER_NOT_RUN
 // is how Pester says so: "Container failed: N" (Pester 5+, a file's top-level BeforeAll or its discovery), "BeforeAll \
@@ -1063,6 +1097,39 @@ function couldNotRunOutput(output) {
   }
   const nr = ran ? null : s.match(RE_PESTER_NOT_RUN); // a Pester block / file that failed before its tests, and no test that ran
   return nr ? { kind: "test", text: one(nr) } : null;
+}
+// 1.24 r6 D4 + D-I2 — a PASS that ran no test: a glob, a path or a filter that matched nothing proves nothing (node --test exits 0
+// with "tests 0"). The runners' own words: node --test "ℹ tests 0" / "# tests 0", go "[no tests to run]" / "[no test files]", cargo
+// "running 0 tests", mocha "0 passing", jest "No tests found", pytest "no tests ran" / "collected 0 items", vitest "No test files
+// found", unittest "Ran 0 tests", Pester "Tests Passed: 0, Failed: 0", RSpec "0 examples, 0 failures", PHPUnit "No tests
+// executed!", dotnet "No test is available", Maven "Tests run: 0, Failures: 0". Never when the output shows a test ran
+// (RE_TESTS_RAN: a non-zero count, a passing test line, a go package that ran — "[no test files]" for one package next to a
+// package that ran is a run) or an assertion did. `done --run` refuses such a pass, nothing recorded; spec_complete_task too when
+// the summary shows it (couldNotRun "no-tests", stable). Literal phrases, every quantifier bounded, linear on 200 KB.
+const VACUOUS_OUTPUT = [
+  ["node --test", /^[ \t]*(?:ℹ|#)[ \t]{1,4}tests 0[ \t]*$/m],
+  ["go test", /^[^\r\n]{0,300}\[no (?:tests to run|test files)\][ \t]*$/m],
+  ["cargo test", /^[ \t]*running 0 tests[ \t]*$/m],
+  ["mocha", /^[ \t]*0 passing\b[^\r\n]{0,40}/m],
+  ["jest", /\bNo tests found\b[^\r\n]{0,120}/],
+  ["pytest", /\bno tests ran\b[^\r\n]{0,60}|\bcollected 0 items\b/],
+  ["vitest", /\bNo test files found\b[^\r\n]{0,120}/],
+  ["unittest", /^Ran 0 tests in [^\r\n]{0,40}/m],
+  ["Pester", /^[ \t]*(?:Tests Passed: 0, Failed: 0\b|Passed: 0 Failed: 0\b)[^\r\n]{0,80}/m],
+  ["RSpec", /^[ \t]*0 examples, 0 failures\b/m],
+  ["PHPUnit", /\bNo tests executed!/],
+  ["dotnet test", /\bNo test is available in [^\r\n]{0,200}|\bNo test matches the given testcase filter\b[^\r\n]{0,120}/],
+  ["Maven", /\bTests run: 0, Failures: 0\b[^\r\n]{0,60}/],
+];
+const RE_TESTS_RAN = /^[ \t]*(?:ℹ|#)[ \t]{1,4}(?:tests|pass|fail) [1-9]|^[ \t]*[1-9]\d{0,8} (?:passing|failing)\b|^[ \t]*running [1-9]\d{0,8} tests?\b|\bcollected [1-9]\d{0,8} items?\b|\b[1-9]\d{0,8} passed\b|\bTests run: [1-9]|\b(?:Tests )?Passed:[ \t]{1,8}[1-9]|^Ran [1-9]\d{0,8} tests? in |^[ \t]*[1-9]\d{0,8} examples?, |^(?:=== RUN|--- (?:PASS|FAIL)):? |^ok[ \t]+\S{1,300}[ \t]+(?:\(cached\)|\d{1,9}(?:\.\d{1,9})?m?s)(?![^\r\n]{0,200}\[no tests to run\])|^[ \t]*ok \d{1,9}\b|^[ \t]*✔ /m;
+function vacuousRun(output) {
+  const s = stripAnsi(String(output == null ? "" : output).slice(0, 200000).split(String.fromCharCode(0)).join(""));
+  if (!s.trim() || RE_TESTS_RAN.test(s) || RE_ASSERTION_RAN.test(s)) return null;
+  for (const [runner, re] of VACUOUS_OUTPUT) {
+    const m = s.match(re);
+    if (m) return { runner, text: m[0].trim().replace(/\s+/g, " ").slice(0, 160) };
+  }
+  return null;
 }
 // 1.21.1 review — PowerShell's OWN parse error: the -Command script never ran (Windows PowerShell 5.1 has no `&&` / `||`: "The
 // token '&&' is not a valid statement separator in this version.", its "+ CategoryInfo : ParserError:" and
@@ -1963,14 +2030,14 @@ function untickedSince(evidence, block, dup, reason) {
 
 module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isRecord, evidenceRecords, ownRecord, movedEvidence,
   ownEvidence, taskEvidenceIssue, taskVerification, EVIDENCE_HISTORY, EVIDENCE_OTHERS, recordEvidence, storeEvidence,
-  runOf, stateEvidence, verificationStatus, RE_COUNT_KW, RE_COUNT_LINE, RE_ANSI, stripAnsi, summarizeRunOutput,
+  runOf, stateEvidence, verificationStatus, RE_COUNT_KW, RE_COUNT_LINE, RE_ANSI, stripAnsi, RE_CARET_LINE, RE_SYNTAX_ERROR_LINE, summarizeRunOutput,
   RE_CMD_SHELL_FAILURE, windowsShellFailure, RE_WSL_LAUNCHER_DIR, isWslLauncher, PWSH_RUN_ARGS, RE_PWSH_PROGRAM,
   isPwshShell, isPosixShellName, resolveRunShell, PWSH_VALUE_OPTS, PWSH_VALUE_ALIASES, RE_PWSH_COMMAND_OPT, pwshOption,
   pwshTracker, WRAPPER_OPTION_VALUES, WRAPPER_POSITIONALS, wrapperStep, posixShellSyntax, POSIX_DQ_ESCAPES, posixPwshScript,
   posixPwshScan,
   verifyPipeMasked, POSIX_SHELLS, PWSH_SHELLS, SHELL_WRAPPERS, WRAPPER_ARG_OPTS, lexShell, programName, setPipefail,
   shellScript, pipeMaskedIn, verifyPipes, expectsFail, unknownExpectValues, CANT_RUN_EXIT, CANT_RUN_OUTPUT, RE_ASSERTION_RAN,
-  RE_PESTER_FAILED, RE_PESTER_NOT_RUN, pesterRan, couldNotRunOutput, RE_PWSH_PARSE_FAILURE, pwshParseFailure, runsPwsh,
+  RE_PESTER_FAILED, RE_PESTER_NOT_RUN, pesterRan, couldNotRunOutput, VACUOUS_OUTPUT, RE_TESTS_RAN, vacuousRun, RE_PWSH_PARSE_FAILURE, pwshParseFailure, runsPwsh,
   cantRunRecord, CRASH_EXIT, crashExit, isRedRun, redProof, CMD_RULE, legacyRedRun, expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps,
   gitEvidence, OBSERVED_LOG, OBSERVED_MAX_BYTES, OBSERVED_WINDOW_MS, OBSERVED_MAX_COMMAND, OBSERVED_MAX_FEATURES,
   EVIDENCE_MODES, evidenceMode, evidenceSince, evidenceRule, evidenceModeInput, setEvidenceMode,

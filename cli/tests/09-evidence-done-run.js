@@ -315,4 +315,32 @@ ok(/^\$ node -e "process\.exit\(0\)"$/m.test(sm1) && /^\$ node --version\r?\nv\d
   dm4.ok && dm4.verified === true && sm4.length <= 2000 && [1, 2, 3, 4].every((n) => sm4.includes("$ node t/noisy.js " + n) && sm4.includes("# pass " + n)),
   "1.23 review: done --run with several _Verify:_ commands records one summary per command (its command line + its output, the count line kept), within 2,000 characters (got " +
   JSON.stringify([sm1, sm4.length, sm4.split("\n").filter((l) => /^\$ |# pass/.test(l))]) + ")");
+
+// 1.24 r6 D4 / D5 / D8: done --run refuses a PASS that ran no test (node --test on a file with no test: "tests 0" — couldNotRun
+// no-tests), and, on an _Expect: fail_ task, a test file that doesn't parse (node's SyntaxError, TAP or spec reporter) or a runner
+// that isn't there (python -m's "No module named") — nothing recorded; a real run of a real test still verifies.
+{
+  const vp = path.join(tmp, "r6-done-run-vacuous");
+  fs.mkdirSync(path.join(vp, "tests"), { recursive: true });
+  run(["create", "Vac", "core", "--project", vp]);
+  fs.writeFileSync(path.join(vp, "tests", "syn.test.js"), "const t = require('node:test');\nt.test('T-01', () => { let x = ; });\n");
+  fs.writeFileSync(path.join(vp, "tests", "real.test.js"), "const t = require('node:test');\nt.test('T-02', () => {});\n");
+  // (task 1: a runner's own zero-count summary — node --test prints "# tests 0" when its glob matches no file; Node 18 / 20 have no
+  // globs, so the line is printed directly)
+  fs.writeFileSync(path.join(vp, ".specs", "vac", "tasks.md"), "- [ ] 1. Empty suite\n  - _Verify: node -e \"console.log('# tests 0'); console.log('# pass 0')\"_\n" +
+    "- [ ] 2. Write the failing test T-01\n  - _Verify: node --test tests/syn.test.js_\n  - _Expect: fail_\n" +
+    "- [ ] 3. Write the failing test T-03\n  - _Verify: node -e \"console.error('/usr/bin/python3: No module named pytest'); process.exit(1)\"_\n  - _Expect: fail_\n" +
+    "- [ ] 4. Real test\n  - _Verify: node --test tests/real.test.js_\n");
+  const vj = (n) => { const r = run(["done", "vac", n, "--run", "--json", "--project", vp]); try { return Object.assign(JSON.parse(r.out.slice(0, r.out.indexOf("\n}") + 2)), { code: r.code }); } catch { return { raw: r.out, code: r.code }; } };
+  const v1 = vj("1"), v2 = vj("2"), v3 = vj("3"), v4 = vj("4");
+  const stFile = path.join(vp, ".specs", "vac", ".state.json");
+  const st = fs.existsSync(stFile) ? JSON.parse(fs.readFileSync(stFile, "utf8")) : {};
+  const ev = st.evidence || {};
+  const tasksNow = fs.readFileSync(path.join(vp, ".specs", "vac", "tasks.md"), "utf8");
+  ok(v1.code === 1 && v1.couldNotRun === "no-tests" && /tests 0/.test(v1.error) && v2.code === 1 && v2.couldNotRun === "output" && /SyntaxError/.test(v2.error) &&
+    v3.code === 1 && v3.couldNotRun === "output" && /No module named pytest/.test(v3.error) && v4.code === 0 && v4.verified === true &&
+    !ev["1"] && !ev["2"] && !ev["3"] && /- \[ \] 1\.[\s\S]*- \[ \] 2\.[\s\S]*- \[ \] 3\.[\s\S]*- \[x\] 4\./.test(tasksNow),
+    "1.24 r6 D4 / D5 / D8: done --run refuses a pass that ran no test (no-tests), a red run of a test file that doesn't parse and of a runner that isn't there (output) — nothing recorded, tasks open; a real test verifies (got " +
+    JSON.stringify([v1, v2.couldNotRun, (v2.error || v2.raw || "").slice(0, 120), v3.couldNotRun, v4.verified, Object.keys(ev)]) + ")");
+}
 };

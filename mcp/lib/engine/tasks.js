@@ -24,7 +24,7 @@ let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDeci
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
-  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit;
+  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun;
 function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
@@ -36,7 +36,7 @@ function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, b
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
-  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit } = E); }
+  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
 // scanner — so status/next/phase can never count a task that complete/brief/finish don't see.
@@ -548,6 +548,10 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const EG = i18n.msg(lng).evidenceGate;
   const ev = normalizeEvidence(evidence);
   if (ev && ev.error) return { ok: false, error: ev.error === "badExit" ? EV.badExit(ev.value) : ev.error === "noContent" ? EG.noContent : EV.needsExit };
+  // 1.24 r6 D4: a passing run whose summary shows no test ran (a glob, a path or a filter that matched nothing — vacuousRun) proves
+  // nothing: refused before anything is recorded (couldNotRun "no-tests", stable). `done --run` (ranBy "cli") read the whole output.
+  const vacuous = ev && ev.command && ev.exitCode === 0 && !(opts && opts.ranBy === "cli") ? vacuousRun(ev.summary) : null;
+  if (vacuous) return { ok: false, couldNotRun: "no-tests", error: EV.noTests(n, vacuous.text) };
   // Validate the state BEFORE touching tasks.md: a broken .state.json used to throw after the tick,
   // leaving a ticked task with no evidence.
   const state = readState(projectDir, f.slug);

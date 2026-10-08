@@ -1132,6 +1132,7 @@ const msg = {
       badExit: (v) => `O exitCode tem de ser um inteiro (recebido '${v}').`,
       needsExit: "Uma evidência que indica um comando precisa do exit code — ou dá só um resumo, para uma verificação manual.",
       unknownExpect: (n, values) => `A tarefa ${n} tem ${values.map((v) => "_Expect: " + v + "_").join(", ")} — o marcador só conhece \`fail\`, por isso, tal como está escrita, a tarefa tem de PASSAR. Se a execução dela tem de falhar (um teste escrito antes da correção), escreve _Expect: fail_.`,
+      noTests: (n, what) => `Tarefa ${n}: a execução passou, mas o output mostra que nenhum teste correu (${what}) — uma execução que não testa nada não prova nada (um glob, um caminho ou um filtro que não apanha nenhum teste). Nada foi registado; a tarefa continua por fazer. Corrige o comando _Verify:_ (ou o teste que ele indica) e depois regista uma execução que corra o teste.`,
     },
     finish: {
       ready: (slug) => `'${slug}' está pronta para fechar — confirma as verificações abaixo e depois faz merge local ou mantém o branch.`,
@@ -2859,6 +2860,7 @@ const msg = {
       },
       wslBash: (p) => `--shell ${p} é o lançador bash.exe do WSL, que corre o comando dentro de uma distribuição Linux (ou falha com "execvpe(/bin/bash) failed") e não numa shell desta máquina — usado como pediste; uma execução que o WSL não consiga arrancar não é registada. A shell desta máquina é o Git Bash, que o --shell bash encontra (com o Git for Windows).`,
       wslExe: (p) => `--shell ${p} é o wsl.exe, que não é uma shell (rejeita o -c que qualquer execução numa shell usa) — recusado, nada foi executado. Indica o caminho do bash.exe do WSL para correr dentro do WSL, ou --shell bash para o Git Bash.`,
+      noTests: (cmd, what) => `\`${cmd}\` passou, mas o output mostra que nenhum teste correu (${what}) — uma execução que não testa nada não prova nada (um glob, um caminho ou um filtro que não apanha nenhum teste). Nada foi registado; a tarefa continua por fazer. Corrige o comando _Verify:_ (ou o teste que ele indica) e depois volta a correr o done --run.`,
       noGitBash: "--shell bash: não foi encontrado nenhum Git Bash (git --exec-path, %ProgramFiles%\\Git\\bin\\bash.exe, PATH) — um bash.exe em System32 ou WindowsApps é o lançador do WSL, que corre o comando dentro de uma distribuição Linux, por isso nunca é usado. Nada foi executado. Instala o Git for Windows, ou indica em --shell o caminho completo de um bash.exe.",
     },
     gitLog: {

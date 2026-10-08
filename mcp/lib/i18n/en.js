@@ -1155,6 +1155,8 @@ const msg = {
       needsExit: "Evidence that names a command needs its exit code — or give only a summary for a manual check.",
       // 1.24 r6 D7 — the failed-run refusal of a task whose _Expect:_ value is no `fail` (unknownExpect)
       unknownExpect: (n, values) => `Task ${n} carries ${values.map((v) => "_Expect: " + v + "_").join(", ")} — the marker knows only \`fail\`, so as written the task must PASS. If its run must fail (a test written before its fix), write _Expect: fail_.`,
+      // 1.24 r6 D4 — spec_complete_task: a passing run whose summary shows no test ran (couldNotRun "no-tests")
+      noTests: (n, what) => `Task ${n}: the run passed, but its output shows no test ran (${what}) — a run that tests nothing proves nothing (a glob, a path or a filter that matches no test). Nothing was recorded; the task stays open. Fix the _Verify:_ command (or the test it names), then record a run that executes the test.`,
     },
     finish: {
       ready: (slug) => `'${slug}' is ready to finish — confirm the checks below, then merge locally or keep the branch.`,
@@ -3026,6 +3028,8 @@ const msg = {
       },
       wslBash: (p) => `--shell ${p} is WSL's bash.exe launcher: it runs the command inside a Linux distribution (or fails with "execvpe(/bin/bash) failed"), not in a shell on this machine — used as you asked; a run WSL can't start is not recorded. For a shell on this machine use Git Bash: --shell bash finds it (Git for Windows).`,
       wslExe: (p) => `--shell ${p} is wsl.exe, which is no shell (it rejects the -c every shell run uses) — refused, nothing was run. Name WSL's bash.exe by its path to run inside WSL, or use --shell bash for Git Bash.`,
+      // 1.24 r6 D4 — done --run: a command that passed without running a test (couldNotRun "no-tests")
+      noTests: (cmd, what) => `\`${cmd}\` passed, but its output shows no test ran (${what}) — a run that tests nothing proves nothing (a glob, a path or a filter that matches no test). Nothing was recorded; the task stays open. Fix the _Verify:_ command (or the test it names), then run done --run again.`,
       noGitBash: "--shell bash: no Git Bash was found (git --exec-path, %ProgramFiles%\\Git\\bin\\bash.exe, PATH) — a bash.exe in System32 or WindowsApps is WSL's launcher, which runs the command inside a Linux distribution, so it is never used. Nothing was run. Install Git for Windows, or pass --shell with the full path of a bash.exe.",
     },
     gitLog: {

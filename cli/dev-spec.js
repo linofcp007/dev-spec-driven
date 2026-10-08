@@ -950,6 +950,10 @@ async function main() {
             if (sh.cmd && spec.windowsShellFailure(x.output, code)) hint = D.shellHint;
             break;
           }
+          // 1.24 r6 D4: a pass whose output shows no test ran (node --test "tests 0", go "[no tests to run]"…) proves nothing — refused,
+          // nothing recorded (couldNotRun "no-tests"; the engine refuses a reported summary that shows it the same way).
+          const none = spec.vacuousRun(x.output);
+          if (none) return fail({ ok: false, couldNotRun: "no-tests", error: M.runGate.noTests(cmd, none.text) });
           passed.push({ cmd, output: x.output, summary: x.summary });
           evidence = { command: cmds.join(" && "), exitCode: 0, summary: runSummaries(passed), ...git };
         }
