@@ -275,7 +275,8 @@ flows, the bugfix kind.
   nothing changed), so a finish / execution sign-off older than it is stale (drift verdict `stale`,
   `revoke.driftWhy` in the CLI line; `revokedSinceList()` drops a phase re-approved since — it reads "re-approved"). The
   catalog's `finished` also needs no pending gate (`pendingGateList`, existence checks only): SPECS.md reads ☑ complete.
-- **Waivers** — `force` + `reason` / `expires` (`waiverInput()`: `YYYY-MM-DD` from today up to 3650 days, or `Nd`) →
+- **Waivers** — `force` + `reason` / `expires` (`waiverInput()`: `YYYY-MM-DD` from today (UTC — `waiver.badExpires` says so,
+  r5 review: west of UTC in the evening the user's "today" was refused) up to 3650 days, or `Nd`) →
   `waiver {reason?, expires?}` on the approval, its history record and role sign-offs; either without force is refused, a
   gate that passes answers `waiverIgnored`. `waiverView` / `forcedApprovalList` / `strictestWaiver`: doctor warn
   `waiver-expired` (feature and spike doctors), the ROADMAP.md forced-approvals line (EXPIRED flagged), `spec_finish`

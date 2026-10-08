@@ -622,7 +622,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       S.approvePhase(p9, "checkout", "requirements", "u", { force: true, expires: "0d" })];
     const badMcp = await rpc("tools/call", { name: "spec_approve", arguments: { name: "checkout", phase: "requirements", force: true, expires: 30, projectDir: p9 } });
     ok(bad9.every((r) => r.ok === false) && /go with force/.test(bad9[0].error) && /go with force/.test(bad9[1].error) &&
-      bad9.slice(2).every((r) => /expires must be an ISO date \(YYYY-MM-DD, today or later, at most 3650 days ahead\) or a number of days/.test(r.error)) &&
+      bad9.slice(2).every((r) => /expires must be an ISO date \(YYYY-MM-DD, today or later in UTC — valid through that day, UTC — at most 3650 days ahead\) or a number of days/.test(r.error)) &&
       badMcp.result.isError === true && !uSt(f9.dir).approvals.requirements,
       "1.16 U3: reason / expires without force, an expiry in the past, beyond 3650 days, unreadable, an impossible date or 0d, and a non-string expires (schema) are refused — nothing recorded (got " + js(bad9.map((r) => r.error)) + ")");
     // Expired: doctor warns waiver-expired, ROADMAP.md flags it, spec_finish lists every forced approval (waivers, merge summary) and warns.
@@ -1259,5 +1259,10 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     ok(/re-confirm it: \/approve widget execution --role tech\./.test(naSt1.recommendation) && /re-confirm it: \/approve widget execution --role product\./.test(naSt2.recommendation),
       "r5 review L15: a stale execution approval by roles is renewed by every role — next_action names tech, then (tech signed) product, never tech again (got " + js([naSt1.recommendation.slice(-60), naSt2.recommendation.slice(-60)]) + ")");
 
+    // L18: the waiver's expiry is a UTC date — said in EN / PT / ES.
+    const i18n = require("../lib/i18n.js");
+    ok(/today or later in UTC/.test(i18n.msg("en").waiver.badExpires('"x"', 3650)) && /hoje ou depois em UTC/.test(i18n.msg("pt").waiver.badExpires('"x"', 3650)) &&
+      /hoy o después en UTC/.test(i18n.msg("es").waiver.badExpires('"x"', 3650)),
+      "r5 review: the waiver --expires refusal says the date is a UTC day (EN / PT / ES)");
   }
 };

@@ -2733,7 +2733,7 @@ const msg = {
       signOffWhy: (list) => `la revocación de ${list}`,
     },
     waiver: {
-      badExpires: (v, max) => `expires debe ser una fecha ISO (AAAA-MM-DD, hoy o después, como máximo dentro de ${max} días) o un número de días (30d, 1–${max}) — recibido: ${v}.`,
+      badExpires: (v, max) => `expires debe ser una fecha ISO (AAAA-MM-DD, hoy o después en UTC — válida hasta el final de ese día, UTC — como máximo dentro de ${max} días) o un número de días (30d, 1–${max}) — recibido: ${v}.`,
       needsForce: "reason / expires describen una excepción (waiver) — van con force (reason también con revoke).",
       notForced: "El gate pasó — no se eximió nada: el motivo / la caducidad no se registraron.",
       recorded: (reason, expires) => `Excepción registrada${reason ? `: ${reason}` : ""}${expires ? ` (vence el ${expires})` : ""}.`,

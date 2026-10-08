@@ -2879,7 +2879,7 @@ const msg = {
       signOffWhy: (list) => `the revocation of ${list}`,
     },
     waiver: {
-      badExpires: (v, max) => `expires must be an ISO date (YYYY-MM-DD, today or later, at most ${max} days ahead) or a number of days (30d, 1–${max}) — got ${v}.`,
+      badExpires: (v, max) => `expires must be an ISO date (YYYY-MM-DD, today or later in UTC — valid through that day, UTC — at most ${max} days ahead) or a number of days (30d, 1–${max}) — got ${v}.`,
       needsForce: "reason / expires describe a waiver — they go with force (reason also with revoke).",
       notForced: "The gate passed — nothing was waived: the reason / expiry were not recorded.",
       recorded: (reason, expires) => `Waiver recorded${reason ? `: ${reason}` : ""}${expires ? ` (expires ${expires})` : ""}.`,

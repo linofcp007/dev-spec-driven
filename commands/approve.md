@@ -52,9 +52,10 @@ seen: present it first (in a bugfix, the reproduction and the root cause in `bug
 `force: true` (CLI `--force`) records it anyway as a **forced** approval with the failing check ids: use it only
 when the user explicitly chooses to accept the failures, and say so. Forced approvals stay visible —
 `spec_doctor`'s `approval-gates` check warns, the roadmap lists them, and `spec_metrics` counts them. A phase with
-no artifact (eval-plan without +ai, test-plan without +tdd, a missing file) can't be approved, not even forced.
+no artifact (eval-plan without +ai, test-plan without +tdd, a missing file — or one that can't be read: a folder of that
+name, no permission — `unreadable`) can't be approved, not even forced.
 With `force`, record the user's reason and, when they give one, an expiry: `reason` + `expires` (`YYYY-MM-DD`, today or
-later, or a number of days like `30d`) — CLI `--force --reason "…" --expires 30d` — are stored as the approval's
+later in UTC — the waiver holds through that UTC day —, or a number of days like `30d`) — CLI `--force --reason "…" --expires 30d` — are stored as the approval's
 **waiver** (`waiver {reason, expires}`, on the approval and its history record; only when the gate really fails —
 a passing gate waives nothing). Once the expiry passes while the approval still stands forced, `spec_doctor` warns
 `waiver-expired`; ROADMAP.md shows each forced approval with its waiver (an expired one flagged EXPIRED) and
