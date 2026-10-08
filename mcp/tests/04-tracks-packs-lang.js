@@ -1,12 +1,13 @@
 "use strict";
 // Track packs — 1.23 review 5 (L30): a track.json problem reads in the project's language. The rule a field breaks and why track.json
-// is no JSON are codes the locale renders (trackPacks.rule / jsonWhy) — they were English text inside the PT / ES sentence.
-// (04-tracks.js holds the packs' earlier tests.)
+// is no JSON are codes the locale renders (trackPacks.rule / jsonWhy) — they were English text inside the PT / ES sentence. And 1.24
+// review 6 (F7): two sections that can answer one heading are an error (section-overlap). (04-tracks.js holds the packs' earlier tests.)
 
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, S, tmp }) => {
+exports.run = async ({ ok, S, tmp, require, __dirname }) => {
+  const E = require(path.join(__dirname, "lib", "engine", "index.js"));
   const js = JSON.stringify;
   const writePack = (proj, n, json) => {
     const d = path.join(proj, ".specs", "tracks", n);
@@ -55,4 +56,30 @@ exports.run = async ({ ok, S, tmp }) => {
     /um erro de sintaxe na linha 3/.test(by("pt", "syntax")) && /un error de sintaxis en la línea 3/.test(by("es", "syntax")) &&
     /no es un objeto JSON/.test(by("es", "array")) && /al menos una/.test(by("es", "nosect")),
     "1.23 review 5 (L30): the rules read in each language; a syntax error names line 3 (got " + js([syn.message, syn.line, by("pt", "noname")]) + ")");
+
+  // 1.24 r6 F7: two sections of a pack that can answer the SAME heading — a name / synonym that is a word-prefix of another's ("Offline" and
+  // "Offline Sync"), or an English inflection of it ("Model" and "Modeling Notes") — are an error, section-overlap: "## [MOB] Offline Sync"
+  // answered both, so deleting the "Offline" section left doctor's mob-sections passing. The built-in tracks' tables keep the invariant.
+  {
+    const p = path.join(tmp, "proj-r6-overlap");
+    S.initProject(p, ["core"], "en");
+    writePack(p, "mob", base("mob", { sections: [{ name: "Offline", syn: ["offline mode"] }, { name: "Offline Sync" }, { name: "Push", syn: ["push notifications"] }] }));
+    writePack(p, "mod", base("mod", { sections: [{ name: "Model" }, { name: "Training", syn: ["modeling notes"] }] }));
+    writePack(p, "syncs", base("syncs", { sections: [{ name: "Offline Sync" }, { name: "Online" }, { name: "Sync Conflicts", syn: ["offline-first notes"] }] }));
+    const probs = S.trackPacks(p, "check").problems;
+    const codes = (n) => probs.filter((x) => x.pack === n).map((x) => x.code);
+    const over = probs.filter((x) => x.code === "section-overlap");
+    const builtin = E.markerTracks().filter((t) => !E.isPackTrack(t)).flatMap((t) => E.sectionOverlaps(E.trackSectionTable(t)).map((o) => t + ": " + o.join(" / ")));
+    const msgs = ["pt", "es"].map((l) => {
+      const q = path.join(tmp, "proj-r6-overlap-" + l);
+      S.initProject(q, ["core"], l);
+      writePack(q, "mob", base("mob", { sections: [{ name: "Offline" }, { name: "Offline Sync" }] }));
+      return (S.trackPacks(q, "check").problems.find((x) => x.code === "section-overlap") || {}).message || "";
+    });
+    ok(codes("mob").includes("section-overlap") && codes("mod").includes("section-overlap") && !codes("syncs").includes("section-overlap") &&
+      over.every((x) => x.severity === "error") && /Offline/.test((over.find((x) => x.pack === "mob") || {}).message || "") && !builtin.length &&
+      msgs.every((m) => m && /Offline Sync/.test(m) && !/answer the same heading/.test(m)),
+      "1.24 r6 F7: tracks check refuses a pack whose sections can answer the same heading (a word-prefix or an inflection of another's name / synonym) — section-overlap, localized; the built-in tables never overlap (got " +
+      js([codes("mob"), codes("mod"), codes("syncs"), builtin, msgs]) + ")");
+  }
 };

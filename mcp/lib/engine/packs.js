@@ -16,13 +16,13 @@ const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in pl
 let acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, extractTestIds, headingIndex,
   isInsideDir, isObj, MARKER_TRACKS, normalizeLang, parseTasks, planIdText, projectLang, PROTO_KEYS, RE_CUSTOM_STEERING,
   RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, readJson,
-  requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription, templateBracketKeys,
+  requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, synonymsOverlap, stripHtmlComments, taskDescription, templateBracketKeys,
   templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING, trackAcIds, trackMarker,
   trackTaskHeading, VALID_TRACKS, writeIfAbsent;
 function __link(E) { ({ acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, extractTestIds,
   headingIndex, isInsideDir, isObj, MARKER_TRACKS, normalizeLang, parseTasks, planIdText, projectLang, PROTO_KEYS,
   RE_CUSTOM_STEERING, RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists,
-  readJson, requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, stripHtmlComments, taskDescription,
+  readJson, requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, synonymsOverlap, stripHtmlComments, taskDescription,
   templateBracketKeys, templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING,
   trackAcIds, trackMarker, trackTaskHeading, VALID_TRACKS, writeIfAbsent } = E); }
 
@@ -407,6 +407,11 @@ function loadPackScan(scan, folder, rel, problem) {
       // unmarked heading nested under one — never the core design's own "## Architecture" / "## Testing Strategy". (`loose` is kept
       // for symmetry with the built-in tables; for a pack every synonym already behaves as one.)
       const all = [...new Set([...nameKeys, ...syn, ...loose])];
+      // 1.24 review 6 (F7): two sections one heading can answer — a key equal to, a word-prefix of or inflected from another section's
+      // (synonymsOverlap — headingTextMatches' rule): "## [MOB] Offline Sync" filled "Offline" too, so its own section could go. An error.
+      let overlap = null;
+      for (const o of sections) { for (const y of o.syn) { const x = all.find((k) => synonymsOverlap(k, y)); if (x) { overlap = { o, heading: x.length >= y.length ? x : y }; break; } } if (overlap) break; }
+      if (overlap) { err(jrel, "section-overlap", { name: names.en, other: overlap.o.name, heading: overlap.heading }); return; }
       const core = all.filter((x) => coreDesignHeadingKeys().has(x));
       if (core.length) warn(jrel, "section-core-name", { name: names.en, heading: core[0] });
       sections.push({ name: names.en, names, nameKeys, syn: all, loose: all, guidance });

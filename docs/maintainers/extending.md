@@ -25,7 +25,7 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
 - New track → a TEAM's track is a track pack (`.specs/tracks/<name>/`, no code — see Project-defined tracks); a BUILT-IN
   one → The track model (registries and its classifier `SIGNALS`: `engine/tracks.js`, the classifier code in `engine/classify.js`; its builders in the
   `i18n/<lang>.js` files) — 1.21: its sections' `tier`, any `TRACK_OVERLAPS` / `TRACK_TASK_OVERLAPS` / `CORE_SUPERSEDED_BY`
-  entry (data only). New artifact → the resource allowlist, the template allowlist
+  entry (data only); no section name / synonym may start another section's (`sectionOverlaps()` — 1.24 review 6, F7). New artifact → the resource allowlist, the template allowlist
   (`TEMPLATE_ARTIFACTS`, `engine/templates.js`) and `templateCorpus()` (`engine/markdown.js`) if it has slots.
 - A size-aware builder (1.21 F5) → the `a.size` branch in EN / PT / ES, NEVER a change to the no-size text (the pinned
   sha1 in mcp/tests/06-gates-sizes.js fails otherwise — update it only when the no-size scaffold changes on purpose), and

@@ -2506,6 +2506,7 @@ const msg = {
         "signal-invalid": (a) => `signals.${a.tier}: '${a.keyword}' no es una palabra clave (letras y dígitos con espacios, - ' . intermedios — de 2 a 60 caracteres; siempre se compara como palabra literal, nunca como patrón) — el pack se ignora.`,
         "too-many": (a) => `${a.field}: más de ${a.max} — el pack se ignora.`,
         "section-duplicate": (a) => `la sección '${a.name}' tiene el nombre repetido — el pack se ignora.`,
+        "section-overlap": (a) => `las secciones '${a.other}' y '${a.name}' pueden responder al mismo encabezado ('${a.heading}'): un nombre o sinónimo que empieza el de otra deja que un solo encabezado rellene las dos — renombra una; el pack se ignora.`,
         "steering-invalid": (a) => `el steering '${a.file}' no es un nombre de archivo de steering (minúsculas, dígitos y -, terminado en .md; no un nombre de dispositivo) — el pack se ignora.`,
         "steering-shared": (a) => `el steering ${a.file} también es un archivo de steering de serie — se conserva el que se escriba primero.`,
         "unknown-key": (a) => `clave desconocida "${a.key}" — ignorada.`,

@@ -652,7 +652,11 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   RE_HEADING_LEAD lead stripped (numbering, `Section N`, an emoji, a dash — what `headingMatches` strips from the heading;
   F4 review R4; nothing left → `field-invalid`, a lead stripped → warn `section-name-lead`), and every synonym is
   MARKER-BOUND (`loose` = all of them — F4 review R7: a core `## Architecture` never satisfies a pack's Architecture; a
-  name equal to a core design heading, `coreDesignHeadingKeys()` over the EN / PT / ES design, warns `section-core-name`).
+  name equal to a core design heading, `coreDesignHeadingKeys()` over the EN / PT / ES design, warns `section-core-name`). Two
+  sections ONE heading can answer — a key equal to, a word-prefix of or an English inflection of another section's (`synonymsOverlap()`,
+  markdown.js: headingTextMatches' rule) — are an ERROR, `section-overlap` (1.24 review 6, F7: "## [MOB] Offline Sync" filled "Offline"
+  too, so deleting the Offline section passed doctor). `sectionOverlaps(table)` lists such pairs; every built-in table keeps none
+  (04-tracks-packs-lang asserts it — a new built-in section must too).
   Fragments: `packListItems()` (top-level item = at most one space before the bullet; lines
   indented ≥ 2 are its continuation), `packTableRows()` (six cells, header + separator skipped; else `fragment-row`);
   `{{acN}}` / `{{tN}}` beyond what the pack scaffolds in that language context → `fragment-ref` (its args name the context

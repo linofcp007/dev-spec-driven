@@ -444,6 +444,29 @@ function headingTextMatches(text, syns, inflect) {
   for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, ""); }
   return syns.some((s) => t.startsWith(s) && (!/[\p{L}\p{N}]/u.test(t.charAt(s.length)) || (inflect && RE_SYN_INFLECTION.test(t.slice(s.length)))));
 }
+// 1.24 review 6 (F7): can ONE heading answer both a section named / synonymed `x` and one named `y`? — headingTextMatches' rule (the
+// synonym STARTS the heading, word-bounded, an English inflection allowed on a track section): only when one key equals the other or
+// is a word-prefix of it ("offline" / "offline sync") or its inflection ("model" / "modeling notes"). Two such sections of ONE track
+// are answered by the longer one's heading: "## [MOB] Offline Sync" filled "Offline" too, so deleting the "Offline" section passed.
+const keyStarts = (s, t) => t.startsWith(s) && (!/[\p{L}\p{N}]/u.test(t.charAt(s.length)) || RE_SYN_INFLECTION.test(t.slice(s.length)));
+function synonymsOverlap(x, y) {
+  const a = String(x).trim().toLowerCase(), b = String(y).trim().toLowerCase();
+  return !!a && !!b && (keyStarts(a, b) || keyStarts(b, a));
+}
+// A track's section table → the pairs of sections that one heading can answer: [[name, other name, key, other key]] ([] when none —
+// the invariant every built-in table keeps; `tracks check` refuses a pack that breaks it, section-overlap). Keys: name + syn + loose.
+function sectionOverlaps(sections) {
+  const keys = (sections || []).map((s) => [...new Set([s.name, ...(s.syn || []), ...(s.loose || [])].filter((k) => typeof k === "string").map((k) => k.trim().toLowerCase()))]);
+  const out = [];
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      let hit = null;
+      for (const a of keys[i]) { for (const b of keys[j]) if (synonymsOverlap(a, b)) { hit = [a, b]; break; } if (hit) break; }
+      if (hit) out.push([sections[i].name, sections[j].name, hit[0], hit[1]]);
+    }
+  }
+  return out;
+}
 
 // marker = "[SaaS]" / "[AI]": a heading carrying the track marker wins, so "[AI] Observability for AI"
 // can no longer stand in for "[SaaS] Observability". Unmarked headings are the fallback (hand-written
@@ -1367,7 +1390,7 @@ module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLi
   notASlug, featureRefTest, RE_LEAD_LABEL, RE_CELL_LABEL, criterionLabel, criterionLabelIds,
   otherFeatureTest, featureProjectDir, planIdText, clarificationMarkers,
   templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
-  headingEntries, headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, headingTextMatches, extractSection,
+  headingEntries, headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, headingTextMatches, synonymsOverlap, sectionOverlaps, extractSection,
   sectionContent, writtenContent, genericAnswer, lineAnswers, isTableSep, SLOT_MAX, bracketCloser, mermaidBlocks, mermaidState,
   RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionLineKey, sectionOwnLines, RE_NA_LEAD, NA_REASON_WORDS, naAnswer,
   trackSectionReport, sectionVerdict, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,

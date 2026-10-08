@@ -2644,6 +2644,7 @@ const msg = {
         "signal-invalid": (a) => `signals.${a.tier}: '${a.keyword}' is not a keyword (letters and digits with inner spaces, - ' . — 2 to 60 characters; always matched as a literal word, never as a pattern) — the pack is ignored.`,
         "too-many": (a) => `${a.field}: more than ${a.max} — the pack is ignored.`,
         "section-duplicate": (a) => `section '${a.name}' is named twice — the pack is ignored.`,
+        "section-overlap": (a) => `sections '${a.other}' and '${a.name}' can answer the same heading ('${a.heading}'): a name or synonym that starts another's lets one heading fill both — rename one; the pack is ignored.`,
         "steering-invalid": (a) => `steering '${a.file}' is not a steering file name (lower-case letters, digits and -, ending in .md; not a device name) — the pack is ignored.`,
         "steering-shared": (a) => `steering ${a.file} is also a built-in steering file — whichever is written first is kept.`,
         "unknown-key": (a) => `unknown key "${a.key}" — ignored.`,
