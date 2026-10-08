@@ -22,8 +22,11 @@ exports.run = ({ ok, run, tmp, __dirname }) => {
   ok(diff15.length === 0 && /verdict=PASS/.test(block15("doctor api-keys")) && !/[▲✗]/.test(block15("doctor api-keys")),
     "examples/README.md: doctor (PASS, no warnings) / trace --code / roadmap / clarify print exactly the pasted outputs on a fresh copy of the demo (differs: " + diff15.join(" | ") + ")");
   // The committed ROADMAP.md is what `roadmap --write` generates now (it said 70% while the engine said 19%).
-  run(["roadmap", "--write", "--project", demo15]);
+  run(["roadmap", "--write", "--html", "--project", demo15]);
   const rm15 = (p) => fs.readFileSync(p, "utf8").replace(/\r\n/g, "\n");
   ok(rm15(path.join(demo15, ".specs", "ROADMAP.md")) === rm15(path.join(repo15, "examples", "demo-project", ".specs", "ROADMAP.md")),
     "the demo's committed .specs/ROADMAP.md matches what roadmap --write generates");
+  // … and so does its ROADMAP.html (1.23.1: it had missed the 1.16 milestone styles — no test held it)
+  ok(rm15(path.join(demo15, ".specs", "ROADMAP.html")) === rm15(path.join(repo15, "examples", "demo-project", ".specs", "ROADMAP.html")),
+    "the demo's committed .specs/ROADMAP.html matches what roadmap --write --html generates");
 };
