@@ -222,8 +222,9 @@ trackers, release notes, milestones).
   one Tasks table, no design, the plan's approval row (`planPhase`); the project export lists its criteria, not stories. A story written as its own `## US-n` section appears once, under the stories.
 - **`spec_changelog`** reads the spec data only (no model, no git log). Added = features that shipped since `since`
   (finish `{write}` recorded their baseline, or their execution sign-off was approved) with their user-story ACs (template
-  criteria left out); Changed = ACs superseded by a feature shipped since then + change requests (`changes`) recorded since
-  then, with the current AC text (folded into the entry of a feature new in these notes); Fixed = bugfixes shipped + the
+  criteria left out); Changed = the CHANGES shipped since then (kind `change` — 1.24 r6 G-I10: `changed.changes`, each with its
+  summary and criteria; they were listed under Added as new features) + ACs superseded by a feature shipped since then + change
+  requests (`changes`) recorded since then, with the current AC text (folded into the entry of a feature new in these notes); Fixed = bugfixes shipped + the
   root-cause one-liner. A feature shipped before `since` is never Added again (a role's `partial` execution sign-off is no shipment — only the
   completing one); a spike is never listed. `since`: an ISO
   date (`YYYY-MM-DD` = 00:00 UTC) or timestamp, `last` (default — `meta.changelogAt`; everything while unset) or `all`.
