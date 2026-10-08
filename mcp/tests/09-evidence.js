@@ -1277,8 +1277,8 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const rootOf = (c) => { const m = /^cd (?:\/d )?"?([^"&;]*?)"? *(?:&&|;)/.exec(c); return m ? m[1] : undefined; };
     const yes = ["npm test", "  npm   test ", "`npm test`", '"npm test"', "'npm test'", "cd /x/y && npm test", 'cd "C:/My Proj" && npm test', "cd /d C:\\x && npm test",
       "set -o pipefail; npm test", "set -euo pipefail; npm test", "set -e -o pipefail && npm test", "CI=1 npm test", 'NODE_ENV="test" CI=1 npm test', "npm test 2>&1",
-      "cd /x && CI=1 npm test 2>&1"];
-    const no = ["echo hello", "npm test -- --grep x", "npm run test", "npm test; echo ok", "npm test || true", "npm test | tee log", "echo npm test", "cd x", "npm test && echo ok",
+      "cd /x && CI=1 npm test 2>&1", "npm run test", "npm t"]; // (review 5: npm's own aliases of `npm test`)
+    const no = ["echo hello", "npm test -- --grep x", "npm run test:unit", "npm test; echo ok", "npm test || true", "npm test | tee log", "echo npm test", "cd x", "npm test && echo ok",
       "npm testing", "", "node -e \"process.exit(0)\"", "cd sub; npm test"];
     const two = ["npm test", "npm run lint"];
     // (review 2: "npm run lint" alone used to prove both — a run must cover EVERY _Verify:_ command of the task, see below)
@@ -1645,7 +1645,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
       const s = (r) => (cmdRule ? { ...r, cmdRule } : r);
       st.evidence = {
         1: rec("[US1] A", "npm test -- tests/x.test.js", s(run("npx jest tests/x.test.js", 0))),
-        2: rec("[US1] B", "node --test tests/y.test.js", s(run("node --test ." + BS + "tests" + BS + "y.test.js", 0))),
+        2: rec("[US1] B", "node --test tests/y.test.js", s(run("node tests" + BS + "y.test.js", 0))),
         3: rec("[US1] Red first", "node --test tests/z.test.js", s(run("node --test --test-reporter=tap tests/z.test.js", 1, { expected: "fail" }))),
       };
       for (const k of ["1", "2", "3"]) st.evidence[k].history = [s(st.evidence[k].history[0])];
@@ -1681,7 +1681,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
       js(ruled.suite) === '["changed"]' && js(ruled.up) === js(ruled.un) && js(ruled.status) === "[false,false,false]" &&
       again.verified === false && again.unverifiedReason === "command-mismatch" && recAgain.cmdRule === 1 &&
       finAgain.suiteChecks[0].status === "changed" && chkAgain.cmdRule === 1 && chkAgain.history[chkAgain.history.length - 1].cmdRule === 1,
-      "1.22 review 4 (0): records made before the command rule (no cmdRule stamp) whose commands differ from the _Verify:_ (`npx jest x`, `.\\tests\\y.test.js`, an _Expect: fail_ red run of another form) and a project check's run of another form keep their pre-1.22 verdict — verified / pass in status, doctor, finish, spec_upgrade, observed mode too; the same records stamped read command-mismatch / changed; a new run is stamped (task and finish check) and judged (got " +
+      "1.22 review 4 (0): records made before the command rule (no cmdRule stamp) whose commands differ from the _Verify:_ (`npx jest x`, `node tests\\y.test.js`, an _Expect: fail_ red run of another form) and a project check's run of another form keep their pre-1.22 verdict — verified / pass in status, doctor, finish, spec_upgrade, observed mode too; the same records stamped read command-mismatch / changed; a new run is stamped (task and finish check) and judged (got " +
       js([pre, preObserved, preSuiteObserved, ruled, again.unverifiedReason, recAgain.cmdRule, finAgain.suiteChecks, chkAgain.cmdRule]) + ")");
   }
 
