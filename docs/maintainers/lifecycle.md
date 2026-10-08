@@ -213,3 +213,8 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   absent — its lines were copied into the committed file) and every display truncation (the next-task cell's 42 / 60 units,
   UPGRADE.md's details, the release notes' one-liners) goes through `cutText()` — never half a surrogate pair (an emoji cut at
   the boundary wrote U+FFFD). `spec_import` refreshes the roadmap once, after its files (`createFeature(…, { refresh: false })`).
+  **What a refresh costs, measured (1.23.1, Windows 11, 86 features):** ~400 ms — one import, one create, one `roadmap --write`
+  alike — and it is the four reads per feature (.state.json, tasks.md, requirements.md, design.md), each ONCE per call already
+  (the facade's read-cache scope: 381 opens, no file twice); ~1 ms an open on Windows, the scan itself ~60 ms. Going below would
+  need a cache that outlives the call (keyed by mtime / size in the long-lived MCP server) — not done on purpose: a file
+  rewritten in the same tick with the same size would read stale, and these are the files approvals fingerprint.
