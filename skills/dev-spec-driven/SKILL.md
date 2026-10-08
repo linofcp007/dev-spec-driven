@@ -40,12 +40,15 @@ What each active track adds at every phase — criteria, design sections, tests,
 **With superpowers installed:** this workflow replaces its feature-work skills — never both on one feature;
 `/spec-superpowers` records that precedence in CLAUDE.md.
 
-## Language (EN / PT / ES)
+## Language (EN / PT / PT-BR / ES)
 
 Detect the language of the user's request and **mirror it** everywhere — the conversation, your questions, the approval
 prompts and the artifacts' prose, **section headings included** (`## Critérios de Sucesso`); the engine recognizes the
 mandatory headings in EN/PT/ES. **Pass `lang`** on `spec_init` (the project default) and `spec_create` (explicit >
-project > en): scaffolds and tool messages come out localized — fill the placeholders, don't translate the scaffold.
+project > en) — `en`, `pt` (European Portuguese), `pt-BR` (Brazilian: você, arquivo, usuário, tela…) or `es`: scaffolds
+and tool messages come out localized — fill the placeholders, don't translate the scaffold. `spec_classify`'s `lang`
+reads any Portuguese as `pt`: pick `pt-BR` from the user's wording. `spec_classify` returns `langHint: "pt-BR"` when
+Brazilian wording dominates — then pass `lang: "pt-BR"`.
 **Structural tokens** stay as they are in every language: AC/SC IDs (`US-1.AC-1`, `SC-001`), test IDs (`T-01`), task
 markers (`_Requirements:_`, `_Verify:_`, `_Expect:_`…), tags (`[US1]`, `[shared]`, `[P]`), track names, the section
 markers (`[SaaS]` … `[DATA]`, case-sensitive) and `[NEEDS CLARIFICATION:]`. EARS keywords may be localized; if the
@@ -177,9 +180,11 @@ Decide the mode, then the track set. This is fast (5–10 min) and saves days of
 3. **Present for approval:** mode, active tracks, size, the signals, blast radius, and (per track) hot-path / autonomy /
    volume / compliance. If the user disagrees with the track set, adjust it now.
 4. **After Phase 0 approval:** `spec_init {tracks, lang}` if steering is missing, then
-   `spec_create {name, tracks, lang}` **once** — it seeds `classification.md` (record the fields from
-   step 3 there) and every artifact skeleton the tracks need, and persists the track set and language in
-   `.state.json` (change tracks later with `spec_add_track`, `--remove` to drop one). Record the gate with `spec_approve`.
+   `spec_create {name, tracks, size, lang}` **once** — it seeds every artifact skeleton the tracks and the size need, and
+   persists the track set, size and language in `.state.json` (change tracks later with `spec_add_track` — `remove: true`
+   drops one). **m / l** (or no size): it seeds `classification.md` — record the fields
+   from step 3 there and record the gate with `spec_approve`. **s / xs:** no `classification.md`, no classification
+   gate — record them in the Summary of `requirements.md` (s) or `change.md` (xs).
 
 Worked examples: `references/classification-examples-saas.md`, `references/classification-examples-ai.md`.
 

@@ -18,10 +18,17 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   tool count — the handshake's, `mcp/tests/harness.js`), the README tool tables (EN/PT/ES —
   `mcp/test.js` builds the expected set from the live `tools/list`: a missing or phantom row in any language fails
   the suite), a `TOOL_ANNOTATIONS` entry in `mcp/server.js` (1.16 — mcp/test.js requires one per tool and snapshots `.specs/`
-  around every read-only one), and (usually) a thin command in `commands/`.
+  around every read-only one), the tool count every doc states (below), and (usually) a thin command in `commands/`.
 - New command → a `commands/<name>.md` with `description` + `argument-hint` front matter; it is automatically an MCP
   prompt too (bump the exact command count in `mcp/tests/17-docs.js` and the README command lists). Never a Claude Code built-in
   name.
+- **The counts the docs state** (1.24 review 6 — INTEGRATIONS.md still said 51 prompts at 55, integrations/README.md 34
+  tools at 38): README, INSTALL, llms-install, INTEGRATIONS, integrations/README, AGENTS and CONTRIBUTING are read by
+  `mcp/tests/17-docs-review6.js` — every "N tools / ferramentas / herramientas", "N (slash) commands", "Commands (N)", the
+  prompts' "N of them, read from `commands/*.md`" and "N agents" must be the live tools/list length, command files and agent
+  files. A new CLI command goes into README's CLI summary in EN / PT / ES (the same file checks it against the CLI's
+  `case` labels), a new doctor check id into `references/tooling-reference.md`'s spec_doctor list (checked against the ids
+  the engine emits).
 - New track → a TEAM's track is a track pack (`.specs/tracks/<name>/`, no code — see Project-defined tracks); a BUILT-IN
   one → The track model (registries and its classifier `SIGNALS`: `engine/tracks.js`, the classifier code in `engine/classify.js`; its builders in the
   `i18n/<lang>.js` files) — 1.21: its sections' `tier`, any `TRACK_OVERLAPS` / `TRACK_TASK_OVERLAPS` / `CORE_SUPERSEDED_BY`

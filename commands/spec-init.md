@@ -1,6 +1,6 @@
 ---
 description: Initialize .specs/ and the steering files for the tracks this project uses. PT - inicializa .specs/ e steering. ES - inicializa .specs/ y steering.
-argument-hint: "[tracks, e.g. tdd saas ai sec privacy dist api ui obs data] [--lang pt] [--guard on|off|scope] [--check name=cmd] [--roles requirements=product,design=tech+security] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]"
+argument-hint: "[tracks, e.g. tdd saas ai sec privacy dist api ui obs data] [--lang en|pt|pt-BR|es] [--guard on|off|scope] [--check name=cmd] [--roles requirements=product,design=tech+security] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]"
 ---
 
 Use the **dev-spec-driven** skill to bootstrap project context.
@@ -8,11 +8,11 @@ Use the **dev-spec-driven** skill to bootstrap project context.
 Args: $ARGUMENTS
 
 Run the `spec_init` MCP tool `{tracks, lang, guard?, checks?, approvalRoles?, stopCheck?, approvalGuard?, evidence?}` (CLI
-`dev-spec init [tracks...] [--lang pt] [--guard on|off|scope] [--check name="cmd"] [--roles …] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]`)
+`dev-spec init [tracks...] [--lang en|pt|pt-BR|es] [--guard on|off|scope] [--check name="cmd"] [--roles …] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]`)
 to create `.specs/steering/` and the steering files the given tracks require (constitution/product/tech/structure always;
 testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai; security for +sec; privacy for
 +privacy; distributed for +dist; api for +api; ui for +ui; observability for +obs; data for +data). Tracks may be given as `tdd saas`, `'tdd,saas'` or `+saas +ai`; an unknown name is an error with a
-did-you-mean. **Pass `lang` matching the user's language** — the stubs come out in it and it becomes the project
+did-you-mean. **Pass `lang` matching the user's language** (`en`, `pt` European, `pt-BR` Brazilian, `es`) — the stubs come out in it and it becomes the project
 default every new feature inherits. It never overwrites an existing file (a team's own steering stubs in
 `.specs/templates/steering/` are used when present — `/spec-templates`).
 

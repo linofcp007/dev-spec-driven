@@ -6,7 +6,7 @@ The methodology travels through **three portable layers**, so it works far beyon
    tools (`spec_classify`, `spec_init`, `spec_create`, `spec_doctor`, `trace_check`, `ears_validate`,
    `spec_approve`, …), including the change-management ones — `spec_impact`, `spec_append_tasks`,
    `spec_import`, `spec_metrics`, `spec_catalog`, `spec_drift` —, `spec_upgrade` (after a plugin update) and the 1.14
-   ones — `spec_templates`, `spec_export`, `spec_changelog`, `spec_decide` — and, unreleased (1.15), `spec_tracks` (project-defined tracks) — and (1.16) `spec_stop_check` (the end-of-turn evidence gate for clients
+   ones — `spec_templates`, `spec_export`, `spec_changelog`, `spec_decide` — and (1.15) `spec_tracks` (project-defined tracks) — and (1.16) `spec_stop_check` (the end-of-turn evidence gate for clients
    without hooks) and `spec_log` (commits per task from the `git log` text the client passes — the server never runs git). They are plain local file operations, so
    they behave the same in every client. The server also offers **prompts** (one per plugin command) and read-only
    **resources** (the specs) — see [MCP prompts and resources](#mcp-prompts-and-resources).
@@ -57,7 +57,7 @@ prints the config with that path already filled in for your machine.
 Besides its tools, the `spec-driven` server advertises two more MCP capabilities, so clients that support them get
 more than tool calls:
 
-- **Prompts** — one per plugin command (`spec`, `spec-status`, `spec-impact`, `spec-ff`, `spec-tour`, … — 51, read from
+- **Prompts** — one per plugin command (`spec`, `spec-status`, `spec-impact`, `spec-ff`, `spec-tour`, … — 55 of them, read from
   `commands/*.md`), each with one optional `args` argument. A client that surfaces MCP prompts shows them as slash
   commands or in a prompt picker — VS Code / Copilot Chat, for example, lists them under `/`; whether and how another
   client shows them depends on the client and its version. Each prompt starts with one line telling an agent without the
@@ -233,7 +233,7 @@ for specs not implemented yet, the converge pass for half-done ones) runs inline
 | Guard mode (asks before code edits while no feature has approved tasks; `scope`: outside the plan too) | ✅ opt-in PreToolUse hook | — (`spec_init {guard}` stores the setting, but nothing enforces it) | — |
 | Human approval guard (an agent's approval asks the user, or is refused) | ✅ opt-in PreToolUse hook (`approvalGuard` ask / deny) | ✅ the MCP server enforces it: with MCP elicitation it asks the user (only an explicit approve records it); without it `ask` runs as before and `deny` is refused with the command to run | — (the CLI is the human's) |
 | Team merges of the spec state (`.state.json` / `roadmap.json` merged semantically by git) | ✅ `dev-spec merge-state --install` | ✅ same (git runs it) | ✅ same |
-| Observed evidence (each reported run stamped `observed`; opt-in `evidence: "observed"` verifies only runs the harness saw) | ✅ PostToolUse / PostToolUseFailure hook on Bash | — (no hook: every reported run reads `observed: false` — under `"observed"`, record runs with `dev-spec done <f> <n> --run`) | ✅ `done --run` / `finish --run` (stamped `"cli"`) |
+| Observed evidence (each reported run stamped `observed`; opt-in `evidence: "observed"` verifies only runs the harness saw) | ✅ PostToolUse / PostToolUseFailure hook on Bash and PowerShell | — (no hook: every reported run reads `observed: false` — under `"observed"`, record runs with `dev-spec done <f> <n> --run`) | ✅ `done --run` / `finish --run` (stamped `"cli"`) |
 | Subagent execution (`/executeTask --subagents`) | ✅ | — (`dev-spec brief` per task, run inline) | — (`dev-spec brief`) |
 | Eval harness | ✅ | ✅ (CLI) | ✅ CLI |
 

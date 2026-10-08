@@ -42,7 +42,7 @@ machine when this repo is the open project — no editing needed.
   To pin a project explicitly, add `"env": { "SPEC_PROJECT_DIR": "/path/to/your/project" }` to the
   server entry.
 - After editing a config, restart the tool (or restart the MCP server from its UI). Verify the
-  `spec-driven` tools appear (34 of them). Full per-tool walkthrough: [`../INTEGRATIONS.md`](../INTEGRATIONS.md).
+  `spec-driven` tools appear (38 of them). Full per-tool walkthrough: [`../INTEGRATIONS.md`](../INTEGRATIONS.md).
 - Every tool works the same in any MCP client. The server also offers prompts (the plugin's commands) and read-only
   `specs://` resources, which clients that support them show; add `"env": { "SPEC_MCP_PROMPTS": "off" }` to hide the
   prompts. The plugin's hooks — the save checks, the SessionStart status, the end-of-turn evidence gate and the opt-in

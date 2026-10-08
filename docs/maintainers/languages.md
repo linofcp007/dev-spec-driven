@@ -12,7 +12,9 @@ PT and ES mirror its structure (same sections, IDs, markers and slots). **pt-BR 
 (`lang: "pt-BR"`; `pt_BR` / `pt-br` / `ptbr` fold to it via `canonicalLang()`, `pt` / `pt-PT` stay European): every
 pt-BR string is `toPtBr(<the pt string>)` — protected tokens (code spans, `_Marker:_`s, paths, the caller's arguments),
 then `PTBR_OVERRIDES`, the progressive (`está a correr` → `está rodando`), `PTBR_PHRASES`, the second person (`tens` →
-`você tem`), clause-start imperatives (`corre` → `execute`) and `PTBR_WORDS` (vocabulary + spelling) — built lazily per
+`você tem`), clause-start imperatives (`corre` → `execute`) and `PTBR_WORDS` (vocabulary + spelling; a word whose
+Brazilian twin changes gender — `ecrã` → `tela`, `faturação` → `faturamento` — also has its articles, contractions and
+possessives in `PTBR_PHRASES`, or the word rule alone writes "no tela"; 1.24 review 6) — built lazily per
 table group (`defineDerivedLocale`), so it inherits every key, ID, marker and synonym of the PT set and a PT edit
 reaches pt-BR with nothing else to change. **When you add or edit a PT string, read its twin once**
 (`node -e "console.log(require('./mcp/lib/i18n.js').toPtBr('…'))"`): a clause-start 3rd person read as an order goes
@@ -53,11 +55,13 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
   data and stays as-is; its surrounding prose (README, prompt stub) is localized.
 - **Adding a language:** a regional variant of an existing one derives from it, as pt-BR does from pt-PT (only the
   overrides). A new language adds a file `mcp/lib/i18n/<lang>.js` holding every table's block (`build`, `steering`,
-  `evalsReadme`, `msg`, `quality`, `designWeigh`, `brief` — as `en.js` does), wires it into `i18n.js`'s `LOCALES`, adds it
-  to `LANGS` (`i18n/common.js`), extends the classifier `SIGNALS` (`engine/tracks.js`; language guess in `engine/classify.js`), `ROADMAP_I18N`
-  (`engine/roadmap-md.js`), the `TRACK_SECTIONS` synonyms (all four tables, `engine/tracks.js`), the stop gate's
-  `stopGate.claims` / `negators` / `admissions`, the `RE_*` matchers and the `lang` enums of the MCP schemas, then adds
-  a test asserting a localized scaffold round-trips.
+  `evalsReadme`, `msg`, `quality`, `designWeigh`, `brief` — as `en.js` does), wires it into `i18n.js`'s `LOCALE_FILES`
+  (each table's getter for it loads that file on first use), adds it to `BASE_LANGS` (`i18n/common.js` — `LANGS`, the
+  strict `canonicalLang()` reading every surface validates with, and the MCP schemas' `lang` enum, `LANG_ENUM` in
+  `mcp/server.js`, all derive from it: no enum to edit by hand), extends the classifier `SIGNALS` (`engine/tracks.js`;
+  language guess in `engine/classify.js`), `ROADMAP_I18N` (`engine/roadmap-md.js`), the `TRACK_SECTIONS` synonyms (all
+  four tables, `engine/tracks.js`), the stop gate's `stopGate.claims` / `negators` / `admissions` and the `RE_*`
+  matchers, then adds a test asserting a localized scaffold round-trips.
 
 ## Localization gotchas (from Conventions & gotchas)
 - **Multilingual headings:** the `TRACK_SECTIONS` tables (`SAAS_SECTIONS` / `AI_SECTIONS` / `SEC_SECTIONS` /

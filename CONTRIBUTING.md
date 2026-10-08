@@ -6,7 +6,8 @@ please respect them in every change:
 - **No GitHub Actions / no paid CI / no pull requests.** All automation is local (the bundled hooks +
   MCP server) and changes are merged locally. Never add a `.github/workflows/` directory.
 - **Zero runtime dependencies.** The MCP server, CLI and all scripts use only Node core (`fs`, `path`, `os`,
-  `readline`, `child_process`, `crypto`, built-in `fetch`). No `npm install`. Keep it that way.
+  `readline`, `string_decoder`, `child_process`, `crypto`, `module` — the compile cache —, built-in `fetch`). No
+  `npm install`. Keep it that way.
 - **Specs always live in `.specs/`.**
 
 ## Architecture in one line

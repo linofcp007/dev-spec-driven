@@ -1392,7 +1392,7 @@ const msg = {
       aiCost: "Especifica um teto de custo por pedido ($/tokens).",
       changeSummary: "Escreve o Resumo da alteração no change.md: o que muda e porquê, numa linha.",
       changeCriteria: "Escreve 1–3 critérios de aceitação EARS no change.md (1. **US-1.AC-1** — QUANDO … O SISTEMA DEVE …).",
-      changeApproach: "Escreve a Abordagem no change.md: o que a alteração toca (e nada mais).",
+      changeApproach: "Escreve a Abordagem no change.md: o que a alteração toca e porque é só isso.",
       changeScope: (detail) => `Mantém-na uma alteração, ou torna-a uma feature: ${detail}.`,
     },
     hook: {
@@ -1660,7 +1660,7 @@ const msg = {
 
     gates: {
       empty: "sem conteúdo além dos títulos",
-      more: (n) => `+${n} a mais`,
+      more: (n) => `+${n} mais`,
       placeholdersNone: "nenhum placeholder do template na fase atual",
       placeholdersFail: (list) => `placeholders do template por preencher na fase atual (ou numa anterior): ${list}`,
       placeholdersLater: (list) => `as fases seguintes ainda são template (ainda não bloqueia): ${list}`,
