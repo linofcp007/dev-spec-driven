@@ -1202,10 +1202,11 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
       "1.17 linear headings: status / doctor / trace (+ matrix) / EARS / clarify / next action / brief / export / catalog on a feature whose headings, task lines, markers, fences and table rows hold 100,000-character runs (and line terminators after them) run within 10 × the small feature's time + 6 s — the task scanner's heading pattern alone took minutes (got " + js({ base, big: bigMs, each: bigRuns.map((x) => x.ms), threw: bigRuns.filter((x) => x.r.threw).map((x) => x.r.error) }) + ")");
     const tb = S.taskBlocks("## Phase" + sp(N) + "one  \n\n- [ ] 1. a\n- [ ] 2. b" + LS + "c\n");
     const dl = S.decisionLog("## D-1 — Title" + sp(N) + "##\n- _Kind:" + sp(N) + "discovery_\n");
-    ok(tb.length === 1 && tb[0].phase === "Phase" + sp(N) + "one" && S.markdownToHtml("## Title" + sp(N) + "##\n") === "<h2>Title</h2>" &&
+    // (1.24 r6 D3: a U+2028 inside a task's text is an ordinary character — the task is read; 1.17 H kept the regex's "no task")
+    ok(tb.length === 2 && tb[1].text === "b" + LS + "c" && tb[0].phase === "Phase" + sp(N) + "one" && S.markdownToHtml("## Title" + sp(N) + "##\n") === "<h2>Title</h2>" &&
       S.markdownToHtml("# a" + sp(3) + "b #") === "<h1>a" + sp(3) + "b</h1>" && dl.length === 1 && dl[0].title === "Title" && dl[0].kind === "discovery" &&
       js(S.taskMarkers(S.taskBlocks("- [ ] 1. t _Implements: src/a.js:12-20_ _Verify: `npm test`_\n")[0]).verify) === js(["npm test"]),
-      "1.17 linear headings: the readers keep their answers — a heading's text is what lies between the blanks after its '#'s and the blanks (or a closing '##') at its end; a task line whose text holds a line terminator is no task; a decision heading's closing '##' and a marker's blanks go (got " + js([tb.map((b) => [b.number, b.phase && b.phase.length]), dl]) + ")");
+      "1.17 linear headings: the readers keep their answers — a heading's text is what lies between the blanks after its '#'s and the blanks (or a closing '##') at its end; a U+2028 inside a task line's text is an ordinary character (1.24 r6 D3); a decision heading's closing '##' and a marker's blanks go (got " + js([tb.map((b) => [b.number, b.phase && b.phase.length]), dl]) + ")");
 
     // L2 — the importers (spec_import is one synchronous call): Kiro, spec-kit, OpenSpec, a plan, an ExecPlan and BMAD sources whose
     // headings, criteria, scenarios and list items hold long blank runs, a line terminator after them, or a long run of keywords.
