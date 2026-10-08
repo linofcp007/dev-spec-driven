@@ -27,6 +27,19 @@ matrix.
   **Linear (1.22 review):** `inTrackContext` (a loose synonym under a marked ancestor) reads every heading's answer from ONE stack
   pass, like `inOtherTrackContext` — the back-walk per loose heading (`heads.indexOf` + a scan up) made 200 KB of "### Processors"
   with no `[PRIVACY]` heading cost status 9 s (now ~0.15 s).
+  **The ONE heading reader (review 5, M2):** `headingEntries(lines)` → `[{ i, level, text, body, atx, indent }]` — never a
+  heading inside fenced code or an HTML comment (`commentLines`; a line that starts inside a comment is none), an ATX heading
+  indented 0–3 spaces (closing `#`s and a trailing comment dropped from `text`), and a SETEXT heading: a ONE-line paragraph (after
+  a blank or comment-only line, a heading, a fence or the text's start) underlined by ≥ 3 `=` (level 1) or `-` (level 2) — a
+  multi-line paragraph over `---` is left alone, so YAML front matter never reads as a heading. `extractSection` (the marker read
+  in the heading's visible text), `sectionState`, `weighSectionHead` (quality.js), `bugPlaceholders`, `designSections` (tasks.js
+  — level-2 entries; a title drops its closing `##`, as weighSectionHead's does), `sectionDropLines` / `headingHasMarker`
+  (tracks.js) all read it — a `## [SEC] Threat Model` section wrapped in `<!-- … -->` read as present and filled (doctor "all 5
+  filled"), a commented-out `## Risks` passed design-risks. `headingIndex(lines)` (decisions, export, import, packs — readers
+  that parse the line themselves) = its ATX entries at the margin. **Sentinel and structure (review 5, L28):** `sectionState`
+  tests the `> **TODO**` sentinel on `stripFencedCode(stripHtmlComments(body))` (one kept in a comment or quoted in a code
+  example is none), and a body of structure only — sub-headings, a thematic break, a table's header / separator rows
+  (`sectionContent()`, `isTableSep()`) — is `unfilled` (it was "filled").
 - **A change's one file (1.21 review C1):** change.md holds the criteria AND the tasks — every reader takes its two views
   (`changeViews` / `criteriaText` / `tasksIdText`, tasks.js — gates-and-approvals.md → Right-sized rigor): trace_check's
   required ACs never include a task's `_Requirements:_` reference, and EARS never lints a task block.
@@ -169,11 +182,11 @@ matrix.
   requirements.md save hook and the pre-commit validator call the same `earsValidate()`, so a table-row or heading AC
   without a modal is an EARS error there too.
 - **Fences: one closer rule, `closesFence(line, marker)`** — every fence-aware reader (`stripFencedCode`,
-  `criterionBlocks`, `designSections`, `headingIndex`, the placeholder scan, `mdListItems`, import, the task
+  `criterionBlocks`, `designSections`, `headingEntries`, the placeholder scan, `mdListItems`, import, the task
   scanner's `fenceLine`) closes a fence only on a CommonMark closer: the opener's character, at least as long,
   nothing after it but spaces. Never `line.trim().startsWith(fence)` — it closed an open backtick fence on a line
   carrying an info string (a `js` opener), and requirements.md then read inverted (its ACs vanished from EARS and
-  trace_check). `stripFencedCode`, `criterionBlocks`, `designSections`, `headingIndex` and the placeholder scan step
+  trace_check). `stripFencedCode`, `criterionBlocks`, `designSections`, `headingEntries` and the placeholder scan step
   through ONE helper, `fenceStep(st, line)`, which also applies CommonMark's list rule (the task scanner's too): a fence
   opened inside a list item (indented) ends with the item — a non-blank line less indented than its opener is outside.
   Without it one unclosed fence in a test-plan bullet blanked every row below it (no coverage, no planned T-IDs,

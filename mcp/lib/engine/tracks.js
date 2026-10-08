@@ -13,9 +13,9 @@
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName, noteGhostPacks, packOf,
+let acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName, noteGhostPacks, packOf,
   packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf;
-function __link(E) { ({ acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName,
+function __link(E) { ({ acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName,
   noteGhostPacks, packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf } = E); }
 
 const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
@@ -142,8 +142,7 @@ function savedTracks(st) {
 // that merely ends in a lower-case "[sec]" / "[privacy]" (`### Timeout [sec]` — seconds) is no track section: matched
 // case-insensitively it was hidden while the track was off (inactiveMarkerLines) and made detectTracks infer +sec.
 function headingHasMarker(md, marker) {
-  const lines = stripHtmlComments(md).split(/\r?\n/);
-  return headingIndex(lines).some((i) => lines[i].includes(marker));
+  return headingEntries(String(md).split(/\r?\n/)).some((h) => h.text.includes(marker)); // the ONE heading reader (review 5, M2)
 }
 
 // The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
@@ -208,16 +207,18 @@ function activeTasks(tasksText, tracks) {
 // `owner` picks (a truthy value, e.g. the turned-off track), up to the next heading of the same or a higher level.
 // The ONE rule behind activeTasks / activeDesign, the gates (which need the real line numbers) and
 // spec_append_tasks (which must never land in a section the other tools hide, and names its track).
+// The headings are the ONE heading reader's (review 5, M2 — headingEntries: never one in a comment or a fence; a setext heading's
+// underline goes with it). owner reads the heading's line as written.
 function sectionDropLines(lines, owner) {
-  const heads = headingIndex(lines);
-  const level = (i) => lines[i].match(/^(#{1,6})/)[1].length;
+  const heads = headingEntries(lines);
   const drop = new Map();
-  for (const h of heads) {
-    const who = owner(lines[h]);
-    if (!who) continue;
-    const end = heads.find((x) => x > h && level(x) <= level(h));
-    for (let i = h; i < (end == null ? lines.length : end); i++) drop.set(i, who);
-  }
+  heads.forEach((h, k) => {
+    const who = owner(lines[h.i]);
+    if (!who) return;
+    let end = lines.length;
+    for (let j = k + 1; j < heads.length; j++) if (heads[j].level <= h.level) { end = heads[j].i; break; }
+    for (let i = h.i; i < end; i++) drop.set(i, who);
+  });
   return drop;
 }
 // tasks.md (text or lines): the template task blocks of tracks that are off (matched by their heading, in any language).

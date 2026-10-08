@@ -37,4 +37,57 @@ exports.run = async ({ ok, S, tmp, require, __dirname }) => {
       E.hasProseOutsideBrackets("[a [b]] [c\n] d") === true && E.hasProseOutsideBrackets("[a [b] c] [d]") === false && E.hasProseOutsideBrackets("[\u{1D538}") === true,
       "review 5 (P5): the readings stay — slots in and around groups, links / reference links / wiki links / footnotes skipped, a long '[TODO: …]' still a slot; bug.md's prose test sets aside only groups closed on their line");
   }
+
+  { // M2 + L28 — the ONE heading reader: never in an HTML comment or a fence; setext and indented ATX headings; a section of structure only is unfilled
+    // A "## [SEC] Threat Model" section wrapped in <!-- … --> read as present and filled (doctor "all 5 filled"), a commented-out
+    // "## Risks" passed design-risks, a `> **TODO**` kept inside a comment or a code example read "unfilled", a hand-written setext
+    // or indented heading was "missing", and a body of sub-headings, a rule or an empty table was "filled".
+    const SEC = [{ name: "Threat Model", syn: ["threat model"] }];
+    const st = (md) => E.sectionState(md, SEC, "[SEC]")[0].status;
+    const body = "STRIDE: spoofing through stolen tokens → 15-minute TTL, rotation.";
+    const cases = [
+      ["normal", "# D\n\n## [SEC] Threat Model\n" + body + "\n\n## Next\nx\n", "filled"],
+      ["commented out", "# D\n\n<!-- later\n## [SEC] Threat Model\n" + body + "\n-->\n\n## Next\nx\n", "missing"],
+      ["heading in a ~~~ fence", "# D\n\n~~~md\n## [SEC] Threat Model\n" + body + "\n~~~\n", "missing"],
+      ["setext", "# D\n\n[SEC] Threat Model\n------------------\n" + body + "\n\nNext\n----\nx\n", "filled"],
+      ["indented ATX (3 spaces), closing #s", "# D\n\n   ## [SEC] Threat Model ##\n" + body + "\n", "filled"],
+      ["4 spaces: code, no heading", "# D\n\n    ## [SEC] Threat Model\n" + body + "\n", "missing"],
+      ["sentinel in a multi-line comment", "# D\n\n## [SEC] Threat Model\n<!--\n> **TODO** — replace\n-->\n" + body + "\n", "filled"],
+      ["sentinel quoted in code", "# D\n\n## [SEC] Threat Model\nThe scaffold writes:\n```md\n> **TODO** — replace\n```\n" + body + "\n", "filled"],
+      ["only sub-headings", "# D\n\n## [SEC] Threat Model\n### Spoofing\nTampering\n---------\n\n## Next\nx\n", "unfilled"],
+      ["only a rule", "# D\n\n## [SEC] Threat Model\n\n---\n\n## Next\nx\n", "unfilled"],
+      ["only an empty table", "# D\n\n## [SEC] Threat Model\n| Threat | Mitigation |\n|---|:---:|\n\n## Next\nx\n", "unfilled"],
+      ["a table with a row", "# D\n\n## [SEC] Threat Model\n| Threat | Mitigation |\n|---|---|\n| Spoofing | short TTL |\n", "filled"],
+    ];
+    const got = cases.map(([n, md, want]) => [n, st(md), want]);
+    ok(got.every(([, g, w]) => g === w),
+      "review 5 (M2 / L28): sectionState — a commented-out or fenced heading is no section, setext / indented ATX headings are; a sentinel in a comment or a code example is none; sub-headings, a rule or an empty table are nothing written (wrong: " +
+      js(got.filter(([, g, w]) => g !== w)) + ")");
+    // the heading reader itself: front matter and a paragraph of several lines over "---" are no setext heading; a comment's heading is none
+    const hs = (t) => E.headingEntries(t.split("\n")).map((h) => h.level + ":" + h.text);
+    ok(js(hs("---\ninclusion: always\n---\n\n# Title\n\nOne line\nanother line\n---\n\nSetext one\n===\n\n<!--\n## Hidden\n-->\n  ### Indented ###\n```\n## code\n```\n")) ===
+      '["1:Title","1:Setext one","3:Indented"]' && js(S.extractSection("# D\n\n## Overview\nx\n<!-- ## Risks -->\n- not a risk section\n", ["risks"])) === "null",
+      "review 5 (M2): headingEntries — YAML front matter and a multi-line paragraph over '---' are no heading; a setext '===' is level 1; an indented ATX heading drops its closing #s; a commented or fenced heading is none (got " +
+      js(hs("---\ninclusion: always\n---\n\n# Title\n\nOne line\nanother line\n---\n\nSetext one\n===\n\n<!--\n## Hidden\n-->\n  ### Indented ###\n```\n## code\n```\n")) + ")");
+    // end to end: doctor's <track>-sections and design-risks, designSections (setext), bug.md's Root Cause commented out
+    const d = path.join(tmp, "proj-r5-headings");
+    S.initProject(d, ["core", "sec"], "en");
+    const f = S.createFeature(d, "Commented section", ["core", "sec"], "", undefined, "en");
+    let design = fs.readFileSync(path.join(f.dir, "design.md"), "utf8").replace(/^> \*\*TODO\*\*.*$/gm, "Answered for this feature: tokens expire after 15 minutes.");
+    design = design.replace("## [SEC] Threat Model", "<!-- dropped for now\n## [SEC] Threat Model").replace("## [SEC] Security Requirements", "-->\n\n## [SEC] Security Requirements")
+      .replace(/## Risks\n/, "<!--\n## Risks\n- outage: retries\n-->\n## Old notes\n");
+    put(f.dir, "design.md", design);
+    const doc = S.specDoctor(d, f.slug);
+    const chk = (id) => (doc.checks.find((c) => c.id === id) || {});
+    const secs = E.designSections("# D\n\nOverview\n--------\nText one.\n\n<!-- ## Hidden -->\n## Data Model ##\nText two.\n");
+    const bug = S.createFeature(d, "Crash bug", ["core", "tdd"], "", undefined, "en", "bugfix");
+    const bugMd = fs.readFileSync(path.join(bug.dir, "bug.md"), "utf8");
+    const rootSyn = E.ROOT_CAUSE_SYN;
+    const written = bugMd.replace(/(## Root Cause[^\n]*\n)[\s\S]*?(?=\n## |$)/, "$1The cache key ignores the locale, so a stale page is served.\n");
+    ok(chk("sec-sections").status === "fail" && /Threat Model/.test(chk("sec-sections").detail || "") && E.designWeighChecks(design, "en", {}).find((c) => c.id === "design-risks").state === "missing" &&
+      js(secs) === js([{ title: "Overview", body: "Text one." }, { title: "Data Model", body: "Text two." }]) &&
+      E.bugSectionFilled(written, rootSyn) === true && E.bugSectionFilled(written.replace("## Root Cause", "<!--\n## Root Cause").replace("served.\n", "served.\n-->\n"), rootSyn) === false,
+      "review 5 (M2): end to end — doctor fails a commented-out [SEC] Threat Model and no longer counts a commented-out Risks section; designSections reads a setext heading and drops a closing '##'; a commented-out Root Cause is not written (got " +
+      js([chk("sec-sections"), E.designWeighChecks(design, "en", {}).map((c) => c.id + ":" + c.state), secs]) + ")");
+  }
 };

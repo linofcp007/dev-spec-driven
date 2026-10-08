@@ -75,7 +75,9 @@ nudge, the TDD micro-cycle.
   synonym must be the WHOLE heading or be followed by a separator (`: , ; ( [ / & + | — – .`, a spaced hyphen) or a
   connector word (and / or / vs / for / of … e / ou / de … y / o / en — `RE_WEIGH_HEADING_REST`): "Risks & Mitigations",
   "Riscos e mitigações" match; "Risk-based rate limiting", "Options parser", "Riskiest assumptions" don't. An unmarked
-  heading wins over a `[MARKER]` one; never the H1. Synonyms include Trade-off(s) / Tradeoff(s) / Trade-off analysis,
+  heading wins over a `[MARKER]` one; never the H1; the headings are `headingEntries()`' (review 5, M2 — markdown-and-trace.md →
+  Readers: a `## Risks` in an HTML comment or a fence is none, a setext / indented ATX one counts; `weighTextMatches()` reads the
+  entry's text). Synonyms include Trade-off(s) / Tradeoff(s) / Trade-off analysis,
   Alternatives considered, MADR's Considered Options, Key / Design Decisions, Options (EN / PT Opções / ES Opciones), PT
   Decisões e alternativas / decisões-chave, ES Compromisos / Decisiones clave, Risk register / assessment / analysis and
   twins. A plain **"Decisions"** heading is NOT one: the execplan / fluidplan imports write `## Decisions` — a decision LOG

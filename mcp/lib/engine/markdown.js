@@ -18,12 +18,12 @@ const { MARKER_TRACKS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, engineVersion, existingFeature, extractAcIds,
   featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket,
-  locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists, renderTrackTaskHeadings,
+  locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, RE_THEMATIC_BREAK, readIfExists, renderTrackTaskHeadings,
   replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf,
   VALID_TRACKS, wildcardMatch;
 function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, engineVersion, existingFeature,
   extractAcIds, featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf,
-  isPackMarkerBracket, locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists,
+  isPackMarkerBracket, locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, RE_THEMATIC_BREAK, readIfExists,
   renderTrackTaskHeadings, replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS,
   useTemplateScopeOf, VALID_TRACKS, wildcardMatch } = E); }
 
@@ -308,15 +308,55 @@ function fenceStep(st, line) {
 // indented under it, a lazy continuation before any blank line). → [{ ids: [T-ID …], text, cells, header }]
 const tableCells = (line) => line.trim().replace(/^\|/, "").replace(/\|\s*$/, "").split(/(?<!\\)\|/).map((c) => c.trim());
 
-// Heading lines outside fenced code (a "# comment" inside a bash block is not a heading).
-function headingIndex(lines) {
+// The headings of a markdown text as a reader of its STRUCTURE sees them — the ONE heading reader (review 5, M2): never in fenced
+// code ("# comment" in a bash block) nor in an HTML comment (a section commented out, `<!--` … `## [SEC] Threat Model` … `-->`, was
+// read as present and filled — doctor passed it; commentLines' rule: a "<!--" with no "-->" after it is text). An ATX heading
+// indented 0–3 spaces ("#"s, then a blank or a tab; its closing "#" sequence dropped, its trailing comment too) and a SETEXT
+// heading: a one-line paragraph — after a blank or comment-only line, a heading, a fence or the text's start — underlined by
+// at least three "=" (level 1) or "-" (level 2), as CommonMark reads them (a paragraph of several lines followed by "---" is left
+// alone, so YAML front matter is never a heading). Linear.
+// lines: the text split on "\n" (a trailing "\r" is harmless). → [{ i, level, text, body, atx, indent }]: i = the heading's
+// line (a setext heading's text line), body = the first line after it (after a setext underline), atx / indent = an ATX
+// heading and its leading spaces.
+const RE_SETEXT_UNDERLINE = /^ {0,3}(?:={3,}|-{3,})[ \t]*\r?$/;
+const RE_SETEXT_NOT_TEXT = /^\s*(?:[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$)|>|\||(?:[-*_][ \t]*){3,}\r?$)/; // a list item, quote, table row, rule
+function headingEntries(lines) {
+  const cl = lines.some((l) => l.includes("<!--")) ? commentLines(lines) : null; // no comment at all: the fences alone
+  const st = { fence: null };
+  const vis = (k) => (cl ? (cl[k].hidden ? "" : cl[k].vis) : lines[k]);
+  const code = (k) => (cl ? !!cl[k].fence : false); // (without comments, fenceStep is stepped in the loop, once per line)
+  const inComment = (k) => !!cl && (cl[k].hidden || (k > 0 && cl[k - 1].open)); // the line starts inside a comment
   const out = [];
-  const fst = { fence: null };
-  lines.forEach((l, i) => {
-    if (fenceStep(fst, l)) return;
-    if (/^#{1,6}\s/.test(l)) out.push(i);
-  });
+  let fresh = true; // the next line may start a setext heading's paragraph (the text's start, a blank line, a heading, a fence)
+  for (let i = 0; i < lines.length; i++) {
+    if (cl ? code(i) : fenceStep(st, lines[i])) { fresh = true; continue; }
+    const v = vis(i);
+    if (inComment(i) || !v.trim()) { fresh = fresh || !v.trim(); continue; }
+    let p = 0;
+    while (p < 3 && v[p] === " ") p++;
+    if (v[p] === "#") {
+      const h = atxHeading(v.slice(p), 1, 6, "closing");
+      if (h) { out.push({ i, level: h.level, text: h.text, body: i + 1, atx: true, indent: p }); fresh = true; continue; }
+    }
+    if (fresh && v[p] !== " " && v[p] !== "\t" && !RE_SETEXT_NOT_TEXT.test(v) && i + 1 < lines.length) { // (4+ spaces: code)
+      const nl = lines[i + 1];
+      const nextCode = cl ? code(i + 1) || inComment(i + 1) : false;
+      if (!nextCode && RE_SETEXT_UNDERLINE.test(cl ? vis(i + 1) : nl)) {
+        if (!cl) fenceStep(st, nl); // keep the fence state in step (an underline is never a fence line)
+        out.push({ i, level: nl.trim()[0] === "=" ? 1 : 2, text: v.trim(), body: i + 2, atx: false, indent: p });
+        i++;
+        fresh = true;
+        continue;
+      }
+    }
+    fresh = false;
+  }
   return out;
+}
+// The ATX heading lines at the margin (the "#"s first), outside fenced code and HTML comments — for the readers that parse the
+// line themselves (decisions, export, import, packs). The section readers use headingEntries (setext and indented ATX too).
+function headingIndex(lines) {
+  return headingEntries(lines).filter((e) => e.atx && e.indent === 0).map((e) => e.i);
 }
 
 // Does a heading line name one of the synonyms? Never a level-1 title — it carries the feature NAME
@@ -343,8 +383,11 @@ function headingLeadRe() {
 const RE_SYN_INFLECTION = /^(?:s|es|ing|ling)(?![\p{L}\p{N}])/u;
 function headingMatches(line, syns, inflect) {
   const m = atxHeading(line, 2, 6, "raw"); // /^#{2,6}\s+(.*)$/
-  if (!m) return false;
-  let t = m.text.toLowerCase();
+  return !!m && headingTextMatches(m.text, syns, inflect);
+}
+// The same test on a heading's TEXT (a headingEntries entry's — an ATX or setext heading of level ≥ 2; the caller keeps the H1 out).
+function headingTextMatches(text, syns, inflect) {
+  let t = String(text).toLowerCase();
   const lead = headingLeadRe();
   for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, ""); }
   return syns.some((s) => t.startsWith(s) && (!/[\p{L}\p{N}]/u.test(t.charAt(s.length)) || (inflect && RE_SYN_INFLECTION.test(t.slice(s.length)))));
@@ -366,9 +409,12 @@ function extractSection(md, synonyms, marker, loose) {
   const looseSet = new Set((loose || []).map((s) => s.toLowerCase()));
   const strict = looseSet.size ? syns.filter((s) => !looseSet.has(s)) : syns;
   const lines = (md || "").split(/\r?\n/);
-  const heads = headingIndex(lines);
-  const matches = (i, list) => headingMatches(lines[i], list || syns, !!marker); // a track section's heading may inflect its name
-  const level = (l) => (lines[l].match(/^(#{1,6})\s/) || ["", "######"])[1].length;
+  // The headings as the ONE heading reader sees them (review 5, M2: never in a comment or a fence; setext and indented ATX too);
+  // a heading's marker is read in its visible text (never a trailing comment's). The H1 title is never a section.
+  const heads = headingEntries(lines);
+  const matches = (h, list) => h.level >= 2 && headingTextMatches(h.text, list || syns, !!marker); // a track section's heading may inflect its name
+  const level = (h) => h.level;
+  const has = (h, mk) => h.text.includes(mk);
   // An enclosing heading (a lower level, above i — its parent, the parent's parent…) carries the marker: the heading sits in the
   // track's context. Every heading's answer comes from ONE linear pass (a stack of the enclosing headings), on first use — the
   // back-walk from each loose-synonym heading (heads.indexOf + a scan up) was quadratic: a 200 KB design.md of "### Processors"
@@ -383,7 +429,7 @@ function extractSection(md, synonyms, marker, loose) {
         while (stack.length && stack[stack.length - 1].lv >= lv) stack.pop();
         const inside = stack.length > 0 && stack[stack.length - 1].marked;
         inCtx.set(h, inside);
-        stack.push({ lv, marked: inside || lines[h].includes(marker) });
+        stack.push({ lv, marked: inside || has(h, marker) });
       }
     }
     return inCtx.get(i) === true;
@@ -404,22 +450,22 @@ function extractSection(md, synonyms, marker, loose) {
         const top = stack[stack.length - 1];
         const ctx = top ? top.own || top.ctx : null;
         ctxOf.set(h, ctx);
-        stack.push({ lv, own: MARKERS.find((x) => lines[h].includes(x)) || null, ctx });
+        stack.push({ lv, own: MARKERS.find((x) => has(h, x)) || null, ctx });
       }
     }
     const m = ctxOf.get(i);
     return !!m && m !== marker;
   };
-  let start = -1;
-  if (marker) start = heads.find((i) => lines[i].includes(marker) && matches(i));
-  if (start == null || start === -1) {
+  let start = null;
+  if (marker) start = heads.find((h) => has(h, marker) && matches(h));
+  if (!start) {
     const other = marker ? MARKERS.filter((m) => m !== marker) : [];
-    start = heads.find((i) => (matches(i, strict) || (marker && looseSet.size && matches(i) && inTrackContext(i))) && !other.some((m) => lines[i].includes(m)) &&
-      !(marker && inOtherTrackContext(i)));
+    start = heads.find((h) => (matches(h, strict) || (marker && looseSet.size && matches(h) && inTrackContext(h))) && !other.some((m) => has(h, m)) &&
+      !(marker && inOtherTrackContext(h)));
   }
-  if (start == null || start === -1) return null;
-  const end = heads.find((i) => i > start && level(i) <= level(start));
-  return lines.slice(start + 1, end == null ? lines.length : end).join("\n");
+  if (!start) return null;
+  const end = heads.find((h) => h.i > start.i && level(h) <= level(start));
+  return lines.slice(start.body, end ? end.i : lines.length).join("\n");
 }
 
 // The indent is read within its line ([^\S\n\r\u2028\u2029], not \s — a line start of a long blank run rescanned the whole
@@ -438,7 +484,11 @@ function sectionState(design, sections, marker, opts = {}) {
     const out = (status) => (opts.size ? { section: sec.name, status, tier: sec.tier === "extended" ? "extended" : "core" } : { section: sec.name, status });
     const body = extractSection(design, sec.syn, marker, sec.loose);
     if (body == null) return out("missing");
-    if (RE_TODO_SENTINEL.test(body) || !stripHtmlComments(body).trim()) return out("unfilled");
+    // review 5 (M2 / L28): the sentinel as a reader sees it (a commented-out or quoted-in-code one is none), and nothing but
+    // structure — sub-headings, a rule, an empty table — is nothing written
+    if (RE_TODO_SENTINEL.test(stripFencedCode(stripHtmlComments(body)))) return out("unfilled");
+    const content = sectionContent(body);
+    if (!content.prose.length && !content.code.length) return out("unfilled");
     const own = sectionOwnLines(body, opts.lang);
     if (!own.length) return out("template");
     if (opts.size) { const na = naAnswer(own); if (na) return out(na); }
@@ -501,17 +551,35 @@ function sectionTemplateLines(lang) {
   return { sets, wild };
 }
 function sectionOwnLines(body, lang) {
-  const st = { fence: null };
-  const prose = [], code = [];
-  for (const l of stripHtmlComments(body).split(/\r?\n/)) {
-    const f = fenceStep(st, l);
-    if (f === "open") continue; // a fence line is no content
-    if (f) { if (st.fence && l.trim()) code.push(l); continue; } // inside the fence (still open after the step) — its closer is no content
-    if (l.trim()) prose.push(l);
-  }
+  const { prose, code } = sectionContent(body);
   if (!prose.length) return code;
   const { sets, wild } = sectionTemplateLines(lang);
   return prose.filter((l) => { const k = sectionLineKey(l); return !sets.some((s) => s.has(k)) && !wild.some((w) => wildcardMatch(w, k)); }).concat(code);
+}
+// A section's content lines → { prose, code }: visible (comments out), not blank, outside fences (prose) or inside one (code — its
+// fence lines are no content). Structure is no content (review 5, L28): a heading (ATX or setext, its underline too), a thematic
+// break, a table's header and separator rows — a section of sub-headings, a rule or an empty table read as "filled".
+// A table's separator row ("|---|:--:|", "--- | ---"): every cell dashes with optional colons — cell by cell (linear).
+const isTableSep = (l) => {
+  const t = String(l).trim();
+  if (!t.includes("|") || !t.includes("-")) return false;
+  return t.replace(/^\|/, "").replace(/\|$/, "").split("|").every((c) => /^:?-+:?$/.test(c.trim()));
+};
+function sectionContent(body) {
+  const lines = stripHtmlComments(body).split(/\r?\n/);
+  const structure = new Set();
+  for (const h of headingEntries(lines)) { structure.add(h.i); if (!h.atx) structure.add(h.i + 1); }
+  const st = { fence: null };
+  const prose = [], code = [];
+  lines.forEach((l, i) => {
+    const f = fenceStep(st, l);
+    if (f === "open") return; // a fence line is no content
+    if (f) { if (st.fence && l.trim()) code.push(l); return; } // inside the fence (still open after the step) — its closer is no content
+    if (!l.trim() || structure.has(i) || RE_THEMATIC_BREAK.test(l)) return;
+    if (l.includes("|") && (isTableSep(l) || (i + 1 < lines.length && isTableSep(lines[i + 1])))) return; // a separator row, a header row
+    prose.push(l);
+  });
+  return { prose, code };
 }
 // "n/a — <why it does not apply>" (EN / PT / ES; any emphasis around the n/a): the section's own text is that ONE line → "na"
 // when the reason holds at least NA_REASON_WORDS words, "na-short" when it holds fewer; anything else → null.
@@ -1141,18 +1209,19 @@ function hasProseOutsideBrackets(body) {
 // → the `items` (placeholderReport(text) entries) that still count.
 function bugPlaceholders(text, items) {
   const lines = String(text || "").split(/\r?\n/);
-  const heads = headingIndex(lines);
+  const heads = headingEntries(lines); // the ONE heading reader (review 5, M2): setext and indented headings, never one in a comment
+  const headAt = new Map(heads.map((h) => [h.i, h]));
   const slots = bugTemplateSlots();
   const unitCache = new Map();
   // A heading line is judged on its own text; any other line on its section's body (up to the next heading).
   const unitHasProse = (i) => {
-    const isHead = heads.includes(i);
-    const start = isHead ? i : heads.filter((h) => h < i).pop();
-    const key = isHead ? "h" + i : "s" + (start == null ? -1 : start);
+    const own = headAt.get(i);
+    const start = own || heads.filter((h) => h.i < i).pop();
+    const key = own ? "h" + i : "s" + (start ? start.i : -1);
     if (!unitCache.has(key)) {
-      const from = start == null ? 0 : start + 1;
-      const end = heads.find((h) => h > (start == null ? -1 : start));
-      const body = isHead ? lines[i].replace(/^#{1,6}\s+/, "") : lines.slice(from, end == null ? lines.length : end).join("\n");
+      const from = start ? start.body : 0;
+      const end = heads.find((h) => h.i > (start ? start.i : -1));
+      const body = own ? own.text : lines.slice(from, end ? end.i : lines.length).join("\n");
       unitCache.set(key, hasProseOutsideBrackets(body));
     }
     return unitCache.get(key);
@@ -1180,7 +1249,8 @@ module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirement
   notASlug, featureRefTest, RE_LEAD_LABEL, RE_CELL_LABEL, criterionLabel, criterionLabelIds,
   otherFeatureTest, featureProjectDir, planIdText, clarificationMarkers,
   templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
-  headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, extractSection,
+  headingEntries, headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, headingTextMatches, extractSection,
+  sectionContent, isTableSep, SLOT_MAX, bracketCloser,
   RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionLineKey, sectionOwnLines, RE_NA_LEAD, NA_REASON_WORDS, naAnswer,
   trackSectionReport, sectionVerdict, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
   RE_LIST_CHECKBOX, placeholderKey, isGenericSlot, unknownSteeringStub, LEGACY_TEMPLATE_PLACEHOLDERS, templateCorpus,
