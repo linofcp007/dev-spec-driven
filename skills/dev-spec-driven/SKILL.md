@@ -342,7 +342,8 @@ sentinel or the template's guidance), evidence, edits since approval and the app
 `references/tooling-reference.md`; `--deep` adds the `dev-spec-driven:spec-critic` agent's semantic review. When the
 user signs off — an explicit yes for that phase — record it with `/approve <feature> <phase>`. **The approval is a
 gate:** its checks run first and a failure refuses it; `--force` records a *forced* approval only when the user
-explicitly accepts the failures (it stays visible). Phases are approved in order (`phase-order`); `/spec-ff`
+explicitly accepts the failures (it stays visible). Phases are approved in order (`phase-order` — an earlier phase edited
+since its approval is re-reviewed and re-approved first); `/spec-ff`
 (`spec_approve {through: "tasks"}`) approves several filled ones, each through its own gate, only after the user said
 go. Team roles and waivers: `references/change-management.md`. When the approval guard asks the user or refuses your
 approval, give the user the command it names and wait — never retry it another way. **The `execution` sign-off:** a

@@ -26,7 +26,9 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   depending on itself, a cycle), `change-scope` (a change past 1–3 criteria, 1–3 tasks or core only — make it a feature),
   `merge-conflicts` (conflicts git's merge driver left in `.state.json` / `roadmap.json` — resolve them), `state` (the
   feature's `.state.json` can't be read — not valid JSON, e.g. a text merge's conflict markers, or the wrong shape: repair
-  it by hand or restore it from git; its approvals, ticks and evidence are unknown until then), missing
+  it by hand or restore it from git; its approvals, ticks and evidence are unknown until then), `roadmap` (`.specs/roadmap.json`
+  can't be read — not valid JSON or the wrong shape: its approval roles and project checks are unknown, so approvals,
+  revocations and `/spec-finish` refuse until it is repaired), missing
   `requirements`/`design`, a bugfix's `root-cause`, a spike's `question` / `decision`.
 - **Warnings**: `steering` (missing core files, or steering files still holding template placeholders — named),
   `success-criteria`, `priorities`, `mermaid`, `constitution-check`, `placeholders` of a later phase,

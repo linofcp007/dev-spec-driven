@@ -90,7 +90,18 @@ and U+FEFF gotchas are in CLAUDE.md.
   conflict: ours kept there, `{path, base?, ours?, theirs?}` reported (a missing side deleted the key), and written INTO the file as
   a top-level `mergeConflicts` list — the file stays valid JSON, the driver exits 1 (git marks it conflicted, stderr lists each
   path), and doctor fails `merge-conflicts` (`mergeConflictsCheck()`, feature + roadmap, both doctors) until someone picks the values
-  and deletes the list. An unparseable ours / theirs merges nothing (exit 1, ours untouched). `ROADMAP.md` / `.html` / `SPECS.md`
+  and deletes the list. **Two post-passes on the RESULT (1.24 review 6):** (E2) a change request reopening task n
+  (`changes[].reopened`) or an untick of n (`unticks[]`) that only ONE side recorded never reached the other side's evidence — that
+  branch's run of the task made BEFORE it won as the later run, unmarked, and a re-tick with no new run read verified (finish and
+  the execution sign-off passed). `staleMergedEvidence()` marks each merged record of slot n (the latest and its `others`) whose run
+  is older than such an event `stale` — `staleBy: "undo"` for an untick; a reopen (the spec changed) wins over an undo — unless the
+  side that recorded the event kept that task's own record (its `task` stamp) valid: a task sharing the number the reopen didn't
+  reach. A record's time is its run's `at`, or `noteAt` for a task without a _Verify:_ command (its note is the re-check). Events
+  both sides hold (the base's) were applied on both. (E5) roadmap.json: dependency edges each side added alone can close a cycle
+  together (alpha → beta here, beta → alpha there) — merged clean, every later `depend` was refused on it. `breakMergedCycles()`
+  undoes, cycle by cycle, the first edge on it ours doesn't hold: ours kept at that feature's `dependsOn`, reported as a conflict
+  (`features.<slug>.dependsOn`, theirs' list — exit 1); a cycle ours' own lists already hold is not the merge's (left as it is).
+  `lastApprovedPhase` needs no pass: it follows the merged approvals already (above). An unparseable ours / theirs merges nothing (exit 1, ours untouched). `ROADMAP.md` / `.html` / `SPECS.md`
   (`kind: "generated"`) keep ours when BOTH sides carry the AUTO-GENERATED marker (the next write regenerates them); a hand-written
   one goes to `git merge-file`. `--install [--project]` (CLI only — the engine never calls git; MCP has no tool: git runs the
   driver) writes the `.gitattributes` block (`mergeAttributes()`, pure, idempotent: a head comment + `MERGE_ATTRIBUTE_LINES`, the

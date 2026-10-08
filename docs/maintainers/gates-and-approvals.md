@@ -55,12 +55,34 @@ flows, the bugfix kind.
   phase while an EARLIER one is in `pendingGateList()` (doctor's pending gates — only phases with an artifact, so a
   missing file never blocks forever) adds the failing check `phase-order` (`gates.phaseOrder`, EN/PT/ES) — refused
   unless force (recorded as forced with it). Not for `execution`: its gate (finish's blockers) already names them.
+  **An earlier phase whose approved CONTENT changed since its approval counts too (1.24 review 6, E1):** a later phase was
+  approved — one by one and by a fast-forward through it — while next_action said "re-review requirements" the whole time.
+  `changedApprovedPhases()` (changedSinceApproval over `approvalsInForce` without its `byDate` part — a file date is no evidence;
+  a whitespace-only edit is no change; a deleted approved artifact is one) joins the same check (`gates.phaseOrderChanged`:
+  re-review — spec_impact — and re-approve it first). `approveThrough` needs nothing of its own: its first phase after the
+  changed one is refused on phase-order (`stopReason: "refused"`); `fastForwardPlan` (next_action's suggestion) returns none
+  while a changed approved phase lies at or before its end. Pending gates and the walk are unchanged (the phase is approved —
+  next_action's re-review step names it).
+- **Governance read fail closed (1.24 review 6, E4).** `roadmap.json` holds `meta.approvalRoles` and `meta.checks`; one that
+  exists but can't be read (`roadmapError()` — not JSON, e.g. a text merge's conflict markers, or the wrong shape) read as "no
+  roles, no checks": one person approved a role-governed phase alone (recorded complete) and spec_finish / the execution
+  sign-off passed with the project checks never run. Reading the roles out of the raw text, evidenceMode's way for ONE flag,
+  can't be trusted for a nested map (two conflicting versions, a list cut in half) — the safer, simpler rule refuses:
+  `governanceError()` → `{ok: false, roadmapInvalid: true, code: "roadmap-invalid"}` + `gates.roadmapUnreadable` from
+  `approvePhase` (any role, a dry run too), `approveThrough` and `revokeApproval`; spec_finish blocks on `roadmap` (its own
+  blocker, first after `state` — so the execution gate names it); doctor (both — features and spikes) fails `roadmap`
+  (`roadmapGovernanceCheck()`, `gates.roadmapCheck`); next_action's one step is `fix` with `roadmapInvalid: true`
+  (`next.roadmapInvalid` — it recommended a role-less /spec-ff); the status line says repair roadmap.json; `backlog` (list)
+  refuses like milestone / depend (it printed "Backlog (0)", exit 0). Ticking tasks stays possible (evidenceMode already reads
+  its one flag fail-closed from the raw text).
 - **next_action step order — phase by phase:** first (r5 review) a `.state.json` readState marks `invalid` (not JSON — a git
   text merge's conflict markers, a truncated write — or the wrong shape) is the ONE step: `fix` with `stateInvalid: true`
   (`next.stateInvalid`: repair or restore it). Read as empty it listed every gate pending and said "approve" — which every
   mutator refuses on that file: a loop. Doctor fails `state` (the localized `state.invalid` as its detail), spec_finish blocks
   on `state` first (and reports no pending gate / change since approval from the unknown approvals), the status line's
-  statusNext answers `{step: fix, file: .state.json}`. Then `re-review` (an artifact changed since ITS approval and re-approvable
+  statusNext answers `{step: fix, file: .state.json}`. Next (1.24 review 6, E4) an unreadable `roadmap.json` the same way:
+  `fix` + `roadmapInvalid: true` (`next.roadmapInvalid`; statusNext `{step: fix, file: roadmap.json}`) — Governance read fail
+  closed above. Then `re-review` (an artifact changed since ITS approval and re-approvable
   now — one of a phase after the first pending gate waits for it, approve would refuse it on `phase-order`; `impact`
   when a snapshot exists; when that phase's gate would refuse it, `refusedGate` {phase, failing} and the check ids are
   named — never an approval that would be refused; an approved artifact that was DELETED (1.22 review) is listed in
@@ -91,7 +113,8 @@ flows, the bugfix kind.
   execution sign-off older than such a change is asked for again (`executionSignOffStale()`). The recorded files are
   hashed even then: a stale baseline with drift answers `drift` (+ `staleBaseline`, `nx.driftedStale`) — the decision
   before any re-baseline.
-- **finish blockers:** `state` (r5 review — .state.json unreadable), doctor fails, changed since approval (shared `changedSinceApproval()`), placeholders
+- **finish blockers:** `state` (r5 review — .state.json unreadable), `roadmap` (1.24 review 6 — roadmap.json unreadable: its roles
+  and checks unknown; doctor's `roadmap` fail, never inside `doctor`), doctor fails, changed since approval (shared `changedSinceApproval()`), placeholders
   anywhere in the chain, bugfix Root Cause, no tasks, open tasks, unverified tasks, pending gates (a phase still
   missing a role's sign-off is pending), and — with `meta.checks` set (1.14) — `suite-evidence`.
   `warnings` (EC/NFR/SC, planned-not-in-code, legacy approvals missing a role, a T-ID planned outside test code whose
@@ -119,6 +142,15 @@ flows, the bugfix kind.
   equal under `wsText()` (state.js — fingerprintText, each line's trailing whitespace and the final blank lines dropped;
   linear, no regex over a run of spaces) → not changed (`changedSinceApproval`, and spec_impact's `changed`). No snapshot
   (before 1.13, a `.history/` not committed) → the fingerprint alone decides, as before.
+  **1.24 review 6 (E6 / E-I5) — the whitespace-insensitive fingerprint is RECORDED:** every new approval, its history record and
+  each role sign-off carry `wsFingerprint` = sha1(`wsText`) (state.js `wsFingerprint()`; `designWsFingerprint` for a bugfix's
+  design.md) next to `fingerprint` (whose rule is unchanged). `changedSinceApproval` checks it (`wsSame()`) before the snapshot
+  fallback — no `.history/` needed —, `sameContent()` (role sign-offs: `roleSignOffs`, `recordRoleSignOff`, doctor's role view)
+  accepts a record whose `wsFingerprint` (+ `designWsFingerprint`) equals the content's (`phaseContent()` computes both), and
+  `changesSince`'s `sameApprovedContent` too (a re-approval after a whitespace-only edit changed nothing). A WAITING role
+  sign-off has no snapshot: an editor's trailing-whitespace trim after product signed made tech's sign-off "not complete"
+  (product's read stale — r5's rule held for single approvals only). Records from before 1.24 have none: the fingerprint and
+  the snapshot fallback decide, as before. (A field of the approval / sign-off records — the merge driver's rules carry it.)
 - **A deleted approved artifact is a change since its approval** (1.22 review — `changedSinceApproval()` skipped a missing
   file, so deleting an approved test-plan.md and its T-IDs read as "nothing changed" and the Phase 4 gate vanished; the
   tasks were approvable at once). It is listed like an edit (doctor's changed-since-approval, finish's blocker, the roadmap,
@@ -150,7 +182,7 @@ flows, the bugfix kind.
   the Phase 4 wording (`/writeTests`) plus what the gate checks — but on an executing / complete feature (tasks ticked,
   e.g. an upgraded 1.12 one) it uses `next.signOffTests` (a sign-off for the tests that exist, never "failing tests
   first, no implementation code"). **Approving `execution`** runs spec_finish's blockers
-  (`finishFeature(…, {gateOnly: true})` → stable ids `state`, `doctor`, `root-cause`, `placeholders`, `changed-since-approval`,
+  (`finishFeature(…, {gateOnly: true})` → stable ids `state`, `roadmap`, `doctor`, `root-cause`, `placeholders`, `changed-since-approval`,
   `tasks`, `open-tasks`, `verification`, `approval-gates`, `suite-evidence` with meta.checks; a spike: `spike`, `decision`);
   otherwise only `force` records it. spec_metrics' `finished`
   = the earliest of the first execution approval and `state.finished.at` (spec_finish {write} on a ready feature).
@@ -159,7 +191,8 @@ flows, the bugfix kind.
 - **Approval history.** `approvals[phase]` stays the latest approval (with its content `fingerprint`);
   every approval is ALSO appended to `.state.json → approvalHistory` `{phase, at, by, fingerprint, forced?,
   failing?, snapshot, file?, designSnapshot?, designFingerprint? (1.22 review — changesSince compares a re-approval with the
-  record in force before it), testsPlan? (a `tests` approval, 1.22 review)}` and the approved artifact is saved to
+  record in force before it), testsPlan? (a `tests` approval, 1.22 review), wsFingerprint? / designWsFingerprint? (1.24 review 6 —
+  the whitespace-insensitive ones)}` and the approved artifact is saved to
   `.specs/<f>/.history/<phase>@<n>.md` (tasks with checkboxes normalized; never overwrites an existing
   snapshot). An IDENTICAL re-approval (the fingerprint + designFingerprint of the phase's previous approval record, whose
   snapshot still holds them — `reuseSnapshot()`, r5 review) shares that snapshot path instead of writing a copy (60
@@ -222,7 +255,8 @@ flows, the bugfix kind.
   completing sign-off writes `approvals[<phase>]` (with `roles` `{<role>: {by, at, fingerprint…}}`) and the snapshot
   exactly like a single approval — so every reader of `approvals[<phase>]` (doctor approval-gates / `nextGate.missingRoles`
   / `pendingRoles`, next_action's "missing role", finish, ROADMAP.md attention, the guard hook, metrics) sees the phase
-  approved only then. A sign-off of OLDER content no longer counts (`phaseContent()` fingerprints; a phase with no file —
+  approved only then. A sign-off of OLDER content no longer counts (`phaseContent()` fingerprints — the same content but
+  whitespace still counts since 1.24 review 6, `wsFingerprint` above; a phase with no file —
   tests, execution — r5 review: a sign-off made before a change of the feature, `changesSince(state, at, phase)` — a change
   request, an untick, a revocation, a re-approval of another phase with other content — no longer counts, the rule
   `executionSignOffStale()` applies to a single approval: `signOffOutdated()` in `roleSignOffs()`, for the waiting
@@ -289,7 +323,10 @@ flows, the bugfix kind.
   gate that passes answers `waiverIgnored`. `waiverView` / `forcedApprovalList` / `strictestWaiver`: doctor warn
   `waiver-expired` (feature and spike doctors), the ROADMAP.md forced-approvals line (EXPIRED flagged), `spec_finish`
   `waivers` `[{phase, failing, reason?, expires?, expired}]` + a warning when expired + the merge summary's "Waived gates".
-  Metrics count `revokedApprovals` and `untickedTasks`.
+  Metrics count `revokedApprovals` and `untickedTasks`. **With roles (1.24 review 6, E7)** the completed approval carries the
+  STRICTEST waiver of the forced sign-offs that count (`strictestWaiver()` — the earliest expiry, else the first one), the
+  completing sign-off's own included: it kept its own (a waiver with no expiry) and another role's expiring waiver was lost —
+  doctor never warned `waiver-expired`, finish never said expired. The roles' records keep their own waivers.
 - **MCP-only surfaces** — `spec_stop_check {message, agent?}` = `stopCheck()` (the same decision as `dev-spec stop-check
   --json`); `spec_log {name, gitLog, max?}` = `taskCommits()` over git log TEXT the client supplies — the server still never
   runs git or any command (`dev-spec log` keeps running git itself; `log <f> - --max N` passes the window too). An empty
@@ -303,7 +340,7 @@ flows, the bugfix kind.
   waiting sign-off and a revocation record; a fast-forward passes it to every phase it approves. No reader branches on it — it is
   the audit trail of WHO approved (the human, in the client), next to `by`.
 - **`opts.dryRun`** — approvePhase runs everything up to its write and returns `{ok: true, dryRun: true, feature, phase, failing,
-  checks, fingerprint, designFingerprint?, role?, waiver?}` (revoke: `{dryRun, revoke: true}` after its own checks; through:
+  checks, fingerprint, designFingerprint?, role?, waiver?}` (revoke: `{dryRun, revoke: true, approvedAt, withdrawn}` after its own checks; through:
   `{dryRun, chain, fingerprints: {<phase>: {fingerprint, designFingerprint?}}}` — the phases it would walk, each gate running only
   when approved, and each one's content, `phaseContent()`); a refusal / error comes back exactly as without it. Only the server
   passes it (the preview before it asks the user — a gate that refuses anyway asks nobody); never a tool argument or a CLI flag.
@@ -317,7 +354,13 @@ flows, the bugfix kind.
   `spec_feature` remove has its own (1.23): `removePreview` returns `fingerprint` (`featureFolderFingerprint()`, finish.js — the
   folder's identity and every entry under it), the server passes it back as `manageFeature(…, {confirm, preview})`, and
   `removeFeatureLocked` refuses another folder under the name or an edited one (`changedSincePreview`, nothing deleted) —
-  mcp.md → Human approvals over MCP elicitation.
+  mcp.md → Human approvals over MCP elicitation. **A revocation (1.24 review 6):** the dry run names what it would remove —
+  `approvedAt` (the approval's `at`, or null) and `withdrawn` `{role: at}` (the waiting sign-offs) —, and `revokeApproval` with
+  `opts.preview` `{approvedAt, withdrawn}` refuses when they differ now (another approval recorded while the user was asked would
+  be revoked in place of the one the question named): `{ok: false, changedSincePreview: true, code: "changed-since-preview",
+  revoke: true}` + `revoke.changedSincePreview`, nothing written. **The server's part is pending:** mcp/server.js's
+  `elicitApproval` builds no preview for a revoke (`if (!pre.revoke)`) — it must pass `{approvedAt: pre.approvedAt, withdrawn:
+  pre.withdrawn}` back for this check to run over MCP.
 - **What the approval guard gates (1.24 review 6 — the full list: claude-code-integration.md → Human approval guard).** Besides the
   approvals, a removal and the spec_init / `init` guard-downs: turning +tdd / +ai off (`spec_add_track {remove}` / `add-track
   --remove` — their gates go with them), a write of a `.state.json` or of `.specs/roadmap.json` by `dev-spec merge-state` (git's
@@ -464,6 +507,10 @@ iron law, phase order, the finish / execution gate, every track criterion scaffo
   `bugfixGate()`). bug.md IS its design (r5 review): an open `[NEEDS CLARIFICATION]` there refuses the design gate
   (`doctor.clarificationsOpenBug` when only bug.md holds them), one in its Reproduction the requirements gate; doctor's
   `clarifications` check and spec_clarify read bug.md too (a Root Cause "probably X [NEEDS CLARIFICATION: …]" was approved).
+  **The design gate checks what doctor checks on bug.md (1.24 review 6, E8):** besides `root-cause`, `reproduction`
+  (`bugSectionFilled(REPRO_SYN)` — the requirements gate read it, an edit since emptied it) and `placeholders` (artifactReport's
+  `bugPlaceholders()`: the report's own slots — `[correct behavior]`, the Fix line —, `> **TODO**`; quoted evidence such as
+  `[object Object]` stays content). A bug.md with its slots left was approved while doctor failed `placeholders` on it.
 - **The bugfix tasks.md — the short form, every size.** `bugTasks(name, lang)` (EN / PT / ES — pt-BR derived; ONE builder,
   no size argument: the XS and the default forms became identical) scaffolds two tasks: **1** the red regression test
   (`_Verify: [command that runs T-01]_` + `_Expect: fail_`, guard test T-02 added) and **2** the fix (`_Makes green: T-01_`,

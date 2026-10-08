@@ -158,8 +158,9 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const apB1 = S.approvePhase(w5, f2b.slug, "requirements", undefined, { force: true });
     const apB2 = S.approvePhase(w5, f2b.slug, "design");
     const apB3 = S.approvePhase(w5, f2b.slug, "classification", undefined, { force: true });
-    ok(apB1.forced && apB1.failing.includes("reproduction") && apB2.ok === false && apB2.failing.join() === "root-cause" && apB3.ok === false && apB3.nothingToApprove,
-      "bugfix: requirements needs bug.md Reproduction, design needs its Root Cause (no design.md), classification has nothing to approve");
+    // (1.24 review 6, E8: the design gate — bug.md — also reads its Reproduction and its slots, as doctor does)
+    ok(apB1.forced && apB1.failing.includes("reproduction") && apB2.ok === false && apB2.failing.join() === "root-cause,reproduction,placeholders" && apB3.ok === false && apB3.nothingToApprove,
+      "bugfix: requirements needs bug.md Reproduction, design needs its Root Cause (+ its Reproduction, no bug.md slot left; no design.md), classification has nothing to approve (got " + JSON.stringify(apB2.failing) + ")");
     const w5pt = path.join(tmp, "proj-wp5-pt");
     S.initProject(w5pt, ["core"], "pt");
     const fpt = S.createFeature(w5pt, "Aprovação", ["core"]);
@@ -1545,16 +1546,20 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const dNa2 = S.nextAction(d.p, "widget");
     d.w("requirements.md", REQ.replace("store it", "store it durably"));
     const dNa3 = S.nextAction(d.p, "widget");
-    // no snapshot: the fingerprint alone decides
+    // no snapshot: the approval's wsFingerprint decides (1.24 review 6, E-I5); an approval without one either (before 1.24): the
+    // fingerprint alone decides
     const dSt = JSON.parse(fs.readFileSync(path.join(d.f.dir, ".state.json"), "utf8"));
     dSt.approvalHistory.forEach((h) => { delete h.snapshot; });
     d.w(".state.json", JSON.stringify(dSt, null, 2));
     d.w("requirements.md", REQ + "\n");
     const dNa4 = S.nextAction(d.p, "widget");
+    for (const a of [...Object.values(dSt.approvals), ...dSt.approvalHistory]) delete a.wsFingerprint;
+    d.w(".state.json", JSON.stringify(dSt, null, 2));
+    const dNa5 = S.nextAction(d.p, "widget");
     ok(js(dNa.changedSinceApproval) === "[]" && dNa.step !== "re-review" && dIm.changed === false && !dDoc.checks.some((x) => x.id === "changed-since-approval") &&
-      js(dNa2.changedSinceApproval) === "[]" && js(dNa3.changedSinceApproval) === '["requirements.md"]' && js(dNa4.changedSinceApproval) === '["requirements.md"]',
-      "r5 review: a whitespace-only edit of an approved artifact (trailing spaces / tabs, blank lines at the end, a final newline dropped) is no change since its approval — next_action, doctor, spec_impact agree; a real edit still is; without the approval's snapshot the fingerprint alone decides (got " +
-      js([dNa.changedSinceApproval, dIm.changed, dNa2.changedSinceApproval, dNa3.changedSinceApproval, dNa4.changedSinceApproval]) + ")");
+      js(dNa2.changedSinceApproval) === "[]" && js(dNa3.changedSinceApproval) === '["requirements.md"]' && js(dNa4.changedSinceApproval) === "[]" && js(dNa5.changedSinceApproval) === '["requirements.md"]',
+      "r5 review: a whitespace-only edit of an approved artifact (trailing spaces / tabs, blank lines at the end, a final newline dropped) is no change since its approval — next_action, doctor, spec_impact agree; a real edit still is; without the approval's snapshot its wsFingerprint decides (1.24), without either the fingerprint alone (got " +
+      js([dNa.changedSinceApproval, dIm.changed, dNa2.changedSinceApproval, dNa3.changedSinceApproval, dNa4.changedSinceApproval, dNa5.changedSinceApproval]) + ")");
 
     // Improvement b: an identical re-approval shares the previous snapshot (no second copy) and is no rework in spec_metrics; new
     // content gets the next snapshot number.

@@ -187,6 +187,13 @@ function wsText(raw, phase) {
   while (end > 0 && lines[end - 1] === "") end--;
   return lines.slice(0, end).join("\n");
 }
+// 1.24 review 6 (E-I5) — the fingerprint of wsText: recorded as `wsFingerprint` (`designWsFingerprint`) on every NEW approval, its
+// history record and each role sign-off, next to `fingerprint` (which keeps its rule). Two versions that differ only in trailing
+// whitespace / final blank lines share it — a waiting role sign-off (no snapshot of its own) of such a version still counts, and
+// changedSinceApproval needs no .history snapshot to tell a whitespace-only edit. Older records have none: the snapshot fallback.
+function wsFingerprint(raw, phase) {
+  return raw == null ? null : sha1Hex(wsText(raw, phase));
+}
 // Does this text still match a fingerprint an approval recorded? An approval recorded before the BOM was ignored
 // hashed the file with its BOM: that fingerprint still matches the same content (with or without the BOM now).
 function fingerprintMatches(raw, phase, stored) {
@@ -552,6 +559,10 @@ function backlog(projectDir, action, name, note) {
     const A = i18n.msg(projectLang(projectDir)).args;
     return { ok: false, error: A.invalid(A.item("action", A.oneOf(BACKLOG_ACTIONS.join(", ")), JSON.stringify(String(action)))) };
   }
+  // 1.24 review 6 (E4): a roadmap.json that doesn't parse (or has the wrong shape) is an error, never "Backlog (0)" — milestone /
+  // depend's rule (its sanitized copy read as an empty backlog)
+  const bad = roadmapError(projectDir);
+  if (bad) return { ok: false, error: bad };
   return { ok: true, backlog: readRoadmap(projectDir).backlog || [] };
 }
 
@@ -1023,6 +1034,94 @@ function mergeFeatureState(b, o, t, ctx) {
     if (SO === undefined) delete out.signoffs;
     else setOwn(out, "signoffs", SO);
   }
+  // 1.24 review 6 (E2): a run older than a reopen / an undo of its task that only ONE side recorded is stale in the result
+  const ev = ownVal(out, "evidence");
+  const evStale = staleMergedEvidence(o, t, ev);
+  if (evStale !== ev) setOwn(out, "evidence", evStale);
+  return out;
+}
+// 1.24 review 6 (E2) — the merge's post-pass over the evidence. A change request that reopened task n (`changes[].reopened`) or an
+// undone tick of n (`unticks[]` {n, at}) recorded on ONE side never reached the other side's evidence: a run of that task the other
+// branch made BEFORE it won the merge (the later run, mergeRunRecord) with no stale mark, and a re-tick with no new run read
+// verified (finish and the execution sign-off passed). A merged record of slot n whose run is older than such an event is marked
+// stale — `staleBy: "undo"` for an untick; a reopen (the spec changed — redProof never reads through it) wins over an undo —
+// unless the side that recorded the event kept that task's own record valid (a task sharing the number that the reopen didn't
+// reach). A record's time is its run's `at`, or its note's (`noteAt`) for a task with no _Verify:_ command (the note IS its
+// re-check — recordEvidence). Events both sides hold (the base's) are applied on both already. Copy on write: no input is mutated.
+// → the evidence (the same object when nothing changes)
+function staleMergedEvidence(o, t, ev) {
+  if (!isObj(ev)) return ev;
+  const listOf = (doc, key) => (Array.isArray(ownVal(doc, key)) ? ownVal(doc, key) : []);
+  const onlyIn = (side, other, key, idOf) => { const there = new Set(listOf(other, key).map(idOf)); return listOf(side, key).filter((x) => isObj(x) && !there.has(idOf(x))); };
+  const events = [];
+  for (const [side, other] of [[o, t], [t, o]]) {
+    for (const c of onlyIn(side, other, "changes", CHANGE_ID)) if (Array.isArray(c.reopened)) for (const n of c.reopened) events.push({ n: String(n), at: mergeTime(c.at), undo: false, side });
+    for (const u of onlyIn(side, other, "unticks", UNTICK_ID)) if (u.n != null) events.push({ n: String(u.n), at: mergeTime(u.at), undo: true, side });
+  }
+  if (!events.length) return ev;
+  const records = (slot) => (isObj(slot) ? [slot, ...(Array.isArray(slot.others) ? slot.others.filter(isObj) : [])] : []);
+  const runTime = (r) => (typeof r.verify === "string" && r.verify ? mergeTime(r.at) : Math.max(mergeTime(r.at), mergeTime(r.noteAt)));
+  // The side's own record of r's task: by its `task` stamp; an unstamped record (v1.12) is the slot's latest.
+  const sideRecord = (side, n, r, isMain) => {
+    const recs = records(ownVal(ownVal(side, "evidence"), n));
+    return runTask(r) !== null ? recs.find((x) => runTask(x) === runTask(r)) : isMain ? recs[0] : undefined;
+  };
+  const judge = (n, r, isMain) => {
+    let reopen = false, undo = false;
+    for (const e of events) {
+      if (e.n !== n || !(e.at > runTime(r))) continue;
+      const mine = sideRecord(e.side, n, r, isMain);
+      if (mine && mine.stale !== true) continue; // the side that recorded it kept this task's record valid: it never reached it
+      if (e.undo) undo = true; else reopen = true;
+    }
+    if (reopen && !(r.stale === true && r.staleBy === undefined)) { const c = copyOwn(r); c.stale = true; delete c.staleBy; return c; }
+    if (!reopen && undo && r.stale !== true) { const c = copyOwn(r); c.stale = true; c.staleBy = "undo"; return c; }
+    return r;
+  };
+  let out = ev;
+  for (const n of Object.keys(ev)) {
+    const slot = ev[n];
+    if (!isObj(slot) || !events.some((e) => e.n === n)) continue;
+    let next = judge(n, slot, true);
+    if (Array.isArray(slot.others)) {
+      const others = slot.others.map((x) => (isObj(x) ? judge(n, x, false) : x));
+      if (others.some((x, i) => x !== slot.others[i])) { if (next === slot) next = copyOwn(slot); setOwn(next, "others", others); }
+    }
+    if (next !== slot) { if (out === ev) out = copyOwn(ev); setOwn(out, n, next); }
+  }
+  return out;
+}
+// 1.24 review 6 (E5) — roadmap.json: dependency edges each side added alone can close a cycle together (alpha → beta on one branch,
+// beta → alpha on the other): the merge was clean, wrote the cycle, and every later depend was refused on it. A cycle in the merged
+// features is a CONFLICT: the first edge on it ours doesn't hold (theirs brought it) is undone — ours kept at that feature's
+// dependsOn, {path: features.<slug>.dependsOn, base?, ours?, theirs?} reported — until no cycle is left; a cycle ours' own lists
+// hold is not the merge's (left as it is). → the merged document (a copy when something changed)
+function breakMergedCycles(b, o, t, merged, ctx) {
+  let feats = ownVal(merged, "features");
+  if (!isObj(feats)) return merged;
+  const depsAt = (doc, slug) => ownVal(ownVal(ownVal(doc, "features"), slug), "dependsOn");
+  let copied = false;
+  for (let round = 0, max = Object.keys(feats).length + 1; round < max; round++) {
+    const map = Object.create(null);
+    for (const k of Object.keys(feats)) map[k] = isObj(feats[k]) && Array.isArray(feats[k].dependsOn) ? feats[k].dependsOn.filter((d) => typeof d === "string") : [];
+    const cycle = findCycle(map);
+    if (!cycle) break;
+    let slug = null;
+    for (let i = 0; i + 1 < cycle.length && slug === null; i++) {
+      const ov = depsAt(o, cycle[i]);
+      if (!(Array.isArray(ov) && ov.includes(cycle[i + 1])) && isObj(feats[cycle[i]])) slug = cycle[i];
+    }
+    if (slug === null) break; // a cycle ours already had (a hand edit): not the merge's
+    if (!copied) { feats = copyOwn(feats); copied = true; }
+    const ov = depsAt(o, slug);
+    mergeConflict(ctx, ["features", slug, "dependsOn"], depsAt(b, slug), ov, depsAt(t, slug));
+    const entry = copyOwn(feats[slug]);
+    if (ov === undefined) delete entry.dependsOn; else setOwn(entry, "dependsOn", ov);
+    setOwn(feats, slug, entry);
+  }
+  if (!copied) return merged;
+  const out = copyOwn(merged);
+  setOwn(out, "features", feats);
   return out;
 }
 // roadmap.json.
@@ -1071,7 +1170,8 @@ function mergeStateJson(base, ours, theirs, kind) {
   const ctx = { conflicts: [] };
   if (!isObj(ours) || !isObj(theirs)) return { kind: k, merged: mergeThree(base, ours, theirs, () => mergeConflict(ctx, [], base, ours, theirs)), conflicts: ctx.conflicts };
   const b = isObj(base) ? base : undefined;
-  const merged = k === "roadmap" ? mergeObject(b, ours, theirs, [], ctx, (f) => (own(ROADMAP_FIELDS, f) ? ROADMAP_FIELDS[f] : null)) : mergeFeatureState(b, ours, theirs, ctx);
+  const merged = k === "roadmap" ? breakMergedCycles(b, ours, theirs, mergeObject(b, ours, theirs, [], ctx, (f) => (own(ROADMAP_FIELDS, f) ? ROADMAP_FIELDS[f] : null)), ctx) // 1.24 review 6 (E5)
+    : mergeFeatureState(b, ours, theirs, ctx);
   return { kind: k, merged, conflicts: ctx.conflicts };
 }
 // The driver's whole job on file TEXTS (git's %O %A %B; opts.path = %P, opts.kind overrides): parse (a BOM tolerated; an empty
@@ -1296,7 +1396,7 @@ function mergeDriverStatus(projectDir, opts = {}) {
 
 module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugifyFull, legacySlugify, RE_WIN_RESERVED,
   RESERVED_SLUGS, reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState,
-  stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, wsText, sha1Hex, fingerprintMatches,
+  stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, wsText, wsFingerprint, sha1Hex, fingerprintMatches,
   BOM_CHAR, artifactMatches, uncheckTasks, phaseFile, FEATURE_SIZES, sizeInput, featureSize, isChangeDir, PLANNING_CEILING, PHASE_PERCENT, phasePercent, featurePercent,
   roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, setDependency, dependencyUnlocked,
   roadmap, flatText, addBacklog, BACKLOG_NOTE_MAX, BACKLOG_NOTE_SEP, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked, BACKLOG_ACTIONS, backlog,

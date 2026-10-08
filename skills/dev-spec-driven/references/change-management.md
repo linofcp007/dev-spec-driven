@@ -265,9 +265,14 @@ or `{}` clears it) stores `roadmap.json → meta.approvalRoles`. A listed phase 
   ("missing role: security" and the `--role` to sign as), `spec_finish`'s blockers, `ROADMAP.md` and the guard hook all
   see it that way;
 - the completing sign-off writes `approvals[<phase>].roles` and the snapshot, like a single approval;
-- a sign-off of content that changed since no longer counts: that role signs the current content again;
+- a sign-off of content that changed since no longer counts: that role signs the current content again (a
+  whitespace-only edit — trailing spaces, blank lines at the end — is no change);
+- forced sign-offs with waivers: the approval carries the strictest one (the earliest `--expires`), so doctor warns
+  `waiver-expired` when any role's waiver ran out;
 - a phase approved before the roles were configured stays approved (by an unknown role); doctor and finish warn and
-  ask each role to re-sign. Without `meta.approvalRoles`, one approval per phase, as before.
+  ask each role to re-sign. Without `meta.approvalRoles`, one approval per phase, as before. A `roadmap.json` that can't
+  be read (a merge's conflict markers) hides the roles: approvals and revocations refuse (`roadmap-invalid`) and doctor
+  fails `roadmap` until it is repaired.
 
 **Fast-forward (`/spec-ff`).** `spec_approve {name, through: "tasks"}` (CLI `dev-spec approve <feature> --through
 tasks`) approves the active phases **in order** from the first unapproved one up to `through` — each through its own

@@ -142,7 +142,10 @@ function finishFeature(projectDir, name, opts = {}) {
   // (r5 review: `state` — .state.json unreadable — is its own blocker, first; the approvals it holds are unknown, so no pending gate
   // nor change since approval is reported from it: they read "every phase awaiting approval")
   const stateBad = !!state.invalid;
-  const failing = doc.ok ? doc.checks.filter((c) => c.status === "fail" && c.id !== "placeholders" && c.id !== "root-cause" && c.id !== "state").map((c) => c.id) : [];
+  const failing = doc.ok ? doc.checks.filter((c) => c.status === "fail" && c.id !== "placeholders" && c.id !== "root-cause" && c.id !== "state" && c.id !== "roadmap").map((c) => c.id) : [];
+  // 1.24 review 6 (E4): roadmap.json unreadable — its project checks (meta.checks: suite-evidence) and approval roles are unknown
+  // (read as none, spec_finish was ready with the checks never run): its own blocker, like `state`
+  const roadmapBad = doc.ok && Array.isArray(doc.checks) ? doc.checks.find((c) => c.id === "roadmap" && c.status === "fail") : null;
   const pendingGates = stateBad ? [] : doc.pendingGates || [];
   // What next_action flags must block finishing too: an artifact edited after its approval, a template placeholder
   // ANYWHERE in the chain, and — for a bugfix — an unwritten root cause. Only a change known by CONTENT blocks: a file date
@@ -171,6 +174,7 @@ function finishFeature(projectDir, name, opts = {}) {
   const blocked = [];
   const block = (id, detail) => blocked.push({ id, detail });
   if (stateBad) block("state", state.invalid); // r5 review (localized: readState's message — fix it by hand)
+  if (roadmapBad) block("roadmap", roadmapBad.detail); // 1.24 review 6 (E4)
   if (failing.length) block("doctor", F.doctor(failing.join(", ")));
   if (rootCauseMissing) block("root-cause", G.finishRootCause);
   if (leftovers.length) block("placeholders", G.finishPlaceholders(placeholderSummary(leftovers, lng)));
@@ -1458,9 +1462,11 @@ function approvalInForceAt(hist, phase, t) {
   }
   return rec && recAt > revAt ? rec : null;
 }
-// An approval and a history record signed off the same content: both fingerprinted, the same fingerprint and designFingerprint.
-const sameApprovedContent = (a, rec) => isRecord(a) && isRecord(rec) && typeof a.fingerprint === "string" && !!a.fingerprint &&
-  a.fingerprint === rec.fingerprint && (a.designFingerprint || null) === (rec.designFingerprint || null);
+// An approval and a history record signed off the same content: both fingerprinted, the same fingerprint and designFingerprint —
+// or (1.24 review 6, E-I5) both carrying the whitespace-insensitive ones, equal: a re-approval after a whitespace-only edit changed nothing.
+const sameApprovedContent = (a, rec) => isRecord(a) && isRecord(rec) && ((typeof a.fingerprint === "string" && !!a.fingerprint &&
+  a.fingerprint === rec.fingerprint && (a.designFingerprint || null) === (rec.designFingerprint || null)) ||
+  (typeof a.wsFingerprint === "string" && !!a.wsFingerprint && a.wsFingerprint === rec.wsFingerprint && (a.designWsFingerprint || null) === (rec.designWsFingerprint || null)));
 // The phases revoked in `since` that no approval in it restores (a revoke then a re-approval reads "re-approved" alone).
 function revokedSinceList(since) {
   const back = new Set(since.filter((x) => x.kind === "approval").map((x) => x.phase));

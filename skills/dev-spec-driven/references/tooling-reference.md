@@ -74,7 +74,10 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   number no active task carries, a self-dependency, a cycle — the tasks approval refuses on it) · bugfix `root-cause` ·
   spike `spike` (spike.md missing) / `question` / `decision` · `merge-conflicts` (a `mergeConflicts` list the git merge driver left in the feature's
   `.state.json` or in `roadmap.json` — pick each value, delete the list) · `state` (the feature's `.state.json` is not
-  valid JSON or has the wrong shape — next_action's one step is to repair it, spec_finish blocks on it).
+  valid JSON or has the wrong shape — next_action's one step is to repair it, spec_finish blocks on it) · `roadmap`
+  (`.specs/roadmap.json` is not valid JSON — e.g. a text merge's conflict markers — or has the wrong shape: the approval
+  roles and project checks it holds can't be read, so approve / revoke / the fast-forward refuse (code `roadmap-invalid`),
+  spec_finish blocks on `roadmap` and next_action's one step is to repair it — every doctor reports it).
 - **Warn:** `steering` (core files missing, or files still holding template placeholders) · `success-criteria` ·
   `priorities` · `mermaid` (no mermaid code block outside comments, or only the template's own diagram) ·
   `constitution-check` · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,
@@ -205,8 +208,10 @@ merge-state --install | --uninstall | --check [--project <dir>]     merge-state 
 clone's git config (`merge.dev-spec-state.driver`; every teammate runs it once). Git then runs `merge-state %O %A %B %P` on
 `.specs/**/.state.json` and `.specs/roadmap.json` whenever both branches changed one: approvals, ticks, evidence (the
 latest run per task, histories merged), the approval history, change requests, sign-offs, backlog, dependencies,
-milestones and checks of both branches are united — a revocation wins over an older approval. A real conflict (a setting
-both branches changed differently, e.g. `meta.lang`) exits 1 and stays valid JSON: ours is kept, the file lists each one
+milestones and checks of both branches are united — a revocation wins over an older approval, and a run one branch made
+before the other branch reopened (spec_impact --reopen) or unticked that task is stale in the result (a new run is needed). A
+real conflict (a setting both branches changed differently, e.g. `meta.lang`, or dependencies whose edges from the two
+branches close a cycle — ours is kept at the edge that closes it) exits 1 and stays valid JSON: ours is kept, the file lists each one
 under `mergeConflicts` (base / ours / theirs) and `spec_doctor` fails `merge-conflicts` until you pick the values and
 delete the list. `ROADMAP.md` / `SPECS.md` keep ours (regenerated on the next write). `--uninstall` removes both.
 **Re-run `merge-state --install` after each plugin update:** the git config names the CLI by its path, and a plugin update

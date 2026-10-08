@@ -1371,4 +1371,88 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       /hoy o después en UTC/.test(i18n.msg("es").waiver.badExpires('"x"', 3650)),
       "r5 review: the waiver --expires refusal says the date is a UTC day (EN / PT / ES)");
   }
+
+  { // 1.24 review 6 — role sign-offs vs a whitespace-only edit (E6), the strictest waiver of a role-signed approval (E7), a revoke over elicitation (preview)
+    const js = JSON.stringify;
+    const w6 = (f, rel, text) => fs.writeFileSync(path.join(f.dir, rel), text);
+    const st6 = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    const REQ6 = "# Feature: x\n\n## Summary\nExport invoices as CSV.\n\n### US-1 (P1 — MVP): Export\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN an admin clicks Export THE SYSTEM SHALL download a CSV.\n2. **US-1.AC-2** — IF the export fails THEN THE SYSTEM SHALL show the error code.\n\n" +
+      "## Success Criteria\n- **SC-001** — 95% of exports finish in under 5 s.\n";
+    const DESIGN6 = "# Design: x\n\n## Overview\nAn endpoint.\n\n## Architecture\n```mermaid\ngraph TD\n  A-->B\n```\n\n## Alternatives & Trade-offs\nSync over a queue: simpler.\n\n" +
+      "## Risks\nLarge months; streaming.\n\n## Reuse & Integration\n| Need | Reuse | Why |\n|---|---|---|\n| CSV | the csv writer | tested |\n";
+    const TASKS6 = "# Tasks\n\n- [ ] 1. [US1] Build the export\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Verify: [manual: open the CSV]_\n";
+    const feature6 = (p) => {
+      const f = S.createFeature(p, "Export", ["core"]);
+      w6(f, "classification.md", "# Classification\n\n## Active tracks\ncore\n\n## Why\nA small export feature.\n");
+      w6(f, "requirements.md", REQ6); w6(f, "design.md", DESIGN6); w6(f, "tasks.md", TASKS6);
+      return f;
+    };
+
+    // 1.24 r6 E6: a whitespace-only edit (an editor's trailing-whitespace trim / final newline) is no change since an approval (r5) —
+    // but a role's WAITING sign-off (no snapshot) went stale on it: the next role's sign-off didn't complete the phase. New approvals
+    // and sign-offs record a whitespace-insensitive `wsFingerprint` too (E-I5): a sign-off of the same content but whitespace counts.
+    const p6 = path.join(tmp, "proj-r6a-ws");
+    S.initProject(p6, ["core"], "en", { approvalRoles: { requirements: ["product", "tech"] } });
+    const f6 = feature6(p6);
+    S.approvePhase(p6, f6.slug, "classification", "carol");
+    const pr = S.approvePhase(p6, f6.slug, "requirements", "pat", { role: "product" });
+    w6(f6, "requirements.md", REQ6.replace("download a CSV.", "download a CSV.   ") + "\n\n");
+    const gates6 = (S.specDoctor(p6, f6.slug).checks.find((c) => c.id === "approval-gates") || {}).detail || "";
+    const te = S.approvePhase(p6, f6.slug, "requirements", "tom", { role: "tech" });
+    const s6 = st6(f6);
+    ok(pr.ok && pr.complete === false && typeof s6.approvalHistory[1].wsFingerprint === "string" && !/no longer count/.test(gates6) &&
+      te.ok && te.complete === true && !!s6.approvals.requirements && typeof s6.approvals.requirements.wsFingerprint === "string" && js(S.nextAction(p6, f6.slug).changedSinceApproval) === "[]",
+      "1.24 r6 E6: a whitespace-only edit doesn't invalidate a waiting role sign-off — the next role completes the phase (sign-offs and approvals record wsFingerprint) (got " +
+      js([pr.complete, te.complete, te.missingRoles, gates6.slice(0, 160)]) + ")");
+    // …while a real edit still does
+    w6(f6, "requirements.md", REQ6.replace("download a CSV.", "download a UTF-8 CSV."));
+    const na6 = S.nextAction(p6, f6.slug);
+    ok(js(na6.changedSinceApproval) === '["requirements.md"]', "1.24 r6 E6: a real edit is still a change since the approval (got " + js(na6.changedSinceApproval) + ")");
+
+    // 1.24 r6 E7: a phase approved by roles where one forced sign-off carries an expiring waiver and the completing one none — the
+    // approval kept the completing sign-off's waiver (no expiry): the expiry was lost, doctor never warned waiver-expired. The
+    // approval now carries the STRICTEST waiver of the forced sign-offs that count (the earliest expiry).
+    const p7 = path.join(tmp, "proj-r6a-waiver");
+    S.initProject(p7, ["core"], "en", { approvalRoles: { design: ["tech", "security"] } });
+    const f7 = feature6(p7);
+    S.approvePhase(p7, f7.slug, null, "alice", { through: "requirements" });
+    const a7 = S.approvePhase(p7, f7.slug, "design", "tom", { role: "tech", force: true, reason: "constitution review next sprint", expires: "1d" });
+    const b7 = S.approvePhase(p7, f7.slug, "design", "sue", { role: "security", force: true, reason: "accepted risk" });
+    const s7 = st6(f7);
+    const w7 = s7.approvals.design && s7.approvals.design.waiver && { ...s7.approvals.design.waiver };
+    const histW = { ...s7.approvalHistory[s7.approvalHistory.length - 1].waiver };
+    // time travel: the tech waiver's expiry passes (the approval's, the role record's and the history's)
+    for (const x of [s7.approvals.design.waiver, s7.approvals.design.roles.tech.waiver, ...s7.approvalHistory.map((h) => h.waiver)]) if (x && x.expires) x.expires = "2026-01-01";
+    fs.writeFileSync(path.join(f7.dir, ".state.json"), JSON.stringify(s7, null, 2));
+    const we = S.specDoctor(p7, f7.slug).checks.find((c) => c.id === "waiver-expired");
+    const fin7 = S.finishFeature(p7, f7.slug, {});
+    ok(a7.ok && a7.complete === false && b7.ok && b7.complete === true && w7 && w7.reason === "constitution review next sprint" && /^\d{4}-\d{2}-\d{2}$/.test(w7.expires) &&
+      histW && histW.expires === w7.expires && b7.waiver && b7.waiver.expires === w7.expires && we && we.status === "warn" &&
+      fin7.waivers && fin7.waivers[0].expired === true,
+      "1.24 r6 E7: a role-signed forced approval carries the strictest waiver of its forced sign-offs (the earliest expiry, even when the completing one has none) — doctor warns waiver-expired once it passes, spec_finish says expired (got " +
+      js([w7, histW, b7.waiver, we, fin7.waivers]) + ")");
+
+    // 1.24 r6 (unconfirmed item, confirmed): a revoke confirmed over MCP elicitation revoked whatever approval stood when the user
+    // answered — another approval recorded while the question waited (a re-approval of other content) was revoked in its place.
+    // The dry run names the approval it would revoke (approvedAt, and the role sign-offs it would withdraw); the confirmed call
+    // with that preview refuses another one (changed-since-preview), nothing written.
+    const p8 = path.join(tmp, "proj-r6a-revoke");
+    S.initProject(p8, ["core"], "en");
+    const f8 = feature6(p8);
+    S.approvePhase(p8, f8.slug, null, "alice", { through: "requirements" });
+    const dry = S.approvePhase(p8, f8.slug, "requirements", "bob", { revoke: true, dryRun: true });
+    const tw8 = Date.now(); while (Date.now() - tw8 < 5) { /* a later approval time stamp */ }
+    w6(f8, "requirements.md", REQ6.replace("download a CSV.", "download a UTF-8 CSV."));
+    const re8 = S.approvePhase(p8, f8.slug, "requirements", "carol");
+    const conf = { via: "elicitation", at: new Date().toISOString() };
+    const rv8 = S.approvePhase(p8, f8.slug, "requirements", "bob", { revoke: true, confirmation: conf, preview: { approvedAt: dry.approvedAt, withdrawn: dry.withdrawn } });
+    const s8 = st6(f8);
+    const dry2 = S.approvePhase(p8, f8.slug, "requirements", "bob", { revoke: true, dryRun: true });
+    const rv8b = S.approvePhase(p8, f8.slug, "requirements", "bob", { revoke: true, confirmation: conf, preview: { approvedAt: dry2.approvedAt, withdrawn: dry2.withdrawn } });
+    ok(dry.ok && dry.dryRun && dry.revoke && typeof dry.approvedAt === "string" && re8.ok && rv8.ok === false && rv8.changedSincePreview === true && rv8.code === "changed-since-preview" &&
+      !!s8.approvals.requirements && s8.approvals.requirements.by === "carol" && !s8.approvalHistory.some((h) => h.revoked) && rv8b.ok && rv8b.revoked === "requirements",
+      "1.24 r6: a revoke confirmed over elicitation refuses when the approval changed since its preview (another approval recorded meanwhile) — nothing revoked; with the current preview it revokes (got " +
+      js([dry.approvedAt, rv8.code, rv8.error, rv8b.ok]) + ")");
+  }
 };
