@@ -157,6 +157,18 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
     "full review Ga10: --timeout, output over 64 MB (done --run and finish --run) and a cmd.exe failure under --shell cmd on an _Expect: fail_ task are could-not-run — refused, nothing recorded; --timeout 0 is refused before anything runs (got " +
     JSON.stringify([g10tj, g10z.out.slice(0, 120), g10bj && g10bj.couldNotRun, g10c, g10f && g10f.couldNotRun]).slice(0, 600) + ")");
 
+  // 1.24 r6 B6: --timeout past Node's timer limit (2147483 s) became a TimeoutOverflowWarning and a timeout after 1 ms — the run
+  // was refused as could-not-run; it is a usage error now, before anything runs (done and finish).
+  {
+    const big = rga(gp, ["done", f10.slug, "1", "--run", "--timeout", "9999999"]);
+    const edge = jsonGa(rga(gp, ["done", f10.slug, "1", "--run", "--timeout", "2147484", "--json"]).stdout);
+    const fin = rga(gpb, ["finish", fb.slug, "--run", "--timeout", "3000000000"]);
+    ok(big.code === 1 && /--timeout must be an integer ≥ 1, at most 2147483 \(got "9999999"\)/.test(big.out) && !/^\$ /m.test(big.out) && !/TimeoutOverflowWarning/.test(big.out) &&
+      edge && edge.ok === false && /at most 2147483 \(got "2147484"\)/.test(edge.error) && fin.code === 1 && /at most 2147483/.test(fin.out) && !/^\$ /m.test(fin.out),
+      "1.24 r6 B6: --timeout above 2147483 s (Node's timer limit) is refused before anything runs — done and finish, --json too (got " +
+      JSON.stringify([big.code, big.out.slice(0, 160), edge, fin.out.slice(0, 120)]) + ")");
+  }
+
   // 1.23 review (M13): --timeout kills the whole process TREE (taskkill /T on Windows, the process group elsewhere), never the
   // shell alone — a check that starts a worker of its own left it running, holding the output pipe (the CLI waited for it too).
   const f13 = Sga.createFeature(gp, "Tree", ["core"], "", undefined, "en");

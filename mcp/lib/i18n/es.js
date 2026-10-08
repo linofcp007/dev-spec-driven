@@ -1658,6 +1658,7 @@ const msg = {
       projectEnvMissing: (name, dir) => `${name}=${dir}: esa carpeta no existe — corrige la variable o elimínala (solo init crea la carpeta de un proyecto).`,
       projectEnvNotDir: (name, dir) => `${name}=${dir} es un fichero, no una carpeta — corrige la variable o elimínala.`,
       projectIsSpecs: (label, parent) => `${label} es la carpeta .specs del proyecto ${parent} — indica la propia carpeta del proyecto: ${parent}`,
+      atMost: (n) => `, como máximo ${n}`,
       runHeldOpen: (code) => `⚠ el comando terminó (${code}), pero un proceso que lanzó en segundo plano mantuvo su salida abierta — la ejecución se registró en ese final; lo que ese proceso imprima después no está en la evidencia.`,
     },
 

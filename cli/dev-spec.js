@@ -303,14 +303,20 @@ function normalizeBoolFlags() {
   }
 }
 // --cap / --max: an integer ≥ 1, like the MCP schema ({type: integer, minimum: 1}). parseInt read "1.5" as 1, "-3" as -3
-// (a scan of zero files, "truncated") and "abc" as the default. Absent → undefined (the engine's default).
-function intFlag(k) {
+// (a scan of zero files, "truncated") and "abc" as the default. Absent → undefined (the engine's default). `max`: the largest
+// value allowed (--timeout: TIMEOUT_MAX_S).
+function intFlag(k, max) {
   if (flags[k] === undefined) return undefined;
   const v = String(flags[k]).trim();
-  if (/^\d+$/.test(v) && Number.isSafeInteger(Number(v)) && Number(v) >= 1) return Number(v);
+  if (/^\d+$/.test(v) && Number.isSafeInteger(Number(v)) && Number(v) >= 1 && (max === undefined || Number(v) <= max)) return Number(v);
   const A = spec.msg(spec.projectLang(projectDir)).args;
-  return die(A.invalid(A.item("--" + k, A.type.integer + " " + A.atLeast(1), JSON.stringify(String(flags[k])))));
+  const most = max === undefined ? "" : projectText().atMost(max);
+  return die(A.invalid(A.item("--" + k, A.type.integer + " " + A.atLeast(1) + most, JSON.stringify(String(flags[k])))));
 }
+// 1.24 r6 B6 — done --run / finish --run --timeout <seconds>: at most Node's timer limit (2^31 - 1 ms) — a larger value became a
+// TimeoutOverflowWarning and a timer of 1 ms: the run was refused as "did not finish within --timeout 9999999 s".
+const TIMEOUT_MAX_S = Math.floor(2147483647 / 1000);
+const timeoutFlag = () => intFlag("timeout", TIMEOUT_MAX_S);
 // `dev-spec evals` (1.23 review P1): the words of the command line but the command, read with run-evals.js's own rules — its
 // value flags (--project, --model, --prompt, --max-items) take the next word unless it is a flag; the first plain word is the
 // feature, any other goes on (the harness refuses it). --project and its value are left out: the CLI passes its resolved project.
@@ -1606,7 +1612,7 @@ async function main() {
     // engine (a bare `bash` on Windows → Git Bash, found through `git --exec-path` (read-only), %ProgramFiles% or PATH; WSL's
     // bash.exe launcher only when named by its path; wsl.exe refused — wsl-exe). → spec.resolveRunShell's result.
     function b5Shell() {
-      intFlag("timeout"); // --timeout <seconds>: an integer ≥ 1 — refused (exit 1) before anything runs
+      timeoutFlag(); // --timeout <seconds>: an integer ≥ 1 (≤ TIMEOUT_MAX_S) — refused (exit 1) before anything runs
       const req = (typeof flags.shell === "string" && flags.shell.trim()) || (process.env.DEV_SPEC_SHELL || "").trim() || "";
       const needsGit = process.platform === "win32" && /^bash(?:\.exe)?$/i.test(req);
       return spec.resolveRunShell(req, { gitExecPath: needsGit ? b5Git(["--exec-path"]) : null });
@@ -1625,7 +1631,7 @@ async function main() {
     // shell alone: the check it started ran on (and held the output pipes — the CLI waited for it all the same). Ctrl+C / a
     // SIGTERM to the CLI kills the tree too (a detached group no longer gets the terminal's Ctrl+C).
     function b5Exec(command, sh, M) {
-      const timeoutS = intFlag("timeout"); // --timeout <seconds>: an integer ≥ 1 (validated before anything runs — first call)
+      const timeoutS = timeoutFlag(); // --timeout <seconds>: an integer ≥ 1, ≤ TIMEOUT_MAX_S (validated before anything runs — first call)
       const win = process.platform === "win32";
       const MAX_OUTPUT = 64 * 1024 * 1024; // spawnSync's maxBuffer, as before
       return new Promise((resolve) => {

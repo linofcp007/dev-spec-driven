@@ -138,7 +138,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   waiting for THAT process, and `--timeout` refused a run that had exited 0. On `'exit'` the `--timeout` timer stops, the output
   still in the pipes drains until `'close'` — `RUN_DRAIN_MS` (2 s) at most —, then the pipes are dropped and the exit status
   settles the run; `heldOpen` makes `done` / `finish` print `cliOutput.runHeldOpen` (what that process prints later is not in the
-  evidence). The background process itself is left running (it is the check's own doing).
+  evidence). The background process itself is left running (it is the check's own doing). `--timeout` is at most 2147483 s
+  (`TIMEOUT_MAX_S`, Node's timer limit — 1.24 r6 B6: a larger value became a TimeoutOverflowWarning and a 1 ms timer, so the
+  run was refused as "did not finish within --timeout 9999999 s"); past it, a usage error before anything runs.
 - **A crash is never a red test (1.23 review L7).** `crashExit(code)` (evidence.js, `CRASH_EXIT`): 128 + SIGILL / SIGABRT /
   SIGBUS / SIGFPE / SIGSEGV as a POSIX shell reports a crashed child (132 · 134 · 135 · 136 · 139), and the Windows NTSTATUS
   crash codes — 0xC0000005 access violation, 0xC0000409 stack buffer overrun, 0xC00000FD stack overflow, 0xC000001D illegal
