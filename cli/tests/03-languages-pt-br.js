@@ -57,4 +57,10 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
     JSON.stringify(clsGuess) === JSON.stringify(SD1.classify("Cadastro do usuário: senha, arquivo e tela, com resumo no LLM")),
     "1.24 r6 H-I4: classify --json says langHint 'pt-BR' for Brazilian wording (lang stays 'pt' — = spec_classify); none for European wording or --lang pt-BR (got " +
     JSON.stringify([clsGuess && clsGuess.langHint, clsBr && clsBr.langHint, clsEu && clsEu.langHint]) + ")");
+  // 1.24 r6 (integration): the human output says it too — one line naming --lang pt-BR; none for European wording
+  const humanBr = run(["classify", "Cadastro do usuário: senha, arquivo e tela, com resumo no LLM"]);
+  const humanEu = run(["classify", "Registo do utilizador com palavra-passe e ficheiro no ecrã"]);
+  ok(humanBr.code === 0 && /^Idioma: redação em português do Brasil \(--lang pt-BR no create \/ init\)\.$/m.test(humanBr.out) &&
+    humanEu.code === 0 && !/--lang pt-BR/.test(humanEu.out),
+    "1.24 r6: classify's human output names --lang pt-BR when langHint says so (got " + JSON.stringify([humanBr.out.slice(-200), humanEu.out.slice(-120)]) + ")");
 };

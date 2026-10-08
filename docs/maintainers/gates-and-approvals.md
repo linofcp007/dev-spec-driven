@@ -359,17 +359,16 @@ flows, the bugfix kind.
   `approvedAt` (the approval's `at`, or null) and `withdrawn` `{role: at}` (the waiting sign-offs) —, and `revokeApproval` with
   `opts.preview` `{approvedAt, withdrawn}` refuses when they differ now (another approval recorded while the user was asked would
   be revoked in place of the one the question named): `{ok: false, changedSincePreview: true, code: "changed-since-preview",
-  revoke: true}` + `revoke.changedSincePreview`, nothing written. **The server's part is pending:** mcp/server.js's
-  `elicitApproval` builds no preview for a revoke (`if (!pre.revoke)`) — it must pass `{approvedAt: pre.approvedAt, withdrawn:
-  pre.withdrawn}` back for this check to run over MCP.
+  revoke: true}` + `revoke.changedSincePreview`, nothing written. mcp/server.js's `elicitApproval` passes the dry run's
+  `{approvedAt, withdrawn}` back as the revoke's preview, so the check runs over MCP elicitation.
 - **What the approval guard gates (1.24 review 6 — the full list: claude-code-integration.md → Human approval guard).** Besides the
   approvals, a removal and the spec_init / `init` guard-downs: turning +tdd / +ai off (`spec_add_track {remove}` / `add-track
   --remove` — their gates go with them), a write of a `.state.json` or of `.specs/roadmap.json` by `dev-spec merge-state` (git's
   merge driver — run by git inside `git merge`, never through the Bash tool) or by git's in-place writers (checkout / restore /
   merge-file / rm / mv naming them or `.specs/`), and any write of a harness-observed log (`.execution/observed.jsonl` — the
-  evidence the gates trust). **Known limit:** the MCP server's own elicitation path (`approvalPolicy`, server.js `APPROVAL_TOOLS`)
-  covers spec_approve / spec_feature / spec_init only — outside Claude Code a `spec_add_track {remove}` is not asked about (the
-  Claude Code hook covers it).
+  evidence the gates trust). The MCP server's own elicitation path (`approvalPolicy`, server.js `APPROVAL_TOOLS`) covers
+  spec_approve / spec_feature / spec_init / spec_add_track: outside Claude Code a `spec_add_track {remove}` of +tdd / +ai is asked
+  about too (refused at `deny` when the client can't ask); the shell and git forms are the Claude Code hook's alone.
 
 ## Flows (1.14 — from Import sources and flows)
 - **Flows:** `.state.json → flow: "design-first"` (`spec_create {flow}` / `create --flow`; changed with

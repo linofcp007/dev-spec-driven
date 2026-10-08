@@ -689,6 +689,7 @@ async function main() {
         console.log(r.reasoning);
         if (r.note) console.log(T.note(r.note));
         if (r.sizeNote) console.log(r.sizeNote); // 1.21 F5: the suggested size (spec_create --size)
+        if (r.langHint) console.log(T.langHint(r.langHint)); // 1.24 r6 H-I4: Brazilian wording — create / init with --lang pt-BR
         if (r.explain) { // 1.21 F2: every keyword match and the project's signal overrides (.specs/classifier.json)
           console.log(r.explain.matches.length ? C.explainHead : C.explainNone);
           r.explain.matches.forEach((m) => console.log(C.explainMatch(m)));
@@ -1299,7 +1300,9 @@ async function main() {
         // Without --yes: show what would be deleted, delete nothing, exit 1.
         process.exitCode = 1;
         return out(r, (r) => {
-          console.log(T.wouldRemove(r.feature, r.wouldDelete.dir, r.wouldDelete.files, r.wouldDelete.entries.join(", ")));
+          // 1.24 r6: a linked feature folder — only the link goes (the engine's message says so), never "0 file(s)"
+          if (r.link) console.log(r.error);
+          else console.log(T.wouldRemove(r.feature, r.wouldDelete.dir, r.wouldDelete.files, r.wouldDelete.entries.join(", ")));
           console.log(T.confirmHint(r.feature));
         });
       }

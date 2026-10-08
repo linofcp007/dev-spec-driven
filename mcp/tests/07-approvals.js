@@ -1126,6 +1126,41 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       "1.23: a remove the user confirmed over MCP deletes only the folder the question named — a feature renamed into the name, or files added while it waited → changedSincePreview, nothing deleted; unchanged → removed; the engine checks remove's preview fingerprint (EN / PT / ES) (got " +
       js([rSwap, rGrows.code, rGone.ok, engBad.code, engOk.ok]) + ")");
 
+    { // 1.24 r6 (integration): a revoke confirmed over MCP removes the approval its question named — another one recorded while
+      // the user read it (revoked and approved again) is refused (changed-since-preview, the newer approval kept); unchanged → revoked.
+      // And spec_add_track {remove} turning +tdd off is asked about (decline → nothing changes; accept → removed); +sec is not.
+      filledFeature("rv-swap");
+      S.approvePhase(pEn, "rv-swap", "classification", "u");
+      A.setAnswer(() => {
+        const before = stateOf(pEn, "rv-swap").approvals.classification.at;
+        S.approvePhase(pEn, "rv-swap", "classification", "u", { revoke: true });
+        while (new Date().toISOString() === before) { /* a later timestamp */ }
+        S.approvePhase(pEn, "rv-swap", "classification", "u");
+        return accept()();
+      });
+      const rRvSwap = await A.call("spec_approve", { name: "rv-swap", phase: "classification", revoke: true, projectDir: pEn });
+      filledFeature("rv-same");
+      S.approvePhase(pEn, "rv-same", "classification", "u");
+      A.setAnswer(accept());
+      const rRvSame = await A.call("spec_approve", { name: "rv-same", phase: "classification", revoke: true, projectDir: pEn });
+      S.createFeature(pEn, "trk", ["core", "tdd", "sec"]);
+      const askedBefore = A.asked.length;
+      A.setAnswer(decline);
+      const rTrkNo = await A.call("spec_add_track", { name: "trk", track: "tdd", remove: true, projectDir: pEn });
+      const tracksAfterNo = stateOf(pEn, "trk").tracks;
+      const askedTdd = A.asked.length - askedBefore;
+      A.setAnswer(accept());
+      const rTrkYes = await A.call("spec_add_track", { name: "trk", track: "tdd", remove: true, projectDir: pEn });
+      const askedMid = A.asked.length;
+      const rSec = await A.call("spec_add_track", { name: "trk", track: "sec", remove: true, projectDir: pEn });
+      ok(rRvSwap.ok === false && rRvSwap.changedSincePreview === true && rRvSwap.code === "changed-since-preview" && rRvSwap.revoke === true &&
+        !!stateOf(pEn, "rv-swap").approvals.classification && rRvSame.ok === true && rRvSame.confirmed && !stateOf(pEn, "rv-same").approvals.classification &&
+        askedTdd === 1 && rTrkNo.ok === false && rTrkNo.declined === true && JSON.stringify(tracksAfterNo).includes("tdd") &&
+        rTrkYes.ok !== false && rTrkYes.confirmed && rSec.ok !== false && A.asked.length === askedMid,
+        "1.24 r6: over MCP elicitation a revoke carries its preview (an approval re-recorded while the user was asked is not revoked — changed-since-preview; unchanged → revoked) and spec_add_track {remove} of +tdd is asked (decline keeps the track, accept removes it); removing +sec asks nothing (got " +
+        js([rRvSwap, rRvSame.ok, askedTdd, rTrkNo.declined, tracksAfterNo, rTrkYes.ok, rSec.ok, A.asked.length - askedMid]) + ")");
+    }
+
     // 1.23 — the client cancels the tools/call while its question waits (notifications/cancelled): the question is withdrawn
     // (notifications/cancelled for the server's own request id), nothing is recorded even when the user answers Approve later,
     // and the cancelled request gets no reply. A call carrying a progressToken gets notifications/progress while it waits.

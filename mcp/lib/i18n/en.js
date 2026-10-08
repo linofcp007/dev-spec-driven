@@ -1674,6 +1674,7 @@ const msg = {
       yes: "true", no: "false",
       tracks: (label, conf) => `Tracks: ${label}   confidence: ${conf}`,
       note: (n) => `\nNote: ${n}`,
+      langHint: (l) => `Language: Brazilian Portuguese wording (--lang ${l} on create / init).`,
       created: (dir, lang, files, kept) => `Created in ${dir} [${lang}]:\n  ${files}` + (kept ? `\n  (existing, kept: ${kept})` : ""),
       nothingNew: "(nothing new)",
       steeringCreated: (f) => `Created ${f}`,

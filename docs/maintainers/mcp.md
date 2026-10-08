@@ -61,7 +61,9 @@ mode — `{}` (2025-06-18) or `{form: {…}}` (2025-11-25); `{url: {…}}` alone
 (`clientElicits`) gets, while `roadmap.json → meta.approvalGuard` is `ask` or `deny`, an `elicitation/create` request before
 an AGENT's approval runs — the calls the approval hook guards, read by the same pure `spec.approvalGuardDecision()` (a synthetic
 PreToolUse payload): `spec_approve` (approve, revoke, `through`, force / waiver), `spec_feature {action: "remove", confirm: true}`,
-`spec_init` lowering a protection. `approvalPolicy()` (server.js) decides: guard off, `SPEC_MCP_APPROVAL_HOOK=on` at `ask`
+`spec_init` lowering a protection, `spec_add_track {remove: true}` turning +tdd / +ai off (1.24 review 6 — the gates they carry).
+A revoke's question carries its preview too (the dry run's `approvedAt` / `withdrawn`: another approval recorded while the user
+reads it is not revoked in its place). `approvalPolicy()` (server.js) decides: guard off, `SPEC_MCP_APPROVAL_HOOK=on` at `ask`
 (mcp/servers.json sets it for the Claude Code plugin — its PreToolUse hook asks there, so that path is unchanged and nothing is
 asked twice), a network / `..` projectDir (runTool refuses it) → the call runs as before. At `deny` the env var no longer waves
 the call through (1.22 review): the hook refuses every agent approval, so one that reaches the server got past no hook

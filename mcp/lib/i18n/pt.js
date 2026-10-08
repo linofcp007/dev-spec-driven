@@ -1608,6 +1608,7 @@ const msg = {
       yes: "sim", no: "não",
       tracks: (label, conf) => `Tracks: ${label}   confiança: ${conf}`,
       note: (n) => `\nNota: ${n}`,
+      langHint: (l) => `Idioma: redação em português do Brasil (--lang ${l} no create / init).`,
       created: (dir, lang, files, kept) => `Criado em ${dir} [${lang}]:\n  ${files}` + (kept ? `\n  (já existiam, mantidos: ${kept})` : ""),
       nothingNew: "(nada de novo)",
       steeringCreated: (f) => `Criado ${f}`,
