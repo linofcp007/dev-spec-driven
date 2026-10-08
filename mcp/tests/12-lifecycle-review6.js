@@ -7,7 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, __dirname }) => {
+exports.run = async ({ ok, rpc, payload, S, tmp, __dirname, require }) => {
   const js = JSON.stringify;
   const CLI = path.join(__dirname, "..", "cli", "dev-spec.js");
   const fresh = (n, lang) => { const p = path.join(tmp, "proj-r6-" + n); S.initProject(p, ["core"], lang); return p; };
@@ -290,5 +290,47 @@ exports.run = async ({ ok, rpc, payload, S, tmp, __dirname }) => {
     const fb = ((v2.roadmap || v2).features.find((f) => f.name === "b") || {});
     ok(!S.readState(p2, "a").approvals.execution && !fb.blocked && fb.forecast && /^\d{4}-\d{2}-\d{2}$/.test(fb.forecast.eta || ""),
       "1.24 r6 G-I6: a dependency whose every task is ticked but whose execution is not signed off is complete (100%) — its dependent is not blocked and gets an ETA (got " + js(fb.forecast) + ")");
+  }
+
+  // 1.24 r6 I-I3: featureOverlaps without a feature list (doctor, the SessionStart line) reads the features LIGHT — each one's name,
+  // "complete?" (every active task ticked; a spike: decided) and dependsOn, in roadmap()'s order — instead of roadmap() → detectPhase on
+  // every feature (the planning chain's artifacts and the placeholder corpus of every feature still being planned). The same pairs.
+  {
+    const p = fresh("ii3", "en");
+    const mk = (name, tasks, tracks) => {
+      const f = S.createFeature(p, name, tracks || ["core"], "", undefined, "en");
+      if (tasks != null) fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + tasks);
+      return f;
+    };
+    const zeta = mk("Zeta Billing", "- [ ] 1. [US1] Invoice\n  - _Implements: src/billing/invoice.js_\n- [ ] 2. [US1] Money\n  - _Implements: src/util/_\n");
+    // filled requirements: detectPhase goes on to read its design.md (a template) — the light listing never does
+    fs.writeFileSync(path.join(zeta.dir, "requirements.md"), "# Requirements\n\n## Summary\nBilling.\n\n### US-1 (P1)\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN a user pays THE SYSTEM SHALL store the receipt\n");
+    mk("Alpha Refunds", "- [ ] 1. [US1] Refund\n  - _Implements: src/util/money.js, src/refunds/**_\n");
+    mk("Payouts", "- [x] 1. [US1] Payout invoice\n  - _Implements: src/billing/invoice.js_\n"); // every task ticked, no finish baseline: complete, nothing recorded
+    const old = mk("Legacy", "- [x] 1. [US1] Old\n  - _Implements: src/billing/legacy.js_\n");
+    const st = path.join(old.dir, ".state.json");
+    fs.writeFileSync(st, JSON.stringify({ ...JSON.parse(rd(st)), finished: { at: "2026-06-01T00:00:00Z", files: { "src/refunds/refund.js": "abc" } } }, null, 2));
+    mk("Planning Only", null, ["core", "saas"]); // a fresh scaffold: detectPhase reads its whole planning chain
+    mk("Ordered", "- [ ] 1. [US1] Same file\n  - _Implements: src/billing/invoice.js_\n");
+    S.setDependency(p, "ordered", ["zeta-billing"]);
+    const rmPath = path.join(p, ".specs", "roadmap.json");
+    const rmj = JSON.parse(rd(rmPath));
+    rmj.features["alpha-refunds"] = { ...(rmj.features["alpha-refunds"] || {}), order: 5 }; // order before the name
+    fs.writeFileSync(rmPath, JSON.stringify(rmj, null, 2));
+    const spike = S.createFeature(p, "Cache Spike", ["core"], undefined, undefined, "en", "spike", { question: "Redis or in-process?" });
+    fs.writeFileSync(path.join(spike.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. Try it\n  - _Implements: src/billing/invoice.js_\n");
+    const E = require("./lib/engine/index.js"), { CTX } = require("./lib/engine/ctx.js");
+    const heavy = S.roadmap(p).features;
+    const light = typeof E.overlapFeatures === "function" ? E.withReadCache(() => E.overlapFeatures(p)) : [];
+    const same = js(light.map((f) => [f.name, f.phase === "complete", f.dependsOn])) === js(heavy.map((f) => [f.name, f.phase === "complete", f.dependsOn]));
+    const names = heavy.map((f) => f.name);
+    const pairsEq = js(S.featureOverlaps(p)) === js(S.featureOverlaps(p, heavy)) &&
+      names.every((n) => js(S.featureOverlaps(p, undefined, { only: n })) === js(S.featureOverlaps(p, heavy, { only: n })));
+    // the files READ (the read cache's plain keys — an existence probe is "\0exists:<path>")
+    const read = E.withReadCache(() => { E.featureOverlaps(p); return [...CTX.READ_CACHE.keys()].filter((k) => !k.startsWith("\u0000") && /(?:design|test-plan|checklist)\.md$|planning-only[\\/]requirements\.md$/i.test(k)); });
+    const ov = S.featureOverlaps(p);
+    ok(same && pairsEq && !read.length && ov.pairs.length >= 2 && heavy.some((f) => f.phase === "complete") && heavy.some((f) => ["requirements", "design", "classified"].includes(f.phase)),
+      "1.24 r6 I-I3: featureOverlaps without a list reads the features light (name, complete?, dependsOn — roadmap()'s order) — the same pairs as through roadmap(), whole and {only} per feature (a spike, an ordered feature, a dependency, a finished baseline, a ticked feature without one, a feature still planning) — and reads no design.md / test-plan.md / checklist.md (got " +
+      js({ same, pairsEq, read, pairs: ov.pairs.map((x) => x.a + "/" + x.b), light: light.map((f) => [f.name, f.phase]), heavy: heavy.map((f) => [f.name, f.phase]) }) + ")");
   }
 };
