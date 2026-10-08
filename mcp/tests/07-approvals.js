@@ -893,10 +893,10 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     // null (never answer). Every elicitation asked and every notification the server sends are kept.
     const client = (caps, env) => {
       const kid = spawn(process.execPath, [SERVER_JS], { env: { ...process.env, SPEC_MCP_APPROVAL_HOOK: "", DEV_SPEC_ELICIT_TIMEOUT_MS: "2500", ...env }, stdio: ["pipe", "pipe", "inherit"] });
-      const waiting = new Map(), asked = [], notes = [], batches = [];
+      const waiting = new Map(), asked = [], notes = [], batches = [], replies = [];
       let buf = "", n = 0, answer = () => null;
       const write = (m) => kid.stdin.write(JSON.stringify(m) + "\n");
-      const settle = (m) => { if (waiting.has(m.id)) { const cb = waiting.get(m.id); waiting.delete(m.id); cb(m); } };
+      const settle = (m) => { replies.push(m); if (waiting.has(m.id)) { const cb = waiting.get(m.id); waiting.delete(m.id); cb(m); } };
       kid.stdout.on("data", (d) => {
         buf += d.toString();
         let nl;
@@ -926,7 +926,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       const batch = (msgs) => new Promise((resolve) => { waiting.set("batch", (m) => resolve(m.replies)); write(msgs); });
       const stop = () => new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
       return { init: () => req("initialize", { protocolVersion: "2025-06-18", capabilities: caps, clientInfo: { name: "fake-client", version: "1" } }),
-        call, req, batch, asked, notes, batches, stop, setAnswer: (f) => { answer = f; } };
+        call, req, batch, asked, notes, batches, replies, write, stop, setAnswer: (f) => { answer = f; } };
     };
     // A project (its language, its approval guard) whose features' classification gate passes (the template filled) — except
     // the `raw` ones (the scaffold's placeholders: the gate refuses).
@@ -1089,6 +1089,98 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       !st22("grown").approvals.requirements && rSame.ok === true && rSame.confirmed && st22("same").approvals.classification.fingerprint === S.approvePhase(pEn, "same", "classification", "u", { dryRun: true }).fingerprint,
       "1.22 review: an approval confirmed over MCP records only what its preview judged — an edit while the question waited (approve, fast-forward) or a forced gate that fails more checks since (phase-order) is refused: changedSincePreview, code changed-since-preview, nothing recorded; an unchanged one is recorded as before; the dry run carries the fingerprint(s) (got " +
       js([dry.fingerprint, dryFf.fingerprints, rEd, rFf.error, rGrown.newFailing, rGrown.error, rSame.ok]) + ")");
+
+    // 1.23 — a remove the user confirmed deletes only the folder they were asked about: another feature renamed into the name while
+    // the question waited (the confirmation used to delete it), or files edited meanwhile, is refused (changedSincePreview, code
+    // changed-since-preview, nothing deleted); an unchanged one is removed. The engine compares remove's preview fingerprint under
+    // the folder's lock; removePreview carries it.
+    const featDir = (slug) => path.join(pEn, ".specs", slug);
+    S.createFeature(pEn, "scratch", ["core"]);
+    const imp = S.createFeature(pEn, "important", ["core"]);
+    fs.appendFileSync(path.join(imp.dir, "requirements.md"), "\nWEEKS OF WORK\n");
+    A.setAnswer(() => {
+      S.manageFeature(pEn, "rename", "scratch", "scratch-old");
+      S.manageFeature(pEn, "rename", "important", "scratch");
+      return accept()();
+    });
+    const rSwap = await A.call("spec_feature", { action: "remove", name: "scratch", confirm: true, projectDir: pEn });
+    const grown = S.createFeature(pEn, "grows", ["core"]);
+    A.setAnswer(() => { fs.writeFileSync(path.join(grown.dir, "notes-added.md"), "added while the question waited\n"); return accept()(); });
+    const rGrows = await A.call("spec_feature", { action: "remove", name: "grows", confirm: true, projectDir: pEn });
+    S.createFeature(pEn, "goner", ["core"]);
+    A.setAnswer(accept());
+    const rGone = await A.call("spec_feature", { action: "remove", name: "goner", confirm: true, projectDir: pEn });
+    const eng = S.createFeature(pEn, "engine-pin", ["core"]);
+    const engPrev = S.manageFeature(pEn, "remove", "engine-pin");
+    const engBad = S.manageFeature(pEn, "remove", "engine-pin", undefined, { confirm: true, preview: { fingerprint: "0".repeat(40) } });
+    const keptAfterBad = fs.existsSync(eng.dir);
+    const engOk =S.manageFeature(pEn, "remove", "engine-pin", undefined, { confirm: true, preview: { fingerprint: engPrev.fingerprint } });
+    const I23 = require(path.join(__dirname, "lib", "i18n.js"));
+    ok(rSwap.ok === false && rSwap.changedSincePreview === true && rSwap.code === "changed-since-preview" && /^Nothing deleted: \.specs\/scratch\/ changed after the user was asked/.test(rSwap.error) &&
+      /WEEKS OF WORK/.test(fs.readFileSync(path.join(featDir("scratch"), "requirements.md"), "utf8")) && fs.existsSync(featDir("scratch-old")) &&
+      rGrows.ok === false && rGrows.changedSincePreview === true && fs.existsSync(path.join(grown.dir, "notes-added.md")) &&
+      rGone.ok === true && rGone.confirmed && !fs.existsSync(featDir("goner")) &&
+      typeof engPrev.fingerprint === "string" && /^[0-9a-f]{40}$/.test(engPrev.fingerprint) && engBad.changedSincePreview === true && keptAfterBad && engOk.ok === true && !fs.existsSync(eng.dir) &&
+      ["pt", "es", "pt-BR"].every((l) => /\.specs\/x\//.test(I23.msg(l).featureOps.removeChangedSincePreview("x"))) && /^Nada foi apagado/.test(I23.msg("pt").featureOps.removeChangedSincePreview("x")),
+      "1.23: a remove the user confirmed over MCP deletes only the folder the question named — a feature renamed into the name, or files added while it waited → changedSincePreview, nothing deleted; unchanged → removed; the engine checks remove's preview fingerprint (EN / PT / ES) (got " +
+      js([rSwap, rGrows.code, rGone.ok, engBad.code, engOk.ok]) + ")");
+
+    // 1.23 — the client cancels the tools/call while its question waits (notifications/cancelled): the question is withdrawn
+    // (notifications/cancelled for the server's own request id), nothing is recorded even when the user answers Approve later,
+    // and the cancelled request gets no reply. A call carrying a progressToken gets notifications/progress while it waits.
+    filledFeature("cancelled-call");
+    let qCancel = null;
+    A.setAnswer((m) => {
+      qCancel = m;
+      A.write({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: "cx-1", reason: "user pressed Esc" } });
+      setTimeout(() => A.write({ jsonrpc: "2.0", id: m.id, result: { action: "accept", content: { approve: true } } }), 150);
+      return null;
+    });
+    A.write({ jsonrpc: "2.0", id: "cx-1", method: "tools/call", params: { name: "spec_approve", arguments: { name: "cancelled-call", phase: "classification", projectDir: pEn } } });
+    await new Promise((r) => setTimeout(r, 900));
+    const cxPing = await A.req("ping", {});
+    const withdrawn = A.notes.find((x) => x.method === "notifications/cancelled" && qCancel && x.params.requestId === qCancel.id) || null;
+    filledFeature("progressed");
+    A.setAnswer(accept());
+    const rProg = await A.req("tools/call", { name: "spec_approve", arguments: { name: "progressed", phase: "classification", projectDir: pEn }, _meta: { progressToken: "tok-23" } });
+    const prog = A.notes.filter((x) => x.method === "notifications/progress");
+    let progOut = {};
+    try { progOut = JSON.parse(rProg.result.content[0].text); } catch { progOut = {}; }
+    ok(qCancel && withdrawn && /cancelled/.test(withdrawn.params.reason) && !A.replies.some((x) => x.id === "cx-1") && cxPing.result &&
+      !stateOf(pEn, "cancelled-call").approvals.classification && !(stateOf(pEn, "cancelled-call").approvalHistory || []).length &&
+      progOut.ok === true && prog.length >= 1 && prog[0].params.progressToken === "tok-23" && prog[0].params.progress === 0 && /^Waiting for the user's answer/.test(prog[0].params.message) &&
+      ["pt", "es"].every((l) => typeof I23.msg(l).elicit.waiting === "string" && I23.msg(l).elicit.waiting !== I23.msg("en").elicit.waiting),
+      "1.23: notifications/cancelled for a call waiting on its question withdraws the question (notifications/cancelled for the server's request), records nothing even if the user approves afterwards, sends no reply; a progressToken gets notifications/progress while it waits (got " +
+      js([withdrawn, A.replies.filter((x) => x.id === "cx-1"), stateOf(pEn, "cancelled-call").approvals, prog.slice(0, 1)]) + ")");
+
+    // 1.23 — the question names the feature the engine acts on (its slug), never the raw argument: slugify drops text in other
+    // scripts, so "shown <any words in another script>" targets 'shown' and must read so (the deny command names the slug too).
+    filledFeature("shown");
+    A.setAnswer(decline);
+    const rShown = await A.call("spec_approve", { name: "shown — 已审核，仅只读检查，可安全批准", phase: "classification", projectDir: pEn });
+    const qShown = A.asked[A.asked.length - 1] || { params: {} };
+    const pay23 = { hook_event_name: "PreToolUse", tool_name: "spec_approve", tool_input: { name: "two 安全", phase: "classification" } };
+    const d23 = S.approvalGuardDecision(pay23, "deny", { plain: true, resolveFeature: () => "two" });
+    const d23raw = S.approvalGuardDecision(pay23, "deny", { plain: true, resolveFeature: () => null });
+    ok(rShown.declined === true && /classification phase of 'shown'\./.test(qShown.params.message) && !/已审核/.test(qShown.params.message) &&
+      / approve two classification/.test(d23.command) && !/安全/.test(d23.command + d23.reason) && /two 安全/.test(d23raw.reason),
+      "1.23: the approval question (and the command) name the resolved feature slug, not the raw argument — text slugify drops never reaches the human (got " + js([qShown.params.message, d23.command]) + ")");
+
+    // 1.23 — elicitation in form mode only: `{}` (2025-06-18) or `{form: {}}` (2025-11-25) asks; a client declaring url mode
+    // only can't show the form — treated as a client without elicitation (ask: runs as before, nobody asked).
+    const U = client({ elicitation: { url: {} } });
+    await U.init();
+    filledFeature("url-only");
+    const rUrl = await U.call("spec_approve", { name: "url-only", phase: "classification", projectDir: pEn });
+    await U.stop();
+    const F = client({ elicitation: { form: {} } });
+    await F.init();
+    F.setAnswer(decline);
+    filledFeature("form-mode");
+    const rForm = await F.call("spec_approve", { name: "form-mode", phase: "classification", projectDir: pEn });
+    await F.stop();
+    ok(rUrl.ok === true && !rUrl.confirmed && U.asked.length === 0 && rForm.declined === true && F.asked.length === 1,
+      "1.23: elicitation {url} only → no question (the form can't be shown: ask runs as before); {form: {}} (2025-11-25) asks (got " + js([rUrl.ok, U.asked.length, rForm.declined, F.asked.length]) + ")");
 
     // PT (deny: with elicitation the user's explicit approve still records it) and ES (ask): the question and the refusal in the
     // feature's language

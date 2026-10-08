@@ -11,7 +11,7 @@
  * RESOURCES: the project's spec artifacts under .specs/, with stable specs:// URIs — specs://roadmap, specs://catalog,
  * specs://steering/<file>, specs://feature/<slug>/<artifact>. Read-only and confined to .specs/: an allowlist of
  * artifact names, features resolved through resolveFeature/existingFeature, no '..', no absolute path, no other
- * scheme, and never a symlink out of .specs/. The list is capped (RESOURCE_CAP; the result says so).
+ * scheme, and never a symlink out of .specs/. The list comes in pages (RESOURCE_PAGE, then nextCursor).
  *
  * COMPLETIONS (1.16): completion/complete — a feature-naming prompt argument → the active features' slugs; the specs://
  * templates' {slug} / {artifact} / {file} → the names that exist. Bounded (100 values), every input validated.
@@ -158,7 +158,15 @@ const MIME = "text/markdown";
 const RESOURCE_ARTIFACTS = ["classification.md", "requirements.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md",
   "bug.md", "quickstart.md", "checklist.md", "integration-plan.md", "retro.md",
   "spike.md", "decisions.md", "change.md"]; // 1.14 C2: a spike's spike.md, a feature's decision log · 1.21 F5: a change's one file
-const RESOURCE_CAP = 500; // resources/list returns at most this many (the rest stay readable through the templates)
+// resources/list pages (1.23 — it was a hard cap of 500, the rest only reachable through the templates): this many per page,
+// then `nextCursor` (MCP pagination). The cursor is opaque to the client: "o:<offset>" in base64url; any other value is refused.
+const RESOURCE_PAGE = 500;
+const encodeCursor = (offset) => Buffer.from("o:" + offset, "utf8").toString("base64url");
+function decodeCursor(c) {
+  if (typeof c !== "string" || !c || c.length > 64) return null;
+  const m = /^o:(\d{1,9})$/.exec(Buffer.from(c, "base64url").toString("utf8"));
+  return m && encodeCursor(Number(m[1])) === c ? Number(m[1]) : null; // only the exact form handed out
+}
 // A steering file: one .md name straight under .specs/steering/ — no separators, no '..', no Windows device name.
 const RE_STEERING_FILE = /^[A-Za-z0-9](?:[A-Za-z0-9_-]|\.(?!\.))*\.md$/;
 const RE_WIN_DEVICE = /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i;
@@ -209,20 +217,24 @@ function steeringFiles(root, inSpecs) {
   return listDir(dir).filter((f) => steeringNameOk(f) && inSpecs(path.join(dir, f))).sort();
 }
 
-// resources/list → { resources: [{ uri, name, description, mimeType }], total, cap, truncated, note? } — ROADMAP.md
-// (else a roadmap rendered from roadmap.json), SPECS.md, the steering files, then each active feature's artifacts.
+// resources/list → { ok: true, resources: [{ uri, name, description, mimeType }], total, cap, nextCursor? } | { ok: false, reason:
+// "invalid", error } (a cursor it did not hand out) — ROADMAP.md (else a roadmap rendered from roadmap.json), SPECS.md, the
+// steering files, then each active feature's artifacts, in that (sorted) order; one page of opts.cap (default RESOURCE_PAGE)
+// from opts.cursor on.
 function listResources(projectDir, opts = {}) {
   const pdir = projectDir || spec.resolveProjectDir();
-  const L = T(spec.projectLang(pdir)).res;
-  const cap = Number.isSafeInteger(opts.cap) && opts.cap > 0 ? opts.cap : RESOURCE_CAP;
+  const P = T(spec.projectLang(pdir));
+  const L = P.res;
+  const cap = Number.isSafeInteger(opts.cap) && opts.cap > 0 ? opts.cap : RESOURCE_PAGE;
+  let offset = 0;
+  if (opts.cursor != null) {
+    offset = decodeCursor(opts.cursor);
+    if (offset == null) return { ok: false, reason: "invalid", error: P.err.badCursor };
+  }
   const root = spec.specsRoot(pdir);
   const inSpecs = specsGuard(root);
-  const resources = [];
-  let total = 0;
-  const add = (uri, name, description) => {
-    total++;
-    if (resources.length < cap) resources.push({ uri, name, description, mimeType: MIME });
-  };
+  const all = [];
+  const add = (uri, name, description) => all.push({ uri, name, description, mimeType: MIME });
   if (inSpecs) {
     if (inSpecs(path.join(root, "ROADMAP.md"))) add("specs://roadmap", "ROADMAP.md", L.roadmap);
     else if (inSpecs(path.join(root, "roadmap.json"))) add("specs://roadmap", "ROADMAP.md", L.roadmapFromJson);
@@ -238,8 +250,8 @@ function listResources(projectDir, opts = {}) {
       }
     }
   }
-  const res = { resources, total, cap, truncated: total > resources.length };
-  if (res.truncated) res.note = L.truncated(cap, total);
+  const res = { ok: true, resources: all.slice(offset, offset + cap), total: all.length, cap };
+  if (offset + cap < all.length) res.nextCursor = encodeCursor(offset + cap);
   return res;
 }
 
@@ -397,7 +409,7 @@ module.exports = {
   PLUGIN_ROOT,
   COMMANDS_DIR,
   RESOURCE_ARTIFACTS,
-  RESOURCE_CAP,
+  RESOURCE_PAGE,
   COMPLETION_MAX,
   parseFrontMatter,
   listPrompts,

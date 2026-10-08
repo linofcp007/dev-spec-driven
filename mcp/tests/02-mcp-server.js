@@ -669,12 +669,16 @@ exports.run = async ({
     ok(unsub.error && unsub.error.code === -32601, "resources/subscribe (subscribe: false) → Method not found");
     await s1.stop();
 
-    // Module-level: the cap (and saying so), the roadmap fallback, a symlink out of .specs/, CRLF/BOM front matter, PT.
+    // Module-level: the pages (1.23 — a hard cap of 500 until then), the roadmap fallback, a symlink out of .specs/, CRLF/BOM
+    // front matter, PT.
     const capped = PR.listResources(a1p, { cap: 3 });
-    ok(capped.resources.length === 3 && capped.truncated && capped.total === a1Expected.length && /capped at 3 of \d+/.test(capped.note) &&
-      PR.listResources(a1p).truncated === false && PR.RESOURCE_CAP === 500,
-      "resources/list is capped (RESOURCE_CAP 500) and says so: truncated, total, a note naming the templates (the server passes it in _meta)");
-    const a1big = path.join(tmp, "proj-a1-big"); // 45 hand-made feature folders × 15 artifacts = 675 resources > the cap (1.21 F5: + a change's change.md)
+    const page2 = PR.listResources(a1p, { cap: 3, cursor: capped.nextCursor });
+    const badCursors = ["x", "", 5, capped.nextCursor + "A", Buffer.from("o:-1").toString("base64url"), Buffer.from("o:3 ").toString("base64url")].map((c) => PR.listResources(a1p, { cap: 3, cursor: c }));
+    ok(capped.ok && capped.resources.length === 3 && capped.total === a1Expected.length && typeof capped.nextCursor === "string" &&
+      JSON.stringify(page2.resources.map((r) => r.uri)) === JSON.stringify(a1Expected.slice(3, 6)) && PR.listResources(a1p).nextCursor === undefined && PR.RESOURCE_PAGE === 500 &&
+      badCursors.every((r) => r.ok === false && r.reason === "invalid" && /invalid cursor/.test(r.error)),
+      "1.23: resources/list comes in pages — RESOURCE_PAGE (500), then nextCursor, the next page from it; a cursor it didn't hand out is refused (invalid)");
+    const a1big = path.join(tmp, "proj-a1-big"); // 45 hand-made feature folders × 15 artifacts = 675 resources > one page (1.21 F5: + a change's change.md)
     for (let i = 1; i <= 45; i++) {
       const d = path.join(a1big, ".specs", "f" + String(i).padStart(2, "0"));
       fs.mkdirSync(d, { recursive: true });
@@ -683,11 +687,15 @@ exports.run = async ({
     const s4 = a1Server(a1big);
     await s4.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
     const big = (await s4.req("resources/list", {})).result;
+    const big2 = (await s4.req("resources/list", { cursor: big.nextCursor })).result || { resources: [] };
+    const bigBad = await s4.req("resources/list", { cursor: "nope" });
     const bigLast = await s4.req("resources/read", { uri: "specs://feature/f45/retro.md" });
     await s4.stop();
-    ok(big.resources.length === 500 && big._meta && big._meta.truncated === true && big._meta.total === 675 && big._meta.cap === 500 &&
-      /capped at 500 of 675 — read the others through the templates/.test(big._meta.note) && bigLast.result && bigLast.result.contents[0].text === "# retro.md\n",
-      "resources/list over the cap: 500 resources plus _meta {truncated, total, cap, note}; a resource past the cap is still readable through its URI");
+    ok(big.resources.length === 500 && typeof big.nextCursor === "string" && !big._meta && big2.resources.length === 175 && !("nextCursor" in big2) &&
+      new Set(big.resources.concat(big2.resources).map((r) => r.uri)).size === 675 && big2.resources[174].uri === "specs://feature/f45/change.md" &&
+      bigBad.error && bigBad.error.code === -32602 && /^resources\/list: invalid cursor/.test(bigBad.error.message) && bigLast.result && bigLast.result.contents[0].text === "# retro.md\n",
+      "1.23: resources/list past one page — 500 resources + nextCursor, then the other 175 (no nextCursor): every resource listed once; a cursor it didn't hand out → -32602 (got " +
+      JSON.stringify([big.resources.length, big.nextCursor, big2.resources.length, bigBad.error]) + ")");
     const a1r = path.join(tmp, "proj-a1-roadmap");
     S.initProject(a1r, ["core"], "en");
     S.createFeature(a1r, "Only One", ["core"], "", undefined, "en");
@@ -914,5 +922,123 @@ exports.run = async ({
       S.backlog(p6, "add", "X").ok && S.backlog(p6, "remove", "x").ok && /\(en \| pt \| pt-BR \| es\)/.test(tp7.description),
       "full review S7: spec_backlog's action enum lists remove (alias of rm — engine and MCP, case-folded); spec_templates names the pt-BR/ folder (got " +
       JSON.stringify([bl7.inputSchema.properties.action.enum, rm7.result.isError]) + ")");
+  }
+
+  { // 1.23 review — the protocol: 2025-11-25, a tool that throws answers JSON, the size of a message, the default project from roots
+    const js = JSON.stringify;
+    const I = require("./lib/i18n.js");
+    // A private server with its own env (null removes a variable) and cwd; every line it writes is kept; `onRequest` answers the
+    // server's own requests (roots/list).
+    const server23 = (env, cwd, onRequest) => {
+      const e = { ...process.env, SPEC_MCP_PROMPTS: "" };
+      for (const [k, v] of Object.entries(env || {})) { if (v === null) delete e[k]; else e[k] = v; }
+      const kid = spawn(process.execPath, [SERVER], { env: e, cwd: cwd || tmp, stdio: ["pipe", "pipe", "inherit"] });
+      const lines = [], waiting = new Map(), asked = [];
+      let b = "", n = 0;
+      const write = (m) => kid.stdin.write((typeof m === "string" ? m : JSON.stringify(m)) + "\n");
+      kid.stdout.on("data", (d) => {
+        b += d.toString();
+        let nl;
+        while ((nl = b.indexOf("\n")) >= 0) {
+          const line = b.slice(0, nl).trim();
+          b = b.slice(nl + 1);
+          if (!line) continue;
+          const m = JSON.parse(line);
+          lines.push(m);
+          if (m.method && m.id !== undefined) { asked.push(m); const a = onRequest ? onRequest(m) : null; if (a) write(Object.assign({ jsonrpc: "2.0", id: m.id }, a)); continue; }
+          if (waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); }
+        }
+      });
+      const req = (method, params) => new Promise((resolve) => {
+        const id = "p23-" + ++n;
+        const t = setTimeout(() => abort("1.23: no reply to " + method + " (" + id + ") within 15s"), 15000);
+        waiting.set(id, (m) => { clearTimeout(t); resolve(m); });
+        write({ jsonrpc: "2.0", id, method, params });
+      });
+      const call = async (name, args) => { const r = await req("tools/call", { name, arguments: args }); try { return JSON.parse(r.result.content[0].text); } catch { return { raw: r }; } };
+      const stop = () => new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
+      return { req, call, write, raw: (s) => kid.stdin.write(s), lines, asked, stop };
+    };
+
+    // 2025-11-25 is spoken (echoed); an unknown revision gets the latest, 2025-11-25.
+    const sv = server23({});
+    const iNew = await sv.req("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
+    const iOdd = await sv.req("initialize", { protocolVersion: "2099-01-01", capabilities: {} });
+    // A tool that throws (spec_init into a FILE: the engine's mkdir fails) answers the JSON every other refusal is — {ok: false,
+    // error: "The tool failed: …", code} — never the bare text "ERROR: …" (1.23 review L24).
+    const aFile = path.join(tmp, "proj-p23-a-file.txt");
+    fs.writeFileSync(aFile, "not a folder\n");
+    const thrown = await sv.req("tools/call", { name: "spec_init", arguments: { projectDir: aFile } });
+    let thrownOut = null;
+    try { thrownOut = JSON.parse(thrown.result.content[0].text); } catch { thrownOut = null; }
+    await sv.stop();
+    ok(iNew.result.protocolVersion === "2025-11-25" && iOdd.result.protocolVersion === "2025-11-25" &&
+      thrown.result.isError === true && thrownOut && thrownOut.ok === false && /^The tool failed: E[A-Z]+/.test(thrownOut.error) && /^E[A-Z]+$/.test(thrownOut.code || "") &&
+      /^A ferramenta falhou: x$/.test(I.msg("pt").args.toolFailed("x")) && /^La herramienta falló: x$/.test(I.msg("es").args.toolFailed("x")),
+      "1.23: initialize speaks 2025-11-25 (and offers it for an unknown revision); a tool that throws answers JSON {ok: false, error: 'The tool failed: …' (localized), code} with isError (got " +
+      js([iNew.result.protocolVersion, iOdd.result.protocolVersion, thrown.result.content[0].text.slice(0, 160)]) + ")");
+
+    // The size of one message: past DEV_SPEC_MCP_MAX_MESSAGE (here 4096) it is refused once (-32600, id null), its bytes skipped up
+    // to the next newline — in one write or across several — and the server keeps answering (a message within it works as before).
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const sc = server23({ DEV_SPEC_MCP_MAX_MESSAGE: "4096" });
+    await sc.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+    sc.write({ jsonrpc: "2.0", id: "big-1", method: "ping", params: { pad: "x".repeat(6000) } });
+    const afterWhole = await sc.req("ping", {});
+    const big2 = JSON.stringify({ jsonrpc: "2.0", id: "big-2", method: "ping", params: { pad: "y".repeat(9000) } });
+    for (const part of [big2.slice(0, 3000), big2.slice(3000, 6000), big2.slice(6000) + "\n"]) { sc.raw(part); await sleep(40); }
+    const afterChunks = await sc.req("ping", {});
+    const within = await sc.call("ears_validate", { text: "WHEN the user saves THE SYSTEM SHALL store the draft." });
+    await sc.stop();
+    const tooBig = sc.lines.filter((m) => m.id === null && m.error && m.error.code === -32600);
+    ok(tooBig.length === 2 && tooBig.every((m) => /passes this server's limit of 4096 \(DEV_SPEC_MCP_MAX_MESSAGE\) — it was skipped/.test(m.error.message)) &&
+      afterWhole.result && afterChunks.result && !sc.lines.some((m) => m.id === "big-1" || m.id === "big-2") && within.verdict === "pass" &&
+      ["pt", "es"].every((l) => /4096/.test(I.msg(l).args.tooLarge(5000, 4096))),
+      "1.23: a message past DEV_SPEC_MCP_MAX_MESSAGE is refused once (-32600, id null, localized) — sent whole or in chunks — skipped to its newline, and the server keeps answering (got " +
+      js(sc.lines.map((m) => (m.error ? m.error.code : m.id))) + ")");
+
+    // The default project from the client's roots: without SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR, a client declaring `roots` is asked
+    // once (roots/list, on the first request that reads the project) and its first LOCAL file:// root is the default — a tool call
+    // without projectDir, resources/list. An explicit projectDir still wins; roots/list_changed asks again; a network root or no
+    // roots capability → the server's cwd as before; SPEC_PROJECT_DIR set → never asked.
+    const fileUri = (p, vscodeStyle) => {
+      const s = path.resolve(p).split(path.sep).join("/");
+      if (process.platform !== "win32") return "file://" + encodeURI(s);
+      return "file:///" + (vscodeStyle ? s[0].toLowerCase() + "%3A" + encodeURI(s.slice(2)) : encodeURI(s));
+    };
+    const rootA = path.join(tmp, "proj-p23-root-a"), rootB = path.join(tmp, "proj-p23-root-b"), cwd23 = path.join(tmp, "proj-p23-cwd"), other = path.join(tmp, "proj-p23-explicit");
+    for (const d of [rootA, rootB, cwd23, other]) fs.mkdirSync(d, { recursive: true });
+    S.initProject(rootA, ["core"], "en");
+    S.createFeature(rootA, "From Roots", ["core"]);
+    let rootsAnswer = [{ uri: "file://fileserver/share/proj", name: "a network root: skipped" }, { uri: "https://example.com/x" }, { uri: fileUri(rootA, true) }];
+    const noEnv = { SPEC_PROJECT_DIR: null, CLAUDE_PROJECT_DIR: null };
+    const sr = server23(noEnv, cwd23, (m) => (m.method === "roots/list" ? { result: { roots: rootsAnswer } } : null));
+    await sr.req("initialize", { protocolVersion: "2025-06-18", capabilities: { roots: { listChanged: true } } });
+    sr.write({ jsonrpc: "2.0", method: "notifications/initialized" });
+    const rlA = (await sr.req("resources/list", {})).result;
+    const listA = await sr.call("spec_list", {});
+    const explicit = await sr.call("spec_list", { projectDir: other });
+    const askedOnce = sr.asked.filter((m) => m.method === "roots/list").length;
+    S.initProject(rootB, ["core"], "en");
+    rootsAnswer = [{ uri: fileUri(rootB) }];
+    sr.write({ jsonrpc: "2.0", method: "notifications/roots/list_changed" });
+    const listB = await sr.call("spec_init", { tracks: ["core"] });
+    const askedTwice = sr.asked.filter((m) => m.method === "roots/list").length;
+    await sr.stop();
+    const sn = server23(noEnv, cwd23); // no roots capability: the cwd, as before
+    await sn.req("initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+    const listCwd = await sn.call("spec_list", {});
+    await sn.stop();
+    const se = server23({ SPEC_PROJECT_DIR: other, CLAUDE_PROJECT_DIR: null }, cwd23, () => ({ result: { roots: [{ uri: fileUri(rootA) }] } }));
+    await se.req("initialize", { protocolVersion: "2025-06-18", capabilities: { roots: {} } });
+    const listEnv = await se.call("spec_list", {});
+    await se.stop();
+    const same = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+    ok(rlA.resources.some((r) => r.uri === "specs://feature/from-roots/requirements.md") && same(listA.specsDir, path.join(rootA, ".specs")) && listA.features.length === 1 &&
+      same(explicit.specsDir, path.join(other, ".specs")) && askedOnce === 1 && same(listB.specsDir, path.join(rootB, ".specs")) && askedTwice === 2 &&
+      !fs.existsSync(path.join(cwd23, ".specs")) && same(listCwd.specsDir, path.join(cwd23, ".specs")) &&
+      same(listEnv.specsDir, path.join(other, ".specs")) && se.asked.length === 0,
+      "1.23: no SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR + a client with roots → its first local file:// root is the default project (asked once; a network root skipped; an explicit projectDir wins; list_changed asks again); no roots → cwd; SPEC_PROJECT_DIR set → never asked (got " +
+      js([listA.specsDir, explicit.specsDir, askedOnce, listB.specsDir, askedTwice, listCwd.specsDir, listEnv.specsDir, se.asked.length]) + ")");
   }
 };

@@ -1531,6 +1531,10 @@ const msg = {
       // tools/call naming no tool of tools/list (JSON-RPC -32602 Invalid params) — 1.14 full review S2.
       unknownTool: (name) => `Unknown tool: ${name} — tools/list lists the tools this server provides.`,
       noTool: "tools/call needs params.name — the tool to call (tools/list lists them).",
+      // 1.23: a tool that threw (a file system error…) — the JSON result {ok: false, error, code}, like every other refusal
+      toolFailed: (why) => `The tool failed: ${why}`,
+      // 1.23: an incoming line past the server's cap (JSON-RPC -32600, the line skipped, the server keeps running)
+      tooLarge: (n, max) => `Invalid Request: a message of ${n}+ characters passes this server's limit of ${max} (DEV_SPEC_MCP_MAX_MESSAGE) — it was skipped.`,
     },
     // Valid JSON with the wrong shape (.specs/roadmap.json, .specs/<feature>/.state.json).
     jsonShape: {
@@ -1630,6 +1634,8 @@ const msg = {
     },
     featureOps: {
       removeNeedsConfirm: (slug, n) => `Removing '${slug}' permanently deletes .specs/${slug}/ (${n} file(s)). Nothing was deleted — pass confirm: true to delete it, or archive it instead (reversible).`,
+      // 1.23: a remove the user confirmed over MCP whose folder is no longer the one they were shown (renamed into the name, edited)
+      removeChangedSincePreview: (slug) => `Nothing deleted: .specs/${slug}/ changed after the user was asked to confirm its removal (another feature renamed into the name, or files edited while the question waited) — their confirmation covered the folder they were shown. Ask them again.`,
       backlogNotFound: (name, known) => `'${name}' is not in the backlog${known ? ` (backlog: ${known})` : " (the backlog is empty)"}.`,
       backlogIsFeature: (name, slug) => `'${name}' already has a spec (.specs/${slug}/) — the backlog is for features without one yet (status: ${DEV_SPEC} status ${slug}).`,
       // 1.19 R review 5: add of a name already in the backlog keeps its entry and appends the new note (exists: true, appended)
@@ -2186,6 +2192,8 @@ const msg = {
       timedOut: (s, list) => `No answer from the user within ${s} s: nothing recorded (${list}). Ask the user to approve it themselves.`,
       failed: (why, list) => `The MCP client could not ask the user (${why}): nothing recorded (${list}). Ask the user to run the approval themselves.`,
       confirmed: "Confirmed by the user in the MCP client (elicitation).",
+      // 1.23: notifications/progress while the question waits (the call carried a progressToken)
+      waiting: "Waiting for the user's answer in the MCP client…",
     },
     // 1.21 F1a — git's merge driver for the spec state (`dev-spec merge-state`): doctor's merge-conflicts and the CLI's lines. The
     // words ours / theirs / base and "mergeConflicts" stay English (git's and the file's own terms).
@@ -2324,9 +2332,10 @@ const msg = {
         },
         tplFeature: (list) => `A feature's spec artifact: .specs/{slug}/{artifact} — {artifact} is one of ${list}.`,
         tplSteering: "A steering file: .specs/steering/{file} (a .md file).",
-        truncated: (cap, total) => `Resource list capped at ${cap} of ${total} — read the others through the templates specs://feature/{slug}/{artifact} and specs://steering/{file}.`,
       },
       err: {
+        // 1.23: resources/list pages (nextCursor) — a cursor this server did not hand out (JSON-RPC -32602)
+        badCursor: "resources/list: invalid cursor — pass back the nextCursor of the previous page as it is.",
         noPromptName: "prompts/get needs the prompt `name` (a string).",
         badPromptArgs: 'prompts/get: `arguments` must be an object of strings, e.g. {"args": "login"}.',
         unknownPrompt: (name, list) => `Unknown prompt '${name}' — one of: ${list}.`,

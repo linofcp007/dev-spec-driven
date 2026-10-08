@@ -31,7 +31,7 @@ try {
 const SERVER_INFO = { name: "dev-spec-driven", version: VERSION };
 const DEFAULT_PROTOCOL = "2024-11-05";
 // Protocol revisions this server speaks. A client asking for another one gets the latest.
-const SUPPORTED_PROTOCOLS = ["2024-11-05", "2025-03-26", "2025-06-18"];
+const SUPPORTED_PROTOCOLS = ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"];
 
 // --- Tool catalogue --------------------------------------------------------
 
@@ -462,9 +462,10 @@ for (const t of TOOLS) t.annotations = Object.prototype.hasOwnProperty.call(TOOL
 
 // --- Tool dispatch ---------------------------------------------------------
 
-// extra (1.21 F1b, spec_approve only — set by the server, never by a tool call): { dryRun } the preview before the user is asked,
+// extra (1.21 F1b — set by the server, never by a tool call): { dryRun } the preview before the user is asked,
 // { confirmation } the user's answer (elicitation), recorded with the approval, and (1.22 review) { preview } what that dry run
 // judged — the content fingerprint(s) and the failing checks the question showed: the engine refuses to record anything else.
+// spec_feature remove (1.23): { preview: {fingerprint} } — the folder the question named; another one now is not deleted.
 function runTool(name, args, extra) {
   args = args || {};
   // Guard against RELATIVE traversal only: a tool call must not reach out of the project with `..`.
@@ -534,8 +535,9 @@ function runTool(name, args, extra) {
       return spec.nextAction(pdir, args.name);
     case "spec_add_track":
       return spec.addTrack(pdir, args.name, args.track, { remove: !!args.remove });
-    case "spec_feature":
-      return spec.manageFeature(pdir, args.action, args.name, args.newName, { confirm: args.confirm === true, flow: args.flow }); // flow (C3): action 'flow'
+    case "spec_feature": // flow (C3): action 'flow' · preview (1.23, remove only — never a tool argument): the folder the user was asked about
+      return spec.manageFeature(pdir, args.action, args.name, args.newName, { confirm: args.confirm === true, flow: args.flow,
+        ...(extra && TYPE_CHECK.object(extra.preview) ? { preview: extra.preview } : {}) });
 
     case "spec_import": // the engine refuses a path outside the project (same call as the CLI's `import`); text: 1.16 C4 (`import plan -`)
       return spec.importSpec(pdir, args.tool, args.path, { name: args.name, tracks: args.tracks, lang: args.lang, text: args.text });
@@ -620,21 +622,49 @@ const ELICIT_TIMEOUT_MS = (() => {
   const n = Number(String(process.env.DEV_SPEC_ELICIT_TIMEOUT_MS || "").trim());
   return Number.isSafeInteger(n) && n >= 1 ? Math.min(n, 60 * 60 * 1000) : 5 * 60 * 1000;
 })();
-let clientElicits = false; // initialize: the client declared capabilities.elicitation
-// Requests this server sent the client (elicitation/create), by id → the resolver of their response.
+// While a question waits and the call carried a progressToken (1.23): notifications/progress at once, then every this many ms —
+// a client whose tool-call timeout restarts on progress doesn't give up on the call while its user reads the question.
+const PROGRESS_EVERY_MS = 10 * 1000;
+let clientElicits = false; // initialize: the client declared capabilities.elicitation (form mode — 2025-11-25 adds url mode)
+// Requests this server sent the client (elicitation/create, roots/list), by id → the handler of their response.
 const serverRequests = new Map();
 let serverRequestSeq = 0;
+// → { rid, promise, cancel(reason) }. The promise resolves to the client's response, { timeout: true } (no answer within
+// timeoutMs) or { cancelled: true } (cancel(): the request that needed it was cancelled); the last two tell the client
+// (notifications/cancelled for our request id), so it can close the question.
 function clientRequest(method, params, timeoutMs) {
-  return new Promise((resolve) => {
-    const rid = "dev-spec-" + ++serverRequestSeq;
-    const timer = setTimeout(() => {
-      if (!serverRequests.delete(rid)) return;
-      process.stdout.write(frame({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: rid, reason: "timeout" } }));
-      resolve({ timeout: true });
-    }, timeoutMs);
-    serverRequests.set(rid, (msg) => { clearTimeout(timer); resolve(msg); });
-    process.stdout.write(frame({ jsonrpc: "2.0", id: rid, method, params })); // never into a batch reply: the client must see it now
-  });
+  const rid = "dev-spec-" + ++serverRequestSeq;
+  let settle;
+  const promise = new Promise((resolve) => { settle = resolve; });
+  let timer = null;
+  const done = (value, cancelReason) => {
+    if (!serverRequests.delete(rid)) return false; // answered, timed out or cancelled already
+    clearTimeout(timer);
+    if (cancelReason) process.stdout.write(frame({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: rid, reason: cancelReason } }));
+    settle(value);
+    return true;
+  };
+  serverRequests.set(rid, (msg) => done(msg));
+  timer = setTimeout(() => done({ timeout: true }, "timeout"), timeoutMs);
+  process.stdout.write(frame({ jsonrpc: "2.0", id: rid, method, params })); // never into a batch reply: the client must see it now
+  return { rid, promise, cancel: (reason) => done({ cancelled: true }, reason || "cancelled") };
+}
+// tools/call requests still running after their handler returned (1.23 — waiting for the user, or for the client's roots), by
+// request id (JSON-encoded: "1" and 1 are two ids) → { cancelled, cancel }. notifications/cancelled from the client marks one:
+// its question is withdrawn, nothing is recorded, and it gets no reply (MCP: a cancelled request is never answered).
+const inflight = new Map();
+const flightKey = (id) => JSON.stringify(id);
+function onCancelled(params) {
+  if (!TYPE_CHECK.object(params) || !(typeof params.requestId === "string" || Number.isInteger(params.requestId))) return;
+  const f = inflight.get(flightKey(params.requestId));
+  if (!f || f.cancelled) return;
+  f.cancelled = true;
+  if (typeof f.cancel === "function") f.cancel();
+}
+// A request's progress token (MCP params._meta.progressToken: a string or an integer), or undefined.
+function progressTokenOf(params) {
+  const t = TYPE_CHECK.object(params) && TYPE_CHECK.object(params._meta) ? params._meta.progressToken : undefined;
+  return typeof t === "string" || Number.isInteger(t) ? t : undefined;
 }
 // roadmap.json meta as the approval hook reads it: {} without a roadmap, undefined when it can't be read or parsed (unknown —
 // the guard's guard-down reading fails closed).
@@ -664,14 +694,18 @@ function approvalPolicy(toolName, args) {
   }
   // plain (1.21 review A4): this client is not Claude Code (its hook would have answered — SPEC_MCP_APPROVAL_HOOK), so the command
   // the user runs is the plain line, never `! …` (Claude Code's prefix: a PowerShell user can't run it), and the reason says so.
-  const d = spec.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: toolName, tool_input: args }, level, { lang, meta: approvalMeta(pdir), plain: true });
+  // resolveFeature (1.23): the question (and the command) name the feature the engine will act on — its slug — never the raw
+  // argument: slugify drops what isn't a-z / 0-9, so "alpha <any text in another script>" targets alpha and must read so.
+  const resolveFeature = (n) => { const f = spec.existingFeature(pdir, n); return f.ok ? f.slug : null; };
+  const d = spec.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: toolName, tool_input: args }, level, { lang, meta: approvalMeta(pdir), plain: true, resolveFeature });
   if (d.decision === "allow") return null;
   if (clientElicits) return { elicit: true, level, decision: d, lang };
   if (level === "deny") return { refuse: { ok: false, refused: true, humanRequired: true, approvalGuard: "deny", command: d.command, error: d.reason } };
   return null; // ask, and the client can't ask its user: today's behaviour
 }
 // Ask the user, then run the call only on an explicit approve. → the tool's result, or a refusal ({ok: false, declined: true, …}).
-async function elicitApproval(toolName, args, pol) {
+// flight: the call's inflight entry (its cancel withdraws the question) · progressToken: the call's, when it gave one.
+async function elicitApproval(toolName, args, pol, flight, progressToken) {
   const E = spec.msg(pol.lang).elicit;
   const list = pol.decision.summary || "";
   const details = [];
@@ -691,8 +725,11 @@ async function elicitApproval(toolName, args, pol) {
     // remove's own preview (no confirm): a feature that doesn't exist is answered as it is — nobody is asked
     const pre = spec.manageFeature(spec.resolveProjectDir(args.projectDir), "remove", args.name, undefined, { confirm: false });
     if (pre && pre.ok === false && !pre.needsConfirm) return pre;
+    // 1.23: the user confirms deleting THIS folder — another feature renamed into the name, or files edited while the question
+    // waits, is not deleted (the engine compares the fingerprint under the folder's lock: changedSincePreview).
+    if (pre && typeof pre.fingerprint === "string") preview = { fingerprint: pre.fingerprint };
   }
-  const res = await clientRequest("elicitation/create", {
+  const q = clientRequest("elicitation/create", {
     message: E.message(list, details.join(" ")),
     requestedSchema: {
       type: "object",
@@ -703,7 +740,18 @@ async function elicitApproval(toolName, args, pol) {
       required: ["approve"],
     },
   }, ELICIT_TIMEOUT_MS);
+  if (flight) flight.cancel = () => q.cancel("the request that asked it was cancelled");
+  let ticker = null;
+  if (progressToken !== undefined) {
+    let n = 0;
+    const tick = () => process.stdout.write(frame({ jsonrpc: "2.0", method: "notifications/progress", params: { progressToken, progress: n++, message: E.waiting } }));
+    tick();
+    ticker = setInterval(tick, PROGRESS_EVERY_MS);
+  }
+  let res;
+  try { res = await q.promise; } finally { if (ticker) clearInterval(ticker); }
   const refusal = (extra, error) => Object.assign({ ok: false, declined: true, approvalGuard: pol.level }, extra, { error });
+  if (res.cancelled) return refusal({ action: "cancel", cancelled: true }, E.cancelled(list)); // never sent: the call was cancelled
   if (res.timeout) return refusal({ timedOut: true }, E.timedOut(String(ELICIT_TIMEOUT_MS / 1000), list));
   if (TYPE_CHECK.object(res.error)) {
     const why = String(res.error.message || res.error.code || "?").slice(0, 200);
@@ -787,7 +835,7 @@ const TYPE_CHECK = {
 function argMessages(args) {
   const pd = args && typeof args.projectDir === "string" && !RE_DOTDOT.test(args.projectDir) && !isNetworkPath(args.projectDir) ? args.projectDir : undefined;
   try {
-    return spec.msg(spec.projectLang(spec.resolveProjectDir(pd))).args;
+    return spec.msg(spec.projectLang(spec.resolveProjectDir(projectDirGiven(pd) ? pd : rootsDir || undefined))).args;
   } catch {
     return spec.msg("en").args;
   }
@@ -861,18 +909,92 @@ function foldEnumArgs(toolName, args) {
 function argError(id, message) {
   return result(id, { content: [{ type: "text", text: JSON.stringify({ ok: false, error: message }, null, 2) }], isError: true });
 }
+// A tool that threw (a file system error: ENOTDIR, EACCES…) → the JSON result every other refusal is (1.23 — it was the bare
+// text "ERROR: <message>"): {ok: false, error: <localized prefix + the message>, code: <the error's code, when it has one>}.
+function toolFailure(e, args) {
+  const out = { ok: false, error: argMessages(args).toolFailed((e && e.message) || String(e)) };
+  if (e && e.code != null) out.code = String(e.code);
+  return out;
+}
+
+// --- The default project from the client's roots (1.23) ---------------------------------------------------------------------
+// With neither SPEC_PROJECT_DIR nor CLAUDE_PROJECT_DIR set (Claude Desktop, a global Cursor / Windsurf / Gemini config), the
+// default project was the server's cwd — an app or home folder, where spec_init then scaffolded .specs/. A client that declares
+// `roots` is asked once (roots/list, on the first request that needs the project) and its first local file:// root becomes the
+// default: tools/call without a projectDir gets it as one, and resources / prompts / completions read it. A network root
+// (file://host/…), one with '..', or no usable root → the old default (cwd). notifications/roots/list_changed asks again.
+const ROOTS_TIMEOUT_MS = 5000;
+// An env value that names a folder (an unexpanded `${VAR}`, `$VAR` or `%VAR%` — a client that didn't expand it — names none).
+const envDirSet = (v) => { const s = v == null ? "" : String(v).trim(); return !!s && !/\$\{|^\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%/.test(s); };
+const ENV_PROJECT = envDirSet(process.env.SPEC_PROJECT_DIR) || envDirSet(process.env.CLAUDE_PROJECT_DIR);
+let clientRoots = false; // initialize: the client declared capabilities.roots
+let rootsDir; // undefined: not asked yet · null: no usable root · the folder
+let rootsWait = null; // the roots/list in flight
+// A local file:// URI → its absolute path, else null (a host other than localhost, '..', a control character; on Windows a
+// drive path only — file:///C:/x, file:///c%3A/x).
+function fileUriToPath(uri) {
+  const m = /^file:\/\/([^/?#]*)(\/[^?#]*)$/i.exec(String(uri).trim());
+  if (!m || (m[1] && m[1].toLowerCase() !== "localhost")) return null;
+  let p;
+  try { p = decodeURIComponent(m[2]); } catch { return null; }
+  if (/[\u0000-\u001f\u007f]/.test(p)) return null;
+  if (process.platform === "win32") {
+    if (!/^\/[A-Za-z]:(\/|$)/.test(p)) return null;
+    p = p.slice(1);
+  }
+  if (RE_DOTDOT.test(p) || isNetworkPath(p)) return null;
+  return path.resolve(p);
+}
+function firstFileRoot(res) {
+  const roots = TYPE_CHECK.object(res) && TYPE_CHECK.object(res.result) && Array.isArray(res.result.roots) ? res.result.roots : [];
+  for (const r of roots) {
+    const p = TYPE_CHECK.object(r) && typeof r.uri === "string" ? fileUriToPath(r.uri) : null;
+    if (p) return p;
+  }
+  return null;
+}
+// null → the default project is known (answer now) · a Promise → wait for the client's roots first.
+function rootsPending() {
+  if (!clientRoots || ENV_PROJECT || rootsDir !== undefined) return null;
+  if (!rootsWait) {
+    const q = clientRequest("roots/list", {}, ROOTS_TIMEOUT_MS);
+    rootsWait = q.promise.then((res) => { rootsDir = firstFileRoot(res); rootsWait = null; });
+  }
+  return rootsWait;
+}
+const defaultProjectDir = () => rootsDir || spec.resolveProjectDir();
+// projectDir as a tool argument: given unless absent, blank or an unexpanded `${VAR}` (the engine's own rule — resolveProjectDir).
+const projectDirGiven = (v) => typeof v === "string" && !!v.trim() && !/^\$\{[^}]*\}$/.test(v.trim());
+// Run `msg` again once `wait` settled, its reply going where it would have gone (the batch it came in, or straight out). A
+// tools/call waits as an inflight entry: cancelled meanwhile, it never runs.
+function deferUntil(wait, msg, cancellable) {
+  const sink = batchSink;
+  const key = cancellable ? flightKey(msg.id) : null;
+  const flight = cancellable ? { cancelled: false, cancel: null } : null;
+  if (flight) inflight.set(key, flight);
+  return wait.then(() => {
+    if (flight) {
+      if (inflight.get(key) === flight) inflight.delete(key);
+      if (flight.cancelled) return undefined;
+    }
+    const prev = batchSink;
+    batchSink = sink;
+    try { return handle(msg); } finally { batchSink = prev; }
+  });
+}
+const NEEDS_PROJECT = new Set(["tools/call", "prompts/list", "prompts/get", "resources/list", "resources/templates/list", "resources/read", "completion/complete"]);
 
 // --- MCP prompts + resources (lib/prompts-resources.js) ----------------------
 // Prompts are the plugin's commands/*.md — slash commands in Cursor, VS Code/Copilot, Windsurf, Zed… The Claude Code
 // plugin already ships those files as its own slash commands, so mcp/servers.json sets SPEC_MCP_PROMPTS=off there:
 // without the prompts capability Claude Code doesn't list every command a second time (/mcp__…__spec-impact).
-// Resources and prompts use the default project (SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / cwd — the tools' default):
-// neither request carries a projectDir. Messages are in that project's language.
+// Resources and prompts use the default project (SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / the client's first root / cwd — the
+// tools' default): neither request carries a projectDir. Messages are in that project's language.
 const PROMPTS_ON = !/^(off|0|false|no)$/i.test(String(process.env.SPEC_MCP_PROMPTS || "").trim());
 function handleContent(id, method, params) {
   if (method.startsWith("prompts/") && !PROMPTS_ON) return error(id, -32601, "Method not found: " + method);
   const p = TYPE_CHECK.object(params) ? params : {};
-  const pdir = spec.resolveProjectDir();
+  const pdir = defaultProjectDir();
   const lang = spec.projectLang(pdir);
   switch (method) {
     case "prompts/list": // argumentHint is the CLI's; a prompt carries name / description / arguments
@@ -883,11 +1005,10 @@ function handleContent(id, method, params) {
       if (!r.ok) return error(id, -32602, r.error); // unknown prompt / bad arguments: Invalid params (MCP)
       return result(id, { description: r.description, messages: r.messages });
     }
-    case "resources/list": {
-      const r = content.listResources(pdir);
-      const out = { resources: r.resources };
-      if (r.truncated) out._meta = { truncated: true, total: r.total, cap: r.cap, note: r.note }; // capped — and says so
-      return result(id, out);
+    case "resources/list": { // pages (1.23): nextCursor while there are more; a cursor this server didn't hand out is Invalid params
+      const r = content.listResources(pdir, { cursor: p.cursor });
+      if (!r.ok) return error(id, -32602, r.error);
+      return result(id, r.nextCursor ? { resources: r.resources, nextCursor: r.nextCursor } : { resources: r.resources });
     }
     case "resources/templates/list":
       return result(id, { resourceTemplates: content.resourceTemplates(pdir) });
@@ -910,14 +1031,19 @@ function handleContent(id, method, params) {
 function handle(msg) {
   if (!msg || typeof msg !== "object" || Array.isArray(msg)) return error(null, -32600, "Invalid Request");
   const { id, method, params } = msg;
-  // A notification is a message WITHOUT an id member: it never gets a response — and never runs anything.
-  if (!hasOwn(msg, "id")) return;
+  // A notification is a message WITHOUT an id member: it never gets a response — and never runs a tool. Two change state (1.23):
+  // notifications/cancelled withdraws a request still waiting (inflight), notifications/roots/list_changed forgets the roots.
+  if (!hasOwn(msg, "id")) {
+    if (method === "notifications/cancelled") onCancelled(params);
+    else if (method === "notifications/roots/list_changed" && !rootsWait) rootsDir = undefined;
+    return;
+  }
   // A JSON-RPC RESPONSE (result / error, no method) is never answered — whatever its id: a client's error response to a
   // request it couldn't parse carries id null (checked before the id rule, full review R9). One that answers a request THIS
-  // server sent (elicitation/create — 1.21 F1b) resolves it.
+  // server sent (elicitation/create — 1.21 F1b; roots/list — 1.23) settles it.
   if (typeof method !== "string" && (hasOwn(msg, "result") || hasOwn(msg, "error"))) {
     const cb = typeof id === "string" ? serverRequests.get(id) : undefined;
-    if (cb) { serverRequests.delete(id); cb(msg); }
+    if (cb) cb(msg);
     return;
   }
   // MCP: a request id is a string or an integer, never null. `id: null` used to be read as a notification and dropped (the
@@ -930,13 +1056,24 @@ function handle(msg) {
     return error(id, -32600, "Invalid Request: method must be a string"); // it was -32601 "Method not found: undefined"
   }
 
+  // 1.23: the default project may come from the client's roots — asked once, on the first request that reads the project.
+  if (NEEDS_PROJECT.has(method)) {
+    const wait = rootsPending();
+    if (wait) return deferUntil(wait, msg, method === "tools/call");
+  }
+
   try {
     switch (method) {
       case "initialize": {
         const asked = params && params.protocolVersion;
         const proto = SUPPORTED_PROTOCOLS.includes(asked) ? asked : asked ? SUPPORTED_PROTOCOLS[SUPPORTED_PROTOCOLS.length - 1] : DEFAULT_PROTOCOL;
-        // 1.21 F1b: a client that can ask its user (capabilities.elicitation) gets the approval guard's questions (elicitation/create).
-        clientElicits = TYPE_CHECK.object(params) && TYPE_CHECK.object(params.capabilities) && TYPE_CHECK.object(params.capabilities.elicitation);
+        const caps = TYPE_CHECK.object(params) && TYPE_CHECK.object(params.capabilities) ? params.capabilities : {};
+        // 1.21 F1b: a client that can ask its user (capabilities.elicitation) gets the approval guard's questions (elicitation/create)
+        // — in form mode: `{}` (2025-06-18) or `{form: {…}}` (2025-11-25); a client declaring url mode only can't show a form.
+        const el = caps.elicitation;
+        clientElicits = TYPE_CHECK.object(el) && (!Object.keys(el).length || TYPE_CHECK.object(el.form));
+        clientRoots = TYPE_CHECK.object(caps.roots); // 1.23: the default project from roots/list (rootsPending)
+        rootsDir = undefined;
         return result(id, {
           protocolVersion: proto,
           serverInfo: SERVER_INFO,
@@ -967,27 +1104,36 @@ function handle(msg) {
         }
         const rawArgs = params.arguments;
         if (rawArgs != null && !TYPE_CHECK.object(rawArgs)) return argError(id, argMessages().notObject);
-        const args = foldEnumArgs(toolName, rawArgs || {});
-        const missing = missingArgs(toolName, args);
-        if (missing.length) return argError(id, argMessages(args).missing(missing.join(", ")));
-        const invalid = invalidArgs(toolName, args);
+        const folded = foldEnumArgs(toolName, rawArgs || {});
+        const missing = missingArgs(toolName, folded);
+        if (missing.length) return argError(id, argMessages(folded).missing(missing.join(", ")));
+        const invalid = invalidArgs(toolName, folded);
         if (invalid.length) {
-          const A = argMessages(args);
+          const A = argMessages(folded);
           return argError(id, A.invalid(invalid.map((i) => A.item(i.where, expectedType(i.schema, A), shortJson(i.value))).join("; ")));
         }
+        // 1.23: no projectDir of its own → the client's root, when its roots gave the default project (rootsPending)
+        const args = rootsDir && !projectDirGiven(folded.projectDir) ? { ...folded, projectDir: rootsDir } : folded;
         // 1.21 F1b: an agent's approval under meta.approvalGuard ask | deny — asked of the user (elicitation: the reply comes
-        // later, the server keeps answering meanwhile) or refused (deny, a client that can't ask).
+        // later, the server keeps answering meanwhile) or refused (deny, a client that can't ask). 1.23: the call waits as an
+        // inflight entry — cancelled by the client, its question is withdrawn and it gets no reply.
         const policy = approvalPolicy(toolName, args);
         if (policy && policy.elicit) {
           const sink = batchSink;
-          return elicitApproval(toolName, args, policy).then((o) => toolReply(id, o, sink),
-            (e) => sendTo(sink, { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: "ERROR: " + ((e && e.message) || String(e)) }], isError: true } }));
+          const key = flightKey(id);
+          const flight = { cancelled: false, cancel: null };
+          inflight.set(key, flight);
+          const finish = (o) => {
+            if (inflight.get(key) === flight) inflight.delete(key);
+            if (!flight.cancelled) toolReply(id, o, sink);
+          };
+          return elicitApproval(toolName, args, policy, flight, progressTokenOf(params)).then(finish, (e) => finish(toolFailure(e, args))).catch(() => {});
         }
         let out;
         try {
           out = policy && policy.refuse ? policy.refuse : runTool(toolName, args);
         } catch (e) {
-          return result(id, { content: [{ type: "text", text: "ERROR: " + e.message }], isError: true });
+          out = toolFailure(e, args); // 1.23: JSON like every other result (it was the bare text "ERROR: …")
         }
         const isErr = out && out.ok === false;
         return result(id, {
@@ -1046,18 +1192,35 @@ function onLine(line) {
 // they are (text pasted from Word / Docs / PDF) — so a valid request was cut in two, answered with two -32700 id:null
 // errors and never answered itself (the client hung). Bytes go through a StringDecoder: a multibyte UTF-8 character split
 // across two chunks stays whole.
+// The size of one incoming message (1.23): a line growing past it — a client that never sends "\n", or a runaway payload — used
+// to grow in memory until the process died. Past it the message is refused (-32600, id null: it can't be parsed for its id),
+// its bytes are skipped up to the next "\n", and the server keeps answering. Characters, after UTF-8 decoding; default 32 MiB
+// (an 8 MB ears_validate text is fine), DEV_SPEC_MCP_MAX_MESSAGE to change it (≥ 1024).
+const MAX_MESSAGE = (() => {
+  const n = Number(String(process.env.DEV_SPEC_MCP_MAX_MESSAGE || "").trim());
+  return Number.isSafeInteger(n) && n >= 1024 ? n : 32 * 1024 * 1024;
+})();
 function main() {
   process.stdout.on("error", onStdoutError);
   const decoder = new StringDecoder("utf8");
   let pending = "";
   let scanned = 0; // pending[0, scanned) holds no "\n": a long message arriving in many chunks is scanned once
+  let skipping = false; // the rest of a message refused as too large, up to its "\n"
+  const tooLarge = (n) => error(null, -32600, argMessages().tooLarge(n, MAX_MESSAGE));
   const drain = () => {
     let nl;
     while ((nl = pending.indexOf("\n", scanned)) >= 0) {
       const line = pending.slice(0, nl);
       pending = pending.slice(nl + 1);
       scanned = 0;
+      if (skipping) { skipping = false; continue; } // the tail of the refused message
+      if (line.length > MAX_MESSAGE) { tooLarge(line.length); continue; }
       onLine(line.endsWith("\r") ? line.slice(0, -1) : line);
+    }
+    if (pending.length > MAX_MESSAGE || (skipping && pending)) {
+      if (!skipping) tooLarge(pending.length);
+      skipping = true;
+      pending = "";
     }
     scanned = pending.length;
   };
@@ -1075,7 +1238,7 @@ function main() {
     closed = true;
     pending += decoder.end();
     drain();
-    if (pending) onLine(pending.endsWith("\r") ? pending.slice(0, -1) : pending);
+    if (pending && !skipping) onLine(pending.endsWith("\r") ? pending.slice(0, -1) : pending);
     pending = "";
     process.stdout.write("", () => process.exit(0));
   };

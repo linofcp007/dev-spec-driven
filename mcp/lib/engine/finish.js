@@ -541,13 +541,35 @@ function pruneRoadmapRefsLocked(projectDir, slug, renameTo, archived) {
 
 // remove / archive / rename / restore: the folder's lock (withMoveLock), then the roadmap lock around the move and the
 // roadmap.json prune, the feature re-resolved under them (it may have moved meanwhile); the ROADMAP.md refresh after both.
-function removeFeature(projectDir, name) {
+// opts.preview (1.23 — the MCP server only, never a tool argument): {fingerprint} of removePreview, the folder the user was asked
+// about over elicitation; another folder under that name now, or the same one edited since, is refused (changedSincePreview).
+function removeFeature(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   sweepTombstones(f.root);
-  const res = withMoveLock(projectDir, f.dir, f.slug, null, () => withRoadmapLock(projectDir, () => removeFeatureLocked(projectDir, name)));
+  const res = withMoveLock(projectDir, f.dir, f.slug, null, () => withRoadmapLock(projectDir, () => removeFeatureLocked(projectDir, name, opts)));
   if (res.ok) maybeRefreshRoadmap(projectDir);
   return res;
+}
+// The folder a remove would delete, as one sha1: its identity (device + inode / file ID + birth time — kept across a rename, so
+// another feature renamed into this name differs) and every entry under it (relative path, size, mtime; lstat — a link is one
+// entry, never followed; the feature's own .lock left out: the remove holds it). null when the folder can't be read.
+function featureFolderFingerprint(dir) {
+  let st;
+  try { st = fs.lstatSync(dir); } catch { return null; }
+  const rows = [`dir ${st.dev} ${st.ino} ${Math.floor(st.birthtimeMs)}`];
+  const walk = (d, rel) => {
+    for (const e of safeReaddir(d).sort()) {
+      if (!rel && e === ".lock") continue;
+      const r = rel ? rel + "/" + e : e;
+      let s;
+      try { s = fs.lstatSync(path.join(d, e)); } catch { continue; }
+      if (s.isDirectory() && !s.isSymbolicLink()) { rows.push("d " + r); walk(path.join(d, e), r); }
+      else rows.push((s.isSymbolicLink() ? "l " : "f ") + r + " " + s.size + " " + Math.floor(s.mtimeMs));
+    }
+  };
+  walk(dir, "");
+  return require("crypto").createHash("sha1").update(rows.join("\n")).digest("hex");
 }
 // A feature folder is removed in two steps: renamed to a dot TOMBSTONE (`.specs/.removing-<slug>-<token>/`, its .lock
 // inside), then deleted there. fs.rmSync of the folder in place deleted its .lock early while the folder still existed: a
@@ -568,12 +590,17 @@ function sweepTombstones(root) {
     } catch { /* best-effort: still held open — the next remove tries again */ }
   }
 }
-function removeFeatureLocked(projectDir, name) {
+function removeFeatureLocked(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const { slug, dir, root } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
+  // Under the folder's lock, so nothing changes it between this check and the move.
+  if (opts.preview && typeof opts.preview.fingerprint === "string" && featureFolderFingerprint(dir) !== opts.preview.fingerprint) {
+    return { ok: false, changedSincePreview: true, code: "changed-since-preview", feature: slug,
+      error: i18n.msg(featureLang(projectDir, slug)).featureOps.removeChangedSincePreview(slug) };
+  }
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
   const tomb = path.join(root, TOMBSTONE_PREFIX + slug + "-" + require("crypto").randomBytes(4).toString("hex"));
   const inUse = moveDirOrBusy(projectDir, slug, dir, tomb); // the folder (and its .lock, ours) leaves the feature path at once
@@ -778,6 +805,7 @@ function removePreview(projectDir, name) {
     action: "remove",
     feature: f.slug,
     wouldDelete: { dir: f.dir, files, entries: safeReaddir(f.dir).sort() },
+    fingerprint: featureFolderFingerprint(f.dir), // 1.23: what the MCP server's question showed — removeFeature's opts.preview
     error: i18n.msg(featureLang(projectDir, f.slug)).featureOps.removeNeedsConfirm(f.slug, files),
   };
 }
@@ -790,7 +818,7 @@ function manageFeature(projectDir, action, name, arg, opts = {}) {
       // Deleting a spec folder can't be undone: without an explicit confirm (MCP confirm:true, CLI --yes)
       // nothing is deleted and the caller gets what WOULD be.
       if (opts.confirm !== true) return removePreview(projectDir, name);
-      return removeFeature(projectDir, name);
+      return removeFeature(projectDir, name, opts.preview ? { preview: opts.preview } : {}); // preview: the MCP server's question (1.23)
     case "archive":
       return archiveFeature(projectDir, name);
     case "rename":
@@ -1566,7 +1594,7 @@ function baselineDrift(root, rootReal, fin) {
 
 module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, COMMIT_TITLE_MAX, commitTitle, finishFeature, METRIC_PHASES, timeOf, round1,
   round2, isoOf, hoursFrom, featureMetrics, stats, metrics, fmtHours, metricsLines, pruneRoadmapRefs, milestoneResult,
-  pruneRoadmapRefsLocked, removeFeature, TOMBSTONE_PREFIX, TOMBSTONE_SWEEP_AGE_MS, sweepTombstones, removeFeatureLocked,
+  pruneRoadmapRefsLocked, removeFeature, TOMBSTONE_PREFIX, TOMBSTONE_SWEEP_AGE_MS, sweepTombstones, removeFeatureLocked, featureFolderFingerprint,
   archiveFeature, archiveFeatureLocked, renameFeature, renameFeatureLocked, renamePlan, renameSupersedesRefs,
   removePreview, manageFeature, SUP_NL, RE_SUPERSEDES_SRC, RE_SUPERSEDES_OPEN_SRC, stripSupersedes, blockLines, lineMap,
   criterionAc, supersedesMarkers, dirKey, resolveSupersedes, supersedesTrace, supersedesWarnings, day, acOneLine,
