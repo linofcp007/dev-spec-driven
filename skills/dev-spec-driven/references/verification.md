@@ -325,7 +325,8 @@ every one of them, joined with ` && ` in any order (that is how `done --run` rep
 holds ` && ` stays whole) — a run of one of them alone proves nothing. The CLI's own `done --run` always counts. Any other
 command ticks the task but leaves it unverified (`command-mismatch`). On an `_Expect: fail_` task, record the red run of
 the `_Verify:_` BEFORE the fix lands; a red run recorded as another command (another test file, `false`) never counts —
-with the fix already in, set it aside (`git stash`), record the failing run, then restore it. (Only a red run recorded
+with the fix already in, set it aside (`git stash push -- <the fix's files>` — a bare `git stash` would stash tasks.md and
+`.state.json` too), record the failing run, then restore it. (Only a red run recorded
 by a dev-spec older than this rule still counts once a passing run of the `_Verify:_` itself follows it.) A project check's run
 (`spec_finish {evidence}`) is compared with its `meta.checks` command the same way — another command reads `changed`.
 Runs recorded by a dev-spec older than 1.22 (before this rule) keep the verdict they had: a plugin update never turns a task

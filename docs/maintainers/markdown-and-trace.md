@@ -58,7 +58,16 @@ matrix.
   for any document with a US-n.AC-m in it, so `- AC-1: … (see US-1.AC-9)` escaped while the CITED ID became the only required AC;
   now a criterion numbered with a bare AC-n (`bareLabel`) is named whatever the document defines, and one with no ID at all only
   when the document defines no AC ID (beside US-n.AC-m criteria it stays EARS's no-id warn). trace_check lints for it when
-  `requiredAcs` is non-empty only if the text holds a bare AC-n (`RE_BARE_AC`) — no second EARS pass otherwise.
+  `requiredAcs` is non-empty only if the text holds a bare AC-n (`RE_BARE_AC`) — no second EARS pass otherwise. `RE_BARE_AC`
+  never reads the AC-n of a US-n.AC-m — nor of an importer's ESCAPED `US-7\.AC-1` (an ID-led line of imported prose, demoted
+  so it defines nothing, e.g. a fluidplan page intro): that one was listed as an unidentified `AC-1` and the import read
+  gaps-found. `bareLabel`'s no-label branch reads the criterion's OWN text (`stripSupersedes`) with `RE_BARE_AC_OWN`: never
+  an AC-n behind a slash (another feature's `checkout/AC-2`, a URL's `/pages/AC-12`) or running into a letter / digit
+  (`AC-230V`) — each was the criterion's "number", and every gate and spec_upgrade's renumber item asked to renumber another
+  feature's ID. EARS's no-id lint reads the own text too (`stripSupersedes`, then `stripForeignAcRefs` with no feature folder:
+  every resolvable slug is another's) — a criterion whose only ID was a `_Supersedes:_` marker's or `checkout/US-3.AC-2`
+  counted as identified there, untraced with no warning (doctor named it). The fluidplan importer escapes a bare `AC-1` of
+  imported prose (`AC\-1`, `fpInert`) as it escapes `US-7\.AC-1`.
   `criteriaBareIds(reqText)` (the bare IDs the criteria are numbered with — `bareLabel`: the label, else a
   bare AC-n in a criterion with no label) feeds spec_upgrade's renumber item (lifecycle.md → Upgrade).
   **`<feature>/US-n.AC-m` is another feature's (1.22 review):** `requirementAcIds` drops it (`stripForeignAcRefs` — the

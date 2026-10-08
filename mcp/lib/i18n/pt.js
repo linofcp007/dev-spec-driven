@@ -1341,7 +1341,7 @@ const msg = {
       acUnique: "IDs de AC únicos",
       earsDetail: (n, e, w) => `critérios=${n}, erros=${e}, avisos=${w}`,
       earsNoCriteria: (ids, file = "requirements.md") => `o ${file} cita IDs de AC (${ids}) mas nenhum critério foi validado — o EARS valida um AC escrito como item de lista, título ou linha que comece pelo seu ID, ou como linha de tabela sob um título de Critérios de Aceitação`,
-      earsNoAcIds: (list, file = "requirements.md") => `o ${file} tem critérios (${list}) mas nenhum ID de AC que o trace_check leia — numera cada um US-<história>.AC-<n> (US-1.AC-1, US-1.AC-2 …); um AC-1 sozinho não é um`,
+      earsNoAcIds: (list, file = "requirements.md") => `o ${file} tem critérios (${list}) sem nenhum ID de AC que o trace_check leia — numera cada um US-<história>.AC-<n> (US-1.AC-1, US-1.AC-2 …); um AC-1 sozinho não é um`,
       designMissing: "design.md em falta",
       mermaidOk: "tem um diagrama",
       mermaidMissing: "nenhum diagrama mermaid encontrado",
@@ -1436,7 +1436,7 @@ const msg = {
         unobserved: "execução não observada pelo harness",
         "command-mismatch": "a execução registada não é o comando _Verify:_" },
       commandMismatch: (n, slug, ran, verify, red) => `Tarefa ${n}: a execução registada (\`${ran}\`) não é uma execução do seu comando _Verify:_ (${verify}) — fica marcada, mas continua não verificada até se registar uma execução ${red ? "QUE FALHE " : ""}desse comando (tal como está escrito — com vários comandos _Verify:_, todos eles numa SÓ execução unidos com \` && \`; um \`cd <raiz do projeto> &&\`, \`set -o pipefail;\` ou VAR=valor teu à frente serve (um cd para outra pasta é outra execução), mas nunca tires um que o _Verify:_ tenha)` +
-        (red ? ` — regista-a ANTES de a correção entrar, enquanto o teste ainda falha: ${DEV_SPEC} done ${slug} ${n} --run (uma execução vermelha de outro comando nunca conta; com a correção já feita, põe-na de parte — git stash — para essa execução e depois repõe-na).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
+        (red ? ` — regista-a ANTES de a correção entrar, enquanto o teste ainda falha: ${DEV_SPEC} done ${slug} ${n} --run (uma execução vermelha de outro comando nunca conta; com a correção já feita, põe-na de parte — git stash push -- <os ficheiros da correção>, não um git stash simples: levaria também o tasks.md e o .state.json — para essa execução e depois repõe-na).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
       duplicateTasks: (list) => `números de tarefa repetidos: ${list} — o complete/brief escolhem a primeira por fazer; renumera-as`,
     },
     observed: {

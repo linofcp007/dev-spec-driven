@@ -120,9 +120,10 @@ const RE_EARS_KEYWORD = new RegExp(B + "(WHEN|WHILE|IF|WHERE|QUANDO|ENQUANTO|SE|
 const RE_UBIQUITOUS = /(THE SYSTEM SHALL|O SISTEMA (N[ÃA]O )?(DEVE|DEVER[ÁA])|EL SISTEMA (NO )?(DEBE|DEBER[ÁA]))/iu;
 // The scaffold's own edge cases / NFRs / success criteria (EC-1, NFR-1, SC-001) are stable IDs too.
 const RE_STABLE_ID = /(?<![A-Za-z0-9])(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
-// …of which a criterion's OWN ID is one trace_check reads: never a bare `AC-n` (RE_BARE_AC — not the AC-n of a US-n.AC-n).
+// …of which a criterion's OWN ID is one trace_check reads: never a bare `AC-n` (RE_BARE_AC — not the AC-n of a US-n.AC-n, nor of
+// an importer's escaped `US-7\.AC-1`: an ID-led line of imported prose, demoted so it defines nothing — review 4).
 const RE_FULL_ID = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
-const RE_BARE_AC = /(?<![A-Za-z0-9]|US-\d+\.)AC-\d+(?!\d)/;
+const RE_BARE_AC = /(?<![A-Za-z0-9]|US-\d+\\?\.)AC-\d+(?!\d)/;
 // …and the stable IDs a criterion with no label may carry anywhere (EARS's no-id lint): never a T- ID (a test's — review 3).
 const RE_FULL_ID_NO_T = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
 
@@ -320,10 +321,15 @@ function ownStableId(text, dir) {
   return !lab.slug || notASlug(lab.slug) || featureRefTest(dir)(lab.slug) !== "other";
 }
 // The bare AC-n a criterion is numbered with: its label when that is one, else (no other label) a bare AC-n in its text.
+// Review 4: in its OWN text — never in a `_Supersedes:_` marker, behind a slash (another feature's `checkout/AC-2`, a URL's
+// `/pages/AC-12`) or running into a letter / digit (`AC-230V mains`): each was read as the criterion's number, and every gate
+// (and spec_upgrade's renumber item) asked to renumber another feature's ID.
+const RE_BARE_AC_OWN = /(?<![A-Za-z0-9/]|US-\d+\\?\.)AC-\d+(?![A-Za-z0-9])/;
 function bareLabel(text) {
-  const lab = criterionLabel(text);
+  const own = stripSupersedes(text);
+  const lab = criterionLabel(own);
   if (lab) return /^AC-\d+$/.test(lab.id) ? lab.id : null;
-  const m = String(text || "").match(RE_BARE_AC);
+  const m = own.match(RE_BARE_AC_OWN);
   return m ? m[0] : null;
 }
 // The bare `AC-n` IDs the criteria are numbered with — each linted criterion with no stable ID of its own that carries one — in
@@ -393,8 +399,12 @@ function earsValidate(text, lang) {
     // traced 0 ACs and passed. Flagged no-id, naming the form to write.
     // Review 3: the ID that LABELS the criterion decides (criterionLabel — `- AC-1: … (see EC-1)` is numbered with a bare AC-1
     // whatever it cites; a T- ID is a test's, never a criterion's); with no label, a stable ID anywhere in it still counts here.
-    const lab = criterionLabel(b.text);
-    if (lab ? RE_OWN_LABEL_ID.test(lab.id) : RE_FULL_ID_NO_T.test(b.text)) withId++;
+    // Review 4: the criterion's OWN text, as ownStableId reads it — never a `_Supersedes:_` marker's ID or another feature's
+    // `<slug>/US-n.AC-m` (with no feature folder here, every resolvable slug is another's): EARS counted them, so a criterion
+    // whose only ID was one stayed untraced with no warning while doctor named it.
+    const own = stripSupersedes(b.text);
+    const lab = criterionLabel(own);
+    if (lab ? RE_OWN_LABEL_ID.test(lab.id) : RE_FULL_ID_NO_T.test(stripForeignAcRefs(own))) withId++;
     else {
       const bare = bareLabel(b.text);
       add("warn", "no-id", bare ? M.bareAcId(bare) : M.noId);
