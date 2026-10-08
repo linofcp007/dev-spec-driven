@@ -139,14 +139,17 @@ function finishFeature(projectDir, name, opts = {}) {
   const vs = verificationStatus(projectDir, slug, dir);
   const G = i18n.msg(lng).gates;
   // placeholders / root-cause get their own, more precise blockers below.
-  const failing = doc.ok ? doc.checks.filter((c) => c.status === "fail" && c.id !== "placeholders" && c.id !== "root-cause").map((c) => c.id) : [];
-  const pendingGates = doc.pendingGates || [];
+  // (r5 review: `state` — .state.json unreadable — is its own blocker, first; the approvals it holds are unknown, so no pending gate
+  // nor change since approval is reported from it: they read "every phase awaiting approval")
+  const stateBad = !!state.invalid;
+  const failing = doc.ok ? doc.checks.filter((c) => c.status === "fail" && c.id !== "placeholders" && c.id !== "root-cause" && c.id !== "state").map((c) => c.id) : [];
+  const pendingGates = stateBad ? [] : doc.pendingGates || [];
   // What next_action flags must block finishing too: an artifact edited after its approval, a template placeholder
   // ANYWHERE in the chain, and — for a bugfix — an unwritten root cause. Only a change known by CONTENT blocks: a file date
   // (a pre-1.11 approval) is no evidence — every clone or copy resets it — and a pre-1.13 bugfix design approval never
   // tracked bug.md; both are warnings (re-approve to track them).
   const cs = changedSinceApproval(dir, state.approvals || {}, tracks, kind, { detail: true });
-  const changed = cs.changed.filter((x) => !cs.byDate.includes(x));
+  const changed = stateBad ? [] : cs.changed.filter((x) => !cs.byDate.includes(x));
   if (cs.byDate.length) warnings.push(F.changedByDate(cs.byDate.join(", "), slug));
   if (cs.untracked.length) warnings.push(F.untrackedApproval(cs.untracked.map((u) => `${u.phase} (${u.file})`).join(", "), slug));
   // 1.14 B3: phases approved without the role sign-offs now required (approved before the roles) — a warning, never a blocker.
@@ -167,6 +170,7 @@ function finishFeature(projectDir, name, opts = {}) {
   // Each blocker with a stable id: the approve gate of 'execution' refuses on exactly these (opts.gateOnly).
   const blocked = [];
   const block = (id, detail) => blocked.push({ id, detail });
+  if (stateBad) block("state", state.invalid); // r5 review (localized: readState's message — fix it by hand)
   if (failing.length) block("doctor", F.doctor(failing.join(", ")));
   if (rootCauseMissing) block("root-cause", G.finishRootCause);
   if (leftovers.length) block("placeholders", G.finishPlaceholders(placeholderSummary(leftovers, lng)));

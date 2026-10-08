@@ -78,7 +78,7 @@ flows, the bugfix kind.
   execution sign-off older than such a change is asked for again (`executionSignOffStale()`). The recorded files are
   hashed even then: a stale baseline with drift answers `drift` (+ `staleBaseline`, `nx.driftedStale`) — the decision
   before any re-baseline.
-- **finish blockers:** doctor fails, changed since approval (shared `changedSinceApproval()`), placeholders
+- **finish blockers:** `state` (r5 review — .state.json unreadable), doctor fails, changed since approval (shared `changedSinceApproval()`), placeholders
   anywhere in the chain, bugfix Root Cause, no tasks, open tasks, unverified tasks, pending gates (a phase still
   missing a role's sign-off is pending), and — with `meta.checks` set (1.14) — `suite-evidence`.
   `warnings` (EC/NFR/SC, planned-not-in-code, legacy approvals missing a role, a T-ID planned outside test code whose
@@ -126,7 +126,7 @@ flows, the bugfix kind.
   the Phase 4 wording (`/writeTests`) plus what the gate checks — but on an executing / complete feature (tasks ticked,
   e.g. an upgraded 1.12 one) it uses `next.signOffTests` (a sign-off for the tests that exist, never "failing tests
   first, no implementation code"). **Approving `execution`** runs spec_finish's blockers
-  (`finishFeature(…, {gateOnly: true})` → stable ids `doctor`, `root-cause`, `placeholders`, `changed-since-approval`,
+  (`finishFeature(…, {gateOnly: true})` → stable ids `state`, `doctor`, `root-cause`, `placeholders`, `changed-since-approval`,
   `tasks`, `open-tasks`, `verification`, `approval-gates`, `suite-evidence` with meta.checks; a spike: `spike`, `decision`);
   otherwise only `force` records it. spec_metrics' `finished`
   = the earliest of the first execution approval and `state.finished.at` (spec_finish {write} on a ready feature).

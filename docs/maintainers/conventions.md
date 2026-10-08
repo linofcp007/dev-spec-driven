@@ -31,7 +31,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   approvals and `meta.lang`). **Valid JSON of the wrong shape is refused the same way:** `readState()` checks
   the top level, `approvals`/`evidence`/`finishChecks`/`signoffs` (objects), `tracks`/`approvalHistory`/`changes`/`unticks` (lists);
   `loadRoadmap()` checks `features` and each entry, `dependsOn` (string lists), `meta`, `backlog`. Readers get
-  a sanitized copy; every mutator refuses BEFORE its destructive step. A leading BOM is tolerated.
+  a sanitized copy; every mutator refuses BEFORE its destructive step — and the readers SAY it (r5 review): doctor fails
+  `state`, next_action's one step is `fix` (`stateInvalid`), spec_finish blocks on `state`, the status line says repair
+  (gates-and-approvals.md → next_action) — read as empty, every gate looked pending and next_action said "approve". A leading BOM is tolerated.
   `writeIfAbsent` uses `flag:"wx"`. `writeFileAtomic`'s temp file never outlives the call: when the rename and the
   plain-write fallback both fail (read-only / locked target on Windows, a folder at that path) it is removed before
   the error is thrown — the best-effort refreshes swallow that error, and used to leave a `<file>.<pid>.<ts>.tmp`

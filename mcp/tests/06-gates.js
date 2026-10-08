@@ -1358,4 +1358,55 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
       "1.22 review 2: with test-plan.md deleted and its approval revoked, `tests` is not pending and doctor's approval-gates no longer says the tests phase is to be approved again (approve tests: nothing to approve) (got " +
       js([rT.ok, rv.ok, doc.pendingGates, gates.detail, at.error]) + ")");
   }
+  { // r5 review (gates) — a .state.json that can't be read, an artifact that can't be read, bug.md's open questions, whitespace-only
+    // edits of an approved artifact, identical re-approvals.
+    const js = JSON.stringify;
+    const REQ = ["# Feature: Widget", "", "## Summary", "Users can save widgets.", "", "### US-1 (P1 — MVP): Save widgets",
+      "**As a** user, **I want** to save a widget, **so that** I keep it.", "**Independent Test:** save one and reload the page.", "",
+      "#### Acceptance Criteria (EARS)", "1. **US-1.AC-1** — WHEN a user saves a widget THE SYSTEM SHALL store it",
+      "2. **US-1.AC-2** — IF the widget name is empty THEN THE SYSTEM SHALL reject it with a message", "",
+      "## Success Criteria", "- **SC-001** — 95% of saves finish under 200 ms", "", "## Edge Cases & Error Handling", "- **EC-1** — an empty widget is rejected", ""].join("\n");
+    const filled = (name) => {
+      const p = path.join(tmp, "proj-r5g-" + name);
+      S.initProject(p, ["core"], "en");
+      const f = S.createFeature(p, "Widget", ["core"]);
+      const w = (rel, text) => fs.writeFileSync(path.join(f.dir, rel), text);
+      w("classification.md", "# Classification: Widget\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none beyond core\n\n## Blast Radius\nThe widget page only.\n\n## Compliance Tags\nnone\n");
+      w("requirements.md", REQ);
+      w("design.md", "# Design: Widget\n\n## Overview\nA store module.\n\n## Architecture\n```mermaid\ngraph TD\n  A[UI] --> B[Store]\n```\n\n## Constitution Check\n- [x] Simplicity — complies\n");
+      w("tasks.md", "# Tasks: Widget\n\n## Story US-1 (P1 — MVP)\n- [ ] 1. [US1] Store widgets\n  - _Requirements: US-1.AC-1, SC-001_\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Reject empty names\n  - _Requirements: US-1.AC-2, EC-1_\n  - _Verify: node -e \"process.exit(0)\"_\n");
+      return { p, f, w };
+    };
+
+    // M1: an unreadable .state.json (a text merge's conflict markers) — doctor fails `state`, next_action's one step is to repair it
+    // (never "approve" — every mutator refuses on that file), finish blocks on it, the status line says so.
+    const a = filled("state");
+    for (const ph of ["classification", "requirements", "design", "tasks"]) S.approvePhase(a.p, "widget", ph, "u");
+    const good = fs.readFileSync(path.join(a.f.dir, ".state.json"), "utf8");
+    a.w(".state.json", good.replace('"approvals": {', '"approvals": {\n<<<<<<< HEAD'));
+    const docA = S.specDoctor(a.p, "widget"), naA = S.nextAction(a.p, "widget"), finA = S.finishFeature(a.p, "widget", {}), slA = S.statusLine(a.p);
+    const apA = S.approvePhase(a.p, "widget", "requirements", "u");
+    a.w(".state.json", JSON.stringify({ ...JSON.parse(good), approvals: [] })); // valid JSON, the wrong shape
+    const naShape = S.nextAction(a.p, "widget");
+    const stateCheck = docA.checks.find((c) => c.id === "state") || {};
+    ok(docA.verdict === "fail" && stateCheck.status === "fail" && /widget\/\.state\.json is not valid JSON/.test(stateCheck.detail) &&
+      naA.step === "fix" && naA.stateInvalid === true && /^widget\/\.state\.json is not valid JSON .* Until it is repaired nothing can be approved, ticked or finished/.test(naA.recommendation) &&
+      /merge-state --install/.test(naA.recommendation) && !naA.fastForward && js(naA.pendingGates) === "[]" &&
+      finA.readyToFinish === false && /not valid JSON/.test(finA.blockers[0]) && !finA.blockers.some((b) => /awaiting approval/.test(b)) && js(finA.pendingGates) === "[]" &&
+      js(slA.next) === '{"step":"fix","file":".state.json"}' && /next: repair \.state\.json \(it can't be read\)/.test(slA.line) &&
+      apA.ok === false && naShape.step === "fix" && /unexpected shape/.test(naShape.recommendation),
+      "r5 review M1: an unreadable / wrong-shaped .state.json → doctor fails `state` (naming the file), next_action's step is `fix` (stateInvalid, repair it — never 'approve' everything again), finish blocks on it first (no 'every phase awaiting approval'), the status line says repair (got " +
+      js([docA.verdict, stateCheck, naA.step, naA.recommendation.slice(0, 160), finA.blockers, slA.line, naShape.step]) + ")");
+    // PT / ES wording
+    const aPt = filled("state-pt");
+    aPt.w(".state.json", "{");
+    const naPt = S.nextAction(aPt.p, "widget");
+    aPt.w(".state.json", JSON.stringify({ lang: "pt", approvals: "x" }));
+    const naPt2 = S.nextAction(aPt.p, "widget");
+    aPt.w(".state.json", JSON.stringify({ lang: "es", approvals: "x" }));
+    const naEs2 = S.nextAction(aPt.p, "widget");
+    ok(naPt.step === "fix" && /Until it is repaired/.test(naPt.recommendation) && /Enquanto não for reparado/.test(naPt2.recommendation) && /Mientras no se repare/.test(naEs2.recommendation),
+      "r5 review M1: next_action's repair step is localized (the feature's language — EN, PT, ES) (got " + js([naPt2.recommendation.slice(0, 90), naEs2.recommendation.slice(0, 90)]) + ")");
+
+  }
 };

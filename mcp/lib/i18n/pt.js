@@ -1362,6 +1362,7 @@ const msg = {
       fixChecks: (ids, slug) => `Corrige as verificações bloqueantes (${ids}) — corre /spec-doctor ${slug} para detalhes.`,
       reReview: (files) => `Nova revisão: ${files} alterado(s) após a última aprovação — volta a aprovar a fase afetada.`,
       approvedMissing: (files, slug, phase) => `${files} foi aprovado mas já não existe — restaura-o (foi apagado depois da aprovação) ou, se desapareceu de vez, retira essa aprovação: /approve ${slug} ${phase} --revoke.`,
+      stateInvalid: (error, slug) => `${error} Enquanto não for reparado, nada pode ser aprovado, marcado como feito nem fechado, e as aprovações, marcações e evidências que guarda não podem ser lidas — corrige-o à mão ou restaura-o do git (marcadores de conflito de um merge? resolve-os; ${DEV_SPEC} merge-state --install passa a juntá-lo pelo significado), depois /spec-doctor ${slug}.`,
       approveRequirements: (slug) => `Revê e aprova os requisitos — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Revê e aprova o design — /approve ${slug} design.`,
       approveTasks: (slug) => `Revê e aprova a divisão de tarefas — /approve ${slug} tasks.`,
@@ -2229,7 +2230,7 @@ const msg = {
         steps: {
           "re-review": (s) => `rever ${s.files.join(", ")}`,
           fill: (s) => `preencher ${s.file}`,
-          fix: (s) => (s.file === "bug.md" ? "escrever a causa raiz em bug.md" : `corrigir o gate ${s.phase}`),
+          fix: (s) => (s.file === "bug.md" ? "escrever a causa raiz em bug.md" : s.file === ".state.json" ? "reparar o .state.json (não pode ser lido)" : `corrigir o gate ${s.phase}`),
           approve: (s) => `aprovar ${s.phase}`,
           tests: () => "escrever os testes e depois aprová-los (Fase 4)",
           tasks: () => "dividir em tarefas",

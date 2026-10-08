@@ -65,7 +65,8 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   are deferred as a warn) · `task-deps` (only when some task declares `_Depends:_`: a value that is no task number, a
   number no active task carries, a self-dependency, a cycle — the tasks approval refuses on it) · bugfix `root-cause` ·
   spike `question` / `decision` · `merge-conflicts` (a `mergeConflicts` list the git merge driver left in the feature's
-  `.state.json` or in `roadmap.json` — pick each value, delete the list).
+  `.state.json` or in `roadmap.json` — pick each value, delete the list) · `state` (the feature's `.state.json` is not
+  valid JSON or has the wrong shape — next_action's one step is to repair it, spec_finish blocks on it).
 - **Warn:** `steering` (core files missing, or files still holding template placeholders) · `success-criteria` ·
   `priorities` · `mermaid` · `constitution-check` · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,
   empty, still the template, or fewer than 2 options) · `design-risks` (its Risks section missing, empty or still the

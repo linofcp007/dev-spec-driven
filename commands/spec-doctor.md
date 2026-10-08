@@ -24,7 +24,9 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   `ui-sections` / `obs-sections` / `data-sections` and a project track pack's `<pack>-sections` (missing, or the
   `> **TODO**` sentinel still there / empty body), `task-deps` (a `_Depends:_` value that is no task number, a task
   depending on itself, a cycle), `change-scope` (a change past 1–3 criteria, 1–3 tasks or core only — make it a feature),
-  `merge-conflicts` (conflicts git's merge driver left in `.state.json` / `roadmap.json` — resolve them), missing
+  `merge-conflicts` (conflicts git's merge driver left in `.state.json` / `roadmap.json` — resolve them), `state` (the
+  feature's `.state.json` can't be read — not valid JSON, e.g. a text merge's conflict markers, or the wrong shape: repair
+  it by hand or restore it from git; its approvals, ticks and evidence are unknown until then), missing
   `requirements`/`design`, a bugfix's `root-cause`, a spike's `question` / `decision`.
 - **Warnings**: `steering` (missing core files, or steering files still holding template placeholders — named),
   `success-criteria`, `priorities`, `mermaid`, `constitution-check`, `placeholders` of a later phase,

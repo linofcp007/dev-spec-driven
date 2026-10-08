@@ -1383,6 +1383,8 @@ const msg = {
       reReview: (files) => `Re-review: ${files} changed after the last approval — re-approve the affected phase.`,
       // 1.22 review: an approved artifact that was deleted — nothing to re-approve until it is back
       approvedMissing: (files, slug, phase) => `${files} was approved but no longer exists — restore it (it was deleted after its approval) or, if it is gone for good, withdraw that approval: /approve ${slug} ${phase} --revoke.`,
+      // r5 review: .state.json doesn't parse / has the wrong shape (error: readState's localized message) — the one step
+      stateInvalid: (error, slug) => `${error} Until it is repaired nothing can be approved, ticked or finished, and the approvals, ticks and evidence it holds can't be read — fix it by hand or restore it from git (conflict markers from a merge? resolve them; ${DEV_SPEC} merge-state --install merges it by meaning from then on), then /spec-doctor ${slug}.`,
       approveRequirements: (slug) => `Review & approve requirements — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Review & approve design — /approve ${slug} design.`,
       approveTasks: (slug) => `Review & approve the task breakdown — /approve ${slug} tasks.`,
@@ -2350,7 +2352,7 @@ const msg = {
         steps: {
           "re-review": (s) => `re-review ${s.files.join(", ")}`,
           fill: (s) => `fill ${s.file}`,
-          fix: (s) => (s.file === "bug.md" ? "write the root cause in bug.md" : `fix the ${s.phase} gate`),
+          fix: (s) => (s.file === "bug.md" ? "write the root cause in bug.md" : s.file === ".state.json" ? "repair .state.json (it can't be read)" : `fix the ${s.phase} gate`),
           approve: (s) => `approve ${s.phase}`,
           tests: () => "write the tests, then approve them (Phase 4)",
           tasks: () => "break it into tasks",

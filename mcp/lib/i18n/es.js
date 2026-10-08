@@ -1361,6 +1361,7 @@ const msg = {
       fixChecks: (ids, slug) => `Corrige las verificaciones bloqueantes (${ids}) — ejecuta /spec-doctor ${slug} para ver los detalles.`,
       reReview: (files) => `Nueva revisión: ${files} modificado(s) tras la última aprobación — vuelve a aprobar la fase afectada.`,
       approvedMissing: (files, slug, phase) => `${files} se aprobó pero ya no existe — restáuralo (se borró después de su aprobación) o, si no va a volver, retira esa aprobación: /approve ${slug} ${phase} --revoke.`,
+      stateInvalid: (error, slug) => `${error} Mientras no se repare no se puede aprobar, marcar ni cerrar nada, y las aprobaciones, marcas y evidencias que guarda no se pueden leer — corrígelo a mano o restáuralo desde git (¿marcadores de conflicto de un merge? resuélvelos; ${DEV_SPEC} merge-state --install lo fusiona por su significado a partir de entonces) y luego /spec-doctor ${slug}.`,
       approveRequirements: (slug) => `Revisa y aprueba los requisitos — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Revisa y aprueba el diseño — /approve ${slug} design.`,
       approveTasks: (slug) => `Revisa y aprueba el desglose de tareas — /approve ${slug} tasks.`,
@@ -2228,7 +2229,7 @@ const msg = {
         steps: {
           "re-review": (s) => `revisar ${s.files.join(", ")}`,
           fill: (s) => `completar ${s.file}`,
-          fix: (s) => (s.file === "bug.md" ? "escribir la causa raíz en bug.md" : `corregir el gate ${s.phase}`),
+          fix: (s) => (s.file === "bug.md" ? "escribir la causa raíz en bug.md" : s.file === ".state.json" ? "reparar .state.json (no se puede leer)" : `corregir el gate ${s.phase}`),
           approve: (s) => `aprobar ${s.phase}`,
           tests: () => "escribir los tests y luego aprobarlos (Fase 4)",
           tasks: () => "dividir en tareas",

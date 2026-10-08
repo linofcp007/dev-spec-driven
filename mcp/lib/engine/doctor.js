@@ -34,7 +34,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   trackLabel, trackMarker, trackSectionTable, unreadTasksDetail, unverifiedLabel, VALID_TRACKS, verificationStatus, verifyPipes,
   waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText;
+  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText, stateFromFile;
 function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
@@ -57,7 +57,7 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   TRACK_SECTIONS, trackLabel, trackMarker, trackSectionTable, unreadTasksDetail, unverifiedLabel, VALID_TRACKS, verificationStatus,
   verifyPipes, waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText } = E); }
+  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText, stateFromFile } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -296,6 +296,13 @@ function nextAction(projectDir, name, opts = {}) {
   const phase = detectPhase(dir, tracks);
   const doc = opts.doctor && opts.doctor.ok ? opts.doctor : specDoctor(projectDir, name, { lean: true }); // lean: the verdict and the failing checks only
   const st = readState(projectDir, name);
+  // r5 review: a .state.json that doesn't parse (a git text merge's conflict markers, a truncated write) or has the wrong shape
+  // holds the approvals, ticks and evidence: read as empty, every gate looked pending and the step said "approve" — which every
+  // mutator refuses on that very file (a loop). The one step is to repair it; doctor fails `state`, finish blocks on it.
+  if (st.invalid) {
+    return { ok: true, feature: slug, tracks: trackLabel(tracks), phase, verdict: doc.verdict, gatesOk: false, pendingGates: [], changedSinceApproval: [],
+      step: "fix", stateInvalid: true, recommendation: i18n.msg(featureLang(projectDir, name)).next.stateInvalid(st.invalid, slug) };
+  }
   // 1.22 review: the approvals in force — a Phase 4 sign-off the plan outgrew (a T-ID planned since, a plan re-approved since)
   // is pending again (testsSignOffStale)
   const approvals = approvalsInForce(dir, tracks, st.approvals || {});
@@ -590,6 +597,10 @@ function specDoctor(projectDir, name, opts = {}) {
   const sectionLabel = (s) => `${fm.sectionNames[s.section] || s.section}:${fm.sectionStatus[s.status] || s.status}`;
   const checks = [];
   const add = (id, status, detail) => checks.push({ id, status, detail });
+  // r5 review: .state.json that doesn't parse or has the wrong shape (readState's `invalid`, localized) — every mutator refuses on
+  // it, and the approvals, ticks and evidence it holds can't be read: a FAIL naming the file, never "awaiting approval: <every phase>".
+  const stateRead = readState(projectDir, slug);
+  if (stateRead.invalid) add("state", "fail", stateRead.invalid);
 
   // Steering
   const steeringDir = path.join(root, "steering");
@@ -1044,6 +1055,7 @@ function statusTestsGate(pdir, dir, tracks) {
 // (finish · verify of the checks · sign-off · finished) may be next_action's `drift`.
 function statusNext(pdir, f, kind, lng, unverified) {
   const st = f.st;
+  if (st.invalid) return { step: "fix", file: ".state.json" }; // r5 review: next_action's step — repair the state file first
   const approvals = approvalsInForce(f.dir, f.tracks, isObj(st.approvals) ? st.approvals : {}); // 1.22 review: a stale tests sign-off is pending
   const open = f.blocks.filter((b) => !b.done);
   if (kind === "spike") {
@@ -1118,8 +1130,7 @@ function statusLine(projectDir, opts = {}) {
   for (const n of safeReaddir(root).filter((x) => isFeatureFolder(x, root)).sort().slice(0, STATUS_MAX_FEATURES)) {
     const dir = path.join(root, n);
     if (!isDirSafe(dir)) continue;
-    const j = readJson(statePath(dir));
-    const st = isObj(j.data) ? j.data : {};
+    const st = stateFromFile(pdir, statePath(dir)); // readState's shape check: `invalid` (r5 review — statusNext's fix step)
     const tracks = detectTracks(dir);
     const blocks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "");
     const done = blocks.filter((b) => b.done).length;
