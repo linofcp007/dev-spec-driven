@@ -826,7 +826,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     put("test-plan.md", scaf("bug-test-plan", () => i18n.bugTestPlan(name, lng)));
     ensureDir(path.join(dir, "tests", "unit"));
     ensureDir(path.join(dir, "tests", "integration"));
-    put("tasks.md", scaf("bug-tasks", () => (size ? i18n.bugTasks(name, lng, size) : i18n.bugTasks(name, lng)))); // 1.21 F5: xs drops the reproduce / root-cause tasks
+    put("tasks.md", scaf("bug-tasks", () => i18n.bugTasks(name, lng))); // every size: the red regression test + the fix (bug.md's gates hold reproduce / root cause)
     const res = finish({ ok: true, slug, dir, kind: "bugfix", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
     const given = Object.keys(bt);
     if (res.ok === false || !given.length) return res;

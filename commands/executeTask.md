@@ -33,7 +33,8 @@ code and output summary — evidence before claims (`references/verification.md`
 - evidence marked **stale** by `/spec-impact --reopen` (or recorded for an earlier `_Verify:_` command) no longer
   counts: run the check again;
 - duplicate task numbers resolve to the first open one — renumber them (doctor warns `duplicate-tasks`);
-- a bugfix refuses tasks after the root-cause task until `bug.md → Root Cause` is filled;
+- a bugfix refuses the fix (every task after task 1, the red regression test — or after the root-cause task, where
+  one exists) until `bug.md → Root Cause` is filled;
 - a task whose `_Depends:_` tasks are not all done is skipped by `spec_next_task` (`skipped`); ticking it anyway is
   recorded — with `waitsOn` and a note, never refused — so do its dependencies first. No open task able to start
   (`blocked`: a cycle, or a `_Depends:_` naming no task) means the plan is wrong: `spec_doctor` fails `task-deps` — fix

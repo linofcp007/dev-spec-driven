@@ -23,7 +23,13 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     "doctor at the design gate (CLI): the template tasks.md's AC references are deferred (▲ not traced yet), readyToAdvance=true, exit 0");
 
   // bugfix: ticking the root-cause task with Root Cause empty warns; the next refusal says the section is empty (not "do task 2 first").
+  // A tasks.md with a root-cause task: the four-task form bugfixes were scaffolded with before the short form (kept in projects).
   run(["bugfix", "Login crash", "--summary", "Login crashes on accented emails", "--project", w16]);
+  fs.writeFileSync(at16("login-crash", "tasks.md"), "# Tasks: Login crash\n\n## Phase: Fix\n" +
+    "- [ ] 1. [shared] Reproduce the bug reliably and write the steps in bug.md → Reproduction\n  - _Requirements: US-1.AC-1_\n" +
+    "- [ ] 2. [shared] Find the root cause with evidence; fill bug.md → Root Cause (no fix yet)\n  - _Requirements: US-1.AC-1_\n" +
+    "- [ ] 3. [US1] Write regression test T-01 and watch it fail for the right reason (paste the output); add guard test T-02 (it passes already)\n  - _Requirements: US-1.AC-1_\n  - _Verify: [command that runs T-01]_\n  - _Expect: fail_\n" +
+    "- [ ] 4. [US1] Fix the root cause — one change, not a bundle; guard test T-02 stays green\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01_\n  - _Verify: [full test suite command]_\n");
   const d2 = run(["done", "login-crash", "2", "--project", w16]);
   const d3 = run(["done", "login-crash", "3", "--evidence", "red", "--project", w16]);
   ok(d2.code === 0 && /⚠ Task 2 is ticked, but bug\.md → Root Cause is still empty — write the root cause there/.test(d2.out) &&

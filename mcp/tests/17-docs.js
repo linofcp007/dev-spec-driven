@@ -380,11 +380,14 @@ exports.run = async ({
     ok(d7ExRed && d7Greened.length >= 13 && d7Greened.every((id) => new RegExp("(?<![A-Za-z0-9])" + id + "(?!\\d)").test(d7ExRed.split("\n")[0])) &&
       !/all four tracks|every track at once/.test(dRef("example-spec-combined.md")),
       "full review D7: example-spec.md's red-run task (_Expect: fail_) names every T-ID made green; example-spec-combined is no longer titled 'all four tracks'");
-    // D8: the tour fills classification.md before it approves it; the bugfix flow ticks tasks 1 and 2 before task 3.
-    const d8Tour = dWs(dRead("commands", "spec-tour.md")), d8Bug = dWs(dRead("commands", "spec-bugfix.md"));
+    // D8: the tour fills classification.md before it approves it; the bugfix flow records task 1's red run before the fix
+    // (task 2) — the short form: the reproduction and the root cause are bug.md's, gated by the approvals, never a task to tick.
+    const d8Tour = dWs(dRead("commands", "spec-tour.md")), d8Bug = dWs(dRead("commands", "spec-bugfix.md")), d8Ref = dWs(dRef("bugfix.md"));
     ok(/3\. \*\*Classify\*\*.*classification\.md.*7\. \*\*Approve\*\*/.test(d8Tour) &&
-      /done <feature> 1 --evidence/.test(d8Bug) && /done <feature> 2 --evidence/.test(d8Bug) && d8Bug.indexOf("done <feature> 2") < d8Bug.indexOf("done <feature> 3"),
-      "full review D8: /spec-tour records the decision in classification.md (step 3) before approving it (step 7); /spec-bugfix ticks tasks 1 and 2 before task 3's red run");
+      /\(T-01, task 1\) — the scaffold marks task 1 `_Expect: fail_`/.test(d8Bug) && /done <feature> 1 --run/.test(d8Bug) && /\*\*Fix the cause\*\* \(one change, task 2\)/.test(d8Bug) &&
+      d8Bug.indexOf("done <feature> 1 --run") < d8Bug.indexOf("done <feature> 2 --run") && !/done <feature> [34]\b/.test(d8Bug) &&
+      /no task stands for them/.test(d8Ref) && /\*\*Failing regression test\*\* \(task 1\)/.test(d8Ref) && /\*\*Fix\*\* \(task 2\)/.test(d8Ref),
+      "full review D8: /spec-tour records the decision in classification.md (step 3) before approving it (step 7); /spec-bugfix and references/bugfix.md: task 1 is the red regression test (its red run first), task 2 the fix — no reproduce / root-cause task to tick");
     // D9: the implementer and the reviewer get explicit tool lists — no Agent tool (they never dispatch subagents).
     const d9Tools = (x) => ((dRead("agents", x).split(/^---$/m)[1] || "").match(/^tools: (.*)$/m) || [])[1] || "";
     ok(["spec-implementer.md", "spec-reviewer.md", "spec-critic.md"].every((x) => d9Tools(x) && !/\b(?:Agent|Task)\b/.test(d9Tools(x))) &&

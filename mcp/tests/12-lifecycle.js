@@ -319,9 +319,8 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
       ["> **TODO** — exact steps, input and environment that reproduce it every time.", "Log in with an expired refresh token."],
       ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The refresh handler redirects before clearing the cookie (auth.js:88)."],
       ["[What changes and why it removes the root cause — one fix, not a bundle.]", "Clear the cookie before redirecting."]]);
-    [1, 2].forEach((n) => S.completeTask(w10d, "login-loop", n));
-    S.completeTask(w10d, "login-loop", 3, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
-    S.completeTask(w10d, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
+    S.completeTask(w10d, "login-loop", 1, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
+    S.completeTask(w10d, "login-loop", 2, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
     ["requirements", "design", "test-plan", "tasks"].forEach((p) => S.approvePhase(w10d, "login-loop", p));
     S.createFeature(w10d, "Draft", ["core"]);
     const bfState = () => JSON.parse(fs.readFileSync(path.join(bf10.dir, ".state.json"), "utf8"));
@@ -411,7 +410,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     S.appendTasks(w10d, "login-loop", [{ text: "Audit log of logins", requirements: ["US-1.AC-1"], implements: ["src/audit.js"] }]);
     fs.writeFileSync(path.join(w10d, "src", "audit.js"), "audit\n");
     const apT10 = S.approvePhase(w10d, "login-loop", "tasks");
-    [5, 6].forEach((n) => S.completeTask(w10d, "login-loop", n));
+    [3, 4].forEach((n) => S.completeTask(w10d, "login-loop", n)); // the two appended tasks (after the bugfix's red test and fix)
     // src/auth.js (recorded by the last finish as "a\nc\n") was reworked above: a stale baseline still hashes its recorded
     // files — the drift and its decision come first (it said only "finish it again", and the re-finish accepted the drift).
     const naSD10 = (await call10("spec_next_action", { name: "login-loop", projectDir: w10d })).p;
@@ -478,20 +477,20 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
       JSON.stringify([naNF10.step, naNF10.drift && naNF10.drift.changed, drNF10.verdict, drNF10.features.map((f) => f.changed)]) + ")");
     fs.writeFileSync(yTs10, y0);
     fs.unlinkSync(zTs10);
-    // Every task ticked but the latest run of task 4 failed: spec_finish and the execution sign-off refuse — next_action
+    // Every task ticked but the latest run of task 2 (the fix) failed: spec_finish and the execution sign-off refuse — next_action
     // names the task and how to re-verify it (it said "finished — nothing left to do", the catalog ✅ finished).
-    const failRun10 = S.completeTask(w10d, "login-loop", 4, { command: "npm test", exitCode: 1, summary: "1 failing" });
+    const failRun10 = S.completeTask(w10d, "login-loop", 2, { command: "npm test", exitCode: 1, summary: "1 failing" });
     const naV10 = (await call10("spec_next_action", { name: "login-loop", projectDir: w10d })).p;
     const finV10 = S.finishFeature(w10d, "login-loop");
     const catV10 = S.catalog(w10d).features.find((f) => f.feature === "login-loop");
-    ok(failRun10.ok === false && naV10.step === "verify" && /^All tasks are ticked, but not all are verified: #4 \(latest run failed\) — \/spec-finish and the execution sign-off refuse/.test(naV10.recommendation) &&
-      /node "[^"]*dev-spec\.js" done login-loop 4 --run/.test(naV10.recommendation) && !/Nothing left to do|close the feature|Sign it off/.test(naV10.recommendation) && naV10.drift && naV10.drift.drifted === false &&
-      finV10.readyToFinish === false && finV10.unverified.join() === "4" && catV10.status === "complete" && catV10.finishedAt === undefined &&
+    ok(failRun10.ok === false && naV10.step === "verify" && /^All tasks are ticked, but not all are verified: #2 \(latest run failed\) — \/spec-finish and the execution sign-off refuse/.test(naV10.recommendation) &&
+      /node "[^"]*dev-spec\.js" done login-loop 2 --run/.test(naV10.recommendation) && !/Nothing left to do|close the feature|Sign it off/.test(naV10.recommendation) && naV10.drift && naV10.drift.drifted === false &&
+      finV10.readyToFinish === false && finV10.unverified.join() === "2" && catV10.status === "complete" && catV10.finishedAt === undefined &&
       /nem todas estão verificadas: #1/.test(S.msg("pt").next.verify("f", "#1", 1, true)) && /no todas están verificadas: #1/.test(S.msg("es").next.verify("f", "#1", 1, false)) &&
       /spec_complete_task \{name: "f", number: 2/.test(S.msg("en").next.verify("f", "#2", 2, false)),
-      "a finished feature whose task's latest run failed: next_action → verify (names #4 and `done --run`, never 'nothing left to do'), finish not ready, the catalog → complete; PT/ES localized (got " +
+      "a finished feature whose task's latest run failed: next_action → verify (names #2 and `done --run`, never 'nothing left to do'), finish not ready, the catalog → complete; PT/ES localized (got " +
       JSON.stringify([failRun10.ok, naV10.step, naV10.recommendation.slice(0, 90), finV10.readyToFinish, catV10.status]) + ")");
-    S.completeTask(w10d, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
+    S.completeTask(w10d, "login-loop", 2, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
     const naV10b = S.nextAction(w10d, "login-loop");
     ok(naV10b.step === "finished" && /Nothing left to do here/.test(naV10b.recommendation) && S.catalog(w10d).features.find((f) => f.feature === "login-loop").status === "finished",
       "a passing re-run: next_action → finished (nothing left), the catalog → finished again");

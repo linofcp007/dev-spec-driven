@@ -132,8 +132,8 @@ Phase 0 also picks a **size** (`spec_classify`'s `suggestedSize` is a draft; pas
 change: ONE `change.md` (summary, 1–3 EARS criteria, approach, 1–3 tasks with `_Verify:_`), core only, two approvals —
 the plan (`spec_approve {through: "tasks"}`) and execution; a track or a fourth task means size s. **s** — one story, no
 classification.md, each track's core-tier sections (an extended one may stay out, or answer `n/a — <reason>`); fill the
-whole plan, approve it in one call (+tdd / +ai: up to Phase 4). **m / l** — the full chain, duplicate track sections merged. An XS bugfix drops
-the reproduce / root-cause tasks (their gates remain). No size = the pre-1.21 scaffold. Every size keeps EARS, trace,
+whole plan, approve it in one call (+tdd / +ai: up to Phase 4). **m / l** — the full chain, duplicate track sections merged. A bugfix (any size) has
+no reproduce / root-cause tasks (their gates remain). No size = the pre-1.21 scaffold. Every size keeps EARS, trace,
 evidence, the iron law and the finish gate. `references/workflows.md`.
 
 ### Brownfield — adopt SDD in an EXISTING codebase

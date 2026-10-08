@@ -825,12 +825,14 @@ ${a.summary || "[una línea: el bug a corregir]"}
 `;
     },
 
-    bugTasks(name, size) {
-      // 1.21 F5 — un bugfix XS (el EN es la referencia): sin las tareas "reproducir" / "causa raíz" — los gates ya las exigen.
-      if (size === "xs") {
-        return `# Tareas: ${name}
+    bugTasks(name) {
+      // Todo bugfix, de cualquier tamaño (el EN es la referencia): dos tareas — la prueba de regresión en rojo y el arreglo;
+      // sin las tareas "reproducir" / "causa raíz" — los gates de los requisitos y del diseño ya las exigen.
+      return `# Tareas: ${name}
 
-<!-- Bugfix XS: bug.md → Reproducción y Causa Raíz se escriben y aprueban primero (los gates de los requisitos y del diseño).
+<!-- El orden de un bugfix es fijo: reproducir → causa raíz → prueba de regresión que falla → corregir → verificar.
+     bug.md → Reproducción y Causa Raíz se escriben y aprueban primero (los gates de los requisitos y del diseño):
+     ninguna corrección antes de que la Causa Raíz esté rellenada con evidencia.
      La tarea 1 es roja por diseño (su prueba debe FALLAR): su _Verify:_ ejecuta T-01 y _Expect: fail_ hace de esa
      ejecución que falla la prueba (una que pase se rechaza). La suite que debe pasar va en la tarea del arreglo (2).
      T-02 protege un comportamiento que ya funciona — en verde antes y después del arreglo, así que no entra en el
@@ -845,34 +847,6 @@ ${a.summary || "[una línea: el bug a corregir]"}
   - _Verify: [comando que ejecuta T-01]_
   - _Expect: fail_
 - [ ] 2. [US1] Corregir la causa raíz — un cambio, no un paquete; la prueba de protección T-02 sigue en verde
-  - _Requirements: US-1.AC-1, US-1.AC-2_
-  - _Makes green: T-01_
-  - _Verify: [comando de la suite de pruebas completa]_
-**Checkpoint:** el bug deja de reproducirse y la suite completa está en verde.
-`;
-      }
-      return `# Tareas: ${name}
-
-<!-- El orden de un bugfix es fijo: reproducir → causa raíz → prueba de regresión que falla → corregir → verificar.
-     Ninguna corrección antes de que bug.md → Causa Raíz esté rellenada con evidencia.
-     La tarea 3 es roja por diseño (su prueba debe FALLAR): su _Verify:_ ejecuta T-01 y _Expect: fail_ hace de esa
-     ejecución que falla la prueba (una que pase se rechaza). La suite que debe pasar va en la tarea del arreglo (4).
-     T-02 protege un comportamiento que ya funciona — en verde antes y después del arreglo, así que no entra en el
-     _Makes green:_ de ninguna tarea. -->
-
-## Restricciones Globales
-- [valores exactos que la corrección debe respetar — versiones, límites, formatos]
-
-## Fase: Corrección
-- [ ] 1. [shared] Reproducir el bug de forma fiable y escribir los pasos en bug.md → Reproducción
-  - _Requirements: US-1.AC-1_
-- [ ] 2. [shared] Encontrar la causa raíz con evidencia; rellenar bug.md → Causa Raíz (aún sin corregir)
-  - _Requirements: US-1.AC-1_
-- [ ] 3. [US1] Escribir la prueba de regresión T-01 y verla fallar por la razón correcta (pegar la salida); añadir la prueba de protección T-02 (ya pasa)
-  - _Requirements: US-1.AC-1_
-  - _Verify: [comando que ejecuta T-01]_
-  - _Expect: fail_
-- [ ] 4. [US1] Corregir la causa raíz — un cambio, no un paquete; la prueba de protección T-02 sigue en verde
   - _Requirements: US-1.AC-1, US-1.AC-2_
   - _Makes green: T-01_
   - _Verify: [comando de la suite de pruebas completa]_
