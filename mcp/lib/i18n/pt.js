@@ -1678,6 +1678,13 @@ const msg = {
           missing: "            a pasta não existe (o init cria-a)",
         },
       },
+      cmdHelp: {
+        options: (list) => `  As suas opções: ${list}`,
+        none: "  Não tem opções próprias.",
+        global: "  Em todos os comandos: --json · --project <pasta> · --help (-h) · --version (-V)",
+        all: `  Todos os comandos e os detalhes: ${DEV_SPEC} help`,
+      },
+      stdinHint: "a ler do terminal — escreve ou cola o texto e depois Ctrl+D numa linha à parte (Windows: Ctrl+Z e Enter).",
       earsNoFile: (file) => `${file}: esse ficheiro não existe — o ears recebe o nome de uma feature, um ficheiro markdown, --text "…" ou - (stdin).`,
       bundleNotOurs: (file) => `${file} já existe e não é um bundle do dev-spec — nada foi escrito. Escolhe outro --out, ou junta --force para o substituir.`,
       flagTwice: (flag) => `${flag} foi indicada mais de uma vez — esta opção só aceita um valor: indica-a uma vez.`,

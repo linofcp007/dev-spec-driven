@@ -1742,6 +1742,15 @@ const msg = {
           missing: "            the folder does not exist (init creates it)",
         },
       },
+      // 1.24 r6 B-I3: `<command> --help` / -h / help <command> — the frame around that command's lines of the help
+      cmdHelp: {
+        options: (list) => `  Its options: ${list}`,
+        none: "  It takes no option of its own.",
+        global: "  Every command: --json · --project <dir> · --help (-h) · --version (-V)",
+        all: `  Every command and the details: ${DEV_SPEC} help`,
+      },
+      // 1.24 r6 B-I9: an argument "-" read from a terminal (a TTY) — one stderr line before the CLI waits
+      stdinHint: "reading from the terminal — type or paste the text, then Ctrl+D on a line of its own (Windows: Ctrl+Z, then Enter).",
       // 1.24 r6 B9: ears <path> naming no file (and no feature of that name)
       earsNoFile: (file) => `${file}: no such file — ears takes a feature name, a markdown file, --text "…" or - (stdin).`,
       // 1.24 r6 B8: bundle --out onto an existing file that is no previous bundle

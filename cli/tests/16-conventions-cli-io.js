@@ -85,4 +85,37 @@ exports.run = async ({ ok, run, tmp, CLI }) => {
       "1.24 r6 B-I1: version reports the bundle it runs on (DEV_SPEC_BUNDLE=1) or why it was skipped — missing, other-version, broken; an unusable DEV_SPEC_BUNDLE_PATH is reported ignored (got " +
       JSON.stringify([used, miss, oth, brk, rel, usedHuman.out.slice(0, 300)]) + ")");
   }
+
+  // 1.24 r6 B-I3: `<command> --help` / `-h` (and `help <command>`) print that command's lines of the help and its options (from
+  // COMMAND_OPTIONS), never the whole help — and `status -h` no longer looked for a feature named "h".
+  {
+    const p = path.join(tmp, "r6i3-help");
+    run(["init", "--project", p]);
+    run(["create", "Login", "--project", p]);
+    const h = (args) => run([...args, "--project", p]);
+    const st = h(["status", "--help"]), stH = h(["status", "-h"]), done = h(["done", "login", "1", "-h"]), ap = h(["approve", "--help"]), apHelp = h(["help", "approve"]);
+    const na = h(["na", "-h"]), whole = h(["-h"]), unknown = h(["frobnicate", "--help"]);
+    const tasks = fs.readFileSync(path.join(p, ".specs", "login", "tasks.md"), "utf8");
+    ok(st.code === 0 && /^ {2}status \[feature\]/m.test(st.out) && !/universal spec-driven CLI/.test(st.out) && !/^ {2}doctor/m.test(st.out) && /--json/.test(st.out) &&
+      stH.code === 0 && stH.out === st.out && !/'h'/.test(stH.out) &&
+      done.code === 0 && /^ {2}done <feature> <n>/m.test(done.out) && /--run/.test(done.out) && /--timeout …/.test(done.out) && !/- \[x\] 1\./.test(tasks) &&
+      ap.code === 0 && (ap.out.match(/^ {2}approve /gm) || []).length === 3 && /--revoke/.test(ap.out) && apHelp.out === ap.out &&
+      na.code === 0 && /^ {2}next-action <feature>/m.test(na.out) && whole.code === 0 && /universal spec-driven CLI/.test(whole.out) &&
+      unknown.code === 0 && /universal spec-driven CLI/.test(unknown.out),
+      "1.24 r6 B-I3: <command> --help / -h / help <command> print that command's help and its options (aliases too); status -h looks for no feature 'h'; -h alone and an unknown command still print the whole help (got " +
+      JSON.stringify([st.out.slice(0, 300), stH.out === st.out, done.out.slice(0, 200), ap.out.slice(0, 200), na.out.slice(0, 120), whole.code]) + ")");
+  }
+
+  // 1.24 r6 B-I9: an argument `-` reads stdin — from a terminal (a TTY) a one-line hint goes to stderr (type, then Ctrl+D /
+  // Ctrl+Z Enter); piped input prints none. (A TTY can't be faked here: the piped side is what this asserts.)
+  {
+    const p = path.join(tmp, "r6i9-stdin");
+    run(["init", "--project", p]);
+    const r = spawnSync(process.execPath, [CLI, "ears", "-", "--project", p], { encoding: "utf8", input: "- **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL open a session\n" });
+    const S = require(path.join(path.dirname(CLI), "..", "mcp", "lib", "i18n.js"));
+    const hints = ["en", "pt", "es", "pt-BR"].map((l) => S.msg(l).cliOutput.stdinHint);
+    ok(r.status === 0 && /EARS: 1 criteria/.test(r.stdout) && r.stderr === "" && hints.every((x) => typeof x === "string" && /Ctrl\+D/.test(x)),
+      "1.24 r6 B-I9: `ears -` with piped stdin prints no stdin hint (only a terminal gets it); the hint exists in every language (got " +
+      JSON.stringify([r.status, r.stderr.slice(0, 120), hints]) + ")");
+  }
 };

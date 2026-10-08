@@ -1677,6 +1677,13 @@ const msg = {
           missing: "            la carpeta no existe (init la crea)",
         },
       },
+      cmdHelp: {
+        options: (list) => `  Sus opciones: ${list}`,
+        none: "  No tiene opciones propias.",
+        global: "  En todos los comandos: --json · --project <carpeta> · --help (-h) · --version (-V)",
+        all: `  Todos los comandos y los detalles: ${DEV_SPEC} help`,
+      },
+      stdinHint: "leyendo del terminal — escribe o pega el texto y luego Ctrl+D en una línea aparte (Windows: Ctrl+Z y Enter).",
       earsNoFile: (file) => `${file}: ese archivo no existe — ears recibe el nombre de una función, un archivo markdown, --text "…" o - (stdin).`,
       bundleNotOurs: (file) => `${file} ya existe y no es un bundle de dev-spec — no se ha escrito nada. Elige otro --out, o añade --force para sobrescribirlo.`,
       flagTwice: (flag) => `${flag} se indicó más de una vez — admite un solo valor: indícala una vez.`,

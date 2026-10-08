@@ -195,7 +195,8 @@ and U+FEFF gotchas are in CLAUDE.md.
   Never `process.exit()` right after a write (the CLI's `die()` under `--json` writes its small document with
   `fs.writeSync(1, …)` first). The CLI's stdin (`ears -`, `import <plan> -`, `log <f> -`, `stop-check -`) is collected as
   BYTES and decoded like a file (`readStdin` → `decodeText`: a UTF-16 BOM decides, else UTF-8 — 1.23 review: a UTF-16 document,
-  what Windows PowerShell 5.1's `>` writes, read as "0 criteria, pass" in `ears -`). The pre-commit validator reads staged
+  what Windows PowerShell 5.1's `>` writes, read as "0 criteria, pass" in `ears -`); from a terminal (`process.stdin.isTTY`)
+  it first prints one stderr line, `cliOutput.stdinHint` — type, then Ctrl+D / Ctrl+Z Enter (1.24 r6 B-I9: it looked hung). The pre-commit validator reads staged
   names NUL-separated with `core.quotePath=false`, so accented paths work, and loads the engine only once a staged
   `requirements.md` / `tasks.md` / `change.md` under a `.specs/` needs it (1.22 review — most commits stage none and paid
   ~130 ms for the require). Only EARS errors and phantom task refs
@@ -271,7 +272,11 @@ and U+FEFF gotchas are in CLAUDE.md.
   value flag into `VALUE_FLAGS` — `refuseUnknownFlags()` refuses any other `--flag` before anything runs (exit 1, a
   localized did-you-mean; `done 2 --rnu` used to tick the task with no evidence). `evals` is exempt (its flags go to
   run-evals.js, which refuses its own unknown ones); `--` ends the options; `--help` anywhere prints the help and runs nothing
-  (`evals --help`: the harness's usage). An explicit
+  (`evals --help`: the harness's usage). **Per command (1.24 r6 B-I3):** `<command> --help`, `-h` (now a switch, never a
+  positional: `status -h` looked for a feature "h") and `help <command>` print `helpFor()` — that command's blocks of the one
+  `helpText()` (each line whose first word is the command, with its continuation lines; `HELP_ALIASES` na / milestones), its
+  `COMMAND_OPTIONS` (a value flag shown `--x …`) and the localized frame (`cliOutput.cmdHelp`); no command, `-h` alone or a
+  word with no block → the whole help. A new command gets its block in `helpText()` starting `  <name> ` at two spaces. An explicit
   `--include-body=false` / `--include-brief=false` is passed through as false (`boolFlag()`), as MCP receives it.
   The eval harness (`mcp/evals/run-evals.js`, which `evals` forwards to untouched) applies the same rule to its own
   switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise).

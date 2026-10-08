@@ -176,8 +176,10 @@ function projectText() { return cliText(spec.projectLang(projectDir)); }
 // Read all of stdin asynchronously — fs.readFileSync(0) is unreliable on Windows pipes (same rule as the hooks). The bytes are
 // decoded as a file is (spec.decodeText: a UTF-16 BOM decides, else UTF-8) — 1.23 review: a UTF-16 document (what Windows
 // PowerShell 5.1's `>` writes) piped into `ears -` read as "0 criteria, pass" and `import plan -` imported garbage.
+// 1.24 r6 B-I9: from a terminal (a TTY) the CLI seemed to hang — one line on stderr says it reads the terminal and how to end it.
 function readStdin(cb) {
   const chunks = [];
+  if (process.stdin.isTTY) console.error("dev-spec: " + projectText().stdinHint);
   process.stdin.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c), "utf8")));
   process.stdin.on("end", () => { try { cb(spec.decodeText(Buffer.concat(chunks))); } catch (e) { die(e.message); } });
   process.stdin.on("error", (e) => die(e.message));
@@ -230,6 +232,7 @@ for (let i = 0; i < argv.length; i++) {
   // anywhere, like --help: the version command, nothing else runs (`--version=true|false` as a switch — the help documents it)
   else if (a === "--version" || a === "-V" || /^--version=(?:true|1|yes|on)$/i.test(a)) versionAsked = true;
   else if (/^--version=(?:false|0|no|off)$/i.test(a)) { /* off */ }
+  else if (a === "-h") flags.help = true; // 1.24 r6 B-I3: = --help (`status -h` looked for a feature named "h")
   else if (a.startsWith("--") && a.includes("=")) { const k = a.slice(2, a.indexOf("=")); flags[k] = a.slice(a.indexOf("=") + 1); countFlag(k); }
   else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) {
     // A value flag never swallows the next flag: `--order --json` must not set order="--json". Only a
@@ -357,6 +360,7 @@ function evalsArgs() {
   const rest = [];
   for (let i = 0; i < toks.length; i++) {
     const a = toks[i];
+    if (a === "-h") { help = true; rest.push("--help"); continue; } // 1.24 r6 B-I3: -h = --help (the harness's usage)
     if (!a.startsWith("--")) { if (feature === null) feature = a; else rest.push(a); continue; }
     const eq = a.indexOf("=");
     const key = eq === -1 ? a.slice(2) : a.slice(2, eq);
@@ -655,7 +659,8 @@ async function main() {
   // usage error, before anything runs: it printed the text on stdout with exit 0, and a script parsing it failed far away.
   const helpOnly = cmd === undefined || cmd === "help" || cmd === "-h" || cmd === "--help" || (on("help") && cmd !== "evals");
   if (on("json") && (helpOnly || TEXT_ONLY_COMMANDS.has(cmd))) die(projectText().noJson(helpOnly ? "help" : cmd), { text: true });
-  if (on("help") && cmd !== "evals") return console.log(helpText()); // `<command> --help` prints the help, runs nothing
+  // `<command> --help` / `-h` prints the help and runs nothing — 1.24 r6 B-I3: that command's part of it and its options
+  if (on("help") && cmd !== "evals") return console.log(helpFor(cmd));
   // 1.24 r6 B-I1: --version / -V anywhere prints the version and runs nothing (the other command's words and flags unread); the
   // `version` command reports the project it resolves — never refuses it (a missing one reads exists: false).
   if (versionAsked && cmd === "version") return printVersion();
@@ -665,10 +670,11 @@ async function main() {
   }
   switch (cmd) {
     case undefined:
-    case "help":
     case "-h":
     case "--help":
       return console.log(helpText());
+    case "help": // `help <command>`: that command's help (1.24 r6 B-I3)
+      return console.log(pos[0] != null ? helpFor(String(pos[0])) : helpText());
 
     case "version": // 1.24 r6 B-I1 (also --version / -V)
       return printVersion();
@@ -2080,6 +2086,30 @@ function printMatrix(feature, mx, lang) {
   console.log("  " + C.legend + (mx.code ? " · " + C.codeLegend : ""));
 }
 
+// 1.24 r6 B-I3 — one command's help: its lines of helpText() (every block whose first word is the command — approve has three —
+// with their continuation lines) + its options (COMMAND_OPTIONS; a value flag shows "…") + the global ones + where the whole
+// help is. An alias reads its command's block (na → next-action, milestones → milestone). No block (help, an unknown word):
+// the whole help. The blocks stay the one help text (English, like the rest of it); the frame lines are localized.
+const HELP_ALIASES = { na: "next-action", milestones: "milestone" };
+function helpFor(c) {
+  if (c == null) return helpText();
+  const name = Object.prototype.hasOwnProperty.call(HELP_ALIASES, c) ? HELP_ALIASES[c] : String(c);
+  const block = [];
+  let take = false;
+  for (const l of helpText().split("\n")) {
+    const m = /^ {2}([a-z][a-z-]*)(?=[\s(]|$)/.exec(l);
+    if (m) take = m[1] === name;
+    else if (!/^ {3,}\S/.test(l)) take = false;
+    if (take) block.push(l);
+  }
+  if (!block.length) return helpText();
+  const T = projectText();
+  const own = Object.prototype.hasOwnProperty.call(COMMAND_OPTIONS, c) ? COMMAND_OPTIONS[c] : null;
+  const lines = ["dev-spec " + name, ...block, ""];
+  if (own) lines.push(own.options.length ? T.cmdHelp.options(own.options.map((f) => "--" + f + (VALUE_FLAGS.has(f) ? " …" : "")).join("  ")) : T.cmdHelp.none);
+  lines.push(T.cmdHelp.global, T.cmdHelp.all);
+  return lines.join("\n");
+}
 function helpText() {
   return `dev-spec — universal spec-driven CLI (local, zero-dependency)
 
@@ -2262,6 +2292,8 @@ function helpText() {
   Each command takes its own options and arguments: another option, one argument too many, or a single-value flag given twice
   is a usage error (exit 1) — repeatable: --add / --rm (depend), --check (init), --req / --implements / --makes-green /
   --depends (append-tasks), --affects / --supersedes (decide).
+  <command> --help (or -h, or help <command>) prints that command's part of this help and its options; - as an argument reads
+  stdin (from a terminal: type the text, then Ctrl+D — Windows: Ctrl+Z, Enter).
 
   Flags: --json  --project <dir>  --lang en|pt|pt-BR|es (init/create/bugfix/spike/steering/roadmap/ears/classify/import/templates/tracks/signals)  --order N (depend)
          --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix|spike|change / --size xs|s|m|l (create; spike: --question, --timebox)  --text "…" (ears)
