@@ -154,7 +154,13 @@ function codeBlockLines(lines) {
 // written in prose: "rules of checkout/US-3.AC-2 stay as they are" names checkout's criterion, never one of this feature's
 // (1.22 review: it was a required AC no task covered). `dir`: the feature's folder — see stripForeignAcRefs.
 function requirementAcIds(reqText, dir) {
-  return extractAcIds(stripForeignAcRefs(stripSupersedes(stripFencedCode(stripHtmlComments(reqText))), dir));
+  return extractAcIds(stripForeignAcRefs(stripSupersedes(stripTitleLines(stripFencedCode(stripHtmlComments(reqText)))), dir));
+}
+// A level-1 heading — the document's title, written from the feature's name — never defines a criterion (1.23.1: a name holding
+// `US-9.AC-1`, bold or not, made one more required AC no task covered). Blanked line by line, so line numbers stay put.
+const RE_TITLE_LINE = /^ {0,3}#(?:[^\S\n][^\n]*)?$/gm;
+function stripTitleLines(text) {
+  return String(text || "").replace(RE_TITLE_LINE, "");
 }
 // `<slug>/US-n.AC-m` (blanks around the slash allowed, as _Supersedes:_ reads it) → removed when <slug> names ANOTHER feature.
 // The slug is one token starting at a token start (linear: a match starts only there). Never a feature (review 2 — the

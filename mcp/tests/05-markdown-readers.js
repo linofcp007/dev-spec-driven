@@ -186,4 +186,22 @@ exports.run = async ({ ok, S, tmp, require, __dirname }) => {
     ok(js(got) === "[0,0,0,0,1,1]" && sec < 3,
       "review 5: the EARS ubiquitous form 'THE <name> SHALL' (PT 'O/A <nome> DEVE', ES 'EL/LA <nombre> DEBE') gets no no-keyword note; a criterion with no article and no keyword still does; linear on 100 KB (got " + js([got, sec]) + ")");
   }
+
+  // 1.23.1 (a review-5 leftover): requirements.md's level-1 title — written from the feature's name — never defines a criterion: a
+  // name holding US-9.AC-1 (bold or plain) made one more required AC that no task covered. A ## heading or a list item still counts.
+  {
+    const p = path.join(tmp, "proj-r5-title-ac");
+    S.initProject(p, ["core"], "en");
+    const c = S.createFeature(p, "Login", ["core"]);
+    const f = path.join(c.dir, "requirements.md");
+    const base = fs.readFileSync(f, "utf8");
+    const acsWith = (first) => { const lines = base.split("\n"); lines[0] = first; fs.writeFileSync(f, lines.join("\n")); return S.traceCheck(p, c.slug).totalAcs; };
+    const plain = acsWith("# Requirements: Login");
+    const bold = acsWith("# Requirements: Login **US-9.AC-1** — WHEN x THE SYSTEM SHALL y");
+    const bare = acsWith("# Requirements: Login US-9.AC-1");
+    fs.writeFileSync(f, base);
+    const ids = E.requirementAcIds("# Title US-9.AC-1\n\n## US-1.AC-7 heading\n\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
+    ok(plain === bold && plain === bare && plain > 0 && js([...ids].sort()) === js(["US-1.AC-1", "US-1.AC-7"]),
+      "1.23.1: an AC ID in requirements.md's # title is no criterion (bold or plain); a ## heading's and a list item's still are (got " + js([plain, bold, bare, [...ids]]) + ")");
+  }
 };
