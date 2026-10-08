@@ -52,7 +52,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   crossFeatureAcs, csvCell, decide, decisionLog, designSaveCheck, detectPhase, detectTracks, drift, earsFeature,
   earsSteps, earsValidate, engineVersion, etaText, evidenceMode, existingFeature, expectsFail, EXPORT_FORMATS,
   exportSpecs, extractSection, featureFlow, featureLang, featureLocked, featureOverlaps, featurePercent,
-  featurePlaceholders, finishFeature, FLOWS, forecastData, globalConstraints, globFiles, glossaryEntries, guardCheck,
+  featurePlaceholders, finishFeature, FLOWS, forecastData, gateRefusal, globalConstraints, globFiles, glossaryEntries, guardCheck,
   guardEnabled, guardLevel, sessionProject, sessionPath, impactLines, impactReport, implementsTargets, importSpec, initProject, integrationPlanMd,
   isFeatureFolder, isNetworkPath, isPlaceholderTask, isTemplatePlaceholder, isTestFile, isWslLauncher, listFeatures,
   manageFeature, markdownToHtml, matrixCsv, maybeRefreshCatalog, mdPlainText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
@@ -326,9 +326,20 @@ module.exports = {
 // catalog refresh after it); the engine's writers keep the cache true (forgetCached / invalidateReadCache) and it is
 // dropped when the call returns — never shared between calls. A caller that makes several calls as one step (a hook)
 // can wrap them in withReadCache itself.
+// 1.24 r6 — a write the engine's write gate refused (a link under .specs/, a path of the wrong kind: engine/files.js
+// specsWriteGate) is that call's ANSWER, never an exception: { ok: false, linked | wrongKind: true, path, error } (localized), on
+// every surface alike (MCP isError, CLI exit 1). Any other exception is thrown as before.
 for (const [name, fn] of Object.entries(module.exports)) {
   if (typeof fn !== "function" || name === "msg") continue;
-  const call = function () { return withReadCache(() => fn.apply(this, arguments)); };
+  const call = function () {
+    try {
+      return withReadCache(() => fn.apply(this, arguments));
+    } catch (e) {
+      const refused = gateRefusal(e);
+      if (refused) return refused;
+      throw e;
+    }
+  };
   Object.defineProperty(call, "name", { value: fn.name || name });
   module.exports[name] = call;
 }

@@ -15,8 +15,8 @@ const path = require("path");
 const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let errs, existingFeature, isDevSpecDir, projectLang, roadmapPath;
-function __link(E) { ({ errs, existingFeature, isDevSpecDir, projectLang, roadmapPath } = E); }
+let errs, existingFeature, featureLang, isDevSpecDir, projectLang, roadmapPath;
+function __link(E) { ({ errs, existingFeature, featureLang, isDevSpecDir, projectLang, roadmapPath } = E); }
 
 // ---------------------------------------------------------------------------
 // Paths & small fs helpers
@@ -62,14 +62,22 @@ function specsRoot(projectDir) {
   return root;
 }
 
+// Every writer below goes through the write gate first (specsWriteGate, below — 1.24 r6): a folder or file under .specs/ is
+// never created or written through a link, nor over a path of the other kind.
 function ensureDir(p) {
+  specsWriteGate(p, { dir: true });
+  mkdirp(p);
+}
+// The folders up to p, once the caller's gate has passed (it checked every folder on the way).
+function mkdirp(p) {
   forgetCached(p, { dir: true });
   fs.mkdirSync(p, { recursive: true });
 }
 
 function writeIfAbsent(file, content) {
+  specsWriteGate(file, { createOnly: true }); // the file itself may be a link: the "wx" create below never writes through it
   forgetCached(file);
-  ensureDir(path.dirname(file));
+  mkdirp(path.dirname(file));
   try {
     fs.writeFileSync(file, content, { encoding: "utf8", flag: "wx" }); // atomic "create only" — never clobbers
     return true;
@@ -90,8 +98,9 @@ const RENAME_RETRY_MS = [5, 15, 40];
 const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
 function writeFileAtomic(file, content) {
   if (!existsRaw(file)) { const a = changeAlias(file); if (a) file = a; } // 1.21 F5: a change's tasks.md / requirements.md is its change.md
+  specsWriteGate(file); // never through a link (a linked folder on the way, or the file itself), never over a folder
   forgetCached(file);
-  ensureDir(path.dirname(file));
+  mkdirp(path.dirname(file));
   const tmp = file + "." + process.pid + "." + Date.now() + ".tmp";
   let moved = false;
   try {
@@ -110,6 +119,27 @@ function writeFileAtomic(file, content) {
   } finally {
     if (!moved) try { fs.unlinkSync(tmp); } catch { /* never created, or already gone */ }
   }
+}
+// 1.24 r6 (G2 / G-I2) — THE write call for an engine module writing a spec file by any other means than writeFileAtomic /
+// writeIfAbsent / ensureDir: no module outside this one touches the disk with fs.writeFileSync / appendFileSync / renameSync /
+// mkdirSync (mcp/tests/16-conventions.js guards it). opts.append: append `text` (a log line, the lock lines of .specs/.gitignore)
+// — the target is never a link (the gate lstats it; O_NOFOLLOW where the platform has it), created when absent, its folder must
+// exist; opts.createOnly: writeIfAbsent (→ true when written); else the atomic replace. The in-place fs.writeFileSync of the
+// derived files (a task brief, a merge summary) followed a committed `.execution/merge-summary.md -> ~/.bashrc`.
+function specWrite(file, text, opts = {}) {
+  if (opts.createOnly) return writeIfAbsent(file, text);
+  if (!opts.append) return writeFileAtomic(file, text);
+  specsWriteGate(file);
+  forgetCached(file);
+  const C = fs.constants;
+  const fd = fs.openSync(file, C.O_WRONLY | C.O_APPEND | C.O_CREAT | (C.O_NOFOLLOW || 0), 0o666);
+  try {
+    const buf = Buffer.from(String(text), "utf8");
+    for (let off = 0; off < buf.length;) off += fs.writeSync(fd, buf, off, buf.length - off);
+  } finally {
+    try { fs.closeSync(fd); } catch { /* ignore */ }
+  }
+  return true;
 }
 
 // Synchronous sleep (the engine is synchronous end to end): blocks this thread only, no busy loop.
@@ -236,6 +266,12 @@ function withFeatureLock(dir, fn, opts = {}) {
 function withLockFile(lock, fn, opts = {}) {
   const key = readCacheKey(lock);
   if (HELD_LOCKS.has(key)) return fn();
+  // 1.24 r6 (G1) — the lock is the first write into the folder: a feature folder (or _archive/<slug>/) that is a link is refused
+  // HERE, once, before the lock exists and before fn writes anything (the lock, the ticks, approvals, briefs and decisions all
+  // landed in the folder the link points at). → opts.onRefused(error) | the refusal result ({ ok: false, linked: true, error }).
+  // (A path of the wrong kind is the lock's own business: a folder named .lock is a stale lock that can't be removed — busy, stuck.)
+  const refused = specsGateError(lock);
+  if (refused && refused.gate.kind === "link") return opts.onRefused ? opts.onRefused(refused) : gateRefusal(refused);
   ensureLockIgnore(specsDirOf(path.dirname(lock))); // before the lock exists: one left by a killed process is never committable
   const waitMs = Number.isSafeInteger(opts.waitMs) && opts.waitMs >= 0 ? opts.waitMs : lockWaitMs();
   const now0 = Date.now();
@@ -344,7 +380,8 @@ function featureLocked(fn, when) {
     if (when && !when(args)) return fn.apply(this, args);
     const f = existingFeature(projectDir, name);
     if (!f.ok) return fn.apply(this, args);
-    return withFeatureLock(f.dir, () => fn.apply(this, args), { onBusy: (b) => featureBusyResult(projectDir, f.slug, null, b) });
+    return withFeatureLock(f.dir, () => fn.apply(this, args), { onBusy: (b) => featureBusyResult(projectDir, f.slug, null, b),
+      onRefused: (e) => gateRefusal(e, featureLangSafe(projectDir, f.slug)) }); // a linked feature folder: refused up front (1.24 r6)
   };
   Object.defineProperty(run, "name", { value: fn.name });
   return run;
@@ -375,7 +412,7 @@ function withMoveLock(projectDir, dir, slug, rel, fn) {
         releaseLock(path.join(moved, LOCK_FILE), mine); // the lock this process carried there — only its own token
       }
     }
-  }, { onBusy: (b) => featureBusyResult(projectDir, slug, rel, b) });
+  }, { onBusy: (b) => featureBusyResult(projectDir, slug, rel, b), onRefused: (e) => gateRefusal(e, featureLangSafe(projectDir, slug)) });
 }
 // fs.renameSync of a folder, retried on Windows: a scanner, an indexer or a lock waiter reading a file inside answers
 // EPERM / EACCES / EBUSY for a moment. The feature lock is already held, so it waits longer than a file's rename (~1.4 s —
@@ -389,6 +426,16 @@ function renameDirSync(from, to) {
       if (process.platform !== "win32" || attempt >= DIR_RENAME_RETRY_MS.length || !RENAME_RETRY_CODES.has(e.code)) throw e;
       sleepSync(DIR_RENAME_RETRY_MS[attempt]);
     }
+  }
+}
+// A folder entry that is a symbolic link / junction removed — the link alone, never what it points at (1.24 r6: remove of a
+// linked feature folder). unlink takes a link to a folder on every platform Node runs on (libuv removes a Windows junction /
+// directory symlink as the reparse point it is); rmdir is the fallback where it answers EPERM / EISDIR.
+function removeLinkEntry(p) {
+  if (!fs.lstatSync(p).isSymbolicLink()) throw Object.assign(new Error("not a link: " + p), { code: "ENOTLINK" });
+  try { fs.unlinkSync(p); } catch (e) {
+    if (e.code !== "EPERM" && e.code !== "EISDIR" && e.code !== "EACCES") throw e;
+    fs.rmdirSync(p);
   }
 }
 // renameDirSync → null, or the localized "folder in use" result when the folder stayed locked by another program
@@ -425,6 +472,9 @@ function ensureLockIgnore(specsDir) {
   if (!specsDir) return;
   const file = path.join(specsDir, ".gitignore");
   try {
+    // 1.24 r6 (G2): a committed .specs/.gitignore that is a link is left alone \u2014 the lock lines were appended to the file it
+    // points at (a user's config elsewhere). The gate throws: caught below, like any other reason not to write.
+    specsWriteGate(file);
     let cur = null;
     try { cur = fs.readFileSync(file, "utf8"); } catch (e) { if (e.code !== "ENOENT") return; } // a folder there, unreadable: left alone
     if (cur == null) {
@@ -434,10 +484,10 @@ function ensureLockIgnore(specsDir) {
       const missing = LOCK_IGNORE_LINES.filter((l) => !have.has(l));
       if (!missing.length) return;
       const eol = /\r\n/.test(cur) ? "\r\n" : "\n";
-      fs.appendFileSync(file, (cur === "" || /\n$/.test(cur) ? "" : eol) + missing.join(eol) + eol, "utf8");
+      specWrite(file, (cur === "" || /\n$/.test(cur) ? "" : eol) + missing.join(eol) + eol, { append: true });
     }
     forgetCached(file);
-  } catch { /* best-effort: read-only, or another process wrote it first */ }
+  } catch { /* best-effort: read-only, a link, or another process wrote it first */ }
 }
 // The `.specs` folder a lock sits in or under (.specs/, .specs/<feature>/, .specs/_archive/<feature>/) — null elsewhere.
 function specsDirOf(dir) {
@@ -552,26 +602,129 @@ function specsFileContainedNow(projectDir, file) {
 // nor the file itself, is a link (a symbolic link, a junction), and each resolves inside the real .specs/ — a committed
 // `.specs/exports -> /etc` or `.specs/exports/project.html -> ~/.bashrc` is refused, nothing written. A part that doesn't
 // exist yet passes (it will be created inside); a path outside .specs/ → false. Uncached: a write's own check.
+// 1.24 r6: the write gate's link verdict (specsWriteBlock) — a path of the wrong kind is not a link: the gate itself refuses it
+// when the write comes (its own message).
 function specsWriteContained(projectDir, file) {
   const root = specsRoot(projectDir);
-  let realRoot;
-  try { realRoot = fs.realpathSync.native(root); } catch { return true; } // no .specs/ yet: nothing in it is a link
   const rel = path.relative(root, path.resolve(file));
   if (!rel || rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel)) return false;
-  let cur = root;
-  for (const seg of rel.split(path.sep)) {
-    cur = path.join(cur, seg);
-    let st;
-    try { st = fs.lstatSync(cur); } catch (e) { return !!e && e.code === "ENOENT"; } // absent: it and what follows are created
-    if (st.isSymbolicLink()) return false;
-    try {
-      const real = fs.realpathSync.native(cur);
-      if (real === realRoot || !withinRoot(realRoot, real)) return false;
-    } catch {
-      return false;
-    }
+  const b = specsWriteBlock(root, path.resolve(file));
+  return !b || b.kind !== "link";
+}
+
+// ---------------------------------------------------------------------------
+// THE write gate (1.24 r6 — G1 / G2 / G7 / G-I2): every file and folder the engine writes below a project's .specs/
+// ---------------------------------------------------------------------------
+// writeFileAtomic, writeIfAbsent, ensureDir and specWrite call specsWriteGate before they touch the disk, and withLockFile
+// checks its lock's path the same way before the lock exists — so every engine writer is gated, whichever module calls it
+// (no module writes with raw fs calls: mcp/tests/16-conventions.js). Refused:
+//   • a LINK on the way — a folder between .specs/ and the target (a feature folder, .execution/, .history/, _archive/,
+//     _archive/<slug>/) or the target itself that is a symbolic link / junction, or that resolves outside the real .specs/
+//     (another reparse point). A committed `.specs/<feature> -> ~/elsewhere` got every tick, approval, brief, decision and lock
+//     written into the folder it points at; `.execution/merge-summary.md -> ~/.bashrc` got the merge summary (spec text)
+//     written into the user's shell profile. (A create-only write may meet a target that is itself a link: "wx" never
+//     writes through it.)
+//   • the wrong KIND — a file where a folder is needed (.specs itself, a feature path, _archive), a folder where a file is
+//     written (ROADMAP.md, an export): the raw EEXIST / ENOTDIR / EISDIR reached the user (G7).
+// .specs/ itself may be a link (a project keeping its specs elsewhere): what is checked lies BELOW it. A path outside every
+// .specs/ is not gated (the engine writes nothing there). A refusal throws an Error — code ESPECSLINK / ESPECSKIND, a message
+// in the project's language, `gate` { kind, rel } — that the facade (spec.js) answers as { ok: false, linked | wrongKind: true,
+// path, error } (gateRefusal); the lock paths answer it before anything is written, in the feature's language.
+const GATE_CODES = { link: "ESPECSLINK", notFolder: "ESPECSKIND", notFile: "ESPECSKIND" };
+// The .specs folder `p` lies in (the nearest ancestor named .specs — p itself for ensureDir(.specs)), or null.
+function specsRootOf(p) {
+  let d = path.resolve(String(p));
+  for (;;) {
+    if (path.basename(d) === ".specs") return d;
+    const up = path.dirname(d);
+    if (up === d) return null;
+    d = up;
   }
-  return true;
+}
+// The real path of .specs/ (memoized in the call's read-cache scope, as specsFileContained does), or null.
+function realSpecsRoot(root) {
+  const rk = CTX.READ_CACHE ? CONTAINED_KEY + "root:" + readCacheKey(root) : null;
+  let real = rk !== null ? CTX.READ_CACHE.get(rk) : undefined;
+  if (real === undefined) {
+    try { real = fs.realpathSync.native(root); } catch { real = null; }
+    if (rk !== null) CTX.READ_CACHE.set(rk, real);
+  }
+  return real;
+}
+// → null when `target` (absolute, below `root`) may be written, else { kind: "link" | "notFolder" | "notFile", at, file } — the
+// first part that refuses it (`file`: that part is the target file itself). opts.dir: the target is a folder (ensureDir);
+// opts.createOnly: an existing target file is never written (writeIfAbsent), so one that is a link passes. Uncached: lstat of
+// each part (cheap), one realpath of the deepest that exists.
+function specsWriteBlock(root, target, opts = {}) {
+  let rs;
+  try { rs = fs.statSync(root); } catch { return null; } // no .specs/ yet: everything below is created inside it
+  if (!rs.isDirectory()) return { kind: "notFolder", at: root, file: false };
+  const rel = path.relative(root, target);
+  if (!rel) return null;
+  const segs = rel.split(path.sep);
+  let cur = root, deepest = null;
+  for (let i = 0; i < segs.length; i++) {
+    cur = path.join(cur, segs[i]);
+    const last = i === segs.length - 1;
+    let st;
+    try { st = fs.lstatSync(cur); } catch (e) {
+      if (e && e.code === "ENOENT") break; // absent: it and what follows are created inside
+      return { kind: "link", at: cur, file: last && !opts.dir }; // unreadable: never written through
+    }
+    if (st.isSymbolicLink()) {
+      if (last && !opts.dir && opts.createOnly) break; // never written: the create-only "wx" refuses an existing link
+      return { kind: "link", at: cur, file: last && !opts.dir };
+    }
+    if (!last || opts.dir) { if (!st.isDirectory()) return { kind: "notFolder", at: cur, file: false }; }
+    else if (st.isDirectory()) return { kind: "notFile", at: cur, file: true };
+    deepest = cur;
+  }
+  if (deepest) {
+    // no link part on the way (lstat), and the deepest part resolves inside the real .specs/: no other reparse point (a mount
+    // point) redirects it either
+    const realRoot = realSpecsRoot(root);
+    let real = null;
+    try { real = fs.realpathSync.native(deepest); } catch { /* unresolvable: refused below */ }
+    if (!realRoot || !real || real === realRoot || !withinRoot(realRoot, real)) return { kind: "link", at: deepest, file: deepest === target && !opts.dir };
+  }
+  return null;
+}
+// ".specs/feature/x.md" — a gate path as the messages name it (a folder ends in "/").
+function gateRel(root, at, folder) {
+  const rel = toPosix(path.relative(path.dirname(root), at));
+  return folder && !rel.endsWith("/") ? rel + "/" : rel;
+}
+// The refusal's message in `lang`.
+function gateMessage(lang, gate) {
+  const E = i18n.msg(lang).err;
+  return gate.kind === "notFolder" ? E.specsNotFolder(gate.rel) : gate.kind === "notFile" ? E.specsNotFile(gate.rel)
+    : gate.file ? E.specsLinkedFile(gate.rel) : E.specsLinked(gate.rel);
+}
+const projectLangOfRoot = (root) => { try { return projectLang(path.dirname(root)); } catch { return "en"; } };
+const featureLangSafe = (projectDir, slug) => { try { return featureLang(projectDir, slug); } catch { return null; } };
+// → null, or the Error a write of `target` is refused with (opts as specsWriteBlock's).
+function specsGateError(target, opts = {}) {
+  const root = specsRootOf(target);
+  if (!root) return null;
+  const abs = path.resolve(String(target));
+  const b = specsWriteBlock(root, abs, opts);
+  if (!b) return null;
+  const gate = { kind: b.kind, rel: gateRel(root, b.at, b.kind === "link" && !b.file), file: !!b.file }; // a linked folder: ".specs/x/"
+  const e = new Error(gateMessage(projectLangOfRoot(root), gate));
+  e.code = GATE_CODES[b.kind];
+  e.gate = gate;
+  return e;
+}
+function specsWriteGate(target, opts) {
+  const e = specsGateError(target, opts);
+  if (e) throw e;
+}
+// A refused write (specsGateError's Error) as an operation's result — in `lang` when given (the feature's), else as thrown;
+// anything else → null (not ours: the caller re-throws it).
+function gateRefusal(e, lang) {
+  if (!e || !e.gate || (e.code !== GATE_CODES.link && e.code !== GATE_CODES.notFile)) return null;
+  const g = e.gate;
+  return { ok: false, ...(g.kind === "link" ? { linked: true } : { wrongKind: true }), path: g.rel, error: lang ? gateMessage(lang, g) : e.message };
 }
 // readIfExists for such a file: null when it is not contained (skipped, as if absent).
 function readContained(projectDir, file) {
@@ -830,11 +983,12 @@ function isNetworkPath(p) {
   return host !== "wsl$" && host !== "wsl.localhost";
 }
 
-module.exports = { resolveProjectDir, unexpandedVar, nearestProject, specsRoot, ensureDir, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
-  writeFileAtomic, SLEEP_CELL, sleepSync, LOCK_FILE, LOCK_WAIT_MS, LOCK_STALE_MS, LOCK_MAX_HOLD_MS, LOCK_RECLAIM_SUFFIX,
+module.exports = { resolveProjectDir, unexpandedVar, nearestProject, specsRoot, ensureDir, mkdirp, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
+  writeFileAtomic, specWrite, GATE_CODES, specsRootOf, realSpecsRoot, specsWriteBlock, gateRel, gateMessage, specsGateError,
+  specsWriteGate, gateRefusal, featureLangSafe, SLEEP_CELL, sleepSync, LOCK_FILE, LOCK_WAIT_MS, LOCK_STALE_MS, LOCK_MAX_HOLD_MS, LOCK_RECLAIM_SUFFIX,
   LOCK_RECLAIM_STALE_MS, LOCK_NOTELESS_STALE_MS, LOCK_NESTED_MIN_MS, HELD_LOCKS, lockSnapshot, sameLockSnapshot,
   staleLock, reclaimStaleLock, releaseLock, lockWaitMs, withFeatureLock, withLockFile, acquireLockFile, featureLocked,
-  featureBusyResult, withMoveLock, DIR_RENAME_RETRY_MS, renameDirSync, moveDirOrBusy, ROADMAP_LOCK_FILE,
+  featureBusyResult, withMoveLock, DIR_RENAME_RETRY_MS, renameDirSync, removeLinkEntry, moveDirOrBusy, ROADMAP_LOCK_FILE,
   LOCK_IGNORE_LINES, ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel,
   shapeError, withReadCache, readCacheKey, EXISTS_KEY, DIR_KEY, CONTAINED_KEY, specsFileContained,
   specsFileContainedNow, specsWriteContained, readContained, readIfExists, readFileHead, readRaw, decodeText, existsCached, existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, globWalkReaches,

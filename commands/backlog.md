@@ -10,7 +10,8 @@ Args: $ARGUMENTS
 Manage the backlog with the `spec_backlog` MCP tool (CLI: `dev-spec backlog add "name" "note"` /
 `dev-spec backlog rm "name"` / `dev-spec backlog`). These are features planned but not yet given a
 `.specs/<feature>/` folder, so the "what's left" in `.specs/ROADMAP.md` includes work not yet
-started. Changes regenerate ROADMAP.md automatically. Respond in the user's language (EN/PT/ES).
+started. A feature created, restored or renamed under an item's name takes its place (the item is dropped:
+`removedFromBacklog`). Changes regenerate ROADMAP.md automatically. Respond in the user's language (EN/PT/ES).
 
 Improvement items coming from `dev-guardian`'s `/guardian-improve` land here as metric-anchored
 seeds. When you scaffold one into a feature, follow `references/improvement-specs.md`: the acceptance

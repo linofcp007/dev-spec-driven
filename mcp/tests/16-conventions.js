@@ -1430,4 +1430,29 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
       "1.23 review: with no projectDir / env the project is the nearest dev-spec .specs/ at or above the working folder (else the folder itself; a hand-made .specs/ in it counts) — the MCP server's fallback too; a SPEC_PROJECT_DIR with an unexpanded ${VAR}, $VAR or %VAR% falls through (got " +
       JSON.stringify({ fromSub, fromBare, fromHand, fromHandSub, unexp, named, listed: listed && listed.specsDir }) + ")");
   }
+
+  // 1.24 r6 G-I2: ONE write gate for everything under .specs/ (engine/files.js: writeFileAtomic / writeIfAbsent / ensureDir / specWrite
+  // all run specsWriteGate first; the locks check their path the same way). No other mcp/lib source writes with a raw fs call — a raw
+  // fs.writeFileSync of a task brief / merge summary and an fs.appendFileSync of observed.jsonl / .specs/.gitignore followed a
+  // committed symlink out of .specs/. Allow-list: files.js alone (the gate, the atomic write, the lock files). Nothing else in mcp/lib
+  // writes outside .specs/ (the exports go to .specs/exports/ through writeFileAtomic; the CLI's merge driver and the hooks are not
+  // engine sources). Destructured fs writers and an fs.openSync with a write flag count too.
+  {
+    const RAW = /\bfs\.(?:writeFileSync|appendFileSync|renameSync|mkdirSync|copyFileSync|cpSync|symlinkSync|linkSync|writeSync|truncateSync|createWriteStream|rmdirSync)\s*\(|\bfs\.openSync\s*\([^)]*["'](?:w|a|r\+)|\{[^}]*\b(?:writeFileSync|appendFileSync|renameSync|mkdirSync|copyFileSync|cpSync)\b[^}]*\}\s*=\s*require\(\s*["']fs["']\s*\)/;
+    const ALLOW = new Set([path.join("mcp", "lib", "engine", "files.js")]);
+    const hits = [];
+    for (const f of libSources()) {
+      const relf = path.relative(root, f);
+      if (ALLOW.has(relf)) continue;
+      fs.readFileSync(f, "utf8").split(/\r?\n/).forEach((l, i) => { if (RAW.test(l) && !/^\s*\/\//.test(l)) hits.push(relf.split(path.sep).join("/") + ":" + (i + 1) + " " + l.trim().slice(0, 90)); });
+    }
+    const files = fs.readFileSync(path.join(root, "mcp", "lib", "engine", "files.js"), "utf8");
+    const gated = ["function ensureDir", "function writeIfAbsent", "function writeFileAtomic", "function specWrite"].every((h) => {
+      const at = files.indexOf(h);
+      return at >= 0 && /specsWriteGate\(/.test(files.slice(at, files.indexOf("\n}\n", at)));
+    });
+    ok(!hits.length && gated && /const refused = specsGateError\(lock\)/.test(files),
+      "1.24 r6 G-I2: no mcp/lib source but engine/files.js writes with a raw fs call (writeFileSync / appendFileSync / renameSync / mkdirSync …) — every write goes through the gate (writeFileAtomic, writeIfAbsent, ensureDir, specWrite each call specsWriteGate; withLockFile checks the lock's path) (got " +
+      JSON.stringify({ hits, gated }) + ")");
+  }
 };

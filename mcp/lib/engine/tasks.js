@@ -1640,8 +1640,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n"); // self-ignoring scratch: no repo config needed
     writeIfAbsent(paths.ledger, t.ledgerHeader(slug));    // the ledger is appended by the controller, never reset
-    forgetCached(paths.brief); // written in place below: its cached text is dropped
-    fs.writeFileSync(paths.brief, md, "utf8");            // derived artifact: regenerated on every call
+    writeFileAtomic(paths.brief, md);                     // derived artifact: regenerated on every call (1.24 r6: through the write gate)
   }
   const includeBrief = opts.includeBrief != null ? !!opts.includeBrief : !write;
 

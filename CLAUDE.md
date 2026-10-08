@@ -53,8 +53,9 @@ Read the file BEFORE you change its area (a section name another note cites — 
   guard, the status line, user defaults or the plan-mode bridge: Hooks and commands · Guard mode · Human approval guard ·
   Claude Code integration (1.16 C).
 - **`docs/maintainers/conventions.md`** — before touching feature folders, `.state.json` / roadmap.json writes (or adding a key
-  to them — the merge driver must know it), the locks, process I/O or CLI flags / exit codes: Conventions & gotchas (resolver,
-  JSON state, merging the spec state — git's merge driver, 1.21 —, locks, rename, stdout, the CLI).
+  to them — the merge driver must know it), any write under .specs/, the locks, process I/O or CLI flags / exit codes:
+  Conventions & gotchas (resolver, the write gate, JSON state, merging the spec state — git's merge driver, 1.21 —, locks,
+  rename, stdout, the CLI).
 - **`docs/maintainers/testing.md`** — before adding a test (which file of `mcp/tests/` / `cli/tests/`), writing one that
   runs a command or depends on the file system, or running a part of a suite or the Linux / plugin-eval suites: The
   suites (files, runner, `--only`) · Tests (continued) — Docker, plugin evals, Windows AND Linux, the eval harness.
@@ -148,7 +149,8 @@ each holds; `--only <file|area|NN>` runs a part, plus the files it needs — tes
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 Exact counts that change when a package adds a command, tool or template (55 command files, the tools/list length, the
 template keys, the resource list) are asserted in place — update them in the same change. The source guards (no literal
-U+FEFF, no `child_process`, no backslash-stripped regex literal, the roadmap's printed labels) read every `mcp/lib` source
+U+FEFF, no `child_process`, no backslash-stripped regex literal, the roadmap's printed labels, no raw fs write outside
+engine/files.js — the write gate, conventions.md) read every `mcp/lib` source
 — the facades and all their modules (`libSources()` in mcp/tests/harness.js) — never a facade alone; never a built bundle
 (its registry comes from scripts/build.js, which they read). Both suites run on the modules (the harnesses drop
 `DEV_SPEC_BUNDLE`); the bundle's tests build one into tmp.

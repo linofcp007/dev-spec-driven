@@ -792,4 +792,29 @@ exports.run = async ({ ok, rpc, payload, S, tmp, shipFeature }) => {
         "1.22 review: spec_export {write} refuses a document that is a symlink to a file outside .specs/ (the file untouched) (got " + js([r.ok, r.error]) + ")");
     } else ok(true, "1.22 review: file symlinks unavailable here (Windows without the privilege) — skipped");
   }
+
+  // 1.24 r6 G-I10: a shipped CHANGE (kind "change" — size xs, one change.md) was listed under "Added" as if it were a new feature. It
+  // is a change to what exists: listed under "Changed" (`changed.changes`: its summary and criteria), counted there, never in Added;
+  // a plain feature shipped beside it stays under Added.
+  {
+    const p = path.join(tmp, "proj-r6-notes-change");
+    S.initProject(p, ["core"], "en");
+    const c = S.createFeature(p, "Footer typo", undefined, "fix a typo in the footer", undefined, "en", "change");
+    fs.writeFileSync(path.join(c.dir, "change.md"), "# Change: Footer typo\n\n## Summary\nThe footer says Copyright again.\n\n## Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer text \"Copyright 2026 Acme\".\n\n## Tasks\n- [x] 1. [US1] Fix the footer string\n  - _Requirements: US-1.AC-1_\n");
+    const f = S.createFeature(p, "Albums", ["core"], "Users group photos into albums");
+    shipFeature(p, c.slug, "2026-09-02T00:00:00.000Z");
+    shipFeature(p, f.slug, "2026-09-03T00:00:00.000Z");
+    const n = S.changelog(p, { since: "all" });
+    const md = n.markdown || "";
+    const changed = md.slice(md.indexOf("## Changed"), md.indexOf("## Fixed"));
+    const added = md.slice(md.indexOf("## Added"), md.indexOf("## Changed"));
+    const pt = S.changelog(p, { since: "all" });
+    ok(n.ok && !n.added.some((a) => a.feature === c.slug) && n.added.some((a) => a.feature === f.slug) && Array.isArray(n.changed.changes) && n.changed.changes.length === 1 &&
+      n.changed.changes[0].feature === c.slug && n.changed.changes[0].kind === "change" && /Copyright again/.test(n.changed.changes[0].summary || "") &&
+      n.changed.changes[0].acs.length === 1 && n.counts.changed === 1 && n.counts.added === 1 && /\*\*Footer typo/.test(changed) && /US-1\.AC-1/.test(changed) &&
+      !/Footer typo/.test(added) && /Albums/.test(added) && pt.ok,
+      "1.24 r6 G-I10: a shipped change (kind change) is listed under Changed — its summary and criteria, counted in `changed` — never under Added (got " +
+      JSON.stringify({ added: n.added.map((a) => a.feature), changes: n.changed.changes, counts: n.counts, changed }) + ")");
+  }
 };

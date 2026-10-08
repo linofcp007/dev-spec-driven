@@ -307,7 +307,8 @@ date|last|all>] [--write]`) builds release notes from the spec data alone — no
 - **Added** — features shipped since `since` (a finish baseline recorded, or the `execution` sign-off approved), each
   with its summary and its user-story criteria (template ones left out); a feature shipped before `since` is never
   Added again;
-- **Changed** — criteria superseded (`_Supersedes:_`) by a feature shipped since then, and the change requests
+- **Changed** — the changes (`kind: "change"`, one `change.md`) shipped since then, with their summary and criteria;
+  criteria superseded (`_Supersedes:_`) by a feature shipped since then, and the change requests
   (`spec_impact` reopen) recorded since then, with the current text of the criteria a requirements change touched;
 - **Fixed** — bugfixes shipped since then, with the root-cause one-liner from `bug.md` (spikes are never listed).
 

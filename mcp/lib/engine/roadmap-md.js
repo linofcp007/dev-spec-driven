@@ -17,7 +17,7 @@ let activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSi
   round1, round2, sectionState, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats, supersedesTrace, taskBlocks,
   taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf, unverifiedLabel, verificationStatus,
   waiverView,
-  featureSize, trackSectionReport, sectionVerdict;
+  featureSize, trackSectionReport, sectionVerdict, featureDirs, findCycles;
 function __link(E) { ({ activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSinceApproval,
   clarificationMarkers, detectTracks, duplicateTaskNumbers, flatText, FOLD_CASE, globMatcher, implementsRel,
   isImplementsGlob, isObj, isRecord, MILESTONE_ICON, milestoneAttention, milestoneInvalidInfo, milestoneLine,
@@ -25,7 +25,7 @@ function __link(E) { ({ activeDesign, activeSectionTracks, activeTasks, chainPla
   readRoadmap, roadmap, roleWaitList, round1, round2, sectionState, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats,
   supersedesTrace, taskBlocks, taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf,
   unverifiedLabel, verificationStatus, waiverView,
-  featureSize, trackSectionReport, sectionVerdict } = E); }
+  featureSize, trackSectionReport, sectionVerdict, featureDirs, findCycles } = E); }
 
 // ---------------------------------------------------------------------------
 // ROADMAP.md renderer — a single always-current overview of all features
@@ -268,7 +268,8 @@ function renderRoadmapMd(projectDir, lang, data) {
   md += `**${t.progress}: ${rmv.overallPercent}%** ${progressBar(rmv.overallPercent)} · ${rmv.complete}/${rmv.total} ${t.complete} · ${tasksDone}/${tasksTotal} ${t.tasks}\n\n`;
   if (rows.length) md += `_${velocityText(rmv.velocity, lang)}_\n\n`; // forecasts: the project velocity (or "not enough data")
   md += `${t.legend}: ✅ ${t.done} · 🟡 ${t.inprogress} · ⛔ ${t.blocked} · 📋 ${t.planned} · ⬜ ${t.notstarted}\n`;
-  if (rmv.cycle) md += `\n> ⚠ **${t.cycle}:** ${rmv.cycle.join(" → ")}\n`;
+  const cycs = rmvCycles(rmv); // 1.24 r6 (G6): every cycle, one line each (only the first was shown)
+  if (cycs.length) md += "\n" + cycs.map((c) => `> ⚠ **${t.cycle}:** ${c.join(" → ")}`).join("\n") + "\n";
 
   md += `\n## ▶ ${t.nextup}\n`;
   if (!rmv.features.length) md += `_${t.noFeatures}_\n`;
@@ -404,7 +405,7 @@ ${rows.length ? `<div class="sub">${htmlEsc(velocityText(rmv.velocity, lang))}</
   <span><span class="dot" style="background:var(--accent)"></span>${t.planned}</span>
   <span><span class="dot" style="background:var(--c-muted)"></span>${t.notstarted}</span>
 </div>
-${rmv.cycle ? `<p class="unmet">⚠ ${t.cycle}: ${htmlEsc(rmv.cycle.join(" → "))}</p>` : ""}
+${rmvCycles(rmv).map((c) => `<p class="unmet">⚠ ${t.cycle}: ${htmlEsc(c.join(" → "))}</p>`).join("")}
 
 <h2>▶ ${t.nextup}</h2>
 ${!rmv.features.length ? `<p class="sub">${t.noFeatures}</p>` : !nextUp.length ? `<p class="sub">${rmv.complete === rmv.total ? t.allDone : t.nothingUnblocked}</p>` : `<div class="cards">${nextCards}</div>`}
@@ -517,7 +518,27 @@ function velocityOf(completions, now) {
 }
 // One feature's forecast input: its completions, open points, open / unsized task counts (active tasks only).
 function forecastInput(projectDir, name) {
-  const dir = path.join(specsRoot(projectDir), name);
+  return forecastInputAt(path.join(specsRoot(projectDir), name));
+}
+// 1.24 r6 (G3) — the project velocity counts the ARCHIVED features' completions too: their ticks happened. Archiving a feature
+// shipped this week wiped the velocity (roadmap, spec_metrics) and every other feature's ETA with it ("not enough data"). An
+// archived folder last written before the window (its mtime — archiving writes its .state.json there, after every tick) holds no
+// completion inside it and is skipped unread — unless `now` is fixed (opts.now, the tests: every archived folder is read).
+function archivedCompletions(projectDir, now, fixedNow) {
+  const from = now - FORECAST_WINDOW_DAYS * FC_DAY_MS;
+  const out = [];
+  for (const fd of featureDirs(projectDir)) {
+    if (!fd.archived) continue;
+    if (!fixedNow) {
+      let m = null;
+      try { m = fs.statSync(fd.dir).mtimeMs; } catch { continue; }
+      if (m < from) continue;
+    }
+    for (const c of forecastInputAt(fd.dir).completions) out.push(c);
+  }
+  return out;
+}
+function forecastInputAt(dir) {
   const blocks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", detectTracks(dir)) || "");
   const st = readJson(statePath(dir)).data;
   const state = isObj(st) ? st : {};
@@ -534,18 +555,24 @@ function forecastInput(projectDir, name) {
   const open = blocks.filter((b) => !b.done);
   return { completions, remaining: round2(open.reduce((s, b) => s + pts(b), 0)), open: open.length, unsized: open.filter((b) => !taskSize(b)).length };
 }
-// feats: roadmap() features ({ name, phase, percent, unmetDeps }). opts.now (ms / ISO) fixes "today" (tests); opts.cycle:
-// roadmap()'s cycle (its features get no ETA). → { velocity, byFeature: { name → forecast } } — forecast: { eta, range:
-// [low, high], workingDays, remainingPoints, openTasks, unsizedTasks, pointsPerDay, velocity: "feature" | "project", after? }
-// or { eta: null, reason: "done" | "no-tasks" | "not-enough-data" | "dependency" | "cycle", … }.
+// feats: roadmap() features ({ name, phase, percent, unmetDeps, dependsOn }). opts.now (ms / ISO) fixes "today" (tests);
+// opts.cycle: a cycle's features (no ETA) — 1.24 r6 (G6): every feature of EVERY dependency cycle (findCycles over the features'
+// dependsOn) gets reason "cycle" too; only roadmap()'s first cycle did, and a member the walk met second was overwritten with
+// "dependency". → { velocity, byFeature: { name → forecast } } — forecast: { eta, range: [low, high], workingDays,
+// remainingPoints, openTasks, unsizedTasks, pointsPerDay, velocity: "feature" | "project", after? } or { eta: null, reason:
+// "done" | "no-tasks" | "not-enough-data" | "dependency" | "cycle", … }.
+// The roadmap view's cycles (roadmap() `cycles`; a view built before 1.24 r6 carries only `cycle`).
+const rmvCycles = (rmv) => (Array.isArray(rmv.cycles) ? rmv.cycles : rmv.cycle ? [rmv.cycle] : []);
 function forecastData(projectDir, feats, opts = {}) {
   const now = (opts.now != null && timeOf(opts.now)) || Date.now();
   const today = fcDay(now);
   const input = Object.create(null);
   const feat = Object.create(null);
   for (const f of feats) { feat[f.name] = f; input[f.name] = forecastInput(projectDir, f.name); }
-  const velocity = velocityOf(Object.values(input).flatMap((x) => x.completions), now);
+  // the project's rate: every feature's completions, the archived ones' included (1.24 r6 G3)
+  const velocity = velocityOf(Object.values(input).flatMap((x) => x.completions).concat(archivedCompletions(projectDir, now, opts.now != null)), now);
   const inCycle = new Set(Array.isArray(opts.cycle) ? opts.cycle : []);
+  for (const c of findCycles(Object.fromEntries(feats.map((f) => [f.name, Array.isArray(f.dependsOn) ? f.dependsOn : []])))) c.members.forEach((m) => inCycle.add(m));
   const out = Object.create(null);
   const days = new Map(); // name → { eta, low, high } (UTC day ms) for the dependents' start
   const visiting = new Set();
@@ -626,6 +653,8 @@ function velocityText(v, lang) {
 function roadmapTailLines(r, lang) {
   const F = i18n.msg(lang).forecast;
   const out = [];
+  // 1.24 r6 (G6): the cycles after the first (the CLI's head line names the first — `cycle`), one line each
+  for (const c of rmvCycles(r).slice(1)) out.push(`⚠ ${i18nLang(lang).cycle}: ${c.join(" → ")}`);
   if (r.velocity && r.velocity.completed > 0) out.push(velocityText(r.velocity, lang));
   if ((r.features || []).some((f) => f.forecast && f.forecast.eta)) out.push(F.etaNote(Math.round(FORECAST_SPREAD * 100)));
   if ((r.milestones || []).length) out.push(`🏁 ${i18n.msg(lang).milestone.title}:`, ...r.milestones.map((m) => "  " + milestoneLine(m, lang))); // 1.16 E3
@@ -794,7 +823,7 @@ module.exports = { progressBar, mid, mlabel, cutText, ROADMAP_I18N, i18nLang, ht
   ROW_SCRATCH, rowStatSig, rowProjectSig, roadmapData, roadmapRow, buildAttention,
   roadmapTaskText, roadmapPhaseName, renderRoadmapMd, renderRoadmapHtml, SIZE_POINTS, RE_SIZE_VALUE,
   FORECAST_WINDOW_DAYS, FORECAST_MIN_TASKS, FORECAST_SPREAD, FC_DAY_MS, taskSize, taskCompletedAt, fcDay, fcWeekend,
-  fcIso, fcWorkingDays, fcAddWorkingDays, velocityOf, forecastInput, forecastData, featureVelocity, roadmapExtras,
+  fcIso, fcWorkingDays, fcAddWorkingDays, velocityOf, forecastInput, forecastInputAt, archivedCompletions, rmvCycles, forecastData, featureVelocity, roadmapExtras,
   etaText, velocityText, roadmapTailLines, OVERLAP_MAX_KEYS, OVERLAP_MAX_GLOB_CHECKS, OVERLAP_MAX_REF_LEN,
   OVERLAP_MAX_GLOB_WORK, OVERLAP_MAX_PAIRS, OVERLAP_FILES_SHOWN, featureOverlaps, overlapFiles, overlapAttention,
   overlapDoctorDetail, __link };

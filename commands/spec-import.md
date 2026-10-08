@@ -13,7 +13,8 @@ a plan / ExecPlan / fluidplan PLAN.md, `{tool, text, …}` with the document's m
 reads stdin, `--text "…"` takes it inline):
 
 - `tool` — `kiro` (`.kiro/specs/<name>/`; a Portuguese / Spanish one too — `### Requisito N`, `## Introdução` /
-  `## Introducción`), `spec-kit` (`specs/<nnn-name>/`), `openspec`
+  `## Introducción`), `spec-kit` (`specs/<nnn-name>/` — `plan.md` and its `research.md`, `data-model.md`, `contracts/`,
+  `quickstart.md` become `design.md`; a task's `[USn]` tag its `_Requirements:_`, the paths it names its `_Implements:_`), `openspec`
   (`openspec/specs/<capability>/`, or a change folder `openspec/changes/<id>/`), `plan` (a Markdown plan: Claude Code
   plan mode or a Cursor plan `.cursor/plans/*.plan.md`), `execplan` (a Codex ExecPlan written per `PLANS.md`) or
   `bmad` (BMAD-METHOD docs: `docs/prd.md` or a sharded `docs/prd/`, `docs/stories/*.md`, `docs/architecture.md`;

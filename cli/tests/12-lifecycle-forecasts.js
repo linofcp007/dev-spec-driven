@@ -68,4 +68,20 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   ok(/roadmap \[--write\]\[--html\]\[--lang\] +Roadmap: .*ETA per feature \(velocity from ticked tasks, _Size: XS\|S\|M\|L\|XL_\), cross-feature file overlaps/.test(helpB4) &&
     /metrics \[feature\] \[--write\] +Lead times.*velocity/.test(helpB4) && /Multi-feature roadmap: ETA forecasts, cross-feature overlaps/.test(docblockB4),
     "help and the header docblock mention the roadmap's ETA / overlaps and metrics' velocity");
+
+  // 1.24 r6 G6: `dev-spec roadmap` names every dependency cycle — the head line the first (as before), one line each for the rest
+  // (a → a hid b ↔ c).
+  {
+    const pc = path.join(tmp, "r6-cycles");
+    run(["init", "--lang", "en", "--project", pc]);
+    for (const n of ["a", "b", "c"]) Sb4.createFeature(pc, n, ["core"], "", undefined, "en");
+    const rmf = path.join(pc, ".specs", "roadmap.json");
+    const rm = JSON.parse(fs.readFileSync(rmf, "utf8"));
+    Object.assign(rm.features, { a: { dependsOn: ["a"] }, b: { dependsOn: ["c"] }, c: { dependsOn: ["b"] } });
+    fs.writeFileSync(rmf, JSON.stringify(rm, null, 2));
+    const r = run(["roadmap", "--project", pc]);
+    const j = jsonB4(run(["roadmap", "--json", "--project", pc]));
+    ok(r.code === 0 && /CYCLE: a → a/.test(r.out) && /⚠ Circular dependency: b → c → b/.test(r.out) && j && j.cycles && j.cycles.length === 2,
+      "1.24 r6 G6: `dev-spec roadmap` names every cycle (the head line's first, a line per other one); --json carries `cycles` (got " + JSON.stringify(r.out.slice(0, 300)) + ")");
+  }
 };
