@@ -235,8 +235,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require }) => {
       S.parseTasks(skTasks).find((t) => t.number === 3).parallel === true, "spec_import spec-kit: T001… → numbered tasks keeping checkbox state, [P]/[USn] tags and checkpoints");
     const skEars = safe6(() => S.earsFeature(im, "photo-albums"));
     ok(skEars.verdict === "pass" && skEars.summary.criteriaDetected === 3 && sk.label === "core +saas" && /## \[SaaS\] Performance Budget/.test(r6(im, ".specs", "photo-albums", "design.md")) &&
-      /## Constitution Check/.test(r6(im, ".specs", "photo-albums", "design.md")) && sk.warnings.some((x) => /research\.md/.test(x)),
-      "spec_import spec-kit: the imported requirements pass ears_validate; explicit tracks honoured; plan.md becomes design.md (+ the [SaaS] sections); un-imported files reported");
+      // 1.24 r6 G-I3: research.md is design now (one holding only its title carries nothing) — no "not imported" warning
+      /## Constitution Check/.test(r6(im, ".specs", "photo-albums", "design.md")) && !sk.warnings.some((x) => /research\.md/.test(x)),
+      "spec_import spec-kit: the imported requirements pass ears_validate; explicit tracks honoured; plan.md becomes design.md (+ the [SaaS] sections); research.md no longer reported as not imported");
 
     // OpenSpec: a capability and a change folder (PT artifacts).
     w6(im, "openspec/specs/auth/spec.md", ["# Auth Specification", "", "## Purpose", "Authentication and session management.", "", "## Requirements", "### Requirement: User Authentication",

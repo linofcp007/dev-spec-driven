@@ -120,6 +120,18 @@ trackers, release notes, milestones).
     (`FP_LS_PS`). Pinned to fluidplan 755d1b2 (2026-09-26).
 - **spec-kit scenarios** (1.22 review): numbered items under the story, else — only under an explicit "Acceptance Scenarios"
   label, as kiro.js reads its criteria — bulleted ones (`mdListItems(…, false)`); a bullet outside the label stays prose.
+- **spec-kit tasks and design documents (1.24 r6 G-I1 / G-I3).** `specKitTaskMarkers()` gives each task line (a checkbox outside
+  fenced code and HTML comments) the sub-lines it lacks: `_Requirements: US<n>_` for its `[USn]` tag — importSpec's `refs` turn it
+  into that story's AC IDs, as a hand-written `US2` — and `_Implements: <paths>_` for the paths its text names (`planPaths()`, the
+  plan import's rule); a marker the task already carries (its line or a sub-line) is kept. The imported sample traces clean (it
+  read every criterion uncovered). `specKitDesignDocs()` appends `research.md`, `data-model.md`, `contracts/` and
+  `quickstart.md` to plan.md's text (they were skipped with a "not imported" warning): each under a localized `## ` heading
+  (`importSpec.skDocs`) with a provenance line (`skFrom`), its first-line title dropped and its headings one level down outside
+  fenced code (`demoteMd`); a contract that is no markdown goes into a fence (`SPECKIT_CONTRACT_EXT` gives its language and the
+  text kinds read); contracts/ two levels deep, at most `SPECKIT_CONTRACTS_MAX` (30) files — the rest, and any other kind, are
+  named in the "not imported" warning; a document holding only its title adds no section. Every file goes through the
+  importer's `read` (inside the project; over `IMPORT_MAX_BYTES` → the whole import refused). No plan.md but such documents:
+  design.md holds them, the warning says so (`wNoPlanDocs`).
 - **A title that names no folder** (1.22 review): when the caller gives no `name` and the parser's `nameHint` (a plan's /
   ExecPlan's / fluidplan's title, BMAD's PRD or story title) slugifies to nothing (`# Добавить тёмную тему`), importSpec uses the
   parser's `nameFallback` — the name it had without the title (the plan file's stem, the folder, fp.id, the story file's stem);

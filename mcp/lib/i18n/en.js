@@ -1853,6 +1853,10 @@ const msg = {
       wRemoved: (name) => `REMOVED requirement '${name}' was not imported`,
       wRenamed: (from, to) => `RENAMED requirement '${from}' → '${to}' (imported under the new name)`,
       wSkipped: (files) => `not imported (left in place): ${files}`,
+      // 1.24 r6 (G-I3): spec-kit's design documents beside plan.md → design.md sections (their headings; the provenance line)
+      skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts", quickstart: "Quickstart" },
+      skFrom: (file) => `> From spec-kit \`${file}\`.`,
+      wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts, quickstart) without the plan`,
       wUnreadable: (file) => `${file} points outside the project — skipped`,
       done: (tool, rel, slug, label, lang) => `Imported ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  mapping: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
