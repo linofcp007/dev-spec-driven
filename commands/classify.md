@@ -1,5 +1,5 @@
 ---
-description: Phase 0 — classify a feature into composable tracks (core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data) and write classification.md. PT - classifica a funcionalidade em tracks. ES - clasifica la función en tracks.
+description: Phase 0 — classify a feature into composable tracks and write classification.md.
 argument-hint: "[feature description]"
 ---
 

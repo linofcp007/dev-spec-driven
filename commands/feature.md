@@ -1,5 +1,5 @@
 ---
-description: Manage a feature's lifecycle - archive, restore, rename, remove, or switch its phase order (design-first); roadmap deps stay consistent. PT - gere a feature (arquivar/restaurar/renomear/apagar/ordem das fases). ES - gestiona la función (archivar/restaurar/renombrar/eliminar/orden de fases).
+description: Manage a feature's lifecycle — archive, restore, rename, remove, or switch its phase order (design-first).
 argument-hint: "[archive|restore|rename|remove|flow] [feature name] [new name | design-first|requirements-first]"
 ---
 

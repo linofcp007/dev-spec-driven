@@ -514,6 +514,8 @@ exports.run = async ({
       "1.22 review P11: INTEGRATIONS' stop-gate row names spec_stop_check first (CLI as the alternative); tool-catalog.md lists spec_stop_check and spec_log; the Cursor / Windsurf / Copilot / Gemini rule files spell out `dev-spec <command>` and the MCP stop-check");
     // P12: Spanish terminology follows es.js — "el gate de evidencia" (never "la puerta" outside the release notes the
     // controller owns), and a command's ES description says "función", never "feature" (languages.md → Terminology).
+    // (1.24 review 6: the command descriptions carry no ES tail any more — 10-guards-review6 checks they stay short English; kept
+    // as a guard should a Spanish one come back.)
     const esBlock = (docsReadme.split("\n## Español\n")[1] || "").split("\n## What's in the box")[0];
     const esOutsideNews = esBlock.split(/\n### Novedades de la [\d.]+\n/).map((s, i) => (i ? s.split(/\n### /).slice(1).join("\n### ") : s)).join("\n");
     const esDescFeature = fs.readdirSync(path.join(root, "commands")).filter((f) => f.endsWith(".md")).filter((f) => {

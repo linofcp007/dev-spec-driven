@@ -1,5 +1,5 @@
 ---
-description: Track planned-but-unspecced features shown in ROADMAP.md. PT - backlog de funcionalidades. ES - backlog de funciones.
+description: Track planned-but-unspecced features shown in ROADMAP.md.
 argument-hint: "[add|rm|remove <name> [note]]"
 ---
 

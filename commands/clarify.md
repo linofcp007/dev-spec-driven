@@ -1,5 +1,5 @@
 ---
-description: Surface ambiguities and gaps in a feature's requirements before design. PT - clarifica requisitos. ES - aclara requisitos.
+description: Surface ambiguities and gaps in a feature's requirements before design.
 argument-hint: "[feature name]"
 ---
 

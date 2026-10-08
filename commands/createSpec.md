@@ -1,5 +1,5 @@
 ---
-description: Phase 1 — write EARS requirements with stable AC IDs for a feature. PT - escreve requisitos EARS. ES - escribe requisitos EARS.
+description: Phase 1 — write EARS requirements with stable AC IDs for a feature.
 argument-hint: "[feature name]"
 ---
 

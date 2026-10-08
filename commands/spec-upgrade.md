@@ -1,5 +1,5 @@
 ---
-description: After updating the plugin, audit the project's .specs/ against the new rules, apply the safe migrations (after you confirm) and review what isn't implemented yet. PT - atualiza as specs de uma versão anterior. ES - actualiza las specs de una versión anterior.
+description: After a plugin update — audit .specs/ against the new rules and apply the safe migrations after you confirm.
 argument-hint: "[--apply]"
 ---
 

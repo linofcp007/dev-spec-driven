@@ -1,5 +1,5 @@
 ---
-description: Brownfield — inventory an existing codebase (stack, modules, routes, tests, entrypoints, env names, migrations) before reverse-engineering specs. PT - analisa código existente. ES - analiza código existente.
+description: Brownfield — inventory an existing codebase (stack, modules, routes, tests, entry points) before reverse-engineering specs.
 argument-hint: "[folder to scan — blank for the project root] [--cap N]"
 ---
 

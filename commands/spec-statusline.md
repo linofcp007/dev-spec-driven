@@ -1,5 +1,6 @@
 ---
-description: Show the dev-spec status line in Claude Code — the most active feature, its tasks, unverified ticks and the next step, one line under the prompt (writes the settings.json entry only after you confirm). PT - mostra a status line do dev-spec no Claude Code. ES - muestra la status line de dev-spec en Claude Code.
+description: Show the dev-spec status line in Claude Code (writes the settings.json entry only after you confirm).
+disable-model-invocation: true
 argument-hint: "[--user | --project] [--remove]"
 ---
 

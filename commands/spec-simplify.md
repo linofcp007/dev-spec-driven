@@ -1,5 +1,5 @@
 ---
-description: Optional simplification pass before /spec-finish — behaviour-preserving cleanups of the code the feature added, one commit each, proven by its own tests and reviewed. PT - passagem de simplificação antes de fechar (sem mudar o comportamento). ES - pasada de simplificación antes de cerrar (sin cambiar el comportamiento).
+description: Optional simplification pass before /spec-finish — behaviour-preserving cleanups of the feature's code, proven by its tests.
 argument-hint: "[feature name] [--subagents]"
 ---
 

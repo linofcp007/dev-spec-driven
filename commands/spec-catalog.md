@@ -1,5 +1,5 @@
 ---
-description: "Living catalog — what the system does today: every feature and every AC in one generated .specs/SPECS.md, superseded criteria marked. PT - catálogo vivo das specs. ES - catálogo vivo de las specs."
+description: "Living catalog — what the system does today: every feature and every AC in one generated .specs/SPECS.md."
 argument-hint: "[--write]"
 ---
 

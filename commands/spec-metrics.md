@@ -1,5 +1,5 @@
 ---
-description: Metrics and retrospective — lead times, rework, forced approvals, change requests, evidence pass rate; optionally draft retro.md. PT - métricas e retrospetiva. ES - métricas y retrospectiva.
+description: Metrics and retrospective — lead times, rework, forced approvals, change requests, evidence pass rate; optional retro.md.
 argument-hint: "[feature name | blank for the project] [--write]"
 ---
 

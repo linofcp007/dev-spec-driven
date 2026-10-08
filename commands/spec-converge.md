@@ -1,5 +1,5 @@
 ---
-description: Converge pass — check the whole feature AC by AC against the code, list what is missing, and append the follow-up tasks the user approves. PT - passagem de convergência (spec vs código, AC a AC). ES - pasada de convergencia (spec vs código, AC por AC).
+description: Converge pass — check the whole feature AC by AC against the code and append the follow-up tasks you approve.
 argument-hint: "[feature name]"
 ---
 

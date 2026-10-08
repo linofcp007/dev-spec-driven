@@ -1,5 +1,5 @@
 ---
-description: Handle code-review feedback against the spec — verify each comment, fix AC violations, push back on out-of-scope asks, route spec changes to their phase. PT - trata feedback de review contra a spec. ES - gestiona feedback de revisión contra la spec.
+description: Handle code-review feedback against the spec — verify each comment, fix AC violations, route spec changes to their phase.
 argument-hint: "[feature name] [paste the review comments]"
 ---
 

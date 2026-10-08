@@ -1,5 +1,5 @@
 ---
-description: Show the roadmap and (re)generate .specs/ROADMAP.md (+ optional brand-styled .html) — progress, dependencies, ETAs, overlaps. PT - roadmap do projeto. ES - hoja de ruta del proyecto.
+description: Show the roadmap and regenerate .specs/ROADMAP.md (optional .html) — progress, dependencies, ETAs, overlaps.
 argument-hint: "[--write] [--html] [--lang pt]"
 ---
 

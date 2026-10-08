@@ -1,5 +1,5 @@
 ---
-description: Initialize .specs/ and the steering files for the tracks this project uses. PT - inicializa .specs/ e steering. ES - inicializa .specs/ y steering.
+description: Initialize .specs/ and the steering files for the tracks this project uses.
 argument-hint: "[tracks, e.g. tdd saas ai sec privacy dist api ui obs data] [--lang pt] [--guard on|off|scope] [--check name=cmd] [--roles requirements=product,design=tech+security] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]"
 ---
 

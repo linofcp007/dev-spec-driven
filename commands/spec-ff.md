@@ -1,5 +1,6 @@
 ---
-description: Fast-forward approval ("quick spec") - approve every filled planning phase in order, each through its own gate. PT - avanço rápido das aprovações. ES - avance rápido de las aprobaciones.
+description: Fast-forward approval (quick spec) — approve every filled planning phase in order, each through its own gate.
+disable-model-invocation: true
 argument-hint: "[feature name] [through-phase, default tasks] [--role name] [--force]"
 ---
 

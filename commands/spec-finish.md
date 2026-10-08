@@ -1,5 +1,5 @@
 ---
-description: Close a feature locally — verify it's really done, draft the merge summary from the spec, then merge locally or keep the branch (no PRs, no CI). PT - fecha a feature localmente (verifica, resumo do merge a partir da spec). ES - cierra la función en local (verifica, resumen del merge desde la spec).
+description: Close a feature locally — verify it is really done, draft the merge summary from the spec, then merge or keep the branch.
 argument-hint: "[feature name] [--run]"
 ---
 

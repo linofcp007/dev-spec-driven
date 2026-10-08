@@ -1,5 +1,6 @@
 ---
-description: Turn guard mode on, off or to scope — Claude Code asks before editing code while no feature has approved tasks (not Phase 4 test files or a spike's prototype; scope - also outside the plan's files). PT - liga/desliga o modo guarda. ES - activa/desactiva el modo guardia.
+description: Turn guard mode on, off or to scope — Claude Code asks before code edits while no feature has approved tasks.
+disable-model-invocation: true
 argument-hint: "[on|off|scope]"
 ---
 

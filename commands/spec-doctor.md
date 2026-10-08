@@ -1,5 +1,5 @@
 ---
-description: Health-check a feature — is it ready to advance a phase? Runs EARS + placeholders + traceability + mandatory-section + evidence + approval checks. PT - diagnóstico (pronto para avançar?). ES - diagnóstico (¿listo para avanzar?).
+description: Health-check a feature before it advances a phase — EARS, placeholders, traceability, sections, evidence, approvals.
 argument-hint: "[feature name] [--deep]"
 ---
 

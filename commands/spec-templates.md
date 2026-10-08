@@ -1,5 +1,5 @@
 ---
-description: Project templates — list, copy (init) or check the team's own scaffolds in .specs/templates/ that replace the built-in ones. PT - templates do projeto. ES - plantillas del proyecto.
+description: Project templates — list, copy (init) or check the team's own scaffolds in .specs/templates/.
 argument-hint: "[list|init|check] [artifact] [--lang en|pt|pt-BR|es]"
 ---
 
