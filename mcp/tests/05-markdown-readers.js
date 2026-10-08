@@ -384,4 +384,24 @@ exports.run = async ({ ok, S, tmp, require, __dirname }) => {
     ok(js(E.clarificationMarkers(fenced)) === "[]" && E.clarificationMarkers("A [NEEDS CLARIFICATION: which provider?] here").length === 1 && clar === "pass",
       "1.24 r6 F11: a [NEEDS CLARIFICATION] in fenced / indented code is no open question (doctor's clarifications pass); in prose it still is (got " + js([E.clarificationMarkers(fenced), clar]) + ")");
   }
+
+  // 1.24 r6 FI8: beside US-n.AC-m criteria, a criterion with a modal verb and no stable ID of its own traces nothing (EARS's no-id warn
+  // only) — trace_check says so too: the warning untracedCriteria (L<line>), doctor's traceability a warn. Never a gap; none for a
+  // criterion with its own ID (US-n.AC-m, NFR-n …).
+  {
+    const p = r6proj("untraced");
+    const c = r6feat(p, "Untraced", ["core"], R6_HEAD + "- US-1.AC-1 — WHEN the password is wrong THE SYSTEM SHALL show an error\n" +
+      "- WHEN the account is locked THE SYSTEM SHALL email the owner\n- **NFR-1** — THE SYSTEM SHALL answer within 200 ms\n" + R6_TAIL);
+    put(c.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1, NFR-1_\n");
+    const tr = S.traceCheck(p, c.slug);
+    const w = (tr.warnings || []).find((x) => x.kind === "untracedCriteria");
+    const docT = status(S.specDoctor(p, c.slug), "traceability");
+    const d2 = r6feat(p, "Traced", ["core"], R6_HEAD + "- US-1.AC-1 — WHEN the password is wrong THE SYSTEM SHALL show an error\n" + R6_TAIL);
+    put(d2.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1_\n");
+    const clean = S.traceCheck(p, d2.slug);
+    ok(tr.verdict === "pass" && !!w && js(w.items) === '["L13"]' && js(tr.untracedCriteria) === '["L13"]' && docT === "warn" &&
+      clean.verdict === "pass" && !("untracedCriteria" in clean) && !(clean.warnings || []).some((x) => x.kind === "untracedCriteria"),
+      "1.24 r6 FI8: a modal criterion with no stable ID beside US-n.AC-m ones is the trace warning untracedCriteria (L13), doctor's traceability warns; never a gap (got " +
+      js([tr.verdict, tr.warnings, tr.untracedCriteria, docT, clean.verdict, clean.warnings]) + ")");
+  }
 };

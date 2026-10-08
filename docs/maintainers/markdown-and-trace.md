@@ -86,7 +86,10 @@ matrix.
   approval refused) while EARS counted their ID. **Review 4 — each criterion by its own ID:** `earsUnidentified` returned null
   for any document with a US-n.AC-m in it, so `- AC-1: … (see US-1.AC-9)` escaped while the CITED ID became the only required AC;
   now a criterion numbered with a bare AC-n (`bareLabel`) is named whatever the document defines, and one with no ID at all only
-  when the document defines no AC ID (beside US-n.AC-m criteria it stays EARS's no-id warn). trace_check lints for it when
+  when the document defines no AC ID (beside US-n.AC-m criteria it stays EARS's no-id warn — and, since 1.24 review 6 (F-I8),
+  trace_check's warning `untracedCriteria`: the linted criteria with a modal verb and neither a stable ID of their own nor a bare /
+  sub-criterion one, as `L<line>` — only when some, in `TRACE_INFO_FIELDS`; doctor's `traceability` warns with it — one EARS pass per
+  trace, shared with `earsUnidentified`). trace_check lints for it when
   `requiredAcs` is non-empty only if the text holds a bare AC-n (`RE_BARE_AC`) — no second EARS pass otherwise. `RE_BARE_AC`
   never reads the AC-n of a US-n.AC-m — nor of an importer's ESCAPED `US-7\.AC-1` (an ID-led line of imported prose, demoted
   so it defines nothing, e.g. a fluidplan page intro): that one was listed as an unidentified `AC-1` and the import read
