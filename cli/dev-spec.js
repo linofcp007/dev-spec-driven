@@ -742,7 +742,9 @@ async function main() {
 
     case "bugfix":
     case "create": {
-      if (!pos[0]) usage('dev-spec create "<name>" [tracks...] [--lang en|pt|pt-BR|es]');
+      // 1.24 r6 B9: each its own usage (`bugfix` without a name printed create's)
+      if (!pos[0]) usage(cmd === "bugfix" ? 'dev-spec bugfix "<name>" [tracks...] [--summary "…"] [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] [--lang en|pt|pt-BR|es]'
+        : 'dev-spec create "<name>" [tracks...] [--summary "…"] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--lang en|pt|pt-BR|es]');
       const name = pos[0];
       const tr = withTracksFlag(pos.slice(1));
       const tracks = tr.length ? tr : undefined; // none → engine: keep existing / classify new
@@ -839,6 +841,11 @@ async function main() {
       const file = argPath(pos[0]);
       const isFile = fs.existsSync(file) && fs.statSync(file).isFile();
       if (isFile) return report(spec.earsValidate(spec.decodeText(fs.readFileSync(file)), textLang), cliText(textLang)); // UTF-16 too
+      // 1.24 r6 B9: a word that reads as a PATH (a separator, or a .md / .markdown / .txt name) and is no file — nor a feature of that
+      // name — is "no such file", never "Feature 'missing-md' not found" (its slug).
+      if ((/[\\/]/.test(String(pos[0])) || /\.(?:md|markdown|txt)$/i.test(String(pos[0]))) && !spec.existingFeature(projectDir, pos[0]).ok) {
+        return fail({ ok: false, error: projectText().earsNoFile(file) });
+      }
       return report(spec.earsFeature(projectDir, pos[0]), featureText(pos[0]));
     }
 
@@ -1780,7 +1787,7 @@ async function main() {
       // (= spec_create {name, kind: "spike", question, timebox}; `create "<name>" --kind spike` is the same call).
       if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--lang en|pt|pt-BR|es]');
       const tr = withTracksFlag(pos.slice(1));
-      const r = spec.createFeature(projectDir, pos[0], tr.length ? tr : undefined, flags.summary, undefined, flags.lang, "spike", { question: flags.question, timebox: flags.timebox, flow: flags.flow, brownfield: on("brownfield") }); // = create --kind spike (a flow gets its note)
+      const r = spec.createFeature(projectDir, pos[0], tr.length ? tr : undefined, flags.summary, undefined, flags.lang, "spike", { question: flags.question, timebox: flags.timebox, flow: flags.flow, brownfield: on("brownfield"), cli: true }); // = create --kind spike (a flow gets its note; cli: a refusal names the flag)
       if (!r.ok) return fail(r);
       return out(r, (r) => {
         const T = cliText(r.lang);
@@ -1934,7 +1941,7 @@ function mergeDriverSetup(uninstall) {
     try { return spawnSync("git", args, { cwd: projectDir, encoding: "utf8", windowsHide: true, timeout: 30000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { return { error: e }; }
   };
   const top = git(["rev-parse", "--show-toplevel"]);
-  if (!top || top.error || top.status !== 0) return fail({ ok: false, error: M.noGit(projectDir) });
+  if (!top || top.error || top.status !== 0) return fail({ ok: false, error: uninstall ? M.noGitUninstall(projectDir) : M.noGit(projectDir) }); // 1.24 r6 B9: each names its own switch
   const file = path.join(projectDir, ".gitattributes");
   let before = "";
   try { before = fs.readFileSync(file, "utf8"); } catch { before = ""; }

@@ -35,7 +35,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   PATH argument (`scan <path>`, `ears <file>`, `import <tool> <path>`) is read from the project when it was NAMED (`--project`
   or the env — as import always read it), else from the working folder (`argPath()`: a path typed in a subfolder is relative
   to it, as in git; import hands the engine that path relative to the project, which still refuses one outside it), and
-  `scan <subfolder>` reports in the project's language (`scanCodebase {lang}`).
+  `scan <subfolder>` reports in the project's language (`scanCodebase {lang}`). `ears <word>`: a file → linted; else a word
+  that reads as a path (a separator, or a `.md` / `.markdown` / `.txt` name) and names no feature is `cliOutput.earsNoFile`
+  (1.24 r6 B9 — `ears missing.md` answered "Feature 'missing-md' not found"); anything else is a feature name.
 - **`spec_feature remove` needs `confirm: true`** (CLI `--yes`). Without it nothing is deleted and the
   result (an error with `needsConfirm`) lists what would be — `removePreview()` checks roadmap.json first
   and uses `lstat` (a symlink/junction is one entry, never followed). Prefer archive (reversible).

@@ -93,6 +93,13 @@ exports.run = ({ ok, run, tmp, CLI }) => {
     "1.21 F1a: merge-state --install writes the .gitattributes lines (other lines kept, idempotent) and this clone's git config (merge.dev-spec-state.driver = node '<clone>/cli/dev-spec.js' merge-state %O %A %B %P); --uninstall removes both; outside a repository it refuses (got " +
     js([iNo.out.slice(0, 120), i1.out.slice(0, 300), drv, u1.out.slice(0, 200)]) + ")");
 
+  // 1.24 r6 B9: --uninstall outside a repository said what --install writes — it names --uninstall (nothing to remove there)
+  {
+    const uNo = noRepo ? run(["merge-state", "--uninstall", "--project", outside]) : null;
+    ok(!uNo || (uNo.code === 1 && /is not inside a git repository/.test(uNo.out) && /merge-state --uninstall/.test(uNo.out) && !/--install/.test(uNo.out)),
+      "1.24 r6 B9: merge-state --uninstall outside a git repository exits 1 naming --uninstall, not --install" + (uNo ? " (got " + js(uNo.out.trim().slice(0, 200)) + ")" : " — skipped: tmp sits inside a repository"));
+  }
+
   // The end-to-end merge: main approves the planning phases; branch A approves the tasks, ticks task 1 and adds a backlog item;
   // branch B ticks task 2, adds another backlog item and a dependency. With the driver installed, `git merge` is clean and the
   // spec state holds both branches' work — valid JSON, doctor happy.

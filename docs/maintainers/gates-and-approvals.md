@@ -474,7 +474,10 @@ iron law, phase order, the finish / execution gate, every track criterion scaffo
   `--reproduction`, `--root-cause`, `--condition`, `--behaviour`): `bugCreateInput()` (engine/scaffold.js) validates them
   BEFORE anything is written (strings; condition / behaviour one line ≤ 500 characters, whitespace folded, a leading
   IF / SE / SI, a trailing THEN / ENTÃO / ENTONCES and a leading THE SYSTEM SHALL / O SISTEMA DEVE / EL SISTEMA DEBE
-  dropped; reproduction / rootCause ≤ 20,000 through `safeSpecText`); on a feature or a spike → `bugPrefill.bugOnly`. The
+  dropped; reproduction / rootCause ≤ 20,000 through `safeSpecText`); on a feature or a spike → `bugPrefill.bugOnly` (the CLI —
+  `createFeature(…, {cli: true})` — names its flag: `bugOnlyCli`; 1.24 r6 B9: the same for a spike's `--question` / `--timebox`
+  on another kind → `spike.spikeOnlyCli`, and a change's create note gives the CLI its `approve <f> --through tasks` /
+  `finish` lines — `sizes.changeCreatedCli` — where MCP reads `spec_approve {through}`). The
   EN / PT / ES builders take them (`a.reproduction || <the > **TODO** slot>`, …): bug.md → Reproduction / Root Cause /
   Expected (behaviour), requirements.md → US-1.AC-1 `IF <condition> THEN THE SYSTEM SHALL <behaviour>` (localized). A
   text left out stays the slot; with no prefill the scaffold is byte-identical to 1.20. Only a file this call created from

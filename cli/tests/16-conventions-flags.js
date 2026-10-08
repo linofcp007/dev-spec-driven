@@ -352,4 +352,29 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
       "1.24 r6 B5: a single-value flag given twice (--role, --by / --by=, --summary, --cmd, --phase, --through, --project, --lang) exits 1 naming it (PT too), nothing changed; append-tasks keeps its own messages; repeatable flags still add up (got " +
       JSON.stringify(cases.map(([r, f]) => [f, r.code, r.out.trim().slice(0, 80)]).concat([[ptTwice.code, ptTwice.out.trim().slice(0, 80)], [atTwice.code, at2Tasks.code, dep.out.trim(), rj && rj.appended]])) + ")");
   }
+
+  // 1.24 r6 B9: messages that pointed the wrong way — `bugfix` without a name printed create's usage; `ears missing.md` answered
+  // "Feature 'missing-md' not found"; create --question / --timebox named the MCP key (kind: "spike") where --root-cause names
+  // the flag; and a change's create note gave only spec_approve {through} — the CLI user now gets the CLI line.
+  {
+    const p = path.join(tmp, "r6b9-msgs");
+    run(["init", "--project", p]);
+    run(["create", "Login", "--project", p]);
+    const S = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+    const bug = run(["bugfix", "--project", p]);
+    const ears = [run(["ears", "missing.md", "--project", p]), run(["ears", "docs/nope.md", "--project", p])];
+    const earsJ = (() => { try { const o = run(["ears", "missing.md", "--json", "--project", p]).out; return JSON.parse(o.slice(0, o.lastIndexOf("}") + 1)); } catch { return null; } })();
+    const earsFeature = run(["ears", "login", "--project", p]);
+    const q = run(["create", "Zed", "--question", "Is it fast?", "--project", p]), tb = run(["create", "Zed", "--timebox", "3d", "--project", p]);
+    const ch = run(["create", "Tiny fix", "--kind", "change", "--project", p]);
+    const chMcp = S.createFeature(p, "Tiny two", undefined, undefined, undefined, undefined, "change", {});
+    ok(bug.code === 1 && /usage: dev-spec bugfix "<name>"/.test(bug.out) && !/dev-spec create/.test(bug.out) &&
+      ears.every((r) => r.code === 1 && /: no such file/.test(r.out) && !/not found under/.test(r.out)) && earsJ && earsJ.ok === false && earsFeature.code === 0 && /EARS: /.test(earsFeature.out) &&
+      q.code === 1 && /--question only applies to a spike/.test(q.out) && /spike "<name>" --question/.test(q.out) && !/kind: "spike"/.test(q.out) &&
+      tb.code === 1 && /--timebox only applies to a spike/.test(tb.out) && !fs.existsSync(path.join(p, ".specs", "zed")) &&
+      ch.code === 0 && /cli\/dev-spec\.js" approve tiny-fix --through tasks/.test(ch.out) && !/spec_approve \{/.test(ch.out) &&
+      chMcp.ok && /spec_approve \{name: "tiny-two", through: "tasks"\}/.test(chMcp.note),
+      "1.24 r6 B9: bugfix's own usage; ears <missing file> says no such file (--json ok false; a feature name still works); create --question / --timebox name the flag and the spike command; a change's create note gives the CLI approve line on the CLI (spec_approve over MCP) (got " +
+      JSON.stringify([bug.out.trim().slice(0, 80), ears.map((r) => r.out.trim().slice(0, 80)), q.out.trim().slice(0, 140), tb.out.trim().slice(0, 80), ch.out.slice(0, 400)]) + ")");
+  }
 };

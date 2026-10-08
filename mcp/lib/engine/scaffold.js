@@ -665,7 +665,10 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // question / timebox on a feature or bugfix are refused — unless the caller asked for a spike and the folder already has
   // another kind (the kindKept note says so; the spike inputs are simply unused).
   if (!spike && askedKind !== "spike" && opts && ["question", "timebox"].some((k) => opts[k] != null && String(opts[k]).trim())) {
-    return { ok: false, error: i18n.msg(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir))).spike.spikeOnly(opts.question != null && String(opts.question).trim() ? "question" : "timebox") };
+    const SPM = i18n.msg(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir))).spike;
+    const key = opts.question != null && String(opts.question).trim() ? "question" : "timebox";
+    // 1.24 r6 B9: the CLI (opts.cli) names its flag and its spike command, as the bug prefill does — MCP keeps the key
+    return { ok: false, error: opts.cli === true ? SPM.spikeOnlyCli("--" + key) : SPM.spikeOnly(key) };
   }
   // 1.21 F3 — the bugfix prefill: validated before anything is written; on a feature or spike it is refused (unless the caller
   // asked for a bugfix and the folder already has another kind — the kindKept note says so, the inputs are unused).
@@ -807,7 +810,8 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   if (change) { // 1.21 F5 — a change (size xs): ONE file, change.md (a project's change template first); no other artifact
     put(CHANGE_FILE, scaf("change", () => i18n.change({ name, summary: writtenSummary }, lng)));
     const res = finish({ ok: true, slug, dir, kind: "change", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
-    if (res.ok !== false && created.includes(CHANGE_FILE)) res.note = [res.note, i18n.msg(lng).sizes.changeCreated(slug)].filter(Boolean).join(" ");
+    const SZN = i18n.msg(lng).sizes; // 1.24 r6: the CLI (opts.cli) gets its own approve / finish lines, MCP spec_approve {through}
+    if (res.ok !== false && created.includes(CHANGE_FILE)) res.note = [res.note, opts && opts.cli === true ? SZN.changeCreatedCli(slug) : SZN.changeCreated(slug)].filter(Boolean).join(" ");
     // 1.21 review C9: an EXISTING change named with tracks (a new one is refused before any write) — never silently: tracksIgnored
     const ignored = given ? pt.tracks.filter((x) => x !== "core" && !t.includes(x)) : [];
     if (res.ok !== false && ignored.length) {

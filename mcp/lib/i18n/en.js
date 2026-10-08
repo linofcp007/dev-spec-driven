@@ -1189,6 +1189,8 @@ const msg = {
       // 1.21 review C9 — spec_create on an EXISTING change named with tracks: nothing is added, never silently
       tracksIgnored: (list, slug) => `Tracks not added — ${list}: '${slug}' is a change (size xs, core-only); a track makes it a feature — create one of size s (spec_create {size: "s", tracks}) and archive this change (spec_feature {action: "archive"}).`,
       changeCreated: (slug) => `'${slug}' is a change (size xs): ONE file, .specs/${slug}/change.md — its summary, 1–3 EARS criteria, the approach and 1–3 tasks with _Verify:_. Fill it, then approve the plan in one call (spec_approve {name: "${slug}", through: "tasks"}); after the tasks, spec_finish and the execution sign-off.`,
+      // 1.24 r6: the same note on the CLI (createFeature {cli: true}) — the CLI's own approve / finish lines
+      changeCreatedCli: (slug) => `'${slug}' is a change (size xs): ONE file, .specs/${slug}/change.md — its summary, 1–3 EARS criteria, the approach and 1–3 tasks with _Verify:_. Fill it, then approve the plan in one call: ${DEV_SPEC} approve ${slug} --through tasks; after the tasks, ${DEV_SPEC} finish ${slug} and the execution sign-off.`,
       sizeKept: (kept, asked) => `This feature's size is ${kept} — kept it (asked for ${asked}): a size is chosen once, when the feature is created.`,
       noGate: (phase, slug) => `'${slug}' is a change: its only approvals are the plan (phase tasks — change.md) and the execution sign-off — there is no ${phase} phase to approve.`,
       scope: (acs, tasks, maxAcs, maxTasks, extra) => `a change is XS — 1–${maxAcs} acceptance criteria and 1–${maxTasks} tasks, core only; change.md has ${acs} criteria and ${tasks} task(s)${extra ? ` and the track(s) ${extra}` : ""} — create it as a feature of size s instead (spec_create {size: "s"}) and archive this change`,
@@ -1722,6 +1724,8 @@ const msg = {
       // 1.24 r6 B7: a project's own .specs/ folder named as the project (label: "--project <dir>" or "<VARIABLE>=<dir>")
       projectIsSpecs: (label, parent) => `${label} is the .specs folder of the project ${parent} — name the project folder itself: ${parent}`,
       // 1.24 r6 B3: done --run / finish --run settled at the command's exit while a background process still held its output
+      // 1.24 r6 B9: ears <path> naming no file (and no feature of that name)
+      earsNoFile: (file) => `${file}: no such file — ears takes a feature name, a markdown file, --text "…" or - (stdin).`,
       // 1.24 r6 B8: bundle --out onto an existing file that is no previous bundle
       bundleNotOurs: (file) => `${file} exists and is not a dev-spec bundle — nothing was written. Choose another --out, or add --force to overwrite it.`,
       // 1.24 r6 B5: a single-value flag given twice (the last value used to win silently)
@@ -2237,6 +2241,8 @@ const msg = {
       parseError: (side, why) => `dev-spec merge-state: ${side} is not valid JSON (${why}) — nothing merged, ours left as it is; merge the file by hand.`,
       unreadable: (file) => `cannot read ${file}.`,
       noGit: (dir) => `${dir} is not inside a git repository (or git is not installed) — merge-state --install writes that repository's own git config.`,
+      // 1.24 r6 B9: --uninstall's own words (it said what --install writes)
+      noGitUninstall: (dir) => `${dir} is not inside a git repository (or git is not installed) — merge-state --uninstall removes that repository's own git config and .gitattributes lines; there is nothing to remove here.`,
       attrsAdded: (file) => `${file}: the merge driver's lines added (commit it — the whole team gets them):`,
       attrsKept: (file) => `${file}: the merge driver's lines are already there.`,
       attrsRemoved: (file) => `${file}: the merge driver's lines removed (commit it).`,
@@ -3228,6 +3234,8 @@ _Outcome: [go | no-go | pivot]_
 `,
       badTimebox: (v) => `timebox must be an end date (YYYY-MM-DD) or a duration from today (e.g. 3d, 2w, 8h) — got ${v}.`,
       spikeOnly: (arg) => `${arg} only applies to a spike (kind: "spike").`,
+      // 1.24 r6 B9: the CLI names its flag and its own way to make a spike (as bugPrefill.bugOnlyCli does)
+      spikeOnlyCli: (flag) => `${flag} only applies to a spike — create it as one: ${DEV_SPEC} spike "<name>" ${flag} "…" (or --kind spike).`,
       tracksIgnored: (list) => `A spike is core-only — tracks ignored (${list}); give them to the feature you spec after a 'go'.`,
       noTracks: (slug) => `'${slug}' is a spike — it has no tracks. After a 'go', spec the real feature with its tracks (spec_create).`,
       noGate: (phase, slug) => `'${slug}' is a spike: it has no ${phase} gate — it goes question → investigate → decide. Record the decision in spike.md → Decision (spec_decide logs it); spec_finish closes it.`,
