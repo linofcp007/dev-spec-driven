@@ -67,15 +67,13 @@ don't translate the scaffold. Keep the **structural tokens** as they are in ever
 5. **Everything is local.** The bundled MCP server runs on your machine. No GitHub Actions, no cloud runners, no
    per-run cost. Specs live in `.specs/` and are versioned in your git repo.
 6. **Evidence before claims.** Nothing is "done", "passing" or "fixed" until a command proved it on the final code. Tick
-   tasks only through `spec_complete_task {evidence}` — never by editing the checkbox. A task whose `_Verify:_` names a
-   runnable command counts as verified only with `{command, exitCode: 0}` of its `_Verify:_` command (on an `_Expect: fail_` task:
-   its failing red run; another command's run → `command-mismatch`); a failed run is recorded and refuses the tick; a text note ticks it but leaves it unverified. **Can't run the
-   command yourself** (no shell, no environment)? Don't tick the task — not bare, not with a note, never with an exit
-   code you didn't see — and don't send a subagent to look for a shell: name the `_Verify:_` command and ask the user
-   for its output (or to run `node "<clone>/cli/dev-spec.js" done <feature> <n> --run`, the line the tool's note prints
-   with the path resolved); record what they report, and tick it unverified only if they explicitly ask for exactly
-   that. Rules and reason codes: `references/verification.md`; the thoughts that precede skipping a phase:
-   `references/red-flags.md`.
+   tasks only through `spec_complete_task {evidence}` — never by editing the checkbox: a runnable `_Verify:_` is proved
+   only by `{command, exitCode: 0}` of THAT command (an `_Expect: fail_` task: its red run; another command →
+   `command-mismatch`); a failed run refuses the tick; a text note leaves it unverified. **Can't run the command
+   yourself?** Don't tick it — never with an exit code you didn't see — and don't send a subagent to look for a shell:
+   ask the user for its output (or to run `node "<clone>/cli/dev-spec.js" done <feature> <n> --run`, the line the tool's
+   note prints) and record what they report. Rules and reason codes: `references/verification.md`; the thoughts that
+   precede skipping a phase: `references/red-flags.md`.
 7. **An approved spec that changed is not approved.** Every approval snapshots what it signed off; an edit afterwards is
    diffed (`spec_impact`), reviewed with the human and re-approved — never silently shipped.
 
@@ -268,12 +266,10 @@ N red, 0 green, 0 erroring. Put the T-ID in each test's name (`test("T-01 …")`
 **+ai:** deterministic tests AND the eval harness (`/eval` runs the bundled local one; `--dry-run` offline); record the
 baseline and commit it (`references/track-checklists.md`).
 
-**The gate is tracked:** once the test plan (+tdd) or eval plan (+ai) exists, phase `tests` is pending —
-`/next-action` asks for it (after the test/eval plan approval, before the tasks approval) and never recommends
-implementing until the user signs it off with `/approve <feature> tests`. The approval checks the phase's output:
-+tdd every planned T-ID named by a test file (`tests-in-code`), +ai an `evals/golden.json` of the feature's own
-(`eval-sets`). The engine can't see the tests run: present the red/green counts (and `trace_check {code: true}`)
-before asking. A bugfix has no Phase 4 gate — its failing regression test is one of its tasks.
+**The gate is tracked:** with a test or eval plan, phase `tests` is pending — `/next-action` asks for it before the
+tasks approval and never recommends implementing until the user signs it off (`/approve <feature> tests`, which checks
+`tests-in-code` / `eval-sets`). The engine can't see the tests run: present the red/green counts first. A bugfix has no
+Phase 4 gate — its failing regression test is one of its tasks.
 
 ## Phase 5: Tasks (`/createTask`)
 
@@ -320,12 +316,11 @@ task whose `_Depends:_` are all done — choosing the loop per task:
   otherwise revert/investigate → `spec_complete_task {evidence}`: the harness command + its exit code,
   and the eval scores with their delta vs baseline in the summary → commit with that delta.
 
-**Evidence, enforced** (`references/verification.md`; no shell: Principle 6). A `_Verify:_` that pipes is flagged
-(`pipeMasked`, doctor `verify-pipes`): drop the pipe or `set -o pipefail`. With project checks set (`spec_init {checks}`)
-every brief lists them and `/spec-finish` needs a passing run of each since the last tick, on the current code. In Claude Code a **Stop hook** sends the turn back when
-your closing message claims done / verified while a recently active feature has ticked tasks without passing evidence
-— run the check, or say plainly what is not verified. With `spec_init {evidence: "observed"}` only a run the harness saw
-(Claude Code's Bash hook) or `done --run` made verifies — run the `_Verify:_` with the Bash tool, then record exactly that.
+**Evidence, enforced** (`references/verification.md`; no shell: Principle 6): a piping `_Verify:_` is flagged
+(`verify-pipes`); project checks (`spec_init {checks}`) need a passing run since the last tick before `/spec-finish`; in
+Claude Code a **Stop hook** sends the turn back when your closing message claims done / verified without passing
+evidence — run the check, or say plainly what is not verified; with `evidence: "observed"` only a run the harness saw
+(or `done --run`) verifies.
 
 Track-gated "done" checks before a feature is finished (load test, cost and safety, scans, subject rights, failure
 injection, contract tests, accessibility, a staged alert…): `references/track-checklists.md`; `spec_finish` lists them.
@@ -354,21 +349,17 @@ change an AC, the design or a planned test goes back to that phase; +ai prompt/e
 ## Gates (`/spec-doctor`, `/approve`, `/spec-ff`, `/next-action`)
 
 Before advancing a phase, run `/spec-doctor` (`spec_doctor`): one `readyToAdvance` verdict over EARS, placeholders,
-traceability, steering, the design + Mermaid + Constitution Check, every active track's mandatory sections (present
-AND filled with your own text — not the `TODO` sentinel, not the template's guidance line left alone), evidence, artifacts changed since their approval and the **approval
-gates** (`gatesOk`, `pendingGates`, forced approvals); check ids: `references/tooling-reference.md`. `--deep` adds a
-semantic review by the `dev-spec-driven:spec-critic` agent. When the user signs off — an explicit yes for that phase —
-record it with `/approve <feature> <phase>` (auditable, resumable, in `.state.json`). **The approval is a gate:** that
-phase's checks run first and any failure refuses it, naming them. `force: true` (`--force`) records it anyway as a
-*forced* approval — only when the user explicitly accepts the failures; doctor, the roadmap and the metrics keep
-showing it. **Phase by phase:** a phase can't be approved while an earlier one is unapproved (`phase-order`).
-**Several filled phases at once:** `/spec-ff` (`spec_approve {through: "tasks"}`) approves them in order, each through
-its own gate, stopping at the first refusal — only after the user said go. **Teams:** with `spec_init {approvalRoles}` a
-listed phase counts as approved only once every role signed off its current content (`spec_approve {role}`). With
-`spec_init {approvalGuard: "ask" | "deny"}` a hook asks the user before your approval or refuses it — then give the
-user the command it names to run themselves and wait; never retry it another way. **The `execution` sign-off:** a green
-run is evidence, not the sign-off — show the run and the merge summary, then ask for an explicit yes before
-`spec_approve {phase: "execution"}`; never "once you paste a passing run, I'll approve it".
+traceability, steering, the design, every active track's mandatory sections (filled with your own text — not the `TODO`
+sentinel or the template's guidance), evidence, edits since approval and the approval gates; check ids:
+`references/tooling-reference.md`; `--deep` adds the `dev-spec-driven:spec-critic` agent's semantic review. When the
+user signs off — an explicit yes for that phase — record it with `/approve <feature> <phase>`. **The approval is a
+gate:** its checks run first and a failure refuses it; `--force` records a *forced* approval only when the user
+explicitly accepts the failures (it stays visible). Phases are approved in order (`phase-order`); `/spec-ff`
+(`spec_approve {through: "tasks"}`) approves several filled ones, each through its own gate, only after the user said
+go. Team roles and waivers: `references/change-management.md`. When the approval guard asks the user or refuses your
+approval, give the user the command it names and wait — never retry it another way. **The `execution` sign-off:** a
+green run is evidence, not the sign-off — show the run and the merge summary, then ask for an explicit yes before
+`spec_approve {phase: "execution"}`.
 
 Lost? `/next-action <feature>` gives ONE next step — re-review what changed since approval → the first phase not
 approved yet (fill → fix what its gate would refuse → approve) → fix → implement → verify an unverified tick →
