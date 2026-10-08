@@ -1,5 +1,5 @@
 ---
-description: Project-defined tracks — list, scaffold (init) or check the team's own track packs in .specs/tracks/ (+a11y, +mobile…), marker tracks like +sec. PT - tracks do projeto. ES - tracks del proyecto.
+description: Project-defined tracks — list, scaffold (init) or check the team's own track packs in .specs/tracks/.
 argument-hint: "[list|init <name>|check] [name] [--lang en|pt|pt-BR|es]"
 ---
 

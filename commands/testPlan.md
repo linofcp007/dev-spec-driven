@@ -1,5 +1,5 @@
 ---
-description: Phase 3 (+tdd) — enumerate every test, map each to AC IDs, choose layers and kind (example / property). PT - plano de testes (+tdd). ES - plan de pruebas (+tdd).
+description: Phase 3 (+tdd) — enumerate every test, map each to AC IDs, choose its layer and kind (example / property).
 argument-hint: "[feature name]"
 ---
 

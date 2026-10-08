@@ -1,5 +1,5 @@
 ---
-description: Fix a bug the systematic way — reproduce, find the root cause with evidence, get it approved, write a failing regression test, then fix. PT - corrige um bug com método (causa raiz primeiro). ES - corrige un bug con método (causa raíz primero).
+description: Fix a bug systematically — reproduce, find the root cause with evidence, approve, write a failing regression test, then fix.
 argument-hint: "[short bug name] [what's broken]"
 ---
 

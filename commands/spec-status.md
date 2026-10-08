@@ -1,5 +1,5 @@
 ---
-description: Report mode, active tracks, phase, task progress, and test/eval state for a feature (or all features). PT - estado da funcionalidade/projeto. ES - estado de la función/proyecto.
+description: Mode, tracks, phase, task progress and test / eval state of a feature (or of every feature).
 argument-hint: "[feature name | blank for all]"
 ---
 

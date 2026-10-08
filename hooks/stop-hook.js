@@ -28,6 +28,16 @@
 const fs = require("fs");
 const path = require("path");
 
+// A JSON file as the engine reads it: UTF-8, or UTF-16 with a BOM (1.24 review 6, C3 — Windows PowerShell 5.1's Out-File: a UTF-16
+// file read as UTF-8 didn't parse), decoded by hook-utils.js — required only for such a file (the hot path stays cheap). Throws on a
+// missing or broken file.
+function readJsonFile(file) {
+  const buf = fs.readFileSync(file);
+  if (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff))) return require("./hook-utils.js").jsonOf(buf);
+  const t = buf.toString("utf8");
+  return JSON.parse(t.charCodeAt(0) === 0xfeff ? t.slice(1) : t);
+}
+
 let done = false;
 let ran = false;
 const TRANSCRIPT_TAIL = 512 * 1024; // bytes read from the end of a transcript when the payload carries no last message
@@ -72,7 +82,7 @@ function userStopCheckOff() {
 // Read raw: the engine is loaded only when the gate may have something to say.
 function gateOff(dir) {
   try {
-    const j = JSON.parse(fs.readFileSync(path.join(dir, ".specs", "roadmap.json"), "utf8").replace(/^\uFEFF/, ""));
+    const j = readJsonFile(path.join(dir, ".specs", "roadmap.json"));
     const meta = !!j && typeof j === "object" && !!j.meta && typeof j.meta === "object" ? j.meta : {};
     return meta.stopCheck === false || (typeof meta.stopCheck !== "boolean" && userStopCheckOff());
   } catch {
@@ -109,7 +119,7 @@ function recentActivity(dir) {
     try { st = fs.statSync(file); } catch { continue; } // no state: no recorded activity
     if (st.size > 1024 * 1024) return true;
     let j;
-    try { j = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "")); } catch { continue; } // unreadable: the engine skips it too
+    try { j = readJsonFile(file); } catch { continue; } // unreadable: the engine skips it too (UTF-16 with a BOM is read — 1.24 review 6, C3)
     if (walk(j, 0)) return true;
   }
   return false;

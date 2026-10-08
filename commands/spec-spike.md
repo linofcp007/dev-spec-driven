@@ -1,5 +1,5 @@
 ---
-description: Run a spike — a timeboxed investigation that ends in a decision (go / no-go / pivot), not in fake requirements. PT - faz um spike (investigar → decidir). ES - haz un spike (investigar → decidir).
+description: Run a spike — a timeboxed investigation that ends in a decision (go / no-go / pivot), not in fake requirements.
 argument-hint: "[spike name] [the question it answers] [--timebox YYYY-MM-DD|3d]"
 ---
 

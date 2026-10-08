@@ -1,5 +1,5 @@
 ---
-description: Drift since finish — which implementing files of finished features changed, went missing or appeared since spec_finish recorded the baseline. PT - deriva desde o fecho da feature. ES - deriva desde el cierre de la función.
+description: Drift since finish — which implementing files of finished features changed, went missing or appeared.
 argument-hint: "[feature name | blank for all]"
 ---
 

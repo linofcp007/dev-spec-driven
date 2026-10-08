@@ -2161,6 +2161,7 @@ const msg = {
         if (a.kind === "remove") return `permanently delete the feature '${f}' (its .specs/ folder, approvals and history)`;
         // 1.23 review 5: a shell command the guard can't read — too long (a.length characters) or in a form it can't follow
         if (a.kind === "unreadable") {
+          if (a.why === "partial") return "run a tool call the approval guard received only in part (its input was cut off) that names dev-spec or .specs/"; // 1.24 review 6
           return a.why === "too-long" ? `run a shell command too long for the approval guard to read (${a.length} characters) that names dev-spec or .specs/`
             : "run a shell command that names the dev-spec CLI with an approval word in a form the approval guard can't read (an unknown launcher, a glob, a variable or a joined string)";
         }
@@ -2169,7 +2170,12 @@ const msg = {
         if (a.kind === "guard-down") {
           // 1.23 review 5: a hand edit with the Write / Edit tool
           if (a.setting === "roadmap" && a.source === "edit") return "edit .specs/roadmap.json by hand (it holds the approval guard and the project's gates)";
-          if (a.setting === "state") return `edit the .state.json of '${f}' by hand — its approvals, evidence and history`;
+          if (a.setting === "state") return a.source === "edit" ? `edit the .state.json of '${f}' by hand — its approvals, evidence and history`
+            : `change the .state.json of '${f}' from the shell — its approvals, evidence and history`; // 1.24 review 6: merge-state, git restore, a redirection
+          // 1.24 review 6: the harness-observed run log; turning off a gated track
+          if (a.setting === "observed") return (a.feature ? `write the harness-observed run log of '${a.feature}' (.execution/observed.jsonl)` : "write the project's harness-observed run log (.specs/.execution/observed.jsonl)") +
+            " by hand — the runs the gates trust as evidence";
+          if (a.setting === "track") return `turn off ${(a.tracks || []).map((t) => "+" + t).join(", ")} on '${f}' — the gates it carries (the test / eval plan, Phase 4's failing tests or evals) stop being required`;
           if (a.setting === "evidence") return "switch the evidence mode (meta.evidence) back to reported";
           if (a.setting === "stopCheck") return "turn off the end-of-turn evidence gate (meta.stopCheck)";
           if (a.setting === "guard") return a.from ? `lower the edit guard (meta.guard) from ${a.from} to ${a.to}` : `set the edit guard (meta.guard) to ${a.to}`;

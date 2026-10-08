@@ -1,5 +1,5 @@
 ---
-description: Generate a conventional commit message referencing the spec chain (tasks, tests, evals, metrics). PT - mensagem de commit convencional. ES - mensaje de commit convencional.
+description: Generate a conventional commit message referencing the spec chain (tasks, tests, evals, metrics).
 argument-hint: "[optional scope/note]"
 ---
 

@@ -1,5 +1,5 @@
 ---
-description: Brownfield — reverse-engineer steering + specs from an existing codebase. PT - engenharia reversa de specs. ES - ingeniería inversa de specs.
+description: Brownfield — reverse-engineer steering and specs from an existing codebase.
 argument-hint: "[module or feature to document]"
 ---
 

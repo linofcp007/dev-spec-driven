@@ -1,5 +1,5 @@
 ---
-description: Phase 4 (+tdd/+ai) — write all failing tests and/or the eval harness. The hard gate before implementation. PT - testes a falhar / harness (gate). ES - pruebas en rojo / harness (gate).
+description: Phase 4 (+tdd / +ai) — write all the failing tests and / or the eval harness; the hard gate before implementation.
 argument-hint: "[feature name]"
 ---
 

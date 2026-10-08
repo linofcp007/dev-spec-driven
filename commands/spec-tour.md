@@ -1,5 +1,6 @@
 ---
-description: A guided 10-minute tour on your own repo — scan it, then take one tiny real change through the whole workflow, one gate at a time. PT - visita guiada de 10 minutos no teu repositório. ES - visita guiada de 10 minutos en tu repositorio.
+description: A guided 10-minute tour on your own repo — one tiny real change through the whole workflow, one gate at a time.
+disable-model-invocation: true
 argument-hint: "[a small change you want to make (optional)]"
 ---
 

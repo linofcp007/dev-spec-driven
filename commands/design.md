@@ -1,5 +1,5 @@
 ---
-description: Phase 2 — produce the technical design, including the mandatory sections for active tracks. PT - cria o design técnico. ES - crea el diseño técnico.
+description: Phase 2 — the technical design, with the mandatory sections of the active tracks.
 argument-hint: "[feature name]"
 ---
 

@@ -613,7 +613,11 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   `'tdd,saas'` before the engine could split it or suggest a fix.
 - **Removal is non-destructive** (`spec_add_track {remove:true}` / `add-track --remove`): files stay, the
   result lists them as inactive, and doctor/status/next_action/roadmap stop requiring them (`activeTasks()`
-  drops a removed track's task section). `core` can't be removed; a bugfix keeps +tdd.
+  drops a removed track's task section). `core` can't be removed; a bugfix keeps +tdd. **1.24 review 6 (E3):** removing
+  +tdd or +ai drops a gate (the test / eval plan, Phase 4 — gates.js `phaseActive`), so with `meta.approvalGuard` on, an
+  agent's removal naming one of them (`APPROVAL_GATED_TRACKS` in engine/guards.js — no other built-in track or a pack adds a
+  phase) is a guard-down: asked / refused with the `add-track <f> <track> --remove` line the human runs
+  (claude-code-integration.md → Human approval guard). Adding a track, or removing one without a phase, is never one.
 
 ## Project-defined tracks (1.15) — `.specs/tracks/<name>/` track packs
 - **What a pack is:** `track.json` (JSON with `//` / `/* */` comments — `stripJsonComments()`, one linear pass) + optional

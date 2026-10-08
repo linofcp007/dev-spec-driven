@@ -1,5 +1,5 @@
 ---
-description: Release notes generated from the specs — Added (shipped features and their ACs), Changed (superseded ACs, change requests), Fixed (bugfixes with their root cause). PT - notas de versão a partir das specs. ES - notas de la versión a partir de las specs.
+description: Release notes generated from the specs — Added, Changed (superseded ACs, change requests) and Fixed (root causes).
 argument-hint: "[--since <ISO date|last|all>] [--milestone <name>] [--write]"
 ---
 

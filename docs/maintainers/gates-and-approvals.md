@@ -318,6 +318,14 @@ flows, the bugfix kind.
   folder's identity and every entry under it), the server passes it back as `manageFeature(…, {confirm, preview})`, and
   `removeFeatureLocked` refuses another folder under the name or an edited one (`changedSincePreview`, nothing deleted) —
   mcp.md → Human approvals over MCP elicitation.
+- **What the approval guard gates (1.24 review 6 — the full list: claude-code-integration.md → Human approval guard).** Besides the
+  approvals, a removal and the spec_init / `init` guard-downs: turning +tdd / +ai off (`spec_add_track {remove}` / `add-track
+  --remove` — their gates go with them), a write of a `.state.json` or of `.specs/roadmap.json` by `dev-spec merge-state` (git's
+  merge driver — run by git inside `git merge`, never through the Bash tool) or by git's in-place writers (checkout / restore /
+  merge-file / rm / mv naming them or `.specs/`), and any write of a harness-observed log (`.execution/observed.jsonl` — the
+  evidence the gates trust). **Known limit:** the MCP server's own elicitation path (`approvalPolicy`, server.js `APPROVAL_TOOLS`)
+  covers spec_approve / spec_feature / spec_init only — outside Claude Code a `spec_add_track {remove}` is not asked about (the
+  Claude Code hook covers it).
 
 ## Flows (1.14 — from Import sources and flows)
 - **Flows:** `.state.json → flow: "design-first"` (`spec_create {flow}` / `create --flow`; changed with

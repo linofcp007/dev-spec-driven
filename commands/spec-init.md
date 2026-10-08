@@ -1,5 +1,5 @@
 ---
-description: Initialize .specs/ and the steering files for the tracks this project uses. PT - inicializa .specs/ e steering. ES - inicializa .specs/ y steering.
+description: Initialize .specs/ and the steering files for the tracks this project uses.
 argument-hint: "[tracks, e.g. tdd saas ai sec privacy dist api ui obs data] [--lang en|pt|pt-BR|es] [--guard on|off|scope] [--check name=cmd] [--roles requirements=product,design=tech+security] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]"
 ---
 
@@ -31,7 +31,7 @@ unchanged):
 - `approvalGuard` — the human approval guard, `"off"` (default) / `"ask"` / `"deny"`: an agent's `spec_approve`,
   `spec_feature` remove, `dev-spec approve` / `feature remove --yes` through the shell, or lowering this guard, asks the
   user first (`ask` — a prompt Claude Code shows in auto mode too; only its bypass-permissions mode may skip it) or is refused in every mode (`deny` — the user
-  runs it in their own terminal or with Claude Code's `!` prefix). Lowering it — or weakening what it protects (evidence → reported, roles cleared or dropped, a check removed or changed, the stop gate or edit guard off, a shell write of .specs/roadmap.json, a hand edit of roadmap.json or a feature's .state.json) — is guarded too: only the user does that.
+  runs it in their own terminal or with Claude Code's `!` prefix). Lowering it — or weakening what it protects (evidence → reported, roles cleared or dropped, a check removed or changed, the stop gate or edit guard off, +tdd / +ai turned off, a shell write of .specs/roadmap.json or a feature's .state.json — `dev-spec merge-state` and git's restores too —, a hand edit of roadmap.json or a feature's .state.json, any write of a harness-observed log) — is guarded too: only the user does that.
 - `evidence` — `"reported"` (default) or `"observed"` (CLI `--evidence observed`): then only a run the harness saw (the plugin's Bash hook in Claude Code) or `dev-spec done --run` / `finish --run` made verifies a `_Verify:_` or a project check — an MCP-only client has no such hook.
 
 **Teams** (several people on branches): suggest the merge driver once — `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" merge-state --install` (CLI only; it

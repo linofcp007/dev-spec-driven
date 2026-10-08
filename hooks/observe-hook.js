@@ -32,7 +32,16 @@ const MAX_INPUT = 4 * 1024 * 1024; // a larger payload is ignored (Claude Code t
 const MAX_COMMAND = 4000; // no _Verify:_ / project-check command is longer (the engine's OBSERVED_MAX_COMMAND, engine/evidence.js)
 const MAX_FEATURES = 200; // feature folders pre-filtered, at most
 const MAX_TASKS_BYTES = 2 * 1024 * 1024; // a tasks.md past this is skipped
-const BOM = String.fromCharCode(0xfeff);
+
+// A JSON file as the engine reads it: UTF-8, or UTF-16 with a BOM (1.24 review 6, C3 — Windows PowerShell 5.1's Out-File: a UTF-16
+// file read as UTF-8 didn't parse), decoded by hook-utils.js — required only for such a file (the hot path stays cheap). Throws on a
+// missing or broken file.
+function readJsonFile(file) {
+  const buf = fs.readFileSync(file);
+  if (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff))) return require("./hook-utils.js").jsonOf(buf);
+  const t = buf.toString("utf8");
+  return JSON.parse(t.charCodeAt(0) === 0xfeff ? t.slice(1) : t);
+}
 
 let done = false;
 let ran = false;
@@ -145,21 +154,16 @@ function exitCodeOf(payload, failure, strict) {
 // then its matcher, what is logged (1.22 review — the hook stripped, the lookup didn't; a worktree's run reached only its own log).
 
 // A tasks.md written as UTF-16 (a BOM: FF FE / FE FF — Windows PowerShell 5.1) is read as the engine reads it (files.js
-// decodeText, 1.22 review) without loading the engine for this pre-filter; anything else is UTF-8.
-function utf16OrUtf8(buf) {
-  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.toString("utf16le", 0, buf.length - (buf.length % 2));
-  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return Buffer.from(buf.subarray(0, buf.length - (buf.length % 2))).swap16().toString("utf16le");
-  return buf.toString("utf8");
-}
+// decodeText, 1.22 review) without loading the engine for this pre-filter: hook-utils.js textOf (shared since 1.24 review 6), required
+// only for such a file; anything else is UTF-8.
+const textOfBuf = (buf) => (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff)) ? require("./hook-utils.js").textOf(buf) : buf.toString("utf8"));
 // The plain-text pre-filter: are the command's bodies written in a feature's tasks.md or in a meta.checks command at all? Only
 // then is the engine loaded (it parses the tasks for real and skips archived features).
 function mentioned(pdir, parts) {
   const root = path.join(pdir, ".specs");
   const has = (text) => { const t = norm(text); return parts.every((x) => t.includes(x)); };
   try {
-    let raw = fs.readFileSync(path.join(root, "roadmap.json"), "utf8");
-    if (raw.startsWith(BOM)) raw = raw.slice(1);
-    const rm = JSON.parse(raw);
+    const rm = readJsonFile(path.join(root, "roadmap.json"));
     const checks = rm && rm.meta && typeof rm.meta === "object" ? rm.meta.checks : null;
     if (checks && typeof checks === "object" && Object.values(checks).some((c) => typeof c === "string" && has(c))) return true;
   } catch { /* no or broken roadmap.json: no project checks */ }
@@ -190,7 +194,7 @@ function readTasksText(file) {
     if (size > MAX_TASKS_BYTES) return false;
     const buf = Buffer.alloc(size);
     const n = fs.readSync(fd, buf, 0, size, 0);
-    return utf16OrUtf8(n === size ? buf : buf.subarray(0, n)); // a UTF-16 (BOM) file too — Windows PowerShell 5.1 writes them
+    return textOfBuf(n === size ? buf : buf.subarray(0, n)); // a UTF-16 (BOM) file too — Windows PowerShell 5.1 writes them
   } catch {
     return false;
   } finally {

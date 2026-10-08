@@ -1,5 +1,5 @@
 ---
-description: Resume a feature - "you are here, do this next" + what changed since approval. PT - próximo passo da feature. ES - siguiente paso de la función.
+description: Resume a feature — where it stands, the one next step, and what changed since its approvals.
 argument-hint: "[feature name]"
 ---
 

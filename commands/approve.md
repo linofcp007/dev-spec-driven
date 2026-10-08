@@ -1,5 +1,6 @@
 ---
-description: Record human approval of a phase gate for a feature (auditable, resumable). PT - aprova um gate de fase. ES - aprueba un gate de fase.
+description: Record your approval of a phase gate for a feature (auditable, resumable).
+disable-model-invocation: true
 argument-hint: "[feature name] [phase] [--role name] [--force [--reason text] [--expires date|30d]] [--revoke [--reason text]]"
 ---
 

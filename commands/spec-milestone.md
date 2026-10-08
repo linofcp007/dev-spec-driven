@@ -1,5 +1,5 @@
 ---
-description: Milestones — a target date for a set of features, judged against their forecast ETAs (on-track, at-risk, late, done) and shown in ROADMAP.md. PT - marcos do roadmap. ES - hitos de la hoja de ruta.
+description: Milestones — a target date for a set of features, judged against their forecast ETAs and shown in ROADMAP.md.
 argument-hint: "[add <name> <YYYY-MM-DD> <features…> | rm <name> | list]"
 ---
 

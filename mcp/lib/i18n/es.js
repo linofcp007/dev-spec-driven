@@ -2045,12 +2045,17 @@ const msg = {
         const f = a.feature || "?";
         if (a.kind === "remove") return `borrar definitivamente la función '${f}' (su carpeta en .specs/, sus aprobaciones y su historial)`;
         if (a.kind === "unreadable") {
+          if (a.why === "partial") return "ejecutar una llamada de herramienta que la guardia de aprobaciones solo recibió en parte (la entrada llegó cortada) y que menciona dev-spec o .specs/";
           return a.why === "too-long" ? `ejecutar un comando de shell demasiado largo para que la guardia de aprobaciones lo lea (${a.length} caracteres) que menciona dev-spec o .specs/`
             : "ejecutar un comando de shell que menciona la CLI de dev-spec con una palabra de aprobación en una forma que la guardia de aprobaciones no puede leer (un lanzador desconocido, un glob, una variable o una cadena concatenada)";
         }
         if (a.kind === "guard-down") {
           if (a.setting === "roadmap" && a.source === "edit") return "editar a mano .specs/roadmap.json (ahí están la guardia de aprobaciones y los gates del proyecto)";
-          if (a.setting === "state") return `editar a mano el .state.json de '${f}' — sus aprobaciones, su evidencia y su historial`;
+          if (a.setting === "state") return a.source === "edit" ? `editar a mano el .state.json de '${f}' — sus aprobaciones, su evidencia y su historial`
+            : `cambiar el .state.json de '${f}' desde la shell — sus aprobaciones, su evidencia y su historial`;
+          if (a.setting === "observed") return (a.feature ? `escribir a mano el registro de las ejecuciones observadas de '${a.feature}' (.execution/observed.jsonl)` : "escribir a mano el registro de las ejecuciones observadas del proyecto (.specs/.execution/observed.jsonl)") +
+            " — las ejecuciones que los gates aceptan como evidencia";
+          if (a.setting === "track") return `desactivar ${(a.tracks || []).map((t) => "+" + t).join(", ")} en '${f}' — los gates que trae (el plan de pruebas / de evals, las pruebas en rojo o los evals de la Fase 4) dejan de exigirse`;
           if (a.setting === "evidence") return "volver a poner el modo de evidencia (meta.evidence) en reported";
           if (a.setting === "stopCheck") return "desactivar el gate de evidencia al final del turno (meta.stopCheck)";
           if (a.setting === "guard") return a.from ? `bajar el modo guardia (meta.guard) de ${a.from} a ${a.to}` : `poner el modo guardia (meta.guard) en ${a.to}`;

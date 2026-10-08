@@ -1,5 +1,5 @@
 ---
-description: Declare feature dependencies or order (cycle-checked) in the roadmap. PT - define dependências entre features. ES - define dependencias entre funciones.
+description: Declare feature dependencies or order (cycle-checked) in the roadmap.
 argument-hint: "[feature] depends-on [other features…]"
 ---
 
