@@ -247,4 +247,28 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
       }
     ok(!slow.length, "1.24 r6 D4: vacuousRun stays linear on 200,000-character hostile inputs (slow: " + js(slow) + ")");
   }
+
+  // 1.24 r6 D-I5: a logged run OLDER than the task's own latest recorded run is not the reported run — the harness saw an earlier
+  // one (a pass before the failure on record): only a run logged after the record counts as observed (meta.evidence observed).
+  {
+    const d = proj("observed-order");
+    S.initProject(d, ["core"], "en", { evidence: "observed" });
+    if (S.evidenceMode(d) !== "observed") S.initProject(d, undefined, undefined, { evidence: "observed" });
+    const f = S.createFeature(d, "Seen", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), "- [ ] 1. Build _Verify: npm test_\n");
+    const tick = () => { const until = Date.now() + 15; while (Date.now() < until) { /* a later millisecond */ } };
+    S.observeRun(d, { command: "npm test", exitCode: 0 }); // the harness saw a pass…
+    tick();
+    const c1 = S.completeTask(d, f.slug, 1, { command: "npm test", exitCode: 1 }); // …then a failure is recorded (made elsewhere)
+    tick();
+    const c2 = S.completeTask(d, f.slug, 1, { command: "npm test", exitCode: 0 }); // a pass reported with no new run
+    tick();
+    S.observeRun(d, { command: "npm test", exitCode: 0 }); // a new run the harness sees
+    tick();
+    const c3 = S.completeTask(d, f.slug, 1, { command: "npm test", exitCode: 0 });
+    ok(S.evidenceMode(d) === "observed" && c1.ok === false && c1.observed === false && c2.observed === false && c2.verified === false && c2.unverifiedReason === "unobserved" &&
+      c3.observed === true && c3.verified === true,
+      "1.24 r6 D-I5: a pass the harness logged BEFORE the task's own recorded failure no longer stamps a later report observed; a new observed run does (got " +
+      js([S.evidenceMode(d), c1.observed, [c2.observed, c2.verified, c2.unverifiedReason], [c3.observed, c3.verified]]) + ")");
+  }
 };

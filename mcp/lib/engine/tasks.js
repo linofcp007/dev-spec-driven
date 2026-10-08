@@ -569,7 +569,12 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   // project, or a git worktree of it holding this feature): its verdict is then the same on another machine.
   const runRoot = ev && ev.command && ev.exitCode != null ? runRootStamp(ev.command, projectDir, f.slug) : undefined;
   if (runRoot) ev.root = runRoot;
-  const observed = observedStamp(projectDir, f.slug, ev, opts && opts.ranBy, verifyCmds); // an observed run of ITS _Verify:_ (1.22 review)
+  // 1.24 r6 D-I5: when the task's own latest recorded run FAILED (or its record is stale), only a run the harness logged after it is
+  // this report's — a pass logged before the failure stamped a later, un-run pass report observed. (After a recorded pass, the same
+  // logged run reported again in another spelling is still that run.)
+  const prevOwn = ownEvidence(state.evidence || {}, task, dup);
+  const prevAt = isRecord(prevOwn) && prevOwn.exitCode != null && (prevOwn.exitCode !== 0 || prevOwn.stale === true) ? Date.parse(prevOwn.at) : NaN;
+  const observed = observedStamp(projectDir, f.slug, ev, opts && opts.ranBy, verifyCmds, prevAt); // an observed run of ITS _Verify:_ (1.22 review)
   if (observed !== undefined) ev.observed = observed;
   const withObserved = (r) => (observed !== undefined ? Object.assign(r, { observed }) : r);
   // _Expect: fail_ (B5): a red run {command, exitCode ≠ 0} is the proof; a passing run is refused unless a red run of this

@@ -1394,7 +1394,10 @@ function observedRun(projectDir, slug, command, exitCode, opts = {}) {
   const file = observedLogFile(projectDir, slug);
   if (!file) return { observed: false };
   const now = Number.isFinite(opts.now) ? opts.now : Date.now();
-  const entries = readObservedLog(file).filter((e) => { const t = Date.parse(e.at); return Number.isFinite(t) && t >= now - OBSERVED_WINDOW_MS && t <= now + 5 * 60 * 1000; });
+  // 1.24 r6 D-I5: opts.after (ms) — the task's own latest recorded run: a logged run no newer than it is not the reported run (the
+  // harness saw an EARLIER one — a pass logged before the failure on record stamped a later, un-run pass report observed)
+  const after = Number.isFinite(opts.after) ? opts.after : -Infinity;
+  const entries = readObservedLog(file).filter((e) => { const t = Date.parse(e.at); return Number.isFinite(t) && t > after && t >= now - OBSERVED_WINDOW_MS && t <= now + 5 * 60 * 1000; });
   const want = expected || [key];
   const latest = (list) => { for (let i = entries.length - 1; i >= 0; i--) if (runProvesVerify({ command: entries[i].command }, list, projectDir)) return entries[i]; return null; };
   const hit = latest(want);
@@ -1430,9 +1433,10 @@ function observedAny(projectDir) {
 }
 // The stamp of a reported run: "cli" when the CLI ran it itself (`done --run`, `finish --run`), else what the log says about a
 // run of the EXPECTED command (expected: the task's _Verify:_ values / [the check's command] — observedRun).
-function observedStamp(projectDir, slug, ev, ranBy, expected) {
+// after (1.24 r6 D-I5, ms): the task's own latest recorded run — only a run logged after it is this report's (observedRun).
+function observedStamp(projectDir, slug, ev, ranBy, expected, after) {
   if (!ev || typeof ev.command !== "string" || !ev.command.trim() || !Number.isInteger(ev.exitCode)) return undefined;
-  return ranBy === "cli" ? "cli" : observedRun(projectDir, slug, ev.command, ev.exitCode, { expected, root: ev.root }).observed;
+  return ranBy === "cli" ? "cli" : observedRun(projectDir, slug, ev.command, ev.exitCode, { expected, root: ev.root, after }).observed;
 }
 // 1.22 review — `cd <dir> && <cmd>` (or `;`) → <cmd> when <dir> — resolved from cwd; Git Bash's /c/… read as C:/… on Windows —
 // is one of `roots` (project folders); any other folder keeps the whole command (another run, which then matches nothing).
