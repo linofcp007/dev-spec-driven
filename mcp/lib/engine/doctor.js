@@ -35,7 +35,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
-  suspiciousVerify, worktreeProject, stateFromFile;
+  suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck;
 function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
@@ -59,7 +59,7 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   verifyPipes, waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
-  suspiciousVerify, worktreeProject, stateFromFile } = E); }
+  suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -316,6 +316,13 @@ function nextAction(projectDir, name, opts = {}) {
   const nx = fm.next;
   const G = fm.gates;
   const kind = st.kind || "feature";
+  // 1.24 review 6 (E4): roadmap.json that can't be read holds the approval roles and project checks — every approval, revocation and
+  // finish refuses on it, so the one step is to repair it (it recommended a role-less /spec-ff the approval would have taken alone)
+  const roadmapBad = roadmapError(projectDir);
+  if (roadmapBad) {
+    return { ok: true, feature: slug, tracks: trackLabel(tracks), phase, verdict: doc.verdict, gatesOk: doc.gatesOk, pendingGates: doc.pendingGates || [],
+      changedSinceApproval: changed, step: "fix", roadmapInvalid: true, recommendation: nx.roadmapInvalid(roadmapBad, slug) };
+  }
   // Phase by phase (SKILL.md: each phase is presented for approval before the next one starts), so a brand-new feature
   // is told to write its classification — never the design before the requirements are approved, and never to fix the
   // checks of phases it hasn't reached:
@@ -605,6 +612,10 @@ function specDoctor(projectDir, name, opts = {}) {
   // it, and the approvals, ticks and evidence it holds can't be read: a FAIL naming the file, never "awaiting approval: <every phase>".
   const stateRead = readState(projectDir, slug);
   if (stateRead.invalid) add("state", "fail", stateRead.invalid);
+  // 1.24 review 6 (E4): roadmap.json that doesn't parse or has the wrong shape — the approval roles and project checks it holds are
+  // unknown (read as none, they failed open): approve / revoke / spec_finish refuse on it, so doctor FAILS naming it
+  const rmc = roadmapGovernanceCheck(projectDir, lng);
+  if (rmc) add(rmc.id, rmc.status, rmc.detail);
 
   // Steering
   const steeringDir = path.join(root, "steering");
@@ -1076,6 +1087,7 @@ function statusTestsGate(pdir, dir, tracks) {
 function statusNext(pdir, f, kind, lng, unverified) {
   const st = f.st;
   if (st.invalid) return { step: "fix", file: ".state.json" }; // r5 review: next_action's step — repair the state file first
+  if (roadmapError(pdir)) return { step: "fix", file: "roadmap.json" }; // 1.24 review 6 (E4): …and roadmap.json (its roles / checks)
   const approvals = approvalsInForce(f.dir, f.tracks, isObj(st.approvals) ? st.approvals : {}); // 1.22 review: a stale tests sign-off is pending
   const open = f.blocks.filter((b) => !b.done);
   if (kind === "spike") {

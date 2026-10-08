@@ -117,8 +117,11 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   // bug.md evidence in brackets ([object Object], [A-Z]) is content: doctor documents both sections and approve design passes.
   run(["bugfix", "Profile Name Shows Object", "--summary", "The profile header shows object text", "--project", w16]);
   const bugP16 = at16("profile-name-shows-object", "bug.md");
+  // (1.24 review 6, E8: the design gate reads every bug.md slot, as doctor does — Expected / Actual / Fix written too)
   fs.writeFileSync(bugP16, fs.readFileSync(bugP16, "utf8").replace(/## Reproduction\n> \*\*TODO\*\*[^\n]*/, "## Reproduction\n1. Log in.\n2. Open /profile: the header reads [object Object].")
-    .replace(/## Root Cause\n> \*\*TODO\*\*[^\n]*/, "## Root Cause\nheader.js interpolates the whole user object, so the browser shows [object Object]; norm() only maps [A-Z]."));
+    .replace(/## Root Cause\n> \*\*TODO\*\*[^\n]*/, "## Root Cause\nheader.js interpolates the whole user object, so the browser shows [object Object]; norm() only maps [A-Z].")
+    .replace("[correct behavior]", "the user's display name").replace("[what happens — error message, output, log lines]", "the header reads [object Object]")
+    .replace(/## Fix\n\[[^\]]*\]/, "## Fix\nInterpolate user.displayName."));
   const bugDoc16 = run(["doctor", "profile-name-shows-object", "--project", w16]);
   run(["approve", "profile-name-shows-object", "requirements", "--force", "--project", w16]); // phase by phase: requirements first
   const bugAp16 = run(["approve", "profile-name-shows-object", "design", "--project", w16]);

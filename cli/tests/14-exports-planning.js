@@ -125,4 +125,11 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   try { brkDoc = JSON.parse(brkJ.stdout); } catch { /* stays null */ }
   ok(brk.code === 1 && /roadmap\.json is not valid JSON/.test(brk.out) && !/No milestones yet/.test(brk.out) && brkJ.code === 1 && brkDoc && brkDoc.ok === false && /roadmap\.json/.test(brkDoc.error),
     "1.16 E review (CLI) extra: milestone list on a roadmap.json that doesn't parse exits 1 with its error (--json: the {ok: false} result) — never 'No milestones yet' (got " + js([brk.code, brk.out]) + ")");
+  // 1.24 r6 E4: backlog (list) on the same broken roadmap.json printed "Backlog (0)" with exit 0 — it refuses like milestone / depend
+  const blk = run(["backlog", "--project", bp]);
+  const blkJ = runOut(["backlog", "list", "--json", "--project", bp]);
+  let blkDoc = null;
+  try { blkDoc = JSON.parse(blkJ.stdout); } catch { /* stays null */ }
+  ok(blk.code === 1 && /roadmap\.json is not valid JSON/.test(blk.out) && !/Backlog \(0\)/.test(blk.out) && blkJ.code === 1 && blkDoc && blkDoc.ok === false && /roadmap\.json/.test(blkDoc.error),
+    "1.24 r6 E4: backlog list on a roadmap.json that doesn't parse exits 1 with its error (--json: the {ok: false} result) — never 'Backlog (0)' (got " + js([blk.code, blk.out]) + ")");
 };

@@ -1376,6 +1376,8 @@ const msg = {
       approvedMissing: (files, slug, phase) => `${files} was approved but no longer exists — restore it (it was deleted after its approval) or, if it is gone for good, withdraw that approval: /approve ${slug} ${phase} --revoke.`,
       // r5 review: .state.json doesn't parse / has the wrong shape (error: readState's localized message) — the one step
       stateInvalid: (error, slug) => `${error} Until it is repaired nothing can be approved, ticked or finished, and the approvals, ticks and evidence it holds can't be read — fix it by hand or restore it from git (conflict markers from a merge? resolve them; ${DEV_SPEC} merge-state --install merges it by meaning from then on), then /spec-doctor ${slug}.`,
+      // 1.24 review 6 (E4): roadmap.json doesn't parse / has the wrong shape (error: roadmapError's localized message) — the one step
+      roadmapInvalid: (error, slug) => `${error} Until it is repaired nothing can be approved, revoked or finished — the approval roles and project checks it holds can't be read. Fix it by hand or restore it from git (conflict markers from a merge? resolve them; ${DEV_SPEC} merge-state --install merges it by meaning from then on), then /spec-doctor ${slug}.`,
       approveRequirements: (slug) => `Review & approve requirements — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Review & approve design — /approve ${slug} design.`,
       approveTasks: (slug) => `Review & approve the task breakdown — /approve ${slug} tasks.`,
@@ -1735,6 +1737,12 @@ const msg = {
       approveUnreadable: (phase, slug, file) => `Nothing to approve: ${file} in '${slug}' can't be read (a folder of that name, no permission, or another program holding it) — make it a readable file, then approve '${phase}'.`, // r5 review
       approveForced: (ids) => `Approved with force — the failing checks are recorded with the approval: ${ids}.`,
       phaseOrder: (list, slug, first) => `earlier phases are not approved yet: ${list} — approve them first, in order (/approve ${slug} ${first})`,
+      // 1.24 review 6 (E1): an earlier phase whose approved content changed since its approval
+      phaseOrderChanged: (list, slug, first) => `earlier phases changed since their approval: ${list} — re-review them (spec_impact) and re-approve them first, in order (/approve ${slug} ${first})`,
+      // 1.24 review 6 (E4): roadmap.json can't be read (detail: roadmapError's message) — approve / revoke / the fast-forward refuse
+      roadmapUnreadable: (detail) => `${detail} Nothing recorded: the approval roles and project checks this file holds can't be read — approvals, revocations and spec_finish refuse until it is repaired (conflict markers from a merge? resolve them; ${DEV_SPEC} merge-state --install merges it by meaning from then on).`,
+      // …doctor's `roadmap` check and spec_finish's `roadmap` blocker
+      roadmapCheck: (detail) => `${detail} The approval roles and project checks it holds can't be read: approvals, revocations and spec_finish refuse until it is repaired.`,
       forcedGates: (list) => `approved with force over failing checks: ${list}`,
       finishRootCause: "bug.md → Root Cause is not filled — no fix before the root cause is known",
       finishPlaceholders: (list) => `template placeholders left in the spec chain: ${list}`,
@@ -2377,7 +2385,7 @@ const msg = {
         steps: {
           "re-review": (s) => `re-review ${s.files.join(", ")}`,
           fill: (s) => `fill ${s.file}`,
-          fix: (s) => (s.file === "bug.md" ? "write the root cause in bug.md" : s.file === ".state.json" ? "repair .state.json (it can't be read)" : `fix the ${s.phase} gate`),
+          fix: (s) => (s.file === "bug.md" ? "write the root cause in bug.md" : s.file === ".state.json" ? "repair .state.json (it can't be read)" : s.file === "roadmap.json" ? "repair roadmap.json (it can't be read)" : `fix the ${s.phase} gate`),
           approve: (s) => `approve ${s.phase}`,
           tests: () => "write the tests, then approve them (Phase 4)",
           tasks: () => "break it into tasks",
@@ -2905,6 +2913,8 @@ const msg = {
       signOffsToo: (roles) => `The role sign-offs waiting for it were withdrawn too: ${roles}.`,
       laterStay: (list, phase) => `Nothing cascades: the later phases stay approved (${list}); approving another phase is refused (phase-order) until '${phase}' is approved again.`,
       notApproved: (phase, slug) => `'${phase}' is not approved for ${slug} and no role sign-off is waiting for it — nothing to revoke.`,
+      // 1.24 review 6: a revoke confirmed over MCP whose approval / waiting sign-offs changed after the question (preview)
+      changedSincePreview: (phase, slug) => `Nothing revoked: what '${phase}' of ${slug} holds changed after the user was asked to confirm revoking it (approved again, or revoked, meanwhile) — ask them again, so they confirm what is there now.`,
       // r5 review: with approval roles configured for the phase, a revocation names a listed role; before the approval it withdraws that role's own sign-off
       roleRequired: (phase, slug, roles) => `'${phase}' is signed off per role (${roles}) — a revocation names the role revoking it: /approve ${slug} ${phase} --revoke --role <role>. Nothing recorded.`,
       noSignOff: (role, phase, slug, waiting) => `'${role}' has no sign-off waiting for '${phase}' of ${slug} — nothing to withdraw (waiting: ${waiting}); a role withdraws only its own sign-off.`,

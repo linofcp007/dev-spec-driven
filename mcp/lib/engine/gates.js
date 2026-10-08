@@ -26,7 +26,7 @@ let acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, ar
   uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey,
-  checkboxBytes, changesSince, wsText;
+  checkboxBytes, changesSince, wsText, wsFingerprint, roadmapError;
 function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, artifactReport,
   artifactState, bugPlaceholders, clarificationMarkers, criterionBlocks, designSections, detectTracks,
   duplicateTaskNumbers, earsUnlinted, earsUnidentified, shortIdList, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection,
@@ -41,7 +41,7 @@ function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks,
   writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey,
-  checkboxBytes, changesSince, wsText } = E); }
+  checkboxBytes, changesSince, wsText, wsFingerprint, roadmapError } = E); }
 
 // Phases that only exist for a track: an inactive track's artifact (kept on disk after add_track --remove)
 // is not a gate, not a phase and not a "changed since approval".
@@ -161,6 +161,8 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   const state = readState(projectDir, f.slug);
   if (state.invalid) return { ok: false, error: state.invalid };
   const lng = featureLang(projectDir, f.slug);
+  const gov = governanceError(projectDir, lng); // 1.24 review 6 (E4): roadmap.json unreadable — its approval roles are unknown
+  if (gov) return gov;
   // 1.16 U3: the waiver a forced approval carries (reason / expires) — validated before anything else; either one without force is refused.
   const wv = waiverInput(opts, lng);
   if (wv.error) return { ok: false, error: wv.error };
@@ -180,8 +182,15 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   // is spec_finish's blockers, which already name every pending gate.
   if (p !== "execution") {
     const order = phaseOrder(featureFlow(f.dir, state.kind || "feature")); // C3: design-first puts design before requirements
-    const earlier = pendingGateList(f.dir, tracks, state.kind || "feature", state.approvals).filter((ph) => order.indexOf(ph) < order.indexOf(p));
-    if (earlier.length) gate.checks.unshift({ id: "phase-order", detail: G.phaseOrder(earlier.join(", "), f.slug, earlier[0]) });
+    const before = (ph) => order.indexOf(ph) < order.indexOf(p);
+    const earlier = pendingGateList(f.dir, tracks, state.kind || "feature", state.approvals).filter(before);
+    // 1.24 review 6 (E1): an earlier phase whose approved CONTENT changed since its approval is no approval to build on either —
+    // a later phase (one by one, or a fast-forward through it) was approved while next_action said "re-review" the whole time
+    const changed = changedApprovedPhases(f.dir, tracks, state.kind || "feature", state.approvals).filter((ph) => before(ph) && !earlier.includes(ph));
+    if (earlier.length || changed.length) {
+      gate.checks.unshift({ id: "phase-order", detail: [earlier.length ? G.phaseOrder(earlier.join(", "), f.slug, earlier[0]) : null,
+        changed.length ? G.phaseOrderChanged(changed.join(", "), f.slug, changed[0]) : null].filter(Boolean).join("; ") });
+    }
   }
   const failing = gate.checks.map((c) => c.id);
   if (failing.length && opts.force !== true) {
@@ -300,6 +309,30 @@ function previewMismatch(pv, fp, dfp, failing) {
   const grown = Array.isArray(pv.failing) ? failing.filter((id) => !pv.failing.includes(id)) : [];
   return str(pv.fingerprint) !== fp || str(pv.designFingerprint) !== dfp || grown.length ? { grown } : null;
 }
+// 1.24 review 6 (E4) — the governance roadmap.json holds (meta.approvalRoles, meta.checks) is read FAIL CLOSED. A roadmap.json that
+// exists but can't be read (not JSON — a text merge's conflict markers —, or the wrong shape: roadmapError) read as "no roles, no
+// checks": one person approved a role-governed phase alone, and spec_finish / the execution sign-off passed with the project checks
+// never run. Reading the roles out of the raw text (evidenceMode's way for one flag) can't be trusted for a nested map — two
+// conflicting versions, a list cut in half — so approve / revoke / the fast-forward refuse instead (a dry run too), spec_finish
+// blocks on `roadmap`, doctor fails `roadmap` and next_action's one step is to repair it. → the refusal, or null.
+function governanceError(projectDir, lng) {
+  const bad = roadmapError(projectDir);
+  return bad ? { ok: false, roadmapInvalid: true, code: "roadmap-invalid", error: i18n.msg(lng).gates.roadmapUnreadable(bad) } : null;
+}
+// …doctor's `roadmap` (a fail — both doctors) and spec_finish's `roadmap` blocker: the check, or null.
+function roadmapGovernanceCheck(projectDir, lng) {
+  const bad = roadmapError(projectDir);
+  return bad ? { id: "roadmap", status: "fail", detail: i18n.msg(lng).gates.roadmapCheck(bad) } : null;
+}
+// 1.24 review 6 (E1) — the APPROVED phases whose artifact changed since their approval, by content (changedSinceApproval without
+// what a file date alone says — a pre-1.11 approval; a whitespace-only edit is no change), in the flow's order: a re-review is
+// pending there, so approving a later phase is refused on phase-order (approvePhase) and no fast-forward runs past it.
+function changedApprovedPhases(dir, tracks, kind, approvals) {
+  const cs = changedSinceApproval(dir, approvalsInForce(dir, tracks, approvals), tracks, kind, { detail: true });
+  const phaseOf = (file) => Object.keys(PHASE_FILE).find((ph) => phaseFile(ph, kind) === file) || (file === PHASE_FILE.design ? "design" : null);
+  const phases = new Set(cs.changed.filter((x) => !cs.byDate.includes(x)).map(phaseOf).filter(Boolean));
+  return phaseOrder(featureFlow(dir, kind)).filter((ph) => phases.has(ph));
+}
 
 // 1.16 U3 — the waiver a forced approval carries: spec_approve {force: true, reason?, expires?} / `approve <f> <phase> --force
 // --reason "…" --expires 2026-12-31|30d`. reason: one line (reasonInput, ≤ 500 characters); expires: an ISO date (today or later)
@@ -403,6 +436,8 @@ function revokeApproval(projectDir, name, phase, by, opts) {
   if (role != null && !RE_ROLE.test(role)) return { ok: false, badRole: true, error: i18n.msg(lng).governance.badRole(String(opts.role)) };
   const state = readState(projectDir, f.slug);
   if (state.invalid) return { ok: false, error: state.invalid };
+  const gov = governanceError(projectDir, lng); // 1.24 review 6 (E4): the roles a revocation names are unknown
+  if (gov) return gov;
   const appr = isRecord(state.approvals[p]) ? state.approvals[p] : null;
   const allWaiting = isObj(state.signoffs) && isObj(state.signoffs[p]) ? Object.keys(state.signoffs[p]) : [];
   if (!appr && !allWaiting.length) return { ok: false, notApproved: true, error: R.notApproved(p, f.slug) };
@@ -762,6 +797,8 @@ function fastForwardPlan(projectDir, slug, dir, st, tracks, kind, pending, doc, 
   const approvals = approvalsInForce(dir, tracks, st.approvals); // 1.22 review: a stale tests sign-off is approved again
   const chain = walk.slice(start, end + 1).filter((ph) => !approvals[ph]);
   if (chain.length < 2) return null;
+  // 1.24 review 6 (E1): an approved phase on the way whose content changed since — approvePhase refuses every phase after it (phase-order)
+  if (changedApprovedPhases(dir, tracks, kind, st.approvals).some((ph) => walk.indexOf(ph) <= end)) return null;
   const cfg = approvalRolesOf(projectDir);
   let role = null;
   for (const ph of chain) {
@@ -832,6 +869,8 @@ function approveThrough(projectDir, name, phase, by, opts) {
   if (!PHASES.includes(t)) return { ok: false, error: errs(projectDir, f.slug).unknownPhase(opts.through, PHASES.filter((p) => p !== "execution").join(", ")) };
   const state = readState(projectDir, f.slug);
   if (state.invalid) return { ok: false, error: state.invalid };
+  const gov = governanceError(projectDir, lng); // 1.24 review 6 (E4)
+  if (gov) return gov;
   const tracks = detectTracks(f.dir);
   const walk = gateWalk(f.dir, tracks, state.kind || "feature");
   if (!walk.includes(t)) return { ok: false, notActive: true, error: E.ffNotActive(t, f.slug) };
@@ -1684,6 +1723,11 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
         // A bugfix has no design of its own: its Root Cause stands in for it.
         if (!exists("bug.md")) return nothing("bug.md");
         need("root-cause", bugSectionFilled(read("bug.md"), ROOT_CAUSE_SYN), m.rootCauseMissing);
+        // 1.24 review 6 (E8): this gate signs off bug.md — what doctor checks on it too: its Reproduction (the requirements gate read
+        // it, an edit since emptied it) and its placeholders (bugPlaceholders: the report's own slots, `> **TODO**`; quoted evidence
+        // such as [object Object] stays content) — a bug.md with `[correct behavior]` left was approved while doctor failed it.
+        need("reproduction", bugSectionFilled(read("bug.md"), REPRO_SYN), m.reproMissing);
+        noPlaceholders("bug.md");
       } else {
         if (design == null) return nothing("design.md");
         noPlaceholders("design.md");
@@ -1806,7 +1850,7 @@ const RE_EDGE_CASES = /edge case|error handling|casos? limite|casos? l[íi]mite|
 const RE_TESTABILITY = /##\s*(testability notes|notas de testabilidade|notas de testabilidad)/i;
 
 module.exports = { phaseActive, testsGateDue, stateApprovals, TESTS_PLANS, plannedTestIds, testsPlanStamp, testsSignOffStale,
-  approvalsInForce, testsStaleText, previewMismatch, detectPhase, approvePhase, WAIVER_MAX_DAYS, waiverInput, waiverView,
+  approvalsInForce, testsStaleText, previewMismatch, governanceError, roadmapGovernanceCheck, changedApprovedPhases, detectPhase, approvePhase, WAIVER_MAX_DAYS, waiverInput, waiverView,
   forcedApprovalList, waiverSummaryLines, waiverResult, waiverExpiredCheck, strictestWaiver, legacySeeds,
   revokeApproval, RE_ROLE, normRole, parseRoleList, validateApprovalRoles, parseApprovalRolesText, approvalRolesOf,
   approvalRolesFrom, rolesSummary, setApprovalRoles, approvalRole, phaseContent, sameContent, approvalRoleRecords,

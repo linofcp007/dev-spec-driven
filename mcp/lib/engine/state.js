@@ -187,6 +187,13 @@ function wsText(raw, phase) {
   while (end > 0 && lines[end - 1] === "") end--;
   return lines.slice(0, end).join("\n");
 }
+// 1.24 review 6 (E-I5) — the fingerprint of wsText: recorded as `wsFingerprint` (`designWsFingerprint`) on every NEW approval, its
+// history record and each role sign-off, next to `fingerprint` (which keeps its rule). Two versions that differ only in trailing
+// whitespace / final blank lines share it — a waiting role sign-off (no snapshot of its own) of such a version still counts, and
+// changedSinceApproval needs no .history snapshot to tell a whitespace-only edit. Older records have none: the snapshot fallback.
+function wsFingerprint(raw, phase) {
+  return raw == null ? null : sha1Hex(wsText(raw, phase));
+}
 // Does this text still match a fingerprint an approval recorded? An approval recorded before the BOM was ignored
 // hashed the file with its BOM: that fingerprint still matches the same content (with or without the BOM now).
 function fingerprintMatches(raw, phase, stored) {
@@ -552,6 +559,10 @@ function backlog(projectDir, action, name, note) {
     const A = i18n.msg(projectLang(projectDir)).args;
     return { ok: false, error: A.invalid(A.item("action", A.oneOf(BACKLOG_ACTIONS.join(", ")), JSON.stringify(String(action)))) };
   }
+  // 1.24 review 6 (E4): a roadmap.json that doesn't parse (or has the wrong shape) is an error, never "Backlog (0)" — milestone /
+  // depend's rule (its sanitized copy read as an empty backlog)
+  const bad = roadmapError(projectDir);
+  if (bad) return { ok: false, error: bad };
   return { ok: true, backlog: readRoadmap(projectDir).backlog || [] };
 }
 
@@ -1385,7 +1396,7 @@ function mergeDriverStatus(projectDir, opts = {}) {
 
 module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugifyFull, legacySlugify, RE_WIN_RESERVED,
   RESERVED_SLUGS, reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState,
-  stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, wsText, sha1Hex, fingerprintMatches,
+  stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, wsText, wsFingerprint, sha1Hex, fingerprintMatches,
   BOM_CHAR, artifactMatches, uncheckTasks, phaseFile, FEATURE_SIZES, sizeInput, featureSize, isChangeDir, PLANNING_CEILING, PHASE_PERCENT, phasePercent, featurePercent,
   roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, setDependency, dependencyUnlocked,
   roadmap, flatText, addBacklog, BACKLOG_NOTE_MAX, BACKLOG_NOTE_SEP, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked, BACKLOG_ACTIONS, backlog,

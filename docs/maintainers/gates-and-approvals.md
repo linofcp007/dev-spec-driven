@@ -55,12 +55,34 @@ flows, the bugfix kind.
   phase while an EARLIER one is in `pendingGateList()` (doctor's pending gates — only phases with an artifact, so a
   missing file never blocks forever) adds the failing check `phase-order` (`gates.phaseOrder`, EN/PT/ES) — refused
   unless force (recorded as forced with it). Not for `execution`: its gate (finish's blockers) already names them.
+  **An earlier phase whose approved CONTENT changed since its approval counts too (1.24 review 6, E1):** a later phase was
+  approved — one by one and by a fast-forward through it — while next_action said "re-review requirements" the whole time.
+  `changedApprovedPhases()` (changedSinceApproval over `approvalsInForce` without its `byDate` part — a file date is no evidence;
+  a whitespace-only edit is no change; a deleted approved artifact is one) joins the same check (`gates.phaseOrderChanged`:
+  re-review — spec_impact — and re-approve it first). `approveThrough` needs nothing of its own: its first phase after the
+  changed one is refused on phase-order (`stopReason: "refused"`); `fastForwardPlan` (next_action's suggestion) returns none
+  while a changed approved phase lies at or before its end. Pending gates and the walk are unchanged (the phase is approved —
+  next_action's re-review step names it).
+- **Governance read fail closed (1.24 review 6, E4).** `roadmap.json` holds `meta.approvalRoles` and `meta.checks`; one that
+  exists but can't be read (`roadmapError()` — not JSON, e.g. a text merge's conflict markers, or the wrong shape) read as "no
+  roles, no checks": one person approved a role-governed phase alone (recorded complete) and spec_finish / the execution
+  sign-off passed with the project checks never run. Reading the roles out of the raw text, evidenceMode's way for ONE flag,
+  can't be trusted for a nested map (two conflicting versions, a list cut in half) — the safer, simpler rule refuses:
+  `governanceError()` → `{ok: false, roadmapInvalid: true, code: "roadmap-invalid"}` + `gates.roadmapUnreadable` from
+  `approvePhase` (any role, a dry run too), `approveThrough` and `revokeApproval`; spec_finish blocks on `roadmap` (its own
+  blocker, first after `state` — so the execution gate names it); doctor (both — features and spikes) fails `roadmap`
+  (`roadmapGovernanceCheck()`, `gates.roadmapCheck`); next_action's one step is `fix` with `roadmapInvalid: true`
+  (`next.roadmapInvalid` — it recommended a role-less /spec-ff); the status line says repair roadmap.json; `backlog` (list)
+  refuses like milestone / depend (it printed "Backlog (0)", exit 0). Ticking tasks stays possible (evidenceMode already reads
+  its one flag fail-closed from the raw text).
 - **next_action step order — phase by phase:** first (r5 review) a `.state.json` readState marks `invalid` (not JSON — a git
   text merge's conflict markers, a truncated write — or the wrong shape) is the ONE step: `fix` with `stateInvalid: true`
   (`next.stateInvalid`: repair or restore it). Read as empty it listed every gate pending and said "approve" — which every
   mutator refuses on that file: a loop. Doctor fails `state` (the localized `state.invalid` as its detail), spec_finish blocks
   on `state` first (and reports no pending gate / change since approval from the unknown approvals), the status line's
-  statusNext answers `{step: fix, file: .state.json}`. Then `re-review` (an artifact changed since ITS approval and re-approvable
+  statusNext answers `{step: fix, file: .state.json}`. Next (1.24 review 6, E4) an unreadable `roadmap.json` the same way:
+  `fix` + `roadmapInvalid: true` (`next.roadmapInvalid`; statusNext `{step: fix, file: roadmap.json}`) — Governance read fail
+  closed above. Then `re-review` (an artifact changed since ITS approval and re-approvable
   now — one of a phase after the first pending gate waits for it, approve would refuse it on `phase-order`; `impact`
   when a snapshot exists; when that phase's gate would refuse it, `refusedGate` {phase, failing} and the check ids are
   named — never an approval that would be refused; an approved artifact that was DELETED (1.22 review) is listed in
@@ -91,7 +113,8 @@ flows, the bugfix kind.
   execution sign-off older than such a change is asked for again (`executionSignOffStale()`). The recorded files are
   hashed even then: a stale baseline with drift answers `drift` (+ `staleBaseline`, `nx.driftedStale`) — the decision
   before any re-baseline.
-- **finish blockers:** `state` (r5 review — .state.json unreadable), doctor fails, changed since approval (shared `changedSinceApproval()`), placeholders
+- **finish blockers:** `state` (r5 review — .state.json unreadable), `roadmap` (1.24 review 6 — roadmap.json unreadable: its roles
+  and checks unknown; doctor's `roadmap` fail, never inside `doctor`), doctor fails, changed since approval (shared `changedSinceApproval()`), placeholders
   anywhere in the chain, bugfix Root Cause, no tasks, open tasks, unverified tasks, pending gates (a phase still
   missing a role's sign-off is pending), and — with `meta.checks` set (1.14) — `suite-evidence`.
   `warnings` (EC/NFR/SC, planned-not-in-code, legacy approvals missing a role, a T-ID planned outside test code whose
@@ -150,7 +173,7 @@ flows, the bugfix kind.
   the Phase 4 wording (`/writeTests`) plus what the gate checks — but on an executing / complete feature (tasks ticked,
   e.g. an upgraded 1.12 one) it uses `next.signOffTests` (a sign-off for the tests that exist, never "failing tests
   first, no implementation code"). **Approving `execution`** runs spec_finish's blockers
-  (`finishFeature(…, {gateOnly: true})` → stable ids `state`, `doctor`, `root-cause`, `placeholders`, `changed-since-approval`,
+  (`finishFeature(…, {gateOnly: true})` → stable ids `state`, `roadmap`, `doctor`, `root-cause`, `placeholders`, `changed-since-approval`,
   `tasks`, `open-tasks`, `verification`, `approval-gates`, `suite-evidence` with meta.checks; a spike: `spike`, `decision`);
   otherwise only `force` records it. spec_metrics' `finished`
   = the earliest of the first execution approval and `state.finished.at` (spec_finish {write} on a ready feature).
@@ -456,6 +479,10 @@ iron law, phase order, the finish / execution gate, every track criterion scaffo
   `bugfixGate()`). bug.md IS its design (r5 review): an open `[NEEDS CLARIFICATION]` there refuses the design gate
   (`doctor.clarificationsOpenBug` when only bug.md holds them), one in its Reproduction the requirements gate; doctor's
   `clarifications` check and spec_clarify read bug.md too (a Root Cause "probably X [NEEDS CLARIFICATION: …]" was approved).
+  **The design gate checks what doctor checks on bug.md (1.24 review 6, E8):** besides `root-cause`, `reproduction`
+  (`bugSectionFilled(REPRO_SYN)` — the requirements gate read it, an edit since emptied it) and `placeholders` (artifactReport's
+  `bugPlaceholders()`: the report's own slots — `[correct behavior]`, the Fix line —, `> **TODO**`; quoted evidence such as
+  `[object Object]` stays content). A bug.md with its slots left was approved while doctor failed `placeholders` on it.
 - **The bugfix tasks.md — the short form, every size.** `bugTasks(name, lang)` (EN / PT / ES — pt-BR derived; ONE builder,
   no size argument: the XS and the default forms became identical) scaffolds two tasks: **1** the red regression test
   (`_Verify: [command that runs T-01]_` + `_Expect: fail_`, guard test T-02 added) and **2** the fix (`_Makes green: T-01_`,

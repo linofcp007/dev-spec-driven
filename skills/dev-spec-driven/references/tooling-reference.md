@@ -66,7 +66,10 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   number no active task carries, a self-dependency, a cycle — the tasks approval refuses on it) · bugfix `root-cause` ·
   spike `question` / `decision` · `merge-conflicts` (a `mergeConflicts` list the git merge driver left in the feature's
   `.state.json` or in `roadmap.json` — pick each value, delete the list) · `state` (the feature's `.state.json` is not
-  valid JSON or has the wrong shape — next_action's one step is to repair it, spec_finish blocks on it).
+  valid JSON or has the wrong shape — next_action's one step is to repair it, spec_finish blocks on it) · `roadmap`
+  (`.specs/roadmap.json` is not valid JSON — e.g. a text merge's conflict markers — or has the wrong shape: the approval
+  roles and project checks it holds can't be read, so approve / revoke / the fast-forward refuse (code `roadmap-invalid`),
+  spec_finish blocks on `roadmap` and next_action's one step is to repair it — every doctor reports it).
 - **Warn:** `steering` (core files missing, or files still holding template placeholders) · `success-criteria` ·
   `priorities` · `mermaid` (no mermaid code block outside comments, or only the template's own diagram) ·
   `constitution-check` · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,

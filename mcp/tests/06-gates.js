@@ -158,8 +158,9 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const apB1 = S.approvePhase(w5, f2b.slug, "requirements", undefined, { force: true });
     const apB2 = S.approvePhase(w5, f2b.slug, "design");
     const apB3 = S.approvePhase(w5, f2b.slug, "classification", undefined, { force: true });
-    ok(apB1.forced && apB1.failing.includes("reproduction") && apB2.ok === false && apB2.failing.join() === "root-cause" && apB3.ok === false && apB3.nothingToApprove,
-      "bugfix: requirements needs bug.md Reproduction, design needs its Root Cause (no design.md), classification has nothing to approve");
+    // (1.24 review 6, E8: the design gate — bug.md — also reads its Reproduction and its slots, as doctor does)
+    ok(apB1.forced && apB1.failing.includes("reproduction") && apB2.ok === false && apB2.failing.join() === "root-cause,reproduction,placeholders" && apB3.ok === false && apB3.nothingToApprove,
+      "bugfix: requirements needs bug.md Reproduction, design needs its Root Cause (+ its Reproduction, no bug.md slot left; no design.md), classification has nothing to approve (got " + JSON.stringify(apB2.failing) + ")");
     const w5pt = path.join(tmp, "proj-wp5-pt");
     S.initProject(w5pt, ["core"], "pt");
     const fpt = S.createFeature(w5pt, "Aprovação", ["core"]);
