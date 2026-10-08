@@ -104,8 +104,10 @@ const RE_MODAL_EN = new RegExp(B + "SHALL" + E, "iu");
 const RE_MODAL_CAPS = new RegExp(B + "(DEVE|DEVER[ÁA]|DEVEM|DEVER[ÃA]O|DEBE|DEBER[ÁA]|DEBEN|DEBER[ÁA]N)" + E, "u");
 const RE_MODAL_SYSTEM = new RegExp(B + "sistema\\s+(n[ãa]o\\s+|no\\s+)?(deve|dever[áa]|debe|deber[áa])" + E, "iu");
 // A list item that opens with a stable AC ID defines a criterion, whatever section it sits in — a checkbox item
-// (`- [ ] **US-1.AC-1** — …`) too, and an ID in single italics or a code span (1.14 full review Pa2).
-const RE_LIST_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)(?:\[[ xX]\]\s+)?(?:\*\*|__|\*|_|`)?(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/;
+// (`- [ ] **US-1.AC-1** — …`) too, and an ID in single italics or a code span (1.14 full review Pa2). 1.24 review 6 (F1): an ID in
+// brackets or parentheses too (`- [US-1.AC-1] …`, `- (US-1.AC-1) …`, `- [ ] [US-1.AC-1] …` — criterionLabel's openers): such an AC was
+// counted by trace_check and never linted, so `- [US-1.AC-1] User can log in` (no modal verb) passed the requirements approval.
+const RE_LIST_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)(?:\[[ xX]\]\s+)?(?:\*\*|__|\*|_|`)?[[(]?(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/;
 const RE_MODAL = { test: (s) => RE_MODAL_EN.test(s) || RE_MODAL_CAPS.test(s) || RE_MODAL_SYSTEM.test(s) };
 // Lowercase PT/ES modal — only trusted on a numbered item inside an acceptance-criteria context.
 const RE_MODAL_LOOSE = new RegExp(B + "(deve|dever[áa]|devem|dever[ãa]o|debe|deber[áa]|deben|deber[áa]n)" + E, "iu");
@@ -134,9 +136,9 @@ const RE_FULL_ID_NO_T = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+(?!\.?\d)|EC-\d+|NFR-\
 
 // A unit that DEFINES an AC for the EARS linter (criterionBlocks {acUnits}) — 1.14 full review Pa2: only list items were
 // linted, so an AC written as a table row, a bold paragraph, a heading or a checkbox item was never EARS-checked while
-// trace_check counted it. A line (list marker / checkbox optional) or a heading that starts with its ID; a table row
-// with a cell that is exactly an AC ID.
-const RE_LEAD_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)?(?:\[[ xX]\]\s+)?(?:\*\*|__|\*|_|`)?(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/;
+// trace_check counted it. A line (list marker / checkbox optional) or a heading that starts with its ID (bracketed or in parentheses
+// too — 1.24 review 6, F1); a table row with a cell that is exactly an AC ID.
+const RE_LEAD_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)?(?:\[[ xX]\]\s+)?(?:\*\*|__|\*|_|`)?[[(]?(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/;
 const RE_CELL_AC = /^(?:\*\*|__|\*|_|`)?(?:US-\d+\.AC-\d+(?:\.\d+)?|AC-\d+)(?:\*\*|__|\*|_|`)?$/; // (a sub-criterion ID too — review 5, L31: linted, then named)
 
 // Strip HTML comments (possibly multi-line — commentLines) so template guidance doesn't count as real content,
@@ -184,12 +186,27 @@ function criterionBlocks(text, opts = {}) {
     if (!c.hidden && !c.fence && !icode[i] && RE_LIST_DEFINES_AC.test(c.vis.trim())) listDefined.add(leadId(c.vis.trim()));
   });
   const unitDefined = new Set();
+  const inDefContext = (s, sect) => !sect || RE_AC_HEADING.test(sect) || RE_MODAL.test(s) || RE_EARS_CAPS.test(s);
   const definesHere = (s, sect) => {
     const id = leadId(s);
-    if (!id || listDefined.has(id) || unitDefined.has(id)) return false;
-    if (sect && !RE_AC_HEADING.test(sect) && !RE_MODAL.test(s) && !RE_EARS_CAPS.test(s)) return false;
+    if (!id || listDefined.has(id) || unitDefined.has(id) || !inDefContext(s, sect)) return false;
     unitDefined.add(id);
     return true;
+  };
+  // acUnits — 1.24 review 6 (F2): every DEFINITION of a US-n.AC-m ID (criterionLabel's reading of the unit), a repeat included, in
+  // document order → `defs` [{ id, key, line }] (key: the ID by number — US-1.AC-01 is US-1.AC-1, F8). acDuplicates (ac-uniqueness)
+  // reads them: a list item led by its ID (a checkbox, an emphasis, a bracket before it — RE_LIST_DEFINES_AC), and a heading / table row
+  // / paragraph line that defines one as above. Such a unit that repeats an ID already defined is a reference (above), never a
+  // criterion — but a DEFINITION again, a duplicate, when it carries a modal verb (it states a criterion of its own), or, a heading in
+  // an acceptance-criteria context, when no list item defines the ID (two `##### US-1.AC-1` headings). A coverage table, a Notes line,
+  // a heading over the list item that defines its ID stay references.
+  const defs = [];
+  const noteDef = (id, ln) => { if (id && RE_US_AC_ONLY.test(id)) defs.push({ id, key: acKey(id), line: ln }); };
+  const labelOf = (s) => { const lab = criterionLabel(s); return lab && !lab.slug ? lab.id : null; };
+  const redefines = (s, sect, heading) => {
+    const id = leadId(s);
+    if (!id || (!listDefined.has(id) && !unitDefined.has(id)) || !inDefContext(s, sect)) return false;
+    return RE_MODAL.test(s) || (heading && !listDefined.has(id) && (!sect || RE_AC_HEADING.test(sect)));
   };
   all.forEach((raw, i) => {
     const ln = i + 1;
@@ -211,18 +228,28 @@ function criterionBlocks(text, opts = {}) {
       while (stack.length && stack[stack.length - 1].level >= hd.level) stack.pop();
       stack.push({ level: hd.level, text: hd.text.trim() });
       section = stack.map((h) => h.text).join(" / ");
-      if (acUnits && RE_LEAD_DEFINES_AC.test(hd.text.trim()) && definesHere(hd.text.trim(), stack.slice(0, -1).map((h) => h.text).join(" / ") || null)) {
-        flush();
-        cur = { line: ln, endLine: ln, numbered: false, section, indent: 0, parts: [hd.text.trim()], definesAc: true, heading: true };
-        return;
+      const ht = hd.text.trim();
+      if (acUnits && RE_LEAD_DEFINES_AC.test(ht)) {
+        const parent = stack.slice(0, -1).map((h) => h.text).join(" / ") || null;
+        if (definesHere(ht, parent)) {
+          noteDef(labelOf(ht), ln);
+          flush();
+          cur = { line: ln, endLine: ln, numbered: false, section, indent: 0, parts: [ht], definesAc: true, heading: true };
+          return;
+        }
+        if (redefines(ht, parent, true)) noteDef(labelOf(ht), ln); // a duplicate definition — still no criterion of its own
       }
     }
     if (acUnits && /^\s*\|/.test(line)) {
       flush();
       const cells = tableCells(line);
       const idCell = cells.find((x) => RE_CELL_AC.test(x));
-      if (idCell && (!section || RE_AC_HEADING.test(section) || RE_MODAL.test(line)) && definesHere(idCell, null)) { // earsValidate's AC context; a reference is no criterion
-        blocks.push({ line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [cells.filter(Boolean).join(" | ")], definesAc: true });
+      const cellId = idCell ? labelOf(idCell) : null;
+      if (idCell && (!section || RE_AC_HEADING.test(section) || RE_MODAL.test(line))) { // earsValidate's AC context; a reference is no criterion
+        if (definesHere(idCell, null)) {
+          noteDef(cellId, ln);
+          blocks.push({ line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [cells.filter(Boolean).join(" | ")], definesAc: true });
+        } else if (redefines(idCell + " " + line, null, false)) noteDef(cellId, ln);
       }
       return;
     }
@@ -246,14 +273,18 @@ function criterionBlocks(text, opts = {}) {
       }
       flush();
       cur = { line: ln, endLine: ln, numbered: RE_NUMBERED.test(line), section, indent: indentOf(line), parts: [trimmed] };
-      if (acUnits && RE_LIST_DEFINES_AC.test(trimmed)) cur.definesAc = true;
+      if (acUnits && RE_LIST_DEFINES_AC.test(trimmed)) { cur.definesAc = true; noteDef(labelOf(trimmed), ln); }
       return;
     }
-    if (acUnits && RE_LEAD_DEFINES_AC.test(trimmed) && definesHere(trimmed, section)) {
-      // A paragraph line that starts with an AC ID defines its own criterion — never the lazy continuation of the one above.
-      flush();
-      cur = { line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [trimmed], definesAc: true };
-      return;
+    if (acUnits && RE_LEAD_DEFINES_AC.test(trimmed)) {
+      if (definesHere(trimmed, section)) {
+        // A paragraph line that starts with an AC ID defines its own criterion — never the lazy continuation of the one above.
+        noteDef(labelOf(trimmed), ln);
+        flush();
+        cur = { line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [trimmed], definesAc: true };
+        return;
+      }
+      if (redefines(trimmed, section, false)) noteDef(labelOf(trimmed), ln);
     }
     if (cur) {
       cur.endLine = ln; // indented or lazy continuation of the criterion above (or an AC heading's body)
@@ -266,8 +297,14 @@ function criterionBlocks(text, opts = {}) {
   return {
     cleaned,
     blocks: blocks.map((b) => ({ line: b.line, endLine: b.endLine, numbered: b.numbered, section: b.section, text: b.parts.join(" "), ...(b.definesAc ? { definesAc: true } : {}) })),
+    defs,
   };
 }
+const RE_US_AC_ONLY = /^US-(\d+)\.AC-(\d+)$/; // a criterion's US-n.AC-m label (never a sub-criterion's US-1.AC-1.2)
+// An AC ID by NUMBER (1.24 review 6, F8): "US-01.AC-01" → "US-1.AC-1" (anything else as it is). A zero-padded one (RE_PADDED_AC) is
+// EARS's `padded-id` warning; ac-uniqueness compares by this key.
+const acKey = (id) => { const m = RE_US_AC_ONLY.exec(id); return m ? "US-" + parseInt(m[1], 10) + ".AC-" + parseInt(m[2], 10) : id; };
+const RE_PADDED_AC = /^US-(?:0\d+\.AC-\d+|\d+\.AC-0\d+)$/;
 
 // ears_validate {name} / `dev-spec ears <feature>`: lint a feature's requirements.md (resolver-aware).
 function earsFeature(projectDir, name) {
@@ -279,13 +316,21 @@ function earsFeature(projectDir, name) {
   return earsValidate(text, lng);
 }
 
-// requirements.md defines AC IDs (trace_check's reading, requirementAcIds) but EARS linted no criterion at all: the IDs,
-// shortened ("US-1.AC-1, US-1.AC-2 …"), else null. Doctor's `ears` check and the requirements approval gate fail on it
+// requirements.md defines AC IDs (trace_check's reading, requirementAcIds) that NO criterion EARS linted carries: those IDs,
+// shortened ("US-1.AC-1, US-1.AC-2 …"), else null. Doctor's `ears` check and the requirements / change-plan approvals fail on it
 // (1.14 full review Pa2) — an AC written only mid-sentence, or in a summary table, is counted yet never checked.
+// 1.24 review 6 (F1): per ID — it fired only when EARS linted no criterion at all, so beside one well-formed criterion an AC trace_check
+// required but EARS never read (`- WHEN … the user sees an error (US-1.AC-1)`, a blockquoted AC, `- Login US-1.AC-1: …`) passed doctor
+// and the approval. A criterion carries an ID written in its own text (never a `_Supersedes:_` marker's nor another feature's
+// `<slug>/US-n.AC-m`, read as requirementAcIds reads them). `ears`: earsValidate's result for reqText (its non-enumerable `criteria`).
 function earsUnlinted(reqText, ears, dir) {
-  if (!ears || !ears.summary || ears.summary.criteriaDetected > 0) return null;
+  if (!ears || !ears.summary) return null;
   const ids = [...requirementAcIds(reqText || "", dir)];
-  return ids.length ? shortIdList(ids) : null;
+  if (!ids.length) return null;
+  const carried = new Set();
+  for (const c of ears.criteria || []) for (const id of extractAcIds(stripForeignAcRefs(stripSupersedes(c.text), dir, reqText || ""))) carried.add(id);
+  const miss = ids.filter((id) => !carried.has(id));
+  return miss.length ? shortIdList(miss) : null;
 }
 const shortIdList = (xs) => xs.slice(0, 5).join(", ") + (xs.length > 5 ? " …" : ""); // "US-1.AC-1, US-1.AC-2 …"
 // The mirror (1.22 review): EARS linted criteria but requirements.md defines no AC ID trace_check reads — a spec numbered with
@@ -420,6 +465,9 @@ function earsValidate(text, lang) {
       const bare = bareLabel(b.text);
       add("warn", "no-id", !bare ? M.noId : /^US-/.test(bare) ? M.subAcId(bare) : M.bareAcId(bare)); // review 5 (L31): a sub-criterion ID
     }
+    // 1.24 review 6 (F8): a zero-padded US-n.AC-m in the criterion's own text — every reader compares AC IDs as written, so
+    // `US-1.AC-01` and a task's `US-1.AC-1` were an uncovered AC and a phantom with no word why. Named, with its canonical form.
+    for (const id of extractAcIds(stripForeignAcRefs(own))) if (RE_PADDED_AC.test(id)) add("warn", "padded-id", M.paddedAcId(id, acKey(id)));
 
     // Every distinct vague term, not just the first ("rápida e amigável" is two things to quantify) — "clean up" is a verb.
     vagueTermsOf(b.text).forEach((term) => add("warn", "vague", M.vague(term)));

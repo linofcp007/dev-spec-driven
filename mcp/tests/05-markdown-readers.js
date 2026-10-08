@@ -1,6 +1,6 @@
 "use strict";
-// Markdown readers (review 5): linear bracket scanning, the comment- and fence-aware heading reader (setext, indented ATX), section content, indented code, task citations, sub-criterion IDs, T-IDs by number.
-// The regressions of the fifth review's markdown / trace findings (P5, M2, M5, L28, L31, L32) — 05-markdown-trace.js holds the older ones.
+// Markdown readers (reviews 5 and 6): linear bracket scanning, the comment- and fence-aware heading reader (setext, indented ATX), section content, indented code, task citations, sub-criterion IDs, T-IDs by number; every AC definition linted and unique, written content, plan-entry coverage.
+// The regressions of the fifth review's markdown / trace findings (P5, M2, M5, L28, L31, L32) and of the sixth's (r6 F1–F4, F8–F11) — 05-markdown-trace.js holds the older ones.
 
 const fs = require("fs");
 const path = require("path");
@@ -204,4 +204,84 @@ exports.run = async ({ ok, S, tmp, require, __dirname }) => {
     ok(plain === bold && plain === bare && plain > 0 && js([...ids].sort()) === js(["US-1.AC-1", "US-1.AC-7"]),
       "1.23.1: an AC ID in requirements.md's # title is no criterion (bold or plain); a ## heading's and a list item's still are (got " + js([plain, bold, bare, [...ids]]) + ")");
   }
+
+  // ---- 1.24 review 6 — markdown / trace / doctor ----
+  const R6_HEAD = "# Feature: login\n\n## Summary\nUsers log in.\n\n## User Stories\n\n### US-1 (P1): Login\n**As a** user, **I want** to log in, **so that** I see my data.\n\n#### Acceptance Criteria (EARS)\n";
+  const R6_TAIL = "\n## Success Criteria\n- **SC-001** — 95% of logins succeed on first try\n";
+  const r6proj = (n, tracks) => { const p = path.join(tmp, "proj-r6-" + n); S.initProject(p, tracks || ["core"], "en"); return p; };
+  const r6feat = (p, name, tracks, req) => { const c = S.createFeature(p, name, tracks || ["core"], "x", undefined, "en"); if (req != null) put(c.dir, "requirements.md", req); return c; };
+  const status = (doc, id) => (doc.checks.find((c) => c.id === id) || {}).status;
+
+  // 1.24 r6 F1: EARS lints every unit that defines an AC ID trace_check counts — a `[US-1.AC-1]` / `(US-1.AC-1)` lead (a checkbox before it
+  // too) is linted like `- US-1.AC-1` — and an ID trace_check requires that NO linted criterion carries (a trailing "(US-1.AC-1)", a
+  // blockquote, an ID after a word) fails doctor's ears and the requirements approval: it was counted, never checked, and approved.
+  {
+    const p = r6proj("ears-ids");
+    const second = "- US-1.AC-2 — WHEN the account is locked THE SYSTEM SHALL email the owner\n";
+    const bad = {
+      bracket: "- [US-1.AC-1] User can log in with a password\n",
+      paren: "- (US-1.AC-1) User can log in with a password\n",
+      boxBracket: "- [ ] [US-1.AC-1] User can log in with a password\n",
+      trailing: "- WHEN the password is wrong the user sees an error (US-1.AC-1)\n",
+      quote: "> **US-1.AC-1** — the user sees an error\n\n",
+      afterWord: "- Login US-1.AC-1: the user sees an error\n",
+    };
+    const good = {
+      bracket: "- [US-1.AC-1] WHEN the password is wrong THE SYSTEM SHALL show an error\n",
+      boxBold: "- [ ] **US-1.AC-1** — WHEN the password is wrong THE SYSTEM SHALL show an error\n",
+      table: "| ID | Criterion |\n|---|---|\n| US-1.AC-1 | WHEN the password is wrong THE SYSTEM SHALL show an error |\n\n",
+      heading: "##### US-1.AC-1: Wrong password\nWHEN the password is wrong THE SYSTEM SHALL show an error\n\n",
+    };
+    const runForm = (k, line) => {
+      const c = r6feat(p, "F1 " + k, ["core"], R6_HEAD + line + second + R6_TAIL);
+      S.approvePhase(p, c.slug, "classification", "t", { force: true });
+      const ap = S.approvePhase(p, c.slug, "requirements", "t");
+      return { ap: ap.ok, why: ap.ok ? "" : String(ap.error).split("\n")[0], ears: status(S.specDoctor(p, c.slug), "ears") };
+    };
+    const badR = Object.entries(bad).map(([k, l]) => [k, runForm("bad " + k, l)]);
+    const goodR = Object.entries(good).map(([k, l]) => [k, runForm("good " + k, l)]);
+    const linted = ["bracket", "paren", "boxBracket"].map((k) => S.earsValidate(R6_HEAD + bad[k] + second, "en").issues.some((i) => i.code === "no-modal" && i.line === 12));
+    ok(badR.every(([, r]) => !r.ap && /ears/.test(r.why) && r.ears === "fail") && goodR.every(([, r]) => r.ap && r.ears === "pass") && linted.every(Boolean),
+      "1.24 r6 F1: an AC led by [ID] / (ID) is linted (no modal → error); an AC ID no linted criterion carries fails doctor's ears and the requirements approval; well-formed tables, headings, checkbox and bracket criteria still pass (got " +
+      js([badR, goodR, linted]) + ")");
+  }
+
+  // 1.24 r6 F2 + F8: ac-uniqueness reads the AC-DEFINING units — EARS's reader (criterionBlocks {acUnits} + criterionLabel): a duplicate
+  // written as a checkbox item, an italic / code / bracketed ID, a heading, a table row or a paragraph line was missed (only `- US-` /
+  // `1. **US-**` counted) and its second criterion vanished from trace_check. A reference (a coverage table, a Notes line) defines
+  // nothing, a sub-criterion ID is no duplicate of its parent, and IDs compare by number (US-1.AC-01 is US-1.AC-1).
+  {
+    const A = "WHEN the password is wrong THE SYSTEM SHALL show an error", B = "WHEN the account is locked THE SYSTEM SHALL email the owner";
+    const forms = {
+      checkbox: (id, t) => `- [ ] **${id}** — ${t}\n`,
+      checkboxPlain: (id, t) => `- [ ] ${id} — ${t}\n`,
+      italic: (id, t) => `- _${id}_ — ${t}\n`,
+      code: (id, t) => "- `" + id + "` — " + t + "\n",
+      bracket: (id, t) => `- [${id}] ${t}\n`,
+      heading: (id, t) => `##### ${id}\n${t}\n\n`,
+      table: (id, t) => `| ${id} | ${t} |\n`,
+      paragraph: (id, t) => `${id} — ${t}\n\n`,
+    };
+    const dup = Object.entries(forms).map(([k, f]) => [k, E.acDuplicates(R6_HEAD + (k === "table" ? "| ID | Criterion |\n|---|---|\n" : "") + f("US-1.AC-1", A) + f("US-1.AC-1", B) + R6_TAIL)]);
+    const padded = [E.acDuplicates(R6_HEAD + "- US-1.AC-1 — " + A + "\n- US-1.AC-01 — " + B + "\n"), E.acDuplicates(R6_HEAD + "- US-1.AC-1 — " + A + "\n- US-01.AC-1 — " + B + "\n")];
+    const refs = E.acDuplicates(R6_HEAD + "- US-1.AC-1 — " + A + "\n- US-1.AC-1.1 — " + B + "\n- US-1.AC-1.2 — " + B + "\n\n## Coverage\n| AC | Priority |\n|---|---|\n| US-1.AC-1 | P1 |\n\n## Notes\nUS-1.AC-1 depends on the IdP's error codes.\n");
+    const p = r6proj("ac-dups");
+    const c = r6feat(p, "Dups", ["core"], R6_HEAD + forms.checkbox("US-1.AC-1", A) + forms.checkbox("US-1.AC-1", B) + R6_TAIL);
+    S.approvePhase(p, c.slug, "classification", "t", { force: true });
+    const ap = S.approvePhase(p, c.slug, "requirements", "t");
+    const docSt = status(S.specDoctor(p, c.slug), "ac-uniqueness");
+    ok(dup.every(([, d]) => js(d) === '["US-1.AC-1"]') && padded.every((d) => js(d) === '["US-1.AC-1"]') && js(refs) === "[]" && docSt === "fail" && !ap.ok && /ac-uniqueness/.test(ap.error),
+      "1.24 r6 F2/F8: a duplicate AC in any defining form (checkbox, italic, code, bracket, heading, table row, paragraph) and a zero-padded twin fail ac-uniqueness (doctor + approval); references and sub-criterion IDs don't (got " +
+      js([dup, padded, refs, docSt, ap.ok]) + ")");
+  }
+
+  // 1.24 r6 F8: a zero-padded AC ID (US-1.AC-01, US-01.AC-1) is an EARS warning naming the canonical form — trace_check, tasks and the
+  // test plan compare AC IDs as written, so `US-1.AC-01` and a task's `US-1.AC-1` were an uncovered AC and a phantom with no hint why.
+  {
+    const ev = S.earsValidate(R6_HEAD + "- US-1.AC-01 — WHEN a THE SYSTEM SHALL b\n- US-02.AC-1 — WHEN c THE SYSTEM SHALL d\n- US-3.AC-3 — WHEN e THE SYSTEM SHALL f\n", "en");
+    const pad = ev.issues.filter((i) => i.code === "padded-id");
+    ok(ev.verdict === "pass" && pad.length === 2 && pad.every((i) => i.severity === "warn") && /US-1\.AC-1(?!\d)/.test(pad[0].msg) && /US-2\.AC-1(?!\d)/.test(pad[1].msg) && pad[0].line === 12,
+      "1.24 r6 F8: EARS warns `padded-id` on US-1.AC-01 / US-02.AC-1, naming US-1.AC-1 / US-2.AC-1 (got " + js(ev.issues) + ")");
+  }
+
 };

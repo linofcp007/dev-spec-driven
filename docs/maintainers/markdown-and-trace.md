@@ -192,7 +192,7 @@ matrix.
   lines, headings, tables, HR and fenced code (fence *state* is tracked, so `const shall = 1` inside
   ` ``` ` is code, not an AC) — and only then lints each joined criterion. A comment-only line does
   **not** split a criterion. Issues report the criterion's start `line` (plus `endLine` when it spans
-  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`). `no-keyword`
+  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`/`padded-id`). `no-keyword`
   (info) spares the ubiquitous form naming ITS system (review 5 — `RE_UBIQUITOUS`): "THE <name> SHALL" (one to four words: the
   API, the billing service), PT "O / A / OS / AS <nome> (NÃO) DEVE(M) / DEVERÁ(ÃO)", ES "EL / LA / LOS / LAS <nombre> (NO)
   DEBE(N) / DEBERÁ(N)" — only "THE SYSTEM" counted. `vague`
@@ -204,13 +204,30 @@ matrix.
   now ~0.2 s). Every unit
   that DEFINES an AC is its own criterion for the linter: an ID-led line or checkbox item, a heading led by an AC ID (its
   body absorbed) and a table row with a cell that is exactly an AC ID (under an Acceptance Criteria / story heading, with no
-  heading, or carrying a modal — elsewhere it is a summary table). Such a unit is a REFERENCE, never linted, when a list
+  heading, or carrying a modal — elsewhere it is a summary table). The ID may sit behind an emphasis, a code span, a bracket
+  or a parenthesis (`- [US-1.AC-1] …`, `- (US-1.AC-1) …`, `- [ ] [US-1.AC-1] …` — 1.24 review 6, F1: `RE_LIST_DEFINES_AC` /
+  `RE_LEAD_DEFINES_AC` take criterionLabel's openers; `- [US-1.AC-1] User can log in`, no modal, was counted by trace_check,
+  never linted, and approved). Such a unit is a REFERENCE, never linted, when a list
   item defines that ID anywhere or an earlier unit already did (a Notes line "US-1.AC-2 depends on …", a coverage table),
   and outside an acceptance-criteria context a line or heading defines one only when it carries a modal verb or a
-  capitalised EARS keyword. Doctor's `ears` FAILS (and the requirements approval
-  is refused) when requirements.md defines AC IDs but no criterion was linted (`earsUnlinted()`, `earsNoCriteria`). The
-  requirements.md save hook and the pre-commit validator call the same `earsValidate()`, so a table-row or heading AC
-  without a modal is an EARS error there too.
+  capitalised EARS keyword. **Per ID (1.24 review 6, F1):** doctor's `ears` FAILS (and the requirements / change-plan approval
+  is refused) when requirements.md defines an AC ID (`requirementAcIds`) that NO linted criterion carries in its own text
+  (`earsUnlinted()` → the IDs, `earsNoCriteria`) — it fired only when nothing at all was linted, so beside one well-formed
+  criterion `- WHEN … the user sees an error (US-1.AC-1)`, a blockquoted AC or `- Login US-1.AC-1: …` was a required AC EARS never
+  read. The raw-text `earsValidate()` (ears_validate, the requirements.md save hook, the pre-commit validator) has no such check —
+  it judges criteria, not a feature's ID set — but a table-row or heading AC without a modal is an EARS error there too.
+  **Zero-padded IDs (1.24 review 6, F8):** every reader compares AC IDs AS WRITTEN (tasks, the test plan, decisions, the brief, the
+  catalog) — comparing by number everywhere would touch each of them — so EARS warns `padded-id` on a US-n.AC-m with a leading zero
+  in the criterion's own text (`US-1.AC-01`, `US-01.AC-1` → "write US-1.AC-1"; `acKey`, `ears.paddedAcId`), and ac-uniqueness
+  compares by number (below). A task citing `US-1.AC-1` for a `US-1.AC-01` criterion stays a visible uncovered + phantom gap.
+  **AC definitions — ONE reader (1.24 review 6, F2):** `criterionBlocks(text, {acUnits})` also returns `defs` [{ id, key, line }] —
+  every US-n.AC-m DEFINITION in document order (criterionLabel's ID of a defining list item, heading, table row or paragraph line), a
+  repeat included: a unit repeating an ID is still a reference (never linted), but a definition again when it carries a modal verb,
+  or — a heading in an acceptance-criteria context — when no list item defines that ID. `acDuplicates()` (doctor's and the
+  approvals' `ac-uniqueness`) reads them by `key` (the number: US-1.AC-01 = US-1.AC-1); it read only `- US-` / `1. **US-**` items,
+  so a second `- [ ] **US-1.AC-1**` (or an italic / code / bracketed one, two headings, two table rows, two paragraph lines) passed
+  and its criterion vanished from trace_check. A coverage table, a Notes line, a heading over the list item that defines its ID
+  and a sub-criterion ID (US-1.AC-1.2) are no duplicates.
 - **Fences: one closer rule, `closesFence(line, marker)`** — every fence-aware reader (`stripFencedCode`,
   `criterionBlocks`, `designSections`, `headingEntries`, the placeholder scan, `mdListItems`, import, the task
   scanner's `fenceLine`) closes a fence only on a CommonMark closer: the opener's character, at least as long,

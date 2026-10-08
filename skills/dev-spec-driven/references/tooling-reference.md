@@ -21,7 +21,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_list` | List all features with track set, phase, and task progress |
 | `spec_status` | One feature: kind (feature / bugfix / spike / change), flow, phase, artifacts, tasks (with `verified`), each active track's sections present vs filled (`secSections`, `privacySections`, `distSections` …), eval state |
 | `spec_next_action` | "You are here → do this next": one `step`, phase by phase (re-review → for the first unapproved phase: fill → fix → approve, the next phase only after that approval → fix → implement → verify → finish → finished / drift; a spike: fill → implement → decide → promote / archive / pivot) + `changedSinceApproval`; suggests `/spec-ff` when every planning artifact passes its gate |
-| `ears_validate` | Lint criteria: modal verb, stable IDs, vague words, placeholders — issue `code`s `no-modal` · `no-id` · `vague` · `placeholder` · `no-keyword` · `needs-clarification` |
+| `ears_validate` | Lint criteria: modal verb, stable IDs, vague words, placeholders — issue `code`s `no-modal` · `no-id` · `vague` · `placeholder` · `no-keyword` · `needs-clarification` · `padded-id` (a zero-padded `US-1.AC-01` — IDs are compared as written: write `US-1.AC-1`) |
 | `spec_clarify` | Requirement ambiguities/gaps before design (markers, placeholders with file:line, missing sections, IF…THEN, track gaps — tenant isolation, AI quality/cost, access denial, secrets, data subject rights, retention; with a glossary, every avoided word used — `glossary`; queues / events / concurrency / transactions named (two concepts, or one strong phrase; never the template's words) while neither requirements.md nor design.md states a consistency model, delivery guarantee or idempotency — one question, `nudges` `consistency-unstated`) |
 | `trace_check` | AC ↔ task ↔ test gaps (the verdict) + warnings for EC/NFR/SC, `phantomSupersedes` and `phantomAffects`; `code: true` scans test files for T-IDs; `matrix: true` adds the requirements traceability matrix (one row per AC / EC / NFR / SC — `status` verified · implemented · planned · untraced, `gaps` no-task · no-test · no-coverage, linked tasks + evidence, tests, design, decisions, supersedes, changed since approval; informational, never the verdict) |
 | `spec_doctor` | One health-check → `readyToAdvance` (the checks are listed below) |
@@ -55,8 +55,10 @@ input schema (a wrong type or unknown value is refused with a clear message).
 Each check is pass / warn / fail; `readyToAdvance` means no fail.
 
 - **Fail when broken:** `requirements` (missing) · `ears` (a criterion without a modal verb, requirements.md
-  defining AC IDs of which no criterion was linted, or criteria with no `US-n.AC-m` ID — a bare `AC-1` is none) · `clarifications` (open
-  `[NEEDS CLARIFICATION]`) · `ac-uniqueness` · `placeholders` (template text in the current or an earlier phase's
+  defining an AC ID that no linted criterion carries — an AC is linted as a list item, heading or line led by its ID, `[ID]` /
+  `(ID)` too, or a table row under an Acceptance Criteria heading — or criteria with no `US-n.AC-m` ID — a bare `AC-1` is none) · `clarifications` (open
+  `[NEEDS CLARIFICATION]`) · `ac-uniqueness` (an AC ID defined twice — a list or checkbox item, a heading, a table row or a
+  line led by it; compared by number, `US-1.AC-01` = `US-1.AC-1`) · `placeholders` (template text in the current or an earlier phase's
   artifact; a later phase's only warns) · `design` (missing) · `saas-sections` / `ai-sections` / `sec-sections` /
   `privacy-sections` / `dist-sections` / `api-sections` / `ui-sections` / `obs-sections` / `data-sections` / `<pack>-sections` (an active track's mandatory design section missing, empty, still holding its `> **TODO**`
   sentinel, or — 1.21 — holding nothing but the template's guidance line (a warn on a design approved before); a sized feature: an
