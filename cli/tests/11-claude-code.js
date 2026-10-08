@@ -102,6 +102,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const planMd = ["# Plan: Dark mode", "", "## Goals", "- WHEN the user picks dark mode THE SYSTEM SHALL apply the dark palette", "", "## Steps",
     "1. Add the theme context in `src/theme.ts`", "2. Wire the toggle in `src/settings.tsx`", ""].join("\n");
   const pi = path.join(tmp, "p16c-import");
+  fs.mkdirSync(pi, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
   const im = [cli(["import", "plan", "-", "--project", pi], { input: planMd }), cli(["import", "plan", "--text", planMd, "--name", "Night mode", "tdd", "--project", pi]),
     cli(["import", "kiro", "-", "--project", pi], { input: "# x" }), cli(["import", "plan", "--project", pi]), cli(["import", "plan", "-", "--project", pi], { input: "   " }),
     cli(["import", "plan", "--json", "--text", planMd, "--name", "Json mode", "--project", pi])];

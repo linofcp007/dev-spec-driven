@@ -157,6 +157,26 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
     "full review Ga10: --timeout, output over 64 MB (done --run and finish --run) and a cmd.exe failure under --shell cmd on an _Expect: fail_ task are could-not-run — refused, nothing recorded; --timeout 0 is refused before anything runs (got " +
     JSON.stringify([g10tj, g10z.out.slice(0, 120), g10bj && g10bj.couldNotRun, g10c, g10f && g10f.couldNotRun]).slice(0, 600) + ")");
 
+  // 1.23 review (M13): --timeout kills the whole process TREE (taskkill /T on Windows, the process group elsewhere), never the
+  // shell alone — a check that starts a worker of its own left it running, holding the output pipe (the CLI waited for it too).
+  const f13 = Sga.createFeature(gp, "Tree", ["core"], "", undefined, "en");
+  wGa(gp, "grandchild-123.js", "require('fs').writeFileSync(process.argv[2], String(process.pid));\nsetTimeout(() => {}, 60000);\n");
+  wGa(gp, "spawner-123.js", "const path = require('path');\nrequire('child_process').spawn(process.execPath, [path.join(__dirname, 'grandchild-123.js'), " +
+    "path.join(__dirname, 'grandchild-123.pid')], { stdio: 'inherit' });\nsetTimeout(() => {}, 60000);\n");
+  wGa(f13.dir, "tasks.md", "- [ ] 1. [US1] Spawns a worker\n  - _Verify: node spawner-123.js_\n");
+  const t13 = Date.now();
+  const g13 = jsonGa(rga(gp, ["done", f13.slug, "1", "--run", "--timeout", "4", "--json"]).stdout);
+  const took13 = Date.now() - t13;
+  let pid13 = 0;
+  try { pid13 = Number(fs.readFileSync(path.join(gp, "grandchild-123.pid"), "utf8")); } catch { /* the worker never started */ }
+  const alive13 = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; } };
+  let dead13 = pid13 > 0 && !alive13(pid13);
+  for (let i = 0; i < 50 && pid13 > 0 && !dead13; i++) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100); dead13 = !alive13(pid13); }
+  if (pid13 > 0 && !dead13) { try { process.kill(pid13); } catch { /* gone */ } }
+  ok(g13 && g13.ok === false && g13.couldNotRun === "timeout" && took13 < 40000 && pid13 > 0 && dead13 && !(stGa(f13).evidence || {})["1"],
+    "1.23 review: done --run --timeout kills the check's whole process tree (its worker too) and returns — could-not-run, nothing recorded (got " +
+    JSON.stringify([g13 && g13.couldNotRun, took13, pid13, dead13]) + ")");
+
   // 1.21.1 languages: finish --run --shell pwsh runs the project checks as PowerShell (the same b5Exec as done --run): a
   // passing and a failing check, both recorded with their exit codes. Skipped where pwsh isn't installed (the Linux containers).
   let hasPwsh = false;

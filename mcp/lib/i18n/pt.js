@@ -1516,6 +1516,8 @@ const msg = {
       usage: "Uso: node run-evals.js <feature> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
       noEvalsDir: (slug, dir) => `Sem pasta evals/ para '${slug}' em ${dir}`,
       requireLive: "harness de evals: a ANTHROPIC_API_KEY não está definida e foi pedido --require-live — recuso fazer um dry run em alternativa.",
+      unknownFlag: (flag, suggestion) => `harness de evals: opção desconhecida ${flag}` + (suggestion ? ` — será ${suggestion}?` : "") + " Nada correu.",
+      extraArg: (word) => `harness de evals: argumento inesperado '${word}' — uma feature por execução. Nada correu.`,
       header: (slug) => `dev-spec-driven evals — feature '${slug}'`,
       config: (model, prompt, mode) => `  modelo: ${model}   prompt: ${prompt}   modo: ${mode}`,
       none: "(nenhum)",
@@ -1653,6 +1655,14 @@ const msg = {
       unknownCommand: (c) => `comando desconhecido '${c}'. Corre \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `cliente desconhecido '${c}'. Conhecidos: ${known}`,
       noJson: (c) => `--json não está disponível para '${c}': só imprime texto. Corre-o sem --json.`,
+      flagNotFor: (flag, c, list) => `${flag} não é uma opção de '${c}'` + (list ? ` (as suas opções: ${list})` : " (não tem nenhuma)") + `. Corre \`${DEV_SPEC} help\`.`,
+      extraArgs: (c, extra) => `'${c}' recebeu argumento(s) inesperado(s): ${extra}. Corre \`${DEV_SPEC} help\` para ver a sintaxe.`,
+      needsRun: (flag) => `${flag} só se aplica com --run (como os comandos correm) — junta --run, ou retira ${flag}.`,
+      runOrEvidence: "--run regista a execução que faz; --evidence / --exit / --cmd relatam uma execução feita noutro lado — passa uma coisa ou a outra.",
+      projectEmpty: "--project está vazio — indica a pasta do projeto, ou omite --project (a pasta mais próxima acima desta com uma .specs/, senão esta).",
+      projectUnexpanded: (v) => `--project ${v} contém uma variável que nunca foi expandida — passa a própria pasta.`,
+      projectMissing: (dir) => `--project ${dir}: essa pasta não existe — verifica o caminho (só o init cria a pasta de um projeto).`,
+      projectNotDir: (dir) => `--project ${dir} é um ficheiro, não uma pasta.`,
     },
 
     gates: {

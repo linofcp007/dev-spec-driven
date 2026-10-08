@@ -162,7 +162,10 @@ and U+FEFF gotchas are in CLAUDE.md.
   has flushed — on a Linux pipe, docker or `| tee`, writes go async past the 64 KB buffer and the tail, FAIL lines and the
   total, was dropped) and for the MCP server (on stdin close it flushes its queued replies first — a slow reader on Linux
   got 0 of 8; a stdout EPIPE / EOF / ERR_STREAM_DESTROYED exits quietly 0, any other stdout error prints one stderr line
-  and exits 1). Never `process.exit()` right after a write. The pre-commit validator reads staged
+  and exits 1). Never `process.exit()` right after a write (the CLI's `die()` under `--json` writes its small document with
+  `fs.writeSync(1, …)` first). The CLI's stdin (`ears -`, `import <plan> -`, `log <f> -`, `stop-check -`) is collected as
+  BYTES and decoded like a file (`readStdin` → `decodeText`: a UTF-16 BOM decides, else UTF-8 — 1.23 review: a UTF-16 document,
+  what Windows PowerShell 5.1's `>` writes, read as "0 criteria, pass" in `ears -`). The pre-commit validator reads staged
   names NUL-separated with `core.quotePath=false`, so accented paths work, and loads the engine only once a staged
   `requirements.md` / `tasks.md` / `change.md` under a `.specs/` needs it (1.22 review — most commits stage none and paid
   ~130 ms for the require). Only EARS errors and phantom task refs
@@ -180,10 +183,33 @@ and U+FEFF gotchas are in CLAUDE.md.
   (`TEXT_ONLY_COMMANDS`, exit 1, below); `dev-spec evals` exits with the harness's status, and 1 when it has none (a spawn error, a signal — 1.22
   review: `status || 0` passed a killed run). An engine refusal goes through `fail(r)`, never
   `die(r.error)`: with `--json` the whole `{ok: false, error, …}` result (`recorded`, `neverApproved`, `gated`…) is
-  the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only. **`--json` on a command
+  the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only — with `--json` (1.23
+  review) it prints `{ok: false, error}` on stdout too (written synchronously: `process.exit` follows; the stderr line stays),
+  and an engine EXCEPTION (main's catch — a file where `.specs/` goes: ENOTDIR) answers `{ok: false, error, code}` (`code` the
+  system error's, else `"exception"`) — it was the raw message on stderr alone; `merge-state --json` prints its result on every
+  path (git merge-file's `{merged: "text", clean, conflicts}` for a hand-written overview, `{ok: false, parseError, error}` for
+  an unparseable side — both printed nothing). **`--json` on a command
   whose output is text only** — the help (`help`, no command, `--help` anywhere), `rules`, `mcp-config`, `evals`
-  (`TEXT_ONLY_COMMANDS`) — is such a usage error (`cliOutput.noJson`, exit 1, nothing on stdout; 1.22 review — it printed the
-  text with exit 0); `--json=false` is the switch off. A new command that prints no structured result joins that list.
+  (`TEXT_ONLY_COMMANDS`) — is such a usage error (`cliOutput.noJson`, exit 1, nothing on stdout — `die(…, {text: true})`; 1.22
+  review — it printed the text with exit 0); `--json=false` is the switch off. A new command that prints no structured result
+  joins that list.
+- **CLI: each command reads its own options and arguments (1.23 review).** `COMMAND_OPTIONS` (cli/dev-spec.js) lists every
+  command's flags and the most positionals it takes (`max`; absent = any number, or the command checks its own: templates,
+  export, decide…); `checkCommandArgs()` refuses — before anything runs, after the help — a known flag the command doesn't
+  read (`cliOutput.flagNotFor`, its options listed) and an argument past its last one (`extraArgs`): they were ignored —
+  `approve <f> <phase> --remove` (meant --revoke) approved, `done <f> 3 4` ticked task 3 alone. `--json`, `--project` and
+  `--help` are global (`GLOBAL_OPTIONS`). `backlog` (add takes note words, rm / list don't) and `log` (a second word is `-`)
+  check theirs in their case; `--shell` / `--timeout` without `--run` (`needsRun`) and `--run` with `--evidence` / `--exit` /
+  `--cmd` (`runOrEvidence`) are usage errors; `undone` takes done's run flags only to refuse them (`undo.noEvidence`). A new
+  command or flag gets its `COMMAND_OPTIONS` entry (extending.md). **`--project` (L14)** names an existing folder
+  (`checkProjectFlag()`): empty, an unexpanded variable (`unexpandedVar`), a file or a missing folder is refused (localized
+  `cliOutput.project*`) — `init` alone may create it (`create x --project <typo>` created the whole mistyped tree); on Windows a
+  trailing `"` is dropped (`--project "C:\dir\"` reaches node as `C:\dir"`). The status line's render path checks none of this.
+  **`evals` (P1)** forwards every word of the command line but the command and `--project` (the CLI passes its resolved one) —
+  read with run-evals.js's rules (`evalsArgs()`: its value flags `--project` / `--model` / `--prompt` / `--max-items` take the
+  next word): only the words after the feature were forwarded, so `evals --dry-run <f>` ran LIVE (paid calls). run-evals.js
+  refuses an unknown flag (did-you-mean, exit 2 — `--dryrun` ran live too), a value flag without its value and a second word,
+  and prints its usage on `--help` (it ran the eval).
 - **CLI boolean switches are read with `on(k)`, never by truthiness**: `--x=false` is the string "false" (truthy),
   so `done --run=false` ran the `_Verify:_` commands. `normalizeBoolFlags()` (every name in `BOOL_FLAGS`) turns
   `true|false|1|0|yes|no|on|off` into booleans and refuses any other value. `BOOL_FLAGS` is `[...spec.CLI_SWITCHES]`
@@ -191,7 +217,8 @@ and U+FEFF gotchas are in CLAUDE.md.
   a new switch goes into `spec.CLI_SWITCHES` (never a CLI-only list: the hook would read the word after it as its value), a new
   value flag into `VALUE_FLAGS` — `refuseUnknownFlags()` refuses any other `--flag` before anything runs (exit 1, a
   localized did-you-mean; `done 2 --rnu` used to tick the task with no evidence). `evals` is exempt (its flags go to
-  run-evals.js untouched); `--` ends the options; `--help` anywhere prints the help and runs nothing. An explicit
+  run-evals.js, which refuses its own unknown ones); `--` ends the options; `--help` anywhere prints the help and runs nothing
+  (`evals --help`: the harness's usage). An explicit
   `--include-body=false` / `--include-brief=false` is passed through as false (`boolFlag()`), as MCP receives it.
   The eval harness (`mcp/evals/run-evals.js`, which `evals` forwards to untouched) applies the same rule to its own
   switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise).

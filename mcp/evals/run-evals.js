@@ -22,14 +22,17 @@
  *   --project=<dir>      project root (default: $SPEC_PROJECT_DIR / $CLAUDE_PROJECT_DIR / cwd — same as the CLI)
  *   --prompt=<file>      prompt file under prompts/ (default: latest vN.md)
  *   --max-items=<N>      grade at most N items per set (an integer >= 1; default 200) — anything else exits 2
+ *   --help               print this usage and run nothing
  *   Switches (--dry-run, --set-baseline, --require-live) follow the CLI's rule: --flag, or --flag=true|false
  *   (1/0, yes/no, on/off); any other value exits 2.
  *   The report is text only: --json is a usage error (exit 2; --json=false is accepted, as the CLI reads it).
+ *   Any other --flag (a typo: --dryrun), a value flag without its value or a second word after the feature is a usage
+ *   error too (1.23 review: they were ignored, and a mistyped --dry-run ran a LIVE, paid eval).
  *
  * Exit code: 0 normally; 1 if a set falls below its threshold (real run only) or a set / thresholds.json
  * is invalid (dry or live — then no model is called; a set with no items is invalid too: it can't pass what it never
  * graded) — handy for a manual pre-push gate. 2 for a usage error (no feature, a bad --max-items or switch value,
- * --require-live without a key, --json).
+ * --require-live without a key, --json, an unknown flag, a missing value, an extra argument).
  * Thresholds: evals/thresholds.json or defaults (golden 0.85, adversarial 1.0, regression 1.0).
  */
 
@@ -63,6 +66,29 @@ function parseArgs(argv) {
 // it explicitly, any other `=value` is a usage error. They are read with `=== true`, never by truthiness: the string
 // "false" is truthy, so `--set-baseline=false` overwrote evals/baseline.json and `--dry-run=false` dry-ran.
 const BOOL_FLAGS = ["dry-run", "set-baseline", "require-live"];
+// 1.23 review — every flag the harness reads (--json and --help included); any other is refused with a did-you-mean (exit 2)
+// before anything runs: a mistyped switch (--dryrun) used to be ignored, and the eval ran LIVE (paid API calls).
+const KNOWN_FLAGS = [...VALUE_FLAGS, ...BOOL_FLAGS, "json", "help"];
+function unknownFlag(flags) {
+  const bad = Object.keys(flags).find((k) => !KNOWN_FLAGS.includes(k));
+  if (bad === undefined) return null;
+  // Optimal-string-alignment distance (a transposition costs 1) — the CLI's did-you-mean rule.
+  const dist = (a, b) => {
+    const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+    return d[a.length][b.length];
+  };
+  let best = null;
+  for (const c of KNOWN_FLAGS) {
+    const n = dist(bad.toLowerCase(), c);
+    if (n <= Math.max(1, Math.floor(c.length / 3)) && (!best || n < best.n)) best = { c, n };
+  }
+  return { flag: "--" + bad, suggestion: best ? "--" + best.c : null };
+}
 function badBoolFlag(flags) {
   for (const k of BOOL_FLAGS) {
     if (typeof flags[k] !== "string") continue;
@@ -216,6 +242,27 @@ async function main() {
       console.error(M.args.invalid(M.args.item("--json", M.args.type.boolean, JSON.stringify(flags.json))));
       process.exit(2);
     }
+  }
+  // 1.23 review: --help prints the usage and runs nothing (it was ignored: `dev-spec evals <f> --help` ran the eval, live with a key)
+  if (flags.help !== undefined && flags.help !== false && !/^(?:false|0|no|off)$/i.test(String(flags.help).trim())) {
+    console.log(T.usage);
+    return;
+  }
+  // …and an unknown flag, a value flag without its value or a second word is a usage error, before anything runs.
+  const unknown = unknownFlag(flags);
+  if (unknown) {
+    console.error(T.unknownFlag(unknown.flag, unknown.suggestion));
+    process.exit(2);
+  }
+  // (--max-items has its own check below: a bare one is "an integer ≥ 1 (got "")", in the argument validator's words)
+  const noValue = [...VALUE_FLAGS].find((k) => k !== "max-items" && (flags[k] === true || flags[k] === ""));
+  if (noValue) {
+    console.error(spec.msg(spec.projectLang(projectDir)).cliOutput.missingValue(noValue));
+    process.exit(2);
+  }
+  if (pos.length > 1) {
+    console.error(T.extraArg(pos[1]));
+    process.exit(2);
   }
   if (!pos[0]) {
     console.error(T.usage);

@@ -134,10 +134,15 @@ has none). `dev-spec …` below is the CLI's NAME: a line you hand the user is t
 "<clone>/cli/dev-spec.js" …` with the path resolved (1.21 — every engine, hook and tool message prints it that way;
 the command files write `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" …`; a committed file — ROADMAP.md, SPECS.md,
 UPGRADE.md, the exports, retro.md — keeps `dev-spec`, never a machine path). `--json` prints the structured
-result — a refused operation too (`{ok: false, error, …}` on stdout, exit 1, as the MCP tool returns it);
-`--project <dir>` sets the project root; human output is localized. Switches take `--x` or `--x=true|false`
+result — a refused operation too (`{ok: false, error, …}` on stdout, exit 1, as the MCP tool returns it), and a usage
+error or an unexpected failure (`{ok: false, error[, code]}`); human output is localized. The project: `--project <dir>`
+(an existing folder — only `init` creates one) > `SPEC_PROJECT_DIR` > `CLAUDE_PROJECT_DIR` > the nearest folder at or above
+the working one that holds a dev-spec `.specs/` (run from a subfolder, the CLI works in the project above) > the working
+folder; the MCP server resolves its default the same way. A path argument (`scan`, `ears`, `import`) is relative to the
+project when it was named, else to the working folder. Each command takes its own options and arguments — another option,
+or one argument too many, is a usage error. Switches take `--x` or `--x=true|false`
 (any other value is an error) — so do the eval harness's (`--dry-run`, `--set-baseline`, `--require-live`), which
-`evals` forwards. `doctor` (FAIL), `trace` (gaps), `ears` (errors) and `drift` (drift, a stale baseline or an
+`evals` forwards wherever they stand (an unknown one is refused, exit 2; `evals --help` prints its usage). `doctor` (FAIL), `trace` (gaps), `ears` (errors) and `drift` (drift, a stale baseline or an
 unreadable state) exit 1, so they are scriptable; so do `templates check` (an error), `finish` (not ready),
 `decide` (an unknown `_Affects:_`) and `stop-check` (the turn would be sent back); `upgrade` exits 0 with its report,
 1 only on an error.

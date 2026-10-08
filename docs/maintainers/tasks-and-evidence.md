@@ -110,6 +110,13 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `--shell pwsh` / `powershell` or `runsPwsh(cmd)`; asked after `output`, never when a test ran) and `output` (the output
   shows the test never ran — see `_Expect: fail_` below); the shell resolution adds `no-git-bash`. `finish --run` stays all-or-nothing: one
   check that could not run records none.
+- **`b5Exec` is asynchronous (1.23 review M13)** — `spawn` with a timer of its own, `main()` is async and awaits it: `--timeout`
+  kills the whole PROCESS TREE — `taskkill /T /F /PID` on Windows, the process group elsewhere (the child is spawned `detached`:
+  its own group, `process.kill(-pid)`) — where spawnSync's timeout killed the shell alone (a test runner's worker ran on and held
+  the output pipe: the CLI waited for it all the same); 3 s after the kill the run settles even if a pipe stays open. Ctrl+C /
+  SIGTERM to the CLI kills the tree too (a detached group no longer gets the terminal's Ctrl+C). The 64 MB output cap, the
+  codes and the stdout discipline are unchanged. `--shell` / `--timeout` without `--run` are a usage error (`needsRun`), and so is
+  `--run` with `--evidence` / `--exit` / `--cmd` (`runOrEvidence`).
 - **A crash is never a red test (1.23 review L7).** `crashExit(code)` (evidence.js, `CRASH_EXIT`): 128 + SIGILL / SIGABRT /
   SIGBUS / SIGFPE / SIGSEGV as a POSIX shell reports a crashed child (132 · 134 · 135 · 136 · 139), and the Windows NTSTATUS
   crash codes — 0xC0000005 access violation, 0xC0000409 stack buffer overrun, 0xC00000FD stack overflow, 0xC000001D illegal
@@ -117,6 +124,10 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   segfault was the red proof of an `_Expect: fail_` task); `expectFailRefusal()` answers `couldNotRun: "crash"`
   (`redGreen.crashNotRed`), recorded as a failed run like any crash — the CLI's own signal case (no exit status) keeps refusing
   before anything is recorded. Exit 137 / 143 (a kill) and 130 (Ctrl+C) are no crash codes.
+- **Several `_Verify:_` commands, all passing (1.23 review):** `done --run` records ONE run (`cmd1 && cmd2`, as ever) whose
+  summary holds one section per command — `$ <command>` and its summary (`runSummaries()`), each re-summarized shorter
+  (`summarizeRunOutput(output, room)`) when together they'd pass the record's 2,000 characters — where it kept the LAST
+  command's summary alone. One command: its summary as before. A failing command records itself alone (unchanged).
 - **Red-phase tasks** (`redPhaseTask()`: "watch it fail", "failing test", "fails for the right reason", PT/ES
   equivalents — `RE_RED_PHASE_TASK`, markers excluded) can never pass a must-pass `_Verify:_`. `redPhaseHint()` appends
   `evidenceGate.redPhaseVerify` (1.14: mark it `_Expect: fail_`, or move the command to the fix task) to the

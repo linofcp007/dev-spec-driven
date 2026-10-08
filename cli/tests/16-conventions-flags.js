@@ -145,4 +145,91 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   try { esMd13 = fs.readFileSync(path.join(es13, ".specs", "ROADMAP.md"), "utf8"); esHtml13 = fs.readFileSync(path.join(es13, ".specs", "ROADMAP.html"), "utf8"); } catch { /* missing */ }
   ok(/Secciones de escala: /.test(esSt13) && /\| requisitos \|/.test(esMd13) && !/\| requirements \|/.test(esMd13) && /<td>requisitos<\/td>/.test(esHtml13),
     "ES: status section label, and ROADMAP.md / ROADMAP.html show the localized phase (requisitos)");
+
+  // 1.23 review — each command reads its own options and at most its own arguments: a known flag it ignores, an extra word,
+  // --shell / --timeout without --run and --run with --evidence are usage errors (they were ignored: `approve … --remove` meant
+  // --revoke and approved, `done <f> 3 4` ticked 3 alone); nothing runs or changes. --json answers a usage error in JSON too.
+  const p23 = path.join(tmp, "wp23-strict");
+  run(["init", "--project", p23]);
+  run(["create", "Login", "--project", p23]);
+  const t23 = path.join(p23, ".specs", "login", "tasks.md");
+  fs.writeFileSync(t23, "# Tasks\n\n## Phase: Build\n- [ ] 1. [US1] First\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Second\n");
+  const before23 = fs.readFileSync(t23, "utf8") + fs.readFileSync(path.join(p23, ".specs", "login", ".state.json"), "utf8");
+  const u23 = [["approve", "login", "classification", "--remove", "--force"], ["done", "login", "1", "2"], ["done", "login", "1", "--timeout", "5"],
+    ["finish", "login", "--shell", "bash"], ["done", "login", "1", "--run", "--evidence", "ok"], ["status", "login", "--lang", "pt"], ["list", "extra"],
+    ["backlog", "rm", "a", "b"], ["log", "login", "x"], ["brief", "login", ""]].map((a) => run([...a, "--project", p23]));
+  const after23 = fs.readFileSync(t23, "utf8") + fs.readFileSync(path.join(p23, ".specs", "login", ".state.json"), "utf8");
+  const want23 = [/--remove is not an option of 'approve' \(its options: --by, --force, --role, --through, --reason, --expires, --revoke\)/, /'done' got unexpected argument\(s\): 2\./,
+    /--timeout only applies with --run/, /--shell only applies with --run/, /--run records the run it makes; --evidence \/ --exit \/ --cmd report a run made elsewhere/,
+    /--lang is not an option of 'status' \(it takes none\)/, /'list' got unexpected argument\(s\): extra/, /'backlog rm' got unexpected argument\(s\): b/,
+    /usage: dev-spec log <feature> \[--max N\] \[-\]/, /number must be an integer ≥ 0 \(got ""\)/];
+  const j23 = runJ(["list", "extra", "--json", "--project", p23]), jMax23 = runJ(["next", "login", "--max", "0", "--json", "--project", p23]), jCmd23 = runJ(["frobnicate", "--json"]);
+  const pt23 = path.join(tmp, "wp23-strict-pt");
+  run(["init", "--lang", "pt", "--project", pt23]);
+  const ptU23 = run(["roadmap", "--force", "--project", pt23]);
+  ok(u23.every((r, i) => r.code === 1 && want23[i].test(r.out) && !/^\$ /m.test(r.out)) && after23 === before23 &&
+    j23.code === 1 && j23.j && j23.j.ok === false && /'list' got unexpected argument/.test(j23.j.error) && jMax23.j && jMax23.j.ok === false && /--max must be an integer ≥ 1/.test(jMax23.j.error) &&
+    jCmd23.j && jCmd23.j.ok === false && /unknown command 'frobnicate'/.test(jCmd23.j.error) && ptU23.code === 1 && /--force não é uma opção de 'roadmap'/.test(ptU23.out),
+    "1.23 review: a known flag a command doesn't read, an extra argument, --shell / --timeout without --run, --run with --evidence and brief '' exit 1 with the reason, nothing changed; --json prints {ok: false, error} on stdout for usage errors too; PT (got " +
+    JSON.stringify(u23.map((r) => [r.code, r.out.trim().slice(0, 70)]).concat([[j23.code, j23.j], [ptU23.code, ptU23.out.trim().slice(0, 60)]])) + ")");
+
+  // 1.23 review (L14) — --project names an existing folder: empty, an unexpanded variable, a file or a missing folder is refused
+  // (localized, --json too) and nothing is created — init alone creates it; Windows' `"C:\dir\"` quoting (a trailing ") is read.
+  const miss23 = path.join(tmp, "wp23-typo", "deeper");
+  const fileP23 = path.join(p23, ".specs", "roadmap.json");
+  const pj23 = [["create", "X", "--project", miss23], ["list", "--project", fileP23], ["list", "--project="], ["list", "--project", "$HOME/x"], ["create", "X", "--project", "%APPDATA%\\x"]].map(run);
+  const pjJ23 = runJ(["create", "X", "--json", "--project", miss23]);
+  const newP23 = path.join(tmp, "wp23-new-by-init");
+  const init23 = run(["init", "--project", newP23]);
+  const quote23 = process.platform === "win32" ? run(["list", "--project", p23 + "\""]) : { code: 0, out: "login" };
+  ok(pj23[0].code === 1 && /--project .*deeper: no such folder — check the path \(only init creates a project folder\)/.test(pj23[0].out) && !fs.existsSync(path.join(tmp, "wp23-typo")) &&
+    pj23[1].code === 1 && /roadmap\.json is a file, not a folder/.test(pj23[1].out) && pj23[2].code === 1 && /--project is empty/.test(pj23[2].out) &&
+    pj23.slice(3).every((r) => r.code === 1 && /holds a variable that was never expanded/.test(r.out)) &&
+    pjJ23.code === 1 && pjJ23.j && pjJ23.j.ok === false && /no such folder/.test(pjJ23.j.error) &&
+    init23.code === 0 && fs.existsSync(path.join(newP23, ".specs", "steering")) && quote23.code === 0 && /login/.test(quote23.out),
+    "1.23 review: --project missing / a file / empty / $VAR / %VAR% exits 1 (localized, --json: ok false) and creates nothing; init --project <new> creates it; a trailing \" (Windows quoting) is dropped (got " +
+    JSON.stringify(pj23.map((r) => [r.code, r.out.trim().slice(0, 90)]).concat([[init23.code], [quote23.code, quote23.out.slice(0, 40)]])) + ")");
+
+  // 1.23 review (L24) — an engine exception (a FILE where .specs/ goes: ENOTDIR) is one line on stderr and, with --json, the
+  // {ok: false, error, code} document on stdout (it was the raw message on stderr only).
+  const ex23 = path.join(tmp, "wp23-exception");
+  fs.mkdirSync(ex23, { recursive: true });
+  fs.writeFileSync(path.join(ex23, ".specs"), "a file where the .specs folder goes");
+  const exH23 = run(["create", "X", "--project", ex23]), exJ23 = runJ(["create", "X", "--json", "--project", ex23]);
+  ok(exH23.code === 1 && /^dev-spec: E[A-Z]+: /m.test(exH23.out) && exJ23.code === 1 && exJ23.j && exJ23.j.ok === false && /^E[A-Z]+$/.test(exJ23.j.code) && /\.specs/.test(exJ23.j.error),
+    "1.23 review: an engine exception exits 1 — one stderr line, and with --json {ok: false, error, code} on stdout (got " + JSON.stringify([exH23.out.trim().slice(0, 60), exJ23.j]) + ")");
+
+  // 1.23 review (M7 + L12 + M6) — from a SUBFOLDER (no --project, no env) the CLI works in the project above (it started a nested
+  // .specs/ there); a path argument is read from that subfolder — and from the project when --project names it (scan / ears read
+  // the working folder even then); scan reports in the project's language; stdin is decoded like a file (UTF-16 with a BOM).
+  const env23 = { ...process.env };
+  delete env23.SPEC_PROJECT_DIR;
+  delete env23.CLAUDE_PROJECT_DIR;
+  const inDir = (cwd, args, input) => {
+    const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", cwd, env: env23, input });
+    return { code: r.status, out: (r.stdout || "") + (r.stderr || "") };
+  };
+  const w23 = path.join(tmp, "wp23-walkup");
+  run(["init", "--lang", "pt", "--project", w23]);
+  const sub23 = path.join(w23, "src", "deep");
+  fs.mkdirSync(sub23, { recursive: true });
+  fs.mkdirSync(path.join(w23, "docs"), { recursive: true });
+  fs.writeFileSync(path.join(w23, "docs", "req.md"), "- **US-1.AC-1** — QUANDO o utilizador entra O SISTEMA DEVE abrir a sessão\n");
+  fs.writeFileSync(path.join(w23, "src", "app.js"), "app.get('/users', h);\n");
+  const cr23 = inDir(sub23, ["create", "Beta"]), bl23w = inDir(sub23, ["backlog", "add", "later"]);
+  const earsRel23 = inDir(sub23, ["ears", path.join("..", "..", "docs", "req.md")]);
+  const elsewhere23 = path.join(tmp, "wp23-elsewhere");
+  fs.mkdirSync(elsewhere23, { recursive: true });
+  const earsP23 = inDir(elsewhere23, ["ears", "docs/req.md", "--project", w23]), scanP23 = inDir(elsewhere23, ["scan", "src", "--project", w23]);
+  const u16 = (s) => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(s, "utf16le")]);
+  const earsU16 = inDir(w23, ["ears", "-"], u16("- **US-1.AC-1** — WHEN a user logs in THE SYSTEM SHALL create a session\r\n- **US-1.AC-2** — WHEN the password is wrong THE SYSTEM SHALL refuse it\r\n"));
+  const planU16 = inDir(w23, ["import", "plan", "-", "--name", "Utf16 plan", "--json"], u16("# Plan: Dark mode\r\n\r\n## Steps\r\n1. Add the theme context in `src/theme.ts`\r\n2. Wire the toggle in `src/settings.tsx`\r\n"));
+  let plan23 = null;
+  try { plan23 = JSON.parse(planU16.out.slice(planU16.out.indexOf("{"))); } catch { /* not JSON */ }
+  ok(cr23.code === 0 && fs.existsSync(path.join(w23, ".specs", "beta")) && bl23w.code === 0 && !fs.existsSync(path.join(sub23, ".specs")) &&
+    earsRel23.code === 0 && /EARS: 1 critérios/.test(earsRel23.out) && earsP23.code === 0 && /EARS: 1 critérios/.test(earsP23.out) &&
+    scanP23.code === 0 && /^Análise de .*src$/m.test(scanP23.out) && /GET {5}\/users/.test(scanP23.out) &&
+    earsU16.code === 0 && /EARS: 2 critérios, 2 com verbo modal/.test(earsU16.out) && plan23 && plan23.ok === true && Object.keys(plan23.mapping).length === 3,
+    "1.23 review: from a subfolder the CLI uses the project above (create / backlog add start no nested .specs/), a path is read from the subfolder — or from --project when named (ears, scan); scan in the project's language; UTF-16 stdin decoded (ears -, import plan -) (got " +
+    JSON.stringify([cr23.code, bl23w.code, earsRel23.out.trim().slice(0, 50), earsP23.out.trim().slice(0, 50), scanP23.out.slice(0, 40), earsU16.out.trim().slice(0, 50), plan23 && plan23.mapping]) + ")");
 };

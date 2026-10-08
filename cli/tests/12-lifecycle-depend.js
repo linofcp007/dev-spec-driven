@@ -7,6 +7,7 @@ const { spawnSync } = require("child_process");
 
 exports.run = ({ ok, run, tmp, CLI }) => {
   const dp = path.join(tmp, "wp3-dep");
+  fs.mkdirSync(dp, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
   ["a", "b", "c"].forEach((n) => run(["create", n, "core", "--project", dp]));
   const depsOfA = () => { try { return JSON.parse(fs.readFileSync(path.join(dp, ".specs", "roadmap.json"), "utf8")).features.a.dependsOn.join(); } catch { return null; } };
   ok(run(["depend", "a", "b", "c", "--project", dp]).code === 0 && depsOfA() === "b,c", "depend a b c replaces the list");

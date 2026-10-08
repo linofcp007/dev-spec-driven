@@ -820,7 +820,8 @@ function scanCodebase(projectDir, opts = {}) {
   // Both surfaces refuse a cap that is not an integer ≥ 1 before calling; here it can only fall back to the default
   // (a negative cap used to scan zero files and report "truncated").
   const cap = Number.isSafeInteger(opts.cap) && opts.cap >= 1 ? opts.cap : 5000;
-  const lang = projectLang(projectDir);
+  // opts.lang (1.23 review): `dev-spec scan <subfolder>` reports in the PROJECT's language — the scanned folder holds no .specs/
+  const lang = opts.lang || projectLang(projectDir);
   const B = i18n.msg(lang).brownfield;
   // 1.22 review — a path that is no folder (a typo, a file) is an error, never an empty codebase ("0 files, stack: unknown").
   if (!isDirSafe(root)) return { ok: false, root, error: B.notFolder(root) };

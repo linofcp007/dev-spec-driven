@@ -1515,6 +1515,8 @@ const msg = {
       usage: "Uso: node run-evals.js <función> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
       noEvalsDir: (slug, dir) => `No hay carpeta evals/ para '${slug}' en ${dir}`,
       requireLive: "harness de evals: ANTHROPIC_API_KEY no está definida y se pidió --require-live — no se hará un dry run en su lugar.",
+      unknownFlag: (flag, suggestion) => `harness de evals: opción desconocida ${flag}` + (suggestion ? ` — ¿quizás ${suggestion}?` : "") + " No se ejecutó nada.",
+      extraArg: (word) => `harness de evals: argumento inesperado '${word}' — una función por ejecución. No se ejecutó nada.`,
       header: (slug) => `dev-spec-driven evals — función '${slug}'`,
       config: (model, prompt, mode) => `  modelo: ${model}   prompt: ${prompt}   modo: ${mode}`,
       none: "(ninguno)",
@@ -1652,6 +1654,14 @@ const msg = {
       unknownCommand: (c) => `comando desconocido '${c}'. Ejecuta \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `cliente desconocido '${c}'. Conocidos: ${known}`,
       noJson: (c) => `--json no está disponible para '${c}': solo imprime texto. Ejecútalo sin --json.`,
+      flagNotFor: (flag, c, list) => `${flag} no es una opción de '${c}'` + (list ? ` (sus opciones: ${list})` : " (no tiene ninguna)") + `. Ejecuta \`${DEV_SPEC} help\`.`,
+      extraArgs: (c, extra) => `'${c}' recibió argumento(s) inesperado(s): ${extra}. Ejecuta \`${DEV_SPEC} help\` para ver la sintaxis.`,
+      needsRun: (flag) => `${flag} solo se aplica con --run (cómo se ejecutan los comandos) — añade --run, o quita ${flag}.`,
+      runOrEvidence: "--run registra la ejecución que hace; --evidence / --exit / --cmd informan de una ejecución hecha en otro lugar — pasa una cosa o la otra.",
+      projectEmpty: "--project está vacío — indica la carpeta del proyecto, u omite --project (la carpeta más cercana por encima de esta con una .specs/, si no esta).",
+      projectUnexpanded: (v) => `--project ${v} contiene una variable que nunca se expandió — pasa la propia carpeta.`,
+      projectMissing: (dir) => `--project ${dir}: esa carpeta no existe — revisa la ruta (solo init crea la carpeta de un proyecto).`,
+      projectNotDir: (dir) => `--project ${dir} es un fichero, no una carpeta.`,
     },
 
     gates: {

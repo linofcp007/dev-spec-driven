@@ -83,7 +83,8 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
 
   // Review round: --tracks is a value flag everywhere, so every command that takes tracks honours it (never dropped).
   const tk = path.join(tmp, "wp6-tracks");
-  const crT = (() => { try { return JSON.parse(run(["create", "Payments Flow", "--tracks", "tdd,saas", "--json", "--project", tk]).out); } catch { return null; } })();
+  fs.mkdirSync(tk, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
+  const crT =(() => { try { return JSON.parse(run(["create", "Payments Flow", "--tracks", "tdd,saas", "--json", "--project", tk]).out); } catch { return null; } })();
   const crT2 = run(["create", "Report page", "--tracks", "saas", "--project", tk]);
   ok(crT && crT.tracks.join() === "core,tdd,saas" && crT2.code === 0 && /\[core \+saas\]/.test(crT2.out) && fs.existsSync(path.join(tk, ".specs", "report-page", "load-test.md")),
     "create --tracks tdd,saas / --tracks saas uses those tracks (no silent auto-classify)");
@@ -142,7 +143,7 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   const covM = run(["coverage", "--project", missing]);
   const scF = run(["scan", "--project", w6, path.join(w6, "package.json")]);
   ok(scM.code === 1 && /is not a folder \(it doesn't exist, or it is a file\)/.test(scM.out) && !/stack: unknown|files: 0/.test(scM.out) &&
-    scMj && scMj.ok === false && /is not a folder/.test(scMj.error) && covM.code === 1 && /is not a folder/.test(covM.out) && scF.code === 1 && !fs.existsSync(missing),
-    "1.22 review: `scan <missing>` / `scan <a file>` / `coverage --project <missing>` exit 1 with 'is not a folder' (--json: ok false), never an empty codebase (got " +
+    scMj && scMj.ok === false && /is not a folder/.test(scMj.error) && covM.code === 1 && /--project .*wp6-missing-folder: no such folder/.test(covM.out) && scF.code === 1 && !fs.existsSync(missing),
+    "1.22 review: `scan <missing>` / `scan <a file>` exit 1 with 'is not a folder' (--json: ok false), never an empty codebase; 1.23 review: `coverage --project <missing>` is refused as a --project that doesn't exist (got " +
     JSON.stringify([scM.code, scM.out.slice(0, 120), covM.code, scF.code]) + ")");
 };
