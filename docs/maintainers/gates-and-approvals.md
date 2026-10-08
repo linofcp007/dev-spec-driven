@@ -98,7 +98,9 @@ flows, the bugfix kind.
   artifact is still the scaffold — `outside-code-artifacts`) never block.
 - **Bugfix execution gate (`bugfixGate()`):** while bug.md → Root Cause is unfilled, no task after the one
   that writes it (names bug.md + a Root Cause synonym, carries no `_Makes green:_`/`_Verify:_`) can be ticked
-  or given evidence; `done --run` refuses before running anything. The root-cause task itself can be ticked
+  or given evidence — without such a task (the scaffold's short form: 1 the red test, 2 the fix), none after task 1
+  (`bugGateFirst`); `done --run` refuses before running anything. The root-cause task itself (a four-task tasks.md
+  scaffolded before the short form, or one the user wrote) can be ticked
   (`rootCauseTaskIndex()`), but then returns `rootCausePending: true` + a note; once it is ticked the refusal of a
   later task is `bugGateTicked` ("the section is still empty"), never "do task N first".
 
@@ -332,7 +334,8 @@ flows, the bugfix kind.
 ## Right-sized rigor — sizes, the change kind, the stricter filled rule (1.21 F5)
 The 1.20 friction audit measured a typo paying ~70% of a public API's slot cost; a feature's **size** now decides its
 scaffold and its approvals. **No size = the 1.20 scaffolds byte for byte** (every builder takes `a.size` undefined —
-mcp/tests/06-gates-sizes.js pins the sha1 of every no-size builder output of the pre-1.21 track combinations), no size key
+mcp/tests/06-gates-sizes.js pins the sha1 of every no-size builder output of the pre-1.21 track combinations; changed on
+purpose once since: the bugfix tasks.md, the short form at every size — Bugfix and finish), no size key
 in the state, and `spec_upgrade` never assigns one; the 1.20 gates too, **except the stricter filled rule** (below — a track
 section holding only the template's guidance), which applies at every size and without one: a design approved before 1.21
 only warns, its next approval asks. What holds at EVERY size: EARS on every criterion, trace, the evidence gate, the bugfix
@@ -395,10 +398,9 @@ iron law, phase order, the finish / execution gate, every track criterion scaffo
   heading (`decisionTargets`: change.md for a change; refusal `decisions.badAffectsChange`). `spec_add_track` refuses a change (`sizes.changeNoTracks`). Hooks: the
   save hook runs EARS + trace on change.md, the pre-commit validator both (a mirror with change.md + .state.json), the
   observe hook's pre-filter reads change.md too; the resources allowlist and the roadmap links know it.
-- **An XS bugfix** (`kind: "bugfix", size: "xs"`): `bugTasks(name, lang, "xs")` drops the reproduce / root-cause tasks
-  (renumbered: 1 = the red regression test, 2 = the fix) — the requirements gate needs bug.md → Reproduction and the design
-  gate its Root Cause before tasks can be approved, and `bugfixGate()` with no root-cause task lets only task 1 through
-  while Root Cause is empty (`bugGateFirst`). The iron law holds.
+- **An XS bugfix** (`kind: "bugfix", size: "xs"`): the plan approved in one call (P3). Its tasks.md is every bugfix's —
+  the short form (1.21 F5 introduced it for xs; every size has it since — Bugfix and finish): `bugTasks(name, lang)`, one
+  builder, no size argument.
 - **s**: `requirements` / `tasks` / `testPlan` S variants (one story: AC-1 WHEN + AC-2 IF…THEN — `SIZE_CORE_ACS` /
   `coreTemplateAcs()`, i18n/common.js, the T-IDs follow — + every track criterion; one core task), no `classification.md`
   (one approval less), the design's three weigh sections merged into **Decisions, reuse & risks** (`WEIGH_MERGED_SYN`,
@@ -454,6 +456,20 @@ iron law, phase order, the finish / execution gate, every track criterion scaffo
   `bugfixGate()`). bug.md IS its design (r5 review): an open `[NEEDS CLARIFICATION]` there refuses the design gate
   (`doctor.clarificationsOpenBug` when only bug.md holds them), one in its Reproduction the requirements gate; doctor's
   `clarifications` check and spec_clarify read bug.md too (a Root Cause "probably X [NEEDS CLARIFICATION: …]" was approved).
+- **The bugfix tasks.md — the short form, every size.** `bugTasks(name, lang)` (EN / PT / ES — pt-BR derived; ONE builder,
+  no size argument: the XS and the default forms became identical) scaffolds two tasks: **1** the red regression test
+  (`_Verify: [command that runs T-01]_` + `_Expect: fail_`, guard test T-02 added) and **2** the fix (`_Makes green: T-01_`,
+  the must-pass suite). No reproduce / root-cause tasks: the requirements gate already needs bug.md → Reproduction and the
+  design gate its Root Cause, both before the tasks can be approved — as tasks 1–2 they made next_action say "Implement
+  task #1: Reproduce the bug…" after the tasks approval, for work done and gated. With Root Cause empty (a forced design
+  approval, the section emptied since) `bugfixGate()` finds no root-cause task and lets only task 1 through
+  (`bugGateFirst`). **Existing features are never touched:** a tasks.md scaffolded with the four tasks (1 reproduce,
+  2 root cause, 3 the red test, 4 the fix) stays as it is and valid — nothing rewrites tasks.md (spec_upgrade audits it
+  like any other and its apply has no migration for it), its root-cause task still drives `bugfixGate()` /
+  `rootCausePending`, and its two steps stay bug steps: `LEGACY_BUG_STEPS` (markdown.js, as `taskDescription()` reads
+  them, EN / PT / pt-BR / ES) join `renderBugSteps()` — and so the corpus's `bugSteps` — or detectPhase would read them as
+  a real breakdown and put such a fresh bugfix at `tasks-ready` before its requirements. mcp/tests/06-gates.js walks both
+  forms (gate by gate; the legacy one's phase, doctor, upgrade audit and apply); 06-gates-sizes.js pins the builder's text.
 - **Bugfix prefill (1.21 F3)** — `spec_create {kind: "bugfix", reproduction, rootCause, condition, behaviour}` (CLI
   `--reproduction`, `--root-cause`, `--condition`, `--behaviour`): `bugCreateInput()` (engine/scaffold.js) validates them
   BEFORE anything is written (strings; condition / behaviour one line ≤ 500 characters, whitespace folded, a leading

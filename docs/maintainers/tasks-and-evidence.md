@@ -150,7 +150,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `evidenceGate.redPhaseVerify` (1.14: mark it `_Expect: fail_`, or move the command to the fix task) to the
   failed-run refusal, the failed-run / note-only / no-evidence note and next_action's `verify` step, with the stable
   field `redPhaseVerify: true` — never for a task that already carries `_Expect: fail_`. The bugfix template scaffolds
-  task 3 with `_Verify: [command that runs T-01]_` + `_Expect: fail_` (its red run is the proof) and keeps guard test T-02
+  task 1 (task 3 before the short form) with `_Verify: [command that runs T-01]_` + `_Expect: fail_` (its red run is the proof) and keeps guard test T-02
   out of every `_Makes green:_` (green before and after the fix — doctor's `red-green` asks no red run for it) (EN/PT/ES).
 - **The gate (`evidenceIssue()`):** a task whose `_Verify:_` is runnable is verified ONLY by
   `{command, exitCode: 0}`; a note ticks it but leaves it unverified. `{exitCode}` alone and a command
@@ -453,8 +453,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `existsCached` / `writeFileAtomic` alias its `tasks.md` (and `requirements.md`) to `change.md` (`changeAlias()`, files.js),
   so the scanner, `completeTask` (the tick lands in change.md, its other text kept), the evidence gate, `done --run`, the
   brief, the observe hook's pre-filter and finish work on it unchanged. A size S scaffold's tasks.md is one core task + each
-  track's tasks that implement a criterion (`sizeTasksText()`); an XS bugfix's is the red regression test + the fix
-  (`bugfixGate()` lets only task 1 through while bug.md → Root Cause is empty — `bugGateFirst`).
+  track's tasks that implement a criterion (`sizeTasksText()`); a bugfix's — any size — is the red regression test + the
+  fix (`bugfixGate()` lets only task 1 through while bug.md → Root Cause is empty — `bugGateFirst`; gates-and-approvals.md →
+  Bugfix and finish).
 
 ## End-of-turn evidence gate and scope guard (1.14)
 - **`stopCheck(projectDir, {message, agent, stopHookActive})`** (engine; `hooks/stop-hook.js` and `dev-spec stop-check`
