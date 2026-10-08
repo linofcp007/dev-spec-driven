@@ -113,9 +113,13 @@ and can read the specs:
 - **Resources** — read-only, confined to `.specs/`: `specs://roadmap` (ROADMAP.md, else rendered from roadmap.json),
   `specs://catalog` (SPECS.md), `specs://steering/<file>`, and `specs://feature/<slug>/<artifact>` for the allowlisted
   artifacts of each active feature (classification, requirements, design, test-plan, eval-plan, load-test, tasks, bug,
-  quickstart, checklist, integration-plan, retro, spike, decisions). Templates: `specs://feature/{slug}/{artifact}`,
-  `specs://steering/{file}`. The list is capped (the result says so); `..`, absolute paths, other schemes and links out
-  of `.specs/` are refused.
+  quickstart, checklist, integration-plan, retro, spike, decisions, change). Templates: `specs://feature/{slug}/{artifact}`,
+  `specs://steering/{file}`. The list comes in pages of 500 (`nextCursor` while there are more); `..`, absolute paths,
+  other schemes and links out of `.specs/` are refused.
+- **The project** — `SPEC_PROJECT_DIR`, else `CLAUDE_PROJECT_DIR`; else, when the client declares MCP `roots` (VS Code
+  does), its first local `file://` root; else the server's working directory. A tool's own `projectDir` always wins.
+  In a client with a global config and no roots (Claude Desktop), set `SPEC_PROJECT_DIR` in the server's `env` or pass
+  `projectDir` — otherwise `.specs/` lands in the app's working directory.
 - **Completions** (`completion/complete`, 1.16) — a prompt whose argument names a feature (`[feature name]`, `[feature] …`)
   completes its first word to the active features' slugs; `specs://feature/{slug}/{artifact}` completes `{slug}` and
   `{artifact}` (the artifacts the feature in `context.arguments.slug` has, else every allowlisted one) and

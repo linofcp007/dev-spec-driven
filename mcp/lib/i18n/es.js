@@ -1499,6 +1499,8 @@ const msg = {
       network: (dir) => `projectDir debe ser una carpeta local — una ruta de red o de dispositivo (${dir}) se rechaza, para que una llamada a una herramienta nunca apunte este servidor local a otra máquina; abre el proyecto localmente (o inicia el servidor con él como carpeta de trabajo).`,
       unknownTool: (name) => `Herramienta desconocida: ${name} — tools/list lista las herramientas de este servidor.`,
       noTool: "tools/call necesita params.name — la herramienta a llamar (tools/list las lista).",
+      toolFailed: (why) => `La herramienta falló: ${why}`,
+      tooLarge: (n, max) => `Solicitud no válida: un mensaje de ${n}+ caracteres supera el límite de este servidor, ${max} (DEV_SPEC_MCP_MAX_MESSAGE) — se descartó.`,
     },
     jsonShape: {
       invalid: (rel, detail) => `${rel} tiene una estructura inesperada (${detail}) — corrígelo a mano; no se sobrescribirá.`,
@@ -1596,6 +1598,7 @@ const msg = {
     },
     featureOps: {
       removeNeedsConfirm: (slug, n) => `Eliminar '${slug}' borra .specs/${slug}/ definitivamente (${n} fichero(s)). No se ha borrado nada — pasa confirm: true para eliminarla, o archívala (reversible).`,
+      removeChangedSincePreview: (slug) => `No se borró nada: .specs/${slug}/ cambió después de preguntar al usuario por su eliminación (otra función renombrada con este nombre, o ficheros editados mientras la pregunta esperaba) — su confirmación cubría la carpeta que se le mostró. Pregúntale de nuevo.`,
       backlogNotFound: (name, known) => `'${name}' no está en el backlog${known ? ` (backlog: ${known})` : " (el backlog está vacío)"}.`,
       backlogIsFeature: (name, slug) => `'${name}' ya tiene una spec (.specs/${slug}/) — el backlog es para funciones aún sin spec (estado: ${DEV_SPEC} status ${slug}).`,
       backlogAppended: (name) => `'${name}' ya está en el backlog — la nueva nota se añadió a su nota.`,
@@ -2089,6 +2092,7 @@ const msg = {
       timedOut: (s, list) => `Sin respuesta del usuario en ${s} s: no se registró nada (${list}). Pide al usuario que lo apruebe él mismo.`,
       failed: (why, list) => `El cliente MCP no pudo preguntar al usuario (${why}): no se registró nada (${list}). Pide al usuario que haga él mismo la aprobación.`,
       confirmed: "Confirmado por el usuario en el cliente MCP (elicitation).",
+      waiting: "Esperando la respuesta del usuario en el cliente MCP…",
     },
     mergeState: {
       doctor: (n, list) => `${n} conflicto(s) de merge que el merge driver de dev-spec dejó sin resolver — ${list}. En cada uno quedó el valor de ours: elige el valor correcto en el fichero (la lista "mergeConflicts" muestra base / ours / theirs) y después borra "mergeConflicts".`,
@@ -2216,9 +2220,9 @@ const msg = {
         },
         tplFeature: (list) => `Un artefacto de la spec de una función: .specs/{slug}/{artifact} — {artifact} es uno de ${list}.`,
         tplSteering: "Un archivo de steering: .specs/steering/{file} (un archivo .md).",
-        truncated: (cap, total) => `Lista de recursos limitada a ${cap} de ${total} — lee los demás mediante las plantillas specs://feature/{slug}/{artifact} y specs://steering/{file}.`,
       },
       err: {
+        badCursor: "resources/list: cursor no válido — devuelve tal cual el nextCursor de la página anterior.",
         noPromptName: "prompts/get necesita el `name` del prompt (una cadena).",
         badPromptArgs: 'prompts/get: `arguments` debe ser un objeto de cadenas, p. ej. {"args": "login"}.',
         unknownPrompt: (name, list) => `Prompt desconocido '${name}' — uno de: ${list}.`,

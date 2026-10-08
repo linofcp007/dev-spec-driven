@@ -840,6 +840,8 @@ function approvalCommand(a, cli) {
 // runs, `!`-prefixed — opts.plain: without the `!`, for the MCP server; null when there is none), `reason` (localized — opts.lang:
 // the user reads it for ask, the agent for deny) and, for deny, `userNote` (the line the user sees). opts.cli: the CLI path shown (default: this clone's cli/dev-spec.js);
 // opts.meta: the project's roadmap.json meta (what a spec_init / `init` change is compared with — absent: unknown, fail closed).
+// opts.resolveFeature (1.23 — the MCP server): name → the slug the engine resolves it to, or null; a resolved action shows (and
+// its command names) that slug, never the raw argument — slugify drops text in other scripts, which must not reach the question.
 function approvalGuardDecision(payload, level, opts = {}) {
   const lvl = approvalGuardInput(level) || "off";
   const allow = (why, extra) => Object.assign({ decision: "allow", why, level: lvl }, extra);
@@ -857,6 +859,14 @@ function approvalGuardDecision(payload, level, opts = {}) {
     actions = shellApprovalActions(ti.command.slice(0, APPROVAL_COMMAND_MAX), lvl, 0, tool === "PowerShell" ? "ps" : "bash", meta);
   }
   if (!actions.length) return allow("not-an-approval", { tool });
+  if (typeof opts.resolveFeature === "function") {
+    actions = actions.map((a) => {
+      if (typeof a.feature !== "string" || !a.feature) return a;
+      let slug = null;
+      try { slug = opts.resolveFeature(a.feature); } catch { slug = null; }
+      return typeof slug === "string" && slug ? Object.assign({}, a, { feature: slug }) : a;
+    });
+  }
   const A = i18n.msg(normalizeLang(opts.lang || "en")).approvalGuard;
   // Shown as text (the prompt, the agent's context): one line each, bounded.
   const show = (v) => (v == null ? v : (() => { const s = String(v).replace(/[\u0000-\u001f\u007f]+/g, " "); return s.length > 80 ? s.slice(0, 79) + "…" : s; })());

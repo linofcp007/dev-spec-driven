@@ -276,6 +276,10 @@ flows, the bugfix kind.
   preview didn't name, refuses with `{ok: false, changedSincePreview: true, code: "changed-since-preview", newFailing?}` and the
   localized `gates.changedSincePreview`, nothing written; a fast-forward compares the chain and every phase's content BEFORE it
   approves anything (then each phase again, stopReason `changed-since-preview`). Server-only, like dryRun and confirmation.
+  `spec_feature` remove has its own (1.23): `removePreview` returns `fingerprint` (`featureFolderFingerprint()`, finish.js — the
+  folder's identity and every entry under it), the server passes it back as `manageFeature(…, {confirm, preview})`, and
+  `removeFeatureLocked` refuses another folder under the name or an edited one (`changedSincePreview`, nothing deleted) —
+  mcp.md → Human approvals over MCP elicitation.
 
 ## Flows (1.14 — from Import sources and flows)
 - **Flows:** `.state.json → flow: "design-first"` (`spec_create {flow}` / `create --flow`; changed with
