@@ -4,7 +4,7 @@
 /**
  * dev-spec-driven — guard hook (opt-in, zero-dependency). Kiro's supervised mode, spec-shaped.
  *
- * Wired from hooks/hooks.json as PreToolUse (Write|Edit|MultiEdit|NotebookEdit). It does NOTHING unless the
+ * Wired from hooks/hooks.json as PreToolUse (Write|Edit|NotebookEdit). It does NOTHING unless the
  * project turned guard mode on (`.specs/roadmap.json` meta.guard === true — spec_init {guard: true} /
  * `dev-spec init --guard on`; 1.16: while meta.guard is unset, the user's DEV_SPEC_GUARD_DEFAULT decides). When on, a
  * code edit outside `.specs/` while no feature has approved, unfinished

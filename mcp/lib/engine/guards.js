@@ -19,14 +19,16 @@ let activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
-  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption;
+  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption,
+  decodeText, isNetworkPath, runProvesVerify, withinRoot;
 function __link(E) { ({ activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
-  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption } = E); }
+  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption,
+  decodeText, isNetworkPath, runProvesVerify, withinRoot } = E); }
 
 // roadmap.json meta.guard — the opt-in guard mode read by hooks/guard-hook.js (PreToolUse): true, or "scope" (1.14 C1 — the
 // stricter level, guardLevel()).
@@ -141,7 +143,13 @@ const APPROVAL_GUARD_LEVELS = ["off", "ask", "deny"]; // in order: a later level
 // The approve-shaped MCP tools, under any server prefix (Claude Code: mcp__plugin_dev-spec-driven_spec-driven__spec_approve;
 // a project server: mcp__spec-driven__spec_approve; any name a user registered the server under) or bare.
 const RE_APPROVAL_MCP = /^(?:mcp__.+__)?(spec_approve|spec_feature|spec_init)$/;
-const APPROVAL_SHELL_TOOLS = new Set(["Bash", "PowerShell"]);
+// The tools that run a shell command (tool_input.command). 1.23 review 5 (P4): Monitor — it runs its command in the Bash tool's
+// shell (with the Bash permission rules), and `node cli/dev-spec.js approve …` through it went past a deny-level guard.
+const APPROVAL_SHELL_TOOLS = new Set(["Bash", "PowerShell", "Monitor"]);
+// 1.23 review 5: the file-editing tools — a hand edit of a feature's approvals (.specs/**/.state.json) or of .specs/roadmap.json
+// (the guard's own level, the project's gates) is a guard-down action like a shell write of it. MultiEdit: an older tool name.
+const APPROVAL_EDIT_TOOLS = new Set(["Write", "Edit", "MultiEdit"]);
+const RE_STATE_FILE = /(?:^|[\\/])\.specs[\\/]+(?:[^\\/]+[\\/]+)+\.state\.json$/i;
 const APPROVAL_COMMAND_MAX = 64 * 1024; // characters of a shell command read (the hook's payload may be anything)
 const APPROVAL_SHELL_DEPTH = 3; // nested scripts (bash -c "cmd /c \"…\"") read at most this deep
 const APPROVAL_LEX_DEPTH = 32; // $( … ) / `…` / heredoc scripts lexed at most this deep (deeper: read as a plain subshell)
@@ -157,7 +165,9 @@ CLI_SWITCHES.add("explain"); // 1.21 F2: classify "<text>" --explain (= spec_cla
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "pnpx", "npm", "pnpm", "yarn", "sudo", "doas", "env", "nohup",
   "time", "exec", "command", "call", "start", "timeout", "nice", "ionice", "setsid", "stdbuf", "wsl", "xargs", "!", "if", "then", "else", "elif",
-  "do", "while", "until", "winpty", "flock"]); // winpty, flock: 1.22 review
+  "do", "while", "until", "winpty", "flock", // winpty, flock: 1.22 review
+  // 1.23 review 5 (L20): tracers, output buffers, bash's builtin / coproc, the TypeScript runners, nodemon, GNU parallel
+  "strace", "ltrace", "unbuffer", "chronic", "builtin", "coproc", "tsx", "ts-node", "nodemon", "parallel", "valgrind", "caffeinate", "catchsegv"]);
 // Wrappers whose first N plain words are theirs, not the program: flock <lockfile> <command> (1.22 review).
 const APPROVAL_POSITIONALS = new Map([["flock", 1]]);
 // Launchers that run a package's bin through a subcommand only: npm exec / npm x, pnpm dlx / pnpm exec, yarn dlx / yarn exec,
@@ -185,24 +195,83 @@ const APPROVAL_OPTION_VALUES = new Map(Object.entries({
   xargs: "-I -n -P -L -d -E -s -a --max-args --max-procs --delimiter --arg-file --max-lines --max-chars --eof --replace",
   wsl: "-d -u --distribution --user --cd --shell-type",
   flock: "-w --wait --timeout -E --conflict-exit-code -c --command", // -c: its script, read as one (APPROVAL_SHELLS)
+  strace: "-o -e -p -s -u -E -P -I -b -S -X -a --output --signal --trace --attach --user --env", // 1.23 review 5
+  ltrace: "-o -e -p -s -u -n -a -l --output --library",
+  nodemon: "-x --exec -w --watch -e --ext -i --ignore -d --delay --signal --config",
+  "ts-node": "-r --require -P --project -C --compiler -O --compiler-options -I --ignore --cwd",
+  tsx: "--tsconfig --env-file -r --require --import",
 }).map(([p, list]) => [p, new Set(list.split(" "))]));
 APPROVAL_OPTION_VALUES.set("nodejs", APPROVAL_OPTION_VALUES.get("node"));
 APPROVAL_OPTION_VALUES.set("pnpx", APPROVAL_OPTION_VALUES.get("npx"));
 // Programs whose quoted argument is itself a script: bash -c "…", cmd /c "…", pwsh -Command "…", eval "…", Start-Process … "…",
 // env -S "…", npx -c "…" — read in that program's syntax (cmd → cmd.exe, the PowerShell ones → PowerShell, the rest → Bash).
 const APPROVAL_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "eval", "iex", "invoke-expression",
-  "start-process", "wsl", "su", "watch", "env", "npx", "pnpx", "npm", "pnpm", "yarn", "flock", "script"]); // flock / script -c "…": 1.22 review
+  "start-process", "wsl", "su", "watch", "env", "npx", "pnpx", "npm", "pnpm", "yarn", "flock", "script", // flock / script -c "…": 1.22 review
+  "trap"]); // trap '…' EXIT: 1.23 review 5
 const APPROVAL_PS_SHELLS = new Set(["powershell", "pwsh", "iex", "invoke-expression", "start-process"]);
 // The shells that run a heredoc / here-string fed to them as their script (`bash <<'EOF' … EOF`, `sh <<< "…"`).
 const APPROVAL_STDIN_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "wsl", "su"]);
 const approvalShellMode = (prog) => (prog === "cmd" ? "cmd" : APPROVAL_PS_SHELLS.has(prog) ? "ps" : "bash");
 const RE_DEVSPEC_WORD = /(?:^|[\\/])dev-spec(?:\.(?:[cm]?js|cmd|ps1|exe))?$/i;
+// 1.23 review 5 (L20): a glob that names the CLI's script (`node cli/dev-sp?c.js approve …` — the shell expands it) — its last
+// path segment, read as a glob (* ? [set]), matches one of the script's names. Bounded: a word over 200 characters is no glob here.
+const DEVSPEC_NAMES = ["dev-spec", "dev-spec.js", "dev-spec.cjs", "dev-spec.mjs", "dev-spec.cmd", "dev-spec.ps1", "dev-spec.exe"];
+function devSpecGlob(word) {
+  const w = String(word);
+  if (w.length > 200 || !/[*?[]/.test(w)) return false;
+  const base = w.replace(/^.*[\\/]/, "");
+  let re = "";
+  for (let i = 0; i < base.length; i++) {
+    const c = base[i];
+    if (c === "*") re += "[^/\\\\]*";
+    else if (c === "?") re += ".";
+    else if (c === "[") {
+      const end = base.indexOf("]", i + 2);
+      if (end < 0) { re += "\\["; continue; }
+      const set = base.slice(i + 1, end).replace(/^[!^]/, "^").replace(/[\\\]]/g, "\\$&");
+      re += "[" + set + "]";
+      i = end;
+    } else re += c.replace(/[.+^${}()|\\]/g, "\\$&");
+  }
+  try { const r = new RegExp("^(?:" + re + ")$", "i"); return DEVSPEC_NAMES.some((n) => r.test(n)); } catch { return false; }
+}
+const isDevSpecWord = (w) => RE_DEVSPEC_WORD.test(w) || devSpecGlob(w);
 // A word that is only a substitution or a variable ($(which node), `…`, $NODE, ${NODE}, $env:NODE, %NODE%): an unknown launcher.
 const RE_APPROVAL_VAR_WORD = /^(?:\$(?:\{[^{}]*\}|[A-Za-z_][\w:]*)|%\w+%)$/;
+// …except cmd.exe named through its variable: `& $env:ComSpec /c "…"`, `%ComSpec% /c …` (1.23 review 5).
+const RE_COMSPEC_WORD = /^(?:\$env:comspec|\$\{env:comspec\}|%comspec%)$/i;
 // A shell command can run the CLI or write .specs/roadmap.json only if it names dev-spec or .specs — read with quotes, escapes and
-// line continuations taken out (`dev\-spec`, `d'e'v-spec`, `dev`-spec`). The hook's own pre-check is the same test.
+// line continuations taken out (`dev\-spec`, `d'e'v-spec`, `dev`-spec`), PowerShell's / JavaScript's string joints too
+// (`"cli/dev" + "-spec.js"` — 1.23 review 5). Or (1.23) a glob together with an approval word: the glob may name the CLI. The
+// hook's own pre-check is the same test.
 const RE_APPROVAL_CANDIDATE = /dev-?spec|\.specs/i;
-const approvalCandidate = (text) => RE_APPROVAL_CANDIDATE.test(String(text).replace(/[\\`^]\r?\n|['"\\`^]/g, ""));
+// The words that make a CLI call an approval or a guard-down (approve, feature remove, init's guard-down flags).
+const RE_APPROVAL_VERB = /(?:^|[^\w-])(?:approve|remove|--approval-guard|--stop-check|--evidence|--guard|--roles|--check)(?![\w-])/i;
+const approvalPlain = (text) => String(text).replace(/(["'])\s*\+\s*\1/g, "").replace(/[\\`^]\r?\n|['"\\`^]/g, "");
+// …and a PowerShell -EncodedCommand / -ec / -e value whose decoded script names dev-spec (`powershell -enc <base64>`).
+const RE_PWSH_ENCODED = /(?:^|\s)[-/]e[a-z]*\s+([A-Za-z0-9+/]{8,}={0,2})(?=\s|$)/gi;
+const approvalCandidate = (text) => {
+  const t = approvalPlain(text);
+  if (RE_APPROVAL_CANDIDATE.test(t) || (/[*?[]/.test(t) && RE_APPROVAL_VERB.test(t))) return true;
+  if (!/powershell|pwsh/i.test(t)) return false;
+  let n = 0;
+  for (const m of t.matchAll(RE_PWSH_ENCODED)) {
+    if (++n > 8) break;
+    const s = decodePwshEncoded(m[1]);
+    if (s && RE_APPROVAL_CANDIDATE.test(approvalPlain(s))) return true;
+  }
+  return false;
+};
+// 1.23 review 5 (L20, fail closed): the programs whose arguments are only text or files read — a simple command run by one of
+// them never runs the CLI (`echo dev-spec approve x`, `git commit -m "…approve…"`, `grep -r "dev-spec.js approve" .`).
+const APPROVAL_TEXT_PROGRAMS = new Set(["echo", "printf", "print", "git", "gh", "grep", "egrep", "fgrep", "rg", "ag", "ack", "findstr",
+  "select-string", "sls", "cat", "type", "gc", "get-content", "less", "more", "head", "tail", "bat", "write-host", "write-output",
+  "write-error", "write-verbose", "write-warning", "out-host", "man", "which", "where", "whereis", "ls", "dir", "gci", "get-childitem",
+  "tree", "code", "vim", "vi", "nvim", "nano", "notepad", "emacs", "wc", "diff", "cmp", "jq", "sort", "uniq", "touch", "test", "[",
+  "true", "false", ":", "read", "curl", "wget", "stat", "file", "realpath", "readlink", "basename",
+  "dirname", "test-path", "resolve-path", "get-item", "gi", "measure-object", "format-list", "fl", "format-table", "ft"]);
+// The JavaScript runtimes that read their script from stdin with `-` (`cat cli/dev-spec.js | node - approve …`).
+const APPROVAL_STDIN_RUNTIMES = new Set(["node", "nodejs", "bun"]);
 // .specs/roadmap.json as a write target (R1): a redirection's target, or the file a writer program names.
 const RE_ROADMAP_FILE = /(?:^|[\\/])\.specs[\\/]+roadmap\.json$/i;
 const RE_SPECS_DIR = /(?:^|[\\/])\.specs[\\/]*$/i;
@@ -289,6 +358,7 @@ function programAt(words, raw) {
   let prog = null, sub = null, positional = 0;
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
+    if (RE_COMSPEC_WORD.test(w) && !positional && !sub) return i; // cmd.exe through its variable (approvalProgram reads it as cmd)
     if (w === "" || RE_APPROVAL_VAR_WORD.test(w)) continue;
     if (w.startsWith("-")) {
       const vals = prog ? APPROVAL_OPTION_VALUES.get(prog) : null;
@@ -304,7 +374,7 @@ function programAt(words, raw) {
     }
     if (/^[A-Za-z_]\w*=/.test(w) || /^\d+(?:\.\d+)?[smhd]?$/.test(w)) continue;
     const p = approvalProgram(w);
-    if (APPROVAL_WRAPPERS.has(p) && !RE_DEVSPEC_WORD.test(w) && !RE_DEVSPEC_WORD.test((raw && raw[i]) || "")) {
+    if (APPROVAL_WRAPPERS.has(p) && !isDevSpecWord(w) && !isDevSpecWord((raw && raw[i]) || "")) {
       prog = p;
       sub = APPROVAL_SUBCOMMANDS.get(p) || null;
       positional = APPROVAL_POSITIONALS.get(p) || 0;
@@ -541,12 +611,12 @@ function shellSubstitutionsIn(t, mode, segs, depth) {
     }
   }
 }
-const approvalProgram = (w) => w.replace(/^.*[\\/]/, "").toLowerCase().replace(/\.exe$/, "");
+const approvalProgram = (w) => (RE_COMSPEC_WORD.test(w) ? "cmd" : w.replace(/^.*[\\/]/, "").toLowerCase().replace(/\.exe$/, ""));
 // The index of the CLI's script in a simple command, when it is the program run (after launchers / env assignments / options) —
 // never an argument of another program (`echo dev-spec approve x`, `git commit -m "…"`): -1.
 function devSpecWordAt(words, raw) {
   const k = programAt(words, raw);
-  return k >= 0 && (RE_DEVSPEC_WORD.test(words[k]) || RE_DEVSPEC_WORD.test((raw && raw[k]) || "")) ? k : -1;
+  return k >= 0 && (isDevSpecWord(words[k]) || isDevSpecWord((raw && raw[k]) || "")) ? k : -1;
 }
 // A simple command that writes .specs/roadmap.json (R1: where the approval guard lives) → a guard-down action, else null: a
 // redirection to it (> >> >| &> 2> *>), a writer naming it (tee, Set-Content, Out-File, Add-Content, rm / Remove-Item, mv /
@@ -675,10 +745,15 @@ function cliApprovalAction(args, level, meta) {
 function shellApprovalActions(command, level, depth, mode, meta) {
   const out = [];
   const segs = shellCommandWords(command, mode);
+  const namesCli = /dev-?spec/i.test(approvalPlain(command));
   segs.forEach((words, si) => {
     const raw = words.raw || words;
     const at = devSpecWordAt(words, raw);
     if (at >= 0) out.push(...cliApprovalAction(words.slice(at + 1), level, meta));
+    // 1.23 review 5 (L20): the CLI fed to a JavaScript runtime on stdin — `cat cli/dev-spec.js | node - approve …`,
+    // `node - approve … < cli/dev-spec.js` — when the command names the CLI somewhere.
+    const sa = at < 0 && namesCli ? stdinScriptAt(words, raw) : -1;
+    if (sa >= 0) out.push(...cliApprovalAction(words.slice(sa + 1), level, meta));
     const w = roadmapWriteAction(words, raw);
     if (w) out.push(w);
     if (depth >= APPROVAL_SHELL_DEPTH) return;
@@ -687,11 +762,14 @@ function shellApprovalActions(command, level, depth, mode, meta) {
     const lex = (script, m) => { if (script && approvalCandidate(script)) add(shellApprovalActions(script, level, depth + 1, m, meta)); };
     const end = at >= 0 ? at : words.length;
     const prog = at >= 0 ? -1 : programAt(words, raw);
-    let shell = null;
+    let shell = null, posix = false;
     for (let j = 0; j < end; j++) {
       if (shell && /\s/.test(words[j]) && approvalCandidate(words[j])) add(shellApprovalActions(words[j], level, depth + 1, shell, meta));
+      // 1.23 review 5 (L20): `sh -c 'node "$0" approve x tasks' cli/dev-spec.js` — a POSIX shell's -c script with its positional
+      // parameters ($0 … $9, "$@", $*) taken from the words after it, then read as a script.
+      if (posix && words[j] === "-c" && j + 1 < end && /\$(?:[0-9@*]|\{[0-9@*]\})/.test(words[j + 1])) lex(withPositionals(words[j + 1], raw.slice(j + 2, end)), "bash");
       const p = approvalProgram(words[j]);
-      if (APPROVAL_SHELLS.has(p)) shell = approvalShellMode(p);
+      if (APPROVAL_SHELLS.has(p)) { shell = approvalShellMode(p); posix = APPROVAL_POSIX_SHELLS.has(p); }
       // the unquoted forms only where the word RUNS — the program (after launchers) or a find -exec's command: `echo cmd /c …` is text
       // (PowerShell's `start` is Start-Process — programAt reads it as cmd.exe's launcher and points past it)
       const psStart = p === "start" && mode === "ps" && words.slice(0, j).every((x) => x === "");
@@ -708,13 +786,48 @@ function shellApprovalActions(command, level, depth, mode, meta) {
 }
 // A word of a joined script: one holding whitespace is quoted again ("C:\My Tools\cli\dev-spec.js"), so the script keeps its words.
 const joinScriptWords = (list) => list.map((w) => (/\s/.test(w) && !w.includes('"') ? '"' + w + '"' : w)).join(" ");
+// 1.23 review 5 (L20) — the POSIX shells whose `-c script arg0 arg1 …` hands the script its positional parameters.
+const APPROVAL_POSIX_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
+// A -c script with $0 … $9, ${N}, "$@" / $@ / $* replaced by the words after it (arg0 is $0), each quoted when it holds whitespace.
+function withPositionals(script, args) {
+  const q = (w) => joinScriptWords([w]);
+  const rest = joinScriptWords(args.slice(1));
+  return String(script).replace(/"\$(?:@|\{@\})"|\$(?:@|\*|\{[@*]\})/g, rest)
+    .replace(/"?\$(?:([0-9])|\{([0-9])\})"?/g, (m, a, b) => { const v = args[Number(a !== undefined ? a : b)]; return v === undefined ? "" : q(v); });
+}
+// The index of a JavaScript runtime's stdin script marker in a simple command (`node - approve …`: the `-`; `node < cli/dev-spec.js`:
+// the runtime itself, no arguments), after launchers / env assignments and the runtime's options — or -1.
+function stdinScriptAt(words, raw) {
+  let runtime = null;
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (!runtime) {
+      if (w === "" || /^[A-Za-z_]\w*=/.test(w)) continue;
+      const p = approvalProgram(w);
+      if (APPROVAL_STDIN_RUNTIMES.has(p)) { runtime = p; continue; }
+      if (APPROVAL_WRAPPERS.has(p) || w.startsWith("-")) continue;
+      return -1;
+    }
+    if (w === "-") return i;
+    if (w.startsWith("-")) { const vals = APPROVAL_OPTION_VALUES.get(runtime); if (vals && vals.has(w)) i++; continue; }
+    return -1; // the runtime runs a script file (devSpecWordAt's business)
+  }
+  return runtime && (words.redirs || []).some((t) => isDevSpecWord(t)) ? words.length - 1 : -1;
+}
+// powershell -EncodedCommand / -ec / -e <base64 of UTF-16LE> → the script, or null (not base64, or past APPROVAL_COMMAND_MAX).
+function decodePwshEncoded(word) {
+  const b = String(word || "").trim();
+  if (!b || b.length > APPROVAL_COMMAND_MAX * 2 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b)) return null;
+  try { return Buffer.from(b, "base64").toString("utf16le"); } catch { return null; }
+}
 // cmd's /c /k /r — or pwsh / powershell's -Command / -c (any abbreviation, `-` or `/`), -CommandWithArgs, -EncodedCommand
 // (pwshOption), Windows PowerShell's first positional (its default is -Command; pwsh 7's is -File: none) — at words[j] (program
 // p): the rest of the words is the script, joined (the raw words: a Windows path keeps its backslashes). → { script, mode } | null
 function restScript(words, raw, j, p) {
   if (p === "cmd") {
+    // (`cmd //c …`: Git Bash's spelling of /c — MSYS turns // into / — 1.23 review 5)
     for (let k = j + 1; k < words.length && /^\//.test(words[k]); k++) {
-      if (/^\/[ckr]$/i.test(words[k])) return k + 1 < words.length ? { script: joinScriptWords(raw.slice(k + 1)), mode: "cmd" } : null;
+      if (/^\/\/?[ckr]$/i.test(words[k])) return k + 1 < words.length ? { script: joinScriptWords(raw.slice(k + 1)), mode: "cmd" } : null;
     }
     return null;
   }
@@ -723,6 +836,12 @@ function restScript(words, raw, j, p) {
     const w = words[k];
     if (/^[-/]/.test(w)) {
       const o = pwshOption(w);
+      // -EncodedCommand (-ec, -e…): its value is the script, base64 of UTF-16LE — decoded and read (1.23 review 5)
+      const opt = w.slice(1).toLowerCase();
+      if (o === "script" && (opt === "ec" || (opt[0] === "e" && "encodedcommand".startsWith(opt)))) {
+        const s = k + 1 < words.length ? decodePwshEncoded(raw[k + 1]) : null;
+        return s ? { script: s, mode: "ps" } : null;
+      }
       if (o === "script") return k + 1 < words.length ? { script: joinScriptWords(raw.slice(k + 1)), mode: "ps" } : null;
       if (o === "file") return null;
       if (o === "value") k++;
@@ -802,10 +921,11 @@ function approvalCommand(a, cli) {
   const safe = (v, re) => (typeof v === "string" && re.test(v) ? v : null);
   const word = (v, ph) => safe(v, /^[\p{L}\p{N}_.-]{1,80}$/u) || ph;
   const name = (v) => { const s = safe(v, /^[\p{L}\p{N} _.@+,-]{1,120}$/u); return s ? (/\s/.test(s) ? '"' + s + '"' : s) : "<feature>"; };
+  if (a.kind === "unreadable") return null; // a command the guard can't read: there is no CLI line to suggest (1.23 review 5)
   const words = [i18n.cliPrefix(cli)]; // 1.21 F3: `node "<cli>"`, quoted like every runnable CLI line (i18n/common.js cliQuote)
   if (a.kind === "remove") words.push("feature", "remove", name(a.feature), "--yes");
   else if (a.kind === "guard-down") {
-    if (a.setting === "roadmap") return null;
+    if (a.setting === "roadmap" || a.setting === "state") return null; // a write / edit of the file itself: the user makes it
     if (a.setting === "evidence") words.push("init", "--evidence", "reported");
     else if (a.setting === "stopCheck") words.push("init", "--stop-check", "off");
     else if (a.setting === "guard") words.push("init", "--guard", a.to === "on" ? "on" : "off");
@@ -853,8 +973,28 @@ function approvalGuardDecision(payload, level, opts = {}) {
   let actions = [];
   const m = RE_APPROVAL_MCP.exec(tool);
   if (m) actions = mcpApprovalAction(m[1], ti, lvl, meta);
-  else if (APPROVAL_SHELL_TOOLS.has(tool) && typeof ti.command === "string" && approvalCandidate(ti.command.slice(0, APPROVAL_COMMAND_MAX))) {
-    actions = shellApprovalActions(ti.command.slice(0, APPROVAL_COMMAND_MAX), lvl, 0, tool === "PowerShell" ? "ps" : "bash", meta);
+  else if (APPROVAL_SHELL_TOOLS.has(tool) && typeof ti.command === "string") {
+    const mode = tool === "PowerShell" ? "ps" : "bash"; // Monitor runs its command in the Bash tool's shell
+    const head = ti.command.slice(0, APPROVAL_COMMAND_MAX);
+    if (ti.command.length > APPROVAL_COMMAND_MAX && approvalCandidate(ti.command.slice(APPROVAL_COMMAND_MAX - 64))) {
+      // 1.23 review 5 (L20): past the read limit nothing was seen — an approval after the first 64 KB went through at deny. A
+      // command whose unread tail names dev-spec (or .specs) is refused / asked as unreadable; an unread tail that names neither
+      // runs nothing of dev-spec's, and the head is read as before.
+      actions = [{ kind: "unreadable", why: "too-long", length: ti.command.length, source: "shell" }];
+    } else if (approvalCandidate(head)) {
+      actions = shellApprovalActions(head, lvl, 0, mode, meta);
+      // 1.23 review 5 (fail closed): the CLI named with an approval word, in a form the lexer can't follow (a launcher it doesn't
+      // know, a string built by concatenation, a glob, a variable) — the user is asked instead of the call being allowed.
+      if (!actions.length && approvalUnparsed(head, mode)) actions = [{ kind: "unreadable", why: "unparsed", source: "shell" }];
+    }
+  } else if (APPROVAL_EDIT_TOOLS.has(tool) && typeof ti.file_path === "string") {
+    // 1.23 review 5: a hand edit of .specs/roadmap.json or of a feature's .state.json (its approvals, evidence, history)
+    const fp = ti.file_path.trim();
+    if (RE_ROADMAP_FILE.test(fp)) actions = [{ kind: "guard-down", setting: "roadmap", source: "edit", project: approvalSpecsProject(fp) }];
+    else if (RE_STATE_FILE.test(fp)) {
+      const segs = fp.split(/[\\/]+/);
+      actions = [{ kind: "guard-down", setting: "state", source: "edit", feature: segs[segs.length - 2] || null, project: approvalSpecsProject(fp) }];
+    }
   }
   if (!actions.length) return allow("not-an-approval", { tool });
   const A = i18n.msg(normalizeLang(opts.lang || "en")).approvalGuard;
@@ -871,10 +1011,40 @@ function approvalGuardDecision(payload, level, opts = {}) {
   const plain = opts.plain === true;
   const command = commands.length ? (plain ? "" : "! ") + commands.join(" && ") : null;
   // summary (1.21 F1b): the actions as one localized line — what the MCP server's elicitation asks the user about.
-  const res = { decision: lvl, why: "approval", level: lvl, tool, actions, force, command, summary: text,
-    reason: lvl === "deny" ? (plain ? A.denyMcp(text, command) : A.deny(text, command)) : A.ask(text, force) };
-  if (lvl === "deny") res.userNote = A.denyUser(text, command);
+  // A command the guard could not follow (why: "unparsed") is never refused outright — it may be no approval at all: ask.
+  const decision = actions.every((a) => a.kind === "unreadable" && a.why === "unparsed") ? "ask" : lvl;
+  const res = { decision, why: "approval", level: lvl, tool, actions, force, command, summary: text,
+    reason: decision === "deny" ? (plain ? A.denyMcp(text, command) : A.deny(text, command)) : A.ask(text, force) };
+  if (decision === "deny") res.userNote = A.denyUser(text, command);
   return res;
+}
+// The project folder of a .specs/ path (the folder holding .specs/) — the project an edit of its roadmap.json / .state.json acts on.
+function approvalSpecsProject(fp) {
+  const m = /^(.*?)[\\/]*\.specs[\\/]/i.exec(String(fp));
+  return m && m[1] ? m[1] : null;
+}
+// 1.23 review 5 (fail closed) — a shell command that names the CLI (dev-spec, a glob that may be it, a string joined from pieces)
+// together with an approval word, in a simple command whose program is no text-only program (echo, git, grep, cat…), or a
+// JavaScript runtime whose script is a substitution / variable — when the lexer found no action in it. → true: ask the user.
+function approvalUnparsed(command, mode) {
+  const plain = approvalPlain(command);
+  if (!RE_APPROVAL_VERB.test(plain)) return false;
+  const mentions = (list) => list.some((w) => /dev-?spec/i.test(w) || devSpecGlob(w)) || /dev-?spec/i.test(list.join("").replace(/\+/g, ""));
+  const named = /dev-?spec/i.test(plain);
+  for (const words of shellCommandWords(command, mode)) {
+    const raw = words.raw || words;
+    // the CLI read where it runs (`dev-spec status x`, `approve a b --help`, a preview): the lexer's answer stands
+    if (devSpecWordAt(words, raw) >= 0 || (named && stdinScriptAt(words, raw) >= 0)) continue;
+    const k = programAt(words, raw);
+    const p = k >= 0 ? approvalProgram(words[k]) : "";
+    if (mentions(words.concat(raw, words.redirs || [])) && !APPROVAL_TEXT_PROGRAMS.has(p)) return true;
+    // `node $(echo cli/dev-spec.js) approve …`, `node $p approve …` ($p = 'cli/dev-spec.js'): the script is a substitution or a variable
+    if (named) {
+      const r = words.findIndex((w) => APPROVAL_STDIN_RUNTIMES.has(approvalProgram(w)) || approvalProgram(w) === "deno");
+      if (r >= 0 && r + 1 < words.length && (words[r + 1] === "" || RE_APPROVAL_VAR_WORD.test(words[r + 1]))) return true;
+    }
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -1395,4 +1565,6 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, RE
   STOP_MAX_FEATURES, STOP_TASKS_SHOWN, STOP_REPORT_MAX, STOP_WINDOW, guardLevel, guardInput, stopCheckEnabled,
   setStopCheck, stopPatterns, STOP_CLAUSE_SPAN, stopClauseStart, RE_ES_NO_NEXT, RE_ES_SE_NEXT, stopNegates,
   stopPastFailure, stopZeroCount, stopProse, stopClaims, stopActivity, SPEC_EDIT_LOCK_WAIT_MS, recordSpecEdit, stopTaskLabel, stopCheck, implementerStopCheck,
-  scopeGuardDecision, __link };
+  scopeGuardDecision, APPROVAL_EDIT_TOOLS, RE_STATE_FILE, DEVSPEC_NAMES, devSpecGlob, isDevSpecWord, RE_COMSPEC_WORD, RE_APPROVAL_VERB,
+  approvalPlain, APPROVAL_TEXT_PROGRAMS, APPROVAL_STDIN_RUNTIMES, APPROVAL_POSIX_SHELLS, withPositionals, stdinScriptAt,
+  decodePwshEncoded, approvalSpecsProject, approvalUnparsed, __link };

@@ -4,17 +4,19 @@
 /**
  * dev-spec-driven — human approval guard (opt-in, zero-dependency; 1.14 F2).
  *
- * Wired from hooks/hooks.json as PreToolUse, matcher ^(Bash|PowerShell|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$.
+ * Wired from hooks/hooks.json as PreToolUse, matcher
+ * ^(Bash|PowerShell|Monitor|Write|Edit|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$.
  * An approval is the human's act, but an agent can call spec_approve (force: true included) or run `dev-spec approve` itself.
  * This hook does NOTHING unless the project opted in (`.specs/roadmap.json` meta.approvalGuard "ask" | "deny" —
  * spec_init {approvalGuard} / `dev-spec init --approval-guard ask|deny`). Then an agent's approval — spec_approve under any MCP
  * server prefix, spec_feature {action: "remove", confirm: true}, `dev-spec approve …` / `dev-spec feature remove … --yes`
- * through the Bash / PowerShell tool (read in that shell's own syntax: escapes, line continuations, $'…', $( ), heredocs), or a
- * guard-down action — lowering this guard (spec_init {approvalGuard} / `init --approval-guard`), weakening what it stands for
- * (evidence observed → reported, clearing / dropping approval roles, removing / changing a project check, the stop gate or the
- * edit guard turned down) or a shell command writing .specs/roadmap.json — gets:
+ * through the Bash / PowerShell / Monitor tool (read in that shell's own syntax: escapes, line continuations, $'…', $( ),
+ * heredocs), or a guard-down action — lowering this guard (spec_init {approvalGuard} / `init --approval-guard`), weakening what it
+ * stands for (evidence observed → reported, clearing / dropping approval roles, removing / changing a project check, the stop gate
+ * or the edit guard turned down), a shell command writing .specs/roadmap.json, or (1.23) a Write / Edit of .specs/roadmap.json or
+ * of a feature's .state.json — gets:
  *   ask  → permissionDecision "ask": the user confirms or declines (the reason names the feature, phase(s), role and, loudly,
- *          --force). A permission prompt may be skipped in Claude Code's auto / bypass permission modes;
+ *          --force). Claude Code shows it in auto mode too; only bypass-permissions mode may skip it (dontAsk refuses it);
  *   deny → permissionDecision "deny" (it holds in every permission mode): the reason tells the agent approvals are the
  *          human's — the user runs it in their own terminal or with Claude Code's `!` prefix, and the agent stops and asks.
  * spec.approvalGuardDecision decides (pure; the engine is loaded only once some candidate project has the guard on).
@@ -22,9 +24,9 @@
  * It NEVER blocks on its own trouble: a malformed payload or any internal error exits 0 silently — but it FAILS CLOSED on a
  * roadmap.json that exists and doesn't parse: the strictest "approvalGuard": "ask" | "deny" its raw text names still holds
  * (appending a byte to the file must not switch the guard off). It is cheap: a tool call that can't be an approval (a Bash
- * command naming neither dev-spec nor .specs) exits before any file read; otherwise one
+ * command naming neither dev-spec nor .specs, a Write / Edit of any other file) exits before any file read; otherwise one
  * raw read of roadmap.json per candidate project (the session cwd, CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR and the project the
- * call names — MCP projectDir / CLI --project; the strictest level wins, never a network path).
+ * call names — MCP projectDir / CLI --project / the edited file's; the strictest level wins, never a network path).
  */
 
 const fs = require("fs");
@@ -32,11 +34,22 @@ const path = require("path");
 
 const LEVELS = ["off", "ask", "deny"];
 const RE_MCP = /^(?:mcp__.+__)?(?:spec_approve|spec_feature|spec_init)$/;
-const SHELLS = new Set(["Bash", "PowerShell"]);
+// The tools that run a shell command — Monitor too (1.23 review 5: it runs its command in the Bash tool's shell).
+const SHELLS = new Set(["Bash", "PowerShell", "Monitor"]);
+// 1.23 review 5: the file-editing tools, on .specs/roadmap.json or a feature's .state.json only (a hand edit of the approvals).
+const EDITS = new Set(["Write", "Edit", "MultiEdit"]);
+const RE_GUARDED_FILE = /(?:^|[\\/])\.specs[\\/]+(?:roadmap\.json|(?:[^\\/]+[\\/]+)+\.state\.json)$/i;
 // The engine's approvalCandidate: a command can run the CLI or write .specs/roadmap.json only if it names dev-spec or .specs
-// (quotes, escapes and line continuations taken out — `dev\-spec`, `d'e'v-spec`).
+// (string joints, quotes, escapes and line continuations taken out — `dev\-spec`, `d'e'v-spec`, `"cli/dev" + "-spec.js"`), or holds
+// a glob together with an approval word (the glob may name the CLI). The WHOLE command: one past the engine's read limit that
+// names dev-spec is refused / asked as unreadable (1.23 review 5 — an approval after the first 64 KB went through).
 const RE_CANDIDATE = /dev-?spec|\.specs/i;
-const candidate = (c) => RE_CANDIDATE.test(c.slice(0, 64 * 1024).replace(/[\\`^]\r?\n|['"\\`^]/g, ""));
+const RE_VERB = /(?:^|[^\w-])(?:approve|remove|--approval-guard|--stop-check|--evidence|--guard|--roles|--check)(?![\w-])/i;
+// (a PowerShell -EncodedCommand value — base64 — is decoded by the engine: here any encoded-looking pwsh call goes on to it)
+const candidate = (c) => {
+  const t = c.replace(/(["'])\s*\+\s*\1/g, "").replace(/[\\`^]\r?\n|['"\\`^]/g, "");
+  return RE_CANDIDATE.test(t) || (/[*?[]/.test(t) && RE_VERB.test(t)) || (/powershell|pwsh/i.test(t) && /(?:^|\s)[-/]e[a-z]*\s+[A-Za-z0-9+/]{8,}/i.test(t));
+};
 // A roadmap.json that doesn't parse: the strictest level its raw text names (fail closed) — the engine's rawApprovalGuard.
 const RE_RAW_GUARD = /"approvalGuard"\s*:\s*"\s*(ask|deny)\s*"/gi;
 
@@ -101,12 +114,14 @@ function main(raw) {
   const tool = typeof payload.tool_name === "string" ? payload.tool_name : typeof payload.toolName === "string" ? payload.toolName : "";
   const ti = isObj(payload.tool_input) ? payload.tool_input : isObj(payload.toolInput) ? payload.toolInput : {};
   const command = SHELLS.has(tool) && typeof ti.command === "string" ? ti.command : null;
-  if (!RE_MCP.test(tool) && !(command && candidate(command))) return finish();
+  const edited = EDITS.has(tool) && typeof ti.file_path === "string" && RE_GUARDED_FILE.test(ti.file_path.trim()) ? ti.file_path.trim() : null;
+  if (!RE_MCP.test(tool) && !(command && candidate(command)) && !edited) return finish();
 
-  // The projects this call may act on: the one it names first (MCP projectDir, CLI --project), then the session's.
+  // The projects this call may act on: the one it names first (MCP projectDir, CLI --project, the edited file's), then the session's.
   const cwd = usableDir(payload.cwd);
   const named = [];
-  if (!command) named.push(ti.projectDir);
+  if (edited) named.push(edited.replace(/[\\/]*\.specs[\\/][\s\S]*$/i, "") || ".");
+  else if (!command) named.push(ti.projectDir);
   else for (const m of command.slice(0, 64 * 1024).matchAll(/--project(?:=|\s+)(?:"([^"]*)"|'([^']*)'|([^\s;&|)]+))/g)) named.push(m[1] || m[2] || m[3]);
   const dirs = [...new Set([...named.map((d) => usableDir(d, cwd || undefined)), cwd, usableDir(process.env.CLAUDE_PROJECT_DIR), usableDir(process.env.SPEC_PROJECT_DIR)].filter(Boolean))];
   let level = 0, dir = null, meta;

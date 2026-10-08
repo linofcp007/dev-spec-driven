@@ -14,7 +14,7 @@ reports the current `guard` state. With no argument, read
 `.specs/roadmap.json → meta.guard` (absent = off), report the state and explain it — don't call `spec_init` just
 to look (it scaffolds any missing core steering file).
 
-**What it does (Claude Code only).** The plugin's PreToolUse hook runs before Write / Edit / MultiEdit /
+**What it does (Claude Code only).** The plugin's PreToolUse hook runs before Write / Edit /
 NotebookEdit. While the guard is on, an edit to a **code file outside `.specs/`** gets a permission prompt
 ("ask") with a localized reason **unless some feature has an approved tasks phase and open tasks** — then it
 is silent. It is silent too for a **test file** while some feature has an approved test plan and is not

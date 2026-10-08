@@ -2038,7 +2038,7 @@ const msg = {
     },
     approvalGuard: {
       on: {
-        ask: "Guardia de aprobaciones ASK — una aprobación hecha por un agente (spec_approve / dev-spec approve, la eliminación de una función, bajar esta guardia) te pide confirmación antes (roadmap.json meta.approvalGuard). En los modos de permiso auto / bypass de Claude Code la solicitud de permiso puede no aparecer — 'deny' se mantiene en todos los modos.",
+        ask: "Guardia de aprobaciones ASK — una aprobación hecha por un agente (spec_approve / dev-spec approve, la eliminación de una función, bajar esta guardia) te pide confirmación antes (roadmap.json meta.approvalGuard). Claude Code muestra esa solicitud también en el modo auto; solo su modo bypass de permisos puede saltársela — 'deny' se mantiene en todos los modos.",
         deny: "Guardia de aprobaciones DENY — una aprobación hecha por un agente (spec_approve / dev-spec approve, la eliminación de una función, bajar esta guardia) se rechaza: apruebas tú, en tu propio terminal o en Claude Code con el prefijo ! (roadmap.json meta.approvalGuard).",
       },
       off: "Guardia de aprobaciones DESACTIVADA — las aprobaciones que pide un agente no se controlan (roadmap.json meta.approvalGuard).",
@@ -2046,7 +2046,13 @@ const msg = {
       action: (a) => {
         const f = a.feature || "?";
         if (a.kind === "remove") return `borrar definitivamente la función '${f}' (su carpeta en .specs/, sus aprobaciones y su historial)`;
+        if (a.kind === "unreadable") {
+          return a.why === "too-long" ? `ejecutar un comando de shell demasiado largo para que la guardia de aprobaciones lo lea (${a.length} caracteres) que menciona dev-spec o .specs/`
+            : "ejecutar un comando de shell que menciona la CLI de dev-spec con una palabra de aprobación en una forma que la guardia de aprobaciones no puede leer (un lanzador desconocido, un glob, una variable o una cadena concatenada)";
+        }
         if (a.kind === "guard-down") {
+          if (a.setting === "roadmap" && a.source === "edit") return "editar a mano .specs/roadmap.json (ahí están la guardia de aprobaciones y los gates del proyecto)";
+          if (a.setting === "state") return `editar a mano el .state.json de '${f}' — sus aprobaciones, su evidencia y su historial`;
           if (a.setting === "evidence") return "volver a poner el modo de evidencia (meta.evidence) en reported";
           if (a.setting === "stopCheck") return "desactivar el gate de evidencia al final del turno (meta.stopCheck)";
           if (a.setting === "guard") return a.from ? `bajar el modo guardia (meta.guard) de ${a.from} a ${a.to}` : `poner el modo guardia (meta.guard) en ${a.to}`;

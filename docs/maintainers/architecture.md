@@ -93,8 +93,8 @@ cli/tests/                     its files: NN-<area>-<topic>.js (NN = the same ar
 scripts/build.js               `npm run build`: the committed corpus (--check: exit 1 when stale) · --bundle [--out]: the bundle
 scripts/test-runner.js         the runner both suites share: files → chains (deps) → parallel processes, --only / --list
 scripts/test-docker.js         both suites in Linux containers — `npm run test:docker` (local Docker, never hosted CI)
-hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|MultiEdit|NotebookEdit) + approval-hook.js
-                               (^(Bash|PowerShell|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$) · PostToolUse → spec-hook.js
+hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|NotebookEdit) + approval-hook.js
+                               (^(Bash|PowerShell|Monitor|Write|Edit|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$) · PostToolUse → spec-hook.js
                                (Write|Edit) + observe-hook.js (Bash) + plan-hook.js (ExitPlanMode) · PostToolUseFailure (Bash) → observe-hook.js ·
                                SessionStart → spec-hook.js · Stop + SubagentStop (matcher ^(dev-spec-driven:)?spec-(implementer|simplifier)$)
                                → stop-hook.js
