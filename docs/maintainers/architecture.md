@@ -94,13 +94,15 @@ scripts/build.js               `npm run build`: the committed corpus (--check: e
 scripts/test-runner.js         the runner both suites share: files → chains (deps) → parallel processes, --only / --list
 scripts/test-docker.js         both suites in Linux containers — `npm run test:docker` (local Docker, never hosted CI)
 hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|NotebookEdit) + approval-hook.js
-                               (^(Bash|PowerShell|Monitor|Write|Edit|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$) · PostToolUse → spec-hook.js
+                               (^(Bash|PowerShell|Monitor|Write|Edit|(mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track))$) · PostToolUse → spec-hook.js
                                (Write|Edit) + observe-hook.js (Bash) + plan-hook.js (ExitPlanMode) · PostToolUseFailure (Bash) → observe-hook.js ·
                                SessionStart → spec-hook.js · Stop + SubagentStop (matcher ^(dev-spec-driven:)?spec-(implementer|simplifier)$)
                                → stop-hook.js
 hooks/guard-hook.js            opt-in guard mode (asks before code edits while no feature has approved tasks; scope level)
 hooks/approval-hook.js         opt-in human approval guard (meta.approvalGuard ask|deny: an agent's approval asks / is refused)
 hooks/observe-hook.js          harness-observed evidence (logs Bash runs of _Verify:_ / project-check commands; prints nothing)
+hooks/hook-utils.js            what the hooks share BEFORE the engine loads (1.24): UTF-8 / UTF-16 reads, a Write / Edit target as the
+                               file system reads it, the approval hook's candidate projects, a per-session marker — no hook itself
 hooks/spec-hook.js             save checks (requirements/tasks/design.md) + SessionStart status (at most 20 features, then
                                "+N more"), drift, upgrade and overlap lines
 hooks/stop-hook.js             end-of-turn evidence gate (spec.stopCheck — a "done" claim with unverified recent ticks)
