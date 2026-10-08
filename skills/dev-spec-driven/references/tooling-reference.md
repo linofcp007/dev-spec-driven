@@ -7,7 +7,15 @@ tables.
 
 All tools are local file operations on `.specs/` (or a read-only scan of the codebase); none hit the network.
 They scaffold and check — they never overwrite your files. Arguments are validated against each tool's
-input schema (a wrong type or unknown value is refused with a clear message).
+input schema (a wrong type or unknown value is refused with a clear message) — and so is an argument the schema doesn't
+list (1.24: `revoked` for `revoke` used to be dropped silently; now nothing runs and the reply names the right one). An
+argument error carries a stable `code`: `unknown-argument` (`unknown` [{argument, didYouMean}]) · `missing-arguments`
+(`missing`) · `invalid-arguments` (`invalid`) · `project-dotdot` · `project-network` · `project-uri` · `project-missing` ·
+`project-not-dir`. `projectDir` names an EXISTING folder (only `spec_init` creates one), as a path or a local `file://` URI;
+not given (or a variable the client left unexpanded, `${workspaceFolder}`, `$HOME`, `%CD%`), the server's project is used —
+`SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR`, else the client's first root (MCP roots), else the nearest folder with a `.specs/`
+at or above its working folder, else that folder; a relative one resolves from the client's root when roots chose the default.
+Results are compact JSON.
 
 | Tool | Use it for |
 |---|---|

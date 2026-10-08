@@ -225,6 +225,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
 
     // (H4) steering_scaffold custom names: localized stub with front matter; known names keep their templates; rejections.
     const c11 = path.join(tmp, "proj-wp11-custom");
+    fs.mkdirSync(c11, { recursive: true }); // a projectDir names an existing folder (1.24 r6 A3 — only spec_init creates one)
     const cs1 = (await call11("steering_scaffold", { file: "api-conventions.md", projectDir: c11 })).p;
     const csText = fs.readFileSync(path.join(c11, ".specs", "steering", "api-conventions.md"), "utf8");
     const csFm = S.steeringFrontMatter(csText);

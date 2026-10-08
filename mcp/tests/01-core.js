@@ -277,6 +277,7 @@ exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, require, __dirna
 
   // --- v1.11: spec_task_brief — a self-contained brief per task (subagent-driven execution) ---
   const bDir = path.join(tmp, "proj-brief");
+  fs.mkdirSync(bDir, { recursive: true }); // a projectDir names an existing folder (1.24 r6 A3 — only spec_init creates one)
   await rpc("tools/call", { name: "spec_create", arguments: { name: "Brief Demo", tracks: ["tdd"], projectDir: bDir } });
   const bFeat = path.join(bDir, ".specs", "brief-demo");
   fs.writeFileSync(path.join(bFeat, "requirements.md"), [
@@ -609,6 +610,7 @@ exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, require, __dirna
   ok(covSeg.documented.join(",") === "auth" && covSeg.undocumented.includes("payments") && covSeg.undocumented.includes("build-tools") && covSeg.coveragePercent === 25,
     "coverage counts files named in _Implements:_ ('payments' ≈ feature 'payment' by name alone is not covered)");
   ok(S.resolveProjectDir("${CLAUDE_PROJECT_DIR}") !== path.resolve("${CLAUDE_PROJECT_DIR}"), "an unexpanded ${VAR} projectDir is ignored, not created as a folder");
+  fs.mkdirSync(path.join(tmp, "proj-auto"), { recursive: true }); // an existing folder (1.24 r6 A3)
   const autoCreate = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "LLM Summaries", projectDir: path.join(tmp, "proj-auto") } }));
   ok(autoCreate.ok && autoCreate.tracks.includes("ai"), "MCP spec_create without tracks auto-classifies (same as the CLI)");
   const batch = await rawOnce(JSON.stringify([{ jsonrpc: "2.0", id: 901, method: "ping" }, { jsonrpc: "2.0", method: "notifications/initialized" }, { jsonrpc: "2.0", id: 902, method: "ping" }]));

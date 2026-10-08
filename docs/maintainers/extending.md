@@ -13,7 +13,8 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   takes resolves its folder through `resolveFeature()` / `existingFeature()`, never `path.join(specsRoot, slugify(name))`,
   and its state goes through `readJson()` / `writeFileAtomic` under the locks (conventions.md → Conventions & gotchas).
 - New MCP tool → the operation above, a TOOLS entry + dispatch case in
-  `mcp/server.js` (its `inputSchema` IS the validation — declare types, enums, required keys), the CLI
+  `mcp/server.js` (its `inputSchema` IS the validation — declare types, enums, required keys, and EVERY argument the
+  dispatch reads: one the schema doesn't list is refused, `unknown-argument` — mcp.md → Argument validation), the CLI
   subcommand, a test in the file of its area in `mcp/tests/` and `cli/tests/` (testing.md → The suites; bump the exact
   tool count — the handshake's, `mcp/tests/harness.js`), the README tool tables (EN/PT/ES —
   `mcp/test.js` builds the expected set from the live `tools/list`: a missing or phantom row in any language fails

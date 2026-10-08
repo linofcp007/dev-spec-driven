@@ -75,6 +75,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     }
     ok(sweep.length === 0 && S.trackSignals("sec").strong.length > 40 && S.trackSignals("privacy").strong.length > 40,
       "A2: self-match sweep — every +sec / +privacy keyword (EN/PT/ES) matches itself as a word, and a strong one alone turns its track on (misses: " + sweep.join(", ") + ")");
+    fs.mkdirSync(a2("mcp"), { recursive: true }); // a projectDir names an existing folder (1.24 r6 A3)
     const mcpCls = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Pseudonymize personal data and threat model the export", projectDir: a2("mcp") } }));
     ok(mcpCls.tracks.includes("sec") && mcpCls.tracks.includes("privacy") && mcpCls.label === "core +sec +privacy",
       "A2: spec_classify (MCP) reports +sec and +privacy (" + mcpCls.label + ")");
@@ -351,6 +352,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     ok(sweep.length === 0 && sg.strong.length > 60 && sg.weak.length > 40 && sg.context.includes("transaction") && !ctxAlone.signals.dist.length && !possible(ctxAlone) &&
       cls("We publish updates. The event page lists them").signals.dist.length === 0 && cls("publishes an OrderPlaced domain event").signals.dist.includes("domain event"),
       "1.17 D5: self-match sweep — every +dist keyword matches itself (gap phrases and verb stems probed by a conjugation); context words alone are no signal; a gap never crosses a sentence (misses: " + sweep.join(", ") + ")");
+    fs.mkdirSync(d("mcp"), { recursive: true }); // a projectDir names an existing folder (1.24 r6 A3)
     const mcpCls = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Create an endpoint that writes a user to Postgres and publishes a UserCreated event to Kafka for other services", projectDir: d("mcp") } }));
     const tl = await rpc("tools/list", {});
     const addDesc = ((tl.result.tools.find((t) => t.name === "spec_add_track") || {}).inputSchema || { properties: { track: {} } }).properties.track.description || "";

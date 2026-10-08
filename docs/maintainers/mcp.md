@@ -23,7 +23,9 @@ session — it had grown to ~124k characters (~31k tokens). A description says w
 on (evidence before claims, approvals are the user's, what a refusal or a stable code means) — at most 2,500 characters, one
 line; the reference detail (every output field, every check id, formats) lives in `references/tooling-reference.md` and the
 topic files. `mcp/tests/02-mcp-server.js` holds the whole list under 76,000 characters (the clone's CLI path counted as
-`dev-spec`); the tests that pin a description's wording (a rule) name it.
+`dev-spec`); the tests that pin a description's wording (a rule) name it. `projectDir` (1.24 r6 A5) is described on every tool:
+`spec_init`'s (`PROJECT_DIR_INIT`) says how the folder is chosen (see Argument validation → projectDir), every other tool shares
+the bare `PROJECT_DIR` ("Project folder") — 37 copies of a longer text cost ~2k characters of the budget (74,946 with it).
 Roadmap/deps persist in `.specs/roadmap.json`; cross-feature deps are cycle-checked and must name existing features.
 
 **Capabilities (1.14 — no longer tools-only).** `initialize` advertises `tools {listChanged: false}`, `prompts
@@ -72,7 +74,8 @@ project's): `summary` (approvalGuardDecision's action line — 1.23: with `opts.
 slug the engine resolves, never the raw argument: slugify drops text in other scripts, which must not reach the human's question;
 the `command` names the slug too) + the gate from a **dry run** — `spec.approvePhase(…, {dryRun: true})`
 runs every check and writes nothing (approve → `{dryRun, failing, checks, role?, waiver?}`, revoke → `{dryRun, revoke}`, through
-→ `{dryRun, chain}`); a gate that refuses anyway (or an error, or a fast-forward with nothing to do) is answered as it is and
+→ `{dryRun, chain}`); a remove's question also says how much it deletes (1.24 r6 A-I8: `elicit.removeSize` — `.specs/<slug>/`
+and the file count of remove's own preview, `wouldDelete.files`); a gate that refuses anyway (or an error, or a fast-forward with nothing to do) is answered as it is and
 NOBODY is asked. `requestedSchema`: `approve` (boolean, default false, required) + `note` (string ≤ 500). Only `action:
 "accept"` with `content.approve === true` runs the call, with `confirmation` {via: "elicitation", at, note?} (a one-line note)
 recorded as `confirmed` on the approval, its history record, a role's sign-off and a revocation record (`confirmationOf()`,
@@ -99,17 +102,42 @@ and every `PROGRESS_EVERY_MS` (10 s) while its question waits — a client whose
 the call. A guardrail on the approve paths, like the hook — not a sandbox.
 
 **Argument validation (server.js).** Before dispatch, `tools/call` arguments are checked against the
-tool's advertised `inputSchema`: required keys (`missingArgs`), then types (`invalidArgs` — `integer` means
-a *safe* integer, so `1.9` / `1e21` never become task 1), `enum`, `minimum`, array `items` and nested
+tool's advertised `inputSchema`, in this order — `arguments` that isn't an object; then **unknown arguments** (1.24 r6 A1,
+`unknownArgs`): a top-level key the schema's `properties` don't list is refused, nothing runs. They used to be ignored, and a
+misspelt key changed what the call did — `spec_approve {revoked: true}` RE-APPROVED changed content, `spec_task_brief {task: 3}`
+briefed the next task, `spec_export {feature}` exported the whole project; the CLI refuses an unknown flag since 1.23. The
+reply lists them with a did-you-mean: a word people type for an argument (`ARG_ALIASES` — feature / slug → name, task → number,
+project / dir → projectDir, untick → undo, unapprove → revoke — when the tool takes it), else `spec.closestName` (core.js — the
+optimal-string-alignment distance, ≤ max(1, ⌊length / 3⌋) edits, case-insensitive: the CLI's flag rule; suggestTrack uses it
+too). Checked before the required keys, so a misspelt required key (`nmae`) reads as unknown with its fix, not as missing. A
+`null` unknown key is "not given", like any argument; a NESTED object's extra keys are still left to the engine. Every
+`args.X` runTool reads must be in its tool's schema — a key it doesn't list would now be refused, never read (a guard in
+02-mcp-server.js parses runTool's `case`s). Then required keys (`missingArgs`), then types (`invalidArgs` — `integer` means
+a *safe* integer, so `1.9` / `1e21` never become task 1), `enum`, `minimum`, `maximum` (1.24 r6 A5 — `spec_next_task.max` ≤ 8;
+the message reads "between 1 and 8"), array `items` and nested
 object properties. A task `number` (spec_task_brief, spec_complete_task) carries `minimum: 0` (1.22 review — `-1` read "must
 be an integer"; 0 is a task number: next serves a hand-written task 0, so refusing it looped next → complete); the engine
 refuses the CLI's raw word in these same words (`msg(lang).args` —
 conventions.md → CLI boolean switches), and a roadmap `order` past the safe range alike. It iterates the SCHEMA's keys, never the caller's (`__proto__` arguments are ignored);
-an absent or `null` value means "not given". `arguments` that isn't an object, a relative `..` in
-`projectDir`, or a network `projectDir` (`isNetworkPath`: UNC `\\host\share`, `//host/share`, `\\?\UNC\…`,
+an absent or `null` value means "not given". Last, **projectDir** (`projectDirArg` — 1.24 r6 A2 / A3), read without any fs call
+first (`parseProjectDir`): not given — absent, blank, or holding a variable a client left unexpanded (`spec.unexpandedVar`: any
+`${`, a leading `$NAME`, a `%NAME%` — only a whole `${VAR}` was caught, so with roots `$HOME` / `${workspaceFolder}/` went to the
+server's cwd) → the client's root when roots gave the default project, else left out (the engine's default); a relative `..`
+(never resolved away first), or a network `projectDir` (`isNetworkPath`: UNC `\\host\share`, `//host/share`, `\\?\UNC\…`,
 `\\.\UNC\…` and other device paths — refused before ANY fs call, argument errors included, so a tool call can't make
 the server open an SMB connection to a host it names or hang on an unreachable one; `\\?\C:\…` and WSL's `\\wsl$` /
-`\\wsl.localhost` are local) is refused. The default projectDir (cwd / env) and the CLI are not restricted.
+`\\wsl.localhost` are local), or a `file://` URI naming a host, is refused; a local `file://` URI (what roots/list hands a
+client) is its path (`fileUriToPath`); a RELATIVE path resolves from the client's root when roots chose the default (it went to
+the server's cwd — `.` from Claude Desktop scaffolded the app folder), else from the server's working folder. The folder must
+EXIST, as the CLI's `--project` (1.23 review L14): a missing one is refused (`project-missing`) — only `spec_init` creates one —
+and so is a file (`project-not-dir`): `spec_create` into a mistyped path built the whole tree there, `spec_list` on a file
+answered `{exists: false}`, a `file://` projectDir ended in ENOENT. The engine receives the absolute folder; `resolveProjectDir`
+is unchanged. The default projectDir (cwd / env / roots) and the CLI are not restricted by these rules.
+**Stable codes (1.24 r6 A-I2).** Every argument error is the tool's JSON `{ok: false, error, code, …}` (`argError`), `isError:
+true`: `unknown-argument` (+ `unknown` [{argument, didYouMean?}]) · `missing-arguments` (+ `missing` [names]) ·
+`invalid-arguments` (+ `invalid` — the paths, e.g. `["number", "evidence.exitCode"]`; arguments that aren't an object:
+`["arguments"]`) · `project-dotdot` · `project-network` · `project-uri` · `project-missing` · `project-not-dir`. Callers branch
+on the code (English, stable); the message is in the project language — the default project's for a projectDir refusal.
 Messages are localized in the project language (`msg(lang).args`). The engine
 still validates what schemas can't express (track names, AC IDs, paths). String enums the engine case-folds
 (`phase`, `lang`, `kind`, `action`) are trimmed + lowercased first (`foldEnumArgs`) — the CLI passes `Design` / `PT`
@@ -118,9 +146,14 @@ straight to the engine and the 1.12 MCP accepted them; `spec_import`'s `tool` st
 A schema `type` is always ONE string, never a list (`["string", "boolean"]` — not every MCP client handles list-valued
 types): `spec_init`'s `guard` is a plain string enum `on | off | scope`, and `foldEnumArgs` turns a boolean into
 `"on"` / `"off"` for any string enum holding both (the pre-1.14 `guard: true` keeps working).
-A tool that THROWS (a file system error — spec_init into a file, `.specs` being a file) answers the JSON every other refusal is
+A tool that THROWS (a file system error — `.specs` being a file) answers the JSON every other refusal is
 (1.23 — it was the bare text `ERROR: <message>`): `toolFailure()` → `{ok: false, error: args.toolFailed(<message>), code: <the
 error's code, e.g. ENOTDIR>}` with `isError: true`, in the project's language.
+**Compact results (1.24 r6 A-I1).** A tool's result text is `JSON.stringify(out)` — no indentation (`toolReply`, argument errors
+included). The indentation was what every agent paid in context on every call: measured on a realistic feature (core +tdd
++saas +sec — spec_doctor, spec_status, spec_task_brief, spec_next_action, trace_check {matrix}, spec_list, spec_roadmap,
+spec_create {includeBody}) the replies went from 40,529 to 31,435 characters (−22%; trace_check −42%, spec_status −32%; a reply
+that is mostly embedded markdown, create's bodies, barely changes). Every client parses the text as JSON; nothing reads its layout.
 
 ## Protocol (from Conventions & gotchas)
 - **Protocol**: stdio transport is newline-delimited JSON; messages must not contain embedded
@@ -156,7 +189,17 @@ error's code, e.g. ENOTDIR>}` with `isError: true`, in the project's language.
   completion/complete) — `rootsPending()` returns the wait and `deferUntil()` runs the request again once it settled, its reply
   going to its sink (a tools/call waits as an `inflight` entry: cancelled meanwhile, it never runs). Its first LOCAL `file://`
   root (`fileUriToPath`: no host but localhost, no `..`, no network path, on Windows a drive — `file:///C:/x`, VS Code's
-  `file:///c%3A/x`) is `rootsDir`: a tool call without its own projectDir (absent, blank or an unexpanded `${VAR}`) gets it as
-  `projectDir`, and resources / prompts / completions / argument messages read it (`defaultProjectDir()`). No usable root, an
+  `file:///c%3A/x`) is `rootsDir`: a tool call without its own projectDir (absent, blank or holding an unexpanded variable —
+  1.24 r6 A2: `spec.unexpandedVar`, any `${` / a leading `$NAME` / `%NAME%`, no longer a whole `${VAR}` only) gets it as
+  `projectDir`, a RELATIVE projectDir resolves from it (1.24 r6 A2 — Argument validation → projectDir), and resources / prompts /
+  completions / argument messages read it (`defaultProjectDir()`). No usable root, an
   error or no answer within `ROOTS_TIMEOUT_MS` (5 s) → `null`, the old default (cwd), not asked again until
   `notifications/roots/list_changed`. The engine's `resolveProjectDir` is untouched — the server passes the root as projectDir.
+- **The feature-lock wait (1.24 r6 A6).** The engine is synchronous: a call waiting for a feature lock another LIVE process holds
+  (a CLI `done`, another editor's server — conventions.md → the locks) froze the WHOLE server — pings, every other tool, a
+  pending approval's reply — for `DEV_SPEC_LOCK_WAIT_MS` (10 s by default). At start the server sets that variable to
+  `MCP_LOCK_WAIT_MS` (2 s) in its own environment when the user didn't set it: the engine reads it at every acquisition
+  (`lockWaitMs`), the server starts no child process, and an explicit `DEV_SPEC_LOCK_WAIT_MS` (a slow network file system) still
+  wins. Past it the call gets the usual localized busy refusal (`busy: true` — retry in a moment) — a lock is held for
+  milliseconds, so 2 s only fails on a real collision, where the client retrying beats a frozen server. Nothing else changes:
+  the CLI and the hooks keep 10 s (a terminal waiting freezes nothing else).

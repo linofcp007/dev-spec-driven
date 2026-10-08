@@ -31,7 +31,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   folder. A value holding a variable left unexpanded — any `${`, a leading `$NAME`, a `%NAME%` (`unexpandedVar()`) — is
   unusable and falls through (1.23 review: `SPEC_PROJECT_DIR="${CLAUDE_PROJECT_DIR}/"`, `$CLAUDE_PROJECT_DIR` or
   `%CLAUDE_PROJECT_DIR%` created that literal folder; only a whole `${VAR}` was caught). A separate project INSIDE another one
-  needs `--project .` (or its own `.specs/` first — an empty one is enough). The CLI validates `--project` itself (below); a
+  needs `--project .` (or its own `.specs/` first — an empty one is enough). The CLI validates `--project` itself (below), the
+  MCP server a tool's `projectDir` by the same rule (1.24 r6 — an existing folder, only spec_init creates one: mcp.md → Argument
+  validation); a
   PATH argument (`scan <path>`, `ears <file>`, `import <tool> <path>`) is read from the project when it was NAMED (`--project`
   or the env — as import always read it), else from the working folder (`argPath()`: a path typed in a subfolder is relative
   to it, as in git; import hands the engine that path relative to the project, which still refuses one outside it), and
