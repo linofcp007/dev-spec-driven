@@ -93,11 +93,16 @@ your machine and nothing runs remotely.
 The server resolves the project directory in this order:
 1. `SPEC_PROJECT_DIR` (set by the plugin's `mcp/servers.json` to `${CLAUDE_PROJECT_DIR}`)
 2. `CLAUDE_PROJECT_DIR`
-3. the process working directory
+3. the client's first local workspace root, when the client reports its roots (MCP `roots` — VS Code does)
+4. the nearest folder at or above the process working directory that holds a dev-spec `.specs/`
+5. the process working directory
 
+A variable the client left unexpanded (`${workspaceFolder}`, `$HOME`, `%CD%`) counts as not set.
 Every tool also accepts an explicit `projectDir` argument if you ever need to override it. It writes
-to `.specs/` in that project, and **never overwrites** existing files. An explicit `projectDir` must be a
-local folder: a network path (`\\host\share`, `//host/share`) is refused, so a tool call can never point the
+to `.specs/` in that project, and **never overwrites** existing files. An explicit `projectDir` must name an
+existing local folder (only `spec_init` creates one — a mistyped path is refused, never created), as a path or a
+local `file://` URI; a relative one is read from the client's root when the roots chose the project. A network
+path (`\\host\share`, `//host/share`) is refused, so a tool call can never point the
 server at another machine. A project that lives on a share can still be the server's working directory
 (or `SPEC_PROJECT_DIR`) — that is your own configuration, not a tool argument.
 
