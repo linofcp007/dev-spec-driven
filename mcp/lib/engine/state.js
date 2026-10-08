@@ -472,6 +472,10 @@ function roadmap(projectDir) {
 
 // One line: a line break in a backlog name or note became markdown structure (a heading) in ROADMAP.md and the export.
 const flatText = (s) => String(s || "").replace(/\s+/g, " ").trim();
+// 1.24 r6 (G4) — a feature NAME as a spec writes it (every title, a template's {{name}}): one line (flatText) and inert to HTML
+// comments — "<!--" / "-->" as &lt;!-- / --&gt; (a name holding "<!--" opened a comment in its titles that hid every criterion
+// of the scaffold; the summary and an imported title were already made inert). The slug is the name's, as before.
+const specNameText = (s) => flatText(s).replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;");
 function addBacklog(projectDir, name, note) {
   const nm = flatText(name);
   if (!nm) return { ok: false, error: errs(projectDir).nameRequired };
@@ -1299,7 +1303,7 @@ module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugi
   stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, wsText, sha1Hex, fingerprintMatches,
   BOM_CHAR, artifactMatches, uncheckTasks, phaseFile, FEATURE_SIZES, sizeInput, featureSize, isChangeDir, PLANNING_CEILING, PHASE_PERCENT, phasePercent, featurePercent,
   roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, setDependency, dependencyUnlocked,
-  roadmap, flatText, addBacklog, BACKLOG_NOTE_MAX, BACKLOG_NOTE_SEP, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked, BACKLOG_ACTIONS, backlog,
+  roadmap, flatText, specNameText, addBacklog, BACKLOG_NOTE_MAX, BACKLOG_NOTE_SEP, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked, BACKLOG_ACTIONS, backlog,
   roadmapLang, roadmapChromeLang, setRoadmapLang, RE_AUTOGEN, isGeneratedOrAbsent, writeRoadmapMd, writeRoadmapHtml,
   writeRoadmapFile, maybeRefreshRoadmap, roadmapReport, featureDirs, locateFeatures,
   // 1.21 F1a — the spec state's git merge driver

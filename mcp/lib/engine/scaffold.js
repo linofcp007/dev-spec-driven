@@ -29,7 +29,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
-  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite; // 1.23 review 5
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText; // 1.23 review 5 · 1.24 r6
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -47,7 +47,7 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
-  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite } = E); }
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText } = E); }
 
 // 1.23 review 5 — the first of `files` a write would reach through a link (a .specs/<feature>/ or .specs/steering/ that is a
 // symbolic link / junction, or resolves outside the real .specs/ — specsWriteContained) → that folder as `.specs/<rel>/`, else
@@ -616,16 +616,20 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   const existed = fs.existsSync(dir);
   // 1.23 review 5 — the name as the scaffolds write it (every title, {{name}}): ONE line, like a backlog name. A line break in it
   // opened a heading in every artifact ("Login\n## US-9 …\n- **US-9.AC-1** …" put a real criterion into requirements.md).
-  name = flatText(name);
+  // 1.24 r6 (G4): … and inert to HTML comments (specNameText: "<!--" / "-->" → &lt;!-- / --&gt;) — "Login <!-- v2" hid every
+  // criterion of its requirements.md behind the title's comment opener.
+  const nameIn = flatText(name);
+  name = specNameText(name);
   // … and never through a link: a .specs/<feature>/ that is a symbolic link / junction (or resolves outside .specs/) got every
   // scaffold — and later its ticks and approvals — written into the folder it points at.
   const linked = linkedSpecsFolder(projectDir, [statePath(dir)]);
   if (linked) return { ok: false, linked: true, error: errs(projectDir).specsLinked(linked) };
   // A folder name keeps the slug's first 64 characters: a long name that reaches an EXISTING feature holding another long name
   // (they differ only past the cut) is refused — the re-run used to answer ok and drop the new feature's summary silently.
-  if (existed && slugifyFull(name) !== slugify(name)) {
+  // (The title holds the name as written — inert since 1.24 r6, raw before: either reads as this name.)
+  if (existed && slugifyFull(nameIn) !== slugify(nameIn)) {
     const held = specTitle(readIfExists(path.join(dir, "requirements.md")) || readIfExists(path.join(dir, SPIKE_FILE)) || readIfExists(path.join(dir, "bug.md")) || "", slug);
-    if (held !== slug && slugifyFull(held) !== slugifyFull(name)) return { ok: false, slugTaken: true, feature: slug, error: errs(projectDir).slugTaken(slug, held, name) };
+    if (held !== slug && slugifyFull(held) !== slugifyFull(name) && slugifyFull(held) !== slugifyFull(nameIn)) return { ok: false, slugTaken: true, feature: slug, error: errs(projectDir).slugTaken(slug, held, nameIn) };
   }
   const pt = parseTracks(tracks);
   const given = pt.given;
@@ -1073,7 +1077,7 @@ function steeringImpactLines(r) {
 // append-if-missing, never a rewrite of what the user wrote.
 function applyTracks(projectDir, f, name, trs, lng) {
   const { slug, dir, root } = f;
-  name = flatText(name); // one line in every title it reaches (1.23 review 5)
+  name = specNameText(name); // one line in every title it reaches (1.23 review 5), inert to HTML comments (1.24 r6)
   const state = readState(projectDir, slug);
   if (state.invalid) return { ok: false, error: state.invalid };
   const coreSteering = steeringFilesForTracks([]);

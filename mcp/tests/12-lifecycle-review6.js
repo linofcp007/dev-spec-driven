@@ -214,4 +214,25 @@ exports.run = async ({ ok, rpc, payload, S, tmp, __dirname }) => {
       "1.24 r6 G3: the project velocity (spec_roadmap, ROADMAP.md, spec_metrics) keeps an archived feature's completions — the other features' ETAs survive the archive (got " +
       js({ before: [before.v.completed, before.next && before.next.eta], after: [after.v.completed, after.v.enough, after.next && (after.next.eta || after.next.reason)], metrics: after.m.completed }) + ")");
   }
+
+  // 1.24 r6 G4: a feature NAME holding "<!--" opened an HTML comment in every title it reached (# Feature: Login <!-- v2 …): the
+  // scaffold's criteria were hidden (trace 0 ACs) — the summary was made inert in 1.22, the name not. "<!--" / "-->" in a name are
+  // written as &lt;!-- / --&gt; wherever the name lands (titles, {{name}}; create, add_track, an import's given name); the slug
+  // is the name's, as before.
+  {
+    const p = fresh("name-comment");
+    const c = S.createFeature(p, "Login <!-- v2", ["core"], "Users can log in with email");
+    const plain = S.createFeature(p, "Login plain", ["core"], "Users can log in with email");
+    const d = S.createFeature(p, "Logout --> v3", ["core"], "Users can log out");
+    const at = S.addTrack(p, c.slug, "sec");
+    const imp = S.importSpec(p, "plan", null, { text: "# Plan\n\n## Steps\n1. Do `src/a.js`\n\n## Acceptance\n- WHEN a user logs in THE SYSTEM SHALL show the dashboard\n", name: "Import <!-- x" });
+    const heads = (dir) => ["requirements.md", "design.md", "tasks.md"].map((f) => rd(dir, f).split("\n")[0]);
+    const acs = (s) => S.traceCheck(p, s).totalAcs;
+    ok(c.ok && c.slug === "login-v2" && acs(c.slug) === acs(plain.slug) && acs(c.slug) > 0 && heads(c.dir).every((h) => /: Login &lt;!-- v2$/.test(h)) &&
+      d.ok && d.slug === "logout-v3" && heads(d.dir).every((h) => /: Logout --&gt; v3$/.test(h)) && at.ok && !/<!--/.test(rd(c.dir, "design.md").split("\n")[0]) &&
+      imp.ok && imp.feature === "import-x" && heads(path.join(p, ".specs", "import-x")).every((h) => /: Import &lt;!-- x$/.test(h)) && acs("import-x") === 1,
+      "1.24 r6 G4: '<!--' / '-->' in a feature name are written inert in every title (create, add_track, an import's given name) — the criteria stay visible (trace counts them), the slug is the name's (got " +
+      js([c.slug, acs(c.slug), acs(plain.slug), heads(c.dir), heads(d.dir), imp.feature]) + ")");
+  }
+
 };

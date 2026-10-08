@@ -19,7 +19,8 @@ and U+FEFF gotchas are in CLAUDE.md.
   feature whose title (`specTitle` of requirements.md / spike.md / bug.md) is another long name is refused (`slugTaken`,
   `err.slugTaken` — it names the slug, by which that feature stays reachable); it used to answer ok and drop the new summary.
   The name is written as ONE line wherever it lands (titles, `{{name}}` — `flatText`; createFeature, applyTracks, the
-  importer). **Never through a link:** `linkedSpecsFolder()` (scaffold.js, over `specsWriteContained`) refuses spec_init /
+  importer) and inert to HTML comments (1.24 r6 G4 — `specNameText`, state.js: `<!--` / `-->` → `&lt;!--` / `--&gt;`; "Login <!-- v2"
+  opened a comment in every title that hid the scaffold's criteria — the slug is the name's, as before). **Never through a link:** `linkedSpecsFolder()` (scaffold.js, over `specsWriteContained`) refuses spec_init /
   steering_scaffold through a linked `.specs/steering/`, and spec_create / add_track through a linked `.specs/<feature>/`
   (or its steering, when a track brings a steering file) — `linked: true`, `err.specsLinked`, nothing written (spec_export and
   templates init already refused); the export's Tasks table and the roadmap row read tasks.md through `readContained`.

@@ -136,7 +136,8 @@ trackers, release notes, milestones).
   at least one character per 3 bytes, so one over 3 × the cap is refused without being read whole; bytes are not characters (a
   2.1 MB file of CJK text under the cap imports whole).
 - **What an import writes (1.23 review 5):** the name — the caller's or the title's — is one line (`flatText`: a line break opened a
-  heading in every file's title); the active tracks' design blocks follow the imported design body through `appendSpecText` (an
+  heading in every file's title) and, once the feature is created, inert to HTML comments (`specNameText` — 1.24 r6 G4: a GIVEN
+  name's `<!--` opened a comment in every imported file's title; a title's `<!--` is escaped before its slug is taken, as ever); the active tracks' design blocks follow the imported design body through `appendSpecText` (an
   open code fence at its end closed first — a design ending inside a ```mermaid had the sections written into it), as do the
   packs' task blocks; an archived feature holding the same slug is a warning (`createArchivedTwin`); the roadmap is refreshed
   ONCE, after the imported files (createFeature's refresh skipped: `{ refresh: false }` — it rendered every feature twice).
