@@ -154,7 +154,11 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   record's time (`taskCompletedAt`); a box ticked by hand has no time and is not counted.
 - **Velocity** = points per WORKING day (Mon–Fri, UTC days) over the last `FORECAST_WINDOW_DAYS` = 28 calendar days,
   counted from the day of the window's first completion through today — project-wide, and per feature once it has
-  `FORECAST_MIN_TASKS` = 3 completions of its own in the window. **ETA** = open points ÷ velocity, in working days from
+  `FORECAST_MIN_TASKS` = 3 completions of its own in the window. **The project rate counts the ARCHIVED features' completions
+  too (1.24 r6 G3, `archivedCompletions()`):** their ticks happened — archiving a feature shipped this week wiped the velocity
+  (roadmap, spec_metrics) and turned every other feature's ETA into `not-enough-data`. An archived folder whose mtime is older
+  than the window (archiving writes its .state.json there, after every tick) is skipped unread; with `opts.now` fixed (tests)
+  every archived folder is read. **ETA** = open points ÷ velocity, in working days from
   today or from the working day after each unfinished dependency's ETA, with a ±`FORECAST_SPREAD` (25%) range (low/high
   chain off the dependencies' low/high). No ETA → `eta: null` + a stable `reason`: `not-enough-data` (< 3 completions in
   the window) · `no-tasks` · `dependency` · `cycle` · `done`. Surfaces: `spec_roadmap` (`velocity`, each feature's

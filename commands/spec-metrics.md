@@ -18,7 +18,7 @@ from `.state.json`, `.history/` and the artifacts — no model, no cost.
   last 28 days, `_Size:_`). A created date or rework flagged approximate / a lower bound comes from approvals made
   before the change history — say so.
 - **Without a name:** every feature plus averages, medians and totals, and the project's velocity (the rate the
-  roadmap's ETAs use; it needs 3 completed tasks in the window).
+  roadmap's ETAs use — archived features' completed tasks count too; it needs 3 completed tasks in the window).
 
 Present the numbers briefly and point at what they suggest (a phase approved three times, forced approvals,
 a low pass rate). **`write: true`** (with a name, usually after `/spec-finish`) creates

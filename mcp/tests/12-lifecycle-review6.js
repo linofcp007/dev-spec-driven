@@ -190,4 +190,28 @@ exports.run = async ({ ok, rpc, payload, S, tmp, __dirname }) => {
       "1.24 r6 G7: the refusal in the project's language (PT), on MCP (isError) and the CLI (exit 1, one line, no stack) (got " + js([cp.error, cli.status, cli.stderr.slice(0, 160)]) + ")");
   }
 
+  // 1.24 r6 G3: archiving a feature finished this week wiped the project velocity — the roadmap and spec_metrics counted the active
+  // folders alone, so every other feature's ETA turned "not enough data". The archived features' completions count too.
+  {
+    const p = fresh("velocity");
+    S.createFeature(p, "Shipped", ["core"], "Users can export a report");
+    S.createFeature(p, "Next", ["core"], "Users can import a report");
+    const now = Date.now();
+    const iso = (d) => new Date(now - d * 86400000).toISOString();
+    const sd = path.join(p, ".specs", "shipped");
+    fs.writeFileSync(path.join(sd, "tasks.md"), "# Tasks\n\n" + [1, 2, 3, 4, 5].map((n) => `- [x] ${n}. Step ${n}\n  - _Size: M_\n`).join(""));
+    const st = JSON.parse(rd(sd, ".state.json"));
+    st.ticks = { 1: iso(6), 2: iso(5), 3: iso(4), 4: iso(2), 5: iso(1) };
+    fs.writeFileSync(path.join(sd, ".state.json"), JSON.stringify(st, null, 2));
+    fs.writeFileSync(path.join(p, ".specs", "next", "tasks.md"), "# Tasks\n\n" + [1, 2, 3, 4].map((n) => `- [ ] ${n}. Step ${n}\n  - _Size: M_\n`).join(""));
+    const view = () => { const r = S.roadmapReport(p, {}); const rm = r.roadmap || r; return { v: rm.velocity, next: (rm.features.find((f) => f.name === "next") || {}).forecast, m: S.metrics(p, null, {}).velocity }; };
+    const before = view();
+    const a = S.manageFeature(p, "archive", "shipped");
+    const after = view();
+    const fixed = S.metrics(p, null, { now: new Date(now).toISOString() }).velocity; // opts.now: every archived folder read
+    ok(a.ok && before.v.completed === 5 && after.v.completed === 5 && after.v.enough === true && after.v.pointsPerDay === before.v.pointsPerDay &&
+      after.next && after.next.eta === before.next.eta && after.m.completed === 5 && fixed.completed === 5,
+      "1.24 r6 G3: the project velocity (spec_roadmap, ROADMAP.md, spec_metrics) keeps an archived feature's completions — the other features' ETAs survive the archive (got " +
+      js({ before: [before.v.completed, before.next && before.next.eta], after: [after.v.completed, after.v.enough, after.next && (after.next.eta || after.next.reason)], metrics: after.m.completed }) + ")");
+  }
 };

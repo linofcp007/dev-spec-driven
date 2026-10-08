@@ -17,7 +17,7 @@ same-named file dev-spec did not generate is never overwritten — the result is
 
 Report: each feature's tracks, phase, %, dependencies and whether they're met, blocked features, overall %, and
 any cycle; recommend the next unblocked feature. **Forecasts:** `velocity` (points per working day over the last 28
-days, from when tasks were ticked; `_Size: XS|S|M|L|XL_` = 1/2/3/5/8 points, unsized = the feature's median) and each
+days, from when tasks were ticked — archived features' ticks count too; `_Size: XS|S|M|L|XL_` = 1/2/3/5/8 points, unsized = the feature's median) and each
 feature's `forecast` — an ETA with a ±25% range, after its unfinished dependencies — or the `reason` there is none
 (`not-enough-data` until 3 tasks were completed in the window, `no-tasks`, `dependency`, `cycle`, `done`); present an
 ETA as an estimate, never a promise. **Overlaps:** pairs of active features whose open tasks plan the same files (or

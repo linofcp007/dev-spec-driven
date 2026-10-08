@@ -29,7 +29,7 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus, suiteSummaryLines,
   taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines, trackLabel,
   unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject, withMoveLock,
-  withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry;
+  withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions;
 function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
@@ -45,7 +45,7 @@ function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport, bugS
   spikeFinish, spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus,
   suiteSummaryLines, taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines,
   trackLabel, unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject,
-  withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry } = E); }
+  withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions } = E); }
 
 // ---------------------------------------------------------------------------
 // spec_finish — close a feature LOCALLY: readiness report + a merge summary generated from the spec chain
@@ -458,8 +458,9 @@ function metrics(projectDir, name, opts = {}) {
     batchApprovals: sum((m) => m.batchApprovals), // 1.14 B3
     changeRequests: sum((m) => m.changeRequests), reopenedTasks: sum((m) => m.reopenedTasks), openClarifications: sum((m) => m.openClarifications),
     evidenceRuns: runs, evidencePassing: passing, evidencePassRate: runs ? round1((passing / runs) * 100) : null };
-  // 1.14 B4 — the project velocity (every feature's completions: the roadmap forecasts' rate)
-  const velocity = velocityOf(list.features.flatMap((x) => forecastInput(projectDir, x.name).completions), (opts.now != null && timeOf(opts.now)) || Date.now());
+  // 1.14 B4 — the project velocity (every feature's completions: the roadmap forecasts' rate — 1.24 r6 G3: the archived ones' too)
+  const now = (opts.now != null && timeOf(opts.now)) || Date.now();
+  const velocity = velocityOf(list.features.flatMap((x) => forecastInput(projectDir, x.name).completions).concat(archivedCompletions(projectDir, now, opts.now != null)), now);
   return { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals, velocity };
 }
 

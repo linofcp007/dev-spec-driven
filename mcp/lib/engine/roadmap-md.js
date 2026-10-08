@@ -17,7 +17,7 @@ let activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSi
   round1, round2, sectionState, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats, supersedesTrace, taskBlocks,
   taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf, unverifiedLabel, verificationStatus,
   waiverView,
-  featureSize, trackSectionReport, sectionVerdict;
+  featureSize, trackSectionReport, sectionVerdict, featureDirs;
 function __link(E) { ({ activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSinceApproval,
   clarificationMarkers, detectTracks, duplicateTaskNumbers, flatText, FOLD_CASE, globMatcher, implementsRel,
   isImplementsGlob, isObj, isRecord, MILESTONE_ICON, milestoneAttention, milestoneInvalidInfo, milestoneLine,
@@ -25,7 +25,7 @@ function __link(E) { ({ activeDesign, activeSectionTracks, activeTasks, chainPla
   readRoadmap, roadmap, roleWaitList, round1, round2, sectionState, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats,
   supersedesTrace, taskBlocks, taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf,
   unverifiedLabel, verificationStatus, waiverView,
-  featureSize, trackSectionReport, sectionVerdict } = E); }
+  featureSize, trackSectionReport, sectionVerdict, featureDirs } = E); }
 
 // ---------------------------------------------------------------------------
 // ROADMAP.md renderer — a single always-current overview of all features
@@ -517,7 +517,27 @@ function velocityOf(completions, now) {
 }
 // One feature's forecast input: its completions, open points, open / unsized task counts (active tasks only).
 function forecastInput(projectDir, name) {
-  const dir = path.join(specsRoot(projectDir), name);
+  return forecastInputAt(path.join(specsRoot(projectDir), name));
+}
+// 1.24 r6 (G3) — the project velocity counts the ARCHIVED features' completions too: their ticks happened. Archiving a feature
+// shipped this week wiped the velocity (roadmap, spec_metrics) and every other feature's ETA with it ("not enough data"). An
+// archived folder last written before the window (its mtime — archiving writes its .state.json there, after every tick) holds no
+// completion inside it and is skipped unread — unless `now` is fixed (opts.now, the tests: every archived folder is read).
+function archivedCompletions(projectDir, now, fixedNow) {
+  const from = now - FORECAST_WINDOW_DAYS * FC_DAY_MS;
+  const out = [];
+  for (const fd of featureDirs(projectDir)) {
+    if (!fd.archived) continue;
+    if (!fixedNow) {
+      let m = null;
+      try { m = fs.statSync(fd.dir).mtimeMs; } catch { continue; }
+      if (m < from) continue;
+    }
+    for (const c of forecastInputAt(fd.dir).completions) out.push(c);
+  }
+  return out;
+}
+function forecastInputAt(dir) {
   const blocks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", detectTracks(dir)) || "");
   const st = readJson(statePath(dir)).data;
   const state = isObj(st) ? st : {};
@@ -544,7 +564,8 @@ function forecastData(projectDir, feats, opts = {}) {
   const input = Object.create(null);
   const feat = Object.create(null);
   for (const f of feats) { feat[f.name] = f; input[f.name] = forecastInput(projectDir, f.name); }
-  const velocity = velocityOf(Object.values(input).flatMap((x) => x.completions), now);
+  // the project's rate: every feature's completions, the archived ones' included (1.24 r6 G3)
+  const velocity = velocityOf(Object.values(input).flatMap((x) => x.completions).concat(archivedCompletions(projectDir, now, opts.now != null)), now);
   const inCycle = new Set(Array.isArray(opts.cycle) ? opts.cycle : []);
   const out = Object.create(null);
   const days = new Map(); // name → { eta, low, high } (UTC day ms) for the dependents' start
@@ -794,7 +815,7 @@ module.exports = { progressBar, mid, mlabel, cutText, ROADMAP_I18N, i18nLang, ht
   ROW_SCRATCH, rowStatSig, rowProjectSig, roadmapData, roadmapRow, buildAttention,
   roadmapTaskText, roadmapPhaseName, renderRoadmapMd, renderRoadmapHtml, SIZE_POINTS, RE_SIZE_VALUE,
   FORECAST_WINDOW_DAYS, FORECAST_MIN_TASKS, FORECAST_SPREAD, FC_DAY_MS, taskSize, taskCompletedAt, fcDay, fcWeekend,
-  fcIso, fcWorkingDays, fcAddWorkingDays, velocityOf, forecastInput, forecastData, featureVelocity, roadmapExtras,
+  fcIso, fcWorkingDays, fcAddWorkingDays, velocityOf, forecastInput, forecastInputAt, archivedCompletions, forecastData, featureVelocity, roadmapExtras,
   etaText, velocityText, roadmapTailLines, OVERLAP_MAX_KEYS, OVERLAP_MAX_GLOB_CHECKS, OVERLAP_MAX_REF_LEN,
   OVERLAP_MAX_GLOB_WORK, OVERLAP_MAX_PAIRS, OVERLAP_FILES_SHOWN, featureOverlaps, overlapFiles, overlapAttention,
   overlapDoctorDetail, __link };
