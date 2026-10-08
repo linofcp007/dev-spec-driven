@@ -402,7 +402,9 @@ const RE_ROOT_CAUSE_TASK = /(?<![\p{L}])(?:root[\s-]+cause|causa[\s-]+ra[ií]z)(
 // synonym (root cause / causa raiz / causa raíz) — and is not itself a fix: a task carrying _Makes green:_ or _Verify:_
 // never qualifies. A bare "root cause" mention is not enough: the template's own fix task ("Fix the root cause",
 // "Corrigir a causa raiz") would otherwise open the gate for itself once step 2 is reworded. Without such a task only
-// the first task can be completed. → null (allowed) or { gated: 'root-cause', error } (localized).
+// the first task can be completed — the scaffold today: the red regression test, then the fix (bug.md's Root Cause is
+// gated at the design approval); the root-cause task is a tasks.md scaffolded before (reproduce · root cause · test · fix)
+// or one the user wrote. → null (allowed) or { gated: 'root-cause', error } (localized).
 function bugfixGate(dir, kind, blocks, task, lng) {
   if (kind !== "bugfix" || !task || bugSectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN)) return null;
   const pos = blockPosition(blocks, task);

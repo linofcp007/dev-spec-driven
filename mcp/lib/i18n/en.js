@@ -835,14 +835,18 @@ ${a.summary || "[one line: the bug being fixed]"}
 `;
     },
 
-    bugTasks(name, size) {
-      // 1.21 F5 — an XS bugfix: no "reproduce" / "root cause" tasks — the requirements gate already needs bug.md → Reproduction
-      // (check `reproduction`) and the design gate its Root Cause (`root-cause`), both before the tasks can be approved; the
-      // execution gate (bugfixGate) still lets only task 1 through while Root Cause is empty. The iron law holds.
-      if (size === "xs") {
-        return `# Tasks: ${name}
+    bugTasks(name) {
+      // Every bugfix, any size: two tasks — the red regression test, then the fix. No "reproduce" / "root cause" tasks: the
+      // requirements gate already needs bug.md → Reproduction (check `reproduction`) and the design gate its Root Cause
+      // (`root-cause`), both before the tasks can be approved, so after the tasks approval the next task is the red test (they
+      // were tasks 1–2 of every bugfix but an XS one — 1.21 F5 — and next_action named them for work already done and gated).
+      // The execution gate (bugfixGate) still lets only task 1 through while Root Cause is empty. The iron law holds. A tasks.md
+      // scaffolded with the four tasks stays as it is and valid (markdown.js LEGACY_BUG_STEPS; bugfixGate's root-cause task).
+      return `# Tasks: ${name}
 
-<!-- XS bugfix: bug.md → Reproduction and Root Cause are written and approved first (the requirements and design gates).
+<!-- Bugfix order is fixed: reproduce → root cause → failing regression test → fix → verify. bug.md → Reproduction and
+     Root Cause are written and approved first (the requirements and design gates): no fix before the Root Cause is
+     filled with evidence.
      Task 1 is red by design (its test must FAIL): its _Verify:_ runs T-01 and _Expect: fail_ makes that failing run the
      proof (a passing run is refused). The must-pass suite belongs on the fix task (2).
      T-02 guards behavior that already works — green before and after the fix, so it is in no task's _Makes green:_. -->
@@ -856,33 +860,6 @@ ${a.summary || "[one line: the bug being fixed]"}
   - _Verify: [command that runs T-01]_
   - _Expect: fail_
 - [ ] 2. [US1] Fix the root cause — one change, not a bundle; guard test T-02 stays green
-  - _Requirements: US-1.AC-1, US-1.AC-2_
-  - _Makes green: T-01_
-  - _Verify: [full test suite command]_
-**Checkpoint:** the bug no longer reproduces and the full suite is green.
-`;
-      }
-      return `# Tasks: ${name}
-
-<!-- Bugfix order is fixed: reproduce → root cause → failing regression test → fix → verify.
-     No fix before bug.md → Root Cause is filled with evidence.
-     Task 3 is red by design (its test must FAIL): its _Verify:_ runs T-01 and _Expect: fail_ makes that failing run
-     the proof (a passing run is refused). The must-pass suite belongs on the fix task (4).
-     T-02 guards behavior that already works — green before and after the fix, so it is in no task's _Makes green:_. -->
-
-## Global Constraints
-- [exact values the fix must respect — versions, limits, formats]
-
-## Phase: Fix
-- [ ] 1. [shared] Reproduce the bug reliably and write the steps in bug.md → Reproduction
-  - _Requirements: US-1.AC-1_
-- [ ] 2. [shared] Find the root cause with evidence; fill bug.md → Root Cause (no fix yet)
-  - _Requirements: US-1.AC-1_
-- [ ] 3. [US1] Write regression test T-01 and watch it fail for the right reason (paste the output); add guard test T-02 (it passes already)
-  - _Requirements: US-1.AC-1_
-  - _Verify: [command that runs T-01]_
-  - _Expect: fail_
-- [ ] 4. [US1] Fix the root cause — one change, not a bundle; guard test T-02 stays green
   - _Requirements: US-1.AC-1, US-1.AC-2_
   - _Makes green: T-01_
   - _Verify: [full test suite command]_

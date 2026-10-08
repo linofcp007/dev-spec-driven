@@ -258,6 +258,6 @@ module.exports = {
   bugReport: (a, lang) => L(lang).bugReport(a),
   bugRequirements: (a, lang) => L(lang).bugRequirements(a),
   bugTestPlan: (name, lang) => L(lang).bugTestPlan(name),
-  bugTasks: (name, lang, size) => L(lang).bugTasks(name, size), // size "xs" (1.21 F5): no reproduce / root-cause tasks — their gates hold them
+  bugTasks: (name, lang) => L(lang).bugTasks(name), // one form for every size: the red regression test + the fix (no reproduce / root-cause tasks — their gates hold them)
   renderBrief,
 };

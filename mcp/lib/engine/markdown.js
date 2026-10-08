@@ -289,7 +289,20 @@ function renderTemplateTasks() {
 // The bugfix steps (every language). They ARE the method — kept verbatim, so never placeholders — but on a
 // fresh bugfix they don't mean "broken into tasks" yet: detectPhase counts them once the planning chain is filled.
 let BUG_STEPS = null;
-const renderBugSteps = () => i18n.LANGS.flatMap((l) => parseTasks(i18n.bugTasks("x", l)).map((t) => taskDescription(t.text)));
+// The two steps every bugfix but an XS one was scaffolded with before the short form (1. reproduce → bug.md → Reproduction,
+// 2. the root cause → bug.md → Root Cause — their gates hold them now), as taskDescription() reads them: EN · PT · pt-BR · ES.
+// A tasks.md scaffolded with them is never rewritten (spec_upgrade leaves it alone), so they stay bug steps: left out, they
+// would read as a real breakdown on such a fresh bugfix, and detectPhase would jump to tasks-ready before requirements.md.
+const LEGACY_BUG_STEPS = [
+  "reproduce the bug reliably and write the steps in bug.md → reproduction",
+  "find the root cause with evidence; fill bug.md → root cause (no fix yet)",
+  "reproduzir o bug de forma fiável e escrever os passos em bug.md → reprodução",
+  "reproduzir o bug de forma confiável e escrever os passos em bug.md → reprodução",
+  "encontrar a causa raiz com evidência; preencher bug.md → causa raiz (ainda sem corrigir)",
+  "reproducir el bug de forma fiable y escribir los pasos en bug.md → reproducción",
+  "encontrar la causa raíz con evidencia; rellenar bug.md → causa raíz (aún sin corregir)",
+];
+const renderBugSteps = () => [...LEGACY_BUG_STEPS, ...i18n.LANGS.flatMap((l) => parseTasks(i18n.bugTasks("x", l)).map((t) => taskDescription(t.text)))];
 function bugStepSet() {
   if (!BUG_STEPS) { const c = builtinCorpus(); BUG_STEPS = new Set(c ? c.bugSteps : renderBugSteps()); }
   return BUG_STEPS;
@@ -861,8 +874,9 @@ function templateCorpus(langs) {
     add(() => i18n.testPlan("x", l, VALID_TRACKS, ["US-1.AC-1"]));
     add(() => i18n.testPlan("x", l, ["core", "tdd"], [])); // requirements that define no AC yet: one generic row (Pa4)
     // 1.21 F5 — the sized builders (s: one story, the merged weigh section; m / l: the trimmed core design) and the change's one
-    // file, the XS bugfix's tasks. Their slots differ from the unsized ones only in the core parts — the track blocks and criteria
-    // are the same texts — so core alone, core +tdd and every track render each of them.
+    // file. Their slots differ from the unsized ones only in the core parts — the track blocks and criteria are the same
+    // texts — so core alone, core +tdd and every track render each of them. (The bugfix tasks have one form for every size —
+    // bugTasks below; the four-task form they replaced held no slot the current one doesn't.)
     for (const size of ["s", "m"]) {
       for (const tracks of [["core"], ["core", "tdd"], VALID_TRACKS]) {
         const a = { name: "x", tracks, label: trackLabel(tracks), slug: "x", summary: "", size };
@@ -874,7 +888,6 @@ function templateCorpus(langs) {
       }
     }
     add(() => i18n.change({ name: "x", summary: "" }, l));
-    add(() => i18n.bugTasks("x", l, "xs"));
     for (const tr of VALID_TRACKS) {
       add(() => i18n.trackDesignBlock(tr, l));
       add(() => M.tracks.taskBlock(tr, 1));
