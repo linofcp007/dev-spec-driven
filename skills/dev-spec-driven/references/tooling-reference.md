@@ -150,7 +150,8 @@ is checked like `--project` (a missing folder — `init` aside — or a file is 
 `.specs/` folder is never taken for the project. A path argument (`scan`, `ears`, `import`) is relative to the
 project when it was named, else to the working folder. Each command takes its own options and arguments — another option,
 one argument too many, or a single-value flag given twice (only `--add` / `--rm`, `--check`, `--req` / `--implements` /
-`--makes-green` / `--depends` and `--affects` / `--supersedes` repeat) is a usage error. `version` (or `--version` / `-V`)
+`--makes-green` / `--depends` and `--affects` / `--supersedes` repeat) is a usage error; `<command> --help` (or `-h`, or
+`help <command>`) prints that command's part of the help and its options. `version` (or `--version` / `-V`)
 prints the version, the CLI's path, the engine it runs on (its modules, or the bundle — and why a requested bundle was
 skipped), the project, which input chose it and its language. A reader that closes the output early (`| head`) ends it
 quietly. Switches take `--x` or `--x=true|false`
