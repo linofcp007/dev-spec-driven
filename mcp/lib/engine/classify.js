@@ -360,6 +360,26 @@ function guessLang(text, fallback) {
   if (i18n.baseLang(f) === g) return f;
   return g === "en" && best < 2 && en < 2 ? f : g;
 }
+// 1.24 r6 H-I4 — which Portuguese: the guess answers `pt` for both variants (the classifier reads them alike), but a summary in
+// Brazilian wording should get Brazilian artifacts. `langHint: "pt-BR"` (the `lang` key stays `pt` — a stable field) when the
+// Brazilian markers outweigh the European ones: STRONG (2) — você, usuário, arquivo, cadastro / cadastrar, celular, aplicativo,
+// planilha, deletar, gerenciar / gerenciamento, the ê / ô before m / n + a vowel (eletrônico, gênero, acadêmico, prêmio); WEAK (1) —
+// tela, equipe, registro, contato, salvar, baixar, "o / do / no time" (the team). European: utilizador, ficheiro, ecrã, telemóvel,
+// equipa, palavra-passe, registo, contacto, facto, secção / acção, descarregar, gerir, utente, "está a <infinitive>", the é / ó before
+// m / n + a vowel (electrónico, género, prémio). A hint for the agent, never a reading change (pt and pt-BR classify alike).
+const PTBR_STRONG = W("você|vocês|voce|voces|usuário|usuários|usuária|usuárias|arquivo|arquivos|cadastro|cadastros|cadastrar|cadastrado|" +
+  "cadastrada|celular|celulares|aplicativo|aplicativos|planilha|planilhas|deletar|deletado|gerenciar|gerencia|gerenciamento|gerenciador|" +
+  "\\p{L}*[êô][mn][aeiouí]\\p{L}*");
+const PTBR_WEAK = W("tela|telas|equipe|equipes|registro|registros|contato|contatos|salvar|baixar|(?:o|do|no|ao|nosso|seu|pelo) time");
+const PTPT_STRONG = W("utilizador|utilizadores|utilizadora|ficheiro|ficheiros|ecrã|ecrãs|telemóvel|telemóveis|equipa|equipas|palavra-passe|" +
+  "palavras-passe|registo|registos|contacto|contactos|facto|factos|secção|secções|acção|acções|descarregar|gerir|utente|utentes|" +
+  "(?:está|estão|estou|estamos|estar) a \\p{L}+r|\\p{L}*[éó][mn][aeiou]\\p{L}*");
+function ptVariantHint(text) {
+  const n = (re) => new Set((text.match(re) || []).map((m) => m.toLowerCase())).size;
+  const br = 2 * n(PTBR_STRONG) + n(PTBR_WEAK);
+  const eu = 2 * n(PTPT_STRONG);
+  return br >= 2 && br > eu ? "pt-BR" : null;
+}
 // The language the classifier reads a NEW feature's summary in (full review Pb2): the explicit one, else the project's
 // configured language (roadmap.json meta.lang, set by spec_init) — the language the feature is written in. Never the 'en'
 // fallback: a project without meta.lang keeps the guess. ("Corrigir o cálculo do IVA no checkout" in a PT project read
@@ -675,6 +695,108 @@ function protectedHead(text, start, end, loose) {
   }
   return false;
 }
+// WHAT FOLLOWS A NOMINAL NEGATION (1.24 r6 F5) — "no X" / "without X" / "sem X" / "sin X" excludes X only when nothing after it turns
+// the phrase into a statement about X:
+//   (a) a negative-quantifier SUBJECT with a finite verb: "No personal data is sent to the LLM provider", "Ensure no PII is written to
+//       the logs", "No API keys are logged", "No tenant can access another tenant's records", "Make sure no personal data ends up in the
+//       logs" — a requirement on X (EN "no" opening its stretch or after ensure / make sure / so / that…; PT / ES nenhum / ningún are no
+//       negators at all, so their twins were always kept). An adoption participle keeps the exclusion — "No Kafka is needed", "No LLM is
+//       used", "No feature flags will be added", "No auth needed" — unless X is data to protect ("No personal data is used for
+//       training": protectedHead, as for a negated verb — 1.21 verify P3);
+//   (b) data to protect kept out of a PLACE: "No secrets in the repository", "No PII in logs", "Sem dados pessoais nos logs", "Sin datos
+//       personales en los registros" — never a scope ("No personal data in this feature / in the MVP", "Sin datos personales en esta
+//       versión" still exclude), never the bare phrase ("No personal data.");
+//   (c) a NEGATIVE PREDICATE over "without X": a denying verb before it in the clause ("Reject requests without a valid access token",
+//       "Block logins without two-factor authentication", "Rejeitar pedidos sem…", "Rechazar peticiones sin…") or a negated / denying
+//       predicate after it ("Users without MFA must not access the admin panel", "Requests without a token are rejected", "Os
+//       utilizadores sem MFA não podem aceder…", "Los usuarios sin MFA no pueden acceder…") — a double negation, like "We won't ship
+//       without a canary release" (negationBlocked).
+const WITHOUT_WORDS = new Set(["without", "sem", "sin"]);
+// (c) the denying verbs — EN / PT / ES, their usual forms ("reject", "rejects", "rejected"…; never "blockchain", "negotiate")
+const RE_DENY_VERB = new RegExp("^(?:reject(?:s|ed|ing)?|refus(?:e|es|ed|ing)|den(?:y|ies|ied|ying)|block(?:s|ed|ing)?|forbid(?:s|den|ding)?|" +
+  "prohibit(?:s|ed|ing)?|prevent(?:s|ed|ing)?|disallow(?:s|ed|ing)?|" +
+  "rejeit(?:ar|a|am|ad[oa]s?)|recus(?:ar|a|am|ad[oa]s?)|neg(?:ar|a|am|ad[oa]s?)|bloque(?:ar|ia|iam|a|an|ad[oa]s?)|imped(?:ir|e|em|id[oa]s?)|" +
+  "pro[ií]b(?:ir|e|em|id[oa]s?)|rechaz(?:ar|a|an|ad[oa]s?)|deneg(?:ar|ad[oa]s?)|denieg(?:a|an)|nieg(?:a|an)|impid(?:e|en)|prohíb(?:e|en))$", "u");
+// (c) after the item: the copulas a denying participle follows ("are rejected", "são bloqueados", "son rechazadas")
+const DENY_COPULA = new Set(["is", "are", "was", "were", "be", "been", "get", "gets", "got", "é", "são", "será", "serão", "fica", "ficam", "es", "son",
+  "será", "serán", "queda", "quedan"]);
+// (c) PT / ES "não" / "no" + a modal or an access verb ("não podem", "não têm acesso", "no pueden", "no tienen acceso")
+const NEG_MODAL_PTES = new Set(["pode", "podem", "poderá", "poderão", "deve", "devem", "deverá", "deverão", "consegue", "conseguem", "tem", "têm",
+  "puede", "pueden", "podrá", "podrán", "debe", "deben", "deberá", "deberán", "tiene", "tienen", "acede", "acedem", "accede", "acceden"]);
+const NEG_PRED_WINDOW = 6; // (c) the words after the item a negated predicate may start within ("Admins without two-factor authentication cannot…")
+function negativePredicate(text, start, end) {
+  // a denying verb anywhere before the item in its clause (the clause, not the comma-free stretch: "Reject, with a 401, any request without…")
+  if (govWords(text, start, CUE_BOUNDARY).some((x) => RE_DENY_VERB.test(x))) return true;
+  const after = cueWords(cueAfter(text, end, CUE_BOUNDARY)).slice(0, NEG_PRED_WINDOW + 2).map((x) => x.toLowerCase());
+  for (let p = 0; p < after.length && p <= NEG_PRED_WINDOW; p++) {
+    const x = after[p];
+    if (/n['’]t$/.test(x) || x === "cannot" || NEVER_WORDS.has(x)) return true;
+    if (x === "not" && p > 0 && (GOVERN_DEONTIC.has(after[p - 1]) || GOVERN_AUX.has(after[p - 1]))) return true;
+    if ((x === "não" || x === "nao" || x === "no") && NEG_MODAL_PTES.has(after[p + 1])) return true;
+    if (p > 0 && DENY_COPULA.has(after[p - 1]) && RE_DENY_VERB.test(x)) return true;
+    if (WITHOUT_WORDS.has(x) || LIST_AND.has(x)) return false; // (another "without" / a new predicate: nothing of this item's)
+  }
+  return false;
+}
+// (a) the finite verbs after a negated subject: auxiliaries and modals (their next verb decides), and the verbs a datum's or a tenant's
+// requirement is written with ("leaks", "reaches", "ends up", "leaves", "can access"…)
+const SUBJECT_AUX = new Set(["is", "are", "was", "were", "will", "would", "may", "might", "can", "could", "must", "should", "shall", "has", "have",
+  "had", "does", "do", "gets", "get", "ever"]);
+const SUBJECT_VERBS = new Set(["leaks", "leak", "reaches", "reach", "leaves", "leave", "ends", "end", "goes", "go", "crosses", "cross", "flows",
+  "flow", "appears", "appear", "escapes", "escape", "travels", "travel", "passes", "pass", "lands", "land", "enters", "enter", "shows", "show",
+  "remains", "remain", "stays", "stay", "persists", "persist", "sees", "see", "accesses", "access", "reads", "read", "touches", "touch", "exceeds",
+  "exceed", "receives", "receive", "makes"]);
+// (a) the words that may follow the auxiliary before its verb ("will be added", "has been sent", "is ever written", "is never logged")
+const SUBJECT_AUX_GAP = new Set(["be", "been", "being", "ever", "never", "not", "get", "got", "also", "still"]);
+// (a) an adoption participle (or a "needed" adjective): the subject phrase states what is NOT adopted — "No Kafka is needed", "No LLM is
+// used", "No auth needed"
+const ADOPT_PARTICIPLES = new Set(["needed", "required", "necessary", "used", "added", "included", "introduced", "implemented", "supported",
+  "adopted", "integrated", "deployed", "run", "offered", "provided", "shipped", "created", "built", "involved", "enabled", "activated",
+  "installed", "embedded", "bundled", "exposed", "planned", "wanted", "allowed", "permitted", "expected", "considered", "involved"]);
+// (a) the words that end the subject phrase before any verb ("No Kafka, just…", "No LLM and the…", "No auth because…")
+const SUBJECT_END = new Set(["and", "but", "so", "because", "since", "as", "while", "though", "although", "just", "only", "instead", "unless",
+  "if", "when", "then", "yet", "except", "rather"]);
+// (a) the words after which an EN "no" opens a subject ("Ensure no PII is…", "Make sure no personal data…", "… so no PII reaches…")
+const SUBJECT_INTRO = new Set(["ensure", "ensures", "ensuring", "guarantee", "guarantees", "sure", "that", "so", "where", "and", "but",
+  "because", "since", "verify", "check", "assert", "confirm", "then"]);
+// (b) the prepositions of a place, and the scope words that make it no place ("in this feature", "in the MVP", "nesta versão")
+const PLACE_PREPS = new Set(["in", "into", "on", "to", "within", "inside", "em", "no", "na", "nos", "nas", "num", "numa", "para", "ao", "aos", "à",
+  "às", "dentro", "en", "al", "a"]);
+const SCOPE_WORDS = new Set(["this", "these", "feature", "features", "mvp", "scope", "release", "version", "v1", "v2", "phase", "iteration",
+  "sprint", "project", "prototype", "poc", "pilot", "milestone", "story", "ticket", "spec", "first", "initial", "beta", "launch", "esta", "este",
+  "estas", "estes", "isto", "esto", "funcionalidade", "funcionalidades", "funcionalidad", "âmbito", "alcance", "versão", "versión", "fase",
+  "projeto", "projecto", "proyecto", "protótipo", "prototipo", "piloto", "iteração", "iteración", "lançamento", "lanzamiento", "primeira",
+  "primeiro", "primera", "primero"]);
+const PLACE_SKIP = new Set(["the", "a", "an", "our", "its", "their", "any", "o", "os", "as", "um", "uma", "nosso", "nossa", "el", "la", "los",
+  "las", "un", "una", "nuestro", "nuestra"]);
+function nominalFollowRequires(text, start, end, words, j, lang) {
+  const w = words[j];
+  const en = w === "no" && i18n.baseLang(lang) !== "es";
+  if (!en && !WITHOUT_WORDS.has(w)) return false;
+  let prot;
+  const protect = () => (prot === undefined ? (prot = protectedHead(text, start, end, false)) : prot);
+  const after = cueWords(cueAfter(text, end, GOVERN_BOUNDARY)).slice(0, 10).map((x) => x.toLowerCase());
+  // (a) EN "no" opening a subject (never right after a verb: "WHEN the month has no invoices THE SYSTEM SHALL…" is an object)
+  if (en && (j === 0 || SUBJECT_INTRO.has(words[j - 1]))) {
+    for (let k = 0; k < after.length && k <= 4; k++) {
+      const x = after[k];
+      if (SUBJECT_AUX.has(x)) {
+        let p = k + 1;
+        while (p < after.length && p <= k + 3 && SUBJECT_AUX_GAP.has(after[p])) p++;
+        return !(ADOPT_PARTICIPLES.has(after[p]) || GOVERN_ADOPT.has(after[p])) || protect();
+      }
+      if (SUBJECT_VERBS.has(x)) return true;
+      if (ADOPT_PARTICIPLES.has(x) || GOVERN_ADOPT.has(x) || SUBJECT_END.has(x)) break;
+    }
+  }
+  // (b) data to protect kept out of a place (≤ 1 more word of its phrase before the preposition)
+  if (!protect()) return false;
+  const at = PLACE_PREPS.has(after[0]) ? 0 : PLACE_PREPS.has(after[1]) && !GOVERN_ADOPT.has(after[0]) && !ADOPT_PARTICIPLES.has(after[0]) ? 1 : -1;
+  if (at < 0 || (after[at] === "a" && i18n.baseLang(lang) === "en")) return false;
+  let q = at + 1;
+  while (q < after.length && PLACE_SKIP.has(after[q])) q++;
+  return q < after.length && !SCOPE_WORDS.has(after[q]) && !SCOPE_WORDS.has(after[at + 1]);
+}
 // WHOSE ADOPTION IS NEGATED (1.21 verify P1) — a verbal negation of an adoption verb excludes only when its SUBJECT is the one
 // designing: the first person ("We don't use Kafka", "Não usamos Kafka", "No usaremos ningún LLM"), the system being built ("The
 // service must not use Redis", "This feature does not require an LLM", "O sistema não deve usar Redis") or none at all (an imperative, an
@@ -895,9 +1017,13 @@ function negationOf(text, start, end, lang, cased) {
   if (LIST_NEG.has(w)) return words.slice(j + 1).every(passWord) && !negationBlocked(text, words, j, end, pt) ? { word: w, conj: true } : null;
   if (w === "no" && j + 1 < words.length && NEG_FILLER.has(words[j + 1]) && !NEG_FILLER_EN.has(words[j + 1])) return null;
   if (negationBlocked(text, words, j, end, pt)) return null;
+  // (1.24 r6 F5 (c)) a negative predicate over "without X" — "Reject requests without a valid access token", "Users without MFA must not…"
+  if (WITHOUT_WORDS.has(w) && negativePredicate(text, start, end)) return null;
   const contrast = j === 0 && (seg.afterComma || (w === "not" && seg.sentenceStart));
   const k = negationKind(words, j, words.length, lang, { contrast, protectedHead: (loose) => protectedHead(text, start, end, loose) });
   if (k !== "exclude") return null;
+  // (1.24 r6 F5 (a) / (b)) what follows the item — "No personal data is sent…", "No secrets in the repository"
+  if (nominalFollowRequires(text, start, end, words, j, lang)) return null;
   // (1.21 verify P1) a role's / a plan's negated adoption is an access or entitlement rule: the track stays
   const from = subjectDecides(words, j, lang, contrast);
   return from >= 0 && subjectKeeps(text, start, words, j, from, pt) ? null : { word: w, conj: false };
@@ -1392,6 +1518,8 @@ function classify(description, opts = {}) {
     notes,
     mode: opts.mode || "spec",
     lang, // the language notes/reasoning were written in (explicit, or guessed from the text)
+    // 1.24 r6 H-I4: Brazilian wording read as `pt` — the agent passes lang "pt-BR" to spec_init / spec_create (absent otherwise)
+    ...(lang === "pt" && ptVariantHint(text) ? { langHint: "pt-BR" } : {}),
     reasoning: buildReasoning(tracks, signals, confidence, negated, C, OPT),
   };
   // 1.21 F5: the suggested size (a deterministic reading — stable `sizeReason`; the localized sentence in `sizeNote`, never in notes)

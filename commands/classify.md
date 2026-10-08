@@ -24,3 +24,6 @@ the suggestion is recorded as a correction for this project; `size` is the one t
 - **Size s or xs:** no `classification.md` and no classification gate — record the decisions (mode, tracks, size, blast
   radius) in the Summary of `requirements.md` (s) or `change.md` (xs, a one-file change). Size s approves its whole plan in
   one call once it is filled, xs its `change.md` plan — `spec_next_action` names the call.
+
+`spec_classify`'s `lang` is the language it read (`pt` for any Portuguese); a `langHint: "pt-BR"` says the wording is
+Brazilian — pass `lang: "pt-BR"` to `spec_init` / `spec_create` then.

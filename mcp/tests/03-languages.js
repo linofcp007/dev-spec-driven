@@ -375,4 +375,23 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
       "1.24 r6 H8 + H9: pt-BR — revisto/revista(s) → revisado(s)/revisada(s); '+N mais'; ecrã → tela with its article (no/num/o/um/os/do seu/teu → na/em uma/a/uma/as/da sua); PT changeApproach asks why that is all of it (got " +
       JSON.stringify({ revBr, more: I.msg("pt").gates.more(3), ecra, ptA, brA }) + ")");
   }
+
+  { // 1.24 r6 H-I4: spec_classify reads pt and pt-BR alike (lang stays "pt" — a stable field) and says which one the wording is:
+    // `langHint: "pt-BR"` when the Brazilian markers outweigh the European ones (você, usuário, arquivo, tela, cadastrar, "o time"…);
+    // none for European wording, another language or an explicit lang pt-BR
+    const brText = "Permitir que o usuário faça upload de um arquivo na tela de cadastro";
+    const br = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: brText } }));
+    const team = S.classify("Você pode exportar a planilha do time de vendas", {});
+    const eu = S.classify("Permitir que o utilizador carregue um ficheiro no ecrã de registo", {});
+    const es = S.classify("Exportar facturas en PDF para el cliente", {});
+    const en = S.classify("Add a CSV export for the time sheet", {});
+    const explicitBr = S.classify(brText, { lang: "pt-BR" });
+    const explicitPt = S.classify(brText, { lang: "pt" });
+    const accents = [S.classify("Relatório eletrônico de vendas", {}), S.classify("Relatório electrónico de vendas", {})];
+    ok(br.lang === "pt" && br.langHint === "pt-BR" && team.langHint === "pt-BR" && eu.lang === "pt" && !("langHint" in eu) && !("langHint" in es) &&
+      !("langHint" in en) && explicitBr.lang === "pt-BR" && !("langHint" in explicitBr) && explicitPt.langHint === "pt-BR" &&
+      accents[0].langHint === "pt-BR" && !("langHint" in accents[1]) && JSON.stringify(br.tracks) === JSON.stringify(S.classify(brText, {}).tracks),
+      "1.24 r6 H-I4: Brazilian wording gets langHint 'pt-BR' (lang stays 'pt'; MCP = engine) — você / usuário / arquivo / tela / cadastro, 'o time', eletrônico; European wording, ES, EN and an explicit pt-BR get none (got " +
+      JSON.stringify([br.lang, br.langHint, team.langHint, eu.langHint, es.langHint, explicitBr.langHint, explicitPt.langHint, accents.map((r) => r.langHint)]) + ")");
+  }
 };

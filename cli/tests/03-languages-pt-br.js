@@ -50,4 +50,11 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   ok(clsBr && clsBr.lang === "pt-BR" && clsBr.tracks.join() === "core,tdd" && JSON.stringify(clsBr) === JSON.stringify(SD1.classify("Cadastro de usuários com senha, sem LLM", { lang: "pt-BR" })) &&
     clsGuess && clsGuess.lang === "pt" && clsGuess.tracks.join() === "core,tdd,ai",
     "classify --lang pt-BR answers in pt-BR (= spec_classify); Brazilian words alone guess 'pt' — 'no LLM' is em+o, +ai on");
+  // 1.24 r6 H-I4: `classify --json` carries spec_classify's langHint — "pt-BR" for Brazilian wording read as pt; none for European wording
+  // or an explicit --lang pt-BR
+  const clsEu = jsonOf(run(["classify", "Registo do utilizador com palavra-passe e ficheiro no ecrã", "--json"]));
+  ok(clsGuess && clsGuess.langHint === "pt-BR" && clsBr && !("langHint" in clsBr) && clsEu && clsEu.lang === "pt" && !("langHint" in clsEu) &&
+    JSON.stringify(clsGuess) === JSON.stringify(SD1.classify("Cadastro do usuário: senha, arquivo e tela, com resumo no LLM")),
+    "1.24 r6 H-I4: classify --json says langHint 'pt-BR' for Brazilian wording (lang stays 'pt' — = spec_classify); none for European wording or --lang pt-BR (got " +
+    JSON.stringify([clsGuess && clsGuess.langHint, clsBr && clsBr.langHint, clsEu && clsEu.langHint]) + ")");
 };

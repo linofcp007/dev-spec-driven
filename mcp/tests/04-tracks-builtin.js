@@ -1699,4 +1699,142 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       `1.21 F2a: precision / recall on ${F2.length} EN / PT / ES texts (the verification's misses and false positives + hard negatives) ≥ 95% per track — ` +
       f2.map((x) => `+${x.tr} ${(x.precision * 100).toFixed(0)}% / ${(x.recall * 100).toFixed(0)}% (${x.pos} positives)`).join(", ") + " (got " + js(f2.flatMap((x) => x.wrong)) + ")");
   }
+
+  { // 1.24 r6 — the classifier findings of the sixth review: negation (F5 / F-I6) and recall (F6 / F-I5), EN / PT / ES
+    const js = (v) => JSON.stringify(v);
+    const onOf = (t, tr) => S.classify(t, {}).tracks.includes(tr);
+    const P = (tr, list) => list.map((t) => [tr, t, true]), N = (tr, list) => list.map((t) => [tr, t, false]);
+    const wrongOf = (rows) => rows.filter(([tr, t, want]) => onOf(t, tr) !== want).map(([tr, t, want]) => (want ? "FN +" : "FP +") + tr + " " + t);
+
+    // 1.24 r6 F5 / F-I6: a negative-quantifier SUBJECT with a finite verb ("No personal data is sent…", "Ensure no PII is written…"), data to
+    // protect kept out of a PLACE ("No secrets in the repository", "Sem dados pessoais nos logs") and a NEGATIVE PREDICATE over "without X"
+    // ("Reject requests without a valid access token", "Users without MFA must not access…") state a requirement — the track stays, EN / PT / ES
+    // alike (PT / ES nenhum / ningún never negated). The genuine exclusions stay off: a bare "No personal data.", a scope ("in this feature",
+    // "nesta funcionalidade", "en esta versión"), an adoption participle ("No LLM is needed", "No Kafka or RabbitMQ is required", "No personal
+    // data needed"), "We don't use Kafka".
+    const NEG = [
+      ...P("privacy", ["No personal data is sent to the LLM provider", "Nenhum dado pessoal é enviado para o fornecedor do LLM",
+        "Ningún dato personal se envía al proveedor del LLM", "Ensure no PII is written to the logs", "Make sure no personal data ends up in the logs",
+        "No personal data may leave the EU", "No PII in logs; mask emails before logging", "Sem dados pessoais nos logs", "Sin datos personales en los registros",
+        "Mask card numbers so no PII reaches the analytics provider", "No personal data is shared with third parties", "Ensure no PII ends up in the analytics events",
+        "Garantir que nenhum dado pessoal é partilhado com terceiros", "Sin datos personales en las URLs"]),
+      ...P("sec", ["No API keys are logged", "No secrets in the repository; load them from the vault", "Sem segredos no repositório; carregá-los do cofre",
+        "Sin secretos en el repositorio; cargarlos desde el vault", "Reject requests without a valid access token",
+        "Rejeitar pedidos sem um token de acesso válido", "Rechazar peticiones sin un token de acceso válido",
+        "Block logins without two-factor authentication for admins", "Bloquear logins sem autenticação de dois fatores para administradores",
+        "Bloquear inicios de sesión sin autenticación de doble factor para administradores", "Users without MFA must not access the admin panel",
+        "Admins without MFA must not access billing", "Utilizadores sem MFA não podem aceder ao painel de administração",
+        "Los usuarios sin MFA no pueden acceder al panel de administración", "Requests without a valid token are rejected with 401",
+        "Nobody can access invoices without authentication", "No unauthenticated access to the reports", "No access tokens are written to the logs",
+        "Users without two-factor authentication cannot approve payments", "Block API calls without a valid token"]),
+      ...P("saas", ["Ensure no tenant can access another tenant's records", "No tenant may see another tenant's data", "No tenant data leaks across workspaces",
+        "Nenhum inquilino pode ver os dados de outro inquilino", "Ningún inquilino puede ver los datos de otro"]),
+      ...N("privacy", ["No personal data.", "Internal sales report without any personal data", "No personal data in this feature",
+        "Sem dados pessoais nesta funcionalidade", "Sin datos personales en esta versión", "No personal data needed for the leaderboard",
+        "Anonymous leaderboard: no personal data", "Widget do tempo sem dados pessoais"]),
+      ...N("ai", ["No LLM is needed for this feature", "No LLM, the checkout first", "We will not add an LLM.", "No LLM is used in this version",
+        "Rules engine only, no AI"]),
+      ...N("dist", ["No Kafka is needed; a Postgres table is enough.", "We don't use Kafka.", "No Kafka or RabbitMQ is required."]),
+      ...N("sec", ["No secrets manager in the MVP"]),
+    ];
+    const negWrong = wrongOf(NEG);
+    const sub = S.classify("No personal data is sent to the LLM provider", {});
+    const ears = S.classify("WHEN the month has no invoices THE SYSTEM SHALL return a header-only CSV.", {});
+    ok(negWrong.length === 0 && !sub.negated.privacy.length && sub.tracks.includes("ai") && !ears.tracks.includes("tdd"),
+      "1.24 r6 F5 / F-I6: 'No personal data is sent…', 'Ensure no PII is written…', 'No API keys are logged', 'No secrets in the repository', 'Reject requests without a valid access token', 'Users without MFA must not access…', 'No tenant can access another tenant's records' (EN / PT / ES) keep their track; 'No personal data.', a scope, 'No LLM is needed', 'We don't use Kafka' and an object's 'has no invoices' still exclude (got " +
+      js(negWrong) + ")");
+
+    // 1.24 r6 F6 / F-I5: the recall corpus — obvious one-liners per track per language must get their track, the hard negatives must not
+    // (the reviewer's 45 one-liners, recall 3 / 21 +ai, 0 / 12 +privacy, 0 / 12 +sec before)
+    const RECALL = [
+      ...P("ai", ["Add AI-generated replies to support tickets", "Use AI to tag uploaded photos", "AI summaries of long email threads",
+        "Add AI-powered search to the help center", "Generate image captions with a vision model", "Transcribe voice notes with Whisper",
+        "Speech-to-text for meeting recordings", "Sentiment analysis of customer reviews", "OCR the uploaded receipts and extract the totals",
+        "Detect objects in camera frames with computer vision", "Agentic workflow that books meetings on the user's behalf",
+        "Use Llama 3 running locally to tag products", "Use DeepSeek to summarize reports",
+        "Let users ask questions about their documents with retrieval-augmented generation", "An AI agent that triages incoming support emails",
+        "Extract invoice fields from scanned PDFs with OCR", "Voice search in the mobile app using speech recognition", "Use computer vision to count people entering the store"]),
+      ...P("ai", ["Gerar respostas automáticas com IA para os tickets", "Usar IA para etiquetar fotos", "Resumos gerados por IA das reuniões",
+        "Transcrever notas de voz com reconhecimento de fala", "Análise de sentimento das avaliações dos clientes", "Ler as faturas digitalizadas com OCR",
+        "Detetar objetos nas imagens da câmara com visão computacional", "Um agente de IA que marca reuniões pelo utilizador",
+        "Pesquisa com geração aumentada por recuperação nos documentos", "Converter fala em texto nas gravações das reuniões com o Whisper"]),
+      ...P("ai", ["Generar respuestas con IA para los tickets de soporte", "Usar IA para etiquetar las fotos subidas", "Resúmenes generados por IA de las reuniones",
+        "Convertir voz a texto en las grabaciones de reuniones", "Análisis de sentimiento de las reseñas de clientes", "Leer los recibos escaneados con OCR",
+        "Detectar objetos en las imágenes de la cámara con visión artificial", "Reconocimiento de voz para las notas del médico",
+        "Un agente de IA que reserva reuniones por el usuario", "Búsqueda con generación aumentada por recuperación sobre los documentos"]),
+      ...N("ai", ["El cliente llama al servicio de pagos tres veces", "The llama farm sells wool online", "Translate the UI into Spanish",
+        "Llama al proveedor cuando falle el pago", "Information architecture (IA) review of the docs navigation and sitemap",
+        "Add an 'AI' badge on products tagged as Adobe Illustrator files", "Add a whisper-quiet mode toggle to the fan controller settings",
+        "Whisper messages to other players in the guild", "Transcribe the interview notes"]),
+      ...P("privacy", ["Store health records of patients", "Store patients' medical records", "Keep patient data for 10 years",
+        "Users upload their ID documents for KYC verification", "Collect users' home addresses and dates of birth", "Track users' location in the background",
+        "Store biometric fingerprints for login", "Collect national insurance numbers and SSNs for payroll", "Ask for the guest's passport number at check-in",
+        "Show the user's location on a map to nearby drivers", "Store the patient's medical history and allergies", "Keep employees' social security numbers for tax filings"]),
+      ...P("privacy", ["Guardar os registos médicos dos pacientes", "Guardar os dados dos pacientes durante 10 anos", "Pedir o cartão de cidadão para a verificação KYC",
+        "Recolher as moradas e as datas de nascimento dos clientes", "Mostrar a localização do utilizador aos motoristas próximos",
+        "Guardar o histórico médico dos utentes", "Recolher o número de segurança social para o processamento salarial", "Prontuário eletrônico do paciente",
+        "Guardar dados biométricos e impressões digitais", "Localização dos utilizadores em segundo plano"]),
+      ...P("privacy", ["Guardar el historial clínico de los pacientes", "Conservar los datos de los pacientes durante 10 años",
+        "Los usuarios suben su documento de identidad para la verificación KYC", "Recoger el domicilio y la fecha de nacimiento de los clientes",
+        "Seguimiento de la ubicación de los usuarios en segundo plano", "Pedir el número de la seguridad social para las nóminas",
+        "Guardar los expedientes médicos de los pacientes", "Mostrar la ubicación del usuario a los conductores cercanos",
+        "Guardar las huellas dactilares y los datos biométricos", "Pedir el DNI y el pasaporte en el registro de huéspedes"]),
+      ...N("privacy", ["Track the parcel location on the map", "Show the NIF on the invoice PDF", "Add a content fingerprint to each build artifact",
+        "Mostrar o NIF na fatura", "Use Passport.js for the login strategy", "Track the location of each delivery truck on the map",
+        "Show the shipping address on the packing slip", "Patient queue screen for the waiting room"]),
+      ...P("sec", ["Store customers' credit card numbers for one-click purchases", "Save cardholder data for recurring billing", "Add login with Google (OAuth)",
+        "Let admins impersonate users for support", "Users can share documents via public links", "Hash passwords with bcrypt",
+        "Rotate the database credentials every 30 days", "Sign webhooks with HMAC so receivers can verify them", "Verify the signature of incoming webhooks",
+        "Prevent unauthorized access to the admin API", "Add an admin panel to manage user roles and permissions", "Anyone with the link can view the shared report",
+        "Store card numbers in a PCI-compliant vault", "Rotate the signing keys every 90 days"]),
+      ...P("sec", ["Guardar os números dos cartões de crédito dos clientes", "Assinar os webhooks com HMAC", "Personificar utilizadores para dar suporte",
+        "Encriptar as palavras-passe com bcrypt", "Rotação das credenciais da base de dados a cada 30 dias", "Partilhar documentos através de links públicos",
+        "Impedir o acesso não autorizado à API de administração", "Verificar a assinatura dos webhooks recebidos", "Iniciar sessão com o Google (OAuth)",
+        "Guardar os dados do titular do cartão para a faturação recorrente"]),
+      ...P("sec", ["Guardar los números de tarjeta de los clientes", "Firmar los webhooks con HMAC", "Suplantar a los usuarios desde el panel de soporte",
+        "Cifrar las contraseñas con bcrypt", "Rotación de las credenciales de la base de datos cada 30 días", "Compartir documentos mediante enlaces públicos",
+        "Impedir el acceso no autorizado a la API de administración", "Verificar la firma de los webhooks entrantes", "Iniciar sesión con Google (OAuth)",
+        "Guardar los datos del titular de la tarjeta para la facturación recurrente"]),
+      ...N("sec", ["Add a public link to the docs in the footer", "Rotate the product image 90 degrees", "Upload a file to attach to the ticket",
+        "Add password reset by email", "Add a share link to each blog post", "Verify that the signature field is filled in the PDF form",
+        "Rotate the key art banner every week", "Rotate the carousel images every five seconds", "Upload a profile picture"]),
+      // +saas: the EN tenant is as strong as PT / ES inquilino; a tenant who rents a home is no signal in any language
+      ...P("saas", ["Each tenant sees only its own invoices", "Show the tenant name in the header", "Tenants must never see each other's data",
+        "Cada inquilino vê apenas as suas faturas", "Cada inquilino ve solo sus facturas", "Mostrar o nome do inquilino no cabeçalho",
+        "Every query must be scoped to the current tenant"]),
+      ...N("saas", ["Tenants pay their rent online and report repairs to the landlord", "Os inquilinos pagam a renda online ao senhorio",
+        "Los inquilinos pagan el alquiler online al casero", "Os inquilinos assinam o contrato de arrendamento online"]),
+    ];
+    const stats = ["ai", "privacy", "sec", "saas"].map((tr) => {
+      const rows = RECALL.filter(([x]) => x === tr);
+      const tp = rows.filter(([, t, w]) => w && onOf(t, tr)).length, fp = rows.filter(([, t, w]) => !w && onOf(t, tr)).length;
+      const pos = rows.filter(([, , w]) => w).length;
+      return { tr, pos, neg: rows.length - pos, precision: tp / (tp + fp || 1), recall: tp / (pos || 1) };
+    });
+    const recWrong = wrongOf(RECALL);
+    ok(RECALL.length >= 120 && stats.every((x) => x.pos >= 15 || x.tr === "saas") && recWrong.length === 0,
+      `1.24 r6 F6 / F-I5: the recall corpus (${RECALL.length} EN / PT / ES one-liners) — ` +
+      stats.map((x) => `+${x.tr} ${(x.precision * 100).toFixed(0)}% / ${(x.recall * 100).toFixed(0)}% (${x.pos} positives, ${x.neg} hard negatives)`).join(", ") + " (got " + js(recWrong) + ")");
+
+    // EN / PT / ES twins classify alike (the reviewer's pairs): a tenant = an inquilino, the negation readings
+    const twins = [["Each tenant sees only its own invoices", "Cada inquilino vê apenas as suas faturas", "Cada inquilino ve solo sus facturas"],
+      ["Show the tenant name in the header", "Mostrar o nome do inquilino no cabeçalho", "Mostrar el nombre del inquilino en la cabecera"],
+      ["No personal data is sent to the LLM provider", "Nenhum dado pessoal é enviado para o fornecedor do LLM", "Ningún dato personal se envía al proveedor del LLM"],
+      ["Reject requests without a valid access token", "Rejeitar pedidos sem um token de acesso válido", "Rechazar peticiones sin un token de acceso válido"]];
+    const twinLabels = twins.map((row) => row.map((t) => S.classify(t, {}).label));
+    ok(twinLabels.every((row) => row.every((l) => l === row[0])),
+      "1.24 r6 F-I5: EN / PT / ES twins get the same tracks — a tenant is as strong as an inquilino; the requirement negations read alike (got " + js(twinLabels) + ")");
+
+    // the signals are data: an "AI" / "IA" in capitals is strong, a lower-case "ai" / "ia" stays weak; a sec hazard is never negated; the
+    // concepts fold one idea into one signal
+    const lower = S.classify("use ai to tag photos", {});
+    const hazard = S.classify("No unauthorized access to the reports", {});
+    const login = S.classify("Social login: sign in with Google", {});
+    ok(S.trackSignals("ai").strong.includes("AI") && S.trackSignals("ai").weak.includes("ai") && !lower.tracks.includes("ai") &&
+      lower.possible.some((p) => p.track === "ai") && hazard.tracks.includes("sec") && !hazard.negated.sec.length &&
+      S.trackSignals("saas").strong.includes("tenant") && !S.trackSignals("saas").weak.includes("tenant") && !login.tracks.includes("sec") &&
+      S.signalConcept("sec", "social login") === S.signalConcept("sec", "sign in with google"),
+      "1.24 r6 F-I5: 'AI' in capitals strong, 'ai' weak (a hint); 'No unauthorized access' keeps +sec (a hazard); tenant strong; one federated-login concept (got " +
+      js([lower.label, hazard.label, hazard.negated.sec, login.label]) + ")");
+  }
 };

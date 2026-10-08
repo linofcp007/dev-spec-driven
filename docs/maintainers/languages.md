@@ -21,7 +21,14 @@ reaches pt-BR with nothing else to change. **When you add or edit a PT string, r
 into `RE_PTBR_NOT_IMPERATIVE`, a missed word into `PTBR_WORDS` / `PTBR_PHRASES`, anything else into `PTBR_OVERRIDES`;
 `mcp/test.js` (pD1) lints every pt-BR string (no European-only vocabulary, English-stable tokens byte-identical,
 idempotent). Readers that match PT headings/keywords match pt-BR too (`baseLang()`); the classifier's language guess
-counts Brazilian markers but still answers `pt`. Project templates for it live in `.specs/templates/pt-BR/`.
+counts Brazilian markers but still answers `pt` (a stable field — pt and pt-BR classify alike). **1.24 r6 H-I4:** when the
+Brazilian markers outweigh the European ones, `spec_classify` (= `classify --json`) adds **`langHint: "pt-BR"`** (absent
+otherwise — never with an explicit `pt-BR`; `ptVariantHint()` in engine/classify.js: STRONG = você, usuário, arquivo, cadastro /
+cadastrar, celular, aplicativo, planilha, deletar, gerenciar, an ê / ô before m / n + a vowel — eletrônico, gênero; WEAK = tela,
+equipe, registro, contato, salvar, baixar, "o / do / no time"; European = utilizador, ficheiro, ecrã, telemóvel, equipa,
+palavra-passe, registo, contacto, facto, secção, descarregar, gerir, utente, "está a <infinitive>", é / ó before m / n — a hint
+at ≥ 2 points and more than the European count). The agent then passes `lang: "pt-BR"` to spec_init / spec_create (SKILL.md →
+Language; commands/classify.md). Project templates for it live in `.specs/templates/pt-BR/`.
 The EN templates are **not** frozen: 1.13 changed them on purpose (every template AC planned + tasked, track ACs under
 `[SaaS]`/`[AI]` headings, the test plan's Kind column…). When you change a template, change EN / PT / ES together
 (and pt-BR where it overrides that text) and keep the tests that round-trip a PT and an ES scaffold through doctor green.
