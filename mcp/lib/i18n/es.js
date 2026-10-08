@@ -1231,6 +1231,9 @@ const msg = {
       noSpecs: (root) => `No hay .specs/ en ${root}`,
       notGenerated: (file) => `${file} existe y no lo generó dev-spec — no se ha modificado.`,
       specsLinked: (rel) => `Se rechazó escribir en ${rel}: esa carpeta es un enlace (simbólico o junction) o apunta fuera de .specs/ — sustitúyela por una carpeta normal y vuelve a intentarlo. No se escribió nada.`,
+      specsLinkedFile: (rel) => `Se rechazó escribir ${rel}: ese fichero es un enlace (simbólico) o apunta fuera de .specs/ — sustitúyelo por un fichero normal y vuelve a intentarlo. No se escribió.`,
+      specsNotFolder: (rel) => `${rel} es un fichero donde dev-spec necesita una carpeta — renómbralo o muévelo y vuelve a intentarlo. No se escribió nada allí.`,
+      specsNotFile: (rel) => `${rel} es una carpeta donde dev-spec escribe un fichero — renómbrala o muévela y vuelve a intentarlo. No se escribió.`,
       roadmapNotWritten: (file, broken) => `${broken} ${file} no se regeneró — generado a partir de lo que roadmap.json aún da, perdería las dependencias, el backlog y los hitos que no puede leer. Corrige .specs/roadmap.json y vuelve a ejecutar ${DEV_SPEC} roadmap --write.`,
       roadmapViewPartial: (broken) => `${broken} Esta vista deja fuera lo que no puede leer (las dependencias, el backlog y los hitos) hasta que se corrija.`,
       unknownSteering: (file, known) => `Fichero de steering desconocido '${file}'. Conocidos: ${known}`,
@@ -1578,6 +1581,7 @@ const msg = {
     },
     featureOps: {
       removeNeedsConfirm: (slug, n) => `Eliminar '${slug}' borra .specs/${slug}/ definitivamente (${n} fichero(s)). No se ha borrado nada — pasa confirm: true para eliminarla, o archívala (reversible).`,
+      removeNeedsConfirmLink: (slug) => `.specs/${slug}/ es un enlace (simbólico o junction): eliminar '${slug}' borra solo el enlace — la carpeta a la que apunta y sus ficheros se conservan. No se ha borrado nada — pasa confirm: true para eliminar el enlace.`,
       removeChangedSincePreview: (slug) => `No se borró nada: .specs/${slug}/ cambió después de preguntar al usuario por su eliminación (otra función renombrada con este nombre, o ficheros editados mientras la pregunta esperaba) — su confirmación cubría la carpeta que se le mostró. Pregúntale de nuevo.`,
       backlogNotFound: (name, known) => `'${name}' no está en el backlog${known ? ` (backlog: ${known})` : " (el backlog está vacío)"}.`,
       backlogIsFeature: (name, slug) => `'${name}' ya tiene una spec (.specs/${slug}/) — el backlog es para funciones aún sin spec (estado: ${DEV_SPEC} status ${slug}).`,

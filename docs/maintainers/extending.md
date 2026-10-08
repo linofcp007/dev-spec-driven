@@ -12,6 +12,9 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   (wrapped in `featureLocked` when it writes a feature) — every surface requires the facade, never a module. A name it
   takes resolves its folder through `resolveFeature()` / `existingFeature()`, never `path.join(specsRoot, slugify(name))`,
   and its state goes through `readJson()` / `writeFileAtomic` under the locks (conventions.md → Conventions & gotchas).
+  Every file it writes goes through the write gate — `writeFileAtomic` / `writeIfAbsent` / `ensureDir` / `specWrite` (append),
+  never a raw `fs.writeFileSync` / `appendFileSync` / `renameSync` / `mkdirSync` outside engine/files.js (a source guard
+  fails it — conventions.md → The write gate).
 - New MCP tool → the operation above, a TOOLS entry + dispatch case in
   `mcp/server.js` (its `inputSchema` IS the validation — declare types, enums, required keys), the CLI
   subcommand, a test in the file of its area in `mcp/tests/` and `cli/tests/` (testing.md → The suites; bump the exact

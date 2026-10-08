@@ -11,12 +11,12 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs, existingFeature,
+let specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs, existingFeature,
   extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest, isBacktickUnit,
   isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, readIfExists, readRoadmap, realPathLoose,
   readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers, taskProse, timeOf, tKey, toPosix,
   traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap;
-function __link(E) { ({ activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
+function __link(E) { ({ specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
   existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest,
   isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, realPathLoose,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
@@ -1509,11 +1509,9 @@ function observeRun(projectDir, run) {
 function appendObserved(exDir, entry) {
   try {
     if (!isDirSafe(path.dirname(exDir))) return null; // the feature folder (or .specs/) must exist — never recreated here
-    try { fs.mkdirSync(exDir); } catch (e) { if (e.code !== "EEXIST") return null; }
-    writeIfAbsent(path.join(exDir, ".gitignore"), "*\n"); // .execution/ ignores itself
+    writeIfAbsent(path.join(exDir, ".gitignore"), "*\n"); // .execution/ (created through the write gate) ignores itself
     const file = path.join(exDir, OBSERVED_LOG);
-    forgetCached(file);
-    fs.appendFileSync(file, JSON.stringify(entry) + "\n", "utf8");
+    specWrite(file, JSON.stringify(entry) + "\n", { append: true }); // 1.24 r6: never appended through a link
     trimObservedLog(file);
     return file;
   } catch {

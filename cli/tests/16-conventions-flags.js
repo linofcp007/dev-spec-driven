@@ -196,8 +196,11 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   fs.mkdirSync(ex23, { recursive: true });
   fs.writeFileSync(path.join(ex23, ".specs"), "a file where the .specs folder goes");
   const exH23 = run(["create", "X", "--project", ex23]), exJ23 = runJ(["create", "X", "--json", "--project", ex23]);
-  ok(exH23.code === 1 && /^dev-spec: E[A-Z]+: /m.test(exH23.out) && exJ23.code === 1 && exJ23.j && exJ23.j.ok === false && /^E[A-Z]+$/.test(exJ23.j.code) && /\.specs/.test(exJ23.j.error),
-    "1.23 review: an engine exception exits 1 — one stderr line, and with --json {ok: false, error, code} on stdout (got " + JSON.stringify([exH23.out.trim().slice(0, 60), exJ23.j]) + ")");
+  // 1.24 r6 G7: that FILE is no exception any more — the write gate answers it as a localized refusal ({ok: false, wrongKind: true,
+  // path}) — still one stderr line and exit 1, the same {ok: false, error} document with --json.
+  ok(exH23.code === 1 && /^dev-spec: \.specs is a file where dev-spec needs a folder/m.test(exH23.out) && !/E[A-Z]+:/.test(exH23.out) &&
+    exJ23.code === 1 && exJ23.j && exJ23.j.ok === false && exJ23.j.wrongKind === true && exJ23.j.path === ".specs" && /\.specs is a file/.test(exJ23.j.error),
+    "1.23 review → 1.24 r6 G7: a FILE where .specs/ goes exits 1 — one localized stderr line (no raw ENOTDIR), and with --json {ok: false, wrongKind, path, error} on stdout (got " + JSON.stringify([exH23.out.trim().slice(0, 60), exJ23.j]) + ")");
 
   // 1.23 review (M7 + L12 + M6) — from a SUBFOLDER (no --project, no env) the CLI works in the project above (it started a nested
   // .specs/ there); a path argument is read from that subfolder — and from the project when --project names it (scan / ears read

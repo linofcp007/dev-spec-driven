@@ -757,8 +757,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   if (write) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
-    forgetCached(summaryPath);
-    fs.writeFileSync(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary, "utf8"); // derived: regenerated on every call
+    writeFileAtomic(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary); // derived: regenerated on every call (1.24 r6: through the write gate)
   }
   const ready = blockers.length === 0;
   const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null; // "finished" (catalog, next_action)

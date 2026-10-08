@@ -31,7 +31,13 @@ with one of:
   or a spike is refused — each keeps its own order. See `references/design-first.md`.
 - **remove** — permanently delete the feature's folder. **Destructive**: without `confirm: true` (CLI `--yes`)
   nothing is deleted and the result lists what would be (`needsConfirm`). Show that list to the user and pass
-  `confirm: true` only after they confirm (or were explicit) — suggest archive instead.
+  `confirm: true` only after they confirm (or were explicit) — suggest archive instead. A feature folder that is a
+  link (a symbolic link, a junction) is removed as the link alone — the folder it points at keeps every file; the
+  preview says so (`link: true`, 0 files).
+
+A feature folder, `.specs/_archive/` or an archived folder that is a link (or resolves outside `.specs/`) is never
+written, archived into or restored from (`linked: true`, nothing changed); a file where a folder belongs (or the reverse)
+is a `wrongKind` error naming the path — tell the user to replace it with a plain folder / file.
 
 Every action keeps `roadmap.json` dependencies consistent and regenerates the roadmap (and `.specs/SPECS.md`
 when it exists). None moves or deletes a folder while another process (another editor, a running `dev-spec`

@@ -29,7 +29,7 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus, suiteSummaryLines,
   taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines, trackLabel,
   unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject, withMoveLock,
-  withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews;
+  withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry;
 function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
@@ -45,7 +45,7 @@ function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport, bugS
   spikeFinish, spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus,
   suiteSummaryLines, taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines,
   trackLabel, unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject,
-  withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews } = E); }
+  withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry } = E); }
 
 // ---------------------------------------------------------------------------
 // spec_finish — close a feature LOCALLY: readiness report + a merge summary generated from the spec chain
@@ -245,8 +245,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (write) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
-    forgetCached(summaryPath); // written in place below: its cached text is dropped
-    fs.writeFileSync(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary, "utf8"); // derived: regenerated on every call
+    writeFileAtomic(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary); // derived: regenerated on every call (1.24 r6: through the write gate)
   }
   const ready = blockers.length === 0;
   // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).
@@ -555,16 +554,50 @@ function removeFeature(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   sweepTombstones(f.root);
+  // 1.24 r6 (G1) — a feature folder that is a LINK (a symbolic link, a junction): only the link goes — the folder it points at and
+  // its files stay — under the roadmap lock alone: the feature lock would be created THROUGH the link (it was: a .lock left in the
+  // target), and the write gate refuses that lock anyway.
+  if (isLinkEntry(f.dir)) {
+    const lr = withRoadmapLock(projectDir, () => removeLinkedFeatureLocked(projectDir, name, opts));
+    if (lr.ok) maybeRefreshRoadmap(projectDir);
+    return lr;
+  }
   const res = withMoveLock(projectDir, f.dir, f.slug, null, () => withRoadmapLock(projectDir, () => removeFeatureLocked(projectDir, name, opts)));
   if (res.ok) maybeRefreshRoadmap(projectDir);
   return res;
 }
+// Is p a symbolic link / junction (lstat — never followed)?
+function isLinkEntry(p) {
+  try { return fs.lstatSync(p).isSymbolicLink(); } catch { return false; }
+}
+function removeLinkedFeatureLocked(projectDir, name, opts = {}) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const { slug, dir } = f;
+  const bad = roadmapError(projectDir);
+  if (bad) return { ok: false, error: bad };
+  if (!isLinkEntry(dir)) return { ok: false, busy: true, error: errs(projectDir, slug).featureBusy(slug) }; // replaced meanwhile: ask again
+  if (opts.preview && typeof opts.preview.fingerprint === "string" && featureFolderFingerprint(dir) !== opts.preview.fingerprint) {
+    return { ok: false, changedSincePreview: true, code: "changed-since-preview", feature: slug,
+      error: i18n.msg(featureLang(projectDir, slug)).featureOps.removeChangedSincePreview(slug) };
+  }
+  invalidateReadCache(); // a folder entry removed: the per-call read cache can't follow it
+  removeLinkEntry(dir); // the link alone — never what it points at
+  const ms = pruneRoadmapRefs(projectDir, slug);
+  return { ok: true, action: "remove", feature: slug, link: true, ...milestoneResult(ms) };
+}
 // The folder a remove would delete, as one sha1: its identity (device + inode / file ID + birth time — kept across a rename, so
 // another feature renamed into this name differs) and every entry under it (relative path, size, mtime; lstat — a link is one
-// entry, never followed; the feature's own .lock left out: the remove holds it). null when the folder can't be read.
+// entry, never followed; the feature's own .lock left out: the remove holds it). null when the folder can't be read. A feature
+// folder that is itself a link (1.24 r6): the link's identity and its target — what a remove deletes.
 function featureFolderFingerprint(dir) {
   let st;
   try { st = fs.lstatSync(dir); } catch { return null; }
+  if (st.isSymbolicLink()) {
+    let to = "";
+    try { to = fs.readlinkSync(dir); } catch { /* unreadable: the identity alone */ }
+    return require("crypto").createHash("sha1").update(`link ${st.dev} ${st.ino} ${Math.floor(st.birthtimeMs)} ${to}`).digest("hex");
+  }
   const rows = [`dir ${st.dev} ${st.ino} ${Math.floor(st.birthtimeMs)}`];
   const walk = (d, rel) => {
     for (const e of safeReaddir(d).sort()) {
@@ -800,6 +833,12 @@ function removePreview(projectDir, name) {
   // Same order as removeFeature: never preview (and promise) a delete that the confirmed call would refuse.
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
+  // 1.24 r6 (G1): a feature folder that is a link — the remove deletes the link alone: nothing under it is counted (it used to
+  // count the target's files as "would delete"), and the preview says so (`link: true`).
+  if (isLinkEntry(f.dir)) {
+    return { ok: false, needsConfirm: true, action: "remove", feature: f.slug, link: true, wouldDelete: { dir: f.dir, files: 0, entries: [], link: true },
+      fingerprint: featureFolderFingerprint(f.dir), error: i18n.msg(featureLang(projectDir, f.slug)).featureOps.removeNeedsConfirmLink(f.slug) };
+  }
   let files = 0;
   const walk = (d) => safeReaddir(d).forEach((e) => {
     const p = path.join(d, e);

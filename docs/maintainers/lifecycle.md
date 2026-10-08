@@ -48,6 +48,10 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   archive result names what the prune did — `dependentsPruned` (always), plus `incompleteDependency: true` and a
   warning `note` when the archived feature wasn't complete (its dependents now read as unblocked; the roadmap
   meets a dep at 100%). `rename` rewrites archived records too (`renamePlan()`), so restore finds the new slug.
+  **Never through a link (1.24 r6):** archive into a `.specs/_archive/` that is a link (or resolves outside .specs/) moved the
+  whole feature there, and restore pulled any folder the link's target held into .specs/; both are refused now by the write gate
+  (conventions.md → The write gate: the archive's `ensureDir(_archive)`, the restore's lock at `_archive/<slug>/.lock`, a linked
+  `_archive/<slug>` too) — `linked: true`, nothing moved. A `_archive` that is a FILE is a localized `wrongKind` refusal.
   **One slug active AND archived (1.23 review 5):** archive refuses (`err.alreadyArchived`) and restore refuses
   (`restore.activeExists`) — each used to advise the other's refused step ("archive it", "Remove it there first", with no command
   for either); both now name the one way out, a rename of the active feature (the runnable `feature rename` line). The state is not

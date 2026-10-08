@@ -23,6 +23,33 @@ and U+FEFF gotchas are in CLAUDE.md.
   steering_scaffold through a linked `.specs/steering/`, and spec_create / add_track through a linked `.specs/<feature>/`
   (or its steering, when a track brings a steering file) — `linked: true`, `err.specsLinked`, nothing written (spec_export and
   templates init already refused); the export's Tasks table and the roadmap row read tasks.md through `readContained`.
+- **The write gate (1.24 r6 — ONE gate for everything under .specs/).** `specsWriteGate(target, {dir, createOnly})`
+  (engine/files.js) runs first in every engine writer — `writeFileAtomic`, `writeIfAbsent`, `ensureDir` and `specWrite` (the
+  append: `{append: true}` opens with O_APPEND | O_CREAT | O_NOFOLLOW where the platform has it, the target lstat'ed first) — and
+  `withLockFile` checks its lock's path the same way BEFORE the lock exists. No other mcp/lib source writes with a raw fs call
+  (mcp/tests/16-conventions.js guards it: writeFileSync / appendFileSync / renameSync / mkdirSync / copyFileSync / cpSync /
+  symlinkSync / linkSync / writeSync / an openSync with a write flag — files.js alone is allowed). The gate finds the `.specs`
+  folder a path lies in (`specsRootOf`: the nearest ancestor of that name — a path outside every .specs/ is not gated; the
+  engine writes nothing there) and refuses (`specsWriteBlock`, lstat of each part below .specs/ + one realpath of the deepest
+  that exists): **a link on the way** — a folder between .specs/ and the target (a feature folder, `.execution/`, `.history/`,
+  `_archive/`, `_archive/<slug>/`) or the target itself that is a symbolic link / junction, or that resolves outside the real
+  .specs/ (another reparse point); **the wrong kind** — a file where a folder is needed (.specs itself, a feature path,
+  `_archive`), a folder where a file is written (ROADMAP.md, an export). .specs/ itself may be a link (a project keeping its specs
+  elsewhere): what is checked lies below it. A create-only write (`createOnly`) passes an existing target that is itself a link —
+  "wx" never writes through it. The refusal is an Error (`code` ESPECSLINK / ESPECSKIND, `gate` {kind, rel, file}, the message in
+  the project's language: `err.specsLinked` (a folder) · `specsLinkedFile` · `specsNotFolder` · `specsNotFile`); **the facade
+  answers it** (spec.js's wrapper, `gateRefusal`) as the call's result — `{ok: false, linked | wrongKind: true, path, error}` —
+  on every surface alike (MCP isError, CLI exit 1 with one line; it was a raw EEXIST / ENOTDIR / EISDIR, a stack on the CLI). The
+  feature mutators meet it up front: their lock is the first write into the folder, so `featureLocked` / `withMoveLock` refuse a
+  linked feature folder (or `_archive/<slug>`) once, before anything is written, in the feature's language (`onRefused`; a
+  path of the wrong kind at the lock is the lock's own business — a folder named .lock is a stuck lock). Best-effort writers
+  swallow it like any other failure: `.specs/.gitignore` linked is left alone, observed.jsonl linked logs nothing, a linked
+  ROADMAP.md is not refreshed. **Why:** a committed `.specs/<feature> -> ~/elsewhere` got every tick, approval, brief,
+  decision, retro.md and the lock written into the folder it points at; `.execution/merge-summary.md -> ~/.bashrc` got the
+  merge summary (spec text) written into the user's shell profile (the in-place `fs.writeFileSync` of the derived files and
+  the appends followed file links; `writeFileAtomic`'s rename replaced a file link but wrote through a folder link). Known
+  limit: a write after another in one call can still be refused (a tasks.md that is itself a link: `done` records its
+  evidence in .state.json, then the tick is refused) — nothing is ever written THROUGH a link.
 - **The project folder: `resolveProjectDir()` (files.js) — every surface's default.** The explicit argument (CLI `--project`, a
   tool's `projectDir`) > `SPEC_PROJECT_DIR` > `CLAUDE_PROJECT_DIR` > **the nearest folder at or above the working folder that
   holds a dev-spec .specs/** (`nearestProject()`: `isDevSpecDir` — roadmap.json, steering/ or a feature's .state.json — the
@@ -38,7 +65,11 @@ and U+FEFF gotchas are in CLAUDE.md.
   `scan <subfolder>` reports in the project's language (`scanCodebase {lang}`).
 - **`spec_feature remove` needs `confirm: true`** (CLI `--yes`). Without it nothing is deleted and the
   result (an error with `needsConfirm`) lists what would be — `removePreview()` checks roadmap.json first
-  and uses `lstat` (a symlink/junction is one entry, never followed). Prefer archive (reversible).
+  and uses `lstat` (a symlink/junction is one entry, never followed). Prefer archive (reversible). **A feature folder that is
+  itself a link (1.24 r6)** is removed as the link alone (`removeLinkEntry` — unlink, rmdir as the fallback; the target and its
+  files are kept): the preview says so (`link: true`, `wouldDelete.files` 0, `featureOps.removeNeedsConfirmLink`) and the remove
+  runs under the roadmap lock only — the feature lock would be created THROUGH the link (it was: a `.lock` left in the target);
+  every other mutator of a linked feature folder is refused (the write gate, above).
 - **Rename follows every reference** (`renamePlan`, computed BEFORE the folder moves so the old slug still resolves,
   written after): roadmap.json dependsOn, `_Supersedes: <old>/…_` markers in other features' requirements.md (active
   and archived; never one in a comment/fence), and archived features' `.state.json → archived` records. A broken
