@@ -1254,4 +1254,35 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
       " (and bash / PowerShell where present); a committed UPGRADE.md keeps `dev-spec`, the audit's lines the runnable form (got " +
       JSON.stringify({ quoting, viaShell, viaBash, viaPs, portOk, upMd: (upMd.match(/.*dev-spec done.*/) || [])[0] }) + ")");
   }
+  { // r5 review (state / locks) — the merge driver's revocation rule on a one-sided approvals change and the evidence of tasks
+    // sharing a number; the feature lock: a lock older than this process naming its pid, a lock dated in the future, a refused
+    // lock create (a lock being deleted) waited for — never run unlocked.
+    const js = JSON.stringify;
+    const T = (d) => `2026-10-0${d}T10:00:00.000Z`;
+    const h = (phase, at, x = {}) => ({ phase, at, by: "x", ...x });
+    // ours approved design (T2) and revoked it (T3) — its approvals equal base; theirs approved design at T1: the revocation is later
+    const m1 = S.mergeStateJson({ approvals: {}, approvalHistory: [] }, { approvals: {}, approvalHistory: [h("design", T(2)), h("design", T(3), { revoked: true })] },
+      { approvals: { design: { at: T(1), by: "y", fingerprint: "D" } }, approvalHistory: [h("design", T(1))], lastApprovedPhase: "design" }, "state");
+    // the same with ours' approvals changed for another phase (the both-sides path) — the same answer
+    const m1b = S.mergeStateJson({ approvals: {}, approvalHistory: [] }, { approvals: { requirements: { at: T(2), by: "x" } }, approvalHistory: [h("design", T(2)), h("design", T(3), { revoked: true })] },
+      { approvals: { design: { at: T(1), by: "y", fingerprint: "D" } }, approvalHistory: [h("design", T(1))], lastApprovedPhase: "design" }, "state");
+    // a later re-approval still wins over an earlier revocation
+    const m1c = S.mergeStateJson({ approvals: {} }, { approvals: {}, approvalHistory: [h("design", T(2)), h("design", T(3), { revoked: true })] },
+      { approvals: { design: { at: T(4), by: "y", fingerprint: "D" } }, approvalHistory: [h("design", T(4))] }, "state");
+    ok(js(m1.merged.approvals) === "{}" && m1.merged.lastApprovedPhase === undefined && js(m1b.merged.approvals) === js({ requirements: { at: T(2), by: "x" } }) &&
+      m1c.merged.approvals.design && m1c.merged.approvals.design.at === T(4),
+      "r5 review L17: revocations win by time also when only one side changed `approvals` (an approval older than the other side's revocation is dropped, lastApprovedPhase follows); a later re-approval still stands (got " +
+      js([m1.merged.approvals, m1.merged.lastApprovedPhase, m1b.merged.approvals, m1c.merged.approvals]) + ")");
+    // evidence[n] of two tasks sharing the number: the other side's `others` and its own record of ANOTHER task are kept (one per task,
+    // newest first), never merged into the winner's history
+    const ev = (at, task, cmd, x = {}) => ({ at, command: cmd, exitCode: 0, task, history: [{ at, command: cmd, exitCode: 0 }], ...x });
+    const m2 = S.mergeStateJson({ approvals: {}, evidence: { 3: ev(T(1), "A", "t") } }, { approvals: {}, evidence: { 3: ev(T(1), "A", "t", { others: [ev(T(2), "B", "u")] }) } },
+      { approvals: {}, evidence: { 3: ev(T(3), "A", "t") } }, "state");
+    const m3 = S.mergeStateJson({ approvals: {} }, { approvals: {}, evidence: { 3: ev(T(2), "A", "a") } }, { approvals: {}, evidence: { 3: ev(T(3), "B", "b") } }, "state");
+    const e2 = m2.merged.evidence[3], e3 = m3.merged.evidence[3];
+    ok(e2.task === "A" && e2.at === T(3) && Array.isArray(e2.others) && e2.others.length === 1 && e2.others[0].task === "B" &&
+      e3.task === "B" && e3.others.length === 1 && e3.others[0].task === "A" && e3.history.length === 1 && e3.history[0].command === "b" && !m2.conflicts.length && !m3.conflicts.length,
+      "r5 review L17: evidence[n] of tasks sharing a number — the other side's `others` and its own record of another task are kept in `others` (never dropped, never merged into the winner's run history) (got " + js([e2, e3]) + ")");
+
+  }
 };

@@ -47,11 +47,16 @@ and U+FEFF gotchas are in CLAUDE.md.
   append-only lists (`approvalHistory`, `changes`, `unticks`) → the union by identity (`HISTORY_ID` phase/at/by/revoked/partial/role
   · `CHANGE_ID` · `UNTICK_ID`; the same record with different fields — upgrade's seeded snapshot — gets both sides' fields),
   chronological once theirs added one; `evidence[n]` / `finishChecks[name]` → the record with the latest run `at` (a tie is the same
-  run: its note and stale mark merged), histories merged, deduped, bounded by `EVIDENCE_HISTORY` (a run's own fields — `observed`,
+  run: its note and stale mark merged; r5 review: tasks sharing the number n — a record's `task` stamp — keep every other
+  task's record in `others`, both sides' plus the losing side's own one, one per task, newest first, `EVIDENCE_OTHERS` —
+  they were dropped, and that task's runs merged into the winner's history), histories merged, deduped, bounded by `EVIDENCE_HISTORY` (a run's own fields — `observed`,
   1.22 review 3's `cmdRule` and `root` — travel with it: no rule of their own); `ticks[n]` / `lastTickAt` / `lastEditAt` (1.22 review: the spec-hook's stamp of a hand-saved tasks.md) → the
   later; `finished` → the later (firstAt the earliest); `createdAt` → the earlier; `approvals[phase]` → the later approval unless
-  a revocation record (`revoked: true`, not `partial`) is later — **revocations win by time**; `signoffs[phase][role]` → the later,
-  dropped when a revocation or the phase's merged approval is no earlier; `lastApprovedPhase` follows the merged approvals (never its
+  a revocation record (`revoked: true`, not `partial`) is later — **revocations win by time**, applied to the 3-way RESULT
+  (`pruneRevokedApprovals()`, r5 review: when only one side changed `approvals`, an approval older than the other side's
+  revocation survived); `signoffs[phase][role]` → the later,
+  dropped when a revocation or the phase's merged approval is no earlier (a partial revocation flagged `roleOnly` — r5
+  review, one role withdrawing its own sign-off — drops only the roles it names; one without the flag, all of them); `lastApprovedPhase` follows the merged approvals (never its
   own 3-way); `tracks` and every `dependsOn` / role list / milestone `features` → a 3-way SET merge; roadmap.json `features` (by
   slug), `backlog` (by name, case-insensitive; notes joined with ` · `), `meta.milestones` (by name), `meta.checks` /
   `meta.approvalRoles` (by key); `meta.specVersion` → the higher (`compareSemver`), `meta.changelogAt` → the later,
