@@ -117,9 +117,37 @@ function commentLines(lines) {
 // Fenced code blocks blanked line for line (the fence lines too) — criterionBlocks' fence rule, so an ID in a ``` example
 // is never a real one. Lines are kept (as empty ones): line-based rules — a table row, a marker's wrap — read the same.
 // An unclosed fence inside a list item ends with the item (fenceStep).
+// An INDENTED code block is code too (review 5, L32): "Example:\n\n    US-1.AC-7 …" defined a required AC (and an EARS no-modal error).
 function stripFencedCode(s) {
+  const lines = String(s || "").split("\n");
+  const code = codeBlockLines(lines);
+  return lines.map((line, i) => (code[i] ? "" : line)).join("\n");
+}
+// The code lines of a text, as CommonMark reads its blocks → flags[i] (1 = code): every fenced-code line (fenceStep, the fence
+// lines too) and every line of an INDENTED code block — indented 4 columns or more (a tab is 4), starting after a blank line, a
+// heading, a fence or the text's start (it never interrupts a paragraph: an indented line right after text is a lazy
+// continuation), and never inside a list (a list item's continuation and nested items are indented that deep; a list ends at a
+// heading, or at a line less indented than 2 columns after a blank line). Blank lines inside a run are blank anyway. Linear.
+const RE_CODE_LIST_ITEM = /^\s*(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)/;
+const RE_CODE_HEADING = /^ {0,3}#{1,6}(?:[ \t]|$)/;
+function codeBlockLines(lines) {
+  const flags = new Uint8Array(lines.length);
   const st = { fence: null };
-  return String(s || "").split("\n").map((line) => (fenceStep(st, line) ? "" : line)).join("\n");
+  let fresh = true, list = false, run = false;
+  const cols = (l) => { let c = 0; for (const ch of l) { if (ch === " ") c++; else if (ch === "\t") c += 4 - (c % 4); else break; if (c >= 8) break; } return c; };
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (fenceStep(st, l)) { flags[i] = 1; fresh = true; run = false; continue; }
+    if (!l.trim()) { fresh = true; continue; }
+    const ind = cols(l);
+    if (ind >= 4 && (run || (fresh && !list))) { flags[i] = 1; run = true; continue; }
+    run = false;
+    const heading = RE_CODE_HEADING.test(l);
+    if (RE_CODE_LIST_ITEM.test(l)) list = true;
+    else if (heading || (fresh && ind < 2)) list = false;
+    fresh = heading;
+  }
+  return flags;
 }
 // requirements.md's own AC IDs as the tools read them: outside HTML comments and fenced code, `_Supersedes:_`
 // references (another feature's ACs) left out — and so is any `<feature>/US-n.AC-m` (the _Supersedes:_ / _Affects:_ syntax)
@@ -1245,7 +1273,7 @@ function bugTemplateSlots() {
   return (BUG_SLOTS = set);
 }
 
-module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirementAcIds, stripForeignAcRefs, RE_NOT_A_SLUG, RE_ID_TOKEN_END,
+module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLines, requirementAcIds, stripForeignAcRefs, RE_NOT_A_SLUG, RE_ID_TOKEN_END,
   notASlug, featureRefTest, RE_LEAD_LABEL, RE_CELL_LABEL, criterionLabel, criterionLabelIds,
   otherFeatureTest, featureProjectDir, planIdText, clarificationMarkers,
   templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,

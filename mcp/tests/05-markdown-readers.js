@@ -90,4 +90,22 @@ exports.run = async ({ ok, S, tmp, require, __dirname }) => {
       "review 5 (M2): end to end — doctor fails a commented-out [SEC] Threat Model and no longer counts a commented-out Risks section; designSections reads a setext heading and drops a closing '##'; a commented-out Root Cause is not written (got " +
       js([chk("sec-sections"), E.designWeighChecks(design, "en", {}).map((c) => c.id + ":" + c.state), secs]) + ")");
   }
+
+  { // L32 (first half) — an INDENTED code block is code: its AC IDs define nothing, its lines are no criterion
+    // "Example:\n\n    US-1.AC-7 example" was a required AC no task covered, and an EARS no-modal error.
+    const d = path.join(tmp, "proj-r5-indented");
+    S.initProject(d, ["core"], "en");
+    const f = S.createFeature(d, "Indented code", ["core"], "", undefined, "en");
+    const req = (tail) => "# Feature: Indented code\n\n## Summary\nx\n\n### US-1 (P1 — MVP): x\n\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL create a session.\n" + tail;
+    put(f.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1_\n");
+    put(f.dir, "requirements.md", req("\nExample of the log line:\n\n    US-1.AC-7 user=42 session=abc\n\tUS-1.AC-8 a tab is four columns\n"));
+    const tr = S.traceCheck(d, f.slug), ev = S.earsFeature(d, f.slug);
+    // inside a list a 4-space line is the item's continuation (and a nested item); after text it is a lazy continuation — never code
+    const kept = js([...E.requirementAcIds("1. WHEN a THE SYSTEM SHALL b\n\n    see US-1.AC-2 below\n- item\n      - US-1.AC-3 nested\nText\n    US-1.AC-4 lazy\n")]);
+    ok(tr.verdict === "pass" && tr.totalAcs === 1 && ev.verdict === "pass" && ev.summary.criteriaDetected === 1 && kept === '["US-1.AC-2","US-1.AC-3","US-1.AC-4"]' &&
+      js([...E.codeBlockLines("# T\n    code\n\n    more\nText\n    lazy".split("\n"))]) === "[0,1,0,1,0,0]",
+      "review 5 (L32): a 4-space (or tab) indented code block holds no required AC and no criterion; a list item's continuation, a nested item and a lazy continuation stay text (got " +
+      js([tr.verdict, tr.totalAcs, tr.uncoveredByTasks, ev.summary, kept]) + ")");
+  }
 };

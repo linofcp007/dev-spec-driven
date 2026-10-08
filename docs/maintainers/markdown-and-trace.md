@@ -190,7 +190,12 @@ matrix.
   through ONE helper, `fenceStep(st, line)`, which also applies CommonMark's list rule (the task scanner's too): a fence
   opened inside a list item (indented) ends with the item — a non-blank line less indented than its opener is outside.
   Without it one unclosed fence in a test-plan bullet blanked every row below it (no coverage, no planned T-IDs,
-  phantoms in tasks.md). An unclosed TOP-LEVEL fence still runs to the end of the file.
+  phantoms in tasks.md). An unclosed TOP-LEVEL fence still runs to the end of the file. **Indented code (review 5, L32):**
+  `codeBlockLines(lines)` = the fence lines + every line of an INDENTED code block (≥ 4 columns, a tab is 4; it starts after a
+  blank line, a heading, a fence or the text's start — never interrupting a paragraph — and never inside a list, which a heading
+  or a less-than-2-column line after a blank ends). `stripFencedCode` (so `requirementAcIds`, `planIdText`, the duplicate-ID and
+  success-criteria readers, the pack fragments, the weigh sections) and `criterionBlocks` read it: "Example:\n\n    US-1.AC-7 …"
+  was a required AC and an EARS no-modal error.
 - **HTML-comment stripping** (`stripHtmlComments`): `ears`/`clarify`/`doctor` (for `[NEEDS
   CLARIFICATION]`) AND `trace_check` (for AC/test IDs and `_Implements:_`) all strip `<!-- -->`
   first, so example markers in template-guidance comments don't count as real. Keep template

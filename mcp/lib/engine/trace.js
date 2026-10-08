@@ -12,7 +12,7 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText, commentLines,
+let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText, codeBlockLines, commentLines,
   decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey, duplicateTaskNumbers, evidenceRule,
   existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, gitEvidence, globFiles, GUARD_CODE_EXT,
   historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord, isCodeFile, isImplementsGlob, isObj, isRecord, isTestFixture,
@@ -24,7 +24,7 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
   useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir;
 function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
-  commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
+  codeBlockLines, commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
   duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE,
   gitEvidence, globFiles, GUARD_CODE_EXT, historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord,
   isCodeFile, isImplementsGlob, isObj, isRecord, isSlashUnit, isTestFile, isTestFixture, readFileHead, testNamed, isWsUnit, italic, latestSnapshot, mdCell, mdPlainText,
@@ -166,6 +166,8 @@ function criterionBlocks(text, opts = {}) {
 
   const all = text.split(/\r?\n/);
   const cl = commentLines(all); // comments and fenced code as every reader sees them (a code span's "<!--" is text)
+  // review 5 (L32): an INDENTED code block (codeBlockLines over the visible text) is code like a fence — its lines define nothing
+  const icode = codeBlockLines(cl.map((c) => (c.hidden ? "" : c.vis)));
   // acUnits: a table row, heading or paragraph line led by an AC ID is a REFERENCE — never a criterion to lint — when a list
   // item defines that ID anywhere, or an earlier unit already did ("US-1.AC-2 depends on the IdP's error codes." in Notes, a
   // "| US-1.AC-1 | P1 |" coverage table); outside an acceptance-criteria context it defines one only when it reads like one
@@ -174,7 +176,7 @@ function criterionBlocks(text, opts = {}) {
   const listDefined = new Set();
   if (acUnits) all.forEach((raw, i) => {
     const c = cl[i];
-    if (!c.hidden && !c.fence && RE_LIST_DEFINES_AC.test(c.vis.trim())) listDefined.add(leadId(c.vis.trim()));
+    if (!c.hidden && !c.fence && !icode[i] && RE_LIST_DEFINES_AC.test(c.vis.trim())) listDefined.add(leadId(c.vis.trim()));
   });
   const unitDefined = new Set();
   const definesHere = (s, sect) => {
@@ -190,6 +192,7 @@ function criterionBlocks(text, opts = {}) {
     if (c.hidden) return; // wholly inside a comment: no content, and no break in the criterion
     if (c.fence === "open") return flush(); // an unclosed fence in a list item ends with the item (fenceStep)
     if (c.fence) return; // inside a fence: no content, no criteria ("const shall = 1")
+    if (icode[i]) return flush(); // an indented code block: code, and the end of the criterion before it
     const line = c.vis;
     if (!line.trim()) {
       // A blank source line ends the criterion; a line that held only a comment does not. An AC heading's body may
