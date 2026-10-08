@@ -64,7 +64,7 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   `change-scope` (a change: 1–3 criteria, 1–3 tasks, core only) · `traceability` (every gap kind with its IDs; the kinds a later phase's still-template file would cause
   are deferred as a warn) · `task-deps` (only when some task declares `_Depends:_`: a value that is no task number, a
   number no active task carries, a self-dependency, a cycle — the tasks approval refuses on it) · bugfix `root-cause` ·
-  spike `question` / `decision` · `merge-conflicts` (a `mergeConflicts` list the git merge driver left in the feature's
+  spike `spike` (spike.md missing) / `question` / `decision` · `merge-conflicts` (a `mergeConflicts` list the git merge driver left in the feature's
   `.state.json` or in `roadmap.json` — pick each value, delete the list) · `state` (the feature's `.state.json` is not
   valid JSON or has the wrong shape — next_action's one step is to repair it, spec_finish blocks on it).
 - **Warn:** `steering` (core files missing, or files still holding template placeholders) · `success-criteria` ·
@@ -94,7 +94,9 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   `steering-changed-since-approval` (a steering file that governed the requirements / design approval changed or was
   removed since — `steeringChanged`; approvals before 1.16 never) · `glossary` (words the glossary says to avoid, used in
   requirements.md / design.md) · spike `timebox` (past its date with no decision) · `waiver-expired` (a forced approval still standing whose
-  waiver's `expires` date has passed).
+  waiver's `expires` date has passed) · `track-pack-missing` (a project track pack the feature uses is gone — its
+  `.specs/tracks/<name>/` folder deleted, the pack now invalid, or its name or marker now a built-in track's: that track is
+  inactive for the feature until the pack is back — `dev-spec tracks check` says why).
 - **`approval-gates`** — pending phases (every phase whose artifact exists, a bugfix's `design` on `bug.md`, Phase 4
   `tests` on +tdd / +ai once its plan exists or was approved — again once its sign-off no longer covers the plan: a T-ID
   planned since, or a plan re-approved with other content —, a phase still missing a role's sign-off), forced approvals with their
