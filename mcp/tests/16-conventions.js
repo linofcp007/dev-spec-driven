@@ -1326,6 +1326,77 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
       js([ownPid, future, contended, ranLocked, msE, readOnly]) + ")");
   }
 
+  { // 1.24 review 6 — the merge driver's post-pass: a run the other branch made before a reopen / an undo (E2), a dependency cycle (E5)
+    const js = JSON.stringify;
+    const T = (d) => `2026-10-0${d}T10:00:00.000Z`;
+    const ev = (at, x = {}) => ({ at, command: "npm test", exitCode: 0, task: "Build", verify: "npm test", history: [{ at, command: "npm test", exitCode: 0 }], ...x });
+    const chg = (at, reopened) => ({ at, phase: "requirements", snapshot: ".history/requirements@1.md", added: [], modified: ["US-1.AC-1"], removed: [], reopened, digests: { "US-1.AC-1": "x" } });
+    const base = { approvals: {}, evidence: { 1: ev(T(1)) }, changes: [], unticks: [] };
+    // 1.24 r6 E2: ours reopened task 1 (spec_impact --reopen, T3: its record stale), theirs re-ran it BEFORE that (T2): theirs' run won
+    // the merge with no stale mark, and the task re-ticked with no new run read verified (finish, the execution sign-off passed)
+    const mR = S.mergeStateJson(base, { ...base, evidence: { 1: ev(T(1), { stale: true }) }, changes: [chg(T(3), [1])] }, { ...base, evidence: { 1: ev(T(2)) } }, "state");
+    // …the same with an undo (unticks {n, at}): stale + staleBy "undo"
+    const mU = S.mergeStateJson(base, { ...base, evidence: { 1: ev(T(1), { stale: true, staleBy: "undo" }) }, unticks: [{ n: 1, at: T(3) }] }, { ...base, evidence: { 1: ev(T(2)) } }, "state");
+    // a run made AFTER the reopen (T4) still counts; a reopen AND an undo after the run: the reopen (the spec changed) wins
+    const mL = S.mergeStateJson(base, { ...base, evidence: { 1: ev(T(1), { stale: true }) }, changes: [chg(T(3), [1])] }, { ...base, evidence: { 1: ev(T(4)) } }, "state");
+    const mB = S.mergeStateJson(base, { ...base, evidence: { 1: ev(T(1), { stale: true, staleBy: "undo" }) }, changes: [chg(T(3), [1])], unticks: [{ n: 1, at: T(4) }] }, { ...base, evidence: { 1: ev(T(2)) } }, "state");
+    // only one side changed (theirs reopened task 1; ours untouched): theirs' own records as they are — a task sharing the number
+    // whose record theirs kept valid (the reopen didn't reach it) stays valid
+    const shared = { ...base, evidence: { 1: ev(T(1), { others: [ev(T(1), { task: "Other" })] }) } };
+    const mS = S.mergeStateJson(shared, shared, { ...shared, evidence: { 1: ev(T(1), { stale: true, others: [ev(T(1), { task: "Other" })] }) }, changes: [chg(T(3), [1])] }, "state");
+    const e = (m) => m.merged.evidence[1];
+    ok(e(mR).at === T(2) && e(mR).stale === true && e(mR).staleBy === undefined && e(mU).at === T(2) && e(mU).stale === true && e(mU).staleBy === "undo" &&
+      e(mL).at === T(4) && e(mL).stale === undefined && e(mB).stale === true && e(mB).staleBy === undefined &&
+      e(mS).stale === true && e(mS).others[0].stale === undefined && ![mR, mU, mL, mB, mS].some((m) => m.conflicts.length),
+      "1.24 r6 E2: the merge driver marks a merged run stale when a merged change request reopening its task is later (staleBy undo for a later untick) — a run made after it still counts, a reopen wins over an undo, a record the reopening side kept valid stays valid (got " +
+      js([e(mR), e(mU), e(mL), e(mB), e(mS)].map((x) => [x.at, x.stale, x.staleBy])) + ")");
+    // the real flow: a branch re-runs task 1, the other changes the requirements and reopens it — the merged state on disk, a re-tick
+    // with no new run is unverified
+    const mp = path.join(tmp, "proj-r6-merge");
+    S.initProject(mp, ["core"], "en");
+    const mf = S.createFeature(mp, "Export", ["core"]);
+    const put = (rel, text) => fs.writeFileSync(path.join(mf.dir, rel), text);
+    const get = (rel) => fs.readFileSync(path.join(mf.dir, rel), "utf8");
+    const REQ = "# Feature: x\n\n## Summary\nExport invoices.\n\n### US-1 (P1 — MVP): Export\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN an admin clicks Export THE SYSTEM SHALL download a CSV.\n\n## Success Criteria\n- **SC-001** — 95% under 5 s.\n";
+    put("classification.md", "# Classification\n\n## Active tracks\ncore\n\n## Why\nA small export.\n");
+    put("requirements.md", REQ);
+    put("design.md", "# Design: x\n\n## Overview\nAn endpoint.\n\n## Architecture\n```mermaid\ngraph TD\n  A-->B\n```\n\n## Constitution Check\n- [x] Principle 1 — complies\n");
+    put("tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build the export\n  - _Requirements: US-1.AC-1_\n  - _Verify: node -e \"process.exit(0)\"_\n");
+    const okFf = S.approvePhase(mp, mf.slug, null, "alice", { through: "tasks" }).ok;
+    const RUN = { command: "node -e \"process.exit(0)\"", exitCode: 0 };
+    const pause = () => { const t0 = Date.now(); while (Date.now() - t0 < 5) { /* the next time stamp */ } };
+    S.completeTask(mp, mf.slug, 1, RUN);
+    const sBase = get(".state.json"), tBase = get("tasks.md");
+    pause(); S.completeTask(mp, mf.slug, 1, RUN); const sTheirs = get(".state.json");
+    put(".state.json", sBase); put("tasks.md", tBase); pause();
+    put("requirements.md", REQ.replace("download a CSV", "download a UTF-8 CSV"));
+    S.impactReport(mp, mf.slug, { phase: "requirements", reopen: true });
+    const mm = S.mergeStateText(sBase, get(".state.json"), sTheirs, { path: ".specs/export/.state.json" });
+    put(".state.json", mm.text);
+    const reTick = S.completeTask(mp, mf.slug, 1);
+    ok(okFf && mm.ok && mm.clean && JSON.parse(mm.text).evidence["1"].stale === true && reTick.ok && reTick.verified === false,
+      "1.24 r6 E2: the real flow — after the merge a re-tick of the reopened task with no new run is unverified (got " + js([okFf, mm.clean, reTick.verified, reTick.unverifiedReason]) + ")");
+
+    // 1.24 r6 E5: each branch adds one dependency edge, together a cycle — the merge reported clean and wrote it (every later depend was
+    // refused on the cycle). The driver reports it as a conflict (ours kept at that feature's dependsOn; exit 1 on the CLI).
+    const cycleOf = (deps) => { // a plain DFS over {slug: [deps]} → true when a cycle exists
+      const color = {};
+      const dfs = (n) => { color[n] = 1; for (const d of deps[n] || []) { if (color[d] === 1 || (color[d] !== 2 && dfs(d))) return true; } color[n] = 2; return false; };
+      return Object.keys(deps).some((n) => color[n] === undefined && dfs(n));
+    };
+    const rBase = { meta: { lang: "en" }, features: { alpha: {}, beta: {}, gamma: { dependsOn: [] } } };
+    const mc = S.mergeStateJson(rBase, { ...rBase, features: { ...rBase.features, alpha: { dependsOn: ["beta"] } } },
+      { ...rBase, features: { ...rBase.features, beta: { dependsOn: ["gamma"] }, gamma: { dependsOn: ["alpha"] } } }, "roadmap");
+    const deps = Object.fromEntries(Object.entries(mc.merged.features).map(([k, v]) => [k, v.dependsOn || []]));
+    const mcText = S.mergeStateText(js(rBase), js({ ...rBase, features: { ...rBase.features, alpha: { dependsOn: ["beta"] } } }),
+      js({ ...rBase, features: { ...rBase.features, beta: { dependsOn: ["alpha"] } } }), { path: ".specs/roadmap.json" });
+    ok(!cycleOf(deps) && js(deps.alpha) === '["beta"]' && mc.conflicts.length >= 1 && mc.conflicts.every((c) => /^features\.(beta|gamma)\.dependsOn$/.test(c.path)) &&
+      mcText.ok && mcText.clean === false && Array.isArray(mcText.merged.mergeConflicts) && mcText.merged.mergeConflicts[0].path === "features.beta.dependsOn" &&
+      js(mcText.merged.mergeConflicts[0].theirs) === '["alpha"]' && !mcText.merged.features.beta.dependsOn && js(rBase.features.beta) === "{}",
+      "1.24 r6 E5: a dependency cycle the two branches' edges make together is a merge conflict — ours kept at the dependsOn that closes it (the result has no cycle), listed under mergeConflicts with theirs' value (got " +
+      js([deps, mc.conflicts, mcText.merged && mcText.merged.mergeConflicts]) + ")");
+  }
+
   { // --- 1.23 review: the project folder with no projectDir / env — the nearest dev-spec project at or above the working folder ---
     // (run from a subfolder, a command started a SECOND, nested .specs/ there) — and a SPEC_PROJECT_DIR holding a variable left
     // unexpanded ("${CLAUDE_PROJECT_DIR}/", "$CLAUDE_PROJECT_DIR", "%CLAUDE_PROJECT_DIR%") falls through instead of naming a folder.
