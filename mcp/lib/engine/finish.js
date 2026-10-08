@@ -647,6 +647,9 @@ function renameFeatureLocked(projectDir, name, newName, moved) {
   const oldDir = from.dir;
   const newDir = to.dir;
   if (fs.existsSync(newDir)) return { ok: false, error: errs(projectDir).alreadyExists(newSlug) };
+  // 1.23 review 5 — never onto an ARCHIVED feature's slug: the two could then neither be archived (alreadyArchived) nor restored
+  // (activeExists) without another rename — and the archived records naming that slug would read as this feature.
+  if (fs.existsSync(path.join(to.root, "_archive", newSlug))) return { ok: false, archivedName: true, error: errs(projectDir).renameArchived(newSlug) };
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
   // Every other reference to the feature follows it — planned while the old folder still resolves, written after the move.
