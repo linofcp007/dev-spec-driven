@@ -1,6 +1,6 @@
 ---
 description: Show the roadmap and (re)generate .specs/ROADMAP.md (+ optional brand-styled .html) — progress, dependencies, ETAs, overlaps. PT - roadmap do projeto. ES - hoja de ruta del proyecto.
-argument-hint: "[--write] [--html] [--lang pt]"
+argument-hint: "[--write] [--html] [--lang en|pt|pt-BR|es]"
 ---
 
 Use the **dev-spec-driven** skill roadmap view.
@@ -11,7 +11,7 @@ Run the `spec_roadmap` MCP tool. With `write: true` (CLI `dev-spec roadmap --wri
 **`.specs/ROADMAP.md`** — the default overview (progress bar, feature table with an ETA column, Mermaid dependency
 graph, needs-attention, backlog; git-friendly). Add `html: true` (`--html`) to also write a self-contained,
 offline, brand-styled **`.specs/ROADMAP.html`** (light/dark toggle that defaults to the system theme).
-**Pass `lang` (`--lang pt|es|en`) matching the user's language** — it localizes the roadmap chrome only
+**Pass `lang` (`--lang en|pt|pt-BR|es`) matching the user's language** — it localizes the roadmap chrome only
 (stored as `meta.roadmapLang` for auto-refresh; the project language set by `spec_init` is unchanged). A
 same-named file dev-spec did not generate is never overwritten — the result is then an error naming it.
 
