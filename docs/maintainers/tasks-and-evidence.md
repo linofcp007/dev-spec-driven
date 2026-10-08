@@ -48,9 +48,17 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   "_Depends:_ and _Size:_" failed task-deps; a closer is searched only BEFORE the next opener (the fallback past it is gone —
   wrap a value holding marker-like text in backticks); a `_` opener after a letter, a digit or another `_` opens nothing
   (`__Verify: x__` is bold — read as italics its value was `x_`); inline code is code: a `_` / `*` inside a code span never
-  closes a value (``_Verify: `npm test -- -g "a_ b"`_`` was cut at `"a`) and a label inside one opens none. Doctor warns
+  closes a value (``_Verify: `npm test -- -g "a_ b"`_`` was cut at `"a`) and a label inside one opens none. **1.24 r6 D9 —
+  CommonMark's right-flanking closer:** a closer may also be followed by `*` (`**_Verify: x_**`), a quote (`("_Verify: x_")`,
+  `'…'`, `”`, `’`, `»`) or a dash (`_Verify: x_— then`) — `MARKER_CLOSE_PUNCT`; `***Verify: x***` opens at its third `*` (exactly
+  two before it — `**Verify:**` stays a bold label, no marker) and a run of `*` closes at its first star (else the run's last
+  star was the plain closer: `x**`). Doctor warns
   `malformed-markers` for text on a task line that
-  looks like a marker but yields none (`**Verify:**`, a bare `Verify:`), and (review 5) `verify-suspicious` for a `_Verify:_`
+  looks like a marker but yields none (`**Verify:**`, a bare `Verify:`, and — 1.24 r6 D2 — an EMPTY marker written apart from
+  its value: `_Verify:_ npm test`, `- _Verify:_ `npm test``, `*Verify:* npm test` — review 5's empty span had hidden them, the
+  task ticked as "nothing to verify". `emptyLabelValues()`: a code span right after an empty marker, or plain text after the
+  line's ONLY empty marker whose first word is no marker noun — `MARKER_NOUNS`: marker, label, field, and, or… / PT-ES
+  marcador, etiqueta… — so "Document the _Verify:_ and _Implements:_ markers" and "the _Verify:_ marker" stay prose), and (review 5) `verify-suspicious` for a `_Verify:_`
   value that looks garbled (`suspiciousVerify()`: it starts with `_` / `*`, holds a code span INSIDE it — two commands written
   as one —, or a quote has no partner: an odd count of `"`, or of `'` not between two letters; `CHECK_PHASE` 5). The MCP server never
   executes commands — the agent runs them and reports; only the CLI's explicit `done --run` executes a task's
@@ -127,6 +135,20 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `--shell pwsh` / `powershell` or `runsPwsh(cmd)`; asked after `output`, never when a test ran) and `output` (the output
   shows the test never ran — see `_Expect: fail_` below); the shell resolution adds `no-git-bash`. `finish --run` stays all-or-nothing: one
   check that could not run records none.
+- **A pass that tested nothing (1.24 r6 D4 + D-I2) — `no-tests`.** A glob, a path or a filter that matches no test exits 0
+  (node `--test` prints "tests 0") and verified a must-pass task. `vacuousRun(output)` (evidence.js, `VACUOUS_OUTPUT` [runner,
+  pattern]): node `--test` "ℹ tests 0" / "# tests 0", go a line ending "[no tests to run]" / "[no test files]", cargo "running 0
+  tests", mocha "0 passing", jest "No tests found", pytest "no tests ran" / "collected 0 items", vitest "No test files found",
+  unittest "Ran 0 tests in", Pester "Tests Passed: 0, Failed: 0" (Pester 3 "Passed: 0 Failed: 0"), RSpec "0 examples, 0
+  failures", PHPUnit "No tests executed!", dotnet "No test is available in" / "No test matches the given testcase filter",
+  Maven "Tests run: 0, Failures: 0" — never when `RE_TESTS_RAN` (a non-zero count — node's tests / pass / fail, "N passing",
+  "running N tests", "collected N items", "N passed", "Tests run: N", "Passed: N", "Ran N tests", "N examples" —, go's `=== RUN`
+  / `--- PASS` or an `ok <pkg> <time>` line without the suffix: one package with no test file next to one that ran is a run,
+  a TAP `ok N`, node's `✔`) or `RE_ASSERTION_RAN` reads the output. `done --run` asks it on each passing command's FULL output
+  and refuses with nothing recorded (`couldNotRun: "no-tests"`, `runGate.noTests` — the CLI's only change); `spec_complete_task`
+  asks it on the reported `summary` of a passing run, before anything is written (`evidence.noTests`; a `ranBy: "cli"` call is
+  not asked again — a summary may have dropped the line that shows a go package ran). Literal phrases, bounded, linear on 200 KB
+  (mcp/tests/09-evidence-runs.js times them). `finish --run`'s project checks are not asked (a project check is a whole suite).
 - **`b5Exec` is asynchronous (1.23 review M13)** — `spawn` with a timer of its own, `main()` is async and awaits it: `--timeout`
   kills the whole PROCESS TREE — `taskkill /T /F /PID` on Windows, the process group elsewhere (the child is spawned `detached`:
   its own group, `process.kill(-pid)`) — where spawnSync's timeout killed the shell alone (a test runner's worker ran on and held
@@ -274,7 +296,16 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `history` (last `EVIDENCE_HISTORY` = 5 runs, for pass-rate metrics), stamps `task` (text) and `verify`
   (the command) — an edited `_Verify:_` makes the old run `stale-evidence`; a record made while the number
   was duplicated carries `shared` and only counts for its own task; other tasks' records under that number
-  are kept in `others`. A note after a run is attached as `note`, never overwrites it (a v1.12 bare
+  are kept in `others`. **1.24 r6 D1 — a renumbering:** `ownRecord`'s fallback (a record of this number stamped with another
+  text — a title edit) never takes a record stamped with the text of ANOTHER block of the same tasks.md (`taskPeerStamps()`:
+  `taskBlocks()` registers every block it hands out with the blocks of its read — a WeakMap; a block built any other way keeps
+  the older rule): inserting a task at the top and renumbering handed the old task 1's passing `npm test` to the new task 1
+  (same `_Verify:_`), which ticked with no evidence read verified, storeEvidence extended that record as its own and an untick
+  staled it. Such a task now reads `stale-evidence`, its first run starts its own record (the other one kept in `others`),
+  and doctor warns **`evidence-moved`** (`movedEvidence()`: a record — or one in `others` — stamped with the text of an active
+  block of another number and of none of its own: `#1 → #2 «Write the parser»`; `CHECK_PHASE` 6). Evidence is not moved to the
+  new number: the moved task records its own run. A pure title edit leaves no block with the old text and keeps its record.
+  A note after a run is attached as `note`, never overwrites it (a v1.12 bare
   `{exitCode: 0}` is a claim, not a run: a note replaces it as the summary). `stale: true` is set by
   `spec_impact --reopen`; only a new run (or, without a runnable `_Verify:_`, a new note) clears it. 1.14 F1: every run
   (the latest and each `history` entry) carries `observed: true | false | "cli"` (`runOf()` keeps it; older records have
@@ -293,7 +324,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 
 **1.14 additions** (engine: the `B5` block of `engine/evidence.js`; the engine still never runs a command or git):
 - **`_Expect: fail_`** — an English-stable marker, value kept whole like `_Verify:_`; only `fail` (any case, backticks
-  dropped) sets it (`expectsFail()`). On such a task a RED run `{command, exitCode ≠ 0}` is the proof: stored with
+  dropped) sets it (`expectsFail()`). 1.24 r6 D7 + D-I8: any other value (`failure`, `red`, PT `falha` — `unknownExpectValues()`)
+  left a must-pass task silently — doctor warns **`expect-value`** (`CHECK_PHASE` 5) and completeTask's failed-run refusal names
+  the value (`evidence.unknownExpect`, stable `unknownExpect: [values]`). On such a task a RED run `{command, exitCode ≠ 0}` is the proof: stored with
   `expected: "fail"`, it ticks and verifies (`redRecorded: true`). A pass with no red run of the SAME `_Verify:_` on
   record is refused and recorded (`unexpectedPass: true`, reason `unexpected-pass`; a ticked task becomes unverified);
   a pass after a red run is the fix going green — the red run is kept as `red` and stays the proof (`redProof()`; a
@@ -308,8 +341,19 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   blanks between the words — 5.1 wraps; every blank run followed by a literal: `de\s+(?:um\s+)?\s*cmdlet` took 58 s on
   200,000 blanks — mcp/tests/09-evidence.js times EVERY such pattern on 200 KB hostile inputs), "The specified module … was not loaded" (EN / PT / ES), the execution policy
   ("running scripts is disabled on this system", EN / PT / ES; "is not digitally signed"), a -File path pwsh / powershell
-  can't find, Pester's "No test files were found"; kinds `wsl` / `spawn`: WSL's relay, a Node spawn error; the `test` kind
-  never applies to output that shows an assertion failed — `RE_ASSERTION_RAN`: "not ok N", AssertionError, pytest
+  can't find, Pester's "No test files were found"; 1.24 r6 D5 + D-I3 — `python -m <runner>`'s "<python>: No module named …",
+  PHP's "Could not open input file", npm `E404` / npx's "could not determine executable to run", dash's "sh: N: cannot open"
+  (`sh <missing>.sh`, exit 2), go's "cannot find main module" / "go.mod file not found …", cargo's "could not find
+  `Cargo.toml`", dotnet `MSB1003` / `MSB1009`, ruby's "cannot load such file --", maven's "there is no POM in this directory",
+  pytest's "Interrupted: N error(s) during collection", and (D8) a test file that doesn't parse — the compiler's caret frame then
+  "SyntaxError:" (node CJS / ESM, python; `#`-prefixed under node's TAP reporter; a SyntaxError a test RAN into — JSON.parse in
+  the code under test — has no caret frame and stays red). The table's rows are `[kind, pattern, runner]` and
+  mcp/tests/09-evidence-runs.js holds a fixture per runner (a row without one fails the test) — add both together; kinds `wsl` / `spawn`: WSL's relay, a Node spawn error; the `test` kind
+  never applies to output that shows an assertion failed — `RE_ASSERTION_RAN`: "not ok N" (1.24 r6 D8: never node `--test`'s
+  FILE-level `not ok 1 - tests/x.test.js` — a subtest named after a .js / .mjs / .cjs / .ts / .mts / .cts / .jsx / .tsx file, the
+  file failed outside any test: under the TAP reporter, Node 18–22's default when piped, a broken import was the red proof
+  while the spec reporter read could-not-run; a test whose own name ends in such a file name reads the same — a known limit;
+  `summarizeRunOutput` keeps the caret frame's two lines, `RE_CARET_LINE` / `RE_SYNTAX_ERROR_LINE`), AssertionError, pytest
   `E   assert`, expect(…), "Expected:" / "But was:", Pester's failed-test line `[-] <name> 12ms (…)` (never a block's "[-] Error
   occurred in …" / "[-] Discovery in …" / "[-] <file> failed with:"), "Expected …, but got …" — or `pesterRan()`: Pester's
   summary "Tests Passed: N, Failed: M>0" (Pester 3: "Passed: N Failed: M") unless a `RE_PESTER_NOT_RUN` line says the test
@@ -385,8 +429,12 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   resolveTask's duplicate rule: a dependency on n is done once EVERY task numbered n is done; a number no active task
   carries never is. **A tasks.md without `_Depends:_` behaves exactly as before** (same next task, no new fields).
 - **`taskSchedule(blocks)` is THE next-task rule** → `{next, skipped, blocked, graph}`: the first open task in tasks order
-  (parseTasks' — by number, stable; only the task resolveTask answers for its number is a candidate) whose dependencies are
-  all done. `skipped` `[{number, waitsOn}]` = open tasks passed over because they wait; `blocked` `[{number, waitsOn}]` =
+  (only the task resolveTask answers for its number is a candidate) whose dependencies are all done. **Tasks order (1.24 r6
+  D6):** by SECTION in file order (`taskSections()`: a phase heading and the checkpoint closing it), then by number (stable) —
+  `taskDepGraph`'s `order`, which the waves' implicit chain uses too. By number alone, a task spec_append_tasks put into an
+  EARLIER phase (`{heading}`, numbered after every task) came after a later phase's tasks: next, complete_task's next, the
+  brief's default task and the waves served Phase 2 past Phase 1's checkpoint. Within one section — a tasks.md without
+  phases is one — the number decides as before; parseTasks' public list stays by number. `skipped` `[{number, waitsOn}]` = open tasks passed over because they wait; `blocked` `[{number, waitsOn}]` =
   open tasks that can never start as things stand (Kahn's walk, `stuckTasks()`: a cycle, a dependency no task carries, or
   waiting on such a task — only computed when some task declares `_Depends:_`; a task without one is never blocked).
   Consumers: `spec_next_task` / `next`, next_action's implement step (open tasks, none startable → step `fix` with
@@ -425,7 +473,14 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 - **Tasks: ONE scanner.** `taskBlocks()` (over `scanTaskLines()`) reads tasks.md like a markdown reader —
   HTML comments (a line-start `<!--` may span lines) and fenced code never hold tasks; `<!--`/`-->` inside
   code spans don't count. `parseTasks()` is its line-only projection (its shape is public through
-  `spec_status`), so status/next/complete/brief/finish can never disagree. A task line is `[-*+] [ ] N. text` — 1.22 review:
+  `spec_status`), so status/next/complete/brief/finish can never disagree. **1.24 r6 D3 — line ends:** a line loses EVERY
+  trailing CR (`dropTrailingCr`, a loop — `/\r+$/` is quadratic on a long run): "\r\r\n" (a CRLF file converted again —
+  Python's text mode on Windows, a double unix2dos) kept a "\r" on each line, headRest read it as a line terminator and NO task
+  was read ("Task 1 not found"); and a task's text is every character after its head (`taskLine` — a U+2028 / U+2029 pasted
+  inside it is an ordinary character, as a markdown reader reads it; headRest refused the line). `activeTasks()` (tracks.js)
+  splits as the scanner does (at "\n", the headings read on CR-stripped lines, each kept line written back as it was) — it
+  split on /\r?\n/ and read those tasks while the whole-file view did not. mcp/tests/08-tasks.js checks both views on 36
+  variants (LF / CRLF / \r\r\n, a BOM, tabs, U+2028 / U+2029, a nested list, a fence, a comment). A task line is `[-*+] [ ] N. text` — 1.22 review:
   `* [ ] 1.` / `+ [ ] 1.` (valid GFM) read as ZERO tasks, silently; the tasks fingerprint's tick normalization (`uncheckTasks`,
   state.js) takes the same bullets, and an approval fingerprinted the pre-1.22 way (`- [x]` only) still matches. A checkbox line
   the scanner doesn't read — an ordered-list checkbox `1. [ ] text`, an unnumbered `- [ ] text` outside every task block (a
@@ -613,7 +668,10 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   LATEST logged run within `OBSERVED_WINDOW_MS` (24 h; a stamp more than 5 min in the future ignored) that is itself a run of
   the expected commands (review 3: `runProvesVerify` from the project root, the matcher of the verdict — it used to need the
   same flattened text as the report) exited with the reported code — a report of exit 0 after an observed exit 1 is not what
-  the harness saw (`latestExitCode`); a passing report also counts when each expected command's latest logged run passed (a
+  the harness saw (`latestExitCode`); 1.24 r6 D-I5: `opts.after` — completeTask passes the time of the task's own latest
+  recorded run when that run FAILED (or its record is stale), and only a run logged after it counts (a pass the harness saw,
+  then a failure recorded for the task elsewhere, then a pass REPORTED with no new run was stamped observed); after a recorded
+  pass, the same logged run reported again in another spelling is still that run; a passing report also counts when each expected command's latest logged run passed (a
   join run as separate Bash calls) — or, for one of several plain ` && ` steps (no cd / pipefail: `proofPlainParts`), each
   step's (review 4: `observeRun` logs such a step — it logged only runs of a whole `_Verify:_` value, so this fallback never
   found one). Known limits (review 4, observed mode only): a run whose verdict depends on its `root` stamp (a sibling

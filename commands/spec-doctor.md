@@ -43,7 +43,10 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   (project checks without a passing run since the last task activity, or run before the implementing files changed —
   `/spec-finish` blocks on it), `verify-pipes` (a `_Verify:_` that pipes: its exit code is the last command's),
   `malformed-markers` (text on a task line shaped like a marker that yields none — `**Verify:** npm test`, a bare
-  `Verify:` — so no check runs and no file is traced: write `_Verify: <command>_`), `verify-suspicious` (a `_Verify:_`
+  `Verify:`, an empty `_Verify:_` followed by its value (`_Verify:_ npm test`) — so no check runs and no file is traced:
+  write `_Verify: <command>_`), `expect-value` (an `_Expect:_` value other than `fail` — the task stays one whose run must
+  pass), `evidence-moved` (a run recorded under a task number whose task was renumbered — `#1 → #2`: neither task reads it;
+  record the moved task's own run), `verify-suspicious` (a `_Verify:_`
   value that looks garbled — it starts with `_` or `*`, holds a code span inside it, or has a quote with no partner —
   which `done --run` would run as written), `outside-code-artifacts` (+tdd: a
   test planned outside test code — `load-test.md`, an eval set — whose artifact is still the scaffold),

@@ -69,6 +69,17 @@ ask the user to run the test and paste the red output — don't write the fix on
   can't paper over it.
 - **Stale evidence.** `spec_impact --reopen` (the spec the run proved changed) marks a task's evidence stale, and a
   run recorded for an earlier `_Verify:_` command no longer proves the task: run the check again.
+- **Renumbered tasks.** Evidence is kept by task number. After a renumbering (a task inserted at the top), a task never
+  reads a run recorded for ANOTHER task of the same `tasks.md` that now has another number — it reads `stale-evidence` —
+  and `spec_doctor` warns **`evidence-moved`** (`#1 → #2 «Write the parser»`): record the moved task's own run. A plain
+  title edit keeps its record.
+- **A pass that tested nothing.** A run that exits 0 while its output shows no test ran — node `--test` "tests 0" (a
+  glob that matches no file), go "[no tests to run]" / "[no test files]", cargo "running 0 tests", mocha "0 passing",
+  jest "No tests found", pytest "no tests ran" / "collected 0 items", vitest "No test files found", unittest "Ran 0
+  tests", Pester "Tests Passed: 0, Failed: 0", RSpec "0 examples", PHPUnit "No tests executed!", dotnet "No test is
+  available", Maven "Tests run: 0" — proves nothing: `dev-spec done --run` refuses it with nothing recorded, and so does
+  `spec_complete_task` when the `summary` shows it (`couldNotRun: "no-tests"`). Fix the glob, path or filter. Output
+  that shows a test ran (another go package, another cargo binary, a non-zero count) is a run.
 - **Undoing a tick.** A task ticked by mistake (or whose work turned out incomplete) is unticked with
   `spec_complete_task {name, number, undo: true, reason}` (CLI `dev-spec undone <feature> <n> --reason "…"`) — never by
   editing the checkbox. Its evidence record is marked stale (`staleBy: "undo"`): ticking it again needs a NEW run
@@ -101,7 +112,7 @@ ask the user to run the test and paste the red output — don't write the fix on
   check that ran and failed means fixing the code. **A run that could not happen records nothing:** the shell could not
   be started, the command was killed by a signal, its output passed 64 MB, `--timeout <seconds>` expired, or WSL's relay
   answered — the task stays open with a `couldNotRun` code (`shell-not-started` · `run-error` · `signal` ·
-  `output-too-large` · `timeout` · `wsl`), never a failed run on record. Or report it by hand:
+  `output-too-large` · `timeout` · `wsl` · `no-tests`: it passed without running a test), never a failed run on record. Or report it by hand:
   `--evidence "14/14 passing" --exit 0 --cmd "npm test"`.
 - **Briefs** (`spec_task_brief`) carry the `_Verify:_` command (and whether its run must fail) and require the
   implementer to paste the command, exit code and output tail in the report; the reviewer checks it is there.
@@ -132,9 +143,14 @@ green (the fix), not to this one.
 - Exit **126 / 127 / 9009** means the command could not run at all (not executable / not found) — no red test; it is
   refused like a failed run (`couldNotRun: "exit-code"`). So is a failing run whose output shows the test never ran — a
   missing test file, module or script, nothing collected (node "Could not find", "Cannot find module", python "can't open
-  file", pytest "no tests ran", jest "No tests found", npm "Missing script", PowerShell "… is not recognized as a name of a
-  cmdlet" / "The specified module … was not loaded" / "running scripts is disabled on this system", Pester "No test files
-  were found"…) — while a test that ran and failed stays red even when its message quotes one of those (Pester's
+  file", pytest "no tests ran" / "error during collection", jest "No tests found", npm "Missing script" / `E404`, npx "could
+  not determine executable to run", `python -m <runner>` "No module named …", PHP "Could not open input file", dash "sh: 0:
+  cannot open", go "cannot find main module" / "go.mod file not found", cargo "could not find `Cargo.toml`", dotnet
+  `MSB1003` / `MSB1009`, ruby "cannot load such file", maven "there is no POM", a test file that doesn't parse — a
+  caret-framed `SyntaxError:`; node `--test`'s file-level `not ok 1 - tests/x.test.js` is no test that ran —, PowerShell
+  "… is not recognized as a name of a cmdlet" / "The specified module … was not loaded" / "running scripts is disabled on
+  this system", Pester "No test files were found"…) — while a test that ran and failed stays red even when its message
+  quotes one of those (Pester's
   `[-] <test> 12ms`, "Expected …, but got …"): `spec_complete_task` refuses a run whose
   `summary` shows it (`couldNotRun: "output"`), `dev-spec done --run` refuses it with nothing recorded, and an older
   record of that kind is no red proof. A Pester block that failed before its tests ("[-] Describe … failed", "BeforeAll \
@@ -145,6 +161,8 @@ green (the fix), not to this one.
   Windows PowerShell 5.1 has no `&&`).
 - A red-phase task that carries a must-pass `_Verify:_` and no `_Expect: fail_` gets `redPhaseVerify: true` and a note
   saying to mark it `_Expect: fail_` (or move the command to the task that makes it green).
+- `_Expect:` knows one value, `fail`. Any other (`failure`, `red`, `falha`) leaves a task whose run must PASS: `spec_doctor`
+  warns **`expect-value`**, and a failed run's refusal names the value (`unknownExpect`).
 - `spec_doctor` warns **`red-green`** (+tdd): T-IDs that done tasks make green (`_Makes green:_`) with no recorded red
   run of an `_Expect: fail_` task citing them — a test that never failed proves nothing. A guard test that passes
   before the change by design (a bugfix's T-02, "the neighbouring behaviour still works") belongs in no
@@ -238,7 +256,8 @@ project checks). Interrupted and backgrounded runs are not logged.
 - **Every recorded run is stamped** `observed: true | false` — true when the latest logged run of the task's `_Verify:_`
   (read as the evidence gate reads it — `tests\x.test.js`, a `CI=1` prefix, the commands joined in any order — see
   "Which run proves it") in the last 24 hours exited with the same code (a reported exit 0 after an observed exit 1 is not
-  observed). `dev-spec
+  observed; once the task's own latest recorded run failed, only a run logged after that record counts — a pass the
+  harness saw before the failure is not the run being reported). `dev-spec
   done --run` / `finish --run` stamp `"cli"` (the CLI ran it itself). The MCP tools never take the stamp from the caller.
   `spec_complete_task` returns it, and so do the finish's `suiteChecks` items and the traceability matrix's task
   evidence (`trace_check {matrix}`).
