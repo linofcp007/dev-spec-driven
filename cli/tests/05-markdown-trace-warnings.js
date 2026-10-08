@@ -148,4 +148,20 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   ok(e16.code === 0 && /^EARS: 2 criteria, 2 with modal, verdict=pass/.test(e16.out) && /L6 \[warn\] 'AC-2' is not a stable ID trace_check reads — write US-<story>\.AC-<n>/.test(e16.out) &&
     trBare.code === 1 && /criteria with no US-<story>\.AC-<n> ID \(traceability counts none\): AC-1, AC-2/.test(trBare.out),
     "1.22 review (CLI): ears <UTF-16 file> reads its criteria and flags the bare AC-2; trace on bare AC-n IDs exits 1 naming them (got " + JSON.stringify([e16.out, trBare.code, trBare.out]) + ")");
+
+  // 1.24 r6 F3 + F8 (CLI): only a test-plan ENTRY covers an AC — trace exits 1 on an AC the plan names only in its Gaps note and prints
+  // the justifiedTestGaps warning (▲); --json carries it as trace_check does; ears warns padded-id on US-1.AC-02.
+  const g6 = path.join(tmp, "r6-gaps");
+  run(["init", "tdd", "--project", g6]);
+  run(["create", "Gaps", "tdd", "--project", g6]);
+  fs.writeFileSync(path.join(g6, ".specs", "gaps", "requirements.md"), "# Requirements\n\n## Acceptance Criteria (EARS)\n\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y.\n2. **US-1.AC-02** — WHEN z THE SYSTEM SHALL w.\n");
+  fs.writeFileSync(path.join(g6, ".specs", "gaps", "tasks.md"), "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1, US-1.AC-02_\n  - _Makes green: T-01_\n");
+  fs.writeFileSync(path.join(g6, ".specs", "gaps", "test-plan.md"), "# Test Plan\n\n| Test ID | Layer | Kind | Description | Covers | File |\n|---|---|---|---|---|---|\n" +
+    "| T-01 | unit | example | x | US-1.AC-1 | `tests/x.test.js` |\n\n## Coverage Check\nGaps (with justification):\n- US-1.AC-02 — manual check only\n");
+  const trG = run(["trace", "gaps", "--project", g6]);
+  const trGj = JSON.parse(run(["trace", "gaps", "--project", g6, "--json"]).out);
+  const eG = run(["ears", "gaps", "--project", g6]);
+  ok(trG.code === 1 && /ACs with no planned test: US-1\.AC-02/.test(trG.out) && /▲ ACs the test plan names only in a note \(Gaps \/ Out of Scope\), never in a test row[^\n]*: US-1\.AC-02/.test(trG.out) &&
+    JSON.stringify(trGj.justifiedTestGaps) === '["US-1.AC-02"]' && trGj.warnings.some((w) => w.kind === "justifiedTestGaps") && /\[warn\] 'US-1\.AC-02' is zero-padded[^\n]*write US-1\.AC-2/.test(eG.out),
+    "1.24 r6 F3/F8 (CLI): trace exits 1 on an AC only a Gaps note names and prints the justifiedTestGaps warning; --json carries it; ears warns padded-id (got " + JSON.stringify([trG.code, trG.out, eG.out]) + ")");
 };
