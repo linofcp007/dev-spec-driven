@@ -252,7 +252,8 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
     const sig = (t) => { const c = S.classify(t); return [c.tracks.includes("sec"), c.signals.sec]; };
     const on5 = ["Encriptar os dados dos cartões em repouso", "Encrypt customer PII at rest and in transit", "Os dados são criptografados em repouso e em trânsito", "Los datos se cifran en reposo"].map(sig);
     // one verb is one signal, whatever its forms (as encrypt / encryption): a lone verb is only "possible"
-    const weak5 = ["Criptografar os backups", "Cifrar las contraseñas", "O sistema encripta os backups", "Encriptar os dados e guardar os dados encriptados"].map(sig);
+    // (review 5: "contraseña" is a +sec word of its own now — "Cifrar las contraseñas" is two signals, +sec on; the lone verb is "las facturas")
+    const weak5 = ["Criptografar os backups", "Cifrar las facturas", "O sistema encripta os backups", "Encriptar os dados e guardar os dados encriptados"].map(sig);
     const none5 = ["As cifras do trimestre sobem", "O paciente fica em repouso", "Packages in transit are tracked"].map(sig);
     ok(on5.every(([on]) => on) && weak5.every(([on, s]) => !on && s.length === 1) && none5.every(([on, s]) => !on && !s.length),
       "full review Pb5: encriptar / criptografar / cifrar are +sec signals, 'at rest' / 'in transit' (EN/PT/ES) corroborate them; 'cifras' (figures), a patient at rest, parcels in transit are none (got " +
