@@ -225,9 +225,17 @@ and U+FEFF gotchas are in CLAUDE.md.
   check theirs in their case; `--shell` / `--timeout` without `--run` (`needsRun`) and `--run` with `--evidence` / `--exit` /
   `--cmd` (`runOrEvidence`) are usage errors; `undone` takes done's run flags only to refuse them (`undo.noEvidence`). A new
   command or flag gets its `COMMAND_OPTIONS` entry (extending.md). **`--project` (L14)** names an existing folder
-  (`checkProjectFlag()`): empty, an unexpanded variable (`unexpandedVar`), a file or a missing folder is refused (localized
+  (`checkProject()`): empty, an unexpanded variable (`unexpandedVar`), a file or a missing folder is refused (localized
   `cliOutput.project*`) — `init` alone may create it (`create x --project <typo>` created the whole mistyped tree); on Windows a
   trailing `"` is dropped (`--project "C:\dir\"` reaches node as `C:\dir"`). The status line's render path checks none of this.
+  **The environment too (1.24 r6 B1):** `PROJECT_SOURCE` reads resolveProjectDir's precedence in the CLI (files.js keeps its
+  signature) — `flag` · `SPEC_PROJECT_DIR` · `CLAUDE_PROJECT_DIR` · `nearest` · `cwd` — and a variable that CHOSE the project is
+  checked like `--project`: a missing folder (but for `init`) or a file is refused with the variable named
+  (`cliOutput.projectEnvMissing` / `projectEnvNotDir`) — a mistyped `SPEC_PROJECT_DIR` created that tree, a file ended in a raw
+  ENOTDIR, and `list` answered "No features". A folder without `.specs/` is fine (CLAUDE_PROJECT_DIR is any folder Claude Code
+  opened); an empty or unexpanded value still falls through. **B7:** a dev-spec project's own `.specs/` named as the project
+  (`--project <proj>/.specs`, or the variable — `spec.isDevSpecDir(parent)`) is refused naming the parent
+  (`cliOutput.projectIsSpecs`): it created `.specs/.specs/`, which then won every walk-up. `version` checks none of this — it reports.
   **`evals` (P1)** forwards every word of the command line but the command and `--project` (the CLI passes its resolved one) —
   read with run-evals.js's rules (`evalsArgs()`: its value flags `--project` / `--model` / `--prompt` / `--max-items` take the
   next word): only the words after the feature were forwarded, so `evals --dry-run <f>` ran LIVE (paid calls). run-evals.js

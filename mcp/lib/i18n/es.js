@@ -1655,6 +1655,9 @@ const msg = {
       projectUnexpanded: (v) => `--project ${v} contiene una variable que nunca se expandió — pasa la propia carpeta.`,
       projectMissing: (dir) => `--project ${dir}: esa carpeta no existe — revisa la ruta (solo init crea la carpeta de un proyecto).`,
       projectNotDir: (dir) => `--project ${dir} es un fichero, no una carpeta.`,
+      projectEnvMissing: (name, dir) => `${name}=${dir}: esa carpeta no existe — corrige la variable o elimínala (solo init crea la carpeta de un proyecto).`,
+      projectEnvNotDir: (name, dir) => `${name}=${dir} es un fichero, no una carpeta — corrige la variable o elimínala.`,
+      projectIsSpecs: (label, parent) => `${label} es la carpeta .specs del proyecto ${parent} — indica la propia carpeta del proyecto: ${parent}`,
     },
 
     gates: {

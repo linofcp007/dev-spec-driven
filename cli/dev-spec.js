@@ -234,12 +234,19 @@ if (process.platform === "win32" && typeof flags.project === "string") flags.pro
 // --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working folder with a dev-spec .specs/
 // > the working folder — the same resolution as the MCP server (spec.resolveProjectDir). --project is checked in main().
 const projectDir = spec.resolveProjectDir(flags.project);
+// 1.24 r6 B1 — WHICH input chose it, read with resolveProjectDir's own precedence (a value that is empty or holds an unexpanded
+// variable falls through): "flag" (--project) · "SPEC_PROJECT_DIR" · "CLAUDE_PROJECT_DIR" · "nearest" (a folder above the working
+// one with a dev-spec .specs/) · "cwd" (the working folder). checkProject() checks a named one; `version` reports it.
+const usableDir = (v) => v != null && String(v).trim() !== "" && !spec.unexpandedVar(v);
+const PROJECT_SOURCE = typeof flags.project === "string" && usableDir(flags.project) ? "flag"
+  : usableDir(process.env.SPEC_PROJECT_DIR) ? "SPEC_PROJECT_DIR"
+  : usableDir(process.env.CLAUDE_PROJECT_DIR) ? "CLAUDE_PROJECT_DIR"
+  : path.resolve(process.cwd()) === projectDir ? "cwd" : "nearest";
 // Where a PATH argument is read from (scan <path>, ears <file>, import <tool> <path>): the project folder when it was NAMED
 // (--project, SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR — as import always read it), else the working folder: a path typed in a
 // subfolder of the project found by walking up is relative to that subfolder, as in git (1.23 review L12: scan and ears read it
 // from the working folder even with --project, import from the project).
-const envProject = (v) => v != null && String(v).trim() !== "" && !spec.unexpandedVar(v);
-const projectNamed = typeof flags.project === "string" || envProject(process.env.SPEC_PROJECT_DIR) || envProject(process.env.CLAUDE_PROJECT_DIR);
+const projectNamed = typeof flags.project === "string" || PROJECT_SOURCE === "SPEC_PROJECT_DIR" || PROJECT_SOURCE === "CLAUDE_PROJECT_DIR";
 const argPath = (p) => path.resolve(projectNamed ? projectDir : process.cwd(), String(p));
 
 // Boolean switches: `--x` is true, `--x=true|false` (also 1/0, yes/no, on/off) sets it explicitly; any other `=value` is
@@ -453,17 +460,32 @@ function checkCommandArgs() {
 // 1.23 review (L14) — --project names an existing FOLDER: an empty value, a variable left unexpanded (`$HOME/x`, `%DIR%`, `${…}`)
 // or a file is refused, and so is a folder that doesn't exist — except for init, which creates it (`create x --project <typo>`
 // used to create the whole mistyped tree; a file or `C:\dir"` ended in a raw ENOTDIR / ENOENT).
-function checkProjectFlag() {
-  if (!("project" in flags)) return;
+// 1.24 r6 B1 — SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR are checked the same way when one of them chose the project (PROJECT_SOURCE):
+// a mistyped one created that tree, a file ended in a raw ENOTDIR and `list` answered "No features" — the message names the
+// variable. A folder without .specs/ is fine (CLAUDE_PROJECT_DIR is whatever folder Claude Code opened). An empty or unexpanded
+// value still falls through (resolveProjectDir's rule). B7 — a dev-spec project's own .specs/ folder named as the project is
+// refused with the folder to name: it created .specs/.specs/, which then won every walk-up.
+function checkProject() {
   const T = projectText();
-  const v = typeof flags.project === "string" ? flags.project.trim() : "";
-  if (!v) die(T.projectEmpty);
-  if (spec.unexpandedVar(v)) die(T.projectUnexpanded(v));
+  let v, src;
+  if ("project" in flags) {
+    v = typeof flags.project === "string" ? flags.project.trim() : "";
+    if (!v) die(T.projectEmpty);
+    if (spec.unexpandedVar(v)) die(T.projectUnexpanded(v));
+    src = "--project";
+  } else if (PROJECT_SOURCE === "SPEC_PROJECT_DIR" || PROJECT_SOURCE === "CLAUDE_PROJECT_DIR") {
+    v = String(process.env[PROJECT_SOURCE]).trim();
+    src = PROJECT_SOURCE;
+  } else return;
   const abs = path.resolve(v);
+  const flag = src === "--project";
   let st = null;
   try { st = fs.statSync(abs); } catch { st = null; }
-  if (st && !st.isDirectory()) die(T.projectNotDir(abs));
-  if (!st && cmd !== "init") die(T.projectMissing(abs));
+  if (st && !st.isDirectory()) die(flag ? T.projectNotDir(abs) : T.projectEnvNotDir(src, abs));
+  if (!st && cmd !== "init") die(flag ? T.projectMissing(abs) : T.projectEnvMissing(src, abs));
+  const base = path.basename(abs);
+  const specsName = process.platform === "win32" || process.platform === "darwin" ? /^\.specs$/i.test(base) : base === ".specs";
+  if (st && specsName && spec.isDevSpecDir(path.dirname(abs))) die(T.projectIsSpecs(flag ? "--project " + abs : src + "=" + abs, path.dirname(abs)));
 }
 
 // ---- mcp-config snippets ---------------------------------------------------
@@ -582,7 +604,7 @@ async function main() {
   if (on("json") && (helpOnly || TEXT_ONLY_COMMANDS.has(cmd))) die(projectText().noJson(helpOnly ? "help" : cmd), { text: true });
   if (on("help") && cmd !== "evals") return console.log(helpText()); // `<command> --help` prints the help, runs nothing
   if (!helpOnly) {
-    checkProjectFlag(); // 1.23 review L14: an existing folder (init alone may create it)
+    checkProject(); // 1.23 review L14: an existing folder (init alone may create it) — 1.24 r6 B1: the environment too
     checkCommandArgs(); // 1.23 review: the command's own options, at most its own arguments
   }
   switch (cmd) {

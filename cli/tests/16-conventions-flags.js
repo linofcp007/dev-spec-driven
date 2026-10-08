@@ -232,4 +232,59 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     earsU16.code === 0 && /EARS: 2 critérios, 2 com verbo modal/.test(earsU16.out) && plan23 && plan23.ok === true && Object.keys(plan23.mapping).length === 3,
     "1.23 review: from a subfolder the CLI uses the project above (create / backlog add start no nested .specs/), a path is read from the subfolder — or from --project when named (ears, scan); scan in the project's language; UTF-16 stdin decoded (ears -, import plan -) (got " +
     JSON.stringify([cr23.code, bl23w.code, earsRel23.out.trim().slice(0, 50), earsP23.out.trim().slice(0, 50), scanP23.out.slice(0, 40), earsU16.out.trim().slice(0, 50), plan23 && plan23.mapping]) + ")");
+
+  // 1.24 r6 B1: SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR are checked like --project when they chose the project — a missing folder
+  // (init alone creates it) or a file is refused, the message names the variable; a folder without .specs/ is fine.
+  {
+    const neutral = path.join(tmp, "r6b1-cwd");
+    fs.mkdirSync(neutral, { recursive: true });
+    const envRun = (env, args) => {
+      const e = { ...process.env };
+      delete e.SPEC_PROJECT_DIR;
+      delete e.CLAUDE_PROJECT_DIR;
+      const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", cwd: neutral, env: { ...e, ...env } });
+      let j = null;
+      try { j = JSON.parse(r.stdout); } catch { /* not JSON */ }
+      return { code: r.status, out: (r.stdout || "") + (r.stderr || ""), j };
+    };
+    const typo = path.join(tmp, "r6b1-typo", "deeper"), aFile = path.join(tmp, "r6b1-a-file.txt"), bare = path.join(tmp, "r6b1-bare");
+    fs.writeFileSync(aFile, "not a folder\n");
+    fs.mkdirSync(bare, { recursive: true });
+    const r = [envRun({ SPEC_PROJECT_DIR: typo }, ["list"]), envRun({ SPEC_PROJECT_DIR: typo }, ["create", "X"]), envRun({ SPEC_PROJECT_DIR: aFile }, ["create", "X"]),
+      envRun({ CLAUDE_PROJECT_DIR: typo }, ["backlog", "add", "later"]), envRun({ SPEC_PROJECT_DIR: typo }, ["create", "X", "--json"]),
+      envRun({ CLAUDE_PROJECT_DIR: aFile }, ["list", "--json"])];
+    const createdTypo = fs.existsSync(path.join(tmp, "r6b1-typo"));
+    const okBare = envRun({ CLAUDE_PROJECT_DIR: bare }, ["list"]);
+    const okFlag = envRun({ SPEC_PROJECT_DIR: typo }, ["list", "--project", bare]);
+    const okFall = envRun({ SPEC_PROJECT_DIR: "$NOPE/x", CLAUDE_PROJECT_DIR: bare }, ["list"]);
+    const newInit = path.join(tmp, "r6b1-new-by-init");
+    const okInit = envRun({ SPEC_PROJECT_DIR: newInit }, ["init"]);
+    const ptP = path.join(tmp, "r6b1-pt");
+    run(["init", "--lang", "pt", "--project", ptP]);
+    const ptMiss = envRun({ SPEC_PROJECT_DIR: path.join(ptP, "nope"), CLAUDE_PROJECT_DIR: ptP }, ["list"]);
+    ok(r[0].code === 1 && /SPEC_PROJECT_DIR=.*deeper: no such folder/.test(r[0].out) && r[1].code === 1 && !createdTypo &&
+      r[2].code === 1 && /SPEC_PROJECT_DIR=.*r6b1-a-file\.txt is a file, not a folder/.test(r[2].out) && !/ENOTDIR/.test(r[2].out) &&
+      r[3].code === 1 && /CLAUDE_PROJECT_DIR=.*deeper: no such folder/.test(r[3].out) &&
+      r[4].code === 1 && r[4].j && r[4].j.ok === false && /SPEC_PROJECT_DIR=/.test(r[4].j.error) && r[5].code === 1 && r[5].j && r[5].j.ok === false && /CLAUDE_PROJECT_DIR=/.test(r[5].j.error) &&
+      okBare.code === 0 && /No features under/.test(okBare.out) && okFlag.code === 0 && okFall.code === 0 &&
+      okInit.code === 0 && fs.existsSync(path.join(newInit, ".specs", "steering")) && ptMiss.code === 1 && /SPEC_PROJECT_DIR=.*nope/.test(ptMiss.out),
+      "1.24 r6 B1: a SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR that chose the project is checked like --project — a missing folder or a file exits 1 naming the variable (--json: ok false), nothing created; a folder without .specs/, --project over it, an unexpanded value falling through and init (creates it) work (got " +
+      JSON.stringify(r.map((x) => [x.code, x.out.trim().slice(0, 90)]).concat([[okBare.code, okFlag.code, okFall.code, okInit.code, createdTypo], [ptMiss.code, ptMiss.out.trim().slice(0, 80)]])) + ")");
+  }
+
+  // 1.24 r6 B7: --project (or the environment) naming a project's .specs/ folder is refused with the folder to name instead — it
+  // created .specs/.specs/, which then won the walk-up.
+  {
+    const proj = path.join(tmp, "r6b7-proj");
+    run(["init", "--project", proj]);
+    const inner = path.join(proj, ".specs");
+    const e = { ...process.env, SPEC_PROJECT_DIR: inner };
+    delete e.CLAUDE_PROJECT_DIR;
+    const viaEnv = spawnSync(process.execPath, [CLI, "create", "X"], { encoding: "utf8", env: e });
+    const r = [run(["create", "X", "--project", inner]), run(["init", "--project", inner]), run(["list", "--project", inner + path.sep])];
+    ok(r.every((x) => x.code === 1 && x.out.includes(proj) && /the \.specs folder of the project/.test(x.out)) && viaEnv.status === 1 && /SPEC_PROJECT_DIR/.test(viaEnv.stderr) &&
+      !fs.existsSync(path.join(inner, ".specs")) && !fs.existsSync(path.join(inner, "x")),
+      "1.24 r6 B7: --project / SPEC_PROJECT_DIR naming a dev-spec project's .specs/ exits 1 with the project folder to name instead; no .specs/.specs/ (got " +
+      JSON.stringify(r.map((x) => [x.code, x.out.trim().slice(0, 100)]).concat([[viaEnv.status, String(viaEnv.stderr).trim().slice(0, 100)]])) + ")");
+  }
 };

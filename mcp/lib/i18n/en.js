@@ -1716,6 +1716,11 @@ const msg = {
       projectUnexpanded: (v) => `--project ${v} holds a variable that was never expanded — pass the folder itself.`,
       projectMissing: (dir) => `--project ${dir}: no such folder — check the path (only init creates a project folder).`,
       projectNotDir: (dir) => `--project ${dir} is a file, not a folder.`,
+      // 1.24 r6 B1: SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR are checked like --project when one of them chose the project
+      projectEnvMissing: (name, dir) => `${name}=${dir}: no such folder — fix or unset the variable (only init creates a project folder).`,
+      projectEnvNotDir: (name, dir) => `${name}=${dir} is a file, not a folder — fix or unset the variable.`,
+      // 1.24 r6 B7: a project's own .specs/ folder named as the project (label: "--project <dir>" or "<VARIABLE>=<dir>")
+      projectIsSpecs: (label, parent) => `${label} is the .specs folder of the project ${parent} — name the project folder itself: ${parent}`,
     },
 
     // Gates: template placeholders, the approve gate (+ force), finish blockers, the bugfix execution gate,

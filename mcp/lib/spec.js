@@ -54,7 +54,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   exportSpecs, extractSection, featureFlow, featureLang, featureLocked, featureOverlaps, featurePercent,
   featurePlaceholders, finishFeature, FLOWS, forecastData, globalConstraints, globFiles, glossaryEntries, guardCheck,
   guardEnabled, guardLevel, sessionProject, sessionPath, impactLines, impactReport, implementsTargets, importSpec, initProject, integrationPlanMd,
-  isFeatureFolder, isNetworkPath, isPlaceholderTask, isTemplatePlaceholder, isTestFile, isWslLauncher, listFeatures,
+  isDevSpecDir, isFeatureFolder, isNetworkPath, isPlaceholderTask, isTemplatePlaceholder, isTestFile, isWslLauncher, listFeatures,
   manageFeature, markdownToHtml, matrixCsv, maybeRefreshCatalog, mdPlainText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
   MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, milestone,
   MILESTONE_ACTIONS, MILESTONE_STATUSES, milestoneLine, networkPathInside, nextAction, nextTask, normalizeLang,
@@ -179,6 +179,7 @@ module.exports = {
   // 1.16 C — Claude Code integration: the status line, the plan-mode bridge, the user's DEV_SPEC_* defaults (fallbacks)
   statusLine,
   statusLineProject,
+  isDevSpecDir, // 1.24 r6 B7: does <dir>/.specs/ belong to dev-spec (roadmap.json, steering/, a feature's .state.json)? — the CLI refuses a project's .specs/ named as the project
   isNetworkPath,
   networkPathInside, // 1.16 verify NEW-3: the guard's (and the save hook's) text-only rule for a network path
   planBridge,
