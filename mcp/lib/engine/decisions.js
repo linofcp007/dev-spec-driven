@@ -281,6 +281,29 @@ function safeSpecText(s) {
   return stripEnds(out.join("\n"), unitIn("\n")); // /^\n+|\n+$/g
 }
 
+// `raw` (a spec file's text) with `addition` appended — THE append of every spec writer (1.23 review 5: spec_decide's entry,
+// spec_add_track's mandatory sections and task block, the covered sections a track removal restores, the importer's design body +
+// track blocks). A code block `raw` leaves open at its end (a snippet pasted by hand) is closed first, by appending its closer —
+// nothing is rewritten: whatever followed it was code to every reader (the decision entry was written unreadable and its D-n
+// handed out again; add_track's sections read 'missing' right after it said it added them, and a second add wrote them twice). A
+// fence opened inside a list item (indented) needs no closer: the appended text at the margin ends it. `addition` (written with
+// "\n") follows in raw's line ends (CRLF kept).
+//   default     raw's bytes kept (a BOM, a missing final newline) and a blank line before `addition` (decisions.md's entries);
+//   opts.trim   raw's trailing blanks dropped, then opts.join (default "\n") — the scaffold writers' join (`text.trimEnd() + "\n" + block`).
+function appendSpecText(raw, addition, opts = {}) {
+  const text = String(raw == null ? "" : raw);
+  const eol = /\r\n/.test(text) ? "\r\n" : "\n";
+  const add = String(addition == null ? "" : addition).replace(/\r?\n/g, eol);
+  const base = opts.trim ? text.trimEnd() : text;
+  const fst = { fence: null };
+  for (const l of blankHtmlComments(base.replace(RE_LEADING_BOM, "")).split(/\r?\n/)) fenceStep(fst, l);
+  const closer = fst.fence && !(fst.fence.indent > 0) ? fst.fence.mark : null;
+  if (opts.trim) return base + (closer ? eol + closer : "") + String(opts.join == null ? "\n" : opts.join).replace(/\r?\n/g, eol) + add;
+  const body = closer ? base + (/\n$/.test(base) ? "" : eol) + closer + eol : base;
+  const sep = /(?:^|\n)[ \t]*\r?\n$/.test(body) ? "" : /\n$/.test(body) ? eol : eol + eol;
+  return body + sep + add;
+}
+
 // spec_decide input → { title, decision, context, consequences, kind, affects, supersedes } | { error }.
 function decisionInput(input, D) {
   const o = isObj(input) ? input : {};
@@ -379,16 +402,9 @@ function decide(projectDir, name, input) {
     const title = specTitle(readIfExists(path.join(dir, "requirements.md")) || readIfExists(path.join(dir, SPIKE_FILE)) || readIfExists(path.join(dir, "bug.md")) || "", slug);
     out = D.header(title) + "\n" + lines.join("\n") + "\n";
   } else {
-    // Append only: the file's bytes stay as they are (BOM, line ends, a missing final newline) — the entry follows its line ends.
-    const eol = /\r\n/.test(raw) ? "\r\n" : "\n";
-    // A code block left open at the end (a snippet pasted by hand) would swallow the entry — every reader skips fenced
-    // lines, so it was written, unreadable, and its number handed out again. Close it first (appended; nothing rewritten).
-    const fst = { fence: null };
-    for (const l of blankHtmlComments(raw.replace(RE_LEADING_BOM, "")).split(/\r?\n/)) fenceStep(fst, l);
-    const closer = fst.fence && !(fst.fence.indent > 0) ? fst.fence.mark : null;
-    const body = closer ? raw + (/\n$/.test(raw) ? "" : eol) + closer + eol : raw;
-    const sep = /(?:^|\n)[ \t]*\r?\n$/.test(body) ? "" : /\n$/.test(body) ? eol : eol + eol;
-    out = body + sep + lines.join(eol) + eol;
+    // Append only: the file's bytes stay as they are (BOM, line ends, a missing final newline) — the entry follows its line ends,
+    // after a code block left open at the end is closed (appendSpecText — it was written unreadable, and its number handed out again).
+    out = appendSpecText(raw, lines.join("\n") + "\n");
   }
   writeFileAtomic(file, out);
   maybeRefreshRoadmap(projectDir); // + SPECS.md once it exists (the catalog lists the decisions)
@@ -760,7 +776,7 @@ module.exports = { DECISIONS_FILE, DECISION_TITLE_MAX, DECISION_TEXT_MAX, RE_DEC
   decisionHead, stripClosingHashes, underscoreMarkerLine, RE_DECISION_MARKER_HEAD, decisionMarker, DECISION_LABELS,
   RE_DECISION_LABEL, BRIEF_DECISIONS_MAX, BRIEF_DECISIONS_CHARS, RE_LEADING_BOM, blankHtmlComments, splitRefs, affectPieces, rejoinRefs, affectsRefs, AFFECTS_JOIN_MAX,
   normDecisionId, decisionLabelKey, decisionLog, retiredDecisions, decisionSectionKeys, decisionTargets, resolveAffect,
-  trimBlanksEnd, safeSpecText, decisionInput, decisionEntryLines, decide, decisionsTrace, affectsWarnings,
+  trimBlanksEnd, safeSpecText, appendSpecText, decisionInput, decisionEntryLines, decide, decisionsTrace, affectsWarnings,
   decisionDoctorChecks, briefDecisions, decisionSummaryLines, catalogDecisions, SPIKE_FILE, SPIKE_SYN, RE_OUTCOME_HEAD,
   outcomeMarker, OUTCOME_SYN, normOutcome, spikeProse, spikeFilled, spikeOutcome, spikeParagraph, validIsoDay,
   spikeTimebox, todayIso, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeSeed, spikeDoctor, spikeNextAction,

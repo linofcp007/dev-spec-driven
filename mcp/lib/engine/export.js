@@ -24,7 +24,7 @@ let acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM
   specsRoot, specsWriteContained, SPIKE_FILE, spikeInfo, stateFromFile, statePath, statusFeature, storyContext, stripEnd, stripEnds,
   stripHtmlComments, supersededByIndex, supersedesMarkers, taskBlocks, taskProse, taskSize, timeOf, trackAcIds,
   trackLabel, trackMarker, verificationStatus, withoutTaskMarkers, withRoadmapLock, writeFileAtomic, writeRoadmap,
-  wsOrUnitIn, changeViews, CHANGE_FILE;
+  wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM_CHAR,
   buildTraceMatrix, catalogData, changedSinceApproval, clarificationMarkers, cleanTaskText, closesFence, csvRecord, day,
   designSections, detectPhase, detectTracks, dirKey, existingFeature, extractAcIds, extractSection, fcDay, fcIso,
@@ -36,7 +36,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeadin
   sectionFirstParagraph, sha1Hex, SIZE_POINTS, slugify, specsRoot, specsWriteContained, SPIKE_FILE, spikeInfo, stateFromFile, statePath,
   statusFeature, storyContext, stripEnd, stripEnds, stripHtmlComments, supersededByIndex, supersedesMarkers, taskBlocks,
   taskProse, taskSize, timeOf, trackAcIds, trackLabel, trackMarker, verificationStatus, withoutTaskMarkers,
-  withRoadmapLock, writeFileAtomic, writeRoadmap, wsOrUnitIn, changeViews, CHANGE_FILE } = E); }
+  withRoadmapLock, writeFileAtomic, writeRoadmap, wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.14 B2 — stakeholder export (spec_export) · release notes from the specs (spec_changelog)
@@ -379,7 +379,10 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
   const reqRaw = kind === "change" ? changeViews(read("requirements.md") || "").criteria : read("requirements.md") || "";
   const reqs = activeDesign(reqRaw, tracks); // a removed track's [SaaS]/[AI]/… criteria are inactive — not part of the spec
   const status = statusFeature(projectDir, slug);
-  const tasks = status.ok ? status.tasks.list : [];
+  // 1.23 review 5 — the Tasks table copies each task's text into the document: a tasks.md (a change's change.md) linked to a file
+  // outside .specs/ is skipped like every other artifact here (`read`), never copied out through statusFeature's plain read.
+  const tasksContained = !existsCached(path.join(dir, "tasks.md")) || read("tasks.md") != null;
+  const tasks = status.ok && tasksContained ? status.tasks.list : [];
   const done = tasks.filter((t) => t.done).length;
   const phase = status.ok ? status.phase : detectPhase(dir, tracks);
   const catF = cat.features.find((x) => x.feature === slug && !x.archived);
@@ -1150,7 +1153,7 @@ function oneLiner(s, max = 200) {
   if (!t) return null;
   if (t.length > max) {
     const first = t.split(/(?<=[.!?])\s+(?=\p{Lu})/u)[0];
-    t = first.length <= max ? first : t.slice(0, max - 1).replace(/\s+\S*$/, "") + "…";
+    t = first.length <= max ? first : cutText(t, max - 1).replace(/\s+\S*$/, "") + "…"; // cutText: never half an emoji (1.23 review 5)
   }
   return t;
 }

@@ -1216,6 +1216,10 @@ const msg = {
     },
     kindKept: (kept, asked) => `Esta función ya es del tipo '${kept}' — se mantiene (pediste '${asked}'). Crea otra para un tipo distinto.`,
     langKept: (kept, asked) => `Esta función ya está en '${kept}' — se mantiene (pediste '${asked}'). Una función, un idioma.`,
+    // 1.23 review 5 — spec_create sobre una carpeta que ya existe (volver a ejecutarlo) lo dice; una función nueva cuyo slug también tiene una archivada se señala.
+    createExisted: (slug) => `'${slug}' ya existe — no se recreó nada (se conservaron sus archivos; volver a ejecutarlo solo añade los tracks que le faltan).`,
+    createSummaryKept: "El resumen indicado no se escribió: los archivos de la función ya tienen uno.",
+    createArchivedTwin: (slug) => `También hay una función archivada llamada '${slug}' (.specs/_archive/${slug}) — para restaurarla más adelante, renombra primero una de las dos.`,
     // 1.21 F3 — spec_create {kind: "bugfix"}: prerrelleno (reproduction · rootCause · condition · behaviour — nombres en inglés).
     bugPrefill: {
       bugOnly: (key) => `${key} es un dato de bugfix — pasa kind: "bugfix" (rellena bug.md y el criterio de regresión).`,
@@ -1239,16 +1243,21 @@ const msg = {
       lockStuck: (rel) => `Un bloqueo de dev-spec abandonado (${rel}) no se ha podido eliminar — el archivo (o una carpeta con ese nombre) está abierto en otro programa, es de solo lectura o no es un archivo. No se ha cambiado nada. Borra ${rel} a mano (revisa sus permisos) y vuelve a intentarlo.`,
       noText: "No se ha proporcionado texto.",
       unknownPhase: (phase, known) => `Fase desconocida '${phase}'. Conocidas: ${known}`,
-      alreadyArchived: (slug) => `'${slug}' ya está archivada (.specs/_archive/${slug}). Elimínala de allí primero.`,
+      alreadyArchived: (slug) => `'${slug}' ya está archivada (.specs/_archive/${slug}) — renombra primero esta función (${DEV_SPEC} feature rename ${slug} "<nuevo nombre>") y luego archívala.`,
       renameNeedsName: "para renombrar hace falta un nombre nuevo.",
       sameSlug: "El nombre nuevo da el mismo slug.",
       alreadyExists: (slug) => `'${slug}' ya existe.`,
+      renameArchived: (slug) => `'${slug}' es el nombre de una función archivada (.specs/_archive/${slug}) — elige otro nombre (con el mismo nombre, ninguna de las dos podría archivarse ni restaurarse).`,
+      slugTaken: (slug, held, name) => `'${name}' llega a la carpeta .specs/${slug}/, que contiene otra función ('${held}') — el nombre de la carpeta conserva solo los primeros 64 caracteres del nombre. No se cambió nada: usa un nombre más corto que se diferencie dentro de ellos (para trabajar en '${held}', usa el nombre '${slug}').`,
       badAction: "la acción debe ser: remove | archive | rename | restore | flow",
       badTrack: "el track debe ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
       cycle: (chain) => `Dependencia circular: ${chain}`,
       nameRequired: "el nombre es obligatorio",
       noSpecs: (root) => `No hay .specs/ en ${root}`,
       notGenerated: (file) => `${file} existe y no lo generó dev-spec — no se ha modificado.`,
+      specsLinked: (rel) => `Se rechazó escribir en ${rel}: esa carpeta es un enlace (simbólico o junction) o apunta fuera de .specs/ — sustitúyela por una carpeta normal y vuelve a intentarlo. No se escribió nada.`,
+      roadmapNotWritten: (file, broken) => `${broken} ${file} no se regeneró — generado a partir de lo que roadmap.json aún da, perdería las dependencias, el backlog y los hitos que no puede leer. Corrige .specs/roadmap.json y vuelve a ejecutar ${DEV_SPEC} roadmap --write.`,
+      roadmapViewPartial: (broken) => `${broken} Esta vista deja fuera lo que no puede leer (las dependencias, el backlog y los hitos) hasta que se corrija.`,
       unknownSteering: (file, known) => `Fichero de steering desconocido '${file}'. Conocidos: ${known}`,
     },
     ears: {
@@ -1509,6 +1518,8 @@ const msg = {
       unticks: "'unticks' debe ser un array",
     },
     depend: {
+      // 1.23 review 5 — "Necesita atención" de ROADMAP.md / .html: un dependsOn que no nombra ninguna función
+      roadmapStale: (feature, list, args) => `depende de ${list}, que no es ninguna función (una entrada antigua o editada a mano en .specs/roadmap.json) — vuelve a definir la lista sin ella: ${DEV_SPEC} depend ${feature} ${args}`,
       unknown: (list) => `Cada dependencia debe ser una función existente — no encontrada(s): ${list}`,
     },
     evals: {
@@ -1737,6 +1748,7 @@ const msg = {
       notFound: (p) => `'${p}' no encontrado.`,
       nothing: (tool, p) => `No se encontraron ficheros de spec ${tool} en '${p}'.`,
       exists: (slug) => `La función '${slug}' ya existe — la importación nunca la sobrescribe. Indica otro nombre.`,
+      tooLarge: (rel, max) => `${rel} tiene más de ${max} caracteres — demasiado grande para importarlo entero (la parte que pasa del límite, incluidos los pasos de un plan, se perdería). Divídelo o acórtalo y vuelve a importarlo; no se creó nada.`,
       noUsableTitle: (title) => `El título del documento '${title}' no tiene caracteres utilizables (a-z, 0-9) para un nombre de carpeta — indica el nombre de la función (name; CLI: --name "<función>").`,
       featureTitle: (name) => `# Función: ${name}`,
       tasksTitle: (name) => `# Tareas: ${name}`,
@@ -1982,7 +1994,7 @@ const msg = {
     },
     restore: {
       notArchived: (slug) => `No hay nada archivado como '${slug}' (.specs/_archive/${slug}/ no existe).`,
-      activeExists: (slug) => `'${slug}' ya es una función activa — renómbrala o archívala antes de restaurar la archivada.`,
+      activeExists: (slug) => `'${slug}' ya es una función activa — renómbrala primero (${DEV_SPEC} feature rename ${slug} "<nuevo nombre>") y luego restaura la archivada.`,
       done: (slug) => `'${slug}' restaurada desde .specs/_archive/ ✓`,
       noRecord: "Se archivó antes de que el archivado registrara su entrada en la hoja de ruta — vuelve a declarar sus dependencias con spec_depend, si las tenía.",
       skipDependsOn: (d, reason) => `su dependencia '${d}' (${reason})`,

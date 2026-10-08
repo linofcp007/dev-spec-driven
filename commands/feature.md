@@ -18,12 +18,13 @@ with one of:
   the user and offer `restore` or re-declaring the dependency with `spec_depend`.
 - **restore** — move `.specs/_archive/<slug>/` back and put back its roadmap entry and the `dependsOn` references
   archive pruned — only for features that still exist (and never one that would now close a cycle); the rest are
-  listed in `skipped`. An error when an active feature already has that slug or nothing is archived under the name.
+  listed in `skipped`. An error when an active feature already has that slug (rename the active one first, then restore —
+  archive refuses that slug too while the archived one is there) or nothing is archived under the name.
 - **rename** — change the slug + folder + `roadmap.json` key, updating every reference to it: `dependsOn` lists,
   `_Supersedes: <old>/US-n.AC-m_` markers in other features' requirements.md (active and archived — never an example
   in a comment or fenced code; an approved requirements.md then shows as changed-since-approval, re-approve it) and
   archived features' archive records (so restore brings their dependencies back). The result lists them
-  (`supersedesUpdated`, `archiveRecordsUpdated`, `note`).
+  (`supersedesUpdated`, `archiveRecordsUpdated`, `note`). Refused onto a slug an archived feature holds (`archivedName`).
 - **flow** — set the feature's phase order: `design-first` (classification → design → requirements → …, for work
   whose architecture is the input) or `requirements-first` (the default). Stored in `.state.json → flow`; phases
   already approved stay approved (the note names them) and the pending gates follow the new order at once. A bugfix

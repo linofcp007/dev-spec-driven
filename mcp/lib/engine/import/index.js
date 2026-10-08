@@ -20,14 +20,14 @@ let BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, 
   parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE, RE_TESTABILITY, readIfExists,
   requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines, slugify, stripHtmlComments, testIndex,
   toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs, unknownTracksError, withTrackBlocks,
-  writeFileAtomic;
+  writeFileAtomic, appendSpecText, flatText;
 function __link(E) { ({ BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines,
   DECISIONS_FILE, extractAcIds, fenceStep, headingHasMarker, indentOf, inertOutsideCode, insertPackRequirements,
   isInsideDir, isLtUnit, isPackTrack, isWsUnit, markerTracks, maybeRefreshRoadmap, normalizeLang, own, packOf,
   packRequirementsBlock, packTaskBlock, parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE,
   RE_TESTABILITY, readIfExists, requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines,
   slugify, stripHtmlComments, testIndex, toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs,
-  unknownTracksError, withTrackBlocks, writeFileAtomic } = E); }
+  unknownTracksError, withTrackBlocks, writeFileAtomic, appendSpecText, flatText } = E); }
 
 // ---------------------------------------------------------------------------
 // spec_import — a spec written for another tool (Kiro · spec-kit · OpenSpec) becomes a NEW dev-spec feature
@@ -270,6 +270,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
   } else if (source == null || !String(source).trim()) return { ok: false, error: W.pathRequired + (TEXT_IMPORT_TOOLS.includes(t) ? " " + C.orText : "") };
   const root = path.resolve(projectDir);
   const readWarnings = [];
+  const tooLarge = new Set(); // the source files over IMPORT_MAX_BYTES characters (1.23 review 5 — refused, never cut)
   let realRoot, realSrc, isFileSrc, dir, rel, read;
   if (inline) {
     try { realRoot = fs.realpathSync.native(root); } catch { realRoot = root; } // a project folder not created yet is fine
@@ -277,7 +278,10 @@ function importSpec(projectDir, tool, source, opts = {}) {
     isFileSrc = true;
     dir = realRoot;
     rel = C.label;
-    const doc = opts.text.slice(0, IMPORT_MAX_BYTES).replace(new RegExp("^" + BOM_CHAR), "");
+    // 1.23 review 5 — a text over the cap is refused, never cut (the cut dropped a plan's Steps and the import kept the scaffold's
+    // tasks, saying no steps list was found)
+    if (opts.text.length > IMPORT_MAX_BYTES) return { ok: false, tooLarge: true, error: W.tooLarge(C.label, IMPORT_MAX_BYTES) };
+    const doc = opts.text.replace(new RegExp("^" + BOM_CHAR), "");
     read = (file) => (file === realSrc ? doc : null);
   } else {
     const abs = path.resolve(root, String(source).trim());
@@ -298,14 +302,22 @@ function importSpec(projectDir, tool, source, opts = {}) {
         if (!fs.existsSync(file)) return null;
         const real = fs.realpathSync.native(file);
         if (!isInsideDir(realRoot, real)) { readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file)))); return null; }
-        if (!fs.statSync(real).isFile()) return null;
-        return decodeText(fs.readFileSync(real)).slice(0, IMPORT_MAX_BYTES).replace(/^\uFEFF/, "");
+        const st = fs.statSync(real);
+        if (!st.isFile()) return null;
+        // 1.23 review 5 \u2014 a source file over the cap refuses the import (never cut: the steps past it were lost). Stat'ed first:
+        // a text holds at least one character per 3 bytes, so a file over 3 \u00D7 the cap is over it without being read whole.
+        const big = () => { tooLarge.add(toPosix(path.relative(realRoot, real))); return null; };
+        if (st.size > 3 * IMPORT_MAX_BYTES) return big();
+        const text = decodeText(fs.readFileSync(real));
+        if (text.length > IMPORT_MAX_BYTES) return big();
+        return text.replace(/^\uFEFF/, "");
       } catch { return null; }
     };
   } // inline (1.16 C4) or a path
   // C3 parsers also get the file named (a plan among several), the language and the real root: { file, lang, root }.
   const parse = own(C3_PARSERS, t) ? C3_PARSERS[t] : t === "kiro" ? parseKiro : t === "spec-kit" ? parseSpecKit : parseOpenSpec;
   const model = parse(dir, read, W, { file: isFileSrc ? realSrc : null, lang: lang0, root: realRoot, inline }); // inline: no file to name (1.17 F review)
+  if (tooLarge.size) return { ok: false, tooLarge: true, error: W.tooLarge([...tooLarge].join(", "), IMPORT_MAX_BYTES) }; // nothing created
   if (!model) return { ok: false, error: W.nothing(IMPORT_TOOLS[t], rel) };
   if (model.error) return { ok: false, error: model.error }; // C3: a folder of several plans — name the file
   // C3: a single-document source shows its file; inline text (1.16 C4) has none — `source` null, `inline` true.
@@ -314,7 +326,8 @@ function importSpec(projectDir, tool, source, opts = {}) {
   // The source's title never opens an HTML comment in the files' titles (1.17 F review); a name the caller gives is theirs. Even in a
   // code span: the name reaches design.md / tasks.md too, whose decision-target reader (blankHtmlComments) sees no code spans.
   const given = opts.name != null && !!String(opts.name).trim();
-  let name = given ? String(opts.name).trim() : model.nameHint == null ? model.nameHint : String(model.nameHint).replace(/<!--/g, "&lt;!--");
+  // One line (flatText, 1.23 review 5): a line break in a name opened a heading in every file's title.
+  let name = given ? flatText(opts.name) : model.nameHint == null ? model.nameHint : flatText(String(model.nameHint).replace(/<!--/g, "&lt;!--"));
   // 1.22 review — a title with no Latin letter or digit (# Добавить тёмную тему, # 添加深色主题) names no folder: a document read
   // from a file falls back to the name the parser had without the title (its file's — `nameFallback`); inline text has none,
   // and says to pass a name. (A name the caller gives is theirs: resolveFeature's own error.)
@@ -335,11 +348,14 @@ function importSpec(projectDir, tool, source, opts = {}) {
   // negation), else in the project's configured language (full review Pb2); an explicit lang wins. The project's signal overrides
   // (1.21 F2 — .specs/classifier.json) apply as for spec_classify / spec_create (projectDir); an import never learns from them.
   const cls = classify(evidence, { name, lang: opts.lang, fallbackLang: configuredLang(projectDir), projectDir });
-  const cr = createFeature(projectDir, name, pt.given ? pt.tracks : cls.tracks, model.summary || undefined, cls, opts.lang);
+  // refresh: false — the roadmap is refreshed ONCE, after the imported files are written (1.23 review 5: every import rendered
+  // ROADMAP.md twice, each a walk over every feature)
+  const cr = createFeature(projectDir, name, pt.given ? pt.tracks : cls.tracks, model.summary || undefined, cls, opts.lang, undefined, { refresh: false });
   if (!cr.ok) return cr;
   const lng = cr.lang;
   const L = i18n.msg(lng).importSpec;
   const warnings = [...readWarnings, ...model.warnings];
+  if (cr.archivedTwin) warnings.push(i18n.msg(lng).createArchivedTwin(cr.slug)); // an archived feature has this slug too (1.23 review 5)
   const note = inline ? i18n.msg(lng).claudeCode.importText.note(IMPORT_TOOLS[t], new Date().toISOString().slice(0, 10))
     : L.note(IMPORT_TOOLS[t], srcRel, new Date().toISOString().slice(0, 10));
   const mapping = {};
@@ -407,7 +423,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
     let out = text;
     for (const tr of packs) {
       const b = packTaskBlock(packOf(tr), out, readIfExists(reqFile) || "", readIfExists(path.join(cr.dir, "test-plan.md")) || "", lng, packVars);
-      if (b) out = out.trimEnd() + "\n" + b;
+      if (b) out = appendSpecText(out, b, { trim: true }); // an open code fence at the end closed first (1.23 review 5)
     }
     return out;
   };
@@ -429,7 +445,9 @@ function importSpec(projectDir, tool, source, opts = {}) {
     // The active tracks' mandatory sections, unless the imported design already has them.
     const blocks = cr.tracks.filter((x) => x !== "core").filter((x) => (x === "tdd" ? !RE_TESTABILITY.test(body) : !headingHasMarker(body, trackMarker(x))))
       .map((x) => trackDesignBlock(x, lng, { name, slug: cr.slug })).join("");
-    put("design.md", [i18n.msg(lng).tracks.designTitle(name), "", note, "", body, blocks].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n");
+    // The blocks follow the body as every spec writer appends (appendSpecText — 1.23 review 5): a design that ends inside an open code
+    // block (a ```mermaid never closed) had the track sections written into it, and doctor read them all 'missing'.
+    put("design.md", [i18n.msg(lng).tracks.designTitle(name), "", note, "", blocks ? appendSpecText(body, blocks, { trim: true }) : body].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n");
   }
 
   if (model.tasks && model.tasks.numbered) {

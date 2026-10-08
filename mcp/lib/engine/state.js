@@ -38,6 +38,11 @@ function errs(projectDir, slug) {
 }
 
 function slugify(name) {
+  return slugifyFull(name).slice(0, 64).replace(/-+$/, "");
+}
+// The slug before slugify's 64-character cut — the same text when the name fits (1.23 review 5: two names that differ only
+// past the cut reach one folder; spec_create tells them apart with it).
+function slugifyFull(name) {
   if (name == null) return ""; // never "undefined" — a missing name must not become a folder
   return String(name)
     .normalize("NFD")
@@ -47,7 +52,6 @@ function slugify(name) {
     .replace(/['"]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+/, "")
-    .slice(0, 64)
     .replace(/-+$/, "");
 }
 
@@ -583,6 +587,10 @@ function writeRoadmapFile(projectDir, lang, data, name, render) {
   if (!fs.existsSync(root)) return { ok: false, error: errs(projectDir).noSpecs(root) };
   const file = path.join(root, name);
   if (!isGeneratedOrAbsent(file)) return { ok: false, skipped: true, file, error: errs(projectDir).notGenerated(name) };
+  // 1.23 review 5 — a roadmap.json that doesn't parse (or has the wrong shape) is read as its sanitized copy: rendered from it, the
+  // file lost every dependency, backlog item and milestone while `roadmap --write` exited 0. The last good one is kept.
+  const broken = roadmapError(projectDir);
+  if (broken) return { ok: false, skipped: true, broken: true, file, error: errs(projectDir).roadmapNotWritten(name, broken) };
   if (lang) {
     const saved = withRoadmapLock(projectDir, () => {
       const bad = roadmapError(projectDir); // persisting roadmapLang writes roadmap.json: refuse on a broken one
@@ -603,10 +611,13 @@ function maybeRefreshRoadmap(projectDir) {
     const root = specsRoot(projectDir);
     if (!fs.existsSync(root)) return;
     const html = fs.existsSync(path.join(root, "ROADMAP.html"));
-    // One computation for both files — none when neither may be written (hand-written ROADMAP.md, no HTML).
-    const data = isGeneratedOrAbsent(path.join(root, "ROADMAP.md")) || (html && isGeneratedOrAbsent(path.join(root, "ROADMAP.html"))) ? roadmapData(projectDir) : undefined;
-    writeRoadmapMd(projectDir, undefined, data);
-    if (html) writeRoadmapHtml(projectDir, undefined, data);
+    // One computation for both files — none when neither may be written (hand-written ROADMAP.md, no HTML; a broken roadmap.json
+    // keeps them as they are — 1.23 review 5).
+    if (!roadmapError(projectDir)) {
+      const data = isGeneratedOrAbsent(path.join(root, "ROADMAP.md")) || (html && isGeneratedOrAbsent(path.join(root, "ROADMAP.html"))) ? roadmapData(projectDir) : undefined;
+      writeRoadmapMd(projectDir, undefined, data);
+      if (html) writeRoadmapHtml(projectDir, undefined, data);
+    }
     maybeRefreshCatalog(projectDir); // .specs/SPECS.md — only once it exists (and is generated)
   } catch {
     /* best-effort */
@@ -628,8 +639,12 @@ function roadmapReport(projectDir, opts = {}) {
     if (m.ok) wrote.push(m.file); else errors.push(m.error);
     if (opts.html) { // independent files: a refused ROADMAP.md is an error, a skipped hand-written ROADMAP.html a warning
       const h = writeRoadmapHtml(projectDir, opts.lang, data);
-      if (h.ok) wrote.push(h.file); else warnings.push(h.error);
+      if (h.ok) wrote.push(h.file); else if (!h.broken) warnings.push(h.error); // a broken roadmap.json: said once, by ROADMAP.md's error
     }
+  } else {
+    // 1.23 review 5 — the view of a broken roadmap.json is its sanitized copy: say what it leaves out
+    const broken = roadmapError(projectDir);
+    if (broken) warnings.push(errs(projectDir).roadmapViewPartial(broken));
   }
   const rm = data ? data.rmv : roadmapExtras(projectDir, roadmap(projectDir), opts); // forecasts + overlaps (roadmapData attaches them too)
   if (write) rm.wrote = wrote;
@@ -1213,7 +1228,7 @@ function mergeDriverStatus(projectDir, opts = {}) {
   return res;
 }
 
-module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, legacySlugify, RE_WIN_RESERVED,
+module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugifyFull, legacySlugify, RE_WIN_RESERVED,
   RESERVED_SLUGS, reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState,
   stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, sha1Hex, fingerprintMatches,
   BOM_CHAR, artifactMatches, uncheckTasks, phaseFile, FEATURE_SIZES, sizeInput, featureSize, isChangeDir, PLANNING_CEILING, PHASE_PERCENT, phasePercent, featurePercent,

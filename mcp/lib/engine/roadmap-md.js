@@ -13,7 +13,7 @@ const i18n = require("../i18n.js");
 let activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSinceApproval, clarificationMarkers,
   detectTracks, duplicateTaskNumbers, flatText, FOLD_CASE, globMatcher, implementsRel, isImplementsGlob, isObj,
   isRecord, MILESTONE_ICON, milestoneAttention, milestoneInvalidInfo, milestoneLine, milestoneStatuses, normalizeLang,
-  ownRecord, parseTasks, PHASE_PERCENT, phaseActive, PHASES, readIfExists, readJson, readRoadmap, roadmap, roleWaitList,
+  ownRecord, parseTasks, PHASE_PERCENT, phaseActive, PHASES, readContained, readIfExists, readJson, readRoadmap, roadmap, roleWaitList,
   round1, round2, sectionState, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats, supersedesTrace, taskBlocks,
   taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf, unverifiedLabel, verificationStatus,
   waiverView,
@@ -21,7 +21,7 @@ let activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSi
 function __link(E) { ({ activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSinceApproval,
   clarificationMarkers, detectTracks, duplicateTaskNumbers, flatText, FOLD_CASE, globMatcher, implementsRel,
   isImplementsGlob, isObj, isRecord, MILESTONE_ICON, milestoneAttention, milestoneInvalidInfo, milestoneLine,
-  milestoneStatuses, normalizeLang, ownRecord, parseTasks, PHASE_PERCENT, phaseActive, PHASES, readIfExists, readJson,
+  milestoneStatuses, normalizeLang, ownRecord, parseTasks, PHASE_PERCENT, phaseActive, PHASES, readContained, readIfExists, readJson,
   readRoadmap, roadmap, roleWaitList, round1, round2, sectionState, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats,
   supersedesTrace, taskBlocks, taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf,
   unverifiedLabel, verificationStatus, waiverView,
@@ -37,8 +37,24 @@ function progressBar(pct, n) {
   return "▰".repeat(f) + "▱".repeat(n - f);
 }
 
+// A Mermaid node id: prefixed (1.23 review 5 — a feature slugged `end`, `graph` or `subgraph` is a flowchart keyword that broke
+// the graph) and made of id characters only. Its label (mlabel) never holds a raw quote.
 function mid(name) {
-  return name.replace(/[^a-z0-9]/gi, "_");
+  return "f_" + String(name).replace(/[^a-z0-9]/gi, "_");
+}
+const mlabel = (name) => String(name).replace(/"/g, "#quot;").replace(/\r?\n/g, " ");
+// A dependsOn entry as the roadmap shows it: a feature slug as it is; anything else (a stale, hand-edited roadmap.json entry) quoted,
+// one line, without markup or table characters (1.23 review 5 — it reached ROADMAP.md's Deps column, its "blocked by" line and the
+// Mermaid graph raw: a "|" broke the table, a "<img …>" was markup in the committed file).
+const depShown = (d) => (/^[\w.-]{1,80}$/.test(d) ? d : JSON.stringify(cutText(flatText(d), 60)).replace(/[<>`|]/g, "?"));
+// The first `max` UTF-16 units of `s`, never ending inside a surrogate pair (1.23 review 5: a task text cut at 42 units in the
+// middle of an emoji wrote U+FFFD into the committed ROADMAP.md). Every display truncation goes through it.
+function cutText(s, max) {
+  const t = String(s == null ? "" : s);
+  if (t.length <= max) return t;
+  let n = Math.max(0, Math.floor(max));
+  if (n > 0) { const c = t.charCodeAt(n - 1); if (c >= 0xd800 && c <= 0xdbff) n--; }
+  return t.slice(0, n);
 }
 
 // Localized chrome for the roadmap (the spec content itself is already in the user's language).
@@ -146,7 +162,9 @@ function roadmapData(projectDir, opts = {}) {
 // One feature's row of roadmapData (what the renderers read; f: its roadmap() view). Pure on its inputs (rowStatSig's).
 function roadmapRow(projectDir, dir, f, rmv) {
   {
-    const raw = { "requirements.md": readIfExists(path.join(dir, "requirements.md")), "design.md": readIfExists(path.join(dir, "design.md")), "tasks.md": readIfExists(path.join(dir, "tasks.md")) };
+    // tasks.md through readContained (1.23 review 5): its next task's text is copied into the committed ROADMAP.md / .html, and a
+    // tasks.md linked to a file outside .specs/ put that file's checkbox lines there — such a file reads as absent.
+    const raw = { "requirements.md": readIfExists(path.join(dir, "requirements.md")), "design.md": readIfExists(path.join(dir, "design.md")), "tasks.md": readContained(projectDir, path.join(dir, "tasks.md")) };
     const reqs = raw["requirements.md"] || "";
     const design = raw["design.md"] || "";
     const clar = clarificationMarkers(reqs).length;
@@ -188,8 +206,17 @@ function roadmapRow(projectDir, dir, f, rmv) {
 function buildAttention(rows, t, lang) {
   const fm = i18n.msg(lang);
   const a = [];
+  const known = new Set(rows.map((r) => r.f.name)); // the active features: a dependsOn naming anything else is stale
   rows.forEach((r) => {
-    if (r.f.blocked) a.push({ name: r.f.name, msg: `${t.blockedBy} ${r.f.unmetDeps.join(", ")}` });
+    if (r.f.blocked) a.push({ name: r.f.name, msg: `${t.blockedBy} ${r.f.unmetDeps.map(depShown).join(", ")}` });
+    // 1.23 review 5 — a dependency no feature answers to (a hand-edited roadmap.json, a folder deleted by hand) blocks forever and
+    // is drawn nowhere: named (a name that is no slug shown quoted, one line, without markup), with the command that sets the list
+    // again from the deps that do exist (`--clear` when none) — it works whatever the stale text holds (--rm can't name one with a space)
+    const stale = (r.f.dependsOn || []).filter((d) => !known.has(d));
+    if (stale.length) {
+      const keep = r.f.dependsOn.filter((d) => known.has(d));
+      a.push({ name: r.f.name, msg: fm.depend.roadmapStale(r.f.name, stale.map(depShown).join(", "), keep.length ? keep.join(" ") : "--clear") });
+    }
     if (r.depsBlocked && r.depsBlocked.length) a.push({ name: r.f.name, msg: fm.taskDeps.roadmapBlocked(taskDepsWaitList(r.depsBlocked, lang)) }); // 1.14 F3
     if (r.clar) a.push({ name: r.f.name, msg: `${r.clar} ${t.openClar}` });
     // The named sections say more than "design has unfilled (TODO) sections" — that line stays for a TODO elsewhere.
@@ -231,8 +258,8 @@ function renderRoadmapMd(projectDir, lang, data) {
   const icon = { done: "✅", inprogress: "🟡", blocked: "⛔", planned: "📋", notstarted: "⬜" };
   const attention = buildAttention(rows, t, lang).concat(milestoneAttention(rmv.milestones, lang, rmv.milestonesInvalid)); // + late / at-risk / invalid milestones (1.16 E3)
   const cell = (s) => String(s).replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
-  const depsCell = (f) => (f.dependsOn.length ? f.dependsOn.map((d) => d + (f.unmetDeps.includes(d) ? " ✗" : " ✓")).join(", ") : "—");
-  const nextCell = (r) => (r.f.percent === 100 ? "—" : r.f.blocked || r.depsBlocked ? t.blocked : r.next ? `#${r.next.number} ${cell(roadmapTaskText(r.next.text, t).slice(0, 42))}` : "…");
+  const depsCell = (f) => (f.dependsOn.length ? f.dependsOn.map((d) => depShown(d) + (f.unmetDeps.includes(d) ? " ✗" : " ✓")).join(", ") : "—");
+  const nextCell = (r) => (r.f.percent === 100 ? "—" : r.f.blocked || r.depsBlocked ? t.blocked : r.next ? `#${r.next.number} ${cell(cutText(roadmapTaskText(r.next.text, t), 42))}` : "…");
   const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked && !r.depsBlocked);
   const kindTag = (f) => (f.kind === "spike" ? " 🔬 " + i18n.msg(lang).spike.kind : ""); // 1.14 C2: spikes read apart
   const specLink = (f) => `./${f.name}/${f.kind === "spike" ? SPIKE_FILE : f.kind === "change" ? "change.md" : "requirements.md"}`; // 1.21 F5: a change's one file
@@ -267,7 +294,10 @@ function renderRoadmapMd(projectDir, lang, data) {
   }
 
   md += `\n## ${t.deps}\n\n`;
-  const edges = rmv.features.flatMap((f) => f.dependsOn.map((d) => `  ${mid(d)}["${d}"] --> ${mid(f.name)}["${f.name}"]`));
+  // Edges between existing features only (a stale / hand-edited dependsOn is listed under Needs attention instead — its text
+  // forged edges and labels here); node ids prefixed, labels without a raw quote (1.23 review 5).
+  const live = new Set(rmv.features.map((f) => f.name));
+  const edges = rmv.features.flatMap((f) => f.dependsOn.filter((d) => live.has(d)).map((d) => `  ${mid(d)}["${mlabel(d)}"] --> ${mid(f.name)}["${mlabel(f.name)}"]`));
   md += edges.length ? "```mermaid\ngraph LR\n" + [...new Set(edges)].join("\n") + "\n```\n" : `_${t.noDeps}_\n`;
 
   md += `\n## ⚠ ${t.needs}\n\n`;
@@ -289,7 +319,7 @@ function renderRoadmapHtml(projectDir, lang, data) {
   const dot = { done: "var(--c-done)", inprogress: "var(--c-prog)", blocked: "var(--c-block)", planned: "var(--accent)", notstarted: "var(--c-muted)" };
   const label = { done: t.done, inprogress: t.inprogress, blocked: t.blocked, planned: t.planned, notstarted: t.notstarted };
   const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked && !r.depsBlocked);
-  const nextTxt = (r) => (r.f.percent === 100 ? "—" : r.f.blocked || r.depsBlocked ? t.blocked : r.next ? `#${r.next.number} ${htmlEsc(roadmapTaskText(r.next.text, t).slice(0, 60))}` : "…");
+  const nextTxt = (r) => (r.f.percent === 100 ? "—" : r.f.blocked || r.depsBlocked ? t.blocked : r.next ? `#${r.next.number} ${htmlEsc(cutText(roadmapTaskText(r.next.text, t), 60))}` : "…");
 
   const featRows = rows
     .map(
@@ -300,7 +330,7 @@ function renderRoadmapHtml(projectDir, lang, data) {
         `<td>${htmlEsc(phaseName(r.f.phase))}</td>` +
         `<td class="pct"><span class="bar"><span style="width:${r.f.percent}%"></span></span>${r.f.percent}%</td>` +
         `<td>${r.done}/${r.total}</td>` +
-        `<td>${r.f.dependsOn.length ? r.f.dependsOn.map((d) => `<span class="${r.f.unmetDeps.includes(d) ? "unmet" : "met"}">${htmlEsc(d)}</span>`).join(", ") : "—"}</td>` +
+        `<td>${r.f.dependsOn.length ? r.f.dependsOn.map((d) => `<span class="${r.f.unmetDeps.includes(d) ? "unmet" : "met"}">${htmlEsc(depShown(d))}</span>`).join(", ") : "—"}</td>` +
         `<td class="next">${nextTxt(r)}</td>` +
         `<td class="eta">${htmlEsc(etaText(r.f.forecast, lang) || "—")}</td></tr>`
     )
@@ -760,7 +790,7 @@ function overlapDoctorDetail(pairs, slug, lang) {
   return [act.length ? O.doctorActive(act.join("; "), slug) : null, fin.length ? O.doctorFinished(fin.join("; "), slug) : null].filter(Boolean).join(" · ");
 }
 
-module.exports = { progressBar, mid, ROADMAP_I18N, i18nLang, htmlEsc, cleanTaskText, ROW_CACHE, ROW_CACHE_MAX, ROW_CALLS, ROW_OPTS,
+module.exports = { progressBar, mid, mlabel, cutText, ROADMAP_I18N, i18nLang, htmlEsc, cleanTaskText, ROW_CACHE, ROW_CACHE_MAX, ROW_CALLS, ROW_OPTS,
   ROW_SCRATCH, rowStatSig, rowProjectSig, roadmapData, roadmapRow, buildAttention,
   roadmapTaskText, roadmapPhaseName, renderRoadmapMd, renderRoadmapHtml, SIZE_POINTS, RE_SIZE_VALUE,
   FORECAST_WINDOW_DAYS, FORECAST_MIN_TASKS, FORECAST_SPREAD, FC_DAY_MS, taskSize, taskCompletedAt, fcDay, fcWeekend,
