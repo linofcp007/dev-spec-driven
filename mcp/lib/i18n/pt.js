@@ -2040,12 +2040,17 @@ const msg = {
         const f = a.feature || "?";
         if (a.kind === "remove") return `apagar definitivamente a feature '${f}' (a pasta em .specs/, as aprovações e o histórico)`;
         if (a.kind === "unreadable") {
+          if (a.why === "partial") return "executar uma chamada de ferramenta que o guarda de aprovações só recebeu em parte (a entrada veio cortada) e que menciona dev-spec ou .specs/";
           return a.why === "too-long" ? `correr um comando de shell demasiado longo para o guarda de aprovações o ler (${a.length} caracteres) que menciona dev-spec ou .specs/`
             : "correr um comando de shell que menciona a CLI do dev-spec com uma palavra de aprovação numa forma que o guarda de aprovações não consegue ler (um lançador desconhecido, um glob, uma variável ou uma string concatenada)";
         }
         if (a.kind === "guard-down") {
           if (a.setting === "roadmap" && a.source === "edit") return "editar à mão .specs/roadmap.json (é lá que estão o guarda de aprovações e os gates do projeto)";
-          if (a.setting === "state") return `editar à mão o .state.json de '${f}' — as aprovações, a evidência e o histórico`;
+          if (a.setting === "state") return a.source === "edit" ? `editar à mão o .state.json de '${f}' — as aprovações, a evidência e o histórico`
+            : `alterar o .state.json de '${f}' a partir da shell — as aprovações, a evidência e o histórico`;
+          if (a.setting === "observed") return (a.feature ? `escrever à mão o registo das execuções observadas de '${a.feature}' (.execution/observed.jsonl)` : "escrever à mão o registo das execuções observadas do projeto (.specs/.execution/observed.jsonl)") +
+            " — as execuções que os gates aceitam como evidência";
+          if (a.setting === "track") return `desligar ${(a.tracks || []).map((t) => "+" + t).join(", ")} em '${f}' — os gates que traz (o plano de testes / de evals, os testes a falhar ou os evals da Fase 4) deixam de ser exigidos`;
           if (a.setting === "evidence") return "voltar a pôr o modo de evidência (meta.evidence) em reported";
           if (a.setting === "stopCheck") return "desligar o gate de evidência no fim do turno (meta.stopCheck)";
           if (a.setting === "guard") return a.from ? `baixar o modo guarda (meta.guard) de ${a.from} para ${a.to}` : `pôr o modo guarda (meta.guard) em ${a.to}`;
