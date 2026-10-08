@@ -569,20 +569,34 @@ function traceCheck(projectDir, name, opts = {}) {
   const tracks = detectTracks(dir);
   const blocks = taskBlocks(rawTasks);
 
-  const requiredAcs = requirementAcIds(rawReqs, dir);
+  // 1.24 review 6 (F9): the REQUIRED ACs are the ACTIVE requirements' (activeDesign — a removed track's [SaaS] / [AI] / … criteria are
+  // inactive, as the matrix, the export and tracks.md's removal rule read them), covered by the ACTIVE tasks (activeTasks — the matrix's
+  // tasks): a feature that turned +saas off and deleted its +saas tasks failed traceability on criteria the matrix no longer listed.
+  // Whatever requirements.md defines (active or not) is no phantom: a task or test row citing an inactive criterion is no typo.
+  const activeReqs = activeDesign(rawReqs, tracks);
+  const requiredAcs = requirementAcIds(activeReqs, dir);
+  const definedAcs = activeReqs === rawReqs ? requiredAcs : requirementAcIds(rawReqs, dir);
   // review 5 (M5): what the TASKS cite — taskCitations, the matrix's reader (never a Notes paragraph or the title; never another
   // feature's `<slug>/US-n.AC-m`); the test plan without another feature's references either
   const cites = taskCitations(blocks, dir, rawReqs);
   const acsInTasks = cites.acs;
-  const acsInTestPlan = extractAcIds(stripForeignAcRefs(testPlan, dir, rawReqs));
+  const activeTaskText = activeTasks(rawTasks, tracks);
+  const activeBlocks = activeTaskText === rawTasks ? blocks : taskBlocks(activeTaskText);
+  const acsInActiveTasks = activeBlocks === blocks ? acsInTasks : taskCitations(activeBlocks, dir, rawReqs).acs;
+  // 1.24 review 6 (F3): an AC's test COVERAGE comes from the plan's test entries only (testPlanEntries — a T-ID's table row or list
+  // item, the matrix's `tests`), never from any mention: an AC named in the Coverage Check's "Gaps" list or under "Out of Scope"
+  // counted as covered and the test-plan approval passed. Any mention still names an AC (phantoms, the justified gaps below).
+  const acsInTestPlan = new Set();
+  for (const e of testPlanEntries(rawPlan)) for (const id of extractAcIds(stripForeignAcRefs(e.text, dir, rawReqs))) acsInTestPlan.add(id);
+  const acsNamedInPlan = extractAcIds(stripForeignAcRefs(testPlan, dir, rawReqs));
 
-  const uncoveredByTasks = [...requiredAcs].filter((id) => !acsInTasks.has(id));
+  const uncoveredByTasks = [...requiredAcs].filter((id) => !acsInActiveTasks.has(id));
   // Reverse direction: AC IDs referenced by tasks that don't exist in requirements (typos).
-  const phantomAcsInTasks = [...acsInTasks].filter((id) => !requiredAcs.has(id));
+  const phantomAcsInTasks = [...acsInTasks].filter((id) => !definedAcs.has(id));
   // 1.22 review: criteria EARS lints but no AC ID this reader counts (a bare AC-1, or none) — 0 ACs used to be "all covered".
   // (review 4: with AC IDs defined, a criterion numbered with a bare AC-n is still one — linted only when the text holds one;
   // review 5, L31: or a sub-criterion ID, US-1.AC-1.2)
-  const unidentified = !rawReqs.trim() || (requiredAcs.size && !RE_BARE_AC.test(rawReqs) && !RE_SUB_AC.test(rawReqs)) ? null
+  const unidentified = !rawReqs.trim() || (definedAcs.size && !RE_BARE_AC.test(rawReqs) && !RE_SUB_AC.test(rawReqs)) ? null
     : earsUnidentified(rawReqs, earsValidate(rawReqs, "en"), dir);
 
   // Spec ↔ code: tasks may carry `_Implements: path/to/file_` markers. Verify the files exist.
@@ -651,9 +665,13 @@ function traceCheck(projectDir, name, opts = {}) {
 
   if (tracks.includes("tdd")) {
     const uncoveredByTests = [...requiredAcs].filter((id) => !acsInTestPlan.has(id));
-    // Reverse: AC IDs the test plan covers that requirements.md doesn't define (a typo, a removed criterion, a template
+    // Reverse: AC IDs the test plan names that requirements.md doesn't define (a typo, a removed criterion, a template
     // row for a track the requirements never got) — a fenced example is no reference (planIdText), as for tasks.
-    const phantomAcsInTests = [...acsInTestPlan].filter((id) => !requiredAcs.has(id));
+    const phantomAcsInTests = [...acsNamedInPlan].filter((id) => !definedAcs.has(id));
+    // 1.24 review 6 (F3): the uncovered ACs the plan NAMES outside its test entries (the Coverage Check's "Gaps (with justification)",
+    // "Out of Scope for Testing") — still gaps (no test covers them: approving the plan anyway is a forced approval), and a warning
+    // that says the plan accounts for them.
+    const justifiedTestGaps = uncoveredByTests.filter((id) => acsNamedInPlan.has(id));
     // T-IDs by NUMBER (review 5, L32 — the matrix's and the test-code scan's rule): a task's T-1 is the plan's T-01; each is
     // reported as its own file spells it. The tasks' T-IDs are what the tasks cite (taskCitations).
     const planTestIds = testIdKeys(testPlan);
@@ -667,6 +685,7 @@ function traceCheck(projectDir, name, opts = {}) {
     result.plannedTests = planTestIds.size;
     result.testsNotMappedToTasks = testsNotInTasks;
     result.phantomTestsInTasks = phantomTestsInTasks;
+    result.justifiedTestGaps = justifiedTestGaps; // a warning (TRACE_INFO_FIELDS) — never the verdict
   }
 
   const gaps =
@@ -691,7 +710,7 @@ function traceCheck(projectDir, name, opts = {}) {
 
   // Deep traceability — WARNINGS, never part of the verdict (above) nor of traceGaps(): the secondary IDs of
   // requirements.md and, with opts.code, the T-IDs of the project's test code.
-  Object.assign(result, traceSecondary(dir, rawReqs, blocks, rawPlan, tracks));
+  Object.assign(result, traceSecondary(dir, activeReqs, activeBlocks, rawPlan, tracks, rawReqs)); // (F9: an inactive section's EC / NFR / SC is no warning)
   // 1.14 F5 — opts.matrix: + the requirements traceability matrix (buildTraceMatrix); with code both share ONE walk.
   const scan = opts.code && opts.matrix ? (typeof opts.scan === "function" ? opts.scan() : opts.scan) || scanTestCode(projectDir) : opts.scan;
   if (opts.code) result.code = traceTestCode(projectDir, dir, testPlan, requiredAcs, scan);
@@ -707,7 +726,7 @@ function traceCheck(projectDir, name, opts = {}) {
 // missing _Implements:_ files). Any array field a later version adds is a gap kind too, unless listed as
 // informational here.
 // planned = an OPEN task's file, not written yet; the deep-traceability warnings (TRACE_WARNING_ORDER) are warnings.
-const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "unresolvedImplGlobs", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "removedAcs"]);
+const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "unresolvedImplGlobs", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "removedAcs", "justifiedTestGaps"]);
 const TRACE_GAP_ORDER = ["unidentifiedCriteria", "uncoveredByTasks", "phantomAcsInTasks", "uncoveredByTests", "phantomAcsInTests", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
 // The kinds trace_check's verdict counts (testsNotMappedToTasks is listed, never failing), and the kinds that read
 // tasks.md / test-plan.md — doctor defers the latter while that artifact is still a later phase's template.
@@ -743,12 +762,14 @@ function traceGapLines(tr, lang) {
 // trace_check `warnings` — ONE shape, the one traceGaps() returns: [{ kind, items: [id, …] }], only the non-empty
 // kinds, in this order. The secondary kinds are also top-level arrays (always present); the code kinds live in
 // result.code (present with opts.code). None of them changes the verdict. unresolvedImplGlobs (a top-level array too):
-// an _Implements:_ glob whose bounded walk stopped at its cap before any match.
-const TRACE_WARNING_ORDER = ["uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "plannedNotInCode", "inCodeNotInPlan", "unresolvedImplGlobs"];
+// an _Implements:_ glob whose bounded walk stopped at its cap before any match. justifiedTestGaps (+tdd, a top-level array — 1.24
+// review 6, F3): uncovered ACs the test plan names only outside its test entries (a Gaps / Out of Scope note) — they stay
+// uncoveredByTests gaps; the warning says the plan accounts for them.
+const TRACE_WARNING_ORDER = ["uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "justifiedTestGaps", "plannedNotInCode", "inCodeNotInPlan", "unresolvedImplGlobs"];
 const TRACE_SECONDARY_KINDS = TRACE_WARNING_ORDER.slice(0, 4);
 function traceWarnings(tr) {
   const src = { ...(tr && tr.code ? { plannedNotInCode: tr.code.plannedNotInCode, inCodeNotInPlan: tr.code.inCodeNotInPlan } : {}) };
-  for (const k of [...TRACE_SECONDARY_KINDS, "unresolvedImplGlobs"]) if (tr && Array.isArray(tr[k])) src[k] = tr[k];
+  for (const k of [...TRACE_SECONDARY_KINDS, "justifiedTestGaps", "unresolvedImplGlobs"]) if (tr && Array.isArray(tr[k])) src[k] = tr[k];
   return TRACE_WARNING_ORDER.filter((k) => Array.isArray(src[k]) && src[k].length).map((k) => ({ kind: k, items: src[k].slice() }));
 }
 // The warnings as localized "label: ID, ID" lines (kinds = a subset, e.g. the secondary ones for doctor).
@@ -798,8 +819,12 @@ function secondaryDefinitions(reqText) {
 // SC by a test-plan row or a real (non-template) line of quickstart.md. phantomSecondary = IDs the tasks / test plan
 // cite that requirements.md never writes. The test plan counts only while +tdd is active: after add_track --remove tdd
 // it is an inactive artifact and must not silence (or raise) anything — the rest of traceCheck reads it only under tdd.
-function traceSecondary(dir, reqText, blocks, planText, tracks) {
-  const { defined, all } = secondaryDefinitions(reqText);
+// allReqText (1.24 review 6, F9): the WHOLE requirements when reqText is its active part — an ID only an inactive section (a removed
+// track's) defines needs no coverage, and a task citing it is no phantom.
+function traceSecondary(dir, reqText, blocks, planText, tracks, allReqText) {
+  const own = secondaryDefinitions(reqText);
+  const { defined } = own;
+  const all = allReqText != null && allReqText !== reqText ? secondaryDefinitions(allReqText).all : own.all;
   const inTasks = secondaryIds(blocks.map((b) => taskProse(b).join("\n")).join("\n"));
   const inPlan = tracks.includes("tdd") ? secondaryIds(testPlanEntries(planText).map((e) => e.text).join("\n")) : new Map();
   const inQuickstart = secondaryIds(realLines(readIfExists(path.join(dir, "quickstart.md")) || "", RE_SECONDARY_ID_LINE).join("\n"));
@@ -1191,7 +1216,7 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
 //   approval    the requirements approval (at, by, forced) and whether THIS row changed since (the approved snapshot's text
 //               for the ID; an approval without a snapshot knows only whether the file changed: null = unknown)
 // status (stable codes):
-//   untraced    a trace gap names it — `gaps`: no-task (an AC no task cites), no-test (+tdd: an AC no test-plan line covers),
+//   untraced    a trace gap names it — `gaps`: no-task (an AC no task cites), no-test (+tdd: an AC no test-plan ENTRY covers — 1.24 review 6, F3),
 //               no-coverage (an EC / NFR no task or planned test covers; an SC no test-plan row or quickstart.md line) —
 //               exactly trace_check's gaps and its secondary warnings for that ID
 //   planned     traced, but no linked task is done yet — one is still open, or none is linked (a planned test only)
@@ -1311,8 +1336,9 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const planOn = phaseActive("test-plan", tracks);
   const planRaw = planOn ? read("test-plan.md") || "" : "";
   const planText = planIdText(planRaw);
-  const planAcs = extractAcIds(stripForeignAcRefs(planText, dir, reqs)); // trace_check's uncoveredByTests set
   const entries = testPlanEntries(planRaw).map((e) => ({ ids: e.ids, acs: extractAcIds(stripForeignAcRefs(e.text, dir, reqs)), sec: secondaryIds(e.text) }));
+  // trace_check's uncoveredByTests set: the ACs the plan's test ENTRIES cite (1.24 review 6, F3 — never a Gaps / Out of Scope note)
+  const planAcs = new Set(entries.flatMap((e) => [...e.acs]));
   const planSec = new Set(entries.flatMap((e) => [...e.sec.keys()]));
   const quickSec = secondaryIds(realLines(read("quickstart.md") || "", RE_SECONDARY_ID_LINE).join("\n"));
   let code = null;

@@ -2060,6 +2060,7 @@ const msg = {
         uncoveredNfr: "non-functional requirements (NFR) that no task or test covers",
         uncoveredSuccessCriteria: "success criteria (SC) that no test or quickstart step checks",
         phantomSecondary: "tasks / test plan cite unknown EC/NFR/SC IDs (typos?)",
+        justifiedTestGaps: "ACs the test plan names only in a note (Gaps / Out of Scope), never in a test row — still uncovered: add a row, or approve the test plan with force to accept the gap",
         plannedNotInCode: "planned tests that no test file names (put the T-ID in the test name)",
         inCodeNotInPlan: "T-IDs in test code that no feature's test plan lists",
         unresolvedImplGlobs: "_Implements:_ globs not fully resolved (the file walk stopped at its cap before a match — not counted as missing)",

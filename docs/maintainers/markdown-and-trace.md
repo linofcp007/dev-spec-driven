@@ -130,6 +130,22 @@ matrix.
   false pass) and planned a T-ID the tests gate demanded. A scaffolded test plan
   only gets the template rows of the track ACs requirements.md has (`testPlanTracks()`, shared by spec_create on an
   existing feature and spec_add_track — a track added after the requirements brings none).
+  **Test coverage = a test ENTRY (1.24 review 6, F3):** an AC is covered by the test plan only when one of its test entries cites
+  it — `testPlanEntries()`: a table row whose first cell holds a T-ID, a list item led by one (with its continuation lines) — the
+  matrix's `tests` reader; trace_check's `uncoveredByTests`, the matrix's `no-test` and the test-plan approval read the same set.
+  Any mention counted (`extractAcIds` over the whole plan): an AC named in the Coverage Check's "Gaps (with justification)" list or
+  under "Out of Scope for Testing" was covered, and the approval passed. Such an AC stays a gap — no test covers it; accepting it is
+  a forced approval — and the warning `justifiedTestGaps` (+tdd, a top-level array in `TRACE_INFO_FIELDS`, `TRACE_WARNING_ORDER`
+  after the secondary kinds; doctor's `traceability` detail repeats it unless the plan's kinds are deferred) lists the uncovered ACs
+  the plan names outside its entries, so the reader sees they are accounted for. `phantomAcsInTests` still reads every mention (a
+  typo in a Gaps note is a phantom).
+  **A removed track's criteria (1.24 review 6, F9):** trace_check reads the ACTIVE requirements (`activeDesign` — a turned-off
+  track's `[SaaS]` / `[AI]` / … sections, a missing pack's ghost sections) for the REQUIRED ACs and the ACTIVE tasks (`activeTasks`)
+  for their coverage — the matrix's rows and tasks, tracks.md's removal rule; it read the whole files, so a feature that removed
+  +saas and deleted its +saas tasks failed traceability (doctor too) on criteria the matrix no longer listed. A phantom is an ID
+  requirements.md defines NOWHERE (`definedAcs`, the whole text): a task or test row citing an inactive criterion is no typo. The
+  secondary IDs alike (`traceSecondary(…, allReqText)`: coverage asked of the active ones, phantoms against all); doctor's
+  `secondary-trace` count reads the active requirements too.
 - **Secondary IDs are trace WARNINGS, never the verdict**: EC-n / NFR-n need a task or (+tdd) a test-plan
   row, SC-nnn a test-plan row or a real quickstart.md line; compared by number (`SC-1` = `SC-001`); untouched
   template rows don't count. `warnings` = `[{kind, items}]`, excluded from `traceGaps()`.
@@ -273,7 +289,7 @@ matrix.
 - **Stable codes.** `status` (`RTM_STATUSES`): `untraced` (a trace gap names it) · `planned` (traced; a linked task still
   open, or none linked yet) · `implemented` (every linked task done, one not verified) · `verified` (every linked task
   done and verified — nothingToVerify counts). `gaps`: `no-task` (an AC no task cites) · `no-test` (+tdd: an AC no test-plan
-  line covers) · `no-coverage` (EC / NFR: no task or planned test; SC: no test-plan row or quickstart.md line — never for a
+  entry covers — a row or a T-ID-led item, never a Gaps note: 1.24 review 6, F3) · `no-coverage` (EC / NFR: no task or planned test; SC: no test-plan row or quickstart.md line — never for a
   scaffold's untouched EC / NFR / SC row, `template: true`, which trace_check doesn't warn about either) — exactly
   trace_check's gaps and secondary warnings for that ID. Labels are localized (`i18n.msg(lang).rtm`, EN/PT/ES).
 - **Surfaces.** `trace_check {matrix: true}` → `matrix` (informational — never the verdict; with `code` both share ONE

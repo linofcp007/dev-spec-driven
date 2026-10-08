@@ -613,7 +613,9 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   `'tdd,saas'` before the engine could split it or suggest a fix.
 - **Removal is non-destructive** (`spec_add_track {remove:true}` / `add-track --remove`): files stay, the
   result lists them as inactive, and doctor/status/next_action/roadmap stop requiring them (`activeTasks()`
-  drops a removed track's task section). `core` can't be removed; a bugfix keeps +tdd.
+  drops a removed track's task section). trace_check too since 1.24 review 6 (F9): its required ACs are the ACTIVE
+  requirements' (`activeDesign`), covered by the active tasks — the matrix's reading; an inactive criterion a task still cites is
+  no phantom (markdown-and-trace.md → Readers). `core` can't be removed; a bugfix keeps +tdd.
 
 ## Project-defined tracks (1.15) — `.specs/tracks/<name>/` track packs
 - **What a pack is:** `track.json` (JSON with `//` / `/* */` comments — `stripJsonComments()`, one linear pass) + optional
@@ -698,7 +700,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   life) — in the per-call `GHOST_MARKERS`; `inactiveMarkerLines` / `inactiveTaskLines` drop those sections like a removed
   track's — no gate, no placeholder — and `trackAcIds` keeps only the lines whose owner IS the asked track (F4 review R5:
   ghost sections joined another track's criteria). Doctor warns `track-pack-missing` (absent vs invalid + its error codes). trace_check
-  reads whole files (as for a removed built-in track), so the pack's criteria and tasks still pair up there.
+  reads the active requirements and tasks (as for a removed built-in track — 1.24 review 6, F9): a ghost section's criteria are not
+  required, and a task citing one is no phantom.
 - **`spec_tracks` / `dev-spec tracks`** (`trackPacks()`): list (built-in rows + every pack entry, valid or not), init
   (`initTrackPack` — six files from `msg.trackPacks.init*`, create-only, the `inside()` link refusal of templates init;
   the marker = the name in capitals, `TRACK`-suffixed when reserved, numbered when taken), check (the loader's problems +

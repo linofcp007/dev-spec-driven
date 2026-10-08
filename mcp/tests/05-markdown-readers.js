@@ -284,4 +284,51 @@ exports.run = async ({ ok, S, tmp, require, __dirname }) => {
       "1.24 r6 F8: EARS warns `padded-id` on US-1.AC-01 / US-02.AC-1, naming US-1.AC-1 / US-2.AC-1 (got " + js(ev.issues) + ")");
   }
 
+  // 1.24 r6 F3: an AC's test coverage comes from the test plan's ENTRIES only (a T-ID's table row or list item — testPlanEntries), never
+  // from any mention: an AC named in the Coverage Check's "Gaps" list or under "Out of Scope" counted as covered and the test-plan
+  // approval passed. Such an AC is uncovered (a gap — trace_check, the matrix's no-test and the approval agree) and the plan's naming
+  // of it is a visible warning, justifiedTestGaps.
+  {
+    const p = r6proj("plan-gaps", ["core", "tdd"]);
+    const req = R6_HEAD + "1. **US-1.AC-1** — WHEN the password is wrong THE SYSTEM SHALL show an error\n2. **US-1.AC-2** — WHEN the account is locked THE SYSTEM SHALL email the owner\n" +
+      "3. **US-1.AC-3** — WHEN the user logs out THE SYSTEM SHALL clear the session\n4. **US-1.AC-4** — WHEN the user resets the password THE SYSTEM SHALL email a link\n" + R6_TAIL;
+    const c = r6feat(p, "Plan gaps", ["core", "tdd"], req);
+    put(c.dir, "tasks.md", "# Tasks: login\n\n## Story US-1\n- [ ] 1. [US1] Login errors\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4_\n  - _Makes green: T-01, T-02_\n");
+    put(c.dir, "test-plan.md", "# Test Plan: login\n\n## Traceability Matrix\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" +
+      "| T-01 | unit | example | wrong password | US-1.AC-1 | `tests/login.test.js` |\n\n- T-02: a reset link is emailed (US-1.AC-4)\n\n## Coverage Check\nGaps (with justification):\n" +
+      "- US-1.AC-2 — not tested yet, next sprint\n\n## Out of Scope for Testing\n- US-1.AC-3 (logout is the framework's)\n");
+    const tr = S.traceCheck(p, c.slug, { matrix: true });
+    const row = (id) => tr.matrix.rows.find((r) => r.id === id) || { gaps: [] };
+    const warn = (tr.warnings || []).find((w) => w.kind === "justifiedTestGaps");
+    for (const ph of ["classification", "requirements", "design"]) S.approvePhase(p, c.slug, ph, "t", { force: true });
+    const ap = S.approvePhase(p, c.slug, "test-plan", "t");
+    ok(js(tr.uncoveredByTests) === '["US-1.AC-2","US-1.AC-3"]' && tr.verdict === "gaps-found" && !!warn && js(warn.items) === '["US-1.AC-2","US-1.AC-3"]' &&
+      row("US-1.AC-2").gaps.includes("no-test") && row("US-1.AC-3").gaps.includes("no-test") && !row("US-1.AC-1").gaps.length && !row("US-1.AC-4").gaps.includes("no-test") &&
+      !ap.ok && /traceability/.test(ap.error) && !S.traceGaps(tr).some((g) => g.kind === "justifiedTestGaps"),
+      "1.24 r6 F3: only a test-plan entry covers an AC — one named in the Gaps list / Out of Scope is uncovered (trace_check, the matrix's no-test, the test-plan approval refused) and listed as the warning justifiedTestGaps (got " +
+      js([tr.uncoveredByTests, tr.verdict, tr.warnings, ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4"].map((id) => row(id).gaps), ap.ok]) + ")");
+  }
+
+  // 1.24 r6 F9: a removed track's criteria are no required ACs — trace_check (and doctor's traceability through it) read requirements.md
+  // and tasks.md as ACTIVE (activeDesign / activeTasks), as the matrix and tracks.md's removal rule do: a feature that turned +saas off and
+  // deleted its +saas tasks failed traceability on the +saas criteria the matrix no longer lists. A task citing an inactive criterion is no
+  // phantom (it is defined, only inactive), and an inactive section's NFR raises no uncoveredNfr.
+  {
+    const p = r6proj("removed-track", ["core", "saas"]);
+    const c = S.createFeature(p, "Removed saas", ["core", "saas"], "x", undefined, "en");
+    const req = R6_HEAD + "1. **US-1.AC-1** — WHEN the password is wrong THE SYSTEM SHALL show an error\n\n## [SaaS] Scale & Tenancy\n" +
+      "5. **US-1.AC-5** — WHILE under peak load THE SYSTEM SHALL answer within 200 ms\n6. **US-1.AC-6** — THE SYSTEM SHALL scope every query by tenant\n- **NFR-1** — p95 under 200 ms at 500 rps\n" + R6_TAIL;
+    put(c.dir, "requirements.md", req);
+    put(c.dir, "tasks.md", "# Tasks: login\n\n## Story US-1\n- [ ] 1. [US1] Show the error\n  - _Requirements: US-1.AC-1_\n- [ ] 2. [US1] Note the tenancy work for later (US-1.AC-6)\n  - _Requirements: US-1.AC-1_\n");
+    const on = S.traceCheck(p, c.slug);
+    S.addTrack(p, c.slug, ["saas"], { remove: true });
+    const tr = S.traceCheck(p, c.slug, { matrix: true });
+    const rows = tr.matrix.rows.map((r) => r.id);
+    const docT = status(S.specDoctor(p, c.slug), "traceability");
+    ok(js(on.uncoveredByTasks) === '["US-1.AC-5"]' && tr.verdict === "pass" && tr.totalAcs === 1 && !tr.uncoveredByTasks.length && !tr.phantomAcsInTasks.length &&
+      !tr.uncoveredNfr.length && !rows.includes("US-1.AC-5") && !rows.includes("NFR-1") && docT === "pass",
+      "1.24 r6 F9: with +saas removed its [SaaS] criteria / NFRs are not required by trace_check or doctor (the matrix's rows), and a task citing one is no phantom (got " +
+      js([on.uncoveredByTasks, tr.verdict, tr.totalAcs, tr.uncoveredByTasks, tr.phantomAcsInTasks, tr.uncoveredNfr, rows, docT]) + ")");
+  }
+
 };
