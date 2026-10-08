@@ -910,7 +910,12 @@ function localeLoaded(rel) {
 }
 if (LOADED_STATS) i18n.onLocaleLoad(localeLoaded);
 // …and the slots of the project's own templates (.specs/templates/ — projectTemplateHas, 1.14).
-const isTemplatePlaceholder = (inner) => { const k = placeholderKey(inner); return isGenericSlot(inner) || templateSets().brackets.has(k) || templateSetsBr().brackets.has(k) || projectTemplateHas("brackets", k); };
+// A bracket longer than SLOT_MAX is no template's slot (only a generic one — "[TODO: …]" — can be that long): never keyed (review 5).
+const isTemplatePlaceholder = (inner) => {
+  if (String(inner).length > SLOT_MAX) return isGenericSlot(inner);
+  const k = placeholderKey(inner);
+  return isGenericSlot(inner) || templateSets().brackets.has(k) || templateSetsBr().brackets.has(k) || projectTemplateHas("brackets", k);
+};
 // A code span is opaque — `[Authorize]`, `[dependencies]`, `[aeiou]`, `[]`, `["a"]` are code — except a template's own
 // code-span slot (the bugfix test plan's `[path]` / `[caminho]` / `[ruta]`), which is unwrapped and scanned.
 const isCodeSlot = (body) => { const b = body.match(/^\[([^[\]]*)\]$/); if (!b) return false; const k = placeholderKey(b[1]); return templateSets().code.has(k) || templateSetsBr().code.has(k) || projectTemplateHas("code", k); };
@@ -970,43 +975,58 @@ function bracketPlaceholders(line, refs) {
 // part of it), false = not (its nested groups are visited in turn — a template sentence half edited keeps its `[N]`).
 // Syntax (links, reference links, footnotes, callouts, wiki links, glued indexing, the list checkbox) and the exempt
 // contents (stable tags / IDs, NEEDS CLARIFICATION, the legacy core-only answer) are skipped whole, never visited.
-// codeSlot(body) says which code spans are unwrapped; every other span is blanked (columns kept). Linear per line.
+// codeSlot(body) says which code spans are unwrapped; every other span is blanked (columns kept). Linear per line (review 5,
+// P5): every "[" learns its closer from ONE stack pass (it rescanned to its closer at every nesting level), the groups are
+// walked with an explicit stack (one recursion per level overflowed the call stack: a 24 KB line of nested "[a [a …]]" threw
+// RangeError out of ears_validate, doctor and approve), and a group longer than SLOT_MAX is looked up nowhere — no template slot,
+// reference label or marker is that long, and keying each level's inner text made the walk quadratic.
+const SLOT_MAX = 1000; // longer than any template slot (the built-in corpus' longest is under 200) and CommonMark's link label (999)
+function bracketCloser(s) { // → closer[i] = the index of the "]" closing the "[" at i (nesting-aware, "\" escapes the next character), or -1
+  const closer = new Int32Array(s.length).fill(-1);
+  const open = [];
+  for (let j = 0; j < s.length; j++) {
+    const c = s[j];
+    if (c === "\\") { j++; continue; }
+    if (c === "[") open.push(j);
+    else if (c === "]" && open.length) closer[open.pop()] = j;
+  }
+  return closer;
+}
 function scanBrackets(line, refs, codeSlot, visit) {
   const s = replaceCodeSpans(line, (m, tick, body) =>
     codeSlot(body.trim()) ? tick.replace(/`/g, " ") + body + tick.replace(/`/g, " ") : " ".repeat(m.length));
+  if (!s.includes("[")) return;
   const box = s.match(RE_LIST_CHECKBOX);
-  const groupEnd = (i) => { // index of the "]" closing the "[" at i (nesting-aware), or -1
-    let depth = 0;
-    for (let j = i; j < s.length; j++) {
-      if (s[j] === "\\") { j++; continue; }
-      if (s[j] === "[") depth++;
-      else if (s[j] === "]" && --depth === 0) return j;
-    }
-    return -1;
-  };
-  const walk = (from, to) => {
+  const closer = bracketCloser(s);
+  // Frames [from, to]: a group's inner range is walked before the rest of the range that holds it (the recursion's order).
+  const frames = [[box ? box[0].length : 0, s.length]];
+  while (frames.length) {
+    const [from, to] = frames.pop();
     for (let i = from; i < to; i++) {
       if (s[i] === "\\") { i++; continue; }
       if (s[i] !== "[") continue;
-      const j = groupEnd(i);
-      if (j === -1 || j >= to) return; // unbalanced: nothing reliable after this point
+      const j = closer[i];
+      if (j === -1 || j >= to) break; // unbalanced: nothing reliable after this point in this range
       const inner = s.slice(i + 1, j);
       const before = i > 0 ? s[i - 1] : "";
       const after = s[j + 1] || "";
+      const short = inner.length <= SLOT_MAX;
       let skip = after === "(" || /[\p{L}\p{N}_]/u.test(before) ||
         (inner.startsWith("[") && inner.endsWith("]")) || inner.startsWith("^") || inner.startsWith("!") ||
-        refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || /^NEEDS[ _-]CLARIFICATION/i.test(inner) || RE_LEGACY_ANSWER.test(inner) ||
-        isPackMarkerBracket(inner); // a track pack's [MARKER] (1.15) is as stable as [SaaS]
+        (short && (refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || RE_LEGACY_ANSWER.test(inner) ||
+          isPackMarkerBracket(inner))) || /^NEEDS[ _-]CLARIFICATION/i.test(inner); // a track pack's [MARKER] (1.15) is as stable as [SaaS]
       let end = j;
       if (after === "[") { // reference link [x][y]: both halves are syntax
-        const k = groupEnd(j + 1);
+        const k = closer[j + 1];
         if (k !== -1) { skip = true; end = k; }
       }
-      if (!skip && !visit(inner, line.slice(i + 1, j))) walk(i + 1, j); // rawInner: code spans intact (columns kept)
+      if (!skip && !visit(inner, line.slice(i + 1, j))) { // rawInner: code spans intact (columns kept)
+        frames.push([end + 1, to], [i + 1, j]); // the group's inside next, then the rest of this range
+        break;
+      }
       i = end;
     }
-  };
-  walk(box ? box[0].length : 0, s.length);
+  }
 }
 
 // 'missing' | 'placeholder' | 'filled' for an artifact — `input` is { file } or { text }, or a string
@@ -1087,11 +1107,30 @@ function chainPlaceholders(dir, tracks, kind, phase, blockingOnly, texts) {
   return { all, blocking: all.filter((r) => r.idx <= cur), later: all.filter((r) => r.idx > cur) };
 }
 // Some prose once brackets (nested too), HTML comments and the TODO sentinel are set aside: a root cause written as
-// nothing but "[the cause, with evidence]" is not written yet — whatever the bracket says.
+// nothing but "[the cause, with evidence]" is not written yet — whatever the bracket says. A bracket group is set aside when it
+// closes on its own line (its nested groups with it); an unbalanced "[" or "]" stays. ONE pass (review 5, P5): a stack of the
+// open "[" (emptied at each line break) marks each closed group in a difference array — removing the innermost groups again and
+// again until nothing changed was quadratic in the nesting (60 KB of nested "[a" in bug.md: 2.9 s).
 function hasProseOutsideBrackets(body) {
-  let t = stripHtmlComments(body).replace(RE_TODO_SENTINEL_LINE, " ");
-  for (let prev = null; prev !== t;) { prev = t; t = t.replace(/\[[^[\]\n]*\]/g, " "); }
-  return /[\p{L}\p{N}]/u.test(t);
+  const t = stripHtmlComments(body).replace(RE_TODO_SENTINEL_LINE, " ");
+  const diff = new Int32Array(t.length + 1);
+  const open = [];
+  for (let j = 0; j < t.length; j++) {
+    const c = t[j];
+    if (c === "\n") open.length = 0;
+    else if (c === "[") open.push(j);
+    else if (c === "]" && open.length) { diff[open.pop()]++; diff[j + 1]--; }
+  }
+  const outside = []; // the text outside every closed group, in pieces (a letter outside the BMP stays whole)
+  let cut = 0, from = 0;
+  for (let j = 0; j < t.length; j++) {
+    const was = cut;
+    cut += diff[j];
+    if (!was && cut) outside.push(t.slice(from, j));
+    else if (was && !cut) from = j;
+  }
+  if (!cut) outside.push(t.slice(from));
+  return /[\p{L}\p{N}]/u.test(outside.join(" "));
 }
 // bug.md is a bug REPORT: its Reproduction, Expected vs Actual and Root Cause quote logs, output and error text, full of
 // brackets that are evidence, not slots — `[object Object]`, `[WARN]`, a regex class `[A-Z]`, `[Error: ENOENT …]`,
