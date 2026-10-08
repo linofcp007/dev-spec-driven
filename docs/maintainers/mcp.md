@@ -18,6 +18,12 @@ track sections, appended `decisions.md` entries, `.state.json` / `roadmap.json`,
 `UPGRADE.md` / `RELEASE-NOTES.md` / `.specs/exports/*`, templates `init` copies) and never rewrite spec prose. The
 observed-run log (`.execution/observed.jsonl`, F1) is written only by `hooks/observe-hook.js` through `observeRun()` —
 no tool writes it, and no tool accepts an `observed` stamp from its caller.
+**The description budget (1.23).** `tools/list` is what every client that loads its tools up front pays in context on every
+session — it had grown to ~124k characters (~31k tokens). A description says what the tool does and the rules an agent must act
+on (evidence before claims, approvals are the user's, what a refusal or a stable code means) — at most 2,500 characters, one
+line; the reference detail (every output field, every check id, formats) lives in `references/tooling-reference.md` and the
+topic files. `mcp/tests/02-mcp-server.js` holds the whole list under 76,000 characters (the clone's CLI path counted as
+`dev-spec`); the tests that pin a description's wording (a rule) name it.
 Roadmap/deps persist in `.specs/roadmap.json`; cross-feature deps are cycle-checked and must name existing features.
 
 **Capabilities (1.14 — no longer tools-only).** `initialize` advertises `tools {listChanged: false}`, `prompts

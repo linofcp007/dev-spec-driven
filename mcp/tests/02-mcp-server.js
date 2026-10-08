@@ -927,6 +927,16 @@ exports.run = async ({
   { // 1.23 review — the protocol: 2025-11-25, a tool that throws answers JSON, the size of a message, the default project from roots
     const js = JSON.stringify;
     const I = require("./lib/i18n.js");
+
+    // tools/list is what every client that loads its tools up front pays in context on every session: it was ~124k characters
+    // (~31k tokens), 29 descriptions past 1,024 characters. The descriptions carry the rules an agent acts on (evidence before
+    // claims, approvals are the user's, what a refusal means); the reference detail lives in references/tooling-reference.md.
+    // The runnable CLI path (spec.DEV_SPEC — the clone's location) is counted as the bare `dev-spec`.
+    const toolsJson = js(list.result.tools).split(S.DEV_SPEC).join("dev-spec");
+    const longDesc = list.result.tools.map((t) => [t.name, t.description.split(S.DEV_SPEC).join("dev-spec").length]).filter(([, n]) => n > 2500);
+    ok(toolsJson.length < 76000 && !longDesc.length && list.result.tools.every((t) => !/\n/.test(t.description)),
+      "1.23 review: tools/list stays compact — under 76,000 characters (was ~124,000), no tool description past 2,500, every one a single line (got " +
+      toolsJson.length + " characters; " + js(longDesc) + ")");
     // A private server with its own env (null removes a variable) and cwd; every line it writes is kept; `onRequest` answers the
     // server's own requests (roots/list).
     const server23 = (env, cwd, onRequest) => {
