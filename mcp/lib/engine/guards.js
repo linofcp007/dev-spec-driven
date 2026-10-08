@@ -225,7 +225,8 @@ function sessionProject(opts = {}) {
       for (let i = 0; i < SESSION_MAX_UP; i++) {
         if (sessionSpecs(d)) { near = d; break; }
         const up = path.dirname(d);
-        if (up === d || (stop && sessionSame(d, stop))) break;
+        // at the anchor (by text, as withinRoot read it — no real-path calls in the walk): never above it
+        if (up === d || (stop && path.relative(stop, d) === "")) break;
         d = up;
       }
     }
