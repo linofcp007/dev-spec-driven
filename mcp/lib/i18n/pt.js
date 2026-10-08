@@ -1217,6 +1217,10 @@ const msg = {
     },
     kindKept: (kept, asked) => `Esta feature já é do tipo '${kept}' — mantive-o (pediste '${asked}'). Cria outra para um tipo diferente.`,
     langKept: (kept, asked) => `Esta feature já está em '${kept}' — mantive-a (pediste '${asked}'). Uma feature, uma língua.`,
+    // 1.23 review 5 — spec_create numa pasta que já existe (correr de novo) di-lo; uma feature nova cujo slug uma arquivada também tem é assinalada.
+    createExisted: (slug) => `'${slug}' já existe — nada foi recriado (os ficheiros foram mantidos; correr de novo só acrescenta os tracks que faltam).`,
+    createSummaryKept: "O resumo indicado não foi escrito: os ficheiros da feature já têm um.",
+    createArchivedTwin: (slug) => `Há também uma feature arquivada chamada '${slug}' (.specs/_archive/${slug}) — para a restaurar mais tarde, renomeia primeiro uma delas.`,
     // 1.21 F3 — spec_create {kind: "bugfix"}: pré-preenchimento (reproduction · rootCause · condition · behaviour — nomes em inglês).
     bugPrefill: {
       bugOnly: (key) => `${key} é um dado de bugfix — passa kind: "bugfix" (preenche o bug.md e o critério de regressão).`,
@@ -1234,22 +1238,28 @@ const msg = {
       tasksMissing: (slug) => `tasks.md não encontrado para '${slug}'`,
       requirementsMissing: (slug) => `requirements.md não encontrado para '${slug}'`,
       taskNotFound: (n, file = "tasks.md") => `Tarefa ${n} não encontrada em ${file}`,
+      tasksNotText: (file = "tasks.md") => `${file} não está gravado em UTF-8 (as letras acentuadas estão noutra codificação — a página de código ANSI do Windows, a que o Set-Content e o Add-Content do Windows PowerShell 5.1 escrevem): nada foi alterado, para essas letras ficarem intactas. Grava ${file} em UTF-8 (VS Code: "Reopen with Encoding" → Windows 1252, depois "Save with Encoding" → UTF-8) e tenta de novo.`,
       featureBusy: (slug, rel) => `Outro processo dev-spec está a atualizar '${slug}' neste momento (${rel || `.specs/${slug}/.lock`}) — nada foi alterado; tenta de novo daqui a pouco. Se nenhum outro editor ou comando dev-spec estiver a correr, apaga esse ficheiro.`,
       roadmapBusy: "Outro processo dev-spec está a atualizar o .specs/roadmap.json neste momento (.specs/.roadmap.lock) — nada foi alterado; tenta de novo daqui a pouco. Se nenhum outro editor ou comando dev-spec estiver a correr, apaga esse ficheiro.",
       folderInUse: (rel) => `A pasta ${rel} está a ser usada por outro programa (um editor, um indexador ou antivírus, um terminal aberto lá dentro) — nada foi movido nem apagado; fecha-o e tenta de novo.`,
       lockStuck: (rel) => `Um lock dev-spec abandonado (${rel}) não pôde ser removido — o ficheiro (ou uma pasta com esse nome) está aberto noutro programa, é só de leitura ou não é um ficheiro. Nada foi alterado. Apaga ${rel} à mão (verifica as permissões) e tenta de novo.`,
       noText: "Nenhum texto fornecido.",
       unknownPhase: (phase, known) => `Fase desconhecida '${phase}'. Conhecidas: ${known}`,
-      alreadyArchived: (slug) => `'${slug}' já está arquivada (.specs/_archive/${slug}). Remove-a de lá primeiro.`,
+      alreadyArchived: (slug) => `'${slug}' já está arquivada (.specs/_archive/${slug}) — renomeia primeiro esta feature (${DEV_SPEC} feature rename ${slug} "<novo nome>") e depois arquiva-a.`,
       renameNeedsName: "para renomear é preciso um nome novo.",
       sameSlug: "O nome novo dá o mesmo slug.",
       alreadyExists: (slug) => `'${slug}' já existe.`,
+      renameArchived: (slug) => `'${slug}' é o nome de uma feature arquivada (.specs/_archive/${slug}) — escolhe outro nome (com o mesmo nome, nenhuma das duas poderia ser arquivada nem restaurada).`,
+      slugTaken: (slug, held, name) => `'${name}' chega à pasta .specs/${slug}/, que tem outra feature ('${held}') — o nome da pasta guarda só os primeiros 64 caracteres do nome. Nada foi alterado: usa um nome mais curto que difira dentro deles (para trabalhar em '${held}', usa o nome '${slug}').`,
       badAction: "a ação tem de ser: remove | archive | rename | restore | flow",
       badTrack: "o track tem de ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
       cycle: (chain) => `Dependência circular: ${chain}`,
       nameRequired: "o nome é obrigatório",
       noSpecs: (root) => `Não há .specs/ em ${root}`,
       notGenerated: (file) => `${file} existe e não foi gerado pelo dev-spec — não foi alterado.`,
+      specsLinked: (rel) => `Recusado escrever em ${rel}: essa pasta é uma ligação (link simbólico, junction) ou aponta para fora de .specs/ — substitui-a por uma pasta normal e tenta de novo. Nada foi escrito.`,
+      roadmapNotWritten: (file, broken) => `${broken} ${file} não foi regenerado — gerado a partir do que o roadmap.json ainda dá, perderia as dependências, o backlog e os marcos que não consegue ler. Corrige .specs/roadmap.json e corre ${DEV_SPEC} roadmap --write de novo.`,
+      roadmapViewPartial: (broken) => `${broken} Esta vista deixa de fora o que não consegue ler (as dependências, o backlog e os marcos) até ser corrigido.`,
       unknownSteering: (file, known) => `Ficheiro de steering desconhecido '${file}'. Conhecidos: ${known}`,
     },
     ears: {
@@ -1257,6 +1267,7 @@ const msg = {
       noModal: "O critério não tem verbo modal (SHALL / DEVE / DEBE) — não é uma frase EARS válida.",
       noId: "O critério não tem ID estável (ex.: US-1.AC-1).",
       bareAcId: (id) => `'${id}' não é um ID estável que o trace_check leia — escreve US-<história>.AC-<n> (ex.: US-1.${id}).`,
+      subAcId: (id) => `'${id}' é um ID de subcritério, não um que o trace_check leia — dá a cada critério o seu próprio US-<história>.AC-<n> (um só nível: US-1.AC-1, US-1.AC-2 …).`,
       vague: (term) => `Termo vago '${term}' — substitui-o por um valor concreto e testável.`,
       noKeyword: "Sem palavra-chave EARS (WHEN/WHILE/IF/WHERE · QUANDO/ENQUANTO/SE/ONDE · CUANDO/MIENTRAS/SI/DONDE). Aceitável em requisitos ubíquos; confirma que é intencional.",
     },
@@ -1332,6 +1343,7 @@ const msg = {
       requirementsMissing: "requirements.md em falta",
       clarificationsOpen: (n) => `${n} [NEEDS CLARIFICATION] por resolver — resolve antes do design`,
       clarificationsOpenPlan: (n) => `${n} [NEEDS CLARIFICATION] por resolver no change.md — resolve antes de aprovar o plano`,
+      clarificationsOpenBug: (n) => `${n} [NEEDS CLARIFICATION] por resolver no bug.md — resolve-os antes de aprovar a Reprodução / Causa Raiz`,
       clarificationsNone: "nenhum por resolver",
       scPresent: "presente",
       scMissing: "sem critérios de sucesso mensuráveis SC-###",
@@ -1345,6 +1357,7 @@ const msg = {
       designMissing: "design.md em falta",
       mermaidOk: "tem um diagrama",
       mermaidMissing: "nenhum diagrama mermaid encontrado",
+      mermaidTemplate: "o diagrama mermaid ainda é o do modelo (Componente → Base de Dados) — falta desenhar a arquitetura desta funcionalidade",
       constitutionOk: "presente — verifica que cada princípio é validado",
       constitutionMissing: "sem secção Verificação da Constituição no design",
       saasAllFilled: "as 5 preenchidas",
@@ -1362,6 +1375,7 @@ const msg = {
       fixChecks: (ids, slug) => `Corrige as verificações bloqueantes (${ids}) — corre /spec-doctor ${slug} para detalhes.`,
       reReview: (files) => `Nova revisão: ${files} alterado(s) após a última aprovação — volta a aprovar a fase afetada.`,
       approvedMissing: (files, slug, phase) => `${files} foi aprovado mas já não existe — restaura-o (foi apagado depois da aprovação) ou, se desapareceu de vez, retira essa aprovação: /approve ${slug} ${phase} --revoke.`,
+      stateInvalid: (error, slug) => `${error} Enquanto não for reparado, nada pode ser aprovado, marcado como feito nem fechado, e as aprovações, marcações e evidências que guarda não podem ser lidas — corrige-o à mão ou restaura-o do git (marcadores de conflito de um merge? resolve-os; ${DEV_SPEC} merge-state --install passa a juntá-lo pelo significado), depois /spec-doctor ${slug}.`,
       approveRequirements: (slug) => `Revê e aprova os requisitos — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Revê e aprova o design — /approve ${slug} design.`,
       approveTasks: (slug) => `Revê e aprova a divisão de tarefas — /approve ${slug} tasks.`,
@@ -1490,6 +1504,8 @@ const msg = {
       network: (dir) => `projectDir tem de ser uma pasta local — um caminho de rede ou de dispositivo (${dir}) é recusado, para que uma chamada de ferramenta nunca aponte este servidor local para outra máquina; abre o projeto localmente (ou arranca o servidor com ele como pasta de trabalho).`,
       unknownTool: (name) => `Ferramenta desconhecida: ${name} — tools/list lista as ferramentas deste servidor.`,
       noTool: "tools/call precisa de params.name (o nome da ferramenta — ver tools/list).",
+      toolFailed: (why) => `A ferramenta falhou: ${why}`,
+      tooLarge: (n, max) => `Pedido inválido: uma mensagem de ${n}+ caracteres passa o limite deste servidor, ${max} (DEV_SPEC_MCP_MAX_MESSAGE) — foi ignorada.`,
     },
     jsonShape: {
       invalid: (rel, detail) => `${rel} tem uma estrutura inesperada (${detail}) — corrige-o à mão; não o vou sobrescrever.`,
@@ -1510,12 +1526,16 @@ const msg = {
       unticks: "'unticks' tem de ser um array",
     },
     depend: {
+      // 1.23 review 5 — "Precisa de atenção" do ROADMAP.md / .html: um dependsOn que não nomeia nenhuma feature
+      roadmapStale: (feature, list, args) => `depende de ${list}, que não é nenhuma feature (uma entrada antiga ou editada à mão em .specs/roadmap.json) — define a lista de novo sem ela: ${DEV_SPEC} depend ${feature} ${args}`,
       unknown: (list) => `Cada dependência tem de ser uma feature existente — não encontrada(s): ${list}`,
     },
     evals: {
       usage: "Uso: node run-evals.js <feature> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
       noEvalsDir: (slug, dir) => `Sem pasta evals/ para '${slug}' em ${dir}`,
       requireLive: "harness de evals: a ANTHROPIC_API_KEY não está definida e foi pedido --require-live — recuso fazer um dry run em alternativa.",
+      unknownFlag: (flag, suggestion) => `harness de evals: opção desconhecida ${flag}` + (suggestion ? ` — será ${suggestion}?` : "") + " Nada correu.",
+      extraArg: (word) => `harness de evals: argumento inesperado '${word}' — uma feature por execução. Nada correu.`,
       header: (slug) => `dev-spec-driven evals — feature '${slug}'`,
       config: (model, prompt, mode) => `  modelo: ${model}   prompt: ${prompt}   modo: ${mode}`,
       none: "(nenhum)",
@@ -1585,6 +1605,7 @@ const msg = {
     },
     featureOps: {
       removeNeedsConfirm: (slug, n) => `Remover '${slug}' apaga .specs/${slug}/ de vez (${n} ficheiro(s)). Nada foi apagado — passa confirm: true para a apagar, ou arquiva-a (reversível).`,
+      removeChangedSincePreview: (slug) => `Nada foi apagado: .specs/${slug}/ mudou depois de o utilizador ter sido questionado sobre a remoção (outra feature renomeada para este nome, ou ficheiros editados enquanto a pergunta esperava) — a confirmação cobria a pasta que lhe foi mostrada. Pergunta-lhe de novo.`,
       backlogNotFound: (name, known) => `'${name}' não está no backlog${known ? ` (backlog: ${known})` : " (o backlog está vazio)"}.`,
       backlogIsFeature: (name, slug) => `'${name}' já tem uma spec (.specs/${slug}/) — o backlog é para features ainda sem spec (estado: ${DEV_SPEC} status ${slug}).`,
       backlogAppended: (name) => `'${name}' já está no backlog — a nova nota foi acrescentada à sua nota.`,
@@ -1653,6 +1674,14 @@ const msg = {
       unknownCommand: (c) => `comando desconhecido '${c}'. Corre \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `cliente desconhecido '${c}'. Conhecidos: ${known}`,
       noJson: (c) => `--json não está disponível para '${c}': só imprime texto. Corre-o sem --json.`,
+      flagNotFor: (flag, c, list) => `${flag} não é uma opção de '${c}'` + (list ? ` (as suas opções: ${list})` : " (não tem nenhuma)") + `. Corre \`${DEV_SPEC} help\`.`,
+      extraArgs: (c, extra) => `'${c}' recebeu argumento(s) inesperado(s): ${extra}. Corre \`${DEV_SPEC} help\` para ver a sintaxe.`,
+      needsRun: (flag) => `${flag} só se aplica com --run (como os comandos correm) — junta --run, ou retira ${flag}.`,
+      runOrEvidence: "--run regista a execução que faz; --evidence / --exit / --cmd relatam uma execução feita noutro lado — passa uma coisa ou a outra.",
+      projectEmpty: "--project está vazio — indica a pasta do projeto, ou omite --project (a pasta mais próxima acima desta com uma .specs/, senão esta).",
+      projectUnexpanded: (v) => `--project ${v} contém uma variável que nunca foi expandida — passa a própria pasta.`,
+      projectMissing: (dir) => `--project ${dir}: essa pasta não existe — verifica o caminho (só o init cria a pasta de um projeto).`,
+      projectNotDir: (dir) => `--project ${dir} é um ficheiro, não uma pasta.`,
     },
 
     gates: {
@@ -1667,6 +1696,7 @@ const msg = {
       checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
       approveRefused: (phase, slug, ids, lines) => `Não é possível aprovar '${phase}' de '${slug}' — verificações a falhar: ${ids}.\n${lines}\nCorrige-as (detalhes: /spec-doctor ${slug}), ou passa force: true (CLI: --force) para registar a aprovação mesmo assim — fica assinalada como forçada.`,
       approveNothing: (phase, slug, file) => `Nada para aprovar: '${phase}' não tem artefacto em '${slug}' (${file} não existe, ou o track está desativado) — nem com force.`,
+      approveUnreadable: (phase, slug, file) => `Nada para aprovar: ${file} em '${slug}' não pode ser lido (uma pasta com esse nome, sem permissão, ou outro programa a usá-lo) — torna-o um ficheiro legível e depois aprova '${phase}'.`,
       approveForced: (ids) => `Aprovado com force — as verificações a falhar ficam registadas com a aprovação: ${ids}.`,
       phaseOrder: (list, slug, first) => `há fases anteriores ainda por aprovar: ${list} — aprova-as primeiro, por ordem (/approve ${slug} ${first})`,
       forcedGates: (list) => `aprovado com force apesar de verificações a falhar: ${list}`,
@@ -1738,6 +1768,7 @@ const msg = {
       notFound: (p) => `'${p}' não encontrado.`,
       nothing: (tool, p) => `Não foram encontrados ficheiros de spec ${tool} em '${p}'.`,
       exists: (slug) => `A feature '${slug}' já existe — a importação nunca a substitui. Indica outro nome.`,
+      tooLarge: (rel, max) => `${rel} tem mais de ${max} caracteres — demasiado grande para importar inteiro (a parte além do limite, incluindo os passos de um plano, perder-se-ia). Divide-o ou encurta-o e importa de novo; nada foi criado.`,
       noUsableTitle: (title) => `O título do documento '${title}' não tem caracteres utilizáveis (a-z, 0-9) para nome de pasta — indica o nome da feature (name; CLI: --name "<feature>").`,
       featureTitle: (name) => `# Feature: ${name}`,
       tasksTitle: (name) => `# Tasks: ${name}`,
@@ -1983,7 +2014,7 @@ const msg = {
     },
     restore: {
       notArchived: (slug) => `Não há nada arquivado como '${slug}' (.specs/_archive/${slug}/ não existe).`,
-      activeExists: (slug) => `'${slug}' já é uma feature ativa — renomeia-a ou arquiva-a antes de restaurar a arquivada.`,
+      activeExists: (slug) => `'${slug}' já é uma feature ativa — renomeia-a primeiro (${DEV_SPEC} feature rename ${slug} "<novo nome>") e depois restaura a arquivada.`,
       done: (slug) => `'${slug}' restaurada de .specs/_archive/ ✓`,
       noRecord: "Foi arquivada antes de o arquivo registar a sua entrada no roadmap — volta a declarar as dependências com spec_depend, se as tinha.",
       skipDependsOn: (d, reason) => `a sua dependência '${d}' (${reason})`,
@@ -2026,7 +2057,7 @@ const msg = {
     },
     approvalGuard: {
       on: {
-        ask: "O guarda de aprovações está em ASK — uma aprovação feita por um agente (spec_approve / dev-spec approve, a remoção de uma feature, baixar este guarda) pede primeiro a tua confirmação (roadmap.json meta.approvalGuard). Nos modos de permissão auto / bypass do Claude Code o pedido de permissão pode não aparecer — 'deny' vale em todos os modos.",
+        ask: "O guarda de aprovações está em ASK — uma aprovação feita por um agente (spec_approve / dev-spec approve, a remoção de uma feature, baixar este guarda) pede primeiro a tua confirmação (roadmap.json meta.approvalGuard). O Claude Code mostra esse pedido também no modo auto; só o modo bypass de permissões o pode saltar — 'deny' vale em todos os modos.",
         deny: "O guarda de aprovações está em DENY — uma aprovação feita por um agente (spec_approve / dev-spec approve, a remoção de uma feature, baixar este guarda) é recusada: só a pessoa aprova, no seu próprio terminal ou no Claude Code com o prefixo ! (roadmap.json meta.approvalGuard).",
       },
       off: "O guarda de aprovações está DESLIGADO — as aprovações pedidas por um agente não são controladas (roadmap.json meta.approvalGuard).",
@@ -2034,7 +2065,13 @@ const msg = {
       action: (a) => {
         const f = a.feature || "?";
         if (a.kind === "remove") return `apagar definitivamente a feature '${f}' (a pasta em .specs/, as aprovações e o histórico)`;
+        if (a.kind === "unreadable") {
+          return a.why === "too-long" ? `correr um comando de shell demasiado longo para o guarda de aprovações o ler (${a.length} caracteres) que menciona dev-spec ou .specs/`
+            : "correr um comando de shell que menciona a CLI do dev-spec com uma palavra de aprovação numa forma que o guarda de aprovações não consegue ler (um lançador desconhecido, um glob, uma variável ou uma string concatenada)";
+        }
         if (a.kind === "guard-down") {
+          if (a.setting === "roadmap" && a.source === "edit") return "editar à mão .specs/roadmap.json (é lá que estão o guarda de aprovações e os gates do projeto)";
+          if (a.setting === "state") return `editar à mão o .state.json de '${f}' — as aprovações, a evidência e o histórico`;
           if (a.setting === "evidence") return "voltar a pôr o modo de evidência (meta.evidence) em reported";
           if (a.setting === "stopCheck") return "desligar o gate de evidência no fim do turno (meta.stopCheck)";
           if (a.setting === "guard") return a.from ? `baixar o modo guarda (meta.guard) de ${a.from} para ${a.to}` : `pôr o modo guarda (meta.guard) em ${a.to}`;
@@ -2077,6 +2114,7 @@ const msg = {
       timedOut: (s, list) => `Sem resposta do utilizador em ${s} s: nada foi registado (${list}). Pede ao utilizador que o aprove ele próprio.`,
       failed: (why, list) => `O cliente MCP não conseguiu perguntar ao utilizador (${why}): nada foi registado (${list}). Pede ao utilizador que faça ele próprio a aprovação.`,
       confirmed: "Confirmado pelo utilizador no cliente MCP (elicitation).",
+      waiting: "À espera da resposta do utilizador no cliente MCP…",
     },
     mergeState: {
       doctor: (n, list) => `${n} conflito(s) de merge que o merge driver do dev-spec deixou por resolver — ${list}. Em cada um ficou o valor de ours: escolhe o valor certo no ficheiro (a lista "mergeConflicts" mostra base / ours / theirs) e depois apaga "mergeConflicts".`,
@@ -2204,9 +2242,9 @@ const msg = {
         },
         tplFeature: (list) => `Um artefacto da spec de uma feature: .specs/{slug}/{artifact} — {artifact} é um de ${list}.`,
         tplSteering: "Um ficheiro de steering: .specs/steering/{file} (um ficheiro .md).",
-        truncated: (cap, total) => `Lista de recursos limitada a ${cap} de ${total} — lê os restantes através dos templates specs://feature/{slug}/{artifact} e specs://steering/{file}.`,
       },
       err: {
+        badCursor: "resources/list: cursor inválido — devolve tal como está o nextCursor da página anterior.",
         noPromptName: "prompts/get precisa do `name` do prompt (uma string).",
         badPromptArgs: 'prompts/get: `arguments` tem de ser um objeto de strings, p. ex. {"args": "login"}.',
         unknownPrompt: (name, list) => `Prompt desconhecido '${name}' — um de: ${list}.`,
@@ -2229,7 +2267,7 @@ const msg = {
         steps: {
           "re-review": (s) => `rever ${s.files.join(", ")}`,
           fill: (s) => `preencher ${s.file}`,
-          fix: (s) => (s.file === "bug.md" ? "escrever a causa raiz em bug.md" : `corrigir o gate ${s.phase}`),
+          fix: (s) => (s.file === "bug.md" ? "escrever a causa raiz em bug.md" : s.file === ".state.json" ? "reparar o .state.json (não pode ser lido)" : `corrigir o gate ${s.phase}`),
           approve: (s) => `aprovar ${s.phase}`,
           tests: () => "escrever os testes e depois aprová-los (Fase 4)",
           tasks: () => "dividir em tarefas",
@@ -2316,8 +2354,9 @@ const msg = {
     },
 
     markerSyntax: {
-      unreadTasks: (list) => `linhas com caixa de verificação que não são tarefas: ${list} — uma linha de tarefa é "- [ ] N. texto" (um marcador -, * ou +, depois o número); estas nunca são marcadas, incluídas num brief nem verificadas. Numera-as (ou torna-as subpassos de uma tarefa).`,
+      unreadTasks: (list) => `linhas com caixa de verificação que não são tarefas: ${list} — uma linha de tarefa é "- [ ] N. texto" (um marcador -, * ou +, depois o número); estas nunca são marcadas, incluídas num brief nem verificadas. Numera-as (ou torna-as subpassos de uma tarefa); uma linha com 4+ espaços de indentação depois de uma linha em branco, fora de uma lista, é um bloco de código — tira-lhe a indentação.`,
       doctor: (list) => `texto com forma de marcador numa linha de tarefa não dá nenhum marcador: ${list} — as ferramentas não leem nada aí (nenhuma verificação é executada, nenhum ficheiro é rastreado). Escreve-o como _Verify: <comando>_ / _Implements: <caminho>_ / _Depends: 3_ (em itálico, com o valor lá dentro).`,
+      suspiciousVerify: (list) => `um comando _Verify:_ parece mal escrito: ${list} — começa por _ ou * (um delimitador do marcador lido como parte dele), tem código entre crases lá dentro (dois comandos escritos como um: dá a cada um o seu _Verify:_; uma substituição de comando lê-se melhor como $(…)) ou tem uma aspa sem par. O done --run corre-o tal como está escrito: corrige o marcador.`,
     },
     outsideCode: {
       doctor: (list) => `testes planeados fora do código de testes apontam para um artefacto que ainda é um modelo: ${list} — preenche-o (a execução de carga real, o conjunto de avaliação da própria feature) antes de considerar esses testes verificados.`,
@@ -2461,6 +2500,19 @@ const msg = {
 <!-- As normas de ${a.title} da equipa — todas as features +${a.name} as seguem (o spec_task_brief cita este ficheiro). -->
 - [fill me in]
 `,
+      // A regra que um campo do track.json viola / porque o track.json não é JSON — o motor passa um código (+ o limite), nunca texto
+      rule: (r) => {
+        const x = r && typeof r === "object" ? r : { id: r };
+        return ({
+          name: "= o nome da pasta", marker: "^[A-Z][A-Z0-9]{1,11}$", text: `2–${x.max} caracteres, uma só linha, sem [ ] < > \``,
+          line: `uma só linha, ≤ ${x.max} caracteres`, signals: "{ strong?, weak?, context? }", keywords: "[palavra-chave, …]",
+          sections: "[{ name, syn?, loose?, guidance? }, …] — pelo menos uma", section: "{ name, syn?, loose?, guidance? }",
+          lead: "um nome depois da numeração / do emoji / do travessão", texts: "[texto, …]",
+          guidance: `uma só linha, ≤ ${x.max} caracteres, sem <!-- -->`,
+        })[x.id] || String(x.id);
+      },
+      jsonWhy: (a) => (a.why === "comment" ? "um comentário /* nunca é fechado" : a.why === "object" ? "não é um objeto JSON"
+        : a.line ? `um erro de sintaxe na linha ${a.line}` : "um erro de sintaxe"),
       problems: {
         "linked-folder": "uma ligação (symlink / junction) ou uma pasta fora de .specs/ — ignorada: um pack só é lido da sua própria pasta.",
         "unknown-file": "não é um ficheiro de pack (track.json, requirements.md, tasks.md, test-plan.md, checklist.md, steering.md, <língua>/) — ignorado.",
@@ -2469,11 +2521,11 @@ const msg = {
         "name-reserved": (a) => `'${a.name}' está reservado (um track incluído, uma palavra para um, ou uma palavra que o dev-spec usa) — o pack é ignorado.`,
         "name-mismatch": (a) => `"name": "${a.name}" não é o nome da pasta '${a.folder}' — o pack é ignorado.`,
         "json-missing": "não há track.json — o pack é ignorado.",
-        "json-invalid": (a) => `o track.json não é JSON válido (${a.detail}) — o pack é ignorado.`,
+        "json-invalid": (a) => `o track.json não é JSON válido (${MSG.pt.trackPacks.jsonWhy(a)}) — o pack é ignorado.`,
         "too-big": (a) => `${a.file} tem mais de ${a.max} bytes — o pack é ignorado.`,
         "fragment-linked": (a) => `${a.file} não é um ficheiro normal dentro de .specs/ (é uma ligação ou uma pasta) — o pack é ignorado.`,
-        "field-missing": (a) => `falta "${a.field}" (${a.rule}) — o pack é ignorado.`,
-        "field-invalid": (a) => `"${a.field}" é inválido (${a.rule}) — o pack é ignorado.`,
+        "field-missing": (a) => `falta "${a.field}" (${MSG.pt.trackPacks.rule(a.rule)}) — o pack é ignorado.`,
+        "field-invalid": (a) => `"${a.field}" é inválido (${MSG.pt.trackPacks.rule(a.rule)}) — o pack é ignorado.`,
         "marker-invalid": (a) => `o marcador '${a.marker}' não é ^[A-Z][A-Z0-9]{1,11}$ — o pack é ignorado.`,
         "marker-reserved": (a) => `o marcador [${a.marker}] é do dev-spec (um marcador incluído, uma etiqueta de história / paralela ou um espaço genérico) — o pack é ignorado.`,
         "marker-duplicate": (a) => `o marcador ${a.marker} já é do pack +${a.other} — os marcadores são únicos; este pack é ignorado.`,
@@ -2672,6 +2724,7 @@ const msg = {
       signedForced: (ids) => `Validado com force — as verificações a falhar ficam registadas com a validação: ${ids}.`,
       stillPending: (phase, missing) => `'${phase}' continua pendente até todos os papéis validarem o seu conteúdo atual — ${missing}.`,
       approvedByRoles: (phase, roles) => `'${phase}' está aprovada — todos os papéis validaram o conteúdo atual: ${roles}.`,
+      sameSigner: (by, phase, roles) => `Nota: ${by} validou '${phase}' por vários papéis (${roles}) — as validações por papel pressupõem pessoas diferentes.`,
       staleSignOffs: (list) => `as validações feitas antes de o artefacto mudar já não contam (volta a validar o conteúdo atual): ${list}`,
       resigning: (list) => `nova validação em curso (a fase continua aprovada como estava até todos os papéis validarem o novo conteúdo): ${list}`,
       unsigned: (list) => `aprovado sem as validações por papel agora exigidas (aprovado antes de os papéis serem configurados ou alterados — conta como aprovado por um papel desconhecido; pede a cada papel que volte a validar): ${list}`,
@@ -2721,6 +2774,8 @@ const msg = {
       signOffsToo: (roles) => `As validações por papel que estavam à espera também foram retiradas: ${roles}.`,
       laterStay: (list, phase) => `Nada em cascata: as fases seguintes continuam aprovadas (${list}); aprovar outra fase é recusado (phase-order) até '${phase}' voltar a ser aprovada.`,
       notApproved: (phase, slug) => `'${phase}' não está aprovada em ${slug} e nenhuma validação por papel está à espera — nada a revogar.`,
+      roleRequired: (phase, slug, roles) => `'${phase}' é validada por papel (${roles}) — uma revogação indica o papel que revoga: /approve ${slug} ${phase} --revoke --role <papel>. Nada foi registado.`,
+      noSignOff: (role, phase, slug, waiting) => `'${role}' não tem nenhuma validação à espera para '${phase}' de ${slug} — nada a retirar (à espera: ${waiting}); cada papel só retira a sua própria validação.`,
       phaseRequired: "Indica a fase cuja aprovação queres revogar.",
       noThrough: "revoke aceita uma só fase — não through (o avanço rápido).",
       noForce: "revoke não aceita force nem expires — serve para retirar uma aprovação; reason diz porquê.",
@@ -2728,7 +2783,7 @@ const msg = {
       signOffWhy: (list) => `a revogação de ${list}`,
     },
     waiver: {
-      badExpires: (v, max) => `expires tem de ser uma data ISO (AAAA-MM-DD, hoje ou depois, no máximo daqui a ${max} dias) ou um número de dias (30d, 1–${max}) — recebido: ${v}.`,
+      badExpires: (v, max) => `expires tem de ser uma data ISO (AAAA-MM-DD, hoje ou depois em UTC — válida até ao fim desse dia, UTC — no máximo daqui a ${max} dias) ou um número de dias (30d, 1–${max}) — recebido: ${v}.`,
       needsForce: "reason / expires descrevem uma exceção (waiver) — acompanham force (reason também acompanha revoke).",
       notForced: "O gate passou — nada foi dispensado: o motivo / a validade não foram registados.",
       recorded: (reason, expires) => `Exceção registada${reason ? `: ${reason}` : ""}${expires ? ` (válida até ${expires})` : ""}.`,
@@ -2774,6 +2829,7 @@ const msg = {
       pwshNotRed: (cmd, what) => `o PowerShell não conseguiu analisar \`${cmd}\` (${what}) — o comando nunca correu, por isso não é um teste vermelho (_Expect: fail_). Nada foi registado; a tarefa continua aberta. O Windows PowerShell 5.1 não tem && / || (usa ; ou o pwsh 7).`,
       cantRunOutput: (n, code, what, ticked) => `Tarefa ${n}: a execução saiu com exit ${code}, mas o output mostra que o teste nunca foi executado (${what}) — isso não é um teste vermelho (_Expect: fail_): um ficheiro de teste, módulo ou script em falta não é a razão certa. Escreve o teste para que falhe numa asserção (ou "não implementado") e regista essa execução. ` + (ticked ? "Registado; a tarefa passa a contar como não verificada." : "Não a marco como feita."),
       notRed: (cmd, what) => `\`${cmd}\` falhou, mas o output mostra que o teste nunca foi executado (${what}) — isso não é um teste vermelho (_Expect: fail_): um ficheiro de teste, módulo ou script em falta não é a razão certa. Nada foi registado; a tarefa continua aberta. Escreve o teste para que falhe numa asserção (ou "não implementado"); depois, repete o done --run.`,
+      crashNotRed: (n, code, ticked) => `Tarefa ${n}: a execução crashou (exit ${code} — um sinal como SIGSEGV / SIGABRT, ou um código de crash do Windows) — isso não é um teste vermelho (_Expect: fail_): um crash não é o teste a falhar pela razão certa. Faz o teste falhar numa asserção (ou "não implementado") e regista essa execução. ` + (ticked ? "Registado; a tarefa passa a contar como não verificada." : "Não a marco como feita."),
       prRed: "a execução vermelha esperada (_Expect: fail_)",
       prRedKept: (code, day) => `execução vermelha antes da correção: exit ${code}${day ? " em " + day : ""}`,
       doctorMissing: (list) => `T-IDs postos a verde por tarefas feitas sem uma execução vermelha registada: ${list} — um teste que nunca falhou não prova nada. Marca a tarefa que o escreve com _Expect: fail_ e regista a execução a falhar antes da correção (${DEV_SPEC} done <feature> <n> --run).`,

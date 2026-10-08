@@ -23,6 +23,7 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   // done while another live process holds the feature's lock: waits DEV_SPEC_LOCK_WAIT_MS, then refuses (exit 1, --json
   // prints the refusal) with nothing ticked or recorded — MCP's spec_complete_task answers the same.
   const k14 = path.join(tmp, "wp14-lock");
+  fs.mkdirSync(k14, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
   run(["create", "Race", "core", "--project", k14]);
   const kDir14 = path.join(k14, ".specs", "race");
   fs.writeFileSync(path.join(kDir14, "tasks.md"), "- [ ] 1. a\n- [ ] 2. b\n");
@@ -73,6 +74,7 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   // A command waiting on a feature's lock whose folder is removed meanwhile (remove's tombstone rename) answers not-found:
   // its pre-lock "the feature exists" read was stale, and its write recreated a zombie .specs/<slug>/.
   const lr14 = path.join(tmp, "wp14-lock-race");
+  fs.mkdirSync(lr14, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
   run(["create", "Imp", "core", "--project", lr14]);
   const imp14 = path.join(lr14, ".specs", "imp");
   fs.writeFileSync(path.join(imp14, ".lock"), JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString(), token: "held-by-test" })); // a live holder

@@ -115,6 +115,21 @@ function recentActivity(dir) {
   return false;
 }
 
+// The nearest folder at or above cwd that holds a dev-spec .specs/ (≤ 40 levels — a cd'd subfolder, a worktree) — a candidate for the
+// raw pre-check only. A network or device path (\\host\share, \\?\…) is the user's own folder: taken as it is, never walked.
+function nearestDevSpec(cwd) {
+  if (!cwd) return null;
+  if (/^[\\/]{2}/.test(cwd.trim())) return cwd;
+  let d = path.resolve(cwd);
+  for (let i = 0; i < 40; i++) {
+    if (isDevSpecProject(d)) return d;
+    const up = path.dirname(d);
+    if (up === d) break;
+    d = up;
+  }
+  return null;
+}
+
 // Older Claude Code versions send no last_assistant_message: the last assistant text of the transcript (JSONL), read from
 // its tail only.
 function lastAssistantText(file) {
@@ -160,22 +175,26 @@ function main(raw) {
   if (event !== "Stop" && event !== "SubagentStop") return finish();
   if (payload.stop_hook_active === true) return finish(); // already sent back once: never twice in a row
 
-  // The project: the session's cwd, else the project dir Claude Code (or the user) exported.
+  // The raw pre-check: the projects this stop may be about — the nearest dev-spec .specs/ at or above the session's cwd (a cd'd
+  // subfolder, a worktree), the project dir Claude Code (or the user) exported — with the gate on. The engine then picks THE
+  // project (spec.sessionProject, 1.23 review 5: a worktree's copy of .specs/ maps to the checkout the MCP server records in).
   const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null;
-  const pdir = [cwd, process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR]
-    .filter((v) => typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim()))
-    .map((v) => path.resolve(v))
-    .find(isDevSpecProject);
-  if (!pdir || gateOff(pdir)) return finish();
+  const anchors = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR]
+    .filter((v) => typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim()));
+  const cands = [...new Set([nearestDevSpec(cwd), ...anchors].filter(Boolean).map((v) => path.resolve(v)))].filter((d) => isDevSpecProject(d) && !gateOff(d));
+  if (!cands.length) return finish();
 
   const sub = event === "SubagentStop";
   // Stop only (a subagent's gate reads its report, not the activity): no feature active lately → nothing the gate could say.
-  if (!sub && !recentActivity(pdir)) return finish();
+  if (!sub && !cands.some(recentActivity)) return finish();
   let message = typeof payload.last_assistant_message === "string" ? payload.last_assistant_message : "";
   if (!message.trim()) message = lastAssistantText(sub ? payload.agent_transcript_path || payload.transcript_path : payload.transcript_path);
   if (!message.trim()) return finish();
 
   const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const s = spec.sessionProject({ cwd, anchors });
+  const pdir = s ? s.project : cands[0];
+  if (gateOff(pdir)) return finish();
   // hooks.json registers SubagentStop for the spec-implementer and the spec-simplifier: a payload without agent_type (older
   // versions) is read as the implementer — a simplifier's reply names no task report, so that check lets it through.
   const agent = !sub ? "" : typeof payload.agent_type === "string" && payload.agent_type.trim() ? payload.agent_type : "spec-implementer";

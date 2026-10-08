@@ -10,7 +10,8 @@ Args: $ARGUMENTS
 **Size xs / s (1.21) — the default way to approve the plan:** `spec_next_action` names this call from the start (its
 `fastForward`): fill the whole plan, then approve it once — a change (size xs) has a single planning approval, `tasks`
 (its `change.md`); size s approves requirements → design (→ test-plan / eval-plan) in order — with +tdd / +ai the call ends
-there (`/spec-ff <feature> test-plan`): Phase 4's `tests` gate needs the failing tests / eval sets written first
+there — at the last plan before `tests`: `/spec-ff <feature> test-plan` with +tdd alone, `eval-plan` whenever +ai
+is on (the phase `spec_next_action`'s `fastForward.through` names): Phase 4's `tests` gate needs the failing tests / eval sets written first
 (`/writeTests`), then approve `tests`, then `tasks`. Each gate still runs.
 
 For a small or well-understood feature whose planning artifacts are already written: instead of one `/approve` per

@@ -22,6 +22,7 @@ exports.run = ({ ok, run, tmp }) => {
   for (const X of C19) {
     const n0 = X.tr;
     const pd = path.join(tmp, "p19t-" + n0);
+    fs.mkdirSync(pd, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
     const en = run(["classify", X.classify[0], "--project", pd]), pt = run(["classify", X.classify[1], "--project", pd]);
     ok(en.code === 0 && new RegExp("^Tracks: core(?: \\+\\w+)* \\+" + n0 + "\\b").test(en.out) && new RegExp("\\+" + n0 + ": ON").test(en.out) &&
       new RegExp("^Tracks: core(?: \\+\\w+)* \\+" + n0 + "\\b").test(pt.out) && new RegExp("\\+" + n0 + ": ATIVO").test(pt.out),

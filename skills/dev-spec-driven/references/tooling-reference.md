@@ -25,7 +25,7 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_clarify` | Requirement ambiguities/gaps before design (markers, placeholders with file:line, missing sections, IF…THEN, track gaps — tenant isolation, AI quality/cost, access denial, secrets, data subject rights, retention; with a glossary, every avoided word used — `glossary`; queues / events / concurrency / transactions named (two concepts, or one strong phrase; never the template's words) while neither requirements.md nor design.md states a consistency model, delivery guarantee or idempotency — one question, `nudges` `consistency-unstated`) |
 | `trace_check` | AC ↔ task ↔ test gaps (the verdict) + warnings for EC/NFR/SC, `phantomSupersedes` and `phantomAffects`; `code: true` scans test files for T-IDs; `matrix: true` adds the requirements traceability matrix (one row per AC / EC / NFR / SC — `status` verified · implemented · planned · untraced, `gaps` no-task · no-test · no-coverage, linked tasks + evidence, tests, design, decisions, supersedes, changed since approval; informational, never the verdict) |
 | `spec_doctor` | One health-check → `readyToAdvance` (the checks are listed below) |
-| `spec_approve` | Record a phase approval — a GATE: refused while that phase's checks fail; `force: true` records it as forced; saves a `.history/` snapshot; `role` signs off as a role (`meta.approvalRoles`); `through` fast-forwards every active phase up to it, each through its own gate; with `force`, `reason` + `expires` (YYYY-MM-DD or `30d`) record the approval's `waiver` (doctor `waiver-expired` once it lapses, ROADMAP.md and the merge summary show it); `revoke: true` (+ `reason`) removes the phase's approval and its waiting role sign-offs — history record `revoked: true`, never a cascade (`laterApproved` stay approved; the phase is pending again) |
+| `spec_approve` | Record a phase approval — a GATE: refused while that phase's checks fail; `force: true` records it as forced; saves a `.history/` snapshot; `role` signs off as a role (`meta.approvalRoles`); `through` fast-forwards every active phase up to it, each through its own gate; with `force`, `reason` + `expires` (YYYY-MM-DD or `30d`) record the approval's `waiver` (doctor `waiver-expired` once it lapses, ROADMAP.md and the merge summary show it); `revoke: true` (+ `reason`) removes the phase's approval and its waiting role sign-offs — history record `revoked: true`, never a cascade (`laterApproved` stay approved; the phase is pending again); on a role-governed phase it names a listed `role`, and before the approval withdraws only that role's sign-off |
 | `spec_impact` | What an edit after approval touches (vs the approved snapshot): ACs/sections/tasks; `reopen: true` unticks the affected done tasks and marks their evidence stale — never a removed criterion's tasks: `retire` [{id, tasks, tests}] lists them to delete or repoint; `phase: "steering"` (no name = every active feature) lists the approvals made under steering that changed since (read-only) |
 | `spec_decide` | Append one entry to the decision log `decisions.md` (`D-n`, `_Kind:_`, `_Date:_`, `_Affects:_` validated against the feature, `_Supersedes:_`) — append-only |
 | `spec_next_task` | The next task — the first open one whose `_Depends:_` are all done (`skipped` / `blocked` `[{number, waitsOn}]` when dependencies are in play; `next: null` + a note when none can start); `batch: true` → + the `[P]` tasks that can run beside it; `waves: true` → the execution waves of every open task + `cycles` + `blocked` |
@@ -65,9 +65,11 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   are deferred as a warn) · `task-deps` (only when some task declares `_Depends:_`: a value that is no task number, a
   number no active task carries, a self-dependency, a cycle — the tasks approval refuses on it) · bugfix `root-cause` ·
   spike `question` / `decision` · `merge-conflicts` (a `mergeConflicts` list the git merge driver left in the feature's
-  `.state.json` or in `roadmap.json` — pick each value, delete the list).
+  `.state.json` or in `roadmap.json` — pick each value, delete the list) · `state` (the feature's `.state.json` is not
+  valid JSON or has the wrong shape — next_action's one step is to repair it, spec_finish blocks on it).
 - **Warn:** `steering` (core files missing, or files still holding template placeholders) · `success-criteria` ·
-  `priorities` · `mermaid` · `constitution-check` · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,
+  `priorities` · `mermaid` (no mermaid code block outside comments, or only the template's own diagram) ·
+  `constitution-check` · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,
   empty, still the template, or fewer than 2 options) · `design-risks` (its Risks section missing, empty or still the
   template) · `design-reuse` (its Reuse & Integration section missing, empty or still the template — a brownfield
   feature's filled `integration-plan.md` → Integration Points counts; the three never block an approval, a bugfix and a
@@ -79,9 +81,10 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   `red-green` (+tdd: T-IDs made green with no recorded red run of an `_Expect: fail_` task) · `suite-evidence`
   (project checks without a passing run since the last task activity — or run before the implementing files changed —
   once every task is done) · `duplicate-tasks` · `unread-tasks` (checkbox lines the task scanner does not read as tasks —
-  an ordered-list `1. [ ] text`, an unnumbered `- [ ] text` outside every task) · `verify-pipes` (a `_Verify:_` that pipes) · `malformed-markers`
+  an ordered-list `1. [ ] text`, an unnumbered `- [ ] text` outside every task, one in an indented code block) · `verify-pipes` (a `_Verify:_` that pipes) · `malformed-markers`
   (text on a task line shaped like a marker that yields none — `**Verify:** …`, a bare `Verify:` — so nothing runs or is
-  traced) · `outside-code-artifacts` (+tdd: a test planned outside test code — `load-test.md`, an eval set — whose
+  traced) · `verify-suspicious` (a `_Verify:_` value that looks garbled: it starts with `_` / `*`, holds a code span inside
+  it, or has a quote with no partner) · `outside-code-artifacts` (+tdd: a test planned outside test code — `load-test.md`, an eval set — whose
   artifact is still the scaffold once a done task makes it green or every task is done; `spec_finish` repeats it as a
   warning) · `integration-plan` (brownfield template unfilled) · bugfix
   `reproduction` · `changed-since-approval` (names the `spec_impact` phases to diff) · `decision-affects` (phantom
@@ -112,9 +115,13 @@ and can read the specs:
 - **Resources** — read-only, confined to `.specs/`: `specs://roadmap` (ROADMAP.md, else rendered from roadmap.json),
   `specs://catalog` (SPECS.md), `specs://steering/<file>`, and `specs://feature/<slug>/<artifact>` for the allowlisted
   artifacts of each active feature (classification, requirements, design, test-plan, eval-plan, load-test, tasks, bug,
-  quickstart, checklist, integration-plan, retro, spike, decisions). Templates: `specs://feature/{slug}/{artifact}`,
-  `specs://steering/{file}`. The list is capped (the result says so); `..`, absolute paths, other schemes and links out
-  of `.specs/` are refused.
+  quickstart, checklist, integration-plan, retro, spike, decisions, change). Templates: `specs://feature/{slug}/{artifact}`,
+  `specs://steering/{file}`. The list comes in pages of 500 (`nextCursor` while there are more); `..`, absolute paths,
+  other schemes and links out of `.specs/` are refused.
+- **The project** — `SPEC_PROJECT_DIR`, else `CLAUDE_PROJECT_DIR`; else, when the client declares MCP `roots` (VS Code
+  does), its first local `file://` root; else the server's working directory. A tool's own `projectDir` always wins.
+  In a client with a global config and no roots (Claude Desktop), set `SPEC_PROJECT_DIR` in the server's `env` or pass
+  `projectDir` — otherwise `.specs/` lands in the app's working directory.
 - **Completions** (`completion/complete`, 1.16) — a prompt whose argument names a feature (`[feature name]`, `[feature] …`)
   completes its first word to the active features' slugs; `specs://feature/{slug}/{artifact}` completes `{slug}` and
   `{artifact}` (the artifacts the feature in `context.arguments.slug` has, else every allowlisted one) and
@@ -134,10 +141,15 @@ has none). `dev-spec …` below is the CLI's NAME: a line you hand the user is t
 "<clone>/cli/dev-spec.js" …` with the path resolved (1.21 — every engine, hook and tool message prints it that way;
 the command files write `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" …`; a committed file — ROADMAP.md, SPECS.md,
 UPGRADE.md, the exports, retro.md — keeps `dev-spec`, never a machine path). `--json` prints the structured
-result — a refused operation too (`{ok: false, error, …}` on stdout, exit 1, as the MCP tool returns it);
-`--project <dir>` sets the project root; human output is localized. Switches take `--x` or `--x=true|false`
+result — a refused operation too (`{ok: false, error, …}` on stdout, exit 1, as the MCP tool returns it), and a usage
+error or an unexpected failure (`{ok: false, error[, code]}`); human output is localized. The project: `--project <dir>`
+(an existing folder — only `init` creates one) > `SPEC_PROJECT_DIR` > `CLAUDE_PROJECT_DIR` > the nearest folder at or above
+the working one that holds a dev-spec `.specs/` (run from a subfolder, the CLI works in the project above) > the working
+folder; the MCP server resolves its default the same way. A path argument (`scan`, `ears`, `import`) is relative to the
+project when it was named, else to the working folder. Each command takes its own options and arguments — another option,
+or one argument too many, is a usage error. Switches take `--x` or `--x=true|false`
 (any other value is an error) — so do the eval harness's (`--dry-run`, `--set-baseline`, `--require-live`), which
-`evals` forwards. `doctor` (FAIL), `trace` (gaps), `ears` (errors) and `drift` (drift, a stale baseline or an
+`evals` forwards wherever they stand (an unknown one is refused, exit 2; `evals --help` prints its usage). `doctor` (FAIL), `trace` (gaps), `ears` (errors) and `drift` (drift, a stale baseline or an
 unreadable state) exit 1, so they are scriptable; so do `templates check` (an error), `finish` (not ready),
 `decide` (an unknown `_Affects:_`) and `stop-check` (the turn would be sent back); `upgrade` exits 0 with its report,
 1 only on an error.
@@ -230,9 +242,9 @@ clone's absolute paths, to paste into another project; `mcp-config <client>` pri
 
 | Hook | Event | What it does |
 |---|---|---|
-| `hooks/guard-hook.js` | PreToolUse (Write/Edit/MultiEdit/NotebookEdit) | Only with guard mode on: asks before an edit to a code file outside `.specs/` while no feature has approved, unfinished tasks — except a test file while a feature has an approved test plan and is unfinished (Phase 4 writes the failing tests first) and any code edit while an active spike exists (its prototype); with `guard: "scope"`, once tasks are approved, also for a code file no open task names in `_Implements:_` (test files excepted — the reason names the likely task or `/spec-converge`); silent otherwise |
-| `hooks/approval-hook.js` | PreToolUse (`Bash`, `PowerShell`, `spec_approve` / `spec_feature` / `spec_init` under any MCP prefix) | Only with `meta.approvalGuard` `ask` / `deny` (`init --approval-guard`): an agent's `spec_approve`, `spec_feature` remove with `confirm`, `dev-spec approve` / `feature remove --yes` through the Bash or PowerShell tool (also inside `bash -c` / `cmd /c` / `pwsh -Command`), or lowering the guard → `ask` (a permission prompt naming the feature, phase, role and `--force`; auto / bypass modes may skip it) or `deny` (refused in every mode; the user sees the `! node <clone>/cli/dev-spec.js …` command to run). Silent otherwise — a shell command not naming dev-spec is never read further; a guardrail, not a sandbox |
-| `hooks/spec-hook.js` | PostToolUse (Write/Edit) | On save: `requirements.md` → EARS lint + placeholders; `tasks.md` → traceability (+ EC/NFR/SC warnings); `design.md` → the active tracks' mandatory sections (`[SaaS]` `[AI]` `[SEC]` `[PRIVACY]` `[DIST]`), Constitution Check, placeholders; any spec file → roadmap refresh. Skips `.execution/` and `.specs/templates/` |
+| `hooks/guard-hook.js` | PreToolUse (Write/Edit/NotebookEdit) | Only with guard mode on: asks before an edit to a code file outside `.specs/` while no feature has approved, unfinished tasks — except a test file while a feature has an approved test plan and is unfinished (Phase 4 writes the failing tests first) and any code edit while an active spike exists (its prototype); with `guard: "scope"`, once tasks are approved, also for a code file no open task names in `_Implements:_` (test files excepted — the reason names the likely task or `/spec-converge`); silent otherwise |
+| `hooks/approval-hook.js` | PreToolUse (`Bash`, `PowerShell`, `Monitor`, `Write` / `Edit`, `spec_approve` / `spec_feature` / `spec_init` under any MCP prefix) | Only with `meta.approvalGuard` `ask` / `deny` (`init --approval-guard`): an agent's `spec_approve`, `spec_feature` remove with `confirm`, `dev-spec approve` / `feature remove --yes` through the Bash, PowerShell or Monitor tool (also inside `bash -c` / `cmd /c` / `pwsh -Command` / `-EncodedCommand`), a hand edit of `.specs/roadmap.json` or a feature's `.state.json`, or lowering the guard → `ask` (a permission prompt naming the feature, phase, role and `--force`; Claude Code shows it in auto mode too, only bypass-permissions mode may skip it) or `deny` (refused in every mode; the user sees the `! node <clone>/cli/dev-spec.js …` command to run). A command naming the CLI with an approval word in a form the guard can't read always asks; one too long to read is treated as an approval. Silent otherwise — a shell command not naming dev-spec is never read further; a guardrail, not a sandbox |
+| `hooks/spec-hook.js` | PostToolUse (Write/Edit) | On save: `requirements.md` → EARS lint + placeholders; `tasks.md` → traceability (+ EC/NFR/SC warnings); `design.md` → every active track's mandatory sections (`[SaaS]` `[AI]` `[SEC]` `[PRIVACY]` `[DIST]` `[API]` `[UI]` `[OBS]` `[DATA]`, and a track pack's), Constitution Check, placeholders; any spec file → roadmap refresh. Skips `.execution/` and `.specs/templates/` |
 | `hooks/spec-hook.js` | SessionStart | One status line per feature (at most 20, the most relevant — then one "+N more — /spec-status" line), plus one line per finished feature whose implementing files drifted, one line when features' open tasks plan the same files (cross-feature overlap), one line while `.specs/` comes from an older dev-spec (`meta.specVersion` absent or older — run `/spec-upgrade`), and one line when `.gitattributes` names the spec state's merge driver but git config runs it from a missing script or another copy (re-run `merge-state --install` after a plugin update — read as text, no git process) |
 | `hooks/observe-hook.js` | PostToolUse + PostToolUseFailure (Bash, PowerShell) | Logs a Bash (or PowerShell, with an explicit exit code) run of a task's runnable `_Verify:_` command (or its `&&` join) or of a `meta.checks` command — `{command, exitCode, at, event, session}` — to `.specs/<feature>/.execution/observed.jsonl` / `.specs/.execution/observed.jsonl` (git-ignored, ≤ 64 KB); interrupted or backgrounded runs are skipped. The engine then stamps each reported run `observed: true / false`. Prints nothing |
 | `hooks/stop-hook.js` | Stop | The end-of-turn evidence gate: when the closing message claims done / verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without passing evidence (or, all tasks done, project checks without a passing run), sends the turn back with the reason; never twice in a row; off with `meta.stopCheck: false` |
@@ -256,7 +268,7 @@ All artifacts live in `.specs/` at the project root:
 ```
 project-root/
 └── .specs/
-    ├── roadmap.json              # order + dependencies + backlog + meta (lang, roadmapLang, guard, stopCheck, checks, approvalRoles, changelogAt, specVersion, milestones)
+    ├── roadmap.json              # order + dependencies + backlog + meta (lang, roadmapLang, guard, stopCheck, evidence, approvalGuard, checks, approvalRoles, changelogAt, specVersion, milestones)
     ├── ROADMAP.md  (ROADMAP.html)   # generated — never hand-edit
     ├── SPECS.md                  # generated living catalog (spec_catalog write) — never hand-edit
     ├── RELEASE-NOTES.md          # generated release notes (spec_changelog write) — never hand-edit
@@ -337,7 +349,7 @@ merge time — unless a dependency orders them or `_Supersedes:_` declares it. T
 `spec_depend`, or re-plan the files.
 
 "Needs attention" lists, per feature: unmet dependencies, open clarifications, unfilled track sections
-(`[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]`), template placeholders in the current phase, artifacts changed since their
+(every active track's — `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]` / `[API]` / `[UI]` / `[OBS]` / `[DATA]` — and a track pack's), template placeholders in the current phase, artifacts changed since their
 approval, forced approvals, missing role sign-offs, overlaps, a spike past its timebox, and ticked tasks without a
 passing run — each named with its reason, as `spec_doctor` gives it (`#1 (latest run failed), #2 (note only,
 _Verify:_ command not run), #3`; no label = no run recorded).

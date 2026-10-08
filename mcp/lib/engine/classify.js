@@ -301,6 +301,18 @@ const ES_STRONG = W("una|unos|pero|también|tambien|usted|esto|eso|entonces|toda
 const ES_STRONG_CHARS = /ción|ciones|ñ/giu;
 const ES_WEAK = W("con|un|por|para|de|del|el|la|las|que|en|solo");
 const EN_WORDS = W("the|and|with|for|of|is|are|to|an|in|on|by|from|that|this|it|should|must|when|without");
+// Review 5 (L29) — content words of ONE language (none an English word): the built-in signals' PT / ES words and the nouns a short
+// feature summary is made of ("Erro no pagamento", "Cupom de desconto no checkout", "Alertas no PagerDuty"). A STRONG marker, and
+// only in a text with no English function word (like the clause-start infinitives): such a summary read as English, its "no"
+// (PT em + o) as a negator, and +tdd / +obs went off. PTES_WORDS exist in both (they tell PT / ES from English, never PT from ES).
+const PT_WORDS = W("pagamentos?|faturas?|faturacao|encomendas?|descontos?|cupom|cupons|cup[ãa]o|erros?|carrinho|lojas?|contas?|produtos?|" +
+  "relat[óo]rios?|registos?|ficheiros?|ecr[ãa]|bot[ãa]o|sess[ãa]o|autenticacao|autorizacao|dinheiro|moeda|cobran[çc]a|mensalidades?|" +
+  "agendamentos?|desempenho|privacidade|consentimento|monitoramento|monitoriza[çc][ãa]o|rastreio|linhagem|pesquisa|notifica[çc](?:[ãa]o|[õo]es)");
+const ES_WORDS = W("pagos?|facturas?|facturaci[óo]n|descuentos?|cup[óo]n|carrito|tiendas?|cuentas?|productos?|informes?|archivos?|pantallas?|" +
+  "bot[óo]n|sesi[óo]n|autenticaci[óo]n|autorizaci[óo]n|dinero|moneda|cobros?|mensualidad|rendimiento|privacidad|consentimiento|" +
+  "monitoreo|b[úu]squeda|despliegue|reintentos?|formularios?|tablero|seguridad|notificaci[óo]n(?:es)?");
+const PTES_WORDS = W("reembolsos?|clientes?|pedidos?|campos?|alertas?|filtros?|envios?|entregas?|p[áa]ginas?|registros?|telemetria|" +
+  "inquilinos?|agentes?|modelos?");
 // 1.17 D review: a PT / ES INFINITIVE opening a clause — the form a PT / ES requirement line starts with ("Publicar eventos no
 // Kafka.", "Gravar o pedido no Postgres e …"): a short line with no other marker read as English, and "no" (PT em + o) as a
 // negator. Only at a clause start (the text's start, after . ! ? ; : or a line break, or a list bullet) and followed by its
@@ -332,11 +344,13 @@ function guessLang(text, fallback) {
   const distinct = (re) => new Set((text.match(re) || []).map((m) => m.toLowerCase())).size;
   const distinctInf = (re) => new Set(Array.from(text.matchAll(re), (m) => m[1].toLowerCase())).size;
   const en = distinct(EN_WORDS);
-  // clause-start infinitives only in a text without English function words (1.17 verification N1)
+  // clause-start infinitives only in a text without English function words (1.17 verification N1) — one language's content words
+  // too (review 5, L29)
   const inf = (re) => (en ? 0 : distinctInf(re));
-  const shared = inf(PTES_INF);
-  const pt = 2 * (distinct(PT_STRONG) + distinct(PT_STRONG_CHARS) + inf(PT_INF) + shared) + distinct(PT_WEAK);
-  const es = 2 * (distinct(ES_STRONG) + distinct(ES_STRONG_CHARS) + inf(ES_INF) + shared + distinctInf(ES_NO_INF)) + distinct(ES_WEAK);
+  const words = (re) => (en ? 0 : distinct(re));
+  const shared = inf(PTES_INF) + words(PTES_WORDS);
+  const pt = 2 * (distinct(PT_STRONG) + distinct(PT_STRONG_CHARS) + inf(PT_INF) + words(PT_WORDS) + shared) + distinct(PT_WEAK);
+  const es = 2 * (distinct(ES_STRONG) + distinct(ES_STRONG_CHARS) + inf(ES_INF) + words(ES_WORDS) + shared + distinctInf(ES_NO_INF)) + distinct(ES_WEAK);
   const best = Math.max(pt, es);
   const f = fallback ? normalizeLang(fallback) : null;
   // a PT / ES tie (a shared verb, "de", "para"…) is PT — unless the project's language is Spanish
@@ -1103,8 +1117,16 @@ function keywordRe(kw, plain) {
 function keywordPattern(kw, plain) {
   if (!plain && IRREGULAR_FORMS.has(kw)) { const [stem, ends] = IRREGULAR_FORMS.get(kw); return stem + ends; }
   const body = pluralize(kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), kw);
-  return body + (STEMS.has(kw) ? "\\p{L}*" : !plain && VERB_STEMS.has(kw) ? VERB_STEMS.get(kw) : (kw.length <= 3 ? ACRONYM_INFLECTION : INFLECTION) + ADJ_SUFFIX);
+  const version = !plain && (RE_VERSIONED_KW.test(kw) || VERSIONED_NAMES.has(kw)) && !STEMS.has(kw) && !VERB_STEMS.has(kw) ? VERSION_TAIL : "";
+  return body + version + (STEMS.has(kw) ? "\\p{L}*" : !plain && VERB_STEMS.has(kw) ? VERB_STEMS.get(kw) : (kw.length <= 3 ? ACRONYM_INFLECTION : INFLECTION) + ADJ_SUFFIX);
 }
+// Review 5 (L29): an acronym-sized one-word built-in keyword (2–5 letters: oauth, gpt, tls, llm, saml) or a versioned product name
+// takes a version glued to it — "OAuth2", "GPT4", "GPT4o", "TLS1.3", "Claude3", "Gemini1.5" were no signal at all (the right edge
+// refuses a digit; "gpt-4" / "OAuth 2.0" always matched). Unambiguous (digits, then dot-digits, then one letter): linear. Never a
+// track pack's.
+const RE_VERSIONED_KW = /^[a-z]{2,5}$/i;
+const VERSIONED_NAMES = new Set(["claude", "gemini", "mistral"]);
+const VERSION_TAIL = "(?:\\d+(?:\\.\\d+)*[a-z]?)?";
 
 // A keyword's ALL-CAPS acronyms when it mixes them with lower-case words and nothing else ("relatório de BI" → ["BI"], "CDC pipeline" →
 // ["CDC"]) — else null ("STRIDE", "Snowflake warehouse", "X-RateLimit-Remaining" keep their exact case). Cached per keyword.

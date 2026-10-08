@@ -14,7 +14,7 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   as a list item, heading or line that starts with its ID, or a table row under an Acceptance Criteria heading — or it
   has criteria but no `US-n.AC-m` ID trace_check reads: number each one `US-1.AC-1`, `US-1.AC-2` …; a bare `AC-1` is
   not one),
-  `clarifications` still open, `ac-uniqueness`, `placeholders` (template
+  `clarifications` still open (a bugfix: in `bug.md` too), `ac-uniqueness`, `placeholders` (template
   text left in the current phase's artifact or an earlier one — including a `[bracketed placeholder]` left inside
   a track section, which the design approval refuses; only a bracket whose text the templates write — the built-in
   ones or the project's own `.specs/templates/` — or TODO / TBD / FIXME / `…`, is a placeholder — real values such as
@@ -24,7 +24,9 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   `ui-sections` / `obs-sections` / `data-sections` and a project track pack's `<pack>-sections` (missing, or the
   `> **TODO**` sentinel still there / empty body), `task-deps` (a `_Depends:_` value that is no task number, a task
   depending on itself, a cycle), `change-scope` (a change past 1–3 criteria, 1–3 tasks or core only — make it a feature),
-  `merge-conflicts` (conflicts git's merge driver left in `.state.json` / `roadmap.json` — resolve them), missing
+  `merge-conflicts` (conflicts git's merge driver left in `.state.json` / `roadmap.json` — resolve them), `state` (the
+  feature's `.state.json` can't be read — not valid JSON, e.g. a text merge's conflict markers, or the wrong shape: repair
+  it by hand or restore it from git; its approvals, ticks and evidence are unknown until then), missing
   `requirements`/`design`, a bugfix's `root-cause`, a spike's `question` / `decision`.
 - **Warnings**: `steering` (missing core files, or steering files still holding template placeholders — named),
   `success-criteria`, `priorities`, `mermaid`, `constitution-check`, `placeholders` of a later phase,
@@ -41,10 +43,12 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   (project checks without a passing run since the last task activity, or run before the implementing files changed —
   `/spec-finish` blocks on it), `verify-pipes` (a `_Verify:_` that pipes: its exit code is the last command's),
   `malformed-markers` (text on a task line shaped like a marker that yields none — `**Verify:** npm test`, a bare
-  `Verify:` — so no check runs and no file is traced: write `_Verify: <command>_`), `outside-code-artifacts` (+tdd: a
+  `Verify:` — so no check runs and no file is traced: write `_Verify: <command>_`), `verify-suspicious` (a `_Verify:_`
+  value that looks garbled — it starts with `_` or `*`, holds a code span inside it, or has a quote with no partner —
+  which `done --run` would run as written), `outside-code-artifacts` (+tdd: a
   test planned outside test code — `load-test.md`, an eval set — whose artifact is still the scaffold),
   `duplicate-tasks`, `unread-tasks` (checkbox lines the task scanner does not read as tasks — an ordered-list
-  `1. [ ] text`, an unnumbered `- [ ] text` outside every task: never ticked, briefed or verified; a task line is
+  `1. [ ] text`, an unnumbered `- [ ] text` outside every task, one in an indented code block: never ticked, briefed or verified; a task line is
   `- [ ] N. text` with a `-`, `*` or `+` bullet), `integration-plan` (still the template), `changed-since-approval` (re-review → `/spec-impact`, then re-approve), `decision-affects` / `decision-affects-approved` (a decision's
   `_Affects:_` naming nothing, or recorded after the approval of what it affects → `/spec-impact`),
   `cross-feature-overlap` (another active feature's open tasks plan the same files → `/depend` or re-plan),

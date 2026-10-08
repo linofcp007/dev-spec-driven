@@ -4,7 +4,7 @@
 /**
  * dev-spec-driven — guard hook (opt-in, zero-dependency). Kiro's supervised mode, spec-shaped.
  *
- * Wired from hooks/hooks.json as PreToolUse (Write|Edit|MultiEdit|NotebookEdit). It does NOTHING unless the
+ * Wired from hooks/hooks.json as PreToolUse (Write|Edit|NotebookEdit). It does NOTHING unless the
  * project turned guard mode on (`.specs/roadmap.json` meta.guard === true — spec_init {guard: true} /
  * `dev-spec init --guard on`; 1.16: while meta.guard is unset, the user's DEV_SPEC_GUARD_DEFAULT decides). When on, a
  * code edit outside `.specs/` while no feature has approved, unfinished
@@ -78,6 +78,21 @@ function guardOn(dir) {
   }
 }
 
+// The nearest folder at or above cwd holding a .specs/ folder (≤ 40 levels) — a candidate for the raw pre-check only (a superset:
+// the engine decides). A network or device path (\\host\share, \\?\…) is the user's own folder: taken as it is, never walked.
+function nearestSpecs(cwd) {
+  if (!cwd) return null;
+  if (/^[\\/]{2}/.test(cwd.trim())) return cwd;
+  let d = path.resolve(cwd);
+  for (let i = 0; i < 40; i++) {
+    try { if (fs.statSync(path.join(d, ".specs")).isDirectory()) return d; } catch { /* none here */ }
+    const up = path.dirname(d);
+    if (up === d) break;
+    d = up;
+  }
+  return null;
+}
+
 function main(raw) {
   if (ran) return; // stdin 'end' and the safety-net timer must not both run it
   ran = true;
@@ -94,16 +109,19 @@ function main(raw) {
   const target = [ti.file_path, ti.notebook_path, ti.path].find((v) => typeof v === "string" && v.trim());
   if (!target) return finish();
 
-  // The project: the session's cwd, else the project dir Claude Code (or the user) exported.
+  // The raw pre-check: is the guard on in any project this edit may belong to — the nearest .specs/ at or above the session's cwd
+  // (a cd'd subfolder, a worktree), the project dir Claude Code (or the user) exported? The engine then picks THE project
+  // (spec.sessionProject, 1.23 review 5: a worktree's copy of .specs/ maps to the checkout the MCP server writes in) and spells
+  // the edited file under it (spec.sessionPath).
   const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null;
-  const pdir = [cwd, process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR]
-    .filter((v) => typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim()))
-    .map((v) => path.resolve(v))
-    .find(guardOn);
-  if (!pdir) return finish();
+  const anchors = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR]
+    .filter((v) => typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim()));
+  if (![nearestSpecs(cwd) || cwd, ...anchors].filter(Boolean).map((v) => path.resolve(v)).some(guardOn)) return finish();
 
   const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
-  const r = spec.guardCheck(pdir, target, cwd || pdir);
+  const s = spec.sessionProject({ cwd, anchors });
+  if (!s) return finish();
+  const r = spec.guardCheck(s.project, spec.sessionPath(s, target, cwd), s.project);
   if (r.decision === "ask") {
     return finish({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: r.reason } });
   }

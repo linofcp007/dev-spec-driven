@@ -20,7 +20,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText, flowPhaseIndex,
   FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority, hasSuccessCriteria,
   headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord, isSpikeDir, isTestCodePath,
-  legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang, outsideCodeTemplates,
+  legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mermaidState, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang, outsideCodeTemplates,
   overlapDoctorDetail, own, packOf, packRegistry, packTitle, packTracks, parseTasks, pendingGateList, PHASE_FILE,
   phaseActive, phaseContent, phaseFile, PHASES, placeholderSummary, planFileScopes, planIdText, projectLang,
   RE_CODE_TID, RE_CONSTITUTION_CHECK, readFileHead, readIfExists, readJson, readRoadmap, readState, realRootOf, redPhaseHint,
@@ -34,7 +34,8 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   trackLabel, trackMarker, trackSectionTable, unreadTasksDetail, unverifiedLabel, VALID_TRACKS, verificationStatus, verifyPipes,
   waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText;
+  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
+  suspiciousVerify, worktreeProject, stateFromFile;
 function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
@@ -43,7 +44,7 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   expectsFail, extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText,
   flowPhaseIndex, FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority,
   hasSuccessCriteria, headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord,
-  isSpikeDir, isTestCodePath, legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang,
+  isSpikeDir, isTestCodePath, legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mermaidState, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang,
   outsideCodeTemplates, overlapDoctorDetail, own, packOf, packRegistry, packTitle, packTracks, parseTasks,
   pendingGateList, PHASE_FILE, phaseActive, phaseContent, phaseFile, PHASES, placeholderSummary, planFileScopes,
   planIdText, projectLang, RE_CODE_TID, RE_CONSTITUTION_CHECK, readFileHead, readIfExists, readJson, readRoadmap, readState,
@@ -57,7 +58,8 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   TRACK_SECTIONS, trackLabel, trackMarker, trackSectionTable, unreadTasksDetail, unverifiedLabel, VALID_TRACKS, verificationStatus,
   verifyPipes, waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText } = E); }
+  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
+  suspiciousVerify, worktreeProject, stateFromFile } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -296,6 +298,13 @@ function nextAction(projectDir, name, opts = {}) {
   const phase = detectPhase(dir, tracks);
   const doc = opts.doctor && opts.doctor.ok ? opts.doctor : specDoctor(projectDir, name, { lean: true }); // lean: the verdict and the failing checks only
   const st = readState(projectDir, name);
+  // r5 review: a .state.json that doesn't parse (a git text merge's conflict markers, a truncated write) or has the wrong shape
+  // holds the approvals, ticks and evidence: read as empty, every gate looked pending and the step said "approve" — which every
+  // mutator refuses on that very file (a loop). The one step is to repair it; doctor fails `state`, finish blocks on it.
+  if (st.invalid) {
+    return { ok: true, feature: slug, tracks: trackLabel(tracks), phase, verdict: doc.verdict, gatesOk: false, pendingGates: [], changedSinceApproval: [],
+      step: "fix", stateInvalid: true, recommendation: i18n.msg(featureLang(projectDir, name)).next.stateInvalid(st.invalid, slug) };
+  }
   // 1.22 review: the approvals in force — a Phase 4 sign-off the plan outgrew (a T-ID planned since, a plan re-approved since)
   // is pending again (testsSignOffStale)
   const approvals = approvalsInForce(dir, tracks, st.approvals || {});
@@ -383,7 +392,8 @@ function nextAction(projectDir, name, opts = {}) {
     step = "re-review";
     // 1.22 review: an approved artifact that is gone can't be re-reviewed nor re-approved (nothing to approve) — restore it, or
     // withdraw its approval (revoke: the phase then waits for a new file, and the Phase 4 gate a test plan opened follows it).
-    missingApproved = reReviewNow.filter((file) => !fs.existsSync(path.join(dir, file)));
+    // (r5 review: one that can't be read — a folder of that name, no permission — is gone the same way: restore the file)
+    missingApproved = reReviewNow.filter((file) => readIfExists(path.join(dir, file)) == null);
     const present = reReviewNow.filter((file) => !missingApproved.includes(file));
     recommendation = [present.length ? nx.reReview(present.join(", ")) : null,
       missingApproved.length ? nx.approvedMissing(missingApproved.join(", "), slug, phaseOfFile(missingApproved[0]) || "design") : null].filter(Boolean).join(" ");
@@ -514,7 +524,8 @@ function nextAction(projectDir, name, opts = {}) {
         const exAt = isRecord(approvals.execution) && typeof approvals.execution.at === "string" ? approvals.execution.at : null;
         const signOff = !approvals.execution ? {} : executionSignOffStale(st) ? { at: exAt ? exAt.slice(0, 10) : "?", why: signOffWhyText(st, lng) } : null;
         // With roadmap.json meta.approvalRoles.execution the sign-off is per role (a role-less /approve is refused): name
-        // the roles still missing and the one to sign as. A stale sign-off is renewed by any role's new sign-off.
+        // the roles still missing and the one to sign as. A stale sign-off is renewed by every role signing again (r5 review: a role's
+        // sign-off older than the change no longer counts — roleSignOffs): the role named is the first one still missing.
         const exRoles = approvalRolesOf(projectDir).execution || [];
         if (signOff && exRoles.length) {
           if (!approvals.execution) {
@@ -524,7 +535,7 @@ function nextAction(projectDir, name, opts = {}) {
             if (all) finishedComplete = true;
             Object.assign(signOff, { role: v.missing[0] || v.signed[0] || exRoles[0], missing: all ? fm.governance.signedAll(v.signed.join(", ")) : v.missing.length ? fm.governance.missing(v.missing) : null,
               signed: all ? "" : v.signed.join(", ") });
-          } else signOff.role = exRoles[0];
+          } else signOff.role = roleSignOffs(st, "execution", exRoles, phaseContent(dir, "execution", kind)).missing[0] || exRoles[0];
         }
         recommendation = nx.finished(slug, day, finishedDrift.files, signOff);
       }
@@ -590,6 +601,10 @@ function specDoctor(projectDir, name, opts = {}) {
   const sectionLabel = (s) => `${fm.sectionNames[s.section] || s.section}:${fm.sectionStatus[s.status] || s.status}`;
   const checks = [];
   const add = (id, status, detail) => checks.push({ id, status, detail });
+  // r5 review: .state.json that doesn't parse or has the wrong shape (readState's `invalid`, localized) — every mutator refuses on
+  // it, and the approvals, ticks and evidence it holds can't be read: a FAIL naming the file, never "awaiting approval: <every phase>".
+  const stateRead = readState(projectDir, slug);
+  if (stateRead.invalid) add("state", "fail", stateRead.invalid);
 
   // Steering
   const steeringDir = path.join(root, "steering");
@@ -634,7 +649,11 @@ function specDoctor(projectDir, name, opts = {}) {
         : m.earsDetail(nCrit, nErr, e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0));
     // Clarifications gate — design is blocked while any [NEEDS CLARIFICATION] remains.
     const markers = clarificationMarkers(reqsFull);
-    add("clarifications", markers.length ? "fail" : "pass", markers.length ? (isChange ? m.clarificationsOpenPlan : m.clarificationsOpen)(markers.length) : m.clarificationsNone); // a change has no design (1.21 verify V7)
+    // r5 review: a bugfix's bug.md (its Reproduction and Root Cause — what its requirements / design gates sign off) counts too
+    const bugMarkers = stateRead.kind === "bugfix" ? clarificationMarkers(readIfExists(path.join(dir, "bug.md")) || "") : [];
+    add("clarifications", markers.length || bugMarkers.length ? "fail" : "pass", markers.length || bugMarkers.length
+      ? [markers.length ? (isChange ? m.clarificationsOpenPlan : m.clarificationsOpen)(markers.length) : null, bugMarkers.length ? m.clarificationsOpenBug(bugMarkers.length) : null].filter(Boolean).join("; ")
+      : m.clarificationsNone); // a change has no design (1.21 verify V7)
     // Spec-Kit-style structure — only REAL lines count: the template's P1 legend and placeholder SC-001 don't. (1.21 F5: a change
     // — one change.md, 1–3 criteria — has no stories to prioritize nor success criteria of its own: its scope check instead.)
     const reqsActive = activeDesign(reqs, tracks);
@@ -676,7 +695,12 @@ function specDoctor(projectDir, name, opts = {}) {
   const design = readIfExists(path.join(dir, "design.md"));
   if (design == null) { if (kind !== "bugfix" && kind !== "change") add("design", "fail", m.designMissing); } // 1.21 F5: a change has no design
   else if (kind !== "bugfix") {
-    add("mermaid", /```mermaid/.test(design) ? "pass" : "warn", /```mermaid/.test(design) ? m.mermaidOk : m.mermaidMissing);
+    // review 5 (L28): a mermaid fence (``` or ~~~) outside comments, and not the scaffold's own diagram — while design.md is still
+    // a LATER phase's template the template diagram is no news (the placeholders check says so), as for the weigh checks
+    const diagram = mermaidState(design);
+    const laterDesign = ph.later.some((r) => r.file === "design.md");
+    add("mermaid", diagram === "present" || (diagram === "template" && laterDesign) ? "pass" : "warn",
+      diagram === "missing" ? m.mermaidMissing : diagram === "template" && !laterDesign ? m.mermaidTemplate : m.mermaidOk);
     add("constitution-check", RE_CONSTITUTION_CHECK.test(design) ? "pass" : "warn", RE_CONSTITUTION_CHECK.test(design) ? m.constitutionOk : m.constitutionMissing);
     // 1.17 A1 — design-tradeoffs / design-risks, 1.19 R1 — design-reuse: warns only (never a fail, never an approval check).
     // Not while design.md is still a LATER phase's template (nothing is being designed yet — the placeholders check already says
@@ -810,6 +834,10 @@ function specDoctor(projectDir, name, opts = {}) {
   // read nothing there — no check runs, no file is traced. Active tasks only; a warn.
   const oddMarkers = malformedMarkers(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""));
   if (oddMarkers.length) add("malformed-markers", "warn", fm.markerSyntax.doctor(oddMarkers.map((o) => "#" + o.number + " (" + o.labels.map((l) => l + ":").join(", ") + ")").join("; ")));
+  // Review 5 — a _Verify:_ value that looks garbled (a delimiter read into it, a code span inside it, a quote with no partner):
+  // `done --run` runs it exactly as written. Active tasks only; a warn.
+  const oddVerify = suspiciousVerify(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""));
+  if (oddVerify.length) add("verify-suspicious", "warn", fm.markerSyntax.suspiciousVerify(oddVerify.map((o) => "#" + o.number + " " + o.values.map((v) => "«" + v + "»").join(", ")).join("; ")));
   // 1.14 full review Pa6 — a test planned outside test code (load-test.md, evals/*.json) whose artifact is still the
   // scaffold, once that test is due (a done task makes it green, or every task is done). A warn; spec_finish repeats it.
   const ocTemplates = outsideCodeTemplates(projectDir, dir, tracks, greenDone);
@@ -942,18 +970,21 @@ function isDevSpecDir(dir) {
 }
 // The project a status line is about: the nearest folder at or above one of the candidate folders (in order) that holds a
 // dev-spec .specs/ — a few stats per level, never a walk down. Unusable candidates (empty, an unexpanded `${VAR}`, a network
-// path — isNetworkPath, skipped before any fs call) are skipped.
+// path — isNetworkPath, skipped before any fs call) are skipped. 1.23 review 5 (M8): a folder found in a git worktree is the same
+// folder in the checkout of another candidate of the same repository (Claude Code's workspace.project_dir — where the MCP server
+// writes), else in the main checkout, when that one is dev-spec's (worktreeProject — the hooks' rule).
 // → the project folder | null
 function statusLineProject(candidates) {
   const seen = new Set();
-  for (const c of Array.isArray(candidates) ? candidates : []) {
+  const list = Array.isArray(candidates) ? candidates : [];
+  for (const c of list) {
     if (typeof c !== "string" || !c.trim() || /^\$\{[^}]*\}$/.test(c.trim()) || c.length > 4096 || isNetworkPath(c)) continue;
     let dir = path.resolve(c.trim());
     for (let i = 0; i < STATUS_MAX_UP; i++) {
       const key = FOLD_CASE ? dir.toLowerCase() : dir;
       if (seen.has(key)) break;
       seen.add(key);
-      if (isDevSpecDir(dir)) return dir;
+      if (isDevSpecDir(dir)) return worktreeProject(dir, list);
       const up = path.dirname(dir);
       if (up === dir) break;
       dir = up;
@@ -1044,6 +1075,7 @@ function statusTestsGate(pdir, dir, tracks) {
 // (finish · verify of the checks · sign-off · finished) may be next_action's `drift`.
 function statusNext(pdir, f, kind, lng, unverified) {
   const st = f.st;
+  if (st.invalid) return { step: "fix", file: ".state.json" }; // r5 review: next_action's step — repair the state file first
   const approvals = approvalsInForce(f.dir, f.tracks, isObj(st.approvals) ? st.approvals : {}); // 1.22 review: a stale tests sign-off is pending
   const open = f.blocks.filter((b) => !b.done);
   if (kind === "spike") {
@@ -1075,11 +1107,13 @@ function statusNext(pdir, f, kind, lng, unverified) {
   // Every phase approved. A forced approval (force: true — recorded with the checks it failed) is re-checked: while its gate still
   // fails on a check the DOCTOR fails too, next_action's doctor step says fix (never Phase 4's: its tests-in-code is a doctor
   // warning, and its gate scans the code). The gate is stricter than the doctor on a few checks (STATUS_DOCTOR_WARNS), and its
-  // clarifications count design.md's markers where the doctor reads requirements.md's only.
+  // clarifications count design.md's markers where the doctor reads requirements.md's only (+ a bugfix's bug.md — r5 review).
+  const doctorMarkers = () => clarificationMarkers(readIfExists(path.join(f.dir, "requirements.md")) || "").length > 0 ||
+    (kind === "bugfix" && clarificationMarkers(readIfExists(path.join(f.dir, "bug.md")) || "").length > 0);
   for (const ph of walk) {
     if (ph === "tests" || !isRecord(approvals[ph]) || approvals[ph].forced !== true) continue;
     const failing = approvalChecks(pdir, f.slug, f.dir, ph, f.tracks, kind, lng).checks.map((c) => c.id).filter((id) => !STATUS_DOCTOR_WARNS.has(id) &&
-      (id !== "clarifications" || clarificationMarkers(readIfExists(path.join(f.dir, "requirements.md")) || "").length > 0));
+      (id !== "clarifications" || doctorMarkers()));
     if (failing.length) return { step: "fix", phase: ph, failing, ...(failing.includes("root-cause") ? { file: "bug.md" } : {}) };
   }
   // A bugfix: no fix before its root cause — bug.md → Root Cause empty fails the doctor (root-cause) and the bugfix gate refuses
@@ -1118,8 +1152,7 @@ function statusLine(projectDir, opts = {}) {
   for (const n of safeReaddir(root).filter((x) => isFeatureFolder(x, root)).sort().slice(0, STATUS_MAX_FEATURES)) {
     const dir = path.join(root, n);
     if (!isDirSafe(dir)) continue;
-    const j = readJson(statePath(dir));
-    const st = isObj(j.data) ? j.data : {};
+    const st = stateFromFile(pdir, statePath(dir)); // readState's shape check: `invalid` (r5 review — statusNext's fix step)
     const tracks = detectTracks(dir);
     const blocks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "");
     const done = blocks.filter((b) => b.done).length;

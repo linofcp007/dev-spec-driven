@@ -1254,4 +1254,107 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
       " (and bash / PowerShell where present); a committed UPGRADE.md keeps `dev-spec`, the audit's lines the runnable form (got " +
       JSON.stringify({ quoting, viaShell, viaBash, viaPs, portOk, upMd: (upMd.match(/.*dev-spec done.*/) || [])[0] }) + ")");
   }
+  { // r5 review (state / locks) — the merge driver's revocation rule on a one-sided approvals change and the evidence of tasks
+    // sharing a number; the feature lock: a lock older than this process naming its pid, a lock dated in the future, a refused
+    // lock create (a lock being deleted) waited for — never run unlocked.
+    const js = JSON.stringify;
+    const T = (d) => `2026-10-0${d}T10:00:00.000Z`;
+    const h = (phase, at, x = {}) => ({ phase, at, by: "x", ...x });
+    // ours approved design (T2) and revoked it (T3) — its approvals equal base; theirs approved design at T1: the revocation is later
+    const m1 = S.mergeStateJson({ approvals: {}, approvalHistory: [] }, { approvals: {}, approvalHistory: [h("design", T(2)), h("design", T(3), { revoked: true })] },
+      { approvals: { design: { at: T(1), by: "y", fingerprint: "D" } }, approvalHistory: [h("design", T(1))], lastApprovedPhase: "design" }, "state");
+    // the same with ours' approvals changed for another phase (the both-sides path) — the same answer
+    const m1b = S.mergeStateJson({ approvals: {}, approvalHistory: [] }, { approvals: { requirements: { at: T(2), by: "x" } }, approvalHistory: [h("design", T(2)), h("design", T(3), { revoked: true })] },
+      { approvals: { design: { at: T(1), by: "y", fingerprint: "D" } }, approvalHistory: [h("design", T(1))], lastApprovedPhase: "design" }, "state");
+    // a later re-approval still wins over an earlier revocation
+    const m1c = S.mergeStateJson({ approvals: {} }, { approvals: {}, approvalHistory: [h("design", T(2)), h("design", T(3), { revoked: true })] },
+      { approvals: { design: { at: T(4), by: "y", fingerprint: "D" } }, approvalHistory: [h("design", T(4))] }, "state");
+    ok(js(m1.merged.approvals) === "{}" && m1.merged.lastApprovedPhase === undefined && js(m1b.merged.approvals) === js({ requirements: { at: T(2), by: "x" } }) &&
+      m1c.merged.approvals.design && m1c.merged.approvals.design.at === T(4),
+      "r5 review L17: revocations win by time also when only one side changed `approvals` (an approval older than the other side's revocation is dropped, lastApprovedPhase follows); a later re-approval still stands (got " +
+      js([m1.merged.approvals, m1.merged.lastApprovedPhase, m1b.merged.approvals, m1c.merged.approvals]) + ")");
+    // evidence[n] of two tasks sharing the number: the other side's `others` and its own record of ANOTHER task are kept (one per task,
+    // newest first), never merged into the winner's history
+    const ev = (at, task, cmd, x = {}) => ({ at, command: cmd, exitCode: 0, task, history: [{ at, command: cmd, exitCode: 0 }], ...x });
+    const m2 = S.mergeStateJson({ approvals: {}, evidence: { 3: ev(T(1), "A", "t") } }, { approvals: {}, evidence: { 3: ev(T(1), "A", "t", { others: [ev(T(2), "B", "u")] }) } },
+      { approvals: {}, evidence: { 3: ev(T(3), "A", "t") } }, "state");
+    const m3 = S.mergeStateJson({ approvals: {} }, { approvals: {}, evidence: { 3: ev(T(2), "A", "a") } }, { approvals: {}, evidence: { 3: ev(T(3), "B", "b") } }, "state");
+    const e2 = m2.merged.evidence[3], e3 = m3.merged.evidence[3];
+    ok(e2.task === "A" && e2.at === T(3) && Array.isArray(e2.others) && e2.others.length === 1 && e2.others[0].task === "B" &&
+      e3.task === "B" && e3.others.length === 1 && e3.others[0].task === "A" && e3.history.length === 1 && e3.history[0].command === "b" && !m2.conflicts.length && !m3.conflicts.length,
+      "r5 review L17: evidence[n] of tasks sharing a number — the other side's `others` and its own record of another task are kept in `others` (never dropped, never merged into the winner's run history) (got " + js([e2, e3]) + ")");
+
+    // L19 — the locks
+    const lp = path.join(tmp, "proj-r5-locks");
+    S.initProject(lp, ["core"], "en");
+    const lf = S.createFeature(lp, "Locky", ["core"]);
+    const lock = path.join(lf.dir, ".lock");
+    const specJs = path.join(__dirname, "lib", "spec.js");
+    // a lock naming THIS pid and host, written before this process started (a recycled pid): reclaimed at once — a child process writes it
+    const kid = spawnSync(process.execPath, ["-e",
+      `const fs=require("fs"),os=require("os");const S=require(${js(specJs)});const L=${js(lock)};` +
+      `fs.writeFileSync(L, JSON.stringify({pid:process.pid,host:os.hostname(),at:"x",token:"old"}));const t=new Date(Date.now()-60000);fs.utimesSync(L,t,t);` +
+      `const r1=S.withFeatureLock(${js(lf.dir)},()=>"ran",{waitMs:300,onBusy:()=>"busy"});` +
+      `fs.writeFileSync(L, JSON.stringify({pid:process.pid,host:os.hostname(),at:"x",token:"new"}));` + // written while it runs: another engine instance of this process
+      `const r2=S.withFeatureLock(${js(lf.dir)},()=>"ran",{waitMs:300,onBusy:()=>"busy"});fs.rmSync(L,{force:true});process.stdout.write(JSON.stringify([r1,r2]));`],
+    { encoding: "utf8" });
+    let ownPid = null;
+    try { ownPid = JSON.parse(kid.stdout); } catch { ownPid = kid.stderr; }
+    // a foreign lock dated a day in the future (another machine's clock): stale — it never aged
+    fs.writeFileSync(lock, js({ pid: 4242, host: "other-host", at: "x", token: "f" }));
+    const fut = new Date(Date.now() + 86400000);
+    fs.utimesSync(lock, fut, fut);
+    const future = S.withFeatureLock(lf.dir, () => "ran", { waitMs: 300, onBusy: () => "busy" });
+    // a lock create refused with EPERM after the note's temp file was written (Windows: a lock being deleted) → waited for, then busy —
+    // it ran UNLOCKED after 10 refusals
+    const realLink = fs.linkSync, realOpen = fs.openSync, realWrite = fs.writeFileSync;
+    const isLock = (p) => path.basename(String(p)) === ".lock";
+    const eperm = () => { const e = new Error("EPERM: operation not permitted"); e.code = "EPERM"; return e; };
+    let ranLocked = false;
+    fs.linkSync = function (a, b) { if (isLock(b)) throw eperm(); return realLink.apply(this, arguments); };
+    fs.openSync = function (p, fl) { if (isLock(p) && fl === "wx") throw eperm(); return realOpen.apply(this, arguments); };
+    const tE = Date.now();
+    let contended;
+    try { contended = S.withFeatureLock(lf.dir, () => { ranLocked = true; return "ran"; }, { waitMs: 400, onBusy: () => "busy" }); } finally { fs.linkSync = realLink; fs.openSync = realOpen; }
+    const msE = Date.now() - tE;
+    // a folder that refuses every new file (the note's temp file itself: EACCES — read-only) still runs unlocked, as before
+    fs.writeFileSync = function (p) { if (/\.lock\.\d+\.\d+\.\d+\.tmp$/.test(String(p))) { const e = new Error("EACCES"); e.code = "EACCES"; throw e; } return realWrite.apply(this, arguments); };
+    let readOnly;
+    try { readOnly = S.withFeatureLock(lf.dir, () => "ran", { waitMs: 3000, onBusy: () => "busy" }); } finally { fs.writeFileSync = realWrite; }
+    ok(js(ownPid) === '["ran","busy"]' && future === "ran" && !fs.existsSync(lock) && contended === "busy" && ranLocked === false && msE >= 350 && readOnly === "ran",
+      "r5 review L19: the feature lock — a lock naming this pid and host written before this process started is reclaimed at once (one written since is respected: another engine instance), one dated in the future is stale, a lock create refused with EPERM (a lock being deleted) is waited for until the deadline and answers busy (never runs unlocked), a folder refusing every new file still runs unlocked (got " +
+      js([ownPid, future, contended, ranLocked, msE, readOnly]) + ")");
+  }
+
+  { // --- 1.23 review: the project folder with no projectDir / env — the nearest dev-spec project at or above the working folder ---
+    // (run from a subfolder, a command started a SECOND, nested .specs/ there) — and a SPEC_PROJECT_DIR holding a variable left
+    // unexpanded ("${CLAUDE_PROJECT_DIR}/", "$CLAUDE_PROJECT_DIR", "%CLAUDE_PROJECT_DIR%") falls through instead of naming a folder.
+    const wu = path.join(tmp, "proj-123-walkup");
+    S.initProject(wu, ["core"], "en");
+    const sub = path.join(wu, "src", "deep");
+    const bare = path.join(tmp, "proj-123-no-project", "x");
+    const handmade = path.join(tmp, "proj-123-handmade");
+    [sub, bare, path.join(handmade, ".specs"), path.join(handmade, "lib")].forEach((d) => fs.mkdirSync(d, { recursive: true }));
+    const env0 = { ...process.env };
+    delete env0.SPEC_PROJECT_DIR;
+    delete env0.CLAUDE_PROJECT_DIR;
+    const same = (a, b) => (process.platform === "win32" ? String(a).toLowerCase() === String(b).toLowerCase() : a === b);
+    const resolved = (cwd, env) => spawnSync(process.execPath, ["-e", "process.stdout.write(require(process.argv[1]).resolveProjectDir())", path.join(__dirname, "lib", "spec.js")],
+      { cwd, env: { ...env0, ...(env || {}) }, encoding: "utf8" }).stdout;
+    // (an empty .specs/ made by hand counts in the working folder itself — init fills it — never as an ancestor's project)
+    const fromSub = resolved(sub), fromBare = resolved(bare), fromHand = resolved(handmade), fromHandSub = resolved(path.join(handmade, "lib"));
+    const unexp = ["${CLAUDE_PROJECT_DIR}/", "$CLAUDE_PROJECT_DIR", "%CLAUDE_PROJECT_DIR%\\x", "${HOME}"].map((v) => resolved(sub, { SPEC_PROJECT_DIR: v }));
+    const named = resolved(sub, { SPEC_PROJECT_DIR: bare });
+    // The MCP server started in the subfolder with no env: its tools work in the project above (spec_list's specsDir).
+    const msgs = [{ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } } },
+      { jsonrpc: "2.0", method: "notifications/initialized" }, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "spec_list", arguments: {} } }];
+    const srv = spawnSync(process.execPath, [path.join(__dirname, "server.js")], { cwd: sub, env: env0, encoding: "utf8", input: msgs.map((m) => JSON.stringify(m)).join("\n") + "\n", timeout: 20000 });
+    let listed = null;
+    try { listed = JSON.parse(JSON.parse(srv.stdout.trim().split("\n").find((l) => /"id":2/.test(l))).result.content[0].text); } catch { /* no reply */ }
+    ok(same(fromSub, wu) && same(fromBare, bare) && same(fromHand, handmade) && same(fromHandSub, path.join(handmade, "lib")) && unexp.every((d) => same(d, wu)) && same(named, bare) &&
+      ["${X}/a", "$HOME/x", "%APPDATA%\\x", "a${B}"].every((v) => S.unexpandedVar(v)) && !["C:\\100%\\x", "/srv/app", "a$b", "c$"].some((v) => S.unexpandedVar(v)) &&
+      listed && same(listed.specsDir, path.join(wu, ".specs")) && !fs.existsSync(path.join(sub, ".specs")),
+      "1.23 review: with no projectDir / env the project is the nearest dev-spec .specs/ at or above the working folder (else the folder itself; a hand-made .specs/ in it counts) — the MCP server's fallback too; a SPEC_PROJECT_DIR with an unexpanded ${VAR}, $VAR or %VAR% falls through (got " +
+      JSON.stringify({ fromSub, fromBare, fromHand, fromHandSub, unexp, named, listed: listed && listed.specsDir }) + ")");
+  }
 };

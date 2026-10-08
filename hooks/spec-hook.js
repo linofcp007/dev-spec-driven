@@ -109,7 +109,13 @@ function main(raw) {
 function handle(payload, event) {
   if (event === "SessionStart") {
     try {
-      const pdir = process.env.CLAUDE_PROJECT_DIR || process.env.SPEC_PROJECT_DIR || payload.cwd || process.cwd();
+      // 1.23 review 5 (M8): the session's project (spec.sessionProject — the nearest dev-spec .specs/ at or above the cwd, a
+      // worktree mapped to the checkout the MCP server writes in), else the folder Claude Code (or the user) exported, as before.
+      const anchors = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR];
+      // No payload cwd → the anchors decide (as guard-hook): the hook's own process folder never outranks CLAUDE_PROJECT_DIR —
+      // it is the last resort below (a .specs/ there is the plugin's own checkout when the hook runs from it).
+      const s = spec.sessionProject({ cwd: typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null, anchors });
+      const pdir = s ? s.project : process.env.CLAUDE_PROJECT_DIR || process.env.SPEC_PROJECT_DIR || payload.cwd || process.cwd();
       // Same gate as PostToolUse: another tool's .specs/ gets no dev-spec status block in every session's context.
       if (!isDevSpecProject(pdir)) process.exit(0);
       const list = spec.listFeatures(pdir);
@@ -204,8 +210,15 @@ function handle(payload, event) {
     const feature = path.basename(path.dirname(filePath));
     // 1.22 review: a tasks.md / change.md saved by hand (a box ticked with the Edit tool) is activity the stop gate must see —
     // stamped in the feature's .state.json (lastEditAt, under its lock), never read from a file date. Best-effort, silent.
+    // 1.23 review 5 (M8): in a git worktree's copy of .specs/, the stamp goes to the checkout the session's state lives in (the
+    // stop gate reads it there — spec.sessionProject from the file's folder); the worktree's own .state.json when that feature
+    // isn't there.
     if (base === "tasks.md" || base === "change.md") {
-      try { spec.recordSpecEdit(pdir, feature); } catch { /* best-effort */ }
+      try {
+        const s = spec.sessionProject({ cwd: path.dirname(filePath), anchors: [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR] });
+        const r = s && s.worktree ? spec.recordSpecEdit(s.project, feature) : null;
+        if (!r || !r.ok) spec.recordSpecEdit(pdir, feature);
+      } catch { /* best-effort */ }
     }
     const h = spec.msg(spec.featureLang(pdir, feature)).hook; // localized in the feature's language
 

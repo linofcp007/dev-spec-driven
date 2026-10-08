@@ -557,26 +557,27 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const eR = [S.approvePhase(p6, "login", "eval-plan", "u", { revoke: true }), S.approvePhase(p6, "login", "design", "u", { revoke: true, force: true }),
       S.approvePhase(p6, "login", null, "u", { revoke: true, through: "tasks" }), S.approvePhase(p6, "login", "design", "u", { revoke: true, expires: "30d" }),
       S.approvePhase(p6, "login", null, "u", { revoke: true })];
-    ok(ra6.ok && ra6.snapshot && m6.revokedApprovals === 1 && m6.reworkByPhase && m6.reworkByPhase.requirements === 1 && m6.untickedTasks === 0 && im6.ok && im6.changed === false &&
+    const snap6 = uSt(f6.dir).approvalHistory.filter((h) => h.phase === "requirements" && h.snapshot).map((h) => h.snapshot);
+    ok(ra6.ok && ra6.snapshot && snap6.length === 2 && snap6[0] === snap6[1] && m6.revokedApprovals === 1 && m6.reworkByPhase && m6.reworkByPhase.requirements === undefined && m6.untickedTasks === 0 && im6.ok && im6.changed === false &&
       eR.every((r) => r.ok === false) && eR[0].notApproved === true && /nothing to revoke/.test(eR[0].error) && /revoke takes no force or expires/.test(eR[1].error) &&
       /not through/.test(eR[2].error) && /revoke takes no force or expires/.test(eR[3].error) && /Name the phase whose approval to revoke/.test(eR[4].error) && uSt(f6.dir).approvals.design,
-      "1.16 U2: re-approving a revoked phase snapshots it again (metrics: revokedApprovals 1, rework counts approvals only; spec_impact diffs the new snapshot); revoking an unapproved phase, with force / expires / through, or without a phase is refused (got " +
-      js([m6.revokedApprovals, m6.reworkByPhase, eR.map((r) => r.error)]) + ")");
+      "1.16 U2: re-approving a revoked phase records it again (r5 review: the same content shares its snapshot and is no rework — metrics: revokedApprovals 1, no requirements rework; spec_impact diffs that snapshot); revoking an unapproved phase, with force / expires / through, or without a phase is refused (got " +
+      js([snap6, m6.revokedApprovals, m6.reworkByPhase, eR.map((r) => r.error)]) + ")");
     // Roles: a waiting sign-off is withdrawn (history record partial), then a completed approval by roles is revoked with its sign-offs.
     const p7 = uDir("revoke-roles");
     S.initProject(p7, ["core"], "en", { approvalRoles: { design: ["tech", "security"] } });
     const f7 = uFeature(p7, "login");
     ["classification", "requirements"].forEach((ph) => S.approvePhase(p7, "login", ph, "u"));
     const tech7 = S.approvePhase(p7, "login", "design", "u", { role: "tech" });
-    const w7 = S.approvePhase(p7, "login", "design", "u", { revoke: true, reason: "signed the wrong draft" });
+    const w7 = S.approvePhase(p7, "login", "design", "u", { revoke: true, role: "tech", reason: "signed the wrong draft" });
     const st7a = uSt(f7.dir);
     const rec7 = st7a.approvalHistory[st7a.approvalHistory.length - 1];
     S.approvePhase(p7, "login", "design", "u", { role: "tech" });
     const sec7 = S.approvePhase(p7, "login", "design", "u", { role: "security" });
-    const v7 = S.approvePhase(p7, "login", "design", "u", { revoke: true });
+    const v7 = S.approvePhase(p7, "login", "design", "u", { revoke: true, role: "security" });
     const st7b = uSt(f7.dir);
     ok(tech7.ok && tech7.pending && w7.ok && w7.revokedApproval === false && js(w7.withdrawnSignOffs) === '["tech"]' && /Withdrew the role sign-off\(s\) waiting for 'design' of login: tech/.test(w7.message) &&
-      st7a.signoffs === undefined && rec7.revoked === true && rec7.partial === true && js(rec7.roles) === '["tech"]' &&
+      st7a.signoffs === undefined && rec7.revoked === true && rec7.partial === true && js(rec7.roles) === '["tech"]' && rec7.roleOnly === true &&
       sec7.ok && sec7.complete === true && v7.ok && v7.revokedApproval === true && !st7b.approvals.design && st7b.signoffs === undefined &&
       S.specDoctor(p7, "login").pendingRoles.design && js(S.specDoctor(p7, "login").pendingRoles.design.missing) === '["tech","security"]',
       "1.16 U2 + roles: revoking a phase that only waits for sign-offs withdraws them (history record revoked + partial, the roles listed); a completed approval by roles is revoked with them — every role signs again (got " +
@@ -621,7 +622,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       S.approvePhase(p9, "checkout", "requirements", "u", { force: true, expires: "0d" })];
     const badMcp = await rpc("tools/call", { name: "spec_approve", arguments: { name: "checkout", phase: "requirements", force: true, expires: 30, projectDir: p9 } });
     ok(bad9.every((r) => r.ok === false) && /go with force/.test(bad9[0].error) && /go with force/.test(bad9[1].error) &&
-      bad9.slice(2).every((r) => /expires must be an ISO date \(YYYY-MM-DD, today or later, at most 3650 days ahead\) or a number of days/.test(r.error)) &&
+      bad9.slice(2).every((r) => /expires must be an ISO date \(YYYY-MM-DD, today or later in UTC — valid through that day, UTC — at most 3650 days ahead\) or a number of days/.test(r.error)) &&
       badMcp.result.isError === true && !uSt(f9.dir).approvals.requirements,
       "1.16 U3: reason / expires without force, an expiry in the past, beyond 3650 days, unreadable, an impossible date or 0d, and a non-string expires (schema) are refused — nothing recorded (got " + js(bad9.map((r) => r.error)) + ")");
     // Expired: doctor warns waiver-expired, ROADMAP.md flags it, spec_finish lists every forced approval (waivers, merge summary) and warns.
@@ -893,10 +894,10 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     // null (never answer). Every elicitation asked and every notification the server sends are kept.
     const client = (caps, env) => {
       const kid = spawn(process.execPath, [SERVER_JS], { env: { ...process.env, SPEC_MCP_APPROVAL_HOOK: "", DEV_SPEC_ELICIT_TIMEOUT_MS: "2500", ...env }, stdio: ["pipe", "pipe", "inherit"] });
-      const waiting = new Map(), asked = [], notes = [], batches = [];
+      const waiting = new Map(), asked = [], notes = [], batches = [], replies = [];
       let buf = "", n = 0, answer = () => null;
       const write = (m) => kid.stdin.write(JSON.stringify(m) + "\n");
-      const settle = (m) => { if (waiting.has(m.id)) { const cb = waiting.get(m.id); waiting.delete(m.id); cb(m); } };
+      const settle = (m) => { replies.push(m); if (waiting.has(m.id)) { const cb = waiting.get(m.id); waiting.delete(m.id); cb(m); } };
       kid.stdout.on("data", (d) => {
         buf += d.toString();
         let nl;
@@ -926,7 +927,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       const batch = (msgs) => new Promise((resolve) => { waiting.set("batch", (m) => resolve(m.replies)); write(msgs); });
       const stop = () => new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
       return { init: () => req("initialize", { protocolVersion: "2025-06-18", capabilities: caps, clientInfo: { name: "fake-client", version: "1" } }),
-        call, req, batch, asked, notes, batches, stop, setAnswer: (f) => { answer = f; } };
+        call, req, batch, asked, notes, batches, replies, write, stop, setAnswer: (f) => { answer = f; } };
     };
     // A project (its language, its approval guard) whose features' classification gate passes (the template filled) — except
     // the `raw` ones (the scaffold's placeholders: the gate refuses).
@@ -1090,6 +1091,98 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       "1.22 review: an approval confirmed over MCP records only what its preview judged — an edit while the question waited (approve, fast-forward) or a forced gate that fails more checks since (phase-order) is refused: changedSincePreview, code changed-since-preview, nothing recorded; an unchanged one is recorded as before; the dry run carries the fingerprint(s) (got " +
       js([dry.fingerprint, dryFf.fingerprints, rEd, rFf.error, rGrown.newFailing, rGrown.error, rSame.ok]) + ")");
 
+    // 1.23 — a remove the user confirmed deletes only the folder they were asked about: another feature renamed into the name while
+    // the question waited (the confirmation used to delete it), or files edited meanwhile, is refused (changedSincePreview, code
+    // changed-since-preview, nothing deleted); an unchanged one is removed. The engine compares remove's preview fingerprint under
+    // the folder's lock; removePreview carries it.
+    const featDir = (slug) => path.join(pEn, ".specs", slug);
+    S.createFeature(pEn, "scratch", ["core"]);
+    const imp = S.createFeature(pEn, "important", ["core"]);
+    fs.appendFileSync(path.join(imp.dir, "requirements.md"), "\nWEEKS OF WORK\n");
+    A.setAnswer(() => {
+      S.manageFeature(pEn, "rename", "scratch", "scratch-old");
+      S.manageFeature(pEn, "rename", "important", "scratch");
+      return accept()();
+    });
+    const rSwap = await A.call("spec_feature", { action: "remove", name: "scratch", confirm: true, projectDir: pEn });
+    const grown = S.createFeature(pEn, "grows", ["core"]);
+    A.setAnswer(() => { fs.writeFileSync(path.join(grown.dir, "notes-added.md"), "added while the question waited\n"); return accept()(); });
+    const rGrows = await A.call("spec_feature", { action: "remove", name: "grows", confirm: true, projectDir: pEn });
+    S.createFeature(pEn, "goner", ["core"]);
+    A.setAnswer(accept());
+    const rGone = await A.call("spec_feature", { action: "remove", name: "goner", confirm: true, projectDir: pEn });
+    const eng = S.createFeature(pEn, "engine-pin", ["core"]);
+    const engPrev = S.manageFeature(pEn, "remove", "engine-pin");
+    const engBad = S.manageFeature(pEn, "remove", "engine-pin", undefined, { confirm: true, preview: { fingerprint: "0".repeat(40) } });
+    const keptAfterBad = fs.existsSync(eng.dir);
+    const engOk =S.manageFeature(pEn, "remove", "engine-pin", undefined, { confirm: true, preview: { fingerprint: engPrev.fingerprint } });
+    const I23 = require(path.join(__dirname, "lib", "i18n.js"));
+    ok(rSwap.ok === false && rSwap.changedSincePreview === true && rSwap.code === "changed-since-preview" && /^Nothing deleted: \.specs\/scratch\/ changed after the user was asked/.test(rSwap.error) &&
+      /WEEKS OF WORK/.test(fs.readFileSync(path.join(featDir("scratch"), "requirements.md"), "utf8")) && fs.existsSync(featDir("scratch-old")) &&
+      rGrows.ok === false && rGrows.changedSincePreview === true && fs.existsSync(path.join(grown.dir, "notes-added.md")) &&
+      rGone.ok === true && rGone.confirmed && !fs.existsSync(featDir("goner")) &&
+      typeof engPrev.fingerprint === "string" && /^[0-9a-f]{40}$/.test(engPrev.fingerprint) && engBad.changedSincePreview === true && keptAfterBad && engOk.ok === true && !fs.existsSync(eng.dir) &&
+      ["pt", "es", "pt-BR"].every((l) => /\.specs\/x\//.test(I23.msg(l).featureOps.removeChangedSincePreview("x"))) && /^Nada foi apagado/.test(I23.msg("pt").featureOps.removeChangedSincePreview("x")),
+      "1.23: a remove the user confirmed over MCP deletes only the folder the question named — a feature renamed into the name, or files added while it waited → changedSincePreview, nothing deleted; unchanged → removed; the engine checks remove's preview fingerprint (EN / PT / ES) (got " +
+      js([rSwap, rGrows.code, rGone.ok, engBad.code, engOk.ok]) + ")");
+
+    // 1.23 — the client cancels the tools/call while its question waits (notifications/cancelled): the question is withdrawn
+    // (notifications/cancelled for the server's own request id), nothing is recorded even when the user answers Approve later,
+    // and the cancelled request gets no reply. A call carrying a progressToken gets notifications/progress while it waits.
+    filledFeature("cancelled-call");
+    let qCancel = null;
+    A.setAnswer((m) => {
+      qCancel = m;
+      A.write({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: "cx-1", reason: "user pressed Esc" } });
+      setTimeout(() => A.write({ jsonrpc: "2.0", id: m.id, result: { action: "accept", content: { approve: true } } }), 150);
+      return null;
+    });
+    A.write({ jsonrpc: "2.0", id: "cx-1", method: "tools/call", params: { name: "spec_approve", arguments: { name: "cancelled-call", phase: "classification", projectDir: pEn } } });
+    await new Promise((r) => setTimeout(r, 900));
+    const cxPing = await A.req("ping", {});
+    const withdrawn = A.notes.find((x) => x.method === "notifications/cancelled" && qCancel && x.params.requestId === qCancel.id) || null;
+    filledFeature("progressed");
+    A.setAnswer(accept());
+    const rProg = await A.req("tools/call", { name: "spec_approve", arguments: { name: "progressed", phase: "classification", projectDir: pEn }, _meta: { progressToken: "tok-23" } });
+    const prog = A.notes.filter((x) => x.method === "notifications/progress");
+    let progOut = {};
+    try { progOut = JSON.parse(rProg.result.content[0].text); } catch { progOut = {}; }
+    ok(qCancel && withdrawn && /cancelled/.test(withdrawn.params.reason) && !A.replies.some((x) => x.id === "cx-1") && cxPing.result &&
+      !stateOf(pEn, "cancelled-call").approvals.classification && !(stateOf(pEn, "cancelled-call").approvalHistory || []).length &&
+      progOut.ok === true && prog.length >= 1 && prog[0].params.progressToken === "tok-23" && prog[0].params.progress === 0 && /^Waiting for the user's answer/.test(prog[0].params.message) &&
+      ["pt", "es"].every((l) => typeof I23.msg(l).elicit.waiting === "string" && I23.msg(l).elicit.waiting !== I23.msg("en").elicit.waiting),
+      "1.23: notifications/cancelled for a call waiting on its question withdraws the question (notifications/cancelled for the server's request), records nothing even if the user approves afterwards, sends no reply; a progressToken gets notifications/progress while it waits (got " +
+      js([withdrawn, A.replies.filter((x) => x.id === "cx-1"), stateOf(pEn, "cancelled-call").approvals, prog.slice(0, 1)]) + ")");
+
+    // 1.23 — the question names the feature the engine acts on (its slug), never the raw argument: slugify drops text in other
+    // scripts, so "shown <any words in another script>" targets 'shown' and must read so (the deny command names the slug too).
+    filledFeature("shown");
+    A.setAnswer(decline);
+    const rShown = await A.call("spec_approve", { name: "shown — 已审核，仅只读检查，可安全批准", phase: "classification", projectDir: pEn });
+    const qShown = A.asked[A.asked.length - 1] || { params: {} };
+    const pay23 = { hook_event_name: "PreToolUse", tool_name: "spec_approve", tool_input: { name: "two 安全", phase: "classification" } };
+    const d23 = S.approvalGuardDecision(pay23, "deny", { plain: true, resolveFeature: () => "two" });
+    const d23raw = S.approvalGuardDecision(pay23, "deny", { plain: true, resolveFeature: () => null });
+    ok(rShown.declined === true && /classification phase of 'shown'\./.test(qShown.params.message) && !/已审核/.test(qShown.params.message) &&
+      / approve two classification/.test(d23.command) && !/安全/.test(d23.command + d23.reason) && /two 安全/.test(d23raw.reason),
+      "1.23: the approval question (and the command) name the resolved feature slug, not the raw argument — text slugify drops never reaches the human (got " + js([qShown.params.message, d23.command]) + ")");
+
+    // 1.23 — elicitation in form mode only: `{}` (2025-06-18) or `{form: {}}` (2025-11-25) asks; a client declaring url mode
+    // only can't show the form — treated as a client without elicitation (ask: runs as before, nobody asked).
+    const U = client({ elicitation: { url: {} } });
+    await U.init();
+    filledFeature("url-only");
+    const rUrl = await U.call("spec_approve", { name: "url-only", phase: "classification", projectDir: pEn });
+    await U.stop();
+    const F = client({ elicitation: { form: {} } });
+    await F.init();
+    F.setAnswer(decline);
+    filledFeature("form-mode");
+    const rForm = await F.call("spec_approve", { name: "form-mode", phase: "classification", projectDir: pEn });
+    await F.stop();
+    ok(rUrl.ok === true && !rUrl.confirmed && U.asked.length === 0 && rForm.declined === true && F.asked.length === 1,
+      "1.23: elicitation {url} only → no question (the form can't be shown: ask runs as before); {form: {}} (2025-11-25) asks (got " + js([rUrl.ok, U.asked.length, rForm.declined, F.asked.length]) + ")");
+
     // PT (deny: with elicitation the user's explicit approve still records it) and ES (ask): the question and the refusal in the
     // feature's language
     const pPt = project("pt-deny", "pt", "deny", ["faturas", "recibos"]);
@@ -1160,5 +1253,108 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       hookForm.command.startsWith("! " + S.DEV_SPEC) && /Claude Code with the ! prefix/.test(hookForm.reason),
       "1.21 review A4: the MCP deny refusal hands a client outside Claude Code the plain runnable command (no leading `!`) and a reason that doesn't mention the `!` prefix — EN / PT / ES / pt-BR; the Claude Code hook keeps `! node …` (got " +
       js([rDeny.command, rDeny.error, plainAll.map((d) => d.reason), hookForm.command]) + ")");
+  }
+  { // r5 review (approvals) — a role's sign-off of a phase with no file (execution, tests) made before a change no longer counts;
+    // revoke is a role's act on a role-governed phase; one person signing two roles is warned; the waiver's expiry is a UTC date.
+    const js = JSON.stringify;
+    const rRun = 'node -e "process.exit(0)"';
+    const feature = (p) => {
+      const f = S.createFeature(p, "Widget", ["core"]);
+      const w = (rel, text) => fs.writeFileSync(path.join(f.dir, rel), text);
+      w("classification.md", "# Classification: Widget\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none beyond core\n\n## Blast Radius\nThe widget page only.\n\n## Compliance Tags\nnone\n");
+      w("requirements.md", ["# Feature: Widget", "", "## Summary", "Users can save widgets.", "", "### US-1 (P1 — MVP): Save widgets", "**Independent Test:** save one.", "",
+        "#### Acceptance Criteria (EARS)", "1. **US-1.AC-1** — WHEN a user saves a widget THE SYSTEM SHALL store it",
+        "2. **US-1.AC-2** — IF the widget name is empty THEN THE SYSTEM SHALL reject it with a message", "", "## Success Criteria", "- **SC-001** — 95% of saves finish under 200 ms", ""].join("\n"));
+      w("design.md", "# Design: Widget\n\n## Overview\nA store module.\n\n## Architecture\n```mermaid\ngraph TD\n  A[UI] --> B[Store]\n```\n\n## Constitution Check\n- [x] Simplicity — complies\n");
+      w("tasks.md", `# Tasks: Widget\n\n## Story US-1 (P1 — MVP)\n- [ ] 1. [US1] Store widgets\n  - _Requirements: US-1.AC-1, SC-001_\n  - _Verify: ${rRun}_\n- [ ] 2. [US1] Reject empty names\n  - _Requirements: US-1.AC-2_\n  - _Verify: ${rRun}_\n`);
+      return f;
+    };
+    const p = path.join(tmp, "proj-r5a-roles");
+    S.initProject(p, ["core"], "en", { approvalRoles: { design: ["tech", "product"], execution: ["tech", "product"] } });
+    const f = feature(p);
+    const st = () => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    ["classification", "requirements"].forEach((ph) => S.approvePhase(p, "widget", ph, "u"));
+
+    // L16: revoke on a role-governed phase names a listed role; before the approval it withdraws only that role's own sign-off.
+    S.approvePhase(p, "widget", "design", "alice", { role: "tech" });
+    const rvNone = S.approvePhase(p, "widget", "design", "x", { revoke: true });
+    const rvIntern = S.approvePhase(p, "widget", "design", "x", { revoke: true, role: "intern" });
+    const rvProduct = S.approvePhase(p, "widget", "design", "x", { revoke: true, role: "product" });
+    S.approvePhase(p, "widget", "design", "pat", { role: "product" }); // completes the approval (tech waited)
+    const doneDesign = st().approvals.design;
+    const rvApproved = S.approvePhase(p, "widget", "design", "pat", { revoke: true, role: "product" });
+    S.approvePhase(p, "widget", "design", "alice", { role: "tech" });
+    S.approvePhase(p, "widget", "design", "pat", { role: "product" }); // complete again (two people)
+    const p2 = path.join(tmp, "proj-r5a-roles-withdraw");
+    S.initProject(p2, ["core"], "en", { approvalRoles: { design: ["tech", "product", "security"] } });
+    feature(p2);
+    ["classification", "requirements"].forEach((ph) => S.approvePhase(p2, "widget", ph, "u"));
+    S.approvePhase(p2, "widget", "design", "alice", { role: "tech" });
+    S.approvePhase(p2, "widget", "design", "pat", { role: "product" });
+    const wd = S.approvePhase(p2, "widget", "design", "pat", { revoke: true, role: "product", reason: "signed too early" });
+    const st2 = JSON.parse(fs.readFileSync(path.join(tmp, "proj-r5a-roles-withdraw", ".specs", "widget", ".state.json"), "utf8"));
+    const rec2 = st2.approvalHistory[st2.approvalHistory.length - 1];
+    ok(rvNone.ok === false && rvNone.roleRequired === true && /a revocation names the role revoking it: \/approve widget design --revoke --role <role>/.test(rvNone.error) &&
+      rvIntern.ok === false && rvIntern.roleNotListed === true && rvProduct.ok === false && rvProduct.notApproved === true && /'product' has no sign-off waiting for 'design'/.test(rvProduct.error) &&
+      doneDesign && rvApproved.ok && rvApproved.revokedApproval === true &&
+      wd.ok && js(wd.withdrawnSignOffs) === '["product"]' && js(Object.keys(st2.signoffs.design)) === '["tech"]' && rec2.partial === true && rec2.roleOnly === true && js(rec2.roles) === '["product"]',
+      "r5 review L16: revoking a role-governed phase names a listed role (none → roleRequired, an unlisted one → roleNotListed, a role with nothing waiting → refused); before the approval a role withdraws only ITS sign-off (the others stay; history record partial + roleOnly) (got " +
+      js([rvNone.error, rvIntern.error, rvProduct.error, wd.withdrawnSignOffs, st2.signoffs, rec2]) + ")");
+    // the merge driver keeps the other roles' sign-offs a roleOnly revocation left (and drops what an old-style partial one withdrew)
+    const T = (d) => `2026-09-0${d}T00:00:00.000Z`;
+    const mg = S.mergeStateJson({ approvals: {} },
+      { approvals: {}, signoffs: { design: { tech: { at: T(2), by: "a" } } }, approvalHistory: [{ phase: "design", at: T(2), by: "a", role: "tech", partial: true }] },
+      { approvals: {}, signoffs: { design: { security: { at: T(1), by: "s" } } }, approvalHistory: [{ phase: "design", at: T(1), by: "s", role: "security", partial: true },
+        { phase: "design", at: T(3), by: "p", role: "product", revoked: true, partial: true, roles: ["product"], roleOnly: true }] }, "state");
+    ok(js(Object.keys(mg.merged.signoffs.design).sort()) === '["security","tech"]',
+      "r5 review L16: a roleOnly revocation merges as one role's withdrawal — the other roles' waiting sign-offs on either branch are kept (got " + js(mg.merged.signoffs) + ")");
+
+    // (c): one person signing a phase for two required roles completes it, with a warning (sameSigner + note) — never a refusal.
+    const p3 = path.join(tmp, "proj-r5a-same");
+    S.initProject(p3, ["core"], "en", { approvalRoles: { design: ["tech", "product"] } });
+    feature(p3);
+    ["classification", "requirements"].forEach((ph) => S.approvePhase(p3, "widget", ph, "u"));
+    const s1 = S.approvePhase(p3, "widget", "design", "alice", { role: "tech" });
+    const s2 = S.approvePhase(p3, "widget", "design", "alice", { role: "product" });
+    ok(s1.ok && !s1.sameSigner && s2.ok && s2.complete === true && js(s2.sameSigner) === '{"by":"alice","roles":["product","tech"]}' &&
+      /Note: alice signed 'design' for several roles \(product, tech\) — role sign-offs are meant to come from different people\./.test(s2.note),
+      "r5 review: the same person signing a phase for two required roles is approved with a warning (sameSigner {by, roles} + a note), never refused (got " + js([s2.sameSigner, s2.note]) + ")");
+
+    // L15: a role's waiting execution sign-off made before a change (an untick) no longer counts — the approval completes only once
+    // every role signed after it; next_action names the role still missing.
+    S.approvePhase(p, "widget", "tasks", "u");
+    [1, 2].forEach((n) => S.completeTask(p, "widget", n, { command: rRun, exitCode: 0 }));
+    S.finishFeature(p, "widget", { write: true });
+    const ex1 = S.approvePhase(p, "widget", "execution", "bob", { role: "tech" });
+    const tw = Date.now(); while (Date.now() - tw < 5) { /* the untick after the sign-off, never the same millisecond */ }
+    S.completeTask(p, "widget", 2, null, { undo: true, reason: "redo" });
+    const t0 = Date.now(); while (Date.now() - t0 < 5) { /* a later time stamp */ }
+    S.completeTask(p, "widget", 2, { command: rRun, exitCode: 0 });
+    S.finishFeature(p, "widget", { write: true });
+    const naEx = S.nextAction(p, "widget");
+    const ex2 = S.approvePhase(p, "widget", "execution", "carol", { role: "product" });
+    const ex3 = S.approvePhase(p, "widget", "execution", "bob", { role: "tech" });
+    const naEx2 = S.nextAction(p, "widget");
+    ok(ex1.ok && ex1.complete === false && naEx.step === "finished" && js(naEx.missingRoles) === '["tech","product"]' && /--role tech\./.test(naEx.recommendation) &&
+      ex2.ok && ex2.complete === false && js(ex2.missingRoles) === '["tech"]' && ex3.ok && ex3.complete === true && naEx2.step === "finished" && /Nothing left to do here/.test(naEx2.recommendation),
+      "r5 review L15: a role's execution sign-off made before an untick (a change since: changesSince) no longer counts — next_action asks every role again (tech first), product's sign-off alone doesn't complete it, tech signing again does (got " +
+      js([naEx.missingRoles, naEx.recommendation.slice(-70), ex2.missingRoles, ex3.complete]) + ")");
+    // …and a stale execution approval with roles names the first role still missing after one re-signs (no loop on the first role)
+    const tv = Date.now(); while (Date.now() - tv < 5) { /* a later time stamp */ }
+    S.completeTask(p, "widget", 1, null, { undo: true });
+    const t1 = Date.now(); while (Date.now() - t1 < 5) { /* a later time stamp */ }
+    S.completeTask(p, "widget", 1, { command: rRun, exitCode: 0 });
+    S.finishFeature(p, "widget", { write: true });
+    const naSt1 = S.nextAction(p, "widget");
+    S.approvePhase(p, "widget", "execution", "bob", { role: "tech" });
+    const naSt2 = S.nextAction(p, "widget");
+    ok(/re-confirm it: \/approve widget execution --role tech\./.test(naSt1.recommendation) && /re-confirm it: \/approve widget execution --role product\./.test(naSt2.recommendation),
+      "r5 review L15: a stale execution approval by roles is renewed by every role — next_action names tech, then (tech signed) product, never tech again (got " + js([naSt1.recommendation.slice(-60), naSt2.recommendation.slice(-60)]) + ")");
+
+    // L18: the waiver's expiry is a UTC date — said in EN / PT / ES.
+    const i18n = require("../lib/i18n.js");
+    ok(/today or later in UTC/.test(i18n.msg("en").waiver.badExpires('"x"', 3650)) && /hoje ou depois em UTC/.test(i18n.msg("pt").waiver.badExpires('"x"', 3650)) &&
+      /hoy o después en UTC/.test(i18n.msg("es").waiver.badExpires('"x"', 3650)),
+      "r5 review: the waiver --expires refusal says the date is a UTC day (EN / PT / ES)");
   }
 };

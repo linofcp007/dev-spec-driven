@@ -585,6 +585,23 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   **Reasoning:** a track kept off with weak / app-level words
   (`signals[t]` non-empty) reads `classify.offWeak` ("+api: off — weak signal only ('endpoint'), not enough on its own.", EN /
   PT / ES), never "no signals matched" beside a "Possible +api" note.
+  **Review 5 — recall (data, `SIGNALS`):** +sec weak gains the credential and the federation protocols — `password`, *senha*,
+  *palavra-passe*, *contraseña*, `sso`, `single sign-on`, `oidc`, `openid connect`, `saml` (one concept each in the new
+  `sec.concepts`: "SSO (single sign-on)" is one hint, "OIDC single sign-on" two) — so "user authentication with email and
+  password" is +sec (two weak), a password reset alone a hint; +tdd strong gains `single sign-on`, `oidc`, `openid connect`,
+  `saml` (auth words, beside `sso`); +sec strong gains role-based access control (EN, PT *controlo / controle de acesso baseado
+  em funções / perfis / papéis*, ES *control de acceso basado en roles* — the weak `access control` inside it is shadowed); +ai
+  strong gains machine learning / machine-learning, ML model, deep learning, neural network (PT *aprendizagem automática*,
+  *aprendizado / aprendizagem de máquina*, *modelo de ML*, *rede(s) neural/neurais* · ES *aprendizaje automático*, *red(es)
+  neuronal(es)*); +api's ownership-ambiguous names (weak, `concepts.kind`, the cue's `ambiguous` and `kinds`) gain `rest
+  endpoint` / *endpoint(s) REST* — "Expose a REST endpoint for orders" is +api (an own verb), "Call the Stripe REST endpoint"
+  a hint. **Measured:** the differential (7ed88be vs the change) over 13,717 inputs — the string literals of both suites' test
+  files and the evals (189 files) + a 15-frame sweep of the new / changed words (480 texts): 189 track decisions changed, every
+  one a track switched ON (+sec 21, +tdd 83, +ai 88, +api 6) in an input holding a new word, a glued version or a PT / ES
+  summary whose "no" is em + o; NO track switched off; 143 language guesses changed (PT / ES texts read as English before —
+  "Erro de Login", "Exportar facturas", "Formulario de inicio de sesión"). Two existing test texts were re-worded: "Cifrar las
+  contraseñas" is two +sec signals now (03-languages' lone-verb example is "las facturas"), "Excluir contas" is PT now (the tie
+  example is "Excluir registros").
 - **Tracks are persisted in `.state.json` `tracks`** (create / add_track / add_track --remove write them)
   and `detectTracks()` reads them first. Only features without a saved list (pre-1.13) fall back to
   their files, and there a `[SaaS]`/`[AI]` marker counts only on a real markdown heading (a Mermaid node
@@ -704,7 +721,10 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   ≠ `raging`), `STEMS` for deliberate prefixes (`idempoten`, `hallucinat`, `summariz`, `alucina`), `VERB_STEMS` (a stem + its
   listed endings only — `encript`, `cifr`, `criptograf`: never "cifra"; the self-match sweep probes them by infinitive),
   and `-based/-powered/…` adjectives (`AI-powered`), while rejecting `-<letter>` compounds
-  (`claude-plugin`) and dotted/slashed identifiers. `-<digit>` stays legal (`gpt-4`). When you add a
+  (`claude-plugin`) and dotted/slashed identifiers. `-<digit>` stays legal (`gpt-4`). **A glued version (review 5, L29):** a
+  built-in one-word keyword of 2–5 letters (an acronym: oauth, gpt, tls, llm, saml) or a `VERSIONED_NAMES` product (claude, gemini,
+  mistral) takes `VERSION_TAIL` — digits, dot-digits, one letter — before its inflection: "OAuth2", "GPT4", "GPT4o", "TLS1.3",
+  "Claude3", "Gemini1.5" were no signal at all; a longer word never does ("Billing10x"), nor a track pack's keyword. When you add a
   keyword, add it to the self-match sweep's expectations if it needs a new suffix class.
 - **Negation never vetoes a track**, it annotates it. "the system shall not hallucinate" negates
   `hallucinat` on a feature that is unmistakably `+ai`. So when a track is on *and* has negated
@@ -733,6 +753,11 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   create (a new feature), spec_import — reads the text in its OWN language, with roadmap.json `meta.lang` only as the
   fallback when the text is inconclusive (`classify(…, {projectDir})` → `configuredLang()` → `guessLang(text, fallback)`;
   never the 'en' default): forcing meta.lang read "no checkout" in a PT summary as an English negation in an EN project,
-  and create disagreed with the classify the human confirms. One matched span counts once per track. Prose pairs like
+  and create disagreed with the classify the human confirms. **One language's content words (review 5, L29):** `PT_WORDS` /
+  `ES_WORDS` (pagamento, encomenda, desconto, cupom, erro, conta, relatório… · pago, factura, descuento, carrito, cuenta,
+  informe…) and `PTES_WORDS` (reembolso, cliente, pedido, campo, alerta, filtro, página… — both languages, like the shared
+  infinitives) are STRONG markers ONLY in a text with no English function word: "Erro no pagamento", "Cupom de desconto no
+  checkout", "Alertas no PagerDuty" read English in an English project and their "no" (em + o) switched +tdd / +obs off. None
+  is an English word; "Show the pagamento status" (an English function word) is unchanged. One matched span counts once per track. Prose pairs like
   `login/signup` are split before matching; path-like tokens (`src/rag.ts`) are not. PT/ES plurals
   (`-ções`, `-ciones`, first word of a phrase) are generated by `pluralize()`.

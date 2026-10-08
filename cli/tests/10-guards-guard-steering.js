@@ -26,6 +26,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   ok(/Modo guarda LIGADO/.test(run(["init", "--guard", "on", "--lang", "pt", "--project", gPt]).out) && S11.guardEnabled(gPt), "init --guard on (PT) is localized");
   // steering <custom>.md — the same engine call as steering_scaffold.
   const s11 = path.join(tmp, "wp11-steer");
+  fs.mkdirSync(s11, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
   const cs = run(["steering", "api-rules.md", "--project", s11]);
   const csText = fs.readFileSync(path.join(s11, ".specs", "steering", "api-rules.md"), "utf8");
   let csJ = null;

@@ -14,7 +14,7 @@ const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in pl
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders, clarificationMarkers,
   criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs, featureLang, ghostMarkers,
-  headingIndex, headingLeadRe, inactiveMarkerLines, isGenericSlot, isObj, isRecord, markerTracks, normalizeLang,
+  headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, isObj, isRecord, markerTracks, normalizeLang,
   OPTIONAL_TRACKS, packDesignBlock, packOf, packRegistry, packRequirementsBlock, packTracks, placeholderReport,
   projectLang, RE_EDGE_CASES, RE_INDEPENDENT_TEST, RE_LIST_ITEM, RE_NFR, RE_OUT_OF_SCOPE, RE_SUCCESS_CRITERIA,
   RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile, replaceHtmlCommentSpans,
@@ -25,7 +25,7 @@ let acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceho
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
-  featureLang, ghostMarkers, headingIndex, headingLeadRe, inactiveMarkerLines, isGenericSlot, isObj, isRecord,
+  featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, isObj, isRecord,
   markerTracks, normalizeLang, OPTIONAL_TRACKS, packDesignBlock, packOf, packRegistry, packRequirementsBlock,
   packTracks, placeholderReport, projectLang, RE_EDGE_CASES, RE_INDEPENDENT_TEST, RE_LIST_ITEM, RE_NFR, RE_OUT_OF_SCOPE,
   RE_SUCCESS_CRITERIA, RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile,
@@ -787,8 +787,11 @@ const DESIGN_WEIGH_STAMPS = { weigh: "1.17", reuse: "1.19" };
 const RE_WEIGH_HEADING_REST = /^(?:[^\p{L}\p{N}]*$|\s*[:,;(\[/&+|—–.]|\s+-(?=\s|$)|\s+(?:and|or|vs|versus|for|of|to|in|on|per|with|e|ou|de|do|da|dos|das|para|por|em|no|na|com|y|o|u|del|en|con)(?![\p{L}\p{N}]))/u;
 function weighHeadingMatches(line, syns) {
   const m = atxHeading(line, 2, 6, "raw"); // /^#{2,6}\s+(.*)$/ — never the H1 title (it carries the feature name)
-  if (!m) return false;
-  let t = m.text.toLowerCase();
+  return !!m && weighTextMatches(m.text, syns);
+}
+// The same test on a heading's text (a headingEntries entry — ATX or setext; the caller keeps the H1 out).
+function weighTextMatches(text, syns) {
+  let t = String(text).toLowerCase();
   const lead = headingLeadRe();
   for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, ""); }
   return syns.some((s) => t.startsWith(s) && RE_WEIGH_HEADING_REST.test(t.slice(s.length)));
@@ -802,17 +805,18 @@ function weighSection(md, syns) {
 // The section weighSection reads → { level, title (atxHeading's trimmed text — designSections' title for a `##` one), body }
 // or null. (R review 2: the brief leaves THIS section — never another one a synonym names — out of "Design context", and only
 // when its Reuse part quotes all of it.)
+// The headings come from the ONE heading reader (review 5, M2 — headingEntries: never in a comment or a fence, setext and indented
+// ATX too): a "## Risks" section commented out read as written. The title is the entry's text (closing "#"s dropped) — as
+// designSections reads it.
 function weighSectionHead(md, syns) {
   const lines = String(md || "").split(/\r?\n/);
-  const index = headingIndex(lines);
-  const heads = index.filter((i) => weighHeadingMatches(lines[i], syns));
+  const index = headingEntries(lines);
+  const heads = index.filter((h) => h.level >= 2 && weighTextMatches(h.text, syns));
   if (!heads.length) return null;
   const MARKERS = markerTracks().map((t) => trackMarker(t));
-  const start = heads.find((i) => !MARKERS.some((mk) => lines[i].includes(mk))) ?? heads[0];
-  const level = (i) => (lines[i].match(/^(#{1,6})\s/) || ["", "######"])[1].length;
-  const end = index.find((i) => i > start && level(i) <= level(start));
-  const h = atxHeading(lines[start]);
-  return { level: level(start), title: h ? h.text : "", body: lines.slice(start + 1, end == null ? lines.length : end).join("\n") };
+  const start = heads.find((h) => !MARKERS.some((mk) => h.text.includes(mk))) ?? heads[0];
+  const end = index.find((h) => h.i > start.i && h.level <= start.level);
+  return { level: start.level, title: start.text, body: lines.slice(start.body, end ? end.i : lines.length).join("\n") };
 }
 // A unit's text is a generic slot word (TODO, TBD, TBC, FIXME, "…", "a definir" — isGenericSlot), trailing punctuation aside.
 const genericUnit = (s) => isGenericSlot(stripEnd(String(s).replace(/[*_`]+/g, "").trim(), unitIn(".:;!?"))); // /[.:;!?]+$/
@@ -1278,6 +1282,8 @@ function clarify(projectDir, name) {
 
   // Author-marked ambiguities take priority — resolve every [NEEDS CLARIFICATION] first (a change: anywhere in change.md).
   const markers = clarificationMarkers(full);
+  // r5 review: a bugfix's bug.md too — its Reproduction / Root Cause are what its requirements / design gates sign off (they refuse on these)
+  if (kind === "bugfix") markers.push(...clarificationMarkers(readIfExists(path.join(dir, "bug.md")) || ""));
   markers.forEach((mk) => add(q.resolveMarker(mk)));
 
   // Spec-Kit-style structure checks (headings matched EN/PT/ES) — a change has no stories, success criteria or priorities

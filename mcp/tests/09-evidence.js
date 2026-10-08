@@ -463,6 +463,29 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
       "full review Ga2: an _Expect: fail_ run whose summary shows the test never ran is refused (recorded, couldNotRun: output, task open; PT); an assertion failure is the red proof; an old 'spawnSync … ENOENT' record proves nothing (got " +
       JSON.stringify([miss2.couldNotRun, miss2.error && miss2.error.slice(0, 120), red2.redRecorded, vs2b.unverifiedDetail, pt2.error && pt2.error.slice(0, 80)]) + ")");
 
+    // 1.23 review (L7): a run that CRASHED — 128 + SIGILL / SIGABRT / SIGBUS / SIGFPE / SIGSEGV as a POSIX shell reports it, a
+    // Windows NTSTATUS crash code read unsigned or signed — is a failed run (recorded), never the red proof of an _Expect: fail_
+    // task: refused with couldNotRun "crash" (MCP = the engine), the task stays open; an assertion failure still proves it.
+    const crashes = [132, 134, 135, 136, 139, 0xC0000005, 0xC0000005 - 0x100000000, 0xC0000409, 0xC00000FD, 0xC000001D, 0xC0000094, 0x80000003, 0x80000003 - 0x100000000];
+    const kills = [0, 1, 2, 3, 126, 127, 130, 137, 143, 255, 9009];
+    const fCr = S.createFeature(p2, "Red crash", ["core"], "", undefined, "en");
+    const CR_CMD = "node --test test/crash.test.js";
+    gaW(fCr.dir, "tasks.md", "- [ ] 1. [US1] Write test T-01 and watch it fail\n  - _Verify: " + CR_CMD + "_\n  - _Expect: fail_\n");
+    const segv = S.completeTask(p2, fCr.slug, 1, { command: CR_CMD, exitCode: 139, summary: "Segmentation fault (core dumped)" });
+    const av = payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { name: fCr.slug, number: 1, evidence: { command: CR_CMD, exitCode: -1073741819 }, projectDir: p2 } }));
+    const openCr = /- \[ \] 1\./.test(gaTasks(fCr));
+    const fCrPt = S.createFeature(p2, "Crash pt", ["core"], "", undefined, "pt");
+    gaW(fCrPt.dir, "tasks.md", "- [ ] 1. [US1] Escrever T-01\n  - _Verify: " + CR_CMD + "_\n  - _Expect: fail_\n");
+    const ptCr = S.completeTask(p2, fCrPt.slug, 1, { command: CR_CMD, exitCode: 3221225477 });
+    const redCr = S.completeTask(p2, fCr.slug, 1, { command: CR_CMD, exitCode: 1, summary: "✖ T-01 (1.1ms)\nAssertionError [ERR_ASSERTION]: 'a' !== 'A'\nℹ fail 1" });
+    ok(crashes.every((c) => S.crashExit(c)) && !kills.some((c) => S.crashExit(c)) &&
+      segv.ok === false && segv.recorded === true && segv.couldNotRun === "crash" && /Task 1: the run crashed \(exit 139/.test(segv.error) &&
+      av.ok === false && av.couldNotRun === "crash" && /exit -1073741819/.test(av.error) && openCr &&
+      ptCr.ok === false && ptCr.couldNotRun === "crash" && /a execução crashou \(exit 3221225477/.test(ptCr.error) &&
+      redCr.ok === true && redCr.redRecorded === true && /- \[x\] 1\./.test(gaTasks(fCr)),
+      "1.23 review: a crash (exit 139, 0xC0000005 signed / unsigned…) is no red proof of an _Expect: fail_ task — refused (recorded, couldNotRun: crash; MCP and PT), the task stays open; an assertion failure is the red proof (got " +
+      JSON.stringify([segv.couldNotRun, av.couldNotRun, ptCr.couldNotRun, segv.error && segv.error.slice(0, 80), redCr.redRecorded]) + ")");
+
     // Ga3: a project check run is stamped with the code it tested (a hash of the implementing files): code edited after the
     // run → suiteChecks status `code-changed` — a finish blocker, doctor's suite-evidence warn and the stop gate's suite line —
     // never "ready" on an old run. A run recorded without the stamp keeps the older rule.
@@ -1277,8 +1300,8 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const rootOf = (c) => { const m = /^cd (?:\/d )?"?([^"&;]*?)"? *(?:&&|;)/.exec(c); return m ? m[1] : undefined; };
     const yes = ["npm test", "  npm   test ", "`npm test`", '"npm test"', "'npm test'", "cd /x/y && npm test", 'cd "C:/My Proj" && npm test', "cd /d C:\\x && npm test",
       "set -o pipefail; npm test", "set -euo pipefail; npm test", "set -e -o pipefail && npm test", "CI=1 npm test", 'NODE_ENV="test" CI=1 npm test', "npm test 2>&1",
-      "cd /x && CI=1 npm test 2>&1"];
-    const no = ["echo hello", "npm test -- --grep x", "npm run test", "npm test; echo ok", "npm test || true", "npm test | tee log", "echo npm test", "cd x", "npm test && echo ok",
+      "cd /x && CI=1 npm test 2>&1", "npm run test", "npm t"]; // (review 5: npm's own aliases of `npm test`)
+    const no = ["echo hello", "npm test -- --grep x", "npm run test:unit", "npm test; echo ok", "npm test || true", "npm test | tee log", "echo npm test", "cd x", "npm test && echo ok",
       "npm testing", "", "node -e \"process.exit(0)\"", "cd sub; npm test"];
     const two = ["npm test", "npm run lint"];
     // (review 2: "npm run lint" alone used to prove both — a run must cover EVERY _Verify:_ command of the task, see below)
@@ -1645,7 +1668,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
       const s = (r) => (cmdRule ? { ...r, cmdRule } : r);
       st.evidence = {
         1: rec("[US1] A", "npm test -- tests/x.test.js", s(run("npx jest tests/x.test.js", 0))),
-        2: rec("[US1] B", "node --test tests/y.test.js", s(run("node --test ." + BS + "tests" + BS + "y.test.js", 0))),
+        2: rec("[US1] B", "node --test tests/y.test.js", s(run("node tests" + BS + "y.test.js", 0))),
         3: rec("[US1] Red first", "node --test tests/z.test.js", s(run("node --test --test-reporter=tap tests/z.test.js", 1, { expected: "fail" }))),
       };
       for (const k of ["1", "2", "3"]) st.evidence[k].history = [s(st.evidence[k].history[0])];
@@ -1681,7 +1704,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
       js(ruled.suite) === '["changed"]' && js(ruled.up) === js(ruled.un) && js(ruled.status) === "[false,false,false]" &&
       again.verified === false && again.unverifiedReason === "command-mismatch" && recAgain.cmdRule === 1 &&
       finAgain.suiteChecks[0].status === "changed" && chkAgain.cmdRule === 1 && chkAgain.history[chkAgain.history.length - 1].cmdRule === 1,
-      "1.22 review 4 (0): records made before the command rule (no cmdRule stamp) whose commands differ from the _Verify:_ (`npx jest x`, `.\\tests\\y.test.js`, an _Expect: fail_ red run of another form) and a project check's run of another form keep their pre-1.22 verdict — verified / pass in status, doctor, finish, spec_upgrade, observed mode too; the same records stamped read command-mismatch / changed; a new run is stamped (task and finish check) and judged (got " +
+      "1.22 review 4 (0): records made before the command rule (no cmdRule stamp) whose commands differ from the _Verify:_ (`npx jest x`, `node tests\\y.test.js`, an _Expect: fail_ red run of another form) and a project check's run of another form keep their pre-1.22 verdict — verified / pass in status, doctor, finish, spec_upgrade, observed mode too; the same records stamped read command-mismatch / changed; a new run is stamped (task and finish check) and judged (got " +
       js([pre, preObserved, preSuiteObserved, ruled, again.unverifiedReason, recAgain.cmdRule, finAgain.suiteChecks, chkAgain.cmdRule]) + ")");
   }
 

@@ -104,7 +104,8 @@
  *   import <plan|execplan|fluidplan> - | --text "<markdown>"   … a plan from stdin or inline (Claude Code keeps plans in ~/.claude/plans)
  *   statusline [--print-config]        One line for Claude Code's status line (reads its session JSON on stdin; prints nothing
  *                                      outside a dev-spec project; exit 0 always); --print-config prints the settings.json snippet
- *   evals <feature> [--dry-run ...]    Run the local eval harness (+ai)
+ *   evals <feature> [--dry-run ...]    Run the local eval harness (+ai) — every flag goes to it wherever it stands; it refuses
+ *                                      an unknown one (exit 2) and prints its usage on --help
  *   mcp-config [client]                Print ready MCP config (claude-desktop|claude-code|
  *                                      cursor|windsurf|vscode|gemini|codex|generic|all)
  *   rules <tool>                       Print a rule file (cursor|windsurf|copilot|gemini|agents)
@@ -114,7 +115,11 @@
  *   bundle [--out <file.js>]           Build this clone's engine as ONE file (mcp/lib/spec.bundle.js, git-ignored) for a
  *                                      slow file system — used with DEV_SPEC_BUNDLE=1 (+ DEV_SPEC_BUNDLE_PATH for --out)
  *
- * Flags: --json (raw JSON output) · --project <dir> (project root, default cwd) · --lang en|pt|pt-BR|es
+ * Flags: --json (raw JSON output) · --project <dir> (an existing folder; only init creates one) · --lang en|pt|pt-BR|es
+ *        The project: --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working one with a
+ *        dev-spec .specs/ > the working folder. A path argument (scan, ears, import) is relative to the project when it was named
+ *        (--project / the env), else to the working folder. Each command takes its own options: another one, or an extra
+ *        argument, is a usage error (exit 1; with --json also {ok:false, error} on stdout).
  *        done: --run · --shell bash|pwsh|<path> · --timeout <s> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
  *        init: --check name="cmd" (repeatable) · finish: --run · --shell bash|pwsh|<path> · --timeout <s> · log: --max N (default 1000)
  *        undone: --reason "…" · approve: --revoke · --reason "…" · --expires YYYY-MM-DD|Nd (with --force: the waiver)
@@ -129,7 +134,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { spawnSync } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 
 const SERVER = path.resolve(__dirname, "..", "mcp", "server.js");
@@ -164,12 +169,13 @@ function cliText(lang) {
 function featureText(name) { return cliText(spec.featureLang(projectDir, name)); }
 function projectText() { return cliText(spec.projectLang(projectDir)); }
 
-// Read all of stdin asynchronously — fs.readFileSync(0) is unreliable on Windows pipes (same rule as the hooks).
+// Read all of stdin asynchronously — fs.readFileSync(0) is unreliable on Windows pipes (same rule as the hooks). The bytes are
+// decoded as a file is (spec.decodeText: a UTF-16 BOM decides, else UTF-8) — 1.23 review: a UTF-16 document (what Windows
+// PowerShell 5.1's `>` writes) piped into `ears -` read as "0 criteria, pass" and `import plan -` imported garbage.
 function readStdin(cb) {
-  let data = "";
-  process.stdin.setEncoding("utf8");
-  process.stdin.on("data", (c) => (data += c));
-  process.stdin.on("end", () => { try { cb(data); } catch (e) { die(e.message); } });
+  const chunks = [];
+  process.stdin.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c), "utf8")));
+  process.stdin.on("end", () => { try { cb(spec.decodeText(Buffer.concat(chunks))); } catch (e) { die(e.message); } });
   process.stdin.on("error", (e) => die(e.message));
 }
 
@@ -203,11 +209,13 @@ VALUE_FLAGS.add("out"); // 1.20: bundle --out <file.js> — the one-file engine 
 // 1.21 F3: bugfix <name> --reproduction "…" --root-cause "…" --condition "…" --behaviour "…" (= spec_create's bugfix prefill)
 ["reproduction", "root-cause", "condition", "behaviour"].forEach((k) => VALUE_FLAGS.add(k));
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
+const ARGV0 = argv.slice(); // the command line as given — `evals` hands its own flags to run-evals.js (evalsArgs)
+let cmdIdx = -1; // where the command word stands in ARGV0
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   // `--` ends the options (POSIX): every later token is positional (`create -- --odd-name`) — it used to become flags[""].
   // argv is cut there, so the repeated-flag collectors below (depend --add, init --check, decide --affects…) stop there too.
-  if (a === "--") { pos.push(...argv.slice(i + 1)); argv.splice(i); break; }
+  if (a === "--") { if (cmdIdx < 0 && !pos.length && i + 1 < argv.length) cmdIdx = i + 1; pos.push(...argv.slice(i + 1)); argv.splice(i); break; }
   if (a === "--json") flags.json = true;
   else if (a.startsWith("--") && a.includes("=")) { const k = a.slice(2, a.indexOf("=")); flags[k] = a.slice(a.indexOf("=") + 1); }
   else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) {
@@ -217,11 +225,22 @@ for (let i = 0; i < argv.length; i++) {
     else flags[a.slice(2)] = argv[++i];
   }
   else if (a.startsWith("--")) flags[a.slice(2)] = true;
-  else pos.push(a);
+  else { if (!pos.length) cmdIdx = i; pos.push(a); }
 }
 const cmd = pos.shift();
-// --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > cwd — the same resolution as the MCP server.
+// 1.23 review (L14): Windows' `--project "C:\dir\"` reaches the CLI as `C:\dir"` (the backslash escapes the closing quote) — a
+// double quote is never part of a Windows path, so a trailing one is dropped.
+if (process.platform === "win32" && typeof flags.project === "string") flags.project = flags.project.replace(/"+$/, "");
+// --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working folder with a dev-spec .specs/
+// > the working folder — the same resolution as the MCP server (spec.resolveProjectDir). --project is checked in main().
 const projectDir = spec.resolveProjectDir(flags.project);
+// Where a PATH argument is read from (scan <path>, ears <file>, import <tool> <path>): the project folder when it was NAMED
+// (--project, SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR — as import always read it), else the working folder: a path typed in a
+// subfolder of the project found by walking up is relative to that subfolder, as in git (1.23 review L12: scan and ears read it
+// from the working folder even with --project, import from the project).
+const envProject = (v) => v != null && String(v).trim() !== "" && !spec.unexpandedVar(v);
+const projectNamed = typeof flags.project === "string" || envProject(process.env.SPEC_PROJECT_DIR) || envProject(process.env.CLAUDE_PROJECT_DIR);
+const argPath = (p) => path.resolve(projectNamed ? projectDir : process.cwd(), String(p));
 
 // Boolean switches: `--x` is true, `--x=true|false` (also 1/0, yes/no, on/off) sets it explicitly; any other `=value` is
 // an error (normalizeBoolFlags, in main). They are read with on(), never by truthiness — the string "false" is truthy,
@@ -238,7 +257,9 @@ const boolFlag = (k) => (typeof flags[k] === "boolean" ? flags[k] : undefined);
 // --waves (1.14 F3: next <f> --waves = spec_next_task {waves: true}) is in spec.CLI_SWITCHES too.
 // An unknown --flag is a usage error, before anything runs: it used to be accepted as a silent boolean switch, so
 // `done big 2 --rnu` ticked the task with no evidence (exit 0). Known = VALUE_FLAGS ∪ BOOL_FLAGS, with a did-you-mean.
-// `evals` forwards its flags untouched to mcp/evals/run-evals.js, which checks its own (--dry-run, --max-items…).
+// `evals` forwards its flags untouched to mcp/evals/run-evals.js, which refuses its own unknown ones (1.23 review: it took any
+// flag silently — a mistyped --dryrun ran a LIVE, paid eval) and checks their values (--dry-run, --max-items…).
+// A KNOWN flag the command doesn't read is refused too (checkCommandArgs: COMMAND_OPTIONS), and so is an extra argument.
 function refuseUnknownFlags() {
   if (cmd === "evals") return;
   const known = [...VALUE_FLAGS, ...BOOL_FLAGS];
@@ -283,14 +304,64 @@ function intFlag(k) {
   const A = spec.msg(spec.projectLang(projectDir)).args;
   return die(A.invalid(A.item("--" + k, A.type.integer + " " + A.atLeast(1), JSON.stringify(String(flags[k])))));
 }
+// `dev-spec evals` (1.23 review P1): the words of the command line but the command, read with run-evals.js's own rules — its
+// value flags (--project, --model, --prompt, --max-items) take the next word unless it is a flag; the first plain word is the
+// feature, any other goes on (the harness refuses it). --project and its value are left out: the CLI passes its resolved project.
+const EVALS_VALUE_FLAGS = new Set(["project", "model", "prompt", "max-items"]);
+function evalsArgs() {
+  const toks = ARGV0.filter((_, i) => i !== cmdIdx);
+  let feature = null, help = false;
+  const rest = [];
+  for (let i = 0; i < toks.length; i++) {
+    const a = toks[i];
+    if (!a.startsWith("--")) { if (feature === null) feature = a; else rest.push(a); continue; }
+    const eq = a.indexOf("=");
+    const key = eq === -1 ? a.slice(2) : a.slice(2, eq);
+    const takesNext = eq === -1 && EVALS_VALUE_FLAGS.has(key) && i + 1 < toks.length && !toks[i + 1].startsWith("--");
+    if (key === "help") help = eq === -1 || !/^(?:false|0|no|off)$/i.test(a.slice(eq + 1).trim());
+    if (key === "project") { if (takesNext) i++; continue; }
+    rest.push(a);
+    if (takesNext) rest.push(toks[++i]);
+  }
+  return { feature, help, rest };
+}
+// done / finish: --shell and --timeout say how --run runs the commands — without --run they are a usage error (1.23 review: ignored).
+function runOnlyFlags() {
+  if (on("run")) return;
+  const k = ["shell", "timeout"].find((n) => flags[n] !== undefined);
+  if (k) die(projectText().needsRun("--" + k));
+}
+// done --run with several _Verify:_ commands, all passing (1.23 review): the record keeps one summary per command — "$ <command>"
+// and its summary, each re-summarized shorter when together they'd pass the record's 2,000 characters (normalizeEvidence cuts
+// there) — where it kept the LAST command's summary alone. One command: its summary, as ever.
+const EVIDENCE_SUMMARY_MAX = 2000;
+function runSummaries(parts) {
+  if (parts.length === 1) return parts[0].summary;
+  const budget = Math.floor(EVIDENCE_SUMMARY_MAX / parts.length);
+  return parts.map((p) => {
+    const head = "$ " + (p.cmd.length > 120 ? p.cmd.slice(0, 119) + "…" : p.cmd);
+    const room = budget - head.length - 1;
+    const body = room < 20 ? "" : p.summary && p.summary.length <= room ? p.summary : spec.summarizeRunOutput(p.output, room);
+    return body ? head + "\n" + body : head;
+  }).join("\n").slice(0, EVIDENCE_SUMMARY_MAX);
+}
 
 function out(obj, human) {
   if (flags.json) console.log(JSON.stringify(obj, null, 2));
   else if (typeof human === "function") human(obj);
   else console.log(typeof obj === "string" ? obj : JSON.stringify(obj, null, 2));
 }
-function die(msg) {
+// --json asked for (before normalizeBoolFlags has run too: a usage error found first still answers in JSON).
+const jsonWanted = () => flags.json === true || (typeof flags.json === "string" && /^(?:true|1|yes|on)$/i.test(flags.json.trim()));
+// A CLI usage / argument error: the message on stderr, exit 1 — and (1.23 review) with --json also {ok: false, error[, code]} as the
+// one JSON document on stdout, as a refusal prints (fail), so a script reads one shape. `text: true` (the --json-on-a-text-command
+// error) keeps stdout empty. Written synchronously: process.exit() follows.
+function die(msg, opts) {
   console.error("dev-spec: " + msg);
+  if (jsonWanted() && !(opts && opts.text)) {
+    const doc = JSON.stringify({ ok: false, error: String(msg), ...(opts && opts.code ? { code: opts.code } : {}) }, null, 2) + "\n";
+    try { fs.writeSync(1, doc); } catch { /* stdout gone */ }
+  }
   process.exit(1);
 }
 // An engine refusal ({ok: false, error, …}). With --json the WHOLE result is the one JSON document on stdout — what the
@@ -310,6 +381,89 @@ function fail(r, hint) {
 // A usage line: the syntax stays as typed, the "usage:" prefix is in the project language.
 function usage(syntax) {
   die(projectText().usage(syntax));
+}
+
+// 1.23 review — each command's own options and the most arguments it takes. A flag every command knows (--json, --project,
+// --help) aside, any other KNOWN flag the command doesn't read is a usage error, and so is an argument past its last one: they
+// were ignored silently — `approve <f> <phase> --remove` (meant --revoke) still approved, `done <f> 3 4` ticked task 3 alone,
+// `done … --timeout 0` without --run did nothing. `max` absent = the command reads any number (a name and tracks, words of a
+// message…) or checks its own (templates, export, decide…). `evals` is not listed: its flags are run-evals.js's.
+const GLOBAL_OPTIONS = ["json", "project", "help"];
+const CREATE_OPTIONS = ["tracks", "summary", "lang", "brownfield", "flow", "question", "timebox", "reproduction", "root-cause", "condition", "behaviour", "include-body", "size"];
+const COMMAND_OPTIONS = {
+  classify: { options: ["name", "lang", "explain"] },
+  signals: { options: ["lang"] },
+  init: { options: ["lang", "tracks", "guard", "stop-check", "check", "approval-guard", "evidence", "roles"] },
+  create: { options: ["kind", ...CREATE_OPTIONS] },
+  bugfix: { options: CREATE_OPTIONS },
+  spike: { options: ["tracks", "summary", "lang", "question", "timebox", "flow", "brownfield"] },
+  list: { options: [], max: 0 },
+  status: { options: [], max: 1 },
+  doctor: { options: [], max: 1 },
+  trace: { options: ["code", "matrix", "csv"], max: 1 },
+  ears: { options: ["text", "lang"], max: 1 },
+  next: { options: ["batch", "max", "waves"], max: 1 },
+  finish: { options: ["write", "include-body", "run", "shell", "timeout"], max: 1 },
+  steering: { options: ["lang"], max: 1 },
+  brief: { options: ["write", "include-brief"], max: 2 },
+  done: { options: ["run", "shell", "timeout", "evidence", "exit", "cmd", "reason"], max: 2 },
+  undone: { options: ["reason", "run", "evidence", "exit", "cmd", "shell", "timeout"], max: 2 }, // done's run / evidence flags: refused with undo's own message
+  approve: { options: ["by", "force", "role", "through", "reason", "expires", "revoke"], max: 2 },
+  backlog: { options: [] }, // add <name> [note words…] · rm|remove <name> · list — checked in its case
+  milestone: { options: [] },
+  milestones: { options: [] },
+  roadmap: { options: ["write", "md", "html", "lang"], max: 0 },
+  depend: { options: ["add", "rm", "clear", "order"] },
+  scan: { options: ["cap"], max: 1 },
+  coverage: { options: [], max: 0 },
+  clarify: { options: [], max: 1 },
+  "next-action": { options: [], max: 1 },
+  na: { options: [], max: 1 },
+  "add-track": { options: ["tracks", "remove"] },
+  feature: { options: ["yes", "flow"], max: 3 },
+  rules: { options: [], max: 1 },
+  import: { options: ["name", "lang", "tracks", "text"] },
+  "append-tasks": { options: ["task", "req", "implements", "verify", "story", "parallel", "makes-green", "expect-fail", "size", "depends", "heading"], max: 1 },
+  impact: { options: ["phase", "reopen"], max: 1 },
+  metrics: { options: ["write"], max: 1 },
+  catalog: { options: ["write"], max: 0 },
+  drift: { options: [], max: 1 },
+  upgrade: { options: ["apply"], max: 0 },
+  prompts: { options: ["args"] },
+  templates: { options: ["lang"] },
+  tracks: { options: ["lang"] },
+  export: { options: ["md", "html", "csv", "gherkin", "tracker", "write"] },
+  changelog: { options: ["since", "write", "milestone"] },
+  log: { options: ["max"], max: 2 }, // <feature> [-]
+  "stop-check": { options: ["message", "agent"] },
+  decide: { options: ["title", "decision", "context", "consequences", "affects", "supersedes", "discovery", "kind"] },
+  "merge-state": { options: ["install", "uninstall", "check", "kind"] },
+  "mcp-config": { options: [], max: 1 },
+  bundle: { options: ["out"] },
+  statusline: { options: ["print-config"], max: 0 },
+};
+function checkCommandArgs() {
+  const own = Object.prototype.hasOwnProperty.call(COMMAND_OPTIONS, cmd) ? COMMAND_OPTIONS[cmd] : null;
+  if (!own) return; // an unknown command (its own error), evals (run-evals.js), help
+  const T = projectText();
+  const bad = Object.keys(flags).find((k) => !GLOBAL_OPTIONS.includes(k) && !own.options.includes(k));
+  if (bad !== undefined) die(T.flagNotFor("--" + bad, cmd, own.options.map((f) => "--" + f).join(", ")));
+  if (own.max !== undefined && pos.length > own.max) die(T.extraArgs(cmd, pos.slice(own.max).join(" ")));
+}
+// 1.23 review (L14) — --project names an existing FOLDER: an empty value, a variable left unexpanded (`$HOME/x`, `%DIR%`, `${…}`)
+// or a file is refused, and so is a folder that doesn't exist — except for init, which creates it (`create x --project <typo>`
+// used to create the whole mistyped tree; a file or `C:\dir"` ended in a raw ENOTDIR / ENOENT).
+function checkProjectFlag() {
+  if (!("project" in flags)) return;
+  const T = projectText();
+  const v = typeof flags.project === "string" ? flags.project.trim() : "";
+  if (!v) die(T.projectEmpty);
+  if (spec.unexpandedVar(v)) die(T.projectUnexpanded(v));
+  const abs = path.resolve(v);
+  let st = null;
+  try { st = fs.statSync(abs); } catch { st = null; }
+  if (st && !st.isDirectory()) die(T.projectNotDir(abs));
+  if (!st && cmd !== "init") die(T.projectMissing(abs));
 }
 
 // ---- mcp-config snippets ---------------------------------------------------
@@ -399,7 +553,9 @@ function statusLineConfig() {
   console.log(C.tryIt(command));
 }
 
-function main() {
+// async (1.23 review M13): done --run / finish --run wait for their commands with a timer of their own (b5Exec) — a timeout kills
+// the whole process tree, never only the shell.
+async function main() {
   // 1.16 C1: the status line's render path runs before any flag / usage check — it must print its line or nothing, exit 0.
   if (cmd === "statusline" && !("print-config" in flags) && !("help" in flags)) return statusLineRender();
   refuseUnknownFlags(); // `--rnu` is an error (did you mean --run?), never a silent switch
@@ -423,8 +579,12 @@ function main() {
   // `evals` (the harness's text report; its flags go to run-evals.js, which refuses a --json given to it directly too) — is a
   // usage error, before anything runs: it printed the text on stdout with exit 0, and a script parsing it failed far away.
   const helpOnly = cmd === undefined || cmd === "help" || cmd === "-h" || cmd === "--help" || (on("help") && cmd !== "evals");
-  if (on("json") && (helpOnly || TEXT_ONLY_COMMANDS.has(cmd))) die(projectText().noJson(helpOnly ? "help" : cmd));
+  if (on("json") && (helpOnly || TEXT_ONLY_COMMANDS.has(cmd))) die(projectText().noJson(helpOnly ? "help" : cmd), { text: true });
   if (on("help") && cmd !== "evals") return console.log(helpText()); // `<command> --help` prints the help, runs nothing
+  if (!helpOnly) {
+    checkProjectFlag(); // 1.23 review L14: an existing folder (init alone may create it)
+    checkCommandArgs(); // 1.23 review: the command's own options, at most its own arguments
+  }
   switch (cmd) {
     case undefined:
     case "help":
@@ -609,8 +769,10 @@ function main() {
       };
       if (typeof flags.text === "string") return report(spec.earsValidate(flags.text, textLang), cliText(textLang));
       if (pos[0] === "-") return readStdin((txt) => report(spec.earsValidate(txt, textLang), cliText(textLang)));
-      const isFile = fs.existsSync(pos[0]) && fs.statSync(pos[0]).isFile();
-      if (isFile) return report(spec.earsValidate(spec.decodeText(fs.readFileSync(pos[0])), textLang), cliText(textLang)); // UTF-16 too
+      // A file path is read from the project when it was named (--project / the env), else from the working folder (argPath, L12).
+      const file = argPath(pos[0]);
+      const isFile = fs.existsSync(file) && fs.statSync(file).isFile();
+      if (isFile) return report(spec.earsValidate(spec.decodeText(fs.readFileSync(file)), textLang), cliText(textLang)); // UTF-16 too
       return report(spec.earsFeature(projectDir, pos[0]), featureText(pos[0]));
     }
 
@@ -641,10 +803,11 @@ function main() {
       if (!pos[0]) usage("dev-spec finish <feature> [--write] [--include-body] [--run [--shell bash|pwsh|<path>] [--timeout <s>]]");
       // B5: --run executes the project checks (roadmap.json meta.checks) — only on this explicit flag — and records every run
       // (= spec_finish {evidence}); without meta.checks it is an error, nothing runs.
+      runOnlyFlags(); // --shell / --timeout without --run: a usage error (1.23 review — they were ignored)
       let evidence, runStart;
       if (on("run")) {
         runStart = spec.runStartStamp(projectDir, pos[0]); // 1.22 review: `at` and the code stamp BEFORE the checks run
-        const rc = b5RunChecks(pos[0]);
+        const rc = await b5RunChecks(pos[0]);
         if (!rc.ok) return fail(rc, rc.hint);
         evidence = rc.evidence;
       }
@@ -682,6 +845,12 @@ function main() {
     case "brief": {
       // dev-spec brief <feature> [n] [--write]  — self-contained brief for one task (default: next open)
       if (!pos[0]) usage("dev-spec brief <feature> [task-number] [--write]");
+      // A task number GIVEN is an integer ≥ 0, as done checks it (1.23 review L11: an empty word briefed — and with --write wrote —
+      // the NEXT task, where spec_task_brief {number: ""} is refused by its schema). No number at all: the next task.
+      if (pos[1] != null && !/^\s*\d+\s*$/.test(String(pos[1]))) {
+        const A = spec.msg(spec.featureLang(projectDir, pos[0])).args;
+        return fail({ ok: false, error: A.invalid(A.item("number", A.type.integer + " " + A.atLeast(0), JSON.stringify(String(pos[1])))) });
+      }
       const r = spec.taskBrief(projectDir, pos[0], pos[1], { write: on("write"), includeBrief: boolFlag("include-brief") }); // = spec_task_brief {includeBrief}
       if (!r.ok) return fail(r);
       const T = cliText(r.lang);
@@ -707,6 +876,10 @@ function main() {
         const A = spec.msg(spec.featureLang(projectDir, pos[0])).args;
         return fail({ ok: false, error: A.invalid(A.item("number", A.type.integer + " " + A.atLeast(0), JSON.stringify(String(pos[1])))) });
       }
+      // 1.23 review: --shell / --timeout need --run, and --run (a run made here) excludes --evidence / --exit / --cmd (a run made
+      // elsewhere) — each was ignored silently.
+      runOnlyFlags();
+      if (on("run") && (flags.evidence !== undefined || flags.exit !== undefined || flags.cmd !== undefined)) die(projectText().runOrEvidence);
       const say = flags.json ? console.error : console.log; // --json keeps stdout one JSON document
       let evidence;
       let hint = null;
@@ -744,9 +917,10 @@ function main() {
         const git = b5GitState(); // B5: the commit the run is made on (+ dirty outside .specs/) — read-only git, skipped without it
         runStartedAt = new Date().toISOString(); // 1.22 review: the run's `at` is when it STARTED (an edit made meanwhile isn't tested)
         ranVerify = b.verify.slice(); // …and its verify stamp the _Verify:_ as it was then (edited meanwhile → stale-evidence)
+        const passed = []; // 1.23 review: each passing command's output — the record keeps one summary per command, not the last one's
         for (const cmd of cmds) {
           say("$ " + cmd);
-          const x = b5Exec(cmd, sh, M);
+          const x = await b5Exec(cmd, sh, M);
           if (x.summary) say(x.summary.replace(/^/gm, "  "));
           // full review Ga1 / Ga9 / Ga10: a command that could not run (the shell never started, a signal, --timeout, output
           // over the buffer, WSL's launcher) is refused and NOTHING is recorded — it used to be recorded as exit 1 (an
@@ -776,7 +950,8 @@ function main() {
             if (sh.cmd && spec.windowsShellFailure(x.output, code)) hint = D.shellHint;
             break;
           }
-          evidence = { command: cmds.join(" && "), exitCode: 0, summary: x.summary, ...git };
+          passed.push({ cmd, output: x.output, summary: x.summary });
+          evidence = { command: cmds.join(" && "), exitCode: 0, summary: runSummaries(passed), ...git };
         }
       } else if (flags.evidence != null || flags.exit != null || flags.cmd != null) {
         evidence = { command: flags.cmd, exitCode: flags.exit, summary: typeof flags.evidence === "string" ? flags.evidence : undefined };
@@ -800,7 +975,8 @@ function main() {
       const M = spec.msg(spec.featureLang(projectDir, pos[0])); // human output in the feature's language
       // 1.16 U review 5: done's evidence flags (--evidence / --exit / --cmd / --run) are refused, as spec_complete_task refuses
       // {undo, evidence} — they were silently ignored (the user believed a run had been recorded). Nothing runs, nothing changes.
-      if (flags.evidence != null || flags.exit != null || flags.cmd != null || on("run")) return fail({ ok: false, error: M.undo.noEvidence });
+      // (1.23 review: --shell / --timeout — how --run would run — too, never ignored)
+      if (flags.evidence != null || flags.exit != null || flags.cmd != null || on("run") || flags.shell !== undefined || flags.timeout !== undefined) return fail({ ok: false, error: M.undo.noEvidence });
       const r = spec.completeTask(projectDir, pos[0], pos[1], undefined, { undo: true, reason: flags.reason });
       if (!r.ok) return fail(r);
       return out(r, (r) => {
@@ -834,9 +1010,12 @@ function main() {
     }
 
     case "evals": {
-      if (!pos[0]) usage("dev-spec evals <feature> [--dry-run] [--set-baseline]");
-      const passthru = argv.slice(argv.indexOf(pos[0]) + 1);
-      const res = spawnSync(process.execPath, [EVALS, pos[0], "--project", projectDir, ...passthru], { stdio: "inherit" });
+      // 1.23 review (P1): every flag goes to run-evals.js WHEREVER it stands — `evals --dry-run <f>` dropped the flag before the
+      // feature and ran the eval LIVE (paid API calls) — read with the harness's own rules (evalsArgs). The harness refuses an
+      // unknown flag (--dryrun), prints its usage on --help and refuses a second word; --project is the CLI's resolved project.
+      const ea = evalsArgs();
+      if (!ea.feature && !ea.help) usage("dev-spec evals <feature> [--dry-run] [--set-baseline] [--require-live] [--model ID] [--prompt FILE] [--max-items N]");
+      const res = spawnSync(process.execPath, [EVALS, ...(ea.feature ? [ea.feature] : []), "--project", projectDir, ...ea.rest], { stdio: "inherit" });
       // A harness that never ran (spawn error) or was killed by a signal has no status — that is a failure, never exit 0
       // (1.22 review: `res.status || 0` passed a killed run).
       if (res.error) console.error("dev-spec: " + res.error.message);
@@ -847,6 +1026,9 @@ function main() {
       const a0 = String(pos[0] == null ? "" : pos[0]).trim().toLowerCase(); // case-folded, like the engine and the MCP enum
       // No action lists; an unknown one (delete, ad…) is an error from the engine, as over MCP — it used to just list.
       const action = a0 || "list";
+      // add <name> [note words…] reads every word; rm|remove <name> and list read no more (1.23 review: extra words were ignored)
+      const most = action === "list" ? 1 : action === "rm" || action === "remove" ? 2 : Infinity;
+      if (pos.length > most) die(projectText().extraArgs("backlog " + action, pos.slice(most).join(" ")));
       const r = spec.backlog(projectDir, action, pos[1], action === "add" ? pos.slice(2).join(" ") : undefined);
       if (!r.ok) return fail(r); // e.g. rm of a name that isn't in the backlog
       const T = projectText();
@@ -920,11 +1102,14 @@ function main() {
     }
 
     case "scan": {
-      const root = pos[0] ? path.resolve(pos[0]) : projectDir;
-      const r = spec.scanCodebase(root, { cap: intFlag("cap") });
+      // 1.23 review (L12): <path> is read from the project when it was named (--project / the env), else from the working folder
+      // (argPath) — it was always the working folder; and the report is in the PROJECT's language (a subfolder has no .specs/).
+      const root = pos[0] ? argPath(pos[0]) : projectDir;
+      const lang = spec.projectLang(projectDir);
+      const r = spec.scanCodebase(root, { cap: intFlag("cap"), lang });
       if (!r.ok) return fail(r); // a path that is no folder (1.22 review): exit 1, never an empty codebase
-      const T = cliText(spec.projectLang(root)); // same language as the engine's note
-      const B = spec.msg(spec.projectLang(root)).brownfield;
+      const T = cliText(lang); // same language as the engine's note
+      const B = spec.msg(lang).brownfield;
       return out(r, (r) => {
         console.log(T.scanHead(r.root, r.truncated));
         console.log(T.scanFiles(r.filesScanned, r.stack.join(" · ")));
@@ -1076,8 +1261,12 @@ function main() {
       // track list next to --text is a path given with it: passed as the source, so the engine answers its "path or text, not
       // both" (as spec_import {path, text} does) — never "Unknown track: 'plans/x.md'".
       const pathWithText = hasText && !!pos[1] && spec.parseTracks(pos[1]).unknown.length > 0;
+      // 1.23 review: run from a subfolder of the project (found by walking up), <path> is relative to that subfolder (argPath) —
+      // handed to the engine relative to the project, which still refuses one outside it.
+      const source = (p) => (p == null || projectNamed || path.resolve(process.cwd()) === projectDir ? p
+        : path.relative(projectDir, argPath(p)).split(path.sep).join("/") || ".");
       const doImport = (text) => {
-        const r = spec.importSpec(projectDir, pos[0], text != null && !pathWithText ? undefined : pos[1], { name: flags.name, lang: flags.lang,
+        const r = spec.importSpec(projectDir, pos[0], text != null && !pathWithText ? undefined : source(pos[1]), { name: flags.name, lang: flags.lang,
           tracks: withTracksFlag(pos.slice(hasText && !pathWithText ? 1 : 2)), text });
         if (!r.ok) return fail(r);
         return out(r, (r) => {
@@ -1287,7 +1476,7 @@ function main() {
       // dev-spec log <feature> [--max N] [-] — per task, the commits whose message cites it (+ the +tdd red-first check), from
       // `git log` (read-only, local, bounded by --max, default 1000); "-" reads a log from stdin instead (e.g. an agent's
       // `git log --name-only --relative`). The engine only parses the text (taskCommits) — it never runs git.
-      if (!pos[0]) usage("dev-spec log <feature> [--max N] [-]");
+      if (!pos[0] || (pos[1] != null && pos[1] !== "-")) usage("dev-spec log <feature> [--max N] [-]"); // a second word is "-" (stdin) or nothing
       const fx = spec.existingFeature(projectDir, pos[0]);
       if (!fx.ok) return fail(fx);
       const max = intFlag("max") || 1000;
@@ -1339,7 +1528,7 @@ function main() {
     }
     // finish --run: every project check (meta.checks), in order, from the project root — the same shell rules as done --run
     // (--shell / DEV_SPEC_SHELL, POSIX syntax refused under cmd.exe, the pipe hint). Every run is recorded, a failure too.
-    function b5RunChecks(feature) {
+    async function b5RunChecks(feature) {
       const fx = spec.existingFeature(projectDir, feature);
       if (!fx.ok) return fx;
       const M = spec.msg(spec.featureLang(projectDir, fx.slug));
@@ -1363,7 +1552,7 @@ function main() {
       let cmdFailed = false;
       for (const c of checks) {
         say("$ " + c.command + "   (" + c.name + ")");
-        const x = b5Exec(c.command, sh, M);
+        const x = await b5Exec(c.command, sh, M);
         if (x.summary) say(x.summary.replace(/^/gm, "  "));
         // full review Ga1 / Ga9 / Ga10: a check that could not run is refused and NOTHING is recorded (all-or-nothing, like
         // spec_finish {evidence}) — it used to be recorded as a failed run (exit 1).
@@ -1392,18 +1581,66 @@ function main() {
     // cantRun: null | { code, why } } — cantRun (full review Ga1 / Ga9 / Ga10, stable codes): the run never exercised the check,
     // so nothing may be recorded for it: shell-not-started (spawn error: a missing or unusable shell) · timeout (--timeout) ·
     // output-too-large (over 64 MB) · signal (killed) · run-error (any other spawn error) · wsl (WSL's launcher answered).
+    // → a Promise (1.23 review M13): the run is asynchronous with a timer of its own, so --timeout kills the whole PROCESS TREE —
+    // `taskkill /T /F` on Windows, the process group (a detached child: its own group) elsewhere. spawnSync's timeout killed the
+    // shell alone: the check it started ran on (and held the output pipes — the CLI waited for it all the same). Ctrl+C / a
+    // SIGTERM to the CLI kills the tree too (a detached group no longer gets the terminal's Ctrl+C).
     function b5Exec(command, sh, M) {
-      const CRASH_SIGNALS = ["SIGSEGV", "SIGABRT", "SIGBUS", "SIGFPE", "SIGILL"]; // inside: b5Exec is hoisted above any outer const
       const timeoutS = intFlag("timeout"); // --timeout <seconds>: an integer ≥ 1 (validated before anything runs — first call)
-      let run;
-      const runOpts = { cwd: projectDir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, windowsHide: true, ...(timeoutS ? { timeout: timeoutS * 1000 } : {}) };
-      try {
-        // 1.21.1: a PowerShell shell (--shell pwsh / powershell, DEV_SPEC_SHELL) runs `<shell> -NoProfile -NonInteractive
-        // -Command <cmd>` (sh.args, resolveRunShell) — no profile, no prompt; the command is one argument. Any other shell: Node
-        // runs `<shell> -c "<cmd>"` (cmd.exe: /d /s /c).
-        // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
-        run = Array.isArray(sh.args) ? spawnSync(String(sh.shell), [...sh.args, command], runOpts) : spawnSync(command, { shell: sh.shell, ...runOpts });
-      } catch (e) { run = { status: null, signal: null, error: e }; }
+      const win = process.platform === "win32";
+      const MAX_OUTPUT = 64 * 1024 * 1024; // spawnSync's maxBuffer, as before
+      return new Promise((resolve) => {
+        const chunks = [[], []];
+        let size = 0, error = null, settled = false, timer = null, grace = null, child = null;
+        const killTree = () => {
+          if (child && child.pid != null) {
+            if (win) {
+              try { spawnSync("taskkill", ["/T", "/F", "/PID", String(child.pid)], { windowsHide: true, stdio: "ignore", timeout: 15000 }); } catch { /* gone */ }
+            } else {
+              try { process.kill(-child.pid, "SIGKILL"); } catch { try { child.kill("SIGKILL"); } catch { /* gone */ } }
+            }
+          }
+          // A process that left the tree (or a pipe someone else holds) must not keep the CLI waiting: 3 s for 'close', then settle.
+          if (!grace) grace = setTimeout(() => settle(null, "SIGKILL"), 3000);
+        };
+        const onSignal = (sig) => { killTree(); process.exit(sig === "SIGINT" ? 130 : 143); };
+        const settle = (status, signal) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          clearTimeout(grace);
+          process.removeListener("SIGINT", onSignal);
+          process.removeListener("SIGTERM", onSignal);
+          if (child) { try { child.stdout.destroy(); child.stderr.destroy(); child.unref(); } catch { /* already closed */ } }
+          resolve(b5ExecResult({ status, signal, error, stdout: Buffer.concat(chunks[0]).toString("utf8"), stderr: Buffer.concat(chunks[1]).toString("utf8") }, sh, M, timeoutS));
+        };
+        try {
+          // 1.21.1: a PowerShell shell (--shell pwsh / powershell, DEV_SPEC_SHELL) runs `<shell> -NoProfile -NonInteractive
+          // -Command <cmd>` (sh.args, resolveRunShell) — no profile, no prompt; the command is one argument. Any other shell: Node
+          // runs `<shell> -c "<cmd>"` (cmd.exe: /d /s /c).
+          const opts = { cwd: projectDir, windowsHide: true, detached: !win };
+          // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
+          child = Array.isArray(sh.args) ? spawn(String(sh.shell), [...sh.args, command], opts) : spawn(command, { shell: sh.shell, ...opts });
+        } catch (e) { error = e; return settle(null, null); }
+        process.on("SIGINT", onSignal);
+        process.on("SIGTERM", onSignal);
+        child.on("error", (e) => { if (!error) error = e; settle(null, null); }); // the shell never started (ENOENT, EACCES…)
+        const take = (k) => (c) => {
+          if (error) return;
+          size += c.length;
+          if (size > MAX_OUTPUT) { error = Object.assign(new Error("output maxBuffer length exceeded"), { code: "ENOBUFS" }); killTree(); return; }
+          chunks[k].push(c);
+        };
+        child.stdout.on("data", take(0));
+        child.stderr.on("data", take(1));
+        try { child.stdin.end(); } catch { /* no stdin */ }
+        child.on("close", (code, signal) => settle(code, signal));
+        if (timeoutS) timer = setTimeout(() => { error = Object.assign(new Error("spawn " + b5ShellName(sh) + " ETIMEDOUT"), { code: "ETIMEDOUT" }); killTree(); }, timeoutS * 1000);
+      });
+    }
+    // A finished run → { code, output, summary, cantRun, crashed? } (b5Exec's verdict, unchanged by M13).
+    function b5ExecResult(run, sh, M, timeoutS) {
+      const CRASH_SIGNALS = ["SIGSEGV", "SIGABRT", "SIGBUS", "SIGFPE", "SIGILL"]; // inside: hoisted above any outer const
       const output = (run.stdout || "") + (run.stderr || "") + (run.error ? "\n" + run.error.message : "");
       const summary = spec.summarizeRunOutput(output);
       const W = M.runGate.why;
@@ -1556,11 +1793,21 @@ function mergeStateRun(baseF, oursF, theirsF, rel) {
     // overview (no AUTO-GENERATED marker): git's own text merge, in place — its exit status is the number of conflicts.
     if (r.keepOurs) return flags.json ? console.log(JSON.stringify({ ok: true, kind: r.kind, kept: "ours" }, null, 2)) : undefined;
     let g;
-    try { g = spawnSync("git", ["merge-file", "-L", "ours", "-L", "base", "-L", "theirs", oursF, baseF, theirsF], { encoding: "utf8", windowsHide: true, timeout: 30000 }); } catch { g = null; }
-    process.exitCode = g && !g.error && g.status === 0 ? 0 : 1;
+    try { g = spawnSync("git", ["merge-file", "-L", "ours", "-L", "base", "-L", "theirs", oursF, baseF, theirsF], { encoding: "utf8", windowsHide: true, timeout: 30000 }); } catch (e) { g = { error: e }; }
+    const ran = !!g && !g.error && Number.isInteger(g.status) && g.status >= 0;
+    process.exitCode = ran && g.status === 0 ? 0 : 1;
+    // 1.23 review (L13): --json printed nothing here — the result of git's text merge (conflicts = its count of conflict hunks)
+    if (flags.json) console.log(JSON.stringify(ran ? { ok: true, kind: r.kind, merged: "text", clean: g.status === 0, conflicts: g.status }
+      : { ok: false, kind: r.kind, merged: "text", error: String((g && g.error && g.error.message) || "git merge-file: exit " + (g && g.status)) }, null, 2));
     return;
   }
-  if (!r.ok) { console.error(M.parseError(r.parseError, r.error)); process.exitCode = 1; return; } // ours left as it is
+  if (!r.ok) { // ours left as it is — with --json (1.23 review L13) the refusal is the JSON document on stdout too
+    const msg = M.parseError(r.parseError, r.error);
+    console.error(msg);
+    if (flags.json) console.log(JSON.stringify({ ok: false, kind: r.kind, parseError: r.parseError, error: msg }, null, 2));
+    process.exitCode = 1;
+    return;
+  }
   fs.writeFileSync(oursF, r.text);
   if (flags.json) {
     console.log(JSON.stringify({ ok: true, kind: r.kind, clean: r.clean, conflicts: r.conflicts }, null, 2));
@@ -1837,7 +2084,9 @@ function helpText() {
   statusline [--print-config]     One line for Claude Code's status line: the most active feature, its tasks, unverified ticks, the next
                                   step (reads the session JSON on stdin; nothing outside a dev-spec project; exit 0 always);
                                   --print-config prints the settings.json "statusLine" snippet with this clone's path
-  evals <feature> [--dry-run]     Run the local eval harness (+ai; your ANTHROPIC_API_KEY)
+  evals <feature> [--dry-run]     Run the local eval harness (+ai; your ANTHROPIC_API_KEY) — every flag reaches it wherever it
+                                  stands (--set-baseline, --require-live, --model ID, --prompt FILE, --max-items N); an unknown
+                                  one or a second word exits 2 with nothing run; evals --help prints the harness's usage
   mcp-config [client]             Print ready MCP config: claude-desktop|claude-code|cursor|windsurf|vscode|gemini|codex|generic|all
   rules <tool>                    Print a rule file (cursor|windsurf|copilot|gemini|agents) with this clone's absolute paths
   prompts [name] [--args "…"]     The MCP prompts (one per plugin command — slash commands in MCP clients): list them, or print
@@ -1846,7 +2095,12 @@ function helpText() {
                                   system (Docker bind mount, network drive, WSL /mnt/c): set DEV_SPEC_BUNDLE=1 (with --out, also
                                   DEV_SPEC_BUNDLE_PATH=<file>); rebuild after every plugin update — a stale bundle is ignored
 
-  Flags: --json  --project <dir>  --lang en|pt|pt-BR|es (init/create/steering/roadmap/ears)  --order N (depend)
+  The project: --project <dir> (an existing folder — only init creates one) > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest
+  folder at or above the working one that holds a dev-spec .specs/ > the working folder. A path argument (scan, ears, import) is
+  relative to the project when it was named (--project or the environment), else to the working folder.
+  Each command takes its own options and arguments: another option, or one argument too many, is a usage error (exit 1).
+
+  Flags: --json  --project <dir>  --lang en|pt|pt-BR|es (init/create/bugfix/spike/steering/roadmap/ears/classify/import/templates/tracks/signals)  --order N (depend)
          --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix|spike|change / --size xs|s|m|l (create; spike: --question, --timebox)  --text "…" (ears)
          --batch  --max N (next)  --write / --include-brief (brief)  --write / --include-body (finish)
          --yes (feature remove)  --write|--md / --html (roadmap)  --cap N (scan)  --by NAME / --force (approve)
@@ -1859,15 +2113,15 @@ function helpText() {
          --guard on|off|scope / --stop-check on|off / --approval-guard off|ask|deny / --evidence reported|observed (init)  --message "…" / --agent <type> (stop-check)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
-         With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1.
+         With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1 — a usage error
+         or an unexpected failure too ({"ok": false, "error": …[, "code": …]}).
          help, rules, mcp-config and evals print text only: --json there is a usage error (exit 1).
+         --shell / --timeout go with --run (done, finish); --run and --evidence / --exit / --cmd exclude each other (done);
+         --timeout stops the command's whole process tree.
 
   Works the same in Claude Code, Cursor, Windsurf, Copilot, Gemini/Codex CLI, or a plain shell.`;
 }
 
-// Engine guards (e.g. an unreadable roadmap.json) surface as a one-line error, not a stack trace.
-try {
-  main();
-} catch (e) {
-  die(e.message);
-}
+// Engine guards (e.g. an unreadable roadmap.json) surface as a one-line error, not a stack trace — with --json (1.23 review L24)
+// also as {ok: false, error, code} on stdout (code: the system error's, e.g. ENOTDIR, else "exception").
+main().catch((e) => die(e && e.message ? e.message : String(e), { code: e && typeof e.code === "string" && e.code ? e.code : "exception" }));

@@ -235,6 +235,22 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
 
+### New in 1.23
+
+- **A fifth full review, fixed** — 68 findings across the server, the CLI, the hooks, the evidence, the gates, the
+  markdown readers and the imports, each reproduced first and kept as a regression test. Among them: `dev-spec evals
+  --dry-run <feature>` ran a live, paid eval; a tasks.md saved by Windows PowerShell 5.1 lost its accented letters on a
+  tick; a corrupt `.state.json` read as "nothing approved"; a commented-out section counted as written; nested brackets
+  crashed the gates; a removal confirmed in an MCP client could delete another feature.
+- **Lighter and stricter** — the tool descriptions are 40% shorter (~31k → ~18k tokens per session); each CLI command
+  refuses an option it doesn't use; run from a subfolder, the CLI and the server use the project above instead of
+  starting a new `.specs/`; the approval guard asks when it can't tell, and covers `Monitor` and hand edits of the
+  state files.
+- **Smarter where it matters** — approvals survive whitespace edits; git worktrees are understood by every hook; a run
+  proves its `_Verify:_` in more spellings (quotes, `npm t`, `pushd`); EARS reads `THE API SHALL`; the classifier knows
+  passwords, SSO, OIDC, machine learning and REST endpoints; MCP protocol 2025-11-25 with roots and progress. The
+  CHANGELOG lists every fix.
+
 ### New in 1.22
 
 - **Reviews you can trust** — the reviewer rates every Critical / Important finding 0–100 and knows what is not a finding
@@ -723,6 +739,23 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabalho, aprovações forçadas, pedidos de
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
+
+### Novidades da 1.23
+
+- **Uma quinta revisão completa, corrigida** — 68 problemas no servidor, no CLI, nos hooks, na evidência, nos gates, na
+  leitura do markdown e nas importações, cada um reproduzido primeiro e guardado como teste de regressão. Entre eles: o
+  `dev-spec evals --dry-run <feature>` corria uma avaliação real, paga; um tasks.md gravado pelo Windows PowerShell 5.1
+  perdia os acentos ao marcar uma tarefa; um `.state.json` corrompido lia-se como "nada aprovado"; uma secção comentada
+  contava como escrita; parênteses retos aninhados rebentavam os gates; uma remoção confirmada num cliente MCP podia apagar
+  outra feature.
+- **Mais leve e mais rigoroso** — as descrições das ferramentas são 40% mais curtas (~31k → ~18k tokens por sessão); cada
+  comando do CLI recusa uma opção que não usa; corrido numa subpasta, o CLI e o servidor usam o projeto acima em vez de
+  criarem um novo `.specs/`; a guarda das aprovações pergunta quando não consegue decidir e cobre o `Monitor` e a edição
+  à mão dos ficheiros de estado.
+- **Mais inteligente onde importa** — as aprovações resistem a edições só de espaços; todos os hooks entendem os git
+  worktrees; uma execução prova o seu `_Verify:_` em mais grafias (aspas, `npm t`, `pushd`); o EARS lê `O SISTEMA DEVE`
+  com o nome do sistema (`A API DEVE`); o classificador reconhece palavras-passe, SSO, OIDC, machine learning e endpoints
+  REST; protocolo MCP 2025-11-25 com roots e progresso. O CHANGELOG lista cada correção.
 
 ### Novidades da 1.22
 
@@ -1236,6 +1269,23 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabajo, aprobaciones forzadas, solicitudes de
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
+
+### Novedades de la 1.23
+
+- **Una quinta revisión completa, corregida** — 68 problemas en el servidor, la CLI, los hooks, la evidencia, los gates, la
+  lectura del markdown y las importaciones, cada uno reproducido primero y guardado como test de regresión. Entre ellos:
+  `dev-spec evals --dry-run <feature>` ejecutaba una evaluación real, de pago; un tasks.md guardado por Windows PowerShell
+  5.1 perdía las tildes al marcar una tarea; un `.state.json` corrupto se leía como "nada aprobado"; una sección comentada
+  contaba como escrita; los corchetes anidados hacían caer los gates; un borrado confirmado en un cliente MCP podía borrar
+  otra función.
+- **Más ligero y más estricto** — las descripciones de las herramientas son un 40% más cortas (~31k → ~18k tokens por
+  sesión); cada comando de la CLI rechaza una opción que no usa; ejecutados desde una subcarpeta, la CLI y el servidor
+  usan el proyecto de arriba en lugar de crear un `.specs/` nuevo; la guardia de aprobaciones pregunta cuando no puede
+  decidir y cubre `Monitor` y la edición a mano de los archivos de estado.
+- **Más inteligente donde importa** — las aprobaciones resisten las ediciones solo de espacios; todos los hooks entienden
+  los git worktrees; una ejecución prueba su `_Verify:_` en más grafías (comillas, `npm t`, `pushd`); EARS lee
+  `LA API DEBE`; el clasificador reconoce contraseñas, SSO, OIDC, machine learning y endpoints REST; protocolo MCP
+  2025-11-25 con roots y progreso. El CHANGELOG lista cada corrección.
 
 ### Novedades de la 1.22
 

@@ -16,7 +16,7 @@ set determines which artifacts, design sections, and execution loop the feature 
 | **core** | EARS requirements → design → tasks → execute (the base flow) | always (every Spec-mode feature) |
 | **+tdd** | Test Plan + failing-tests-first + red-green-refactor execution | correctness matters / it's hard to undo |
 | **+saas** | 5 mandatory scale design sections, multi-tenancy, observability, cost, load test | production system with real users at scale |
-| **+ai** | Eval plan, prompts-as-code, token economics, safety, model lifecycle, eval-gated execution | feature quality depends on LLM/agent/embedding output |
+| **+ai** | Eval plan, prompts-as-code, token economics, safety, model lifecycle, eval-gated execution | feature quality depends on LLM/agent/embedding output — or a trained (machine learning) model's |
 | **+sec** | 5 mandatory `[SEC]` sections (STRIDE threat model, ASVS level, authn/authz, secrets, security testing), 3 criteria, abuse-case tests, `security.md` | a mistake here is a breach, not just a bug |
 | **+privacy** | 6 mandatory `[PRIVACY]` sections (data inventory, lawful basis, retention, data subject rights, processors & transfers, DPIA), 3 criteria, `privacy.md` | it collects, stores, shares, profiles or deletes personal data |
 | **+dist** | 5 mandatory `[DIST]` sections (consistency model, cross-system writes, delivery & idempotency, concurrency, failure modes), 4 criteria, failure-injection tests, `distributed.md` | one write reaches more than one system, or delivery, idempotency, concurrency or partial failure matter |
@@ -46,8 +46,12 @@ is a draft for the human, who confirms Phase 0.
   +api: api, endpoint, route, request, pagination; +ui: screen, page, form, button, dialog, dashboard, menu, icon; +obs: metrics, logs, latency, p99, monitor, deploy; +data: analytics, dataset, partition, transformation, a batch / nightly job, ingest, upsert, a data engineer) add to the score but never turn the track on alone: at least one strong
   or weak signal of that track must be there. "Print queue: … retry failed prints" stays *possible* (a note names the app-level words). Words of **one
   concept** count once: retry · backoff · jitter, consumer · producer · subscriber, dedupe · deduplicate.
-- Auth words (`authentication`, `authorization`, `RBAC`, `MFA`) are **strong for +tdd and weak for +sec**: "login with a
-  password" is `core +tdd` with a possible +sec note; "login with a password, RBAC and an audit log" turns +sec on.
+- Auth words (`authentication`, `authorization`, `RBAC`, `MFA`, `SSO` / single sign-on, `OIDC` / OpenID Connect, `SAML`) are
+  **strong for +tdd and weak for +sec**, and so is a password (*senha*, *palavra-passe*, *contraseña* — weak for +sec): "login
+  with a password" is `core +tdd` with a possible +sec note; "user authentication with email and password" or "login with a
+  password, RBAC and an audit log" turns +sec on. Role-based access control (*controlo / controle de acesso baseado em
+  funções / perfis / papéis*, *control de acceso basado en roles*) is strong for +sec. A version glued to a short keyword is
+  the keyword: OAuth2, GPT4, GPT4o, TLS1.3, Claude3.
 - Upper-case acronyms are matched case-sensitively where the lower-case word means something else: `STRIDE` (weak +sec)
   — a lower-case "stride" is an array stride; `CDC` (weak +dist).
 - A word may serve two tracks: `exactly-once` is strong for +tdd and +dist, `idempotent` / `webhook` strong for +saas and
@@ -333,8 +337,8 @@ consumer-driven contracts, (application/)problem+json, RFC 9457 / 7807, Idempote
 (and `X-RateLimit-Limit` / `-Remaining` / `-Reset`, `RateLimit-*`), Retry-After, the Sunset / Deprecation header
 (*versionamento da API, contrato da API, programadores externos, portal do programador, teste de contrato · versionado de
 la API, contrato de la API, desarrolladores externos, portal de desarrolladores, prueba de contrato*). **Ownership-ambiguous
-— weak, strong when the API is ours:** a public / REST / HTTP / web / JSON / partner API, an API version, problem details
-(*API pública, API REST, versão da API · versión de la API*) — strong beside an own cue ("our", expose, publish, offer,
+— weak, strong when the API is ours:** a public / REST / HTTP / web / JSON / partner API, a REST endpoint, an API version,
+problem details (*API pública, API REST, endpoint REST, versão da API · versión de la API*) — strong beside an own cue ("our", expose, publish, offer,
 provide, design, document, deprecate, "Build a REST API", *versionar*, *nuestra*) or when the name opens its clause or follows
 a plain article ("REST API for the mobile app…", "add rate limiting to the public API"); "Stripe REST API integration" or
 "show the problem details of each ticket" stay weak. **Weak:** a breaking change, backward compatible / compatibility, an

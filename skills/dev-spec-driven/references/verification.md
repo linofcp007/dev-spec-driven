@@ -314,9 +314,13 @@ with `nothingToVerify: true` (and no reason code) — nothing was run or atteste
 | `command-mismatch` | The run recorded is not a run of the task's `_Verify:_` command (`echo ok` for `npm test`, `npm test -- --grep x`, one of its two `_Verify:_` commands alone) — on an `_Expect: fail_` task, its red run | Run the `_Verify:_` command as written — all of them, joined with ` && `, when there are several — and record that run (`dev-spec done <feature> <n> --run`); an `_Expect: fail_` task: before the fix lands — a red run of another command never counts (the fix already in: set it aside with `git stash` for the red run, then restore it) |
 
 **Which run proves it.** The recorded `command` is compared with the task's `_Verify:_`: whitespace, backticks, quotes
-around the whole command or around a plain argument (`"tests/x.test.js"`), `\` for `/` (`tests\x.test.js`) and a
+around the whole command or around a plain argument (`"tests/x.test.js"`), single for double quotes when the quoted text
+holds none of `$` `` ` `` `\` `!` or a quote (`node -e 'process.exit(0)'`), the spacing around `&&` / `||` / `;` / `|`, a
+leading `./` on a path (`./tests/x.test.js` — never on `./gradlew` or Go's `./...`), npm's own aliases of `npm test` (`npm
+run test`, `npm t`), `\` for `/` (`tests\x.test.js`) and a
 trailing `2>&1` don't matter, nor does a leading `cd <project root> &&` (absolute, relative or `./`, any drive-letter case on
-Windows), `set -o pipefail;` or `VAR=value` of the run's own — a `cd` that ends anywhere else (`cd ../other-project`, `cd ..
+Windows; cmd.exe's `cd /d` / `chdir` / `pushd`, PowerShell's `Set-Location` / `sl` / `Push-Location` move the same way),
+`set -o pipefail;` or `VAR=value` of the run's own — a `cd` that ends anywhere else (`cd ../other-project`, `cd ..
 && cd packages/web`) runs the command there: another run; `cd #` (a comment in bash) and a `cd` inside `` `…` `` / `$(…)` prove
 nothing — but
 a prefix the `_Verify:_` itself holds must be there: `cd packages/web && npm test` is no run of `cd packages/api && npm

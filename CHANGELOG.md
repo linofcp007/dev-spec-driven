@@ -3,6 +3,114 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.23.0] — 2026-10-08
+
+A fifth full review — eight areas (the MCP server, the CLI, the Claude Code hooks, tasks and evidence, gates and state,
+markdown / trace / classifier, lifecycle / imports / exports, i18n and docs), 68 findings, each reproduced before it was
+fixed and each with a regression test — and the improvements it proposed: a 40% lighter tool list, a stricter CLI, an
+approval guard that fails closed, hooks that understand git worktrees, approvals that survive whitespace edits and a
+classifier with better recall.
+
+### Changed
+- **`tools/list` is 40% lighter** — the 38 tool descriptions went from ~124k to ~73k characters (about 31k → 18k tokens
+  per session in clients that load every tool up front); no description is longer than 2,500 characters, and every rule
+  an agent must follow (evidence before claims, approvals are the user's, what a refusal means) stays in it.
+- **The CLI is strict.** Each command refuses an option or an extra argument it doesn't use: `approve f req --remove` no
+  longer approves, `done f 3 4` no longer ticks task 3 alone, `--timeout` / `--shell` need `--run`, `--run` can't be mixed
+  with `--evidence` / `--exit` / `--cmd`. `--project` must name an existing folder (only `init` creates one). With `--json`,
+  usage errors and unexpected failures print `{ok: false, error}` on stdout too.
+- **The default project is the nearest dev-spec `.specs/` above the working folder** (after `--project` /
+  `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR`; MCP: then the client's first workspace root): run from `src/`, the CLI and the
+  server no longer start a second, nested `.specs/`. A variable left unexpanded (`${…}`, `$VAR`, `%VAR%`) is ignored.
+- **The approval guard fails closed** — a command naming the CLI and an approval word in a form it can't follow (a joined
+  string, a variable, an unknown launcher) asks you instead of passing. It also covers the `Monitor` tool, a hand edit of
+  a `.state.json` or `.specs/roadmap.json` (Write / Edit), a command too long to read whose unread part names dev-spec, and
+  more launchers (`cmd //c`, `$env:ComSpec`, `powershell -EncodedCommand`, `sh -c '…$0…'`, the CLI piped into `node -`,
+  globs, strace / tsx / nodemon / parallel…). `pwsh -File x.ps1 node cli/dev-spec.js approve …` now asks.
+- **Approvals survive whitespace** — trailing spaces or a final newline changed after an approval no longer need a
+  re-approval (compared with the approval's own `.history` snapshot; existing approvals keep their fingerprints). An
+  identical re-approval reuses its snapshot and no longer counts as rework.
+- **trace_check counts only what tasks cite** — the task blocks, with another feature's `checkout/US-2.AC-1` removed: a
+  stray note in tasks.md no longer covers an AC, and trace_check agrees with the traceability matrix. Sub-criterion IDs
+  (`US-1.AC-1.2`) are flagged instead of merging into `US-1.AC-1`.
+- **Markers read as markdown reads italics** — a `_Verify:_` whose command contains marker-like text goes in backticks.
+- **Classifier recall** — +sec: password / senha / contraseña, SSO, OIDC, SAML, role-based access control; +ai: machine
+  learning, deep learning; +api: "REST endpoint"; versions glued to a keyword (OAuth2, GPT4, TLS1.3, Claude3); short
+  Portuguese / Spanish summaries are read in their own language ("Erro no pagamento" keeps +tdd). On 13,717 test inputs
+  189 decisions changed, each one turning a track on.
+- **`spec_import` refuses a source over 2 MiB** of text instead of cutting it (a plan's steps used to vanish).
+
+### Added
+- **MCP:** protocol 2025-11-25 (elicitation only for clients with form mode); the client's `roots` as the default project
+  when no project folder is exported; `resources/list` in pages (`nextCursor`, no 500 cap); progress notifications while
+  a question waits for the user; a 32 MiB message cap (`DEV_SPEC_MCP_MAX_MESSAGE`).
+- **Doctor:** `state` (an unreadable `.state.json`), `verify-suspicious` (a `_Verify:_` starting with `_` / `*`, holding
+  inline code or an unpaired quote), the mermaid template diagram left untouched.
+- **EARS:** `THE <name> SHALL` (and `A API DEVE`, `LA API DEBE`) is the ubiquitous form.
+- **Commands:** `npm run test` / `npm t` prove `npm test`; `chdir`, `pushd` / `popd`, `Set-Location`, `Push-Location` read
+  as `cd`; quotes, unspaced `&&` / `||` / `;` / `|` and a leading `./` don't matter.
+- **Approvals:** one person signing a phase for two roles is warned (`sameSigner`).
+
+### Fixed
+- **Paid evals by mistake.** `dev-spec evals --dry-run <feature>`, `evals <feature> --help` and a mistyped `--dryrun` ran a
+  LIVE, paid eval: every flag now reaches the harness wherever it stands, and the harness refuses an unknown flag
+  (did-you-mean), a value flag without its value and an extra word, and prints its usage on `--help`.
+- **MCP.** A feature removal confirmed over elicitation deletes only the folder the user was shown (a rename while the
+  question waited deleted another feature). A call the client cancels while its question waits records nothing. The
+  question names the resolved slug, never the agent's raw text. A tool that throws answers the usual JSON
+  (`ok: false`, a localized error, the error `code`).
+- **Tasks and evidence.** A tasks.md in Windows' ANSI code page (Windows PowerShell 5.1's `Set-Content`) lost every accented
+  letter on a tick: tick / untick change only the checkbox's byte, and an append is refused until the file is UTF-8; a
+  UTF-16 tasks.md stays UTF-16. A title mentioning `_Verify:_` / `_Depends:_` became a bogus check or dependency. The task
+  brief quoted US-1.AC-10's design section for US-1.AC-1 (T-1 for T-10). `done --run --timeout` killed only the shell on
+  Windows (the whole tree now). A crashed run (abort, segfault, an access violation) was taken for an `_Expect: fail_`
+  task's red proof. Several `_Verify:_` commands keep one output summary each. cmd.exe's Portuguese / Spanish
+  "invalid file name" message is a failed run, not a red one.
+- **Gates and state.** An unreadable `.state.json` (a merge's conflict markers) read as "nothing approved" and next_action
+  looped on approve — doctor fails `state`, next_action says to repair it, finish blocks. A spec file that exists but can't
+  be read crashed approve / doctor / next_action / finish. A bugfix's open `[NEEDS CLARIFICATION]` in bug.md now blocks its
+  gates. A role's `tests` / `execution` sign-off older than a change no longer counts; revoking a per-role phase names its
+  role. The git merge driver applies "a revocation wins by time" to its result and keeps every task's run records. The
+  feature lock reclaims an earlier process's own-pid lock and a future-dated one, and never runs unlocked on Windows'
+  EPERM. A waiver's `--expires` is a UTC day, and says so.
+- **Markdown, trace, doctor.** A line of deeply nested brackets overflowed the stack in EARS, doctor, approve and clarify
+  (linear now). A section commented out with `<!-- -->` counted as written; a TODO inside a comment or a code example
+  marked one unfilled. Setext headings and headings indented up to three spaces are sections; one holding only
+  sub-headings, a rule or an empty table is unfilled. An AC in an indented code block is no criterion. T-1 = T-01 in
+  trace_check. Doctor's diagram check reads `~~~mermaid`, ignores one in a comment.
+- **Lifecycle, imports, exports.** `spec_add_track` and `spec_import` appended the track sections inside a code block left
+  open at the end of design.md (doctor still said "missing"; a second add wrote them twice). `spec_init`,
+  `steering_scaffold`, `spec_create` and `spec_add_track` wrote through a linked `.specs/steering/` or feature folder; the
+  export and ROADMAP copied a tasks.md linked outside `.specs/`. A feature name with line breaks injected headings and
+  criteria. `spec_create` on an existing feature says so (`existed: true`); two long names sharing a folder after the
+  64-character cut are refused, not merged. A slug both active and archived: archive / restore name the rename that
+  unblocks them. ROADMAP.md's Mermaid graph links only existing features (a feature named `end` broke it) and lists stale
+  dependencies under "Needs attention"; a broken roadmap.json never rewrites ROADMAP.md without its dependencies, backlog
+  and milestones. Truncated text never cuts an emoji in half.
+- **Claude Code integration.** In a git worktree the hooks and the status line read the checkout where the MCP server
+  records approvals and ticks. The subagent stop gate reads the report at the path the subagent names, in UTF-16 too, and
+  judges its runs by the command matcher (`tests/x.js` for `tests\x.js`, quoted or not). The edit guard reads
+  `file::$DATA` and Git Bash `/c/…` paths. The three working agents can use the PowerShell tool (Windows without Git Bash).
+  `mcp/servers.json` drops an undocumented `cwd`.
+- **CLI.** stdin in UTF-16 (PowerShell's `>`) was misread — `ears -` passed with 0 criteria. `scan` / `ears` / `import` paths
+  are relative to `--project` when given; `brief <f> ""` is refused; `merge-state --json` always prints its result.
+- **Languages.** A track pack's problems are written in the project's language (the rule a field breaks and why
+  track.json is no JSON were English text inside a Portuguese / Spanish message; a syntax error names its line). pt-BR:
+  "aguardando", a symlink is a "link".
+
+### Docs
+- `/spec-ff` and the workflows reference: a size-s feature with +ai fast-forwards to `eval-plan` (`test-plan`, as written,
+  was refused). Every list of the track markers names all nine. Claude Code's auto mode does show the approval guard's
+  prompt (only bypass-permissions may skip it). How the project folder is chosen (CLI help, tooling reference,
+  conventions). SKILL.md points to the references for the gates' and the evidence's details (4,745 → 4,526 words).
+  The maintainer notes cover every change above.
+
+### Tests
+- `node mcp/test.js` 1892 assertions (was 1803), `node cli/test-cli.js` 549 (was 535): a regression for every finding
+  above, including linear-time checks on nested brackets, the localized pack problems in four languages, a docs guard
+  against stale marker lists and the +ai fast-forward prose, the tools/list size budget, and a SessionStart hook run from
+  a folder holding another `.specs/`.
+
 ## [1.22.0] — 2026-10-08
 
 Reviews you can trust, and an optional simplification pass before finishing. Both ideas come from Anthropic's

@@ -9,6 +9,7 @@ exports.run = ({ ok, run, tmp, __dirname }) => {
   const rd = (...p) => fs.readFileSync(path.join(...p), "utf8");
   const help = run(["help"]).out;
   const pd = path.join(tmp, "p21-data");
+  fs.mkdirSync(pd, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
 
   // classify turns +data on in EN and PT; init data --lang es writes the ES data.md; create --tracks tdd,data (PT) → status in PT
   const en = run(["classify", "Build an ETL pipeline that loads the orders into BigQuery every night", "--project", pd]);

@@ -27,7 +27,7 @@ files a finished feature recorded) collide at merge time — suggest ordering th
 done) or `done`; ROADMAP.md shows a Milestones table.
 
 Relay the **needs attention** items: blocked dependencies, open clarifications, unfilled track sections
-(`[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]`), template placeholders in the current phase, artifacts changed since
+(every active track's — `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]` / `[API]` / `[UI]` / `[OBS]` / `[DATA]` — and a track pack's), template placeholders in the current phase, artifacts changed since
 their approval, **forced** approvals, missing role sign-offs, overlaps, a spike past its timebox, and ticked tasks
 without a passing run (each task with its reason — latest run failed, note only, stale or shared-number evidence, an
 unexpected pass, a run of another command than its `_Verify:_`), and late or at-risk milestones. The roadmap is auto-generated on every mutation and by a hook, so it's normally already up to date —

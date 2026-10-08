@@ -48,14 +48,16 @@ function finish() {
 // NAME=value assignments (quotes honoured) and a trailing 2>&1 dropped, then backticks and quotes dropped, `\` read as `/`,
 // whitespace folded — must each appear in a tasks.md (or a meta.checks command) read the same way. A SUPERSET of the engine's
 // matcher (runProvesVerify — review 3: `node --test tests\x.test.js`, `CI=1 npm run lint`, a reversed join used to miss it): the
-// engine decides. Cheap: a few string passes, no parse.
-const norm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim();
+// engine decides. Cheap: a few string passes, no parse. (Review 5: pipes unspaced, a word's leading `./` dropped, npm's aliases of
+// `npm test`, `&&` however spaced, and chdir / pushd / popd / Set-Location / sl / Push-Location / Pop-Location parts too.)
+const norm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim()
+  .replace(/ ?(\|+) ?/g, "$1").replace(/(^|[ ;&|(=])\.\//g, "$1").replace(/\bnpm (?:run(?:-script)? test|t|tst)(?=$|[ ;&|])/g, "npm test");
 const RE_ENV = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s"'`;&|]*)\s+)+/;
 function bodies(cmd) {
   const out = [];
-  for (let part of String(cmd == null ? "" : cmd).replace(/\s+/g, " ").split(/ && |;/)) {
+  for (let part of String(cmd == null ? "" : cmd).replace(/\s+/g, " ").split(/\s*&&\s*|;/)) {
     part = part.trim();
-    if (!part || /^cd(?:\s|$)/i.test(part) || /^set\s.*pipefail\s*$/.test(part)) continue;
+    if (!part || /^(?:cd|chdir|pushd|popd|sl|set-location|push-location|pop-location)(?:\s|$)/i.test(part) || /^set\s.*pipefail\s*$/.test(part)) continue;
     const b = norm(part.replace(RE_ENV, "").replace(/\s+2>&1$/, ""));
     if (b) out.push(b);
   }
@@ -222,8 +224,16 @@ function main(raw) {
   let spec = null;
   const dirs = projectDirsOf(payload);
   const parts = bodies(command);
-  for (const pdir of dirs) {
-    if (!parts.length || !mentioned(pdir, parts)) continue;
+  const hits = parts.length ? dirs.filter((d) => mentioned(d, parts)) : []; // the pre-filter, once per project
+  // 1.23 review 5 (M8): once some project passed the pre-filter, the session's project too (spec.sessionProject — a worktree's
+  // copy mapped to the checkout the MCP server records in), when it isn't one of them already (no CLAUDE_PROJECT_DIR exported).
+  if (hits.length) {
+    spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+    const s = spec.sessionProject({ cwd: payload.cwd, anchors: [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR] });
+    const key = (d) => (process.platform === "win32" || process.platform === "darwin" ? path.resolve(d).toLowerCase() : path.resolve(d));
+    if (s && !dirs.some((d) => key(d) === key(s.project)) && mentioned(s.project, parts)) { dirs.push(s.project); hits.push(s.project); }
+  }
+  for (const pdir of hits) {
     const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : pdir;
     spec = spec || require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
     // The engine strips a `cd <dir> &&` whose folder is this project or another one the run belongs to (dirs: a worktree's and

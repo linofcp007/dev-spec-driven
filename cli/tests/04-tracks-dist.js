@@ -7,6 +7,7 @@ const path = require("path");
 exports.run = ({ ok, run, tmp }) => {
   const js = (v) => JSON.stringify(v);
   const pd = path.join(tmp, "p17d-proj");
+  fs.mkdirSync(pd, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
   const rd = (...p) => fs.readFileSync(path.join(...p), "utf8");
   const en = run(["classify", "Create an endpoint that writes a user to Postgres and publishes a UserCreated event to Kafka for other services", "--project", pd]);
   const es = run(["classify", "Crear un endpoint que escribe un usuario en Postgres y publica un evento UserCreated en Kafka para otros servicios", "--project", pd]);

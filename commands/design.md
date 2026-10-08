@@ -49,7 +49,7 @@ health & capacity (+obs — `references/observability-patterns.md`); the 5 `[DAT
 data quality, pipeline idempotency & backfills, lineage & ownership, retention & cost (+data — `references/data-pipeline-patterns.md`). No mandatory section may be blank — an honest "not needed because X" is
 acceptable; remove each `> **TODO**` sentinel and template placeholder as you fill it (saving `design.md` reports what
 is still open, and the design approval is refused while a track section, the Constitution Check or a placeholder is
-unfilled). Keep the markers `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]` exactly (English, case-sensitive). In an
+unfilled). Keep the markers `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]` / `[API]` / `[UI]` / `[OBS]` / `[DATA]` exactly (English, case-sensitive). In an
 existing codebase, fill `integration-plan.md` alongside. A design decision worth keeping goes to `/spec-decide`. See
 `references/scale-design-template.md`, `references/mandatory-ai-design-sections.md`,
 `references/security-track.md`, `references/privacy-track.md` and `references/distributed-data-patterns.md`. On a design-first feature this phase comes before

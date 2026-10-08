@@ -7,6 +7,7 @@ const path = require("path");
 exports.run = ({ ok, run, tmp, require, __dirname }) => {
   const SB1 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const b1 = path.join(tmp, "pb1-proj");
+  fs.mkdirSync(b1, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
   const tpl = (...p) => path.join(b1, ".specs", "templates", ...p);
   const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
   const lsEmpty = run(["templates", "--project", b1]);

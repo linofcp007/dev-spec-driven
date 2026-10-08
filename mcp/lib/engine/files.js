@@ -15,17 +15,43 @@ const path = require("path");
 const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let errs, existingFeature, projectLang, roadmapPath;
-function __link(E) { ({ errs, existingFeature, projectLang, roadmapPath } = E); }
+let errs, existingFeature, isDevSpecDir, projectLang, roadmapPath;
+function __link(E) { ({ errs, existingFeature, isDevSpecDir, projectLang, roadmapPath } = E); }
 
 // ---------------------------------------------------------------------------
 // Paths & small fs helpers
 // ---------------------------------------------------------------------------
 
+// The project folder every surface works in (the CLI, the MCP server, the eval harness, the MCP resources): the explicit
+// argument (CLI --project, a tool's projectDir) > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the
+// working folder that holds a dev-spec .specs/ (nearestProject — run from a subfolder, a command used to start a SECOND,
+// nested .specs/ there) > the working folder itself (a project not set up yet: init creates it there).
+// 1.23 review: a value holding a variable left unexpanded — any "${", a leading $NAME, a %NAME% — is unusable and falls
+// through (a SPEC_PROJECT_DIR of "${CLAUDE_PROJECT_DIR}/", "$CLAUDE_PROJECT_DIR" or "%CLAUDE_PROJECT_DIR%" created that
+// literal folder; only a whole "${VAR}" was caught).
+const RE_UNEXPANDED_VAR = /\$\{|^\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%/;
+const PROJECT_MAX_UP = 64; // folders walked up from the working folder (a few stats each, never a walk down)
+function unexpandedVar(v) { return RE_UNEXPANDED_VAR.test(String(v == null ? "" : v).trim()); }
 function resolveProjectDir(arg) {
-  const usable = (v) => v != null && String(v).trim() && !/^\$\{[^}]*\}$/.test(String(v).trim()) ? String(v).trim() : null;
-  const dir = usable(arg) || usable(process.env.SPEC_PROJECT_DIR) || usable(process.env.CLAUDE_PROJECT_DIR) || process.cwd();
-  return path.resolve(dir);
+  const usable = (v) => (v != null && String(v).trim() && !unexpandedVar(v) ? String(v).trim() : null);
+  const dir = usable(arg) || usable(process.env.SPEC_PROJECT_DIR) || usable(process.env.CLAUDE_PROJECT_DIR);
+  if (dir) return path.resolve(dir);
+  const cwd = path.resolve(process.cwd());
+  return nearestProject(cwd) || cwd;
+}
+// The nearest folder at or above `start` that holds a dev-spec .specs/ (isDevSpecDir: roadmap.json, steering/ or a feature's
+// .state.json) — `start` itself also with any .specs/ folder (one made by hand before init) — or null. A network path is never
+// walked (isNetworkPath: no stat goes up a share).
+function nearestProject(start) {
+  if (isNetworkPath(start)) return null;
+  let dir = path.resolve(start);
+  for (let i = 0; i < PROJECT_MAX_UP; i++) {
+    if ((i === 0 && isDirSafe(path.join(dir, ".specs"))) || isDevSpecDir(dir)) return dir;
+    const up = path.dirname(dir);
+    if (up === dir) return null;
+    dir = up;
+  }
+  return null;
 }
 
 function specsRoot(projectDir) {
@@ -122,6 +148,7 @@ const LOCK_NOTELESS_STALE_MS = 5 * 1000;
 const LOCK_NESTED_MIN_MS = 500;
 let LOCK_DEADLINE = null; // the acquisition deadline of the outermost lock this process is inside (null: none)
 const HELD_LOCKS = new Map(); // lock key → this process's acquisition { token, ino, mtimeMs } (re-entrant, and what release checks)
+const PROCESS_START_MS = Date.now() - process.uptime() * 1000; // when this process started (staleLock: a lock older than it isn't its own)
 // The lock file as it is now: its note (raw text, null when it can't be read — a directory, a file being deleted) and
 // the stat that identifies it. null: gone, or it changed while being read (the caller just retries).
 function lockSnapshot(lock) {
@@ -139,10 +166,16 @@ const sameLockSnapshot = (a, b) => !!a && !!b && a.raw === b.raw && a.ino === b.
 function staleLock(lock) {
   const snap = lockSnapshot(lock);
   if (!snap) return null;
-  const age = Date.now() - snap.mtimeMs;
+  // r5 review: the age of a lock dated in the FUTURE (another machine's clock on a shared folder, a copied file) counts as well — it
+  // never aged, and blocked the feature until the clock caught up (a day ahead: a day). Symmetric with a clock that is behind.
+  const age = Math.abs(Date.now() - snap.mtimeMs);
   let info = null;
   try { info = JSON.parse(snap.raw); } catch { /* being written, or not ours */ }
   let stale = age > LOCK_STALE_MS || (!isObj(info) && snap.raw != null && age > LOCK_NOTELESS_STALE_MS);
+  // r5 review: a note naming THIS process (this host, this pid) on a lock written BEFORE this process started was left by an earlier
+  // process that had the same pid — a recycled pid, a container's pid 1 with a fixed hostname: its holder is gone (it waited
+  // LOCK_STALE_MS). One written since may be another engine instance or worker thread of this very process: respected, as before.
+  if (isObj(info) && info.host === require("os").hostname() && info.pid === process.pid && snap.mtimeMs < PROCESS_START_MS - 1000) stale = true;
   if (isObj(info) && info.host === require("os").hostname() && Number.isSafeInteger(info.pid) && info.pid > 0 && info.pid !== process.pid) {
     try {
       process.kill(info.pid, 0); // signal 0: an existence probe, nothing is sent
@@ -214,7 +247,7 @@ function withLockFile(lock, fn, opts = {}) {
   const note = JSON.stringify({ pid: process.pid, host: require("os").hostname(), at: new Date().toISOString(), token: mine.token });
   let acquired = false;
   let delay = 5;
-  let denied = 0; // consecutive EPERM/EACCES: Windows answers that for a lock being deleted — or the folder is read-only
+  let denied = 0; // consecutive refusals to create ANY file in the folder (acquireLockFile's readOnly): a read-only folder
   let stuck = false; // the last stale lock seen could not be removed
   while (!acquired) {
     try {
@@ -230,8 +263,13 @@ function withLockFile(lock, fn, opts = {}) {
         } else stuck = false;
         // Otherwise it waits like a held lock — a stale lock that can't be removed included: the deadline and the sleep
         // below always run (a `continue` here spun at 100% CPU forever on an undeletable one, freezing the MCP server).
-      } else if ((e.code === "EPERM" || e.code === "EACCES" || e.code === "EBUSY") && ++denied < 10) {
-        /* transient on Windows: retry below */
+      } else if (e.readOnly && ++denied < 10) {
+        /* the folder refused the note's temp file: maybe transient (a scanner) — retry below, then run unlocked */
+      } else if (!e.readOnly && (e.code === "EPERM" || e.code === "EACCES" || e.code === "EBUSY")) {
+        // r5 review: the temp file was written, the lock itself refused — Windows answers that for a lock being deleted (another
+        // holder's release, a scanner's open handle on it): a held lock, waited for until the deadline (busy). After 10 such answers
+        // in a row it ran UNLOCKED, beside the next holder.
+        denied = 0;
       } else {
         // No lock possible here (the folder vanished while we waited — removed / renamed / archived — or is read-only, or an
         // odd file system): run unlocked, as before, but on FRESH reads — the caller's pre-lock check ("the feature exists")
@@ -267,13 +305,17 @@ function withLockFile(lock, fn, opts = {}) {
 function acquireLockFile(lock, note, mine) {
   const tmp = lock + "." + process.pid + "." + Date.now() + "." + Math.floor(Math.random() * 1e6) + ".tmp";
   let linked = false;
+  let tmpWritten = false;
   try {
     fs.writeFileSync(tmp, note, { encoding: "utf8", flag: "wx" });
+    tmpWritten = true;
     fs.linkSync(tmp, lock);
     linked = true;
   } catch (e) {
     if (e.code === "EEXIST" || e.code === "ENOENT") throw e; // held (or a temp name taken: retried) / no folder: the caller decides
-    // no hard links here, or the temp file couldn't be written: the O_EXCL create below throws the real reason
+    // r5 review: no file at all can be created here — a read-only folder (or file system): the caller runs unlocked, as before
+    if (!tmpWritten && (e.code === "EACCES" || e.code === "EPERM" || e.code === "EROFS")) { e.readOnly = true; throw e; }
+    // no hard links here: the O_EXCL create below throws the real reason (EEXIST held; EPERM / EACCES: a lock being deleted)
   } finally {
     try { fs.unlinkSync(tmp); } catch { /* never created */ }
   }
@@ -788,7 +830,7 @@ function isNetworkPath(p) {
   return host !== "wsl$" && host !== "wsl.localhost";
 }
 
-module.exports = { resolveProjectDir, specsRoot, ensureDir, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
+module.exports = { resolveProjectDir, unexpandedVar, nearestProject, specsRoot, ensureDir, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
   writeFileAtomic, SLEEP_CELL, sleepSync, LOCK_FILE, LOCK_WAIT_MS, LOCK_STALE_MS, LOCK_MAX_HOLD_MS, LOCK_RECLAIM_SUFFIX,
   LOCK_RECLAIM_STALE_MS, LOCK_NOTELESS_STALE_MS, LOCK_NESTED_MIN_MS, HELD_LOCKS, lockSnapshot, sameLockSnapshot,
   staleLock, reclaimStaleLock, releaseLock, lockWaitMs, withFeatureLock, withLockFile, acquireLockFile, featureLocked,

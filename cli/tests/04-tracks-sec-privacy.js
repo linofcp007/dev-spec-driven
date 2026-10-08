@@ -6,6 +6,7 @@ const path = require("path");
 
 exports.run = ({ ok, run, tmp }) => {
   const a2 = path.join(tmp, "pa2-proj");
+  fs.mkdirSync(a2, { recursive: true }); fs.mkdirSync(path.join(tmp, "pa2-steer"), { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
   const cls = run(["classify", "Threat model the export and pseudonymize personal data", "--project", a2]);
   const clsEs = run(["classify", "Modelo de amenazas y cifrado en reposo de los datos personales", "--project", a2]);
   ok(cls.code === 0 && /Tracks: core \+sec \+privacy/.test(cls.out) && /sec=medium, privacy=high/.test(cls.out) && /\+sec: ON/.test(cls.out) && /\+privacy: ON/.test(cls.out) &&

@@ -744,7 +744,8 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       "Adicionar productos al carrito, no usar LLM.", "Excluir los pedidos cancelados del informe; no usar Kafka."].map((t) => [t, cls(t)]);
     const vEn = ["Spanish UI labels: Guardar, Enviar, Cancelar; no LLM.", "Translate buttons. Enviar. Pagar. No LLM translation."].map((t) => [t, cls(t)]);
     const vEsProj = S.classify("Alterar el formulario de registro; no usar LLM.", { fallbackLang: "es" });
-    const vTie = [S.classify("Excluir contas inativas").lang, S.classify("Excluir contas inativas", { fallbackLang: "es" }).lang, S.classify("Publicar eventos no Kafka.", { fallbackLang: "pt" }).lang];
+    // (review 5: "contas" is a Portuguese word now — PT_WORDS — so the tie is "Excluir registros", a word both languages have)
+    const vTie = [S.classify("Excluir registros").lang, S.classify("Excluir registros", { fallbackLang: "es" }).lang, S.classify("Publicar eventos no Kafka.", { fallbackLang: "pt" }).lang];
     ok(vEs.every(([, r]) => r.lang === "es" && r.tracks.join(",") === "core") && vEn.every(([, r]) => r.lang === "en" && r.tracks.join(",") === "core") &&
       vEsProj.lang === "es" && vEsProj.tracks.join(",") === "core" && /siempre activo/.test(vEsProj.reasoning) && js(vTie) === js(["pt", "es", "pt"]) &&
       g1.lang === "pt" && g1.tracks.includes("dist") && g2.lang === "pt" && g2.tracks.includes("dist") && enNeg.every((r) => r.lang === "en" && !r.tracks.includes("dist")) &&

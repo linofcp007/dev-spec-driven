@@ -28,7 +28,8 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   unknownTracksError, userDefaultsApplied, VALID_TRACKS, validateApprovalRoles, withRoadmapLock, writeChecks,
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
-  trackSectionReport, sectionVerdict;
+  trackSectionReport, sectionVerdict,
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite; // 1.23 review 5
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -45,7 +46,25 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   unknownTracksError, userDefaultsApplied, VALID_TRACKS, validateApprovalRoles, withRoadmapLock, writeChecks,
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
-  trackSectionReport, sectionVerdict } = E); }
+  trackSectionReport, sectionVerdict,
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite } = E); }
+
+// 1.23 review 5 — the first of `files` a write would reach through a link (a .specs/<feature>/ or .specs/steering/ that is a
+// symbolic link / junction, or resolves outside the real .specs/ — specsWriteContained) → that folder as `.specs/<rel>/`, else
+// null. spec_export and templates init refused such a folder; init, steering_scaffold, create and add_track wrote through it.
+function linkedSpecsFolder(projectDir, files) {
+  for (const f of files) {
+    if (!specsWriteContained(projectDir, f)) return ".specs/" + toPosix(path.relative(specsRoot(projectDir), path.dirname(f))) + "/";
+  }
+  return null;
+}
+// An existing spec file with `addition` appended as every spec writer appends (appendSpecText: an open code fence at its end
+// closed first, its line ends kept; `opts` as there) — never through a link (linkedSpecsFolder). → true when written.
+function appendSpecFile(projectDir, file, raw, addition, opts) {
+  if (linkedSpecsFolder(projectDir, [file])) return false;
+  writeFileAtomic(file, appendSpecText(raw, addition, opts));
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // Steering scaffolding
@@ -64,6 +83,10 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const pt = parseTracks(tracks);
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(normalizeLang(lang || projectLang(projectDir)), pt.unknown) };
   const steering = path.join(root, "steering");
+  // 1.23 review 5 — never through a linked .specs/steering/ (its stubs were created in the folder it points at), refused before
+  // anything is written
+  const linked = linkedSpecsFolder(projectDir, [path.join(steering, "constitution.md")]);
+  if (linked) return { ok: false, linked: true, error: i18n.msg(normalizeLang(lang || projectLang(projectDir))).err.specsLinked(linked) };
   // Before anything is written: a project with no feature yet is brand-new (stamped with this engine's version below).
   const fresh = featureDirs(projectDir).length === 0;
   // 1.16 C2: no lang given, a brand-new project without a language of its own → the user's DEFAULT_LANG option (seeded below
@@ -160,6 +183,8 @@ function scaffoldSteeringFile(projectDir, fileName, lang) {
     stub = customSteeringStub(fileName, lng);
     custom = true;
   }
+  const linked = linkedSpecsFolder(projectDir, [path.join(steering, fileName)]); // 1.23 review 5: never through a linked steering/
+  if (linked) return { ok: false, linked: true, error: i18n.msg(lng).err.specsLinked(linked) };
   // The project's template for this file (.specs/templates/[<lang>/]steering/<file>) when there is one (1.14).
   const s = steeringScaffold(projectDir, fileName, lng, ["core"], () => stub);
   const created = writeIfAbsent(path.join(steering, fileName), s.text);
@@ -580,6 +605,19 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   if (!f.ok) return { ok: false, error: f.error };
   const { slug, dir } = f;
   const existed = fs.existsSync(dir);
+  // 1.23 review 5 — the name as the scaffolds write it (every title, {{name}}): ONE line, like a backlog name. A line break in it
+  // opened a heading in every artifact ("Login\n## US-9 …\n- **US-9.AC-1** …" put a real criterion into requirements.md).
+  name = flatText(name);
+  // … and never through a link: a .specs/<feature>/ that is a symbolic link / junction (or resolves outside .specs/) got every
+  // scaffold — and later its ticks and approvals — written into the folder it points at.
+  const linked = linkedSpecsFolder(projectDir, [statePath(dir)]);
+  if (linked) return { ok: false, linked: true, error: errs(projectDir).specsLinked(linked) };
+  // A folder name keeps the slug's first 64 characters: a long name that reaches an EXISTING feature holding another long name
+  // (they differ only past the cut) is refused — the re-run used to answer ok and drop the new feature's summary silently.
+  if (existed && slugifyFull(name) !== slugify(name)) {
+    const held = specTitle(readIfExists(path.join(dir, "requirements.md")) || readIfExists(path.join(dir, SPIKE_FILE)) || readIfExists(path.join(dir, "bug.md")) || "", slug);
+    if (held !== slug && slugifyFull(held) !== slugifyFull(name)) return { ok: false, slugTaken: true, feature: slug, error: errs(projectDir).slugTaken(slug, held, name) };
+  }
   const pt = parseTracks(tracks);
   const given = pt.given;
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir)), pt.unknown) };
@@ -717,8 +755,20 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
         if (L) { res.signalOverrides = L; learnNote = signalLearnNote(L, lng); }
       } catch { /* best-effort */ }
     }
-    maybeRefreshRoadmap(projectDir);
-    const notes = [kindNote, langNote, sizeNote, newTracks.length ? i18n.msg(lng).tracks.addedOnCreate(slug, newTracks.map((x) => "+" + x).join(", ")) : null, learnNote].filter(Boolean);
+    if (!(opts && opts.refresh === false)) maybeRefreshRoadmap(projectDir); // (spec_import refreshes once, after its own writes)
+    // 1.23 review 5 — a re-run says so (`existed`): nothing was re-created, and a summary given now was not written. A NEW feature
+    // whose slug an ARCHIVED one holds too is noted: restoring that one later needs one of them renamed first.
+    // (tracks added on a re-run: tracks.addedOnCreate already says it existed)
+    let existedNote = null;
+    if (existed) {
+      res.existed = true;
+      if (!newTracks.length) existedNote = i18n.msg(lng).createExisted(slug);
+    } else if (isDirSafe(path.join(f.root, "_archive", slug))) {
+      res.archivedTwin = true;
+      existedNote = i18n.msg(lng).createArchivedTwin(slug);
+    }
+    const summaryKept = existed && summary != null && String(summary).trim() ? i18n.msg(lng).createSummaryKept : null;
+    const notes = [existedNote, kindNote, langNote, sizeNote, newTracks.length ? i18n.msg(lng).tracks.addedOnCreate(slug, newTracks.map((x) => "+" + x).join(", ")) : null, summaryKept, learnNote].filter(Boolean);
     if (notes.length) res.note = notes.join(" ");
     if (size) res.size = size; // 1.21 F5 (only for a sized feature: the 1.20 result is unchanged)
     // C3: the flow — named when created design-first, ignored (a bugfix …) or kept (an existing feature); `flow` only when design-first.
@@ -1014,8 +1064,18 @@ function steeringImpactLines(r) {
 // append-if-missing, never a rewrite of what the user wrote.
 function applyTracks(projectDir, f, name, trs, lng) {
   const { slug, dir, root } = f;
+  name = flatText(name); // one line in every title it reaches (1.23 review 5)
   const state = readState(projectDir, slug);
   if (state.invalid) return { ok: false, error: state.invalid };
+  const coreSteering = steeringFilesForTracks([]);
+  // 1.23 review 5 — never through a link: the feature folder, and .specs/steering/ when a track brings a steering file
+  const steeringOut = trs.flatMap((tr) => steeringFilesForTracks([tr]).filter((x) => !coreSteering.includes(x))).map((sf) => path.join(root, "steering", sf));
+  const linked = linkedSpecsFolder(projectDir, [statePath(dir), ...steeringOut.slice(0, 1)]);
+  if (linked) return { ok: false, linked: true, error: i18n.msg(lng).err.specsLinked(linked) };
+  // Review 5 (P3): a track's template tasks are appended to tasks.md in its own encoding — refused up front, nothing written,
+  // when its bytes are no text in it (Windows' ANSI code page: the rewrite made every accented letter U+FFFD).
+  const tasks0 = trs.some((t) => t !== "tdd" && t !== "core") ? readIfExists(path.join(dir, "tasks.md")) : null;
+  if (tasks0 != null && !tasksRewrite(path.join(dir, "tasks.md"), tasks0, tasks0)) return { ok: false, error: errs(projectDir, slug).tasksNotText(isChangeDir(dir) ? CHANGE_FILE : "tasks.md") };
   const T = i18n.msg(lng).tracks;
   const before = detectTracks(dir);
   const after = allTracks().filter((t) => before.includes(t) || trs.includes(t));
@@ -1037,7 +1097,6 @@ function applyTracks(projectDir, f, name, trs, lng) {
     if (writeIfAbsent(path.join(dir, rel), s.text)) { note(rel); if (s.template) templates[rel] = s.template; }
   };
   const scaf = (key, builtIn, o) => scaffoldText(projectDir, key, lng, { name, slug, summary: "", tracks: after }, builtIn, o);
-  const coreSteering = steeringFilesForTracks([]);
 
   for (const tr of trs) {
     if (tr === "tdd") {
@@ -1063,10 +1122,9 @@ function applyTracks(projectDir, f, name, trs, lng) {
     const block = () => sizeDesignText(trackDesignBlock(tr, lng, { name, slug }), after, size, lng);
     if (design != null) {
       const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(design)) : !adopted.includes(tr) && headingHasMarker(design, trackMarker(tr));
-      if (!present) {
-        writeFileAtomic(designPath, design.trimEnd() + "\n" + block()); // trimEnd: no /\s*$/ backtracking
-        note(T.addedDesign);
-      }
+      // appended as every spec writer appends (1.23 review 5): a code block design.md leaves open at its end is closed first — the
+      // sections landed inside it, doctor read them 'missing' and a second add wrote them twice
+      if (!present && appendSpecFile(projectDir, designPath, design, block(), { trim: true })) note(T.addedDesign);
     } else if (tr !== "tdd") {
       // A bugfix has no design.md: the escalated track's mandatory sections still need a home (localized title).
       if (writeIfAbsent(designPath, T.designTitle(name) + "\n" + block())) note(T.addedDesign);
@@ -1087,10 +1145,8 @@ function applyTracks(projectDir, f, name, trs, lng) {
     const tasksText = readIfExists(tasksPath);
     if (tasksText != null) {
       const block = sizeTasksText(trackTaskBlock(tr, tasksText, readIfExists(path.join(dir, "requirements.md")), lng, undefined, readIfExists(path.join(dir, "test-plan.md")), { name, slug }), after, size);
-      if (block) {
-        writeFileAtomic(tasksPath, tasksText.trimEnd() + "\n" + block); // never a torn tasks.md for a concurrent reader
-        note(T.addedTasks);
-      }
+      // atomic (never a torn tasks.md for a concurrent reader), after a code block left open at its end is closed (1.23 review 5)
+      if (block && appendSpecFile(projectDir, tasksPath, tasksText, block, { trim: true })) note(T.addedTasks);
     }
   }
 
@@ -1244,7 +1300,7 @@ function restoreCoveredSections(dir, gone, after, lng, vars) {
     names.push(lines[h].replace(/^##\s+/, "").trim());
   }
   if (!blocks.length) return [];
-  writeFileAtomic(designPath, design.trimEnd() + "\n\n" + blocks.join("\n\n") + "\n");
+  writeFileAtomic(designPath, appendSpecText(design, blocks.join("\n\n") + "\n", { trim: true, join: "\n\n" })); // an open fence closed first (1.23 review 5)
   return names;
 }
 

@@ -25,7 +25,7 @@ What to tell the user when they edit a template:
 
 - Variables: `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}` `{{date}}` (in a spike template `{{summary}}`
   is the spike's question) — an unknown `{{x}}` is left as is. Details: `references/steering-templates.md`.
-- Keep the **English-stable** tokens exactly: AC IDs `US-n.AC-m`, test IDs `T-nn`, `[SaaS]`/`[AI]`/`[SEC]`/`[PRIVACY]`/`[DIST]`,
+- Keep the **English-stable** tokens exactly: AC IDs `US-n.AC-m`, test IDs `T-nn`, `[SaaS]`/`[AI]`/`[SEC]`/`[PRIVACY]`/`[DIST]`/`[API]`/`[UI]`/`[OBS]`/`[DATA]`,
   `> **TODO**`, `_Requirements:_`, `_Verify:_`, `**Checkpoint:**`.
 - Leave `[bracketed]` slots for what each feature must fill: they count as template placeholders, so an untouched
   scaffold stays unapprovable. A template with no slot at all scaffolds a file its gate could approve unedited.

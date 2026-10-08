@@ -946,4 +946,36 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname 
       "1.22 review 4: an inflected factor word away from an auth word is no signal ('multi-factored discount'); 'autenticação forte / obrigatória de dois fatores', 'autenticación obligatoria / reforzada de doble factor', 'logs in / inicia sesión / iniciam sessão com …' keep the factor word (ON with another +sec word) (got " +
       js([offs.map(([t, l]) => sig(t, l)), ons.map(([t, l]) => [on(t, l), sig(t, l)])]) + ")");
   }
+
+  { // review 5 (L29 + recall) — a short PT / ES summary in an English project; a version glued to a keyword; the missing auth / ML / REST words
+    const js = (v) => JSON.stringify(v);
+    const d = path.join(tmp, "proj-r5-classify");
+    S.initProject(d, ["core"], "en");
+    const cl = (t, o) => S.classify(t, o || { projectDir: d });
+    const tr = (t, o) => cl(t, o).tracks.filter((x) => x !== "core").join(",");
+    // L29a: one language's content words mark the language in a text with no English function word — its "no" is PT em + o
+    const ptNo = [["Erro no pagamento", "tdd"], ["Cupom de desconto no checkout", "tdd"], ["Campo de email no login", "tdd"], ["Alertas no PagerDuty", "obs"]]
+      .map(([t, w]) => [t, cl(t).lang, tr(t), w]);
+    const enNo = [["No Kafka", ""], ["We need no Kafka", ""], ["No payments in the MVP", ""], ["Show the pagamento status in the dashboard", "tdd"]]
+      .map(([t, w]) => [t, cl(t).lang, tr(t), w]);
+    ok(ptNo.every(([, l, g, w]) => l === "pt" && g === w) && enNo.every(([, l, g, w]) => l === "en" && g === w) && cl("Exportar facturas").lang === "es",
+      "review 5 (L29): 'Erro no pagamento', 'Cupom de desconto no checkout', 'Campo de email no login', 'Alertas no PagerDuty' read PT in an English project (their 'no' is em + o: +tdd / +obs kept); 'No Kafka', 'We need no Kafka' stay English negations; a PT word in an English sentence changes nothing (got " +
+      js([ptNo, enNo]) + ")");
+    // L29b: a version glued to an acronym-sized keyword or a product name; never to a longer word, never a track pack's
+    const ver = ["Use OAuth2 for the partner sign-in", "Upgrade the summaries to GPT4", "Use GPT4o for the summaries", "Support TLS1.3 only", "Summaries with Claude3", "Use Gemini1.5 to tag photos"]
+      .map((t) => [t, tr(t, {})]);
+    ok(js(ver.map(([, g]) => g)) === js(["tdd", "ai", "ai", "", "ai", "ai"]) && cl("Support TLS1.3 only", {}).signals.sec.join() === "tls" &&
+      !cl("Raging rivers", {}).signals.ai.length && !cl("Billing10x report", {}).signals.tdd.length,
+      "review 5 (L29): OAuth2 / GPT4 / GPT4o / TLS1.3 / Claude3 / Gemini1.5 are their keyword's signal (TLS a weak +sec one); 'raging' and 'Billing10x' are not (got " + js(ver) + ")");
+    // recall: +sec (password, SSO / OIDC / SAML, role-based access control), +ai (machine learning), +api (a REST endpoint) — EN / PT / ES
+    const rec = [["Add user authentication with email and password", "sec"], ["Use OAuth2 / OIDC single sign-on for employees", "sec"],
+      ["Role-based access control for admins", "sec"], ["Controle de acesso baseado em papéis para administradores", "sec"], ["Control de acceso basado en roles", "sec"],
+      ["Detect fraud with a machine learning model", "ai"], ["Detetar fraude com aprendizagem automática", "ai"], ["Detectar fraude con aprendizaje automático", "ai"],
+      ["Expose a REST endpoint for orders", "api"], ["Expor um endpoint REST para encomendas", "api"], ["Exponer un endpoint REST para pedidos", "api"]].map(([t, w]) => [t, tr(t, {}), w]);
+    const hints = [["SSO (single sign-on) for staff", "sec"], ["Password reset email", "sec"], ["Call the Stripe REST endpoint to refund", "api"]]
+      .map(([t, w]) => { const r = cl(t, {}); return [t, r.tracks.includes(w), (r.possible || []).some((p) => p.track === w)]; });
+    ok(rec.every(([, g, w]) => g.split(",").includes(w)) && hints.every(([, on, poss]) => !on && poss),
+      "review 5: +sec (authentication + password, OIDC + single sign-on, role-based access control EN / PT / ES), +ai (machine learning EN / PT / ES), +api (a REST endpoint we expose EN / PT / ES) turn on; 'SSO (single sign-on)' (one concept), a password reset, a third party's REST endpoint stay hints (got " +
+      js([rec, hints]) + ")");
+  }
 };

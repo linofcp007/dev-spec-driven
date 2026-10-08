@@ -64,6 +64,8 @@ const PTBR_OVERRIDES = [
   ["; aceita uma lista", "; aceita uma lista"], // a glob syntax note: "accepts a list"
   // +obs (1.19 T review): in Brazil a "ligação" is a phone call — the runbook gets a link, the on-call person is "de plantão"
   ["dispara e chama com a ligação ao runbook", "dispara e aciona o plantão com o link para o runbook"],
+  // review 5 — a symlink is a "link" in Brazil (the phrase table misses this one: its "symlink / junction" reads as a path)
+  ["uma ligação (symlink / junction)", "um link (symlink / junction)"],
 ];
 
 // 1. The European progressive a + infinitive → the Brazilian gerund. correr = a process running → rodando.
@@ -130,6 +132,14 @@ const PTBR_PHRASES = {
   "quem é chamado": "quem é acionado", "cada chamada liga a um runbook": "cada alerta aponta para um runbook",
   "o que é um ticket e não uma chamada": "o que vira um ticket e não aciona o plantão",
   "a que os alertas ligam": "para os quais os alertas apontam", "cada um liga a um runbook": "cada um com um link para o runbook",
+  // review 5 — "à espera (de)" is European; Brazil says "aguardando" (the article stays with its noun)
+  "à espera de": "aguardando", "à espera do": "aguardando o", "à espera da": "aguardando a", "à espera dos": "aguardando os",
+  "à espera das": "aguardando as", "à espera": "aguardando",
+  // review 5 — a symlink is a "link" in Brazil (a "ligação" is a phone call); a connection to the harness, an integration
+  "é uma ligação simbólica": "é um link simbólico", "uma ligação (simbólica, ou uma junction)": "um link (simbólico ou junction)",
+  "uma ligação (link simbólico, junction)": "um link (simbólico ou junction)",
+  "é uma ligação ou uma pasta": "é um link ou uma pasta", "uma ligação para fora do projeto": "um link simbólico para fora do projeto",
+  "repõe a ligação": "restaura o vínculo", "ligação ao harness": "integração com o harness",
 };
 // "põe X a verde" (make X pass) → "faz X passar"; "postos a verde" → "deixados verdes"; a leftover "a verde" → "verde(s)".
 const PTBR_GREEN_VERB = { põe: ["faz", "passar"], põem: ["fazem", "passar"], pôr: ["fazer", "passar"], pondo: ["fazendo", "passar"],

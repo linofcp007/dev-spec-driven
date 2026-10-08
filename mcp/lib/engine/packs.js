@@ -297,18 +297,26 @@ function loadPackScan(scan, folder, rel, problem) {
   if (jf.tooBig) { err(jrel, "too-big", { file: PACK_JSON, max: PACK_LIMITS.jsonBytes }); return done(); }
   const stripped = stripJsonComments(jf.text);
   let j = null;
+  // The reason is a code the project's language renders (review 5: V8's JSON.parse text is English), and a syntax error names its
+  // line — stripJsonComments keeps the line breaks, so the parser's position maps to the file's line.
+  if (stripped == null) { err(jrel, "json-invalid", { why: "comment" }); return done(); }
   try {
-    if (stripped == null) throw new Error("a /* comment is never closed");
     j = JSON.parse(stripped);
-  } catch (e) { err(jrel, "json-invalid", { detail: String(e && e.message).slice(0, 200) }); return done(); }
-  if (!isObj(j)) { err(jrel, "json-invalid", { detail: "not a JSON object" }); return done(); }
+  } catch (e) {
+    const m = String(e && e.message);
+    const pos = /position (\d+)/.exec(m), ln = /line (\d+)/.exec(m);
+    const line = pos ? stripped.slice(0, Number(pos[1])).split("\n").length : ln ? Number(ln[1]) : null;
+    err(jrel, "json-invalid", { why: "syntax", line }, line || undefined);
+    return done();
+  }
+  if (!isObj(j)) { err(jrel, "json-invalid", { why: "object" }); return done(); }
   for (const k of Object.keys(j)) if (!PACK_KEYS.has(k)) warn(jrel, "unknown-key", { key: k });
 
-  if (typeof j.name !== "string") err(jrel, "field-missing", { field: "name", rule: "= the folder name" });
+  if (typeof j.name !== "string") err(jrel, "field-missing", { field: "name", rule: "name" });
   else if (j.name !== folder) err(jrel, "name-mismatch", { name: j.name.slice(0, 80), folder });
 
   let token = null;
-  if (typeof j.marker !== "string") err(jrel, "field-missing", { field: "marker", rule: "^[A-Z][A-Z0-9]{1,11}$" });
+  if (typeof j.marker !== "string") err(jrel, "field-missing", { field: "marker", rule: "marker" });
   else {
     const t = j.marker.trim();
     const bare = t.length > 2 && t.startsWith("[") && t.endsWith("]") ? t.slice(1, -1) : t;
@@ -317,23 +325,24 @@ function loadPackScan(scan, folder, rel, problem) {
     else token = bare;
   }
 
-  const textRule = "2–" + PACK_LIMITS.textLen + " characters, one line, no [ ] < > `";
+  // A rule is a code (+ its limit) — trackPacks.rule renders it in the project's language (review 5)
+  const textRule = { id: "text", max: PACK_LIMITS.textLen };
   const title = packLocalized(j.title, "title", (s) => packTextOk(s, PACK_LIMITS.textLen), textRule, jrel, err, warn);
   let description = null;
   if (j.description != null) {
     if (typeof j.description !== "string" || j.description.length > PACK_LIMITS.descriptionLen || /[\u0000-\u001f\u007f]/.test(j.description)) {
-      err(jrel, "field-invalid", { field: "description", rule: "one line, ≤ " + PACK_LIMITS.descriptionLen + " characters" });
+      err(jrel, "field-invalid", { field: "description", rule: { id: "line", max: PACK_LIMITS.descriptionLen } });
     } else description = j.description.trim();
   }
 
   const signals = { strong: [], weak: [], context: [] };
   if (j.signals != null) {
-    if (!isObj(j.signals)) err(jrel, "field-invalid", { field: "signals", rule: "{ strong?, weak?, context? }" });
+    if (!isObj(j.signals)) err(jrel, "field-invalid", { field: "signals", rule: "signals" });
     else {
       for (const k of Object.keys(j.signals)) {
         if (!PACK_TIERS.includes(k)) { warn(jrel, "unknown-key", { key: "signals." + k }); continue; }
         const list = j.signals[k];
-        if (!Array.isArray(list)) { err(jrel, "field-invalid", { field: "signals." + k, rule: "[keyword, …]" }); continue; }
+        if (!Array.isArray(list)) { err(jrel, "field-invalid", { field: "signals." + k, rule: "keywords" }); continue; }
         if (list.length > PACK_LIMITS.keywords) { err(jrel, "too-many", { field: "signals." + k, max: PACK_LIMITS.keywords }); continue; }
         for (const kw of list) {
           const t = typeof kw === "string" && kw.length <= 4 * PACK_LIMITS.keywordLen ? kw.trim().replace(/\s+/g, " ") : null;
@@ -348,12 +357,12 @@ function loadPackScan(scan, folder, rel, problem) {
   }
 
   const sections = [];
-  if (!Array.isArray(j.sections) || !j.sections.length) err(jrel, j.sections == null ? "field-missing" : "field-invalid", { field: "sections", rule: "[{ name, syn?, loose?, guidance? }, …] — at least one" });
+  if (!Array.isArray(j.sections) || !j.sections.length) err(jrel, j.sections == null ? "field-missing" : "field-invalid", { field: "sections", rule: "sections" });
   else if (j.sections.length > PACK_LIMITS.sections) err(jrel, "too-many", { field: "sections", max: PACK_LIMITS.sections });
   else {
     j.sections.forEach((s, i) => {
       const f = "sections[" + i + "]";
-      if (!isObj(s)) { err(jrel, "field-invalid", { field: f, rule: "{ name, syn?, loose?, guidance? }" }); return; }
+      if (!isObj(s)) { err(jrel, "field-invalid", { field: f, rule: "section" }); return; }
       for (const k of Object.keys(s)) if (!PACK_SECTION_KEYS.has(k)) warn(jrel, "unknown-key", { key: f + "." + k });
       // (a section name keys the localized-name lookups: never an Object.prototype key such as "constructor")
       const names = packLocalized(s.name, f + ".name", (x) => packTextOk(x, PACK_LIMITS.textLen) && !PROTO_KEYS.has(x.trim().toLowerCase()), textRule, jrel, err, warn);
@@ -364,14 +373,14 @@ function loadPackScan(scan, folder, rel, problem) {
       const key = (x, field) => {
         const raw = x.trim().replace(/\s+/g, " ").toLowerCase();
         const k = packSectionKey(raw);
-        if (k.length < 2) { err(jrel, "field-invalid", { field, rule: "a name after its numbering / emoji / dash" }); return null; }
+        if (k.length < 2) { err(jrel, "field-invalid", { field, rule: "lead" }); return null; }
         if (k !== raw && !leadWarned) { leadWarned = true; warn(jrel, "section-name-lead", { name: x.trim(), key: k }); }
         return k;
       };
       const list = (k) => {
         const v = s[k];
         if (v == null) return [];
-        if (!Array.isArray(v)) { err(jrel, "field-invalid", { field: f + "." + k, rule: "[text, …]" }); return null; }
+        if (!Array.isArray(v)) { err(jrel, "field-invalid", { field: f + "." + k, rule: "texts" }); return null; }
         if (v.length > PACK_LIMITS.syn) { err(jrel, "too-many", { field: f + "." + k, max: PACK_LIMITS.syn }); return null; }
         const out = [];
         for (const x of v) {
@@ -383,7 +392,7 @@ function loadPackScan(scan, folder, rel, problem) {
         return out;
       };
       const syn = list("syn"), loose = list("loose");
-      const guidance = s.guidance == null ? null : packLocalized(s.guidance, f + ".guidance", packGuidanceOk, "one line, ≤ " + PACK_LIMITS.guidanceLen + " characters, no <!-- -->", jrel, err, warn);
+      const guidance = s.guidance == null ? null : packLocalized(s.guidance, f + ".guidance", packGuidanceOk, { id: "guidance", max: PACK_LIMITS.guidanceLen }, jrel, err, warn);
       if (!names || !syn || !loose || (s.guidance != null && !guidance)) return;
       if (guidance) for (const g of Object.values(guidance)) for (const v of packVarRefs(g)) if (!RE_PACK_GUIDANCE_VAR.test(v)) warn(jrel, "unknown-variable", { v });
       const nameKeys = [];

@@ -139,14 +139,17 @@ function finishFeature(projectDir, name, opts = {}) {
   const vs = verificationStatus(projectDir, slug, dir);
   const G = i18n.msg(lng).gates;
   // placeholders / root-cause get their own, more precise blockers below.
-  const failing = doc.ok ? doc.checks.filter((c) => c.status === "fail" && c.id !== "placeholders" && c.id !== "root-cause").map((c) => c.id) : [];
-  const pendingGates = doc.pendingGates || [];
+  // (r5 review: `state` — .state.json unreadable — is its own blocker, first; the approvals it holds are unknown, so no pending gate
+  // nor change since approval is reported from it: they read "every phase awaiting approval")
+  const stateBad = !!state.invalid;
+  const failing = doc.ok ? doc.checks.filter((c) => c.status === "fail" && c.id !== "placeholders" && c.id !== "root-cause" && c.id !== "state").map((c) => c.id) : [];
+  const pendingGates = stateBad ? [] : doc.pendingGates || [];
   // What next_action flags must block finishing too: an artifact edited after its approval, a template placeholder
   // ANYWHERE in the chain, and — for a bugfix — an unwritten root cause. Only a change known by CONTENT blocks: a file date
   // (a pre-1.11 approval) is no evidence — every clone or copy resets it — and a pre-1.13 bugfix design approval never
   // tracked bug.md; both are warnings (re-approve to track them).
   const cs = changedSinceApproval(dir, state.approvals || {}, tracks, kind, { detail: true });
-  const changed = cs.changed.filter((x) => !cs.byDate.includes(x));
+  const changed = stateBad ? [] : cs.changed.filter((x) => !cs.byDate.includes(x));
   if (cs.byDate.length) warnings.push(F.changedByDate(cs.byDate.join(", "), slug));
   if (cs.untracked.length) warnings.push(F.untrackedApproval(cs.untracked.map((u) => `${u.phase} (${u.file})`).join(", "), slug));
   // 1.14 B3: phases approved without the role sign-offs now required (approved before the roles) — a warning, never a blocker.
@@ -167,6 +170,7 @@ function finishFeature(projectDir, name, opts = {}) {
   // Each blocker with a stable id: the approve gate of 'execution' refuses on exactly these (opts.gateOnly).
   const blocked = [];
   const block = (id, detail) => blocked.push({ id, detail });
+  if (stateBad) block("state", state.invalid); // r5 review (localized: readState's message — fix it by hand)
   if (failing.length) block("doctor", F.doctor(failing.join(", ")));
   if (rootCauseMissing) block("root-cause", G.finishRootCause);
   if (leftovers.length) block("placeholders", G.finishPlaceholders(placeholderSummary(leftovers, lng)));
@@ -318,10 +322,14 @@ function featureMetrics(projectDir, slug, dir) {
   }
   // First approval of each phase: the history; a phase approved only before 1.13 falls back to its (latest) approval —
   // approximate, like a seeded legacy record (the phase may have been approved earlier).
-  const first = {}, count = {};
+  // r5 review: an approval of the SAME content as the phase's previous approval (fingerprint + designFingerprint — a role re-signing,
+  // a fast-forward re-run, a revoke then re-approve) changed nothing: no rework. A phase without a fingerprint (tests) counts as before.
+  const first = {}, count = {}, lastContent = {};
   for (const h of history || []) {
     const t = timeOf(h.at);
-    count[h.phase] = (count[h.phase] || 0) + 1;
+    const content = typeof h.fingerprint === "string" && h.fingerprint ? h.fingerprint + "|" + (h.designFingerprint || "") : null;
+    if (content == null || lastContent[h.phase] !== content) count[h.phase] = (count[h.phase] || 0) + 1;
+    if (content != null) lastContent[h.phase] = content;
     if (t != null && (first[h.phase] == null || t < first[h.phase].t)) first[h.phase] = { t, approximate: h.legacy === true };
   }
   for (const [ph, a] of Object.entries(approvals)) {
@@ -541,13 +549,35 @@ function pruneRoadmapRefsLocked(projectDir, slug, renameTo, archived) {
 
 // remove / archive / rename / restore: the folder's lock (withMoveLock), then the roadmap lock around the move and the
 // roadmap.json prune, the feature re-resolved under them (it may have moved meanwhile); the ROADMAP.md refresh after both.
-function removeFeature(projectDir, name) {
+// opts.preview (1.23 — the MCP server only, never a tool argument): {fingerprint} of removePreview, the folder the user was asked
+// about over elicitation; another folder under that name now, or the same one edited since, is refused (changedSincePreview).
+function removeFeature(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   sweepTombstones(f.root);
-  const res = withMoveLock(projectDir, f.dir, f.slug, null, () => withRoadmapLock(projectDir, () => removeFeatureLocked(projectDir, name)));
+  const res = withMoveLock(projectDir, f.dir, f.slug, null, () => withRoadmapLock(projectDir, () => removeFeatureLocked(projectDir, name, opts)));
   if (res.ok) maybeRefreshRoadmap(projectDir);
   return res;
+}
+// The folder a remove would delete, as one sha1: its identity (device + inode / file ID + birth time — kept across a rename, so
+// another feature renamed into this name differs) and every entry under it (relative path, size, mtime; lstat — a link is one
+// entry, never followed; the feature's own .lock left out: the remove holds it). null when the folder can't be read.
+function featureFolderFingerprint(dir) {
+  let st;
+  try { st = fs.lstatSync(dir); } catch { return null; }
+  const rows = [`dir ${st.dev} ${st.ino} ${Math.floor(st.birthtimeMs)}`];
+  const walk = (d, rel) => {
+    for (const e of safeReaddir(d).sort()) {
+      if (!rel && e === ".lock") continue;
+      const r = rel ? rel + "/" + e : e;
+      let s;
+      try { s = fs.lstatSync(path.join(d, e)); } catch { continue; }
+      if (s.isDirectory() && !s.isSymbolicLink()) { rows.push("d " + r); walk(path.join(d, e), r); }
+      else rows.push((s.isSymbolicLink() ? "l " : "f ") + r + " " + s.size + " " + Math.floor(s.mtimeMs));
+    }
+  };
+  walk(dir, "");
+  return require("crypto").createHash("sha1").update(rows.join("\n")).digest("hex");
 }
 // A feature folder is removed in two steps: renamed to a dot TOMBSTONE (`.specs/.removing-<slug>-<token>/`, its .lock
 // inside), then deleted there. fs.rmSync of the folder in place deleted its .lock early while the folder still existed: a
@@ -568,12 +598,17 @@ function sweepTombstones(root) {
     } catch { /* best-effort: still held open — the next remove tries again */ }
   }
 }
-function removeFeatureLocked(projectDir, name) {
+function removeFeatureLocked(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   const { slug, dir, root } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
+  // Under the folder's lock, so nothing changes it between this check and the move.
+  if (opts.preview && typeof opts.preview.fingerprint === "string" && featureFolderFingerprint(dir) !== opts.preview.fingerprint) {
+    return { ok: false, changedSincePreview: true, code: "changed-since-preview", feature: slug,
+      error: i18n.msg(featureLang(projectDir, slug)).featureOps.removeChangedSincePreview(slug) };
+  }
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
   const tomb = path.join(root, TOMBSTONE_PREFIX + slug + "-" + require("crypto").randomBytes(4).toString("hex"));
   const inUse = moveDirOrBusy(projectDir, slug, dir, tomb); // the folder (and its .lock, ours) leaves the feature path at once
@@ -647,6 +682,9 @@ function renameFeatureLocked(projectDir, name, newName, moved) {
   const oldDir = from.dir;
   const newDir = to.dir;
   if (fs.existsSync(newDir)) return { ok: false, error: errs(projectDir).alreadyExists(newSlug) };
+  // 1.23 review 5 — never onto an ARCHIVED feature's slug: the two could then neither be archived (alreadyArchived) nor restored
+  // (activeExists) without another rename — and the archived records naming that slug would read as this feature.
+  if (fs.existsSync(path.join(to.root, "_archive", newSlug))) return { ok: false, archivedName: true, error: errs(projectDir).renameArchived(newSlug) };
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
   // Every other reference to the feature follows it — planned while the old folder still resolves, written after the move.
@@ -778,6 +816,7 @@ function removePreview(projectDir, name) {
     action: "remove",
     feature: f.slug,
     wouldDelete: { dir: f.dir, files, entries: safeReaddir(f.dir).sort() },
+    fingerprint: featureFolderFingerprint(f.dir), // 1.23: what the MCP server's question showed — removeFeature's opts.preview
     error: i18n.msg(featureLang(projectDir, f.slug)).featureOps.removeNeedsConfirm(f.slug, files),
   };
 }
@@ -790,7 +829,7 @@ function manageFeature(projectDir, action, name, arg, opts = {}) {
       // Deleting a spec folder can't be undone: without an explicit confirm (MCP confirm:true, CLI --yes)
       // nothing is deleted and the caller gets what WOULD be.
       if (opts.confirm !== true) return removePreview(projectDir, name);
-      return removeFeature(projectDir, name);
+      return removeFeature(projectDir, name, opts.preview ? { preview: opts.preview } : {}); // preview: the MCP server's question (1.23)
     case "archive":
       return archiveFeature(projectDir, name);
     case "rename":
@@ -1566,7 +1605,7 @@ function baselineDrift(root, rootReal, fin) {
 
 module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, COMMIT_TITLE_MAX, commitTitle, finishFeature, METRIC_PHASES, timeOf, round1,
   round2, isoOf, hoursFrom, featureMetrics, stats, metrics, fmtHours, metricsLines, pruneRoadmapRefs, milestoneResult,
-  pruneRoadmapRefsLocked, removeFeature, TOMBSTONE_PREFIX, TOMBSTONE_SWEEP_AGE_MS, sweepTombstones, removeFeatureLocked,
+  pruneRoadmapRefsLocked, removeFeature, TOMBSTONE_PREFIX, TOMBSTONE_SWEEP_AGE_MS, sweepTombstones, removeFeatureLocked, featureFolderFingerprint,
   archiveFeature, archiveFeatureLocked, renameFeature, renameFeatureLocked, renamePlan, renameSupersedesRefs,
   removePreview, manageFeature, SUP_NL, RE_SUPERSEDES_SRC, RE_SUPERSEDES_OPEN_SRC, stripSupersedes, blockLines, lineMap,
   criterionAc, supersedesMarkers, dirKey, resolveSupersedes, supersedesTrace, supersedesWarnings, day, acOneLine,

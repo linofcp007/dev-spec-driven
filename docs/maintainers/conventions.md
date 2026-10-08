@@ -13,6 +13,29 @@ and U+FEFF gotchas are in CLAUDE.md.
   transliterates accents (`Autenticação` → `autenticacao`) and falls back to the pre-1.11 slug
   (`autentica-o`) so old folders are still found. `slugify(undefined)` is `""`, never `"undefined"`.
   `listFeatures` skips dot-folders and non-slug folders (reported as `ignored`).
+  **spec_create on an existing folder (1.23 review 5)** is a re-run (idempotent: create-only writes) and now says so: `existed:
+  true` + `createExisted` (unless tracks were added — `tracks.addedOnCreate` says it), `createSummaryKept` when a summary it did
+  not write was given. A slug keeps the first 64 characters of `slugifyFull(name)`: a long name that reaches an EXISTING
+  feature whose title (`specTitle` of requirements.md / spike.md / bug.md) is another long name is refused (`slugTaken`,
+  `err.slugTaken` — it names the slug, by which that feature stays reachable); it used to answer ok and drop the new summary.
+  The name is written as ONE line wherever it lands (titles, `{{name}}` — `flatText`; createFeature, applyTracks, the
+  importer). **Never through a link:** `linkedSpecsFolder()` (scaffold.js, over `specsWriteContained`) refuses spec_init /
+  steering_scaffold through a linked `.specs/steering/`, and spec_create / add_track through a linked `.specs/<feature>/`
+  (or its steering, when a track brings a steering file) — `linked: true`, `err.specsLinked`, nothing written (spec_export and
+  templates init already refused); the export's Tasks table and the roadmap row read tasks.md through `readContained`.
+- **The project folder: `resolveProjectDir()` (files.js) — every surface's default.** The explicit argument (CLI `--project`, a
+  tool's `projectDir`) > `SPEC_PROJECT_DIR` > `CLAUDE_PROJECT_DIR` > **the nearest folder at or above the working folder that
+  holds a dev-spec .specs/** (`nearestProject()`: `isDevSpecDir` — roadmap.json, steering/ or a feature's .state.json — the
+  working folder itself also with any `.specs/`, one made by hand before init; never walked up a network path; at most 64
+  levels; 1.23 review: run from a subfolder, `create` / `backlog add` started a SECOND, nested .specs/ there) > the working
+  folder. A value holding a variable left unexpanded — any `${`, a leading `$NAME`, a `%NAME%` (`unexpandedVar()`) — is
+  unusable and falls through (1.23 review: `SPEC_PROJECT_DIR="${CLAUDE_PROJECT_DIR}/"`, `$CLAUDE_PROJECT_DIR` or
+  `%CLAUDE_PROJECT_DIR%` created that literal folder; only a whole `${VAR}` was caught). A separate project INSIDE another one
+  needs `--project .` (or its own `.specs/` first — an empty one is enough). The CLI validates `--project` itself (below); a
+  PATH argument (`scan <path>`, `ears <file>`, `import <tool> <path>`) is read from the project when it was NAMED (`--project`
+  or the env — as import always read it), else from the working folder (`argPath()`: a path typed in a subfolder is relative
+  to it, as in git; import hands the engine that path relative to the project, which still refuses one outside it), and
+  `scan <subfolder>` reports in the project's language (`scanCodebase {lang}`).
 - **`spec_feature remove` needs `confirm: true`** (CLI `--yes`). Without it nothing is deleted and the
   result (an error with `needsConfirm`) lists what would be — `removePreview()` checks roadmap.json first
   and uses `lstat` (a symlink/junction is one entry, never followed). Prefer archive (reversible).
@@ -31,7 +54,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   approvals and `meta.lang`). **Valid JSON of the wrong shape is refused the same way:** `readState()` checks
   the top level, `approvals`/`evidence`/`finishChecks`/`signoffs` (objects), `tracks`/`approvalHistory`/`changes`/`unticks` (lists);
   `loadRoadmap()` checks `features` and each entry, `dependsOn` (string lists), `meta`, `backlog`. Readers get
-  a sanitized copy; every mutator refuses BEFORE its destructive step. A leading BOM is tolerated.
+  a sanitized copy; every mutator refuses BEFORE its destructive step — and the readers SAY it (r5 review): doctor fails
+  `state`, next_action's one step is `fix` (`stateInvalid`), spec_finish blocks on `state`, the status line says repair
+  (gates-and-approvals.md → next_action) — read as empty, every gate looked pending and next_action said "approve". A leading BOM is tolerated.
   `writeIfAbsent` uses `flag:"wx"`. `writeFileAtomic`'s temp file never outlives the call: when the rename and the
   plain-write fallback both fail (read-only / locked target on Windows, a folder at that path) it is removed before
   the error is thrown — the best-effort refreshes swallow that error, and used to leave a `<file>.<pid>.<ts>.tmp`
@@ -45,11 +70,16 @@ and U+FEFF gotchas are in CLAUDE.md.
   append-only lists (`approvalHistory`, `changes`, `unticks`) → the union by identity (`HISTORY_ID` phase/at/by/revoked/partial/role
   · `CHANGE_ID` · `UNTICK_ID`; the same record with different fields — upgrade's seeded snapshot — gets both sides' fields),
   chronological once theirs added one; `evidence[n]` / `finishChecks[name]` → the record with the latest run `at` (a tie is the same
-  run: its note and stale mark merged), histories merged, deduped, bounded by `EVIDENCE_HISTORY` (a run's own fields — `observed`,
+  run: its note and stale mark merged; r5 review: tasks sharing the number n — a record's `task` stamp — keep every other
+  task's record in `others`, both sides' plus the losing side's own one, one per task, newest first, `EVIDENCE_OTHERS` —
+  they were dropped, and that task's runs merged into the winner's history), histories merged, deduped, bounded by `EVIDENCE_HISTORY` (a run's own fields — `observed`,
   1.22 review 3's `cmdRule` and `root` — travel with it: no rule of their own); `ticks[n]` / `lastTickAt` / `lastEditAt` (1.22 review: the spec-hook's stamp of a hand-saved tasks.md) → the
   later; `finished` → the later (firstAt the earliest); `createdAt` → the earlier; `approvals[phase]` → the later approval unless
-  a revocation record (`revoked: true`, not `partial`) is later — **revocations win by time**; `signoffs[phase][role]` → the later,
-  dropped when a revocation or the phase's merged approval is no earlier; `lastApprovedPhase` follows the merged approvals (never its
+  a revocation record (`revoked: true`, not `partial`) is later — **revocations win by time**, applied to the 3-way RESULT
+  (`pruneRevokedApprovals()`, r5 review: when only one side changed `approvals`, an approval older than the other side's
+  revocation survived); `signoffs[phase][role]` → the later,
+  dropped when a revocation or the phase's merged approval is no earlier (a partial revocation flagged `roleOnly` — r5
+  review, one role withdrawing its own sign-off — drops only the roles it names; one without the flag, all of them); `lastApprovedPhase` follows the merged approvals (never its
   own 3-way); `tracks` and every `dependsOn` / role list / milestone `features` → a 3-way SET merge; roadmap.json `features` (by
   slug), `backlog` (by name, case-insensitive; notes joined with ` · `), `meta.milestones` (by name), `meta.checks` /
   `meta.approvalRoles` (by key); `meta.specVersion` → the higher (`compareSemver`), `meta.changelogAt` → the later,
@@ -106,7 +136,13 @@ and U+FEFF gotchas are in CLAUDE.md.
   `{ok:false, busy:true, error}` (`err.featureBusy`, localized) with nothing changed. A lock taken while this process already
   holds another (`LOCK_DEADLINE`: a folder move's roadmap lock inside its feature lock) waits only for the outer acquisition's
   remaining budget, at least `LOCK_NESTED_MIN_MS` — nested waits could add up to twice the wait. A dead holder's lock (same host)
-  is reclaimed at once, any other after 2 min (10 min while its pid still runs). **Mutual exclusion rules** (each one
+  is reclaimed at once, any other after 2 min (10 min while its pid still runs). r5 review: a note naming THIS pid and host
+  on a lock older than this process (`PROCESS_START_MS` — a recycled pid, a container's pid 1 with a fixed hostname) is
+  reclaimed at once (one written since may be another engine instance or worker of this process: respected, as before); the
+  age of a lock dated in the future (another machine's clock) counts too (`Math.abs`). A lock create refused with
+  EPERM / EACCES / EBUSY AFTER the note's temp file was written (Windows: a lock being deleted, a scanner's handle on it) is
+  waited for like a held lock — busy at the deadline; it ran UNLOCKED after 10 refusals. Only a folder that refuses the temp
+  file itself (`readOnly`: read-only, EROFS) still runs unlocked after 10 tries. **Mutual exclusion rules** (each one
   lost updates under contention while every call answered ok): a lock that can't be stat'ed is NEVER stale (it was
   just released — retry the create); a stale lock is removed only by `reclaimStaleLock()` — under `<lock>.reclaim`
   (O_EXCL) and only while the file is still the one judged stale (`lockSnapshot`: note + ino/mtime/size), so a
@@ -149,7 +185,10 @@ and U+FEFF gotchas are in CLAUDE.md.
   has flushed — on a Linux pipe, docker or `| tee`, writes go async past the 64 KB buffer and the tail, FAIL lines and the
   total, was dropped) and for the MCP server (on stdin close it flushes its queued replies first — a slow reader on Linux
   got 0 of 8; a stdout EPIPE / EOF / ERR_STREAM_DESTROYED exits quietly 0, any other stdout error prints one stderr line
-  and exits 1). Never `process.exit()` right after a write. The pre-commit validator reads staged
+  and exits 1). Never `process.exit()` right after a write (the CLI's `die()` under `--json` writes its small document with
+  `fs.writeSync(1, …)` first). The CLI's stdin (`ears -`, `import <plan> -`, `log <f> -`, `stop-check -`) is collected as
+  BYTES and decoded like a file (`readStdin` → `decodeText`: a UTF-16 BOM decides, else UTF-8 — 1.23 review: a UTF-16 document,
+  what Windows PowerShell 5.1's `>` writes, read as "0 criteria, pass" in `ears -`). The pre-commit validator reads staged
   names NUL-separated with `core.quotePath=false`, so accented paths work, and loads the engine only once a staged
   `requirements.md` / `tasks.md` / `change.md` under a `.specs/` needs it (1.22 review — most commits stage none and paid
   ~130 ms for the require). Only EARS errors and phantom task refs
@@ -167,10 +206,33 @@ and U+FEFF gotchas are in CLAUDE.md.
   (`TEXT_ONLY_COMMANDS`, exit 1, below); `dev-spec evals` exits with the harness's status, and 1 when it has none (a spawn error, a signal — 1.22
   review: `status || 0` passed a killed run). An engine refusal goes through `fail(r)`, never
   `die(r.error)`: with `--json` the whole `{ok: false, error, …}` result (`recorded`, `neverApproved`, `gated`…) is
-  the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only. **`--json` on a command
+  the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only — with `--json` (1.23
+  review) it prints `{ok: false, error}` on stdout too (written synchronously: `process.exit` follows; the stderr line stays),
+  and an engine EXCEPTION (main's catch — a file where `.specs/` goes: ENOTDIR) answers `{ok: false, error, code}` (`code` the
+  system error's, else `"exception"`) — it was the raw message on stderr alone; `merge-state --json` prints its result on every
+  path (git merge-file's `{merged: "text", clean, conflicts}` for a hand-written overview, `{ok: false, parseError, error}` for
+  an unparseable side — both printed nothing). **`--json` on a command
   whose output is text only** — the help (`help`, no command, `--help` anywhere), `rules`, `mcp-config`, `evals`
-  (`TEXT_ONLY_COMMANDS`) — is such a usage error (`cliOutput.noJson`, exit 1, nothing on stdout; 1.22 review — it printed the
-  text with exit 0); `--json=false` is the switch off. A new command that prints no structured result joins that list.
+  (`TEXT_ONLY_COMMANDS`) — is such a usage error (`cliOutput.noJson`, exit 1, nothing on stdout — `die(…, {text: true})`; 1.22
+  review — it printed the text with exit 0); `--json=false` is the switch off. A new command that prints no structured result
+  joins that list.
+- **CLI: each command reads its own options and arguments (1.23 review).** `COMMAND_OPTIONS` (cli/dev-spec.js) lists every
+  command's flags and the most positionals it takes (`max`; absent = any number, or the command checks its own: templates,
+  export, decide…); `checkCommandArgs()` refuses — before anything runs, after the help — a known flag the command doesn't
+  read (`cliOutput.flagNotFor`, its options listed) and an argument past its last one (`extraArgs`): they were ignored —
+  `approve <f> <phase> --remove` (meant --revoke) approved, `done <f> 3 4` ticked task 3 alone. `--json`, `--project` and
+  `--help` are global (`GLOBAL_OPTIONS`). `backlog` (add takes note words, rm / list don't) and `log` (a second word is `-`)
+  check theirs in their case; `--shell` / `--timeout` without `--run` (`needsRun`) and `--run` with `--evidence` / `--exit` /
+  `--cmd` (`runOrEvidence`) are usage errors; `undone` takes done's run flags only to refuse them (`undo.noEvidence`). A new
+  command or flag gets its `COMMAND_OPTIONS` entry (extending.md). **`--project` (L14)** names an existing folder
+  (`checkProjectFlag()`): empty, an unexpanded variable (`unexpandedVar`), a file or a missing folder is refused (localized
+  `cliOutput.project*`) — `init` alone may create it (`create x --project <typo>` created the whole mistyped tree); on Windows a
+  trailing `"` is dropped (`--project "C:\dir\"` reaches node as `C:\dir"`). The status line's render path checks none of this.
+  **`evals` (P1)** forwards every word of the command line but the command and `--project` (the CLI passes its resolved one) —
+  read with run-evals.js's rules (`evalsArgs()`: its value flags `--project` / `--model` / `--prompt` / `--max-items` take the
+  next word): only the words after the feature were forwarded, so `evals --dry-run <f>` ran LIVE (paid calls). run-evals.js
+  refuses an unknown flag (did-you-mean, exit 2 — `--dryrun` ran live too), a value flag without its value and a second word,
+  and prints its usage on `--help` (it ran the eval).
 - **CLI boolean switches are read with `on(k)`, never by truthiness**: `--x=false` is the string "false" (truthy),
   so `done --run=false` ran the `_Verify:_` commands. `normalizeBoolFlags()` (every name in `BOOL_FLAGS`) turns
   `true|false|1|0|yes|no|on|off` into booleans and refuses any other value. `BOOL_FLAGS` is `[...spec.CLI_SWITCHES]`
@@ -178,7 +240,8 @@ and U+FEFF gotchas are in CLAUDE.md.
   a new switch goes into `spec.CLI_SWITCHES` (never a CLI-only list: the hook would read the word after it as its value), a new
   value flag into `VALUE_FLAGS` — `refuseUnknownFlags()` refuses any other `--flag` before anything runs (exit 1, a
   localized did-you-mean; `done 2 --rnu` used to tick the task with no evidence). `evals` is exempt (its flags go to
-  run-evals.js untouched); `--` ends the options; `--help` anywhere prints the help and runs nothing. An explicit
+  run-evals.js, which refuses its own unknown ones); `--` ends the options; `--help` anywhere prints the help and runs nothing
+  (`evals --help`: the harness's usage). An explicit
   `--include-body=false` / `--include-brief=false` is passed through as false (`boolFlag()`), as MCP receives it.
   The eval harness (`mcp/evals/run-evals.js`, which `evals` forwards to untouched) applies the same rule to its own
   switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise).

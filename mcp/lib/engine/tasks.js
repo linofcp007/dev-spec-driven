@@ -16,25 +16,27 @@ const i18n = require("../i18n.js");
 let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions, briefGlossary, briefSteering,
   bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir, errs, evidenceRule,
   existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds, extractSection,
-  extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headRest, idKey, implementsKey, implementsRel,
+  extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, headRest, idKey, implementsKey, implementsRel,
   inactiveTaskLines, isBacktickUnit, isObj, isPackTrack, isRecord, lineMap, markerTracks, maybeRefreshRoadmap,
   normalizeEvidence, normTaskHeading, observedAny, observedStamp, own, ownEvidence, ownRecord, packTracks, planIdText,
   projectChecks, RE_FENCE_CLOSE, RE_LIST_ITEM, RE_TEST_REF, readIfExists, readState, redProof, REPRO_SYN,
   ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp;
+  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
+  decodeText, existsRaw, changeAlias;
 function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
-  extractSection, extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headRest, idKey, implementsKey,
+  extractSection, extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, headRest, idKey, implementsKey,
   implementsRel, inactiveTaskLines, isBacktickUnit, isObj, isPackTrack, isRecord, lineMap, markerTracks,
   maybeRefreshRoadmap, normalizeEvidence, normTaskHeading, observedAny, observedStamp, own, ownEvidence, ownRecord,
   packTracks, planIdText, projectChecks, RE_FENCE_CLOSE, RE_LIST_ITEM, RE_TEST_REF, readIfExists, readState, redProof,
   REPRO_SYN, ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp } = E); }
+  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
+  decodeText, existsRaw, changeAlias } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
 // scanner — so status/next/phase can never count a task that complete/brief/finish don't see.
@@ -443,6 +445,70 @@ function taskNumberError(lang, v) {
   const A = i18n.msg(lang).args;
   return A.invalid(A.item("number", A.type.integer + " " + A.atLeast(0), JSON.stringify(typeof v === "number" ? v : String(v))));
 }
+// Review 5 (P3) — tasks.md written back as the bytes it holds. readIfExists decodes a file as UTF-8 (UTF-16 by its BOM), so a
+// tasks.md in another encoding — Windows' ANSI code page, what Windows PowerShell 5.1's Set-Content / Add-Content write ("sessão"
+// is E3 there) — reads with a U+FFFD for each such byte, and writing that TEXT back made every one of them U+FFFD for good:
+// ticking one task destroyed the accents of the whole file. Now a tick / untick (and spec_impact --reopen) changes the
+// checkbox's own byte(s) and nothing else (checkboxBytes); a rewrite that adds text (spec_append_tasks, a track's template
+// tasks) keeps the file's own encoding — UTF-8, or UTF-16 with its BOM (it used to become UTF-8) — and is refused, nothing
+// written, when the file's bytes are not its text in that encoding (tasksRewrite → null; err.tasksNotText).
+// The file's bytes (a change's change.md for its tasks.md — writeFileAtomic's alias), or null.
+function tasksBytes(file) {
+  const real = existsRaw(file) ? file : changeAlias(file) || file;
+  try { return fs.readFileSync(real); } catch { return null; }
+}
+// The encoding decodeText read the bytes in: a UTF-16 BOM decides, anything else is UTF-8.
+const textEncoding = (raw) => (raw.length >= 2 && raw[0] === 0xff && raw[1] === 0xfe ? "utf16le" : raw.length >= 2 && raw[0] === 0xfe && raw[1] === 0xff ? "utf16be" : "utf8");
+// text → its bytes in that encoding (decodeText keeps a BOM as U+FEFF, so the text carries it back).
+function encodeText(enc, text) {
+  const b = Buffer.from(text, enc === "utf8" ? "utf8" : "utf16le");
+  return enc === "utf16be" ? b.swap16() : b;
+}
+// The bytes to write for `updated` — tasks.md's new text — given `text`, the file as it was read: `updated` in the file's own
+// encoding, or null when the file's bytes are no text in it (the caller refuses: err.tasksNotText). No file: UTF-8.
+function tasksRewrite(file, text, updated) {
+  const raw = tasksBytes(file);
+  if (!raw) return Buffer.from(updated, "utf8");
+  const enc = textEncoding(raw);
+  if (decodeText(raw) !== text) return encodeText(enc, updated); // rewritten meanwhile (never under the feature lock): as before
+  return encodeText(enc, text).equals(raw) ? encodeText(enc, updated) : null;
+}
+// The bytes of tasks.md with the checkbox of each box ({line, col}: the scanner's, over `text`) set to ch (" " / "x"), every
+// other byte as it was. → a Buffer · null when there is no file, or it isn't `text` any more (the caller writes the text, as
+// before) · false when a box can't be found in the bytes (the line before it is no text the engine reads) — refused.
+function checkboxBytes(file, text, boxes, ch) {
+  const raw = tasksBytes(file);
+  if (!raw || decodeText(raw) !== text) return null;
+  const enc = textEncoding(raw);
+  const buf = Buffer.from(raw);
+  const lines = text.split("\n");
+  const isBox = (c) => c === 0x20 || c === 0x78 || c === 0x58; // " " / "x" / "X"
+  if (enc !== "utf8") { // UTF-16: one code unit (two bytes) per character of the text, its BOM included
+    const starts = [];
+    for (let i = 0, at = 0; i < lines.length; i++) { starts.push(at); at += lines[i].length + 1; }
+    const get = (o) => (enc === "utf16le" ? buf.readUInt16LE(o) : buf.readUInt16BE(o));
+    for (const b of boxes) {
+      const o = 2 * (starts[b.line] + b.col);
+      if (!(b.line < lines.length) || o < 2 || o + 1 >= buf.length || get(o - 2) !== 0x5b || !isBox(get(o))) return false;
+      if (enc === "utf16le") buf.writeUInt16LE(ch.charCodeAt(0), o); else buf.writeUInt16BE(ch.charCodeAt(0), o);
+    }
+    return buf;
+  }
+  // UTF-8 — or another code page: a line ends at its 0x0A byte (in every ASCII-compatible encoding; no decoder takes an ASCII
+  // byte into what it replaces), and the bytes before the box count only when they decode to exactly the text before it.
+  const nl = [0];
+  for (let i = 0; i < buf.length; i++) if (buf[i] === 0x0a) nl.push(i + 1);
+  for (const b of boxes) {
+    const start = nl[b.line];
+    if (start === undefined || lines[b.line] === undefined) return false;
+    const prefix = lines[b.line].slice(0, b.col);
+    const off = start + Buffer.byteLength(prefix, "utf8");
+    if (off >= buf.length || buf.toString("utf8", start, off) !== prefix || buf[off - 1] !== 0x5b || !isBox(buf[off])) return false;
+    buf[off] = ch.charCodeAt(0);
+  }
+  return buf;
+}
+
 // opts.ranBy "cli" (1.14 F1): the CLI's `done --run` ran the command itself — the record's observed stamp is "cli". The MCP
 // server never passes it (and normalizeEvidence keeps no caller-given `observed`): a reported run is looked up in the
 // harness's log (observedRun).
@@ -516,6 +582,10 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     state.evidence[key] = storeEvidence(state.evidence[key], task, dup, ev, run && cliStart ? cliStart.at : now, run ? ranVerify : undefined, projectDir);
   }
   const ticks = !alreadyDone && !failed;
+  // Review 5 (P3): the tick changes the checkbox's byte and nothing else — found BEFORE anything is written: a box the bytes
+  // don't show where the text has it is refused with nothing recorded (never half a tick).
+  const tickBytes = ticks ? checkboxBytes(file, text, [task], "x") : null;
+  if (tickBytes === false) return { ok: false, error: E.tasksNotText(tasksFileName(f.dir)) };
   if (ticks) {
     state.lastTickAt = now; // spec_finish's suite-evidence needs every project check run AFTER the last tick
     // when this task was ticked (state.ticks[n]) — the roadmap forecasts' completion times; a hand-broken ticks value is left alone
@@ -530,8 +600,8 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     lines[task.line] = raw.slice(0, task.col) + "x" + raw.slice(task.col + 1);
     updated = lines.join("\n");
     // Replaced atomically: a reader in another process (status, a hook, a second server) never catches a truncated
-    // tasks.md — it used to refuse a real task as "not found" mid-write.
-    writeFileAtomic(file, updated);
+    // tasks.md — it used to refuse a real task as "not found" mid-write. The file's own bytes with the box's changed (P3).
+    writeFileAtomic(file, tickBytes || updated);
   }
   if (updated !== text || ev) maybeRefreshRoadmap(projectDir);
   // A red-phase task (it writes a test that must FAIL) with a must-pass _Verify:_ can never be verified: its refusal and
@@ -666,6 +736,9 @@ function untickTask(projectDir, name, number, opts = {}) {
     return { done: tasks.filter((t) => t.done).length, total: tasks.length, next: next && { number: next.number, text: next.text } };
   };
   if (!task.done) return { ok: true, feature: f.slug, number: n, unticked: false, alreadyOpen: true, evidenceStale: false, ...progress(text), note: U.alreadyOpen(n) };
+  // Review 5 (P3): the checkbox's own byte, found before anything is written (refused with nothing changed when it can't be).
+  const untickBytes = checkboxBytes(file, text, [task], " ");
+  if (untickBytes === false) return { ok: false, error: E.tasksNotText(tasksFileName(f.dir)) };
   const key = String(n);
   const dup = same.length > 1;
   const rec = ownRecord(isObj(state.evidence) ? state.evidence[key] : undefined, task, dup); // this task's record, never the other "N."'s
@@ -684,7 +757,7 @@ function untickTask(projectDir, name, number, opts = {}) {
   const raw = lines[task.line];
   lines[task.line] = raw.slice(0, task.col) + " " + raw.slice(task.col + 1);
   const updated = lines.join("\n");
-  writeFileAtomic(file, updated);
+  writeFileAtomic(file, untickBytes || updated);
   maybeRefreshRoadmap(projectDir);
   const runnable = taskMarkers(task).verify.length > 0;
   // 1.16 U review 1: an _Expect: fail_ task keeps its red run (redProof reads through staleBy "undo"): once the fix is in, the
@@ -754,9 +827,32 @@ function scanTaskLines(tasksText) {
   const out = [];
   const st = { fence: null };
   let comment = false;
+  // Review 5 — CommonMark's INDENTED code block: outside every list, a line indented 4+ columns after a blank line (or a heading,
+  // or at the top) is code, and so is each line after it while it stays indented or blank: its `    - [ ] 1. example` is no
+  // task (resolveTask's "first open task 1" ticked the example above the real one). Inside a list — a task's sub-lines, a nested
+  // task, `- Phase A` then `    - [ ] 1.` — the indentation is the item's own, as before. listStep reads each line once it is
+  // scanned: a list item opens the list, a heading or an unindented line after a blank one closes it.
+  const ind = { list: false, blank: true, heading: false, code: false };
+  const listStep = (s, o) => {
+    if (!s.trim()) { ind.blank = true; ind.heading = false; return; }
+    if (o.code) { ind.blank = false; ind.heading = false; return; }
+    if (!o.vis.trim()) return; // a comment-only line
+    const h = /^\s{0,3}#{1,6}(?:\s|$)/.test(o.vis);
+    if (/^\s*(?:[-*+]|\d{1,9}[.)])(?:\s|$)/.test(o.vis)) ind.list = true;
+    else if (h || (ind.blank && indentCols(o.vis) === 0)) ind.list = false;
+    ind.blank = false;
+    ind.heading = h;
+  };
   for (let i = 0; i < n; i++) {
     const src = lines[i];
     const inComment = comment; // the line starts inside a multi-line comment (a "<!--" on it is comment text)
+    if (i > 0) listStep(lines[i - 1], out[i - 1]);
+    if (!comment && !st.fence) {
+      const blank = !src.trim();
+      if (ind.code && !blank && indentCols(src) < 4) ind.code = false;
+      if (!ind.code && !blank && !ind.list && (ind.blank || ind.heading) && indentCols(src) >= 4) ind.code = true;
+      if (ind.code) { out.push({ vis: src, code: true, fenceOpen: false, indented: true }); continue; }
+    }
     // An open fence never coexists with a comment: neither opens inside the other.
     const fl = !comment && fenceLine(st, lines, i, below);
     if (fl) { out.push({ vis: src, code: true, fenceOpen: fl === "open" }); continue; }
@@ -820,6 +916,16 @@ function fenceLine(st, lines, i, below) {
 // Leading whitespace width — a UTF-8 BOM on the first line is not indentation.
 function indentOf(s) {
   return s.match(/^\s*/)[0].replace(/\uFEFF/g, "").length;
+}
+// Leading indentation in COLUMNS, as CommonMark counts it (a tab to the next multiple of 4; a BOM is no column).
+function indentCols(s) {
+  let c = 0;
+  for (let k = s.charCodeAt(0) === 0xfeff ? 1 : 0; k < s.length; k++) {
+    if (s[k] === " ") c++;
+    else if (s[k] === "\t") c += 4 - (c % 4);
+    else break;
+  }
+  return c;
 }
 // Does `token` occur in `s` outside every `inline code span`?
 function hasOutsideCode(s, token) {
@@ -946,8 +1052,10 @@ function unreadTaskLines(tasksText) {
   const held = new Array(src.split("\n").length).fill(false);
   scanTaskBlocks(src, held);
   const out = [];
+  // (review 5: a checkbox line in an INDENTED code block — 4+ spaces after a blank line, outside a list — is named too: indenting
+  // real tasks that way reads as zero tasks)
   scanTaskLines(src).forEach((ln, i) => {
-    if (!ln.code && !ln.task && !held[i] && RE_LIST_BOX_LINE.test(ln.vis)) out.push({ line: i + 1, text: ln.vis.trim().slice(0, 80) });
+    if ((!ln.code || ln.indented) && !ln.task && !held[i] && RE_LIST_BOX_LINE.test(ln.vis)) out.push({ line: i + 1, text: ln.vis.trim().slice(0, 80) });
   });
   return out;
 }
@@ -1041,8 +1149,17 @@ function tasksIdText(dir) {
 // `_Implements: src/a.ts_;` (1.14 full review Pa1 — those yielded NO marker: a task whose check fails ticked as "nothing
 // to verify", and a done task's missing file passed trace_check). An underscore inside the value survives
 // (`src/keys_util.js`, `src/__init__.py`). Linear: a line's closers are found once, its openers walk them with a cursor.
+// Review 5 (M4) — what a markdown reader reads as italics, never more:
+//   - a `_` opener after a letter, a digit or another `_` opens nothing (CommonMark: intraword `_` is no emphasis; `__Verify: x__`
+//     is bold, and read as italics its value was `x_` — `done --run` ran `npm test_`);
+//   - an EMPTY marker (`_Verify:_`, `*Implements:*`) is a span with an empty value: a title naming a marker ("Document the
+//     _Verify:_ and _Implements:_ markers") yielded the runnable _Verify:_ `_ and _Implements:` — the task could never be
+//     verified, and `done --run` executed it; "_Depends:_ and _Size:_" failed doctor's task-deps, refusing the tasks approval;
+//   - a closer is searched only before the next opener (else the end of the line) — the value never swallows a marker after it;
+//   - inline code is code: a `_` / `*` inside a code span never closes a marker (``_Verify: `npm test -- -g "a_ b"`_`` was cut at
+//     `"a`), and a label inside one opens none.
 const TASK_MARKER_LABELS = ["Requirements", "Makes green", "Affects evals", "Emits metrics", "Implements", "Verify", "Expect", "Size", "Depends"]; // _Depends:_ (1.14 F3)
-const RE_TASK_MARKER_OPEN = new RegExp("(?:_|(?<![*\\p{L}\\p{N}_])\\*)(" + TASK_MARKER_LABELS.join("|") + "):[ \\t]*", "giu");
+const RE_TASK_MARKER_OPEN = new RegExp("(?:(?<![_\\p{L}\\p{N}])_|(?<![*\\p{L}\\p{N}_])\\*)(" + TASK_MARKER_LABELS.join("|") + "):[ \\t]*", "giu");
 const MARKER_CLOSE_PUNCT = new Set([".", ",", ";", ":", "!", "?", ")", "]"]);
 // → [{ key (the label, lower-case), value (untrimmed), start, end }], in line order.
 // A closer followed directly by whitespace / the end ("plain") wins over one followed by closing punctuation, when one exists
@@ -1069,10 +1186,23 @@ function taskMarkerSpans(line) {
 }
 function scanMarkerSpans(s) {
   const out = [];
+  // The characters inside inline code spans (a backtick run closed by a run of the same length — backtickRuns, linear).
+  let inCode = null;
+  if (s.includes("`")) {
+    const ticks = backtickRuns(s);
+    for (let k = 0; k < s.length;) {
+      if (s[k] !== "`") { k++; continue; }
+      let r = k;
+      while (s[r] === "`") r++;
+      const e = ticks.spanEnd(k);
+      if (e > r) (inCode || (inCode = new Uint8Array(s.length))).fill(1, k, e);
+      k = e;
+    }
+  }
   const re = new RegExp(RE_TASK_MARKER_OPEN.source, RE_TASK_MARKER_OPEN.flags); // its own lastIndex
   const opens = [];
   let m;
-  while ((m = re.exec(s)) !== null) opens.push({ index: m.index, len: m[0].length, key: m[1] });
+  while ((m = re.exec(s)) !== null) if (!inCode || !inCode[m.index]) opens.push({ index: m.index, len: m[0].length, key: m[1] });
   if (!opens.length) return out;
   // Per delimiter, the indices of the `_` / `*` that can close a marker, ascending: plain, or before punctuation.
   const ok = new Array(s.length + 1).fill(false); // ok[i]: from i, closing punctuation then whitespace or the end
@@ -1080,7 +1210,7 @@ function scanMarkerSpans(s) {
   for (let i = s.length - 1; i >= 0; i--) ok[i] = /\s/.test(s[i]) || (MARKER_CLOSE_PUNCT.has(s[i]) && ok[i + 1]);
   const plain = { _: [], "*": [] }, punct = { _: [], "*": [] };
   for (let j = 0; j < s.length; j++) {
-    if ((s[j] === "_" || s[j] === "*") && ok[j + 1]) (j + 1 === s.length || /\s/.test(s[j + 1]) ? plain : punct)[s[j]].push(j);
+    if ((s[j] === "_" || s[j] === "*") && ok[j + 1] && !(inCode && inCode[j])) (j + 1 === s.length || /\s/.test(s[j + 1]) ? plain : punct)[s[j]].push(j);
   }
   const cursor = { plain: { _: 0, "*": 0 }, punct: { _: 0, "*": 0 } };
   const next = (lists, kind, d, v) => { // the first closer after v (the value holds one character at least); cursors only move on
@@ -1096,10 +1226,16 @@ function scanMarkerSpans(s) {
     if (o.index < at) continue; // inside the previous marker's value
     const d = s[o.index];
     const v = o.index + o.len;
+    // An empty marker (`_Verify:_`): the label named, no value — a span of its own, so nothing after it reads as its value.
+    if (s[v] === d && ok[v + 1] && !(inCode && inCode[v])) {
+      out.push({ key: o.key.toLowerCase(), value: "", start: o.index, end: v + 1 });
+      at = v + 1;
+      continue;
+    }
     let limit = s.length;
     for (let q = k + 1; q < opens.length; q++) if (opens[q].index > v) { limit = opens[q].index; break; }
     const pc = next(plain, "plain", d, v), uc = next(punct, "punct", d, v);
-    const close = pc >= 0 && pc < limit ? pc : uc >= 0 && uc < limit ? uc : pc;
+    const close = pc >= 0 && pc < limit ? pc : uc >= 0 && uc < limit ? uc : -1; // never past the next opener
     if (close < 0) continue;
     out.push({ key: o.key.toLowerCase(), value: s.slice(v, close), start: o.index, end: close + 1 });
     at = close + 1;
@@ -1183,6 +1319,40 @@ function malformedMarkers(blocks) {
     if (labels.size) out.push({ number: b.number, labels: [...labels] });
   }
   return out;
+}
+
+// Review 5 — a _Verify:_ value that looks garbled (doctor's verify-suspicious warn; `done --run` would run it exactly as written):
+// it starts with `_` or `*` (a marker's delimiter read into the value), it holds a code span INSIDE it (`` `npm test` and `npm run
+// lint` `` — two commands written as one; the whole-value span is dropped before), or a quote has no partner (an odd count of `"`;
+// of `'` not between two letters — `it's` is a word). → [{ number, values }]
+function suspiciousVerify(blocks) {
+  const out = [];
+  for (const b of blocks) {
+    const values = taskMarkers(b).verify.filter(verifySuspicious);
+    if (values.length) out.push({ number: b.number, values });
+  }
+  return out;
+}
+function verifySuspicious(v) {
+  if (/^[_*]/.test(v)) return true;
+  if (v.includes("`")) {
+    const ticks = backtickRuns(v);
+    for (let k = 0; k < v.length;) {
+      if (v[k] !== "`") { k++; continue; }
+      let r = k;
+      while (v[r] === "`") r++;
+      const e = ticks.spanEnd(k);
+      if (e > r) return true; // a closed code span
+      k = e;
+    }
+  }
+  const word = (c) => !!c && /[\p{L}\p{N}]/u.test(c);
+  let dq = 0, sq = 0;
+  for (let i = 0; i < v.length; i++) {
+    if (v[i] === '"' && v[i - 1] !== String.fromCharCode(92)) dq++;
+    else if (v[i] === "'" && !(word(v[i - 1]) && word(v[i + 1]))) sq++;
+  }
+  return dq % 2 === 1 || sq % 2 === 1;
 }
 
 // tasks.md → "## Global Constraints" (EN/PT/ES): exact values every task must respect. Placeholder-only
@@ -1273,17 +1443,13 @@ function testIndex(planText) {
   return map;
 }
 
-// design.md split into its `##` sections (nested `###` content stays in the body).
+// design.md split into its level-2 sections (nested `###` content stays in the body) — the ONE heading reader's (review 5, M2:
+// headingEntries — a setext "Title\n---" or an indented "  ## Title" is a section too; its title drops a closing "##", as
+// weighSectionHead's does).
 function designSections(designText) {
-  const out = [];
-  let cur = null;
-  const fst = { fence: null };
-  for (const line of stripHtmlComments(designText || "").split(/\r?\n/)) {
-    const h = !fenceStep(fst, line) && atxHeading(line, 2, 2); // /^##\s+(.*?)\s*$/
-    if (h) { cur = { title: h.text, body: [] }; out.push(cur); continue; }
-    if (cur) cur.body.push(line);
-  }
-  return out.map((s) => ({ title: s.title, body: s.body.join("\n").trim() }));
+  const lines = stripHtmlComments(designText || "").split(/\r?\n/);
+  const heads = headingEntries(lines).filter((h) => h.level === 2);
+  return heads.map((h, k) => ({ title: h.text, body: lines.slice(h.body, k + 1 < heads.length ? heads[k + 1].i : lines.length).join("\n").trim() }));
 }
 
 const BRIEF_DESIGN_BUDGET = 4000; // chars of design text carried into a brief (keeps it ~≤8 KB)
@@ -1370,7 +1536,16 @@ function taskBrief(projectDir, name, number, opts = {}) {
   // The files as the design spells them: `src/payment.js:10` / `#L10` / backticks never appear there (implementsRel, the
   // way briefSteering reads them) — the raw spelling left the design section out.
   const impFiles = mk.implements.map(implementsRel).filter(Boolean);
-  const needles = [...acIds, ...testIds, ...impFiles, ...impFiles.map((f) => path.posix.basename(f)).filter((b) => b.length >= 5)];
+  // Review 5 (M15) — IDs and files as whole words: a substring test took US-1.AC-1 for US-1.AC-10 and T-1 for T-10, quoted that
+  // section and pushed the one about the task's own criterion out of the budget. An AC ID ends before a non-digit (and never
+  // follows another feature's `x/`), a T-ID is read by its number (T-01 = T-1, tKey's rule), a file needs a boundary on both
+  // sides (its basename may follow a folder). The sections naming one of the task's IDs fill the budget first.
+  const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const idNeedles = [...acIds.map((id) => new RegExp("(?<![\\w./-])" + reEsc(id) + "(?!\\d)")),
+    ...testIds.map((id) => new RegExp("(?<![\\w-])T-0*" + parseInt(id.slice(2), 10) + "(?!\\d)"))];
+  const fileNeedles = [...impFiles, ...impFiles.map((f) => path.posix.basename(f)).filter((b) => b.length >= 5)]
+    .map((x) => new RegExp("(?<![\\w-])" + reEsc(x) + "(?![\\w-])"));
+  const idHit = (s) => idNeedles.some((r) => r.test(s.title + "\n" + s.body));
   // A task proving a +sec / +privacy criterion reads that track's design sections (threat model, authz, retention…).
   // … and a track pack's (1.15) — its sections are the rigor its criteria were written for.
   const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
@@ -1388,7 +1563,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const want = (s) => {
     if (s === reuseSection) return false;
     const hay = s.title + "\n" + s.body;
-    if (needles.some((x) => hay.includes(x))) return true;
+    if (idHit(s) || fileNeedles.some((r) => r.test(hay))) return true;
     const title = s.title.toLowerCase();
     const syn = (list, nm) => list.find((x) => x.name === nm).syn.some((y) => title.includes(y));
     if (mk["emits metrics"].length && syn(SAAS_SECTIONS, "Observability")) return true;
@@ -1400,10 +1575,15 @@ function taskBrief(projectDir, name, number, opts = {}) {
   let budget = BRIEF_DESIGN_BUDGET;
   const included = [];
   const omitted = [];
-  for (const s of sections.filter(want)) {
+  const wanted = sections.filter(want);
+  for (const s of [...wanted.filter(idHit), ...wanted.filter((x) => !idHit(x))]) { // the task's own IDs first (M15)
     if (s.body.length <= budget) { included.push(s); budget -= s.body.length; }
-    else omitted.push(s.title);
+    else omitted.push(s);
   }
+  const docOrder = (a, b) => sections.indexOf(a) - sections.indexOf(b); // shown as design.md orders them
+  included.sort(docOrder);
+  omitted.sort(docOrder);
+  omitted.forEach((s, i) => { omitted[i] = s.title; });
 
   // Steering: the default files (as before) + front-matter scoped ones (always / fileMatch on _Implements:_ paths).
   const steer = briefSteering(root, tracks, mk.implements);
@@ -1814,7 +1994,10 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     if (cyc.length) return { ok: false, error: DP.cycleDepends(cyc.map((c) => c.map((x) => "#" + x).join(", ")).join("; ")), cycles: cyc };
   }
 
-  writeFileAtomic(file, updated);
+  // Review 5 (P3): written in the file's own encoding — refused, nothing written, when its bytes are no text in it (a code page).
+  const bytes = tasksRewrite(file, raw, updated);
+  if (!bytes) return { ok: false, error: M.err.tasksNotText(tasksFileName(dir)) };
+  writeFileAtomic(file, bytes);
   maybeRefreshRoadmap(projectDir);
   // New content after an approval of the task breakdown: next_action reports tasks.md as changed-since-approval.
   const appr = state.approvals.tasks;
@@ -1841,12 +2024,12 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
 module.exports = { parseTasks, taskDescription, nextTask, parallelBatch, RE_DEP_TOKEN, taskDependsSpec, taskDepGraph,
   stuckTasks, taskSchedule, dependencyCycles, taskWaves, openDependenciesOf, briefDependencies, taskDepsBlockedNote,
   taskDepsWaitList, taskDepsIssues, taskDepsCheck, RE_ROOT_CAUSE_TASK, bugfixGate, rootCauseTaskIndex, blockPosition,
-  taskNumber, completeTask, UNDO_REASON_MAX, reasonInput, untickTask, RE_TASK_LINE_HEAD, taskLine, RE_CHECKPOINT,
+  taskNumber, tasksBytes, textEncoding, encodeText, tasksRewrite, checkboxBytes, completeTask, UNDO_REASON_MAX, reasonInput, untickTask, RE_TASK_LINE_HEAD, taskLine, RE_CHECKPOINT,
   COMMENT_MASK, RE_TASK_FENCE_OPEN, RE_PARA_BREAK, scanTaskLines, fenceLine, indentOf, hasOutsideCode, backtickRuns,
   TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, taskBlocks, scanTaskBlocks, RE_LIST_BOX_LINE, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse,
   RE_RED_PHASE_TASK, redPhaseTask, redPhaseHint, tasksProseText, changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, RE_TASK_MARKER_OPEN,
   MARKER_CLOSE_PUNCT, MARKER_SPANS_MEMO, MARKER_SPANS_MEMO_MAX, MARKER_MEMO_LINE_MAX, NO_MARKER_SPANS, taskMarkerSpans, scanMarkerSpans,
   taskMarkerValues, withoutTaskMarkers, WHOLE_VALUE_MARKERS, TASK_MARKERS_MEMO, TASK_MARKERS_MEMO_MAX, taskMarkers, scanTaskMarkers,
-  RE_MARKER_WORD, MARKER_WORD_LABEL, malformedMarkers, RE_GLOBAL_CONSTRAINTS, globalConstraints, isPromptTask,
+  RE_MARKER_WORD, MARKER_WORD_LABEL, malformedMarkers, suspiciousVerify, verifySuspicious, RE_GLOBAL_CONSTRAINTS, globalConstraints, isPromptTask,
   RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections, BRIEF_DESIGN_BUDGET, taskBrief, RE_NEW_TASK_TAGS,
   RE_THEMATIC_BREAK, unwrapCodeSpan, newTaskSpec, appendTasks, __link };

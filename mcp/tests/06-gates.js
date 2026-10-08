@@ -1358,4 +1358,143 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
       "1.22 review 2: with test-plan.md deleted and its approval revoked, `tests` is not pending and doctor's approval-gates no longer says the tests phase is to be approved again (approve tests: nothing to approve) (got " +
       js([rT.ok, rv.ok, doc.pendingGates, gates.detail, at.error]) + ")");
   }
+  { // r5 review (gates) — a .state.json that can't be read, an artifact that can't be read, bug.md's open questions, whitespace-only
+    // edits of an approved artifact, identical re-approvals.
+    const js = JSON.stringify;
+    const REQ = ["# Feature: Widget", "", "## Summary", "Users can save widgets.", "", "### US-1 (P1 — MVP): Save widgets",
+      "**As a** user, **I want** to save a widget, **so that** I keep it.", "**Independent Test:** save one and reload the page.", "",
+      "#### Acceptance Criteria (EARS)", "1. **US-1.AC-1** — WHEN a user saves a widget THE SYSTEM SHALL store it",
+      "2. **US-1.AC-2** — IF the widget name is empty THEN THE SYSTEM SHALL reject it with a message", "",
+      "## Success Criteria", "- **SC-001** — 95% of saves finish under 200 ms", "", "## Edge Cases & Error Handling", "- **EC-1** — an empty widget is rejected", ""].join("\n");
+    const filled = (name) => {
+      const p = path.join(tmp, "proj-r5g-" + name);
+      S.initProject(p, ["core"], "en");
+      const f = S.createFeature(p, "Widget", ["core"]);
+      const w = (rel, text) => fs.writeFileSync(path.join(f.dir, rel), text);
+      w("classification.md", "# Classification: Widget\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none beyond core\n\n## Blast Radius\nThe widget page only.\n\n## Compliance Tags\nnone\n");
+      w("requirements.md", REQ);
+      w("design.md", "# Design: Widget\n\n## Overview\nA store module.\n\n## Architecture\n```mermaid\ngraph TD\n  A[UI] --> B[Store]\n```\n\n## Constitution Check\n- [x] Simplicity — complies\n");
+      w("tasks.md", "# Tasks: Widget\n\n## Story US-1 (P1 — MVP)\n- [ ] 1. [US1] Store widgets\n  - _Requirements: US-1.AC-1, SC-001_\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Reject empty names\n  - _Requirements: US-1.AC-2, EC-1_\n  - _Verify: node -e \"process.exit(0)\"_\n");
+      return { p, f, w };
+    };
+
+    // M1: an unreadable .state.json (a text merge's conflict markers) — doctor fails `state`, next_action's one step is to repair it
+    // (never "approve" — every mutator refuses on that file), finish blocks on it, the status line says so.
+    const a = filled("state");
+    for (const ph of ["classification", "requirements", "design", "tasks"]) S.approvePhase(a.p, "widget", ph, "u");
+    const good = fs.readFileSync(path.join(a.f.dir, ".state.json"), "utf8");
+    a.w(".state.json", good.replace('"approvals": {', '"approvals": {\n<<<<<<< HEAD'));
+    const docA = S.specDoctor(a.p, "widget"), naA = S.nextAction(a.p, "widget"), finA = S.finishFeature(a.p, "widget", {}), slA = S.statusLine(a.p);
+    const apA = S.approvePhase(a.p, "widget", "requirements", "u");
+    a.w(".state.json", JSON.stringify({ ...JSON.parse(good), approvals: [] })); // valid JSON, the wrong shape
+    const naShape = S.nextAction(a.p, "widget");
+    const stateCheck = docA.checks.find((c) => c.id === "state") || {};
+    ok(docA.verdict === "fail" && stateCheck.status === "fail" && /widget\/\.state\.json is not valid JSON/.test(stateCheck.detail) &&
+      naA.step === "fix" && naA.stateInvalid === true && /^widget\/\.state\.json is not valid JSON .* Until it is repaired nothing can be approved, ticked or finished/.test(naA.recommendation) &&
+      /merge-state --install/.test(naA.recommendation) && !naA.fastForward && js(naA.pendingGates) === "[]" &&
+      finA.readyToFinish === false && /not valid JSON/.test(finA.blockers[0]) && !finA.blockers.some((b) => /awaiting approval/.test(b)) && js(finA.pendingGates) === "[]" &&
+      js(slA.next) === '{"step":"fix","file":".state.json"}' && /next: repair \.state\.json \(it can't be read\)/.test(slA.line) &&
+      apA.ok === false && naShape.step === "fix" && /unexpected shape/.test(naShape.recommendation),
+      "r5 review M1: an unreadable / wrong-shaped .state.json → doctor fails `state` (naming the file), next_action's step is `fix` (stateInvalid, repair it — never 'approve' everything again), finish blocks on it first (no 'every phase awaiting approval'), the status line says repair (got " +
+      js([docA.verdict, stateCheck, naA.step, naA.recommendation.slice(0, 160), finA.blockers, slA.line, naShape.step]) + ")");
+    // PT / ES wording
+    const aPt = filled("state-pt");
+    aPt.w(".state.json", "{");
+    const naPt = S.nextAction(aPt.p, "widget");
+    aPt.w(".state.json", JSON.stringify({ lang: "pt", approvals: "x" }));
+    const naPt2 = S.nextAction(aPt.p, "widget");
+    aPt.w(".state.json", JSON.stringify({ lang: "es", approvals: "x" }));
+    const naEs2 = S.nextAction(aPt.p, "widget");
+    ok(naPt.step === "fix" && /Until it is repaired/.test(naPt.recommendation) && /Enquanto não for reparado/.test(naPt2.recommendation) && /Mientras no se repare/.test(naEs2.recommendation),
+      "r5 review M1: next_action's repair step is localized (the feature's language — EN, PT, ES) (got " + js([naPt2.recommendation.slice(0, 90), naEs2.recommendation.slice(0, 90)]) + ")");
+
+    // The crash: an artifact that exists but can't be read (a folder named requirements.md) — approve, doctor, next_action, finish and
+    // the fast-forward answer (approve: unreadable, localized) instead of a TypeError.
+    const c = filled("unreadable");
+    S.approvePhase(c.p, "widget", "classification", "u");
+    fs.rmSync(path.join(c.f.dir, "requirements.md"));
+    fs.mkdirSync(path.join(c.f.dir, "requirements.md"));
+    const run = (fn) => { try { return fn(); } catch (e) { return { threw: e.message }; } };
+    const cAp = run(() => S.approvePhase(c.p, "widget", "requirements", "u")), cDoc = run(() => S.specDoctor(c.p, "widget"));
+    const cNa = run(() => S.nextAction(c.p, "widget")), cFin = run(() => S.finishFeature(c.p, "widget", {}));
+    const cFf = run(() => S.approvePhase(c.p, "widget", null, "u", { through: "tasks" }));
+    ok(cAp.ok === false && cAp.unreadable === true && cAp.nothingToApprove === true && /^Nothing to approve: requirements\.md in 'widget' can't be read/.test(cAp.error) &&
+      cDoc.ok === true && cNa.ok === true && cFin.ok === true && cFin.readyToFinish === false && cFf.ok === false && cFf.stopReason === "nothing-to-approve",
+      "r5 review: an artifact that exists but can't be read (a folder named requirements.md) — approve answers a localized 'can't be read' (unreadable), doctor / next_action / finish / the fast-forward answer instead of throwing (got " +
+      js([cAp, cDoc.threw, cNa.threw, cFin.threw, cFf.stopReason || cFf.threw]) + ")");
+    // the same after its approval: next_action says restore it (missingApproved), never "re-approve"
+    const c2 = filled("unreadable-approved");
+    for (const ph of ["classification", "requirements"]) S.approvePhase(c2.p, "widget", ph, "u");
+    fs.rmSync(path.join(c2.f.dir, "requirements.md"));
+    fs.mkdirSync(path.join(c2.f.dir, "requirements.md"));
+    const c2Na = run(() => S.nextAction(c2.p, "widget"));
+    ok(c2Na.step === "re-review" && js(c2Na.missingApproved) === '["requirements.md"]' && /was approved but no longer exists — restore it/.test(c2Na.recommendation),
+      "r5 review: an approved artifact that can't be read any more → next_action's re-review names it in missingApproved (restore it or revoke) (got " + js([c2Na.step, c2Na.missingApproved, c2Na.threw]) + ")");
+
+    // M11: a bugfix's bug.md is its design — an open [NEEDS CLARIFICATION] in its Root Cause (or Reproduction) refuses the approval;
+    // doctor's clarifications check and spec_clarify see it too.
+    const bp = path.join(tmp, "proj-r5g-bug");
+    S.initProject(bp, ["core"], "en");
+    const bf = S.createFeature(bp, "Login fails", ["core"], undefined, undefined, "en", "bugfix");
+    const bw = (rel, re, by) => fs.writeFileSync(path.join(bf.dir, rel), fs.readFileSync(path.join(bf.dir, rel), "utf8").replace(re, by));
+    fs.writeFileSync(path.join(bf.dir, "requirements.md"), "# Bugfix: Login fails\n\n## Summary\nLogin fails.\n\n### US-1 (P1 — fix): Login fails\n**Independent Test:** T-01.\n\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — IF the e-mail holds an accented letter THEN THE SYSTEM SHALL log the user in\n2. **US-1.AC-2** — THE SYSTEM SHALL keep plain e-mails logging in unchanged\n\n## Success Criteria\n- **SC-001** — the bug no longer reproduces.\n");
+    bw("bug.md", /## Summary\n\[[^\]]*\]/, "## Summary\nLogin fails for accented e-mails.");
+    bw("bug.md", /## Reproduction\n> \*\*TODO\*\*[^\n]*/, "## Reproduction\nLog in as josé@example.com: 401 [NEEDS CLARIFICATION: which browser?]");
+    bw("bug.md", /- \*\*Expected:\*\* \[[^\]]*\]/, "- **Expected:** logged in");
+    bw("bug.md", /- \*\*Actual:\*\* \[[^\]]*\]/, "- **Actual:** 401");
+    bw("bug.md", /## Fix\n\[[^\]]*\]/, "## Fix\nNormalize with NFC.");
+    const bReq1 = S.approvePhase(bp, "login-fails", "requirements", "u");
+    bw("bug.md", " [NEEDS CLARIFICATION: which browser?]", "");
+    const bReq2 = S.approvePhase(bp, "login-fails", "requirements", "u");
+    bw("bug.md", /## Root Cause\n> \*\*TODO\*\*[^\n]*/, "## Root Cause\nProbably the stored NFD form [NEEDS CLARIFICATION: confirm it in the DB]");
+    const bDes1 = S.approvePhase(bp, "login-fails", "design", "u");
+    const bDoc = S.specDoctor(bp, "login-fails");
+    const bCl = S.clarify(bp, "login-fails");
+    bw("bug.md", "Probably the stored NFD form [NEEDS CLARIFICATION: confirm it in the DB]", "The DB stores NFD (users.email, checked in psql); the lookup compares NFC.");
+    const bDes2 = S.approvePhase(bp, "login-fails", "design", "u");
+    const bClar = bDoc.checks.find((x) => x.id === "clarifications") || {};
+    ok(bReq1.ok === false && bReq1.failing.includes("clarifications") && bReq2.ok && bDes1.ok === false && js(bDes1.failing) === '["clarifications"]' &&
+      /1 unresolved \[NEEDS CLARIFICATION\] in bug\.md/.test(bDes1.checks[0].detail) && bClar.status === "fail" && /in bug\.md/.test(bClar.detail) &&
+      bCl.questions.some((q) => /confirm it in the DB/.test(q)) && bDes2.ok,
+      "r5 review M11: a bugfix's [NEEDS CLARIFICATION] in bug.md → Reproduction refuses the requirements gate, in its Root Cause the design gate (bug.md is its design); doctor's clarifications check fails and spec_clarify asks it (got " +
+      js([bReq1.failing, bDes1.failing, bClar, bCl.questions]) + ")");
+
+    // Improvement a: a whitespace-only edit of an approved artifact (trailing spaces, blank lines at the end) is no change since its
+    // approval — judged against the approval's own snapshot; an approval without one (pre-1.13) keeps the fingerprint alone.
+    const d = filled("ws");
+    for (const ph of ["classification", "requirements"]) S.approvePhase(d.p, "widget", ph, "u");
+    d.w("requirements.md", REQ.replace("store it\n", "store it   \t\n").replace(/\n$/, "\n\n\n"));
+    const dNa = S.nextAction(d.p, "widget"), dIm = S.impactReport(d.p, "widget", { phase: "requirements" }), dDoc = S.specDoctor(d.p, "widget");
+    d.w("requirements.md", REQ.replace(/\n/g, "\r\n").replace(/\r\n$/, "")); // CRLF and no final newline
+    const dNa2 = S.nextAction(d.p, "widget");
+    d.w("requirements.md", REQ.replace("store it", "store it durably"));
+    const dNa3 = S.nextAction(d.p, "widget");
+    // no snapshot: the fingerprint alone decides
+    const dSt = JSON.parse(fs.readFileSync(path.join(d.f.dir, ".state.json"), "utf8"));
+    dSt.approvalHistory.forEach((h) => { delete h.snapshot; });
+    d.w(".state.json", JSON.stringify(dSt, null, 2));
+    d.w("requirements.md", REQ + "\n");
+    const dNa4 = S.nextAction(d.p, "widget");
+    ok(js(dNa.changedSinceApproval) === "[]" && dNa.step !== "re-review" && dIm.changed === false && !dDoc.checks.some((x) => x.id === "changed-since-approval") &&
+      js(dNa2.changedSinceApproval) === "[]" && js(dNa3.changedSinceApproval) === '["requirements.md"]' && js(dNa4.changedSinceApproval) === '["requirements.md"]',
+      "r5 review: a whitespace-only edit of an approved artifact (trailing spaces / tabs, blank lines at the end, a final newline dropped) is no change since its approval — next_action, doctor, spec_impact agree; a real edit still is; without the approval's snapshot the fingerprint alone decides (got " +
+      js([dNa.changedSinceApproval, dIm.changed, dNa2.changedSinceApproval, dNa3.changedSinceApproval, dNa4.changedSinceApproval]) + ")");
+
+    // Improvement b: an identical re-approval shares the previous snapshot (no second copy) and is no rework in spec_metrics; new
+    // content gets the next snapshot number.
+    const e = filled("reuse");
+    for (const ph of ["classification", "requirements"]) S.approvePhase(e.p, "widget", ph, "u");
+    const eRe = [1, 2, 3].map(() => S.approvePhase(e.p, "widget", "requirements", "u"));
+    const eSnaps = () => fs.readdirSync(path.join(e.f.dir, ".history")).filter((x) => x.startsWith("requirements")).sort();
+    const eM1 = S.metrics(e.p, "widget");
+    const eSnaps1 = eSnaps();
+    e.w("requirements.md", REQ.replace("store it", "store it durably"));
+    const eNew = S.approvePhase(e.p, "widget", "requirements", "u");
+    const eM2 = S.metrics(e.p, "widget");
+    ok(eRe.every((r) => r.ok && r.snapshot === ".history/requirements@1.md") && js(eSnaps1) === '["requirements@1.md"]' && eM1.rework === 0 && eM1.approvalsTotal === 5 &&
+      eNew.snapshot === ".history/requirements@2.md" && js(eSnaps()) === '["requirements@1.md","requirements@2.md"]' && eM2.rework === 1 && eM2.reworkByPhase.requirements === 1,
+      "r5 review: an identical re-approval shares the previous snapshot (.history/requirements@1.md, no copy) and is no rework in spec_metrics (still an approval in approvalsTotal); new content → requirements@2.md, rework 1 (got " +
+      js([eRe.map((r) => r.snapshot), eSnaps1, eM1.rework, eM1.approvalsTotal, eNew.snapshot, eM2.rework]) + ")");
+  }
 };

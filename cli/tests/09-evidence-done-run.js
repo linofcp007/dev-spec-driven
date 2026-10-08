@@ -8,6 +8,7 @@ const { spawnSync } = require("child_process");
 exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
 // 1.13 WP1: `done --run` verifies the very task it ticks; zero-padded numbers; --exit alone; --shell; localized output
 const w1p = path.join(tmp, "wp1-proj");
+fs.mkdirSync(w1p, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
 const w1Read = (f) => fs.readFileSync(path.join(w1p, ".specs", f, "tasks.md"), "utf8");
 run(["create", "Dup", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "dup", "tasks.md"),
@@ -143,6 +144,7 @@ ok(/Tasks: 1\/3\s+next → #2/.test(w1CmSt.out) && w1CmDone.code === 0 && /Task 
 const hasShell = (sh) => { try { return spawnSync(sh, ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], { encoding: "utf8", windowsHide: true, timeout: 60000 }).status === 0; } catch { return false; } };
 const hasPwsh = hasShell("pwsh"), hasWinPs = process.platform === "win32" && hasShell("powershell");
 const lp = path.join(tmp, "l121-pwsh-run");
+fs.mkdirSync(lp, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
 run(["create", "Pwsh", "core", "--project", lp]);
 const lpRead = () => fs.readFileSync(path.join(lp, ".specs", "pwsh", "tasks.md"), "utf8");
 const lpEv = () => { try { return JSON.parse(fs.readFileSync(path.join(lp, ".specs", "pwsh", ".state.json"), "utf8")).evidence || {}; } catch { return {}; } };
@@ -242,6 +244,7 @@ if (hasWinPs) {
 // Describe Broken failed" — completeTask re-read it as "never ran" and refused the red proof. Same for a thrown message quoting
 // "[-] Describe Foo failed". Both are recorded red now, the task ticked.
 const rm2 = path.join(tmp, "l121-mixed-pester");
+fs.mkdirSync(rm2, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
 run(["create", "Mixed", "core", "--project", rm2]);
 fs.writeFileSync(path.join(rm2, ".specs", "mixed", "tasks.md"), [
   "- [ ] 1. [US1] Write T-01 and watch it fail", "  - _Verify: node t/pester-mixed.js_", "  - _Expect: fail_",
@@ -267,6 +270,7 @@ ok(rm1.code === 0 && /red run recorded for task 1/.test(rm1.out) && rmEv()["1"] 
 // 1.22 review (finding 1): `done --cmd <another command> --exit 0` ticks the task WITHOUT "(verified)" and says why
 // (command-mismatch); `--run` (the CLI runs the _Verify:_ itself) verifies.
 const cm = path.join(tmp, "122-cmd-mismatch");
+fs.mkdirSync(cm, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
 run(["create", "Proof", "core", "--project", cm]);
 fs.writeFileSync(path.join(cm, ".specs", "proof", "tasks.md"), "- [ ] 1. a\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. b\n  - _Verify: node -e \"process.exit(0)\"_\n");
 const cm1 = run(["done", "proof", "1", "--cmd", "echo hello", "--exit", "0", "--project", cm]);
@@ -282,6 +286,7 @@ ok(cm1.code === 0 && /Task 1 done\. 1\/2/.test(cm1.out) && !/\(verified\)/.test(
 // verified, and the recorded command proves the task on its own too (without the "cli" stamp); `--cmd` with one of the two does not.
 const SR2 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 const dm = path.join(tmp, "122r2-done-run-multi");
+fs.mkdirSync(dm, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
 run(["create", "Multi", "core", "--project", dm]);
 fs.mkdirSync(path.join(dm, "t"), { recursive: true });
 fs.writeFileSync(path.join(dm, "t", "ok.js"), "process.exit(0)\n");
@@ -299,4 +304,15 @@ ok(dm1.ok && dm1.verified === true && dm2.ok && dm2.verified === true && evDm["1
   dm3.verified === false && dm3.unverifiedReason === "command-mismatch",
   "1.22 review 2: done --run on a task with two _Verify:_ commands and on a Windows-path _Verify:_ verifies it, and the command it records (the commands joined) proves the task on its own; done --cmd with one of the two is command-mismatch (got " +
   JSON.stringify([dm1, dm2, evDm["1"] && evDm["1"].command, evDm["2"] && evDm["2"].command, dm3.unverifiedReason]) + ")");
+// 1.23 review: a task with several _Verify:_ commands, all passing, keeps one summary per command ("$ <command>" + its output) —
+// the record kept the LAST command's summary alone; four noisy ones are each cut to fit the record's 2,000 characters.
+fs.writeFileSync(path.join(dm, "t", "noisy.js"), "const n = process.argv[2];\nfor (let i = 0; i < 400; i++) console.log('run ' + n + ' line ' + i + ' ' + 'x'.repeat(120));\nconsole.log('# pass ' + n);\n");
+fs.appendFileSync(path.join(dm, ".specs", "multi", "tasks.md"), "- [ ] 4. d\n" + [1, 2, 3, 4].map((n) => "  - _Verify: node t/noisy.js " + n + "_\n").join(""));
+const dm4 = dmJ("4");
+const evDm2 = JSON.parse(fs.readFileSync(path.join(dm, ".specs", "multi", ".state.json"), "utf8")).evidence;
+const sm1 = String((evDm2["1"] && evDm2["1"].summary) || ""), sm4 = String((evDm2["4"] && evDm2["4"].summary) || "");
+ok(/^\$ node -e "process\.exit\(0\)"$/m.test(sm1) && /^\$ node --version\r?\nv\d+\.\d+\.\d+/m.test(sm1) &&
+  dm4.ok && dm4.verified === true && sm4.length <= 2000 && [1, 2, 3, 4].every((n) => sm4.includes("$ node t/noisy.js " + n) && sm4.includes("# pass " + n)),
+  "1.23 review: done --run with several _Verify:_ commands records one summary per command (its command line + its output, the count line kept), within 2,000 characters (got " +
+  JSON.stringify([sm1, sm4.length, sm4.split("\n").filter((l) => /^\$ |# pass/.test(l))]) + ")");
 };

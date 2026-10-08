@@ -47,7 +47,8 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   const kiroSrc = fs.readFileSync(path.join(w6, ".kiro/specs/login/tasks.md"), "utf8");
   const ki = run(["import", "kiro", ".kiro/specs/login", "--project", w6]);
   const kiTasks = fs.existsSync(path.join(w6, ".specs", "login", "tasks.md")) ? fs.readFileSync(path.join(w6, ".specs", "login", "tasks.md"), "utf8") : "";
-  ok(ki.code === 0 && /Imported Kiro \.kiro\/specs\/login → feature 'login' \[core \+tdd\] \(en\)/.test(ki.out) && /mapping: \d+ ID\(s\) — Requirement 1 → US-1, 1\.1 → US-1\.AC-1/.test(ki.out) &&
+  // (review 5: "valid credentials" + "the password" are two +sec words — a login spec imports as core +tdd +sec)
+  ok(ki.code === 0 && /Imported Kiro \.kiro\/specs\/login → feature 'login' \[core \+tdd \+sec\] \(en\)/.test(ki.out) && /mapping: \d+ ID\(s\) — Requirement 1 → US-1, 1\.1 → US-1\.AC-1/.test(ki.out) &&
     /- \[x\] 1\. Session store\n  - _Requirements: US-1\.AC-1_/.test(kiTasks) && /- \[ \] 2\. Error message\n  - _Requirements: US-1\.AC-2_/.test(kiTasks) &&
     fs.readFileSync(path.join(w6, ".kiro/specs/login/tasks.md"), "utf8") === kiroSrc, "import kiro: new feature, IDs mapped, _Requirements:_ rewritten, checkbox state kept, source untouched");
   ok(run(["ears", "login", "--project", w6]).code === 0 && /US-1\.AC-2\*\* — WHEN the password is wrong, THE SYSTEM SHALL show an error/.test(fs.readFileSync(path.join(w6, ".specs", "login", "requirements.md"), "utf8")),
@@ -83,7 +84,8 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
 
   // Review round: --tracks is a value flag everywhere, so every command that takes tracks honours it (never dropped).
   const tk = path.join(tmp, "wp6-tracks");
-  const crT = (() => { try { return JSON.parse(run(["create", "Payments Flow", "--tracks", "tdd,saas", "--json", "--project", tk]).out); } catch { return null; } })();
+  fs.mkdirSync(tk, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
+  const crT =(() => { try { return JSON.parse(run(["create", "Payments Flow", "--tracks", "tdd,saas", "--json", "--project", tk]).out); } catch { return null; } })();
   const crT2 = run(["create", "Report page", "--tracks", "saas", "--project", tk]);
   ok(crT && crT.tracks.join() === "core,tdd,saas" && crT2.code === 0 && /\[core \+saas\]/.test(crT2.out) && fs.existsSync(path.join(tk, ".specs", "report-page", "load-test.md")),
     "create --tracks tdd,saas / --tracks saas uses those tracks (no silent auto-classify)");
@@ -142,7 +144,7 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   const covM = run(["coverage", "--project", missing]);
   const scF = run(["scan", "--project", w6, path.join(w6, "package.json")]);
   ok(scM.code === 1 && /is not a folder \(it doesn't exist, or it is a file\)/.test(scM.out) && !/stack: unknown|files: 0/.test(scM.out) &&
-    scMj && scMj.ok === false && /is not a folder/.test(scMj.error) && covM.code === 1 && /is not a folder/.test(covM.out) && scF.code === 1 && !fs.existsSync(missing),
-    "1.22 review: `scan <missing>` / `scan <a file>` / `coverage --project <missing>` exit 1 with 'is not a folder' (--json: ok false), never an empty codebase (got " +
+    scMj && scMj.ok === false && /is not a folder/.test(scMj.error) && covM.code === 1 && /--project .*wp6-missing-folder: no such folder/.test(covM.out) && scF.code === 1 && !fs.existsSync(missing),
+    "1.22 review: `scan <missing>` / `scan <a file>` exit 1 with 'is not a folder' (--json: ok false), never an empty codebase; 1.23 review: `coverage --project <missing>` is refused as a --project that doesn't exist (got " +
     JSON.stringify([scM.code, scM.out.slice(0, 120), covM.code, scF.code]) + ")");
 };

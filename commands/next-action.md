@@ -10,6 +10,9 @@ Args: $ARGUMENTS
 Call the `spec_next_action` MCP tool (CLI `dev-spec next-action <feature>`, alias `na`). It picks ONE next step,
 **phase by phase**, and names it in `step`:
 
+0. **fix** with `stateInvalid: true` — the feature's `.state.json` can't be read (not valid JSON, e.g. a git text merge's
+   conflict markers, or the wrong shape): its approvals, ticks and evidence are unknown and every mutator refuses on it —
+   repair it by hand or restore it from git first;
 1. **re-review** — an artifact changed after its own approval (`changedSinceApproval`); when the approval has a
    snapshot, `impact` names the `spec_impact` phases to run first (`/spec-impact`). An approved artifact that was
    deleted is named in `missingApproved`: restore it, or revoke that approval (`/approve <feature> <phase> --revoke`);

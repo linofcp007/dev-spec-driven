@@ -117,6 +117,11 @@ Restart Claude Desktop. The `spec-driven` tools appear. The workflow itself: pas
 `node "<PLUGIN>/cli/dev-spec.js" rules agents` into a Project's custom instructions (Claude Desktop has
 no skills/rules file convention).
 
+**Which project?** A global config names none, and the server's working directory is the app's. Add
+`"env": { "SPEC_PROJECT_DIR": "<your project folder>" }` next to `args`, or have the agent pass `projectDir` to every tool —
+otherwise `.specs/` is written in that working directory. (A client that reports its workspace as MCP `roots` — VS Code
+does — needs neither: the server uses its first local root.)
+
 ## Claude CoWork
 
 Same as Claude Code (skills + MCP supported). If no project folder is mounted, the engine writes

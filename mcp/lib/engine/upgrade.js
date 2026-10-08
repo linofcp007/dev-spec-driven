@@ -10,14 +10,14 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, DESIGN_WEIGH_IDS, detectTracks, ensureLockIgnore, errs, existsCached,
+let activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, detectTracks, ensureLockIgnore, errs, existsCached,
   featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord, isChangeDir, isGeneratedOrAbsent, isObj,
   isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES, maybeRefreshRoadmap, missingPackTracks,
   nextAction, normalizeLang, parseTasks, PHASE_FILE, phaseActive, phaseFile, positionPhase, projectLang, readIfExists,
   readJson, readRoadmap, realRootOf, roadmapBusyResult, roadmapError, savedTracks, scanTestCode, shortIdList, specDoctor, specsRoot,
   staleFinish, stateFromFile, statePath, timeOf, trackLabel, unverifiedLabel, verificationStatus, withFeatureLock,
   withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot;
-function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, DESIGN_WEIGH_IDS, detectTracks, ensureLockIgnore,
+function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, detectTracks, ensureLockIgnore,
   errs, existsCached, featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord, isChangeDir,
   isGeneratedOrAbsent, isObj, isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES,
   maybeRefreshRoadmap, missingPackTracks, nextAction, normalizeLang, parseTasks, PHASE_FILE, phaseActive, phaseFile,
@@ -182,7 +182,7 @@ function applyUpgradePlan(dir, st, plan) {
 
 // The phases a feature's status can be `not-started` in: nothing written beyond the classification.
 const NOT_STARTED_PHASES = new Set(["empty", "classified", "requirements"]);
-const shortDetail = (s) => { const t = String(s == null ? "" : s).replace(/\s+/g, " ").trim(); return t.length > 110 ? t.slice(0, 109) + "…" : t; };
+const shortDetail = (s) => { const t = String(s == null ? "" : s).replace(/\s+/g, " ").trim(); return t.length > 110 ? cutText(t, 109) + "…" : t; }; // cutText: never half an emoji (1.23 review 5)
 // One active feature, audited against the current rules — every verdict comes from the engine's own checks (doctor,
 // next_action, verificationStatus, changedSinceApproval, the finish baseline), computed once (ctx.scan: one test-code walk
 // shared by every feature, only when one needs it).

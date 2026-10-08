@@ -60,6 +60,25 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   ok(q.slice(0, 4).every((r) => r.code === 0 && r.out === "" && r.err === "") && q[4].code === 0 && q[4].out === line + "\n",
     "1.16 C1: statusline is silent (exit 0, no output) outside a dev-spec project, on a malformed or empty stdin and an unknown flag; without a payload --project names the project (got " +
     js(q.map((r) => [r.code, r.out, r.err.slice(0, 60)])) + ")");
+  // 1.23 review 5 (M8): in a git worktree of the project (EnterWorktree: workspace.current_dir is the worktree, project_dir the
+  // folder Claude Code started in), the line is the checkout the MCP server records in — the worktree's own copy holds no tick.
+  if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.23 review 5 (M8): statusline in a worktree — skipped: no git");
+  else {
+    const sw = path.join(tmp, "p16c-status-wt");
+    fs.cpSync(sp, sw, { recursive: true });
+    const g = (args) => spawnSync("git", args, { cwd: sw, encoding: "utf8" });
+    g(["init", "-q"]); g(["config", "user.email", "t@example.com"]); g(["config", "user.name", "t"]);
+    g(["add", "-A"]); g(["commit", "-qm", "status"]);
+    const wt = path.join(sw, ".claude", "worktrees", "s1");
+    g(["worktree", "add", "-q", wt, "-b", "s1"]);
+    // the worktree was made from the commit: its copy of billing's state is the committed one; the main checkout's gains a tick
+    S16.completeTask(sw, "billing", 3, { summary: "refunded by hand" });
+    const w1 = cli(["statusline"], { input: js({ cwd: wt, workspace: { current_dir: wt, project_dir: sw } }) });
+    const w2 = cli(["statusline"], { input: js({ cwd: wt, workspace: { current_dir: path.join(wt, "src") } }) }); // no project_dir: the main checkout
+    ok(w1.code === 0 && /3\/4 tasks/.test(w1.out) && w2.code === 0 && /3\/4 tasks/.test(w2.out),
+      "1.23 review 5 (M8): statusline in a git worktree shows the checkout the MCP server records in (workspace.project_dir, else the main checkout) — the tick made there, not the worktree's stale copy (got " +
+      js([w1.out, w2.out, w1.err.slice(0, 80)]) + ")");
+  }
   // Bounded: a 50-feature project answers well within a status line's budget (a whole CLI process, node start-up included).
   const s50 = path.join(tmp, "p16c-status-50");
   S16.initProject(s50, ["core"], "en");
@@ -102,6 +121,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const planMd = ["# Plan: Dark mode", "", "## Goals", "- WHEN the user picks dark mode THE SYSTEM SHALL apply the dark palette", "", "## Steps",
     "1. Add the theme context in `src/theme.ts`", "2. Wire the toggle in `src/settings.tsx`", ""].join("\n");
   const pi = path.join(tmp, "p16c-import");
+  fs.mkdirSync(pi, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
   const im = [cli(["import", "plan", "-", "--project", pi], { input: planMd }), cli(["import", "plan", "--text", planMd, "--name", "Night mode", "tdd", "--project", pi]),
     cli(["import", "kiro", "-", "--project", pi], { input: "# x" }), cli(["import", "plan", "--project", pi]), cli(["import", "plan", "-", "--project", pi], { input: "   " }),
     cli(["import", "plan", "--json", "--text", planMd, "--name", "Json mode", "--project", pi])];
