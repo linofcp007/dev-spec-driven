@@ -2042,7 +2042,7 @@ const msg = {
     },
     approvalGuard: {
       on: {
-        ask: "O guarda de aprovações está em ASK — uma aprovação feita por um agente (spec_approve / dev-spec approve, a remoção de uma feature, baixar este guarda) pede primeiro a tua confirmação (roadmap.json meta.approvalGuard). Nos modos de permissão auto / bypass do Claude Code o pedido de permissão pode não aparecer — 'deny' vale em todos os modos.",
+        ask: "O guarda de aprovações está em ASK — uma aprovação feita por um agente (spec_approve / dev-spec approve, a remoção de uma feature, baixar este guarda) pede primeiro a tua confirmação (roadmap.json meta.approvalGuard). O Claude Code mostra esse pedido também no modo auto; só o modo bypass de permissões o pode saltar — 'deny' vale em todos os modos.",
         deny: "O guarda de aprovações está em DENY — uma aprovação feita por um agente (spec_approve / dev-spec approve, a remoção de uma feature, baixar este guarda) é recusada: só a pessoa aprova, no seu próprio terminal ou no Claude Code com o prefixo ! (roadmap.json meta.approvalGuard).",
       },
       off: "O guarda de aprovações está DESLIGADO — as aprovações pedidas por um agente não são controladas (roadmap.json meta.approvalGuard).",
@@ -2050,7 +2050,13 @@ const msg = {
       action: (a) => {
         const f = a.feature || "?";
         if (a.kind === "remove") return `apagar definitivamente a feature '${f}' (a pasta em .specs/, as aprovações e o histórico)`;
+        if (a.kind === "unreadable") {
+          return a.why === "too-long" ? `correr um comando de shell demasiado longo para o guarda de aprovações o ler (${a.length} caracteres) que menciona dev-spec ou .specs/`
+            : "correr um comando de shell que menciona a CLI do dev-spec com uma palavra de aprovação numa forma que o guarda de aprovações não consegue ler (um lançador desconhecido, um glob, uma variável ou uma string concatenada)";
+        }
         if (a.kind === "guard-down") {
+          if (a.setting === "roadmap" && a.source === "edit") return "editar à mão .specs/roadmap.json (é lá que estão o guarda de aprovações e os gates do projeto)";
+          if (a.setting === "state") return `editar à mão o .state.json de '${f}' — as aprovações, a evidência e o histórico`;
           if (a.setting === "evidence") return "voltar a pôr o modo de evidência (meta.evidence) em reported";
           if (a.setting === "stopCheck") return "desligar o gate de evidência no fim do turno (meta.stopCheck)";
           if (a.setting === "guard") return a.from ? `baixar o modo guarda (meta.guard) de ${a.from} para ${a.to}` : `pôr o modo guarda (meta.guard) em ${a.to}`;

@@ -3,7 +3,6 @@
     "spec-driven": {
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/server.js"],
-      "cwd": "${CLAUDE_PROJECT_DIR}",
       "env": {
         "SPEC_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}",
         "SPEC_MCP_PROMPTS": "off",

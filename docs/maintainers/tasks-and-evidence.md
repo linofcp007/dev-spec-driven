@@ -485,7 +485,15 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   1", "exited with code 0", "exit status 2", PT "código de saída", ES "código de salida"): an exit 0 for a must-pass
   `_Verify:_` (`notPassing` — "DONE … exit code: 1" was allowed), a non-zero exit for an `_Expect: fail_` task
   (`notFailing`); any matching code in the report counts, so a report showing the red run and then the green one passes.
-  STATUS BLOCKED / NEEDS_CONTEXT, no report path, or no runnable `_Verify:_` → allowed.
+  STATUS BLOCKED / NEEDS_CONTEXT, no report path, or no runnable `_Verify:_` → allowed. **1.23 review 5 (M16):** a `_Verify:_`
+  command is shown when the flattened report holds its text OR a command the report writes in a code span
+  (`reportCommandSpans()`, ≤ 500 spans of ≤ 4000 characters) is a run of it by the evidence gate's matcher (`runProvesVerify`
+  from the project root — `tests\x.test.js` vs `tests/x.test.js`, quotes, a ` && ` join of the task's commands): the raw text
+  compare bounced `node --test tests/login.test.js` for `_Verify: node --test tests\login.test.js_` (another test file is still
+  no run). **M8:** the report is read where the reply names it (`stopReportFile()`): a path written out absolute (the
+  controller hands the report path in the MAIN checkout — subagent-execution.md, parallel mode —, or a subagent in a worktree
+  writes its own copy) is read when it lies in the project or in another checkout of its repository (the same git common
+  dir) and exists; else the project's copy. A path elsewhere (another repository) is never read.
 - **spec-simplifier (SubagentStop, 1.22):** it rewrites code already reviewed and verified, so its DONE /
   DONE_WITH_CONCERNS needs `.specs/<f>/.execution/simplify-report.md` (named in its reply) to END with the proof:
   `finalRuns()` reads everything after the LAST `## Final runs` heading (at the margin, any level; PT "Execuções finais" /
@@ -509,11 +517,18 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `blocked`" in a commit line a BLOCKED status). The hard gate
   stays `spec_finish`'s `code-changed`, which sees only the tasks' `_Implements:_` files — /spec-simplify records the
   project checks again after the pass for that reason. Shared helpers: `readStopReport()`, `flatReport()`,
-  `reportExitCodes()` (the implementer's gate reads through them unchanged).
+  `reportExitCodes()`, `stopReportFile()` (the implementer's gate reads through them too). **1.23 review 5:** a check's run
+  is the run line that IS a run of its command by `runProvesVerify` (the same text first; `node scripts/lint.js` runs the check
+  `node scripts\lint.js`) — the last such line wins; a longer command is still another run (M16). `readStopReport()` (L8)
+  decodes a UTF-16 report (a BOM — Windows PowerShell 5.1's `>` / Out-File) through `decodeText`, reads a tail from an even
+  offset so the code units stay aligned, and drops a leading BOM — a UTF-16 report read as noise before (no run, no code).
 - **The hook** (`hooks/stop-hook.js`): registered in hooks.json for **Stop** (no matcher) and **SubagentStop** with matcher
   `^(dev-spec-driven:)?spec-(implementer|simplifier)$` — plugin subagents IGNORE a `hooks` block in their own frontmatter, so it must
   live in the plugin's hooks.json. It reads `last_assistant_message` (a bounded transcript tail for older payloads),
   honours `stop_hook_active` (never sends the same stop back twice in a row), answers `{"decision": "block", "reason"}`,
+  reads the project `spec.sessionProject()` picks (1.23 review 5, M8 — claude-code-integration.md → Which project a hook reads:
+  a worktree's copy of `.specs/` maps to the checkout the MCP server records in; its raw pre-filter runs over the nearest
+  dev-spec `.specs/` above the cwd and CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR),
   is silent when there is nothing to say, when `.specs/` isn't dev-spec's, when (Stop only — 1.22 review) no feature folder's
   `.state.json` holds a string that parses as a date within the last `STOP_RECENT_HOURS` (and ≤ 5 min ahead) — a raw
   pre-filter, a superset of `stopActivity()`, run BEFORE the engine loads (30 idle features: ~235 → ~88 ms a turn; the
@@ -530,7 +545,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 
 ## Harness-observed evidence (1.14 F1)
 - **The log.** `hooks/observe-hook.js` (hooks.json **PostToolUse** and **PostToolUseFailure**, matcher `^(Bash|PowerShell)$` —
-  a PowerShell run only with an EXPLICIT exit code, its response shape being undocumented) logs a run of a task's runnable `_Verify:_` command (or of
+  a PowerShell run only with an EXPLICIT exit code, its response shape being undocumented; never the Monitor tool, which the
+  approval guard reads since 1.23: it streams a background command's lines and reports no finished run with its exit code) logs a run of a task's runnable `_Verify:_` command (or of
   all of a task's several commands joined, how `done --run` reports them) or of a `meta.checks` command — **1.22 review 3: as
   the evidence gate's matcher reads it** (`runProvesVerify` from the project root: one `_Verify:_` command, or all of a task's
   in any order; it used to log only the `_Verify:_` as written or its in-order join, so `node --test tests\x.test.js`, `npm test
@@ -545,7 +561,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 - **The hook** exits 0 at once unless the tool is `Bash` / `PowerShell` on one of the two events and a project is found —
   EVERY distinct dev-spec one (`isDevSpecProject`) among the nearest folder holding `.specs/` at or above the payload's `cwd`
   and `CLAUDE_PROJECT_DIR` / `SPEC_PROJECT_DIR`: a subagent working in a git worktree of the project runs in the worktree's
-  copy, whose git-ignored log is never merged back, so the run is logged in the main project too. Exit code: `tool_response.exit_code` / `exitCode` / `code` / `returnCode` (or
+  copy, whose git-ignored log is never merged back, so the run is logged in the main project too — and (1.23 review 5, M8), once
+  one of them passed the pre-filter, in the project `spec.sessionProject()` maps the cwd to (the main checkout of a worktree
+  when no CLAUDE_PROJECT_DIR names it). Exit code: `tool_response.exit_code` / `exitCode` / `code` / `returnCode` (or
   the payload's own), else a response text starting `Exit code N`; else (never for PowerShell — no code, no run) 0 on PostToolUse (1 when the response says
   `is_error`), and on PostToolUseFailure the code named in `error` ("… exit code 1"), else 1 — a failure is never 0. An
   interrupted run (`is_interrupt`, `interrupted`), a backgrounded one (`run_in_background`, `backgroundTaskId`,

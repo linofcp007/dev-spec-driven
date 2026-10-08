@@ -114,6 +114,25 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
     "1.22 stop-check --agent spec-simplifier: a report whose final project-check run fails → exit 1 with the reason (PT); a final exit 0 ('código de saída 0') → exit 0 and the allow line; NO_CHANGES → allowed (got " +
     JSON.stringify([scSim.out.slice(0, 200), scSimOk.out.slice(0, 160), scSimNone.out.slice(0, 120)]) + ")");
 
+  // 1.23 review 5 (M16, L8): stop-check --agent spec-implementer reads the report's runs with the evidence gate's matcher (`tests/x`
+  // for a `_Verify:_` written `tests\x`) and a UTF-16 report (Windows PowerShell 5.1's `>`), as spec.stopCheck does.
+  const p7 = path.join(tmp, "r5-stop-report");
+  Sc1.initProject(p7, ["core"], "en");
+  const f7 = Sc1.createFeature(p7, "Auth", ["core"], "", undefined, "en");
+  fs.writeFileSync(path.join(f7.dir, "tasks.md"), "- [ ] 1. [US1] Login\n  - _Verify: node --test tests" + String.fromCharCode(92) + "login.test.js_\n");
+  fs.mkdirSync(path.join(f7.dir, ".execution"), { recursive: true });
+  const rep7 = path.join(f7.dir, ".execution", "task-1-report.md");
+  const reply7 = "**Status:** DONE\nReport: .specs/auth/.execution/task-1-report.md";
+  fs.writeFileSync(rep7, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("# Task 1\r\n- `node --test tests/login.test.js` → exit 0\r\n", "utf16le")]));
+  const r7 = rc1(["stop-check", "--message", reply7, "--agent", "spec-implementer", "--json", "--project", p7]);
+  const r7J = jc1(r7.stdout);
+  const e7 = Sc1.stopCheck(p7, { message: reply7, agent: "spec-implementer" }).why;
+  fs.writeFileSync(rep7, "# Task 1\n- `node --test tests/other.test.js` → exit 0\n");
+  const r7b = rc1(["stop-check", "--message", reply7, "--agent", "spec-implementer", "--project", p7]);
+  ok(r7.code === 0 && r7J && r7J.why === "report-ok" && e7 === "report-ok" && r7b.code === 1 && /doesn't show the _Verify:_ run/.test(r7b.out),
+    "1.23 review 5 (M16, L8): stop-check --agent spec-implementer accepts a UTF-16 report whose run is the _Verify:_ written with `/` for `\\` (exit 0, report-ok — the engine's answer); a run of another test file → exit 1 (got " +
+    JSON.stringify([r7.code, r7J && r7J.why, e7, r7b.code, r7b.out.slice(0, 160)]) + ")");
+
   // help and the header docblock document stop-check, --stop-check and --guard scope.
   const hC1 = rc1(["help"]).out;
   const docC1 = fs.readFileSync(CLI, "utf8").split("*/")[0];

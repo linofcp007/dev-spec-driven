@@ -112,9 +112,13 @@ exports.run = async ({ ok, S, tmp, __dirname }) => {
     ];
     const allowed = [["Bash", "cmd /c node cli" + BS + "dev-spec.js status alpha"], ["Bash", "pwsh -Command node cli/dev-spec.js next alpha"], ["Bash", "find . -name dev-spec -exec cat {} ;"],
       ["PowerShell", "Start-Process node -ArgumentList 'cli/dev-spec.js','status'"], ["Bash", "flock /tmp/x.lock node cli/dev-spec.js status"],
-      ["Bash", "echo cmd /c node cli/dev-spec.js approve alpha tasks"], ["Bash", "pwsh -File run.ps1 node cli/dev-spec.js approve alpha tasks"]];
+      ["Bash", "echo cmd /c node cli/dev-spec.js approve alpha tasks"]];
+    // 1.23 review 5 (fail closed): the CLI and an approval word handed to a script the guard can't read (run.ps1 gets them as its
+    // arguments) asks the user — it was allowed.
+    const asked = [["Bash", "pwsh -File run.ps1 node cli/dev-spec.js approve alpha tasks"]];
     const wrong = denied.filter(([t, c]) => dec(t, c).decision !== "deny").map(([t, c]) => "allowed: " + t + " " + c)
-      .concat(allowed.filter(([t, c]) => dec(t, c).decision !== "allow").map(([t, c]) => "denied: " + t + " " + c));
+      .concat(allowed.filter(([t, c]) => dec(t, c).decision !== "allow").map(([t, c]) => "denied: " + t + " " + c))
+      .concat(asked.filter(([t, c]) => dec(t, c).decision !== "ask").map(([t, c]) => "not asked: " + t + " " + c));
     const once = dec("Bash", "cmd /c \"node cli/dev-spec.js approve alpha tasks\"");
     const force = dec("Bash", "cmd /c node cli" + BS + "dev-spec.js approve alpha tasks --force");
     const down = dec("Bash", "cmd /c node cli" + BS + "dev-spec.js init --approval-guard off");
@@ -131,7 +135,7 @@ exports.run = async ({ ok, S, tmp, __dirname }) => {
     const ms = Date.now() - t0;
     ok(!wrong.length && once.actions.length === 1 && force.force === true && down.actions[0].kind === "guard-down" && down.actions[0].setting === "approvalGuard" &&
       h.status === 0 && hd === "deny" && ms < 3000,
-      "1.22 review: the approval guard reads cmd /c /k /r and pwsh / powershell -Command / -c (and Windows PowerShell's positional script) unquoted — the rest of the line is the script — plus winpty, flock (its lock file; -c), script -c, find -exec and Start-Process -ArgumentList (array or string): approve / --force / init --approval-guard off are caught at deny (the hook too); a quoted script is one action; status / next, echo and pwsh -File stay allowed (wrong: " +
+      "1.22 review: the approval guard reads cmd /c /k /r and pwsh / powershell -Command / -c (and Windows PowerShell's positional script) unquoted — the rest of the line is the script — plus winpty, flock (its lock file; -c), script -c, find -exec and Start-Process -ArgumentList (array or string): approve / --force / init --approval-guard off are caught at deny (the hook too); a quoted script is one action; status / next and echo stay allowed, pwsh -File run.ps1 <the CLI's approve> asks (1.23) (wrong: " +
       js(wrong) + ", " + js([once.actions.length, force.force, down.actions, hd, ms]) + ")");
   }
 

@@ -194,7 +194,8 @@ Claude Code's `!` prefix):
 node "$plugin\cli\dev-spec.js" init --approval-guard deny   # or ask; off to disable (only you can lower it)
 ```
 
-`ask` relies on Claude Code's permission prompt, which auto / bypass permission modes may skip; `deny` holds in every mode.
+`ask` relies on Claude Code's permission prompt, which auto mode still shows and only bypass-permissions mode may skip;
+`deny` holds in every mode.
 Both are guardrails, not a sandbox. In other MCP clients the MCP server enforces the same setting itself: a client that
 supports MCP elicitation shows you the question (Approve + an optional note) and only your explicit approve records it; a
 client without it runs `ask` as before and refuses `deny` with the command to run yourself.

@@ -2147,7 +2147,7 @@ const msg = {
     // the AGENT (+ `denyUser`, the line the user sees). The "dev-spec approval guard" prefix stays English, like "dev-spec guard".
     approvalGuard: {
       on: {
-        ask: "Approval guard ASK — an agent's approval (spec_approve / dev-spec approve, a feature removal, lowering this guard) asks you first (roadmap.json meta.approvalGuard). A permission prompt may be skipped in Claude Code's auto / bypass permission modes — 'deny' holds in every mode.",
+        ask: "Approval guard ASK — an agent's approval (spec_approve / dev-spec approve, a feature removal, lowering this guard) asks you first (roadmap.json meta.approvalGuard). Claude Code shows that prompt in auto mode too; only its bypass-permissions mode may skip it — 'deny' holds in every mode.",
         deny: "Approval guard DENY — an agent's approval (spec_approve / dev-spec approve, a feature removal, lowering this guard) is refused: you approve in your own terminal, or in Claude Code with the ! prefix (roadmap.json meta.approvalGuard).",
       },
       off: "Approval guard OFF — an agent's approval calls are not gated (roadmap.json meta.approvalGuard).",
@@ -2155,9 +2155,17 @@ const msg = {
       action: (a) => {
         const f = a.feature || "?";
         if (a.kind === "remove") return `permanently delete the feature '${f}' (its .specs/ folder, approvals and history)`;
+        // 1.23 review 5: a shell command the guard can't read — too long (a.length characters) or in a form it can't follow
+        if (a.kind === "unreadable") {
+          return a.why === "too-long" ? `run a shell command too long for the approval guard to read (${a.length} characters) that names dev-spec or .specs/`
+            : "run a shell command that names the dev-spec CLI with an approval word in a form the approval guard can't read (an unknown launcher, a glob, a variable or a joined string)";
+        }
         // guard-down: lowering this guard, or weakening what it stands for (a.setting — the spec_init / `init` setting, or a
         // shell write of roadmap.json)
         if (a.kind === "guard-down") {
+          // 1.23 review 5: a hand edit with the Write / Edit tool
+          if (a.setting === "roadmap" && a.source === "edit") return "edit .specs/roadmap.json by hand (it holds the approval guard and the project's gates)";
+          if (a.setting === "state") return `edit the .state.json of '${f}' by hand — its approvals, evidence and history`;
           if (a.setting === "evidence") return "switch the evidence mode (meta.evidence) back to reported";
           if (a.setting === "stopCheck") return "turn off the end-of-turn evidence gate (meta.stopCheck)";
           if (a.setting === "guard") return a.from ? `lower the edit guard (meta.guard) from ${a.from} to ${a.to}` : `set the edit guard (meta.guard) to ${a.to}`;

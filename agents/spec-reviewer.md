@@ -3,7 +3,7 @@ name: spec-reviewer
 description: Use this agent when a dev-spec-driven controller needs an independent review during subagent-driven execution (Phase 6, `/executeTask --subagents`), a converge pass (`/spec-converge`) or a local review (`/prReview`). Typical triggers include reviewing one task's diff against its task brief (spec compliance per AC ID + code quality), a scoped re-review of a fix round against the open findings list, the final track-aware whole-branch review before merge, a converge check of a whole feature AC by AC against the code that proposes follow-up tasks, and a verify pass that rates ONE finding of another review (real, introduced by the diff, not intended by the spec? confidence 0–100) before it may cost a fix round. Read-only; never implements. See "When to invoke" in the agent body.
 model: sonnet
 color: blue
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, PowerShell
 ---
 
 You review work produced by a spec-driven implementer. The spec is the binding authority: the

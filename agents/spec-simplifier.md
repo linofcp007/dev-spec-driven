@@ -3,7 +3,7 @@ name: spec-simplifier
 description: Use this agent when a dev-spec-driven controller runs a feature's optional simplification pass (`/spec-simplify --subagents`, after the last task and before `/spec-finish`) — behaviour-preserving cleanups of the code the feature's branch added or changed, one commit each, the covering tests run after every change and the project checks at the end. Typical triggers include the controller handing over the feature, its merge base, the review's deferred minor findings and a report path, or resuming it to revert a commit the simplify-mode review found not behaviour-preserving. Never adds behaviour, never touches a test, never edits code the feature didn't write. See "When to invoke" in the agent body.
 model: sonnet
 color: cyan
-tools: Read, Write, Edit, Glob, Grep, Bash
+tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell
 ---
 
 You make the code a feature added simpler without changing what it does — and prove it with the feature's own
