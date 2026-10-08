@@ -1217,6 +1217,10 @@ const msg = {
     },
     kindKept: (kept, asked) => `Esta feature já é do tipo '${kept}' — mantive-o (pediste '${asked}'). Cria outra para um tipo diferente.`,
     langKept: (kept, asked) => `Esta feature já está em '${kept}' — mantive-a (pediste '${asked}'). Uma feature, uma língua.`,
+    // 1.23 review 5 — spec_create numa pasta que já existe (correr de novo) di-lo; uma feature nova cujo slug uma arquivada também tem é assinalada.
+    createExisted: (slug) => `'${slug}' já existe — nada foi recriado (os ficheiros foram mantidos; correr de novo só acrescenta os tracks que faltam).`,
+    createSummaryKept: "O resumo indicado não foi escrito: os ficheiros da feature já têm um.",
+    createArchivedTwin: (slug) => `Há também uma feature arquivada chamada '${slug}' (.specs/_archive/${slug}) — para a restaurar mais tarde, renomeia primeiro uma delas.`,
     // 1.21 F3 — spec_create {kind: "bugfix"}: pré-preenchimento (reproduction · rootCause · condition · behaviour — nomes em inglês).
     bugPrefill: {
       bugOnly: (key) => `${key} é um dado de bugfix — passa kind: "bugfix" (preenche o bug.md e o critério de regressão).`,
@@ -1240,16 +1244,21 @@ const msg = {
       lockStuck: (rel) => `Um lock dev-spec abandonado (${rel}) não pôde ser removido — o ficheiro (ou uma pasta com esse nome) está aberto noutro programa, é só de leitura ou não é um ficheiro. Nada foi alterado. Apaga ${rel} à mão (verifica as permissões) e tenta de novo.`,
       noText: "Nenhum texto fornecido.",
       unknownPhase: (phase, known) => `Fase desconhecida '${phase}'. Conhecidas: ${known}`,
-      alreadyArchived: (slug) => `'${slug}' já está arquivada (.specs/_archive/${slug}). Remove-a de lá primeiro.`,
+      alreadyArchived: (slug) => `'${slug}' já está arquivada (.specs/_archive/${slug}) — renomeia primeiro esta feature (${DEV_SPEC} feature rename ${slug} "<novo nome>") e depois arquiva-a.`,
       renameNeedsName: "para renomear é preciso um nome novo.",
       sameSlug: "O nome novo dá o mesmo slug.",
       alreadyExists: (slug) => `'${slug}' já existe.`,
+      renameArchived: (slug) => `'${slug}' é o nome de uma feature arquivada (.specs/_archive/${slug}) — escolhe outro nome (com o mesmo nome, nenhuma das duas poderia ser arquivada nem restaurada).`,
+      slugTaken: (slug, held, name) => `'${name}' chega à pasta .specs/${slug}/, que tem outra feature ('${held}') — o nome da pasta guarda só os primeiros 64 caracteres do nome. Nada foi alterado: usa um nome mais curto que difira dentro deles (para trabalhar em '${held}', usa o nome '${slug}').`,
       badAction: "a ação tem de ser: remove | archive | rename | restore | flow",
       badTrack: "o track tem de ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
       cycle: (chain) => `Dependência circular: ${chain}`,
       nameRequired: "o nome é obrigatório",
       noSpecs: (root) => `Não há .specs/ em ${root}`,
       notGenerated: (file) => `${file} existe e não foi gerado pelo dev-spec — não foi alterado.`,
+      specsLinked: (rel) => `Recusado escrever em ${rel}: essa pasta é uma ligação (link simbólico, junction) ou aponta para fora de .specs/ — substitui-a por uma pasta normal e tenta de novo. Nada foi escrito.`,
+      roadmapNotWritten: (file, broken) => `${broken} ${file} não foi regenerado — gerado a partir do que o roadmap.json ainda dá, perderia as dependências, o backlog e os marcos que não consegue ler. Corrige .specs/roadmap.json e corre ${DEV_SPEC} roadmap --write de novo.`,
+      roadmapViewPartial: (broken) => `${broken} Esta vista deixa de fora o que não consegue ler (as dependências, o backlog e os marcos) até ser corrigido.`,
       unknownSteering: (file, known) => `Ficheiro de steering desconhecido '${file}'. Conhecidos: ${known}`,
     },
     ears: {
@@ -1510,6 +1519,8 @@ const msg = {
       unticks: "'unticks' tem de ser um array",
     },
     depend: {
+      // 1.23 review 5 — "Precisa de atenção" do ROADMAP.md / .html: um dependsOn que não nomeia nenhuma feature
+      roadmapStale: (feature, list, args) => `depende de ${list}, que não é nenhuma feature (uma entrada antiga ou editada à mão em .specs/roadmap.json) — define a lista de novo sem ela: ${DEV_SPEC} depend ${feature} ${args}`,
       unknown: (list) => `Cada dependência tem de ser uma feature existente — não encontrada(s): ${list}`,
     },
     evals: {
@@ -1738,6 +1749,7 @@ const msg = {
       notFound: (p) => `'${p}' não encontrado.`,
       nothing: (tool, p) => `Não foram encontrados ficheiros de spec ${tool} em '${p}'.`,
       exists: (slug) => `A feature '${slug}' já existe — a importação nunca a substitui. Indica outro nome.`,
+      tooLarge: (rel, max) => `${rel} tem mais de ${max} caracteres — demasiado grande para importar inteiro (a parte além do limite, incluindo os passos de um plano, perder-se-ia). Divide-o ou encurta-o e importa de novo; nada foi criado.`,
       noUsableTitle: (title) => `O título do documento '${title}' não tem caracteres utilizáveis (a-z, 0-9) para nome de pasta — indica o nome da feature (name; CLI: --name "<feature>").`,
       featureTitle: (name) => `# Feature: ${name}`,
       tasksTitle: (name) => `# Tasks: ${name}`,
@@ -1983,7 +1995,7 @@ const msg = {
     },
     restore: {
       notArchived: (slug) => `Não há nada arquivado como '${slug}' (.specs/_archive/${slug}/ não existe).`,
-      activeExists: (slug) => `'${slug}' já é uma feature ativa — renomeia-a ou arquiva-a antes de restaurar a arquivada.`,
+      activeExists: (slug) => `'${slug}' já é uma feature ativa — renomeia-a primeiro (${DEV_SPEC} feature rename ${slug} "<novo nome>") e depois restaura a arquivada.`,
       done: (slug) => `'${slug}' restaurada de .specs/_archive/ ✓`,
       noRecord: "Foi arquivada antes de o arquivo registar a sua entrada no roadmap — volta a declarar as dependências com spec_depend, se as tinha.",
       skipDependsOn: (d, reason) => `a sua dependência '${d}' (${reason})`,
