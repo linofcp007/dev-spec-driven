@@ -1178,8 +1178,11 @@ function tasksIdText(dir) {
 //   - inline code is code: a `_` / `*` inside a code span never closes a marker (``_Verify: `npm test -- -g "a_ b"`_`` was cut at
 //     `"a`), and a label inside one opens none.
 const TASK_MARKER_LABELS = ["Requirements", "Makes green", "Affects evals", "Emits metrics", "Implements", "Verify", "Expect", "Size", "Depends"]; // _Depends:_ (1.14 F3)
-const RE_TASK_MARKER_OPEN = new RegExp("(?:(?<![_\\p{L}\\p{N}])_|(?<![*\\p{L}\\p{N}_])\\*)(" + TASK_MARKER_LABELS.join("|") + "):[ \\t]*", "giu");
-const MARKER_CLOSE_PUNCT = new Set([".", ",", ";", ":", "!", "?", ")", "]"]);
+// 1.24 r6 D9 — bold-italic: `***Verify: x***` opens at its third `*` (exactly two before it — `**Verify:**` stays a bold label, no
+// marker); a closer may be followed by `*` (`**_Verify: x_**`), quotes (`("_Verify: x_")`, “…”, ‘…’, «…»), a dash (`_Verify: x_—`)
+// — CommonMark's right-flanking rule (a closer followed by punctuation); and a run of `*` closes at its first star.
+const RE_TASK_MARKER_OPEN = new RegExp("(?:(?<![_\\p{L}\\p{N}])_|(?<![*\\p{L}\\p{N}_])\\*|(?<=(?:^|[^*\\p{L}\\p{N}_])\\*\\*)\\*)(" + TASK_MARKER_LABELS.join("|") + "):[ \\t]*", "giu");
+const MARKER_CLOSE_PUNCT = new Set([".", ",", ";", ":", "!", "?", ")", "]", "*", '"', "'", "—", "–", "”", "’", "»"]);
 // → [{ key (the label, lower-case), value (untrimmed), start, end }], in line order.
 // A closer followed directly by whitespace / the end ("plain") wins over one followed by closing punctuation, when one exists
 // before the next marker opener (else the end of the line): `_Verify: python -c "import a_; print(1)"_` keeps its whole
@@ -1229,6 +1232,7 @@ function scanMarkerSpans(s) {
   for (let i = s.length - 1; i >= 0; i--) ok[i] = /\s/.test(s[i]) || (MARKER_CLOSE_PUNCT.has(s[i]) && ok[i + 1]);
   const plain = { _: [], "*": [] }, punct = { _: [], "*": [] };
   for (let j = 0; j < s.length; j++) {
+    if (s[j] === "*" && s[j - 1] === "*") continue; // r6 D9: a run of `*` closes at its first star (`***Verify: x***` → x)
     if ((s[j] === "_" || s[j] === "*") && ok[j + 1] && !(inCode && inCode[j])) (j + 1 === s.length || /\s/.test(s[j + 1]) ? plain : punct)[s[j]].push(j);
   }
   const cursor = { plain: { _: 0, "*": 0 }, punct: { _: 0, "*": 0 } };
@@ -1309,18 +1313,49 @@ function scanTaskMarkers(prose) {
   return out;
 }
 // Marker-shaped text on a task's own lines that yielded NO marker (1.14 full review Pa1): "Verify:" / "Implements:" /
-// "Makes green:" / "Expect:" outside every parsed marker and every code span — `**Verify:** npm test`, `Verify: npm test`,
-// `_Verify:_ npm test`. The tools read nothing there (no check to run, no file to trace). → [{ number, labels }] — doctor's
-// malformed-markers warn.
+// "Makes green:" / "Expect:" outside every parsed marker and every code span — `**Verify:** npm test`, `Verify: npm test` —
+// and (1.24 r6 D2) an EMPTY marker written apart from its value: `_Verify:_ npm test`, `- _Verify:_ `npm test``, `*Verify:*
+// npm test` (emptyLabelValues — review 5 made `_Verify:_` an empty span, which hid them). The tools read nothing there (no check
+// to run, no file to trace). → [{ number, labels }] — doctor's malformed-markers warn.
 // "depends:" only before a task number ("depends: 3", "Depends: #3, 5") — prose like "(depends: the schema from task 1)" is
 // prose (feature review R8).
 const RE_MARKER_WORD = /(?<![\p{L}\p{N}])(verify|implements|makes[ \t]+green|expect|depends(?=[ \t]*:[ \t*_]*#?\d))[ \t]*:/giu;
 const MARKER_WORD_LABEL = { verify: "Verify", implements: "Implements", "makes green": "Makes green", expect: "Expect", depends: "Depends" };
+// 1.24 r6 D2 — the empty markers of a line followed by a value: a code span right after one (any line), or plain text after the
+// line's ONLY empty marker whose first word is no marker noun — a title naming markers is prose ("Document the _Verify:_ and
+// _Implements:_ markers": two empty markers; "the _Verify:_ marker in the README"; PT / ES "marcador", "etiqueta"). → [keys]
+const MARKER_NOUNS = new Set(["marker", "markers", "label", "labels", "tag", "tags", "field", "fields", "line", "lines", "spelling", "spellings",
+  "syntax", "value", "values", "and", "or", "marcador", "marcadores", "etiqueta", "etiquetas", "campo", "campos", "linha", "linhas", "línea", "líneas",
+  "valor", "valores", "e", "ou", "y", "o"]);
+function emptyLabelValues(line) {
+  const spans = taskMarkerSpans(line);
+  const empties = spans.filter((sp) => sp.value === "");
+  const out = [];
+  let ticks = null;
+  for (const e of empties) { // in line order: backtickRuns' cursor only moves forward
+    let p = e.end;
+    while (p < line.length && (line[p] === " " || line[p] === "\t")) p++;
+    if (p >= line.length) continue;
+    if (line[p] === "`") {
+      ticks = ticks || backtickRuns(line);
+      let r = p;
+      while (line[r] === "`") r++;
+      if (ticks.spanEnd(p) > r) { out.push(e.key); continue; } // a code span: the value, written apart
+    }
+    if (empties.length > 1) continue; // several empty markers: a sentence naming them
+    const next = spans.find((sp) => sp.start >= p);
+    const word = (line.slice(p, next ? next.start : line.length).match(/^[\p{L}\p{N}]+/u) || [""])[0].toLowerCase();
+    if (word && !MARKER_NOUNS.has(word)) out.push(e.key);
+  }
+  return out;
+}
+const markerLabel = (key) => TASK_MARKER_LABELS.find((l) => l.toLowerCase() === key) || key;
 function malformedMarkers(blocks) {
   const out = [];
   for (const b of blocks) {
     const labels = new Set();
     for (const line of taskProse(b)) {
+      for (const key of emptyLabelValues(line)) labels.add(markerLabel(key)); // r6 D2
       if (!/verify|implements|green|expect|depends/i.test(line)) continue;
       const masked = withoutTaskMarkers(line);
       const ticks = backtickRuns(masked);
@@ -2049,6 +2084,6 @@ module.exports = { parseTasks, taskDescription, nextTask, parallelBatch, RE_DEP_
   RE_RED_PHASE_TASK, redPhaseTask, redPhaseHint, tasksProseText, changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, RE_TASK_MARKER_OPEN,
   MARKER_CLOSE_PUNCT, MARKER_SPANS_MEMO, MARKER_SPANS_MEMO_MAX, MARKER_MEMO_LINE_MAX, NO_MARKER_SPANS, taskMarkerSpans, scanMarkerSpans,
   taskMarkerValues, withoutTaskMarkers, WHOLE_VALUE_MARKERS, TASK_MARKERS_MEMO, TASK_MARKERS_MEMO_MAX, taskMarkers, scanTaskMarkers,
-  RE_MARKER_WORD, MARKER_WORD_LABEL, malformedMarkers, suspiciousVerify, verifySuspicious, RE_GLOBAL_CONSTRAINTS, globalConstraints, isPromptTask,
+  RE_MARKER_WORD, MARKER_WORD_LABEL, MARKER_NOUNS, emptyLabelValues, markerLabel, malformedMarkers, suspiciousVerify, verifySuspicious, RE_GLOBAL_CONSTRAINTS, globalConstraints, isPromptTask,
   RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections, BRIEF_DESIGN_BUDGET, taskBrief, RE_NEW_TASK_TAGS,
   RE_THEMATIC_BREAK, unwrapCodeSpan, newTaskSpec, appendTasks, __link };

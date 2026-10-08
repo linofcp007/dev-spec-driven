@@ -990,4 +990,54 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       cvPt && /parece mal escrito/.test(cvPt.detail),
       "review 5: doctor verify-suspicious warns for a _Verify:_ holding a code span inside it or a quote with no partner (never for paired quotes or a plain command; PT) (got " + js([cv, clean, cvPt && cvPt.detail]) + ")");
   }
+
+  // 1.24 r6 D2: an EMPTY label followed by its value — `_Verify:_ npm test`, `- _Verify:_ `npm test``, `*Verify:* npm test` — yields
+  // no marker (nothing runs, the task ticks as "nothing to verify"): doctor's malformed-markers names it again. A title naming
+  // markers ("Document the _Verify:_ and _Implements:_ markers", "the _Verify:_ marker") is prose.
+  {
+    const js = JSON.stringify;
+    const pd = path.join(tmp, "proj-r6-empty-label");
+    S.initProject(pd, ["core"], "en");
+    const cases = {
+      plain: ["- [ ] 1. Build the parser _Verify:_ npm test", ["Verify"]],
+      code: ["- [ ] 1. Build the parser\n  - _Verify:_ `npm test`", ["Verify"]],
+      star: ["- [ ] 1. Build the parser\n  - *Verify:* npm test", ["Verify"]],
+      impl: ["- [ ] 1. Build the parser _Implements:_ src/parser.js _Verify: npm test_", ["Implements"]],
+      codeMid: ["- [ ] 1. Build the parser _Verify:_ `npm test` and lint", ["Verify"]],
+      title2: ["- [ ] 1. Document the _Verify:_ and _Implements:_ markers", []],
+      title1: ["- [ ] 1. Document the _Verify:_ marker in the README", []],
+      titlePt: ["- [ ] 1. Documentar o marcador _Verify:_ e a etiqueta _Implements:_", []],
+      tail: ["- [ ] 1. Rename the _Verify:_ marker_", []],
+      end: ["- [ ] 1. Explain _Verify:_.", []],
+    };
+    const got = {};
+    let k = 0;
+    for (const [name, [text]] of Object.entries(cases)) {
+      const f = S.createFeature(pd, "E" + (k++), ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + text + "\n");
+      const c = S.specDoctor(pd, f.slug).checks.find((x) => x.id === "malformed-markers");
+      got[name] = c ? (c.detail.match(/\(([^)]*)\)/) || [, ""])[1].split(", ").map((l) => l.replace(/:$/, "")).filter(Boolean) : [];
+    }
+    const wrong = Object.keys(cases).filter((n) => js(got[n]) !== js(cases[n][1]));
+    ok(!wrong.length, "1.24 r6 D2: an empty marker label followed by a code span or plain text is malformed-markers again (`_Verify:_ npm test`, `- _Verify:_ `npm test``, `*Verify:* npm test`); a title naming markers is prose (wrong: " +
+      js(wrong.map((n) => [n, got[n]])) + ")");
+  }
+
+  // 1.24 r6 D9: a marker closer followed by closing punctuation a markdown reader allows — `*`, quotes, dashes, guillemets — is read:
+  // `**_Verify: x_**`, `***Verify: x***`, `("_Verify: x_")`, `_Verify: x_— then`; bold labels and `__x__` stay no markers.
+  {
+    const js = JSON.stringify;
+    const v = (line) => S.taskMarkers({ text: line, body: [] }).verify;
+    const want = {
+      "Build **_Verify: npm test_**": ["npm test"], "Build ***Verify: npm test***": ["npm test"], 'Build ("_Verify: npm test_")': ["npm test"],
+      "Build _Verify: npm test_— then lint": ["npm test"], "Build _Verify: npm test_– then": ["npm test"], "Build «_Verify: npm test_»": ["npm test"],
+      "Build “_Verify: npm test_”": ["npm test"], "Build ‘_Verify: npm test_’": ["npm test"], "Build '_Verify: npm test_'": ["npm test"],
+      "Build *_Verify: npm test_*": ["npm test"], "Build _Verify: npm test_.": ["npm test"],
+      "Build **Verify:** npm test": [], "x __Verify: npm test__": [], '_Verify: python -c "import a_; print(1)"_': ['python -c "import a_; print(1)"'],
+      "x *Verify: ls **/*.js*": ["ls **/*.js"], "x *Verify: npm test* and *Implements: a.js*": ["npm test"], "x ****Verify: npm test****": [],
+    };
+    const wrong = Object.keys(want).filter((l) => js(v(l)) !== js(want[l]));
+    ok(!wrong.length, "1.24 r6 D9: marker closers followed by *, quotes, dashes or guillemets are read (bold-italic, quoted, a dash after); a bold label, __x__ and ****x**** stay no marker; a value keeps its own _ (wrong: " +
+      js(wrong.map((l) => [l, v(l)])) + ")");
+  }
 };
