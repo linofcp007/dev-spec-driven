@@ -16,7 +16,7 @@ const i18n = require("../i18n.js");
 let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions, briefGlossary, briefSteering,
   bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir, errs, evidenceRule,
   existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds, extractSection,
-  extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, headRest, idKey, implementsKey, implementsRel,
+  extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, idKey, implementsKey, implementsRel,
   inactiveTaskLines, isBacktickUnit, isObj, isPackTrack, isRecord, lineMap, markerTracks, maybeRefreshRoadmap,
   normalizeEvidence, normTaskHeading, observedAny, observedStamp, own, ownEvidence, ownRecord, packTracks, planIdText,
   projectChecks, RE_FENCE_CLOSE, RE_LIST_ITEM, RE_TEST_REF, readIfExists, readState, redProof, REPRO_SYN,
@@ -24,11 +24,11 @@ let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDeci
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
-  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues;
+  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit;
 function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
-  extractSection, extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, headRest, idKey, implementsKey,
+  extractSection, extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, idKey, implementsKey,
   implementsRel, inactiveTaskLines, isBacktickUnit, isObj, isPackTrack, isRecord, lineMap, markerTracks,
   maybeRefreshRoadmap, normalizeEvidence, normTaskHeading, observedAny, observedStamp, own, ownEvidence, ownRecord,
   packTracks, planIdText, projectChecks, RE_FENCE_CLOSE, RE_LIST_ITEM, RE_TEST_REF, readIfExists, readState, redProof,
@@ -36,7 +36,7 @@ function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, b
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
-  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues } = E); }
+  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
 // scanner — so status/next/phase can never count a task that complete/brief/finish don't see.
@@ -786,8 +786,27 @@ function untickTask(projectDir, name, number, opts = {}) {
 // not task 1), its text read by headRest (\s*(.*)$ rescanned a long blank run before a line terminator — 1.17 H). Any GFM bullet
 // (1.22 review: `* [ ] 1.` / `+ [ ] 1.` read as ZERO tasks, silently); an ordered-list checkbox (`1. [ ] text`) is no task —
 // doctor's unread-tasks names it (unreadTaskLines).
+// 1.24 r6 D3: its text is every character to the end of the scanner's line (which holds no "\n" and no trailing CR) — a U+2028 /
+// U+2029 inside it (pasted from a PDF, Word, a JSON string) is an ordinary character, as a markdown reader reads it: headRest
+// refused such a line (a line terminator to `.`), so the task vanished from complete_task / brief while the active view read it.
 const RE_TASK_LINE_HEAD = /^(\s*[-*+]\s*\[)([ xX])\]\s*(\d+)\.(?!\d)/;
-const taskLine = (s) => headRest(s, RE_TASK_LINE_HEAD, false);
+function taskLine(s) {
+  const h = RE_TASK_LINE_HEAD.exec(s);
+  if (!h) return null;
+  let q = h[0].length;
+  while (q < s.length && isWsUnit(s[q])) q++;
+  const m = Array.from(h);
+  m[0] = s;
+  m.push(s.slice(q));
+  return m;
+}
+// A line without its trailing CRs — every one of them (1.24 r6 D3: "\r\r\n", a CRLF file converted to CRLF again, kept a "\r" on
+// each line and no task was read). A loop, not /\r+$/ (quadratic on a long run of CRs followed by text).
+function dropTrailingCr(l) {
+  let e = l.length;
+  while (e > 0 && l.charCodeAt(e - 1) === 13) e--;
+  return e === l.length ? l : l.slice(0, e);
+}
 const RE_CHECKPOINT = /^\s*\*\*Checkpoint:?\*\*:?\s*/i;
 const COMMENT_MASK = "\u0001";
 // CommonMark fence opener: a backtick fence's info string can't hold a backtick ("```npm test``` must pass"
@@ -804,7 +823,7 @@ const RE_TASK_FENCE_OPEN = /^(\s*)(?:(?=(`{3,}))\2[^`]*|(?=(~{3,}))\3.*)$/;
 // code span doesn't count as the closer that lets a comment open.
 const RE_PARA_BREAK = /^\s*$|^\s*(?:[-*+]|\d+[.)])(?:\s|$)|^\s{0,3}#{1,6}(?:\s|$)|^\s*(?:`{3,}|~{3,})|^\s*<!--/;
 function scanTaskLines(tasksText) {
-  const lines = String(tasksText || "").split("\n").map((l) => l.replace(/\r$/, ""));
+  const lines = String(tasksText || "").split("\n").map(dropTrailingCr);
   // Facts about the lines BELOW each line, so an unclosed marker is known the moment it opens (linear
   // passes): the longest ``` / ~~~ closer and the smallest indentation of a non-blank line.
   const n = lines.length;
@@ -2078,7 +2097,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
 module.exports = { parseTasks, taskDescription, nextTask, parallelBatch, RE_DEP_TOKEN, taskDependsSpec, taskDepGraph,
   stuckTasks, taskSchedule, dependencyCycles, taskWaves, openDependenciesOf, briefDependencies, taskDepsBlockedNote,
   taskDepsWaitList, taskDepsIssues, taskDepsCheck, RE_ROOT_CAUSE_TASK, bugfixGate, rootCauseTaskIndex, blockPosition,
-  taskNumber, tasksBytes, textEncoding, encodeText, tasksRewrite, checkboxBytes, completeTask, UNDO_REASON_MAX, reasonInput, untickTask, RE_TASK_LINE_HEAD, taskLine, RE_CHECKPOINT,
+  taskNumber, tasksBytes, textEncoding, encodeText, tasksRewrite, checkboxBytes, completeTask, UNDO_REASON_MAX, reasonInput, untickTask, RE_TASK_LINE_HEAD, taskLine, dropTrailingCr, RE_CHECKPOINT,
   COMMENT_MASK, RE_TASK_FENCE_OPEN, RE_PARA_BREAK, scanTaskLines, fenceLine, indentOf, hasOutsideCode, backtickRuns,
   TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, BLOCK_PEERS, SCAN_STAMPS, taskPeerStamps, taskBlocks, scanTaskBlocks, RE_LIST_BOX_LINE, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse,
   RE_RED_PHASE_TASK, redPhaseTask, redPhaseHint, tasksProseText, changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, RE_TASK_MARKER_OPEN,

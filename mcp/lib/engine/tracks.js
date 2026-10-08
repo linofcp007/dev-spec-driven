@@ -14,9 +14,9 @@ const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName, noteGhostPacks, packOf,
-  packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf;
+  packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf, dropTrailingCr;
 function __link(E) { ({ acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName,
-  noteGhostPacks, packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf } = E); }
+  noteGhostPacks, packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf, dropTrailingCr } = E); }
 
 const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
@@ -197,11 +197,13 @@ function trackTaskHeading(tr, tasksText) {
 // tasks.md minus the task blocks of tracks that were turned off — the same rule as activeDesign: the block stays
 // on disk (inactive) and counts again when the track is re-added. Progress, next task, phase, roadmap and finish
 // read this; completing, tracing and briefing a task read the whole file.
+// 1.24 r6 D3: split as the task scanner splits (scanTaskLines: at "\n", every trailing CR dropped — "\r\r\n" kept a "\r" here) —
+// the headings are read on those lines, the kept lines are written back as they are (their own line endings).
 function activeTasks(tasksText, tracks) {
   if (tasksText == null) return tasksText;
-  const lines = tasksText.split(/\r?\n/);
-  const drop = inactiveTaskLines(lines, tracks);
-  return drop.size ? lines.filter((_, i) => !drop.has(i)).join("\n") : tasksText;
+  const raw = String(tasksText).split("\n");
+  const drop = inactiveTaskLines(raw.map(dropTrailingCr), tracks);
+  return drop.size ? raw.filter((_, i) => !drop.has(i)).join("\n") : tasksText;
 }
 // 0-based line index → the value `owner` returned for the heading that holds it: every line under a heading
 // `owner` picks (a truthy value, e.g. the turned-off track), up to the next heading of the same or a higher level.

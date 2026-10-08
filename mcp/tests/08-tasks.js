@@ -1040,4 +1040,54 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     ok(!wrong.length, "1.24 r6 D9: marker closers followed by *, quotes, dashes or guillemets are read (bold-italic, quoted, a dash after); a bold label, __x__ and ****x**** stay no marker; a value keeps its own _ (wrong: " +
       js(wrong.map((l) => [l, v(l)])) + ")");
   }
+
+  // 1.24 r6 D3: "\r\r\n" line endings (a CRLF file converted again) and a U+2028 / U+2029 inside a task's text — the task vanished
+  // from the whole-file view (complete_task: "Task 1 not found") while activeTasks (split on /\r?\n/) still read it.
+  {
+    const js = JSON.stringify;
+    const pc = path.join(tmp, "proj-r6-crcr");
+    S.initProject(pc, ["core"], "en");
+    const fc = S.createFeature(pc, "Crcr", ["core"], "", undefined, "en");
+    const tc = path.join(fc.dir, "tasks.md");
+    fs.writeFileSync(tc, ["# Tasks", "", "## Phase 1", "", "- [ ] 1. Build the parser _Verify: npm test_", "- [ ] 2. Handle errors _Verify: npm test_", ""].join("\r\r\n"));
+    const c1 = S.completeTask(pc, "crcr", 1, { command: "npm test", exitCode: 0 });
+    const after = fs.readFileSync(tc, "utf8");
+    const fl = S.createFeature(pc, "Ls", ["core"], "", undefined, "en");
+    const LS = String.fromCharCode(0x2028), PS = String.fromCharCode(0x2029);
+    fs.writeFileSync(path.join(fl.dir, "tasks.md"), "# Tasks\n\n- [x] 1. Build the parser\n- [ ] 2. Handle errors" + LS + "(see the spec) _Verify: npm test_\n- [ ] 3. Docs" + PS + "end\n");
+    const nx = S.nextTask(pc, "ls");
+    const c2 = S.completeTask(pc, "ls", 2, { command: "npm test", exitCode: 0 });
+    ok(c1.ok && c1.verified && c1.total === 2 && after.includes("- [x] 1. Build the parser _Verify: npm test_\r\r\n- [ ] 2.") && nx.next && nx.next.number === 2 && nx.total === 3 &&
+      c2.ok && c2.verified && S.taskMarkers(S.taskBlocks(fs.readFileSync(path.join(fl.dir, "tasks.md"), "utf8"))[1]).verify[0] === "npm test",
+      "1.24 r6 D3: a tasks.md with \\r\\r\\n line endings reads its tasks (ticked in place, the endings kept); a U+2028 / U+2029 inside a task's text is an ordinary character (got " +
+      js([c1.ok, c1.total, c1.error, nx.next, nx.total, c2.ok, c2.error]) + ")");
+  }
+
+  // 1.24 r6 D-I6: the whole-file scanner and the active view (activeTasks — a track turned off) read the same task numbers on every
+  // tasks.md variant: LF / CRLF / \r\r\n, a BOM, tabs, U+2028 / U+2029 in a task's text, a nested list, a fence and a comment.
+  {
+    const js = JSON.stringify;
+    const LS = String.fromCharCode(0x2028), PS = String.fromCharCode(0x2029), BOM = String.fromCharCode(0xfeff);
+    const E = require(path.join(__dirname, "lib", "engine", "index.js")); // activeTasks is the engine's (no facade name)
+    const wrong = [];
+    let n = 0;
+    for (const eol of ["\n", "\r\n", "\r\r\n"]) for (const bom of ["", BOM]) for (const sep of ["", LS, PS]) for (const tab of [" ", "\t"]) {
+      const lines = [bom + "# Tasks", "", "## Phase 1", "", "-" + tab + "[ ]" + tab + "1." + tab + "Build the parser" + sep + "(see the spec) _Verify: npm test_",
+        "", "## Story US-1 — Security", "", "- [ ] 2. Threat model" + sep + "notes", "", "## Phase 2", "", "- Group A", "    - [ ] 3. Nested task", "", "```md", "- [ ] 9. Example", "```",
+        "<!-- - [ ] 8. hidden -->", "- [x] 4. Done task" + sep, ""];
+      const text = lines.join(eol);
+      const whole = S.taskBlocks(text).map((b) => b.number);
+      const off = S.taskBlocks(E.activeTasks(text, ["core"])).map((b) => b.number);
+      const on = S.taskBlocks(E.activeTasks(text, ["core", "sec"])).map((b) => b.number);
+      const parsed = S.parseTasks(text).map((t) => t.number);
+      if (js(whole) !== "[1,2,3,4]" || js(off) !== "[1,3,4]" || js(on) !== js(whole) || js(parsed) !== js(whole)) wrong.push([js(eol), bom ? "bom" : "", sep.charCodeAt(0) || "", tab === "\t" ? "tab" : "", whole, off, on]);
+      n++;
+    }
+    ok(!wrong.length && n === 36, "1.24 r6 D-I6: on " + n + " tasks.md variants the whole-file scanner, parseTasks and the active view (+sec off / on) read the same task numbers (wrong: " + js(wrong.slice(0, 6)) + ")");
+    const CR = String.fromCharCode(13);
+    const t0 = Date.now();
+    const hostile = [S.taskBlocks("- [ ] 1. a" + CR.repeat(200000) + "b\n- [ ] 2. c" + CR.repeat(200000) + "\n"), E.activeTasks(("## Story US-1 — Security" + CR.repeat(100000) + "\n").repeat(2), ["core"])];
+    const ms = Date.now() - t0;
+    ok(ms < 3000 && hostile[0].length === 2, "1.24 r6 D3: trailing-CR stripping stays linear (200,000 CRs before text / at a line's end) (got " + js([ms, hostile[0].length]) + ")");
+  }
 };
