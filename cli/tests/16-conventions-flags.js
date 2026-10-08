@@ -287,4 +287,69 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
       "1.24 r6 B7: --project / SPEC_PROJECT_DIR naming a dev-spec project's .specs/ exits 1 with the project folder to name instead; no .specs/.specs/ (got " +
       JSON.stringify(r.map((x) => [x.code, x.out.trim().slice(0, 100)]).concat([[viaEnv.status, String(viaEnv.stderr).trim().slice(0, 100)]])) + ")");
   }
+
+  // 1.24 r6 B4: extra or contradictory inputs the 1.23 checks let through — feature archive / remove / restore with a word past
+  // the name (and rename / flow past theirs), feature flow <name> <flow> with --flow, --flow on another action, merge-state's
+  // file arguments with --install / --uninstall (or both switches), depend's deps with --clear, stop-check --message with words —
+  // are usage errors; nothing changes.
+  {
+    const p = path.join(tmp, "r6b4-extra");
+    run(["init", "--project", p]);
+    run(["create", "Login", "--project", p]);
+    run(["create", "Other", "--project", p]);
+    run(["depend", "login", "other", "--project", p]);
+    const snap = () => fs.readdirSync(path.join(p, ".specs")).sort().join(",") + "|" + fs.readFileSync(path.join(p, ".specs", "roadmap.json"), "utf8");
+    const before = snap();
+    const cases = [
+      [["feature", "archive", "login", "extra"], /'feature archive' got unexpected argument\(s\): extra/],
+      [["feature", "remove", "login", "extra", "--yes"], /'feature remove' got unexpected argument\(s\): extra/],
+      [["feature", "restore", "login", "extra"], /'feature restore' got unexpected argument\(s\): extra/],
+      [["feature", "rename", "login", "auth", "extra"], /'feature rename' got unexpected argument\(s\): extra/],
+      [["feature", "flow", "login", "design-first", "--flow", "requirements-first"], /'feature flow' got unexpected argument\(s\): design-first/],
+      [["feature", "flow", "login", "design-first", "extra"], /'feature flow' got unexpected argument\(s\): extra/],
+      [["feature", "archive", "login", "--flow", "design-first"], /--flow is not an option of 'feature archive'/],
+      [["merge-state", "a", "b", "c", "--install"], /usage: dev-spec merge-state/],
+      [["merge-state", "--install", "--uninstall"], /usage: dev-spec merge-state/],
+      [["depend", "login", "other", "--clear"], /usage: dev-spec depend/],
+      [["stop-check", "all", "done", "--message", "done"], /usage: dev-spec stop-check/],
+    ].map(([a, re]) => [run([...a, "--project", p]), re, a.join(" ")]);
+    const after = snap();
+    const ok2 = run(["feature", "flow", "other", "--flow", "design-first", "--project", p]);
+    const okClear = run(["depend", "login", "--clear", "--project", p]);
+    ok(cases.every(([r, re]) => r.code === 1 && re.test(r.out)) && after === before && ok2.code === 0 && okClear.code === 0 && /login depends on: \(none\)/.test(okClear.out),
+      "1.24 r6 B4: feature archive/remove/restore/rename/flow past their arguments, a flow given twice or on another action, merge-state files with --install / both switches, depend deps + --clear and stop-check --message + words exit 1, nothing changed; feature flow --flow and depend --clear alone still work (got " +
+      JSON.stringify(cases.filter(([r, re]) => !(r.code === 1 && re.test(r.out))).map(([r, , a]) => [a, r.code, r.out.trim().slice(0, 90)]).concat([[ok2.code, okClear.code]])) + ")");
+  }
+
+  // 1.24 r6 B5: a single-value flag given twice was last-wins — `approve … --role tech --role product` signed for product alone,
+  // --by / --cmd / --summary / --through / --phase dropped the first — now a usage error; the repeatable ones (depend --add / --rm,
+  // init --check, append-tasks --req / --implements / --makes-green / --depends, decide --affects / --supersedes) still add up.
+  {
+    const p = path.join(tmp, "r6b5-twice");
+    run(["init", "--project", p]);
+    run(["create", "Login", "--project", p]);
+    run(["create", "Other", "--project", p]);
+    run(["create", "Third", "--project", p]);
+    const st = () => fs.readFileSync(path.join(p, ".specs", "login", ".state.json"), "utf8");
+    const before = st();
+    const cases = [["approve", "login", "classification", "--role", "tech", "--role", "product"], ["approve", "login", "classification", "--by", "a", "--by=b"],
+      ["create", "Zed", "--summary", "a", "--summary", "b"], ["done", "login", "1", "--cmd", "a", "--cmd", "b", "--exit", "0"],
+      ["impact", "login", "--phase", "design", "--phase", "tasks"], ["approve", "login", "--through", "design", "--through", "tasks"],
+      ["list", "--project", p]].map((a) => [run([...a, "--project", p]), a.find((x) => x.startsWith("--")).replace(/=.*/, "")]);
+    const pt = path.join(tmp, "r6b5-pt");
+    run(["init", "--lang", "pt", "--project", pt]);
+    const ptTwice = run(["roadmap", "--lang", "pt", "--lang", "es", "--project", pt]);
+    const atTwice = run(["append-tasks", "login", "--task", "a", "--size", "S", "--size", "M", "--project", p]);
+    const at2Tasks = run(["append-tasks", "login", "--task", "a", "--task", "b", "--project", p]);
+    const dep = run(["depend", "login", "--add", "other", "--add", "third", "--project", p]);
+    const reqs = run(["append-tasks", "login", "--task", "Wire it", "--implements", "src/a.js", "--implements", "src/b.js", "--json", "--project", p]);
+    let rj = null;
+    try { rj = JSON.parse(reqs.out); } catch { /* not JSON */ }
+    ok(cases.every(([r, f]) => r.code === 1 && new RegExp(f + " was given more than once").test(r.out)) && st() === before && !fs.existsSync(path.join(p, ".specs", "zed")) &&
+      ptTwice.code === 1 && /--lang foi indicada mais de uma vez/.test(ptTwice.out) &&
+      atTwice.code === 1 && /append-tasks takes --size once per call/.test(atTwice.out) && at2Tasks.code === 1 && /one --task per call/.test(at2Tasks.out) &&
+      dep.code === 0 && /login depends on: other, third/.test(dep.out) && rj && rj.ok === true && JSON.stringify(rj.appended[0].implements) === '["src/a.js","src/b.js"]',
+      "1.24 r6 B5: a single-value flag given twice (--role, --by / --by=, --summary, --cmd, --phase, --through, --project, --lang) exits 1 naming it (PT too), nothing changed; append-tasks keeps its own messages; repeatable flags still add up (got " +
+      JSON.stringify(cases.map(([r, f]) => [f, r.code, r.out.trim().slice(0, 80)]).concat([[ptTwice.code, ptTwice.out.trim().slice(0, 80)], [atTwice.code, at2Tasks.code, dep.out.trim(), rj && rj.appended]])) + ")");
+  }
 };

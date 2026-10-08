@@ -226,8 +226,16 @@ and U+FEFF gotchas are in CLAUDE.md.
   export, decide…); `checkCommandArgs()` refuses — before anything runs, after the help — a known flag the command doesn't
   read (`cliOutput.flagNotFor`, its options listed) and an argument past its last one (`extraArgs`): they were ignored —
   `approve <f> <phase> --remove` (meant --revoke) approved, `done <f> 3 4` ticked task 3 alone. `--json`, `--project` and
-  `--help` are global (`GLOBAL_OPTIONS`). `backlog` (add takes note words, rm / list don't) and `log` (a second word is `-`)
-  check theirs in their case; `--shell` / `--timeout` without `--run` (`needsRun`) and `--run` with `--evidence` / `--exit` /
+  `--help` are global (`GLOBAL_OPTIONS`). `backlog` (add takes note words, rm / list don't), `log` (a second word is `-`) and
+  `feature` (1.24 r6 B4: remove / archive / restore take the name, rename and flow one more — flow's is its `--flow` or the word,
+  never both; `--flow` on another action is refused) check theirs in their case; the contradictory pairs are usage errors too
+  (B4): `depend <f> <deps…> --clear`, `merge-state <files…> --install|--uninstall` and both switches together, `stop-check
+  --message … <words>`. **A single-value flag given twice (B5)** is refused (`refuseRepeatedFlags()`, `cliOutput.flagTwice`):
+  the parser counts each VALUE flag (`flagCount`, both `--k v` and `--k=v`) and kept the last — `approve … --role tech --role
+  product` signed for product alone; `REPEATABLE_FLAGS` are the ones a command collects every occurrence of (depend `--add` /
+  `--rm`, init `--check`, append-tasks `--req` / `--implements` / `--makes-green` / `--depends`, decide `--affects` /
+  `--supersedes` — a new collector joins that list), and append-tasks keeps its own words for `--task` / `--verify` / `--story` /
+  `--heading` / `--size`; `--shell` / `--timeout` without `--run` (`needsRun`) and `--run` with `--evidence` / `--exit` /
   `--cmd` (`runOrEvidence`) are usage errors; `undone` takes done's run flags only to refuse them (`undo.noEvidence`). A new
   command or flag gets its `COMMAND_OPTIONS` entry (extending.md). **`--project` (L14)** names an existing folder
   (`checkProject()`): empty, an unexpanded variable (`unexpandedVar`), a file or a missing folder is refused (localized

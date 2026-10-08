@@ -211,18 +211,23 @@ VALUE_FLAGS.add("out"); // 1.20: bundle --out <file.js> — the one-file engine 
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 const ARGV0 = argv.slice(); // the command line as given — `evals` hands its own flags to run-evals.js (evalsArgs)
 let cmdIdx = -1; // where the command word stands in ARGV0
+// 1.24 r6 B5 — how many times each VALUE flag was given (`--k v` and `--k=v`): the parser keeps the last value, so a second one of
+// a single-value flag dropped the first silently (`approve … --role tech --role product` signed for product alone) — main()
+// refuses it (refuseRepeatedFlags); the flags a command collects every occurrence of are REPEATABLE_FLAGS.
+const flagCount = Object.create(null);
+const countFlag = (k) => { if (VALUE_FLAGS.has(k)) flagCount[k] = (flagCount[k] || 0) + 1; };
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   // `--` ends the options (POSIX): every later token is positional (`create -- --odd-name`) — it used to become flags[""].
   // argv is cut there, so the repeated-flag collectors below (depend --add, init --check, decide --affects…) stop there too.
   if (a === "--") { if (cmdIdx < 0 && !pos.length && i + 1 < argv.length) cmdIdx = i + 1; pos.push(...argv.slice(i + 1)); argv.splice(i); break; }
   if (a === "--json") flags.json = true;
-  else if (a.startsWith("--") && a.includes("=")) { const k = a.slice(2, a.indexOf("=")); flags[k] = a.slice(a.indexOf("=") + 1); }
+  else if (a.startsWith("--") && a.includes("=")) { const k = a.slice(2, a.indexOf("=")); flags[k] = a.slice(a.indexOf("=") + 1); countFlag(k); }
   else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) {
     // A value flag never swallows the next flag: `--order --json` must not set order="--json". Only a
     // `--<letter>` token is a flag — `---` (front matter, an HR) or `-- draft` stays a value, like over MCP.
     if (argv[i + 1] === undefined || /^--[A-Za-z]/.test(argv[i + 1])) missingValue = missingValue || a.slice(2);
-    else flags[a.slice(2)] = argv[++i];
+    else { flags[a.slice(2)] = argv[++i]; countFlag(a.slice(2)); }
   }
   else if (a.startsWith("--")) flags[a.slice(2)] = true;
   else { if (!pos.length) cmdIdx = i; pos.push(a); }
@@ -289,6 +294,22 @@ function refuseUnknownFlags() {
     if (n <= Math.max(1, Math.floor(c.length / 3)) && (!best || n < best.n)) best = { c, n };
   }
   die(projectText().unknownFlag("--" + bad, best ? "--" + best.c : null));
+}
+// 1.24 r6 B5 — a single-value flag given twice is a usage error, never last-wins (--role, --by, --cmd, --summary, --through,
+// --phase, --project, --lang… dropped the first value). REPEATABLE_FLAGS are the ones a command reads every occurrence of: depend
+// --add / --rm, init --check, append-tasks --req / --implements / --makes-green / --depends, decide --affects / --supersedes.
+// append-tasks keeps its own words for --task (one task per call) and --verify / --story / --heading / --size. `evals` is exempt
+// (its flags are run-evals.js's).
+const REPEATABLE_FLAGS = new Set(["add", "rm", "check", "req", "implements", "makes-green", "depends", "affects", "supersedes"]);
+function refuseRepeatedFlags() {
+  if (cmd === "evals") return;
+  const k = Object.keys(flagCount).find((n) => flagCount[n] > 1 && !REPEATABLE_FLAGS.has(n));
+  if (k === undefined) return;
+  if (cmd === "append-tasks" && ["task", "verify", "story", "heading", "size"].includes(k)) {
+    const AT = spec.msg(pos[0] != null ? spec.featureLang(projectDir, pos[0]) : spec.projectLang(projectDir)).appendTasks;
+    die(k === "task" ? AT.oneTaskPerCall : AT.oneValue(k));
+  }
+  die(projectText().flagTwice("--" + k));
 }
 function normalizeBoolFlags() {
   for (const k of BOOL_FLAGS) {
@@ -447,7 +468,7 @@ const COMMAND_OPTIONS = {
   "next-action": { options: [], max: 1 },
   na: { options: [], max: 1 },
   "add-track": { options: ["tracks", "remove"] },
-  feature: { options: ["yes", "flow"], max: 3 },
+  feature: { options: ["yes", "flow"] }, // its arguments per action (remove / archive / restore: 2, rename / flow: 3) — checked in its case (1.24 r6 B4)
   rules: { options: [], max: 1 },
   import: { options: ["name", "lang", "tracks", "text"] },
   "append-tasks": { options: ["task", "req", "implements", "verify", "story", "parallel", "makes-green", "expect-fail", "size", "depends", "heading"], max: 1 },
@@ -607,6 +628,7 @@ async function main() {
   // init's value as the next word): a bare `--check` after merge-state reads as on.
   if (cmd === "merge-state" && missingValue === "check") { missingValue = null; flags.check = true; }
   if (missingValue) die(projectText().missingValue(missingValue));
+  refuseRepeatedFlags(); // 1.24 r6 B5: `--role tech --role product` is an error, never last-wins
   // --lang is checked once, like the MCP `lang` enum: an unknown value (fr, spanish, portugues…) is refused before any
   // command runs — the engine would quietly turn it into 'en' and SAVE it (init rewrote the project language).
   if (flags.lang !== undefined) {
@@ -1122,7 +1144,8 @@ async function main() {
 
     case "depend": {
       const syntax = "dev-spec depend <feature> [dep1 dep2 ...] [--add x[,y]] [--rm x[,y]] [--order N] [--clear]";
-      if (!pos[0]) usage(syntax);
+      // 1.24 r6 B4: deps (they REPLACE the list) and --clear (it empties it) contradict each other — the deps won silently
+      if (!pos[0] || (on("clear") && pos.length > 1)) usage(syntax);
       // The shared parser keeps only the LAST value of a repeated flag, so `--add b --add c` silently added c
       // alone. Collect every occurrence here, walking argv with the parser's own rules.
       const every = (name) => {
@@ -1231,6 +1254,12 @@ async function main() {
       // dev-spec feature <remove|archive|rename|restore|flow> <name> [new-name|flow] — remove needs --yes (= spec_feature confirm:true);
       // flow <name> <requirements-first|design-first> (or --flow) = spec_feature {action: "flow", flow} (C3)
       if (!pos[0] || !pos[1]) usage("dev-spec feature <remove|archive|rename|restore|flow> <name> [new-name|requirements-first|design-first] [--yes]");
+      // 1.24 r6 B4: each action reads its own arguments — remove / archive / restore the name, rename + the new name, flow + the
+      // flow (or --flow, never both) — and --flow only on flow: a word past them (or --flow elsewhere) was ignored silently.
+      const act = String(pos[0]).trim().toLowerCase();
+      const most = { remove: 2, archive: 2, restore: 2, rename: 3, flow: flags.flow !== undefined ? 2 : 3 }[act];
+      if (most !== undefined && pos.length > most) die(projectText().extraArgs("feature " + act, pos.slice(most).join(" ")));
+      if (most !== undefined && act !== "flow" && flags.flow !== undefined) die(projectText().flagNotFor("--flow", "feature " + act, act === "remove" ? "--yes" : ""));
       const T = featureText(pos[1]); // resolved BEFORE the folder moves or disappears
       const r = spec.manageFeature(projectDir, pos[0], pos[1], pos[2], { confirm: on("yes"), flow: flags.flow });
       if (!r.ok && r.needsConfirm) {
@@ -1341,12 +1370,9 @@ async function main() {
         }
         return vals;
       };
-      // A second --task is a second task: refused (one per call) rather than merged or dropped.
-      if (every("task").length > 1) die(T.oneTaskPerCall);
-      // Single-valued like over MCP: a second --verify would silently drop the first check (the evidence gate would
-      // never ask for it), a second --story/--heading the first choice — refused, never last-wins.
-      const twice = ["verify", "story", "heading", "size"].find((k) => every(k).length > 1);
-      if (twice) die(T.oneValue(twice));
+      // A second --task is a second task (one per call), a second --verify would drop the first check (the evidence gate would
+      // never ask for it), a second --story / --heading / --size the first choice — each refused before anything runs, in
+      // append-tasks' own words (refuseRepeatedFlags, 1.24 r6 B5: every single-value flag now).
       const task = { text: flags.task };
       const reqs = every("req"), impls = every("implements");
       if (reqs.length) task.requirements = reqs; // each may hold "a,b" — the engine splits it, same as over MCP
@@ -1742,6 +1768,8 @@ async function main() {
         }
         process.exitCode = r.block ? 1 : 0;
       };
+      // 1.24 r6 B4: the message is --message OR the words after the command (or a lone - : stdin) — both given, the words were dropped
+      if (flags.message !== undefined && pos.length) usage('dev-spec stop-check [--message "<text>" | <words…> | -] [--agent <type>]');
       if (flags.message === "-" || (flags.message === undefined && pos.length === 1 && pos[0] === "-")) return readStdin(runCheck);
       return runCheck(typeof flags.message === "string" ? flags.message : pos.join(" "));
     }
@@ -1800,6 +1828,8 @@ async function main() {
       const check = flags.check === true || /^(?:true|1|yes|on)$/i.test(String(flags.check === undefined ? "" : flags.check));
       if (flags.check !== undefined && !check && !/^(?:false|0|no|off)$/i.test(String(flags.check))) usage(msUsage);
       if (check) { if (pos.length || on("install") || on("uninstall")) usage(msUsage); return mergeDriverCheck(); }
+      // 1.24 r6 B4: --install / --uninstall take no file arguments, and not both (the file arguments, or --install, were ignored)
+      if ((on("install") || on("uninstall")) && (pos.length || (on("install") && on("uninstall")))) usage(msUsage);
       if (on("install") || on("uninstall")) return mergeDriverSetup(on("uninstall"));
       if (pos.length < 3 || pos.length > 4) usage(msUsage);
       return mergeStateRun(pos[0], pos[1], pos[2], pos[3]);

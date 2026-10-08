@@ -1722,6 +1722,8 @@ const msg = {
       // 1.24 r6 B7: a project's own .specs/ folder named as the project (label: "--project <dir>" or "<VARIABLE>=<dir>")
       projectIsSpecs: (label, parent) => `${label} is the .specs folder of the project ${parent} — name the project folder itself: ${parent}`,
       // 1.24 r6 B3: done --run / finish --run settled at the command's exit while a background process still held its output
+      // 1.24 r6 B5: a single-value flag given twice (the last value used to win silently)
+      flagTwice: (flag) => `${flag} was given more than once — it takes a single value: give it once.`,
       // 1.24 r6 B6: a bounded integer flag's upper end, after args.atLeast (--timeout ≤ Node's timer limit)
       atMost: (n) => `, at most ${n}`,
       runHeldOpen: (code) => `⚠ the command exited (${code}), but a process it started in the background kept its output open — the run was recorded at that exit; what that process prints later is not in the evidence.`,
