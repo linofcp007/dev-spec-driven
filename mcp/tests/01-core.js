@@ -709,9 +709,9 @@ exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, require, __dirna
   llFill("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
   llFill("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[full test suite command]", "npm test"]]);
   llFill("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"]]);
-  [1, 2].forEach((n) => S.completeTask(vDir, "login-loop", n));
-  S.completeTask(vDir, "login-loop", 3, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
-  S.completeTask(vDir, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
+  // Two tasks (the reproduce / root-cause steps are bug.md's, gated by the approvals): the red regression test, then the fix.
+  S.completeTask(vDir, "login-loop", 1, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
+  S.completeTask(vDir, "login-loop", 2, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
   const llReq = S.approvePhase(vDir, "login-loop", "requirements");
   // Phase by phase: the test plan and the tasks can't be approved before the design (bug.md) — refused, naming it.
   const llEarly = ["test-plan", "tasks"].map((p) => S.approvePhase(vDir, "login-loop", p));
@@ -730,24 +730,26 @@ exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, require, __dirna
   const prFile = fs.readFileSync(ready.paths.summary, "utf8");
   ok(ready.readyToFinish === true && ready.blockers.length === 0 && /42\/42 passing/.test(prFile) && /US-1\.AC-1/.test(prFile) && ready.mergeSummary === undefined && /merge-summary\.md$/.test(ready.paths.summary),
     "all tasks done + evidence + approvals → readyToFinish; the merge summary (with evidence) is written to .execution/");
-  // 1.14: the bugfix scaffold's task 3 carries its _Verify:_ + _Expect: fail_ (the red run is the proof) and T-02 — a guard
+  // 1.14: the bugfix scaffold's red task carries its _Verify:_ + _Expect: fail_ (the red run is the proof) and T-02 — a guard
   // test, green before and after the fix — is in no task's _Makes green:_, so doctor's red-green passes on a finished bugfix
   // (it warned "T-02 has no red run" on every one). spec_status carries kind + flow; the brief's reply line names the report.
+  // The short form at every size: two tasks — 1 the red regression test, 2 the fix (no reproduce / root-cause tasks: bug.md's
+  // Reproduction and Root Cause are gated by the requirements and design approvals; they were tasks 1–2, the red test task 3).
   {
     const llDocDone = S.specDoctor(vDir, "login-loop");
     const rgLl = llDocDone.checks.find((c) => c.id === "red-green");
     const scaf = ["en", "pt", "es", "pt-BR"].map((lg) => require("./lib/i18n.js").bugTasks("X", lg));
-    const t3 = (t) => (t.match(/- \[ \] 3\.[\s\S]*?(?=\n- \[ \] 4\.)/) || [""])[0];
-    const t4 = (t) => (t.match(/- \[ \] 4\.[\s\S]*?(?=\n\*\*Checkpoint)/) || [""])[0];
+    const t1 = (t) => (t.match(/- \[ \] 1\.[\s\S]*?(?=\n- \[ \] 2\.)/) || [""])[0];
+    const t2 = (t) => (t.match(/- \[ \] 2\.[\s\S]*?(?=\n\*\*Checkpoint)/) || [""])[0];
     const stBug = S.statusFeature(vDir, "login-loop");
     const dfSt = S.createFeature(vDir, "Arch first", ["core"], "x", undefined, "en", undefined, { flow: "design-first" });
     const stDf = S.statusFeature(vDir, dfSt.slug);
-    const brLl = S.taskBrief(vDir, "login-loop", 4, {});
-    ok(rgLl && rgLl.status === "pass" && scaf.every((t) => /_Verify: \[[^\]\n]+T-01\]_\n  - _Expect: fail_/.test(t3(t)) && !/_Makes green:/.test(t3(t)) &&
-      /_Makes green: T-01_/.test(t4(t)) && !/_Makes green:[^\n]*T-02/.test(t) && /T-02/.test(t3(t)) && /T-02/.test(t4(t))) &&
+    const brLl = S.taskBrief(vDir, "login-loop", 2, {});
+    ok(rgLl && rgLl.status === "pass" && scaf.every((t) => S.taskBlocks(t).length === 2 && /_Verify: \[[^\]\n]+T-01\]_\n  - _Expect: fail_/.test(t1(t)) && !/_Makes green:/.test(t1(t)) &&
+      /_Makes green: T-01_/.test(t2(t)) && !/_Makes green:[^\n]*T-02/.test(t) && /T-02/.test(t1(t)) && /T-02/.test(t2(t))) &&
       stBug.kind === "bugfix" && stBug.flow === "requirements-first" && stDf.kind === "feature" && stDf.flow === "design-first" &&
-      /the report path written out in full \(`\.specs\/login-loop\/\.execution\/task-4-report\.md`\)/.test(brLl.brief),
-      "bugfix: task 3 scaffolds with _Verify:_ + _Expect: fail_ and T-02 stays out of _Makes green:_ (EN/PT/ES/pt-BR) → red-green passes on a finished bugfix; spec_status returns kind + flow; the brief asks the implementer to name its report path (got " +
+      /the report path written out in full \(`\.specs\/login-loop\/\.execution\/task-2-report\.md`\)/.test(brLl.brief),
+      "bugfix: two tasks — task 1 scaffolds with _Verify:_ + _Expect: fail_, T-02 stays out of _Makes green:_ (EN/PT/ES/pt-BR) → red-green passes on a finished bugfix; spec_status returns kind + flow; the brief asks the implementer to name its report path (got " +
       JSON.stringify([rgLl && rgLl.status, rgLl && rgLl.detail, stBug.kind, stBug.flow, stDf.flow, (brLl.brief || "").slice(-400)]) + ")");
   }
   // 1.14 final review — engine: a re-finish keeps the FIRST finish (release notes don't list a shipped feature again), and a

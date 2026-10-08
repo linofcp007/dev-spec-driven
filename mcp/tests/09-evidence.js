@@ -201,7 +201,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const redExpect = (d, lang) => {
       const b = S.createFeature(d, "Red expect " + lang, undefined, "loop", undefined, lang, "bugfix");
       const tp = path.join(b.dir, "tasks.md");
-      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace(/  - _Verify: \[[^\]\n]*T-01\]_\n/, "  - _Verify: node tests/t01.test.js_\n")); // the scaffold's task 3 already carries _Expect: fail_
+      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace(/  - _Verify: \[[^\]\n]*T-01\]_\n/, "  - _Verify: node tests/t01.test.js_\n")); // the scaffold's task 1 already carries _Expect: fail_
       const bp = path.join(b.dir, "bug.md");
       fs.writeFileSync(bp, fs.readFileSync(bp, "utf8").replace(/> \*\*TODO\*\*[^\n]*/g, "The handler redirects before clearing the cookie (auth.js:88).").replace(/\[[^\]\n]+\]/g, "the dashboard opens"));
       const fillAll = (rel, re, by) => { const p = path.join(b.dir, rel); fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(re, by)); };
@@ -209,17 +209,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
       fillAll("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
       fillAll("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
       ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(d, b.slug, ph));
-      S.completeTask(d, b.slug, 1); S.completeTask(d, b.slug, 2);
-      const pass3 = S.completeTask(d, b.slug, 3, { command: "node tests/t01.test.js", exitCode: 0 });
-      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace(/- \[ \] 3\./, "- [x] 3.").replace(/- \[ \] 4\./, "- [x] 4."));
-      return { b, pass3, na: S.nextAction(d, b.slug) };
+      const pass1 = S.completeTask(d, b.slug, 1, { command: "node tests/t01.test.js", exitCode: 0 });
+      fs.writeFileSync(tp, fs.readFileSync(tp, "utf8").replace(/- \[ \] 1\./, "- [x] 1.").replace(/- \[ \] 2\./, "- [x] 2."));
+      return { b, pass1, na: S.nextAction(d, b.slug) };
     };
     const d10 = b5Dir("na");
     S.initProject(d10, ["core"], "en");
     const reEn = redExpect(d10, "en"), rePt = redExpect(d10, "pt");
-    ok(reEn.pass3.unexpectedPass === true && reEn.na.step === "verify" && /#3 \(run passed, but _Expect: fail_ needs a red run\)/.test(reEn.na.recommendation) &&
-      /Task 3 is marked _Expect: fail_: its proof is a run that FAILS .*\(node "[^"]*dev-spec\.js" done red-expect-en 3 --run while the test fails/.test(reEn.na.recommendation) &&
-      !/Mark task 3 with _Expect: fail_/.test(reEn.na.recommendation) && rePt.na.step === "verify" && /A tarefa 3 tem _Expect: fail_: a prova é uma execução que FALHA/.test(rePt.na.recommendation),
+    ok(reEn.pass1.unexpectedPass === true && reEn.na.step === "verify" && /#1 \(run passed, but _Expect: fail_ needs a red run\)/.test(reEn.na.recommendation) &&
+      /Task 1 is marked _Expect: fail_: its proof is a run that FAILS .*\(node "[^"]*dev-spec\.js" done red-expect-en 1 --run while the test fails/.test(reEn.na.recommendation) &&
+      !/Mark task 1 with _Expect: fail_/.test(reEn.na.recommendation) && rePt.na.step === "verify" && /A tarefa 1 tem _Expect: fail_: a prova é uma execução que FALHA/.test(rePt.na.recommendation),
       "B5 next_action verify: an _Expect: fail_ task whose run passed (unexpected-pass) is told its proof is a FAILING run — no 'add the marker' red-phase hint; PT (got " +
       JSON.stringify([reEn.na.step, reEn.na.recommendation]).slice(0, 400) + ")");
 
@@ -788,13 +787,12 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     naFill("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
     naFill("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
     ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(pNa, bNa.slug, ph));
-    S.completeTask(pNa, bNa.slug, 1); S.completeTask(pNa, bNa.slug, 2);
-    const red3 = S.completeTask(pNa, bNa.slug, 3, { command: "node tests/t01.test.js", exitCode: 1, summary: "not ok 1 - T-01" });
-    naFill("tasks.md", /- \[ \] 4\./, "- [x] 4.");
+    const red1 = S.completeTask(pNa, bNa.slug, 1, { command: "node tests/t01.test.js", exitCode: 1, summary: "not ok 1 - T-01" }); // the red task (_Expect: fail_)
+    naFill("tasks.md", /- \[ \] 2\./, "- [x] 2.");
     const naObs = S.nextAction(pNa, bNa.slug);
-    ok(red3.ok && red3.unverifiedReason === "unobserved" && naObs.step === "verify" && /#3 \(run not observed by the harness\)/.test(naObs.recommendation) &&
+    ok(red1.ok && red1.unverifiedReason === "unobserved" && naObs.step === "verify" && /#1 \(run not observed by the harness\)/.test(naObs.recommendation) &&
       /only runs the harness saw \(roadmap\.json meta\.evidence: observed\)/.test(naObs.recommendation),
-      "feature F1: next_action's verify step lists the unobserved task and says how to get an observed run (got " + JSON.stringify([red3.unverifiedReason, naObs.step, naObs.recommendation]).slice(0, 400) + ")");
+      "feature F1: next_action's verify step lists the unobserved task and says how to get an observed run (got " + JSON.stringify([red1.unverifiedReason, naObs.step, naObs.recommendation]).slice(0, 400) + ")");
 
     // A new report of task 2: unobserved (reason + note; nothing ever observed in a project → the MCP-only line); after the hook saw it → verified.
     const c2b = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0 } });
