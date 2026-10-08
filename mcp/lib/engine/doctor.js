@@ -34,7 +34,8 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   trackLabel, trackMarker, trackSectionTable, unreadTasksDetail, unverifiedLabel, VALID_TRACKS, verificationStatus, verifyPipes,
   waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText;
+  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
+  suspiciousVerify;
 function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
@@ -57,7 +58,8 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   TRACK_SECTIONS, trackLabel, trackMarker, trackSectionTable, unreadTasksDetail, unverifiedLabel, VALID_TRACKS, verificationStatus,
   verifyPipes, waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText } = E); }
+  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
+  suspiciousVerify } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -810,6 +812,10 @@ function specDoctor(projectDir, name, opts = {}) {
   // read nothing there — no check runs, no file is traced. Active tasks only; a warn.
   const oddMarkers = malformedMarkers(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""));
   if (oddMarkers.length) add("malformed-markers", "warn", fm.markerSyntax.doctor(oddMarkers.map((o) => "#" + o.number + " (" + o.labels.map((l) => l + ":").join(", ") + ")").join("; ")));
+  // Review 5 — a _Verify:_ value that looks garbled (a delimiter read into it, a code span inside it, a quote with no partner):
+  // `done --run` runs it exactly as written. Active tasks only; a warn.
+  const oddVerify = suspiciousVerify(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""));
+  if (oddVerify.length) add("verify-suspicious", "warn", fm.markerSyntax.suspiciousVerify(oddVerify.map((o) => "#" + o.number + " " + o.values.map((v) => "«" + v + "»").join(", ")).join("; ")));
   // 1.14 full review Pa6 — a test planned outside test code (load-test.md, evals/*.json) whose artifact is still the
   // scaffold, once that test is due (a done task makes it green, or every task is done). A warn; spec_finish repeats it.
   const ocTemplates = outsideCodeTemplates(projectDir, dir, tracks, greenDone);

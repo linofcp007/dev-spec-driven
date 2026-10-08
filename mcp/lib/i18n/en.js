@@ -1258,6 +1258,8 @@ const msg = {
       tasksMissing: (slug) => `tasks.md not found for '${slug}'`,
       requirementsMissing: (slug) => `requirements.md not found for '${slug}'`,
       taskNotFound: (n, file = "tasks.md") => `Task ${n} not found in ${file}`,
+      // review 5 (P3): a tasks.md whose bytes are not UTF-8 / UTF-16 text (Windows' ANSI code page) is never rewritten
+      tasksNotText: (file = "tasks.md") => `${file} is not saved as UTF-8 (its accented letters are in another encoding — Windows' ANSI code page, what Windows PowerShell 5.1's Set-Content / Add-Content write): nothing was changed, so those letters stay intact. Save ${file} as UTF-8 (VS Code: "Reopen with Encoding" → Windows 1252, then "Save with Encoding" → UTF-8) and retry.`,
       featureBusy: (slug, rel) => `Another dev-spec process is updating '${slug}' right now (${rel || `.specs/${slug}/.lock`}) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.`,
       roadmapBusy: "Another dev-spec process is updating .specs/roadmap.json right now (.specs/.roadmap.lock) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.",
       folderInUse: (rel) => `The folder ${rel} is in use by another program (an editor, a file indexer or antivirus, a terminal opened inside it) — nothing was moved or deleted; close it and try again.`,
@@ -2428,8 +2430,10 @@ const msg = {
     // Marker-shaped text on a task line that yields no marker (doctor malformed-markers, 1.14 full review Pa1).
     markerSyntax: {
       // 1.22 review — checkbox lines the task scanner does not read as tasks (doctor unread-tasks).
-      unreadTasks: (list) => `checkbox lines that are not tasks: ${list} — a task line is "- [ ] N. text" (a -, * or + bullet, then its number); these are never ticked, briefed or verified. Number them (or make them sub-steps of a task).`,
+      unreadTasks: (list) => `checkbox lines that are not tasks: ${list} — a task line is "- [ ] N. text" (a -, * or + bullet, then its number); these are never ticked, briefed or verified. Number them (or make them sub-steps of a task); a line indented 4+ spaces after a blank line, outside a list, is a code block — unindent it.`,
       doctor: (list) => `marker-shaped text on a task line yields no marker: ${list} — the tools read nothing there (no check runs, no file is traced). Write it as _Verify: <command>_ / _Implements: <path>_ / _Depends: 3_ (italics, the value inside).`,
+      // review 5 — a _Verify:_ value that looks garbled (doctor verify-suspicious)
+      suspiciousVerify: (list) => `a _Verify:_ command looks garbled: ${list} — it starts with _ or * (a marker's delimiter read into it), holds a code span inside it (two commands written as one: give each its own _Verify:_; a command substitution reads better as $(…)), or has a quote with no partner. done --run runs it exactly as written: fix the marker.`,
     },
     // A T-ID the test plan checks outside test code (load-test.md, evals/*.json) whose artifact is still the scaffold (doctor
     // outside-code-artifacts, a spec_finish warning — 1.14 full review Pa6).

@@ -79,9 +79,10 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   `red-green` (+tdd: T-IDs made green with no recorded red run of an `_Expect: fail_` task) · `suite-evidence`
   (project checks without a passing run since the last task activity — or run before the implementing files changed —
   once every task is done) · `duplicate-tasks` · `unread-tasks` (checkbox lines the task scanner does not read as tasks —
-  an ordered-list `1. [ ] text`, an unnumbered `- [ ] text` outside every task) · `verify-pipes` (a `_Verify:_` that pipes) · `malformed-markers`
+  an ordered-list `1. [ ] text`, an unnumbered `- [ ] text` outside every task, one in an indented code block) · `verify-pipes` (a `_Verify:_` that pipes) · `malformed-markers`
   (text on a task line shaped like a marker that yields none — `**Verify:** …`, a bare `Verify:` — so nothing runs or is
-  traced) · `outside-code-artifacts` (+tdd: a test planned outside test code — `load-test.md`, an eval set — whose
+  traced) · `verify-suspicious` (a `_Verify:_` value that looks garbled: it starts with `_` / `*`, holds a code span inside
+  it, or has a quote with no partner) · `outside-code-artifacts` (+tdd: a test planned outside test code — `load-test.md`, an eval set — whose
   artifact is still the scaffold once a done task makes it green or every task is done; `spec_finish` repeats it as a
   warning) · `integration-plan` (brownfield template unfilled) · bugfix
   `reproduction` · `changed-since-approval` (names the `spec_impact` phases to diff) · `decision-affects` (phantom

@@ -28,7 +28,8 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   unknownTracksError, userDefaultsApplied, VALID_TRACKS, validateApprovalRoles, withRoadmapLock, writeChecks,
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
-  trackSectionReport, sectionVerdict;
+  trackSectionReport, sectionVerdict,
+  tasksRewrite;
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -45,7 +46,8 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   unknownTracksError, userDefaultsApplied, VALID_TRACKS, validateApprovalRoles, withRoadmapLock, writeChecks,
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
-  trackSectionReport, sectionVerdict } = E); }
+  trackSectionReport, sectionVerdict,
+  tasksRewrite } = E); }
 
 // ---------------------------------------------------------------------------
 // Steering scaffolding
@@ -1016,6 +1018,10 @@ function applyTracks(projectDir, f, name, trs, lng) {
   const { slug, dir, root } = f;
   const state = readState(projectDir, slug);
   if (state.invalid) return { ok: false, error: state.invalid };
+  // Review 5 (P3): a track's template tasks are appended to tasks.md in its own encoding — refused up front, nothing written,
+  // when its bytes are no text in it (Windows' ANSI code page: the rewrite made every accented letter U+FFFD).
+  const tasks0 = trs.some((t) => t !== "tdd" && t !== "core") ? readIfExists(path.join(dir, "tasks.md")) : null;
+  if (tasks0 != null && !tasksRewrite(path.join(dir, "tasks.md"), tasks0, tasks0)) return { ok: false, error: errs(projectDir, slug).tasksNotText(isChangeDir(dir) ? CHANGE_FILE : "tasks.md") };
   const T = i18n.msg(lng).tracks;
   const before = detectTracks(dir);
   const after = allTracks().filter((t) => before.includes(t) || trs.includes(t));
