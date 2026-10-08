@@ -71,7 +71,11 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
     const FFFD = String.fromCharCode(0xfffd);
     const shell = ["A sintaxe do nome de ficheiro, nome de diretório ou etiqueta de volume está incorreta.", "A sintaxe do nome de ficheiro, nome de directório ou etiqueta de volume está incorrecta.",
       "A sintaxe do nome do arquivo, do nome do diretório ou do rótulo do volume está incorreta.", "A sintaxe do nome do arquivo, do nome do diret" + FFFD + "rio ou do r" + FFFD + "tulo do volume est" + FFFD + " incorreta.",
-      "La sintaxis del nombre de archivo, del nombre de directorio o de la etiqueta del volumen no es correcta.", "La sintaxis del nombre del archivo, del directorio o del volumen no es correcta."];
+      "La sintaxis del nombre de archivo, del nombre de directorio o de la etiqueta del volumen no es correcta.", "La sintaxis del nombre del archivo, del directorio o del volumen no es correcta.",
+      // the other word order — Spanish Windows prints this one (seen verbatim in user reports) — and its PT twins, é / estão / são
+      "El nombre de archivo, el nombre de directorio o la sintaxis de la etiqueta del volumen no son correctos.",
+      "O nome de ficheiro, o nome de directório ou a sintaxe da etiqueta de volume estão incorrectos.", "A sintaxe do nome de ficheiro, nome de directório ou etiqueta de volume é incorrecta.",
+      "O nome do arquivo, o nome do diretório ou a sintaxe do rótulo do volume está incorreta.", "O nome do arquivo, o nome do diret" + FFFD + "rio ou a sintaxe do r" + FFFD + "tulo do volume s" + FFFD + "o incorretos."];
     const notShell = ["not ok 1 - the volume label is incorrect", "A sintaxe do teste falhou: esperado 2, recebido 3", "1 failing"];
     const wrong = shell.filter((s) => !S.windowsShellFailure(s, 1)).map((s) => "missed: " + s).concat(notShell.filter((s) => S.windowsShellFailure(s, 1)).map((s) => "flagged: " + s));
     const t = Date.now();
