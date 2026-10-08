@@ -1237,6 +1237,7 @@ const msg = {
       tasksMissing: (slug) => `tasks.md no encontrado para '${slug}'`,
       requirementsMissing: (slug) => `requirements.md no encontrado para '${slug}'`,
       taskNotFound: (n, file = "tasks.md") => `Tarea ${n} no encontrada en ${file}`,
+      tasksNotText: (file = "tasks.md") => `${file} no está guardado en UTF-8 (sus letras acentuadas están en otra codificación — la página de códigos ANSI de Windows, la que escriben Set-Content / Add-Content de Windows PowerShell 5.1): no se ha cambiado nada, para que esas letras queden intactas. Guarda ${file} en UTF-8 (VS Code: "Reopen with Encoding" → Windows 1252, luego "Save with Encoding" → UTF-8) y vuelve a intentarlo.`,
       featureBusy: (slug, rel) => `Otro proceso de dev-spec está actualizando '${slug}' en este momento (${rel || `.specs/${slug}/.lock`}) — no se ha cambiado nada; vuelve a intentarlo en un momento. Si no hay otro editor ni comando de dev-spec en marcha, borra ese archivo.`,
       roadmapBusy: "Otro proceso de dev-spec está actualizando .specs/roadmap.json en este momento (.specs/.roadmap.lock) — no se ha cambiado nada; vuelve a intentarlo en un momento. Si no hay otro editor ni comando de dev-spec en marcha, borra ese archivo.",
       folderInUse: (rel) => `La carpeta ${rel} está en uso por otro programa (un editor, un indexador o antivirus, una terminal abierta dentro) — no se ha movido ni borrado nada; ciérralo y vuelve a intentarlo.`,
@@ -2327,8 +2328,9 @@ const msg = {
     },
 
     markerSyntax: {
-      unreadTasks: (list) => `líneas con casilla que no son tareas: ${list} — una línea de tarea es "- [ ] N. texto" (una viñeta -, * o +, luego su número); estas nunca se marcan, ni entran en un brief, ni se verifican. Numéralas (o conviértelas en subpasos de una tarea).`,
+      unreadTasks: (list) => `líneas con casilla que no son tareas: ${list} — una línea de tarea es "- [ ] N. texto" (una viñeta -, * o +, luego su número); estas nunca se marcan, ni entran en un brief, ni se verifican. Numéralas (o conviértelas en subpasos de una tarea); una línea con 4+ espacios de sangría tras una línea en blanco, fuera de una lista, es un bloque de código — quítale la sangría.`,
       doctor: (list) => `un texto con forma de marcador en una línea de tarea no da ningún marcador: ${list} — las herramientas no leen nada ahí (no se ejecuta ninguna comprobación, no se rastrea ningún archivo). Escríbelo como _Verify: <comando>_ / _Implements: <ruta>_ / _Depends: 3_ (en cursiva, con el valor dentro).`,
+      suspiciousVerify: (list) => `un comando _Verify:_ parece mal escrito: ${list} — empieza por _ o * (un delimitador del marcador leído como parte de él), tiene código entre comillas invertidas dentro (dos comandos escritos como uno: da a cada uno su propio _Verify:_; una sustitución de comando se lee mejor como $(…)) o tiene una comilla sin pareja. done --run lo ejecuta tal como está escrito: corrige el marcador.`,
     },
     outsideCode: {
       doctor: (list) => `pruebas planificadas fuera del código de pruebas apuntan a un artefacto que aún es una plantilla: ${list} — rellénalo (la ejecución de carga real, el conjunto de evaluación propio de la función) antes de darlas por verificadas.`,

@@ -84,8 +84,21 @@ function evidenceIssue(e, runnable, expectFail) {
 // Review 3: a command substitution — a backtick span or `$(…)` — is never split, unquoted or stripped inside (flatCommand
 // dropped every backtick first: ``cd `: && npm test` `` read as `cd :` and a `npm test`, though bash runs npm test inside the
 // substitution and the run's exit code is cd's).
-const RE_PLAIN_ARG = /^[A-Za-z0-9_.\/:@%+,=-]+$/; // an argument that means the same quoted or not
-const RE_PROOF_CD = /^cd\s+(?:\/d\s+)?("[^"]*"|'[^']*'|[^\s;&|"']+)\s*(?:;\s*|$)/i;
+// Review 5 (L9 + improvements) — spellings that run the same command read as one:
+//   - quotes: a quoted word whose content holds none of $ ` \ ! " ' means the same in single or double quotes (bash and
+//     PowerShell): `node -e 'process.exit(0)'` is `node -e "process.exit(0)"` (unquotePlainArgs writes it double-quoted);
+//   - spacing: `&&`, `||`, `;` and a pipe read the same however they are spaced (`npm run build&&npm test`) — proofOps;
+//   - `./`: dropped from the start of a word that names a path below the folder (`./tests/x.test.js` is `tests/x.test.js`,
+//     `./scripts/test.sh` runs the file `scripts/test.sh` runs) — never from a word with no other `/` (`./gradlew` runs the
+//     folder's program, `gradlew` one on the PATH) nor from Go's `./...` pattern;
+//   - npm: `npm run test`, `npm run-script test`, `npm t` and `npm tst` are `npm test` (npm's own aliases);
+//   - folders: cmd.exe's `chdir`, `pushd` / `popd`, PowerShell's `Set-Location` / `sl` / `Push-Location` / `Pop-Location`
+//     (with `-Path` / `-LiteralPath`) move like `cd` (proofCommands keeps the pushd stack).
+const RE_PLAIN_ARG = /^[A-Za-z0-9_.\/\\:@%+,=-]+$/; // an argument that means the same quoted or not
+const RE_QUOTE_SAFE = /^[^$`\\!"']*$/; // a quoted text that reads the same in single and double quotes
+const RE_PROOF_CD = /^(cd|chdir|pushd|sl|set-location|push-location)\s+(?:\/d\s+|-(?:literal)?path\s+|-lp\s+)?("[^"]*"|'[^']*'|[^\s;&|"']+)\s*(?:;\s*|$)/i;
+const RE_PROOF_POPD = /^(?:popd|pop-location)\s*(?:;\s*|$)/i;
+const RE_NPM_TEST = /^npm (?:run(?:-script)? test|t|tst)(?= |$)/;
 const RE_PROOF_PIPEFAIL = /^set\s+(?:-[A-Za-z]+\s+){0,4}-[A-Za-z]*o\s+pipefail\s*(?:;\s*|$)/;
 const RE_PROOF_ENV = /^([A-Za-z_][A-Za-z0-9_]*)=("[^"]*"|'[^']*'|[^\s"'`;&|]*)\s+/;
 const PROOF_MAX_STEPS = 200; // a run of more steps proves nothing (bounded matching)
@@ -105,8 +118,9 @@ function proofSubstEnd(s, i) {
   }
   return s.length;
 }
-// `"x"` / `'x'` → x when x is a plain argument (RE_PLAIN_ARG) — a left-to-right scan (a quote inside another one is kept; a
-// substitution is copied whole), linear.
+// `"x"` / `'x'` → x when x is a plain argument (RE_PLAIN_ARG), → `"x"` when x reads the same in either quotes (RE_QUOTE_SAFE —
+// review 5) — a left-to-right scan (a quote inside another one is kept; a substitution is copied whole), linear. Run before
+// `\` is read as `/` (a backslash inside the quotes is what tells the two quotes apart).
 function unquotePlainArgs(s) {
   let out = "", i = 0;
   while (i < s.length) {
@@ -116,8 +130,35 @@ function unquotePlainArgs(s) {
     const j = s.indexOf(c, i + 1);
     if (j === -1) { out += s.slice(i); break; }
     const inner = s.slice(i + 1, j);
-    out += RE_PLAIN_ARG.test(inner) ? inner : s.slice(i, j + 1);
+    out += RE_PLAIN_ARG.test(inner) ? inner : RE_QUOTE_SAFE.test(inner) ? '"' + inner + '"' : s.slice(i, j + 1);
     i = j + 1;
+  }
+  return out;
+}
+// Review 5 (L9) — the shell's operators in one spelling, outside quotes and substitutions: ` && `, ` || `, ` | ` and `; ` (a
+// trailing `;` keeps no space), however the run spaced them; and a leading `./` dropped from a word that names a path below the
+// folder (see RE_PLAIN_ARG's note). s: whitespace already folded to single spaces. Linear (a word is read at most twice).
+function proofOps(s) {
+  let out = "", q = "", space = false, afterOp = false;
+  const emit = (t) => { if (space) out += " "; space = false; afterOp = false; out += t; };
+  const op = (t, spaced) => { out += spaced ? " " + t + " " : t; space = !spaced; afterOp = true; };
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (q) { out += c; if (c === q) q = ""; continue; }
+    if (proofSubstAt(s, i)) { const e = proofSubstEnd(s, i); emit(s.slice(i, e)); i = e - 1; continue; }
+    if (c === " ") { if (!afterOp) space = true; continue; }
+    if (c === "&" && s[i + 1] === "&") { space = false; op("&&", true); i++; continue; }
+    if (c === "|" && s[i + 1] === "|") { space = false; op("||", true); i++; continue; }
+    if (c === "|" && s[i - 1] !== ">" && s[i + 1] !== "&") { space = false; op("|", true); continue; }
+    if (c === ";") { space = false; op(";", false); continue; }
+    if (c === "." && s[i + 1] === "/" && (i === 0 || /[ ;&|(]/.test(s[i - 1]))) {
+      let e = i + 2;
+      while (e < s.length && !/[ ;&|"'`()]/.test(s[e])) e++;
+      const w = s.slice(i + 2, e);
+      if (w.includes("/") && !w.includes("...")) { i++; continue; } // `./` dropped (the loop steps past the `/`)
+    }
+    if (c === '"' || c === "'") q = c;
+    emit(c);
   }
   return out;
 }
@@ -150,18 +191,19 @@ function proofSteps(cmd) {
   let s = proofUnwrapCode(String(cmd == null ? "" : cmd).replace(/\s+/g, " ").trim());
   const q = /^(["'])([\s\S]*)\1$/.exec(s);
   if (q && !q[2].includes(q[1])) s = q[2].trim(); // quotes around the WHOLE command
-  s = unquotePlainArgs(s.split(String.fromCharCode(92)).join("/"));
+  s = proofOps(unquotePlainArgs(s).split(String.fromCharCode(92)).join("/")); // review 5: quotes read before `\` is `/`; operators
   const steps = [];
   for (let part of splitAndSteps(s)) {
     const env = [];
     for (let guard = 0; part && guard < 64; guard++) { // each step shortens part
       let m;
-      if (!env.length && (m = RE_PROOF_CD.exec(part))) { steps.push({ t: "cd", dir: proofDir(m[1]) }); part = part.slice(m[0].length).trim(); continue; }
+      if (!env.length && (m = RE_PROOF_CD.exec(part))) { steps.push({ t: "cd", dir: proofDir(m[2]), push: /^(?:pushd|push-location)$/i.test(m[1]) }); part = part.slice(m[0].length).trim(); continue; }
+      if (!env.length && (m = RE_PROOF_POPD.exec(part))) { steps.push({ t: "popd" }); part = part.slice(m[0].length).trim(); continue; }
       if (!env.length && (m = RE_PROOF_PIPEFAIL.exec(part))) { steps.push({ t: "pf" }); part = part.slice(m[0].length).trim(); continue; }
       if ((m = RE_PROOF_ENV.exec(part))) { env.push([m[1], m[2]]); part = part.slice(m[0].length).trim(); continue; }
       break;
     }
-    const body = part.replace(/\s+2>&1$/, "").trim();
+    const body = part.replace(/\s+2>&1$/, "").trim().replace(RE_NPM_TEST, "npm test"); // review 5: npm's own aliases of `npm test`
     if (body) steps.push({ t: "cmd", env, body });
     else if (env.length) steps.push({ t: "cmd", env: [], body: env.map(([k, v]) => k + "=" + v).join(" ") }); // only assignments: a command of its own
   }
@@ -232,7 +274,10 @@ function proofCommands(steps, base) {
   let cur = base ? { drive: base.drive, segs: base.segs.slice() } : { drive: null, segs: [] };
   let pf = false, at; // the folder key, computed once per folder
   const out = [];
+  const pushed = []; // review 5: pushd / Push-Location's stack (a copy of each folder left — cdInto extends a folder in place)
   for (const s of steps) {
+    if (s.t === "cd" && s.push) pushed.push(cur && { drive: cur.drive, segs: cur.segs.slice() });
+    if (s.t === "popd") { cur = pushed.length ? pushed.pop() : null; at = undefined; continue; } // an empty stack: popd fails
     if (s.t === "cd") { cur = cdInto(cur, s.dir, win); at = undefined; continue; }
     if (s.t === "pf") { pf = true; continue; }
     if (at === undefined) at = proofFolderKey(cur, base, fold);
@@ -495,6 +540,8 @@ const RE_CMD_SHELL_FAILURE = new RegExp([
   "was unexpected at this time", "n[ãa\uFFFD]o era esperad[oa] (?:nesta altura|neste momento)", "era inesperad[oa] neste momento", "no se esperaba en este momento",
   "cannot find the path specified", "n[ãa\uFFFD]o (?:pode|consegue|conseguiu) (?:encontrar|localizar) o caminho especificado", "no puede (?:encontrar|hallar) la ruta especificada",
   "the filename, directory name, or volume label syntax is incorrect",
+  // review 5 (L10): the same message on a PT-PT / PT-BR / ES Windows, read between its fixed ends (a bounded gap)
+  "a sintaxe do nome d[eo] (?:ficheiro|arquivo)[^\\n]{0,120}?volume est[áa�] incorrec?ta", "la sintaxis del nombre del? archivo[^\\n]{0,120}?volumen no es correcta",
 ].join("|"), "i");
 function windowsShellFailure(output, code) {
   return code === 9009 || RE_CMD_SHELL_FAILURE.test(String(output == null ? "" : output).slice(0, 200000));
@@ -1273,7 +1320,8 @@ function observedStamp(projectDir, slug, ev, ranBy, expected) {
 // ONE function for both sides: the observe hook's log (observeRun: the project AND the project holding the run's cwd — a
 // subagent in a git worktree logs `cd <worktree> && npm test` in the main project's log too) and the reported run's lookup
 // (observedRun) — the hook used to strip it while the lookup didn't, so reporting the exact command that ran read unobserved.
-const RE_CD_STRIP = /^cd\s+(?:"([^"]*)"|'([^']*)'|([^\s;&|]+))\s*(?:&&|;)\s*([\s\S]+)$/;
+// (review 5: cmd.exe's `cd /d` / `chdir` / `pushd` and PowerShell's `Set-Location` / `sl` / `Push-Location` [-Path] too)
+const RE_CD_STRIP = /^(?:cd|chdir|pushd|sl|set-location|push-location)\s+(?:\/d\s+|-(?:literal)?path\s+|-lp\s+)?(?:"([^"]*)"|'([^']*)'|([^\s;&|]+))\s*(?:&&|;)\s*([\s\S]+)$/i;
 function stripCdPrefix(cmd, roots, cwd) {
   const s = String(cmd == null ? "" : cmd).trim();
   const m = RE_CD_STRIP.exec(s);
@@ -1385,13 +1433,17 @@ function observedProof(e, expectFail, since, verify, root) {
 // quotes dropped, `\` read as `/`, whitespace folded (observedNorm) — must each appear in the normalized text. A SUPERSET of
 // runProvesVerify (every transformation keeps a body a substring of its _Verify:_'s normalized text): a run the matcher accepts
 // always passes it. → the bodies ([] — a run of cds / pipefail only — matches nothing).
-const observedNorm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim();
+// (review 5: also pipes unspaced, a `./` at a word's start dropped, npm's aliases of `npm test` read as it, `&&` split however
+// spaced, and a part that is cmd.exe's / PowerShell's change of folder — chdir, pushd, popd, Set-Location, sl, Push-Location,
+// Pop-Location — dropped like `cd`: the matcher's review-5 readings, so the filter stays a superset of it)
+const observedNorm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim()
+  .replace(/ ?(\|+) ?/g, "$1").replace(/(^|[ ;&|(=])\.\//g, "$1").replace(/\bnpm (?:run(?:-script)? test|t|tst)(?=$|[ ;&|])/g, "npm test");
 const RE_OBSERVED_ENV = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s"'`;&|]*)\s+)+/;
 function observedBodies(cmd) {
   const out = [];
-  for (let part of String(cmd == null ? "" : cmd).replace(/\s+/g, " ").split(/ && |;/)) {
+  for (let part of String(cmd == null ? "" : cmd).replace(/\s+/g, " ").split(/\s*&&\s*|;/)) {
     part = part.trim();
-    if (!part || /^cd(?:\s|$)/i.test(part) || /^set\s.*pipefail\s*$/.test(part)) continue;
+    if (!part || /^(?:cd|chdir|pushd|popd|sl|set-location|push-location|pop-location)(?:\s|$)/i.test(part) || /^set\s.*pipefail\s*$/.test(part)) continue;
     const b = observedNorm(part.replace(RE_OBSERVED_ENV, "").replace(/\s+2>&1$/, ""));
     if (b) out.push(b);
   }

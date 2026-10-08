@@ -41,10 +41,12 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   (project checks without a passing run since the last task activity, or run before the implementing files changed —
   `/spec-finish` blocks on it), `verify-pipes` (a `_Verify:_` that pipes: its exit code is the last command's),
   `malformed-markers` (text on a task line shaped like a marker that yields none — `**Verify:** npm test`, a bare
-  `Verify:` — so no check runs and no file is traced: write `_Verify: <command>_`), `outside-code-artifacts` (+tdd: a
+  `Verify:` — so no check runs and no file is traced: write `_Verify: <command>_`), `verify-suspicious` (a `_Verify:_`
+  value that looks garbled — it starts with `_` or `*`, holds a code span inside it, or has a quote with no partner —
+  which `done --run` would run as written), `outside-code-artifacts` (+tdd: a
   test planned outside test code — `load-test.md`, an eval set — whose artifact is still the scaffold),
   `duplicate-tasks`, `unread-tasks` (checkbox lines the task scanner does not read as tasks — an ordered-list
-  `1. [ ] text`, an unnumbered `- [ ] text` outside every task: never ticked, briefed or verified; a task line is
+  `1. [ ] text`, an unnumbered `- [ ] text` outside every task, one in an indented code block: never ticked, briefed or verified; a task line is
   `- [ ] N. text` with a `-`, `*` or `+` bullet), `integration-plan` (still the template), `changed-since-approval` (re-review → `/spec-impact`, then re-approve), `decision-affects` / `decision-affects-approved` (a decision's
   `_Affects:_` naming nothing, or recorded after the approval of what it affects → `/spec-impact`),
   `cross-feature-overlap` (another active feature's open tasks plan the same files → `/depend` or re-plan),

@@ -29,7 +29,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
-  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle; // 1.23 review 5
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite; // 1.23 review 5
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -47,7 +47,7 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
-  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle } = E); }
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite } = E); }
 
 // 1.23 review 5 — the first of `files` a write would reach through a link (a .specs/<feature>/ or .specs/steering/ that is a
 // symbolic link / junction, or resolves outside the real .specs/ — specsWriteContained) → that folder as `.specs/<rel>/`, else
@@ -1072,6 +1072,10 @@ function applyTracks(projectDir, f, name, trs, lng) {
   const steeringOut = trs.flatMap((tr) => steeringFilesForTracks([tr]).filter((x) => !coreSteering.includes(x))).map((sf) => path.join(root, "steering", sf));
   const linked = linkedSpecsFolder(projectDir, [statePath(dir), ...steeringOut.slice(0, 1)]);
   if (linked) return { ok: false, linked: true, error: i18n.msg(lng).err.specsLinked(linked) };
+  // Review 5 (P3): a track's template tasks are appended to tasks.md in its own encoding — refused up front, nothing written,
+  // when its bytes are no text in it (Windows' ANSI code page: the rewrite made every accented letter U+FFFD).
+  const tasks0 = trs.some((t) => t !== "tdd" && t !== "core") ? readIfExists(path.join(dir, "tasks.md")) : null;
+  if (tasks0 != null && !tasksRewrite(path.join(dir, "tasks.md"), tasks0, tasks0)) return { ok: false, error: errs(projectDir, slug).tasksNotText(isChangeDir(dir) ? CHANGE_FILE : "tasks.md") };
   const T = i18n.msg(lng).tracks;
   const before = detectTracks(dir);
   const after = allTracks().filter((t) => before.includes(t) || trs.includes(t));

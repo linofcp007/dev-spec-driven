@@ -863,4 +863,128 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       "1.22 review: the roadmap row cache — after a tick, a hand edit of the same size, a design / requirements edit, a dependency, an approval, the evidence mode, a project template, an undo, ROADMAP.md is byte for byte a fresh computation and the unchanged rows come from the cache; a file stamped within the racy window is never trusted (wrong: " +
       js(wrong) + ", racy hits " + racyHits + ")");
   }
+
+  // Review 5 (P3) — tasks.md written back as the bytes it holds: a tasks.md in Windows' ANSI code page (Windows PowerShell 5.1's
+  // Set-Content) lost every accented letter to U+FFFD on ONE tick (the decoded text was written back). A tick / untick changes the
+  // checkbox's byte only; an append / a track's tasks are refused (localized, nothing written); UTF-16 stays UTF-16.
+  {
+    const js = JSON.stringify;
+    const BOM = String.fromCharCode(0xfeff);
+    const p5 = path.join(tmp, "proj-r5-bytes");
+    S.initProject(p5, ["core"], "pt");
+    const f5 = S.createFeature(p5, "Bytes", ["core"], "", undefined, "pt");
+    const t5 = path.join(f5.dir, "tasks.md"), st5 = path.join(f5.dir, ".state.json");
+    const cp = (s) => Buffer.from(s, "latin1"); // these letters are the same bytes in Windows-1252
+    const ansi = cp("## Fase 1\n- [ ] 1. Validar a sessão\n- [ ] 2. Página de início\n**Checkpoint:** ok\n");
+    fs.writeFileSync(t5, ansi);
+    const tick = S.completeTask(p5, "bytes", 2);
+    const afterTick = fs.readFileSync(t5);
+    const diff = [...afterTick].map((b, i) => (b !== ansi[i] ? i : -1)).filter((i) => i >= 0);
+    const untick = S.completeTask(p5, "bytes", 2, undefined, { undo: true });
+    const afterUntick = fs.readFileSync(t5);
+    const app = S.appendTasks(p5, "bytes", [{ text: "Nova" }]);
+    const trk = S.addTrack(p5, "bytes", "saas");
+    const afterRefusals = fs.readFileSync(t5);
+    fs.writeFileSync(t5, cp("<!-- nota da sessão --> - [ ] 1. a\n")); // the box after an accented byte: where is it in the bytes?
+    const stBefore = fs.readFileSync(st5, "utf8");
+    const odd = S.completeTask(p5, "bytes", 1, { command: "npm test", exitCode: 0 });
+    const oddKept = fs.readFileSync(st5, "utf8") === stBefore && fs.readFileSync(t5).equals(cp("<!-- nota da sessão --> - [ ] 1. a\n"));
+    const u16 = (be, s) => { const b = Buffer.from(BOM + s, "utf16le"); return be ? b.swap16() : b; };
+    const read16 = (b) => (b[0] === 0xfe ? Buffer.from(b).swap16() : b).toString("utf16le");
+    const r16 = [false, true].map((be) => {
+      fs.writeFileSync(t5, u16(be, "## Fase\r\n- [ ] 1. sessão\r\n- [ ] 2. início\r\n**Checkpoint:** ok\r\n"));
+      const c = S.completeTask(p5, "bytes", 2);
+      const a = S.appendTasks(p5, "bytes", [{ text: "Três" }]);
+      const out = fs.readFileSync(t5);
+      return [c.ok, a.ok, out[0], out[1], /- \[x\] 2\. início\r\n/.test(read16(out)), /- \[ \] \d+\. Três\r\n/.test(read16(out))];
+    });
+    ok(tick.ok && diff.length === 1 && afterTick[diff[0]] === 0x78 && untick.ok && afterUntick.equals(ansi) &&
+      app.ok === false && /não está gravado em UTF-8/.test(app.error) && trk.ok === false && /não está gravado em UTF-8/.test(trk.error) && afterRefusals.equals(ansi) &&
+      odd.ok === false && /UTF-8/.test(odd.error) && oddKept &&
+      js(r16) === js([[true, true, 0xff, 0xfe, true, true], [true, true, 0xfe, 0xff, true, true]]),
+      "review 5 (P3): a tasks.md in an ANSI code page is ticked and unticked byte for byte (the box's byte alone); append-tasks and add-track refuse it (PT message, nothing written); a box the bytes can't place is refused with nothing recorded; UTF-16 LE / BE stays UTF-16 through a tick and an append (got " +
+      js([tick.ok, diff, untick.ok, afterUntick.equals(ansi), app.error, trk.error, afterRefusals.equals(ansi), odd.error, oddKept, r16]) + ")");
+  }
+
+  // Review 5 (M4) — markers as a markdown reader reads italics: an EMPTY marker (`_Verify:_`) is no value (a title naming two
+  // markers yielded the runnable _Verify:_ `_ and _Implements:` — never verifiable; "_Depends:_ and _Size:_" failed task-deps), the
+  // value never swallows a following marker, `__Verify: x__` (bold) is no marker (it read `x_`), and a `_` inside a code span
+  // never closes one.
+  {
+    const js = JSON.stringify;
+    const mk = (line) => { const m = S.taskMarkers({ text: line, body: [] }); return [m.verify, m.implements, m.depends]; };
+    const got = {
+      empty: mk("Document the _Verify:_ and _Implements:_ markers"), star: mk("Support *Verify:* and *Implements:* spellings"),
+      tail: mk("Rename the _Verify:_ marker_"), deps: mk("Document the _Depends:_ and _Size:_ markers"), bold: mk("x __Verify: npm test__"),
+      code: mk('x _Verify: `npm test -- --grep "login_ flow"`_'), inCode: mk("x `_Verify: rm -rf dist_` here"), intra: mk("snake_Verify: npm test_"),
+      both: mk("x _Verify: npm test_ and _Implements: src/a.js_"), open: mk("x _Verify: npm test and _Implements: src/a.js_"),
+    };
+    const want = { empty: [[], [], []], star: [[], [], []], tail: [[], [], []], deps: [[], [], []], bold: [[], [], []], code: [['npm test -- --grep "login_ flow"'], [], []],
+      inCode: [[], [], []], intra: [[], [], []], both: [["npm test"], ["src/a.js"], []], open: [[], ["src/a.js"], []] };
+    const pm = path.join(tmp, "proj-r5-markers");
+    S.initProject(pm, ["core"], "en");
+    const fm = S.createFeature(pm, "Marks", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fm.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. Document the _Verify:_ and _Implements:_ markers\n- [ ] 2. Document the _Depends:_ and _Size:_ markers\n");
+    const docM = S.specDoctor(pm, "marks").checks;
+    const c1 = S.completeTask(pm, "marks", 1);
+    ok(js(got) === js(want) && !docM.some((c) => ["task-deps", "malformed-markers", "verify-suspicious"].includes(c.id)) && c1.ok && c1.verified && c1.nothingToVerify,
+      "review 5 (M4): `_Verify:_` / `*Implements:*` named in a title are empty markers (no value — nothing to run, no task-deps fail, no malformed warn); a value never runs past the next marker; `__Verify: x__` and an intraword `_Verify:` are no markers; a `_ ` inside a code span doesn't close the value (got " +
+      js([got, docM.filter((c) => c.status !== "pass").map((c) => c.id), c1.verified, c1.nothingToVerify]) + ")");
+  }
+
+  // Review 5 (M15) — the task brief picks design sections by WHOLE IDs: US-1.AC-1 is not US-1.AC-10, T-1 is not T-10 (but is
+  // T-01); the sections naming the task's own IDs fill the design budget first (a long US-1.AC-10 section pushed AC-1's out).
+  {
+    const js = JSON.stringify;
+    const pb = path.join(tmp, "proj-r5-brief");
+    S.initProject(pb, ["core"], "en");
+    const fb = S.createFeature(pb, "Brief", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fb.dir, "requirements.md"), "# Req\n\n### US-1 Login\n\n- US-1.AC-1: WHEN the user logs in THE SYSTEM SHALL greet them.\n- US-1.AC-10: WHEN the user exports THE SYSTEM SHALL write a CSV.\n");
+    fs.writeFileSync(path.join(fb.dir, "design.md"), "# Design\n\n## Export (US-1.AC-10, T-10)\n\n" + "Export pipeline details. ".repeat(140) +
+      "\n\n## Big file (src/greet.ts)\n\n" + "Notes. ".repeat(500) + "\n\n## Login greeting (US-1.AC-1)\n\n" + "Greeting rules. ".repeat(60) + "\n\n## Greeting test (T-01)\n\nAsserts the greeting.\n");
+    fs.writeFileSync(path.join(fb.dir, "tasks.md"), "- [ ] 1. Greet the user (T-1)\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/greet.ts_\n- [ ] 2. Export (T-10)\n  - _Requirements: US-1.AC-10_\n");
+    const b1 = S.taskBrief(pb, "brief", 1), b2 = S.taskBrief(pb, "brief", 2);
+    ok(js(b1.designSections) === js(["Login greeting (US-1.AC-1)", "Greeting test (T-01)"]) && /Relevant but not included \(size\)[^\n]*Big file/.test(b1.brief) &&
+      js(b2.designSections) === js(["Export (US-1.AC-10, T-10)"]),
+      "review 5 (M15): the brief's design sections match whole IDs (US-1.AC-1 ≠ US-1.AC-10, T-1 = T-01 ≠ T-10) and the task's own ID sections fill the budget before a file's (got " +
+      js([b1.designSections, (b1.brief.match(/^Relevant[^\n]*$/m) || [""])[0], b2.designSections]) + ")");
+  }
+
+  // Review 5 — CommonMark's indented code block holds no task: `    - [ ] 1. example` after a blank line, outside every list, is
+  // code (complete_task ticked that example — the first open task 1 — instead of the real one); doctor's unread-tasks names it.
+  // Inside a list (`- Phase A` then a 4-space task, a task's sub-lines) the indentation is the item's, as before.
+  {
+    const js = JSON.stringify;
+    const pi = path.join(tmp, "proj-r5-indented");
+    S.initProject(pi, ["core"], "en");
+    const fi = S.createFeature(pi, "Indent", ["core"], "", undefined, "en");
+    const ti = path.join(fi.dir, "tasks.md");
+    fs.writeFileSync(ti, "# Tasks\n\nExample:\n\n    - [ ] 1. example\n\n## Phase 1\n- [ ] 1. real\n- Phase A\n\n    - [ ] 2. nested\n");
+    const list = S.parseTasks(fs.readFileSync(ti, "utf8")).map((t) => t.number + ":" + t.text);
+    const done1 = S.completeTask(pi, "indent", 1);
+    const unread = (S.specDoctor(pi, "indent").checks.find((c) => c.id === "unread-tasks") || {}).detail || "";
+    ok(js(list) === js(["1:real", "2:nested"]) && done1.ok && /    - \[ \] 1\. example\n[\s\S]*- \[x\] 1\. real/.test(fs.readFileSync(ti, "utf8")) && /L5 `- \[ \] 1\. example`/.test(unread) && /indented 4\+ spaces/.test(unread),
+      "review 5: a 4-space task line after a blank line outside a list is an indented code block — no task, never ticked; unread-tasks names it; a 4-space task inside a list item is still a task (got " +
+      js([list, done1.ok, unread]) + ")");
+  }
+
+  // Review 5 — doctor verify-suspicious (a warn): a _Verify:_ value that starts with _ / *, holds a code span inside it, or has a quote
+  // with no partner — `done --run` would run it as written.
+  {
+    const js = JSON.stringify;
+    const pv = path.join(tmp, "proj-r5-verify");
+    S.initProject(pv, ["core"], "en");
+    const fv = S.createFeature(pv, "Odd", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fv.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. a\n  - _Verify: `npm test` and `npm run lint`_\n- [ ] 2. b\n  - _Verify: node -e \"process.exit(0)_\n" +
+      "- [ ] 3. c\n  - _Verify: node -e \"console.log('it is ok')\"_\n- [ ] 4. d\n  - _Verify: npm test_\n");
+    const cv = S.specDoctor(pv, "odd").checks.find((c) => c.id === "verify-suspicious");
+    fs.writeFileSync(path.join(fv.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. a\n  - _Verify: npm test_\n");
+    const clean = S.specDoctor(pv, "odd").checks.some((c) => c.id === "verify-suspicious");
+    const fvPt = S.createFeature(pv, "Estranho", ["core"], "", undefined, "pt");
+    fs.writeFileSync(path.join(fvPt.dir, "tasks.md"), "- [ ] 1. a\n  - _Verify: grep \"a_\n");
+    const cvPt = S.specDoctor(pv, fvPt.slug).checks.find((c) => c.id === "verify-suspicious");
+    ok(cv && cv.status === "warn" && /#1 «npm test` and `npm run lint»; #2 «node -e "process\.exit\(0\)»/.test(cv.detail) && !/#3|#4/.test(cv.detail) && !clean &&
+      cvPt && /parece mal escrito/.test(cvPt.detail),
+      "review 5: doctor verify-suspicious warns for a _Verify:_ holding a code span inside it or a quote with no partner (never for paired quotes or a plain command; PT) (got " + js([cv, clean, cvPt && cvPt.detail]) + ")");
+  }
 };

@@ -48,14 +48,16 @@ function finish() {
 // NAME=value assignments (quotes honoured) and a trailing 2>&1 dropped, then backticks and quotes dropped, `\` read as `/`,
 // whitespace folded — must each appear in a tasks.md (or a meta.checks command) read the same way. A SUPERSET of the engine's
 // matcher (runProvesVerify — review 3: `node --test tests\x.test.js`, `CI=1 npm run lint`, a reversed join used to miss it): the
-// engine decides. Cheap: a few string passes, no parse.
-const norm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim();
+// engine decides. Cheap: a few string passes, no parse. (Review 5: pipes unspaced, a word's leading `./` dropped, npm's aliases of
+// `npm test`, `&&` however spaced, and chdir / pushd / popd / Set-Location / sl / Push-Location / Pop-Location parts too.)
+const norm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim()
+  .replace(/ ?(\|+) ?/g, "$1").replace(/(^|[ ;&|(=])\.\//g, "$1").replace(/\bnpm (?:run(?:-script)? test|t|tst)(?=$|[ ;&|])/g, "npm test");
 const RE_ENV = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s"'`;&|]*)\s+)+/;
 function bodies(cmd) {
   const out = [];
-  for (let part of String(cmd == null ? "" : cmd).replace(/\s+/g, " ").split(/ && |;/)) {
+  for (let part of String(cmd == null ? "" : cmd).replace(/\s+/g, " ").split(/\s*&&\s*|;/)) {
     part = part.trim();
-    if (!part || /^cd(?:\s|$)/i.test(part) || /^set\s.*pipefail\s*$/.test(part)) continue;
+    if (!part || /^(?:cd|chdir|pushd|popd|sl|set-location|push-location|pop-location)(?:\s|$)/i.test(part) || /^set\s.*pipefail\s*$/.test(part)) continue;
     const b = norm(part.replace(RE_ENV, "").replace(/\s+2>&1$/, ""));
     if (b) out.push(b);
   }

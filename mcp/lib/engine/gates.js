@@ -25,7 +25,8 @@ let acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, ar
   taskDepsCheck, taskMarkers, taskVerification, testIndex, textFingerprint, timeOf, todayIso, traceCheck, traceGapLines,
   uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey;
+  CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey,
+  checkboxBytes;
 function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, artifactReport,
   artifactState, bugPlaceholders, clarificationMarkers, criterionBlocks, designSections, detectTracks,
   duplicateTaskNumbers, earsUnlinted, earsUnidentified, shortIdList, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection,
@@ -39,7 +40,8 @@ function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks,
   todayIso, traceCheck, traceGapLines, uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic,
   writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey } = E); }
+  CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey,
+  checkboxBytes } = E); }
 
 // Phases that only exist for a track: an inactive track's artifact (kept on disk after add_track --remove)
 // is not a gate, not a phase and not a "changed since approval".
@@ -1238,7 +1240,11 @@ function impactReport(projectDir, name, opts = {}) {
       const raw = lines[b.line];
       if (/[xX]/.test(raw.charAt(b.col))) lines[b.line] = raw.slice(0, b.col) + " " + raw.slice(b.col + 1);
     }
-    writeFileAtomic(tasksFile, lines.join("\n"));
+    // Review 5 (P3): only the checkboxes' own bytes change (a tasks.md in an ANSI code page kept its accents only this way);
+    // a box the bytes don't show where the text has it → refused, nothing changed.
+    const bytes = checkboxBytes(tasksFile, tasksText, toReopen, " ");
+    if (bytes === false) return { ok: false, error: errs(projectDir, slug).tasksNotText(isChange ? CHANGE_FILE : "tasks.md") };
+    writeFileAtomic(tasksFile, bytes || lines.join("\n"));
   }
   for (const b of toReopen) {
     const rec = ownRecord(evidence[String(b.number)], b, dups.has(b.number)); // this task's record, never the other "N."'s
@@ -1434,6 +1440,7 @@ const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-crit
   design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "dist-sections": 2, "api-sections": 2, "ui-sections": 2, "obs-sections": 2, "data-sections": 2, "root-cause": 2,
   "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, "malformed-markers": 5, verification: 6, "outside-code-artifacts": 6 };
 CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
+CHECK_PHASE["verify-suspicious"] = 5; // review 5: a garbled _Verify:_ value (a warn)
 Object.assign(CHECK_PHASE, { glossary: 1, "cross-feature-acs": 1, "steering-changed-since-approval": 2 }); // 1.16 Q (warns only)
 Object.assign(CHECK_PHASE, { "design-tradeoffs": 2, "design-risks": 2, "design-reuse": 2 }); // 1.17 A1, 1.19 R1 (warns only)
 CHECK_PHASE["change-scope"] = 1; // 1.21 F5: a change's size (1–3 criteria, 1–3 tasks, core only) — its plan, from the start
