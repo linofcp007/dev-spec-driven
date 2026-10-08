@@ -595,19 +595,24 @@ function addSectionLines(set, text, wild) {
     set.add(k);
   }
 }
-function sectionTemplateLines(lang) {
-  if (!SECTION_TEMPLATE_LINES) {
+// The built-in track design blocks' line keys → a sorted list: group "base" (EN / PT / ES), or "pt-BR" — only its lines the base
+// set lacks (a pt-BR section is read against both). 1.24 r6 I-I2: read from the corpus (builtinCorpus) — rendered, they loaded
+// pt.js and es.js into every English gate that reads a section.
+function renderSectionLines(group) {
+  const lines = (langs) => {
     const set = new Set();
-    for (const l of i18n.BASE_LANGS) for (const tr of VALID_TRACKS) { try { addSectionLines(set, i18n.trackDesignBlock(tr, l)); } catch { /* a builder's trouble never breaks a gate */ } }
-    SECTION_TEMPLATE_LINES = set;
-  }
+    for (const l of langs) for (const tr of VALID_TRACKS) { try { addSectionLines(set, i18n.trackDesignBlock(tr, l)); } catch { /* a builder's trouble never breaks a gate */ } }
+    return set;
+  };
+  const base = lines(i18n.BASE_LANGS);
+  if (group !== "pt-BR") return sortList(base);
+  return sortList([...lines(["pt-BR"])].filter((k) => !base.has(k)));
+}
+function sectionTemplateLines(lang) {
+  if (!SECTION_TEMPLATE_LINES) { const c = builtinCorpus(); SECTION_TEMPLATE_LINES = new Set(c ? c.sectionLines : renderSectionLines("base")); }
   const sets = [SECTION_TEMPLATE_LINES];
   if (lang === "pt-BR") {
-    if (!SECTION_TEMPLATE_LINES_BR) {
-      const set = new Set();
-      for (const tr of VALID_TRACKS) { try { addSectionLines(set, i18n.trackDesignBlock(tr, "pt-BR")); } catch { /* ignore */ } }
-      SECTION_TEMPLATE_LINES_BR = set;
-    }
+    if (!SECTION_TEMPLATE_LINES_BR) { const c = builtinCorpus(); SECTION_TEMPLATE_LINES_BR = new Set(c ? c.sectionLinesBr : renderSectionLines("pt-BR")); }
     sets.push(SECTION_TEMPLATE_LINES_BR);
   }
   const reg = packRegistry();
@@ -702,22 +707,26 @@ function mermaidBlocks(text) {
   }
   return out.map((b) => b.join(" ").replace(/\s+/g, " ").trim());
 }
-const TEMPLATE_DIAGRAMS = {}; // lang group ("base" | "pt-BR") → Set of the scaffold's diagrams, rendered on first use
-function templateDiagrams(group) {
-  if (TEMPLATE_DIAGRAMS[group]) return TEMPLATE_DIAGRAMS[group];
+// The scaffold's own diagrams (every language, pt-BR's too; each design size) → a sorted list. 1.24 r6 I-I2: read from the corpus
+// (builtinCorpus) — rendered, doctor's mermaid check loaded pt.js, es.js and pt-BR into every English process.
+function renderTemplateDiagrams() {
   const set = new Set();
-  for (const l of group === "base" ? i18n.BASE_LANGS : ["pt-BR"]) {
+  for (const l of i18n.LANGS) {
     for (const size of [undefined, "s", "m"]) {
       try { mermaidBlocks(i18n.design({ name: "x", tracks: ["core"], label: trackLabel(["core"]), slug: "x", summary: "", size }, l)).forEach((d) => set.add(d)); } catch { /* a builder's trouble never breaks a check */ }
     }
   }
-  return (TEMPLATE_DIAGRAMS[group] = set);
+  return sortList(set);
+}
+let TEMPLATE_DIAGRAMS = null; // Set — process-wide
+function templateDiagramSet() {
+  if (!TEMPLATE_DIAGRAMS) { const c = builtinCorpus(); TEMPLATE_DIAGRAMS = new Set(c ? c.diagrams : renderTemplateDiagrams()); }
+  return TEMPLATE_DIAGRAMS;
 }
 function mermaidState(design) {
   const blocks = mermaidBlocks(design).filter(Boolean); // an empty block draws nothing
   if (!blocks.length) return "missing";
-  const isTemplate = (d) => templateDiagrams("base").has(d) || templateDiagrams("pt-BR").has(d);
-  return blocks.every(isTemplate) ? "template" : "present";
+  return blocks.every((d) => templateDiagramSet().has(d)) ? "template" : "present";
 }
 // "n/a — <why it does not apply>" (EN / PT / ES; any emphasis around the n/a): the section's own text is that ONE line → "na"
 // when the reason holds at least NA_REASON_WORDS words, "na-short" when it holds fewer; anything else → null.
@@ -1034,9 +1043,13 @@ function renderTemplateSetsBr(base) {
 // as before: a slower answer, never a wrong one. Inside spec.bundle.js the corpus is the copy the build embedded beside the
 // very sources it was rendered from (module.bundle — undefined under Node's own loader). The per-project part (the
 // project's templates, its track packs: projectTemplateHas, packCorpusSets) stays computed per call. Only .has() is ever
-// asked of these sets.
+// asked of these sets. 1.24 r6 I-I2 (review 6, I1): every OTHER all-language template set a gate asks about comes from it too —
+// the steering stubs (isSteeringStub), the scaffold's diagrams (templateDiagramSet), the track design blocks' lines
+// (sectionTemplateLines), the bug report's slots (bugTemplateSlots) and the requirement templates (builtinTemplateReqs): rendered,
+// they loaded pt.js, es.js and pt-BR into every English doctor / next_action / done / finish / catalog (~78 ms a call).
 const CORPUS_FILE = "corpus.generated.json";
-const CORPUS_KEYS = ["brackets", "code", "bracketsBr", "codeBr", "tasks", "bugSteps"];
+const CORPUS_KEYS = ["brackets", "code", "bracketsBr", "codeBr", "tasks", "bugSteps", "diagrams", "sectionLines", "sectionLinesBr", "bugSlots"];
+const sortList = (xs) => [...xs].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)); // code-unit order, stable across Node versions
 const CORPUS_SOURCES = ["i18n.js", "i18n/common.js", "i18n/en.js", "i18n/es.js", "i18n/pt-br.js", "i18n/pt.js", "engine/core.js",
   "engine/markdown.js", "engine/packs.js", "engine/tasks.js", "engine/tracks.js"]; // mcp/lib-relative, in hash order
 // A source file's text as the stamp reads it: a leading BOM and CRLF line ends are encoding, not code.
@@ -1067,17 +1080,21 @@ const sourceStat = (rel) => {
 };
 const LOADED_STATS = module.bundle ? null : new Map(CORPUS_SOURCES.map((rel) => [rel, sourceStat(rel)]));
 const sourcesUnchanged = () => !!LOADED_STATS && CORPUS_SOURCES.every((rel) => { const s = LOADED_STATS.get(rel); return s !== null && sourceStat(rel) === s; });
-// The built-in corpus as it renders now → { brackets, code, bracketsBr, codeBr, tasks, bugSteps }: sorted string lists (the
-// sets' members — code-unit order, stable across Node versions). What scripts/build.js writes, and what the tests compare.
+// The built-in corpus as it renders now → { brackets, code, bracketsBr, codeBr, tasks, bugSteps, taskHeadings, steeringStubs,
+// diagrams, sectionLines, sectionLinesBr, bugSlots, templateReqs }: sorted string lists (the sets' members — code-unit order,
+// stable across Node versions) — the requirement templates in render order. What scripts/build.js writes, and what the tests compare.
 function renderCorpusData() {
-  const sort = (xs) => [...xs].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const sort = sortList;
   const base = renderTemplateSets(), br = renderTemplateSetsBr(base);
   return { brackets: sort(base.brackets), code: sort(base.code), bracketsBr: sort(br.brackets), codeBr: sort(br.code),
     tasks: sort(renderTemplateTasks()), bugSteps: sort(new Set(renderBugSteps())),
     // 1.22 review: every built-in track's template task headings, all languages (trackTaskHeadings — tracks.js)
-    taskHeadings: Object.fromEntries(VALID_TRACKS.map((t) => [t, sort(renderTrackTaskHeadings(t))])) };
+    taskHeadings: Object.fromEntries(VALID_TRACKS.map((t) => [t, sort(renderTrackTaskHeadings(t))])),
+    // 1.24 r6 I-I2: the gates' other all-language sets
+    steeringStubs: renderSteeringStubs(), diagrams: renderTemplateDiagrams(), sectionLines: renderSectionLines("base"),
+    sectionLinesBr: renderSectionLines("pt-BR"), bugSlots: renderBugSlots(), templateReqs: renderTemplateReqs() };
 }
-// The corpus's task headings: { track: [heading…] } — strings only, own keys.
+// The corpus's task headings, steering stubs, requirement templates: { key: [string…] } — strings only, own keys.
 const taskHeadingsShape = (h) => !!h && typeof h === "object" && !Array.isArray(h) &&
   Object.values(h).every((v) => Array.isArray(v) && v.every((x) => typeof x === "string"));
 let BUILTIN_CORPUS = undefined; // undefined: not looked for yet · null: none usable (render) · else the data
@@ -1091,7 +1108,7 @@ function builtinCorpus() {
     // The load-time version and (the modules) the sources' hash, the sources unchanged since the engine loaded — stat'ed
     // AFTER the hash read them, so a file rewritten before or while it was hashed is never trusted.
     if (data && typeof data === "object" && CORPUS_KEYS.every((k) => Array.isArray(data[k]) && data[k].every((x) => typeof x === "string")) &&
-      taskHeadingsShape(data.taskHeadings) && data.version === engineVersion() && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
+      taskHeadingsShape(data.taskHeadings) && taskHeadingsShape(data.steeringStubs) && taskHeadingsShape(data.templateReqs) && data.version === engineVersion() && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
       BUILTIN_CORPUS = data;
       BUILTIN_CORPUS_FROM = b ? "bundle" : "file";
     }
@@ -1112,6 +1129,7 @@ function localeLoaded(rel) {
   BUILTIN_CORPUS = null; // looked for, none usable: the sets render on their next use
   BUILTIN_CORPUS_FROM = "render";
   TEMPLATE_SETS = TEMPLATE_SETS_BR = TEMPLATE_TASKS = BUG_STEPS = null;
+  STEERING_STUBS = TEMPLATE_DIAGRAMS = SECTION_TEMPLATE_LINES = SECTION_TEMPLATE_LINES_BR = BUG_SLOTS = TEMPLATE_REQS = null; // 1.24 r6 I-I2
   TASK_HEADINGS.clear(); // tracks.js's per-track sets, read from it (1.22 review)
 }
 if (LOADED_STATS) i18n.onLocaleLoad(localeLoaded);
@@ -1250,7 +1268,7 @@ function artifactState(input, opts = {}) {
   else if (!/[\r\n]/.test(input) && (path.isAbsolute(input) || /\.(md|markdown|json)$/i.test(input))) text = readIfExists(input);
   else text = String(input);
   if (text == null) return "missing";
-  const squash = (x) => String(x).replace(/\s+/g, "");
+  const squash = squashText; // whitespace aside (the steering stubs' hashes are taken the same way — isSteeringStub)
   const templates = opts.template == null ? [] : [].concat(opts.template);
   if (templates.some((tpl) => squash(tpl) === squash(text))) return "placeholder";
   if (headingsOnly(text)) return "placeholder";
@@ -1373,17 +1391,63 @@ function bugPlaceholders(text, items) {
 // (hasProseOutsideBrackets: the blank lines above a sentinel line are no longer part of what is blanked — they hold no
 // bracket, letter or digit, so its answer is the same; 1.17 H, as RE_TODO_SENTINEL)
 const RE_TODO_SENTINEL_LINE = /^[^\S\n\r\u2028\u2029]*>\s*\*\*TODO\*\*.*$/gm;
-// Every bracketed slot of the bug report template, in every language (the Summary slot included: built without one).
+// Every bracketed slot of the bug report template, in every language (the Summary slot included: built without one) — from the
+// corpus (1.24 r6 I-I2), rendered when it can't be trusted.
 let BUG_SLOTS = null;
-function bugTemplateSlots() {
-  if (BUG_SLOTS) return BUG_SLOTS;
+function renderBugSlots() {
   const set = new Set();
   for (const l of i18n.LANGS) {
     let t;
     try { t = i18n.bugReport({ name: "x" }, l); } catch { continue; } // a builder's trouble never breaks the check
     for (const m of String(t || "").matchAll(/\[([^[\]\n]*)\]/g)) set.add(placeholderKey(m[1]));
   }
-  return (BUG_SLOTS = set);
+  return sortList(set);
+}
+function bugTemplateSlots() {
+  if (BUG_SLOTS) return BUG_SLOTS;
+  const c = builtinCorpus();
+  return (BUG_SLOTS = new Set(c ? c.bugSlots : renderBugSlots()));
+}
+
+// 1.24 r6 I-I2 — the steering stubs of every language (doctor's steering check: a steering file whose body is still one of them
+// verbatim, whitespace aside, is a template — scaffold.js steeringPlaceholders): per known file, the sha1 of each stub with its
+// whitespace taken out (artifactState's comparison), from the corpus — never every language's text rendered to compare one file.
+const squashText = (x) => String(x).replace(/\s+/g, "");
+const stubHash = (text) => crypto.createHash("sha1").update(squashText(text)).digest("hex");
+function renderSteeringStubs() {
+  const out = {};
+  for (const f of sortList(i18n.steeringKnownFiles())) {
+    const hs = new Set();
+    for (const l of i18n.LANGS) { const t = i18n.steeringStub(f, l); if (typeof t === "string" && t) hs.add(stubHash(t)); }
+    out[f] = sortList(hs);
+  }
+  return out;
+}
+let STEERING_STUBS = null; // { file: [hash…] } — process-wide
+function isSteeringStub(file, text) {
+  if (!STEERING_STUBS) { const c = builtinCorpus(); STEERING_STUBS = c ? c.steeringStubs : renderSteeringStubs(); }
+  const hs = typeof file === "string" && Object.prototype.hasOwnProperty.call(STEERING_STUBS, file) ? STEERING_STUBS[file] : null;
+  return !!hs && hs.includes(stubHash(text));
+}
+// 1.24 r6 I-I2 — the built-in requirement templates (EN / PT / pt-BR / ES: every built-in track's requirements.md, the bugfix's)
+// whose criteria the cross-feature check (quality.js builtinTemplateAcs) sets aside: { lang: [text…] }, in render order. The texts
+// themselves (i18n only): their criteria are read live (acIndex), so the corpus never depends on the criteria readers.
+function renderTemplateReqs() {
+  const out = {};
+  for (const l of i18n.LANGS) {
+    out[l] = [];
+    for (const fn of [() => i18n.requirements({ name: "x", tracks: VALID_TRACKS.slice(), summary: "" }, l), () => i18n.bugRequirements({ name: "x" }, l)]) {
+      try { const t = fn(); if (typeof t === "string") out[l].push(t); } catch { /* a builder's trouble never breaks the check */ }
+    }
+  }
+  return out;
+}
+let TEMPLATE_REQS = null; // [[text, lang]…] in i18n.LANGS order — process-wide (quality.js keys its table on this array)
+function builtinTemplateReqs() {
+  if (TEMPLATE_REQS) return TEMPLATE_REQS;
+  const c = builtinCorpus();
+  const by = c ? c.templateReqs : renderTemplateReqs();
+  return (TEMPLATE_REQS = i18n.LANGS.flatMap((l) => (Object.prototype.hasOwnProperty.call(by, l) ? by[l] : []).map((t) => [t, l])));
 }
 
 module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLines, requirementAcIds, stripForeignAcRefs, RE_NOT_A_SLUG, RE_ID_TOKEN_END,
@@ -1399,4 +1463,5 @@ module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLi
   builtinCorpusSource, builtinTaskHeadings, isTemplatePlaceholder, isCodeSlot, visibleLines, placeholderReport,
   bracketPlaceholders, scanBrackets, artifactState, headingsOnly, RE_MANUAL_VERIFY, artifactReport, featurePlaceholders,
   placeholderSummary, chainPlaceholders, hasProseOutsideBrackets, bugPlaceholders, RE_TODO_SENTINEL_LINE,
-  bugTemplateSlots, __link };
+  bugTemplateSlots, renderBugSlots, renderSectionLines, renderTemplateDiagrams, templateDiagramSet, renderSteeringStubs, isSteeringStub,
+  renderTemplateReqs, builtinTemplateReqs, __link };

@@ -196,7 +196,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   CLI call (1.19's SessionStart was ~20% slower than 1.18's for it). The build renders it ONCE with the engine's own
   functions (`renderCorpusData()`: the sets' members, sorted) into the JSON file, stamped `version` (package.json) and
   `sources` — a sha1 over `CORPUS_SOURCES` (markdown.js): the eleven mcp/lib files the render runs through. On the first
-  placeholder question a process reads the file (one `JSON.parse`, ~38 KB) and uses it only while it matches the engine the
+  placeholder question a process reads the file (one `JSON.parse`, ~129 KB since 1.24 r6 — below) and uses it only while it matches the engine the
   process LOADED: `version` is `engineVersion()` — package.json read as the engine loads, never later — and `sources` is the
   hash of the sources as they were at load. markdown.js stats every source as it loads (`LOADED_STATS`: size, mtime, ctime —
   one stat each, no read, ~0.5 ms); the first question re-reads and hashes them (~2 ms natively) and trusts the file only
@@ -211,6 +211,20 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   makes that test name it), and that a rendered corpus decides every fresh scaffold text exactly as the committed one. The
   per-project part (the project's templates, its track packs — `projectTemplateHas`, `packCorpusSets`) stays per call. Only
   `.has()` is ever asked of these sets. A new builder or artifact goes into `templateCorpus()` as before — then rebuild.
+  **Every other all-language set a gate asks about (1.24 r6 I-I2 — review 6 finding I1)** is in the corpus too: rendered on first use,
+  they loaded pt.js, es.js and the derived pt-BR into every English doctor / next_action / done / finish / catalog. `steeringStubs`
+  ({file: [sha1 of the stub with its whitespace taken out]} — `isSteeringStub()`, doctor's steering check; hashes, not the 55 KB of
+  stubs), `diagrams` (the scaffold's Mermaid blocks, every language and size — `templateDiagramSet()`, doctor's mermaid check),
+  `sectionLines` / `sectionLinesBr` (the built-in track design blocks' line keys, EN / PT / ES, and pt-BR's own extra ones —
+  `sectionTemplateLines()`, a section's own lines), `bugSlots` (the bug report's slots — `bugTemplateSlots()`) and `templateReqs`
+  ({lang: [the all-track requirements.md, the bugfix's]} — `builtinTemplateReqs()`; their criteria are read LIVE by acIndex in
+  quality.js `builtinTemplateAcs`, so the corpus never depends on the criteria readers in trace.js / finish.js — V8 coverage would
+  have asked for them in `CORPUS_SOURCES`, and every edit there for a rebuild). `localeLoaded` drops them with the rest. A rule
+  for a new one: an engine set built from EVERY language's texts belongs here; a process must only load the languages it speaks
+  (mcp/tests/16-conventions.js "I-I2" runs an English doctor / next_action / done / finish / catalog in a child process and asserts
+  require.cache holds no pt.js, es.js or pt-br.js). The file grew from ~45 KB to ~129 KB (read + JSON.parse ~0.8 ms). Measured
+  (p50 of 11 interleaved fresh `dev-spec` processes, the reviewer's 52-feature English project, Windows 11, Node 24): doctor 423 →
+  339 ms, next-action 362 → 287, finish 382 → 314, catalog 364 → 296; status unchanged (214).
 - **The bundle.** Each engine and i18n module (`engine/**`, `i18n.js`, `i18n/*` — not the facade spec.js, not
   prompts-resources.js) is its source VERBATIM inside `function (exports, require, module, __filename, __dirname)`, run by a
   small module registry (`moduleRegistry()` in scripts/build.js, emitted with `Function.prototype.toString`). The bundle

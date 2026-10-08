@@ -22,7 +22,7 @@ let acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceho
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope;
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
@@ -33,7 +33,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHea
   stripEnd, stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope } = E); }
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.16 Q — spec quality: steering amendments (Q1) · cross-feature acceptance criteria (Q2) · the glossary (Q3)
@@ -204,17 +204,15 @@ function templateShapeTable(texts) {
   }
   return { skel, shapes };
 }
-// Every built-in template criterion (EN / PT / pt-BR / ES, every built-in track, the bugfix requirements) — process-wide.
-let XAC_TEMPLATES = null;
+// Every built-in template criterion (EN / PT / pt-BR / ES, every built-in track, the bugfix requirements) — process-wide. 1.24 r6
+// I-I2: the requirement templates come from the corpus (markdown.js builtinTemplateReqs — acIndex reads them here, live) —
+// rendering every language's here loaded pt.js, es.js and pt-BR into every English doctor / next_action. Kept while that list is
+// the same array (a corpus dropped under a long-lived process hands out a new one).
+let XAC_TEMPLATES = null; // { docs, table }
 function builtinTemplateAcs() {
-  if (XAC_TEMPLATES) return XAC_TEMPLATES;
-  const texts = [];
-  for (const l of i18n.LANGS) {
-    for (const fn of [() => i18n.requirements({ name: "x", tracks: VALID_TRACKS.slice(), summary: "" }, l), () => i18n.bugRequirements({ name: "x" }, l)]) {
-      try { texts.push([fn(), l]); } catch { /* a builder's trouble never breaks the check */ }
-    }
-  }
-  return (XAC_TEMPLATES = templateShapeTable(texts));
+  const docs = builtinTemplateReqs();
+  if (!XAC_TEMPLATES || XAC_TEMPLATES.docs !== docs) XAC_TEMPLATES = { docs, table: templateShapeTable(docs) };
+  return XAC_TEMPLATES.table;
 }
 // …and the project's own (this call's): its track packs' criteria and its requirements templates (.specs/templates/).
 function projectTemplateAcs(projectDir) {

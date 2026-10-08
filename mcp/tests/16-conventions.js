@@ -732,6 +732,55 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
       "1.22 review: every built-in track's task headings (corpus, file and rendered) are exactly the live i18n's for each language; listing the features of an English project (a turned-off [SaaS] block included) loads no pt.js, es.js or pt-br.js and lists exactly what this process does (got " +
       js({ headDiff, loaded: listed.loaded, source: listed.source, features: listed.features, here22 }) + ")");
 
+    // 1.24 r6 I-I2 (finding I1): the all-language template sets the gates ask about — the steering stubs (doctor's steering check),
+    // the scaffold's Mermaid diagrams (doctor's mermaid), the track design blocks' lines (a section's own lines), the bug report's
+    // slots, the built-in template criteria (cross-feature ACs) — come from the corpus too: rendered, they loaded pt.js, es.js and
+    // the derived pt-BR into every English doctor / next_action / done / finish / catalog (~78 ms). Each is exactly the rendered one,
+    // and an English session of those calls loads no other language and answers as this process does.
+    {
+      const renderedSets = { steeringStubs: E.renderSteeringStubs(), diagrams: E.renderTemplateDiagrams(), sectionLines: E.renderSectionLines("base"),
+        sectionLinesBr: E.renderSectionLines("pt-BR"), bugSlots: E.renderBugSlots(), templateReqs: E.renderTemplateReqs() };
+      const same = Object.keys(renderedSets).filter((k) => js(fresh[k]) !== js(renderedSets[k]) || js(fileCorpus[k]) !== js(renderedSets[k]));
+      const live = { diagrams: js(sorted(E.templateDiagramSet())) === js(fresh.diagrams), bugSlots: js(sorted(E.bugTemplateSlots())) === js(fresh.bugSlots),
+        templateReqs: js(E.builtinTemplateReqs()) === js(I.LANGS.flatMap((l) => (fresh.templateReqs[l] || []).map((t) => [t, l]))),
+        sectionLines: E.sectionOwnLines(I.trackDesignBlock("saas", "pt") + "\n" + I.trackDesignBlock("api", "es"), "en").length === 0 &&
+          E.sectionOwnLines(I.trackDesignBlock("saas", "pt-BR"), "pt-BR").length === 0 && fresh.sectionLinesBr.length > 0 && fresh.sectionLinesBr.every((k) => !fresh.sectionLines.includes(k)),
+        steering: I.steeringKnownFiles().every((f) => I.LANGS.every((l) => E.isSteeringStub(f, I.steeringStub(f, l) + "\n\n"))) && !E.isSteeringStub("product.md", "# Product\n\nOurs.\n") };
+      const p24 = path.join(tmp, "p24-ii2-en");
+      S.initProject(p24, ["core"], "en");
+      const fa = S.createFeature(p24, "Feature A", ["core", "saas"], "", undefined, "en");
+      S.createFeature(p24, "Feature B", ["core", "tdd"], "", undefined, "en");
+      S.createFeature(p24, "Crash On Save", ["core"], "crash on save", undefined, "en", "bugfix");
+      fs.writeFileSync(path.join(fa.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1_\n  - _Verify: `node -e \"process.exit(0)\"`_\n- [ ] 2. Ship it\n  - _Requirements: US-1.AC-1_\n");
+      const enChild = function (lib, proj) {
+        const path = require("path");
+        const S = require(path.join(lib, "spec.js")), E = require(path.join(lib, "engine", "index.js"));
+        const out = {};
+        for (const f of ["feature-a", "feature-b", "crash-on-save"]) {
+          const d = S.specDoctor(proj, f), n = S.nextAction(proj, f);
+          out[f] = { doctor: d.verdict, checks: d.checks.map((c) => c.id + ":" + c.status).join(","), next: n.step };
+        }
+        out.done = S.completeTask(proj, "feature-a", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0, summary: "ok" }).ok;
+        out.finish = S.finishFeature(proj, "feature-a", {}).readyToFinish;
+        out.catalog = S.catalog(proj).ok;
+        out.loaded = Object.keys(require.cache).map((f) => f.split(path.sep).join("/")).filter((f) => f.includes("/lib/i18n/")).map((f) => path.posix.basename(f)).sort();
+        out.source = E.builtinCorpusSource();
+        process.stdout.write(JSON.stringify(out));
+      };
+      const en = spawnJson([script("p24-en.js", enChild, "process.argv[2], process.argv[3]"), libDir, p24], process.env);
+      const hereEn = {};
+      for (const f of ["feature-a", "feature-b", "crash-on-save"]) {
+        const d = S.specDoctor(p24, f), n = S.nextAction(p24, f);
+        hereEn[f] = { doctor: d.verdict, checks: d.checks.map((c) => c.id + ":" + c.status).join(","), next: n.step };
+      }
+      const other = Array.isArray(en.loaded) ? en.loaded.filter((f) => ["pt.js", "es.js", "pt-br.js"].includes(f)) : null;
+      ok(!same.length && Object.values(live).every(Boolean) && fresh.diagrams.length >= 3 && fresh.sectionLines.length > 100 && fresh.bugSlots.length > 5 &&
+        Object.keys(fresh.templateReqs).length === I.LANGS.length && Array.isArray(other) && !other.length && en.loaded.includes("en.js") && en.source === "file" &&
+        ["feature-a", "feature-b", "crash-on-save"].every((f) => js(en[f]) === js(hereEn[f])) && en.done === true && en.catalog === true,
+        "1.24 r6 I-I2: the steering stubs, the template diagrams, the track design lines (EN / PT / ES and pt-BR), the bug report's slots and the requirement templates (their criteria read live) come from the corpus — each exactly the rendered set; an English doctor / next_action / done / finish / catalog loads no pt.js, es.js or pt-br.js and answers as this process does (got " +
+        js({ same, live, other, loaded: en.loaded, source: en.source, en: ["feature-a", "feature-b", "crash-on-save"].map((f) => [en[f], hereEn[f]]), done: en.done }) + ")");
+    }
+
     // CORPUS_SOURCES — what the sources stamp hashes — lists every mcp/lib file whose functions run while the corpus renders (V8
     // coverage of renderCorpusData, the counters reset once every language has loaded): a render that came to depend on another
     // module would otherwise keep a stale corpus after an edit there.
