@@ -14,12 +14,12 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures, maybeRefreshCatalog, own,
-  positionPhase, readIfExists, readJson, renderRoadmapHtml, renderRoadmapMd, roadmapData, roadmapExtras, safeReaddir,
-  shapeError, specsRoot, withRoadmapLock, writeFileAtomic;
-function __link(E) { ({ compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures,
-  maybeRefreshCatalog, own, positionPhase, readIfExists, readJson, renderRoadmapHtml, renderRoadmapMd, roadmapData,
-  roadmapExtras, safeReaddir, shapeError, specsRoot, withRoadmapLock, writeFileAtomic } = E); }
+let catalogData, compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures, maybeRefreshCatalog, own,
+  positionPhase, readIfExists, readJson, removeSpecFile, renderRoadmapHtml, renderRoadmapMd, roadmapData, roadmapExtras, safeReaddir,
+  shapeError, specsRoot, withRoadmapLock, writeFileAtomic, writeIfAbsent;
+function __link(E) { ({ catalogData, compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures,
+  maybeRefreshCatalog, own, positionPhase, readIfExists, readJson, removeSpecFile, renderRoadmapHtml, renderRoadmapMd, roadmapData,
+  roadmapExtras, safeReaddir, shapeError, specsRoot, withRoadmapLock, writeFileAtomic, writeIfAbsent } = E); }
 
 // Language resolution. The project's language is the single source of truth, persisted in
 // .specs/roadmap.json meta.lang (seeded by spec_init); each feature may override it via
@@ -688,11 +688,12 @@ function writeRoadmapFile(projectDir, lang, data, name, render) {
 }
 
 // Keep the roadmap current after any mutation. MD is the default (always); HTML only if it exists.
-// Best-effort — never breaks the primary operation.
+// Best-effort — never breaks the primary operation. It clears the stale stamp first (below): this refresh covers it.
 function maybeRefreshRoadmap(projectDir) {
   try {
     const root = specsRoot(projectDir);
     if (!fs.existsSync(root)) return;
+    clearRoadmapStale(projectDir);
     const html = fs.existsSync(path.join(root, "ROADMAP.html"));
     // One computation for both files — none when neither may be written (hand-written ROADMAP.md, no HTML; a broken roadmap.json
     // keeps them as they are — 1.23 review 5).
@@ -705,6 +706,56 @@ function maybeRefreshRoadmap(projectDir) {
   } catch {
     /* best-effort */
   }
+}
+
+// 1.24 r6 I-I1 — the save hook's DEFERRED refresh. A spec file saved through Claude Code's Write / Edit tool refreshed ROADMAP.md
+// and SPECS.md on the spot (hooks/spec-hook.js, PostToolUse): every save recomputed every feature's row — ~75 % of the hook, 272 /
+// 423 / 725 ms per save at 10 / 50 / 150 features. The hook now leaves a STAMP, `.specs/.execution/roadmap-stale` (the project's
+// scratch folder, which git-ignores itself), and the refresh runs ONCE for all the saves since: at the end of the turn (the Stop /
+// SubagentStop hook), at SessionStart, in the next engine mutation (maybeRefreshRoadmap clears the stamp first) and in the pre-commit
+// check — refreshStaleRoadmap. The lint stays on every save. The generated files lag at most one turn, and nothing reads them for a
+// decision: approvals fingerprint a feature's own artifacts, every view (spec_roadmap, the catalog, next_action, the status line)
+// computes from the specs, and the specs://roadmap / catalog resources render in memory while the stamp is there
+// (docs/maintainers/lifecycle.md → Roadmap files). → whether the stamp is there (written now or before).
+const ROADMAP_STALE_FILE = "roadmap-stale";
+const roadmapStalePath = (projectDir) => path.join(specsRoot(projectDir), ".execution", ROADMAP_STALE_FILE);
+function markRoadmapStale(projectDir) {
+  try {
+    const root = specsRoot(projectDir);
+    if (!isDirSafe(root)) return false;
+    const ex = path.join(root, ".execution");
+    writeIfAbsent(path.join(ex, ".gitignore"), "*\n"); // .execution/ (created through the write gate) ignores itself
+    writeIfAbsent(path.join(ex, ROADMAP_STALE_FILE), "");
+    return true;
+  } catch {
+    return false; // best-effort: a read-only folder, a link (the gate) — the next mutation refreshes anyway
+  }
+}
+// Is the stamp there? (A plain stat: never the read cache — the stamp comes and goes inside one call.)
+function roadmapStale(projectDir) {
+  try { return fs.statSync(roadmapStalePath(projectDir)).isFile(); } catch { return false; }
+}
+function clearRoadmapStale(projectDir) {
+  if (!roadmapStale(projectDir)) return false;
+  try { return removeSpecFile(roadmapStalePath(projectDir)); } catch { return false; }
+}
+// The refresh the stamp stands for, when it is there → { refreshed }. The stamp goes first (maybeRefreshRoadmap): a save while the
+// refresh runs stamps again, and the next refresh covers it.
+function refreshStaleRoadmap(projectDir) {
+  if (!roadmapStale(projectDir)) return { refreshed: false };
+  maybeRefreshRoadmap(projectDir);
+  return { refreshed: true };
+}
+// While the stamp is there: the text the refresh WOULD write now for a generated ROADMAP.md / SPECS.md (in memory, nothing written),
+// else null — not stale, the file absent or hand-written, a broken roadmap.json (the refresh keeps the last good file). The
+// specs://roadmap / specs://catalog resources serve it: never the stale file.
+function staleGeneratedText(projectDir, name) {
+  if (!roadmapStale(projectDir)) return null;
+  const file = path.join(specsRoot(projectDir), name);
+  if (readIfExists(file) == null || !isGeneratedOrAbsent(file)) return null;
+  if (name === "ROADMAP.md") return roadmapError(projectDir) ? null : i18n.portableCli(renderRoadmapMd(projectDir, roadmapChromeLang(projectDir)));
+  if (name === "SPECS.md") return i18n.portableCli(catalogData(projectDir).markdown);
+  return null;
 }
 
 // spec_roadmap as ONE operation for the MCP tool and the CLI: the roadmap view plus, with write/html, the
@@ -1461,7 +1512,8 @@ module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugi
   roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, findCycles, setDependency, dependencyUnlocked,
   roadmap, flatText, specNameText, addBacklog, BACKLOG_NOTE_MAX, BACKLOG_NOTE_SEP, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked, BACKLOG_ACTIONS, backlog,
   roadmapLang, roadmapChromeLang, setRoadmapLang, RE_AUTOGEN, isGeneratedOrAbsent, writeRoadmapMd, writeRoadmapHtml,
-  writeRoadmapFile, maybeRefreshRoadmap, roadmapReport, featureDirs, locateFeatures,
+  writeRoadmapFile, maybeRefreshRoadmap, ROADMAP_STALE_FILE, markRoadmapStale, roadmapStale, clearRoadmapStale, refreshStaleRoadmap, staleGeneratedText,
+  roadmapReport, featureDirs, locateFeatures,
   // 1.21 F1a — the spec state's git merge driver
   MERGE_DRIVER, MERGE_KINDS, MERGE_ATTRIBUTE_PATHS, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY, mergeStateJson, mergeStateText,
   mergeKindOfPath, mergeAttributes, mergeConflictsCheck,

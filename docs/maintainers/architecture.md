@@ -103,11 +103,12 @@ hooks/approval-hook.js         opt-in human approval guard (meta.approvalGuard a
 hooks/observe-hook.js          harness-observed evidence (logs Bash runs of _Verify:_ / project-check commands; prints nothing)
 hooks/hook-utils.js            what the hooks share BEFORE the engine loads (1.24): UTF-8 / UTF-16 reads, a Write / Edit target as the
                                file system reads it, the approval hook's candidate projects, a per-session marker — no hook itself
-hooks/spec-hook.js             save checks (requirements/tasks/design.md) + SessionStart status (at most 20 features, then
-                               "+N more"), drift, upgrade and overlap lines
-hooks/stop-hook.js             end-of-turn evidence gate (spec.stopCheck — a "done" claim with unverified recent ticks)
+hooks/spec-hook.js             save checks (requirements/tasks/design.md; any spec save stamps ROADMAP.* / SPECS.md stale — 1.24 r6
+                               I-I1) + SessionStart status (at most 20 features, then "+N more"), drift, upgrade and overlap lines
+hooks/stop-hook.js             end-of-turn: the stale ROADMAP.* / SPECS.md refreshed once, then the evidence gate (spec.stopCheck —
+                               a "done" claim with unverified recent ticks)
 hooks/plan-hook.js             plan-mode bridge (ExitPlanMode: one line of context suggesting /spec-import of the approved plan)
-hooks/precommit-check.js       optional git pre-commit validator
+hooks/precommit-check.js       optional git pre-commit validator (+ a stale ROADMAP.* / SPECS.md refreshed, re-staged when staged)
 AGENTS.md                      portable workflow for non-Claude agent tools
 .cursor/ .windsurf/ .github/copilot-instructions.md GEMINI.md  per-tool rule files (point to AGENTS.md)
 INTEGRATIONS.md                per-tool setup + MCP config snippets

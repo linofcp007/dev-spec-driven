@@ -323,4 +323,76 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
     ok(!bad.length && /_Depends:_/.test(dsx) && /scope/i.test(dsx) && /micro-cycle|red-green/.test(dsx),
       "1.24 r6 C-I9: /ds, /dss and /dsx follow the full command's file (${CLAUDE_PLUGIN_ROOT}/commands/<full>.md — resolved in the MCP prompt too) with their arguments; /dsx still names _Depends:_, the scope guard and the micro-cycle should the file be unreadable (wrong: " + js(bad) + ")");
   }
+
+  // 1.24 r6 I-I1: the save hook (PostToolUse) leaves a stamp instead of refreshing ROADMAP.md / SPECS.md on every Write / Edit (~75 % of
+  // the hook: 272 / 423 / 725 ms a save at 10 / 50 / 150 features); the lint stays on every save. The refresh runs ONCE — at the Stop
+  // hook, at SessionStart, in the next engine mutation, in the pre-commit check; the specs:// resources render in memory meanwhile.
+  {
+    const p = project("r6-ii1", "en", {}, ["Alpha", "Beta"]);
+    const specs = path.join(p, ".specs"), a = path.join(specs, "alpha");
+    S.catalog(p, { write: true }); // SPECS.md exists: every refresh refreshes it too
+    const rmFile = path.join(specs, "ROADMAP.md"), catFile = path.join(specs, "SPECS.md");
+    const stamp = path.join(specs, ".execution", S.ROADMAP_STALE_FILE || "roadmap-stale");
+    const read = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return null; } };
+    const fresh = () => read(rmFile) === S.portableCli(S.renderRoadmapMd(p, "en")) && read(catFile) === S.portableCli(S.catalog(p).markdown);
+    const tasks = (done) => fs.writeFileSync(path.join(a, "tasks.md"), "# Tasks\n\n" + [1, 2, 3].map((n) => `- [${n <= done ? "x" : " "}] ${n}. Step ${n}\n  - _Requirements: US-1.AC-1_\n`).join(""));
+    const save = (file) => hookOut("spec-hook", { session_id: "s", hook_event_name: "PostToolUse", cwd: p, tool_name: "Edit", tool_input: { file_path: file } }, { CLAUDE_PROJECT_DIR: p });
+    const before = [read(rmFile), read(catFile)];
+    tasks(1);
+    const tSave = save(path.join(a, "tasks.md"));
+    const linted = !!(tSave.json && tSave.json.hookSpecificOutput && tSave.json.hookSpecificOutput.additionalContext);
+    const afterSave = { roadmapKept: read(rmFile) === before[0], catalogKept: read(catFile) === before[1], stamp: fs.existsSync(stamp),
+      ignore: read(path.join(specs, ".execution", ".gitignore")), staleApi: S.roadmapStale(p), stale: !fresh() };
+    const cSave = save(path.join(a, "classification.md")); // no lint for this file: silent now (it printed "Roadmap updated → …")
+    // the resource reads the stale file? No — while the stamp is there it renders in memory
+    const PR = require("./lib/prompts-resources.js");
+    const res = PR.readResource(p, "specs://roadmap"), resCat = PR.readResource(p, "specs://catalog");
+    const resFresh = res.ok && res.contents[0].text === S.portableCli(S.renderRoadmapMd(p, "en")) && resCat.ok && resCat.contents[0].text === S.portableCli(S.catalog(p).markdown);
+    // the Stop hook (any message, even a second stop in a row) refreshes once
+    const stop = hookOut("stop-hook", { session_id: "s", hook_event_name: "Stop", cwd: p, stop_hook_active: true, last_assistant_message: "Here is the layout." }, { CLAUDE_PROJECT_DIR: p });
+    const afterStop = { silent: stop.stdout === "", stamp: fs.existsSync(stamp), fresh: fresh() };
+    // SessionStart (a session that ended before its Stop) refreshes too
+    tasks(2);
+    save(path.join(a, "tasks.md"));
+    const midSession = { stamp: fs.existsSync(stamp), fresh: fresh() };
+    const ss = hookOut("spec-hook", { session_id: "s2", hook_event_name: "SessionStart", cwd: p }, { CLAUDE_PROJECT_DIR: p });
+    const afterSession = { out: /alpha/.test(ss.stdout), stamp: fs.existsSync(stamp), fresh: fresh() };
+    // the next mutation refreshes (and clears the stamp); the engine's own calls
+    tasks(3);
+    const marked = S.markRoadmapStale(p);
+    S.backlog(p, "add", "Later");
+    const afterMutation = { marked, stamp: fs.existsSync(stamp), fresh: fresh() };
+    const noop = S.refreshStaleRoadmap(p);
+    S.markRoadmapStale(p);
+    const did = S.refreshStaleRoadmap(p);
+    // the hooks stat the stamp raw, before the engine loads: the same name
+    const raw = ["stop-hook.js", "precommit-check.js"].filter((h) => !fs.readFileSync(path.join(__dirname, "..", "hooks", h), "utf8").includes('"' + S.ROADMAP_STALE_FILE + '"'));
+    ok(linted && afterSave.roadmapKept && afterSave.catalogKept && afterSave.stamp && afterSave.ignore === "*\n" && afterSave.staleApi === true && afterSave.stale &&
+      cSave.status === 0 && cSave.stdout === "" && resFresh && afterStop.silent && !afterStop.stamp && afterStop.fresh &&
+      midSession.stamp && !midSession.fresh && afterSession.out && !afterSession.stamp && afterSession.fresh &&
+      afterMutation.marked === true && !afterMutation.stamp && afterMutation.fresh && noop.refreshed === false && did.refreshed === true && !raw.length,
+      "1.24 r6 I-I1: a spec save lints at once and leaves the stamp .specs/.execution/roadmap-stale (git-ignored) — ROADMAP.md / SPECS.md untouched; the Stop hook, SessionStart and the next mutation refresh them once and clear it; the specs:// resources render in memory meanwhile (got " +
+      js({ linted, afterSave, cSave: [cSave.status, cSave.stdout.slice(0, 60)], resFresh, afterStop, midSession, afterSession, afterMutation, noop, did, raw }) + ")");
+    // the pre-commit check: a stale roadmap is refreshed, and a generated file that was staged is staged again (the commit holds the fresh one)
+    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.24 r6 I-I1 pre-commit: skipped — git not available");
+    else {
+      const git = (...g) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", ...g], { cwd: p, encoding: "utf8" });
+      git("init", "-q");
+      git("add", "-A");
+      git("commit", "-q", "-m", "init");
+      tasks(2);
+      S.backlog(p, "add", "Someday"); // a mutation: ROADMAP.md refreshed — the user stages it
+      git("add", ".specs/ROADMAP.md");
+      tasks(1);
+      save(path.join(a, "tasks.md")); // a hand edit: stamped, ROADMAP.md (staged) is now one edit behind
+      git("add", ".specs/alpha/tasks.md");
+      const staleStaged = git("show", ":.specs/ROADMAP.md").stdout === read(rmFile);
+      spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "precommit-check.js")], { cwd: p, encoding: "utf8", env: hookEnv() });
+      const staged = git("show", ":.specs/ROADMAP.md").stdout;
+      const names = git("diff", "--cached", "--name-only").stdout.split(/\r?\n/).filter(Boolean);
+      ok(staleStaged && !fs.existsSync(stamp) && fresh() && staged === read(rmFile) && !names.includes(".specs/SPECS.md"),
+        "1.24 r6 I-I1: the pre-commit check refreshes a stale roadmap and stages a generated file again only when it was staged (got " +
+        js({ staleStaged, stamp: fs.existsSync(stamp), fresh: fresh(), stagedFresh: staged === read(rmFile), names }) + ")");
+    }
+  }
 };

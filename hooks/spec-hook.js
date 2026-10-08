@@ -7,10 +7,11 @@
  * Wired from hooks/hooks.json for two events:
  *   - PostToolUse (Write|Edit): when a `.specs/.../requirements.md` is saved, lint EARS;
  *     when a `.specs/.../tasks.md` is saved, run a traceability check; when a `.specs/.../design.md`
- *     is saved, run its mandatory checks for the active tracks. Any spec edit also refreshes ROADMAP.md
- *     and, when it exists and is generated, the living catalog .specs/SPECS.md. Surfaces gaps in the
- *     moment, with zero CI and zero cost.
- *   - SessionStart: print a one-line status of the project's features (at most SESSION_MAX_FEATURES — the most
+ *     is saved, run its mandatory checks for the active tracks. Surfaces gaps in the moment, with zero CI and zero
+ *     cost. Any spec edit also marks ROADMAP.md / SPECS.md stale (1.24 r6 I-I1: a stamp, .specs/.execution/roadmap-stale —
+ *     the refresh itself runs once, at the Stop hook, SessionStart, the next engine mutation or the pre-commit check).
+ *   - SessionStart: refresh a stale ROADMAP.md / SPECS.md (a session that ended before its Stop hook), then
+ *     print a one-line status of the project's features (at most SESSION_MAX_FEATURES — the most
  *     relevant — then one "+N more" line), plus one line per finished
  *     active feature whose implementing files drifted since finish (bounded; see DRIFT_MAX_FILES), and one
  *     line when .specs/ comes from an older dev-spec (roadmap.json meta.specVersion) — run /spec-upgrade — and one
@@ -118,6 +119,8 @@ function handle(payload, event) {
       const pdir = s ? s.project : process.env.CLAUDE_PROJECT_DIR || process.env.SPEC_PROJECT_DIR || payload.cwd || process.cwd();
       // Same gate as PostToolUse: another tool's .specs/ gets no dev-spec status block in every session's context.
       if (!isDevSpecProject(pdir)) process.exit(0);
+      // 1.24 r6 I-I1: saves the last session made after its last Stop hook left ROADMAP.md / SPECS.md stale — refreshed once, here.
+      try { spec.refreshStaleRoadmap(pdir); } catch { /* best-effort */ }
       const list = spec.listFeatures(pdir);
       if (!list.exists || !list.features.length) process.exit(0);
       const m = spec.msg(spec.projectLang(pdir));
@@ -222,24 +225,15 @@ function handle(payload, event) {
     }
     const h = spec.msg(spec.featureLang(pdir, feature)).hook; // localized in the feature's language
 
-    // Keep the roadmap current on any hand-edit of a spec file (not the roadmap files themselves).
-    // The generated files at the .specs/ root (ROADMAP.md/.html, SPECS.md) are outputs, never a reason to refresh.
+    // A hand-edit of a spec file (not the roadmap files themselves) makes ROADMAP.md / SPECS.md stale. The generated files at the
+    // .specs/ root (ROADMAP.md/.html, SPECS.md, UPGRADE.md) are outputs, never a reason to refresh.
+    // 1.24 r6 I-I1: the refresh used to run HERE, on every save — every feature's row recomputed, ~75 % of this hook (272 / 423 /
+    // 725 ms a save at 10 / 50 / 150 features). Now a stamp (.specs/.execution/roadmap-stale, git-ignored): the Stop hook refreshes
+    // once at the end of the turn (SessionStart, the next engine mutation and the pre-commit check too). Best-effort, silent.
     const atRoot = path.resolve(path.dirname(filePath)).toLowerCase() === path.resolve(pdir, ".specs").toLowerCase();
     const generated = base === "roadmap.md" || base === "roadmap.html" || (atRoot && (base === "specs.md" || base === "upgrade.md"));
-    let roadmapNote = "";
     if (!generated) {
-      try {
-        const w = spec.writeRoadmapMd(pdir);
-        if (w.ok) roadmapNote = h.roadmapUpdated(w.overallPercent, w.complete, w.total);
-      } catch {
-        /* best-effort */
-      }
-      // …and the living catalog (.specs/SPECS.md) after a spec artifact changed — only once it exists and carries the
-      // AUTO-GENERATED marker (maybeRefreshCatalog checks both; unchanged content is not rewritten). Steering is not
-      // catalogued. Best-effort, silent.
-      if (!/\/\.specs\/steering\//i.test(fwd)) {
-        try { spec.maybeRefreshCatalog(pdir); } catch { /* best-effort */ }
-      }
+      try { spec.markRoadmapStale(pdir); } catch { /* best-effort */ }
     }
 
     try {
@@ -297,15 +291,15 @@ function handle(payload, event) {
       if (base === "design.md") {
         // The design's mandatory checks for the feature's ACTIVE tracks ([SaaS]/[AI] sections, Constitution Check,
         // placeholders) — one file, string checks only, in the feature's language.
-        // Not an active feature's design (an archived one, steering/design.md): fall through to the roadmap note.
+        // Not an active feature's design (an archived one, steering/design.md): silent (1.24 r6 I-I1 — the roadmap note it fell
+        // through to went with the refresh).
         const d = spec.designSaveCheck(pdir, feature);
         if (d.ok) return emit("PostToolUse", d.text);
       }
     } catch {
       process.exit(0);
     }
-    // Not a requirements.md / tasks.md edit, but a spec file changed → surface the roadmap refresh.
-    if (roadmapNote) return emit("PostToolUse", roadmapNote);
+    // Any other spec file (classification.md, a test plan, steering…): nothing to say — its roadmap refresh waits for the Stop hook.
   }
 
   if (!emitted) process.exit(0);

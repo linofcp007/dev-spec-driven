@@ -142,6 +142,20 @@ function specWrite(file, text, opts = {}) {
   return true;
 }
 
+// 1.24 r6 I-I1 — a file under .specs/ removed (the roadmap's stale stamp): never through a linked folder on the way (the gate);
+// a link AT the path is removed as the link (unlink never follows). → true when removed, false when it wasn't there.
+function removeSpecFile(file) {
+  specsWriteGate(file);
+  forgetCached(file);
+  try {
+    fs.unlinkSync(file);
+    return true;
+  } catch (e) {
+    if (e.code === "ENOENT") return false;
+    throw e;
+  }
+}
+
 // Synchronous sleep (the engine is synchronous end to end): blocks this thread only, no busy loop.
 const SLEEP_CELL = new Int32Array(new SharedArrayBuffer(4));
 function sleepSync(ms) {
@@ -984,7 +998,7 @@ function isNetworkPath(p) {
 }
 
 module.exports = { resolveProjectDir, unexpandedVar, nearestProject, specsRoot, ensureDir, mkdirp, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
-  writeFileAtomic, specWrite, GATE_CODES, specsRootOf, realSpecsRoot, specsWriteBlock, gateRel, gateMessage, specsGateError,
+  writeFileAtomic, specWrite, removeSpecFile, GATE_CODES, specsRootOf, realSpecsRoot, specsWriteBlock, gateRel, gateMessage, specsGateError,
   specsWriteGate, gateRefusal, featureLangSafe, SLEEP_CELL, sleepSync, LOCK_FILE, LOCK_WAIT_MS, LOCK_STALE_MS, LOCK_MAX_HOLD_MS, LOCK_RECLAIM_SUFFIX,
   LOCK_RECLAIM_STALE_MS, LOCK_NOTELESS_STALE_MS, LOCK_NESTED_MIN_MS, HELD_LOCKS, lockSnapshot, sameLockSnapshot,
   staleLock, reclaimStaleLock, releaseLock, lockWaitMs, withFeatureLock, withLockFile, acquireLockFile, featureLocked,

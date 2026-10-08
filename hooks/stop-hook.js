@@ -18,6 +18,8 @@
  *     project checks. (Plugin subagents ignore `hooks` in their frontmatter, so the plugin's hooks.json is where this
  *     lives.)
  * The decision is the engine's (spec.stopCheck — `dev-spec stop-check` prints the same one).
+ * First, whatever the gate says (1.24 r6 I-I1): ROADMAP.md / SPECS.md left stale by the turn's spec saves (the save hook's stamp)
+ * are refreshed, once — the save hook no longer refreshes them on every Write / Edit.
  *
  * It never sends a stop back twice in a row (`stop_hook_active`), is silent (exit 0, no output) when there is nothing to
  * say, when the project has no dev-spec .specs/ or when roadmap.json meta.stopCheck is false (spec_init {stopCheck: false} /
@@ -140,6 +142,19 @@ function nearestDevSpec(cwd) {
   return null;
 }
 
+// 1.24 r6 I-I1 — the end of the turn: a ROADMAP.md / SPECS.md left stale by spec saves (the save hook's stamp, spec.ROADMAP_STALE_FILE
+// in .specs/.execution/) is refreshed ONCE here, whatever the gate then says (a second stop in a row, the gate off). One stat per
+// project; the engine loads only for a stamped one.
+const ROADMAP_STALE = path.join(".specs", ".execution", "roadmap-stale");
+function refreshStale(dirs) {
+  const stale = dirs.filter((d) => { try { return fs.statSync(path.join(d, ROADMAP_STALE)).isFile(); } catch { return false; } });
+  if (!stale.length) return;
+  try {
+    const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+    for (const d of stale) try { spec.refreshStaleRoadmap(d); } catch { /* best-effort */ }
+  } catch { /* engine not found: nothing refreshed */ }
+}
+
 // Older Claude Code versions send no last_assistant_message: the last assistant text of the transcript (JSONL), read from
 // its tail only.
 function lastAssistantText(file) {
@@ -183,7 +198,6 @@ function main(raw) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return finish();
   const event = payload.hook_event_name || payload.hookEventName || "";
   if (event !== "Stop" && event !== "SubagentStop") return finish();
-  if (payload.stop_hook_active === true) return finish(); // already sent back once: never twice in a row
 
   // The raw pre-check: the projects this stop may be about — the nearest dev-spec .specs/ at or above the session's cwd (a cd'd
   // subfolder, a worktree), the project dir Claude Code (or the user) exported — with the gate on. The engine then picks THE
@@ -191,7 +205,10 @@ function main(raw) {
   const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null;
   const anchors = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR]
     .filter((v) => typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim()));
-  const cands = [...new Set([nearestDevSpec(cwd), ...anchors].filter(Boolean).map((v) => path.resolve(v)))].filter((d) => isDevSpecProject(d) && !gateOff(d));
+  const projects = [...new Set([nearestDevSpec(cwd), ...anchors].filter(Boolean).map((v) => path.resolve(v)))].filter(isDevSpecProject);
+  refreshStale(projects); // 1.24 r6 I-I1: the turn's spec saves → ROADMAP.md / SPECS.md, once
+  if (payload.stop_hook_active === true) return finish(); // already sent back once: never twice in a row
+  const cands = projects.filter((d) => !gateOff(d));
   if (!cands.length) return finish();
 
   const sub = event === "SubagentStop";

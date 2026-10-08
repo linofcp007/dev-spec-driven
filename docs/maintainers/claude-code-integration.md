@@ -22,6 +22,11 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   feature's `.state.json lastEditAt` stamp the stop gate reads as activity — `recordSpecEdit()`, 1.22 review), design.md →
   `designSaveCheck()` (active tracks' marker sections, Constitution Check, placeholders); it skips `/.execution/`,
   `.specs/templates/` (unless that folder is a pre-1.14 feature), `.specs/tracks/` (1.15, the same exception) and generated files.
+  **It no longer refreshes ROADMAP.md / SPECS.md (1.24 r6 I-I1):** any other spec save leaves the stamp
+  `.specs/.execution/roadmap-stale` (`markRoadmapStale`) and the Stop / SubagentStop hook refreshes once, at the end of the turn
+  (SessionStart, the next engine mutation and the pre-commit check too) — ~75 % of the save hook was the refresh (272 / 423 / 725 ms a
+  save at 10 / 50 / 150 features → ~130–180 ms); the files lag at most one turn, read by nothing that decides
+  (lifecycle.md → Roadmap files).
   It loads the engine LAZILY (1.22 review): only for SessionStart and a PostToolUse on a `.specs/` file outside `.execution/` —
   the plain path check runs first (an edit anywhere else cost the engine's ~100 ms load: 173 → 68 ms median per Write / Edit,
   `node -e 0` ≈ 61 ms; mcp/tests/10-guards-review.js asserts which events load it). The Stop / SubagentStop hook
