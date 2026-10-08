@@ -1090,4 +1090,31 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const ms = Date.now() - t0;
     ok(ms < 3000 && hostile[0].length === 2, "1.24 r6 D3: trailing-CR stripping stays linear (200,000 CRs before text / at a line's end) (got " + js([ms, hostile[0].length]) + ")");
   }
+
+  // 1.24 r6 D6: the next task and the waves' implicit chain follow the SECTIONS in file order, then the number — a task appended into
+  // an earlier phase (spec_append_tasks {heading}, numbered after every task) comes before a later phase's tasks: by number, next
+  // served Phase 2 first, past Phase 1's checkpoint. parseTasks' public order stays by number.
+  {
+    const js = JSON.stringify;
+    const po = path.join(tmp, "proj-r6-order");
+    S.initProject(po, ["core"], "en");
+    const fo = S.createFeature(po, "Order", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fo.dir, "tasks.md"), ["# Tasks", "", "## Phase 1: Foundation", "", "- [x] 1. Create the schema", "- [ ] 2. Write the repository",
+      "**Checkpoint:** the repository persists users", "", "## Phase 2: API", "", "- [ ] 3. Expose GET /users", "- [ ] 4. Expose POST /users",
+      "**Checkpoint:** the API serves users", ""].join("\n"));
+    const ap = S.appendTasks(po, "order", [{ text: "Add the repository's unique-email constraint" }], { heading: "Phase 1: Foundation" });
+    const c2 = S.completeTask(po, "order", 2);
+    const nx = S.nextTask(po, "order", { waves: true });
+    const br = S.taskBrief(po, "order");
+    const st = S.statusFeature(po, "order");
+    const parsed = S.parseTasks(fs.readFileSync(path.join(fo.dir, "tasks.md"), "utf8")).map((t) => t.number);
+    ok(ap.ok && ap.appended[0].number === 5 && c2.next && c2.next.number === 5 && nx.next.number === 5 && js(nx.waves) === "[[5],[3],[4]]" && br.task && br.task.number === 5 &&
+      st.tasks.next && st.tasks.next.number === 5 && js(parsed) === "[1,2,3,4,5]",
+      "1.24 r6 D6: a task appended into Phase 1 is next before Phase 2's tasks (complete_task's next, next_task, the waves, the brief's default task, status); parseTasks stays by number (got " +
+      js([ap.appended.map((x) => x.number), c2.next, nx.next, nx.waves, br.task && br.task.number, st.tasks.next, parsed]) + ")");
+    // within one section (or a tasks.md without phases) the number decides, as before
+    fs.writeFileSync(path.join(fo.dir, "tasks.md"), "- [ ] 2. Second\n- [ ] 1. First\n- [ ] 3. Third\n");
+    const flat = S.nextTask(po, "order", { waves: true });
+    ok(flat.next.number === 1 && js(flat.waves) === "[[1],[2],[3]]", "1.24 r6 D6: within one section the number decides (unchanged) (got " + js([flat.next, flat.waves]) + ")");
+  }
 };

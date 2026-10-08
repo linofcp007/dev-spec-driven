@@ -122,7 +122,8 @@ function parallelBatch(tasksText, max, tracks) {
 // never fenced code — taskMarkers reads it like every marker) names tasks of the SAME tasks.md that must be done first.
 // Every reader works on ONE view — the active tasks (activeTasks) — and follows resolveTask's duplicate-number rule: a
 // dependency on number n is done once EVERY task numbered n is done; a number no active task carries never is.
-//   - next (taskSchedule): the first open task in tasks order (parseTasks: by number, stable) whose _Depends:_ are all done —
+//   - next (taskSchedule): the first open task in tasks order (taskDepGraph: by section in file order, then by number — 1.24 r6
+//     D6; parseTasks' public list stays by number) whose _Depends:_ are all done —
 //     only the task resolveTask answers for its number is a candidate. A tasks.md without _Depends:_ gets exactly the task it
 //     got before (the first open one). `skipped` = the tasks passed over, `blocked` = the tasks that can never start as things
 //     stand (a cycle, a _Depends:_ naming no task — or waiting on such a task).
@@ -163,14 +164,24 @@ function taskDependsSpec(block) {
   return { declared, numbers, invalid };
 }
 // The dependency view of a task list (blocks in file order): numbers → blocks, each block's _Depends:_, which numbers are
-// done, and the tasks order (parseTasks' — by number, stable).
+// done, and the tasks order: by SECTION (taskSections — a phase heading and the checkpoint closing it, in file order), then by
+// number (stable). 1.24 r6 D6: by number alone, a task spec_append_tasks put into an EARLIER phase (numbered after every task)
+// came after a later phase's tasks — next served Phase 2 past Phase 1's checkpoint. parseTasks' public order stays by number;
+// within a section (a tasks.md without phases: one section) the number decides, as before.
+function taskSections(blocks) {
+  const sec = [];
+  let k = -1;
+  blocks.forEach((b, i) => { const p = blocks[i - 1]; if (!p || b.phase !== p.phase || b.checkpoint !== p.checkpoint) k++; sec.push(k); });
+  return sec;
+}
 function taskDepGraph(blocks) {
   const byNum = new Map();
   blocks.forEach((b, i) => { const l = byNum.get(b.number); if (l) l.push(i); else byNum.set(b.number, [i]); });
   const doneNum = new Map();
   for (const [num, l] of byNum) doneNum.set(num, l.every((i) => blocks[i].done));
   const specs = blocks.map(taskDependsSpec);
-  const order = blocks.map((_, i) => i).sort((a, b) => blocks[a].number - blocks[b].number || a - b);
+  const sec = taskSections(blocks);
+  const order = blocks.map((_, i) => i).sort((a, b) => sec[a] - sec[b] || blocks[a].number - blocks[b].number || a - b);
   // The dependency numbers of block i that are not done yet (open, or carried by no task), ascending.
   const waitsOn = (i) => specs[i].numbers.filter((n) => doneNum.get(n) !== true).sort((a, b) => a - b);
   return { blocks, byNum, doneNum, specs, order, waitsOn };
@@ -2097,7 +2108,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
 module.exports = { parseTasks, taskDescription, nextTask, parallelBatch, RE_DEP_TOKEN, taskDependsSpec, taskDepGraph,
   stuckTasks, taskSchedule, dependencyCycles, taskWaves, openDependenciesOf, briefDependencies, taskDepsBlockedNote,
   taskDepsWaitList, taskDepsIssues, taskDepsCheck, RE_ROOT_CAUSE_TASK, bugfixGate, rootCauseTaskIndex, blockPosition,
-  taskNumber, tasksBytes, textEncoding, encodeText, tasksRewrite, checkboxBytes, completeTask, UNDO_REASON_MAX, reasonInput, untickTask, RE_TASK_LINE_HEAD, taskLine, dropTrailingCr, RE_CHECKPOINT,
+  taskSections, taskNumber, tasksBytes, textEncoding, encodeText, tasksRewrite, checkboxBytes, completeTask, UNDO_REASON_MAX, reasonInput, untickTask, RE_TASK_LINE_HEAD, taskLine, dropTrailingCr, RE_CHECKPOINT,
   COMMENT_MASK, RE_TASK_FENCE_OPEN, RE_PARA_BREAK, scanTaskLines, fenceLine, indentOf, hasOutsideCode, backtickRuns,
   TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, BLOCK_PEERS, SCAN_STAMPS, taskPeerStamps, taskBlocks, scanTaskBlocks, RE_LIST_BOX_LINE, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse,
   RE_RED_PHASE_TASK, redPhaseTask, redPhaseHint, tasksProseText, changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, RE_TASK_MARKER_OPEN,
