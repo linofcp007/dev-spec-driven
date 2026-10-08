@@ -126,7 +126,8 @@ matrix.
   review):** `readFileHead` and `readRaw` — so every `readIfExists` / `readContained` — decode through `decodeText()`: a BOM
   FF FE is UTF-16LE, FE FF UTF-16BE (swapped), anything else UTF-8. Windows PowerShell 5.1's `>` / Out-File writes UTF-16LE: a
   Pester `tests/Login.Tests.ps1` naming T-01 was never found, a UTF-16 requirements.md traced 0 ACs. The BOM stays the U+FEFF
-  every reader drops (a rewrite of such a file is UTF-8); the importer, the specs:// resources, the requirements.md save hook,
+  every reader drops (a rewrite of such a file is UTF-8 — except tasks.md, written back in its own encoding since review 5:
+  tasks-and-evidence.md → Tasks: ONE scanner); the importer, the specs:// resources, the requirements.md save hook,
   `dev-spec ears <file>` and the observe hook's pre-filter read the same way. Until 1.21.1 the scan read only the scanner's
   short `CODE_EXT` and a PowerShell project's tests gate never passed. The scan (`scanTestCode()`) is bounded and read-only; a plan row whose File column names a
   concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts; a test file

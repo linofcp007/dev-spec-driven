@@ -9,7 +9,10 @@ and harness-observed runs.
 keeps sub-lines, phase heading and closing `**Checkpoint:**`), AC IDs resolved to their full EARS text
 (`acIndex()` over `criterionBlocks()`, exact-ID keys so AC-1 never hits AC-10), T-IDs resolved to their
 test-plan row (keyed by the FIRST table cell), design sections that mention the task (bounded by
-`BRIEF_DESIGN_BUDGET`), the task's `_Verify:_`, Global Constraints, the steering it needs (see Scoped
+`BRIEF_DESIGN_BUDGET`; review 5: by WHOLE IDs — an AC ID ends before a non-digit and never follows another feature's `x/`, a
+T-ID is read by its number so T-01 = T-1, a file needs a boundary on both sides — a substring test took US-1.AC-1 for
+US-1.AC-10 and T-1 for T-10; the sections naming the task's own IDs fill the budget first, then the file / track ones, shown in
+design.md's order), the task's `_Verify:_`, Global Constraints, the steering it needs (see Scoped
 steering), for a bugfix bug.md's Reproduction + Root Cause (and `gated`/`gateError` when the bugfix gate
 would refuse the task), and the loop's definition of done. Labels/rules live in the i18n `BRIEF` table (`i18n/<lang>.js` `brief`) +
 `renderBrief()`. `write:true` writes `.specs/<f>/.execution/` — a self-ignoring folder (`.gitignore` = `*`),
@@ -39,8 +42,17 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   punctuation (`.,;:!?)]`) then whitespace / end, so `(_Verify: npm test_)` and `_Implements: a.ts_;` are markers (they
   were silently dropped: nothing to verify, a verified tick) — but a plain closer (followed by whitespace / the end) before
   the next marker opener, else the end of the line, wins over a punctuation one: `_Verify: python -c "import a_; print(1)"_`
-  keeps its whole command. Doctor warns `malformed-markers` for text on a task line that
-  looks like a marker but yields none (`**Verify:**`, a bare `Verify:`). The MCP server never
+  keeps its whole command. **Review 5 (M4) — italics as a markdown reader reads them:** an EMPTY marker (`_Verify:_`,
+  `*Implements:*`) is a span with an empty value — a title naming two markers ("Document the _Verify:_ and _Implements:_
+  markers") yielded the runnable `_Verify:_` `_ and _Implements:` (never verifiable, and `done --run` executed it), and
+  "_Depends:_ and _Size:_" failed task-deps; a closer is searched only BEFORE the next opener (the fallback past it is gone —
+  wrap a value holding marker-like text in backticks); a `_` opener after a letter, a digit or another `_` opens nothing
+  (`__Verify: x__` is bold — read as italics its value was `x_`); inline code is code: a `_` / `*` inside a code span never
+  closes a value (``_Verify: `npm test -- -g "a_ b"`_`` was cut at `"a`) and a label inside one opens none. Doctor warns
+  `malformed-markers` for text on a task line that
+  looks like a marker but yields none (`**Verify:**`, a bare `Verify:`), and (review 5) `verify-suspicious` for a `_Verify:_`
+  value that looks garbled (`suspiciousVerify()`: it starts with `_` / `*`, holds a code span INSIDE it — two commands written
+  as one —, or a quote has no partner: an odd count of `"`, or of `'` not between two letters; `CHECK_PHASE` 5). The MCP server never
   executes commands — the agent runs them and reports; only the CLI's explicit `done --run` executes a task's
   `_Verify:_` (the user's own tasks.md; `--shell bash|<path>` or `DEV_SPEC_SHELL`). The shell is `resolveRunShell()`'s
   (engine, pure — the CLI passes `git --exec-path`'s output): the platform default (cmd.exe / `/bin/sh`) or the one
@@ -96,6 +108,11 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   while `b5Exec` decodes the output as UTF-8, so each accented letter arrives as U+FFFD: every accented class of the PT / ES
   wordings (`RE_CMD_SHELL_FAILURE`, the PowerShell `couldNotRunOutput` patterns) takes U+FFFD too — on a PT Windows "O sistema
   não conseguiu localizar o caminho especificado" never matched, and an `_Expect: fail_` task was ticked on cmd.exe's own failure.
+  Review 5 (L10): "The filename, directory name, or volume label syntax is incorrect" had no PT / ES wording — PT-PT "A sintaxe
+  do nome de ficheiro, nome de diretório ou etiqueta de volume está incorreta" (older builds "directório … incorrecta"), PT-BR
+  "A sintaxe do nome do arquivo, do nome do diretório ou do rótulo do volume está incorreta", ES "La sintaxis del nombre de
+  archivo, del nombre de directorio o de la etiqueta del volumen no es correcta" are read between their fixed ends (a gap of
+  ≤ 120 characters, linear).
 - **A run that could not happen is never evidence** (CLI `b5Exec()`, `done --run` and `finish --run`): it is refused with
   `{ok: false, couldNotRun}` + a localized `runGate` message and NOTHING is recorded (it used to be recorded as exit 1 —
   a passing check stored as failed, a red run that never happened). Stable `couldNotRun` codes: `shell-not-started` (spawn
@@ -133,7 +150,18 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   kept) dropped — `node --test tests\x.test.js`, `node --test "tests/x.test.js"` and `node --test tests/x.test.js` are one
   command —, split at ` && ` outside quotes (`splitAndSteps()`) into STEPS: a `cd <dir>` (cmd.exe's `cd /d`; the folder
   without its quotes), a `set … -o pipefail`, or a command with its leading `NAME=value` assignments apart and a trailing
-  `2>&1` dropped (a `cd <dir>;` / `set -o pipefail;` at a step's start is a step of its own). **Review 3 — substitutions:**
+  `2>&1` dropped (a `cd <dir>;` / `set -o pipefail;` at a step's start is a step of its own). **Review 5 (L9) — more
+  spellings of one command:** quotes are read BEFORE `\` becomes `/` (`RE_PLAIN_ARG` takes `\`), and a quoted word whose content
+  holds none of `$` `` ` `` `\` `!` `"` `'` (`RE_QUOTE_SAFE`) is written double-quoted — `node -e 'process.exit(0)'` is `node -e
+  "process.exit(0)"`; `proofOps()` (one linear pass outside quotes and substitutions) spells ` && `, ` || `, ` | ` and `; ` the
+  same however the run spaced them (`npm run build&&npm test`) and drops a leading `./` from a word naming a path below the
+  folder — never from a word with no other `/` (`./gradlew` runs this folder's program, `gradlew` one on the PATH) nor from
+  Go's `./...`; a body's `npm run test` / `npm run-script test` / `npm t` / `npm tst` is `npm test` (`RE_NPM_TEST` — npm's own
+  aliases; `npm run test:unit` stays apart); and `RE_PROOF_CD` takes cmd.exe's `chdir` / `pushd` and PowerShell's
+  `Set-Location` / `sl` / `Push-Location` (`-Path` / `-LiteralPath`), `RE_PROOF_POPD` `popd` / `Pop-Location` — proofCommands
+  keeps the pushd stack (a copy of each folder left; a popd on an empty stack is no folder: nothing after it matches). A `;`
+  after a command still joins it to the next one (`npm test; Pop-Location` exits with Pop-Location's code — no run of `npm
+  test`). **Review 3 — substitutions:**
   `flatCommand` dropped EVERY backtick first, so ``cd `: && npm test` `` read as `cd :` + `npm test` (bash runs npm test
   inside the substitution; the exit code is cd's). A backtick span or `$(…)` (`proofSubstAt` / `proofSubstEnd`, balanced,
   quotes inside skipped, linear) is now never split, unquoted or stripped: it is equal only to the same text. **Review 3 —
@@ -384,9 +412,23 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   state.js) takes the same bullets, and an approval fingerprinted the pre-1.22 way (`- [x]` only) still matches. A checkbox line
   the scanner doesn't read — an ordered-list checkbox `1. [ ] text`, an unnumbered `- [ ] text` outside every task block (a
   sub-step in a task's body is the task's; fences and comments hold none) — is named by doctor's `unread-tasks` warn
-  (`unreadTaskLines()`, `CHECK_PHASE` 5; the feature and the spike doctor). Task numbers are numeric (`01.` is
+  (`unreadTaskLines()`, `CHECK_PHASE` 5; the feature and the spike doctor). **Review 5 — CommonMark's indented code block:**
+  outside every list, a line indented 4+ columns (`indentCols()`: a tab to the next multiple of 4) after a blank line, a heading
+  or the top of the file is code, and so is each line after it while it stays indented or blank (`scanTaskLines`' `ind` state,
+  `listStep()` — a list item opens the list, a heading or an unindented line after a blank one closes it): its `    - [ ] 1.
+  example` is no task (complete_task's "first open task 1" ticked the example above the real one). Inside a list — a task's
+  sub-lines, `- Phase A` then a 4-space task — the indentation is the item's, as before; such a line is `{code, indented}` and
+  `unread-tasks` names it (indenting real tasks that way would read as zero tasks). Task numbers are numeric (`01.` is
   task 1); `resolveTask()` picks the first OPEN task of a duplicated number (doctor warns `duplicate-tasks`);
-  `completeTask` ticks exactly the resolved line at its checkbox column (CRLF kept). Tasks are
+  `completeTask` ticks exactly the resolved line at its checkbox column (CRLF kept). **Review 5 (P3) — as the bytes it
+  holds:** `readIfExists` decodes UTF-8 (UTF-16 by its BOM), so a tasks.md in Windows' ANSI code page (Windows PowerShell 5.1's
+  Set-Content / Add-Content) read a U+FFFD for each accented byte and writing the TEXT back destroyed every one of them on ONE
+  tick. A tick / untick / spec_impact --reopen now changes the checkbox's byte(s) only (`checkboxBytes()`: a line starts after
+  its 0x0A byte, the bytes before the box must decode to exactly the text before it — else refused, `err.tasksNotText`, with
+  nothing recorded; UTF-16: two bytes a character), found BEFORE `.state.json` is written. spec_append_tasks and a track's
+  template tasks (`applyTracks` checks first) write the file's own encoding (`tasksRewrite()`: UTF-8, or UTF-16 with its BOM —
+  it used to become UTF-8) and are refused, nothing written, when the bytes are no text in it. A file changed meanwhile (never
+  under the feature lock) is written as before. Tasks are
   story-organized (P1 first) with `[P]` parallel markers + `**Checkpoint:**` lines; the design's
   `Constitution Check` section is checked by `doctor`.
 - **A change's tasks live in its change.md (1.21 F5).** A `kind: "change"` folder has no tasks.md: `readIfExists` /
@@ -523,7 +565,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   only after a plain-text pre-filter — review 3: a copy of the engine's `observedNorm` / `observedBodies` (mcp/tests/09-evidence.js
   compares the sources): the command's BODIES (split at ` && ` and `;`, a `cd` / `set … pipefail` part dropped, leading
   NAME=value assignments — quotes honoured — and a trailing 2>&1 dropped, then backticks and quotes dropped, `\` read as `/`,
-  whitespace folded) each appear in some feature's tasks.md read the same way (≤ 2 MB each, dot / `_` folders skipped) or in a
+  whitespace folded; review 5 — the matcher's new readings, so it stays a superset: `&&` split however spaced, a chdir / pushd /
+  popd / Set-Location / sl / Push-Location / Pop-Location part dropped like `cd`, pipes unspaced, a word's leading `./`
+  dropped, npm's aliases of `npm test` read as it; mcp/tests/09-evidence-matcher.js checks the probes) each appear in some feature's tasks.md read the same way (≤ 2 MB each, dot / `_` folders skipped) or in a
   meta.checks command — a SUPERSET of the matcher (each step keeps a body a substring of its `_Verify:_`'s normalized text),
   as cheap as the flat-text test it replaced; observeRun runs the same test before it parses a tasks.md; it prints nothing, reads stdin asynchronously (≤ 4 MB, else
   ignored), and exits 0 on any error.
