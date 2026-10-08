@@ -250,10 +250,12 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   back until its report's `## Final runs` shows every run passing. Both ideas come from Anthropic's `code-review` and
   `code-simplifier` plugins, rebuilt around the spec and the evidence gate.
 - **A full review, fixed** — a run now proves a task only when it IS the task's `_Verify:_` (`command-mismatch`
-  otherwise); the stop gate, the approval guard (unquoted `cmd /c`, `pwsh -Command`…) and the Phase 4 tests gate close
-  their gaps; bare `AC-n` criteria are flagged; the scan honours `.gitignore` and monorepos; UTF-16 files are read.
-  Faster too: the spec-hook ~173 → ~68 ms per edit, the Stop hook ~235 → ~88 ms, a tick ~185 → ~65 ms, the fast-forward
-  ~1.2 → ~0.4 s. The CHANGELOG lists every fix.
+  otherwise — runs an older version recorded keep their verdict, so updating never unverifies a task); the stop gate,
+  the approval guard (unquoted `cmd /c`, `pwsh -Command`…) and the Phase 4 tests gate close their gaps; bare `AC-n`
+  criteria are flagged (`/spec-upgrade` lists the features to renumber); the scan reads `.gitignore` as Git does and
+  handles monorepos; UTF-16 files are read; +sec reads two-factor authentication in Portuguese and Spanish; `done --run`
+  works on a Portuguese or Spanish Windows. Faster too: the spec-hook ~173 → ~68 ms per edit, the Stop hook ~235 → ~88
+  ms, a tick ~185 → ~65 ms, the fast-forward ~1.2 → ~0.4 s. The CHANGELOG lists every fix.
 
 ### New in 1.21
 
@@ -739,10 +741,13 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   relatório não mostrar todas as execuções a passar. As duas ideias vêm dos plugins `code-review` e `code-simplifier` da
   Anthropic, reconstruídas à volta da spec e do gate de evidência.
 - **Uma revisão completa, corrigida** — uma execução só prova uma tarefa quando É o `_Verify:_` dela (senão
-  `command-mismatch`); o gate de paragem, a guarda das aprovações (`cmd /c`, `pwsh -Command` sem aspas…) e o gate dos
-  testes da Fase 4 fecham as suas lacunas; os critérios com `AC-n` sem história são assinalados; o scan respeita o
-  `.gitignore` e os monorepos; os ficheiros UTF-16 são lidos. E mais rápido: o spec-hook ~173 → ~68 ms por edição, o hook
-  Stop ~235 → ~88 ms, marcar uma tarefa ~185 → ~65 ms, o avanço rápido ~1,2 → ~0,4 s. O CHANGELOG lista cada correção.
+  `command-mismatch` — as execuções registadas por uma versão anterior mantêm o veredicto, por isso atualizar nunca tira
+  a verificação a uma tarefa); o gate de paragem, a guarda das aprovações (`cmd /c`, `pwsh -Command` sem aspas…) e o gate
+  dos testes da Fase 4 fecham as suas lacunas; os critérios com `AC-n` sem história são assinalados (o `/spec-upgrade`
+  lista as features a renumerar); o scan lê o `.gitignore` como o Git e trata os monorepos; os ficheiros UTF-16 são lidos;
+  o +sec reconhece a autenticação de dois fatores em português e espanhol; o `done --run` funciona num Windows em
+  português ou espanhol. E mais rápido: o spec-hook ~173 → ~68 ms por edição, o hook Stop ~235 → ~88 ms, marcar uma
+  tarefa ~185 → ~65 ms, o avanço rápido ~1,2 → ~0,4 s. O CHANGELOG lista cada correção.
 
 ### Novidades da 1.21
 
@@ -1249,10 +1254,13 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   todas las ejecuciones en verde. Las dos ideas vienen de los plugins `code-review` y `code-simplifier` de Anthropic,
   reconstruidas en torno a la spec y el gate de evidencia.
 - **Una revisión completa, corregida** — una ejecución solo prueba una tarea cuando ES su `_Verify:_` (si no,
-  `command-mismatch`); el gate de parada, la guardia de aprobaciones (`cmd /c`, `pwsh -Command` sin comillas…) y el gate
-  de pruebas de la Fase 4 cierran sus huecos; los criterios con `AC-n` sin historia se señalan; el scan respeta el
-  `.gitignore` y los monorepos; los ficheros UTF-16 se leen. Y más rápido: el spec-hook ~173 → ~68 ms por edición, el hook
-  Stop ~235 → ~88 ms, marcar una tarea ~185 → ~65 ms, el avance rápido ~1,2 → ~0,4 s. El CHANGELOG lista cada corrección.
+  `command-mismatch` — las ejecuciones que registró una versión anterior conservan su veredicto, así que actualizar nunca
+  le quita la verificación a una tarea); el gate de parada, la guardia de aprobaciones (`cmd /c`, `pwsh -Command` sin
+  comillas…) y el gate de pruebas de la Fase 4 cierran sus huecos; los criterios con `AC-n` sin historia se señalan
+  (`/spec-upgrade` lista las funciones que hay que renumerar); el scan lee el `.gitignore` como Git y trata los monorepos;
+  los ficheros UTF-16 se leen; +sec reconoce la autenticación de dos factores en portugués y español; `done --run`
+  funciona en un Windows en portugués o español. Y más rápido: el spec-hook ~173 → ~68 ms por edición, el hook Stop ~235
+  → ~88 ms, marcar una tarea ~185 → ~65 ms, el avance rápido ~1,2 → ~0,4 s. El CHANGELOG lista cada corrección.
 
 ### Novedades de la 1.21
 

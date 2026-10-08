@@ -47,10 +47,6 @@ local, no pull requests, no CI.
   `simplifier-evidence` · `no-changes` · `no-report`; EN / PT / pt-BR / ES).
 
 ### Changed
-- `references/subagent-execution.md`: step 6 "Verify the findings" before the fix loop (now step 7), the simplification
-  pass before closing, the verify and simplifier rows in model selection, three new rationalizations.
-- `references/code-reuse-and-quality.md`: "The simplification pass" (the rules and why), a checklist item.
-- The evidence gate's "not-done" line now says "the subagent" (it covers the simplifier too).
 - **A run proves a task only when it IS the task's `_Verify:_` command.** Any other command (`echo ok` for `npm test`, another
   test file, one of two `_Verify:_` commands alone, a `cd` into another folder) ticks the task but leaves it unverified —
   the new reason `command-mismatch` (EN / PT / ES). Spacing, quotes, `\` vs `/`, a trailing `2>&1`, your own `cd <project
@@ -60,11 +56,20 @@ local, no pull requests, no CI.
 - **Criteria numbered with a bare `AC-1` are flagged** — EARS warns (`no-id`), trace_check reports them
   (`unidentifiedCriteria`), and doctor's `ears` check and the requirements / change-plan approvals fail instead of "all 0
   ACs covered". `/spec-upgrade` lists such features with the way out (renumber them US-<story>.AC-<n>, then re-approve).
-- `references/subagent-execution.md`: in parallel mode the controller creates each worktree from the recorded BASE (the
-  Agent tool's isolation started from the default branch, without the earlier tasks).
-- Faster: the spec-hook ~173 → ~68 ms per edit outside `.specs/`, the Stop hook ~235 → ~88 ms on an idle project, a tick
-  with its ROADMAP.md refresh ~185 → ~65 ms (30 features × 40 tasks), the fast-forward ~1.2 → ~0.4 s, the pre-commit
+- **Faster:** the spec-hook ~173 → ~68 ms per edit outside `.specs/`, the Stop hook ~235 → ~88 ms on an idle project, a
+  tick with its ROADMAP.md refresh ~185 → ~65 ms (30 features × 40 tasks), the fast-forward ~1.2 → ~0.4 s, the pre-commit
   check ~238 → ~127 ms, an English `list` ~144 → ~66 ms.
+- `references/subagent-execution.md`: step 6 "Verify the findings" before the fix loop (now step 7), the simplification
+  pass before closing, the verify and simplifier rows in model selection, three new rationalizations; in parallel mode
+  the controller creates each worktree from the recorded BASE (the Agent tool's isolation started from the default
+  branch, without the earlier tasks). SKILL.md's subagent loop names the verify pass.
+- `references/code-reuse-and-quality.md`: "The simplification pass" (the rules and why), a checklist item.
+- The evidence gate's "not-done" line now says "the subagent" (it covers the simplifier too).
+- Docs: AGENTS.md describes the approval guard over MCP too (elicitation asks the user, `deny` refuses); MCP-only
+  clients call `spec_stop_check` before claiming done (INTEGRATIONS.md, the rule files, where `dev-spec <command>` is
+  spelled out as the runnable `node cli/dev-spec.js <command>`); the agents cite paths a subagent or an MCP prompt can
+  resolve; `/approve` and `/spec-doctor` list every check id the engine has; the Spanish README and command descriptions
+  say "gate de evidencia" and "función".
 
 ### Fixed
 - An implementer's "**Status:** `DONE`" (the status in backticks) read as no claim, so its report was never checked; a
@@ -116,16 +121,15 @@ local, no pull requests, no CI.
   harness never ran; `dev-spec rules agents` writes absolute paths.
 
 ### Tests
-- `node mcp/test.js` 1803 assertions (was 1680), `node cli/test-cli.js` 535 (was 522) — a regression per review finding,
-  and: the simplifier's SubagentStop gate
-  — its `## Final runs` section: no report, a baseline only, a red run, a failed run hidden by a later passing one, a code
-  quoted in output or in a fenced block, a check never run or without its code, a longer command starting with a
-  check's, a check listed twice, a run nested under a group bullet, "# pass 212" output lines, a revert round with and without a new heading, a 256 KB
-  report read from its end (also when the window starts inside a fence), a double-backtick command, a status in
-  backticks vs a code span holding "blocked"; NO_CHANGES / BLOCKED / no report path allowed; the hook's reason = the
-  engine's; EN / PT / pt-BR / ES strings; `stop-check --agent spec-simplifier` in PT —, the hooks.json matcher, 4 agents
-  and 55 commands, and the prose of the verify pass, the written rules and history, the simplify mode and the
-  simplification pass.
+- `node mcp/test.js` 1803 assertions (was 1680), `node cli/test-cli.js` 535 (was 522): a regression for every review
+  finding above, and the simplifier's SubagentStop gate — its `## Final runs` section: no report, a baseline only, a red
+  run, a failed run hidden by a later passing one, a code quoted in output or in a fenced block, a check never run or
+  without its code, a longer command starting with a check's, a check listed twice, a run nested under a group bullet,
+  "# pass 212" output lines, a revert round with and without a new heading, a 256 KB report read from its end (also when
+  the window starts inside a fence), a double-backtick command, a status in backticks vs a code span holding "blocked";
+  NO_CHANGES / BLOCKED / no report path allowed; the hook's reason = the engine's; EN / PT / pt-BR / ES strings;
+  `stop-check --agent spec-simplifier` in PT —, the hooks.json matcher, 4 agents and 55 commands, and the prose of the
+  verify pass, the written rules and history, the simplify mode and the simplification pass.
 
 ## [1.21.1] — 2026-09-30
 
