@@ -132,4 +132,20 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   ok(/tests in code: 0\/1 planned T-ID\(s\) named in 0 test file\(s\)/.test(trFx3.out) && gateFx3.code === 1 && /tests-in-code/.test(gateFx3.out) && /T-01/.test(gateFx3.out),
     "1.21.1 languages (review 3): trace --code and approve tests with a plan naming `tests/` — tests/fixtures/seed.sql (a fixture holding 'T-01') is no test: 0/1, the gate refuses naming T-01 (got " +
     JSON.stringify([trFx3.out.split("\n").filter((l) => /tests in code/.test(l)), gateFx3.code, gateFx3.out.slice(0, 200)]) + ")");
+
+  // 1.22 review: `ears <file>` reads a UTF-16 file (Windows PowerShell 5.1's `>` / Out-File) — the CLI reads it itself; a bare
+  // AC-n is flagged; trace on a feature numbered AC-1, AC-2 fails (exit 1) naming them instead of "all 0 ACs covered".
+  const u16 = path.join(tmp, "122-utf16");
+  fs.mkdirSync(u16, { recursive: true });
+  const reqBare = "# Requirements\n\n## Acceptance Criteria (EARS)\n\n1. **US-1.AC-1** — WHEN x THE SYSTEM SHALL y.\n2. **AC-2** — WHEN z THE SYSTEM SHALL w.\n";
+  fs.writeFileSync(path.join(u16, "r16.md"), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(reqBare, "utf16le")]));
+  const e16 = run(["ears", path.join(u16, "r16.md")]);
+  run(["init", "core", "--project", u16]);
+  run(["create", "Bare", "core", "--project", u16]);
+  fs.writeFileSync(path.join(u16, ".specs", "bare", "requirements.md"), reqBare.replace("**US-1.AC-1**", "**AC-1**"));
+  fs.writeFileSync(path.join(u16, ".specs", "bare", "tasks.md"), "# Tasks\n\n- [ ] 1. Build it\n");
+  const trBare = run(["trace", "bare", "--project", u16]);
+  ok(e16.code === 0 && /^EARS: 2 criteria, 2 with modal, verdict=pass/.test(e16.out) && /L6 \[warn\] 'AC-2' is not a stable ID trace_check reads — write US-<story>\.AC-<n>/.test(e16.out) &&
+    trBare.code === 1 && /criteria with no US-<story>\.AC-<n> ID \(traceability counts none\): AC-1, AC-2/.test(trBare.out),
+    "1.22 review (CLI): ears <UTF-16 file> reads its criteria and flags the bare AC-2; trace on bare AC-n IDs exits 1 naming them (got " + JSON.stringify([e16.out, trBare.code, trBare.out]) + ")");
 };

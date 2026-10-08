@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, list, __dirname }) => {
+exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __dirname }) => {
 
   { // --- 1.13 WP5: gates — placeholders, approve --force, finish/next-action, bugfix gate, clarify/EARS, roadmap, templates ---
     const w5 = path.join(tmp, "proj-wp5");
@@ -1244,5 +1244,118 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, list, __dirname 
     ok(langOk && gateOk && refusals && tplOk && mcpOk,
       "1.21 F3: spec_create {kind: 'bugfix'} prefills bug.md (Reproduction, Root Cause, Expected) and US-1.AC-1's IF … THEN (EN/PT/ES keywords; a leading IF / trailing THEN / THE SYSTEM SHALL dropped), returns `prefilled` and — with includeBody — every scaffold's body; a slot-only, sentinel or blank Root Cause still fails root-cause and the design gate; no prefill = the template byte for byte; refused on a feature / over 500 characters / a non-string; a project template's bug.md is left alone (prefillSkipped + a PT note); MCP schema + call (got " +
       JSON.stringify({ got, gate: [rcOf(slot), rcOf(todo), rcOf(blank), apSlot.failing], refusals: [onFeature.error, tooLong.error, notStr.error], tp: [tp.prefilled, tp.prefillSkipped, tp.note], mcp: viaMcp.error || ac1(viaMcp.bodies && viaMcp.bodies["requirements.md"] || "") }).slice(0, 1500) + ")");
+  }
+
+  { // 1.22 review — the Phase 4 `tests` sign-off covers the plan it was given: a T-ID planned since (or a plan re-approved since)
+    // makes it pending again; an approval recorded before 1.22 (no `testsPlan` stamp) is never flagged. On copies of the demo.
+    const js = JSON.stringify;
+    const demo = (n) => { const p = path.join(tmp, "proj-122-tests-" + n); fs.cpSync(path.join(root, "examples", "demo-project"), p, { recursive: true }); return p; };
+    const planFile = (p) => path.join(p, ".specs", "api-keys", "test-plan.md");
+    const addRow = (p, id) => fs.writeFileSync(planFile(p), fs.readFileSync(planFile(p), "utf8").replace(/(\| T-07 [^\n]*\n)/, (m) => m + `| ${id} | unit | example | a key prefix is unique per tenant | US-1.AC-1 | \`tests/unit/create.test.ts\` |\n`));
+    const legacy = demo("legacy");
+    addRow(legacy, "T-08");
+    const reL = S.approvePhase(legacy, "api-keys", "test-plan", "u");
+    const naL = S.nextAction(legacy, "api-keys");
+    ok(reL.ok && naL.step === "implement" && js(naL.pendingGates) === "[]" && !S.readState(legacy, "api-keys").approvals.tests.testsPlan,
+      "1.22 review: a tests approval recorded before 1.22 (no testsPlan stamp) is never flagged — the demo's T-08 + test-plan re-approval keeps next_action on implement (got " + js([naL.step, naL.pendingGates]) + ")");
+
+    const p = demo("stamped");
+    const rT = S.approvePhase(p, "api-keys", "tests", "u");
+    const stamp = rT.ok ? rT.approvals.tests.testsPlan : null;
+    const histStamp = (S.readState(p, "api-keys").approvalHistory || []).slice(-1)[0] || {};
+    const naIn = S.nextAction(p, "api-keys");
+    addRow(p, "T-08");
+    const reP = S.approvePhase(p, "api-keys", "test-plan", "u");
+    const na = S.nextAction(p, "api-keys");
+    const doc = S.specDoctor(p, "api-keys");
+    const gates = doc.checks.find((c) => c.id === "approval-gates") || {};
+    const rTasks = S.approvePhase(p, "api-keys", "tasks", "u");
+    const stale = /^The Phase 4 sign-off of \d{4}-\d\d-\d\d no longer covers the plan \(planned since: T-08; approval changed since: test-plan\) — the tests phase is to be approved again\. Phase 4, the hard gate/;
+    ok(rT.ok && stamp && js(stamp.tests) === js(["T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-07"]) && typeof stamp.plans["test-plan"] === "string" && js(histStamp.testsPlan) === js(stamp) &&
+      naIn.step === "implement" && reP.ok && na.step === "fix" && js(na.pendingGates) === '["tests"]' && na.refusedGate && na.refusedGate.phase === "tests" && js(na.refusedGate.failing) === '["tests-in-code"]' &&
+      stale.test(na.recommendation) && js(doc.pendingGates) === '["tests"]' && doc.verdict === "warn" && gates.status === "warn" && /no longer covers the plan \(planned since: T-08/.test(gates.detail) &&
+      rTasks.ok === false && js(rTasks.failing) === '["phase-order"]',
+      "1.22 review: a stamped tests approval (testsPlan {tests, plans}, on the approval and its history record) goes stale once the test plan gains T-08 and is re-approved — pendingGates [tests], next_action fix (refusedGate tests-in-code, the reason first), doctor warns, and the tasks can't be approved past it (phase-order) (got " +
+      js([stamp, na.step, na.pendingGates, na.recommendation, doc.pendingGates, gates.detail, rTasks.failing]) + ")");
+    // The test written → approve; approved again → in force. Then, executing (a task ticked), Phase 4's sign-off wording.
+    const tf = path.join(p, "tests", "unit", "create.test.ts");
+    fs.writeFileSync(tf, fs.readFileSync(tf, "utf8") + '\ntest("T-08 a key prefix is unique per tenant", () => {});\n');
+    const naW = S.nextAction(p, "api-keys");
+    const rT2 = S.approvePhase(p, "api-keys", "tests", "u");
+    const naA = S.nextAction(p, "api-keys");
+    const tick = S.completeTask(p, "api-keys", 2);
+    addRow(p, "T-09");
+    S.approvePhase(p, "api-keys", "test-plan", "u");
+    const naX = S.nextAction(p, "api-keys");
+    const ff = S.approvePhase(p, "api-keys", null, "u", { through: "tasks" });
+    ok(naW.step === "approve" && /^The Phase 4 sign-off of .* — \/approve api-keys tests\./.test(naW.recommendation) && rT2.ok && js(rT2.approvals.tests.testsPlan.tests.slice(-1)) === '["T-08"]' &&
+      naA.step === "implement" && js(naA.pendingGates) === "[]" && tick.ok && naX.step === "fix" && /planned since: T-09/.test(naX.recommendation) &&
+      /Phase 4 sign-off: the implementation has already started/.test(naX.recommendation) && ff.ok === false && ff.stoppedAt === "tests" && js(ff.approved) === "[]",
+      "1.22 review: once T-08 is in the test code next_action asks to approve tests, the new approval is in force (implement); on an executing feature a stale sign-off is asked for with Phase 4's sign-off wording, and a fast-forward re-runs the tests gate (got " +
+      js([naW.step, naW.recommendation, naA.step, naX.step, naX.recommendation, ff.stoppedAt, ff.approved]) + ")");
+  }
+
+  { // 1.22 review — a deleted approved artifact is a change since its approval, and Phase 4 stays due once its plan was approved
+    // (deleting test-plan.md and its T-IDs dropped the hard gate: the tasks approved at once).
+    const js = JSON.stringify;
+    const p = path.join(tmp, "proj-122-deleted-plan");
+    fs.cpSync(path.join(root, "examples", "demo-project"), p, { recursive: true });
+    const dir = path.join(p, ".specs", "api-keys");
+    const st = JSON.parse(fs.readFileSync(path.join(dir, ".state.json"), "utf8"));
+    delete st.approvals.tests; delete st.approvals.tasks;
+    fs.writeFileSync(path.join(dir, ".state.json"), JSON.stringify(st, null, 2));
+    fs.rmSync(path.join(dir, "test-plan.md"));
+    fs.writeFileSync(path.join(dir, "tasks.md"), fs.readFileSync(path.join(dir, "tasks.md"), "utf8").replace(/^\s*- _Makes green: [^\n]*\n/gm, "").replace(/T-0\d, /g, "").replace(/T-07 /, ""));
+    const r = S.approvePhase(p, "api-keys", "tasks", "u");
+    const na = S.nextAction(p, "api-keys");
+    const doc = S.specDoctor(p, "api-keys");
+    const chg = doc.checks.find((c) => c.id === "changed-since-approval") || {};
+    const fin = S.finishFeature(p, "api-keys");
+    const rv = S.approvePhase(p, "api-keys", "test-plan", "u", { revoke: true, reason: "the plan is gone for good" });
+    const r2 = S.approvePhase(p, "api-keys", "tasks", "u");
+    ok(r.ok === false && js(r.failing) === '["phase-order"]' && /earlier phases are not approved yet: tests/.test(r.error) &&
+      na.step === "re-review" && js(na.changedSinceApproval) === '["test-plan.md"]' && js(na.missingApproved) === '["test-plan.md"]' && !na.impact &&
+      /^test-plan\.md was approved but no longer exists — restore it .* \/approve api-keys test-plan --revoke\./.test(na.recommendation) && !/^Re-review/.test(na.recommendation) &&
+      chg.status === "warn" && /test-plan\.md/.test(chg.detail) && js(doc.pendingGates) === '["tests","tasks"]' && fin.blockers.some((b) => /changed after their approval .*test-plan\.md/.test(b)) &&
+      rv.ok && r2.ok && r2.approved === "tasks",
+      "1.22 review: deleting an approved test-plan.md is a change since its approval (next_action re-review: restore it or revoke — no spec_impact on a missing file; doctor and finish name it) and Phase 4 stays due (tasks refused on phase-order); revoking the plan's approval is the way out (got " +
+      js([r.failing, na.step, na.changedSinceApproval, na.recommendation, doc.pendingGates, chg.detail, rv.ok, r2.ok]) + ")");
+    // The engine's rule: a deleted approved artifact counts (a plain feature's requirements.md, a bugfix's bug.md) — a bugfix's
+    // deleted design.md does not (it only held a track's sections).
+    const E = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const bd = path.join(tmp, "proj-122-deleted-unit");
+    fs.mkdirSync(bd, { recursive: true });
+    fs.writeFileSync(path.join(bd, "bug.md"), "# Bug\n");
+    fs.writeFileSync(path.join(bd, "design.md"), "# Design\n");
+    fs.writeFileSync(path.join(bd, "requirements.md"), "# Req\n");
+    const fp = (f, ph) => E.textFingerprint(fs.readFileSync(path.join(bd, f), "utf8"), ph);
+    const appr = { design: { at: "2026-01-01T00:00:00.000Z", by: "u", fingerprint: fp("bug.md", "design"), file: "bug.md", designFingerprint: fp("design.md", "design") },
+      requirements: { at: "2026-01-01T00:00:00.000Z", by: "u", fingerprint: fp("requirements.md", "requirements") } };
+    const before = E.changedSinceApproval(bd, appr, ["core", "saas"], "bugfix");
+    fs.rmSync(path.join(bd, "design.md"));
+    const noDesign = E.changedSinceApproval(bd, appr, ["core", "saas"], "bugfix");
+    fs.rmSync(path.join(bd, "bug.md"));
+    fs.rmSync(path.join(bd, "requirements.md"));
+    const gone = E.changedSinceApproval(bd, appr, ["core", "saas"], "bugfix");
+    ok(js(before) === "[]" && js(noDesign) === "[]" && js(gone.slice().sort()) === '["bug.md","requirements.md"]',
+      "1.22 review: changedSinceApproval reports a deleted approved bug.md / requirements.md, never a bugfix's deleted design.md (got " + js([before, noDesign, gone]) + ")");
+  }
+
+  { // 1.22 review 2 — doctor names the stale Phase 4 sign-off ("the tests phase is to be approved again") only while `tests` IS
+    // pending: a stamped tests approval, then test-plan.md deleted and its approval revoked (the way out next_action gives) left
+    // the note while `approve tests` answered "Nothing to approve".
+    const js = JSON.stringify;
+    const p = path.join(tmp, "proj-122r2-stale-tests");
+    fs.cpSync(path.join(root, "examples", "demo-project"), p, { recursive: true });
+    const rT = S.approvePhase(p, "api-keys", "tests", "u"); // stamped (testsPlan)
+    fs.rmSync(path.join(p, ".specs", "api-keys", "test-plan.md"));
+    const rv = S.approvePhase(p, "api-keys", "test-plan", "u", { revoke: true, reason: "the plan is gone for good" });
+    const doc = S.specDoctor(p, "api-keys");
+    const gates = doc.checks.find((c) => c.id === "approval-gates") || {};
+    const at = S.approvePhase(p, "api-keys", "tests", "u", { force: true });
+    ok(rT.ok && rT.approvals.tests.testsPlan && rv.ok && !doc.pendingGates.includes("tests") && !/approved again|no longer covers the plan/.test(gates.detail || "") &&
+      at.ok === false && /^Nothing to approve/.test(at.error || ""),
+      "1.22 review 2: with test-plan.md deleted and its approval revoked, `tests` is not pending and doctor's approval-gates no longer says the tests phase is to be approved again (approve tests: nothing to approve) (got " +
+      js([rT.ok, rv.ok, doc.pendingGates, gates.detail, at.error]) + ")");
   }
 };

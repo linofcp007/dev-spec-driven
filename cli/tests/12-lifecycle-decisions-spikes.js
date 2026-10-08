@@ -35,6 +35,13 @@ ok(dc1.code === 0 && /^✎ D-1 — JWT sessions  \(\.specs\/auth\/decisions\.md\
   "decide = spec_decide: appends D-1 (✎ line, canonical _Affects:_), --discovery + --supersedes, --json = the MCP result; unknown _Affects:_ / no --title → exit 1, nothing written (got " +
   JSON.stringify([dc1.out, dcBad.out.slice(0, 120)]) + ")");
 
+// 1.22 review — `--affects "Decisions, reuse & risks"` (the size-S scaffold's own heading, typed unquoted): rejoined, written `quoted`.
+const fS22 = Sc2.createFeature(pd, "Small", ["core"], "", undefined, "en", "feature", { size: "s" });
+const dcS22 = rc2(["decide", "small", "--title", "Cache", "--decision", "In memory.", "--affects", "Decisions, reuse & risks", "--affects", "US-1.AC-1", "--project", pd]);
+ok(dcS22.code === 0 && /\n  _Affects: Decisions, reuse & risks, US-1\.AC-1_\n$/.test(dcS22.out) &&
+  /^- _Affects: `Decisions, reuse & risks`, US-1\.AC-1_$/m.test(fs.readFileSync(path.join(fS22.dir, "decisions.md"), "utf8")),
+  "1.22 review: decide --affects names a heading holding a comma, unquoted — exit 0, the entry writes it `quoted` (got " + JSON.stringify(dcS22.out) + ")");
+
 // trace prints the phantom _Affects:_ warnings (exit code unchanged); brief shows the decisions citing the task.
 fs.appendFileSync(path.join(fd.dir, "decisions.md"), "\n## D-3 — Old\n\n- _Kind: decision_\n- _Date: 2026-01-01_\n- _Affects: US-7.AC-7_\n\n**Decision:** x\n");
 const trc = rc2(["trace", "auth", "--project", pd]);

@@ -539,6 +539,52 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   (`consent`, `retention period` / `retention policy` and twins) are weak; encryption in transit and security testing
   are strong in EN/PT/ES alike — keep the three languages aligned when you add a signal. `keywordLiteral()` is a literal
   precheck (a keyword pluralize() leaves alone is its own whole literal) so a text without it never compiles its regex.
+  **1.22 review — +sec's two-factor signal in PT / ES:** `two-factor` had no PT / ES twin, so "Adicionar autenticação de dois
+  fatores" was `core +tdd` while its English twin was +sec. sec.weak gained `multi-factor`, `multifactor` (EN = ES), PT `dois
+  fatores`, `multifator`, ES `dos factores`, `doble factor` — each a separate word, never the whole "autenticação de dois
+  fatores" phrase (it would win its place and shadow the auth word: ONE signal where English has two). A lone one is a
+  "possible +sec" note ("os dois fatores principais"). **Measured:** the differential (e2bb4d1 vs the fix) over 40,579 inputs —
+  6,756 string literals of both trees' test files and evals + a 20-frame sweep of every built-in keyword (1,782, incl. "Add K and
+  multi-factor sign-in", "Adicionar K com dois fatores", "Añadir K con dos factores", "autenticação K de dois fatores"): 1,863
+  decisions changed, ALL +sec switched on in an input holding one of the new words (the sweep's frames and the review's 7 test
+  texts); no track switched off, no existing literal changed. **Review 2 — the factor words count only as authentication:**
+  "depende de dois fatores", "depende de dos factores", "doble factor de ponderación", "a multi-factor risk model" were a weak
+  +sec signal (a "Possible +sec", and ON with one more weak word: "… dois fatores e da segurança da entrega"). Two +sec cue
+  rules (data, `SIGNALS.sec.cues`): `near` an auth word — before (authentication / auth / login / sign-in / SSO / verification /
+  autenticação / verificação / início de sessão / acesso / autenticación / verificación / inicio de sesión / acceso, a link word
+  between allowed: de / em / com / por / en / con / with / via …) or after ("… de autenticação", "… of authentication", "… for
+  the login") — `keep`; else the catch-all `sentence` rule (the hit's own sentence always holds the hit) — `none`. Only the
+  1.22 words (`multi-factor`, `multifactor`, PT `dois fatores`, `multifator`, ES `dos factores`, `doble factor`); `two-factor`,
+  `2fa`, `mfa` keep their reading. **Measured:** the differential (7cf3843 vs the fix) over 32,719 inputs — 11,113 string
+  literals of both trees' test files and evals (0 track decisions changed; 4 reasonings, all holding a factor word: "weak
+  signal only ('dois fatores')" → "no signals matched") + a 13-frame sweep of every built-in keyword (the other 21,606 texts:
+  1,943 +sec switched OFF, every one in a frame holding a factor word; 0 switched on; 9,668 more reasonings changed — no input
+  without a factor word changed at all). The A2 self-match sweep probes each factor word beside an auth word.
+  **Review 3 — the natural phrasings:** "Iniciar sesión con doble factor", "Os administradores passam a entrar com dois fatores",
+  "Require multifactor at login" were no signal at all (their English twin "Admins sign in with multi-factor" is a weak one): the
+  `near` cue's auth words gain the verbs `iniciar sesión` / `iniciar sessão` (+ unaccented), `entrar`, `log in` (`sign in` was
+  there), in both directions, and the AFTER connectors `at`, PT `ao`, ES `al` ("doble factor al iniciar sesión") — still only
+  RIGHT NEXT to the factor word (`entrar no mercado com dois fatores` stays none). **Measured:** the differential (f67e2ff vs the
+  fix) over 53,462 inputs — 7,168 string literals of both trees' test files and evals + a 27-frame sweep of every built-in keyword
+  (7 new frames: "Iniciar sesión con K", "Os administradores passam a entrar com K", "Require K at login", "K al iniciar
+  sesión", "K ao entrar", "Admins log in with K", "Vamos entrar com K"): 66 decisions changed, every one an input holding a factor
+  word next to a new auth verb / connector — 62 gained the weak +sec signal (a "Possible +sec" note) and 4 switched +sec ON
+  ("autenticação iniciar sessão de dois fatores": the auth word is the second signal); 0 literals changed, 0 tracks switched off.
+  Known cost: "entrar" is also everyday PT / ES ("O preço vai entrar com dois fatores de risco" reads a weak signal — a note,
+  never ON alone).
+  **Review 4:** (1) the catch-all `sentence` rule's phrases take every inflection the keyword matcher accepts (`(?:e?s|ed|ing|d)?`
+  — INFLECTION): "a multi-factored discount and a security deposit" kept the weak signal and was ON; (2) PT / ES put the adjective
+  AFTER the noun, between the auth word and the factor word — one optional adjective slot in the `before` sequence (`forte(s)`,
+  `fuerte`, `obrigatóri[ao]`, `obligatori[ao]`, `reforçad[ao]`, `reforzad[ao]`, `adicional`, `segur[ao]`): "autenticação forte de
+  dois fatores" / "autenticación obligatoria de doble factor" were a hint while "strong multi-factor authentication" is ON; (3) the
+  auth verbs conjugated: `log(?:s|ged|ging) in`, `sign(?:s|ed|ing) in`, `inicia[mn]? sess[ãa]o`, `inicia[mn]? sesi[óo]n`. Checked
+  with the reviewer's cases (tests/04-tracks.js) — no differential run this round. Known costs left: `acesso` / `acceso` /
+  `verificação` in their everyday sense ("Os dois fatores de acesso ao crédito… e a segurança do emprego" is ON), a noun phrase
+  between the two words ("autenticação dos administradores com dois fatores" stays a hint), and a negated auth noun whose factor
+  word still counts ("Sem autenticação de dois fatores… registo de auditoria" is ON — negation reaches the first keyword only).
+  **Reasoning:** a track kept off with weak / app-level words
+  (`signals[t]` non-empty) reads `classify.offWeak` ("+api: off — weak signal only ('endpoint'), not enough on its own.", EN /
+  PT / ES), never "no signals matched" beside a "Possible +api" note.
 - **Tracks are persisted in `.state.json` `tracks`** (create / add_track / add_track --remove write them)
   and `detectTracks()` reads them first. Only features without a saved list (pre-1.13) fall back to
   their files, and there a `[SaaS]`/`[AI]` marker counts only on a real markdown heading (a Mermaid node

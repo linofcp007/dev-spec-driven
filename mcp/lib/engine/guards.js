@@ -16,17 +16,17 @@ const i18n = require("../i18n.js");
 let activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords, existingFeature,
   expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher, guessLang,
   implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
-  isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectLang, readIfExists, readJson,
+  isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
-  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile;
+  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption;
 function __link(E) { ({ activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
-  isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectLang, readIfExists, readJson,
+  isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
-  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile } = E); }
+  validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption } = E); }
 
 // roadmap.json meta.guard — the opt-in guard mode read by hooks/guard-hook.js (PreToolUse): true, or "scope" (1.14 C1 — the
 // stricter level, guardLevel()).
@@ -157,7 +157,9 @@ CLI_SWITCHES.add("explain"); // 1.21 F2: classify "<text>" --explain (= spec_cla
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "pnpx", "npm", "pnpm", "yarn", "sudo", "doas", "env", "nohup",
   "time", "exec", "command", "call", "start", "timeout", "nice", "ionice", "setsid", "stdbuf", "wsl", "xargs", "!", "if", "then", "else", "elif",
-  "do", "while", "until"]);
+  "do", "while", "until", "winpty", "flock"]); // winpty, flock: 1.22 review
+// Wrappers whose first N plain words are theirs, not the program: flock <lockfile> <command> (1.22 review).
+const APPROVAL_POSITIONALS = new Map([["flock", 1]]);
 // Launchers that run a package's bin through a subcommand only: npm exec / npm x, pnpm dlx / pnpm exec, yarn dlx / yarn exec,
 // bun x / bun run, deno run (`yarn dev-spec …` — the CLI named directly — is found as it is). Any other subcommand runs no bin.
 const APPROVAL_SUBCOMMANDS = new Map([["npm", ["exec", "x"]], ["pnpm", ["dlx", "exec"]], ["yarn", ["dlx", "exec"]], ["bun", ["x", "run"]], ["deno", ["run"]]]);
@@ -182,13 +184,14 @@ const APPROVAL_OPTION_VALUES = new Map(Object.entries({
   stdbuf: "-i -o -e --input --output --error",
   xargs: "-I -n -P -L -d -E -s -a --max-args --max-procs --delimiter --arg-file --max-lines --max-chars --eof --replace",
   wsl: "-d -u --distribution --user --cd --shell-type",
+  flock: "-w --wait --timeout -E --conflict-exit-code -c --command", // -c: its script, read as one (APPROVAL_SHELLS)
 }).map(([p, list]) => [p, new Set(list.split(" "))]));
 APPROVAL_OPTION_VALUES.set("nodejs", APPROVAL_OPTION_VALUES.get("node"));
 APPROVAL_OPTION_VALUES.set("pnpx", APPROVAL_OPTION_VALUES.get("npx"));
 // Programs whose quoted argument is itself a script: bash -c "…", cmd /c "…", pwsh -Command "…", eval "…", Start-Process … "…",
 // env -S "…", npx -c "…" — read in that program's syntax (cmd → cmd.exe, the PowerShell ones → PowerShell, the rest → Bash).
 const APPROVAL_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "eval", "iex", "invoke-expression",
-  "start-process", "wsl", "su", "watch", "env", "npx", "pnpx", "npm", "pnpm", "yarn"]);
+  "start-process", "wsl", "su", "watch", "env", "npx", "pnpx", "npm", "pnpm", "yarn", "flock", "script"]); // flock / script -c "…": 1.22 review
 const APPROVAL_PS_SHELLS = new Set(["powershell", "pwsh", "iex", "invoke-expression", "start-process"]);
 // The shells that run a heredoc / here-string fed to them as their script (`bash <<'EOF' … EOF`, `sh <<< "…"`).
 const APPROVAL_STDIN_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "wsl", "su"]);
@@ -283,7 +286,7 @@ function shellCommandWords(cmd, mode) {
 // an unknown substitution / variable) → its index, or -1. A launcher that needs a subcommand (npm exec) returns the word that
 // stands where the subcommand should be when it is another one (`npm run …` → "run": no bin run).
 function programAt(words, raw) {
-  let prog = null, sub = null;
+  let prog = null, sub = null, positional = 0;
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
     if (w === "" || RE_APPROVAL_VAR_WORD.test(w)) continue;
@@ -292,6 +295,7 @@ function programAt(words, raw) {
       if (vals && vals.has(w)) i++;
       continue;
     }
+    if (positional > 0) { positional--; continue; } // flock's lock file
     if (sub) {
       const need = sub;
       sub = null;
@@ -303,6 +307,7 @@ function programAt(words, raw) {
     if (APPROVAL_WRAPPERS.has(p) && !RE_DEVSPEC_WORD.test(w) && !RE_DEVSPEC_WORD.test((raw && raw[i]) || "")) {
       prog = p;
       sub = APPROVAL_SUBCOMMANDS.get(p) || null;
+      positional = APPROVAL_POSITIONALS.get(p) || 0;
       continue;
     }
     return i;
@@ -662,23 +667,110 @@ function cliApprovalAction(args, level, meta) {
 }
 // Every approval / guard-down action a shell command runs (each simple command; the scripts of bash -c / cmd /c / pwsh -Command
 // …, of a heredoc / here-string fed to a shell; a write to .specs/roadmap.json).
+// 1.22 review: + the UNQUOTED forms — `cmd /c node cli\dev-spec.js approve …`, `pwsh -Command node cli/dev-spec.js approve …`
+// (the words after cmd's /c /k /r or pwsh / powershell's -Command / -c, joined: restScript), `Start-Process node -ArgumentList
+// 'cli/dev-spec.js','approve',…` (startProcessLine), `find … -exec node cli/dev-spec.js approve … ;` (findExecActions), and the
+// wrappers winpty / flock (+ `flock … -c "…"`, `script -c "…"`) — all allowed at deny before. One simple command's nested
+// actions are deduplicated (a quoted script is read both as a word and as the joined rest).
 function shellApprovalActions(command, level, depth, mode, meta) {
   const out = [];
-  for (const words of shellCommandWords(command, mode)) {
+  const segs = shellCommandWords(command, mode);
+  segs.forEach((words, si) => {
     const raw = words.raw || words;
     const at = devSpecWordAt(words, raw);
     if (at >= 0) out.push(...cliApprovalAction(words.slice(at + 1), level, meta));
     const w = roadmapWriteAction(words, raw);
     if (w) out.push(w);
-    if (depth >= APPROVAL_SHELL_DEPTH) continue;
+    if (depth >= APPROVAL_SHELL_DEPTH) return;
+    const nested = [], seen = new Set();
+    const add = (acts) => { for (const a of acts) { const k = JSON.stringify(a); if (!seen.has(k)) { seen.add(k); nested.push(a); } } };
+    const lex = (script, m) => { if (script && approvalCandidate(script)) add(shellApprovalActions(script, level, depth + 1, m, meta)); };
     const end = at >= 0 ? at : words.length;
+    const prog = at >= 0 ? -1 : programAt(words, raw);
     let shell = null;
     for (let j = 0; j < end; j++) {
-      if (shell && /\s/.test(words[j]) && approvalCandidate(words[j])) out.push(...shellApprovalActions(words[j], level, depth + 1, shell, meta));
+      if (shell && /\s/.test(words[j]) && approvalCandidate(words[j])) add(shellApprovalActions(words[j], level, depth + 1, shell, meta));
       const p = approvalProgram(words[j]);
       if (APPROVAL_SHELLS.has(p)) shell = approvalShellMode(p);
+      // the unquoted forms only where the word RUNS — the program (after launchers) or a find -exec's command: `echo cmd /c …` is text
+      // (PowerShell's `start` is Start-Process — programAt reads it as cmd.exe's launcher and points past it)
+      const psStart = p === "start" && mode === "ps" && words.slice(0, j).every((x) => x === "");
+      if (j !== prog && !psStart && !/^-(?:exec|execdir|ok|okdir)$/.test(words[j - 1] || "")) continue;
+      const rest = restScript(words, raw, j, p);
+      if (rest) lex(rest.script, rest.mode);
+      if (APPROVAL_START_PROCESS.has(p) && (p !== "start" || mode === "ps")) lex(startProcessLine(words, raw, j, segs[si + 1]), "cmd");
     }
-    if (words.stdinShell) for (const h of words.herestrings || []) if (approvalCandidate(h)) out.push(...shellApprovalActions(h, level, depth + 1, words.stdinShell, meta));
+    add(findExecActions(words, raw, level, meta));
+    if (words.stdinShell) for (const h of words.herestrings || []) if (approvalCandidate(h)) add(shellApprovalActions(h, level, depth + 1, words.stdinShell, meta));
+    out.push(...nested);
+  });
+  return out;
+}
+// A word of a joined script: one holding whitespace is quoted again ("C:\My Tools\cli\dev-spec.js"), so the script keeps its words.
+const joinScriptWords = (list) => list.map((w) => (/\s/.test(w) && !w.includes('"') ? '"' + w + '"' : w)).join(" ");
+// cmd's /c /k /r — or pwsh / powershell's -Command / -c (any abbreviation, `-` or `/`), -CommandWithArgs, -EncodedCommand
+// (pwshOption), Windows PowerShell's first positional (its default is -Command; pwsh 7's is -File: none) — at words[j] (program
+// p): the rest of the words is the script, joined (the raw words: a Windows path keeps its backslashes). → { script, mode } | null
+function restScript(words, raw, j, p) {
+  if (p === "cmd") {
+    for (let k = j + 1; k < words.length && /^\//.test(words[k]); k++) {
+      if (/^\/[ckr]$/i.test(words[k])) return k + 1 < words.length ? { script: joinScriptWords(raw.slice(k + 1)), mode: "cmd" } : null;
+    }
+    return null;
+  }
+  if (p !== "pwsh" && p !== "powershell") return null;
+  for (let k = j + 1; k < words.length; k++) {
+    const w = words[k];
+    if (/^[-/]/.test(w)) {
+      const o = pwshOption(w);
+      if (o === "script") return k + 1 < words.length ? { script: joinScriptWords(raw.slice(k + 1)), mode: "ps" } : null;
+      if (o === "file") return null;
+      if (o === "value") k++;
+      continue;
+    }
+    return p === "powershell" ? { script: joinScriptWords(raw.slice(k)), mode: "ps" } : null;
+  }
+  return null;
+}
+// Start-Process (saps; PowerShell's `start`) at words[j] → the command line it starts: -FilePath (or the first positional) and
+// -ArgumentList / -Args (or the second positional) — a string, a comma list ('a','b' — the lexer joins it as a,b), or an
+// @( … ) / ( … ) array (the lexer's next segment) — joined with spaces, as PowerShell hands them to the process. Or null.
+const APPROVAL_START_PROCESS = new Set(["start-process", "saps", "start"]);
+const START_PROCESS_VALUES = ["credential", "workingdirectory", "redirectstandarderror", "redirectstandardinput", "redirectstandardoutput",
+  "windowstyle", "verb", "environment"];
+function startProcessLine(words, raw, j, nextSeg) {
+  let file = null, args = null, argsFlag = false, pos = 0;
+  for (let k = j + 1; k < words.length; k++) {
+    const w = words[k];
+    if (/^-[A-Za-z]/.test(w)) {
+      const n = w.slice(1).toLowerCase().replace(/:$/, "");
+      if (n === "path" || n === "pspath" || (n.length >= 1 && "filepath".startsWith(n))) file = raw[++k] != null ? raw[k] : null;
+      else if (n === "args" || (n.length >= 1 && "argumentlist".startsWith(n))) { argsFlag = true; args = raw[++k] != null ? raw[k] : null; }
+      else if (["rse", "rsi", "rso", "wd"].includes(n) || (n.length >= 3 && START_PROCESS_VALUES.some((v) => v.startsWith(n)))) k++;
+      continue;
+    }
+    if (pos === 0) file = raw[k];
+    else if (pos === 1) { args = raw[k]; argsFlag = true; }
+    pos++;
+  }
+  if (!file) return null;
+  if (argsFlag && (args == null || args === "@") && nextSeg) args = (nextSeg.raw || nextSeg).join(",");
+  const list = args == null ? [] : String(args).split(",").map((a) => a.trim()).filter(Boolean);
+  return joinScriptWords([file]) + (list.length ? " " + list.join(" ") : "");
+}
+// find … -exec / -execdir / -ok / -okdir <command> … ; (or +) → the actions of each such command (the CLI in its program position).
+function findExecActions(words, raw, level, meta) {
+  const k0 = programAt(words, raw);
+  if (k0 < 0 || approvalProgram(words[k0]) !== "find") return [];
+  const out = [];
+  for (let k = k0 + 1; k < words.length; k++) {
+    if (!/^-(?:exec|execdir|ok|okdir)$/.test(words[k])) continue;
+    let e = k + 1;
+    while (e < words.length && words[e] !== ";" && words[e] !== "+") e++;
+    const sub = words.slice(k + 1, e), subRaw = raw.slice(k + 1, e);
+    const at = devSpecWordAt(sub, subRaw);
+    if (at >= 0) out.push(...cliApprovalAction(sub.slice(at + 1), level, meta));
+    k = e;
   }
   return out;
 }
@@ -790,9 +882,9 @@ function approvalGuardDecision(payload, level, opts = {}) {
 // and the scope guard (roadmap.json meta.guard = "scope": a code edit no open task plans in _Implements:_ asks).
 // ---------------------------------------------------------------------------
 
-const STOP_RECENT_HOURS = 4; // "recently active": a task ticked, evidence recorded or tasks.md edited within these hours
+const STOP_RECENT_HOURS = 4; // "recently active": a task ticked, evidence recorded or tasks.md edited (lastEditAt) within these hours
 const STOP_MESSAGE_MAX = 20000; // the message's LAST characters are read (the claim sits in the closing lines)
-const STOP_MAX_FEATURES = 50; // feature folders looked at, at most (bounded: the hook runs at the end of every turn)
+const STOP_MAX_FEATURES = 50; // recently active features checked, at most — the most recent first (bounded: the hook runs at the end of every turn)
 const STOP_TASKS_SHOWN = 8; // task numbers listed per feature in the reason
 const STOP_REPORT_MAX = 256 * 1024; // bytes of an implementer's report read
 const STOP_WINDOW = 3; // words before a claim, in its sentence, looked at for a negator / condition
@@ -858,6 +950,10 @@ function stopPatterns() {
     admissions: all("admissions").map(word),
     negators: new Set(all("negators").map((w) => w.toLowerCase())),
     fixed: new Set(all("fixed").map((w) => w.toLowerCase())),
+    // 1.22 review: a zero count right before an admission ("0 tests failing", "none of the tests fail") — read on the few
+    // characters before it, so `\s+$` anchors it to the admission; "now pass(es)" after a failure in its clause (fixed).
+    zero: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + all("zeroes").join("|") + ")\\s+$", "iu"),
+    passNow: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + all("passNow").join("|") + ")(?![\\p{L}\\p{N}_])", "iu"),
   };
   return STOP_PATTERNS;
 }
@@ -895,13 +991,23 @@ function stopNegates(words, i, langs, lang) {
 // verbs and "previously" — never an auxiliary like "was" / "had", which any honest "2 tests failed and I was unable to fix
 // them" holds) among the 4 words before it in its clause, or the 4 words after it before the clause ends — and no negator
 // anywhere in that window ("I haven't fixed the 2 failing tests", "the 3 failing tests were not fixed").
+// 1.22 review: …or a "now pass(es)" (i18n stopGate.passNow) after it in its clause with no negator before it ("Fixed the bug;
+// the 2 failing tests now pass" — the `;` cut the fixed word off, and it read as an admission).
 function stopPastFailure(text, start, end, wordsOf) {
   const P = stopPatterns();
   const neg = (w) => P.negators.has(w) || /n['’]t$/.test(w);
   const before = wordsOf(text.slice(stopClauseStart(text, start) + 1, start)).slice(-4).map((w) => w.toLowerCase());
-  const after = wordsOf((text.slice(end, end + STOP_CLAUSE_SPAN).match(/^[^\n.!?;:,—–]*/) || [""])[0]).slice(0, 4).map((w) => w.toLowerCase());
+  const tail = (text.slice(end, end + STOP_CLAUSE_SPAN).match(/^[^\n.!?;:,—–]*/) || [""])[0];
+  const after = wordsOf(tail).slice(0, 4).map((w) => w.toLowerCase());
   const fixedIn = (ws) => ws.some((w) => P.fixed.has(w)) && !ws.some(neg);
-  return fixedIn(before) || fixedIn(after);
+  const now = P.passNow.exec(tail);
+  return fixedIn(before) || fixedIn(after) || (!!now && !wordsOf(tail.slice(0, now.index)).some((w) => neg(w.toLowerCase())));
+}
+// 1.22 review: is the admission at `start` counted as ZERO ("0 tests failing", "no tests fail", "none of the tests fail", PT
+// "nenhum teste falha", ES "ninguna prueba falla")? A zero word (i18n stopGate.zeroes) right before it in its clause.
+function stopZeroCount(text, start) {
+  const from = Math.max(stopClauseStart(text, start) + 1, start - 60);
+  return stopPatterns().zero.test(text.slice(from, start));
 }
 // The message as prose: its last STOP_MESSAGE_MAX characters without fenced code, inline code, HTML comments and quoted
 // lines (> …) — a pasted command output or a quoted instruction claims nothing.
@@ -946,12 +1052,15 @@ function stopClaims(message) {
     if (tail && tail[1] === "?") continue; // a question claims nothing
     if (found.length < 10) found.push(h.text.trim());
   }
-  // An admission counts unless it names a failure already fixed ("I fixed the 2 failing tests", "Previously 4 tests failed").
+  // An admission counts unless it names a failure already fixed ("I fixed the 2 failing tests", "Previously 4 tests failed",
+  // "the 2 failing tests now pass") or a count of zero ("0 tests failing", "none of the tests fail" — 1.22 review: those
+  // were read as admissions and the gate stayed silent on "All tasks done. 0 tests failing.").
   const admitted = P.admissions.some((re) => {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(text)) !== null) {
       if (m[0] === "") { re.lastIndex++; continue; }
+      if (stopZeroCount(text, m.index)) continue;
       if (!stopPastFailure(text, m.index, m.index + m[0].length, wordsOf)) return true;
     }
     return false;
@@ -962,11 +1071,14 @@ function stopClaims(message) {
 // the records kept aside under `others` included) — only what the engine RECORDED. Never a file date: a fresh clone stamps
 // every tasks.md "now", and a repo someone else wrote then made the gate fire on unrelated work and hand the agent that repo's
 // _Verify:_ commands. A stamp in the future (a committed .state.json can hold any date) is ignored.
+// 1.22 review: + lastEditAt — tasks.md / change.md saved through the Write / Edit tool (recordSpecEdit, the PostToolUse spec-hook):
+// a box ticked by hand never counted, so "All tasks done" after hand ticks read `no-recent`.
 function stopActivity(state) {
   let best = null;
   const horizon = Date.now() + 5 * 60 * 1000; // clock skew tolerated
   const see = (v) => { const t = typeof v === "string" ? Date.parse(v) : NaN; if (Number.isFinite(t) && t <= horizon && (best == null || t > best)) best = t; };
   see(state.lastTickAt);
+  see(state.lastEditAt);
   if (isRecord(state.ticks)) Object.values(state.ticks).forEach(see);
   for (const slot of Object.values(isRecord(state.evidence) ? state.evidence : {})) {
     for (const r of evidenceRecords(slot)) {
@@ -976,6 +1088,23 @@ function stopActivity(state) {
     }
   }
   return best;
+}
+// 1.22 review — a feature's tasks.md (a change's change.md) saved through the Write / Edit tool is activity the stop gate sees:
+// hooks/spec-hook.js (PostToolUse) stamps `lastEditAt` in the feature's .state.json — under its lock, with a short wait (a hook
+// has 10 s; busy → nothing stamped, never an error). What the engine RECORDS, never a file date (a fresh clone stamps every file
+// "now"). git's merge driver keeps the later stamp (state.js). → { ok: true, feature, at } | { ok: false, … }
+const SPEC_EDIT_LOCK_WAIT_MS = 2000;
+function recordSpecEdit(projectDir, name) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  return withFeatureLock(f.dir, () => {
+    const state = readState(projectDir, f.slug);
+    if (state.invalid) return { ok: false, error: state.invalid }; // never "repaired"
+    const at = new Date().toISOString();
+    state.lastEditAt = at;
+    writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
+    return { ok: true, feature: f.slug, at };
+  }, { waitMs: SPEC_EDIT_LOCK_WAIT_MS, onBusy: () => ({ ok: false, busy: true }) });
 }
 // One unverified task as the reason lists it: "#3 (latest run failed)".
 function stopTaskLabel(d, lng) {
@@ -989,8 +1118,8 @@ function stopTaskLabel(d, lng) {
 // verificationStatus reports unverified (a failed run, a note on a runnable _Verify:_, stale evidence, an unexpected pass,
 // no evidence for a runnable _Verify:_…) or, every active task done, project checks without a passing run since the last
 // task activity (suiteStatus). opts: { message, agent (the subagent type — a spec-implementer is checked on its REPORT: it
-// never ticks tasks), stopHookActive (the hook already sent this stop back once: never twice in a row) }. The reason is in
-// the project language (an implementer's: its feature's). Read-only and bounded; a feature whose .state.json is unreadable
+// never ticks tasks; 1.22: a spec-simplifier on its simplification report), stopHookActive (the hook already sent this
+// stop back once: never twice in a row) }. The reason is in the project language (a subagent's: its feature's). Read-only and bounded; a feature whose .state.json is unreadable
 // is skipped — the gate never blocks on its own trouble.
 // → { ok, block, why, lang, claims, features: [{feature, unverified: [{number, reason}], suite: [{name, status}]}], reason? }
 function stopCheck(projectDir, opts = {}) {
@@ -1004,17 +1133,25 @@ function stopCheck(projectDir, opts = {}) {
   const cl = stopClaims(opts.message);
   const agent = typeof opts.agent === "string" ? opts.agent.trim() : "";
   if (agent && /(?:^|:)spec-implementer$/i.test(agent)) return implementerStopCheck(pdir, String(opts.message == null ? "" : opts.message), cl, res);
+  if (agent && /(?:^|:)spec-simplifier$/i.test(agent)) return simplifierStopCheck(pdir, String(opts.message == null ? "" : opts.message), cl, res);
   if (!cl.claim) return res(false, "no-claim");
   if (cl.admitted) return res(false, "admitted", { claims: cl.claims });
   const since = Date.now() - STOP_RECENT_HOURS * 3600 * 1000;
   const features = [];
   const clean = [];
-  for (const f of featureDirs(pdir).filter((x) => !x.archived).slice(0, STOP_MAX_FEATURES)) {
-    const tasksFile = path.join(f.dir, "tasks.md");
+  // 1.22 review: the activity of EVERY non-archived feature (one .state.json read each — cheap), then the STOP_MAX_FEATURES most
+  // recently active are checked (verificationStatus / suiteStatus — the costly part), in folder order. The cap used to apply
+  // to the folders first: the 51st feature alphabetically ("zeta", ticked a minute ago) was never looked at — `no-recent`.
+  const recent = [];
+  featureDirs(pdir).filter((x) => !x.archived).forEach((f, order) => {
     const state = readState(pdir, f.slug);
-    if (state.invalid) continue; // unreadable state: never block on it (doctor reports it)
+    if (state.invalid) return; // unreadable state: never block on it (doctor reports it)
     const last = stopActivity(state);
-    if (last == null || last < since) continue;
+    if (last != null && last >= since) recent.push({ f, state, last, order });
+  });
+  const checked = recent.sort((a, b) => b.last - a.last || a.order - b.order).slice(0, STOP_MAX_FEATURES).sort((a, b) => a.order - b.order);
+  for (const { f, state } of checked) {
+    const tasksFile = path.join(f.dir, "tasks.md");
     const tracks = detectTracks(f.dir);
     const blocks = taskBlocks(activeTasks(readIfExists(tasksFile) || "", tracks) || "");
     const vs = verificationStatus(pdir, f.slug, f.dir);
@@ -1046,14 +1183,25 @@ function stopCheck(projectDir, opts = {}) {
     reason: lines.join("\n"),
   });
 }
+// A subagent's status as the gates read it: its prose (stopProse) with a status TOKEN in inline code unwrapped first — only
+// on a line that starts with "Status" ("**Status:** `DONE`" is a status, not code) — while every other code span still
+// drops out ("`order.status === "blocked"`" or "with status `blocked`" in a commit line is no status; 1.22 reviews 2–3).
+const statusProse = (message) => stopProse(String(message).replace(/^([ \t>*_#+-]*status\W{0,8})`\s*(done_with_concerns|done|blocked|needs_context|no_changes)\s*`/gim, "$1$2"));
+const STATUS_DONE_RE = /(?<![\p{L}_])status\W{0,8}done(?:_with_concerns)?(?![\p{L}_])/iu;
+const STATUS_NOT_DONE_RE = /(?<![\p{L}_])status\W{0,8}(?:blocked|needs_context)(?![\p{L}_])/iu;
 // A spec-implementer's stop (SubagentStop): it never ticks tasks (the controller does, after review), so its gate is its
 // REPORT — reporting DONE (or DONE_WITH_CONCERNS) for a task whose _Verify:_ holds a runnable command needs the report file
 // (.specs/<feature>/.execution/task-N-report.md, named in the reply as the protocol asks) to carry each command and an exit
 // code. BLOCKED / NEEDS_CONTEXT, no report path in the reply, or no runnable _Verify:_ → allowed.
 function implementerStopCheck(pdir, message, cl, res) {
-  if (/(?<![\p{L}_])status\W{0,8}(?:blocked|needs_context)(?![\p{L}_])/iu.test(stopProse(message))) return res(false, "not-done");
-  if (!cl.claim) return res(false, "no-claim");
-  const m = message.slice(-STOP_MESSAGE_MAX).match(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+task-(\d+)-(?:report|brief)\.md/i);
+  // 1.22 review: a status in backticks (`DONE`) is a status too — it used to read as no claim and skip the report
+  const prose = statusProse(message);
+  if (STATUS_NOT_DONE_RE.test(prose)) return res(false, "not-done");
+  if (!cl.claim && !STATUS_DONE_RE.test(prose)) return res(false, "no-claim");
+  // 1.22 review: the LAST task-N-report.md path the reply names (a report wins over a brief) — "Task 2 builds on task 1 (see
+  // …/task-1-report.md). Report: …/task-2-report.md" was checked against task 1's report and passed.
+  const paths = [...message.slice(-STOP_MESSAGE_MAX).matchAll(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+task-(\d+)-(report|brief)\.md/gi)];
+  const m = paths.filter((x) => x[3].toLowerCase() === "report").pop() || paths.pop();
   if (!m) return res(false, "no-task", { claims: cl.claims });
   const f = existingFeature(pdir, m[1]);
   if (!f.ok) return res(false, "no-task", { claims: cl.claims });
@@ -1065,22 +1213,14 @@ function implementerStopCheck(pdir, message, cl, res) {
   if (!verify.length) return res(false, "nothing-to-verify", info);
   const file = path.join(f.dir, ".execution", `task-${n}-report.md`);
   const rel = toPosix(path.relative(pdir, file));
-  let report = null;
-  try {
-    const fd = fs.openSync(file, "r");
-    try {
-      const buf = Buffer.alloc(Math.min(STOP_REPORT_MAX, fs.fstatSync(fd).size));
-      report = buf.toString("utf8", 0, fs.readSync(fd, buf, 0, buf.length, 0));
-    } finally { fs.closeSync(fd); }
-  } catch { report = null; }
+  const report = readStopReport(file);
   const X = i18n.msg(lng).stopGate.implementer;
-  const flat = (s) => s.replace(/`/g, "").replace(/\s+/g, " ").trim();
+  const flat = flatReport;
   let problem = null;
   if (report == null) problem = X.noReport(rel);
   else {
     const body = flat(report);
-    // "exit 0", "exit code: 1", "exitCode 0", "exited with code 0", "exit status 2", PT "código de saída 0", ES "código de salida 0"
-    const codes = [...body.matchAll(/(?<![\p{L}_])(?:exit(?:ed)?(?:\s+with)?(?:[\s_-]*(?:code|status))?|c[óo]digo\s+de\s+(?:sa[íi]da|salida))\W{0,4}(-?\d+)/giu)].map((x) => parseInt(x[1], 10));
+    const codes = reportExitCodes(body).map((x) => x.code);
     const missing = verify.filter((c) => !body.includes(flat(c)));
     const cmds = (missing.length ? missing : verify).map((c) => "`" + c + "`").join(", ");
     if (missing.length || !codes.length) problem = X.noRun(rel, cmds);
@@ -1091,6 +1231,97 @@ function implementerStopCheck(pdir, message, cl, res) {
   }
   if (!problem) return res(false, "report-ok", info);
   return res(true, "implementer-evidence", { ...info, report: rel, reason: [X.head(n, f.slug) + " " + problem, X.todo].join("\n") });
+}
+// A subagent's report, at most STOP_REPORT_MAX bytes of it (null when it can't be read) — the stop gates read one file
+// each: the implementer's from its start, the simplifier's from its END (`tail`), where its final runs are.
+function readStopReport(file, tail) {
+  try {
+    const fd = fs.openSync(file, "r");
+    try {
+      const size = fs.fstatSync(fd).size;
+      const buf = Buffer.alloc(Math.min(STOP_REPORT_MAX, size));
+      return buf.toString("utf8", 0, fs.readSync(fd, buf, 0, buf.length, tail ? size - buf.length : 0));
+    } finally { fs.closeSync(fd); }
+  } catch { return null; }
+}
+// A report or a command as the gates compare them: backticks dropped, whitespace runs collapsed.
+const flatReport = (s) => s.replace(/`/g, "").replace(/\s+/g, " ").trim();
+// The exit codes a (flattened) report writes out, in order, with where each sits: "exit 0", "exit code: 1", "exitCode 0",
+// "exited with code 0", "exit status 2", PT "código de saída 0", ES "código de salida 0".
+function reportExitCodes(body) {
+  return [...body.matchAll(/(?<![\p{L}_])(?:exit(?:ed)?(?:\s+with)?(?:[\s_-]*(?:code|status))?|c[óo]digo\s+de\s+(?:sa[íi]da|salida))\W{0,4}(-?\d+)/giu)]
+    .map((x) => ({ code: parseInt(x[1], 10), index: x.index }));
+}
+// The runs a simplification report proves its claim with: everything after its LAST "## Final runs" heading (a heading at
+// the margin, any level; English-stable like a marker — PT "Execuções finais" / ES "Ejecuciones finales" are read too) to
+// the END of the file — the section is the report's last, so nothing after it ends it: a "# pass 212" output line can't,
+// and a revert round written below it without a new heading still counts. A run is ONE line at the margin: an optional
+// bullet, the command in backticks (``double`` when it holds one), then its exit code — "- `npm test` → exit 0 (212
+// passing)" — or an indented bullet with both (a run nested under a group). Other indented lines are output and fenced
+// blocks (counted from the heading — the read window may start inside one) are skipped, so a code quoted in output never
+// counts, and a command that starts with a check's (`npm test -- t/x.test.js`) is another command. Text reads have
+// limits — a run pasted only inside a fenced transcript is not seen; spec_finish's code-changed is the hard gate.
+// → null without such a heading, else [{command (flattened), code (null: the line names none)}] — a command's last line wins.
+function finalRuns(report) {
+  const lines = report.split(/\r?\n/);
+  let start = -1;
+  lines.forEach((s, i) => { if (/^#{1,6}\s*(?:final runs|execu[çc][õo]es finais|ejecuciones finales)(?![\p{L}])/iu.test(s)) start = i; });
+  if (start < 0) return null;
+  const runs = new Map();
+  let fence = false;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^\s{0,3}(?:`{3,}|~{3,})/.test(lines[i])) { fence = !fence; continue; }
+    if (fence) continue;
+    const m = lines[i].match(/^(\s*)((?:[-*+]|\d+[.)])\s+)?(?:``\s?(.+?)\s?``|`([^`]+)`)(.*)$/);
+    if (!m) continue;
+    const code = (reportExitCodes(flatReport(m[5]))[0] || {}).code;
+    // indented, only a bullet + a command + its exit code is a run (one nested under a group bullet — review 3: a failing one
+    // was skipped as output); any other indented line is output
+    if (m[1] && !(m[2] && code !== undefined)) continue;
+    const command = flatReport(m[3] !== undefined ? m[3] : m[4]);
+    runs.delete(command);
+    runs.set(command, code === undefined ? null : code);
+  }
+  return [...runs].map(([command, code]) => ({ command, code }));
+}
+// 1.22 — a spec-simplifier's stop (SubagentStop): it rewrites code that is already reviewed and verified, so its DONE (or
+// DONE_WITH_CONCERNS) needs its report (.specs/<feature>/.execution/simplify-report.md, named in the reply) to END with the
+// proof — a "## Final runs" section (finalRuns) where every run exits 0 and, with project checks (meta.checks), each check's
+// command is one of them. A baseline run higher up never stands in, a failed run never hides behind a later passing one,
+// and a run line without its exit code is no proof. BLOCKED / NEEDS_CONTEXT / NO_CHANGES, no claim, or no report path in
+// the reply → allowed.
+function simplifierStopCheck(pdir, message, cl, res) {
+  const prose = statusProse(message);
+  if (STATUS_NOT_DONE_RE.test(prose)) return res(false, "not-done");
+  if (/(?<![\p{L}_])status\W{0,8}no_changes(?![\p{L}_])/iu.test(prose)) return res(false, "no-changes");
+  if (!cl.claim && !STATUS_DONE_RE.test(prose)) return res(false, "no-claim");
+  const m = message.slice(-STOP_MESSAGE_MAX).match(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+simplify-report\.md/i);
+  if (!m) return res(false, "no-report", { claims: cl.claims });
+  const f = existingFeature(pdir, m[1]);
+  if (!f.ok) return res(false, "no-report", { claims: cl.claims });
+  const lng = featureLang(pdir, f.slug);
+  const info = { claims: cl.claims, lang: lng, feature: f.slug };
+  const file = path.join(f.dir, ".execution", "simplify-report.md");
+  const rel = toPosix(path.relative(pdir, file));
+  const report = readStopReport(file, true);
+  const X = i18n.msg(lng).stopGate.simplifier;
+  const checks = [...new Set(projectChecks(pdir).checks.map((c) => flatReport(c.command)))];
+  let problem = null;
+  if (report == null) problem = X.noReport(rel);
+  else {
+    const runs = finalRuns(report);
+    if (!runs || !runs.length) problem = X.noFinal(rel);
+    else {
+      const code = new Map(runs.map((r) => [r.command, r.code]));
+      const list = (a) => a.map((c) => "`" + c + "`").join(", ");
+      const unrun = checks.filter((c) => code.get(c) == null).concat(runs.filter((r) => r.code == null && !checks.includes(r.command)).map((r) => r.command));
+      const failing = runs.filter((r) => r.code != null && r.code !== 0).map((r) => r.command);
+      if (unrun.length) problem = X.noRun(rel, list(unrun));
+      else if (failing.length) problem = X.notPassing(rel, list(failing));
+    }
+  }
+  if (!problem) return res(false, "simplify-ok", info);
+  return res(true, "simplifier-evidence", { ...info, report: rel, reason: [X.head(f.slug) + " " + problem, X.todo].join("\n") });
 }
 
 // The scope guard's decision for a code file once some feature has approved, unfinished tasks (guardCheck, level "scope"):
@@ -1159,8 +1390,9 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, RE
   lowersApprovalGuard, ANSI_C_ESCAPES, ansiCEscape, PS_ESCAPES, shellCommandWords, programAt, stdinShellMode,
   shellLexList, shellSubstitutionsIn, approvalProgram, devSpecWordAt, roadmapWriteAction, approvalStr, approvalTruthy,
   guardRank, guardName, initGuardDowns, initRolesInput, initChecksInput, cliApprovalAction, shellApprovalActions,
+  APPROVAL_POSITIONALS, joinScriptWords, restScript, APPROVAL_START_PROCESS, START_PROCESS_VALUES, startProcessLine, findExecActions,
   approvalExtras, mcpApprovalAction, approvalCommand, approvalGuardDecision, STOP_RECENT_HOURS, STOP_MESSAGE_MAX,
   STOP_MAX_FEATURES, STOP_TASKS_SHOWN, STOP_REPORT_MAX, STOP_WINDOW, guardLevel, guardInput, stopCheckEnabled,
   setStopCheck, stopPatterns, STOP_CLAUSE_SPAN, stopClauseStart, RE_ES_NO_NEXT, RE_ES_SE_NEXT, stopNegates,
-  stopPastFailure, stopProse, stopClaims, stopActivity, stopTaskLabel, stopCheck, implementerStopCheck,
+  stopPastFailure, stopZeroCount, stopProse, stopClaims, stopActivity, SPEC_EDIT_LOCK_WAIT_MS, recordSpecEdit, stopTaskLabel, stopCheck, implementerStopCheck,
   scopeGuardDecision, __link };

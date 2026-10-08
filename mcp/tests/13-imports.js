@@ -51,7 +51,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require }) => {
       "GET /users/:id src/users.controller.ts:4", "POST /users src/users.controller.ts:6", "GET /api/items src/app/api/items/route.ts:1",
       "GET /items/{item_id} api/main.py:4", "POST /v1/users api/main.py:6", "GET /login web/app.py:4", "POST /login web/app.py:4", "GET /me/profile web/app.py:6",
       "ANY /cart/ shop/urls.py:3", "GET /api/orders svc/src/main/java/com/x/OrderController.java:5", "POST /api/orders svc/src/main/java/com/x/OrderController.java:7",
-      "GET /api/[controller]/{id} net/Controllers/ItemsController.cs:4", "GET /ping net/Program.cs:2", "GET /about config/routes.rb:2", "RESOURCES /orders config/routes.rb:3",
+      "GET /api/Items/{id} net/Controllers/ItemsController.cs:4", "GET /ping net/Program.cs:2", "GET /about config/routes.rb:2", "RESOURCES /orders config/routes.rb:3", // [controller] → Items (1.22 review)
       "GET /dashboard routes/web.php:2", "POST /posts routes/web.php:3", "GET /home src/Controller/HomeController.php:3", "ANY /healthz cmd/api/main.go:4", "GET /v1/users cmd/api/main.go:6",
       "GET /f src/f.js:2", "POST /h src/h.ts:3", "PUT /koa src/k.js:3", "GET /chi cmd/chi/main.go:5", "PUT /api/orders/{id} svc/src/main/java/com/x/OrderController.java:9"];
     ok(scan6.ok && wantRoutes.every((k) => routeKeys.includes(k)) && scan6.candidateEndpoints === 30 && scan6.candidateEndpoints === scan6.routes.length && scan6.endpointFiles === 17,
@@ -600,8 +600,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require }) => {
       /## Functional Requirements\n- \*\*FR-1\*\* — Users can create a todo with a title\.\n- \*\*FR-2\*\* — Users can mark a todo done\./.test(bmReq) &&
       /## Non-Functional Requirements\n- \*\*NFR-1\*\* — Pages load in under 2 seconds on 3G\./.test(bmReq) && /^## Summary\nTaskFlow helps small teams/m.test(bmReq) && !/### Functional|### Non Functional/.test(bmReq),
       "C3 spec_import bmad: stories in story order (the story file wins over the PRD's copy) → US-n, their ACs ('1:' and '1.') → US-n.AC-m (EARS when they read like one), FR1/NFR1 → FR-1/NFR-1 lines, Background → summary, the name from the PRD title (got " + JSON.stringify(bmb).slice(0, 300) + ")");
-    ok(/## US-1: Create todos\n- \[x\] 1\. \[US1\] Task 1: Todo model\n  - _Requirements: US-1\.AC-1_\n- \[x\] 2\. \[US1\] Subtask 1\.1: add `src\/models\/todo\.ts`\n  - _Implements: src\/models\/todo\.ts_\n/.test(bmTasks) &&
-      /- \[ \] 3\. \[US1\] Task 2: List ordering \(AC: 2, 7\)\n  - _Requirements: US-1\.AC-2_\n/.test(bmTasks) && /- \[ \] 4\. \[US1\] Subtask 2\.1/.test(bmTasks) &&
+    // 1.22 review: a subtask with no (AC: n) of its own carries its parent task's references
+    ok(/## US-1: Create todos\n- \[x\] 1\. \[US1\] Task 1: Todo model\n  - _Requirements: US-1\.AC-1_\n- \[x\] 2\. \[US1\] Subtask 1\.1: add `src\/models\/todo\.ts`\n  - _Requirements: US-1\.AC-1_\n  - _Implements: src\/models\/todo\.ts_\n/.test(bmTasks) &&
+      /- \[ \] 3\. \[US1\] Task 2: List ordering \(AC: 2, 7\)\n  - _Requirements: US-1\.AC-2_\n/.test(bmTasks) && /- \[ \] 4\. \[US1\] Subtask 2\.1[^\n]*\n  - _Requirements: US-1\.AC-2_\n/.test(bmTasks) &&
       /- \[ \] 5\. \[US1\] Task 3: End-to-end check\n  - _Requirements: US-1\.AC-1, US-1\.AC-2_/.test(bmTasks) &&
       bmb.mapping["Story 1.1 / Task 2"] === "task 3" && bmb.warnings.some((w) => /Story 1\.1, 'Task 2: List ordering \(AC: 2, 7\)': AC reference\(s\) 7 match no criterion/.test(w)) &&
       bmb.warnings.some((w) => /BMAD workflow records not imported \(left in place\): Change Log \(PRD, 1\.1\), Status \(1\.1\)/.test(w)) &&
@@ -1299,5 +1300,200 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require }) => {
       !missExt.length && E.PLAN_FILE_EXT.has("md") && E.PLAN_FILE_EXT.has("json"),
       "1.21.1 languages: planPaths reads `Greeter.psm1`, `Greeter.psd1`, `deploy.bats`, `scripts/build.cmd` … as files — PLAN_FILE_EXT holds every CODE_EXT / test-only extension but the ambiguous few, which need a folder part (`conf.d`, `this.el`, `a.s`, `color.r`, `args.cmd`, `obj.m` are object fields — 1.21.1 review) (got " +
       js([pp, pp2, missExt]) + ")");
+  }
+
+  { // 1.22 review — the brownfield scan / coverage and the importers (each finding reproduced at e2bb4d1, guarded here)
+    const js = (v) => JSON.stringify(v);
+    const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const rd = (root, ...p) => { try { return fs.readFileSync(path.join(root, ...p), "utf8"); } catch { return ""; } };
+    const raw = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); return { isError: !!res.result.isError, body: payload(res) }; };
+    const E = require("./lib/engine/index.js");
+
+    // F2. The cap counts code files and manifests only — 60 PNGs in assets/ before src/ used up a cap of 50 (filesScanned 50,
+    // truncated, 0 routes); `truncated` = a code file was left unscanned; a huge tree still stops at the entry cap.
+    const cp = path.join(tmp, "proj-122-cap");
+    for (let i = 0; i < 60; i++) put(cp, `assets/img${String(i).padStart(3, "0")}.png`, "x");
+    put(cp, "src/server.js", "const app = require('express')();\napp.get('/health', h);\n");
+    put(cp, "src/util.js", "module.exports = 1;\n");
+    const capScan = S.scanCodebase(cp, { cap: 50 }), capCov = S.coverage(cp, { cap: 50 });
+    const capTight = S.scanCodebase(cp, { cap: 1 }), capExact = S.scanCodebase(cp, { cap: 2 }), capCovTight = S.coverage(cp, { cap: 1 });
+    const ec = path.join(tmp, "proj-122-entrycap");
+    for (let i = 0; i < 30; i++) put(ec, `a/f${i}.png`, "x");
+    put(ec, "z/main.js", "1;\n");
+    const ecWalk = E.walkProject(ec, 100, () => {}, { counts: (rel) => E.isCodeFile(rel), entryCap: 20 });
+    ok(capScan.ok && capScan.candidateEndpoints === 1 && capScan.truncated === false && capScan.filesScanned === 62 && capScan.codeFilesCounted === 2 &&
+      capCov.codeFiles === 2 && capCov.truncated === false && capTight.truncated === true && capTight.candidateEndpoints === 1 && capExact.truncated === false &&
+      capCovTight.truncated === true && capCovTight.codeFiles === 1 && ecWalk.truncated === true && ecWalk.total === 0 && ecWalk.files < 20,
+      "1.22 review F2: spec_scan's cap and coverage's count code files and manifests only — 60 PNGs before src/ no longer leave the code unread (a cap of 50 reads the route, not truncated); truncated means a code file was skipped (cap 1 of 2: yes, cap 2: no); the entry cap still ends a huge tree (got " +
+      js([capScan.candidateEndpoints, capScan.truncated, capScan.filesScanned, capScan.codeFilesCounted, capCov.codeFiles, capTight.truncated, capExact.truncated, capCovTight.codeFiles, ecWalk]) + ")");
+
+    // F3. Generated / vendored folders: the root .gitignore's plain directory patterns ([Bb]in/, [Oo]bj/, /_build/, /deps, Pods/,
+    // /public/build — wildcards and negations ignored), a folder whose own .gitignore ignores everything (Laravel's
+    // storage/framework/views), and testdata/ (fixtures: no code, no test, no route). Never a blanket bin/.
+    const gi = path.join(tmp, "proj-122-gitignore");
+    put(gi, ".gitignore", "# build output\n[Bb]in/\n[Oo]bj/\n/_build/\n/deps\nPods/\n*.log\n!important.log\n/public/build\n");
+    put(gi, "src/Api/Controllers/HomeController.cs", "[ApiController]\n[Route(\"api/[controller]\")]\npublic class HomeController : ControllerBase {\n  [HttpGet(\"ping\")]\n  public IActionResult Ping() => Ok();\n}\n");
+    put(gi, "src/Api/obj/Debug/net8.0/Api.AssemblyInfo.cs", "[assembly: System.Reflection.AssemblyVersion(\"1.0\")]\n");
+    put(gi, "src/Api/obj/Debug/net8.0/Api.GlobalUsings.g.cs", "global using System;\n");
+    put(gi, "src/Api/bin/Debug/Gen.cs", "class Gen {}\n");
+    put(gi, "_build/dev/lib/app/app.ex", "defmodule App do end\n");
+    put(gi, "deps/plug/lib/plug.ex", "defmodule Plug do end\n");
+    put(gi, "lib/app/deps/helper.ex", "defmodule App.Deps.Helper do end\n"); // /deps is anchored to the root: this one stays code
+    put(gi, "ios/Pods/AFNetworking/AFURLSessionManager.m", "@implementation X @end\n");
+    put(gi, "ios/App/AppDelegate.swift", "import UIKit\n");
+    put(gi, "storage/framework/views/.gitignore", "*\n!.gitignore\n");
+    put(gi, "storage/framework/views/3f2a1b.php", "<?php Route::get('/compiled', h);\n");
+    put(gi, "storage/app/.gitignore", "*\n!public/\n!.gitignore\n"); // re-includes more than itself: not "everything"
+    put(gi, "storage/app/keep.php", "<?php return 1;\n");
+    put(gi, "pkg/server/server.go", "package server\nimport \"net/http\"\nfunc Routes() { http.HandleFunc(\"/real\", h) }\n");
+    put(gi, "pkg/server/testdata/fixture.go", "package fixture\nimport \"net/http\"\nfunc F() { http.HandleFunc(\"/phantom\", h) }\n");
+    put(gi, "pkg/server/testdata/golden_test.go", "package fixture\n");
+    put(gi, "public/build/app.js", "app.get('/built', h);\n");
+    const giScan = S.scanCodebase(gi), giCov = S.coverage(gi);
+    const giRoutes = (giScan.routes || []).map((r) => r.method + " " + r.path + " " + r.file).sort();
+    const giCode = ["ios/App/AppDelegate.swift", "lib/app/deps/helper.ex", "pkg/server/server.go", "src/Api/Controllers/HomeController.cs", "storage/app/keep.php"];
+    const nb = path.join(tmp, "proj-122-bin");
+    put(nb, "bin/cli.js", "#!/usr/bin/env node\nrequire('../lib/cli');\n");
+    put(nb, "lib/cli.js", "module.exports = 1;\n");
+    const nbCov = S.coverage(nb);
+    ok(giScan.ok && js(giRoutes) === js(["ANY /real pkg/server/server.go", "GET /api/Home/ping src/Api/Controllers/HomeController.cs"]) &&
+      !giScan.topLevelDirs.includes("_build") && !giScan.topLevelDirs.includes("deps") && giScan.topLevelDirs.includes("lib") && giScan.testFiles === 0 &&
+      giCov.codeFiles === giCode.length && js(giCov.uncoveredSample) === js(giCode) && giCov.testFiles === 0 &&
+      nbCov.codeFiles === 2 && nbCov.uncoveredSample.includes("bin/cli.js") && E.gitignoreDirPatterns("*.log\n!x/\na/**/b\n[!a]b/\n\\#c\nkeep/\n").length === 1,
+      "1.22 review F3: the scan and coverage leave out the root .gitignore's plain directory patterns (obj/ bin/ [Bb]in-style classes, /_build/ and /deps anchored — lib/app/deps stays —, Pods/, /public/build), a folder whose own .gitignore ignores everything, and testdata/ (no code, test or phantom route); without a .gitignore bin/ is code (got " +
+      js([giRoutes, giScan.topLevelDirs, giScan.testFiles, giCov.codeFiles, giCov.uncoveredSample, nbCov.codeFiles]) + ")");
+
+    // F4. Monorepos: the nested manifests join the stack and the test frameworks (≤ NESTED_MANIFEST_CAP read; never a fixture's).
+    const mr = path.join(tmp, "proj-122-monorepo");
+    put(mr, "package.json", js({ name: "mono", private: true, workspaces: ["apps/*"] }));
+    put(mr, "apps/web/package.json", js({ name: "web", devDependencies: { vitest: "^1" } }));
+    put(mr, "apps/web/src/main.ts", "export {};\n");
+    put(mr, "apps/api/pyproject.toml", "[project]\nname = \"api\"\ndependencies = [\"fastapi\"]\n[project.optional-dependencies]\ntest = [\"pytest\"]\n");
+    put(mr, "apps/api/app/main.py", "x = 1\n");
+    put(mr, "services/billing/go.mod", "module billing\n\ngo 1.22\n\nrequire github.com/gin-gonic/gin v1.9.1\n");
+    put(mr, "services/billing/main.go", "package main\n");
+    put(mr, "tests/fixtures/legacy/package.json", js({ name: "fx", dependencies: { koa: "^2" } }));
+    for (let i = 0; i < 22; i++) put(mr, `widgets/w${String(i).padStart(2, "0")}/package.json`, js({ name: "w" + i, dependencies: i === 21 ? { express: "^4" } : {} }));
+    const mrScan = S.scanCodebase(mr);
+    ok(mrScan.ok && mrScan.stack.includes("go") && mrScan.stack.includes("python (fastapi)") && mrScan.stack.some((s) => /^node \(vitest\)$/.test(s)) &&
+      ["pytest", "vitest"].every((f) => mrScan.testFrameworks.includes(f)) && ["fastapi", "gin"].every((f) => mrScan.frameworks.includes(f)) &&
+      !mrScan.frameworks.includes("koa") && !mrScan.frameworks.includes("express") && E.NESTED_MANIFEST_CAP === 20,
+      "1.22 review F4: a monorepo's nested manifests (apps/web/package.json, apps/api/pyproject.toml, services/billing/go.mod) join the stack, frameworks and test frameworks (go, pytest, vitest, gin); a fixture's manifest is never read, and at most 20 nested ones are (the 22nd widget's express is not) (got " +
+      js([mrScan.stack, mrScan.testFrameworks, mrScan.frameworks]) + ")");
+
+    // F8. ASP.NET route tokens: [controller] → the class name without "Controller", [action] → the method (its Async suffix dropped).
+    const an = path.join(tmp, "proj-122-aspnet");
+    put(an, "Api/Controllers/OrdersController.cs", ["[ApiController]", "[Route(\"api/[controller]\")]", "public class OrdersController : ControllerBase", "{",
+      "    [HttpGet(\"[action]\")]", "    [ProducesResponseType(200)]", "    public async Task<IActionResult> ListAsync() => Ok();", "",
+      "    [HttpPost(\"{id}/[action]\")] public IActionResult Cancel(int id) => Ok();", "", "    [HttpGet]", "    public IActionResult All() => Ok();", "}", ""].join("\n"));
+    const anRoutes = (S.scanCodebase(an).routes || []).map((r) => r.method + " " + r.path + " :" + r.line);
+    ok(js(anRoutes) === js(["GET /api/Orders/List :5", "POST /api/Orders/{id}/Cancel :9", "GET /api/Orders :11"]),
+      "1.22 review F8: ASP.NET routes substitute [controller] (OrdersController → Orders) and [action] (ListAsync → List, Cancel), the class-level [Route] prefixing each method's (got " + js(anRoutes) + ")");
+
+    // F9. A root manifest that is a link out of the project is never read (a link inside it is).
+    const sl = path.join(tmp, "proj-122-manifest-link");
+    const outPkg = path.join(tmp, "out-122-package.json");
+    fs.writeFileSync(outPkg, js({ name: "outside", dependencies: { express: "^4", "secret-dep": "1" } }));
+    put(sl, "src/index.js", "1;\n");
+    put(sl, "config/go.mod.real", "module inside\n\nrequire github.com/labstack/echo/v4 v4.11.0\n");
+    let slLinked = true;
+    try { fs.symlinkSync(outPkg, path.join(sl, "package.json"), "file"); fs.symlinkSync(path.join(sl, "config", "go.mod.real"), path.join(sl, "go.mod"), "file"); } catch { slLinked = false; }
+    if (slLinked) {
+      const slScan = S.scanCodebase(sl);
+      ok(!slScan.stack.some((s) => /node|secret-dep/.test(s)) && !slScan.frameworks.includes("express") && slScan.stack.includes("go") && slScan.frameworks.includes("echo"),
+        "1.22 review F9: a root package.json linked to a file outside the project is not read (no node stack, no express); a go.mod linked inside the project is (got " + js([slScan.stack, slScan.frameworks]) + ")");
+    } else ok(true, "1.22 review F9: file symlinks unavailable here (Windows without the privilege) — skipped");
+
+    // F11. coverage(): a folder reference's files by a binary search of keys sorted once — the same files as the scan of every
+    // key, far faster (18,000 keys × 709 references here; two scans of every key per reference were most of a coverage run).
+    const fold = (s) => (E.FOLD_CASE ? s.toLowerCase() : s);
+    const keys = [];
+    for (let m = 0; m < 600; m++) for (let f = 0; f < 30; f++) keys.push(`src/m${m}/f${f}.js`);
+    const codeMap = new Map(keys.map((k) => [k, k]));
+    const sortedKeys = [...codeMap.keys()].sort();
+    const refs = [];
+    for (let m = 0; m < 700; m++) refs.push(`src/m${m}`); // m600–m699 name nothing
+    refs.push("src/m1/f1.js", "src/m1*/f2.js", "src", "src/", "./src/m12/", "src/m1", "src/m10/", "../out", "src/m1/f1.js:12");
+    let t0 = Date.now();
+    const lin = refs.map((r) => E.implementsTargets(tmp, r, codeMap, fold));
+    const msLin = Date.now() - t0;
+    t0 = Date.now();
+    const bin = refs.map((r) => E.implementsTargets(tmp, r, codeMap, fold, sortedKeys));
+    const msBin = Date.now() - t0;
+    const same = lin.every((a, i) => js(a.slice().sort()) === js(bin[i].slice().sort()));
+    const at = (r) => bin[refs.indexOf(r)];
+    ok(same && at("src/m1").length === 30 && at("src/m10/").length === 30 && at("src").length === 18000 && at("src/m650").length === 0 && at("src/m1*/f2.js").length === 111 &&
+      at("../out").length === 0 && js(at("src/m1/f1.js:12")) === '["src/m1/f1.js"]' && msBin <= Math.max(25, msLin / 4),
+      "1.22 review F11: implementsTargets with coverage's sorted keys finds exactly the files the scan of every key does (a folder, its prefix twin src/m1 vs src/m10, a glob, the whole src/, a file, outside) and far faster (" +
+      msBin + " ms vs " + msLin + " ms for " + refs.length + " references over 18,000 files)");
+
+    // F12. A path that is no folder is an error, never an empty codebase (MCP = engine; the CLI exits 1 — cli/tests/13-imports-scan.js).
+    const missing = path.join(tmp, "proj-122-does-not-exist");
+    const msScan = S.scanCodebase(missing), msCov = S.coverage(missing), msFile = S.scanCodebase(path.join(cp, "src", "util.js"));
+    const msMcp = await raw("spec_scan", { projectDir: missing }), msMcpCov = await raw("spec_coverage", { projectDir: missing });
+    const i18n = require("./lib/i18n.js");
+    ok(!msScan.ok && /is not a folder/.test(msScan.error) && !msCov.ok && /is not a folder/.test(msCov.error) && !msFile.ok && msMcp.isError && /is not a folder/.test(msMcp.body.error) &&
+      msMcpCov.isError && !fs.existsSync(missing) && /não é uma pasta/.test(i18n.msg("pt").brownfield.notFolder("x")) && /no es una carpeta/.test(i18n.msg("es").brownfield.notFolder("x")),
+      "1.22 review F12: spec_scan / spec_coverage on a missing folder (or a file) return ok: false with a localized 'is not a folder' error — never ok: true, 0 files (got " +
+      js([msScan.ok, msScan.error, msCov.ok, msFile.ok, msMcp.isError]) + ")");
+
+    // F5. spec-kit: bullet scenarios under an explicit "**Acceptance Scenarios**:" label are criteria (they gave none).
+    const ik = path.join(tmp, "proj-122-imports");
+    S.initProject(ik, ["core"], "en");
+    put(ik, "specs/005-bullets/spec.md", "# Feature Specification: Bullets\n\n## User Scenarios & Testing\n\n### User Story 1 - Export (Priority: P1)\n\nAs a user I export my data.\n\n**Acceptance Scenarios**:\n\n" +
+      "- **Given** a user, **When** they export, **Then** the system sends a zip\n- **Given** no data, **When** they export, **Then** the system shows an empty state\n");
+    const skb = S.importSpec(ik, "spec-kit", "specs/005-bullets");
+    const skbReq = skb.ok ? rd(ik, ".specs", skb.feature, "requirements.md") : "";
+    ok(skb.ok && skb.mapping["User Story 1 / Scenario 2"] === "US-1.AC-2" && /US-1\.AC-1\*\* — WHILE a user, WHEN they export, THE SYSTEM SHALL send a zip/.test(skbReq) && /US-1\.AC-2\*\* — [^\n]*empty state/.test(skbReq),
+      "1.22 review F5: spec-kit bullet scenarios under an explicit Acceptance Scenarios label become US-1.AC-1 / AC-2 (got " + js(skb).slice(0, 300) + ")");
+
+    // F6. A plan title with no Latin letter or digit: a file's plan is named after its file; inline text says to pass a name.
+    put(ik, "plans/dark-theme.md", "# Добавить тёмную тему\n\n## Goals\n- The system SHALL offer a dark theme\n\n## Steps\n- [ ] Add `src/theme.ts`\n");
+    const cyr = S.importSpec(ik, "plan", "plans/dark-theme.md");
+    const cjkText = "# 添加深色主题\n\n## Steps\n- [ ] Add `src/theme.ts`\n";
+    const cjk = S.importSpec(ik, "plan", undefined, { text: cjkText });
+    const cjkNamed = S.importSpec(ik, "plan", undefined, { text: cjkText, name: "Dark theme zh" });
+    ok(cyr.ok && cyr.feature === "dark-theme" && /Добавить тёмную тему/.test(rd(ik, ".specs", "dark-theme", "requirements.md")) &&
+      !cjk.ok && /title '添加深色主题' has no usable characters[^\n]*--name/.test(cjk.error) && cjkNamed.ok && cjkNamed.feature === "dark-theme-zh",
+      "1.22 review F6: a plan titled '# Добавить тёмную тему' in plans/dark-theme.md imports as 'dark-theme' (the title kept as the story's); an inline '# 添加深色主题' is refused with a clear 'pass a name' error, and imports with one (got " +
+      js([cyr.ok, cyr.feature, cyr.error, cjk.error, cjkNamed.feature]) + ")");
+
+    // F7. BMAD: a subtask with no (AC: n) of its own carries its parent's — a grandchild too; a task without any stays without.
+    put(ik, "docs/stories/1.1.nested.md", "# Story 1.1: Nested tasks\n\n## Story\n\nAs a user, I want nesting, so that refs follow.\n\n## Acceptance Criteria\n\n1. WHEN a THEN the system SHALL b\n2. WHEN c THEN the system SHALL d\n\n" +
+      "## Tasks / Subtasks\n\n- [ ] Task 1: X (AC: 2)\n  - [ ] Subtask 1.1: a\n    - [ ] Subtask 1.1.1: b\n- [ ] Task 2: Y\n  - [ ] Subtask 2.1: c\n");
+    const bn = S.importSpec(ik, "bmad", "docs/stories/1.1.nested.md");
+    const bnTasks = bn.ok ? rd(ik, ".specs", bn.feature, "tasks.md") : "";
+    ok(bn.ok && /- \[ \] 2\. \[US1\] Subtask 1\.1: a\n  - _Requirements: US-1\.AC-2_\n/.test(bnTasks) && /- \[ \] 3\. \[US1\] Subtask 1\.1\.1: b\n  - _Requirements: US-1\.AC-2_\n/.test(bnTasks) &&
+      /- \[ \] 4\. \[US1\] Task 2: Y\n(?! {2}- _Requirements)/.test(bnTasks) && /- \[ \] 5\. \[US1\] Subtask 2\.1: c(?:\n|$)(?! {2}- _Requirements)/.test(bnTasks),
+      "1.22 review F7: BMAD subtasks inherit their parent task's (AC: n) references (a grandchild too); a task without references gives its subtasks none (got " + js(bnTasks.slice(0, 500)) + ")");
+
+    // F10. ExecPlan / plan: "Run `npm test` and expect all tests to pass." is a command-only validation line, never a criterion.
+    put(ik, "plans/exec-expect.md", "# Cache the feed\n\n## Progress\n\n- [ ] Add `src/feed/cache.ts`\n\n## Validation and Acceptance\n\n" +
+      "- When the feed is requested twice within a minute, the second response comes from the cache\n- Run `npm test` and expect all tests to pass.\n");
+    const xe = S.importSpec(ik, "execplan", "plans/exec-expect.md");
+    const xeReq = xe.ok ? rd(ik, ".specs", xe.feature, "requirements.md") : "";
+    const longBlank = "Run `npm test`" + " ".repeat(200000) + "x";
+    t0 = Date.now();
+    const lb = E.planCommandOnly(longBlank);
+    const msLb = Date.now() - t0;
+    ok(xe.ok && /US-1\.AC-1\*\* — WHEN the feed is requested twice/.test(xeReq) && !/US-1\.AC-2|npm test/.test(xeReq) &&
+      /Run `npm test` and expect all tests to pass\./.test(rd(ik, ".specs", xe.feature, "design.md")) &&
+      E.planCommandOnly("Run `npm test` and expect all tests to pass.") && E.planCommandOnly("`pytest -q`, and expect 3 passing") && E.planCommandOnly("Corre `npm test` e esperar verde") &&
+      !E.planCommandOnly("Run `npm test` and the page lists the orders") && !lb && msLb < 1000,
+      "1.22 review F10: a command-only validation line with a trailing 'and expect …' clause stays in design.md, never a [NEEDS CLARIFICATION] criterion; any other trailing text still makes a criterion; linear on a long blank run (" + msLb + " ms; got " +
+      js([xe.ok, xeReq.split("\n").filter((l) => /AC-\d/.test(l))]) + ")");
+
+    // 1.22 review 4: a step's `cd packages/web && npm test` is imported WHOLE as the _Verify:_ — the cd was dropped, so `done --run` ran
+    // `npm test` at the project root and the natural run (with its cd) read command-mismatch. A cd-led validation line is command-only.
+    put(ik, "plans/exec-cd.md", "# Web feed checks\n\n## Progress\n\n- [ ] Add `packages/web/src/feed.ts` and run `cd packages/web && npm test`\n\n" +
+      "## Validation and Acceptance\n\n- When the feed loads, the list shows 10 items\n- Run `cd packages/web && npm test`\n");
+    const xc = S.importSpec(ik, "execplan", "plans/exec-cd.md");
+    const xcTasks = xc.ok ? rd(ik, ".specs", xc.feature, "tasks.md") : "";
+    const xcAcs = (xc.ok ? rd(ik, ".specs", xc.feature, "requirements.md") : "").split("\n").filter((l) => /AC-\d/.test(l));
+    ok(xc.ok && /\n {2}- _Verify: cd packages\/web && npm test_\n/.test(xcTasks) && xcAcs.length === 1 && !/cd packages/.test(xcAcs.join(" ")) &&
+      E.planCommand(["cd packages/web && npm test"]) === "cd packages/web && npm test" && E.planCommand(["$ cd api && pytest -q"]) === "cd api && pytest -q" &&
+      E.planCommand(["cd packages/web && npm install"]) === null && E.planCommand(["cd packages/web"]) === null && E.planCommandOnly("Run `cd packages/web && npm test`"),
+      "1.22 review 4: a step naming `cd packages/web && npm test` imports `_Verify: cd packages/web && npm test_` (the cd kept — it was `npm test`, run at the root); a cd before a non-check (`npm install`) or alone is no _Verify:_; a cd-led validation line is no criterion (got " +
+      js([xc.ok, xcTasks, xcAcs]) + ")");
   }
 };

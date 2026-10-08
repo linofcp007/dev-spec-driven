@@ -20,7 +20,7 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained, readIfExists, readJson, realLines,
   requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes, retiredDecisions, safeReaddir,
   SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile, statePath, stripEnd, stripEnds,
-  stripStart, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
+  criterionLabel, notASlug, featureRefTest, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
   useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir;
 function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
@@ -31,7 +31,7 @@ function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atx
   normWs, oneLiner, ownEvidence, packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained,
   readIfExists, readJson, realLines, requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes,
   retiredDecisions, safeReaddir, SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile,
-  statePath, stripEnd, stripEnds, stripStart, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
+  statePath, stripEnd, stripEnds, criterionLabel, notASlug, featureRefTest, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
   taskMarkerValues, taskProse, tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds,
   trackLabel, trackMarker, unitIn, useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews,
   isChangeDir } = E); }
@@ -68,6 +68,26 @@ const VAGUE_RE = new RegExp(
   "iu"
 );
 const VAGUE_RE_ALL = new RegExp(VAGUE_RE.source, "giu");
+// "clean" (PT "limpa", ES "limpia") is a VERB too — "THE SYSTEM SHALL clean up its temporary files within 1 hour", "O sistema
+// DEVE limpar… / limpa os ficheiros", "limpia los archivos" — and then it names an action, not a vague quality. It is vague
+// only as the adjective ("a clean UI", "clean code", "interface limpa"): a match followed by a verb's particle or object
+// opener (up / out, an article, a possessive, a demonstrative, a quantifier, old / temporary / expired / stale…) is skipped.
+const VAGUE_VERB_NEXT = {
+  clean: /^[^\S\n]+(?:up|out|away|the|a|an|its|their|his|her|our|your|my|all|any|every|each|both|old|older|temporary|temp|expired|stale|unused|orphaned|orphan|leftover|obsolete|outdated|them|it|this|that|these|those)(?![\p{L}\p{N}_])/iu,
+  limpa: /^[^\S\n]+(?:o|a|os|as|todo|toda|todos|todas|seu|sua|seus|suas|este|esta|estes|estas|esse|essa|esses|essas|aquele|aquela|aqueles|aquelas|cada)(?![\p{L}\p{N}_])/iu,
+  limpia: /^[^\S\n]+(?:el|la|lo|los|las|todo|toda|todos|todas|su|sus|este|esta|estos|estas|ese|esa|esos|esas|aquel|aquella|aquellos|aquellas|cada)(?![\p{L}\p{N}_])/iu,
+};
+// Every distinct vague term of a text, lower-cased — a verb use of clean / limpa / limpia left out.
+function vagueTermsOf(text) {
+  const out = new Set();
+  for (const v of String(text).matchAll(VAGUE_RE_ALL)) {
+    const term = v[1].toLowerCase();
+    const next = VAGUE_VERB_NEXT[term];
+    if (next && next.test(text.slice(v.index + v[0].length, v.index + v[0].length + 40))) continue;
+    out.add(term);
+  }
+  return [...out];
+}
 
 // A criterion is a LOGICAL unit, not a physical line. Markdown list items continue across lines
 // (indented or lazy), and EARS phrasing — "WHILE <state> WHEN <trigger> THE SYSTEM SHALL <response>"
@@ -100,6 +120,12 @@ const RE_EARS_KEYWORD = new RegExp(B + "(WHEN|WHILE|IF|WHERE|QUANDO|ENQUANTO|SE|
 const RE_UBIQUITOUS = /(THE SYSTEM SHALL|O SISTEMA (N[ÃA]O )?(DEVE|DEVER[ÁA])|EL SISTEMA (NO )?(DEBE|DEBER[ÁA]))/iu;
 // The scaffold's own edge cases / NFRs / success criteria (EC-1, NFR-1, SC-001) are stable IDs too.
 const RE_STABLE_ID = /(?<![A-Za-z0-9])(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
+// …of which a criterion's OWN ID is one trace_check reads: never a bare `AC-n` (RE_BARE_AC — not the AC-n of a US-n.AC-n, nor of
+// an importer's escaped `US-7\.AC-1`: an ID-led line of imported prose, demoted so it defines nothing — review 4).
+const RE_FULL_ID = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
+const RE_BARE_AC = /(?<![A-Za-z0-9]|US-\d+\\?\.)AC-\d+(?!\d)/;
+// …and the stable IDs a criterion with no label may carry anywhere (EARS's no-id lint): never a T- ID (a test's — review 3).
+const RE_FULL_ID_NO_T = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
 
 // A unit that DEFINES an AC for the EARS linter (criterionBlocks {acUnits}) — 1.14 full review Pa2: only list items were
 // linted, so an AC written as a table row, a bold paragraph, a heading or a checkbox item was never EARS-checked while
@@ -126,6 +152,16 @@ function criterionBlocks(text, opts = {}) {
   const flush = () => {
     if (cur) blocks.push(cur);
     cur = null;
+  };
+  // Does the block so far read as a criterion (a modal verb)? Parts only grow, so once true it stays true; until then only the
+  // parts not tested yet are read, with the two before them — a modal phrase spans at most three parts ("o sistema" / "não" /
+  // "deve" across line breaks). Re-testing the whole joined block on every sub-line was quadratic (200 KB of "- … SHALL x"
+  // sub-items: ears 1.6 s, trace + matrix 12.5 s).
+  const curModal = (c) => {
+    if (c.modal) return true;
+    c.modal = RE_MODAL.test(c.parts.slice(Math.max(0, (c.tested || 0) - 2)).join(" "));
+    c.tested = c.parts.length;
+    return c.modal;
   };
 
   const all = text.split(/\r?\n/);
@@ -195,7 +231,7 @@ function criterionBlocks(text, opts = {}) {
       // its numbered points is ONE criterion) — when the parent reads as a criterion (a modal verb or a defined
       // AC) and the sub-item doesn't define an AC of its own.
       if (cur && indentOf(line) > cur.indent && !RE_LIST_DEFINES_AC.test(trimmed) &&
-        (RE_MODAL.test(cur.parts.join(" ")) || RE_LIST_DEFINES_AC.test(cur.parts[0]))) {
+        (curModal(cur) || RE_LIST_DEFINES_AC.test(cur.parts[0]))) {
         cur.endLine = ln;
         cur.parts.push(trimmed);
         return;
@@ -238,10 +274,76 @@ function earsFeature(projectDir, name) {
 // requirements.md defines AC IDs (trace_check's reading, requirementAcIds) but EARS linted no criterion at all: the IDs,
 // shortened ("US-1.AC-1, US-1.AC-2 …"), else null. Doctor's `ears` check and the requirements approval gate fail on it
 // (1.14 full review Pa2) — an AC written only mid-sentence, or in a summary table, is counted yet never checked.
-function earsUnlinted(reqText, ears) {
+function earsUnlinted(reqText, ears, dir) {
   if (!ears || !ears.summary || ears.summary.criteriaDetected > 0) return null;
-  const ids = [...requirementAcIds(reqText || "")];
-  return ids.length ? ids.slice(0, 5).join(", ") + (ids.length > 5 ? " …" : "") : null;
+  const ids = [...requirementAcIds(reqText || "", dir)];
+  return ids.length ? shortIdList(ids) : null;
+}
+const shortIdList = (xs) => xs.slice(0, 5).join(", ") + (xs.length > 5 ? " …" : ""); // "US-1.AC-1, US-1.AC-2 …"
+// The mirror (1.22 review): EARS linted criteria but requirements.md defines no AC ID trace_check reads — a spec numbered with
+// bare `AC-1`, `AC-2` (EARS took them as stable IDs) or with none at all traced 0 ACs, passed trace_check ("all 0 ACs covered")
+// and the requirements approval. → the criteria as labels — each one's bare AC ID, else "L<line>" — in document order
+// (the full list), else null. trace_check reports them as a gap (unidentifiedCriteria); doctor's `ears` and the requirements /
+// change-plan approvals fail on them. Only a criterion with NO stable ID counts (review 2): an NFR-n / EC-n / SC-nnn one has
+// its own (trace_check's secondary warnings read it) — a performance spec of NFR-1, NFR-2 alone failed every gate. Its own:
+// the ID that LABELS it (ownStableId — review 3).
+// Review 4: each criterion is judged by its OWN ID — a criterion numbered with a bare AC-n (bareLabel) is listed whatever the rest
+// of the document defines: the early return for a document with any US-n.AC-m in it let `- AC-1: … (see US-1.AC-9)` through,
+// while the CITED ID became the only required criterion. One with no ID at all is listed only when the document defines no AC ID
+// trace_check reads (a stray unnumbered criterion next to US-n.AC-m ones stays EARS's no-id warn).
+function earsUnidentified(reqText, ears, dir) {
+  if (!ears || !ears.summary || !(ears.summary.criteriaDetected > 0)) return null;
+  const docIds = requirementAcIds(reqText || "", dir).size > 0;
+  const out = [];
+  for (const c of ears.criteria || []) {
+    if (ownStableId(c.text, dir)) continue;
+    const bare = bareLabel(c.text);
+    if (bare || !docIds) out.push(bare || "L" + c.line);
+  }
+  return out.length ? out : null;
+}
+// A criterion has a stable ID of its OWN when the ID that LABELS it (criterionLabel — its lead, or a table row's ID cell) is a
+// US-n.AC-m, EC-n, NFR-n or SC-nnn of this feature: not behind another feature's slug (`checkout/US-3.AC-2` — resolved as
+// requirementAcIds resolves it, `dir`), never in a `_Supersedes:_` marker. Review 3: ANY ID mentioned in the criterion counted —
+// `- AC-1: WHEN … SHALL redirect (see EC-1)` or `… (T-01)` had "its own" ID (earsUnidentified null, doctor's ears passed, trace
+// counted 0 ACs with no gap, spec_upgrade's bareAcIds was []). A bare AC-n label is no ID whatever else the criterion cites, and
+// a T- ID (a test's) is never a criterion's.
+// Review 4: with NO label (criterionLabel null), a stable non-T ID anywhere in the criterion's own text is its ID — as earsValidate
+// counts it (withStableId): `- THE SYSTEM SHALL answer … in 200 ms (NFR-1)`, `- **Latency (NFR-1):** …`, `- **[NFR-1]** …`,
+// `a. NFR-1: …` were unidentified (doctor's ears failed, the approval was refused) while EARS found their ID. Another feature's
+// `<slug>/US-n.AC-m` (stripForeignAcRefs) and a `_Supersedes:_` marker's IDs are never its own.
+const RE_OWN_LABEL_ID = /^(?:US-\d+\.AC-\d+|EC-\d+|NFR-\d+|SC-\d+)$/;
+function ownStableId(text, dir) {
+  const own = stripSupersedes(text);
+  const lab = criterionLabel(own);
+  if (!lab) return RE_FULL_ID_NO_T.test(stripForeignAcRefs(own, dir));
+  if (!RE_OWN_LABEL_ID.test(lab.id)) return false;
+  return !lab.slug || notASlug(lab.slug) || featureRefTest(dir)(lab.slug) !== "other";
+}
+// The bare AC-n a criterion is numbered with: its label when that is one, else (no other label) a bare AC-n in its text.
+// Review 4: in its OWN text — never in a `_Supersedes:_` marker, behind a slash (another feature's `checkout/AC-2`, a URL's
+// `/pages/AC-12`) or running into a letter / digit (`AC-230V mains`): each was read as the criterion's number, and every gate
+// (and spec_upgrade's renumber item) asked to renumber another feature's ID.
+const RE_BARE_AC_OWN = /(?<![A-Za-z0-9/]|US-\d+\\?\.)AC-\d+(?![A-Za-z0-9])/;
+function bareLabel(text) {
+  const own = stripSupersedes(text);
+  const lab = criterionLabel(own);
+  if (lab) return /^AC-\d+$/.test(lab.id) ? lab.id : null;
+  const m = own.match(RE_BARE_AC_OWN);
+  return m ? m[0] : null;
+}
+// The bare `AC-n` IDs the criteria are numbered with — each linted criterion with no stable ID of its own that carries one — in
+// document order, once each ([] when none). spec_upgrade's renumber item (review 2): a feature approved before 1.22 with AC-1,
+// AC-2 … fails doctor's ears / traceability now, with no warning path. `dir`: the feature's folder (see ownStableId).
+function criteriaBareIds(reqText, dir) {
+  const ev = earsValidate(reqText || "", "en");
+  const out = [];
+  for (const c of (ev.ok && ev.criteria) || []) {
+    if (ownStableId(c.text, dir)) continue;
+    const b = bareLabel(c.text);
+    if (b && !out.includes(b)) out.push(b);
+  }
+  return out;
 }
 // Issues carry a stable `code` (no-modal · no-id · vague · no-keyword · needs-clarification · placeholder) —
 // callers branch on it, never on the (localized) `msg`.
@@ -256,6 +358,7 @@ function earsValidate(text, lang) {
   let withId = 0;
   let needsClar = 0;
   let withPlaceholder = 0;
+  const linted = [];
 
   // Unresolved [NEEDS CLARIFICATION] markers can sit anywhere (heading, table, prose), not just in
   // a criterion — design is gated on these, so scan every content line.
@@ -288,15 +391,27 @@ function earsValidate(text, lang) {
     if (!looksLikeAc) continue;
 
     acCount++;
+    linted.push({ line: b.line, text: b.text });
     if (mentionsShall) withShall++;
     else add("error", "no-modal", M.noModal);
 
-    if (RE_STABLE_ID.test(b.text)) withId++;
-    else add("warn", "no-id", M.noId);
+    // A bare `AC-1` is no stable ID: trace_check reads US-<story>.AC-<n> only (requirementAcIds) — a spec numbered AC-1, AC-2 …
+    // traced 0 ACs and passed. Flagged no-id, naming the form to write.
+    // Review 3: the ID that LABELS the criterion decides (criterionLabel — `- AC-1: … (see EC-1)` is numbered with a bare AC-1
+    // whatever it cites; a T- ID is a test's, never a criterion's); with no label, a stable ID anywhere in it still counts here.
+    // Review 4: the criterion's OWN text, as ownStableId reads it — never a `_Supersedes:_` marker's ID or another feature's
+    // `<slug>/US-n.AC-m` (with no feature folder here, every resolvable slug is another's): EARS counted them, so a criterion
+    // whose only ID was one stayed untraced with no warning while doctor named it.
+    const own = stripSupersedes(b.text);
+    const lab = criterionLabel(own);
+    if (lab ? RE_OWN_LABEL_ID.test(lab.id) : RE_FULL_ID_NO_T.test(stripForeignAcRefs(own))) withId++;
+    else {
+      const bare = bareLabel(b.text);
+      add("warn", "no-id", bare ? M.bareAcId(bare) : M.noId);
+    }
 
-    // Every distinct vague term, not just the first ("rápida e amigável" is two things to quantify).
-    const vagueTerms = [...new Set([...b.text.matchAll(VAGUE_RE_ALL)].map((v) => v[1].toLowerCase()))];
-    vagueTerms.forEach((term) => add("warn", "vague", M.vague(term)));
+    // Every distinct vague term, not just the first ("rápida e amigável" is two things to quantify) — "clean up" is a verb.
+    vagueTermsOf(b.text).forEach((term) => add("warn", "vague", M.vague(term)));
     // A template criterion ("WHEN [trigger] THE SYSTEM SHALL [behavior]") is well-formed EARS but says nothing
     // yet — never "clean" while its placeholders remain.
     const slots = placeholderReport(b.text).map((p) => p.text);
@@ -312,12 +427,15 @@ function earsValidate(text, lang) {
 
   issues.sort((a, b) => a.line - b.line); // stable: clarification markers first on a shared line
 
-  return {
+  const res = {
     ok: true,
     summary: { criteriaDetected: acCount, withShall, withStableId: withId, needsClarification: needsClar, placeholders: withPlaceholder, issues: issues.length },
     issues,
     verdict: issues.filter((x) => x.severity === "error").length === 0 ? "pass" : "fail",
   };
+  // The linted criteria {line, text}, for earsUnidentified — not part of the result's JSON.
+  Object.defineProperty(res, "criteria", { value: linted, enumerable: false });
+  return res;
 }
 
 // ---------------------------------------------------------------------------
@@ -363,13 +481,16 @@ function traceCheck(projectDir, name, opts = {}) {
   const testPlan = planIdText(rawPlan); // comments out, fenced examples blanked — like the tasks
   const tracks = detectTracks(dir);
 
-  const requiredAcs = requirementAcIds(rawReqs);
+  const requiredAcs = requirementAcIds(rawReqs, dir);
   const acsInTasks = extractAcIds(tasks);
   const acsInTestPlan = extractAcIds(testPlan);
 
   const uncoveredByTasks = [...requiredAcs].filter((id) => !acsInTasks.has(id));
   // Reverse direction: AC IDs referenced by tasks that don't exist in requirements (typos).
   const phantomAcsInTasks = [...acsInTasks].filter((id) => !requiredAcs.has(id));
+  // 1.22 review: criteria EARS lints but no AC ID this reader counts (a bare AC-1, or none) — 0 ACs used to be "all covered".
+  // (review 4: with AC IDs defined, a criterion numbered with a bare AC-n is still one — linted only when the text holds one)
+  const unidentified = !rawReqs.trim() || (requiredAcs.size && !RE_BARE_AC.test(rawReqs)) ? null : earsUnidentified(rawReqs, earsValidate(rawReqs, "en"), dir);
 
   // Spec ↔ code: tasks may carry `_Implements: path/to/file_` markers. Verify the files exist.
   const implFiles = [];
@@ -429,6 +550,7 @@ function traceCheck(projectDir, name, opts = {}) {
     coveredByTasks: requiredAcs.size - uncoveredByTasks.length,
     uncoveredByTasks,
     phantomAcsInTasks,
+    ...(unidentified ? { unidentifiedCriteria: unidentified } : {}), // only when there are some: the result is otherwise unchanged
     implementsFiles: implFiles,
     missingImplFiles,
     plannedImplFiles,
@@ -454,6 +576,7 @@ function traceCheck(projectDir, name, opts = {}) {
   }
 
   const gaps =
+    (unidentified ? unidentified.length : 0) +
     uncoveredByTasks.length +
     phantomAcsInTasks.length +
     missingImplFiles.length +
@@ -491,10 +614,10 @@ function traceCheck(projectDir, name, opts = {}) {
 // informational here.
 // planned = an OPEN task's file, not written yet; the deep-traceability warnings (TRACE_WARNING_ORDER) are warnings.
 const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "unresolvedImplGlobs", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "removedAcs"]);
-const TRACE_GAP_ORDER = ["uncoveredByTasks", "phantomAcsInTasks", "uncoveredByTests", "phantomAcsInTests", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
+const TRACE_GAP_ORDER = ["unidentifiedCriteria", "uncoveredByTasks", "phantomAcsInTasks", "uncoveredByTests", "phantomAcsInTests", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
 // The kinds trace_check's verdict counts (testsNotMappedToTasks is listed, never failing), and the kinds that read
 // tasks.md / test-plan.md — doctor defers the latter while that artifact is still a later phase's template.
-const TRACE_VERDICT_KINDS = new Set(["uncoveredByTasks", "phantomAcsInTasks", "missingImplFiles", "uncoveredByTests", "phantomAcsInTests", "phantomTestsInTasks"]);
+const TRACE_VERDICT_KINDS = new Set(["unidentifiedCriteria", "uncoveredByTasks", "phantomAcsInTasks", "missingImplFiles", "uncoveredByTests", "phantomAcsInTests", "phantomTestsInTasks"]);
 const TRACE_TASK_KINDS = ["uncoveredByTasks", "phantomAcsInTasks", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
 const TRACE_PLAN_KINDS = ["uncoveredByTests", "phantomAcsInTests", "phantomTestsInTasks", "testsNotMappedToTasks"];
 function traceGaps(tr) {
@@ -1062,7 +1185,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
 
   // The rows: trace_check's AC set (requirementAcIds) in document order, then the secondary IDs (trace's secondaryDefinitions).
   const rows = [];
-  for (const id of requirementAcIds(reqs)) {
+  for (const id of requirementAcIds(reqs, dir)) {
     const e = idx.get(id);
     rows.push({ id, key: id, kind: "ac", raw: e ? e.text : "", line: e ? e.line : Infinity });
   }
@@ -1101,7 +1224,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const planSec = new Set(entries.flatMap((e) => [...e.sec.keys()]));
   const quickSec = secondaryIds(realLines(read("quickstart.md") || "", RE_SECONDARY_ID_LINE).join("\n"));
   let code = null;
-  if (opts.code && planOn) code = traceTestCode(projectDir, dir, planText, requirementAcIds(reqs), opts.scan);
+  if (opts.code && planOn) code = traceTestCode(projectDir, dir, planText, requirementAcIds(reqs, dir), opts.scan);
   const inCode = new Map(code ? Object.entries(code.testsInCode).map(([id, files]) => [tKey(id.slice(2)), files]) : []);
   const outside = new Set(code ? code.plannedOutsideCode.map((id) => tKey(id.slice(2))) : []);
 
@@ -1356,8 +1479,8 @@ function rtmProjectMarkdown(projectDir, lang, features) {
 
 module.exports = { VAGUE_WORDS, VAGUE_RE, VAGUE_RE_ALL, RE_LIST_ITEM, RE_NUMBERED, RE_BLOCK_BREAK, B, E, RE_MODAL_EN,
   RE_MODAL_CAPS, RE_MODAL_SYSTEM, RE_LIST_DEFINES_AC, RE_MODAL, RE_MODAL_LOOSE, RE_AC_SHAPE, RE_AC_HEADING,
-  RE_EARS_CAPS, RE_EARS_KEYWORD, RE_UBIQUITOUS, RE_STABLE_ID, RE_LEAD_DEFINES_AC, RE_CELL_AC, criterionBlocks,
-  earsFeature, earsUnlinted, earsValidate, extractAcIds, extractTestIds, traceCheck, TRACE_INFO_FIELDS, TRACE_GAP_ORDER,
+  RE_EARS_CAPS, RE_EARS_KEYWORD, RE_UBIQUITOUS, RE_STABLE_ID, RE_FULL_ID, RE_BARE_AC, RE_FULL_ID_NO_T, RE_OWN_LABEL_ID, ownStableId, bareLabel, RE_LEAD_DEFINES_AC, RE_CELL_AC, criterionBlocks,
+  VAGUE_VERB_NEXT, vagueTermsOf, earsFeature, earsUnlinted, earsUnidentified, criteriaBareIds, shortIdList, earsValidate, extractAcIds, extractTestIds, traceCheck, TRACE_INFO_FIELDS, TRACE_GAP_ORDER,
   TRACE_VERDICT_KINDS, TRACE_TASK_KINDS, TRACE_PLAN_KINDS, traceGaps, traceGapLines, TRACE_WARNING_ORDER,
   TRACE_SECONDARY_KINDS, traceWarnings, traceWarningLines, RE_SECONDARY_ID, RE_SECONDARY_ID_LINE, idKey, secondaryIds,
   secondaryDefinitions, traceSecondary, testPlanEntries, RE_CODE_TID, CODE_TRACE_CAP, CODE_TRACE_READ_CAP,

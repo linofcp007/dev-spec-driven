@@ -11,9 +11,10 @@ mcp/servers.json               registers the `spec-driven` stdio server (plugin.
 skills/dev-spec-driven/SKILL.md the workflow (track routing engine, prose) — the decision-time rules, ≤ 5,000 words (1.21)
 skills/.../references/          deep library, read on demand — index.md lists every file; tool-catalog.md · track-checklists.md ·
                                workflows.md hold what SKILL.md points to (1.21)
-commands/*.md                  54 slash commands (thin wrappers that invoke the skill/MCP) — also served as the MCP prompts
+commands/*.md                  55 slash commands (thin wrappers that invoke the skill/MCP) — also served as the MCP prompts
 agents/*.md                    plugin subagents, auto-discovered and dispatched as `dev-spec-driven:spec-implementer` /
-                               `dev-spec-driven:spec-reviewer` (subagent execution) / `dev-spec-driven:spec-critic` (--deep)
+                               `dev-spec-driven:spec-reviewer` (subagent execution, its verify / simplify modes) /
+                               `dev-spec-driven:spec-critic` (--deep) / `dev-spec-driven:spec-simplifier` (/spec-simplify, 1.22)
 evals/                         plugin evals for `claude plugin eval` — maintainer-side, results ignored: triggering cases
                                (tags triggering / negative) and behavioural cases (tag behavior: <case>/case.yaml + fixture.sh,
                                built from evals/fixtures/ — lib.sh + project trees — with this plugin's own CLI); evals/README.md
@@ -95,7 +96,7 @@ scripts/test-docker.js         both suites in Linux containers — `npm run test
 hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|MultiEdit|NotebookEdit) + approval-hook.js
                                (^(Bash|PowerShell|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$) · PostToolUse → spec-hook.js
                                (Write|Edit) + observe-hook.js (Bash) + plan-hook.js (ExitPlanMode) · PostToolUseFailure (Bash) → observe-hook.js ·
-                               SessionStart → spec-hook.js · Stop + SubagentStop (matcher ^(dev-spec-driven:)?spec-implementer$)
+                               SessionStart → spec-hook.js · Stop + SubagentStop (matcher ^(dev-spec-driven:)?spec-(implementer|simplifier)$)
                                → stop-hook.js
 hooks/guard-hook.js            opt-in guard mode (asks before code edits while no feature has approved tasks; scope level)
 hooks/approval-hook.js         opt-in human approval guard (meta.approvalGuard ask|deny: an agent's approval asks / is refused)
@@ -157,7 +158,10 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   assembled `BUILD` / `MSG` through `__link` from `i18n.js`. The tables hold their `en` · `pt` · `es` keys from the start,
   in that order; a language's file loads on the FIRST read of any table's entry for it (`loadLocale`: its blocks replace
   the getters, then the `sectionNames` / `quality` / `designWeigh` merges, then its link) — a process pays only for the
-  languages it speaks. pt-BR is derived from pt on its first use (`defineDerivedLocale`), as before, and `i18n/pt-br.js`
+  languages it speaks — so engine code that needs a text of EVERY language (a heading matched in any language) reads it from
+  the pre-generated corpus, never by asking each language's table: the built-in tracks' task-block headings (`trackTaskHeadings`
+  → `builtinTaskHeadings`, 1.22 review) loaded pt.js, es.js and pt-BR into every English `list` (50–65 ms). pt-BR is derived
+  from pt on its first use (`defineDerivedLocale`), as before, and `i18n/pt-br.js`
   itself loads only then (a table's `pt-BR` entry, `toPtBr`, `derivePtBr` — `ptbr()` in i18n.js). A group with raw entries
   (MSG `stopGate`: the claim patterns) is derived entry by entry, so the stop gate's claim scan reads pt-BR's patterns
   without a single toPtBr (its first call compiles the pt-BR word maps: ~17 ms).
@@ -177,7 +181,9 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   mcp/test.js ("1.20 build") fails with "run npm run build" until the regenerated file is committed; nothing at runtime goes
   wrong meanwhile (below), it only goes slower. On a merge conflict in the file, take either side and run `npm run build`.
 - **The corpus.** The built-in part of the placeholder corpus (docs/maintainers/gates-and-approvals.md → Gates) —
-  `templateSets()`, `templateSetsBr()`, `templateTaskSet()`, the bug steps (`bugStepSet()`) — is the same in every process of
+  `templateSets()`, `templateSetsBr()`, `templateTaskSet()`, the bug steps (`bugStepSet()`) — and the built-in tracks' task-block
+  headings in every language (`taskHeadings` {track: [heading…]}, read by `trackTaskHeadings` — 1.22 review: rendering them
+  loaded every language's file; `localeLoaded` clears tracks.js's `TASK_HEADINGS` with the corpus) — is the same in every process of
   one engine, and rendering it (1,165 texts plus pt-BR's twins through toPtBr: ~200 ms) was the largest slice of a hook or
   CLI call (1.19's SessionStart was ~20% slower than 1.18's for it). The build renders it ONCE with the engine's own
   functions (`renderCorpusData()`: the sets' members, sorted) into the JSON file, stamped `version` (package.json) and

@@ -22,7 +22,6 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { execFileSync } = require("child_process");
-const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 
 // git without a shell (no injection surface); stderr ignored so "not a git repo" is just empty output.
 function git(args) {
@@ -45,19 +44,28 @@ const files = (git(["-c", "core.quotePath=false", "diff", "--cached", "--name-on
   .split("\0")
   .filter(Boolean);
 
+// The staged files this hook checks — a feature's requirements.md / tasks.md / change.md under a `.specs/` — found BEFORE the
+// engine loads: a commit that stages none (most commits) exits without paying for it (~130 ms — 1.22 review).
+const CHECKED = new Set(["requirements.md", "tasks.md", "change.md"]);
+const specFiles = files.filter((f) => {
+  if (!f.startsWith(".specs/") && !f.includes("/.specs/")) return false;
+  if (!CHECKED.has(path.basename(f).toLowerCase())) return false;
+  // Project templates are no feature's spec (dev-spec templates check) — unless .specs/templates/ is a pre-1.14 feature (.state.json).
+  const tplAt = f.match(/^(.*?)\.specs\/templates\//);
+  if (tplAt && !fs.existsSync(path.join(root, tplAt[1], ".specs", "templates", ".state.json"))) return false;
+  // Track packs (1.15) neither (dev-spec tracks check) — unless .specs/tracks/ is a pre-1.15 feature (.state.json).
+  const packAt = f.match(/^(.*?)\.specs\/tracks\//);
+  return !(packAt && !fs.existsSync(path.join(root, packAt[1], ".specs", "tracks", ".state.json")));
+});
+if (!specFiles.length) process.exit(0);
+
+const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 const P = spec.msg(spec.projectLang(root)).precommit; // messages in the project's language
 let blocking = 0;
 const out = [];
 let scratch = null;
 
-for (const f of files) {
-  if (!f.startsWith(".specs/") && !f.includes("/.specs/")) continue;
-  // Project templates are no feature's spec (dev-spec templates check) — unless .specs/templates/ is a pre-1.14 feature (.state.json).
-  const tplAt = f.match(/^(.*?)\.specs\/templates\//);
-  if (tplAt && !fs.existsSync(path.join(root, tplAt[1], ".specs", "templates", ".state.json"))) continue;
-  // Track packs (1.15) neither (dev-spec tracks check) — unless .specs/tracks/ is a pre-1.15 feature (.state.json).
-  const packAt = f.match(/^(.*?)\.specs\/tracks\//);
-  if (packAt && !fs.existsSync(path.join(root, packAt[1], ".specs", "tracks", ".state.json"))) continue;
+for (const f of specFiles) {
   const base = path.basename(f).toLowerCase();
   const featureRel = path.posix.dirname(f); // <prefix>.specs/<feature>
   const feature = path.posix.basename(featureRel);
@@ -115,7 +123,10 @@ for (const f of files) {
         out.push(PF.phantom(f, phantom.length, phantom.join(", ")));
       }
       if (tr.uncoveredByTasks.length) out.push(PF.uncovered(f, tr.uncoveredByTasks.length, tr.uncoveredByTasks.join(", ")));
-      if (!phantom.length && !tr.uncoveredByTasks.length) out.push(PF.traceClean(f, tr.totalAcs));
+      // criteria with no US-n.AC-n ID (bare AC-1, or none): traceability counts none of them — never "clean (0 ACs)"
+      const unid = tr.unidentifiedCriteria || [];
+      if (unid.length) out.push(PF.unidentified(f, unid.length, unid.join(", ")));
+      if (!phantom.length && !tr.uncoveredByTasks.length && !unid.length) out.push(PF.traceClean(f, tr.totalAcs));
     }
   }
 }

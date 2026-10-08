@@ -60,6 +60,9 @@ Preflight: <table — see below>
 Ruling: <what you decided> — <why> — <what it costs if wrong>
 Task 3: dispatched (base a1b2c3d, model sonnet)
 Task 3: minor (deferred): <one-liner>
+Task 3: verify — 2 confirmed, 1 unconfirmed, 1 refuted
+Task 3: unconfirmed (65): <one-liner> — <why it isn't 80>
+Task 3: refuted (20, pre-existing): <one-liner>
 Task 3: fix round 1/5 (2 addressed, 0 open — <one-liners>; commits a1b2c3d..e4f5a6b)
 Task 3: parked — <finding> — Ruling: <why the code stands>
 Task 3: refactor candidate filed: refactor-pricing-rules (backlog)
@@ -102,7 +105,10 @@ The dispatch contains only:
 3. interfaces/decisions from earlier tasks the brief cannot know, and pointers to ledger rulings or
    parked findings that touch this task's files;
 4. your resolution of any ambiguity you noticed;
-5. the report path (`paths.report`) — the implementer names it in its reply.
+5. the report path (`paths.report`) — the implementer names it in its reply;
+6. the references folder path — this folder, the plugin's `skills/dev-spec-driven/references/`, absolute: the agent's
+   guides (`code-reuse-and-quality.md`, `test-patterns.md`) live there, and a subagent can't resolve a bare
+   `references/…`.
 
 Never paste prior-task history or the whole spec into a dispatch. Never dispatch two implementers on
 the same working tree — they conflict. Concurrency is only for the parallel mode below (one worktree
@@ -149,14 +155,37 @@ last commit of a multi-commit task.)
 ### 5. Dispatch the reviewer
 
 Dispatch **`dev-spec-driven:spec-reviewer`** in **task** mode with: the brief path, the report path, the diff
-path, BASE/HEAD, and the active tracks. The reviewer returns a verdict **per AC ID** (✅ / ❌ / ⚠️ cannot
-verify from the diff), track checks, and Critical / Important / Minor findings. Never tell a reviewer
-what not to flag. Resolve every ⚠️ yourself (you hold the cross-task context); a confirmed gap is a
-failed spec review.
+path, BASE/HEAD, the active tracks and the references folder path. The reviewer returns a verdict **per AC ID** (✅ / ❌ / ⚠️ cannot
+verify from the diff), track checks, the project's written rules and the history of rewritten lines, and Critical /
+Important / Minor findings, each Critical / Important one rated 0–100. Never tell a reviewer what not to flag. Resolve
+every ⚠️ yourself (you hold the cross-task context); a confirmed gap is a failed spec review.
 
-### 6. Fix loop (max 5 rounds)
+### 6. Verify the findings
 
-Triggers: any ❌, any Critical/Important finding, or a ⚠️ you confirmed. Minor findings never enter the
+A finding is a claim, like an implementer's DONE: check it independently before it may cost a fix round — a false
+positive costs a round, and an implementer "fixing" correct code can break it. (Adapted from Anthropic's `code-review`
+plugin: each issue rated by a separate agent, only the confident ones kept.)
+
+- **What goes through:** every ❌ and every Critical / Important finding — and, later, each piece of new breakage a
+  re-review reports. **What doesn't:** the facts the report or the diff settle by themselves — a `_Verify:_` run
+  missing, a non-zero exit, a piped exit code with no unpiped run, a planned test's expectation changed.
+- **How:** one `dev-spec-driven:spec-reviewer` in **verify** mode per finding, all dispatched in one message (they are
+  independent), on the cheapest tier — standard for a security, concurrency or data-loss finding — with the finding
+  verbatim, the package path, BASE/HEAD, the brief path (the feature folder in the final review and the simplification
+  pass) and the report path (the implementer's, or the simplifier's). Never the first review's reasoning, never the
+  answer you expect.
+- **Then, by its confidence:** **80 or more** → confirmed: it enters the fix loop. **50–79** → unconfirmed: no fix
+  round — ledger `unconfirmed (NN)`, show it at the next checkpoint; the final review triages it with the deferred
+  minors. **Under 50** → refuted: ledger `refuted (NN, <why>)` and drop it.
+- **An ❌ comes back CONFIRMED or REFUTED, never unconfirmed** (an AC with no code is never pre-existing): its verdict
+  decides, not a confidence. A refuted ❌ cites the file:line that satisfies the AC — read that line before you count the
+  AC as satisfied; a refutation without one is a confirmed ❌, and a confirmed ❌ enters the fix loop.
+- **An implementer that disputes a finding** in a fix round, with evidence, gets the same verify pass — not your
+  hunch.
+
+### 7. Fix loop (max 5 rounds)
+
+Triggers: any confirmed ❌ or Critical / Important finding (§6), or a ⚠️ you confirmed. Minor findings never enter the
 loop — ledger them as `minor (deferred)` for the final review.
 
 - **Rounds 1–3:** resume the same implementer with the open findings verbatim.
@@ -165,15 +194,16 @@ loop — ledger them as `minor (deferred)` for the final review.
 - Every round: the implementer fixes, re-runs the covering tests, appends a fix report (tests, command,
   output). Then a **scoped** re-review: package `FIX_BASE..HEAD` (FIX_BASE = the head the last review
   saw) and dispatch `dev-spec-driven:spec-reviewer` in **re-review** mode with the findings list. New breakage in the
-  fix diff joins the list; out-of-scope observations become deferred minors.
+  fix diff joins the list once its verify pass confirms it; out-of-scope observations become deferred minors.
 - Never fix findings yourself — it pollutes your context and skips review.
 - **Breaker (after round 5):** adjudicate each open finding. Reviewer wrong/contestable, or real but
   nothing builds on it → `parked` with a ruling. Real and load-bearing → rule on the smallest change
   that unblocks dependent work and carry it into the next dispatch. Every adjudication is a ledger line.
 
-### 7. Complete
+### 8. Complete
 
-Clean review (or every open finding parked with a ruling) → `spec_complete_task {name, number, evidence}`
+Clean review — no confirmed finding open (unconfirmed ones ledgered), or every open one parked with a ruling →
+`spec_complete_task {name, number, evidence}`
 with the evidence **from the implementer's report** — the task's `_Verify:_` command, its exit code and
 the output summary (`references/verification.md`) — + ledger `complete` line. A non-zero exit code is
 refused by the engine: that task is not done. Never tick a task with open Critical/Important findings.
@@ -200,9 +230,14 @@ own git worktree, so they never share a working tree. Adapted from superpowers' 
    `_Implements:_`, a shared file (`src/a.js:12`, `src/a.js#L40`, `./src/a.js` are one file; a folder shares every
    file under it), a task waiting on an open dependency, a non-`[P]` task or a section
    boundary ends the batch — then run sequentially. The pre-flight scan must agree (no shared interface).
-2. Record BASE, write each task's brief, and dispatch the implementers **in one message**, each with
-   worktree isolation (Claude Code: the Agent tool's `isolation: "worktree"`). Each commits on its own
-   worktree branch.
+2. Record BASE (`git rev-parse HEAD` on the feature branch), write each task's brief, and **create each worktree by
+   hand from that BASE**: `git worktree add <path> -b task-N <BASE>`. Never the Agent tool's `isolation: "worktree"` —
+   it bases the worktree on the default branch, not on the feature branch's HEAD, so the implementer would start
+   without the earlier tasks and the Phase 4 failing tests. Dispatch the implementers **in one message**, each with its
+   worktree path and the BASE it was made from, and the brief and report paths written out absolute, in the main
+   checkout (`.execution/` ignores itself, so a worktree has no copy — and the SubagentStop gate reads the report
+   there). Each implementer checks `git rev-parse HEAD` in its worktree equals that BASE before it starts, and commits
+   on its own `task-N` branch.
 3. **Merge one at a time** into the feature branch (fast-forward or rebase — never a merge that rewrites
    the others' work). After EACH merge, run the full suite; a conflict or a red suite takes that task out
    of the batch: re-run it sequentially on the updated branch.
@@ -230,7 +265,8 @@ them):
   plan (re-approve the tasks phase).
 
 Per wave: write each task's brief, dispatch a wave of one sequentially as usual, and a wider wave as in the parallel
-mode above (one worktree per implementer, merge one at a time, full suite after each merge, review each diff,
+mode above (one worktree per implementer, made by hand from the wave's BASE — `git worktree add <path> -b task-N
+<BASE>`, never `isolation: "worktree"` —, merge one at a time, full suite after each merge, review each diff,
 complete each with its own evidence). Ask for the waves again after each wave — a merge conflict re-run sequentially
 or a task that turned out to need another changes them. Only a task's own `_Depends:_` can take it ahead of an
 earlier section's checkpoint: still stop at every `**Checkpoint:**` once that section's tasks are done.
@@ -241,7 +277,8 @@ Run continuously within a story — no "should I continue?" prompts between task
 human **only** for:
 
 1. **A `**Checkpoint:**` line** (end of a story). Present: tasks done, commits, per-task review verdicts,
-   deferred minors, every `Ruling:` made so far (with its cost if wrong), and the next story. Continue on
+   deferred minors, unconfirmed findings (with their confidence), every `Ruling:` made so far (with its cost if wrong),
+   and the next story. Continue on
    approval; ledger `Checkpoint USn: presented → approved`.
 2. **A spec change.** Any finding or blocker that requires changing an AC, a design decision, or a
    planned test's expectation. Go back to that phase (`/createSpec`, `/design`, `/testPlan`) — never
@@ -282,11 +319,52 @@ a conflict between two tasks' file plans — you decide, and ledger the ruling.
 ## Final review
 
 After the last task: package `MERGE_BASE..HEAD` (`git merge-base <default-branch> HEAD`) and dispatch
-`dev-spec-driven:spec-reviewer` in **final** mode on the most capable model — it runs the `/prReview` checklist
-(track-aware: spec compliance, red-first evidence, tenant isolation, eval deltas, security) and triages
-the ledger's deferred minors and parked findings. If it returns findings: ONE fix dispatch with the whole
-list, ONE scoped re-review, then adjudicate residuals as in the breaker. No second wave — residual
-load-bearing findings go to the human.
+`dev-spec-driven:spec-reviewer` in **final** mode on the most capable model, with the package path, the feature folder,
+the ledger, the active tracks, the references folder path and, on +tdd, the `spec_log {name, gitLog}` output (you run
+`git log --name-only --relative` and pass its text — the server never runs git; the reviewer can't call MCP tools) — it
+runs the `/prReview` checklist
+(track-aware: spec compliance, red-first evidence, tenant isolation, eval deltas, security, the project's written rules
+and the history of rewritten lines) and triages the ledger's deferred minors, unconfirmed and parked findings. If it
+returns findings: verify each Critical / Important one (§6), then ONE fix dispatch with the confirmed list, ONE scoped
+re-review, then adjudicate residuals as in the breaker. No second wave — residual load-bearing findings go to the human.
+
+## The simplification pass (optional, before `/spec-finish`)
+
+With every task done and the final review's fixes in, the code the feature added can often be simpler than the
+task-by-task loop left it — the smells the reviews deferred as Minor are still there. **`/spec-simplify <feature>
+--subagents`** cleans them up without changing behaviour, and proves it (adapted from Anthropic's `code-simplifier`
+plugin — with the proof added: its own tests after every change, one commit each, a review of the pass):
+
+1. Record `SIMPLIFY_BASE = git rev-parse HEAD` and `MERGE_BASE` (as for the final review). No `.execution/` yet (the
+   feature ran inline)? Create it with a `.gitignore` holding `*` — the folder ignores itself. Dispatch
+   **`dev-spec-driven:spec-simplifier`** with the feature, MERGE_BASE, the list — the ledger's deferred minors and the
+   final review's "can ship" minors —, the project checks, the report path
+   (`.specs/<feature>/.execution/simplify-report.md`) and the references folder path. It touches only lines `MERGE_BASE..HEAD` added or changed —
+   never a test, a contract, a dependency or code the feature didn't write — runs the covering tests after each change,
+   commits each one alone, and ends its report with a `## Final runs` section: the project checks (or the full suite)
+   and the changed tasks' `_Verify:_` on the final code, one line each. In Claude Code the SubagentStop hook sends back
+   a DONE whose `## Final runs` lacks a project check or shows a run that fails. **Guard mode** (`meta.guard` on or
+   `scope`): once every task is done no open task covers an edit, so each edit of the pass asks the user — tell them
+   before you dispatch, and dispatch the simplifier in the foreground (Claude Code: `run_in_background: false`) so those
+   questions reach them; a handful of approvals, never a reason to lower the guard.
+2. Package `SIMPLIFY_BASE..HEAD` (as in §4) and dispatch `dev-spec-driven:spec-reviewer` in **simplify** mode with the
+   package path, MERGE_BASE, SIMPLIFY_BASE, the report path and the feature folder: is the behaviour unchanged, no test
+   and no contract touched, the change inside the feature's lines, and actually simpler? Verify its Critical / Important
+   findings (§6). A confirmed one is **reverted**, not repaired: resume the simplifier to `git revert` that commit — and
+   the later ones that build on it, newest first — and re-run the suite; a revert that conflicts is aborted
+   (`git revert --abort`) and stops the pass (BLOCKED), never a hand-resolved merge. A cleanup that isn't safe as written is dropped, and there is no fix loop.
+3. Re-record the `_Verify:_` run of each done task whose `_Implements:_` files the pass changed, from the report
+   (`spec_complete_task {name, number, evidence}` — on a ticked task it is a re-check: a failing one makes it
+   unverified; not an `_Expect: fail_` task, whose red run stays its proof). With project checks set (`meta.checks`),
+   record them on this code too — each under its name: `spec_finish {name, evidence: [{name: <check name>, command,
+   exitCode, summary}]}` from the report's final runs, or `dev-spec finish <feature> --run` —: `/spec-finish`'s
+   `code-changed` rule sees only the files the tasks implement, so a pass that touched another file would leave an older
+   passing run standing. (No project checks: nothing to record — `/spec-finish` asks for the full suite fresh. Never add
+   checks to record a run.) Ledger `Simplify: N commits (a1b2c3d..e4f5a6b), M dropped, review clean`.
+
+Skip it for a small feature or a review with no deferred smells. `NO_CHANGES` is a fine result.
+
+## Closing
 
 Then close with **`/spec-finish`** (`spec_finish {name, write: true}`): it lists any blocker (doctor
 fails, open tasks, tasks without a passing run, project checks without a passing run since the last tick (on the
@@ -328,7 +406,7 @@ tasks. Either way, never append a task the human hasn't approved.
 
 ## Model selection
 
-Pass `model` explicitly on every dispatch. The three plugin agents declare `model: sonnet` in their
+Pass `model` explicitly on every dispatch. The four plugin agents declare `model: sonnet` in their
 frontmatter, so an omitted `model` runs them on `sonnet` — right for most implementer and reviewer work,
 wrong for the cheap transcription tasks and the final review below.
 
@@ -338,8 +416,10 @@ wrong for the cheap transcription tasks and the final review below.
 | Implementer working from prose, multi-file integration | standard (`sonnet`) — the floor for prose tasks |
 | Task reviewer | standard (`sonnet`); scale up for subtle concurrency/security diffs |
 | Scoped re-review of a small fix | cheap-to-standard |
+| Verify pass (one finding) | cheapest (`haiku`); standard for a security, concurrency or data-loss finding |
 | Fix rounds 4–5 | one tier above the implementer that got stuck |
 | Final review, architecture-level judgment | most capable (`opus`) |
+| Simplifier | standard (`sonnet`); its simplify-mode review standard too |
 
 Turn count beats token price: the cheapest models take 2–3× the turns on multi-step work.
 
@@ -358,3 +438,6 @@ Turn count beats token price: the cheapest models take 2–3× the turns on mult
 | "The SubagentStop hook let it through, so it passed" | The gate reads the report's text — each `_Verify:_` command with the exit code the task needs — it never ran anything. Read it; record the run with `spec_complete_task`. |
 | "The implementer found a good refactor — let it do it in this task" | File it: `spec_backlog add` with a `refactor:` note. A refactor folded into a feature task makes the diff bigger and a regression unattributable. |
 | "The new helper is tiny, no need to look for an existing one" | Tiny duplicates are how a codebase ends up with four retry wrappers. No **Reuse** block with the search in the report → send it back. |
+| "The reviewer is sure — skip the verify pass" | A reviewer's certainty is a claim. One cheap verify per finding costs less than one fix round spent on a false positive. |
+| "Unconfirmed means wrong — drop it" | Unconfirmed means not proven. It skips the fix loop, not the ledger: the checkpoint shows it and the final review triages it. |
+| "The simplification broke a test — adjust the test" | The tests are the proof that behaviour didn't change. Revert the simplification. |

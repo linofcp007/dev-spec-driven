@@ -48,9 +48,11 @@ slash commands are the same files — without it Claude Code lists every command
 (`clientElicits`) gets, while `roadmap.json → meta.approvalGuard` is `ask` or `deny`, an `elicitation/create` request before
 an AGENT's approval runs — the calls the approval hook guards, read by the same pure `spec.approvalGuardDecision()` (a synthetic
 PreToolUse payload): `spec_approve` (approve, revoke, `through`, force / waiver), `spec_feature {action: "remove", confirm: true}`,
-`spec_init` lowering a protection. `approvalPolicy()` (server.js) decides: guard off, `SPEC_MCP_APPROVAL_HOOK=on` (mcp/servers.json
-sets it for the Claude Code plugin — its PreToolUse hook asks / refuses there, so that path is unchanged and nothing is asked
-twice), a network / `..` projectDir (runTool refuses it) → the call runs as before; elicitation → ask; no elicitation → `ask`
+`spec_init` lowering a protection. `approvalPolicy()` (server.js) decides: guard off, `SPEC_MCP_APPROVAL_HOOK=on` at `ask`
+(mcp/servers.json sets it for the Claude Code plugin — its PreToolUse hook asks there, so that path is unchanged and nothing is
+asked twice), a network / `..` projectDir (runTool refuses it) → the call runs as before. At `deny` the env var no longer waves
+the call through (1.22 review): the hook refuses every agent approval, so one that reaches the server got past no hook
+(disableAllHooks, a managed policy, a hook that failed open) — it is handled as in any client. Otherwise: elicitation → ask; no elicitation → `ask`
 runs as today, `deny` is refused (`{ok: false, refused, humanRequired: true, approvalGuard: "deny", command, error}` — the
 server asks `approvalGuardDecision(…, {plain: true})` (1.21 review A4): `command` is the plain runnable line, WITHOUT Claude Code's
 `! ` prefix (a PowerShell / cmd.exe user can't run `! node …`), and `error` is `approvalGuard.denyMcp` — "in their own terminal",
@@ -61,7 +63,10 @@ runs every check and writes nothing (approve → `{dryRun, failing, checks, role
 NOBODY is asked. `requestedSchema`: `approve` (boolean, default false, required) + `note` (string ≤ 500). Only `action:
 "accept"` with `content.approve === true` runs the call, with `confirmation` {via: "elicitation", at, note?} (a one-line note)
 recorded as `confirmed` on the approval, its history record, a role's sign-off and a revocation record (`confirmationOf()`,
-gates.js — never a tool argument); the result gains `confirmed` (+ a localized `message`) only when it isn't `ok: false` (1.21
+gates.js — never a tool argument) — and with `preview` (1.22 review), what the dry run judged: `{fingerprint,
+designFingerprint?, failing}` / a fast-forward's `{chain, fingerprints}`; the engine records nothing else (content edited while
+the question waited, or — forced — a check failing that the question didn't name → `changedSincePreview: true`, code
+`changed-since-preview`; gates-and-approvals.md → the dry run); the result gains `confirmed` (+ a localized `message`) only when it isn't `ok: false` (1.21
 review A6 — a fast-forward a later gate stopped: the phases it approved carry their own `confirmed` in .state.json). Decline /
 cancel / an accept without approve / a client error / no answer within `DEV_SPEC_ELICIT_TIMEOUT_MS` (default 300000, ≤ 1 h) →
 `{ok: false, declined: true, approvalGuard, action | elicitationError | timedOut, error}` (localized — an accept without approve
@@ -71,7 +76,9 @@ has its own text, `elicit.unapproved`: the user answered without ticking Approve
 **Argument validation (server.js).** Before dispatch, `tools/call` arguments are checked against the
 tool's advertised `inputSchema`: required keys (`missingArgs`), then types (`invalidArgs` — `integer` means
 a *safe* integer, so `1.9` / `1e21` never become task 1), `enum`, `minimum`, array `items` and nested
-object properties. It iterates the SCHEMA's keys, never the caller's (`__proto__` arguments are ignored);
+object properties. A task `number` (spec_task_brief, spec_complete_task) carries `minimum: 1` (1.22 review — `-1` read "must
+be an integer", `0` "Task 0 not found"); the engine refuses the CLI's raw word in these same words (`msg(lang).args` —
+conventions.md → CLI boolean switches), and a roadmap `order` past the safe range alike. It iterates the SCHEMA's keys, never the caller's (`__proto__` arguments are ignored);
 an absent or `null` value means "not given". `arguments` that isn't an object, a relative `..` in
 `projectDir`, or a network `projectDir` (`isNetworkPath`: UNC `\\host\share`, `//host/share`, `\\?\UNC\…`,
 `\\.\UNC\…` and other device paths — refused before ANY fs call, argument errors included, so a tool call can't make

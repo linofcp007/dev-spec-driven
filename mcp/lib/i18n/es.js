@@ -1237,7 +1237,6 @@ const msg = {
       roadmapBusy: "Otro proceso de dev-spec está actualizando .specs/roadmap.json en este momento (.specs/.roadmap.lock) — no se ha cambiado nada; vuelve a intentarlo en un momento. Si no hay otro editor ni comando de dev-spec en marcha, borra ese archivo.",
       folderInUse: (rel) => `La carpeta ${rel} está en uso por otro programa (un editor, un indexador o antivirus, una terminal abierta dentro) — no se ha movido ni borrado nada; ciérralo y vuelve a intentarlo.`,
       lockStuck: (rel) => `Un bloqueo de dev-spec abandonado (${rel}) no se ha podido eliminar — el archivo (o una carpeta con ese nombre) está abierto en otro programa, es de solo lectura o no es un archivo. No se ha cambiado nada. Borra ${rel} a mano (revisa sus permisos) y vuelve a intentarlo.`,
-      numberInt: "el número debe ser un entero",
       noText: "No se ha proporcionado texto.",
       unknownPhase: (phase, known) => `Fase desconocida '${phase}'. Conocidas: ${known}`,
       alreadyArchived: (slug) => `'${slug}' ya está archivada (.specs/_archive/${slug}). Elimínala de allí primero.`,
@@ -1256,6 +1255,7 @@ const msg = {
       needsClar: "Marcador [NEEDS CLARIFICATION] sin resolver — resuélvelo antes del diseño.",
       noModal: "El criterio no tiene verbo modal (SHALL / DEVE / DEBE) — no es una frase EARS válida.",
       noId: "El criterio no tiene ID estable (p. ej., US-1.AC-1).",
+      bareAcId: (id) => `'${id}' no es un ID estable que trace_check lea — escribe US-<historia>.AC-<n> (p. ej., US-1.${id}).`,
       vague: (term) => `Término vago '${term}' — sustitúyelo por un valor concreto y comprobable.`,
       noKeyword: "Sin palabra clave EARS (WHEN/WHILE/IF/WHERE · QUANDO/ENQUANTO/SE/ONDE · CUANDO/MIENTRAS/SI/DONDE). Aceptable en requisitos ubicuos; confirma que es intencionado.",
     },
@@ -1264,6 +1264,7 @@ const msg = {
       core: "core: siempre activo (toda función en modo Spec).",
       on: (t, conf, list, neg) => `+${t}: ACTIVO${conf ? ` [confianza ${conf}]` : ""} — señales encontradas: ${list}.${neg ? ` (${neg} apareció negado.)` : ""}`,
       off: (t, neg) => `+${t}: inactivo — ${neg ? `${neg} apareció negado.` : "ninguna señal encontrada."}`,
+      offWeak: (t, list, neg) => `+${t}: inactivo — solo señales débiles (${list}), insuficientes por sí solas.${neg ? ` (${neg} apareció negado.)` : ""}`,
       substantial: "Ninguna señal de track, pero la descripción es sustancial — considera si aplica +tdd (corrección/casos límite).",
       weakOnly: (list) => `Activo solo por señales débiles — compruébalo: ${list}.`,
       possible: (t, sig) => `Posible +${t} — señal débil '${sig}' (necesita corroboración; no se ha activado).`,
@@ -1320,6 +1321,7 @@ const msg = {
       earsWarnings: (f, n, w, p) => `⚠ ${f}: sin errores EARS (${n} criterios), pero ${[w ? `${w} aviso(s)` : null, p ? `${p} placeholder(s) de la plantilla sin rellenar` : null].filter(Boolean).join(" y ")} — no bloquea`,
       phantom: (f, n, list) => `✗ ${f}: ${n} referencia(s) AC/prueba fantasma — probablemente erratas: ${list}`,
       uncovered: (f, n, list) => `⚠ ${f}: ${n} AC(s) sin tarea (aviso): ${list}`,
+      unidentified: (f, n, list) => `⚠ ${f}: ${n} criterio(s) sin ID US-<historia>.AC-<n> — la trazabilidad no cuenta ninguno (aviso): ${list}`,
       traceClean: (f, n) => `✓ ${f}: trazabilidad limpia (${n} ACs)`,
       blocked: (n) => `\nCommit bloqueado: ${n} problema(s) bloqueante(s) en los ficheros de spec preparados. Corrígelos o usa 'git commit --no-verify' para omitirlos.`,
     },
@@ -1338,6 +1340,7 @@ const msg = {
       acUnique: "IDs de AC únicos",
       earsDetail: (n, e, w) => `criterios=${n}, errores=${e}, avisos=${w}`,
       earsNoCriteria: (ids, file = "requirements.md") => `${file} cita IDs de AC (${ids}) pero no se validó ningún criterio — EARS valida un AC escrito como elemento de lista, título o línea que empiece por su ID, o como fila de tabla bajo un título de Criterios de Aceptación`,
+      earsNoAcIds: (list, file = "requirements.md") => `${file} tiene criterios (${list}) sin ningún ID de AC que trace_check lea — numera cada uno US-<historia>.AC-<n> (US-1.AC-1, US-1.AC-2 …); un AC-1 suelto no lo es`,
       designMissing: "falta design.md",
       mermaidOk: "tiene un diagrama",
       mermaidMissing: "no se encontró diagrama mermaid",
@@ -1357,6 +1360,7 @@ const msg = {
     next: {
       fixChecks: (ids, slug) => `Corrige las verificaciones bloqueantes (${ids}) — ejecuta /spec-doctor ${slug} para ver los detalles.`,
       reReview: (files) => `Nueva revisión: ${files} modificado(s) tras la última aprobación — vuelve a aprobar la fase afectada.`,
+      approvedMissing: (files, slug, phase) => `${files} se aprobó pero ya no existe — restáuralo (se borró después de su aprobación) o, si no va a volver, retira esa aprobación: /approve ${slug} ${phase} --revoke.`,
       approveRequirements: (slug) => `Revisa y aprueba los requisitos — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Revisa y aprueba el diseño — /approve ${slug} design.`,
       approveTasks: (slug) => `Revisa y aprueba el desglose de tareas — /approve ${slug} tasks.`,
@@ -1366,7 +1370,7 @@ const msg = {
       signOffTests: (slug, what) => `Aprobación de la Fase 4: la implementación ya empezó, así que las pruebas ya no se escriben primero — ${({ tdd: "comprueba que cada prueba planificada existe con su T-ID en el nombre de la prueba (test(\"T-01 …\")) para que tests-in-code la encuentre", ai: `comprueba que el conjunto de evals es el de la propia función y registra la línea base (/eval ${slug} --set-baseline)`, both: `comprueba que cada prueba planificada existe con su T-ID en el nombre de la prueba (test("T-01 …")) y que el conjunto de evals es el de la propia función, y registra la línea base (/eval ${slug} --set-baseline)` })[what]}. Después apruébalo — /approve ${slug} tests.`,
       approveTests: (slug, what) => `Fase 4, el gate estricto: ${({ tdd: "escribe todas las pruebas planificadas y confirma que cada una falla por la razón correcta", ai: "escribe las pruebas deterministas y el harness de evals, y registra la línea base", both: "escribe todas las pruebas planificadas (cada una fallando por la razón correcta) y el harness de evals, y registra la línea base" })[what]} — /writeTests ${slug}; ningún código de implementación antes. Después apruébalo — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implementa la tarea #${n}: ${text} — /executeTask ${slug}.`,
-      allDone: (slug) => `Todas las tareas hechas — cierra la función con /spec-finish ${slug} (spec_finish): informe de preparación + resumen del merge.`,
+      allDone: (slug) => `Todas las tareas hechas — cierra la función con /spec-finish ${slug} (spec_finish): informe de preparación + resumen del merge. Opcional, antes: /spec-simplify ${slug} — una limpieza del código de la propia función sin cambiar el comportamiento, probada por sus pruebas.`,
       breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /createTask ${slug}.`,
       drifted: (slug, day, n, total, files) => `'${slug}' se cerró el ${day}, pero ${n} de ${total} fichero(s) de implementación cambiaron desde entonces: ${files} (${DEV_SPEC} drift ${slug}). Decide: la spec ahora es incorrecta → /spec-impact ${slug} (o una función nueva con _Supersedes:_); el código es incorrecto → corrígelo (/spec-bugfix); inofensivo → vuelve a ejecutar /spec-finish ${slug} para una línea base nueva.`,
       finished: (slug, day, total, signOff) => `'${slug}' está cerrada (${day}) — sus ${total} fichero(s) de implementación no han cambiado desde entonces.` +
@@ -1428,7 +1432,10 @@ const msg = {
       reason: { "no-evidence": "sin evidencia", "failed-run": "la última ejecución falló", "manual-note-on-runnable-verify": "solo una nota, comando _Verify:_ sin ejecutar", "duplicate-number": "número compartido con otra tarea",
         "stale-evidence": "evidencia de otra tarea o de otro comando _Verify:_",
         "unexpected-pass": "la ejecución pasó, pero _Expect: fail_ necesita una ejecución en rojo",
-        unobserved: "ejecución no observada por el harness" },
+        unobserved: "ejecución no observada por el harness",
+        "command-mismatch": "la ejecución registrada no es su comando _Verify:_" },
+      commandMismatch: (n, slug, ran, verify, red) => `Tarea ${n}: la ejecución registrada (\`${ran}\`) no es una ejecución de su comando _Verify:_ (${verify}) — queda marcada, pero sigue sin verificar hasta que se registre una ejecución ${red ? "QUE FALLE " : ""}de ese comando (tal como está escrito — con varios comandos _Verify:_, todos ellos en UNA sola ejecución unidos con \` && \`; un \`cd <raíz del proyecto> &&\`, \`set -o pipefail;\` o VAR=valor tuyo delante vale (un cd a otra carpeta es otra ejecución), pero nunca quites uno que tenga el _Verify:_)` +
+        (red ? ` — regístrala ANTES de que entre la corrección, mientras la prueba aún falla: ${DEV_SPEC} done ${slug} ${n} --run (una ejecución roja de otro comando nunca cuenta; con la corrección ya hecha, apártala — git stash push -- <los archivos de la corrección>, no un git stash a secas: se llevaría también tasks.md y .state.json — para esa ejecución y luego restáurala).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
       duplicateTasks: (list) => `números de tarea repetidos: ${list} — complete/brief eligen la primera pendiente; renuméralas`,
     },
     observed: {
@@ -1446,7 +1453,6 @@ const msg = {
       already: (n, verified, done, total) => `La tarea ${n} ya estaba hecha${verified ? " (verificada)" : ""}. ${done}/${total}`,
       next: (n, text) => `  siguiente → #${n} ${text}`,
       allDone: "  — todo hecho ✓",
-      numberInt: "el número de tarea debe ser un entero",
       noRunnable: (n) => `la tarea ${n} no tiene un marcador _Verify: <comando>_ ejecutable`,
       shellHint: "Consejo: la shell predeterminada de Windows (cmd.exe) no pudo ejecutar esta línea de comandos tal como está escrita. Si el comando _Verify:_ está escrito para una shell POSIX, reinténtalo con --shell bash (o define DEV_SPEC_SHELL=bash).",
       posixOnWindows: (cmd, kinds) => `el comando _Verify:_ \`${cmd}\` usa sintaxis de shell POSIX (${kinds.map((k) => ({ "single-quotes": "comillas simples '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) que cmd.exe — la shell predeterminada de --run en Windows — interpreta de otra forma, a menudo sin fallar: no tiene comillas simples y nunca expande $VAR, así que una comprobación rota podría registrarse como ejecución correcta. No se ejecutó nada; la tarea sigue abierta. Vuelve a ejecutarlo con --shell bash (Git Bash; o define DEV_SPEC_SHELL=bash), con --shell pwsh si es un comando de PowerShell (o pasa el script a PowerShell entre comillas dobles: pwsh -NoProfile -Command "…") — o con --shell cmd para ejecutarlo igualmente en cmd.exe.`,
@@ -1504,7 +1510,6 @@ const msg = {
     },
     depend: {
       unknown: (list) => `Cada dependencia debe ser una función existente — no encontrada(s): ${list}`,
-      orderInt: (v) => `order debe ser un entero (recibido: '${v}').`,
     },
     evals: {
       usage: "Uso: node run-evals.js <función> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
@@ -1563,6 +1568,7 @@ const msg = {
         phantomTestsInTasks: "tareas referencian pruebas desconocidas (¿erratas?)",
         testsNotMappedToTasks: "pruebas planeadas que ninguna tarea pone en verde",
         missingImplFiles: "ficheros _Implements:_ que no existen",
+        unidentifiedCriteria: "criterios sin ID US-<historia>.AC-<n> (la trazabilidad no cuenta ninguno)",
       },
       gap: (label, list) => `${label}: ${list}`,
       allCovered: (n) => `los ${n} ACs cubiertos por tareas`,
@@ -1645,6 +1651,7 @@ const msg = {
       usage: (syntax) => `uso: ${syntax}`,
       unknownCommand: (c) => `comando desconocido '${c}'. Ejecuta \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `cliente desconocido '${c}'. Conocidos: ${known}`,
+      noJson: (c) => `--json no está disponible para '${c}': solo imprime texto. Ejecútalo sin --json.`,
     },
 
     gates: {
@@ -1694,11 +1701,16 @@ const msg = {
       evalSetsSample: "evals/golden.json sigue siendo el conjunto de ejemplo del scaffold — escribe los casos golden de esta función, ejecuta el harness y registra la baseline",
       evalSetsMissing: "evals/golden.json no existe o no tiene ítems de eval ({\"items\": […]}) — escribe primero el conjunto golden de esta función",
       testsGateChecks: (ids) => `(el gate de aprobación comprueba esto: ${ids})`,
+      testsStale: (day, missing, plans) => `La aprobación de la Fase 4 del ${day} ya no cubre el plan (${[missing ? `planeadas después: ${missing}` : null, plans ? `aprobación cambiada después: ${plans}` : null].filter(Boolean).join("; ")}) — hay que aprobar de nuevo la fase tests.`,
+      changedSincePreview: (phase, slug, grown) => (grown
+        ? `No se registró nada: desde que se pidió al usuario confirmar '${phase}' de '${slug}', su gate falla más comprobaciones (${grown}) de las que nombraba la pregunta — vuelve a preguntarle.`
+        : `No se registró nada: '${phase}' de '${slug}' cambió después de pedir al usuario que la confirmara — su confirmación cubría la versión que se le mostró. Vuelve a preguntarle, para que confirme lo que hay ahora.`),
       clarifyPlaceholders: (file, n, list) => `Sustituye los ${n} placeholder(s)/TBD de la plantilla en ${file}: ${list}`,
       hookPlaceholders: (n, list, file = "requirements.md") => `Placeholders de la plantilla: ${n} sin rellenar en ${file} (${list}) — sustitúyelos antes de aprobar ${file === "change.md" ? "el plan" : "los requisitos"}.`,
     },
 
     brownfield: {
+      notFolder: (p) => `${p} no es una carpeta (no existe, o es un archivo) — nada que analizar; revisa la ruta.`,
       frameworks: (list) => `  frameworks: ${list}`,
       routeLine: (method, p, loc) => `    ${method.padEnd(7)} ${p}  (${loc})`,
       moreRoutes: (n) => `    … ${n} más (--json las lista, hasta el límite)`,
@@ -1725,6 +1737,7 @@ const msg = {
       notFound: (p) => `'${p}' no encontrado.`,
       nothing: (tool, p) => `No se encontraron ficheros de spec ${tool} en '${p}'.`,
       exists: (slug) => `La función '${slug}' ya existe — la importación nunca la sobrescribe. Indica otro nombre.`,
+      noUsableTitle: (title) => `El título del documento '${title}' no tiene caracteres utilizables (a-z, 0-9) para un nombre de carpeta — indica el nombre de la función (name; CLI: --name "<función>").`,
       featureTitle: (name) => `# Función: ${name}`,
       tasksTitle: (name) => `# Tareas: ${name}`,
       summary: "## Resumen",
@@ -2138,6 +2151,7 @@ const msg = {
         stale: (slug) => `Cambió después del cierre — ciérrala de nuevo: /spec-finish ${slug}`,
         packReserved: (list, slug, since) => `Cambia el nombre de su(s) track pack(s) anterior(es) a la ${since || "1.17"} — ${list}: el nombre está reservado ahora, así que el track está inactivo (detalles: ${DEV_SPEC} doctor ${slug}, comprobación track-pack-missing)`,
         packMarkerReserved: (list, slug, since, tracks) => `Cambia el marcador de su(s) track pack(s) anterior(es) a la ${since || "1.19"} — ${list}: el marcador es ahora el de un track de serie, así que el pack está inactivo; o usa el track de serie: ${DEV_SPEC} add-track ${slug} ${tracks} (detalles: ${DEV_SPEC} doctor ${slug}, comprobación track-pack-missing)`,
+        bareAcIds: (list, slug, file = "requirements.md") => `Renumera los criterios que ${file} identifica con IDs sueltos (${list}) como US-<historia>.AC-<n> — y sus referencias ${file === "change.md" ? "en los _Requirements:_ de sus tareas (también en change.md)" : "en tasks.md y test-plan.md"} — y vuelve a aprobar: desde la 1.22 un AC-n suelto no es un ID que trace_check lea, así que doctor (ears, traceability) falla y la aprobación se rechaza (detalles: ${DEV_SPEC} doctor ${slug})`,
         critic: (files) => `Revísala con el agente spec-critic (solo lectura), fase a fase: ${files || "—"}`,
         converge: (files) => "Ejecuta la pasada de convergencia del spec-reviewer (las tareas hechas frente a sus ACs)" + (files ? `, después el agente spec-critic sobre ${files}` : ""),
         none: "No necesita revisión de la spec — todas las tareas están hechas",
@@ -2301,6 +2315,7 @@ const msg = {
     },
 
     markerSyntax: {
+      unreadTasks: (list) => `líneas con casilla que no son tareas: ${list} — una línea de tarea es "- [ ] N. texto" (una viñeta -, * o +, luego su número); estas nunca se marcan, ni entran en un brief, ni se verifican. Numéralas (o conviértelas en subpasos de una tarea).`,
       doctor: (list) => `un texto con forma de marcador en una línea de tarea no da ningún marcador: ${list} — las herramientas no leen nada ahí (no se ejecuta ninguna comprobación, no se rastrea ningún archivo). Escríbelo como _Verify: <comando>_ / _Implements: <ruta>_ / _Depends: 3_ (en cursiva, con el valor dentro).`,
     },
     outsideCode: {
@@ -2517,6 +2532,7 @@ const msg = {
       print: "Imprimir",
       wrote: (file) => `✎ generado ${file}`,
       exportsIsFeature: (dir) => `${dir} es una carpeta de función anterior a que dev-spec reservara el nombre 'exports' (contiene requirements.md / .state.json) — mueve o renombra esa carpeta a mano y vuelve a exportar.`,
+      exportsLinked: (rel) => `Me niego a escribir ${rel}: .specs/exports/ o ese archivo es un enlace (simbólico, o una junction) o apunta fuera de .specs/ — sustitúyelo por una carpeta / un archivo normal y vuelve a exportar. No se escribió nada.`,
     },
     rtm: {
       title: "Matriz de trazabilidad",
@@ -2779,7 +2795,7 @@ const msg = {
       unknownCheck: (name, list) => `'${name}' no es una verificación del proyecto — una de: ${list}`,
       needsCommand: "falta el comando que se ejecutó",
       needsExit: "falta su exit code (un entero)",
-      status: (i) => ({ "no-run": "ninguna ejecución registrada", failed: `la última ejecución falló (exit ${i.exitCode})`, changed: "su comando cambió desde la ejecución", "before-last-tick": "se ejecutó antes de la última actividad en las tareas", "code-changed": "los ficheros de implementación cambiaron desde la ejecución", unobserved: "la ejecución no fue observada por el harness" })[i.status] || i.status,
+      status: (i) => ({ "no-run": "ninguna ejecución registrada", failed: `la última ejecución falló (exit ${i.exitCode})`, changed: "la ejecución no es de su comando (o el comando cambió desde entonces)", "before-last-tick": "se ejecutó antes de la última actividad en las tareas", "code-changed": "los ficheros de implementación cambiaron desde la ejecución", unobserved: "la ejecución no fue observada por el harness" })[i.status] || i.status,
       blocker: (list, slug) => `verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: ${list} — ejecútalas: ${DEV_SPEC} finish ${slug} --run (o registra las ejecuciones con spec_finish {evidence})`,
       doctorWarn: (list, slug) => `todas las tareas están hechas, pero hay verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: ${list} — spec_finish rechaza hasta que pasen: ${DEV_SPEC} finish ${slug} --run`,
       doctorOk: (n) => `todas las verificaciones del proyecto (${n}) tienen una ejecución correcta desde la última actividad en las tareas`,
@@ -2846,12 +2862,14 @@ const msg = {
       ],
       fixed: ["corregí", "corregimos", "corregido", "corregida", "corregidos", "corregidas", "arreglé", "arreglamos", "arreglado", "arreglada", "arreglados", "arregladas",
         "resolví", "resolvimos", "resuelto", "resuelta", "resueltos", "resueltas", "anteriormente"],
+      zeroes: [String.raw`0|cero|ning[uú]n(?:[oa]s?)?(?:\s+de\s+l[oa]s)?`],
+      passNow: [String.raw`ahora\s+(?:pasan|pasa|est[áa]n\s+en\s+verde|est[áa]\s+en\s+verde)`],
       head: "dev-spec — gate de evidencia: tu último mensaje dice que el trabajo está hecho o verificado, pero hay tareas marcadas sin evidencia de verificación:",
       headSuite: "dev-spec — gate de evidencia: tu último mensaje dice que el trabajo está hecho o verificado, pero las verificaciones del proyecto no tienen una ejecución correcta desde la última actividad en las tareas:",
       taskLine: (slug, list) => `  - ${slug}: ${list}`,
       suiteLine: (slug, list) => `  - ${slug}: verificaciones del proyecto sin una ejecución correcta desde la última actividad en las tareas: ${list}`,
       more: (n) => `+${n} más`,
-      todoTasks: (slug, n, file = "tasks.md") => `Registra la evidencia antes de afirmarlo: lee el comando _Verify:_ de cada tarea listada en .specs/${slug}/${file} (primero la tarea ${n}), ejecútalo sobre el código final solo si es seguro hacerlo y registra esa ejecución con spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
+      todoTasks: (slug, n, file = "tasks.md") => `Registra la evidencia antes de afirmarlo: lee el comando _Verify:_ de cada tarea listada en .specs/${slug}/${file} (primero la tarea ${n}) — una tarea con varios: todos ellos, en UNA sola ejecución unidos con \` && \` —, ejecútalo sobre el código final solo si es seguro hacerlo y registra esa ejecución (el comando tal como está escrito) con spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
       todoSuite: (slug) => `Las verificaciones del proyecto de ${slug} no tienen ninguna ejecución que pase: léelas en .specs/roadmap.json (meta.checks), ejecútalas solo si es seguro hacerlo y registra las ejecuciones con spec_finish {evidence}.`,
       plainly: "O di claramente cuáles de ellas no están verificadas.",
       implementer: {
@@ -2862,6 +2880,14 @@ const msg = {
         notFailing: (file, cmds) => `su informe (${file}) no muestra ninguna ejecución que falle (un exit code distinto de cero) de ${cmds} — la tarea tiene _Expect: fail_: su prueba es la ejecución en rojo.`,
         todo: "Ejecuta el comando sobre el código final y pon en el informe el comando, su exit code y las últimas líneas de su salida — o informa BLOCKED / NEEDS_CONTEXT si no puede pasar. (Evidencia antes que afirmaciones: el controlador solo marca la tarea con esa ejecución.)",
       },
+      simplifier: {
+        head: (slug) => `dev-spec — gate de evidencia: informas la pasada de simplificación de '${slug}' como DONE, pero`,
+        noReport: (file) => `su informe (${file}) no existe.`,
+        noFinal: (file) => `su informe (${file}) no tiene una sección "## Final runs" con ejecuciones — la última sección, una línea por ejecución: - \`<comando>\` → exit <código>.`,
+        noRun: (file, cmds) => `la sección "## Final runs" de su informe (${file}) no muestra estas ejecuciones con su exit code: ${cmds} — todas las verificaciones del proyecto deben estar, una línea por ejecución: - \`<comando>\` → exit <código>.`,
+        notPassing: (file, cmds) => `las ejecuciones finales de su informe (${file}) fallan: ${cmds} — una simplificación debe dejar todas las ejecuciones en verde.`,
+        todo: "Ejecuta las verificaciones del proyecto (o la batería de pruebas completa) y el _Verify:_ de las tareas cambiadas sobre el código final y ponlos al final del informe, en \"## Final runs\", una línea cada uno (- `<comando>` → exit <código>, luego las últimas líneas de la salida) — o revierte el cambio que hizo fallar una ejecución, o informa BLOCKED. (\"Comportamiento sin cambios\" es una afirmación: las ejecuciones son su prueba.)",
+      },
       allow: {
         off: () => "gate de evidencia: desactivado (roadmap.json meta.stopCheck: false) — nada comprobado.",
         "stop-hook-active": () => "gate de evidencia: este fin de turno ya se devolvió una vez (stop_hook_active) — permitido.",
@@ -2870,7 +2896,10 @@ const msg = {
         admitted: () => "gate de evidencia: el mensaje dice claramente qué no está verificado (o falla) — permitido.",
         "no-recent": (i) => `gate de evidencia: ninguna función tuvo actividad en las últimas ${i.hours} h (tarea marcada, evidencia registrada o tasks.md editado) — permitido.`,
         verified: (i) => `gate de evidencia: todas las tareas marcadas de las funciones con actividad reciente tienen evidencia correcta (${i.list}) — permitido.`,
-        "not-done": () => "gate de evidencia: el implementador informa BLOCKED / NEEDS_CONTEXT — permitido.",
+        "not-done": () => "gate de evidencia: el subagente informa BLOCKED / NEEDS_CONTEXT — permitido.",
+        "no-changes": () => "gate de evidencia: el simplificador informa NO_CHANGES — nada que probar, permitido.",
+        "no-report": () => "gate de evidencia: el mensaje no nombra ningún informe de simplificación (.specs/<función>/.execution/simplify-report.md) — permitido.",
+        "simplify-ok": (i) => `gate de evidencia: el informe de simplificación de '${i.slug}' termina con sus ejecuciones correctas — permitido.`,
         "no-task": () => "gate de evidencia: el mensaje no nombra ningún informe de tarea (.specs/<función>/.execution/task-N-report.md) — permitido.",
         "nothing-to-verify": (i) => `gate de evidencia: la tarea ${i.n} de '${i.slug}' no tiene un comando _Verify:_ ejecutable — permitido.`,
         "report-ok": (i) => `gate de evidencia: el informe de la tarea ${i.n} de '${i.slug}' muestra la ejecución de su _Verify:_ — permitido.`,

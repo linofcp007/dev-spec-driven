@@ -11,9 +11,13 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
 - **Hooks never block and stay cheap.** Every hook exits 0 on any error or irrelevant event, emits at most
   one JSON object, has a 10 s timeout, and only acts on a `.specs/` dev-spec owns (`isDevSpecProject` — checked by
   PostToolUse AND SessionStart: another tool's `.specs/` gets no status block in every session). The PostToolUse hook:
-  requirements.md → EARS + placeholders, tasks.md → every trace gap + EC/NFR/SC warnings, design.md →
+  requirements.md → EARS + placeholders, tasks.md → every trace gap + EC/NFR/SC warnings (and, tasks.md / change.md, the
+  feature's `.state.json lastEditAt` stamp the stop gate reads as activity — `recordSpecEdit()`, 1.22 review), design.md →
   `designSaveCheck()` (active tracks' marker sections, Constitution Check, placeholders); it skips `/.execution/`,
-  `.specs/templates/` (unless that folder is a pre-1.14 feature), `.specs/tracks/` (1.15, the same exception) and generated files. The Stop / SubagentStop hook
+  `.specs/templates/` (unless that folder is a pre-1.14 feature), `.specs/tracks/` (1.15, the same exception) and generated files.
+  It loads the engine LAZILY (1.22 review): only for SessionStart and a PostToolUse on a `.specs/` file outside `.execution/` —
+  the plain path check runs first (an edit anywhere else cost the engine's ~100 ms load: 173 → 68 ms median per Write / Edit,
+  `node -e 0` ≈ 61 ms; mcp/tests/10-guards-review.js asserts which events load it). The Stop / SubagentStop hook
   follows the same rules (see End-of-turn evidence gate), and so do the 1.14 observe hook (it prints nothing at all and
   exits as soon as it has appended its line) and approval hook (silent unless `meta.approvalGuard` is on — its only
   output is a permission decision).
@@ -33,7 +37,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   (`TEST_EXTRA_EXT`: a `.bats` suite, Perl's `.t`) on a file that IS a test (`isTestFile`: `t/basic.t` yes, `notes.t`
   no). `GUARD_CODE_EXT` = `CODE_EXT` + `TEST_EXTRA_EXT`, the extension-only allow-list trace's `plannedOutsideCode` and
   the reuse check read. The scan, coverage and the test-code scan also set test fixtures apart (`isTestFixture`: a `.sql` /
-  `.ipynb` in a test folder not named like a test is data — 1.21.1 review; the test-code scan still reads one a test plan's
+  `.ipynb` in a test folder not named like a test is data — 1.21.1 review —, and every file under `testdata/` — 1.22 review; the test-code scan still reads one a test plan's
   File column names — the file, or the folder directly holding it: review 2 / 3); the guard still asks before editing one. Until 1.21.1 the scan's `CODE_EXT` was a short list and the guard kept its own broad one — a
   PowerShell project scanned empty and its tests gate never passed. It is an allow-list, so the docs say "a broad list of
   languages", never "any source file"; add a language to `CODE_EXT` (and to the guard test — mcp/tests/16-conventions.js
@@ -91,8 +95,17 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   options and a timeout — never as another program's argument (`echo dev-spec approve x`, `git commit -m "…"`).
   `cliApprovalAction()` reads the words after it with `CLI_SWITCHES` (a `--flag` that is no switch takes the next word),
   then again with every flag as a switch. A word holding whitespace and `dev-spec` after an `APPROVAL_SHELLS` program
-  (bash, sh, zsh, cmd, powershell, pwsh, eval, iex, Invoke-Expression, Start-Process, wsl, su, watch…) is lexed as a script
-  in turn, up to `APPROVAL_SHELL_DEPTH` = 3; at most `APPROVAL_COMMAND_MAX` (64 K) characters are read.
+  (bash, sh, zsh, cmd, powershell, pwsh, eval, iex, Invoke-Expression, Start-Process, wsl, su, watch, flock, script…) is lexed
+  as a script in turn, up to `APPROVAL_SHELL_DEPTH` = 3; at most `APPROVAL_COMMAND_MAX` (64 K) characters are read. **1.22
+  review — the unquoted forms** (all allowed at deny before): where cmd / pwsh / powershell RUNS (the program position, or a
+  `find -exec` command), the words after cmd's `/c` `/k` `/r` or pwsh's `-Command` / `-c` (any abbreviation, `pwshOption()`;
+  Windows PowerShell's first positional — its default is -Command; pwsh 7's is -File: none) are joined (`restScript()`, a
+  word holding whitespace quoted again) and lexed as that shell's script — `cmd /c node cli\dev-spec.js approve alpha tasks`;
+  `Start-Process` / `saps` / PowerShell's `start` → its -FilePath + -ArgumentList (a string, a comma list, an `@( … )` array —
+  the lexer's next segment; `startProcessLine()`), lexed as cmd.exe would; `find … -exec <cmd> … ;` → that command
+  (`findExecActions()`); `winpty` and `flock` are launchers (flock's lock file is a positional, `APPROVAL_POSITIONALS`; its
+  `-c` script and `script -c "…"` are read as shells' scripts). A simple command's nested actions are deduplicated (a quoted
+  script is read as a word AND as the joined rest). `echo cmd /c … approve` stays text.
 - **ask** → `permissionDecision: "ask"`: the user confirms or declines; the reason names the feature, phase(s), role, the
   `by` and, loudly, `--force`. Claude Code's auto / bypass permission modes may skip the prompt. **deny** →
   `permissionDecision: "deny"` (holds in every mode): the reason tells the agent approvals are the human's (stop and ask);

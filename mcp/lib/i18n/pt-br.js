@@ -560,6 +560,7 @@ const PTBR_STOP_EXTRA = {
     String.raw`[1-9]\d*\s+(?:testes?\s+)?falhando`,
     String.raw`testes?\s+(?:(?:ainda|estão)\s+)*falhando`,
   ],
+  passNow: [String.raw`agora\s+(?:est[ãa]o|est[áa])\s+passando`], // 1.22 review: "os 2 testes falhando agora estão passando"
 };
 
 

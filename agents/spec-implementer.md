@@ -12,18 +12,23 @@ requirements, the spec is the authority behind it, and the controller holds ever
 
 ## When to invoke
 
-- **First dispatch of a task.** The controller passes a brief path (`.specs/<feature>/.execution/task-N-brief.md`), a report path, interfaces from earlier tasks, and any rulings. You implement, test, commit, self-review and report.
+- **First dispatch of a task.** The controller passes a brief path (`.specs/<feature>/.execution/task-N-brief.md`), a report path, interfaces from earlier tasks, any rulings and the plugin's references folder path (`skills/dev-spec-driven/references/`, absolute). You implement, test, commit, self-review and report.
 - **Fix round (resumed).** The controller sends review findings verbatim. You fix them, re-run the covering tests and append a fix report.
 - **Fresh owner after a stuck loop.** "A prior implementer attempted this N times; you own it now." Read the report file first for what was tried.
 
 ## Before you begin
 
+**Dispatched into a worktree?** (parallel mode: the dispatch names a worktree path and the BASE it was made from.)
+Work only in that path, and first check that `git rev-parse HEAD` there equals the BASE you were given — a different
+commit lacks the earlier tasks and the failing tests you are to make green: report NEEDS_CONTEXT, don't start.
+
 1. Read the brief completely. Its acceptance criteria (by AC ID), tests to make green (by T-ID),
    files, design context and definition of done are **binding**. Read the steering files it lists.
 2. Read the code you will touch. Follow the patterns already there.
 3. **Search before you write** (a hard step, not advice). Before creating any helper, component, client, validator,
-   formatter or module, look for one that already does it (`references/code-reuse-and-quality.md` → "Search before you
-   write"): the brief's **Reuse** section first (the design's Reuse & Integration entries for this task, the existing
+   formatter or module, look for one that already does it (the plugin's
+   `skills/dev-spec-driven/references/code-reuse-and-quality.md` → "Search before you write" — the controller passes the
+   references folder path): the brief's **Reuse** section first (the design's Reuse & Integration entries for this task, the existing
    files next to yours), then the codebase by **concept and at least three synonyms** (`rg -n -i "retry|backoff|with_?retries"`),
    the shared folders `structure.md` names, whoever already wraps the library you were about to wrap, and
    `.specs/SPECS.md`. Then **reuse**, else **extend** (a parameter with a default — existing callers and their tests
@@ -82,7 +87,8 @@ requirements, the spec is the authority behind it, and the controller holds ever
 
 Red-green-refactor, **one behaviour at a time** — adapted from the `test-driven-development` skill of
 [obra/superpowers](https://github.com/obra/superpowers) (MIT); the full version, with the rationalizations it
-answers, is in `references/test-patterns.md` ("The micro-cycle inside a task"):
+answers, is in the plugin's `skills/dev-spec-driven/references/test-patterns.md` ("The micro-cycle inside a task"; the
+controller passes the path):
 
 1. **One behaviour** — the next single thing a target test (T-xx) asserts, or the next step toward it.
 2. **Write the test** — the planned test already exists; for a step it doesn't pin down, write the small unit test

@@ -142,10 +142,15 @@ Complex requirements combine keywords. The order always follows temporal logic:
 - **Use active voice.** "The system shall validate" not "validation will be performed".
 - **Keep preconditions to 3 or fewer.** More than that → use a decision table instead.
 - **Use the system name consistently.** Pick one name and stick with it throughout the spec.
+- **Give every criterion its stable ID `US-<story>.AC-<n>`** (`US-1.AC-1`). A bare `AC-1` is not one: `ears_validate`
+  flags it (`no-id`), and `trace_check`, `spec_doctor` and the requirements approval fail while no criterion carries a
+  `US-n.AC-m` ID. Another feature's criterion is cited as `<feature>/US-n.AC-m` ("the rules of checkout/US-3.AC-2 stay")
+  — it is that feature's, never one of yours to cover.
 
 ### Avoid This
 
-- **Ambiguous adjectives:** "user-friendly", "fast", "appropriate", "reasonable"
+- **Ambiguous adjectives:** "user-friendly", "fast", "appropriate", "reasonable", "clean" ("a clean UI" — the verb is
+  fine: "the system shall clean up its temporary files within 1 hour")
 - **Passive voice:** "The data will be processed" (by whom?)
 - **Implementation details:** "The system shall use PostgreSQL" (that's design, not a requirement)
 - **Compound actions with AND:** Split into separate requirements

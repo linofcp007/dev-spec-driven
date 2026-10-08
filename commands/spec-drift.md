@@ -16,7 +16,8 @@ drifted active feature.
 Report per feature: files **changed**, **missing**, or **now present** (missing at finish), and list apart the
 features without a baseline (`unbaselined` — finished before 1.13, or never finished with `write`), those whose
 tasks are open again (`reopened`), and those that changed since their finish and are done again (`stale`, with
-`why`: a change request or a re-approval after the finish, or — for an active feature — an `_Implements:_` file the
+`why`: a change request or a re-approval of changed content after the finish — a re-approval of the same content
+changes nothing —, or — for an active feature — an `_Implements:_` file the
 baseline never recorded — tell the user to finish them again with `spec_finish {write: true}`, then re-approve
 `execution`; an ARCHIVED one (`archived: true`) can't be finished where it is: restore it first with
 `spec_feature restore`, finish, then archive it again). A stale

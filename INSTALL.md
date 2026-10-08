@@ -35,7 +35,7 @@ git clone https://github.com/linofcp007/dev-spec-driven.git
 claude --plugin-dir ./dev-spec-driven
 ```
 
-`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 54 commands, the 3 agents, the
+`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 55 commands, the 4 agents, the
 hooks and the `spec-driven` MCP server (38 tools) load for that session.
 
 > The rest of this guide uses a `$plugin` variable for your clone location. Set it once (PowerShell):
@@ -153,7 +153,7 @@ prints feature status plus one line per finished feature whose files drifted sin
 turn them off, disable the plugin (or empty `hooks/hooks.json`).
 
 **Evidence gate at the end of a turn (on by default).** A Stop hook (`hooks/stop-hook.js`, also on SubagentStop for the
-`spec-implementer` agent) sends Claude back to work — once — when its closing message says a task or feature is done or
+`spec-implementer` and `spec-simplifier` agents, checked on their reports) sends Claude back to work — once — when its closing message says a task or feature is done or
 verified while a feature active in the last hours has ticked tasks without passing evidence. It is silent otherwise and
 never blocks on its own errors. To turn it off for a project:
 

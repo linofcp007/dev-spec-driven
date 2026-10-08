@@ -24,7 +24,10 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   `supersededByIndex()` (the matrix: `.live`, `.liveBy`) and `catalogData()` (`supLiveBy`) apply the same rule.
 - **Drift baseline:** `spec_finish {write}` on a READY feature records `.state.json → finished`
   `{at, files: {rel: sha1|null}}` (CRLF-normalized, `_Implements:_` files, folders expanded, inside the project
-  only). `spec_drift` hashes only those files (never walks the tree); a baselined feature with open tasks is
+  only). `fileHash()` reads a file in `FILE_HASH_CHUNK` (1 MiB) pieces with `readSync` and drops each 0x0D that precedes a
+  0x0A, a CR ending a piece carried to the next (1.22 review: `readFileSync().toString("latin1")` returned null at 512 MiB —
+  recorded "missing", then "unchanged" forever — and held every file twice in memory); its digests are the old function's
+  byte for byte (mcp/tests/12-lifecycle.js checks pieces of 1–64 bytes against it). `spec_drift` hashes only those files (never walks the tree); a baselined feature with open tasks is
   `reopened`, one changed since its finish (`staleFinish()`) is `stale` (verdict `stale`, CLI exit 1 — finish it
   again; the catalog calls it `complete`) but its recorded files are STILL hashed: one that drifted puts it in
   `features` (`stale: true`) and `drifted` (verdict `drift`) — a stale baseline must never hide a changed file
@@ -67,7 +70,13 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   for the whole call: `traceTestCode()` accepts a function for `scan`, called only when a feature needs it. Stable codes (never
   localized): `status` not-started · planning · executing · complete · finished (= phase complete + a finish baseline),
   `review` critic (no task ticked) · converge (some done, some open) · none, `group` blocked (doctor fail) · attention · ok,
-  `attention` codes, history skip `reason`s. `lines` (and UPGRADE.md) are rendered in the PROJECT language by
+  `attention` codes, history skip `reason`s. **Bare AC-n IDs (1.22 review 2):** a feature approved before 1.22 with criteria
+  numbered `AC-1`, `AC-2` fails doctor's `ears` / `traceability` now (a bare ID is no ID trace_check reads); the audit lists them
+  (`bareAcIds` — `criteriaBareIds()` over the criteria, a change's change.md included — and `criteriaFile`), attention
+  `bare-ac-ids`, and an item (`upgrade.item.bareAcIds`, EN / PT / ES, in UPGRADE.md too): renumber them US-<story>.AC-<n>, their
+  references in tasks.md / test-plan.md too (review 3: a change has neither — the item names its tasks' `_Requirements:_` in
+  change.md), then re-approve. It never renumbers anything itself (the audit edits no spec).
+  `lines` (and UPGRADE.md) are rendered in the PROJECT language by
   `upgradeLines()` / `renderUpgradeMd()` over one item list (`upgradeItems()`); next_action's recommendation stays in the
   feature's language, as everywhere.
 - **The migrations** (`apply: true`) never edit an artifact, approve, tick, untick or delete. Per feature, under its lock,
@@ -101,7 +110,13 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   the end is closed first, by appending its closer — the entry was written unreadable and its D-n handed out again); title ≤ 200 and texts ≤
   20 000 characters. `_Affects:_` is validated when written (an AC defined in requirements.md, a T-ID planned in
   test-plan.md, an EC/NFR/SC ID written in requirements.md, anything else a design.md section heading — bug.md /
-  design.md for a bugfix, spike.md for a spike; unknown → error `unknownAffects`, nothing written) and `_Supersedes:_ D-n`
+  design.md for a bugfix, spike.md for a spike; unknown → error `unknownAffects`, nothing written). **A heading holding "," /
+  ";"** (1.22 review — the size-S "Decisions, reuse & risks" and its PT / ES twins, "[API] Pagination, Idempotency &
+  Concurrency"): the value is split OUTSIDE backtick-quoted spans (`affectPieces()` / `splitRefs()`), the entry writes such a
+  reference `quoted` (`quoteRef`), and a piece that names nothing is joined with the ones after it (at most
+  `AFFECTS_JOIN_MAX`, the longest first) when together they name something — `affectsRefs()` over the value's own separators
+  for spec_decide (the unquoted CLI `--affects "Decisions, reuse & risks"`), `entryRefs()` with ", " for a logged entry
+  (trace's phantomAffects, doctor's decision-affects-approved). `_Supersedes:_ D-n`
   must name existing entries; a superseded entry is retired (the brief and `decision-affects-approved` skip it, the catalog
   marks it). Readers: the brief (bounded), finish's merge summary, spec_export, spec_catalog (count + titles),
   trace_check (`phantomAffects`, warnings — never a gap), doctor (`decision-affects`, and `decision-affects-approved` for
@@ -137,7 +152,10 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   transitively — a finished pair included) or one declaring `_Supersedes:_` of the other's criteria. Bounded (`OVERLAP_MAX_KEYS` 500,
   `OVERLAP_MAX_GLOB_CHECKS`, `OVERLAP_MAX_PAIRS` 50), text reads only — nothing hashed, since SessionStart runs it.
   Surfaces: ROADMAP.md "Needs attention" (each pair once), doctor warn `cross-feature-overlap` (fix with spec_depend or
-  `_Supersedes:_`), one SessionStart line.
+  `_Supersedes:_`), one SessionStart line. Doctor runs `featureOverlaps(…, {only})` (a whole roadmap() walk) only when an
+  OPEN active task of the feature has an `_Implements:_` — a pair needs one on its active side (1.22 review, a 30 features ×
+  40 tasks project, a feature with none: doctor 236 → 64 ms, next_action 336 → 96 ms, spec_finish 257 → 75 ms); the answer is
+  the walk's.
 
 ## Roadmap files and dependencies (from Conventions & gotchas)
 - **Generated roadmap files carry the `AUTO-GENERATED by dev-spec` marker (EN/PT/ES, `RE_AUTOGEN`)**.
@@ -155,7 +173,17 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   `renderRoadmapMd`/`renderRoadmapHtml` (both take `lang`) build the output; `ROADMAP_I18N` holds
   EN/PT/ES chrome; `meta.roadmapLang` (else `meta.lang`) in `roadmap.json` persists the language for auto-refresh.
   `maybeRefreshRoadmap` (in every mutator) writes MD always + HTML if it exists + SPECS.md if it exists —
-  best-effort. The PostToolUse hook does the same for hand-edits, skipping when the changed file IS a
+  best-effort. **The refresh's cost (1.22 review):** every tick recomputed every feature's row (30 features × 40 tasks: 313
+  ms a tick against 13.8 without the refresh). `roadmapRow()` results are cached IN PROCESS (`ROW_CACHE`, ≤ 500 — the MCP
+  server; a one-shot CLI / hook never calls twice, so the first `roadmapData` of a process signs nothing), keyed on every
+  input the row reads: each entry of the feature folder (size, mtime, ctime, inode; `.history/` one level down; `.execution/`,
+  the lock and temp files skipped), roadmap.json and the steering / templates / tracks folders (two levels), the row's
+  `f` and its overlaps. git's racy rule: a file stamped within `ROW_OPTS.racyMs` (3 s) of now is never trusted (a coarse
+  clock can give two same-size writes one stamp), and a spike's row or one with a waiver (date-dependent) is never stored.
+  The marker readers are memoized by text (`taskMarkerSpans` by line — frozen, shared; `taskMarkers` by the block's prose —
+  copies; bounded). Measured on 30 × 40, in process: a tick with its refresh ~185 → ~65 ms (no refresh: ~10), roadmapData
+  ~180 → ~58; a one-shot `done` / tasks.md save ~470 → ~440. mcp/tests/08-tasks.js renders ROADMAP.md after each kind of
+  change from the cache and fresh and compares them byte for byte. The PostToolUse hook does the same for hand-edits, skipping when the changed file IS a
   `ROADMAP.*`. HTML must stay **offline** — no CDN/external URLs (test asserts it). Backlog lives in
   `roadmap.json` `backlog: [{name,note}]`; `spec_create` drops the backlog item with the same slug. Name and note are one
   line (`flatText()` on add and when rendered — a line break became a heading in ROADMAP.md); a name an ACTIVE feature

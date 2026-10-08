@@ -214,7 +214,7 @@ Task runs prove tasks; a feature is done when the **whole project's checks** pas
 - Once they are set, **`spec_finish` needs a passing recorded run of each since the feature's last task activity**
   (the last tick or task run), on the code as it is now — blocker **`suite-evidence`**, with `suiteChecks`
   [{name, command, status}] where status is `pass` · `no-run` · `failed` · `changed` (the configured command changed
-  since the run) · `before-last-tick` · `code-changed` (the feature's implementing files — its tasks' `_Implements:_` —
+  since the run, or the run was of another command — `echo ok` recorded as check `test`) · `before-last-tick` · `code-changed` (the feature's implementing files — its tasks' `_Implements:_` —
   changed since the run; each recorded run is stamped with a hash of them) · `unobserved` (only with
   `meta.evidence: "observed"` — a passing run the harness never saw, see below). Doctor warns `suite-evidence` once every
   task is done; the execution sign-off refuses it too, and `/next-action`'s finish step says how to run and record them.
@@ -235,8 +235,10 @@ every such run of a task's runnable
 git-ignored, size-bounded log (`.specs/<feature>/.execution/observed.jsonl`, `.specs/.execution/observed.jsonl` for
 project checks). Interrupted and backgrounded runs are not logged.
 
-- **Every recorded run is stamped** `observed: true | false` — true when the latest logged run of the same command in
-  the last 24 hours exited with the same code (a reported exit 0 after an observed exit 1 is not observed). `dev-spec
+- **Every recorded run is stamped** `observed: true | false` — true when the latest logged run of the task's `_Verify:_`
+  (read as the evidence gate reads it — `tests\x.test.js`, a `CI=1` prefix, the commands joined in any order — see
+  "Which run proves it") in the last 24 hours exited with the same code (a reported exit 0 after an observed exit 1 is not
+  observed). `dev-spec
   done --run` / `finish --run` stamp `"cli"` (the CLI ran it itself). The MCP tools never take the stamp from the caller.
   `spec_complete_task` returns it, and so do the finish's `suiteChecks` items and the traceability matrix's task
   evidence (`trace_check {matrix}`).
@@ -273,14 +275,18 @@ back with the reason: which feature, which tasks and why (`#3 (latest run failed
 a question, a negated or conditional claim ("not verified yet", "once the tests pass"), quoted or code text, or an
 honest admission ("task 3 is not verified", "2 failing") — the right answer is to read the task's `_Verify:_` in
 tasks.md, run it if it is safe to run, record the evidence, or **say plainly what is not verified**; never reword a
-claim to slip past it. "Active" means activity the engine recorded (ticks, evidence) — never a file date, so a fresh
+claim to slip past it. "Active" means activity the engine recorded (ticks, evidence, and a save of tasks.md / change.md
+through the Write / Edit tool — `lastEditAt`, stamped by the plugin's PostToolUse hook) — never a file date, so a fresh
 clone of someone else's repo doesn't trip it — and the reason never hands you a `--run` command to execute blindly.
 
-- **SubagentStop** (the `spec-implementer` agent only): its DONE is checked against its report — the report file
-  `.specs/<feature>/.execution/task-N-report.md` (named in the reply) must carry each runnable `_Verify:_` command of the
-  task and the exit code it needs — `exit 0` for a must-pass `_Verify:_`, a non-zero exit for an `_Expect: fail_` task.
-  BLOCKED / NEEDS_CONTEXT, or a task without a runnable `_Verify:_`, pass
-  (`references/subagent-execution.md`).
+- **SubagentStop** (the `spec-implementer` and `spec-simplifier` agents only): an implementer's DONE is checked against
+  its report — the report file `.specs/<feature>/.execution/task-N-report.md` (named in the reply) must carry each
+  runnable `_Verify:_` command of the task and the exit code it needs — `exit 0` for a must-pass `_Verify:_`, a non-zero
+  exit for an `_Expect: fail_` task. BLOCKED / NEEDS_CONTEXT, or a task without a runnable `_Verify:_`, pass
+  (`references/subagent-execution.md`). A simplifier's DONE needs its `.specs/<feature>/.execution/simplify-report.md`
+  to end with a `## Final runs` section where every run shows an exit 0 and, with project checks set, each check's
+  command is one of them. NO_CHANGES / BLOCKED / NEEDS_CONTEXT pass (`references/subagent-execution.md` → The
+  simplification pass).
 - It never sends the same stop back twice in a row, stays silent in a project without a dev-spec `.specs/`, and never
   blocks on its own error.
 - **Opt out** per project: `spec_init {stopCheck: false}` (CLI `dev-spec init --stop-check off`; `roadmap.json →
@@ -305,6 +311,26 @@ with `nothingToVerify: true` (and no reason code) — nothing was run or atteste
 | `duplicate-number` | Another task shares this number and the record isn't this task's | Renumber the tasks (doctor warns `duplicate-tasks`) |
 | `unexpected-pass` | The task is marked `_Expect: fail_`, but its latest run passed with no red run before it | Make the test fail for the right reason and record that run (or drop the marker) |
 | `unobserved` | Only with `meta.evidence: "observed"`: the run that proves it was reported, but the harness never saw it (nor did the CLI make it) | Run the command with the Bash tool in Claude Code and record it again, or `dev-spec done <feature> <n> --run` |
+| `command-mismatch` | The run recorded is not a run of the task's `_Verify:_` command (`echo ok` for `npm test`, `npm test -- --grep x`, one of its two `_Verify:_` commands alone) — on an `_Expect: fail_` task, its red run | Run the `_Verify:_` command as written — all of them, joined with ` && `, when there are several — and record that run (`dev-spec done <feature> <n> --run`); an `_Expect: fail_` task: before the fix lands — a red run of another command never counts (the fix already in: set it aside with `git stash` for the red run, then restore it) |
+
+**Which run proves it.** The recorded `command` is compared with the task's `_Verify:_`: whitespace, backticks, quotes
+around the whole command or around a plain argument (`"tests/x.test.js"`), `\` for `/` (`tests\x.test.js`) and a
+trailing `2>&1` don't matter, nor does a leading `cd <project root> &&` (absolute, relative or `./`, any drive-letter case on
+Windows), `set -o pipefail;` or `VAR=value` of the run's own — a `cd` that ends anywhere else (`cd ../other-project`, `cd ..
+&& cd packages/web`) runs the command there: another run; `cd #` (a comment in bash) and a `cd` inside `` `…` `` / `$(…)` prove
+nothing — but
+a prefix the `_Verify:_` itself holds must be there: `cd packages/web && npm test` is no run of `cd packages/api && npm
+test`, `npm test` none of `NODE_ENV=production npm test`. A task with several `_Verify:_` commands needs ONE run of
+every one of them, joined with ` && ` in any order (that is how `done --run` reports them; a `_Verify:_` that itself
+holds ` && ` stays whole) — a run of one of them alone proves nothing. The CLI's own `done --run` always counts. Any other
+command ticks the task but leaves it unverified (`command-mismatch`). On an `_Expect: fail_` task, record the red run of
+the `_Verify:_` BEFORE the fix lands; a red run recorded as another command (another test file, `false`) never counts —
+with the fix already in, set it aside (`git stash push -- <the fix's files>` — a bare `git stash` would stash tasks.md and
+`.state.json` too), record the failing run, then restore it. (Only a red run recorded
+by a dev-spec older than this rule still counts once a passing run of the `_Verify:_` itself follows it.) A project check's run
+(`spec_finish {evidence}`) is compared with its `meta.checks` command the same way — another command reads `changed`.
+Runs recorded by a dev-spec older than 1.22 (before this rule) keep the verdict they had: a plugin update never turns a task
+it verified — or a project check's run — unverified; every new run is held to the rule.
 
 **Duplicate numbers.** `spec_complete_task`, `spec_task_brief` and `done --run` resolve a duplicated number to
 its first **open** task, and evidence is stamped per task, so one "3." never borrows the other's passing run.

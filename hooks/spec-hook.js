@@ -23,11 +23,18 @@
 const fs = require("fs");
 const path = require("path");
 
+// The engine is loaded LAZILY (1.22 review): this hook runs on every Write / Edit in EVERY project, and loading the engine cost
+// ~100 ms before the `/.specs/` path check could send an unrelated edit away (197 vs 71 ms median per edit). loadSpec() runs
+// only for SessionStart and for a spec file that passed the cheap path checks below.
 let spec;
-try {
-  spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
-} catch {
-  process.exit(0); // engine not found — stay silent
+function loadSpec() {
+  if (spec) return spec;
+  try {
+    spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  } catch {
+    process.exit(0); // engine not found — stay silent
+  }
+  return spec;
 }
 
 let emitted = false;
@@ -78,12 +85,6 @@ function findProjectDir(filePath) {
 function main(raw) {
   if (ran) return; // stdin 'end' and the safety-net timer must not both run the hook
   ran = true;
-  // One hook event = one engine call: every spec file is read once across the steps below (roadmap, catalog, the
-  // check), however many of them ask — the engine's own writes (ROADMAP.md, SPECS.md) keep that cache true.
-  return spec.withReadCache(() => handle(raw));
-}
-
-function handle(raw) {
   let payload = {};
   try {
     payload = JSON.parse(raw || "{}");
@@ -92,7 +93,20 @@ function handle(raw) {
   }
   if (!payload || typeof payload !== "object") process.exit(0);
   const event = payload.hook_event_name || payload.hookEventName || "";
+  // The cheap pre-check, before the engine loads: only SessionStart and a PostToolUse on a `.specs/` file (not its scratch
+  // `.execution/` folder, not a folder being removed) go on.
+  if (event === "PostToolUse") {
+    const ti = payload.tool_input || payload.toolInput || {};
+    const filePath = typeof ti.file_path === "string" ? ti.file_path : typeof ti.path === "string" ? ti.path : "";
+    const fwd = filePath.replace(/\\/g, "/");
+    if (!filePath || !fwd.includes("/.specs/") || fwd.includes("/.execution/") || fwd.includes("/.specs/.removing-")) process.exit(0);
+  } else if (event !== "SessionStart") process.exit(0);
+  // One hook event = one engine call: every spec file is read once across the steps below (roadmap, catalog, the
+  // check), however many of them ask — the engine's own writes (ROADMAP.md, SPECS.md) keep that cache true.
+  return loadSpec().withReadCache(() => handle(payload, event));
+}
 
+function handle(payload, event) {
   if (event === "SessionStart") {
     try {
       const pdir = process.env.CLAUDE_PROJECT_DIR || process.env.SPEC_PROJECT_DIR || payload.cwd || process.cwd();
@@ -188,6 +202,11 @@ function handle(raw) {
     if (!isDevSpecProject(pdir)) process.exit(0);
 
     const feature = path.basename(path.dirname(filePath));
+    // 1.22 review: a tasks.md / change.md saved by hand (a box ticked with the Edit tool) is activity the stop gate must see —
+    // stamped in the feature's .state.json (lastEditAt, under its lock), never read from a file date. Best-effort, silent.
+    if (base === "tasks.md" || base === "change.md") {
+      try { spec.recordSpecEdit(pdir, feature); } catch { /* best-effort */ }
+    }
     const h = spec.msg(spec.featureLang(pdir, feature)).hook; // localized in the feature's language
 
     // Keep the roadmap current on any hand-edit of a spec file (not the roadmap files themselves).
@@ -214,7 +233,7 @@ function handle(raw) {
       // The EARS lines of a criteria file — requirements.md, or a change's change.md (1.21 F5: its criteria AND its tasks; the
       // criteria view alone is linted — a task line is no criterion, the engine's own rule) — or null.
       const earsText = (fileName) => {
-        const text = fs.readFileSync(filePath, "utf8");
+        const text = spec.decodeText(fs.readFileSync(filePath)); // a UTF-16 file too (Windows PowerShell 5.1 — 1.22 review)
         const lang = spec.featureLang(pdir, feature);
         const r = spec.earsValidate(fileName === "change.md" ? spec.changeViews(text).criteria : text, lang); // issue messages in the spec's language
         if (!r.ok) return null;

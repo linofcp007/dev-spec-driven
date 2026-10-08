@@ -11,10 +11,12 @@
  *     `{"decision": "block", "reason": …}` — Claude Code keeps the turn going with that reason (localized, project
  *     language): run the task's _Verify:_ (`dev-spec done <f> <n> --run`), record the evidence, or say plainly what is not
  *     verified.
- *   - SubagentStop, matcher ^(dev-spec-driven:)?spec-implementer$: the implementer never ticks tasks (the controller does,
- *     after review), so its DONE is checked against its report — the task's runnable _Verify:_ commands and an exit code
- *     must be in .specs/<feature>/.execution/task-N-report.md. (Plugin subagents ignore `hooks` in their frontmatter, so
- *     the plugin's hooks.json is where this lives.)
+ *   - SubagentStop, matcher ^(dev-spec-driven:)?spec-(implementer|simplifier)$: the implementer never ticks tasks (the
+ *     controller does, after review), so its DONE is checked against its report — the task's runnable _Verify:_ commands
+ *     and an exit code must be in .specs/<feature>/.execution/task-N-report.md; the simplifier (1.22) rewrites code already
+ *     verified, so its DONE needs .specs/<feature>/.execution/simplify-report.md to end with the passing runs of the
+ *     project checks. (Plugin subagents ignore `hooks` in their frontmatter, so the plugin's hooks.json is where this
+ *     lives.)
  * The decision is the engine's (spec.stopCheck — `dev-spec stop-check` prints the same one).
  *
  * It never sends a stop back twice in a row (`stop_hook_active`), is silent (exit 0, no output) when there is nothing to
@@ -78,6 +80,41 @@ function gateOff(dir) {
   }
 }
 
+// 1.22 review — the Stop event's cheap pre-filter, before the engine loads (it cost ~200 ms at the end of EVERY turn in a
+// dev-spec project): the gate can only send a turn back when some feature recorded activity within the last
+// STOP_RECENT_HOURS (spec.STOP_RECENT_HOURS — mcp/tests/10-guards-review.js checks they agree), stamped not more than
+// 5 minutes in the future (the engine's stopActivity). A superset of what the engine counts: ANY string value of a feature
+// folder's .state.json that parses as a date in that window (lastTickAt, lastEditAt, ticks, evidence `at` / `noteAt` /
+// history, approvals…). None → silent, the engine's answer too. Bounded: ≤ STOP_PRE_MAX_FEATURES folders, ≤ 1 MB a file;
+// past a bound, the engine decides.
+const STOP_RECENT_HOURS = 4;
+const STOP_PRE_MAX_FEATURES = 500;
+function recentActivity(dir) {
+  const root = path.join(dir, ".specs");
+  const now = Date.now();
+  const since = now - STOP_RECENT_HOURS * 3600 * 1000, horizon = now + 5 * 60 * 1000;
+  let dirs;
+  try { dirs = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory() && !/^[._]/.test(d.name)); } catch { return true; }
+  if (dirs.length > STOP_PRE_MAX_FEATURES) return true;
+  const recent = (v) => { const t = Date.parse(v); return Number.isFinite(t) && t >= since && t <= horizon; };
+  const walk = (v, depth) => {
+    if (typeof v === "string") return recent(v);
+    if (!v || typeof v !== "object" || depth > 12) return false;
+    for (const x of Array.isArray(v) ? v : Object.values(v)) if (walk(x, depth + 1)) return true;
+    return false;
+  };
+  for (const d of dirs) {
+    const file = path.join(root, d.name, ".state.json");
+    let st;
+    try { st = fs.statSync(file); } catch { continue; } // no state: no recorded activity
+    if (st.size > 1024 * 1024) return true;
+    let j;
+    try { j = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "")); } catch { continue; } // unreadable: the engine skips it too
+    if (walk(j, 0)) return true;
+  }
+  return false;
+}
+
 // Older Claude Code versions send no last_assistant_message: the last assistant text of the transcript (JSONL), read from
 // its tail only.
 function lastAssistantText(file) {
@@ -132,12 +169,15 @@ function main(raw) {
   if (!pdir || gateOff(pdir)) return finish();
 
   const sub = event === "SubagentStop";
+  // Stop only (a subagent's gate reads its report, not the activity): no feature active lately → nothing the gate could say.
+  if (!sub && !recentActivity(pdir)) return finish();
   let message = typeof payload.last_assistant_message === "string" ? payload.last_assistant_message : "";
   if (!message.trim()) message = lastAssistantText(sub ? payload.agent_transcript_path || payload.transcript_path : payload.transcript_path);
   if (!message.trim()) return finish();
 
   const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
-  // hooks.json registers SubagentStop for the spec-implementer only: a payload without agent_type (older versions) is that agent.
+  // hooks.json registers SubagentStop for the spec-implementer and the spec-simplifier: a payload without agent_type (older
+  // versions) is read as the implementer — a simplifier's reply names no task report, so that check lets it through.
   const agent = !sub ? "" : typeof payload.agent_type === "string" && payload.agent_type.trim() ? payload.agent_type : "spec-implementer";
   const r = spec.stopCheck(pdir, { message, agent });
   if (r && r.block === true && typeof r.reason === "string" && r.reason) return finish({ decision: "block", reason: r.reason });

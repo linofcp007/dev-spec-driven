@@ -1431,6 +1431,9 @@ function buildReasoning(tracks, signals, confidence, negated, C, optional) {
       const uniq = [...new Set(signals[t])].slice(0, 6);
       const conf = confidence ? C.conf[confidence[t]] || confidence[t] : "";
       lines.push(C.on(t, conf, uniq.join(", "), neg));
+    } else if (signals && signals[t] && signals[t].length) {
+      // off, yet a weak / app-level word matched (the "Possible +t" note names it): never "no signals matched" (1.22 review)
+      lines.push(C.offWeak(t, [...new Set(signals[t])].slice(0, 6).map((k) => `'${k.trim()}'`).join(", "), neg));
     } else {
       lines.push(C.off(t, neg));
     }

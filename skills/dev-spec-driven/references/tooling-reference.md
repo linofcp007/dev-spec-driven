@@ -30,11 +30,11 @@ input schema (a wrong type or unknown value is refused with a clear message).
 | `spec_decide` | Append one entry to the decision log `decisions.md` (`D-n`, `_Kind:_`, `_Date:_`, `_Affects:_` validated against the feature, `_Supersedes:_`) — append-only |
 | `spec_next_task` | The next task — the first open one whose `_Depends:_` are all done (`skipped` / `blocked` `[{number, waitsOn}]` when dependencies are in play; `next: null` + a note when none can start); `batch: true` → + the `[P]` tasks that can run beside it; `waves: true` → the execution waves of every open task + `cycles` + `blocked` |
 | `spec_task_brief` | Self-contained brief for one task (ACs + tests resolved, design context, a Reuse section — the design's Reuse & Integration entries for the task and the source files next to its own —, scoped steering, decisions, project checks, `_Expect: fail_`, pipe warnings, its `_Depends:_` and where each stands, DoD); default = the next task by `spec_next_task`'s rule; `write: true` → `.specs/<feature>/.execution/` |
-| `spec_complete_task` | The only way to tick task N, with `evidence {command, exitCode, summary}` — a failed run is recorded and refuses the tick; a runnable `_Verify:_` counts as verified only with `{command, exitCode: 0}`; an `_Expect: fail_` task needs a failing run (a pass → `unexpectedPass`; a run that never reached the test — exit 126/127/9009, a missing test file or module — → `couldNotRun`); a piped command → `pipeMasked`; every run stamped `observed` (true / false; `"cli"` for `done --run`) — with `meta.evidence: "observed"` an unobserved run leaves it unverified (`unobserved`); a task ticked before its `_Depends:_` → `waitsOn` + a note (never refused); `undo: true` (+ `reason`) unticks it — its evidence turns stale (`staleBy: "undo"`, a re-tick needs a new run), `ticks[n]` dropped, `.state.json → unticks` {n, at, reason} |
+| `spec_complete_task` | The only way to tick task N, with `evidence {command, exitCode, summary}` — a failed run is recorded and refuses the tick; a runnable `_Verify:_` counts as verified only with `{command, exitCode: 0}` of its `_Verify:_` command (a run of another command ticks it unverified: `command-mismatch`); an `_Expect: fail_` task needs a failing run (a pass → `unexpectedPass`; a run that never reached the test — exit 126/127/9009, a missing test file or module — → `couldNotRun`); a piped command → `pipeMasked`; every run stamped `observed` (true / false; `"cli"` for `done --run`) — with `meta.evidence: "observed"` an unobserved run leaves it unverified (`unobserved`); a task ticked before its `_Depends:_` → `waitsOn` + a note (never refused); `undo: true` (+ `reason`) unticks it — its evidence turns stale (`staleBy: "undo"`, a re-tick needs a new run), `ticks[n]` dropped, `.state.json → unticks` {n, at, reason} |
 | `spec_append_tasks` | Converge: append new tasks under "Phase: Convergence" (existing tasks never renumbered; each task may carry `_Requirements:_`, `_Makes green:_`, `_Implements:_`, `_Verify:_`, `_Expect: fail_`, `_Size:_`, `_Depends:_`; unknown AC IDs, unplanned T-IDs, or a `depends` naming no task / closing a cycle refuse the call; `needsReapproval`) |
 | `spec_finish` | Close a feature: blockers (incl. `suite-evidence` with project checks) + warnings + fresh checks + a merge summary from the spec chain; `evidence` records the project checks you ran; `write: true` on a ready feature records the drift baseline |
 | `spec_drift` | Implementing files of finished features changed / missing / now present since the finish baseline |
-| `spec_stop_check` | The end-of-turn evidence gate for MCP-only clients (= the Stop hook, `stop-check --json`): `message` → `block` + `reason` when it claims done / verified while recently active features have unverified ticks (or project checks without a passing run); `why` otherwise; `agent: "spec-implementer"` checks the task report |
+| `spec_stop_check` | The end-of-turn evidence gate for MCP-only clients (= the Stop hook, `stop-check --json`): `message` → `block` + `reason` when it claims done / verified while recently active features have unverified ticks (or project checks without a passing run); `why` otherwise; `agent: "spec-implementer"` checks the task report, `agent: "spec-simplifier"` the simplification report |
 | `spec_log` | Git-linked evidence from `gitLog` — the `git log --name-only --relative` text the client passes (the server never runs git): the commits citing each task + the +tdd red-first check (= `log <f> - --json`); `max` = the window it was read with |
 | `spec_metrics` | Lead times, rework, forced and batch approvals, change requests, evidence pass rate, velocity; `write: true` (with `name`) → `retro.md` (never overwritten) |
 | `spec_catalog` | The living catalog: every feature + AC (superseded ones marked), spikes, decisions, possible duplicate / conflicting criteria across active features (`crossAcs`); `write: true` → `.specs/SPECS.md` (AUTO-GENERATED) |
@@ -54,8 +54,8 @@ input schema (a wrong type or unknown value is refused with a clear message).
 
 Each check is pass / warn / fail; `readyToAdvance` means no fail.
 
-- **Fail when broken:** `requirements` (missing) · `ears` (a criterion without a modal verb, or requirements.md
-  defining AC IDs of which no criterion was linted) · `clarifications` (open
+- **Fail when broken:** `requirements` (missing) · `ears` (a criterion without a modal verb, requirements.md
+  defining AC IDs of which no criterion was linted, or criteria with no `US-n.AC-m` ID — a bare `AC-1` is none) · `clarifications` (open
   `[NEEDS CLARIFICATION]`) · `ac-uniqueness` · `placeholders` (template text in the current or an earlier phase's
   artifact; a later phase's only warns) · `design` (missing) · `saas-sections` / `ai-sections` / `sec-sections` /
   `privacy-sections` / `dist-sections` / `api-sections` / `ui-sections` / `obs-sections` / `data-sections` / `<pack>-sections` (an active track's mandatory design section missing, empty, still holding its `> **TODO**`
@@ -78,7 +78,8 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   too under `meta.evidence: "observed"`) ·
   `red-green` (+tdd: T-IDs made green with no recorded red run of an `_Expect: fail_` task) · `suite-evidence`
   (project checks without a passing run since the last task activity — or run before the implementing files changed —
-  once every task is done) · `duplicate-tasks` · `verify-pipes` (a `_Verify:_` that pipes) · `malformed-markers`
+  once every task is done) · `duplicate-tasks` · `unread-tasks` (checkbox lines the task scanner does not read as tasks —
+  an ordered-list `1. [ ] text`, an unnumbered `- [ ] text` outside every task) · `verify-pipes` (a `_Verify:_` that pipes) · `malformed-markers`
   (text on a task line shaped like a marker that yields none — `**Verify:** …`, a bare `Verify:` — so nothing runs or is
   traced) · `outside-code-artifacts` (+tdd: a test planned outside test code — `load-test.md`, an eval set — whose
   artifact is still the scaffold once a done task makes it green or every task is done; `spec_finish` repeats it as a
@@ -92,7 +93,8 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   requirements.md / design.md) · spike `timebox` (past its date with no decision) · `waiver-expired` (a forced approval still standing whose
   waiver's `expires` date has passed).
 - **`approval-gates`** — pending phases (every phase whose artifact exists, a bugfix's `design` on `bug.md`, Phase 4
-  `tests` on +tdd / +ai once its plan exists, a phase still missing a role's sign-off), forced approvals with their
+  `tests` on +tdd / +ai once its plan exists or was approved — again once its sign-off no longer covers the plan: a T-ID
+  planned since, or a plan re-approved with other content —, a phase still missing a role's sign-off), forced approvals with their
   failing checks, and what the next approval would refuse (`nextGate {phase, ready, failing, missingRoles}`).
 
 ## MCP prompts and resources (other MCP clients)
@@ -195,9 +197,12 @@ while it points at a missing script or another copy.
 `spec_approve` (approve, revoke, fast-forward, force), `spec_feature` remove and a `spec_init` that lowers a protection:
 a client that supports MCP **elicitation** gets an `elicitation/create` question for its user (the action, the gate —
 forced checks, the waiver —, an Approve box and a note); only an explicit approve records it, with `confirmed {via:
-"elicitation", at, note}`; decline, cancel or no answer within 5 min (`DEV_SPEC_ELICIT_TIMEOUT_MS`) → `declined: true`,
-nothing recorded. Without elicitation `ask` runs as before and `deny` is refused (`humanRequired: true` + the `command`).
-The Claude Code plugin's server leaves this to the approval hook (`SPEC_MCP_APPROVAL_HOOK=on` in `mcp/servers.json`).
+"elicitation", at, note}`, and only the version the question showed — an artifact edited while the user decided (or, forced,
+a gate failing more checks) → `changedSincePreview: true`, nothing recorded: ask again; decline, cancel or no answer within
+5 min (`DEV_SPEC_ELICIT_TIMEOUT_MS`) → `declined: true`, nothing recorded. Without elicitation `ask` runs as before and `deny`
+is refused (`humanRequired: true` + the `command`). The Claude Code plugin's server leaves `ask` to the approval hook
+(`SPEC_MCP_APPROVAL_HOOK=on` in `mcp/servers.json`); a `deny`-level call that still reaches it got past no hook and is
+guarded as above.
 
 `done --run` runs the task's own `_Verify:_` command(s) from the project root and records the evidence (with the git
 commit and whether the tree was dirty, when git is available); `finish --run` runs the project checks
@@ -229,10 +234,10 @@ clone's absolute paths, to paste into another project; `mcp-config <client>` pri
 | `hooks/approval-hook.js` | PreToolUse (`Bash`, `PowerShell`, `spec_approve` / `spec_feature` / `spec_init` under any MCP prefix) | Only with `meta.approvalGuard` `ask` / `deny` (`init --approval-guard`): an agent's `spec_approve`, `spec_feature` remove with `confirm`, `dev-spec approve` / `feature remove --yes` through the Bash or PowerShell tool (also inside `bash -c` / `cmd /c` / `pwsh -Command`), or lowering the guard → `ask` (a permission prompt naming the feature, phase, role and `--force`; auto / bypass modes may skip it) or `deny` (refused in every mode; the user sees the `! node <clone>/cli/dev-spec.js …` command to run). Silent otherwise — a shell command not naming dev-spec is never read further; a guardrail, not a sandbox |
 | `hooks/spec-hook.js` | PostToolUse (Write/Edit) | On save: `requirements.md` → EARS lint + placeholders; `tasks.md` → traceability (+ EC/NFR/SC warnings); `design.md` → the active tracks' mandatory sections (`[SaaS]` `[AI]` `[SEC]` `[PRIVACY]` `[DIST]`), Constitution Check, placeholders; any spec file → roadmap refresh. Skips `.execution/` and `.specs/templates/` |
 | `hooks/spec-hook.js` | SessionStart | One status line per feature (at most 20, the most relevant — then one "+N more — /spec-status" line), plus one line per finished feature whose implementing files drifted, one line when features' open tasks plan the same files (cross-feature overlap), one line while `.specs/` comes from an older dev-spec (`meta.specVersion` absent or older — run `/spec-upgrade`), and one line when `.gitattributes` names the spec state's merge driver but git config runs it from a missing script or another copy (re-run `merge-state --install` after a plugin update — read as text, no git process) |
-| `hooks/observe-hook.js` | PostToolUse + PostToolUseFailure (Bash, PowerShell) | Logs a Bash (or PowerShell, with an explicit exit code) run of a task's runnable `_Verify:_` command (or its `&&` join) or of a `meta.checks` command — `{command, exitCode, at, event, session}` — to `.specs/<feature>/.execution/observed.jsonl` / `.specs/.execution/observed.jsonl` (git-ignored, ≤ 64 KB); interrupted or backgrounded runs are skipped. The engine then stamps each reported run `observed: true / false`. Prints nothing; PowerShell runs are not observed |
+| `hooks/observe-hook.js` | PostToolUse + PostToolUseFailure (Bash, PowerShell) | Logs a Bash (or PowerShell, with an explicit exit code) run of a task's runnable `_Verify:_` command (or its `&&` join) or of a `meta.checks` command — `{command, exitCode, at, event, session}` — to `.specs/<feature>/.execution/observed.jsonl` / `.specs/.execution/observed.jsonl` (git-ignored, ≤ 64 KB); interrupted or backgrounded runs are skipped. The engine then stamps each reported run `observed: true / false`. Prints nothing |
 | `hooks/stop-hook.js` | Stop | The end-of-turn evidence gate: when the closing message claims done / verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without passing evidence (or, all tasks done, project checks without a passing run), sends the turn back with the reason; never twice in a row; off with `meta.stopCheck: false` |
 | `hooks/plan-hook.js` | PostToolUse (`ExitPlanMode`) | The plan-mode bridge: when the user approves a plan in a dev-spec project, one line of context suggests `/spec-import` of it (`spec_import {tool: "plan", text}` — or `{path}` when the plan file is inside the project); never imports by itself, silent elsewhere |
-| `hooks/stop-hook.js` | SubagentStop (`spec-implementer` only) | A DONE for a task with a runnable `_Verify:_` needs its report (`task-N-report.md`, named in the reply) to carry each `_Verify:_` command and the exit code the task needs (exit 0; a non-zero exit for an `_Expect: fail_` task), else the stop is sent back |
+| `hooks/stop-hook.js` | SubagentStop (`spec-implementer`, `spec-simplifier`) | An implementer's DONE for a task with a runnable `_Verify:_` needs its report (`task-N-report.md`, named in the reply) to carry each `_Verify:_` command and the exit code the task needs (exit 0; a non-zero exit for an `_Expect: fail_` task); a simplifier's DONE needs `simplify-report.md` to end with a `## Final runs` section in which every run exits 0 and every project check is one of the runs — else the stop is sent back |
 
 `hooks/precommit-check.js` is an optional git pre-commit validator (staged EARS errors, phantom references). The
 evidence rules behind the Stop hooks: `references/verification.md`.
@@ -341,7 +346,7 @@ A `ROADMAP.md`/`ROADMAP.html` that dev-spec did **not** generate (no `AUTO-GENER
 marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chrome language
 (`meta.roadmapLang`); the project language (`meta.lang`) is set by `spec_init`.
 
-## Command reference (54 commands)
+## Command reference (55 commands)
 
 | Command | Phase | What it does |
 |---|---|---|
@@ -386,12 +391,13 @@ marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chr
 | `/coverage` | brownfield | Spec coverage of existing code via `_Implements:_` (uses `spec_coverage`) |
 | `/spec-import` | brownfield | Import a Kiro / spec-kit / OpenSpec spec, a plan, a Codex ExecPlan, BMAD docs or a fluidplan plan as a new feature (uses `spec_import`) |
 | `/spec-bugfix` | bugfix | Reproduce → root cause (with evidence) → approval → failing regression test (`_Expect: fail_`) → fix → verify (uses `spec_create {kind:"bugfix"}`) |
+| `/spec-simplify` | close | Optional, before `/spec-finish`: behaviour-preserving cleanups of the feature's own lines, one commit each, proven by the tests and reviewed; `--subagents` → the `spec-simplifier` agent |
 | `/spec-finish` | close | Blockers + warnings + fresh checks + a merge summary from the spec chain; then merge locally / keep (uses `spec_finish`) |
 | `/spec-drift` | after | Implementing files changed since finish, and what to do about it (uses `spec_drift`) |
 | `/spec-metrics` | after | Lead times, rework, forced approvals, change requests, pass rate, velocity; `--write` → retro.md (uses `spec_metrics`) |
 | `/spec-review-feedback` | support | Classify review comments against the spec: fix AC violations, route spec changes, push back on out-of-scope |
 | `/spec-commit` | support | Conventional commits referencing spec + tests + evals (format below) |
-| `/prReview` | support | Track-aware local pre-merge review against the full chain |
+| `/prReview` | support | Track-aware local pre-merge review against the full chain, the project's written rules and the history of rewritten lines; each finding verified (confidence 80+) before it is reported |
 | `/promptReview` | support | (+ai) gate prompt changes on eval/cost/version |
 | `/migrateModel` | support | (+ai) eval-gated model migration |
 | `/spec-status` | any | Mode, tracks, phase, task/test/eval state (uses `spec_status`/`spec_list`) |

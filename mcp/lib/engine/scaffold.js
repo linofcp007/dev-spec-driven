@@ -639,6 +639,10 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // language: the explicit one, else the project's configured one (full review Pb2 — spec_create / create used to classify
   // with the explicit lang only; they now leave it to the engine, so both surfaces read it the same way).
   const clsR = cls || (bugfix || spike || change ? null : classify(summary || "", existed ? { name, lang: featureLang(projectDir, slug) } : { name, lang, projectDir }));
+  // The summary as it is WRITTEN into a scaffold (requirements.md, change.md, classification.md, bug.md, a project template's
+  // {{summary}}): through safeSpecText, like the bug prefill and the spike question — a `<!--` in it paired with the scaffold's
+  // closing EARS-guidance `-->` and hid every criterion (EARS 0 criteria, trace 0 ACs, no placeholder). classify reads the raw text.
+  const writtenSummary = summary != null ? safeSpecText(String(summary)) : summary;
   const t = spike || change ? (existed ? current : ["core"]) // a spike is core-only (tracks belong to the feature a 'go' leads to); so is a change (1.21 F5)
     : existed ? allTracks().filter((x) => current.includes(x) || (given && pt.tracks.includes(x)) || (bugfix && x === "tdd"))
     : bugfix ? allTracks().filter((x) => x === "core" || x === "tdd" || (given && pt.tracks.includes(x)))
@@ -686,7 +690,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
       if (s.template) fromTemplates[rel] = s.template;
     } else skip.push(rel);
   };
-  const scaf = (key, builtIn, o) => scaffoldText(projectDir, key, lng, { name, slug, summary, tracks: t }, builtIn, o);
+  const scaf = (key, builtIn, o) => scaffoldText(projectDir, key, lng, { name, slug, summary: writtenSummary, tracks: t }, builtIn, o);
   // Shared tail: new tracks on an existing feature (or a new bugfix's extra tracks), the backlog entry this
   // feature fulfils, the roadmap.
   const finish = (res) => {
@@ -728,7 +732,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   if (spike) { // 1.14 C2 — spike.md + the investigation tasks (a project's spike / spike-tasks templates first; {{summary}} = the question)
     const SP = i18n.msg(lng).spike;
     const q = spikeIn.question || (summary != null && String(summary).trim() ? safeSpecText(String(summary).trim()) : null);
-    const sv = { name, slug, summary: q || summary, tracks: t };
+    const sv = { name, slug, summary: q || writtenSummary, tracks: t };
     put(SPIKE_FILE, scaffoldText(projectDir, "spike", lng, sv, () => SP.report({ name, question: q, until: spikeIn.until, raw: spikeIn.raw })));
     put("tasks.md", scaffoldText(projectDir, "spike-tasks", lng, sv, () => SP.tasks(name)));
     const res = finish({ ok: true, slug, dir, kind: "spike", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
@@ -742,7 +746,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   }
 
   if (change) { // 1.21 F5 — a change (size xs): ONE file, change.md (a project's change template first); no other artifact
-    put(CHANGE_FILE, scaf("change", () => i18n.change({ name, summary }, lng)));
+    put(CHANGE_FILE, scaf("change", () => i18n.change({ name, summary: writtenSummary }, lng)));
     const res = finish({ ok: true, slug, dir, kind: "change", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
     if (res.ok !== false && created.includes(CHANGE_FILE)) res.note = [res.note, i18n.msg(lng).sizes.changeCreated(slug)].filter(Boolean).join(" ");
     // 1.21 review C9: an EXISTING change named with tracks (a new one is refused before any write) — never silently: tracksIgnored
@@ -758,8 +762,8 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
 
   if (bugfix) {
     const bt = bugIn.texts; // 1.21 F3: the prefill (built-in scaffolds only — a project template is written as it says)
-    put("bug.md", scaf("bug", () => i18n.bugReport({ name, summary, ...bt }, lng)));
-    put("requirements.md", scaf("bug-requirements", () => i18n.bugRequirements({ name, summary, ...bt }, lng)));
+    put("bug.md", scaf("bug", () => i18n.bugReport({ name, summary: writtenSummary, ...bt }, lng)));
+    put("requirements.md", scaf("bug-requirements", () => i18n.bugRequirements({ name, summary: writtenSummary, ...bt }, lng)));
     put("test-plan.md", scaf("bug-test-plan", () => i18n.bugTestPlan(name, lng)));
     ensureDir(path.join(dir, "tests", "unit"));
     ensureDir(path.join(dir, "tests", "integration"));
@@ -789,8 +793,8 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // A project template (.specs/templates/) replaces the built-in one; design / requirements / tasks still get the active
   // tracks' blocks the template doesn't carry (withTrackBlocks).
   // 1.21 F5 — size S has no classification.md (its Phase 0 is the size and the tracks recorded in .state.json: one approval less).
-  if (size !== "s") put("classification.md", scaf("classification", () => classificationMd(name, t, summary, clsR, lng)));
-  put("requirements.md", scaf("requirements", () => requirementsMd(name, t, summary, lng, size), { tracks: t }));
+  if (size !== "s") put("classification.md", scaf("classification", () => classificationMd(name, t, writtenSummary, clsR, lng)));
+  put("requirements.md", scaf("requirements", () => requirementsMd(name, t, writtenSummary, lng, size), { tracks: t }));
   put("design.md", scaf("design", () => designMd(name, t, lng, size), { tracks: t }));
   if (t.includes("tdd")) {
     // The same rule as spec_add_track: a template test row only for the track criteria requirements.md has — on an
@@ -1112,7 +1116,7 @@ function applyTracks(projectDir, f, name, trs, lng) {
 // the track's first template criterion) — a track added after the requirements brings none. spec_add_track and
 // spec_create (new or existing feature) share it, so both give the same plan.
 function testPlanTracks(dir, tracks, reqIds) {
-  const ids = reqIds || requirementAcIds(readIfExists(path.join(dir, "requirements.md")) || "");
+  const ids = reqIds || requirementAcIds(readIfExists(path.join(dir, "requirements.md")) || "", dir);
   return tracks.filter((x) => { const first = trackTemplateAcs(x)[0]; return !first || ids.has(first); });
 }
 // A track's own template criteria (the requirements template's IDs for it, in order) — [] for core / tdd.
@@ -1130,7 +1134,7 @@ function trackTemplateAcs(tr) {
 // Pa4). Only a missing / blank requirements.md still gets the template rows.
 function scaffoldTestPlan(dir, name, lng, tracks, size) {
   const reqText = readIfExists(path.join(dir, "requirements.md"));
-  const reqIds = requirementAcIds(reqText || "");
+  const reqIds = requirementAcIds(reqText || "", dir);
   const t = testPlanTracks(dir, tracks, reqIds);
   const tmpl = i18n.templateAcIds(t, size); // 1.21 F5: a size S scaffold's two core criteria
   // A track pack's criteria (1.15) are the pack's scaffold, not written requirements: they get the pack's own rows (withTrackBlocks).

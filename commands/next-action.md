@@ -1,5 +1,5 @@
 ---
-description: Resume a feature - "you are here, do this next" + what changed since approval. PT - próximo passo da feature. ES - siguiente paso de la feature.
+description: Resume a feature - "you are here, do this next" + what changed since approval. PT - próximo passo da feature. ES - siguiente paso de la función.
 argument-hint: "[feature name]"
 ---
 
@@ -11,9 +11,12 @@ Call the `spec_next_action` MCP tool (CLI `dev-spec next-action <feature>`, alia
 **phase by phase**, and names it in `step`:
 
 1. **re-review** — an artifact changed after its own approval (`changedSinceApproval`); when the approval has a
-   snapshot, `impact` names the `spec_impact` phases to run first (`/spec-impact`);
+   snapshot, `impact` names the `spec_impact` phases to run first (`/spec-impact`). An approved artifact that was
+   deleted is named in `missingApproved`: restore it, or revoke that approval (`/approve <feature> <phase> --revoke`);
 2. then the **first active phase not approved yet**, in order — classification, requirements, design, test-plan
-   (+tdd), eval-plan (+ai), tests (Phase 4, +tdd / +ai once its plan exists — never on a bugfix), tasks:
+   (+tdd), eval-plan (+ai), tests (Phase 4, +tdd / +ai once its test or eval plan exists or was approved — and again
+   once its sign-off no longer covers the plan: a T-ID planned since, or a plan re-approved with other content; never
+   on a bugfix), tasks:
    - **fill** — its artifact is missing or still a template (`file` names it); a fresh feature starts here, at its
      classification;
    - **fix** — what that phase's approve gate would refuse (`refusedGate` lists its failing check ids);
@@ -31,8 +34,9 @@ Call the `spec_next_action` MCP tool (CLI `dev-spec next-action <feature>`, alia
 4. **implement** — the next task: the first open one whose `_Depends:_` tasks are all done (`spec_next_task`'s rule).
    Open tasks none of which can start (a `_Depends:_` cycle, or one naming no task) → **fix** instead, with `blocked`
    [{number, waitsOn}]: correct the `_Depends:_` markers (`spec_doctor` fails `task-deps`);
-5. **verify** — every task is ticked, but one is not verified (its latest run failed, or its runnable `_Verify:_`
-   has only a note, stale or shared-number evidence): `/spec-finish` and the `execution` sign-off would refuse. The
+5. **verify** — every task is ticked, but one is not verified (its latest run failed, its runnable `_Verify:_`
+   has only a note, stale or shared-number evidence, or the run recorded is not a run of its `_Verify:_` command —
+   `command-mismatch`): `/spec-finish` and the `execution` sign-off would refuse. The
    recommendation names each task with its reason — re-run its `_Verify:_` with `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run`
    (a failing run means fixing the code first; an `_Expect: fail_` task's proof is a FAILING run — its red test). No
    shell to run it? Ask the user to run it and paste the output — never tick or record a run nobody made;

@@ -13,10 +13,10 @@
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acIndex, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName, noteGhostPacks, packOf, packTracks,
-  readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf;
-function __link(E) { ({ acIndex, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName, noteGhostPacks,
-  packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf } = E); }
+let acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName, noteGhostPacks, packOf,
+  packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf;
+function __link(E) { ({ acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName,
+  noteGhostPacks, packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf } = E); }
 
 const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
@@ -163,12 +163,23 @@ function trackAcIds(reqText, tr) {
 }
 // The heading of a track's template task block as it appears in tasks.md (in any language), or null.
 const normTaskHeading = (l) => l.replace(/^#{1,6}\s+/, "").replace(/\s+/g, " ").trim().toLowerCase();
-const TASK_HEADINGS = new Map(); // built-in track → its template task headings (static i18n text: built once per process)
+// built-in track → its template task headings (static i18n text: built once per process; markdown.js clears it with the
+// corpus it came from — localeLoaded)
+const TASK_HEADINGS = new Map();
+// A track's template task headings in every language (normalized, unique), rendered from the i18n tables — each language's
+// taskBlock. The pre-generated corpus holds them for the built-in tracks (renderCorpusData's taskHeadings).
+function renderTrackTaskHeadings(tr) {
+  return [...new Set(i18n.LANGS.map((l) => (i18n.msg(l).tracks.taskBlock(tr, 1).match(/^#{1,6}\s.*$/m) || [""])[0]).filter(Boolean).map(normTaskHeading))];
+}
 function trackTaskHeadings(tr) {
   if (isPackTrack(tr)) return new Set(); // a track pack's block is found by its marker (trackTaskHeadingIs)
   let set = TASK_HEADINGS.get(tr);
   if (!set) {
-    set = new Set(i18n.LANGS.map((l) => (i18n.msg(l).tracks.taskBlock(tr, 1).match(/^#{1,6}\s.*$/m) || [""])[0]).filter(Boolean).map(normTaskHeading));
+    // A built-in track's come from the pre-generated corpus when this process trusts it (builtinTaskHeadings): rendering them
+    // loads every language's file — pt.js, es.js and the derived pt-BR, 50–65 ms of an English `list` (1.22 review: a process
+    // pays only for the languages it speaks). Else, and for any other name, rendered.
+    const built = VALID_TRACKS.includes(tr) ? builtinTaskHeadings(tr) : null;
+    set = new Set(built || renderTrackTaskHeadings(tr));
     if (VALID_TRACKS.includes(tr)) TASK_HEADINGS.set(tr, set);
   }
   return set;
@@ -618,7 +629,8 @@ const SIGNALS = {
     weak: [
       "authentication", "authorization", "rbac", "abac", "access control", "access token", "refresh token",
       "api key", "credential", "encryption", "encrypt", "tls", "cors", "csp", "audit log", "audit trail", "sanitiz",
-      "input validation", "security", "hardening", "least privilege", "mfa", "2fa", "two-factor", "firewall", "secrets",
+      "input validation", "security", "hardening", "least privilege", "mfa", "2fa", "two-factor", "multi-factor", "multifactor",
+      "firewall", "secrets",
       "brute force", "brute-force", // weak: also an algorithm ("a brute-force search") — the attack phrase is strong
       // C4: the STRIDE methodology only as the upper-case acronym (an upper-case keyword is matched case-sensitively, see
       // classify): a lower-case "stride" is an array stride or a running stride. "STRIDE threat model" stays strong through
@@ -628,9 +640,13 @@ const SIGNALS = {
       "autenticação", "autenticacao", "autorização", "autorizacao", "controlo de acesso", "controle de acesso",
       "token de acesso", "chave de api", "credencial", "credenciais", "encriptação", "cifragem", "criptografia", "segurança",
       "registo de auditoria", "trilho de auditoria", "registro de auditoria", "trilha de auditoria", "privilégio mínimo", "menor privilégio", "validação de entrada", "força bruta",
+      // 1.22 review — the two-factor / multi-factor signal (EN "two-factor", "multi-factor") in PT / ES too: "autenticação de dois fatores"
+      // is autenticação + dois fatores, two weak signals like "two-factor authentication" (never ONE phrase: it would shadow the second)
+      "dois fatores", "multifator",
       // ES
       "autenticación", "autorización", "control de acceso", "token de acceso", "clave de api",
       "cifrado", "encriptación", "seguridad", "registro de auditoría", "privilegio mínimo", "validación de entrada", "fuerza bruta",
+      "dos factores", "doble factor", // (ES "multifactor" is the EN word above)
       // full review Pb5 — the encryption VERBS, PT / pt-BR / ES (EN has "encrypt" + its inflections): encriptar, cifrar,
       // criptografar as VERB_STEMS — their conjugations only, one signal per verb (like encrypt / encryption). Never a bare
       // "cifra": PT/ES also a figure, an amount ("as cifras do trimestre").
@@ -641,6 +657,38 @@ const SIGNALS = {
     // Full review Pb5: "at rest" / "in transit" (EN / PT / ES) the same way — beside "encrypt" they name data encryption
     // ("Encrypt customer PII at rest and in transit"), alone they are a patient at rest or a parcel in transit.
     context: ["permission", "permissão", "permiso", "at rest", "in transit", "em repouso", "em trânsito", "em transito", "en reposo", "en tránsito", "en transito"],
+    // CUES (1.22 review 2) — the 1.22 factor words count only as AUTHENTICATION: "depende de dois fatores", "depende de dos factores",
+    // "doble factor de ponderación", "a multi-factor risk model" were a weak +sec signal (one more weak word turned +sec on). Next
+    // to an auth word — "autenticação de dois fatores", "login com dois fatores", "autenticación de doble factor", "doble factor de
+    // autenticación", "multi-factor authentication", "multi-factor sign-in" — they stay weak (the auth word is the other signal, as
+    // in English); anywhere else they are no signal at all. "two-factor", "2fa" and "mfa" (pre-1.22) keep their reading.
+    // Review 3 — the natural phrasings the auth-word list missed: the VERBS "iniciar sesión" / "iniciar sessão", "entrar", "log in" /
+    // "sign in" ("Iniciar sesión con doble factor", "passam a entrar com dois fatores"), and the connectors "at" / PT "ao" / ES "al"
+    // before one ("Require multifactor at login", "doble factor al iniciar sesión") — still only RIGHT NEXT to the factor word.
+    // Review 4 — PT / ES put the adjective AFTER the noun, between the auth word and the factor word ("autenticação forte de dois
+    // fatores", "autenticación obligatoria de doble factor" turned +sec off while "strong multi-factor authentication" kept it):
+    // one optional adjective slot; and the auth verbs conjugated ("The user logs in with multi-factor", "inicia sesión con…").
+    cues: [
+      { kind: "near", on: ["dois fatores", "multifator", "dos factores", "doble factor", "multi-factor", "multifactor"], then: "keep",
+        before: { words: [[["authenticat\\p{L}*", "auth", "log-?ins?", "log in", "log(?:s|ged|ging) in", "sign-?ins?", "sign in", "sign(?:s|ed|ing) in",
+          "sso", "verification", "autenticaç\\p{L}*", "autenticac\\p{L}*", "autenticar", "verificaç\\p{L}*", "verificac\\p{L}*", "início de sessão",
+          "inicio de sessao", "inicio de sesión", "inicio de sesion", "iniciar sessão", "iniciar sessao", "iniciar sesión", "iniciar sesion",
+          "inicia[mn]? sess[ãa]o", "inicia[mn]? sesi[óo]n", "entrar", "acesso", "acceso"],
+        { optional: ["forte", "fortes", "fuerte", "obrigatóri[ao]", "obrigatori[ao]", "obligatori[ao]", "reforçad[ao]", "reforcad[ao]", "reforzad[ao]",
+          "adicional", "segur[ao]"] },
+        { optional: ["de", "em", "com", "por", "a", "en", "con", "with", "via", "using", "by"] }]],
+        chars: 48, edge: "letter" },
+        after: { words: [[{ optional: ["de", "do", "da", "del", "para", "for", "of", "on", "at", "no", "na", "ao", "al", "en", "em"] }, { optional: ["o", "a", "the", "el", "la"] },
+          ["authenticat\\p{L}*", "auth", "log-?ins?", "log in", "sign-?ins?", "sign in", "sso", "verification", "autenticaç\\p{L}*", "autenticac\\p{L}*",
+            "verificaç\\p{L}*", "verificac\\p{L}*", "início de sessão", "inicio de sessao", "inicio de sesión", "inicio de sesion", "iniciar sessão",
+            "iniciar sessao", "iniciar sesión", "iniciar sesion", "entrar", "acesso", "acceso"]]],
+        chars: 48 } },
+      // … anywhere else, no signal: the catch-all — the hit's own sentence always holds the hit, so this rule always fires (review 4:
+      // with every inflection the keyword matcher accepts — "multi-factored" / "multifactored" missed the phrases and kept a weak signal)
+      { kind: "sentence", on: ["dois fatores", "multifator", "dos factores", "doble factor", "multi-factor", "multifactor"], then: "none",
+        edge: "letter", phrases: ["dois fatores(?:e?s|ed|ing|d)?", "multifator(?:e?s|ed|ing|d)?", "dos factores(?:e?s|ed|ing|d)?", "doble factor(?:e?s|ed|ing|d)?",
+          "multi-?factor(?:e?s|ed|ing|d)?"] },
+    ],
   },
   // +privacy (1.14): GDPR / RGPD. The regulation names moved here from +saas — one concept, one track.
   privacy: {
@@ -1471,7 +1519,7 @@ const SIGNALS = {
 module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, parseTracks, normalizeTracks,
   TRACK_ALIASES, suggestTrack, unknownTracksError, trackLabel, SIGNALS, allTracks, optionalTracks, markerTracks, trackMarker, trackSectionTable, trackSteeringFiles, trackSignalTable,
   detectTracks, savedTracks, headingHasMarker, TRACK_MARKER, MARKER_TRACKS, trackAcIds, normTaskHeading, TASK_HEADINGS,
-  trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
+  renderTrackTaskHeadings, trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
   inactiveMarkerLines, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
   SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, OBS_SECTIONS, DATA_SECTIONS, TRACK_SECTIONS,
   TRACK_OVERLAPS, TRACK_TASK_OVERLAPS, activeSectionTracks, activeDesign, __link };

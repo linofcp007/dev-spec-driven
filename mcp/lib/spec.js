@@ -58,7 +58,8 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   manageFeature, markdownToHtml, matrixCsv, maybeRefreshCatalog, mdPlainText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
   MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, milestone,
   MILESTONE_ACTIONS, MILESTONE_STATUSES, milestoneLine, networkPathInside, nextAction, nextTask, normalizeLang,
-  normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, PACK_LIMITS, parseApprovalRolesText,
+  normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, PACK_LIMITS, parseApprovalRolesText, runProvesVerify, stripCdPrefix,
+  recordSpecEdit, runStartStamp,
   parseGitLog, parseTasks, parseTracks, phasePercent, PHASES, placeholderKey, placeholderReport, planBridge, planPaths,
   posixPwshScript, posixShellSyntax, projectChecks, projectLang, pwshParseFailure, runsPwsh, readRoadmap, readState, removeFeature, removeTrack, renameFeature,
   renderRoadmapHtml, renderRoadmapMd, resolveFeature, resolveProjectDir, resolveRunShell, resolveTask, restoreFeature,
@@ -69,7 +70,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   supersedesWarnings, taskBlocks, taskBrief, taskCommits, taskDependsSpec, taskMarkers, taskSchedule, taskSize,
   taskWaves, TEMPLATE_ARTIFACTS, templateBracketKeys, templateKey, templates, templateSets, traceCheck, traceGapLines,
   traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks, FEATURE_SIZES, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS,
-  changeViews,
+  changeViews, decodeText,
   userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, windowsShellFailure, withFeatureLock, withinRoot,
   withReadCache, writeRoadmapHtml, writeRoadmapMd } = engine;
 
@@ -100,6 +101,7 @@ module.exports = {
   taskBrief: featureLocked(taskBrief, (a) => !!(a[3] && a[3].write)), // write: .execution/ resolved and written under the lock (a move waits)
   taskBlocks,
   taskMarkers, // a task block's English-stable markers ({ requirements, "makes green", …, verify, expect }) — taskMarkerSpans' reading
+  decodeText, // a file's bytes as text: a UTF-16 BOM (FF FE / FE FF) decides, else UTF-8 (1.22 review — the hooks, the resources, `ears <file>`)
   stripHtmlComments, // text minus HTML comments as every reader sees it (code spans and fenced code keep their "<!--")
   globalConstraints,
   taskDependsSpec, // 1.14 F3: a task block's _Depends:_ → { declared, numbers, invalid }
@@ -268,6 +270,7 @@ module.exports = {
   stopCheck, // the end-of-turn evidence gate — hooks/stop-hook.js (Stop / SubagentStop) and `dev-spec stop-check`
   stopClaims, // does a message claim the work is done / verified? (EN / PT / ES, conservative) → { claim, admitted, claims }
   stopCheckEnabled, // roadmap.json meta.stopCheck (on unless false)
+  recordSpecEdit, // 1.22 review: (projectDir, feature) — stamp .state.json lastEditAt (a tasks.md / change.md saved by hand; the PostToolUse spec-hook) under the feature lock
   guardLevel, // roadmap.json meta.guard → false | true | "scope"
   approvalGuardDecision, // 1.14 F2: the human approval guard's decision for one PreToolUse payload (hooks/approval-hook.js) — pure
   approvalGuardLevel, // roadmap.json meta.approvalGuard → "off" | "ask" | "deny"
@@ -286,8 +289,11 @@ module.exports = {
   // 1.14 F1 — harness-observed evidence
   observeRun, // hooks/observe-hook.js: log a Bash run of a _Verify:_ / project-check command (.specs/<f>/.execution/observed.jsonl, .specs/.execution/observed.jsonl)
   observedRun, // was this reported run observed? (latest observed run of the same command, same exit code, recent) → { observed, at? }
+  runProvesVerify, // 1.22 review: is a run {command, observed?} a run of one of these _Verify:_ / check commands? (else command-mismatch / changed)
+  stripCdPrefix, // 1.22 review: `cd <dir> && cmd` → cmd when <dir> is one of the given project roots — the observe hook's log and observedRun alike
   evidenceMode, // roadmap.json meta.evidence → "reported" (default) | "observed"
   OBSERVED_MAX_BYTES, // the log's size bound
+  runStartStamp, // 1.22 review: (projectDir, feature) → { ok, at, code } — the stamps `finish --run` takes BEFORE its checks run
 
   // 1.21 F1a — git's merge driver for the spec state (`dev-spec merge-state %O %A %B %P`, installed by `merge-state --install`)
   mergeStateJson, // (base, ours, theirs, kind) → { kind, merged, conflicts } — the semantic 3-way merge of a .state.json / roadmap.json (pure)

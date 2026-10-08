@@ -16,7 +16,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled, chainPlaceholders,
   changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN, crossAcDoctorDetail,
   crossFeatureAcs, decisionDoctorChecks, designApprovedBeforeWeigh, designWeighChecks, detectPhase, detectTracks,
-  duplicateTaskNumbers, earsUnlinted, earsValidate, evidenceRule, executionSignOffStale, existingFeature, expectsFail,
+  duplicateTaskNumbers, earsUnlinted, earsUnidentified, shortIdList, earsValidate, evidenceRule, executionSignOffStale, existingFeature, expectsFail,
   extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText, flowPhaseIndex,
   FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority, hasSuccessCriteria,
   headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord, isSpikeDir, isTestCodePath,
@@ -31,15 +31,15 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   suiteLabel, suiteStatus, supersedesWarnings, taskBlocks, taskDepsBlockedNote, taskDepsCheck, taskMarkers,
   taskSchedule, taskVerification, tKey, toPosix, TRACE_PLAN_KINDS, TRACE_SECONDARY_KINDS, TRACE_TASK_KINDS,
   TRACE_VERDICT_KINDS, traceCheck, traceGapLines, traceGaps, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS,
-  trackLabel, trackMarker, trackSectionTable, unverifiedLabel, VALID_TRACKS, verificationStatus, verifyPipes,
+  trackLabel, trackMarker, trackSectionTable, unreadTasksDetail, unverifiedLabel, VALID_TRACKS, verificationStatus, verifyPipes,
   waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd;
+  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText;
 function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
   crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designApprovedBeforeWeigh, designWeighChecks, detectPhase,
-  detectTracks, duplicateTaskNumbers, earsUnlinted, earsValidate, evidenceRule, executionSignOffStale, existingFeature,
+  detectTracks, duplicateTaskNumbers, earsUnlinted, earsUnidentified, shortIdList, earsValidate, evidenceRule, executionSignOffStale, existingFeature,
   expectsFail, extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText,
   flowPhaseIndex, FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority,
   hasSuccessCriteria, headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord,
@@ -54,10 +54,10 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   steeringPlaceholders, stopActivity, suiteLabel, suiteStatus, supersedesWarnings, taskBlocks, taskDepsBlockedNote,
   taskDepsCheck, taskMarkers, taskSchedule, taskVerification, tKey, toPosix, TRACE_PLAN_KINDS, TRACE_SECONDARY_KINDS,
   TRACE_TASK_KINDS, TRACE_VERDICT_KINDS, traceCheck, traceGapLines, traceGaps, traceWarningLines, TRACK_MARKER,
-  TRACK_SECTIONS, trackLabel, trackMarker, trackSectionTable, unverifiedLabel, VALID_TRACKS, verificationStatus,
+  TRACK_SECTIONS, trackLabel, trackMarker, trackSectionTable, unreadTasksDetail, unverifiedLabel, VALID_TRACKS, verificationStatus,
   verifyPipes, waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd } = E); }
+  isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -296,7 +296,9 @@ function nextAction(projectDir, name, opts = {}) {
   const phase = detectPhase(dir, tracks);
   const doc = opts.doctor && opts.doctor.ok ? opts.doctor : specDoctor(projectDir, name, { lean: true }); // lean: the verdict and the failing checks only
   const st = readState(projectDir, name);
-  const approvals = st.approvals || {};
+  // 1.22 review: the approvals in force — a Phase 4 sign-off the plan outgrew (a T-ID planned since, a plan re-approved since)
+  // is pending again (testsSignOffStale)
+  const approvals = approvalsInForce(dir, tracks, st.approvals || {});
   // An approved artifact whose content changed after ITS OWN approval needs re-review (shared with finish/roadmap).
   const changed = changedSinceApproval(dir, approvals, tracks, st.kind);
 
@@ -368,6 +370,9 @@ function nextAction(projectDir, name, opts = {}) {
   let finishedComplete = false; // 1.21 review A1: every execution role signed, yet no approval (finished step)
   let suiteMissing = null; // the project checks without a passing run since the last task activity (verify step, finished)
   let depsBlocked = null; // 1.14 F3: [{number, waitsOn}] — open tasks, none can start (fix step)
+  let missingApproved = []; // 1.22 review: approved artifacts that are gone (re-review step)
+  // 1.22 review: Phase 4 pending again because its sign-off no longer covers the plan — said before what the phase asks for
+  const testsStale = pending === "tests" ? testsStaleText(dir, tracks, st.approvals, lng) : null;
   // Re-review now only what can be re-approved now: an artifact of a phase AFTER the first pending gate waits for that gate
   // (approve refuses it on phase-order — next_action looped "re-review tasks.md" → refused → "re-review tasks.md"); the
   // chain reaches it again once the earlier gate is approved.
@@ -376,7 +381,12 @@ function nextAction(projectDir, name, opts = {}) {
   const reReviewNow = pending ? changed.filter((file) => { const i = walk.indexOf(phaseOfFile(file)); return i === -1 || i <= walk.indexOf(pending); }) : changed;
   if (reReviewNow.length) {
     step = "re-review";
-    recommendation = nx.reReview(reReviewNow.join(", "));
+    // 1.22 review: an approved artifact that is gone can't be re-reviewed nor re-approved (nothing to approve) — restore it, or
+    // withdraw its approval (revoke: the phase then waits for a new file, and the Phase 4 gate a test plan opened follows it).
+    missingApproved = reReviewNow.filter((file) => !fs.existsSync(path.join(dir, file)));
+    const present = reReviewNow.filter((file) => !missingApproved.includes(file));
+    recommendation = [present.length ? nx.reReview(present.join(", ")) : null,
+      missingApproved.length ? nx.approvedMissing(missingApproved.join(", "), slug, phaseOfFile(missingApproved[0]) || "design") : null].filter(Boolean).join(" ");
     // Never "re-approve" what the approve gate would refuse (an edit added a [NEEDS CLARIFICATION], a placeholder…): it
     // looped re-review → refused → re-review. The first changed phase whose gate fails is named with its failing checks
     // (refusedGate, as the fix step) — fix them, then re-approve.
@@ -415,9 +425,11 @@ function nextAction(projectDir, name, opts = {}) {
     // Phase 4: what its gate refuses on (planned tests not in the test code, the sample eval set) IS the work the phase
     // asks for — name that work (/writeTests), then what the gate checks.
     recommendation = pending === "tests" ? approveMsg.tests(slug) + " " + G.testsGateChecks(refused.map((c) => c.id).join(", ")) : G.fixGate(pending, ids, slug);
+    if (testsStale) recommendation = testsStale + " " + recommendation; // 1.22 review: why Phase 4 is asked for again
   } else if (pending && approveMsg[pending]) {
     step = "approve";
     recommendation = approveMsg[pending](slug);
+    if (testsStale) recommendation = testsStale + " " + recommendation;
     // 1.14 B3: the roles still to sign off this phase (the role to sign as), and the fast-forward when every gate through tasks passes.
     approveExtras = approveStepExtras(projectDir, slug, dir, st, tracks, kind, pending, doc, lng);
     // Phase 4's own wording says what the phase asks for (the tests / eval harness) — the role step is added to it there.
@@ -536,6 +548,7 @@ function nextAction(projectDir, name, opts = {}) {
   if (suiteMissing) res.suite = suiteMissing; // stable: [{name, status}] — the project checks the verify step asks to run
   if (depsBlocked) res.blocked = depsBlocked; // 1.14 F3: stable — the open tasks and the dependencies each waits on
   if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
+  if (missingApproved.length) res.missingApproved = missingApproved; // 1.22 review: stable — approved artifacts that no longer exist
   if (approveExtras && approveExtras.missingRoles) res.missingRoles = approveExtras.missingRoles; // 1.14 B3: stable — the roles to sign
   if ((approveExtras && approveExtras.signoffsComplete) || finishedComplete) res.signoffsComplete = true; // 1.21 review A1: stable — every role signed, one re-signs to approve
   if (approveExtras && approveExtras.fastForward) res.fastForward = approveExtras.fastForward; // 1.14 B3: {through, phases, role}
@@ -612,9 +625,13 @@ function specDoctor(projectDir, name, opts = {}) {
     const nCrit = e.summary ? e.summary.criteriaDetected : 0;
     // Zero criteria is not a pass — an empty requirements.md must not read as "EARS clean". And requirements.md whose AC
     // IDs trace_check counts while EARS linted none of them fails (1.14 full review Pa2): nothing was checked.
-    const unlinted = earsUnlinted(reqs, e);
-    add("ears", nErr || unlinted ? "fail" : nCrit === 0 ? "warn" : "pass",
-      unlinted ? m.earsNoCriteria(unlinted, isChange ? CHANGE_FILE : undefined) : m.earsDetail(nCrit, nErr, e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0));
+    // The mirror (1.22 review): criteria linted, but no AC ID trace_check reads (bare AC-1 IDs, or none) — it traced 0 ACs.
+    const unlinted = earsUnlinted(reqs, e, dir);
+    const unidentified = unlinted ? null : earsUnidentified(reqs, e, dir);
+    const file = isChange ? CHANGE_FILE : undefined;
+    add("ears", nErr || unlinted || unidentified ? "fail" : nCrit === 0 ? "warn" : "pass",
+      unlinted ? m.earsNoCriteria(unlinted, file) : unidentified ? m.earsNoAcIds(shortIdList(unidentified), file)
+        : m.earsDetail(nCrit, nErr, e.issues ? e.issues.filter((i) => i.severity === "warn").length : 0));
     // Clarifications gate — design is blocked while any [NEEDS CLARIFICATION] remains.
     const markers = clarificationMarkers(reqsFull);
     add("clarifications", markers.length ? "fail" : "pass", markers.length ? (isChange ? m.clarificationsOpenPlan : m.clarificationsOpen)(markers.length) : m.clarificationsNone); // a change has no design (1.21 verify V7)
@@ -730,7 +747,7 @@ function specDoctor(projectDir, name, opts = {}) {
       ...(laterFiles.includes("test-plan.md") ? TRACE_PLAN_KINDS : []),
       // C3: design-first — requirements.md is a LATER phase's template at the design gate: its template ACs are no gap yet
       // (the checks involving the requirements run once they are written).
-      ...(laterFiles.includes("requirements.md") ? [...TRACE_TASK_KINDS, ...TRACE_PLAN_KINDS].filter((k) => k !== "missingImplFiles") : []),
+      ...(laterFiles.includes("requirements.md") ? [...TRACE_TASK_KINDS, ...TRACE_PLAN_KINDS, "unidentifiedCriteria"].filter((k) => k !== "missingImplFiles") : []),
     ]);
     const kept = Object.fromEntries(Object.entries(tr).filter(([k]) => !deferKinds.has(k)));
     const gapLines = traceGapLines(kept, lng);
@@ -776,6 +793,10 @@ function specDoctor(projectDir, name, opts = {}) {
   // Duplicated task numbers: complete/brief resolve to the first OPEN one, but humans read them as one task.
   const dupTasks = duplicateTaskNumbers(taskBlocks(readIfExists(path.join(dir, "tasks.md")) || ""));
   if (dupTasks.length) add("duplicate-tasks", "warn", fm.evidenceGate.duplicateTasks(dupTasks.map((n) => "#" + n).join(", ")));
+  // 1.22 review — checkbox lines the task scanner doesn't read (`1. [ ] text`, an unnumbered `- [ ] text` outside a task): never
+  // ticked, briefed or verified — a tasks.md written that way read as zero tasks, silently. A warn naming the lines.
+  const unread = unreadTasksDetail(readIfExists(path.join(dir, "tasks.md")) || "");
+  if (unread) add("unread-tasks", "warn", fm.markerSyntax.unreadTasks(unread));
   // 1.14 F3 — `_Depends:_` that name no (active) task, a task depending on itself, a cycle: a fail (the tasks approval refuses
   // on it) — only when some task declares _Depends:_. Active tasks only (a removed track's tasks are inactive).
   const depsCheck = taskDepsCheck(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""), lng);
@@ -795,7 +816,10 @@ function specDoctor(projectDir, name, opts = {}) {
   if (ocTemplates.length) add("outside-code-artifacts", "warn", fm.outsideCode.doctor(ocTemplates.map((o) => o.id + " → " + o.file).join(", ")));
   // 1.14 B4 — cross-feature file overlap (featureOverlaps): this feature's open tasks plan files another active feature's open
   // tasks plan too, or files a finished feature recorded in its drift baseline — a warn, only when there is one.
-  const overlapPairs = featureOverlaps(projectDir, undefined, { only: slug }).pairs;
+  // 1.22 review: a pair of `slug` needs one of its OPEN active tasks to plan a file (_Implements:_) — without one, the whole
+  // roadmap walk (every feature's tasks, the finished baselines) could only answer "none": skipped, the result the same.
+  const plansFiles = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "").some((b) => !b.done && taskMarkers(b).implements.length > 0);
+  const overlapPairs = plansFiles ? featureOverlaps(projectDir, undefined, { only: slug }).pairs : [];
   if (overlapPairs.length) add("cross-feature-overlap", "warn", overlapDoctorDetail(overlapPairs, slug, lng));
   // 1.16 Q2 — cross-feature acceptance criteria: this feature's criteria that read like another active feature's (near-duplicate)
   // or may contradict them (same trigger, SHALL vs SHALL NOT or different numbers) — a warn, only when there is a pair. Computed
@@ -829,7 +853,12 @@ function specDoctor(projectDir, name, opts = {}) {
   // roles view (pendingRoles, the approval-gates line): pendingGates stays the planning chain, which spec_finish's blockers read
   // (the sign-off comes after the finish, never a blocker of it).
   const execDue = !approvals.execution && isRecord(state.finished);
-  const rv = roleGateView(projectDir, dir, state, execDue ? pendingGates.concat("execution") : pendingGates, tracks, kind, lng);
+  // (1.22 review: a stale Phase 4 sign-off lends no role a current sign-off — the view reads the approvals in force)
+  const inForce = approvalsInForce(dir, tracks, approvals);
+  const rv = roleGateView(projectDir, dir, inForce === approvals ? state : Object.assign({}, state, { approvals: inForce }), execDue ? pendingGates.concat("execution") : pendingGates, tracks, kind, lng);
+  // 1.22 review: why `tests` is pending again — only while it IS pending (review 2: a test plan deleted, then its approval
+  // revoked, leaves the stale tests sign-off with nothing to approve again: "approve tests" answers "Nothing to approve")
+  const testsStale = inForce === approvals || !pendingGates.includes("tests") ? null : testsStaleText(dir, tracks, approvals, lng);
   const shownPending = rv.pending.execution ? pendingGates.concat("execution") : pendingGates;
   if (pendingGates.length) {
     const g = approvalChecks(projectDir, slug, dir, pendingGates[0], tracks, kind, lng);
@@ -854,7 +883,7 @@ function specDoctor(projectDir, name, opts = {}) {
     [shownPending.length ? m.gatesPending(shownPending.map(rv.label).join(", ")) : null,
       nextGate && nextGate.failing.length ? G.gateWouldRefuse(nextGate.phase, nextGate.failing.map((c) => c.id).join(", ")) : null,
       forcedGates.length ? G.forcedGates(forcedGates.map((p) => p + (Array.isArray(approvals[p].failing) && approvals[p].failing.length ? ` (${approvals[p].failing.join(", ")})` : "")).join(", ")) : null,
-      ...rv.notes]
+      testsStale, ...rv.notes]
       .filter(Boolean).join("; ") || m.gatesOk);
   for (const c of decisionDoctorChecks(projectDir, slug, dir, state, kind, lng, tr)) add(c.id, c.status, c.detail); // 1.14 C2 (warns)
   const wExp = waiverExpiredCheck(approvals, tracks, slug, lng); // 1.16 U3: a forced approval whose waiver expired
@@ -1015,7 +1044,7 @@ function statusTestsGate(pdir, dir, tracks) {
 // (finish · verify of the checks · sign-off · finished) may be next_action's `drift`.
 function statusNext(pdir, f, kind, lng, unverified) {
   const st = f.st;
-  const approvals = isObj(st.approvals) ? st.approvals : {};
+  const approvals = approvalsInForce(f.dir, f.tracks, isObj(st.approvals) ? st.approvals : {}); // 1.22 review: a stale tests sign-off is pending
   const open = f.blocks.filter((b) => !b.done);
   if (kind === "spike") {
     const si = spikeInfo(f.dir);

@@ -111,8 +111,9 @@ project's specs as read-only **resources**: `specs://roadmap`, `specs://catalog`
 
 `/executeTask <feature> --subagents` keeps the main session's context for coordination: per task it
 writes a brief (`spec_task_brief`), dispatches the plugin's **`dev-spec-driven:spec-implementer`** agent, sends the diff
-to the **`dev-spec-driven:spec-reviewer`** agent (verdict per AC ID + quality + track checks), runs a fix loop of at most
-5 rounds, and only then ticks the task. It runs on its own within a story, stops at every
+to the **`dev-spec-driven:spec-reviewer`** agent (verdict per AC ID + quality + track checks + the project's written
+rules), has an independent reviewer verify each finding (only a confidence of 80+ costs a fix round), runs a fix loop of
+at most 5 rounds, and only then ticks the task. It runs on its own within a story, stops at every
 `**Checkpoint:**` for your review, and never changes an AC, the design or a test without going back to
 that phase. It uses about 2–3× the tokens of inline execution, so it is worth it on features with ~6+
 independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-execution.md`. Adapted from the
@@ -144,7 +145,9 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   the user explicitly asks for one. Failed runs are kept in a short history, and a task reopened after a spec
   change has **stale** evidence until it is re-run. `spec_complete_task` returns a stable reason code
   (`unverifiedReason`: `failed-run`, `manual-note-on-runnable-verify`, `duplicate-number`,
-  `stale-evidence`, `unexpected-pass`, `no-evidence`); `doctor`, `spec_finish` and the `ROADMAP.md` "Needs attention" line
+  `stale-evidence`, `unexpected-pass`, `no-evidence`, `unobserved` — under `meta.evidence: "observed"`, a run the
+  harness never saw —, `command-mismatch` — the run recorded is not a run of the task's `_Verify:_` command);
+  `doctor`, `spec_finish` and the `ROADMAP.md` "Needs attention" line
   list each unverified task with a localized reason. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — a light spec for a defect: reproduce → **root cause with evidence** → failing
   regression test → fix → verify. `doctor` fails until the root cause is written, and the tasks after the
@@ -231,6 +234,26 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   Test plans have a **Kind** column (`example` | `property`) with property-based testing guidance.
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
+
+### New in 1.22
+
+- **Reviews you can trust** — the reviewer rates every Critical / Important finding 0–100 and knows what is not a finding
+  (pre-existing, outside the diff, what the spec asked for, what a green check already answers); each one is verified by
+  an independent reviewer before it may cost a fix round — only a confidence of 80+ opens one, the rest is ledgered as
+  unconfirmed. `/prReview` verifies before it reports. Two new angles: the project's written rules (the constitution,
+  `CLAUDE.md` / `AGENTS.md`, comments in the code — quoted) and the history of the lines a change rewrites (a fix undone,
+  a bugfix's root cause back).
+- **`/spec-simplify`** — an optional pass before `/spec-finish`: behaviour-preserving cleanups of the code the feature
+  added — the smells the reviews deferred first —, one commit each, its own tests after every change and the project
+  checks at the end; never a test, a contract or code the feature didn't write; the pass is reviewed and a confirmed
+  finding is reverted. With `--subagents` a new `spec-simplifier` agent does it, and the SubagentStop gate sends its DONE
+  back until its report's `## Final runs` shows every run passing. Both ideas come from Anthropic's `code-review` and
+  `code-simplifier` plugins, rebuilt around the spec and the evidence gate.
+- **A full review, fixed** — a run now proves a task only when it IS the task's `_Verify:_` (`command-mismatch`
+  otherwise); the stop gate, the approval guard (unquoted `cmd /c`, `pwsh -Command`…) and the Phase 4 tests gate close
+  their gaps; bare `AC-n` criteria are flagged; the scan honours `.gitignore` and monorepos; UTF-16 files are read.
+  Faster too: the spec-hook ~173 → ~68 ms per edit, the Stop hook ~235 → ~88 ms, a tick ~185 → ~65 ms, the fast-forward
+  ~1.2 → ~0.4 s. The CHANGELOG lists every fix.
 
 ### New in 1.21
 
@@ -362,7 +385,7 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **Hooks** (`hooks/hooks.json`): on saving `requirements.md` → EARS lint + placeholders; on saving
   `tasks.md` → traceability check; on saving `design.md` → the active tracks' mandatory sections; at
   session start → feature status + drift + overlapping features; at the end of a turn (and of a
-  `spec-implementer` subagent) → the evidence gate; after each Bash run → the observed-evidence log (silent). The
+  `spec-implementer` or `spec-simplifier` subagent) → the evidence gate; after each Bash run → the observed-evidence log (silent). The
   opt-in guard runs before code edits, the opt-in approval guard before an agent's approval. Plus an optional git
   `pre-commit` validator.
 - **Eval harness** (`mcp/evals/run-evals.js`): runs golden/adversarial/regression sets with **your
@@ -426,7 +449,7 @@ Superpowers' own instructions say CLAUDE.md takes precedence over its skills, so
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; everywhere,
 `/plugin disable` — both also drop the superpowers skills this plugin doesn't replace.
 
-### Commands (54)
+### Commands (55)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -437,7 +460,7 @@ New in 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-imp
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 New in 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
 `/spec-tour`. New in 1.15: `/spec-tracks`.
-New in 1.16: `/spec-statusline`, `/spec-milestone`.
+New in 1.16: `/spec-statusline`, `/spec-milestone`. New in 1.22: `/spec-simplify`.
 (As a plugin they are namespaced, e.g. `/dev-spec-driven:design`; in other MCP clients they are the server's prompts.)
 
 ### The `dev-spec` CLI
@@ -570,7 +593,8 @@ exemplo) — e as specs do projeto como **recursos** só de leitura: `specs://ro
 `/executeTask <feature> --subagents` guarda o contexto da sessão principal para a coordenação: por tarefa
 escreve um brief (`spec_task_brief`), despacha o agente **`dev-spec-driven:spec-implementer`** do plugin,
 envia o diff ao agente **`dev-spec-driven:spec-reviewer`** (veredicto por AC ID + qualidade + verificações do
-track), faz um ciclo de correções de no máximo 5 rondas e só depois marca a tarefa. Avança sozinho dentro de
+track + as regras escritas do projeto), põe um revisor independente a verificar cada problema apontado (só uma confiança de
+80 ou mais custa uma ronda de correções), faz um ciclo de correções de no máximo 5 rondas e só depois marca a tarefa. Avança sozinho dentro de
 uma história, para em cada `**Checkpoint:**` para a tua revisão e nunca muda um AC, o design ou um teste sem
 voltar a essa fase. Gasta cerca de 2–3× os tokens da execução inline, por isso compensa em funcionalidades
 com ~6+ tarefas independentes. Protocolo: `skills/dev-spec-driven/references/subagent-execution.md`. Adaptado da
@@ -602,7 +626,9 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   para quando o utilizador a pede explicitamente. As execuções falhadas ficam num histórico curto, e uma tarefa
   reaberta depois de uma alteração à spec fica com evidência **desatualizada** até voltar a correr. O
   `spec_complete_task` devolve um código de motivo estável (`unverifiedReason`: `failed-run`,
-  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `unexpected-pass`, `no-evidence`); o `doctor`, o `spec_finish` e a linha "Precisa de
+  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `unexpected-pass`, `no-evidence`,
+  `unobserved` — com `meta.evidence: "observed"`, uma execução que o harness nunca viu —, `command-mismatch` — a
+  execução registada não é uma execução do comando `_Verify:_` da tarefa); o `doctor`, o `spec_finish` e a linha "Precisa de
   atenção" do `ROADMAP.md` listam cada tarefa por verificar com o motivo. CLI:
   `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — uma spec leve para um defeito: reproduzir → **causa raiz com evidência** → teste de
@@ -695,6 +721,28 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabalho, aprovações forçadas, pedidos de
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
+
+### Novidades da 1.22
+
+- **Revisões em que se pode confiar** — o revisor dá a cada problema Critical / Important que aponta uma confiança de 0 a
+  100 e sabe o que não conta como problema (o que já existia, o que está fora do diff, o que a spec pediu, o que uma
+  verificação a verde já responde); cada um é verificado por um revisor independente antes de poder custar uma ronda de
+  correções — só uma confiança de 80 ou mais a abre, o resto fica no ledger como não confirmado. O `/prReview` verifica
+  antes de reportar. Dois ângulos novos: as regras escritas do projeto (a constituição, `CLAUDE.md` / `AGENTS.md`, os
+  comentários no código — citados) e o histórico das linhas que uma alteração reescreve (uma correção desfeita, o regresso
+  da causa raiz de um bug já corrigido).
+- **`/spec-simplify`** — uma passagem opcional antes do `/spec-finish`: limpezas que não mudam o comportamento do código
+  que a funcionalidade acrescentou — primeiro os smells que as revisões adiaram —, um commit por limpeza, os testes da
+  funcionalidade depois de cada alteração e as verificações do projeto no fim; nunca um teste, um contrato ou código que a
+  funcionalidade não escreveu; a passagem é revista e um problema confirmado é revertido. Com `--subagents` é um novo
+  agente, `spec-simplifier`, que a faz, e o gate SubagentStop devolve o DONE dele enquanto a secção `## Final runs` do
+  relatório não mostrar todas as execuções a passar. As duas ideias vêm dos plugins `code-review` e `code-simplifier` da
+  Anthropic, reconstruídas à volta da spec e do gate de evidência.
+- **Uma revisão completa, corrigida** — uma execução só prova uma tarefa quando É o `_Verify:_` dela (senão
+  `command-mismatch`); o gate de paragem, a guarda das aprovações (`cmd /c`, `pwsh -Command` sem aspas…) e o gate dos
+  testes da Fase 4 fecham as suas lacunas; os critérios com `AC-n` sem história são assinalados; o scan respeita o
+  `.gitignore` e os monorepos; os ficheiros UTF-16 são lidos. E mais rápido: o spec-hook ~173 → ~68 ms por edição, o hook
+  Stop ~235 → ~88 ms, marcar uma tarefa ~185 → ~65 ms, o avanço rápido ~1,2 → ~0,4 s. O CHANGELOG lista cada correção.
 
 ### Novidades da 1.21
 
@@ -841,7 +889,7 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **Hooks** (`hooks/hooks.json`): ao gravar `requirements.md` → valida EARS + placeholders; ao gravar
   `tasks.md` → verifica a rastreabilidade; ao gravar `design.md` → as secções obrigatórias dos tracks ativos;
   no arranque da sessão → estado das funcionalidades + drift + funcionalidades que se sobrepõem; no fim de um turno
-  (e de um subagente `spec-implementer`) → o gate de evidência; depois de cada execução Bash → o registo da evidência
+  (e de um subagente `spec-implementer` ou `spec-simplifier`) → o gate de evidência; depois de cada execução Bash → o registo da evidência
   observada (silencioso). O modo guarda opcional corre antes das edições de código, a guarda opcional das aprovações
   antes da aprovação de um agente. Mais um validador `pre-commit` opcional do git.
 - **Harness de evals** (`mcp/evals/run-evals.js`): corre os conjuntos golden/adversarial/regression
@@ -907,7 +955,7 @@ projeto ou, com `--user`, no `~/.claude/CLAUDE.md`; `--remove` retira-o. Para de
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; em todo o lado,
 `/plugin disable` — ambos retiram também as skills do superpowers que este plugin não substitui.
 
-### Comandos (54)
+### Comandos (55)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -918,7 +966,7 @@ Novos na 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-i
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 Novos na 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
 `/spec-tour`. Novo na 1.15: `/spec-tracks`.
-Novos na 1.16: `/spec-statusline`, `/spec-milestone`.
+Novos na 1.16: `/spec-statusline`, `/spec-milestone`. Novo na 1.22: `/spec-simplify`.
 (Como plugin, têm namespace, ex.: `/dev-spec-driven:design`; noutros clientes MCP são os prompts do servidor.)
 
 ### A CLI `dev-spec`
@@ -1007,7 +1055,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | Herramienta | Qué hace |
 |---|---|
 | `spec_classify` | Recomienda tracks desde una descripción (heurística multilingüe, ponderada) |
-| `spec_init` | Crea `.specs/steering/` para los tracks; `lang` fija el idioma del proyecto, `guard` on · off · scope, `stopCheck` la puerta de evidencia al final del turno, `checks` los comandos de comprobación del proyecto, `approvalRoles` quién aprueba cada fase, `evidence` reported · observed (solo verifican las ejecuciones que el harness vio), `approvalGuard` off · ask · deny (la aprobación de un agente te pregunta / se rechaza) |
+| `spec_init` | Crea `.specs/steering/` para los tracks; `lang` fija el idioma del proyecto, `guard` on · off · scope, `stopCheck` el gate de evidencia al final del turno, `checks` los comandos de comprobación del proyecto, `approvalRoles` quién aprueba cada fase, `evidence` reported · observed (solo verifican las ejecuciones que el harness vio), `approvalGuard` off · ask · deny (la aprobación de un agente te pregunta / se rechaza) |
 | `spec_create` | Crea la carpeta de la función para los tracks activos (`kind: "bugfix"` para el flujo de bugfix, `kind: "spike"` para una investigación con plazo, `brownfield: true` añade `integration-plan.md`, `flow: "design-first"` pone el diseño antes de los requisitos) |
 | `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas; un plan puede llegar como `text` — el plan mode guarda los planes fuera del proyecto) |
 | `spec_templates` | Plantillas del proyecto: lista, copia (`init`) o comprueba (`check`) los scaffolds del equipo en `.specs/templates/`, que sustituyen a los de origen |
@@ -1031,7 +1079,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders — o la matriz de trazabilidad en CSV (`format: "csv"`), un `.feature` Gherkin por función (`"gherkin"`: un escenario por criterio de aceptación, con las cláusulas EARS como Dado / Cuando / Entonces) o un CSV para el importador de Jira / Linear (`"jira"` · `"linear"`: la función, sus historias, sus tareas); `write` → `.specs/exports/` |
 | `spec_changelog` | Notas de la versión desde las specs — Added / Changed / Fixed desde una fecha o desde las últimas notas; `milestone` las limita a las funciones de un hito; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Archivos de implementación cambiados, ausentes o nuevos desde que `spec_finish` registró la línea base |
-| `spec_stop_check` | La puerta de evidencia del final del turno para clientes solo MCP: ¿este mensaje final ("hecho", "verificado") se devolvería — tareas marcadas sin evidencia, comprobaciones del proyecto sin una ejecución correcta? |
+| `spec_stop_check` | El gate de evidencia del final del turno para clientes solo MCP: ¿este mensaje final ("hecho", "verificado") se devolvería — tareas marcadas sin evidencia, comprobaciones del proyecto sin una ejecución correcta? |
 | `spec_log` | Los commits que citan cada tarea (+ la comprobación red-first de +tdd) a partir del texto de `git log` que pasa el cliente — el servidor nunca ejecuta git |
 | `spec_upgrade` | Tras actualizar el plugin: audita cada función activa frente a las reglas actuales (estado, lo que señala el doctor, siguiente paso, una revisión critic / converge); `apply` guarda los tracks deducidos, da a las aprobaciones anteriores a la 1.13 una línea base en el historial, sella `meta.specVersion` y escribe `.specs/UPGRADE.md` — nunca edita una spec |
 | `spec_roadmap` / `spec_depend` | Hoja de ruta + dependencias (detecta ciclos; `add` / `remove` editan la lista), una ETA por función a partir de la velocidad de las tareas marcadas y los archivos que las tareas abiertas de dos funciones planifican a la vez; `write:true` → `.specs/ROADMAP.md` (+ `html:true` para el `.html` con la marca, offline, claro/oscuro; `lang`) |
@@ -1051,8 +1099,9 @@ Copilot Chat, por ejemplo) — y las specs del proyecto como **recursos** de sol
 `/executeTask <feature> --subagents` reserva el contexto de la sesión principal para la coordinación: por
 tarea escribe un brief (`spec_task_brief`), despacha el agente **`dev-spec-driven:spec-implementer`** del
 plugin, envía el diff al agente **`dev-spec-driven:spec-reviewer`** (veredicto por AC ID + calidad +
-comprobaciones del track), hace un ciclo de correcciones de como máximo 5 rondas y solo entonces marca la
-tarea. Avanza solo dentro de una historia, se detiene en cada `**Checkpoint:**` para tu revisión y nunca
+comprobaciones del track + las reglas escritas del proyecto), hace que un revisor independiente verifique cada
+hallazgo (solo una confianza de 80 o más cuesta una ronda de correcciones), hace un ciclo de correcciones de como
+máximo 5 rondas y solo entonces marca la tarea. Avanza solo dentro de una historia, se detiene en cada `**Checkpoint:**` para tu revisión y nunca
 cambia un AC, el diseño o una prueba sin volver a esa fase. Usa unas 2–3× los tokens de la ejecución inline,
 así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 `skills/dev-spec-driven/references/subagent-execution.md`. Adaptado de la skill `subagent-driven-development` de
@@ -1085,7 +1134,9 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   verificar y es para cuando el usuario la pide explícitamente. Las ejecuciones fallidas quedan en un historial
   corto, y una tarea reabierta tras un cambio en la spec tiene evidencia **obsoleta** hasta volver a ejecutarse.
   `spec_complete_task` devuelve un código de motivo estable (`unverifiedReason`: `failed-run`,
-  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `unexpected-pass`, `no-evidence`); el `doctor`,
+  `manual-note-on-runnable-verify`, `duplicate-number`, `stale-evidence`, `unexpected-pass`, `no-evidence`,
+  `unobserved` — con `meta.evidence: "observed"`, una ejecución que el harness nunca vio —, `command-mismatch` — la
+  ejecución registrada no es una ejecución del comando `_Verify:_` de la tarea); el `doctor`,
   `spec_finish` y la línea "Necesita atención" del `ROADMAP.md` listan cada tarea sin verificar con su
   motivo. CLI: `dev-spec done <feature> <n> --run`.
 - **`/spec-bugfix`** — una spec ligera para un defecto: reproducir → **causa raíz con evidencia** → prueba de
@@ -1180,6 +1231,28 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabajo, aprobaciones forzadas, solicitudes de
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
+
+### Novedades de la 1.22
+
+- **Revisiones en las que confiar** — el revisor da a cada hallazgo Critical / Important una confianza de 0 a 100 y sabe lo
+  que no es un hallazgo (lo que ya existía, lo que queda fuera del diff, lo que pidió la spec, lo que una verificación en
+  verde ya responde); cada uno lo verifica un revisor independiente antes de que pueda costar una ronda de correcciones —
+  solo una confianza de 80 o más la abre, el resto queda en el ledger como no confirmado. `/prReview` verifica antes de
+  informar. Dos ángulos nuevos: las reglas escritas del proyecto (la constitución, `CLAUDE.md` / `AGENTS.md`, los
+  comentarios del código — citados) y el historial de las líneas que un cambio reescribe (una corrección deshecha, la causa
+  raíz de un bugfix que vuelve).
+- **`/spec-simplify`** — una pasada opcional antes de `/spec-finish`: limpiezas que no cambian el comportamiento del
+  código que añadió la función — primero los smells que las revisiones aplazaron —, un commit cada una, sus pruebas tras
+  cada cambio y las verificaciones del proyecto al final; nunca una prueba, un contrato ni código que la función no
+  escribió; la pasada se revisa y un hallazgo confirmado se revierte. Con `--subagents` la hace un nuevo agente,
+  `spec-simplifier`, y el gate SubagentStop devuelve su DONE mientras la sección `## Final runs` de su informe no muestre
+  todas las ejecuciones en verde. Las dos ideas vienen de los plugins `code-review` y `code-simplifier` de Anthropic,
+  reconstruidas en torno a la spec y el gate de evidencia.
+- **Una revisión completa, corregida** — una ejecución solo prueba una tarea cuando ES su `_Verify:_` (si no,
+  `command-mismatch`); el gate de parada, la guardia de aprobaciones (`cmd /c`, `pwsh -Command` sin comillas…) y el gate
+  de pruebas de la Fase 4 cierran sus huecos; los criterios con `AC-n` sin historia se señalan; el scan respeta el
+  `.gitignore` y los monorepos; los ficheros UTF-16 se leen. Y más rápido: el spec-hook ~173 → ~68 ms por edición, el hook
+  Stop ~235 → ~88 ms, marcar una tarea ~185 → ~65 ms, el avance rápido ~1,2 → ~0,4 s. El CHANGELOG lista cada corrección.
 
 ### Novedades de la 1.21
 
@@ -1327,7 +1400,7 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **Hooks** (`hooks/hooks.json`): al guardar `requirements.md` → valida EARS + placeholders; al guardar
   `tasks.md` → comprueba la trazabilidad; al guardar `design.md` → las secciones obligatorias de los tracks
   activos; al iniciar la sesión → estado de las funciones + drift + funciones que se solapan; al final de un turno
-  (y de un subagente `spec-implementer`) → la puerta de evidencia; tras cada ejecución Bash → el registro de la
+  (y de un subagente `spec-implementer` o `spec-simplifier`) → el gate de evidencia; tras cada ejecución Bash → el registro de la
   evidencia observada (silencioso). El modo guardia opcional se ejecuta antes de las ediciones de código, la guardia
   opcional de las aprobaciones antes de la aprobación de un agente. Más un validador `pre-commit` opcional de git.
 - **Harness de evals** (`mcp/evals/run-evals.js`): ejecuta los conjuntos
@@ -1383,7 +1456,7 @@ escritura de skills):
 | executing-plans, subagent-driven-development | `/executeTask [--subagents]` |
 | test-driven-development | el track `+tdd` y su microciclo red-green-refactor dentro de cada tarea |
 | systematic-debugging | `/spec-bugfix` |
-| verification-before-completion | la puerta de evidencia (`_Verify:_`, `dev-spec done --run`) |
+| verification-before-completion | el gate de evidencia (`_Verify:_`, `dev-spec done --run`) |
 | requesting / receiving-code-review | `/prReview`, `/spec-review-feedback` |
 | finishing-a-development-branch | `/spec-finish` (merge local; sin pull requests, sin CI) |
 
@@ -1393,7 +1466,7 @@ proyecto o, con `--user`, en `~/.claude/CLAUDE.md`; `--remove` lo quita. Para de
 proyecto, `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; en
 todas partes, `/plugin disable` — ambos quitan también las skills de superpowers que este plugin no sustituye.
 
-### Comandos (54)
+### Comandos (55)
 
 `/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
 `/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
@@ -1404,7 +1477,7 @@ Nuevos en la 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/sp
 `/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
 Nuevos en la 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
 `/spec-tour`. Nuevo en la 1.15: `/spec-tracks`.
-Nuevos en la 1.16: `/spec-statusline`, `/spec-milestone`.
+Nuevos en la 1.16: `/spec-statusline`, `/spec-milestone`. Nuevo en la 1.22: `/spec-simplify`.
 (Como plugin, tienen namespace, p. ej. `/dev-spec-driven:design`; en otros clientes MCP son los prompts del servidor.)
 
 ### La CLI `dev-spec`
@@ -1458,8 +1531,8 @@ dev-spec-driven/                      ← plugin root
 ├── skills/dev-spec-driven/
 │   ├── SKILL.md                      ← trilingual track-based workflow
 │   └── references/                   ← deep library (EARS, scale, eval, safety, …)
-├── commands/                         ← 54 slash commands (trilingual descriptions; also the MCP prompts)
-├── agents/                           ← spec-implementer + spec-reviewer + spec-critic
+├── commands/                         ← 55 slash commands (trilingual descriptions; also the MCP prompts)
+├── agents/                           ← spec-implementer + spec-reviewer + spec-critic + spec-simplifier
 ├── evals/                            ← plugin evals for `claude plugin eval` (triggering EN/PT/ES + behavioural, with fixtures)
 ├── cli/dev-spec.js                   ← universal CLI (works in any tool / shell)
 ├── mcp/

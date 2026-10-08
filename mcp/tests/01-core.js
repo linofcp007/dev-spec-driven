@@ -679,7 +679,7 @@ exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, require, __dirna
   ok(noEv.ok && noEv.verified === false && /_Verify:_/.test(noEv.note) && S.specDoctor(vDir, "keys").checks.find((c) => c.id === "verification").status === "warn" &&
     /^- \*\*keys\*\* — 1 task\(s\) ticked without verification evidence: #1 \(latest run failed\)$/m.test(fs.readFileSync(path.join(vDir, ".specs", "ROADMAP.md"), "utf8")),
     "ticking a _Verify:_ task without evidence warns (result, doctor, roadmap)");
-  const backfill = payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { name: "keys", number: 1, evidence: { command: "npm test", exitCode: 0, summary: "3/3 passing" }, projectDir: vDir } }));
+  const backfill = payload(await rpc("tools/call", { name: "spec_complete_task", arguments: { name: "keys", number: 1, evidence: { command: 'node -e "process.exit(0)"', exitCode: 0, summary: "3/3 passing" }, projectDir: vDir } }));
   const vState = JSON.parse(fs.readFileSync(path.join(vf.dir, ".state.json"), "utf8"));
   ok(backfill.verified && vState.evidence["1"].summary === "3/3 passing" && S.specDoctor(vDir, "keys").checks.find((c) => c.id === "verification").status === "pass" &&
     S.statusFeature(vDir, "keys").tasks.list[0].verified === true, "evidence is recorded (and back-fillable) — doctor and status see it");

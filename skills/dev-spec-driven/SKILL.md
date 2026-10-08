@@ -37,10 +37,8 @@ and **scale the rigor to the feature**, not the other way around — one pipelin
 What each active track adds at every phase — criteria, design sections, tests, task markers, done checks:
 **`references/track-checklists.md`** (read its rows at each phase).
 
-**With the superpowers plugin installed too:** for feature work this workflow replaces its brainstorming,
-writing-plans, executing-plans, subagent-driven-development, test-driven-development, systematic-debugging,
-verification-before-completion, code-review and finishing-a-development-branch skills — don't run both for the same
-feature (`/spec-superpowers` records that precedence in CLAUDE.md).
+**With superpowers installed:** this workflow replaces its feature-work skills — never both on one feature;
+`/spec-superpowers` records that precedence in CLAUDE.md.
 
 ## Language (EN / PT / ES)
 
@@ -70,8 +68,8 @@ don't translate the scaffold. Keep the **structural tokens** as they are in ever
    per-run cost. Specs live in `.specs/` and are versioned in your git repo.
 6. **Evidence before claims.** Nothing is "done", "passing" or "fixed" until a command proved it on the final code. Tick
    tasks only through `spec_complete_task {evidence}` — never by editing the checkbox. A task whose `_Verify:_` names a
-   runnable command counts as verified only with `{command, exitCode: 0}` (on an `_Expect: fail_` task: its failing red
-   run); a failed run is recorded and refuses the tick; a text note ticks it but leaves it unverified. **Can't run the
+   runnable command counts as verified only with `{command, exitCode: 0}` of its `_Verify:_` command (on an `_Expect: fail_` task:
+   its failing red run; another command's run → `command-mismatch`); a failed run is recorded and refuses the tick; a text note ticks it but leaves it unverified. **Can't run the
    command yourself** (no shell, no environment)? Don't tick the task — not bare, not with a note, never with an exit
    code you didn't see — and don't send a subagent to look for a shell: name the `_Verify:_` command and ask the user
    for its output (or to run `node "<clone>/cli/dev-spec.js" done <feature> <n> --run`, the line the tool's note prints
@@ -90,9 +88,8 @@ when:** `references/tool-catalog.md`; the full tool table, CLI, hooks, MCP promp
 `references/tooling-reference.md`. The tools produce **skeletons and checks** (never overwriting your files); *you*
 fill them. No MCP connection (e.g. claude.ai)? Write the files by hand.
 
-**CLI lines you hand the user are the runnable ones.** `dev-spec …` in these docs is the CLI's name; a plugin install
-puts no `dev-spec` on PATH. Give the user the line the tools' messages print — `node "<clone>/cli/dev-spec.js" …`, the
-clone's path resolved — never a bare `dev-spec …`.
+**`dev-spec …` here names the CLI; a line you hand the user is the runnable one the tools print** —
+`node "<clone>/cli/dev-spec.js" …` (a plugin install has no `dev-spec` on PATH).
 
 ## First Things First: Mode, then Tracks
 
@@ -240,8 +237,8 @@ Security · Error Handling · Testing Strategy · **Risks** (likelihood · impac
 (each principle of `steering/constitution.md` — a gate, re-checked after any change) · **Complexity Tracking** (justify what
 breaks a principle; empty is good). Doctor warns `design-tradeoffs` / `design-risks` / `design-reuse` (never blocks).
 `spec_create` always scaffolds `quickstart.md` (a manual acceptance scenario) and `checklist.md` — fill both; optionally
-`research.md`. **Each active track adds its mandatory sections** (+tdd Testability Notes; +saas 5, +ai 10, +sec 5,
-+privacy 6, +dist / +api / +ui / +obs / +data 5 each) — what goes in each: `references/track-checklists.md`.
+`research.md`. **Each active track adds its mandatory sections** (+tdd Testability Notes, +ai 10; the rest: the table
+above) — what goes in each: `references/track-checklists.md`.
 
 Design principles: simplicity over cleverness, consistency with the codebase, known patterns over novelty. Present for
 approval before proceeding.
@@ -305,8 +302,8 @@ them). Present for review. Work found after approval is appended, never renumber
 
 ## Phase 6: Execute (`/executeTask`)
 
-Before any code, re-read steering, requirements, design, (test/eval plans), and tasks; summarize your understanding to
-confirm alignment. **Search before you write:** the design's Reuse & Integration, the brief's Reuse section, the codebase by
+Before any code, re-read steering, requirements, design, (test/eval plans) and tasks; summarize your understanding.
+**Search before you write:** the design's Reuse & Integration, the brief's Reuse section, the codebase by
 concept and synonyms — reuse, else extend, else create; a refactor outside the task goes to the backlog (`refactor:` note;
 `references/code-reuse-and-quality.md`). Then work tasks **in order** — the next is `spec_next_task`'s: the first open
 task whose `_Depends:_` are all done — choosing the loop per task:
@@ -323,17 +320,16 @@ task whose `_Depends:_` are all done — choosing the loop per task:
   otherwise revert/investigate → `spec_complete_task {evidence}`: the harness command + its exit code,
   and the eval scores with their delta vs baseline in the summary → commit with that delta.
 
-**Evidence, enforced** (`references/verification.md`): no shell to run a `_Verify:_`? Ask for the output or for the
-runnable `done … --run` line the tool prints — never tick on your own, never send a subagent to find a shell
-(Principle 6). A `_Verify:_` that pipes is flagged (`pipeMasked`, doctor `verify-pipes`): drop the pipe or
-`set -o pipefail`. With project checks set (`spec_init {checks}`) every brief lists them and `/spec-finish` needs a
-passing run of each since the last tick, on the current code. In Claude Code a **Stop hook** sends the turn back when
+**Evidence, enforced** (`references/verification.md`; no shell: Principle 6). A `_Verify:_` that pipes is flagged
+(`pipeMasked`, doctor `verify-pipes`): drop the pipe or `set -o pipefail`. With project checks set (`spec_init {checks}`)
+every brief lists them and `/spec-finish` needs a passing run of each since the last tick, on the current code. In Claude Code a **Stop hook** sends the turn back when
 your closing message claims done / verified while a recently active feature has ticked tasks without passing evidence
 — run the check, or say plainly what is not verified. With `spec_init {evidence: "observed"}` only a run the harness saw
 (Claude Code's Bash hook) or `done --run` made verifies — run the `_Verify:_` with the Bash tool, then record exactly that.
 
 Track-gated "done" checks before a feature is finished (load test, cost and safety, scans, subject rights, failure
 injection, contract tests, accessibility, a staged alert…): `references/track-checklists.md`; `spec_finish` lists them.
+Before `/spec-finish`, optionally `/spec-simplify`: a behaviour-preserving cleanup, proven by the tests.
 
 If blocked, pause and discuss — don't improvise outside the design. If a test/measurement reveals a gap, go back to
 that phase, not the implementation. If a "green" test is actually wrong, pause, explain, fix the plan with approval,
@@ -342,8 +338,9 @@ rerun — never quietly edit a test to pass. A decision or discovery made on the
 
 **Inline (default) or subagents (opt-in).** `/executeTask <feature> --subagents` (or when the user asks) keeps your
 context for coordination: per task write a brief with `spec_task_brief {name, number, write:true}`, dispatch
-**`dev-spec-driven:spec-implementer`** with its path, send the diff to **`dev-spec-driven:spec-reviewer`**, run a fix loop of
-at most 5 rounds, only then `spec_complete_task`. Offer it for ~6+ mostly independent tasks (it costs 2–3× the tokens).
+**`dev-spec-driven:spec-implementer`** with its path, send the diff to **`dev-spec-driven:spec-reviewer`**, verify each
+❌ / Critical / Important finding (a verify-mode `spec-reviewer` per finding; only 80+ opens a fix round), run a fix loop
+of at most 5 rounds, only then `spec_complete_task`. Offer it for ~6+ mostly independent tasks (it costs 2–3× the tokens).
 You (the controller) never write feature code; stop at every `**Checkpoint:**` for human review; a finding that would
 change an AC, the design or a planned test goes back to that phase; +ai prompt/eval tasks stay inline. Full protocol:
 `references/subagent-execution.md`.
@@ -397,7 +394,7 @@ supporting command (`/spec-upgrade`, `/spec-import`, `/prReview`, `/spec-commit`
 local automation behind them: `references/workflows.md`.
 
 ## Environment Notes
-- **Claude Code / Cowork:** full support — the local MCP server scaffolds and tracks, git versions everything.
+- **Claude Code / Cowork:** full support (the local MCP server, git).
 - **claude.ai:** present artifacts in code blocks to copy; the MCP server and test/load/eval runs need a real
   environment — describe the expected results, and never tick a task on a run nobody made (Principle 6).
 

@@ -16,15 +16,16 @@ const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 const { MARKER_TRACKS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature, extractAcIds,
-  featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket,
-  markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists, replaceCodeSpans,
-  stripSupersedes, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf, VALID_TRACKS, wildcardMatch;
-function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, engineVersion, existingFeature,
-  extractAcIds, featureFlow, flowPhaseIndex, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf,
-  isPackMarkerBracket, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists,
-  replaceCodeSpans, stripSupersedes, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf, VALID_TRACKS,
-  wildcardMatch } = E); }
+let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, engineVersion, existingFeature, extractAcIds,
+  featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket,
+  locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists, renderTrackTaskHeadings,
+  replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf,
+  VALID_TRACKS, wildcardMatch;
+function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, engineVersion, existingFeature,
+  extractAcIds, featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf,
+  isPackMarkerBracket, locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists,
+  renderTrackTaskHeadings, replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS,
+  useTemplateScopeOf, VALID_TRACKS, wildcardMatch } = E); }
 
 // The text minus its HTML comments (commentLines' reading: a "<!--" in fenced code or an inline code span is text, one
 // that never closes is text). A comment spanning lines takes its line breaks with it, as the old regex did.
@@ -121,9 +122,105 @@ function stripFencedCode(s) {
   return String(s || "").split("\n").map((line) => (fenceStep(st, line) ? "" : line)).join("\n");
 }
 // requirements.md's own AC IDs as the tools read them: outside HTML comments and fenced code, `_Supersedes:_`
-// references (another feature's ACs) left out.
-function requirementAcIds(reqText) {
-  return extractAcIds(stripSupersedes(stripFencedCode(stripHtmlComments(reqText))));
+// references (another feature's ACs) left out — and so is any `<feature>/US-n.AC-m` (the _Supersedes:_ / _Affects:_ syntax)
+// written in prose: "rules of checkout/US-3.AC-2 stay as they are" names checkout's criterion, never one of this feature's
+// (1.22 review: it was a required AC no task covered). `dir`: the feature's folder — see stripForeignAcRefs.
+function requirementAcIds(reqText, dir) {
+  return extractAcIds(stripForeignAcRefs(stripSupersedes(stripFencedCode(stripHtmlComments(reqText))), dir));
+}
+// `<slug>/US-n.AC-m` (blanks around the slash allowed, as _Supersedes:_ reads it) → removed when <slug> names ANOTHER feature.
+// The slug is one token starting at a token start (linear: a match starts only there). Never a feature (review 2 — the
+// feature's own ID was dropped, its required ACs went to 0): a token that is itself an ID ("US-1.AC-1/US-1.AC-2", "AC-1 /
+// US-1.AC-2"), a story ("US-1 / US-1.AC-1"), a priority ("**P1/US-1.AC-1**"), a number ("1.1/US-1.AC-1"), no letter at all.
+// With `dir` — a feature folder under <project>/.specs/ (or its _archive/) — the slug is resolved as _Supersedes:_ validation
+// resolves it (locateFeatures: active or archived): another feature → removed; this feature (`login/US-1.AC-1`) → kept; NO
+// feature of that name (review 3 — "keep the rules of billing/US-3.AC-2" with no billing feature was a required AC no task
+// covered) → this feature's only when the same ID LABELS one of the text's criteria (criterionLabelIds: "5. Step-2/US-1.AC-5 —
+// WHEN …"), else a foreign reference, removed. Without `dir` (a pure reader: a template, a pack's numbering, an import's task
+// fitting) every token of a slug's shape counts as another feature's — the limit: there "Step-2/US-1.AC-1" reads as one.
+const RE_FOREIGN_AC = /(?<![\p{L}\p{N}_.-])([\p{L}\p{N}][\p{L}\p{N}_.-]*)[^\S\n]*\/[^\S\n]*(US-\d+\.AC-\d+)(?!\d)/gu;
+const RE_ID_TOKEN_END = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)$/;
+const RE_NOT_A_SLUG = /^(?:\d+(?:[._-]\d+)*|p\d+|(?:us|ac|t|ec|nfr|sc)-\d+)$/i;
+// A token before a slash that names no feature by its shape (an ID, a priority, a number, no letter): the ID after it is the text's own.
+const notASlug = (slug) => RE_ID_TOKEN_END.test(slug) || RE_NOT_A_SLUG.test(slug) || !/\p{L}/u.test(slug);
+function stripForeignAcRefs(text, dir) {
+  const s = String(text || "");
+  if (!s.includes("/")) return s;
+  let kind = null, labels = null;
+  return s.replace(RE_FOREIGN_AC, (whole, slug, id) => {
+    if (notASlug(slug)) return whole;
+    if (!kind) kind = featureRefTest(dir);
+    const k = kind(slug);
+    if (k === "self") return whole;
+    if (k === "other") return "";
+    if (!labels) labels = criterionLabelIds(s, kind);
+    return labels.has(id) ? whole : "";
+  });
+}
+// dir (a feature folder) → slug → "other" (ANOTHER feature of its project, active or archived) · "self" (this feature) · null
+// (no feature of that name). No dir, or one outside a .specs/ folder → "other" for every slug-shaped token (the pure reader).
+function featureRefTest(dir) {
+  const proj = dir ? featureProjectDir(dir) : null;
+  if (!proj) return () => "other";
+  const self = dirKey(dir);
+  const memo = new Map();
+  return (slug) => {
+    if (!memo.has(slug)) {
+      let hit = null;
+      try {
+        const found = locateFeatures(proj, slug);
+        hit = found.some((t) => dirKey(t.dir) !== self) ? "other" : found.length ? "self" : null;
+      } catch { /* unreadable: none */ }
+      memo.set(slug, hit);
+    }
+    return memo.get(slug);
+  };
+}
+// The pre-review-3 reading (does the slug name ANOTHER feature?) — kept for its callers.
+function otherFeatureTest(dir) {
+  const k = featureRefTest(dir);
+  return (slug) => k(slug) === "other";
+}
+// Review 3 — the ID that LABELS a criterion: the one that leads it (after a heading mark, a list marker, a checkbox, an emphasis /
+// bracket opener — `- **US-1.AC-1** — WHEN …`, `1. NFR-2: THE SYSTEM SHALL …`, `### US-1.AC-3: …`, `- [ ] (EC-1) IF …`), with the
+// token before a slash in front of it (`login/US-1.AC-1`, `P1/US-1.AC-1`); for a table row with no lead label, its cell that is
+// exactly such an ID. An ID cited later in the criterion ("… (see EC-1)", "… (T-01)") labels nothing. → {id, slug} | null.
+const RE_LEAD_LABEL = /^[ \t]*(?:#{1,6}[ \t]+)?(?:(?:\d+[.)]|[-*+])[ \t]+)?(?:\[[ xX]\][ \t]+)?(?:\*\*|__|\*|_|`|\[|\()?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?!\d)/u;
+const RE_CELL_LABEL = /^(?:\*\*|__|\*|_|`)?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?:\*\*|__|\*|_|`)?$/u;
+function criterionLabel(text) {
+  const s = String(text || "");
+  const m = RE_LEAD_LABEL.exec(s);
+  if (m) return { id: m[2], slug: m[1] || null };
+  if (!s.includes("|")) return null;
+  for (const cell of s.replace(/^[ \t]*\|/, "").split("|").slice(0, 64)) {
+    const c = RE_CELL_LABEL.exec(cell.trim());
+    if (c) return { id: c[2], slug: c[1] || null };
+  }
+  return null;
+}
+// The US-n.AC-m IDs that label a criterion line of the text (criterionLabel, line by line — the table rows too), its own: no slug,
+// a slug that names no feature by its shape, this feature or no feature at all (kind: featureRefTest's answer). Linear.
+function criterionLabelIds(text, kind) {
+  const ids = new Set();
+  for (const line of String(text || "").split("\n")) {
+    if (!line.includes("US-")) continue;
+    const lab = criterionLabel(line);
+    if (!lab || !/^US-/.test(lab.id)) continue;
+    if (!lab.slug || notASlug(lab.slug) || kind(lab.slug) !== "other") ids.add(lab.id);
+  }
+  return ids;
+}
+// <project>/.specs/<f> or <project>/.specs/_archive/<f> → <project>; anything else → null. (Lexical — nothing is stat'ed.)
+function featureProjectDir(dir) {
+  const isSpecs = (p) => (FOLD_CASE ? path.basename(p).toLowerCase() : path.basename(p)) === ".specs";
+  let d = path.resolve(dir);
+  for (let i = 0; i < 2; i++) {
+    const up = path.dirname(d);
+    if (up === d) return null;
+    if (isSpecs(up)) return path.dirname(up);
+    d = up;
+  }
+  return null;
 }
 // test-plan.md as every reader of its IDs sees it — trace_check's coverage and planned T-IDs, its test-code scan, the
 // Phase 4 gate, doctor, finish, the brief and impact: outside HTML comments AND fenced code. A fenced example row
@@ -272,16 +369,24 @@ function extractSection(md, synonyms, marker, loose) {
   const heads = headingIndex(lines);
   const matches = (i, list) => headingMatches(lines[i], list || syns, !!marker); // a track section's heading may inflect its name
   const level = (l) => (lines[l].match(/^(#{1,6})\s/) || ["", "######"])[1].length;
-  // The nearest enclosing heading (a lower level, above i) carries the marker: the heading sits in the track's context.
+  // An enclosing heading (a lower level, above i — its parent, the parent's parent…) carries the marker: the heading sits in the
+  // track's context. Every heading's answer comes from ONE linear pass (a stack of the enclosing headings), on first use — the
+  // back-walk from each loose-synonym heading (heads.indexOf + a scan up) was quadratic: a 200 KB design.md of "### Processors"
+  // with no [PRIVACY] heading took status 9 s.
+  let inCtx = null;
   const inTrackContext = (i) => {
-    let lv = level(i);
-    for (let k = heads.indexOf(i) - 1; k >= 0 && lv > 1; k--) {
-      const h = heads[k];
-      if (level(h) >= lv) continue;
-      if (lines[h].includes(marker)) return true;
-      lv = level(h);
+    if (!inCtx) {
+      inCtx = new Map();
+      const stack = [];
+      for (const h of heads) {
+        const lv = level(h);
+        while (stack.length && stack[stack.length - 1].lv >= lv) stack.pop();
+        const inside = stack.length > 0 && stack[stack.length - 1].marked;
+        inCtx.set(h, inside);
+        stack.push({ lv, marked: inside || lines[h].includes(marker) });
+      }
     }
-    return false;
+    return inCtx.get(i) === true;
   };
   const MARKERS = markerTracks().map((t) => trackMarker(t)); // + the track packs' (1.15)
   // 1.21 review B5 — the mirror of inTrackContext: the nearest enclosing heading that carries a marker carries ANOTHER track's — the
@@ -762,8 +867,13 @@ function renderCorpusData() {
   const sort = (xs) => [...xs].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const base = renderTemplateSets(), br = renderTemplateSetsBr(base);
   return { brackets: sort(base.brackets), code: sort(base.code), bracketsBr: sort(br.brackets), codeBr: sort(br.code),
-    tasks: sort(renderTemplateTasks()), bugSteps: sort(new Set(renderBugSteps())) };
+    tasks: sort(renderTemplateTasks()), bugSteps: sort(new Set(renderBugSteps())),
+    // 1.22 review: every built-in track's template task headings, all languages (trackTaskHeadings — tracks.js)
+    taskHeadings: Object.fromEntries(VALID_TRACKS.map((t) => [t, sort(renderTrackTaskHeadings(t))])) };
 }
+// The corpus's task headings: { track: [heading…] } — strings only, own keys.
+const taskHeadingsShape = (h) => !!h && typeof h === "object" && !Array.isArray(h) &&
+  Object.values(h).every((v) => Array.isArray(v) && v.every((x) => typeof x === "string"));
 let BUILTIN_CORPUS = undefined; // undefined: not looked for yet · null: none usable (render) · else the data
 let BUILTIN_CORPUS_FROM = "render"; // "file" | "bundle" | "render" — where this process's built-in corpus comes from
 function builtinCorpus() {
@@ -775,7 +885,7 @@ function builtinCorpus() {
     // The load-time version and (the modules) the sources' hash, the sources unchanged since the engine loaded — stat'ed
     // AFTER the hash read them, so a file rewritten before or while it was hashed is never trusted.
     if (data && typeof data === "object" && CORPUS_KEYS.every((k) => Array.isArray(data[k]) && data[k].every((x) => typeof x === "string")) &&
-      data.version === engineVersion() && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
+      taskHeadingsShape(data.taskHeadings) && data.version === engineVersion() && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
       BUILTIN_CORPUS = data;
       BUILTIN_CORPUS_FROM = b ? "bundle" : "file";
     }
@@ -783,6 +893,12 @@ function builtinCorpus() {
   return BUILTIN_CORPUS;
 }
 const builtinCorpusSource = () => { builtinCorpus(); return BUILTIN_CORPUS_FROM; };
+// A built-in track's template task headings from the trusted corpus (normalized, every language), or null: trackTaskHeadings
+// renders them then (1.22 review — rendered, they load pt.js, es.js and pt-BR into an English process).
+function builtinTaskHeadings(tr) {
+  const c = builtinCorpus();
+  return c && Object.prototype.hasOwnProperty.call(c.taskHeadings, tr) ? c.taskHeadings[tr] : null;
+}
 // i18n.js tells us each language file it loads (en / pt / es.js on first use, pt-br.js): one changed since the engine loaded
 // makes a trusted file corpus the corpus of code this process doesn't run — dropped, with the sets built from it.
 function localeLoaded(rel) {
@@ -790,6 +906,7 @@ function localeLoaded(rel) {
   BUILTIN_CORPUS = null; // looked for, none usable: the sets render on their next use
   BUILTIN_CORPUS_FROM = "render";
   TEMPLATE_SETS = TEMPLATE_SETS_BR = TEMPLATE_TASKS = BUG_STEPS = null;
+  TASK_HEADINGS.clear(); // tracks.js's per-track sets, read from it (1.22 review)
 }
 if (LOADED_STATS) i18n.onLocaleLoad(localeLoaded);
 // …and the slots of the project's own templates (.specs/templates/ — projectTemplateHas, 1.14).
@@ -1020,14 +1137,16 @@ function bugTemplateSlots() {
   return (BUG_SLOTS = set);
 }
 
-module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirementAcIds, planIdText, clarificationMarkers,
+module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirementAcIds, stripForeignAcRefs, RE_NOT_A_SLUG, RE_ID_TOKEN_END,
+  notASlug, featureRefTest, RE_LEAD_LABEL, RE_CELL_LABEL, criterionLabel, criterionLabelIds,
+  otherFeatureTest, featureProjectDir, planIdText, clarificationMarkers,
   templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
   headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, extractSection,
   RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionLineKey, sectionOwnLines, RE_NA_LEAD, NA_REASON_WORDS, naAnswer,
   trackSectionReport, sectionVerdict, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
   RE_LIST_CHECKBOX, placeholderKey, isGenericSlot, unknownSteeringStub, LEGACY_TEMPLATE_PLACEHOLDERS, templateCorpus,
   templateBracketKeys, templateSets, templateSetsBr, CORPUS_FILE, CORPUS_SOURCES, corpusSourcesHash, renderCorpusData,
-  builtinCorpusSource, isTemplatePlaceholder, isCodeSlot, visibleLines, placeholderReport,
+  builtinCorpusSource, builtinTaskHeadings, isTemplatePlaceholder, isCodeSlot, visibleLines, placeholderReport,
   bracketPlaceholders, scanBrackets, artifactState, headingsOnly, RE_MANUAL_VERIFY, artifactReport, featurePlaceholders,
   placeholderSummary, chainPlaceholders, hasProseOutsideBrackets, bugPlaceholders, RE_TODO_SENTINEL_LINE,
   bugTemplateSlots, __link };

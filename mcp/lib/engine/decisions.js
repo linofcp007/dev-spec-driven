@@ -20,7 +20,7 @@ let activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, dupl
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE;
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail;
 function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers,
   ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
@@ -29,7 +29,7 @@ function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE } = E); }
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) · the spike kind (investigate → decide)
@@ -106,7 +106,46 @@ const BRIEF_DECISIONS_CHARS = 2000; // …and the characters of their titles + t
 const RE_LEADING_BOM = new RegExp("^" + BOM_CHAR);
 // HTML comments blanked line for line (line numbers hold) — /<!--[\s\S]*?-->/g by replaceHtmlCommentSpans (1.17 H).
 const blankHtmlComments = (s) => replaceHtmlCommentSpans(String(s || ""), (m) => m.replace(/[^\n]/g, ""));
-const splitRefs = (v) => String(v == null ? "" : v).split(/[,;]/).map((s) => stripEnds(s.trim(), isBacktickUnit).trim()).filter(Boolean);
+// An `_Affects:_` value → its pieces: split at "," / ";" OUTSIDE a backtick-quoted span (1.22 review: a section heading holding a
+// comma or a semicolon — the size-S "Decisions, reuse & risks", "[API] Pagination, Idempotency & Concurrency" — is written
+// `quoted` by decisionEntryLines), each piece trimmed and its backticks stripped. → [{ text, start, end }] (start / end: the
+// piece's span in the value, so affectsRefs can rejoin pieces from the value itself). A backtick with no closing one is text.
+function affectPieces(v) {
+  const s = String(v == null ? "" : v);
+  const spans = [];
+  let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === "`") { const close = s.indexOf("`", i + 1); if (close !== -1) { i = close; continue; } }
+    if (s[i] === "," || s[i] === ";") { spans.push([start, i]); start = i + 1; }
+  }
+  spans.push([start, s.length]);
+  return spans.map(([a, b]) => ({ start: a, end: b, text: cleanRef(s.slice(a, b)) })).filter((p) => p.text);
+}
+const cleanRef = (s) => stripEnds(String(s).trim(), isBacktickUnit).trim();
+const splitRefs = (v) => affectPieces(v).map((p) => p.text);
+// 1.22 review — the unquoted form (`decide --affects "Decisions, reuse & risks"`, a hand-written entry): a piece that names nothing
+// is joined with the pieces after it (at most AFFECTS_JOIN_MAX, the longest first) when together they name something. texts: the
+// pieces; join(i, j) → the text of pieces i..j together; ok(text) → it resolves (resolveAffect). → the references
+const AFFECTS_JOIN_MAX = 8;
+function rejoinRefs(texts, join, ok) {
+  const out = [];
+  for (let i = 0; i < texts.length;) {
+    let j = -1;
+    if (!ok(texts[i])) for (let k = Math.min(texts.length - 1, i + AFFECTS_JOIN_MAX - 1); k > i; k--) if (ok(join(i, k))) { j = k; break; }
+    if (j > i) { out.push(join(i, j)); i = j + 1; } else { out.push(texts[i]); i++; }
+  }
+  return out;
+}
+// A raw _Affects:_ value (a spec_decide item) → its references, rejoined over the value's own separators.
+function affectsRefs(v, ok) {
+  const s = String(v == null ? "" : v);
+  const p = affectPieces(s);
+  return rejoinRefs(p.map((x) => x.text), (i, j) => cleanRef(s.slice(p[i].start, p[j].end)), ok);
+}
+// A logged entry's references (decisionLog's `affects`), rejoined with ", " (the separator the log no longer holds).
+const entryRefs = (refs, t) => rejoinRefs(refs, (i, j) => refs.slice(i, j + 1).join(", "), (r) => resolveAffect(r, t).ok);
+// A reference as decisionEntryLines writes it: `quoted` when it holds a separator (its backticks dropped — no key reads them).
+const quoteRef = (r) => (/[,;]/.test(r) ? "`" + String(r).replace(/`/g, "") + "`" : r);
 const normDecisionId = (s) => { const m = String(s || "").trim().match(/^D-(\d{1,6})$/i); return m ? "D-" + parseInt(m[1], 10) : null; };
 function decisionLabelKey(label) {
   const l = String(label).toLowerCase();
@@ -203,7 +242,7 @@ function decisionTargets(dir, kind) {
     }
   }
   return {
-    acs: requirementAcIds(req),
+    acs: requirementAcIds(req, dir),
     secondary: secondaryDefinitions(req).all,
     tests: new Set([...extractTestIds(planIdText(read("test-plan.md")))].map((id) => tKey(id.slice(2)))),
     sections,
@@ -270,16 +309,18 @@ function decisionInput(input, D) {
   }
   const list = (k) => {
     const v = o[k];
-    if (v == null) return { value: [] };
+    if (v == null) return { value: [], items: [] };
     const items = Array.isArray(v) ? v : [v];
     if (items.some((x) => typeof x !== "string")) return { error: D.badText(k) };
-    return { value: [...new Set(items.flatMap(splitRefs))] };
+    return { value: [...new Set(items.flatMap(splitRefs))], items };
   };
   const affects = list("affects");
   if (affects.error) return affects;
   const supersedes = list("supersedes");
   if (supersedes.error) return supersedes;
-  return { title: t1, decision: decision.value, context: context.value, consequences: consequences.value, kind, affects: affects.value, supersedes: supersedes.value };
+  // affectItems: the raw values — decide() rejoins their pieces against the feature's sections (affectsRefs)
+  return { title: t1, decision: decision.value, context: context.value, consequences: consequences.value, kind, affects: affects.value, affectItems: affects.items,
+    supersedes: supersedes.value };
 }
 // One entry's lines (no line ends).
 function decisionEntryLines(e, D) {
@@ -293,7 +334,7 @@ function decisionEntryLines(e, D) {
     "",
     `- _Kind: ${e.kind}_`,
     `- _Date: ${e.at}_`,
-    ...(e.affects.length ? [`- _Affects: ${e.affects.join(", ")}_`] : []),
+    ...(e.affects.length ? [`- _Affects: ${e.affects.map(quoteRef).join(", ")}_`] : []), // 1.22 review: a heading with a "," / ";" quoted
     ...(e.supersedes.length ? [`- _Supersedes: ${e.supersedes.join(", ")}_`] : []),
     ...para(D.labels.context, e.context),
     ...para(e.kind === "discovery" ? D.labels.discovery : D.labels.decision, e.decision),
@@ -323,7 +364,10 @@ function decide(projectDir, name, input) {
   const badSup = sup.filter((x) => !x.id || !known.has(x.id)).map((x) => x.s);
   if (badSup.length) return { ok: false, unknownSupersedes: badSup, error: D.badSupersedes(badSup.join(", ")) };
   const targets = decisionTargets(dir, kind);
-  const resolved = inp.affects.map((r) => resolveAffect(r, targets));
+  // 1.22 review: each value's pieces, rejoined where together they name a heading (an unquoted "Decisions, reuse & risks")
+  const okRef = (r) => resolveAffect(r, targets).ok;
+  const refs = [...new Set(inp.affectItems.flatMap((v) => affectsRefs(v, okRef)))];
+  const resolved = refs.map((r) => resolveAffect(r, targets));
   const unknown = resolved.filter((r) => !r.ok).map((r) => r.ref);
   if (unknown.length) return { ok: false, unknownAffects: unknown, error: (kind === "change" ? D.badAffectsChange : D.badAffects)(unknown.join(", ")) };
   const n = Math.max(0, ...log.map((e) => e.n)) + 1;
@@ -359,7 +403,7 @@ function decisionsTrace(dir, kind) {
   if (raw == null) return { phantomAffects: [] };
   const t = decisionTargets(dir, kind);
   const out = [];
-  for (const e of decisionLog(raw)) for (const r of e.affects) if (!resolveAffect(r, t).ok) out.push({ decision: e.id, ref: r, line: e.line });
+  for (const e of decisionLog(raw)) for (const r of entryRefs(e.affects, t)) if (!resolveAffect(r, t).ok) out.push({ decision: e.id, ref: r, line: e.line });
   return { phantomAffects: out };
 }
 TRACE_INFO_FIELDS.add("phantomAffects"); // informational, so traceGaps never lists them as gaps
@@ -391,7 +435,7 @@ function decisionDoctorChecks(projectDir, slug, dir, state, kind, lng, tr) {
   const phases = [];
   for (const e of log) {
     if (retired.has(e.id) || e.at == null) continue;
-    const res = e.affects.map((r) => resolveAffect(r, t)).filter((r) => r.ok);
+    const res = entryRefs(e.affects, t).map((r) => resolveAffect(r, t)).filter((r) => r.ok);
     const reqRefs = res.filter((r) => r.type === "ac" || r.type === "secondary").map((r) => r.ref);
     const desRefs = res.filter((r) => r.type === "section").map((r) => r.ref);
     if (reqRefs.length && rq != null && e.at > rq) {
@@ -607,6 +651,8 @@ function spikeDoctor(projectDir, f) {
   }
   const dupTasks = duplicateTaskNumbers(taskBlocks(readIfExists(path.join(dir, "tasks.md")) || ""));
   if (dupTasks.length) add("duplicate-tasks", "warn", i18n.msg(lng).evidenceGate.duplicateTasks(dupTasks.map((n) => "#" + n).join(", ")));
+  const unread = unreadTasksDetail(readIfExists(path.join(dir, "tasks.md")) || ""); // 1.22 review: checkbox lines that are no tasks
+  if (unread) add("unread-tasks", "warn", i18n.msg(lng).markerSyntax.unreadTasks(unread));
   const depsCheck = taskDepsCheck(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""), lng); // 1.14 F3
   if (depsCheck) add("task-deps", depsCheck.status, depsCheck.detail);
   for (const c of decisionDoctorChecks(projectDir, slug, dir, st, "spike", lng)) add(c.id, c.status, c.detail);
@@ -712,7 +758,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
 
 module.exports = { DECISIONS_FILE, DECISION_TITLE_MAX, DECISION_TEXT_MAX, RE_DECISION_HEAD_START, isBlankUnit,
   decisionHead, stripClosingHashes, underscoreMarkerLine, RE_DECISION_MARKER_HEAD, decisionMarker, DECISION_LABELS,
-  RE_DECISION_LABEL, BRIEF_DECISIONS_MAX, BRIEF_DECISIONS_CHARS, RE_LEADING_BOM, blankHtmlComments, splitRefs,
+  RE_DECISION_LABEL, BRIEF_DECISIONS_MAX, BRIEF_DECISIONS_CHARS, RE_LEADING_BOM, blankHtmlComments, splitRefs, affectPieces, rejoinRefs, affectsRefs, AFFECTS_JOIN_MAX,
   normDecisionId, decisionLabelKey, decisionLog, retiredDecisions, decisionSectionKeys, decisionTargets, resolveAffect,
   trimBlanksEnd, safeSpecText, decisionInput, decisionEntryLines, decide, decisionsTrace, affectsWarnings,
   decisionDoctorChecks, briefDecisions, decisionSummaryLines, catalogDecisions, SPIKE_FILE, SPIKE_SYN, RE_OUTCOME_HEAD,

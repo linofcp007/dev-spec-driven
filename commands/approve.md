@@ -18,24 +18,30 @@ With the human approval guard on (`spec_init {approvalGuard: "ask" | "deny"}`), 
 before that call, or refuses it: then give the user the command the refusal names to run themselves (their own
 terminal, or `! node <clone>/cli/dev-spec.js approve …`) and wait — never retry it another way. In other MCP clients
 the server asks the user itself when the client supports elicitation (a question with an Approve box and a note —
-only their explicit approve is recorded, as `confirmed`); a `declined: true` result means the user said no (or didn't
-answer): record nothing, ask what should change. A `humanRequired: true` refusal (deny, a client that can't ask) works
+only their explicit approve is recorded, as `confirmed`, and only for the version the question showed); a `declined: true`
+result means the user said no (or didn't answer): record nothing, ask what should change. `changedSincePreview: true`
+means the artifact (or, forced, its failing checks) changed while they decided: nothing was recorded — ask again. A `humanRequired: true` refusal (deny, a client that can't ask) works
 like the hook's: the user runs the `command` it names.
 
 **The approval is a gate:** that phase's checks run first and any failure **refuses** it, listing the failing
 check ids — e.g. requirements: `ears`, `placeholders`, `clarifications`, `success-criteria`, `priorities`,
 `ac-uniqueness` (bugfix: `reproduction`); design: `placeholders`, `constitution-check`, the active
-`saas-sections` / `ai-sections` / `sec-sections` / `privacy-sections` / `dist-sections`, `clarifications` (bugfix: `root-cause` — its design approval signs off
-`bug.md`); test-plan: `placeholders`, `traceability` (every AC has a test row, and no row cites an AC
-requirements.md doesn't define); eval-plan: `placeholders`; tasks: `placeholders` (no placeholder tasks),
-`traceability` (every AC covered by a task, no phantom AC / T-IDs in tasks); tests (the Phase 4 sign-off —
+`saas-sections` / `ai-sections` / `sec-sections` / `privacy-sections` / `dist-sections` / `api-sections` /
+`ui-sections` / `obs-sections` / `data-sections` and a project track pack's `<pack>-sections`, `clarifications`
+(bugfix: `root-cause` — its design approval signs off `bug.md`); test-plan: `placeholders`, `traceability` (every AC
+has a test row, and no row cites an AC requirements.md doesn't define); eval-plan: `placeholders`; tasks:
+`placeholders` (no placeholder tasks), `traceability` (every AC covered by a task, no phantom AC / T-IDs in tasks),
+`task-deps` (a `_Depends:_` naming no task, or a cycle; a change's plan also `change-scope`); tests (the Phase 4 sign-off —
 failing tests / eval harness written and red): +tdd `tests-in-code` (every planned T-ID named by a test file),
 +ai `eval-sets` (`evals/golden.json` is the feature's own set, not the scaffold's sample) — nothing to approve on a
 core-only feature; execution (the sign-off after a ready `/spec-finish`): spec_finish's blockers — `doctor`,
 `root-cause`, `placeholders`, `changed-since-approval`, `tasks`, `open-tasks`, `verification`, `suite-evidence`
 (project checks without a passing run since the last tick, on the current code), `approval-gates`.
-`tests` is pending on a +tdd / +ai feature once its test or eval plan exists (never on a bugfix), so
-`gatesOk` stays false and `spec_next_action` asks for it until it is approved. **Phase by phase:** a phase is
+`tests` is pending on a +tdd / +ai feature once its test or eval plan exists or was approved (never on a bugfix), so
+`gatesOk` stays false and `spec_next_action` asks for it until it is approved — and again once the test plan gains a T-ID
+or a plan is re-approved with other content after it (the approval records the plan it covered; one recorded before 1.22
+is never asked for again). An approved artifact that was deleted counts as changed since its approval: restore it, or
+revoke that approval. **Phase by phase:** a phase is
 refused while an EARLIER active phase that has an artifact is still unapproved — check `phase-order`, naming the
 phase(s) to approve first (a bugfix's tasks can't be approved before its design / `bug.md`; on a design-first feature
 the design comes before the requirements). On a refusal, show the failing checks and fix them (or ask the user to) —

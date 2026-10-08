@@ -45,7 +45,8 @@ and U+FEFF gotchas are in CLAUDE.md.
   append-only lists (`approvalHistory`, `changes`, `unticks`) → the union by identity (`HISTORY_ID` phase/at/by/revoked/partial/role
   · `CHANGE_ID` · `UNTICK_ID`; the same record with different fields — upgrade's seeded snapshot — gets both sides' fields),
   chronological once theirs added one; `evidence[n]` / `finishChecks[name]` → the record with the latest run `at` (a tie is the same
-  run: its note and stale mark merged), histories merged, deduped, bounded by `EVIDENCE_HISTORY`; `ticks[n]` / `lastTickAt` → the
+  run: its note and stale mark merged), histories merged, deduped, bounded by `EVIDENCE_HISTORY` (a run's own fields — `observed`,
+  1.22 review 3's `cmdRule` and `root` — travel with it: no rule of their own); `ticks[n]` / `lastTickAt` / `lastEditAt` (1.22 review: the spec-hook's stamp of a hand-saved tasks.md) → the
   later; `finished` → the later (firstAt the earliest); `createdAt` → the earlier; `approvals[phase]` → the later approval unless
   a revocation record (`revoked: true`, not `partial`) is later — **revocations win by time**; `signoffs[phase][role]` → the later,
   dropped when a revocation or the phase's merged approval is no earlier; `lastApprovedPhase` follows the merged approvals (never its
@@ -149,7 +150,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   total, was dropped) and for the MCP server (on stdin close it flushes its queued replies first — a slow reader on Linux
   got 0 of 8; a stdout EPIPE / EOF / ERR_STREAM_DESTROYED exits quietly 0, any other stdout error prints one stderr line
   and exits 1). Never `process.exit()` right after a write. The pre-commit validator reads staged
-  names NUL-separated with `core.quotePath=false`, so accented paths work. Only EARS errors and phantom task refs
+  names NUL-separated with `core.quotePath=false`, so accented paths work, and loads the engine only once a staged
+  `requirements.md` / `tasks.md` / `change.md` under a `.specs/` needs it (1.22 review — most commits stage none and paid
+  ~130 ms for the require). Only EARS errors and phantom task refs
   block; a requirements.md with EARS warnings or template placeholders (the STAGED text, `featurePlaceholders(…, text)`)
   gets a ⚠ line (`earsWarnings`), never "EARS clean" — the PostToolUse hook's rule.
 - **Dates/timestamps**: fine to use `new Date()` in the MCP server and scripts (normal Node
@@ -159,9 +162,15 @@ and U+FEFF gotchas are in CLAUDE.md.
 - **CLI exit codes are scriptable**: `doctor` (FAIL), `trace` (gaps), `ears` (errors), `finish` (not ready),
   `drift` (drift, a stale baseline or an error) and any refused operation exit 1. The eval harness
   (`mcp/evals/run-evals.js`, also `dev-spec evals`) exits 2 on a usage error (a `--max-items` that isn't an
-  integer ≥ 1 — it graded nothing and scored 0/0 = 100%) and 1 on an invalid set (an empty one included). An engine refusal goes through `fail(r)`, never
+  integer ≥ 1 — it graded nothing and scored 0/0 = 100% — or, run directly, a `--json`: its report is text) and 1 on an
+  invalid set (an empty one included); `dev-spec evals --json` never reaches the harness — the CLI refuses it first
+  (`TEXT_ONLY_COMMANDS`, exit 1, below); `dev-spec evals` exits with the harness's status, and 1 when it has none (a spawn error, a signal — 1.22
+  review: `status || 0` passed a killed run). An engine refusal goes through `fail(r)`, never
   `die(r.error)`: with `--json` the whole `{ok: false, error, …}` result (`recorded`, `neverApproved`, `gated`…) is
-  the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only.
+  the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only. **`--json` on a command
+  whose output is text only** — the help (`help`, no command, `--help` anywhere), `rules`, `mcp-config`, `evals`
+  (`TEXT_ONLY_COMMANDS`) — is such a usage error (`cliOutput.noJson`, exit 1, nothing on stdout; 1.22 review — it printed the
+  text with exit 0); `--json=false` is the switch off. A new command that prints no structured result joins that list.
 - **CLI boolean switches are read with `on(k)`, never by truthiness**: `--x=false` is the string "false" (truthy),
   so `done --run=false` ran the `_Verify:_` commands. `normalizeBoolFlags()` (every name in `BOOL_FLAGS`) turns
   `true|false|1|0|yes|no|on|off` into booleans and refuses any other value. `BOOL_FLAGS` is `[...spec.CLI_SWITCHES]`
@@ -175,4 +184,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise).
   Numeric flags that MCP bounds (`--cap`, `--max`) and the CLI-only `--timeout` go through `intFlag()` (integer ≥ 1).
   The engine refuses what the MCP schema refuses where the CLI passes raw strings: `taskNumber()` (digits only — `"1.9"` / `"2abc"` are not
-  task 1 / 2), `createFeature` kind ∈ feature|bugfix|spike, `backlog` action ∈ add|rm|remove|list.
+  task 1 / 2), `createFeature` kind ∈ feature|bugfix|spike, `backlog` action ∈ add|rm|remove|list. **In the validator's own words**
+  (`msg(lang).args`, 1.22 review) where the schema bounds a value: a task number asked for (`askedTaskNumber()` — done / undone /
+  brief, spec_complete_task / spec_task_brief `{number}`, schema `minimum: 0`) is an integer ≥ 0 (`taskNumberError()`: `-1` read
+  "must be an integer"; not ≥ 1 — the scanner reads a hand-written "0." task and next serves it, so refusing 0 would loop next →
+  complete; `done` checks it itself before `--run` runs anything — an empty word would brief the NEXT task); a roadmap `order` (depend `--order`, spec_depend's `{type: "integer"}`) is a SAFE
+  integer (`orderInput()` — `99999999999999999999` matched the digits and was stored as 1e20).

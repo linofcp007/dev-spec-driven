@@ -506,6 +506,31 @@ function specsFileContainedNow(projectDir, file) {
     return false;
   }
 }
+// 1.22 review — a file the engine is about to WRITE below .specs/ (an export's document): no folder between .specs/ and it,
+// nor the file itself, is a link (a symbolic link, a junction), and each resolves inside the real .specs/ — a committed
+// `.specs/exports -> /etc` or `.specs/exports/project.html -> ~/.bashrc` is refused, nothing written. A part that doesn't
+// exist yet passes (it will be created inside); a path outside .specs/ → false. Uncached: a write's own check.
+function specsWriteContained(projectDir, file) {
+  const root = specsRoot(projectDir);
+  let realRoot;
+  try { realRoot = fs.realpathSync.native(root); } catch { return true; } // no .specs/ yet: nothing in it is a link
+  const rel = path.relative(root, path.resolve(file));
+  if (!rel || rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel)) return false;
+  let cur = root;
+  for (const seg of rel.split(path.sep)) {
+    cur = path.join(cur, seg);
+    let st;
+    try { st = fs.lstatSync(cur); } catch (e) { return !!e && e.code === "ENOENT"; } // absent: it and what follows are created
+    if (st.isSymbolicLink()) return false;
+    try {
+      const real = fs.realpathSync.native(cur);
+      if (real === realRoot || !withinRoot(realRoot, real)) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
 // readIfExists for such a file: null when it is not contained (skipped, as if absent).
 function readContained(projectDir, file) {
   const f = (!existsRaw(file) && changeAlias(file)) || file; // 1.21 F5: a change's change.md is checked as itself
@@ -559,7 +584,7 @@ function readFileHead(file, maxChars) {
       if (r <= 0) break;
       n += r;
     }
-    const text = HEAD_BUF.toString("utf8", 0, n);
+    const text = decodeText(HEAD_BUF, n);
     return text.length > chars ? text.slice(0, chars) : text;
   } catch {
     return null;
@@ -572,12 +597,26 @@ function readRaw(file) {
   if (k !== null && CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
   let text;
   try {
-    text = fs.readFileSync(file, "utf8");
+    text = decodeText(fs.readFileSync(file));
   } catch {
     text = null;
   }
   if (k !== null) CTX.READ_CACHE.set(k, text);
   return text;
+}
+// A file's bytes (the first n of buf) as text, the way a Windows editor or shell wrote them (1.22 review): a UTF-16 BOM decides
+// — FF FE is UTF-16LE (Windows PowerShell 5.1's `>` / Out-File, Notepad's "Unicode"), FE FF UTF-16BE (swapped, then read as LE) —
+// anything else is UTF-8. Read as UTF-8, a UTF-16 file was NUL-interleaved noise: a Pester tests/Login.Tests.ps1 naming T-01 was
+// never found (the tests gate never passed), a UTF-16 requirements.md traced 0 ACs. The BOM is kept as the U+FEFF a UTF-8 BOM
+// reads as, so every reader that drops one drops this one too (a rewrite of such a file is UTF-8). Every reader of spec / test
+// text goes through it: readRaw (readIfExists, readContained), readFileHead, the importer, the resources, the save hooks.
+function decodeText(buf, n = buf.length) {
+  if (n >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.toString("utf16le", 0, n - (n % 2));
+  if (n >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    const le = Buffer.from(buf.subarray(0, n - (n % 2))); // a copy: the caller's buffer stays as it was
+    return le.swap16().toString("utf16le");
+  }
+  return buf.toString("utf8", 0, n);
 }
 // fs.existsSync, served from the same scope (the per-feature file probes of listFeatures / detectPhase / detectTracks) — a
 // change's requirements.md / tasks.md exist as its change.md (changeAlias, 1.21 F5).
@@ -756,6 +795,6 @@ module.exports = { resolveProjectDir, specsRoot, ensureDir, writeIfAbsent, RENAM
   featureBusyResult, withMoveLock, DIR_RENAME_RETRY_MS, renameDirSync, moveDirOrBusy, ROADMAP_LOCK_FILE,
   LOCK_IGNORE_LINES, ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel,
   shapeError, withReadCache, readCacheKey, EXISTS_KEY, DIR_KEY, CONTAINED_KEY, specsFileContained,
-  specsFileContainedNow, readContained, readIfExists, readFileHead, readRaw, existsCached, existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, globWalkReaches,
+  specsFileContainedNow, specsWriteContained, readContained, readIfExists, readFileHead, readRaw, decodeText, existsCached, existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, globWalkReaches,
   invalidateReadCache, safeReaddir, withinRoot, isDirSafe, FOLD_CASE, toPosix, isInsideDir, realPathLoose, plainUnc,
   networkPathInside, insideDirAlias, isNetworkPath, __link };

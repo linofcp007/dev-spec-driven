@@ -124,6 +124,7 @@
  *        prompts: --args "…" (the command's arguments, = prompts/get {arguments: {args}})
  *        import: --text "<markdown>" (a plan / ExecPlan's text, = spec_import {text}) · statusline: --print-config
  *        Switches: --x or --x=true|false (1/0, yes/no, on/off). --json prints a refusal's {ok:false,…} result on stdout (exit 1).
+ *        help, rules, mcp-config and evals print text only: --json there is a usage error (exit 1).
  */
 
 const fs = require("fs");
@@ -337,6 +338,8 @@ function mcpConfig(client) {
 
 // ---- dispatch --------------------------------------------------------------
 const CLI_LANGS = spec.LANGS; // = the MCP tools' `lang` enum (en · pt · es · pt-BR)
+// The commands whose output is text only — no structured result — so --json is refused there (main; the help too).
+const TEXT_ONLY_COMMANDS = new Set(["rules", "mcp-config", "evals"]);
 
 // ---- statusline (1.16 C1) ----------------------------------------------------
 // Claude Code runs the settings.json "statusLine" command after every assistant message (debounced, cancelled when a newer
@@ -416,6 +419,11 @@ function main() {
     flags.lang = l;
   }
   normalizeBoolFlags(); // `--run=false` is false, `--run=maybe` an error — before any command runs
+  // 1.22 review: --json on what prints text only — the help (`help`, no command, `--help` anywhere), `rules`, `mcp-config`, and
+  // `evals` (the harness's text report; its flags go to run-evals.js, which refuses a --json given to it directly too) — is a
+  // usage error, before anything runs: it printed the text on stdout with exit 0, and a script parsing it failed far away.
+  const helpOnly = cmd === undefined || cmd === "help" || cmd === "-h" || cmd === "--help" || (on("help") && cmd !== "evals");
+  if (on("json") && (helpOnly || TEXT_ONLY_COMMANDS.has(cmd))) die(projectText().noJson(helpOnly ? "help" : cmd));
   if (on("help") && cmd !== "evals") return console.log(helpText()); // `<command> --help` prints the help, runs nothing
   switch (cmd) {
     case undefined:
@@ -602,7 +610,7 @@ function main() {
       if (typeof flags.text === "string") return report(spec.earsValidate(flags.text, textLang), cliText(textLang));
       if (pos[0] === "-") return readStdin((txt) => report(spec.earsValidate(txt, textLang), cliText(textLang)));
       const isFile = fs.existsSync(pos[0]) && fs.statSync(pos[0]).isFile();
-      if (isFile) return report(spec.earsValidate(fs.readFileSync(pos[0], "utf8"), textLang), cliText(textLang));
+      if (isFile) return report(spec.earsValidate(spec.decodeText(fs.readFileSync(pos[0])), textLang), cliText(textLang)); // UTF-16 too
       return report(spec.earsFeature(projectDir, pos[0]), featureText(pos[0]));
     }
 
@@ -633,13 +641,14 @@ function main() {
       if (!pos[0]) usage("dev-spec finish <feature> [--write] [--include-body] [--run [--shell bash|pwsh|<path>] [--timeout <s>]]");
       // B5: --run executes the project checks (roadmap.json meta.checks) — only on this explicit flag — and records every run
       // (= spec_finish {evidence}); without meta.checks it is an error, nothing runs.
-      let evidence;
+      let evidence, runStart;
       if (on("run")) {
+        runStart = spec.runStartStamp(projectDir, pos[0]); // 1.22 review: `at` and the code stamp BEFORE the checks run
         const rc = b5RunChecks(pos[0]);
         if (!rc.ok) return fail(rc, rc.hint);
         evidence = rc.evidence;
       }
-      const r = spec.finishFeature(projectDir, pos[0], { write: on("write"), includeBody: boolFlag("include-body"), evidence, ...(on("run") ? { ranBy: "cli" } : {}) }); // = spec_finish {includeBody, evidence}; ranBy: the runs are observed by the CLI itself (1.14 F1)
+      const r = spec.finishFeature(projectDir, pos[0], { write: on("write"), includeBody: boolFlag("include-body"), evidence, ...(on("run") ? { ranBy: "cli", runStart } : {}) }); // = spec_finish {includeBody, evidence}; ranBy: the runs are observed by the CLI itself (1.14 F1)
       if (!r.ok) return fail(r);
       if (!r.readyToFinish) process.exitCode = 1; // scriptable: blockers → non-zero
       const T = featureText(r.feature);
@@ -691,10 +700,17 @@ function main() {
     case "done": {
       if (!pos[0] || pos[1] == null) usage("dev-spec done <feature> <task-number> [--run [--shell bash|pwsh|<path>] [--timeout <s>] | --evidence \"summary\" [--exit N] [--cmd \"command\"]]");
       const D = spec.msg(spec.featureLang(projectDir, pos[0])).taskDone; // human output in the feature's language
-      if (!/^\d+$/.test(String(pos[1]).trim())) die(D.numberInt); // before running anything
+      // The task number: an integer ≥ 0 (spec_complete_task's schema; a hand-written "0." task is one next can serve) — refused
+      // BEFORE anything runs (an empty word would brief the NEXT task and run its _Verify:_), in the MCP validator's words, as the
+      // engine refuses it for undone / brief (1.22 review: `-1` read "must be an integer"). --json prints the refusal on stdout.
+      if (!/^\s*\d+\s*$/.test(String(pos[1])) || !(Number(pos[1]) >= 0)) {
+        const A = spec.msg(spec.featureLang(projectDir, pos[0])).args;
+        return fail({ ok: false, error: A.invalid(A.item("number", A.type.integer + " " + A.atLeast(0), JSON.stringify(String(pos[1])))) });
+      }
       const say = flags.json ? console.error : console.log; // --json keeps stdout one JSON document
       let evidence;
       let hint = null;
+      let runStartedAt = null, ranVerify = null; // 1.22 review: the stamps taken BEFORE the run (its start, the _Verify:_ it ran)
       if (on("run")) {
         // Evidence before claims: run the task's own _Verify:_ command(s) from the project root; any failure
         // leaves the task open. taskBrief resolves the SAME task completeTask ticks (first open one of a
@@ -726,6 +742,8 @@ function main() {
         // A pipe masks the check's exit code (a pipeline reports its LAST command's): one hint line — it still runs.
         cmds.filter(spec.verifyPipeMasked).forEach((c) => say(M.verifyPipe.runHint(c)));
         const git = b5GitState(); // B5: the commit the run is made on (+ dirty outside .specs/) — read-only git, skipped without it
+        runStartedAt = new Date().toISOString(); // 1.22 review: the run's `at` is when it STARTED (an edit made meanwhile isn't tested)
+        ranVerify = b.verify.slice(); // …and its verify stamp the _Verify:_ as it was then (edited meanwhile → stale-evidence)
         for (const cmd of cmds) {
           say("$ " + cmd);
           const x = b5Exec(cmd, sh, M);
@@ -764,7 +782,7 @@ function main() {
         evidence = { command: flags.cmd, exitCode: flags.exit, summary: typeof flags.evidence === "string" ? flags.evidence : undefined };
       }
       // 1.14 F1: a run --run made is observed by the CLI itself (observed: "cli"); a reported one is looked up in the harness's log.
-      const r = spec.completeTask(projectDir, pos[0], pos[1], evidence, { ...(on("run") ? { ranBy: "cli" } : {}), ...(flags.reason !== undefined ? { reason: flags.reason } : {}) }); // --reason: only undone takes it (refused here, as MCP)
+      const r = spec.completeTask(projectDir, pos[0], pos[1], evidence, { ...(on("run") ? { ranBy: "cli", startedAt: runStartedAt, ranVerify } : {}), ...(flags.reason !== undefined ? { reason: flags.reason } : {}) }); // --reason: only undone takes it (refused here, as MCP)
       if (!r.ok) return fail(r, hint); // --json: {ok:false, recorded:true, …} on stdout, as spec_complete_task returns it
       return out(r, (r) => {
         // "(verified)" only when something was run or attested — nothingToVerify is verified with nothing checked
@@ -819,7 +837,10 @@ function main() {
       if (!pos[0]) usage("dev-spec evals <feature> [--dry-run] [--set-baseline]");
       const passthru = argv.slice(argv.indexOf(pos[0]) + 1);
       const res = spawnSync(process.execPath, [EVALS, pos[0], "--project", projectDir, ...passthru], { stdio: "inherit" });
-      return process.exit(res.status || 0);
+      // A harness that never ran (spawn error) or was killed by a signal has no status — that is a failure, never exit 0
+      // (1.22 review: `res.status || 0` passed a killed run).
+      if (res.error) console.error("dev-spec: " + res.error.message);
+      return process.exit(res.error || res.status == null ? 1 : res.status);
     }
 
     case "backlog": {
@@ -901,6 +922,7 @@ function main() {
     case "scan": {
       const root = pos[0] ? path.resolve(pos[0]) : projectDir;
       const r = spec.scanCodebase(root, { cap: intFlag("cap") });
+      if (!r.ok) return fail(r); // a path that is no folder (1.22 review): exit 1, never an empty codebase
       const T = cliText(spec.projectLang(root)); // same language as the engine's note
       const B = spec.msg(spec.projectLang(root)).brownfield;
       return out(r, (r) => {
@@ -923,6 +945,7 @@ function main() {
 
     case "coverage": {
       const r = spec.coverage(projectDir);
+      if (!r.ok) return fail(r);
       const T = projectText();
       const B = spec.msg(spec.projectLang(projectDir)).brownfield;
       const folder = (x) => (x === "." ? B.root : x);
@@ -1027,9 +1050,10 @@ function main() {
       const ROOT = path.resolve(__dirname, "..").replace(/\\/g, "/"); // forward slashes: valid in markdown and on Windows
       const raw = fs.readFileSync(path.join(__dirname, "..", RULE_FILES[tool]), "utf8");
       // One pass (so skills/…/references/x.md is never rewritten twice). `../../AGENTS.md` (the Cursor link)
-      // and bare `references/x.md` (relative to the skill) resolve too. Commands get quoted paths and link
-      // targets get <…> when the clone path has spaces.
-      const re = /(\bnode\s+|\]\()?(?<![\w./-])(?:\.\.\/)*(cli\/dev-spec\.js|mcp\/server\.js|AGENTS\.md|skills\/dev-spec-driven(?:\/[\w.-]+)*\/?|references\/(?:[\w.-]+\.md)?)/g;
+      // and bare `references/x.md` (relative to the skill) resolve too, as do the plugin's `agents/x.md` and
+      // `commands/x.md` (AGENTS.md cites the reviewer's Verify mode, /spec-review-feedback and /spec-simplify).
+      // Commands get quoted paths and link targets get <…> when the clone path has spaces.
+      const re = /(\bnode\s+|\]\()?(?<![\w./-])(?:\.\.\/)*(cli\/dev-spec\.js|mcp\/server\.js|AGENTS\.md|skills\/dev-spec-driven(?:\/[\w.-]+)*\/?|references\/(?:[\w.-]+\.md)?|(?:agents|commands)\/[\w.-]+\.md)/g;
       const text = raw.replace(re, (m, lead, rel) => {
         const abs = ROOT + "/" + (rel.startsWith("references/") ? "skills/dev-spec-driven/" + rel : rel);
         if (lead && /^node/.test(lead)) return lead + JSON.stringify(abs);
@@ -1408,7 +1432,7 @@ function main() {
     case "stop-check": {
       // = the Stop / SubagentStop hook's decision (spec.stopCheck): the closing message from --message "<text>", the words
       // after the command, or stdin (--message - / a lone -); --agent <subagent type> (a spec-implementer is checked on its
-      // report). Exit 1 when the turn would be sent back (scriptable, like doctor); --json prints the result.
+      // report, a spec-simplifier on its simplification report). Exit 1 when the turn would be sent back (scriptable, like doctor); --json prints the result.
       const runCheck = (message) => {
         const r = spec.stopCheck(projectDir, { message, agent: typeof flags.agent === "string" ? flags.agent : "" });
         if (flags.json) console.log(JSON.stringify(r, null, 2));
@@ -1778,7 +1802,8 @@ function helpText() {
   stop-check [--message "<text>"|-] [--agent <type>]   The Stop hook's evidence gate: does a closing message claim done /
                                   verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without verification
                                   evidence? Prints the reason it would send the turn back (exit 1) or why it lets it end; - reads stdin;
-                                  --agent spec-implementer checks the task report named in the message instead
+                                  --agent spec-implementer checks the task report named in the message instead,
+                                  --agent spec-simplifier the simplification report (its last '## Final runs' must all pass)
   log <feature> [--max N] [-]     Per task, the commits whose message cites it — "task #N" / "#N" with the feature name (as /spec-commit
                                   writes "Part of .specs/<feature>/ task #N."), or its T-/AC IDs ("Makes T-01 green") — and, +tdd, a
                                   red-first check (implementation committed before its test?); reads git log (read-only, local, --max
@@ -1835,6 +1860,7 @@ function helpText() {
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
          With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1.
+         help, rules, mcp-config and evals print text only: --json there is a usage error (exit 1).
 
   Works the same in Claude Code, Cursor, Windsurf, Copilot, Gemini/Codex CLI, or a plain shell.`;
 }

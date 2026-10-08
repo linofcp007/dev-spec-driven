@@ -75,7 +75,7 @@ server entry (`"env": { "SPEC_MCP_PROMPTS": "off" }`) if you don't want them.
 
 ## Claude Code (CLI / IDE extension)
 
-Native — it's a plugin. Skills, the 54 commands, the 3 agents, the hooks (PostToolUse + SessionStart, the Stop /
+Native — it's a plugin. Skills, the 55 commands, the 4 agents, the hooks (PostToolUse + SessionStart, the Stop /
 SubagentStop evidence gate, the Bash observed-evidence log, the ExitPlanMode plan-mode bridge, plus the opt-in PreToolUse
 guard and approval guard) and the MCP server all load:
 
@@ -224,7 +224,7 @@ for specs not implemented yet, the converge pass for half-done ones) runs inline
 | Slash commands (`/spec`, `/spec-doctor`, `/spec-impact`, …) | ✅ | ✅ as MCP prompts, where the client shows them (else the CLI) | — (use the CLI; `dev-spec prompts` prints one) |
 | Spec resources (`specs://…`) | — (the files are in the project) | ✅ where the client supports resources | — |
 | Hooks on save (EARS / traceability / design checks) + SessionStart status, drift, upgrade and overlap lines | ✅ | — (use git `pre-commit`, `dev-spec doctor`, `dev-spec drift`, `dev-spec upgrade`, `dev-spec roadmap`) | ✅ git pre-commit |
-| End-of-turn evidence gate (a "done" claim with unverified ticks is sent back) | ✅ Stop / SubagentStop hook, on by default | — (run `dev-spec stop-check --message "…"` before claiming done) | — (`dev-spec stop-check`) |
+| End-of-turn evidence gate (a "done" claim with unverified ticks is sent back) | ✅ Stop / SubagentStop hook, on by default | — (call the `spec_stop_check {message}` MCP tool before claiming done — or the CLI `dev-spec stop-check --message "…"`) | — (`dev-spec stop-check`) |
 | Guard mode (asks before code edits while no feature has approved tasks; `scope`: outside the plan too) | ✅ opt-in PreToolUse hook | — (`spec_init {guard}` stores the setting, but nothing enforces it) | — |
 | Human approval guard (an agent's approval asks the user, or is refused) | ✅ opt-in PreToolUse hook (`approvalGuard` ask / deny) | ✅ the MCP server enforces it: with MCP elicitation it asks the user (only an explicit approve records it); without it `ask` runs as before and `deny` is refused with the command to run | — (the CLI is the human's) |
 | Team merges of the spec state (`.state.json` / `roadmap.json` merged semantically by git) | ✅ `dev-spec merge-state --install` | ✅ same (git runs it) | ✅ same |
@@ -242,8 +242,8 @@ before the tasks are approved); the approval guard is a PreToolUse hook as well 
 the gate is forced, the waiver — with an Approve box and an optional note, and only an explicit approve records the approval
 (`confirmed` in `.state.json`); decline, dismiss or no answer (5 min — `DEV_SPEC_ELICIT_TIMEOUT_MS` in the server's `env`)
 records nothing; with `deny` a client without elicitation is refused and the user runs the command it names; the observed-evidence log is a Claude Code hook on the Bash tool, so a project that opts into
-`evidence: "observed"` records runs from other tools with `dev-spec done --run`; the end-of-turn evidence gate is a Stop / SubagentStop hook — elsewhere, the agent runs
-`dev-spec stop-check` before claiming a task or feature is done, as `AGENTS.md` says. The PostToolUse and SessionStart
+`evidence: "observed"` records runs from other tools with `dev-spec done --run`; the end-of-turn evidence gate is a Stop / SubagentStop hook — elsewhere, the agent calls
+the `spec_stop_check` MCP tool (or runs `dev-spec stop-check`) before claiming a task or feature is done, as `AGENTS.md` says. The PostToolUse and SessionStart
 hooks are Claude Code only too; everything they report is also available on demand through `dev-spec ears` / `trace` /
 `doctor` / `status` / `drift` / `upgrade` / `roadmap`.
 

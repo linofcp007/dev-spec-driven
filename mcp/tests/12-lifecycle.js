@@ -568,6 +568,38 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     ok(/^# Catálogo de specs — proj-wp10-es$/m.test(mdEs) && /AUTO-GENERADO por dev-spec/.test(mdEs) && /función\(es\)/.test(mdEs) && /en curso/.test(mdEs), "ES project: catalog chrome in Spanish");
   }
 
+  { // 1.22 review — the drift hash reads a file in fixed-size pieces (it read it whole: null at 512 MiB, two copies in memory),
+    // dropping each CR that precedes an LF across the pieces too — the digests are the old function's for every file.
+    const E = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const crypto = require("crypto");
+    const oldHash = (abs) => { try { if (!fs.statSync(abs).isFile()) return null; return crypto.createHash("sha1").update(fs.readFileSync(abs).toString("latin1").replace(/\r\n/g, "\n"), "latin1").digest("hex"); } catch { return null; } };
+    const hd = path.join(tmp, "proj-122-filehash");
+    fs.mkdirSync(hd, { recursive: true });
+    let seed = 7;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const noisy = Buffer.from(Array.from({ length: 4000 }, () => { const r = rnd(); return r < 0.15 ? 0x0d : r < 0.3 ? 0x0a : r < 0.35 ? 0xff : 0x61 + Math.floor(rnd() * 26); }));
+    const files = { "empty.txt": Buffer.alloc(0), "lf.txt": Buffer.from("a\nb\n"), "crlf.txt": Buffer.from("a\r\nb\r\n"), "cr-only.txt": Buffer.from("\r"), "cr-cr-lf.txt": Buffer.from("x\r\r\ny\r"),
+      "boundary.txt": Buffer.from("ab\r\ncd\r\r\n\r\n"), "noisy.bin": noisy,
+      // the default 1 MiB piece ends on the CR of a CRLF: the LF opens the next piece
+      "big.txt": Buffer.concat([Buffer.alloc(1048575, 0x61), Buffer.from("\r\n" + "line\r\n".repeat(200000) + "tail\r")]) };
+    const diffs = [];
+    for (const [name, buf] of Object.entries(files)) {
+      const abs = path.join(hd, name);
+      fs.writeFileSync(abs, buf);
+      for (const chunk of buf.length > 100000 ? [undefined, 65536, 1048576 - 7] : [1, 2, 3, 4, 7, 64, undefined]) if (E.fileHash(abs, chunk) !== oldHash(abs)) diffs.push(name + "@" + chunk);
+    }
+    // …and never as a whole: no readFileSync of the file (at 512 MiB its latin1 string could not exist — the old hash was null).
+    const bigAbs = path.join(hd, "big.txt");
+    const want = oldHash(bigAbs);
+    const realReadFile = fs.readFileSync;
+    let whole = 0, got = null;
+    fs.readFileSync = function (p) { if (path.resolve(String(p)) === bigAbs) whole++; return realReadFile.apply(this, arguments); };
+    try { got = E.fileHash(bigAbs); } finally { fs.readFileSync = realReadFile; }
+    if (whole !== 0 || got !== want) diffs.push("big.txt read whole " + whole + "x");
+    ok(!diffs.length && E.fileHash(path.join(hd, "missing.txt")) === null && E.fileHash(hd) === null && E.fileHash(path.join(hd, "boundary.txt"), 3) === E.fileHash(path.join(hd, "boundary.txt")),
+      "1.22 review: fileHash in pieces (1, 2, 3, 4, 7, 64 bytes and the default 1 MiB — a CR on the boundaries) equals the old whole-file digest for CRLF / LF / CR-only / CR CR LF / an empty file / random bytes / a 2.2 MB file whose first piece ends on a CR — and never reads a file whole (no readFileSync); null for a missing file or a folder (got " + JSON.stringify(diffs) + ")");
+  }
+
   { // --- 1.13 batch 8: spec_upgrade — meta.specVersion, the audit, the safe migrations, UPGRADE.md, the SessionStart notice ---
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
     const hookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
@@ -757,6 +789,51 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     ok(["pt", "es"].every((l) => JSON.stringify(keys16(S.msg(l).upgrade)) === en16) && badArg16.result.isError && /apply must be a boolean/.test(badArg16.result.content[0].text) &&
       noSpecs16.result.isError && /No \.specs\/ at/.test(noSpecs16.result.content[0].text) && !fs.existsSync(path.join(tmp, "proj-wp16-empty")),
       "upgrade messages exist in EN / PT / ES with the same keys; spec_upgrade {apply: 'yes'} is an argument error; a project without .specs/ is an error (nothing created)");
+  }
+
+  { // 1.22 review 2 — a feature approved before 1.22 with bare AC-n IDs fails doctor's ears / traceability now: the upgrade audit names
+    // them (attention bare-ac-ids, an item to renumber them US-<story>.AC-<n> with their references, then re-approve — in UPGRADE.md
+    // too) and never edits the spec. On a copy of the demo whose api-keys criteria, tasks and plan were numbered AC-11, AC-12 …
+    const js = JSON.stringify;
+    const p = path.join(tmp, "proj-122r2-bare-upgrade");
+    fs.cpSync(path.join(root, "examples", "demo-project"), p, { recursive: true });
+    const dir = path.join(p, ".specs", "api-keys");
+    for (const f of ["requirements.md", "design.md", "test-plan.md", "tasks.md"]) {
+      const fp = path.join(dir, f);
+      if (fs.existsSync(fp)) fs.writeFileSync(fp, fs.readFileSync(fp, "utf8").replace(/US-(\d+)\.AC-(\d+)/g, (m, a, b) => "AC-" + a + b));
+    }
+    const rmFile = path.join(p, ".specs", "roadmap.json"); // stamped by 1.21.1: the apply below stamps it again and writes UPGRADE.md
+    fs.writeFileSync(rmFile, fs.readFileSync(rmFile, "utf8").replace(/"specVersion": "[^"]*"/, '"specVersion": "1.21.1"'));
+    const reqBefore = fs.readFileSync(path.join(dir, "requirements.md"), "utf8");
+    const au = payload(await rpc("tools/call", { name: "spec_upgrade", arguments: { projectDir: p } }));
+    const fa = (au.features || []).find((f) => f.name === "api-keys") || {};
+    const fu = (au.features || []).find((f) => f.name === "usage-metering") || {};
+    const ap = S.specUpgrade(p, { apply: true });
+    const md = fs.readFileSync(path.join(p, ".specs", "UPGRADE.md"), "utf8");
+    const U = (l) => S.msg(l).upgrade.item.bareAcIds("AC-1, AC-2", "x");
+    ok(js(fa.bareAcIds) === '["AC-11","AC-12","AC-13","AC-14","AC-21"]' && (fa.attention || []).includes("bare-ac-ids") && fa.group === "blocked" &&
+      js(fu.bareAcIds) === "[]" && !(fu.attention || []).includes("bare-ac-ids") &&
+      au.lines.some((l) => /^ {6}- Renumber the criteria requirements\.md numbers with bare IDs \(AC-11, AC-12, AC-13, AC-14, AC-21\) as US-<story>\.AC-<n> — and their references in tasks\.md and test-plan\.md — then re-approve/.test(l)) &&
+      /^- \[ \] Renumber the criteria requirements\.md numbers with bare IDs \(AC-11/m.test(md) && fs.readFileSync(path.join(dir, "requirements.md"), "utf8") === reqBefore && ap.ok &&
+      /^Renumera os critérios que o requirements\.md identifica com IDs soltos \(AC-1, AC-2\) como US-<história>\.AC-<n>/.test(U("pt")) &&
+      /^Renumera los criterios que requirements\.md identifica con IDs sueltos \(AC-1, AC-2\) como US-<historia>\.AC-<n>/.test(U("es")),
+      "1.22 review 2: spec_upgrade names criteria numbered with bare AC-n IDs (bareAcIds, attention bare-ac-ids, an item to renumber them US-<story>.AC-<n> with their tasks / test-plan references, then re-approve — EN / PT / ES, in UPGRADE.md too) and never edits the spec; a US-n.AC-m feature has none (got " +
+      js([fa.bareAcIds, fa.attention, fu.bareAcIds, au.lines.filter((l) => /Renumber/.test(l))]) + ")");
+    // review 3 — a CHANGE has no tasks.md nor test-plan.md (its tasks live in change.md): the item names its tasks' _Requirements:_
+    const pc = path.join(tmp, "proj-122r3-bare-change");
+    S.initProject(pc, ["core"], "en");
+    const ch = S.createFeature(pc, "Tweak", undefined, "", undefined, "en", undefined, { size: "xs" });
+    const chFile = path.join(ch.dir, "change.md");
+    fs.writeFileSync(chFile, fs.readFileSync(chFile, "utf8").replace(/US-(\d+)\.AC-(\d+)/g, (m, a, b) => "AC-" + a + b));
+    const auC = S.specUpgrade(pc);
+    const fc = (auC.features || []).find((f) => f.name === ch.slug) || {};
+    const lineC = (auC.lines || []).find((l) => /Renumber/.test(l)) || "";
+    const UC = (l) => S.msg(l).upgrade.item.bareAcIds("AC-1", "x", "change.md");
+    ok(fc.criteriaFile === "change.md" && (fc.bareAcIds || []).length > 0 && /Renumber the criteria change\.md numbers with bare IDs .* — and their references in its tasks' _Requirements:_ \(in change\.md too\) — then re-approve/.test(lineC) &&
+      !/tasks\.md and test-plan\.md/.test(lineC) && /nos _Requirements:_ das suas tarefas \(também no change\.md\)/.test(UC("pt")) && !/test-plan/.test(UC("pt")) &&
+      /en los _Requirements:_ de sus tareas \(también en change\.md\)/.test(UC("es")) && !/test-plan/.test(UC("es")) && /tasks\.md and test-plan\.md/.test(U("en")),
+      "1.22 review 3 (9): the bare-ID upgrade item for a change names its tasks' _Requirements:_ in change.md — never tasks.md / test-plan.md, which a change has not (EN / PT / ES); a feature's item is unchanged (got " +
+      js([fc.criteriaFile, fc.bareAcIds, lineC, UC("pt"), UC("es")]) + ")");
   }
 
   { // 1.14 B4.1 — forecasts on the roadmap: _Size:_ points, tick timestamps, velocity, ETA (dependencies chained), surfaces
@@ -953,6 +1030,21 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     ok(S.featureOverlaps(cleanB4).pairs.length === 0 && !S.specDoctor(cleanB4, "one").checks.some((c) => c.id === "cross-feature-overlap") && !/overlap/.test(hk3B4.stdout) &&
       !/plans the same files/.test(S.renderRoadmapMd(cleanB4, "en")),
       "no false positive for disjoint files (src/one/ vs src/one-two/, shared-one.js vs shared.js) nor for stand-ins both write (TBD, [path]): no pair, no doctor check, no hook line, no attention line");
+    // 1.22 review — doctor walks the roadmap for overlaps only when an OPEN task of the feature plans a file (_Implements:_): a pair
+    // needs one. The answer is the walk's for every feature — the quiet one's DONE task names billing's open file, a finished one.
+    mkO("Quiet", "- [ ] 1. [US1] Talk it through\n- [x] 2. [US1] Done before\n  - _Implements: src/billing/invoice.js_\n");
+    const same22 = ["billing", "refunds", "payouts", "search", "notes", "legacy", "quiet"].map((n) => {
+      const c = chk(n);
+      const pairs = S.featureOverlaps(opB4, undefined, { only: n }).pairs;
+      return [n, !!c, pairs.length > 0];
+    });
+    // …and for such a feature doctor reads no other feature's tasks.md (the walk did: roadmap() over every feature).
+    const realRF = fs.readFileSync;
+    const otherTasks = [];
+    fs.readFileSync = function (p) { const s = String(p).replace(/\\/g, "/"); if (/\/\.specs\/(?!quiet\/)[^/]+\/tasks\.md$/.test(s)) otherTasks.push(s); return realRF.apply(this, arguments); };
+    try { S.specDoctor(opB4, "quiet"); } finally { fs.readFileSync = realRF; }
+    ok(same22.every(([, d, w]) => d === w) && same22.filter(([, d]) => d).map(([n]) => n).join() === "billing,refunds" && !chk("quiet") && otherTasks.length === 0,
+      "1.22 review: doctor's cross-feature-overlap (computed only when an open task plans a file — no other feature's tasks.md read otherwise) agrees with featureOverlaps {only} for every feature — none for a feature whose only _Implements:_ is a done task's (got " + JSON.stringify([same22, otherTasks.length]) + ")");
   }
 
   { // 1.14 C2 — the decision log (decisions.md, spec_decide) and the spike kind (investigate → decide)
@@ -1107,6 +1199,32 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
       /^D-1 \(decisão\) registada em/.test(dec4.message) && /^# Decisiones: Pagos\n/.test(c2Read(f5, "decisions.md")) && /\*\*Descubrimiento:\*\* Tres reintentos\./.test(c2Read(f5, "decisions.md")) &&
       /## Decisões\n.*\n- \*\*D-1\*\* — PDF no servidor _\(decisão · US-1\.AC-2\)_: Gerar o PDF no servidor\./.test(br4pt.brief) && S.decisionLog(c2Read(f5, "decisions.md"))[0].decision === "Tres reintentos.",
       "C2 decision logs in PT / ES: localized header and labels (Contexto / Decisão, Descubrimiento), read back by the parser; the PT brief's Decisions section");
+
+    // 1.22 review — _Affects:_ can name a heading holding "," / ";" (the size-S "Decisions, reuse & risks" and its PT / ES twins,
+    // "[API] Pagination, Idempotency & Concurrency"): written `quoted`, split outside backticks, and the unquoted form rejoined
+    // when its pieces together name a heading. The log reads back clean (no phantom), and a hand-written unquoted entry too.
+    const d22 = c2Dir("affects-commas");
+    S.initProject(d22, ["core"], "en");
+    const sizedS = [["Small", "en", "Decisions, reuse & risks"], ["Pequena", "pt", "Decisões, reutilização e riscos"], ["Chica", "es", "Decisiones, reutilización y riesgos"]]
+      .map(([n, l, h]) => [S.createFeature(d22, n, ["core"], "", undefined, l, "feature", { size: "s" }), h]);
+    const api22 = S.createFeature(d22, "Api", ["api"], "", undefined, "en");
+    const r22 = sizedS.map(([f, h]) => S.decide(d22, f.slug, { title: "Cache the token", decision: "In memory.", affects: h + "; US-1.AC-1" }));
+    const q22 = S.decide(d22, "small", { title: "Quoted", decision: "q", affects: ["`Decisions, reuse & risks`", "US-1.AC-2"] });
+    const a22 = S.decide(d22, "api", { title: "Cursor pages", decision: "Opaque cursors.", affects: "Pagination, Idempotency & Concurrency, US-1.AC-1" });
+    const bad22 = S.decide(d22, "small", { title: "Typo", decision: "x", affects: "Decisions, reuse & rsks" });
+    const rd22 = (ft) => { try { return c2Read(ft, "decisions.md"); } catch { return ""; } }; // (no log when every decide was refused)
+    const log22 = rd22(sizedS[0][0]);
+    fs.appendFileSync(path.join(sizedS[0][0].dir, "decisions.md"), "\n## D-9 — By hand\n\n- _Kind: decision_\n- _Date: 2026-09-01T00:00:00.000Z_\n- _Affects: Decisions, reuse & risks_\n\n**Decision:** typed without quotes.\n");
+    const tr22 = S.traceCheck(d22, "small");
+    ok(r22.every((r, i) => r.ok && JSON.stringify(r.affects) === JSON.stringify([sizedS[i][1], "US-1.AC-1"])) &&
+      /^- _Affects: `Decisions, reuse & risks`, US-1\.AC-1_$/m.test(log22) && /^- _Affects: `Decisões, reutilização e riscos`, US-1\.AC-1_$/m.test(rd22(sizedS[1][0])) &&
+      q22.ok && JSON.stringify(q22.affects) === '["Decisions, reuse & risks","US-1.AC-2"]' &&
+      a22.ok && JSON.stringify(a22.affects) === '["[API] Pagination, Idempotency & Concurrency","US-1.AC-1"]' && /`\[API\] Pagination, Idempotency & Concurrency`, US-1\.AC-1_/.test(rd22(api22)) &&
+      bad22.ok === false && JSON.stringify(bad22.unknownAffects) === '["Decisions","reuse & rsks"]' &&
+      S.decisionLog(log22)[0].affects.join("|") === "Decisions, reuse & risks|US-1.AC-1" && tr22.phantomAffects.length === 0 &&
+      ["pequena", "chica", "api"].every((n) => S.traceCheck(d22, n).phantomAffects.length === 0),
+      "1.22 review: spec_decide takes a heading holding ',' / ';' — unquoted (rejoined), quoted, EN / PT / ES size-S and +api headings — writes it `quoted`, reads it back whole; a typo is still unknown; a hand-written unquoted entry is no phantom (got " +
+      JSON.stringify([r22.map((r) => r.affects || r.error), q22.affects, a22.affects, bad22.unknownAffects, tr22.phantomAffects]) + ")");
 
     // --- C2.2 the spike kind: scaffold EN / PT / ES, question + timebox, no planning chain, core-only.
     const d6 = c2Dir("spike");

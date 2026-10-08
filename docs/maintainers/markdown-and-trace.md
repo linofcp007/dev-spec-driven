@@ -24,11 +24,66 @@ matrix.
   fenced code — a json / yaml / mermaid block answers a section, 1.21 review C2) — it fails a new approval and warns on an approved design; a sized
   feature's `na` / `na-short` (an `n/a — <reason>` answer) and `covered` (TRACK_OVERLAPS) — every gate reads them through
   `trackSectionReport()` + `sectionVerdict()` (gates-and-approvals.md → Right-sized rigor).
+  **Linear (1.22 review):** `inTrackContext` (a loose synonym under a marked ancestor) reads every heading's answer from ONE stack
+  pass, like `inOtherTrackContext` — the back-walk per loose heading (`heads.indexOf` + a scan up) made 200 KB of "### Processors"
+  with no `[PRIVACY]` heading cost status 9 s (now ~0.15 s).
 - **A change's one file (1.21 review C1):** change.md holds the criteria AND the tasks — every reader takes its two views
   (`changeViews` / `criteriaText` / `tasksIdText`, tasks.js — gates-and-approvals.md → Right-sized rigor): trace_check's
   required ACs never include a task's `_Requirements:_` reference, and EARS never lints a task block.
 - **AC/test IDs**: `US-<n>.AC-<n>` and `T-<n>`. Extraction uses a lookbehind guard, NOT `\b` —
   markdown italics (`_US-1.AC-1_`) make `\b` fail because `_` is a word char. Don't reintroduce `\b`.
+  **A bare `AC-n` is no ID (1.22 review):** EARS still LINTS a unit led by one (`RE_LIST_DEFINES_AC` / `RE_LEAD_DEFINES_AC`), but
+  its stable-ID check reads `RE_FULL_ID` (US-n.AC-n, T-, EC-, NFR-, SC-) — a bare one is `no-id` with `ears.bareAcId` ("write
+  US-<story>.AC-<n>"). And the mirror of `earsUnlinted`: `earsUnidentified(reqText, ears)` — EARS linted criteria but
+  `requirementAcIds` is empty (bare IDs, or none; review 4: or a criterion is numbered with a bare AC-n) → the criteria as labels (each one's bare ID, else `L<line>`, from the
+  result's non-enumerable `criteria`). trace_check reports them as the gap `unidentifiedCriteria` (first in `TRACE_GAP_ORDER`, a
+  verdict kind; only present when non-empty, so every other result is unchanged), doctor's `ears` fails (`earsNoAcIds`), so do
+  the requirements approval and a change's plan approval; the pre-commit check names them instead of "traceability clean (0
+  ACs)". A spec numbered AC-1, AC-2 used to trace 0 ACs and pass everything ("all 0 ACs covered"). **Only a criterion with NO
+  stable ID counts (review 2):** one carrying `NFR-n` / `EC-n` / `SC-nnn` (`RE_FULL_ID`) has its own — trace's secondary
+  warnings read it — so a performance spec of NFR-1, NFR-2 alone passes (it failed doctor, trace and the requirements approval);
+  a criterion with no ID beside them is still named, and so is one whose only ID is another feature's (`checkout/US-3.AC-2`) or
+  a `_Supersedes:_` reference (`ownStableId` — requirementAcIds' reading). **Review 3 — the LABEL, never a mention:** any ID
+  anywhere in the criterion counted, so `- AC-1: WHEN … SHALL redirect (see EC-1)` or `… (T-01)` had "its own" ID (earsUnidentified
+  null, doctor's ears passed, trace counted 0 ACs with no gap, spec_upgrade's bareAcIds []). `criterionLabel(text)` (markdown.js)
+  reads the ID that LABELS a criterion — its lead after a heading mark, a list marker, a checkbox, an emphasis / bracket opener
+  (`RE_LEAD_LABEL`; `- **US-1.AC-1** —`, `1. NFR-2:`, `### US-1.AC-3:`, `- [ ] (EC-1)`), with the token before a slash in front of
+  it (`P1/US-1.AC-4`), or, with no lead, a table row's cell that is exactly such an ID (`RE_CELL_LABEL`). `ownStableId` is a
+  US-n.AC-m / EC / NFR / SC label not behind another feature's slug (`featureRefTest`); a bare AC-n label is no ID whatever the
+  criterion cites, and a T- ID (a test's) never a criterion's. **Review 4 — no label, an ID anywhere:** with NO label
+  (`criterionLabel` null), a non-T stable ID anywhere in the criterion's own text is its ID (`RE_FULL_ID_NO_T` over the text after
+  `stripSupersedes` / `stripForeignAcRefs`) — EARS's no-id lint reads the same (label, else that); `- THE SYSTEM SHALL answer … in
+  200 ms (NFR-1)`, `- **Latency (NFR-1):** …`, `- **[NFR-1]** …`, `a. NFR-1: …` were unidentified (doctor's ears failed, the
+  approval refused) while EARS counted their ID. **Review 4 — each criterion by its own ID:** `earsUnidentified` returned null
+  for any document with a US-n.AC-m in it, so `- AC-1: … (see US-1.AC-9)` escaped while the CITED ID became the only required AC;
+  now a criterion numbered with a bare AC-n (`bareLabel`) is named whatever the document defines, and one with no ID at all only
+  when the document defines no AC ID (beside US-n.AC-m criteria it stays EARS's no-id warn). trace_check lints for it when
+  `requiredAcs` is non-empty only if the text holds a bare AC-n (`RE_BARE_AC`) — no second EARS pass otherwise. `RE_BARE_AC`
+  never reads the AC-n of a US-n.AC-m — nor of an importer's ESCAPED `US-7\.AC-1` (an ID-led line of imported prose, demoted
+  so it defines nothing, e.g. a fluidplan page intro): that one was listed as an unidentified `AC-1` and the import read
+  gaps-found. `bareLabel`'s no-label branch reads the criterion's OWN text (`stripSupersedes`) with `RE_BARE_AC_OWN`: never
+  an AC-n behind a slash (another feature's `checkout/AC-2`, a URL's `/pages/AC-12`) or running into a letter / digit
+  (`AC-230V`) — each was the criterion's "number", and every gate and spec_upgrade's renumber item asked to renumber another
+  feature's ID. EARS's no-id lint reads the own text too (`stripSupersedes`, then `stripForeignAcRefs` with no feature folder:
+  every resolvable slug is another's) — a criterion whose only ID was a `_Supersedes:_` marker's or `checkout/US-3.AC-2`
+  counted as identified there, untraced with no warning (doctor named it). The fluidplan importer escapes a bare `AC-1` of
+  imported prose (`AC\-1`, `fpInert`) as it escapes `US-7\.AC-1`.
+  `criteriaBareIds(reqText)` (the bare IDs the criteria are numbered with — `bareLabel`: the label, else a
+  bare AC-n in a criterion with no label) feeds spec_upgrade's renumber item (lifecycle.md → Upgrade).
+  **`<feature>/US-n.AC-m` is another feature's (1.22 review):** `requirementAcIds` drops it (`stripForeignAcRefs` — the
+  `_Supersedes:_` / `_Affects:_` syntax written in prose: "rules of checkout/US-3.AC-2 stay as they are" was a required AC no
+  task covered); a token that is itself an ID keeps the pair ("US-1.AC-1/US-1.AC-2"). tasks.md's references are read as before.
+  **Review 2 — only ANOTHER feature's:** never a priority (`**P1/US-1.AC-1**`), a story (`US-1 / US-1.AC-1`), a number
+  (`1.1/US-1.AC-1`) or a token with no letter (`RE_NOT_A_SLUG`) — every required AC of such a spec went to 0. With the feature's
+  folder (`requirementAcIds(text, dir)` — trace_check, the matrix, doctor's / the approvals' `earsUnlinted` / `earsUnidentified`,
+  a change's scope, decisions' targets, the test-plan scaffold, the importer's no-criteria warning) the token must resolve as
+  `_Supersedes:_` resolves it (`locateFeatures`, active or archived — `featureRefTest`: "other" · "self" · null) to a feature
+  OTHER than this one; the feature's own `login/US-1.AC-1` stays its ID. **Review 3 — a token that names NO feature:** it counted
+  as this feature's, so "keep the rules of billing/US-3.AC-2" with no billing feature was a required AC no task covered. It is
+  this feature's only when the same ID LABELS one of the text's criteria (`criterionLabelIds` — `5. Step-2/US-1.AC-5 — WHEN …`,
+  and then every `<x>/US-1.AC-5` citing it); otherwise a foreign reference, dropped. **The limit:** a reader with no folder (a
+  template, a pack's numbering, the importer's task fitting) can't resolve — there every slug-shaped token counts as another
+  feature's.
   A test-plan row covering an AC requirements.md doesn't define is a gap (`phantomAcsInTests`, +tdd; fenced examples
   excluded), like a phantom AC in tasks — doctor fails and the test-plan approval is refused. Every reader of
   test-plan.md's IDs goes through `planIdText()` (comments AND fenced code out): coverage, planned T-IDs, the code
@@ -52,7 +107,7 @@ matrix.
   the 1.21.1 review dropped the name-only `test_*.sh` / `test_*.c` / `*Spec.hs` rules — `scripts/test_data.sh`,
   `src/test_utils.c`, `lib/DevSpec.hs` are code; in a test folder they are tests). **Fixtures:** `isTestFixture()` — a
   `TEST_DATA_EXT` file (`.sql`, `.ipynb`) in a test folder whose NAME follows no convention (`testNamed()`, + pgTAP's
-  `test_*.sql` / `*_test.sql`) is data: the scan, coverage and the test-code scan skip it (1,600 `tests/fixtures/*.sql`
+  `test_*.sql` / `*_test.sql`) is data — and so is every file under a `testdata/` folder (Go's convention; 1.22 review): the scan, coverage and the test-code scan skip it (1,600 `tests/fixtures/*.sql`
   exhausted the read cap; a 'T-01' in a seed counted as the test); guard mode still asks before editing one — unless a
   plan claims it (review 2): the test-code scan reads a fixture some feature's test plan claims in its File column
   (`fixtureClaim()` over every plan's `planFileScopes().scopes`) — pgTAP's `test/sql/users.sql`, a numbered
@@ -67,7 +122,12 @@ matrix.
   scan collects its candidates, reads them all in walk order below `CODE_TRACE_READ_CAP`, above it the test-NAMED ones
   first, and reads each through `readFileHead()` (files.js — the first `SCAN_READ_BYTES` CHARACTERS, as the slice it replaced:
   one bounded read of up to 4 bytes a character, decoded, then sliced — review 2: a byte cap lost a T-ID behind 150,000
-  'é'; never the whole file then a slice; the brownfield scan and the status line's tests gate too). Until 1.21.1 the scan read only the scanner's
+  'é'; never the whole file then a slice; the brownfield scan and the status line's tests gate too). **UTF-16 (1.22
+  review):** `readFileHead` and `readRaw` — so every `readIfExists` / `readContained` — decode through `decodeText()`: a BOM
+  FF FE is UTF-16LE, FE FF UTF-16BE (swapped), anything else UTF-8. Windows PowerShell 5.1's `>` / Out-File writes UTF-16LE: a
+  Pester `tests/Login.Tests.ps1` naming T-01 was never found, a UTF-16 requirements.md traced 0 ACs. The BOM stays the U+FEFF
+  every reader drops (a rewrite of such a file is UTF-8); the importer, the specs:// resources, the requirements.md save hook,
+  `dev-spec ears <file>` and the observe hook's pre-filter read the same way. Until 1.21.1 the scan read only the scanner's
   short `CODE_EXT` and a PowerShell project's tests gate never passed. The scan (`scanTestCode()`) is bounded and read-only; a plan row whose File column names a
   concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts; a test file
   ANOTHER feature's plan (active or archived) names in its File column — and this feature's plan does not — never counts
@@ -92,7 +152,13 @@ matrix.
   lines, headings, tables, HR and fenced code (fence *state* is tracked, so `const shall = 1` inside
   ` ``` ` is code, not an AC) — and only then lints each joined criterion. A comment-only line does
   **not** split a criterion. Issues report the criterion's start `line` (plus `endLine` when it spans
-  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`). Every unit
+  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`). `vague`
+  skips a VERB use of clean / limpa / limpia (`VAGUE_VERB_NEXT`: followed by up / out / an article / a possessive / a
+  quantifier / old / temporary / expired… — "THE SYSTEM SHALL clean up its temporary files"); "a clean UI" stays vague. A
+  sub-list continues its parent only when the parent reads as a criterion: that modal test is cached per block (`curModal` —
+  once true it stays true; until then only the untested parts plus the two before them, a modal phrase spanning at most three
+  parts) — re-testing the whole joined block per sub-line was quadratic (200 KB of nested "- … SHALL x": trace + matrix 12 s,
+  now ~0.2 s). Every unit
   that DEFINES an AC is its own criterion for the linter: an ID-led line or checkbox item, a heading led by an AC ID (its
   body absorbed) and a table row with a cell that is exactly an AC ID (under an Acceptance Criteria / story heading, with no
   heading, or carrying a modal — elsewhere it is a summary table). Such a unit is a REFERENCE, never linted, when a list

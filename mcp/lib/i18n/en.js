@@ -1262,7 +1262,6 @@ const msg = {
       roadmapBusy: "Another dev-spec process is updating .specs/roadmap.json right now (.specs/.roadmap.lock) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.",
       folderInUse: (rel) => `The folder ${rel} is in use by another program (an editor, a file indexer or antivirus, a terminal opened inside it) — nothing was moved or deleted; close it and try again.`,
       lockStuck: (rel) => `A stale dev-spec lock (${rel}) could not be removed — the file (or a folder of that name) is held open by another program, read-only, or not a file. Nothing was changed. Delete ${rel} by hand (check its permissions), then retry.`,
-      numberInt: "number must be an integer",
       noText: "No text provided.",
       unknownPhase: (phase, known) => `Unknown phase '${phase}'. Known: ${known}`,
       alreadyArchived: (slug) => `'${slug}' is already archived (.specs/_archive/${slug}). Remove it there first.`,
@@ -1281,6 +1280,7 @@ const msg = {
       needsClar: "Unresolved [NEEDS CLARIFICATION] marker — resolve before design.",
       noModal: "Criterion has no modal verb (SHALL / DEVE / DEBE) — not a valid EARS statement.",
       noId: "Criterion has no stable ID (e.g., US-1.AC-1).",
+      bareAcId: (id) => `'${id}' is not a stable ID trace_check reads — write US-<story>.AC-<n> (e.g., US-1.${id}).`,
       vague: (term) => `Vague term '${term}' — replace with a concrete, testable value.`,
       noKeyword: "No EARS keyword (WHEN/WHILE/IF/WHERE · QUANDO/ENQUANTO/SE/ONDE · CUANDO/MIENTRAS/SI/DONDE). OK for ubiquitous requirements; confirm intentional.",
     },
@@ -1289,6 +1289,7 @@ const msg = {
       core: "core: always on (every Spec-mode feature).",
       on: (t, conf, list, neg) => `+${t}: ON${conf ? ` [${conf} confidence]` : ""} — matched signals: ${list}.${neg ? ` (${neg} appeared negated.)` : ""}`,
       off: (t, neg) => `+${t}: off — ${neg ? `${neg} appeared negated.` : "no signals matched."}`,
+      offWeak: (t, list, neg) => `+${t}: off — weak signal only (${list}), not enough on its own.${neg ? ` (${neg} appeared negated.)` : ""}`,
       substantial: "No track signals matched but the description is substantial — consider whether +tdd applies (correctness/edge cases).",
       weakOnly: (list) => `On from weak signals only — double-check: ${list}.`,
       possible: (t, sig) => `Possible +${t} — weak signal '${sig}' (needs corroboration; not auto-enabled).`,
@@ -1341,6 +1342,7 @@ const msg = {
       earsWarnings: (f, n, w, p) => `⚠ ${f}: no EARS errors (${n} criteria), but ${[w ? `${w} warning(s)` : null, p ? `${p} template placeholder(s) left` : null].filter(Boolean).join(" and ")} — not blocking`,
       phantom: (f, n, list) => `✗ ${f}: ${n} phantom AC/test reference(s) — likely typos: ${list}`,
       uncovered: (f, n, list) => `⚠ ${f}: ${n} AC(s) not covered by a task (warning): ${list}`,
+      unidentified: (f, n, list) => `⚠ ${f}: ${n} criteria with no US-<story>.AC-<n> ID — traceability counts none of them (warning): ${list}`,
       traceClean: (f, n) => `✓ ${f}: traceability clean (${n} ACs)`,
       blocked: (n) => `\nCommit blocked: ${n} blocking issue(s) in staged spec files. Fix or 'git commit --no-verify' to bypass.`,
     },
@@ -1359,6 +1361,7 @@ const msg = {
       acUnique: "AC IDs unique",
       earsDetail: (n, e, w) => `criteria=${n}, errors=${e}, warnings=${w}`,
       earsNoCriteria: (ids, file = "requirements.md") => `${file} cites AC IDs (${ids}) but no criterion was linted — EARS checks an AC written as a list item, heading or line that starts with its ID, or as a table row under an Acceptance Criteria heading`,
+      earsNoAcIds: (list, file = "requirements.md") => `${file} has criteria (${list}) with no AC ID trace_check reads — number each one US-<story>.AC-<n> (US-1.AC-1, US-1.AC-2 …); a bare AC-1 is not one`,
       designMissing: "design.md missing",
       mermaidOk: "has a diagram",
       mermaidMissing: "no mermaid diagram found",
@@ -1378,6 +1381,8 @@ const msg = {
     next: {
       fixChecks: (ids, slug) => `Fix blocking checks (${ids}) — run /spec-doctor ${slug} for details.`,
       reReview: (files) => `Re-review: ${files} changed after the last approval — re-approve the affected phase.`,
+      // 1.22 review: an approved artifact that was deleted — nothing to re-approve until it is back
+      approvedMissing: (files, slug, phase) => `${files} was approved but no longer exists — restore it (it was deleted after its approval) or, if it is gone for good, withdraw that approval: /approve ${slug} ${phase} --revoke.`,
       approveRequirements: (slug) => `Review & approve requirements — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Review & approve design — /approve ${slug} design.`,
       approveTasks: (slug) => `Review & approve the task breakdown — /approve ${slug} tasks.`,
@@ -1389,7 +1394,7 @@ const msg = {
       signOffTests: (slug, what) => `Phase 4 sign-off: the implementation has already started, so the tests are no longer written first — ${({ tdd: "check that every planned test exists with its T-ID in the test's name (test(\"T-01 …\")) so tests-in-code finds it", ai: `check that the eval set is the feature's own and record the baseline (/eval ${slug} --set-baseline)`, both: `check that every planned test exists with its T-ID in the test's name (test("T-01 …")) and that the eval set is the feature's own, and record the baseline (/eval ${slug} --set-baseline)` })[what]}. Then approve — /approve ${slug} tests.`,
       approveTests: (slug, what) => `Phase 4, the hard gate: ${({ tdd: "write every planned test and confirm each fails for the right reason", ai: "write the deterministic tests and the eval harness, and record the baseline", both: "write every planned test (each failing for the right reason) and the eval harness, and record the baseline" })[what]} — /writeTests ${slug}; no implementation code until then. Then approve — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implement task #${n}: ${text} — /executeTask ${slug}.`,
-      allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary.`,
+      allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary. Optional, before it: /spec-simplify ${slug} — a behaviour-preserving cleanup of the feature's own code, proven by its tests.`,
       breakIntoTasks: (slug) => `Break the design into tasks — /createTask ${slug}.`,
       drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (${DEV_SPEC} drift ${slug}). Decide: the spec is now wrong → /spec-impact ${slug} (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
       // signOff: null (signed off — nothing left), {} (no execution approval yet) or {at, why} (an execution approval exists
@@ -1459,7 +1464,14 @@ const msg = {
       reason: { "no-evidence": "no evidence", "failed-run": "latest run failed", "manual-note-on-runnable-verify": "note only, _Verify:_ command not run", "duplicate-number": "number shared with another task",
         "stale-evidence": "evidence is for another task or _Verify:_ command",
         "unexpected-pass": "run passed, but _Expect: fail_ needs a red run",
-        unobserved: "run not observed by the harness" }, // 1.14 F1 (meta.evidence: observed)
+        unobserved: "run not observed by the harness", // 1.14 F1 (meta.evidence: observed)
+        "command-mismatch": "the run recorded is not its _Verify:_ command" }, // 1.22 review
+      // 1.22 review — the run recorded for a task is not a run of its _Verify:_ command(s): it ticks, but proves nothing.
+      // review 2: several _Verify:_ commands → every one of them, in one run; a prefix the _Verify:_ holds is never dropped; an
+      // _Expect: fail_ task: the red run BEFORE the fix lands (review 3: a red run of another command never counts — with the fix in,
+      // it is set aside for the red run)
+      commandMismatch: (n, slug, ran, verify, red) => `Task ${n}: the run recorded (\`${ran}\`) is not a run of its _Verify:_ command (${verify}) — it is ticked, but stays unverified until a ${red ? "FAILING " : ""}run of that command is recorded (the command as written — with several _Verify:_ commands, every one of them in ONE run joined with \` && \`; a \`cd <project root> &&\`, \`set -o pipefail;\` or VAR=value of your own in front is fine (a cd anywhere else is another run), but never drop one the _Verify:_ holds)` +
+        (red ? ` — record it BEFORE the fix lands, while the test still fails: ${DEV_SPEC} done ${slug} ${n} --run (a red run of another command never counts; with the fix already in, set it aside — git stash push -- <the fix's files>, not a bare git stash: it would take tasks.md and .state.json too — for that run, then restore it).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
       duplicateTasks: (list) => `task numbers used more than once: ${list} — complete/brief pick the first open one; renumber them`,
     },
     // 1.14 F1 — harness-observed evidence (hooks/observe-hook.js; roadmap.json meta.evidence "reported" | "observed").
@@ -1479,7 +1491,6 @@ const msg = {
       already: (n, verified, done, total) => `Task ${n} was already done${verified ? " (verified)" : ""}. ${done}/${total}`,
       next: (n, text) => `  next → #${n} ${text}`,
       allDone: "  — all done ✓",
-      numberInt: "task number must be an integer",
       noRunnable: (n) => `task ${n} has no runnable _Verify: <command>_ marker`,
       shellHint: "Hint: the default Windows shell (cmd.exe) could not run this command line as written. If the _Verify:_ command is written for a POSIX shell, retry with --shell bash (or set DEV_SPEC_SHELL=bash).",
       posixOnWindows: (cmd, kinds) => `the _Verify:_ command \`${cmd}\` uses POSIX shell syntax (${kinds.map((k) => ({ "single-quotes": "single quotes '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) that cmd.exe — the default shell of --run on Windows — reads differently, often without failing: it has no single quotes and never expands $VAR, so a broken check could be recorded as a passing run. Nothing was run; the task stays open. Re-run with --shell bash (Git Bash; or set DEV_SPEC_SHELL=bash), with --shell pwsh for a PowerShell command (or hand PowerShell the script in double quotes: pwsh -NoProfile -Command "…") — or --shell cmd to run it under cmd.exe anyway.`,
@@ -1542,7 +1553,6 @@ const msg = {
     },
     depend: {
       unknown: (list) => `Every dependency must be an existing feature — not found: ${list}`,
-      orderInt: (v) => `order must be an integer (got '${v}').`,
     },
     // mcp/evals/run-evals.js human output (in the feature's language).
     evals: {
@@ -1603,6 +1613,7 @@ const msg = {
         phantomTestsInTasks: "tasks reference unknown tests (typos?)",
         testsNotMappedToTasks: "planned tests that no task makes green",
         missingImplFiles: "_Implements:_ files that don't exist",
+        unidentifiedCriteria: "criteria with no US-<story>.AC-<n> ID (traceability counts none)",
       },
       gap: (label, list) => `${label}: ${list}`,
       allCovered: (n) => `all ${n} ACs covered by tasks`,
@@ -1689,6 +1700,8 @@ const msg = {
       usage: (syntax) => `usage: ${syntax}`,
       unknownCommand: (c) => `unknown command '${c}'. Run \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `unknown client '${c}'. Known: ${known}`,
+      // 1.22 review: --json on a command that prints text only (help, rules, mcp-config, evals) — a usage error, never that text
+      noJson: (c) => `--json is not available for '${c}': it prints text only. Run it without --json.`,
     },
 
     // Gates: template placeholders, the approve gate (+ force), finish blockers, the bugfix execution gate,
@@ -1742,12 +1755,19 @@ const msg = {
       evalSetsSample: "evals/golden.json is still the scaffold's sample set — write this feature's golden cases, run the harness and record the baseline",
       evalSetsMissing: "evals/golden.json is missing or holds no eval items ({\"items\": […]}) — write this feature's golden set first",
       testsGateChecks: (ids) => `(the approve gate checks this: ${ids})`,
+      // 1.22 review: a Phase 4 sign-off the plan outgrew (a T-ID planned since, a plan whose approval changed since) — pending again.
+      testsStale: (day, missing, plans) => `The Phase 4 sign-off of ${day} no longer covers the plan (${[missing ? `planned since: ${missing}` : null, plans ? `approval changed since: ${plans}` : null].filter(Boolean).join("; ")}) — the tests phase is to be approved again.`,
+      // 1.22 review: an approval the user confirmed over MCP whose content (or, forced, its failing checks) changed after the question.
+      changedSincePreview: (phase, slug, grown) => (grown
+        ? `Nothing recorded: since the user was asked to confirm '${phase}' of '${slug}', its gate fails more checks (${grown}) than the question named — ask them again.`
+        : `Nothing recorded: '${phase}' of '${slug}' changed after the user was asked to confirm it — their confirmation covered the version they were shown. Ask them again, so they confirm what is there now.`),
       clarifyPlaceholders: (file, n, list) => `Replace the ${n} template placeholder(s)/TBD in ${file}: ${list}`,
       hookPlaceholders: (n, list, file = "requirements.md") => `Template placeholders: ${n} left in ${file} (${list}) — replace them before approving the ${file === "change.md" ? "plan" : "requirements"}.`,
     },
 
     // Brownfield depth: scan / coverage CLI lines and the integration-plan doctor check.
     brownfield: {
+      notFolder: (p) => `${p} is not a folder (it doesn't exist, or it is a file) — nothing to scan; check the path.`,
       frameworks: (list) => `  frameworks: ${list}`,
       routeLine: (method, p, loc) => `    ${method.padEnd(7)} ${p}  (${loc})`,
       moreRoutes: (n) => `    … ${n} more (--json lists them, up to the cap)`,
@@ -1776,6 +1796,7 @@ const msg = {
       notFound: (p) => `'${p}' not found.`,
       nothing: (tool, p) => `No ${tool} spec files found in '${p}'.`,
       exists: (slug) => `Feature '${slug}' already exists — import never overwrites it. Pass another name.`,
+      noUsableTitle: (title) => `The document's title '${title}' has no usable characters (a-z, 0-9) for a folder name — pass the feature's name (name; CLI: --name "<feature>").`,
       featureTitle: (name) => `# Feature: ${name}`,
       tasksTitle: (name) => `# Tasks: ${name}`,
       summary: "## Summary",
@@ -2249,6 +2270,8 @@ const msg = {
         packReserved: (list, slug, since) => `Rename its track pack(s) from before ${since || "1.17"} — ${list}: the name is reserved now, so the track is inactive (details: ${DEV_SPEC} doctor ${slug}, check track-pack-missing)`,
         // 1.19 T review: a pack whose marker is a built-in track's now
         packMarkerReserved: (list, slug, since, tracks) => `Change the marker of its track pack(s) from before ${since || "1.19"} — ${list}: the marker is a built-in track's now, so the pack is inactive; or adopt the built-in track: ${DEV_SPEC} add-track ${slug} ${tracks} (details: ${DEV_SPEC} doctor ${slug}, check track-pack-missing)`,
+        // 1.22 review 2: criteria numbered with bare AC-n IDs (approved before 1.22) — renumber, then re-approve
+        bareAcIds: (list, slug, file = "requirements.md") => `Renumber the criteria ${file} numbers with bare IDs (${list}) as US-<story>.AC-<n> — and their references in ${file === "change.md" ? "its tasks' _Requirements:_ (in change.md too)" : "tasks.md and test-plan.md"} — then re-approve: since 1.22 a bare AC-n is no ID trace_check reads, so doctor (ears, traceability) fails and the approval is refused (details: ${DEV_SPEC} doctor ${slug})`,
         critic: (files) => `Review it with the spec-critic agent (read-only), phase by phase: ${files || "—"}`,
         converge: (files) => "Run the spec-reviewer converge pass (the done tasks against their ACs)" + (files ? `, then the spec-critic agent on ${files}` : ""),
         none: "No spec review needed — every task is done",
@@ -2404,6 +2427,8 @@ const msg = {
 
     // Marker-shaped text on a task line that yields no marker (doctor malformed-markers, 1.14 full review Pa1).
     markerSyntax: {
+      // 1.22 review — checkbox lines the task scanner does not read as tasks (doctor unread-tasks).
+      unreadTasks: (list) => `checkbox lines that are not tasks: ${list} — a task line is "- [ ] N. text" (a -, * or + bullet, then its number); these are never ticked, briefed or verified. Number them (or make them sub-steps of a task).`,
       doctor: (list) => `marker-shaped text on a task line yields no marker: ${list} — the tools read nothing there (no check runs, no file is traced). Write it as _Verify: <command>_ / _Implements: <path>_ / _Depends: 3_ (italics, the value inside).`,
     },
     // A T-ID the test plan checks outside test code (load-test.md, evals/*.json) whose artifact is still the scaffold (doctor
@@ -2630,6 +2655,7 @@ const msg = {
       print: "Print",
       wrote: (file) => `✎ wrote ${file}`,
       exportsIsFeature: (dir) => `${dir} is a feature folder from before dev-spec reserved the name 'exports' (it holds requirements.md / .state.json) — move or rename that folder by hand, then export again.`,
+      exportsLinked: (rel) => `Refused to write ${rel}: .specs/exports/ or that file is a link (a symbolic link, a junction) or resolves outside .specs/ — replace it with a plain folder / file, then export again. Nothing was written.`,
     },
     // Requirements traceability matrix (trace_check {matrix} / `dev-spec trace --matrix | --csv` / spec_export {format: "csv"}):
     // labels only — the IDs, the kind column (AC / EC / NFR / SC) and the JSON codes (status, gaps, reason) stay English.
@@ -2914,7 +2940,7 @@ const msg = {
       unknownCheck: (name, list) => `'${name}' is not a project check — one of: ${list}`,
       needsCommand: "the command that ran is required",
       needsExit: "its exit code (an integer) is required",
-      status: (i) => ({ "no-run": "no run recorded", failed: `latest run failed (exit ${i.exitCode})`, changed: "its command changed since the run", "before-last-tick": "ran before the last task activity", "code-changed": "the implementing files changed since the run", unobserved: "the run was not observed by the harness" })[i.status] || i.status,
+      status: (i) => ({ "no-run": "no run recorded", failed: `latest run failed (exit ${i.exitCode})`, changed: "the run is not of its command (or the command changed since)", "before-last-tick": "ran before the last task activity", "code-changed": "the implementing files changed since the run", unobserved: "the run was not observed by the harness" })[i.status] || i.status,
       blocker: (list, slug) => `project checks without a passing run since the last task activity: ${list} — run them: ${DEV_SPEC} finish ${slug} --run (or record the runs with spec_finish {evidence})`,
       doctorWarn: (list, slug) => `every task is done, but project checks have no passing run since the last task activity: ${list} — spec_finish refuses until they pass: ${DEV_SPEC} finish ${slug} --run`,
       doctorOk: (n) => `every project check (${n}) has a passing run since the last task activity`,
@@ -2999,12 +3025,17 @@ const msg = {
       // A failure named after (or before) one of these words is history, not an admission: "I fixed the 2 failing tests",
       // "Previously 4 tests failed", "the 3 failures from yesterday are fixed" (stopPastFailure — a negator before the word keeps it).
       fixed: ["fixed", "resolved", "repaired", "addressed", "previously", "formerly", "earlier"],
+      // 1.22 review — a count of ZERO right before an admission makes it none ("0 tests failing", "no tests fail", "none of the
+      // tests fail", "zero tests failed"): it says nothing is failing. Regex sources, read just before the admission.
+      zeroes: [String.raw`0|zero|no|none(?:\s+of(?:\s+(?:the|these|those|them|my|our))?)?`],
+      // …and a failure that "now passes" in the same clause is one already fixed ("the 2 failing tests now pass").
+      passNow: [String.raw`now\s+(?:pass|passes|passing|green|succeed|succeeds)`],
       head: "dev-spec evidence gate: your last message says the work is done or verified, but tasks are ticked without verification evidence:",
       headSuite: "dev-spec evidence gate: your last message says the work is done or verified, but the project checks have no passing run since the last task activity:",
       taskLine: (slug, list) => `  - ${slug}: ${list}`,
       suiteLine: (slug, list) => `  - ${slug}: project checks without a passing run since the last task activity: ${list}`,
       more: (n) => `+${n} more`,
-      todoTasks: (slug, n, file = "tasks.md") => `Record the evidence before claiming it: read each listed task's _Verify:_ command in .specs/${slug}/${file} (task ${n} first), run it on the final code only if it is safe to run, and record that run with spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
+      todoTasks: (slug, n, file = "tasks.md") => `Record the evidence before claiming it: read each listed task's _Verify:_ command in .specs/${slug}/${file} (task ${n} first) — a task with several: all of them, in ONE run joined with \` && \` —, run it on the final code only if it is safe to run, and record that run (the command as written) with spec_complete_task {name, number, evidence: {command, exitCode, summary}}.`,
       todoSuite: (slug) => `Project checks for ${slug} have no passing run: read them in .specs/roadmap.json (meta.checks), run them only if they are safe to run, and record the runs with spec_finish {evidence}.`,
       plainly: "Or say plainly which of these are not verified.",
       implementer: {
@@ -3015,6 +3046,15 @@ const msg = {
         notFailing: (file, cmds) => `its report (${file}) shows no failing run (a non-zero exit code) of ${cmds} — the task is marked _Expect: fail_: its proof is the red run.`,
         todo: "Run the command on the final code and put the command, its exit code and the last lines of its output in the report — or report BLOCKED / NEEDS_CONTEXT if it can't pass. (Evidence before claims: the controller ticks the task only with that run.)",
       },
+      // 1.22 — the spec-simplifier's DONE (SubagentStop): its report must end with the final passing runs.
+      simplifier: {
+        head: (slug) => `dev-spec evidence gate: you report the simplification pass of '${slug}' as DONE, but`,
+        noReport: (file) => `its report (${file}) does not exist.`,
+        noFinal: (file) => `its report (${file}) has no "## Final runs" section with a run in it — the last section, one line per run: - \`<command>\` → exit <code>.`,
+        noRun: (file, cmds) => `the "## Final runs" section of its report (${file}) doesn't show these runs with their exit code: ${cmds} — every project check must be there, one line per run: - \`<command>\` → exit <code>.`,
+        notPassing: (file, cmds) => `the final runs in its report (${file}) fail: ${cmds} — a simplification must leave every run green.`,
+        todo: "Run the project checks (or the full test suite) and the changed tasks' _Verify:_ on the final code and list them last in the report, under \"## Final runs\", one line each (- `<command>` → exit <code>, then the last lines of output) — or revert the change that made a run fail, or report BLOCKED. (\"Behaviour unchanged\" is a claim: the runs are its proof.)",
+      },
       // `dev-spec stop-check` when nothing is sent back (the why code → one line).
       allow: {
         off: () => "evidence gate: off (roadmap.json meta.stopCheck: false) — nothing checked.",
@@ -3024,7 +3064,10 @@ const msg = {
         admitted: () => "evidence gate: the message says plainly what is not verified (or failing) — allowed.",
         "no-recent": (i) => `evidence gate: no feature was active in the last ${i.hours} h (a task ticked, evidence recorded or tasks.md edited) — allowed.`,
         verified: (i) => `evidence gate: every ticked task of the recently active features has passing evidence (${i.list}) — allowed.`,
-        "not-done": () => "evidence gate: the implementer reports BLOCKED / NEEDS_CONTEXT — allowed.",
+        "not-done": () => "evidence gate: the subagent reports BLOCKED / NEEDS_CONTEXT — allowed.",
+        "no-changes": () => "evidence gate: the simplifier reports NO_CHANGES — nothing to prove, allowed.",
+        "no-report": () => "evidence gate: the message names no simplification report (.specs/<feature>/.execution/simplify-report.md) — allowed.",
+        "simplify-ok": (i) => `evidence gate: the simplification report of '${i.slug}' ends with its passing runs — allowed.`,
         "no-task": () => "evidence gate: the message names no task report (.specs/<feature>/.execution/task-N-report.md) — allowed.",
         "nothing-to-verify": (i) => `evidence gate: task ${i.n} of '${i.slug}' has no runnable _Verify:_ command — allowed.`,
         "report-ok": (i) => `evidence gate: the report of task ${i.n} of '${i.slug}' shows its _Verify:_ run — allowed.`,

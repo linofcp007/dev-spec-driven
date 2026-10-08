@@ -389,14 +389,16 @@ function colonLineAnchorAt(s) {
 // `src/payment.js:10`, `./src/payment.js#L50` and `SRC/Payment.js` (on Windows / macOS) compare as one file.
 const implementsRel = (ref) => stripEnd(implementsPath(stripEnds(String(ref).trim(), isBacktickUnit)).replace(/^(?:\.\/)+/, ""), isSlashUnit);
 const implementsKey = (ref) => (FOLD_CASE ? implementsRel(ref).toLowerCase() : implementsRel(ref));
-function implementsTargets(root, ref, code, fold) {
+// sorted (optional — coverage builds it once per call, 1.22 review): code's keys, sorted. A folder's files are then found by a
+// binary search (keysWithPrefix) instead of a scan of every key; the same files, in key order instead of the map's.
+function implementsTargets(root, ref, code, fold, sorted) {
   const p = implementsPath(ref);
   if (!p) return [];
   if (isImplementsGlob(p)) {
     const g = projectGlob(p, root); // "../x/**", "/elsewhere/*": outside the project, names nothing
     if (!g) return [];
     const match = globMatcher(g); // keys are already case-folded where the file system folds case; the matcher folds too
-    return [...code.keys()].filter((k) => match(k));
+    return (sorted || [...code.keys()]).filter((k) => match(k));
   }
   const abs = path.resolve(root, p);
   // The whole project, or outside it: never counted. isInsideDir, not `root + sep`: a drive root (Q:\ from subst)
@@ -404,7 +406,16 @@ function implementsTargets(root, ref, code, fold) {
   if (abs === root || !isInsideDir(root, abs)) return [];
   const rel = fold(toPosix(path.relative(root, abs)));
   if (code.has(rel)) return [rel];
-  return [...code.keys()].filter((k) => k.startsWith(rel + "/"));
+  return sorted ? keysWithPrefix(sorted, rel + "/") : [...code.keys()].filter((k) => k.startsWith(rel + "/"));
+}
+// The keys of a sorted array that start with `prefix` — contiguous in code-unit order (Array#sort's and `<`'s): the first is
+// found by a binary search, the rest follow it.
+function keysWithPrefix(sorted, prefix) {
+  let lo = 0, hi = sorted.length;
+  while (lo < hi) { const mid = (lo + hi) >>> 1; if (sorted[mid] < prefix) lo = mid + 1; else hi = mid; }
+  const out = [];
+  for (let i = lo; i < sorted.length && sorted[i].startsWith(prefix); i++) out.push(sorted[i]);
+  return out;
 }
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 // Per-position facts for the scans below: nnw[i] the first non-blank ≥ i, nlt[i] the first line terminator ≥ i (n: none),
@@ -422,4 +433,4 @@ module.exports = { isWsUnit, RE_LINE_TERMINATOR, isLtUnit, lastLtIndex, stripHas
   headPlus, replaceHtmlCommentSpans, codeSpans, replaceCodeSpans, atxHeading, GLOB_MAX_ALTS, globNorm,
   steeringGlobMatch, globMatcher, isImplementsGlob, globAlternatives, globDpMatch, implementsRefs, projectGlob,
   globFiles, globFolderNames, implementsPath, isDigitUnit, stripHashLineAnchor, colonLineAnchorAt, implementsRel,
-  implementsKey, implementsTargets, own, blankFacts, __link };
+  implementsKey, implementsTargets, keysWithPrefix, own, blankFacts, __link };

@@ -877,4 +877,73 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname 
       "1.21 F2b: spec_classify {explain} lists every match (table tier → final tier, a cue, the negation: before / a negated list) and the project's overrides with their state (got " +
       js([ex.explain.matches, ex.explain.overrides]) + ")");
   }
+
+  { // 1.22 review — +sec's two-factor / multi-factor signal in PT / ES too; the reasoning of a track kept off by a lone weak signal
+    const js = (x) => JSON.stringify(x);
+    const on = (t) => S.classify(t).tracks.includes("sec");
+    const pos = ["Add two-factor authentication to the login", "Adicionar autenticação de dois fatores ao login", "Añadir autenticación de dos factores al inicio de sesión",
+      "Añadir autenticación de doble factor para administradores", "Add multi-factor authentication for admins", "Add multifactor authentication for admins",
+      "Adicionar autenticação multifator para administradores", "Añadir autenticación multifactor para administradores"];
+    // (review 2: a factor word counts only next to an auth word — "login com dois fatores" is a lone hint; login is +tdd's, not +sec's)
+    const lone = S.classify("Adicionar login com dois fatores para os administradores");
+    ok(pos.every(on) && !lone.tracks.includes("sec") && js(lone.signals.sec) === '["dois fatores"]' && !on("Os dois fatores principais do relatório") && !on("Uma doença multifatorial"),
+      "1.22 review: 'autenticação de dois fatores', 'autenticación de dos factores / de doble factor', 'multi-factor / multifactor / multifator' are +sec's weak signal like 'two-factor' (+ the auth word: ON); alone only a hint (got " +
+      js(pos.filter((t) => !on(t))) + ")");
+    // 1.22 review 2 — the factor words in everyday phrases are no +sec signal at all (they were a weak one: a "Possible +sec" note, and
+    // with one more weak word +sec turned ON): PT "depende de dois fatores", ES "depende de dos factores", "doble factor de ponderación",
+    // EN "a multi-factor risk model". Next to an auth word they still count (above).
+    const secSig = (t) => S.classify(t).signals.sec;
+    const everyday = ["O cálculo do frete depende de dois fatores: o peso da encomenda e a distância até ao cliente.",
+      "El precio final depende de dos factores: el volumen del pedido y la región del cliente.",
+      "Build a multi-factor risk model that scores loan applicants from income and credit history.",
+      "Ativar dois fatores para os administradores", "Os dois fatores principais do relatório"];
+    const withWeak = ["O frete depende de dois fatores e da segurança da entrega.",
+      "El descuento se calcula con doble factor de ponderación según la antigüedad del cliente y su credencial de socio."];
+    ok(everyday.every((t) => !secSig(t).length) && withWeak.every((t) => !on(t) && secSig(t).length === 1) &&
+      ["Adicionar autenticação de dois fatores", "Añadir doble factor de autenticación", "Add multi-factor sign-in"].every((t) => secSig(t).some((w) => /fator|factor/.test(w))),
+      "1.22 review 2: 'depende de dois fatores' / 'depende de dos factores' / 'doble factor de ponderación' / 'a multi-factor risk model' are no +sec signal (one more weak word no longer turns +sec on); next to an auth word they are (got " +
+      js([everyday.map(secSig), withWeak.map((t) => [on(t), secSig(t)])]) + ")");
+    const api = S.classify("add a flag to the export endpoint");
+    const apiPt = S.classify("adicionar uma flag ao endpoint de exportação", { lang: "pt" });
+    const apiEs = S.classify("añadir un indicador al endpoint de exportación", { lang: "es" });
+    const line = (r, t) => r.reasoning.split("\n").find((l) => l.startsWith("+" + t + ":")) || "";
+    ok(js(api.signals.api) === '["endpoint"]' && !api.tracks.includes("api") && line(api, "api") === "+api: off — weak signal only ('endpoint'), not enough on its own." &&
+      /^\+api: inativo — só sinais fracos \('endpoint'\)/.test(line(apiPt, "api")) && /^\+api: inactivo — solo señales débiles \('endpoint'\)/.test(line(apiEs, "api")) &&
+      line(api, "ai") === "+ai: off — no signals matched.",
+      "1.22 review: a track kept off with a weak signal says so in the reasoning (EN / PT / ES) — never 'no signals matched' beside a 'Possible +api' note (got " +
+      js([line(api, "api"), line(apiPt, "api"), line(apiEs, "api")]) + ")");
+  }
+
+  { // 1.22 review 3 — natural phrasings of a factor word next to an auth VERB / connector: "Iniciar sesión con doble factor", "passam a
+    // entrar com dois fatores", "Require multifactor at login" were no signal at all (their English twin "Admins sign in with
+    // multi-factor" is +sec's weak signal); with the auth word they are +sec's weak signal, with another +sec word +sec is ON.
+    const js = (x) => JSON.stringify(x);
+    const sig = (t, lang) => S.classify(t, { lang }).signals.sec;
+    const on = (t, lang) => S.classify(t, { lang }).tracks.includes("sec");
+    const natural = [["Iniciar sesión con doble factor", "es"], ["Os administradores passam a entrar com dois fatores", "pt"], ["Require multifactor at login", "en"],
+      ["Doble factor al iniciar sesión", "es"], ["Dois fatores ao entrar", "pt"], ["Admins log in with multi-factor", "en"]];
+    const stillNone = [["O preço depende de dois fatores", "pt"], ["Vamos entrar no mercado com dois fatores de preço", "pt"], ["The risk model weighs multi-factor at random", "en"],
+      ["El modelo al entrar usa dos factores de ponderación", "es"]];
+    ok(natural.every(([t, l]) => sig(t, l).length === 1 && /fator|factor/.test(sig(t, l)[0])) && stillNone.every(([t, l]) => !sig(t, l).length) &&
+      on("Iniciar sesión con doble factor y registro de auditoría", "es") && on("Require multifactor at login and encrypt the session tokens", "en"),
+      "1.22 review 3 (8): 'iniciar sesión con doble factor', 'entrar com dois fatores', 'multifactor at login' (and 'al iniciar sesión', 'ao entrar', 'log in with') are +sec's weak signal next to the auth verb / connector; ON beside another +sec word; a factor word away from one stays none (got " +
+      js([natural.map(([t, l]) => sig(t, l)), stillNone.map(([t, l]) => sig(t, l))]) + ")");
+  }
+
+  { // 1.22 review 4 — "multi-factored" / "multifactored" escaped the catch-all (a weak +sec signal: "a multi-factored discount and a security
+    // deposit" was ON); PT / ES put the adjective between the auth noun and the factor word ("autenticação forte de dois fatores" was a
+    // hint while "strong multi-factor authentication" is ON); a conjugated auth verb ("logs in", "signing in", "inicia sesión") was none.
+    const js = (x) => JSON.stringify(x);
+    const sig = (t, lang) => S.classify(t, { lang }).signals.sec;
+    const on = (t, lang) => S.classify(t, { lang }).tracks.includes("sec");
+    const offs = [["The pricing engine uses a multi-factored discount and a security deposit.", "en"], ["We need a multifactored scoring model and an encrypted export.", "en"]];
+    const ons = [["Adicionar autenticação forte de dois fatores", "pt"], ["Adicionar autenticação obrigatória de dois fatores para administradores", "pt"],
+      ["Añadir autenticación obligatoria de doble factor para administradores", "es"], ["Añadir autenticación reforzada de doble factor", "es"],
+      ["The user logs in with multi-factor and the session token is encrypted", "en"], ["El administrador inicia sesión con doble factor y un registro de auditoría", "es"],
+      ["Os utilizadores iniciam sessão com dois fatores e registo de auditoria", "pt"]];
+    ok(offs.every(([t, l]) => !on(t, l) && sig(t, l).length === 1) && !sig("Build a multi-factored risk model that scores loan applicants.", "en").length &&
+      ons.every(([t, l]) => on(t, l)) && !sig("O preço depende de dois fatores: o peso e a distância.", "pt").length,
+      "1.22 review 4: an inflected factor word away from an auth word is no signal ('multi-factored discount'); 'autenticação forte / obrigatória de dois fatores', 'autenticación obligatoria / reforzada de doble factor', 'logs in / inicia sesión / iniciam sessão com …' keep the factor word (ON with another +sec word) (got " +
+      js([offs.map(([t, l]) => sig(t, l)), ons.map(([t, l]) => [on(t, l), sig(t, l)])]) + ")");
+  }
 };

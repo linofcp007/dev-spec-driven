@@ -33,8 +33,10 @@ of approvals (snapshots, metrics' rework, the changelog) skip it. It **never cas
 refused (`phase-order`) until it is re-approved. `spec_metrics` counts `revokedApprovals` (and `untickedTasks`,
 `spec_complete_task {undo}`). A task unticked after a finish or an execution sign-off makes both stale (finish again,
 sign off again once it is done) — and so does a revocation of a planning phase: `spec_drift` reads the feature `stale`
-("approval revoked: …") and the catalog / SPECS.md read it complete, not finished, until the phase is re-approved and the
-feature finished again (revoking the `execution` sign-off only asks for that sign-off again).
+("approval revoked: …") and the catalog / SPECS.md read it complete, not finished, until the phase is re-approved —
+with the same content the finish stands again (a re-approval, or a role re-signing, of unchanged content after a finish
+changes nothing, and the revocation before it no longer counts); with changed content the feature is finished again
+(revoking the `execution` sign-off only asks for that sign-off again).
 
 ## 2. Noticing a change
 
@@ -151,9 +153,10 @@ CRLF-normalized hash of every file its `_Implements:_` markers name (a folder ex
 inside the project). `spec_drift {name?}` (CLI `dev-spec drift [feature]`, exit 1 on drift or a stale baseline)
 reports per finished feature the files **changed**, **missing**, or **now present** since then; features without a
 baseline are listed as `unbaselined`, finished features whose tasks were reopened as `reopened`, and finished features
-that changed since the finish and are done again as `stale` (a change request, a re-approval, an untick or a revocation
-after the finish —
-the converge pass's `spec_append_tasks`, a reopened change request — or, for an active feature, an `_Implements:_`
+that changed since the finish and are done again as `stale` (a change request, a re-approval of changed content, an
+untick or a revocation after the finish — the converge pass's `spec_append_tasks`, a reopened change request; a
+re-approval of the same content changes nothing, nor does a revocation of that phase before it — or, for an active
+feature, an `_Implements:_`
 file the baseline never recorded: the old baseline no longer covers them — their recorded files are still hashed, and
 one that drifted lists the feature as drifted too: a stale baseline never hides a changed file). An archived feature
 is never walked for new files (it can't be finished again where it is); when it is stale the CLI line says to restore
@@ -195,8 +198,9 @@ nothing). While it is absent or older than the engine, the SessionStart hook pri
 
 1. **Audit** — `spec_upgrade {}` (CLI `dev-spec upgrade`, read-only): per active feature its status (not started ·
    planning · executing · complete · finished), what doctor fails / warns on, pending gates, artifacts changed since
-   approval, approvals without a history baseline (`legacyApprovals`, `history.skip`), unverified tasks, drift, the
-   next step and a `review`: `critic` when no task is ticked (run the read-only `spec-critic` agent over the
+   approval, approvals without a history baseline (`legacyApprovals`, `history.skip`), unverified tasks, drift,
+   criteria numbered with bare `AC-n` IDs (`bareAcIds` — since 1.22 no ID trace_check reads: renumber them
+   `US-<story>.AC-<n>`, their references in tasks.md / test-plan.md too, then re-approve), the next step and a `review`: `critic` when no task is ticked (run the read-only `spec-critic` agent over the
    artifacts, phase by phase), `converge` mid-execution (the spec-reviewer converge pass + the critic on changed /
    unapproved artifacts), `none` once complete. Grouped blocked (doctor fails) · attention · ok; `plan` = what apply
    changes.

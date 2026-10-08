@@ -119,7 +119,8 @@ function finishFeature(projectDir, name, opts = {}) {
   // the feature ready); all-or-nothing, under the feature lock.
   let recordedChecks = null;
   if (opts.evidence != null) {
-    const rc = recordFinishChecks(projectDir, slug, dir, opts.evidence, lng, opts.ranBy); // ranBy "cli": `finish --run` (1.14 F1; never from MCP)
+    // ranBy "cli": `finish --run` (1.14 F1; never from MCP) — with runStart {at, code} (1.22 review): the stamps taken BEFORE it ran
+    const rc = recordFinishChecks(projectDir, slug, dir, opts.evidence, lng, opts.ranBy, opts.ranBy === "cli" ? opts.runStart : undefined);
     if (rc.error) return { ok: false, error: rc.error };
     recordedChecks = rc.recorded;
   }
@@ -1241,13 +1242,37 @@ function restoreFeatureLocked(projectDir, name, moved) {
 
 // --- drift since finish ---
 
-// Content hash of a file, CRLF-normalized on the raw bytes (latin1 is byte-preserving), or null (missing / not a file).
-function fileHash(abs) {
+// Content hash of a file, CRLF-normalized on the raw bytes, or null (missing / not a file / unreadable): the sha1 of its bytes
+// with each 0x0D that precedes a 0x0A dropped. 1.22 review: read in FILE_HASH_CHUNK pieces (readSync), never whole — the old
+// readFileSync().toString("latin1") returned null for a file of 512 MiB or more (V8's string limit: recorded "missing", then
+// "unchanged" forever) and held every file in memory twice (100 MiB: 270 MiB RSS per next_action). A CR ending a piece is
+// carried to the next one (dropped there when it starts with LF). The digests are the old function's, byte for byte.
+// chunk: the piece size (tests use tiny ones to put a CR on every boundary).
+const FILE_HASH_CHUNK = 1 << 20;
+const CR_BYTE = Buffer.from([0x0d]);
+const CRLF_BYTES = Buffer.from([0x0d, 0x0a]);
+function fileHash(abs, chunk = FILE_HASH_CHUNK) {
+  let fd = null;
   try {
     if (!fs.statSync(abs).isFile()) return null;
-    return require("crypto").createHash("sha1").update(fs.readFileSync(abs).toString("latin1").replace(/\r\n/g, "\n"), "latin1").digest("hex");
+    fd = fs.openSync(abs, "r");
+    const h = require("crypto").createHash("sha1");
+    const buf = Buffer.allocUnsafe(Math.max(1, Math.floor(chunk) || FILE_HASH_CHUNK));
+    let carry = false; // the previous piece ended with a CR, not hashed yet
+    for (let n; (n = fs.readSync(fd, buf, 0, buf.length, null)) > 0;) {
+      if (carry && buf[0] !== 0x0a) h.update(CR_BYTE);
+      carry = buf[n - 1] === 0x0d;
+      const piece = buf.subarray(0, carry ? n - 1 : n);
+      let from = 0;
+      for (let k = piece.indexOf(CRLF_BYTES); k !== -1; k = piece.indexOf(CRLF_BYTES, from)) { h.update(piece.subarray(from, k)); from = k + 1; }
+      h.update(piece.subarray(from));
+    }
+    if (carry) h.update(CR_BYTE);
+    return h.digest("hex");
   } catch {
     return null;
+  } finally {
+    if (fd != null) try { fs.closeSync(fd); } catch { /* already closed */ }
   }
 }
 // A project-relative path → its absolute path, or null when it leaves the project (by path or through a symlink).
@@ -1349,15 +1374,22 @@ function staleFinish(projectDir, st, tasksText, opts = {}) {
   return { finishedAt: typeof fin.at === "string" ? fin.at : null, since, newFiles };
 }
 // What changed the spec after time t: change requests, and approvals of any phase but `except`.
+// 1.22 review: an approval newer than t that signed off the SAME content as the approval of its phase in force at t (a
+// byte-identical re-approval, a role re-signing) changed nothing — it is skipped, and so is a revocation of that phase between
+// the two (the phase is back as it was). Content = the fingerprint (+ designFingerprint): a phase without one (tests) always counts.
 function changesSince(st, t, except) {
   const out = [];
   (Array.isArray(st.changes) ? st.changes : []).forEach((c, i) => {
     const at = isRecord(c) ? timeOf(c.at) : null;
     if (at != null && at > t) out.push({ kind: "change-request", n: i + 1, at: c.at });
   });
+  const hist = Array.isArray(st.approvalHistory) ? st.approvalHistory : [];
+  const unchanged = new Map(); // phase → the time of its re-approval that changed nothing
   for (const [phase, a] of Object.entries(isObj(st.approvals) ? st.approvals : {})) {
     const at = phase !== except && isRecord(a) ? timeOf(a.at) : null;
-    if (at != null && at > t) out.push({ kind: "approval", phase, at: a.at });
+    if (at == null || at <= t) continue;
+    if (sameApprovedContent(a, approvalInForceAt(hist, phase, t))) { unchanged.set(phase, at); continue; }
+    out.push({ kind: "approval", phase, at: a.at });
   }
   // 1.16 U1: a task unticked after t (spec_complete_task {undo}) — the work was reopened: a finish or a sign-off older than it no
   // longer speaks for the feature once the task is done again.
@@ -1368,12 +1400,28 @@ function changesSince(st, t, except) {
   // 1.16 U review 3: an approval revoked after t (spec_approve {revoke}) — the phase is pending again, so a finish or a sign-off
   // older than it no longer speaks for the feature (the catalog kept calling it finished, drift said clean). Only a revocation
   // that removed an approval (a `partial` one withdrew waiting sign-offs: nothing was approved) and never of `except`.
-  for (const h of Array.isArray(st.approvalHistory) ? st.approvalHistory : []) {
+  for (const h of hist) {
     const at = isRecord(h) && h.revoked === true && h.partial !== true && typeof h.phase === "string" && h.phase !== except ? timeOf(h.at) : null;
-    if (at != null && at > t) out.push({ kind: "revoke", phase: h.phase, at: h.at });
+    if (at != null && at > t && !(unchanged.has(h.phase) && at < unchanged.get(h.phase))) out.push({ kind: "revoke", phase: h.phase, at: h.at });
   }
   return out;
 }
+// 1.22 review — the approval record of `phase` in force at time t: its latest approval record (never a partial sign-off) at or
+// before t, unless a revocation of that phase came after it (still at or before t). → the record | null
+function approvalInForceAt(hist, phase, t) {
+  let rec = null, recAt = -Infinity, revAt = -Infinity;
+  for (const h of hist) {
+    if (!isRecord(h) || h.phase !== phase || h.partial === true) continue;
+    const at = timeOf(h.at);
+    if (at == null || at > t) continue;
+    if (h.revoked === true) { if (at >= revAt) revAt = at; }
+    else if (at >= recAt) { rec = h; recAt = at; }
+  }
+  return rec && recAt > revAt ? rec : null;
+}
+// An approval and a history record signed off the same content: both fingerprinted, the same fingerprint and designFingerprint.
+const sameApprovedContent = (a, rec) => isRecord(a) && isRecord(rec) && typeof a.fingerprint === "string" && !!a.fingerprint &&
+  a.fingerprint === rec.fingerprint && (a.designFingerprint || null) === (rec.designFingerprint || null);
 // The phases revoked in `since` that no approval in it restores (a revoke then a re-approval reads "re-approved" alone).
 function revokedSinceList(since) {
   const back = new Set(since.filter((x) => x.kind === "approval").map((x) => x.phase));
@@ -1524,5 +1572,5 @@ module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, COMMIT_
   criterionAc, supersedesMarkers, dirKey, resolveSupersedes, supersedesTrace, supersedesWarnings, day, acOneLine,
   catalogData, renderCatalogMd, catalog, maybeRefreshCatalog, archiveRecord, reinsertDep, archivedFeature,
   restoreFeature, restoreFeatureLocked, fileHash, projectFile, realRootOf, BASELINE_CAP, baselineFiles,
-  recordFinishBaseline, staleFinish, changesSince, revokedSinceList, executionSignOffStale, signOffWhyText,
+  recordFinishBaseline, staleFinish, changesSince, approvalInForceAt, sameApprovedContent, revokedSinceList, executionSignOffStale, signOffWhyText,
   staleFinishText, drift, baselineDrift, __link };

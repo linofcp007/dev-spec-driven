@@ -1,5 +1,5 @@
 ---
-description: Track-aware local pre-merge review against the full spec chain (no PR or CI needed). PT - revisão local antes do merge. ES - revisión local antes del merge.
+description: Track-aware local pre-merge review against the full spec chain, each finding verified before it is reported (no PR or CI needed). PT - revisão local antes do merge. ES - revisión local antes del merge.
 argument-hint: "[feature name or diff scope]"
 ---
 
@@ -7,7 +7,8 @@ Use the **dev-spec-driven** skill code-review workflow.
 
 Scope: $ARGUMENTS
 
-Review against the full chain, gating checks by the feature's active tracks:
+Review the given scope — by default the branch, `git diff <merge-base>..HEAD` with `<merge-base>` = `git merge-base
+<base-branch> HEAD` — against the full chain, gating checks by the feature's active tracks:
 - **Spec compliance** — does the code match the design?
 - **Constitution** — the code honours every principle in `.specs/steering/constitution.md`; anything that
   breaks one is justified in the design's Complexity Tracking table, or it is sent back.
@@ -31,6 +32,29 @@ Review against the full chain, gating checks by the feature's active tracks:
 - **+data** — every dataset written matches its contract (schema, owner, compatibility rule); the data-quality checks run where the
   design says and quarantine bad rows; loads are idempotent per partition (no blind append); retention and partitioning applied.
 - **Security** — injection, authz, data exposure — always.
+- **Written rules** — the constitution, the `CLAUDE.md` / `AGENTS.md` at the root and in each directory the diff
+  touches, and the comments around the changed code ("never…", "keep in sync with…"): a break quotes the rule with its
+  file:line (a rule you can't quote is not one; how-to-work instructions for an agent are no review rule).
+- **History** — the lines the branch rewrites or deletes (not lines it added): `git log --oneline -L <start>,<end>:<file>
+  <merge-base>` / `git blame`; a fix made there must survive, and a finished bugfix in `.specs/` (or `.specs/_archive/`)
+  whose tasks implement the file keeps its Root Cause away and its regression test unchanged — a fixed bug brought back
+  is Critical.
+
+**Verify before you report.** Each Critical / Important finding is a claim until checked: does it exist at HEAD (the
+input or call path that breaks it), did this branch introduce it, make it reachable or break unchanged lines with it (a
+caller of a contract it changed) — not pre-existing —, is it what an AC, the design or `decisions.md` asks for, does a
+green check or a documented exception already answer it? An AC with no code is never pre-existing: it is confirmed, or
+refuted with the file:line that satisfies it. Rate each 0–100: **0** not real (or pre-existing) · **25** might be real,
+unverified · **50** verified but minor or rare in practice · **75** verified and likely hit (or a spec / written rule
+names it) · **100** direct evidence (a failing input, a run, the line that does it).
+With a subagent tool, write the branch diff to a file first (`git diff -U10 <merge-base>..HEAD` into
+`.specs/<feature>/.execution/review.diff` — a missing `.execution/` gets a `.gitignore` holding `*` — or a temp file),
+then dispatch one `dev-spec-driven:spec-reviewer` in **verify** mode per finding — the finding, that file, the merge
+base and HEAD, the feature folder — in parallel, cheapest tier (standard for a security, concurrency or data-loss
+finding); without one, check each yourself and say the findings are self-verified.
+Report the findings rated **80 or more** by severity; list the rest in one line each under "Unconfirmed (below 80)" —
+never dropped silently. An AC with no code goes by its verdict, not a rating: confirmed → reported as a finding; refuted
+→ dropped only with the file:line that satisfies the AC.
 
 Run `trace_check` to confirm coverage. Report findings grouped by severity.
 For an audit trail, `trace_check {name, matrix: true}` (CLI `dev-spec trace <feature> --matrix`; `--csv` for a

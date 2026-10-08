@@ -177,13 +177,20 @@ const sha1Hex = (text) => require("crypto").createHash("sha1").update(text).dige
 function fingerprintMatches(raw, phase, stored) {
   if (raw == null || typeof stored !== "string" || !stored) return false;
   const text = fingerprintText(raw, phase);
-  return sha1Hex(text) === stored || sha1Hex(BOM_CHAR + text) === stored;
+  if (sha1Hex(text) === stored || sha1Hex(BOM_CHAR + text) === stored) return true;
+  if (phase !== "tasks") return false;
+  // An approval recorded before 1.22 normalized only `- [x]` ticks: the same content still matches it (a `* [x]` / `+ [x]` line
+  // kept its tick in that fingerprint).
+  const legacy = uncheckDashTasks(String(raw).replace(/^\uFEFF/, "").replace(/\r\n/g, "\n"));
+  return legacy !== text && (sha1Hex(legacy) === stored || sha1Hex(BOM_CHAR + legacy) === stored);
 }
 const BOM_CHAR = String.fromCharCode(0xfeff);
 const artifactMatches = (file, phase, stored) => fingerprintMatches(readIfExists(file), phase, stored);
 // Checkbox state is not content. The indent is read within its line ([^\S\n\r\u2028\u2029], not \s): from each line start of a
-// long blank run \s* rescanned the whole run (1.17 H) — the lines above keep their text either way ($1 puts it back).
-const uncheckTasks = (text) => text.replace(/^([^\S\n\r\u2028\u2029]*-\s*\[)[xX](\])/gm, "$1 $2");
+// long blank run \s* rescanned the whole run (1.17 H) — the lines above keep their text either way ($1 puts it back). Any GFM
+// bullet (1.22 review: `* [ ] 1.` / `+ [ ] 1.` are task lines too — the scanner reads them).
+const uncheckTasks = (text) => text.replace(/^([^\S\n\r\u2028\u2029]*[-*+]\s*\[)[xX](\])/gm, "$1 $2");
+const uncheckDashTasks = (text) => text.replace(/^([^\S\n\r\u2028\u2029]*-\s*\[)[xX](\])/gm, "$1 $2"); // the pre-1.22 rule (legacy fingerprints)
 // The artifact a phase's approval signs off: a bugfix has no design of its own — its design approval signs off bug.md
 // (the Root Cause the gate checks). approvePhase records it as `file` on the approval, so changedSinceApproval
 // compares the right file (an approval without `file` signed off PHASE_FILE's, as before).
@@ -354,6 +361,12 @@ function setDependency(projectDir, name, dependsOn, order, edits) {
   if (r.ok) delete r.changed;
   return r;
 }
+// A roadmap order as a caller gave it (a number over MCP, the raw word on the CLI) → the safe integer, or null.
+function orderInput(v) {
+  if (typeof v === "number") return Number.isSafeInteger(v) ? v : null;
+  const s = String(v).trim();
+  return /^-?\d+$/.test(s) && Number.isSafeInteger(Number(s)) ? Number(s) : null;
+}
 function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
   edits = edits || {};
   const f = existingFeature(projectDir, name);
@@ -378,7 +391,14 @@ function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
   const replaced = dependsOn === undefined || dependsOn === null ? null : resolveDeps(dependsOn);
   const added = resolveDeps(edits.add);
   if (unknownNames.length) return { ok: false, error: D.unknown(unknownNames.join(", ")) };
-  if (order != null && !/^-?\d+$/.test(String(order).trim())) return { ok: false, error: D.orderInt(order) };
+  // order: a SAFE integer, as spec_depend's schema ({type: "integer"} — no bound) — the CLI passes the raw word, and
+  // `--order 99999999999999999999` matched the digits and was stored as 1e20 (1.22 review). Refused with the MCP
+  // validator's own message (args), so both surfaces refuse the same values alike.
+  const orderNum = order == null ? null : orderInput(order);
+  if (order != null && orderNum === null) {
+    const A = i18n.msg(projectLang(projectDir)).args;
+    return { ok: false, error: A.invalid(A.item("order", A.type.integer, JSON.stringify(typeof order === "number" ? order : String(order)))) };
+  }
   // Removals match the slug as typed, transliterated or legacy — a stale dep on a deleted feature can go too.
   const drop = new Set(names(edits.remove).flatMap((d) => [d, slugify(d), resolveFeature(projectDir, d).slug]).filter(Boolean));
 
@@ -402,7 +422,7 @@ function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
 
   rm.features[slug] = rm.features[slug] || {};
   rm.features[slug].dependsOn = finalDeps;
-  if (order != null) rm.features[slug].order = parseInt(String(order).trim(), 10);
+  if (orderNum !== null) rm.features[slug].order = orderNum;
   writeRoadmap(projectDir, rm);
   return { ok: true, changed: true, feature: slug, dependsOn: finalDeps, order: rm.features[slug].order, unknownDeps: unknown };
 }
@@ -660,7 +680,7 @@ function locateFeatures(projectDir, name) {
 //   · append-only lists (approvalHistory, changes, unticks) → the union by identity (a record both sides hold once; the same
 //     record with different fields — spec_upgrade seeding a snapshot — gets both sides' fields), in chronological order;
 //   · evidence[n] / finishChecks[name] → the record with the latest run `at` (a tie is the same run: its note and stale mark
-//     merged), both histories merged, deduped, bounded by EVIDENCE_HISTORY; ticks[n] and lastTickAt → the later time;
+//     merged), both histories merged, deduped, bounded by EVIDENCE_HISTORY; ticks[n], lastTickAt and lastEditAt → the later time;
 //     `finished` → the later baseline (firstAt: the earliest finish); createdAt → the earlier;
 //   · approvals[phase] → the later approval, unless a revocation (an approvalHistory record, revoked: true) is later than it —
 //     revocations win by time; signoffs[phase][role] → the later sign-off, dropped when a revocation or the phase's merged
@@ -907,7 +927,7 @@ function mergeFeatureState(b, o, t, ctx) {
     approvalHistory: () => H, approvals: () => A, signoffs: () => SO, lastApprovedPhase: lastApproved,
     changes: mergeHistoryBy(CHANGE_ID), unticks: mergeHistoryBy(UNTICK_ID), [MERGE_CONFLICTS_KEY]: mergeHistoryBy(mergeCanon),
     evidence: mergeMapWith(mergeRunRecord), finishChecks: mergeMapWith(mergeRunRecord), ticks: mergeMapWith(mergeLaterTime),
-    finished: mergeFinished, tracks: mergeSet, createdAt: mergeEarlierTime, lastTickAt: mergeLaterTime,
+    finished: mergeFinished, tracks: mergeSet, createdAt: mergeEarlierTime, lastTickAt: mergeLaterTime, lastEditAt: mergeLaterTime, // lastEditAt: 1.22 review (the spec-hook's stamp)
   };
   const out = mergeObject(b, o, t, [], ctx, (k) => (own(FIELDS, k) ? FIELDS[k] : null));
   // lastApprovedPhase follows the merged approvals, never its own 3-way (ours unchanged + theirs revoked would drop it while a

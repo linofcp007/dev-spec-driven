@@ -45,8 +45,6 @@ dist/
 **/evals/baseline.json
 **/evals/report.json
 
-# dev-guardian outputs
-.guardian/
 
 # Plugin eval results (claude plugin eval) — local runs, never committed
 evals/results/
@@ -54,3 +52,6 @@ evals/results/
 # The single-file engine bundle (1.20): built on demand for a slow file system (dev-spec bundle / npm run build:bundle),
 # never committed — a stale one is ignored at runtime (docs/maintainers/architecture.md → The build)
 mcp/lib/spec.bundle.js
+# dev-guardian outputs
+**/.guardian/*
+!**/.guardian/baseline.json

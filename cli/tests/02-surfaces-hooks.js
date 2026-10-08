@@ -41,8 +41,9 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   ok(dd.code === 0 && bl5 === "--later|plan",
     "full review S5: `--` ends the options — the tokens after it are positional (backlog add -- --later plan) (got " + JSON.stringify([dd.code, bl5, dd.out.trim().slice(0, 80)]) + ")");
   // Every flag the help documents is known (the evals harness's and git log's own flags excepted); --help anywhere prints help.
+  // (--json too — but the help itself is text only: `help --json` is a usage error since the 1.22 review, 16-conventions-flags.)
   const helpFlags = [...new Set((run(["help"]).out.match(/--[a-z][a-z-]*/g) || []).map((f) => f.slice(2)))]
-    .filter((f) => !["flag", "dry-run", "name-only", "relative"].includes(f));
+    .filter((f) => !["flag", "dry-run", "name-only", "relative", "json"].includes(f));
   const allFlags = run(["help", ...helpFlags.map((f) => (f === "lang" ? "--lang=en" : f === "project" ? "--project=" + pf : "--" + f + "=1"))]);
   const helpAnywhere = run(["done", "big", "2", "--help", "--project", pf]);
   ok(helpFlags.length > 50 && allFlags.code === 0 && /universal spec-driven CLI/.test(allFlags.out) && helpAnywhere.code === 0 && /universal spec-driven CLI/.test(helpAnywhere.out) &&

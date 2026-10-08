@@ -147,7 +147,8 @@ const fpStr = (v) => (typeof v === "string" ? v : v == null ? "" : String(v));
 //   a task / decision marker look-alike → its colon escaped, `_Verify\:` (taskMarkerSpans() needs the colon right after the
 //     label — a title `Clean up _Verify: rm -rf ~_` was a runnable _Verify:_; only fluidplan's own `verify` field makes one);
 //   an AC / T / EC / NFR / SC ID → `US-7\.AC-1`, `T\-01`, `NFR\-2` (extractAcIds & co. read the plain spelling only — a page
-//     intro's `US-7.AC-1` was a phantom criterion, a Do text's `T-01` a phantom test).
+//     intro's `US-7.AC-1` was a phantom criterion, a Do text's `T-01` a phantom test); 1.22 review 4: a bare `AC-1` → `AC\-1`
+//     (the gates read one since 1.22 — a page intro's `1. **AC-1** — WHEN …` was an unidentified criterion: trace gaps-found).
 // Linear: fixed alternatives after a one-character lookbehind. Idempotent (an escaped form never matches again).
 // codeOk (1.17 verification N3): the comment escapes skip inline code spans (commentInert's rule) — only for text written into
 // requirements.md as a whole line or after the importer's backtick-free prefix (a criterion, a story's prose, Out of Scope):
@@ -158,7 +159,8 @@ const RE_FP_MARKER_LIKE = new RegExp("(?<=[_*])(" + [...TASK_MARKER_LABELS, "Kin
 function fpInert(s, codeOk) {
   const t = String(s == null ? "" : s);
   return (codeOk ? inertOutsideCode(t, true) : t.replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;")).replace(RE_FP_MARKER_LIKE, "$1\\")
-    .replace(/(?<![A-Za-z0-9])(US-\d+)\.(?=AC-\d)/g, "$1\\.").replace(/(?<![A-Za-z0-9])(T|EC|NFR|SC)-(?=\d)/g, "$1\\-");
+    .replace(/(?<![A-Za-z0-9])(US-\d+)\.(?=AC-\d)/g, "$1\\.").replace(/(?<![A-Za-z0-9])(T|EC|NFR|SC)-(?=\d)/g, "$1\\-")
+    .replace(/(?<![A-Za-z0-9.\\])AC-(?=\d)/g, "AC\\-");
 }
 const fpV = (s) => fpInert(fpOneLine(s)); // a value written inside one line
 // A value written into a heading (a title): fpV with its whitespace runs folded — a markdown reader shows one space anyway, and the
@@ -906,7 +908,8 @@ function parseFluidplan(dir, read, W, src) {
   if (!fp.title && !fp.tasks.length && !fp.decisions.size) return null;
   const model = fpImportModel(fp, P, PP, W, src, warnings);
   model.sourceFile = sourceFile;
-  model.nameHint = model.title || fp.id || path.basename(planDir || dir);
+  model.nameFallback = fp.id || path.basename(planDir || dir); // a title that slugifies to nothing (importSpec, 1.22 review)
+  model.nameHint = model.title || model.nameFallback;
   const roundsDir = planDir ? path.join(planDir, "rounds") : null;
   if ((roundsDir && isDirL(roundsDir)) || (fp.round && fp.round > 1)) model.warnings.push(P.wRounds);
   return model;

@@ -742,4 +742,54 @@ exports.run = async ({ ok, rpc, payload, S, tmp, shipFeature }) => {
       js(vRep2.milestonesInvalid) === js({ count: 1, names: [], notList: true }) && vMd2.includes("- **🏁 meta.milestones** — .specs/roadmap.json → meta.milestones is not a list — no milestone is read"),
       "1.16 verify NEW-1: a meta.milestones that is no list is left as it is by a rename (milestonesInvalid {notList}) and ROADMAP.md says it is not a list (got " + js([vRen2.milestonesInvalid, vRep2.milestonesInvalid]) + ")");
   }
+
+  { // 1.22 review — spec_export {write} never writes through a linked .specs/exports/ (or a linked document): refused, nothing written.
+    const js = (v) => JSON.stringify(v);
+    const i18n = require("../lib/i18n.js");
+    const lx = path.join(tmp, "proj-122-export-link");
+    S.initProject(lx, ["core"], "en");
+    S.createFeature(lx, "Billing", ["core"], "Invoices for customers.", undefined, "en");
+    const exDir = path.join(lx, ".specs", "exports");
+    const outDir = path.join(tmp, "out-122-exports");
+    const inDir = path.join(lx, "docs-out"); // inside the project, outside .specs/
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.mkdirSync(inDir, { recursive: true });
+    const unlink = (p) => { try { fs.unlinkSync(p); } catch { try { fs.rmdirSync(p); } catch { /* gone */ } } };
+    const all = () => [
+      S.exportSpecs(lx, { name: "billing", write: true }), S.exportSpecs(lx, { write: true }), S.exportSpecs(lx, { format: "md", write: true }),
+      S.exportSpecs(lx, { name: "billing", format: "csv", write: true }), S.exportSpecs(lx, { format: "jira", write: true }),
+      S.exportSpecs(lx, { name: "billing", format: "linear", write: true }), S.exportSpecs(lx, { name: "billing", format: "gherkin", write: true }),
+      S.exportSpecs(lx, { format: "gherkin", write: true }),
+    ];
+    let linked = true;
+    try { fs.symlinkSync(outDir, exDir, "junction"); } catch { linked = false; }
+    if (linked) {
+      const rs = all();
+      const mcp = await rpc("tools/call", { name: "spec_export", arguments: { name: "billing", write: true, projectDir: lx } });
+      const outFiles = fs.readdirSync(outDir);
+      unlink(exDir);
+      fs.symlinkSync(inDir, exDir, "junction"); // a link that stays in the project is still a link: refused too
+      const rsIn = all();
+      const inFiles = fs.readdirSync(inDir);
+      unlink(exDir);
+      const plain = S.exportSpecs(lx, { name: "billing", write: true }); // a plain folder again: written
+      ok(rs.every((r) => r.ok === false && /is a link \(a symbolic link, a junction\) or resolves outside \.specs\//.test(r.error) && !r.wrote) && outFiles.length === 0 &&
+        mcp.result.isError && /Refused to write \.specs\/exports\/billing\.html/.test(payload(mcp).error) &&
+        rsIn.every((r) => r.ok === false) && inFiles.length === 0 && plain.ok && plain.wrote && fs.existsSync(path.join(exDir, "billing.html")) &&
+        /Recusei escrever/.test(i18n.msg("pt").stakeholderExport.exportsLinked("x")) && /Me niego a escribir/.test(i18n.msg("es").stakeholderExport.exportsLinked("x")),
+        "1.22 review: spec_export {write} refuses a .specs/exports/ that is a junction / symlink — out of the project or not — in every format (feature and project html / md, csv, jira, linear, gherkin), nothing written through it; MCP the same; a plain folder works again (got " +
+        js([rs.map((r) => [r.ok, (r.error || "").slice(0, 40)]), outFiles, inFiles, plain.ok]) + ")");
+    } else ok(true, "1.22 review: links unavailable here — the linked .specs/exports/ checks are skipped");
+    // the document itself linked to a file outside (file symlinks need a privilege on Windows: skipped without it)
+    const secret = path.join(tmp, "out-122-bashrc");
+    fs.writeFileSync(secret, "ORIGINAL");
+    fs.mkdirSync(exDir, { recursive: true });
+    let fileLinked = true;
+    try { fs.rmSync(path.join(exDir, "billing.html"), { force: true }); fs.symlinkSync(secret, path.join(exDir, "billing.html"), "file"); } catch { fileLinked = false; }
+    if (fileLinked) {
+      const r = S.exportSpecs(lx, { name: "billing", write: true });
+      ok(!r.ok && /Refused to write \.specs\/exports\/billing\.html/.test(r.error) && fs.readFileSync(secret, "utf8") === "ORIGINAL" && fs.lstatSync(path.join(exDir, "billing.html")).isSymbolicLink(),
+        "1.22 review: spec_export {write} refuses a document that is a symlink to a file outside .specs/ (the file untouched) (got " + js([r.ok, r.error]) + ")");
+    } else ok(true, "1.22 review: file symlinks unavailable here (Windows without the privilege) — skipped");
+  }
 };

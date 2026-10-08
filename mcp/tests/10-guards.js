@@ -360,7 +360,8 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     ok(sBlock.ok && sBlock.block === true && sBlock.why === "unverified" && sBlock.features.length === 1 && sBlock.features[0].feature === "billing" &&
       JSON.stringify(sBlock.features[0].unverified) === JSON.stringify([{ number: 1, reason: "no-evidence" }]) &&
       /^dev-spec evidence gate: your last message says the work is done or verified, but tasks are ticked without verification evidence:\n {2}- billing: #1 \(no evidence\)\n/.test(sBlock.reason) &&
-      /read each listed task's _Verify:_ command in \.specs\/billing\/tasks\.md \(task 1 first\), run it on the final code only if it is safe to run/.test(sBlock.reason) && !/--run/.test(sBlock.reason) &&
+      // (1.22 review 2: a task with several _Verify:_ commands is recorded as ONE run of all of them — the rule accepts nothing less)
+      /read each listed task's _Verify:_ command in \.specs\/billing\/tasks\.md \(task 1 first\) — a task with several: all of them, in ONE run joined with ` && ` —, run it on the final code only if it is safe to run/.test(sBlock.reason) && !/--run/.test(sBlock.reason) &&
       /spec_complete_task \{name, number, evidence: \{command, exitCode, summary\}\}/.test(sBlock.reason) && /say plainly/.test(sBlock.reason) &&
       sNoClaim.block === false && sNoClaim.why === "no-claim" && sActive.block === false && sActive.why === "stop-hook-active" && sAdmit.block === false && sAdmit.why === "admitted",
       "C1 stopCheck: a claim + a recently ticked task without evidence → block, naming the feature, the task and its reason and what to do (read the _Verify:_ in tasks.md, run it if safe, record it with spec_complete_task / say it plainly); no claim, stop_hook_active or an honest admission → allowed; the reason never hands over a `--run` command (got " +
@@ -443,7 +444,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     c1Tasks(fEs, "- [x] 1. [US1] Cobrar\n  - _Verify: npm test_\n"); // ticked by hand after the failed run
     const sEs = S.stopCheck(pEs, { message: "Listo: todas las pruebas pasan." });
     ok(sPt.block && sPt.lang === "pt" && /^dev-spec — gate de evidência: a tua última mensagem diz que o trabalho está feito ou verificado, mas há tarefas marcadas sem evidência de verificação:\n {2}- pagamentos: #1 \(sem evidência\)/.test(sPt.reason) &&
-      /Regista a evidência antes de o afirmar/.test(sPt.reason) && /em \.specs\/pagamentos\/tasks\.md \(primeiro a tarefa 1\); corre esse comando no código final só se for seguro/.test(sPt.reason) && !/--run/.test(sPt.reason) && /Ou diz claramente/.test(sPt.reason) &&
+      /Regista a evidência antes de o afirmar/.test(sPt.reason) && /em \.specs\/pagamentos\/tasks\.md \(primeiro a tarefa 1\) — uma tarefa com vários: todos eles, numa SÓ execução unidos com ` && ` —; corre esse comando no código final só se for seguro/.test(sPt.reason) && !/--run/.test(sPt.reason) && /Ou diz claramente/.test(sPt.reason) &&
       sEs.block && /^dev-spec — gate de evidencia: tu último mensaje dice que el trabajo está hecho o verificado, pero hay tareas marcadas sin evidencia de verificación:\n {2}- pagos: #1 \(la última ejecución falló\)/.test(sEs.reason) &&
       /O di claramente/.test(sEs.reason) && S.stopCheck(pPt, { message: "Os testes ainda não passam; a tarefa 1 não está verificada." }).block === false,
       "C1 stopCheck PT / ES: the claim is read in either language and the reason is in the project language (PT: no evidence; ES: failed run); an honest PT answer is allowed (got " +
@@ -511,15 +512,129 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     ok(sBlockedIm.why === "not-done" && sNoPath.why === "no-task" && sNoVerify.why === "nothing-to-verify" && silent(sActiveIm) && sActiveIm2.block === false &&
       [sBlockedIm, sNoPath, sNoVerify].every((r) => r.block === false),
       "C1 SubagentStop (spec-implementer): BLOCKED / NEEDS_CONTEXT, a reply naming no task report, a task with no runnable _Verify:_ and stop_hook_active are never sent back");
+
+    // --- 1.22 SubagentStop: the spec-simplifier rewrites verified code — its DONE needs its report to END with the proof: a
+    // "## Final runs" section in which every run exits 0 (and, with project checks, each check is one of the runs).
+    const pSi = c1Dir("simplify");
+    S.initProject(pSi, ["core"], "en");
+    const fSi = S.createFeature(pSi, "Checkout", ["core"], "", undefined, "en");
+    const siEx = path.join(fSi.dir, ".execution");
+    fs.mkdirSync(siEx, { recursive: true });
+    const siRep = path.join(siEx, "simplify-report.md");
+    const siReply = "**Status:** DONE\nCommits: a1b2c3d refactor(checkout): guard clauses — no behaviour change\n212/212 passing\nReport: .specs/checkout/.execution/simplify-report.md";
+    const siAgent = "dev-spec-driven:spec-simplifier";
+    const si = (message, agent) => S.stopCheck(pSi, { message: message || siReply, agent: agent || siAgent });
+    const siW = (text, message) => { fs.writeFileSync(siRep, text); return si(message); };
+    const siPayload = () => ({ ...subPayload(siReply, siAgent), cwd: pSi, transcript_path: path.join(pSi, "t.jsonl"), agent_transcript_path: path.join(pSi, "sub.jsonl") });
+    const siNoRep = si();
+    const hSiNoRep = blocked(runHook(stopJs, siPayload()));
+    const siRed = siW("## Baseline\n- `npm test` → exit 0 (212 passing)\n## Changes\n- a1b2c3d src/cart.js:12 Deep nesting → guard clauses\n## Final runs\n- `npm test` → exit code 1 (1 failing)\n");
+    const siOk = siW("## Baseline\n- `npm test` → exit 0\n## Final runs\n- `npm test` → exit 0 (212 passing)\n  ℹ pass 212\n");
+    const siBare = si(undefined, "spec-simplifier");
+    const hSiOk = runHook(stopJs, siPayload());
+    ok(siNoRep.block && siNoRep.why === "simplifier-evidence" && siNoRep.feature === "checkout" && siNoRep.report === ".specs/checkout/.execution/simplify-report.md" &&
+      /^dev-spec evidence gate: you report the simplification pass of 'checkout' as DONE, but its report \(\.specs\/checkout\/\.execution\/simplify-report\.md\) does not exist\./.test(siNoRep.reason) &&
+      hSiNoRep === siNoRep.reason && siRed.block && /the final runs in its report \(\.specs\/checkout\/\.execution\/simplify-report\.md\) fail: `npm test` — a simplification must leave every run green/.test(siRed.reason) &&
+      /revert the change that made a run fail/.test(siRed.reason) && siOk.block === false && siOk.why === "simplify-ok" && siBare.why === "simplify-ok" && silent(hSiOk),
+      "1.22 SubagentStop (spec-simplifier): DONE with no report, or a red run in its '## Final runs' → block naming the report; a section whose runs all exit 0 → allowed (namespaced or not; the hook prints the engine's reason) (got " +
+      JSON.stringify([siNoRep.why, siRed.why, siOk.why, siBare.why]) + ")");
+    // review 1 (engine): only the LAST "## Final runs" section's run lines count — never a baseline, an output line, a fenced
+    // block or a later passing run hiding a failed one; a run line without its exit code is no proof.
+    const siBaseOnly = siW("## Baseline\n- `npm test` → exit 0\n## Changes\n- a1b2c3d src/x.js:3 Rename\n");
+    const siHidden = siW("## Final runs\n- `npm test` → exit code 1 (3 failing)\n- `node --test test/cart.test.js` → exit 0\n");
+    const siOutput = siW("## Final runs\n- `npm test` → exit code 1\n  [0] npm run test:unit exited with code 0\n");
+    const siNoCode = siW("## Final runs\n- `npm test` → FAILED (3 failing)\n");
+    const siQuoted = siW("## Final runs\n- `npm test` → exit 0 (212 passing)\n  ✓ returns exit code 2 on bad args\n");
+    const siRevert = siW("## Final runs\n- `npm test` → exit code 1\n## Revert round\n- reverted b2c3d4e (it changed an error text)\n## Final runs\n- `npm test` → exit 0\n");
+    const siFenced = siW("## Final runs\n- `npm test` → exit 0\n```\n# a comment the output printed\n`npm test` → exit code 1\n```\n");
+    const siPt = siW("## Execuções finais\n1. `npm test` → código de saída 0\n");
+    const siTick = siW("## Final runs\n- `npm test` → exit code 1\n", "**Status:** `DONE`\nReport: .specs/checkout/.execution/simplify-report.md");
+    fs.writeFileSync(siRep, "## Baseline\n- `npm test` → exit code 1\n## Changes\n" + "- a1b2c3d src/cart.js:12 Deep nesting → guard clauses\n".repeat(6000) + "## Final runs\n- `npm test` → exit 0\n");
+    const siBig = si();
+    ok(siBaseOnly.block && /has no "## Final runs" section with a run in it/.test(siBaseOnly.reason) &&
+      siHidden.block && /fail: `npm test` — /.test(siHidden.reason) && !/cart\.test/.test(siHidden.reason) && siOutput.block && /fail: `npm test`/.test(siOutput.reason) &&
+      siNoCode.block && /doesn't show these runs with their exit code: `npm test`/.test(siNoCode.reason) &&
+      siQuoted.why === "simplify-ok" && siRevert.why === "simplify-ok" && siFenced.why === "simplify-ok" && siPt.why === "simplify-ok" &&
+      siTick.block && siTick.why === "simplifier-evidence" && siBig.why === "simplify-ok" && fs.statSync(siRep).size > 256 * 1024,
+      "1.22 review 1: a baseline-only report, a failed run hidden by a later passing one, a code quoted in output, a run line without its code → block; a code in a passing run's output, a revert round's later '## Final runs', a fenced block, PT headings, a status in backticks (a claim), a report past the 256 KB cap (read from its end) are read right (got " +
+      JSON.stringify([siBaseOnly.why, siHidden.why, siOutput.why, siNoCode.why, siQuoted.why, siRevert.why, siFenced.why, siPt.why, siTick.why, siBig.why]) + ")");
+    // with project checks: each must be one of the final runs, as a WHOLE command — a longer command that starts with it (a
+    // re-run _Verify:_ `npm test -- t/x`, `npm run lint:css`) is another run, never its stand-in; one listed twice is named once.
+    const pSim = c1Dir("simplify-checks");
+    S.initProject(pSim, ["core"], "en", { checks: { test: "npm test", lint: "npm run lint", probe: "node -e \"process.exit(0)\"", again: "npm  test" } });
+    const fSim = S.createFeature(pSim, "Checkout", ["core"], "", undefined, "en");
+    fs.mkdirSync(path.join(fSim.dir, ".execution"), { recursive: true });
+    const si2 = (text) => { fs.writeFileSync(path.join(fSim.dir, ".execution", "simplify-report.md"), text); return S.stopCheck(pSim, { message: siReply, agent: siAgent }); };
+    const probe = "- `node -e \"process.exit(0)\"` → exit 0\n";
+    const siFail = si2("## Final runs\n- `npm test` → exit code 1\n- `npm run lint` → exit 0\n- `node -e \"process.exit(0)\"` → exit code 3\n");
+    const siUnrun = si2("## Final runs\n- `npm test` → exit 0\n" + probe);
+    const siPrefix = si2("## Final runs\n- `npm test` → exit code 1\n- `npm run lint` → exit 0\n" + probe + "- `npm test -- t/cart.test.js` → exit 0\n- `npm run lint:css` → exit 0\n");
+    const siLintNoCode = si2("## Final runs\n- `npm run lint` → FAILED (3 problems)\n- `npm test` → exit 0\n" + probe);
+    const siOk2 = si2("## Baseline\n- `npm test` → exit code 1\n## Final runs\n- `npm test` → exit 0 (212 passing)\n- `npm run lint` → exit 0\n" + probe + "- `npm test -- t/cart.test.js` → exit 0\n");
+    ok(siFail.block && /fail: `npm test`, `node -e "process\.exit\(0\)"` — a simplification must leave every run green/.test(siFail.reason) && !/npm run lint/.test(siFail.reason) &&
+      siUnrun.block && /doesn't show these runs with their exit code: `npm run lint` — every project check must be there/.test(siUnrun.reason) &&
+      siPrefix.block && /fail: `npm test` — /.test(siPrefix.reason) && siLintNoCode.block && /exit code: `npm run lint` — /.test(siLintNoCode.reason) &&
+      siOk2.block === false && siOk2.why === "simplify-ok" && ![siFail, siUnrun, siPrefix, siLintNoCode].some((r) => /`npm test`, `npm test`/.test(r.reason || "")),
+      "1.22 SubagentStop (spec-simplifier) with project checks: a red check (also one whose command holds 'exit(0)'), a check missing or without its code → block naming exactly those; a longer command starting with a check's never stands in; all green → allowed (got " +
+      JSON.stringify([siFail.why, siUnrun.why, siPrefix.why, siLintNoCode.why, siOk2.why]) + ")");
+    // review 2: the section runs from the last heading to the END — an output "# pass 212" line (indented or not) never cuts
+    // it short, a revert round written under it without a new heading still counts; runs start at the margin (an indented
+    // "`foo` is deprecated" is output); fences are counted from the heading (the 256 KB window may start inside one); a
+    // ``double-backtick`` span holds a command with a backtick.
+    const siTap = siW("## Final runs\n- `npm test` → exit 0\n  # pass 212\n  # fail 0\n- `node --test test/cart.test.js` → exit code 1\n");
+    const siTap0 = siW("## Final runs\n- `npm test` → exit 0\n# pass 212\n- `node --test test/cart.test.js` → exit code 1\n");
+    const siRevertNoHead = siW("## Final runs\n- `npm test` → exit 0\n## Revert round\n- reverted b2c3d4e\n- `npm test` → exit code 1\n");
+    const siIndented = siW("## Final runs\n- `npm test` → exit 0\n  `foo` is deprecated\n");
+    fs.writeFileSync(siRep, "## Baseline\n```\n" + "  ok 1 - cart totals\n".repeat(16000) + "```\n## Final runs\n- `npm test` → exit 0\n");
+    const siFenceWindow = si(), siFenceSize = fs.statSync(siRep).size;
+    const pTick = c1Dir("simplify-backtick");
+    S.initProject(pTick, ["core"], "en", { checks: { stamp: "echo `date`" } });
+    const fTick = S.createFeature(pTick, "Checkout", ["core"], "", undefined, "en");
+    fs.mkdirSync(path.join(fTick.dir, ".execution"), { recursive: true });
+    fs.writeFileSync(path.join(fTick.dir, ".execution", "simplify-report.md"), "## Final runs\n- `` echo `date` `` → exit 0\n");
+    const siTickCmd = S.stopCheck(pTick, { message: siReply, agent: siAgent });
+    // a code span that merely holds the word "blocked" is no status — the claim stands and the report is read
+    const siCodeStatus = siW("## Final runs\n- `npm test` → exit code 1\n", "**Status:** DONE\nCommits: a1b2c3d refactor: reject when `order.status === \"blocked\"`\nReport: .specs/checkout/.execution/simplify-report.md");
+    const sImCode = S.stopCheck(pIm, { message: "**Status:** DONE\nCommits: abc1234 feat(auth): reject when `order.status === \"blocked\"`\nReport: .specs/auth/.execution/task-1-report.md", agent: "spec-implementer" });
+    ok(siTap.block && /fail: `node --test test\/cart\.test\.js`/.test(siTap.reason) && siTap0.block && siRevertNoHead.block && /fail: `npm test`/.test(siRevertNoHead.reason) &&
+      siIndented.why === "simplify-ok" && siFenceWindow.why === "simplify-ok" && siFenceSize > 256 * 1024 && siTickCmd.why === "simplify-ok" &&
+      siCodeStatus.block && siCodeStatus.why === "simplifier-evidence" && sImCode.block && sImCode.why === "implementer-evidence",
+      "1.22 review 2: '# pass 212' output (indented or not) never ends '## Final runs', a revert round under it without a new heading counts, an indented backticked word is output, fences count from the heading, a ``double-backtick`` command matches its check, a code span holding 'blocked' is no status (got " +
+      JSON.stringify([siTap.why, siTap0.why, siRevertNoHead.why, siIndented.why, siFenceWindow.why, siTickCmd.why, siCodeStatus.why, sImCode.why]) + ")");
+    // review 3: a run nested under a group bullet (indented: a bullet, a command, its exit code) counts — a failing one was
+    // skipped as output; a status token in backticks is a status only on a line that starts with "Status"
+    const siNested = siW("## Final runs\n- Project checks:\n  - `npm test` → exit code 1 (2 failing)\n- `node --test test/cart.test.js` → exit 0\n");
+    const siNestedOk = siW("## Final runs\n- Project checks:\n  - `npm test` → exit 0 (212 passing)\n    ℹ pass 212\n");
+    const siNested2 = si2("## Final runs\n- `npm test` → exit 0\n- `npm run lint` → exit 0\n" + probe + "- Re-run _Verify:_:\n  - `node --test test/cart.test.js` → exit code 1\n");
+    const siMidStatus = siW("## Final runs\n- `npm test` → exit code 1\n", "**Status:** DONE\nCommits: a1b2c3d fix: lock out with status `blocked`\nReport: .specs/checkout/.execution/simplify-report.md");
+    ok(siNested.block && /fail: `npm test` — /.test(siNested.reason) && siNestedOk.why === "simplify-ok" && siNested2.block && /fail: `node --test test\/cart\.test\.js`/.test(siNested2.reason) &&
+      siMidStatus.block && siMidStatus.why === "simplifier-evidence",
+      "1.22 review 3: a failing run nested under a group bullet blocks (with and without project checks), a passing nested run with indented output is allowed; 'with status `blocked`' inside a commit line is no status (got " +
+      JSON.stringify([siNested.why, siNestedOk.why, siNested2.why, siMidStatus.why]) + ")");
+    const siNoChange = si("**Status:** NO_CHANGES\nNothing on the list was worth a change.\nReport: .specs/checkout/.execution/simplify-report.md");
+    const siNoChangeBt = si("**Status:** `NO_CHANGES`\nReport: .specs/checkout/.execution/simplify-report.md");
+    const siBlocked = si("**Status:** BLOCKED\nThe baseline is red: 2 failing.");
+    const siNoPath = si("**Status:** DONE\n212/212 passing");
+    const siOther = si("**Status:** DONE\nReport: .specs/nope/.execution/simplify-report.md");
+    const siTaskRep = si("**Status:** DONE\nReport: .specs/checkout/.execution/task-1-report.md");
+    ok(siNoChange.why === "no-changes" && siNoChangeBt.why === "no-changes" && siBlocked.why === "not-done" && siNoPath.why === "no-report" && siOther.why === "no-report" && siTaskRep.why === "no-report" &&
+      [siNoChange, siNoChangeBt, siBlocked, siNoPath, siOther, siTaskRep].every((r) => r.block === false) &&
+      S.msg("en").stopGate.allow["no-changes"]() && S.msg("pt").stopGate.allow["simplify-ok"]({ slug: "x" }).includes("'x'") && S.msg("es").stopGate.simplifier.head("x").includes("'x'") &&
+      ["en", "pt", "pt-BR", "es"].every((l) => Object.keys(S.msg(l).stopGate.simplifier).join() === "head,noReport,noFinal,noRun,notPassing,todo"),
+      "1.22 SubagentStop (spec-simplifier): NO_CHANGES (also in backticks), BLOCKED, a reply naming no simplification report (or an unknown feature, or a task report) are never sent back; the strings exist in EN / PT / pt-BR / ES");
+    // review 1: the implementer's status in backticks is a status too — "**Status:** `DONE`" used to read as no claim
+    const sImTick = S.stopCheck(pIm, { message: "**Status:** `DONE`\nReport: .specs/auth/.execution/task-1-report.md", agent: "spec-implementer" });
+    ok(sImTick.block && sImTick.why === "implementer-evidence", "1.22 review 1: an implementer's '**Status:** `DONE`' is a claim — its report is read (got " + sImTick.why + ")");
     const hooksCfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
     const stopCfg = ((hooksCfg.Stop || [])[0] || {});
     const subCfg = ((hooksCfg.SubagentStop || [])[0] || {});
     const cmd = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.js"';
     const re = new RegExp(subCfg.matcher || "^$");
     ok(stopCfg.matcher === undefined && stopCfg.hooks[0].command === cmd && stopCfg.hooks[0].timeout === 10 && subCfg.hooks[0].command === cmd && subCfg.hooks[0].timeout === 10 &&
-      re.test("dev-spec-driven:spec-implementer") && re.test("spec-implementer") && !re.test("dev-spec-driven:spec-reviewer") && !re.test("Explore") && !re.test("general-purpose") &&
+      re.test("dev-spec-driven:spec-implementer") && re.test("spec-implementer") && re.test("dev-spec-driven:spec-simplifier") && re.test("spec-simplifier") &&
+      !re.test("dev-spec-driven:spec-reviewer") && !re.test("dev-spec-driven:spec-critic") && !re.test("spec-simplifier-x") && !re.test("Explore") && !re.test("general-purpose") &&
       hooksCfg.PreToolUse && hooksCfg.PostToolUse && hooksCfg.SessionStart,
-      "C1 hooks.json: Stop (no matcher — it fires on every stop) and SubagentStop matching only the spec-implementer (plugin-scoped or copied) run hooks/stop-hook.js (timeout 10), beside the existing hooks");
+      "C1 hooks.json: Stop (no matcher — it fires on every stop) and SubagentStop matching only the spec-implementer and the spec-simplifier (plugin-scoped or copied) run hooks/stop-hook.js (timeout 10), beside the existing hooks");
 
     // --- C1.2 the scope guard (meta.guard = "scope").
     const pSc = c1Dir("scope");

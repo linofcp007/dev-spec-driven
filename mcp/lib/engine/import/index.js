@@ -14,19 +14,19 @@ const { parseBmad } = require("./bmad.js"); // load time
 const { parseFluidplan } = require("./fluidplan.js"); // load time
 const { parseExecPlan, parsePlan } = require("./plan.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let BOM_CHAR, classify, closesFence, configuredLang, createFeature, decisionEntryLines, DECISIONS_FILE, extractAcIds,
+let BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines, DECISIONS_FILE, extractAcIds,
   fenceStep, headingHasMarker, indentOf, inertOutsideCode, insertPackRequirements, isInsideDir, isLtUnit, isPackTrack,
   isWsUnit, markerTracks, maybeRefreshRoadmap, normalizeLang, own, packOf, packRequirementsBlock, packTaskBlock,
   parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE, RE_TESTABILITY, readIfExists,
-  requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines, stripHtmlComments, testIndex,
+  requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines, slugify, stripHtmlComments, testIndex,
   toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs, unknownTracksError, withTrackBlocks,
   writeFileAtomic;
-function __link(E) { ({ BOM_CHAR, classify, closesFence, configuredLang, createFeature, decisionEntryLines,
+function __link(E) { ({ BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines,
   DECISIONS_FILE, extractAcIds, fenceStep, headingHasMarker, indentOf, inertOutsideCode, insertPackRequirements,
   isInsideDir, isLtUnit, isPackTrack, isWsUnit, markerTracks, maybeRefreshRoadmap, normalizeLang, own, packOf,
   packRequirementsBlock, packTaskBlock, parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE,
   RE_TESTABILITY, readIfExists, requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines,
-  stripHtmlComments, testIndex, toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs,
+  slugify, stripHtmlComments, testIndex, toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs,
   unknownTracksError, withTrackBlocks, writeFileAtomic } = E); }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +299,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
         const real = fs.realpathSync.native(file);
         if (!isInsideDir(realRoot, real)) { readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file)))); return null; }
         if (!fs.statSync(real).isFile()) return null;
-        return fs.readFileSync(real, "utf8").slice(0, IMPORT_MAX_BYTES).replace(/^\uFEFF/, "");
+        return decodeText(fs.readFileSync(real)).slice(0, IMPORT_MAX_BYTES).replace(/^\uFEFF/, "");
       } catch { return null; }
     };
   } // inline (1.16 C4) or a path
@@ -313,7 +313,16 @@ function importSpec(projectDir, tool, source, opts = {}) {
 
   // The source's title never opens an HTML comment in the files' titles (1.17 F review); a name the caller gives is theirs. Even in a
   // code span: the name reaches design.md / tasks.md too, whose decision-target reader (blankHtmlComments) sees no code spans.
-  const name = opts.name != null && String(opts.name).trim() ? String(opts.name).trim() : model.nameHint == null ? model.nameHint : String(model.nameHint).replace(/<!--/g, "&lt;!--");
+  const given = opts.name != null && !!String(opts.name).trim();
+  let name = given ? String(opts.name).trim() : model.nameHint == null ? model.nameHint : String(model.nameHint).replace(/<!--/g, "&lt;!--");
+  // 1.22 review — a title with no Latin letter or digit (# Добавить тёмную тему, # 添加深色主题) names no folder: a document read
+  // from a file falls back to the name the parser had without the title (its file's — `nameFallback`); inline text has none,
+  // and says to pass a name. (A name the caller gives is theirs: resolveFeature's own error.)
+  if (!given && name != null && String(name).trim() && !slugify(name)) {
+    const fb = !inline && model.nameFallback != null ? String(model.nameFallback) : "";
+    if (!slugify(fb)) return { ok: false, error: W.noUsableTitle(String(name).trim()) };
+    name = fb;
+  }
   const f = resolveFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   if (fs.existsSync(f.dir)) return { ok: false, error: W.exists(f.slug) };
@@ -382,7 +391,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
   put("requirements.md", req.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n"); // trimEnd: no /\s*$/ backtracking
   // A source with no criteria at all (an OpenSpec change of proposal.md + tasks.md): requirements.md defines no AC — said
   // once, so no one approves requirements that trace nothing (1.14 full review Pa4).
-  if (!requirementAcIds(readIfExists(path.join(cr.dir, "requirements.md")) || "").size) warnings.push(W.wNoCriteriaAtAll);
+  if (!requirementAcIds(readIfExists(path.join(cr.dir, "requirements.md")) || "", cr.dir).size) warnings.push(W.wNoCriteriaAtAll);
   // 1.15 track packs (F4 review R8): the import replaced the scaffold's requirements.md — each pack's [MARKER] criteria go back in,
   // after the imported US-1 criteria, as spec_create writes them (a pack's scaffold always has its criteria); its test rows and its
   // task block follow below, citing the IDs the criteria got here.

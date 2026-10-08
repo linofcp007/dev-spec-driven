@@ -305,7 +305,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const chg7 = S.finishFeature(d7, f7.slug);
     ok(fix7.ok && fix7.suiteChecks.every((c) => c.status === "pass") && !fix7.blockers.some((b) => /project checks/.test(b)) && !(gate7b.failing || []).includes("suite-evidence") &&
       docOk7.status === "pass" && late7.suiteChecks.every((c) => c.status === "before-last-tick") && late7.blockers.some((b) => /test \(ran before the last task activity\)/.test(b)) &&
-      chg7.suiteChecks.find((c) => c.name === "lint").status === "changed" && chg7.blockers.some((b) => /lint \(its command changed since the run\)/.test(b)),
+      chg7.suiteChecks.find((c) => c.name === "lint").status === "changed" && chg7.blockers.some((b) => /lint \(the run is not of its command \(or the command changed since\)\)/.test(b)),
       "B5 suite-evidence clears once every check passed since the last task activity (doctor pass, the execution gate no longer names it); a later tick makes the runs 'before-last-tick', an edited meta.checks command makes its run 'changed' (got " +
       JSON.stringify([late7.suiteChecks, chg7.suiteChecks]).slice(0, 300) + ")");
     const fPt7 = S.createFeature(d7, "Suite Pt", ["core"], "", undefined, "pt");
@@ -1264,5 +1264,535 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     ok(!ppWrong.length && !rpWrong.length && !vpWrong.length && !slowC.length,
       "1.21.1 languages (review 2): posixPwshScript leaves a redirection's target, an fd number and a comment to the outer shell, reads pwsh's script behind sudo / doas / timeout / nice / nohup / time and their options, and follows a POSIX shell's -c script (bash -c \"pwsh -c \\\"$x\\\"\" is refused); runsPwsh and verifyPipeMasked skip the same wrappers; all linear on 200,000-character inputs (wrong: " +
       js([ppWrong, rpWrong, vpWrong, slowC]) + ")");
+  }
+
+  // 1.22 review (finding 1) — the run must BE a run of the task's _Verify:_ (or of the check's command): `echo hello` with exit 0
+  // verified a task whose _Verify:_ is `npm test`, `echo ok` passed check test (`npm test`), an observed run of another task's
+  // command was accepted. Now: command-mismatch (ticked, unverified) / changed (the finish check).
+  {
+    const js = JSON.stringify;
+    // (review 3: a run's own cd counts only when it ends at the project root — the fourth argument; `cd sub; npm test` runs npm
+    // test in sub/, no run of the root's `npm test`)
+    const PV = (cmd, verify, extra, root) => S.runProvesVerify({ command: cmd, ...extra }, verify, root);
+    const rootOf = (c) => { const m = /^cd (?:\/d )?"?([^"&;]*?)"? *(?:&&|;)/.exec(c); return m ? m[1] : undefined; };
+    const yes = ["npm test", "  npm   test ", "`npm test`", '"npm test"', "'npm test'", "cd /x/y && npm test", 'cd "C:/My Proj" && npm test', "cd /d C:\\x && npm test",
+      "set -o pipefail; npm test", "set -euo pipefail; npm test", "set -e -o pipefail && npm test", "CI=1 npm test", 'NODE_ENV="test" CI=1 npm test', "npm test 2>&1",
+      "cd /x && CI=1 npm test 2>&1"];
+    const no = ["echo hello", "npm test -- --grep x", "npm run test", "npm test; echo ok", "npm test || true", "npm test | tee log", "echo npm test", "cd x", "npm test && echo ok",
+      "npm testing", "", "node -e \"process.exit(0)\"", "cd sub; npm test"];
+    const two = ["npm test", "npm run lint"];
+    // (review 2: "npm run lint" alone used to prove both — a run must cover EVERY _Verify:_ command of the task, see below)
+    const pvWrong = yes.filter((c) => !PV(c, ["npm test"], {}, rootOf(c))).map((c) => "refused: " + c).concat(no.filter((c) => PV(c, ["npm test"], {}, "/r")).map((c) => "accepted: " + c))
+      .concat(["npm test && npm run lint", "cd /p && npm run lint && npm test"].filter((c) => !PV(c, two, {}, "/p")).map((c) => "refused (2): " + c))
+      .concat(["npm test && echo x", "npm test && npm run lint && rm -rf x", "npm run lint"].filter((c) => PV(c, two)).map((c) => "accepted (2): " + c));
+    ok(!pvWrong.length && PV("anything at all", ["npm test"], { observed: "cli" }) && !PV("echo hi", ["npm test"], { observed: true }),
+      "1.22 review: runProvesVerify — a run proves a _Verify:_ only when it runs its commands (all of them): whitespace / backticks / surrounding quotes, a leading cd <dir> && · set -o pipefail; · VAR=value and a trailing 2>&1 are fine, the ` && ` join of its commands too, and the CLI's own run (observed \"cli\"); anything else is not (wrong: " + js(pvWrong) + ")");
+
+    const pM = path.join(tmp, "proj-122-mismatch");
+    S.initProject(pM, ["core"], "en", { checks: { test: "npm test" } });
+    const fM = S.createFeature(pM, "Proof", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fM.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] A\n  - _Verify: npm test_\n- [ ] 2. [US1] B\n  - _Verify: npm test_\n" +
+      "- [ ] 3. [US1] C\n  - _Verify: npm test_\n  - _Verify: npm run lint_\n- [ ] 4. [US1] Red first\n  - _Verify: node t01.js_\n  - _Expect: fail_\n- [ ] 5. [US1] D\n  - _Verify: npm test_\n");
+    const m1 = S.completeTask(pM, "proof", 1, { command: "echo hello", exitCode: 0 });
+    const m2 = S.completeTask(pM, "proof", 2, { command: "cd " + pM + " && CI=1 npm test", exitCode: 0, summary: "3 passing" });
+    const m3 = S.completeTask(pM, "proof", 3, { command: "npm test && npm run lint", exitCode: 0 }, { ranBy: "cli" });
+    const doc = S.specDoctor(pM, "proof").checks.find((c) => c.id === "verification");
+    const st = S.statusFeature(pM, "proof").tasks.list;
+    ok(m1.ok && m1.verified === false && m1.unverifiedReason === "command-mismatch" && /the run recorded \(`echo hello`\) is not a run of its _Verify:_ command \(npm test\) — it is ticked/.test(m1.note) &&
+      /done proof 1 --run/.test(m1.note) && m2.verified === true && !m2.unverifiedReason && m3.verified === true &&
+      doc && /#1 \(the run recorded is not its _Verify:_ command\)/.test(doc.detail) && !/#2|#3/.test(doc.detail) && st[0].verified === false && st[1].verified === true &&
+      S.finishFeature(pM, "proof").blockers.some((b) => /#1 \(the run recorded is not its _Verify:_ command\)/.test(b)),
+      "1.22 review: spec_complete_task with a run of ANOTHER command than the task's _Verify:_ ticks it but leaves it unverified — unverifiedReason command-mismatch + a note; doctor, status and finish say so; a cd / env prefix and the CLI's join verify (got " +
+      js([m1.unverifiedReason, m1.note, m2.unverifiedReason, m3.unverifiedReason, doc && doc.detail]) + ")");
+
+    // _Expect: fail_: a red run of another command ticks, but is no red proof — and never displaces the real one later.
+    const r1 = S.completeTask(pM, "proof", 4, { command: "node -e \"process.exit(1)\"", exitCode: 1, summary: "1 failing" });
+    const r2 = S.completeTask(pM, "proof", 4, { command: "node t01.js", exitCode: 1, summary: "not ok 1 T-01" });
+    const r3 = S.completeTask(pM, "proof", 4, { command: "node -e \"process.exit(2)\"", exitCode: 2, summary: "1 failing" });
+    const r4 = S.completeTask(pM, "proof", 4, { command: "node t01.js", exitCode: 0, summary: "ok 1 T-01" });
+    const rec4 = JSON.parse(fs.readFileSync(path.join(fM.dir, ".state.json"), "utf8")).evidence["4"];
+    ok(r1.ok && r1.verified === false && r1.unverifiedReason === "command-mismatch" && !r1.redRecorded && /until a FAILING run of that command/.test(r1.note) &&
+      r2.ok && r2.verified === true && r2.redRecorded === true && r3.ok && r3.verified === true && !r3.redRecorded && r4.ok && r4.verified === true &&
+      rec4.red && rec4.red.command === "node t01.js",
+      "1.22 review: an _Expect: fail_ task — a red run of another command ticks it (command-mismatch, no redRecorded); the red run of its _Verify:_ is the proof, a later red run of another command never displaces it, and the fix's pass keeps it (got " +
+      js([r1.unverifiedReason, r2.verified, r3.verified, r4.verified, rec4.red]) + ")");
+
+    // finish: a run of another command than the configured check reads `changed`; the check's own command (a cd prefix) passes.
+    const fin1 = S.finishFeature(pM, "proof", { evidence: [{ name: "test", command: "echo ok", exitCode: 0 }] });
+    const fin2 = S.finishFeature(pM, "proof", { evidence: [{ name: "test", command: "cd " + pM + " && npm test", exitCode: 0 }] });
+    ok(fin1.ok && fin1.suiteChecks.find((c) => c.name === "test").status === "changed" && fin1.blockers.some((b) => /test \(the run is not of its command/.test(b)) &&
+      fin2.ok && fin2.suiteChecks.find((c) => c.name === "test").status === "pass",
+      "1.22 review: spec_finish {evidence} — a check's run of ANOTHER command (`echo ok` for `npm test`) reads changed and blocks; the check's command itself passes (got " +
+      js([fin1.suiteChecks, fin2.suiteChecks]) + ")");
+
+    // observed mode: an observed run of another task's / check's command is not this one's.
+    S.observeRun(pM, { command: "npm run lint", exitCode: 0 });
+    // (review 2: one of two expected commands alone is no run of the task's _Verify:_ any more — false; the lint task's own: true)
+    const look = [S.observedRun(pM, "proof", "npm run lint", 0).observed, S.observedRun(pM, "proof", "npm run lint", 0, { expected: ["npm test"] }).observed,
+      S.observedRun(pM, "proof", "npm run lint", 0, { expected: two }).observed, S.observedRun(pM, "proof", "npm run lint", 0, { expected: ["npm run lint"] }).observed];
+    S.initProject(pM, ["core"], "en", { evidence: "observed" });
+    const o5 = S.completeTask(pM, "proof", 5, { command: "npm run lint", exitCode: 0 });
+    ok(js(look) === js([true, false, false, true]) && o5.ok && o5.observed === false && o5.verified === false && o5.unverifiedReason === "command-mismatch",
+      "1.22 review: observedRun looks up the EXPECTED command — another task's observed run (npm run lint) is not observed for a task whose _Verify:_ is npm test; under meta.evidence observed it neither verifies nor counts as observed (got " +
+      js([look, o5.observed, o5.unverifiedReason]) + ")");
+
+    // PT / ES wording.
+    const fP = S.createFeature(pM, "Prova", ["core"], "", undefined, "pt"), fE = S.createFeature(pM, "Prueba", ["core"], "", undefined, "es");
+    for (const f of [fP, fE]) fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] x\n  - _Verify: npm test_\n");
+    S.initProject(pM, ["core"], "en", { evidence: "reported" });
+    const mP = S.completeTask(pM, "prova", 1, { command: "echo ola", exitCode: 0 }), mE = S.completeTask(pM, "prueba", 1, { command: "echo hola", exitCode: 0 });
+    ok(mP.unverifiedReason === "command-mismatch" && /a execução registada \(`echo ola`\) não é uma execução do seu comando _Verify:_/.test(mP.note) &&
+      mE.unverifiedReason === "command-mismatch" && /la ejecución registrada \(`echo hola`\) no es una ejecución de su comando _Verify:_/.test(mE.note),
+      "1.22 review: the command-mismatch note in PT / ES (got " + js([mP.note, mE.note]) + ")");
+  }
+
+  // 1.22 review 2 — the evidence rule's own defects (command-mismatch): a Windows report of an _Expect: fail_ task's red run left
+  // it stuck for good once the fix was in; a long command was cut BEFORE the comparison; a _Verify:_ holding ` && ` broke the
+  // documented join; a prefix the _Verify:_ holds counted for nothing; one of two _Verify:_ commands proved both.
+  {
+    const js = JSON.stringify;
+    const BS = String.fromCharCode(92);
+    const PV = (cmd, verify, root) => S.runProvesVerify({ command: cmd }, verify, root); // (review 3: root — the project folder a run's cds resolve from)
+    const wrongOf = (cases) => cases.filter(([c, v, want, root]) => PV(c, v, root) !== want).map(([c, v, want]) => (want ? "refused: " : "accepted: ") + c + " vs " + js(v));
+    const mkTasks = (p, slug, tasks) => {
+      const f = S.createFeature(p, slug, ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + tasks);
+      return f;
+    };
+    const pR = path.join(tmp, "proj-122r2-evidence");
+    S.initProject(pR, ["core"], "en", { checks: { api: "cd packages/api && npm test", long: "node --test " + "tests/unit/a-long-test-file-name.test.js ".repeat(11).trim() } });
+
+    // 1a — `\` for `/`, quotes around a plain argument: the same command.
+    const w1 = wrongOf([["node --test tests" + BS + "x.test.js", ["node --test tests/x.test.js"], true], ['node --test "tests/x.test.js"', ["node --test tests/x.test.js"], true],
+      ["node --test 'tests/x.test.js'", ["node --test tests" + BS + "x.test.js"], true], ['node --test "tests/x.test.js"', ['node --test "tests/x.test.js"'], true],
+      ["node -e process.exit(1)", ['node -e "process.exit(1)"'], false], ['node --test "tests/a b.test.js"', ["node --test tests/a b.test.js"], false]]);
+    const fA = mkTasks(pR, "Stuck", "- [ ] 1. [US1] Write the failing regression test T-01 and watch it fail\n  - _Verify: node --test tests/x.test.js_\n  - _Expect: fail_\n" +
+      "- [ ] 2. [US1] Fix it\n  - _Verify: node --test tests/x.test.js_\n");
+    const a1 = S.completeTask(pR, "stuck", 1, { command: "node --test tests" + BS + "x.test.js", exitCode: 1, summary: "not ok 1 - T-01" });
+    ok(!w1.length && a1.ok && a1.verified === true && a1.redRecorded === true,
+      "1.22 review 2 (1a): `\\` for `/` and quotes around a plain argument don't make another command — an _Expect: fail_ task's red run reported as `node --test tests\\x.test.js` is its red proof (got " + js([w1, a1.verified, a1.unverifiedReason]) + ")");
+
+    // 1b — a red run of another form already on record from BEFORE the command rule (pre-1.22: no `cmdRule` stamp — simulated by
+    // removing it): the passing run of the _Verify:_ itself — the fix going green — accepts it (grandfathering); a pass of ANOTHER
+    // command still doesn't.
+    const fB = mkTasks(pR, "Upgrade", "- [ ] 1. [US1] Write the failing regression test T-01 and watch it fail\n  - _Verify: node --test tests/x.test.js_\n  - _Expect: fail_\n" +
+      "- [ ] 2. [US1] Fix it\n  - _Verify: node --test tests/x.test.js_\n- [ ] 3. [US1] Red, too\n  - _Verify: node --test tests/y.test.js_\n  - _Expect: fail_\n" +
+      "- [ ] 4. [US1] Red, three\n  - _Verify: node --test tests/z.test.js_\n  - _Expect: fail_\n- [ ] 5. [US1] Red, four\n  - _Verify: node --test tests/w.test.js_\n  - _Expect: fail_\n");
+    const preRule = (dir, n) => { // the record as a pre-1.22 engine wrote it: no cmdRule on any run
+      const sf = path.join(dir, ".state.json"), st = JSON.parse(fs.readFileSync(sf, "utf8")), rec = st.evidence[String(n)];
+      for (const r of [rec, rec.red, ...(rec.history || [])]) if (r) delete r.cmdRule;
+      fs.writeFileSync(sf, JSON.stringify(st, null, 2));
+    };
+    const b1 = S.completeTask(pR, "upgrade", 1, { command: "node --test --test-reporter=spec tests/x.test.js", exitCode: 1, summary: "not ok 1 - T-01" });
+    preRule(fB.dir, 1);
+    // task 5: a could-not-run run between the red run (of another form) and the fix's pass never drops that red run
+    S.completeTask(pR, "upgrade", 5, { command: "node --test --test-reporter=tap tests/w.test.js", exitCode: 1, summary: "not ok 1" });
+    preRule(fB.dir, 5);
+    const b5c = S.completeTask(pR, "upgrade", 5, { command: "node --test tests/w.test.js", exitCode: 127, summary: "node: not found" });
+    const b5g = S.completeTask(pR, "upgrade", 5, { command: "node --test tests/w.test.js", exitCode: 0, summary: "ok 1" });
+    S.completeTask(pR, "upgrade", 2, { command: "node --test tests/x.test.js", exitCode: 0, summary: "ok 1 - T-01" }, { ranBy: "cli" });
+    const b1g = S.completeTask(pR, "upgrade", 1, { command: "node --test tests/x.test.js", exitCode: 0, summary: "ok 1 - T-01" }, { ranBy: "cli", startedAt: new Date().toISOString(), ranVerify: ["node --test tests/x.test.js"] });
+    const recB = JSON.parse(fs.readFileSync(path.join(fB.dir, ".state.json"), "utf8")).evidence["1"];
+    S.completeTask(pR, "upgrade", 3, { command: "node --test --test-reporter=tap tests/y.test.js", exitCode: 1, summary: "not ok 1" });
+    preRule(fB.dir, 3);
+    const b3g = S.completeTask(pR, "upgrade", 3, { command: "node --test tests/y.test.js", exitCode: 0, summary: "ok 1" }); // reported (MCP), the _Verify:_ itself
+    S.completeTask(pR, "upgrade", 4, { command: "node --test --test-reporter=tap tests/z.test.js", exitCode: 1, summary: "not ok 1" });
+    preRule(fB.dir, 4);
+    const b4x = S.completeTask(pR, "upgrade", 4, { command: "echo ok", exitCode: 0 }); // a pass of ANOTHER command: no grandfathering
+    const unB = S.verificationStatus(pR, "upgrade", fB.dir).unverifiedDetail;
+    const finB = S.finishFeature(pR, "upgrade").blockers.filter((b) => /without verification evidence/.test(b));
+    const undoB = S.completeTask(pR, "upgrade", 1, undefined, { undo: true });
+    ok(b1.verified === false && b1.unverifiedReason === "command-mismatch" && b1g.ok && b1g.verified === true && !b1g.unverifiedReason && recB.red && recB.red.exitCode === 1 &&
+      b3g.ok && b3g.verified === true && b4x.ok === false && b4x.unexpectedPass === true && js(unB.map((d) => [d.number, d.reason])) === js([[4, "unexpected-pass"]]) &&
+      finB.length === 1 && /#4/.test(finB[0]) && !/#1|#3|#5/.test(finB[0]) && undoB.ok && undoB.redKept === true && b5c.ok === false && b5c.couldNotRun === "exit-code" &&
+      b5g.ok && b5g.verified === true,
+      "1.22 review 2 (1b): an _Expect: fail_ task whose red run is on record as another command is no longer stuck once the fix is in — the passing run of its _Verify:_ (done --run, or reported) is the fix going green and keeps that red run (an exit 127 in between doesn't drop it); a pass of another command is still unexpected-pass; undo keeps it (redKept) (got " +
+      js([b1.unverifiedReason, b1g.error || b1g.verified, recB.red, b3g.error || b3g.verified, b4x.unverifiedReason || b4x.error, unB, undoB.redKept, b5c.couldNotRun, b5g.error || b5g.verified]) + ")");
+
+    // 1c — the _Expect: fail_ command-mismatch note: the red run BEFORE the fix lands; (review 3) a red run of another command never
+    // counts — it no longer says "record the passing run … the red run on record then counts" (the grandfathering it advertised
+    // verified a task with no red run of its own test).
+    const notes = ["en", "pt", "es", "pt-BR"].map((l) => S.msg(l).evidenceGate.commandMismatch(1, "f", "x", "y", true));
+    ok(/BEFORE the fix lands, while the test still fails: .*done upgrade 1 --run \(a red run of another command never counts; with the fix already in, set it aside — git stash push -- <the fix's files>, not a bare git stash: it would take tasks\.md and \.state\.json too — for that run, then restore it\)\.$/.test(b1.note) &&
+      !notes.some((t) => /then counts|passa então a contar|cuenta entonces/.test(t)) &&
+      /ANTES de a correção entrar.*nunca conta; com a correção já feita, põe-na de parte — git stash push -- <os ficheiros da correção>, não um git stash simples: levaria também o tasks\.md e o \.state\.json/.test(notes[1]) &&
+      /ANTES de que entre la corrección.*nunca cuenta; con la corrección ya hecha, apártala — git stash push -- <los archivos de la corrección>, no un git stash a secas: se llevaría también tasks\.md y \.state\.json/.test(notes[2]) &&
+      /nunca conta/.test(notes[3]) && /git stash push -- <os arquivos da correção>/.test(notes[3]) &&
+      !/BEFORE the fix lands/.test(S.msg("en").evidenceGate.commandMismatch(1, "f", "x", "y", false)),
+      "1.22 review 3 (1) + review 4: the _Expect: fail_ command-mismatch note says to record the failing run BEFORE the fix lands, that a red run of another command never counts (the fix set aside with `git stash push -- <the fix's files>` — a bare git stash takes tasks.md and .state.json too), and no longer that the red run on record counts once the _Verify:_ passes (EN/PT/ES/pt-BR) (got " + js([b1.note, notes]) + ")");
+    // review 3 (1) — grandfathering only for red runs recorded BEFORE the command rule: every run is stamped `cmdRule` now, and a red run
+    // of ANOTHER test file (or `false`) recorded under the rule, then the passing run of the _Verify:_, is no red proof — unexpected-pass.
+    const fG = mkTasks(pR, "Grand", "- [ ] 1. [US1] Red A\n  - _Verify: npm test -- tests/a.test.js_\n  - _Expect: fail_\n" +
+      "- [ ] 2. [US1] Red B\n  - _Verify: npm test -- tests/b.test.js_\n  - _Expect: fail_\n");
+    const g1 = S.completeTask(pR, "grand", 1, { command: "npm test -- tests/other.test.js", exitCode: 1, summary: "not ok 1", cmdRule: null });
+    const g1p = S.completeTask(pR, "grand", 1, { command: "npm test -- tests/a.test.js", exitCode: 0, summary: "ok 1" });
+    const g2 = S.completeTask(pR, "grand", 2, { command: "false", exitCode: 1 });
+    const g2p = S.completeTask(pR, "grand", 2, { command: "npm test -- tests/b.test.js", exitCode: 0 });
+    const recG = JSON.parse(fs.readFileSync(path.join(fG.dir, ".state.json"), "utf8")).evidence;
+    const unG = S.verificationStatus(pR, "grand", fG.dir).unverifiedDetail.map((d) => [d.number, d.reason]);
+    ok(g1.ok && g1.unverifiedReason === "command-mismatch" && g1p.ok === false && g1p.unexpectedPass === true && g2.ok && g2p.ok === false && g2p.unexpectedPass === true &&
+      [recG["1"], recG["2"]].every((r) => r.cmdRule === 1 && r.history.every((h) => h.cmdRule === 1) && !r.red) && js(unG) === js([[1, "unexpected-pass"], [2, "unexpected-pass"]]),
+      "1.22 review 3 (1): a red run of another test file (or `false`) recorded under the command rule (cmdRule: 1 on every run, a caller's value ignored), then the passing run of the _Verify:_, is NO red proof — refused as unexpected-pass, nothing carried as `red`, both tasks unverified (got " +
+      js([g1.unverifiedReason, g1p.error || g1p.verified, g2p.error || g2p.verified, recG["1"], unG]) + ")");
+
+    // 2 — a long command is compared whole (it was cut at 500 first): a faithful report of a long _Verify:_, a join past 500, a
+    // finish run with a cd in front of a long check.
+    const longV = "node --test " + Array.from({ length: 40 }, (_, i) => "tests/unit/module-number-" + i + ".test.js").join(" ");
+    const fL = mkTasks(pR, "Long", "- [ ] 1. [US1] A\n  - _Verify: " + longV + "_\n- [ ] 2. [US1] B\n  - _Verify: " + longV.slice(0, 300) + "_\n  - _Verify: npm run lint -- " + "x".repeat(300) + "_\n" +
+      "- [ ] 3. [US1] C\n  - _Verify: npm test_\n");
+    const l1 = S.completeTask(pR, "long", 1, { command: longV, exitCode: 0 });
+    const l2 = S.completeTask(pR, "long", 2, { command: longV.slice(0, 300) + " && npm run lint -- " + "x".repeat(300), exitCode: 0 });
+    S.completeTask(pR, "long", 3, { command: "npm test " + "x".repeat(9000), exitCode: 0 });
+    const recL = JSON.parse(fs.readFileSync(path.join(fL.dir, ".state.json"), "utf8")).evidence;
+    const longCheck = "node --test " + "tests/unit/a-long-test-file-name.test.js ".repeat(11).trim();
+    const finL = S.finishFeature(pR, "long", { evidence: [{ name: "long", command: "cd " + pR + " && " + longCheck, exitCode: 0 }] });
+    ok(longV.length > 500 && l1.verified === true && l2.verified === true && recL["1"].command === longV && (recL["3"].command || "").length === 4000 &&
+      finL.ok && finL.suiteChecks.find((c) => c.name === "long").status === "pass",
+      "1.22 review 2 (2): a command over 500 characters is compared whole — a faithful report of a long _Verify:_ (or of a join past 500) verifies, a long check's run passes; the stored command stays bounded (4000, OBSERVED_MAX_COMMAND) (got " +
+      js([l1.unverifiedReason, l2.unverifiedReason, (recL["1"].command || "").length, (recL["3"].command || "").length, finL.suiteChecks]) + ")");
+
+    // 3 — a _Verify:_ that itself holds ` && ` is ONE key of the join (the run was split on every ` && `); the observed lookup too.
+    const vb = ["npm run build && npm test", "npm run lint"];
+    const w3 = wrongOf([["npm run build && npm test && npm run lint", vb, true], ["npm run lint && npm run build && npm test", vb, true],
+      ["cd /p && npm run lint && cd /p && npm run build && npm test", vb, true, "/p"], ["npm run build && npm run lint && npm test", vb, false], ["npm run build && npm test", vb, false],
+      ['bash -c "a && b"', ['bash -c "a && b"'], true], ['bash -c "a && b"', ["a", "b"], false]]);
+    const fJ = mkTasks(pR, "Join", "- [ ] 1. [US1] A\n  - _Verify: npm run build && npm test_\n  - _Verify: npm run lint_\n");
+    S.observeRun(pR, { command: "npm run build && npm test", exitCode: 0 });
+    S.observeRun(pR, { command: "npm run lint", exitCode: 0 });
+    const o3 = S.observedRun(pR, "join", "npm run build && npm test && npm run lint", 0, { expected: vb }).observed;
+    const j1 = S.completeTask(pR, "join", 1, { command: "npm run build && npm test && npm run lint", exitCode: 0 });
+    ok(!w3.length && o3 === true && j1.verified === true && fJ.ok !== false,
+      "1.22 review 2 (3): the ` && ` join is matched against WHOLE _Verify:_ commands (one holding ` && ` stays one), any order; the observed lookup finds each expected command's logged run (got " + js([w3, o3, j1.unverifiedReason]) + ")");
+
+    // 4 — a prefix is stripped from the RUN only: the _Verify:_ keeps its own (cd folder, pipefail, assignments).
+    const w4 = wrongOf([["npm test", ["cd packages/api && npm test"], false], ["cd packages/web && npm test", ["cd packages/api && npm test"], false],
+      ["cd packages/api && npm test", ["cd packages/api && npm test"], true], ["cd packages/api/ && npm test", ["cd packages/api && npm test"], true],
+      ["cd packages" + BS + "api && npm test", ["cd packages/api && npm test"], true], ['cd "packages/api" && npm test', ["cd packages/api && npm test"], true],
+      ["cd packages/api; npm test", ["cd packages/api && npm test"], true], ["cd /repo && cd packages/api && npm test", ["cd packages/api && npm test"], true, "/repo"],
+      ["cd packages/api && cd sub && npm test", ["cd packages/api && npm test"], false],
+      ["npm test | tee out.log", ["set -o pipefail; npm test | tee out.log"], false], ["set -euo pipefail; npm test | tee out.log", ["set -o pipefail; npm test | tee out.log"], true],
+      ["set -o pipefail; npm test | tee out.log", ["npm test | tee out.log"], true],
+      ["npm test", ["NODE_ENV=production npm test"], false], ["NODE_ENV=test npm test", ["NODE_ENV=production npm test"], false],
+      ["CI=1 NODE_ENV=production npm test", ["NODE_ENV=production npm test"], true], ["NODE_ENV=production CI=1 npm test", ["NODE_ENV=production npm test"], true],
+      ["cd /x && CI=1 npm test 2>&1", ["npm test"], true, "/x"]]);
+    const fP = mkTasks(pR, "Mono", "- [ ] 1. [US1] API\n  - _Verify: cd packages/api && npm test_\n");
+    const p1 = S.completeTask(pR, "mono", 1, { command: "cd packages/web && npm test", exitCode: 0 });
+    const finP = S.finishFeature(pR, "mono", { evidence: [{ name: "api", command: "npm test", exitCode: 0 }] });
+    ok(!w4.length && p1.verified === false && p1.unverifiedReason === "command-mismatch" && finP.ok && finP.suiteChecks.find((c) => c.name === "api").status === "changed" && fP.ok !== false,
+      "1.22 review 2 (4): a cd / pipefail / VAR=value prefix is stripped from the RUN only — `cd packages/web && npm test` (or `npm test`) is no run of `cd packages/api && npm test`, nor `npm test | tee out.log` of `set -o pipefail; npm test | tee out.log`, nor `npm test` of `NODE_ENV=production npm test`; the same folder (separators, trailing slash, quotes) is (got " +
+      js([w4, p1.unverifiedReason, finP.suiteChecks]) + ")");
+
+    // 5 — a task with several _Verify:_ commands needs a run of EVERY one (one of them alone verified it); the join in any order,
+    // and exactly what `done --run` records for it (the commands joined) proves it on the engine path too, with no "cli" stamp —
+    // a Windows-path _Verify:_ as well.
+    const two = ["npm run lint", "npm test"];
+    const w5 = wrongOf([["npm run lint", two, false], ["npm test", two, false], ["npm run lint && npm test", two, true], ["npm test && npm run lint", two, true],
+      ["npm test && npm test", ["npm test", "npm test"], true]]);
+    const fM = mkTasks(pR, "Multi", "- [ ] 1. [US1] A\n  - _Verify: npm run lint_\n  - _Verify: npm test_\n- [ ] 2. [US1] B\n  - _Verify: npm run lint_\n  - _Verify: npm test_\n" +
+      "- [ ] 3. [US1] C\n  - _Verify: node tests" + BS + "ok.js_\n  - _Verify: node -e \"process.exit(0)\"_\n");
+    const m1 = S.completeTask(pR, "multi", 1, { command: "npm run lint", exitCode: 0 });
+    const brief2 = S.taskBrief(pR, "multi", 2), brief3 = S.taskBrief(pR, "multi", 3);
+    const m2 = S.completeTask(pR, "multi", 2, { command: brief2.verify.join(" && "), exitCode: 0 });
+    const m3 = S.completeTask(pR, "multi", 3, { command: brief3.verify.join(" && "), exitCode: 0 });
+    const stopAdvice = ["en", "pt", "es", "pt-BR"].map((l) => S.msg(l).stopGate.todoTasks("f", 1));
+    ok(!w5.length && m1.verified === false && m1.unverifiedReason === "command-mismatch" && /every one of them in ONE run joined with ` && `/.test(m1.note) &&
+      m2.verified === true && m3.verified === true && fM.ok !== false && stopAdvice.every((t) => /` && `/.test(t) && !/--run/.test(t)),
+      "1.22 review 2 (5): a run of ONE of a task's two _Verify:_ commands no longer verifies it (command-mismatch, the note asks for all of them in one ` && ` run); the join in any order does, and so does exactly what done --run records (also for a Windows-path _Verify:_); the Stop gate's advice says to join them (got " +
+      js([w5, m1.unverifiedReason, m2.unverifiedReason, m3.unverifiedReason, stopAdvice]) + ")");
+
+    // …and the matching stays bounded: keys that are prefixes of each other, 199 steps, 12 commands.
+    const keysH = Array.from({ length: 12 }, (_, i) => "a" + " && a".repeat(i));
+    const t0 = Date.now();
+    S.runProvesVerify({ command: Array.from({ length: 199 }, () => "a").join(" && ") + " && z" }, keysH);
+    S.runProvesVerify({ command: '"'.repeat(200000) }, ["npm test"]);
+    S.runProvesVerify({ command: "A=1 ".repeat(50000) + "npm test" }, ["npm test"]);
+    S.runProvesVerify({ command: "cd x && ".repeat(25000) + "npm test" }, ["npm test"]);
+    const msH = Date.now() - t0;
+    ok(msH < 1500, "1.22 review 2: runProvesVerify stays bounded on hostile inputs (199 steps × 12 nested keys, 200,000 quotes, 50,000 assignments, 25,000 cds) — " + msH + " ms");
+  }
+
+  // 1.22 review 3 (4) — `cd` folders are resolved from the project root: the absolute form of the _Verify:_'s folder, `./x`, a
+  // folder's drive-letter case all prove it; a run's own cd counts only when it ends at the project root — `cd ../other-project &&
+  // npm test` and `cd .. && cd packages/web && npm test` used to prove `npm test` / `cd packages/web && npm test`. A run with an
+  // absolute cd is stamped with the project root (`root`), so the verdict is the same on another machine and for a git worktree
+  // of the project; a dev-spec project of another repository holding the same feature name is no worktree.
+  // (5) `cd # && npm test` (bash: a comment — npm test never runs) and a cd inside a substitution (``cd `: && npm test` ``) prove
+  // nothing; a substitution is never split (a _Verify:_ holding one matches the same text).
+  {
+    const js = JSON.stringify;
+    const BS = String.fromCharCode(92);
+    const p4 = path.join(tmp, "proj-122r3-cd");
+    S.initProject(p4, ["core"], "en");
+    const f4 = S.createFeature(p4, "Mono", ["core"], "", undefined, "en");
+    const web = "- [ ] N. [US1] Web\n  - _Verify: cd packages/web && npm test_\n", root = "- [ ] N. [US1] Root\n  - _Verify: npm test_\n";
+    const tasks = [web, web, web, web, root, web, root, root, root, root, web, web].map((t, i) => t.replace("N.", (i + 1) + ".")).join("");
+    fs.writeFileSync(path.join(f4.dir, "tasks.md"), "# Tasks\n\n" + tasks);
+    const fwd = p4.split(BS).join("/");
+    const drive = /^[A-Za-z]:/.test(fwd) ? (fwd[0] === fwd[0].toUpperCase() ? fwd[0].toLowerCase() : fwd[0].toUpperCase()) + fwd.slice(1) : fwd;
+    const run = (n, command) => S.completeTask(p4, "mono", n, { command, exitCode: 0, summary: "ok" });
+    const r = [
+      run(1, "cd " + fwd + "/packages/web && npm test"), run(2, "cd ./packages/web && npm test"), run(3, "cd " + p4 + BS + "packages" + BS + "web && npm test"),
+      run(4, "cd " + drive + "/packages/web && npm test"), run(5, "cd ../other-project && npm test"), run(6, "cd .. && cd packages/web && npm test"),
+      run(7, "cd # && npm test"), run(8, "cd /d # && npm test"), run(9, "cd `: && npm test`"), run(10, "cd " + fwd + " && npm test"),
+      run(11, "cd " + fwd + "/packages/web/../web && npm test"), run(12, "cd " + fs.realpathSync.native(p4) + "/packages/web && npm test"), // (the long form of an 8.3 short name)
+    ];
+    // run 4 flips a drive letter's case: the same folder where the file system folds case — and, with no drive letter (Linux),
+    // the very same path as run 1
+    const want = [true, true, true, drive === fwd || process.platform === "win32" || process.platform === "darwin", false, false, false, false, false, true, true, true];
+    const got = r.map((x) => x.ok && x.verified === true);
+    const st4 = JSON.parse(fs.readFileSync(path.join(f4.dir, ".state.json"), "utf8")).evidence;
+    ok(js(got) === js(want) && r.filter((x, i) => !want[i]).every((x) => x.unverifiedReason === "command-mismatch") &&
+      st4["1"].root === path.resolve(p4) && st4["10"].root === path.resolve(p4) && !("root" in st4["2"]) && !("root" in st4["5"]),
+      "1.22 review 3 (4, 5): cd folders resolved from the project root — the absolute, ./ and \\ forms of the _Verify:_'s folder (drive-letter case where the file system folds it) prove it; `cd ../other-project && npm test`, `cd .. && cd packages/web && npm test`, `cd # && npm test`, `cd /d # && …` and ``cd `: && npm test` `` do not (command-mismatch); a run with an absolute cd is stamped root (got " +
+      js([got, r.map((x) => x.unverifiedReason || null), st4["1"].root, st4["2"].root]) + ")");
+    // the root stamp travels: the same record read on another machine (its paths) still proves the task
+    const sf = path.join(f4.dir, ".state.json"), st = JSON.parse(fs.readFileSync(sf, "utf8"));
+    st.evidence["1"].command = "cd /home/someone/proj/packages/web && npm test";
+    st.evidence["1"].root = "/home/someone/proj";
+    st.evidence["1"].history = [];
+    fs.writeFileSync(sf, JSON.stringify(st, null, 2));
+    const un = S.verificationStatus(p4, "mono", f4.dir).unverifiedDetail.map((d) => d.number);
+    ok(!un.includes(1) && js(un) === js([5, 6, 7, 8, 9]),
+      "1.22 review 3 (4): a record whose command cds into ANOTHER machine's checkout (root stamp /home/someone/proj) still proves `cd packages/web && npm test` — the stamp, not this machine's folder, anchors it (got " + js(un) + ")");
+    // pure: substitutions are never split; `#` kills the line; an unknown folder is equal only to itself
+    const PV = (c, v, rt) => S.runProvesVerify({ command: c }, v, rt);
+    const w5 = [["node --test $(ls tests/*.js && echo x)", ["node --test $(ls tests/*.js && echo x)"], true], ["echo `npm test`", ["npm test"], false],
+      ["cd $(: && npm test)", ["npm test"], false], ["npm test && cd #", ["npm test"], true], ["cd $HOME && npm test", ["npm test"], false],
+      ["cd $HOME && npm test", ["cd $HOME && npm test"], true], ["`npm test` && `npm run lint`", ["npm test", "npm run lint"], false], ["``npm test``", ["npm test"], true],
+      ["cd packages/web && npm test && npm run lint", ["cd packages/web && npm test", "npm run lint"], false], ["npm run lint && cd packages/web && npm test", ["cd packages/web && npm test", "npm run lint"], true],
+      ["cd /x && npm test", ["npm test"], false]].filter(([c, v, want]) => PV(c, v, "/r") !== want).map(([c, v]) => c + " vs " + js(v));
+    ok(!w5.length, "1.22 review 3 (5): a substitution ($(…), `…`) is never split or stripped — it matches only the same text; a run's commands after `cd # ` never count; an unknown folder ($HOME) equals only itself; commands run in the folder the run left them in (wrong: " + js(w5) + ")");
+    // a git worktree of the SAME repository holding the feature is the run's root; another repository's project with the same feature is not
+    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.22 review 3 (4): worktree root — skipped: no git");
+    else {
+      const repo = path.join(tmp, "proj-122r3-wt-main"), wt = path.join(tmp, "proj-122r3-wt-task"), other = path.join(tmp, "proj-122r3-wt-other");
+      const git = (cwd, ...a) => spawnSync("git", a, { cwd, encoding: "utf8" });
+      for (const d of [repo, other]) {
+        S.initProject(d, ["core"], "en");
+        const f = S.createFeature(d, "Auth", ["core"], "", undefined, "en");
+        fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] A\n  - _Verify: npm test_\n- [ ] 2. [US1] B\n  - _Verify: npm test_\n");
+        git(d, "init", "-q");
+        git(d, "-c", "user.email=t@t", "-c", "user.name=t", "add", "-A");
+        git(d, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "x");
+      }
+      git(repo, "worktree", "add", "-q", wt);
+      const a = S.completeTask(repo, "auth", 1, { command: "cd " + wt + " && npm test", exitCode: 0 });
+      const b = S.completeTask(repo, "auth", 2, { command: "cd " + other + " && npm test", exitCode: 0 });
+      const ev = JSON.parse(fs.readFileSync(path.join(repo, ".specs", "auth", ".state.json"), "utf8")).evidence;
+      ok(fs.existsSync(path.join(wt, ".specs", "auth")) && a.verified === true && ev["1"].root === path.resolve(wt) && b.verified === false && b.unverifiedReason === "command-mismatch" &&
+        ev["2"].root === path.resolve(repo),
+        "1.22 review 3 (4): `cd <git worktree of the project> && npm test` proves `npm test` (root stamped: the worktree); `cd <another repository's project holding the same feature> && npm test` does not (got " +
+        js([a.verified, a.unverifiedReason, ev["1"].root, b.verified, ev["2"].root]) + ")");
+      // review 4: a worktree INSIDE the project (`.claude/worktrees/<name>`) is its own root — it was read as a folder of the main project
+      // (command-mismatch); a plain subfolder of the project still is one (the run went there: another run)
+      const nested = path.join(repo, ".claude", "worktrees", "agent-1");
+      git(repo, "worktree", "add", "-q", nested);
+      fs.appendFileSync(path.join(repo, ".specs", "auth", "tasks.md"), "- [ ] 3. [US1] C\n  - _Verify: npm test_\n- [ ] 4. [US1] D\n  - _Verify: npm test_\n");
+      fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+      const c = S.completeTask(repo, "auth", 3, { command: "cd " + nested + " && npm test", exitCode: 0 });
+      const dd = S.completeTask(repo, "auth", 4, { command: "cd " + path.join(repo, "src") + " && npm test", exitCode: 0 });
+      const ev2 = JSON.parse(fs.readFileSync(path.join(repo, ".specs", "auth", ".state.json"), "utf8")).evidence;
+      ok(fs.existsSync(path.join(nested, ".specs", "auth")) && c.verified === true && ev2["3"].root === path.resolve(nested) &&
+        dd.verified === false && dd.unverifiedReason === "command-mismatch" && ev2["4"].root === path.resolve(repo),
+        "1.22 review 4: `cd <repo>/.claude/worktrees/agent-1 && npm test` proves `npm test` (root stamped: that worktree); `cd <repo>/src && npm test` still does not (got " +
+        js([c.verified, c.unverifiedReason, ev2["3"].root, dd.verified, ev2["4"].root]) + ")");
+    }
+    { // review 4: observeRun logs ONE plain step of a `_Verify:_` holding ` && ` — observedRun's step-by-step fallback (proofPlainParts) reads
+      // them, and they were never logged: run as two Bash calls, `_Verify: npm run build && npm test_` read unobserved
+      const pS = path.join(tmp, "proj-122r4-steps");
+      S.initProject(pS, ["core"], "en");
+      const fS = S.createFeature(pS, "Steps", ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(fS.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] A\n  - _Verify: npm run build && npm test_\n");
+      const r = ["npm run build", "npm test", "npm run lint"].map((command) => S.observeRun(pS, { command, exitCode: 0 }).recorded.length);
+      const ob = S.observedRun(pS, fS.slug, "npm run build && npm test", 0, { expected: ["npm run build && npm test"] });
+      ok(js(r) === "[1,1,0]" && ob.observed === true,
+        "1.22 review 4: each plain step of `_Verify: npm run build && npm test_` run on its own is logged (another command is not) and the joined report reads observed (got " + js([r, ob]) + ")");
+    }
+    // hostile input: LINEAR (64 KB costs ~4× 16 KB — a quadratic matcher would cost ~16×), measured as a ratio so a slow machine
+    // or a container doesn't flake; past PROOF_MAX_CHARS (64 KB) a command or _Verify:_ is never matched, at once.
+    const hostile = (n) => ["`".repeat(n), "$(".repeat(n / 2), "cd ".repeat(n / 3), "'\"".repeat(n / 2), "cd x/ && ".repeat(n / 9) + "npm test", "a && ".repeat(n / 5),
+      "cd " + "../".repeat(n / 3) + " && npm test", "#".repeat(n), "CI=1 ".repeat(n / 5) + "npm test", "$(" + "(".repeat(n) + ")"];
+    const timeAll = (n) => { const t = Date.now(); for (const h of hostile(n)) { PV(h, ["npm test"], "/r"); PV("npm test", [h], "/r"); } return Date.now() - t; };
+    timeAll(4096); // warm up
+    const ms16 = Math.max(timeAll(16 * 1024), 5), ms64 = timeAll(64 * 1000);
+    const tBig = Date.now();
+    const big = [PV("`".repeat(1024 * 1024), ["npm test"], "/r"), PV("npm test", ["a && ".repeat(200000)], "/r"), PV("npm test " + "x".repeat(70000), ["npm test " + "x".repeat(70000)], "/r")];
+    const msBig = Date.now() - tBig;
+    ok(ms64 / ms16 < 12 && ms64 < 15000 && big.every((x) => x === false) && msBig < 200,
+      "1.22 review 3: runProvesVerify is linear on hostile commands and _Verify:_ values (backticks, $(, cd chains, quotes, ` && `, `#`, assignments) — 64 KB costs < 12× 16 KB (got " +
+      ms16 + " → " + ms64 + " ms); past 64 KB nothing is matched, at once (" + msBig + " ms)");
+  }
+
+  // 1.22 review 4 (0) — upgrade safety: the command rule judged evidence RECORDED BEFORE it existed — after a plugin update, tasks an
+  // earlier release verified (`npx jest x` for `_Verify: npm test -- x`, a Windows path…) turned unverified (command-mismatch) and
+  // blocked /spec-finish, and so did a project check's run of another form. A run without the cmdRule stamp keeps the pre-1.22 verdict
+  // (any command with exit 0; an _Expect: fail_ task: any red run), in reported and observed mode; only stamped runs are judged by the
+  // rule — the same record stamped reads command-mismatch (a check's: changed), and a NEW run is stamped and judged.
+  {
+    const js = JSON.stringify;
+    const BS = String.fromCharCode(92);
+    const pU = path.join(tmp, "proj-122r4-upgrade");
+    S.initProject(pU, ["core"], "en", { checks: { test: "npm test" } });
+    const fU = S.createFeature(pU, "Legacy", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fU.dir, "tasks.md"), "# Tasks\n\n- [x] 1. [US1] A\n  - _Verify: npm test -- tests/x.test.js_\n" +
+      "- [x] 2. [US1] B\n  - _Verify: node --test tests/y.test.js_\n- [x] 3. [US1] Red first\n  - _Verify: node --test tests/z.test.js_\n  - _Expect: fail_\n");
+    const stF = path.join(fU.dir, ".state.json");
+    const at = new Date(Date.now() - 120000).toISOString(), atCheck = new Date(Date.now() - 60000).toISOString();
+    const run = (command, exitCode, extra) => ({ command, exitCode, summary: exitCode ? "not ok 1" : "ok 1", at, observed: true, ...extra });
+    const rec = (task, verify, r) => ({ ...r, task, verify, history: [{ ...r }] });
+    const writeState = (cmdRule) => { // the records as a pre-1.22 engine wrote them (no cmdRule) — or stamped
+      const st = JSON.parse(fs.readFileSync(stF, "utf8"));
+      const s = (r) => (cmdRule ? { ...r, cmdRule } : r);
+      st.evidence = {
+        1: rec("[US1] A", "npm test -- tests/x.test.js", s(run("npx jest tests/x.test.js", 0))),
+        2: rec("[US1] B", "node --test tests/y.test.js", s(run("node --test ." + BS + "tests" + BS + "y.test.js", 0))),
+        3: rec("[US1] Red first", "node --test tests/z.test.js", s(run("node --test --test-reporter=tap tests/z.test.js", 1, { expected: "fail" }))),
+      };
+      for (const k of ["1", "2", "3"]) st.evidence[k].history = [s(st.evidence[k].history[0])];
+      st.lastTickAt = at;
+      st.finishChecks = { test: { ...s({ command: "npx jest", exitCode: 0, summary: "12 passing", at: atCheck, observed: true }), check: "npm test", history: [s({ command: "npx jest", exitCode: 0, at: atCheck })] } };
+      fs.writeFileSync(stF, JSON.stringify(st, null, 2));
+    };
+    const verdicts = () => {
+      const un = S.verificationStatus(pU, "legacy", fU.dir).unverifiedDetail.map((d) => [d.number, d.reason]);
+      const doc = (S.specDoctor(pU, "legacy").checks || []).find((c) => c.id === "verification") || {};
+      const fin = S.finishFeature(pU, "legacy");
+      const up = (S.specUpgrade(pU).features || []).find((x) => x.name === "legacy") || {};
+      return { un, doc: doc.status, finUnverified: (fin.blockers || []).some((b) => /without verification evidence/.test(b)),
+        suite: (fin.suiteChecks || []).map((c) => c.status), up: (up.unverified || []).map((d) => [d.number, d.reason]),
+        status: S.statusFeature(pU, "legacy").tasks.list.map((t) => t.verified) };
+    };
+    writeState(null);
+    const pre = verdicts();
+    S.initProject(pU, ["core"], "en", { evidence: "observed" });
+    const preObserved = S.verificationStatus(pU, "legacy", fU.dir).unverifiedDetail.map((d) => [d.number, d.reason]);
+    const preSuiteObserved = S.finishFeature(pU, "legacy").suiteChecks.map((c) => c.status);
+    S.initProject(pU, ["core"], "en", { evidence: "reported" });
+    writeState(1);
+    const ruled = verdicts();
+    // a NEW run of the same other command is recorded under the rule (stamped) and judged by it
+    writeState(null);
+    const again = S.completeTask(pU, "legacy", 1, { command: "npx jest tests/x.test.js", exitCode: 0 });
+    const recAgain = JSON.parse(fs.readFileSync(stF, "utf8")).evidence["1"];
+    const finAgain = S.finishFeature(pU, "legacy", { evidence: [{ name: "test", command: "npx jest", exitCode: 0 }] });
+    const chkAgain = JSON.parse(fs.readFileSync(stF, "utf8")).finishChecks.test;
+    ok(js(pre) === js({ un: [], doc: "pass", finUnverified: false, suite: ["pass"], up: [], status: [true, true, true] }) && js(preObserved) === "[]" && js(preSuiteObserved) === '["pass"]' &&
+      js(ruled.un) === js([[1, "command-mismatch"], [2, "command-mismatch"], [3, "command-mismatch"]]) && ruled.doc === "warn" && ruled.finUnverified === true &&
+      js(ruled.suite) === '["changed"]' && js(ruled.up) === js(ruled.un) && js(ruled.status) === "[false,false,false]" &&
+      again.verified === false && again.unverifiedReason === "command-mismatch" && recAgain.cmdRule === 1 &&
+      finAgain.suiteChecks[0].status === "changed" && chkAgain.cmdRule === 1 && chkAgain.history[chkAgain.history.length - 1].cmdRule === 1,
+      "1.22 review 4 (0): records made before the command rule (no cmdRule stamp) whose commands differ from the _Verify:_ (`npx jest x`, `.\\tests\\y.test.js`, an _Expect: fail_ red run of another form) and a project check's run of another form keep their pre-1.22 verdict — verified / pass in status, doctor, finish, spec_upgrade, observed mode too; the same records stamped read command-mismatch / changed; a new run is stamped (task and finish check) and judged (got " +
+      js([pre, preObserved, preSuiteObserved, ruled, again.unverifiedReason, recAgain.cmdRule, finAgain.suiteChecks, chkAgain.cmdRule]) + ")");
+  }
+
+  // 1.22 review 3 (3) — observed mode sees the forms the matcher accepts: the observe hook's log (observeRun) and the lookup
+  // (observedRun) use runProvesVerify too — `node --test tests\x.test.js`, the reversed join `npm test && npm run build`, `CI=1 npm
+  // run lint` were verified in reported mode and `unobserved` in observed mode (the log took only the _Verify:_ as written or its
+  // in-order join). The hook's cheap pre-filter is a copy of the engine's observedNorm / observedBodies.
+  {
+    const js = JSON.stringify;
+    const BS = String.fromCharCode(92);
+    const obsJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
+    const p3 = path.join(tmp, "proj-122r3-observed");
+    S.initProject(p3, ["core"], "en", { checks: { lint: "npm run lint" } });
+    const f3 = S.createFeature(p3, "Feat", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(f3.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] a\n  - _Verify: node --test tests/x.test.js_\n" +
+      "- [ ] 2. [US1] b\n  - _Verify: npm run build_\n  - _Verify: npm test_\n- [ ] 3. [US1] c\n  - _Verify: npm run typecheck_\n  - _Verify: npm run format_\n" +
+      "- [ ] 4. [US1] d\n  - _Verify: npm run lint_\n- [ ] 5. [US1] e\n  - _Verify: cd packages/web && npm test_\n- [ ] 6. [US1] f\n  - _Verify: npm run e2e_\n");
+    S.initProject(p3, ["core"], "en", { evidence: "observed" });
+    const hook = (command, code) => spawnSync(process.execPath, [obsJs], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" },
+      input: js({ session_id: "s", cwd: p3, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command }, tool_response: { exit_code: code } }) });
+    for (const [c, x] of [["node --test tests" + BS + "x.test.js", 0], ["npm test && npm run build", 0], ["npm run typecheck", 0], ["npm run format", 0], ["CI=1 npm run lint", 0],
+      ["cd ./packages/web && npm test", 0], ["cd ../elsewhere && npm run e2e", 0], ["CI=1 npm run e2e", 1]]) hook(c, x);
+    const pick = (r) => [r.ok, r.verified, r.unverifiedReason || null, r.observed];
+    const c1 = S.completeTask(p3, "feat", 1, { command: "node --test tests" + BS + "x.test.js", exitCode: 0 });
+    const c2 = S.completeTask(p3, "feat", 2, { command: "npm test && npm run build", exitCode: 0 });
+    const c3 = S.completeTask(p3, "feat", 3, { command: "npm run typecheck && npm run format", exitCode: 0 }); // run as two Bash calls
+    const c4 = S.completeTask(p3, "feat", 4, { command: "CI=1 npm run lint", exitCode: 0 });
+    const c4b = S.completeTask(p3, "feat", 4, { command: "npm run lint", exitCode: 0 }); // the latest logged run OF it passed
+    const c5 = S.completeTask(p3, "feat", 5, { command: "cd packages/web && npm test", exitCode: 0 });
+    const c6 = S.completeTask(p3, "feat", 6, { command: "npm run e2e", exitCode: 0 }); // the harness saw it fail (and a run elsewhere)
+    const logged = fs.readFileSync(path.join(f3.dir, ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).command);
+    const projLog = fs.readFileSync(path.join(p3, ".specs", ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).command);
+    ok(js([c1, c2, c3, c4, c4b, c5].map(pick)) === js(Array(6).fill([true, true, null, true])) && c6.verified === false && c6.observed === false &&
+      !logged.includes("cd ../elsewhere && npm run e2e") && logged.includes("node --test tests" + BS + "x.test.js") && js(projLog) === js(["CI=1 npm run lint"]),
+      "1.22 review 3 (3): under meta.evidence observed, runs in the forms the matcher accepts are logged and found — `node --test tests\\x.test.js`, `npm test && npm run build` (reversed), two separate Bash runs reported joined, `CI=1 npm run lint` (task and project check), `cd ./packages/web && npm test`; a run in another folder is logged nowhere and the harness's failed run stays failed (got " +
+      js([[c1, c2, c3, c4, c4b, c5, c6].map(pick), logged, projLog]) + ")");
+    // the hook's pre-filter is the engine's: the same functions, and a superset of the matcher on the probe commands
+    const E3 = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const hookSrc = fs.readFileSync(obsJs, "utf8"), engSrc = fs.readFileSync(path.join(__dirname, "lib", "engine", "evidence.js"), "utf8");
+    const grab = (src, from, to) => { const a = src.indexOf(from), b = src.indexOf(to, a); return a < 0 || b < 0 ? null : src.slice(a, b); };
+    const hookFns = (grab(hookSrc, "const norm = ", "\n}\n") || "").replace(/\bnorm\b/g, "observedNorm").replace(/\bRE_ENV\b/g, "RE_OBSERVED_ENV").replace(/\bbodies\b/g, "observedBodies");
+    const engFns = grab(engSrc, "const observedNorm = ", "\n}\n") || "";
+    const strip = (s) => s.replace(/\s+/g, " ").trim();
+    const probes = [["node --test tests" + BS + "x.test.js", "node --test tests/x.test.js"], ['X="a b" npm test', "npm test"], ["CI=1 npm run lint 2>&1", "npm run lint"],
+      ["cd /x && set -o pipefail; npm test | tee log", "set -o pipefail; npm test | tee log"], ["`npm test`", "npm test"], ['node --test "tests/x.test.js"', "node --test tests/x.test.js"],
+      ["npm test && npm run build", "npm run build"]];
+    const notSuperset = probes.filter(([run, v]) => { const t = E3.observedNorm(v + " " + "npm test"); return !E3.observedBodies(run).every((b) => t.includes(b)); });
+    ok(hookFns && strip(hookFns) === strip(engFns) && !notSuperset.length,
+      "1.22 review 3 (3): hooks/observe-hook.js's pre-filter (norm / RE_ENV / bodies) is the engine's observedNorm / RE_OBSERVED_ENV / observedBodies, and reads every probe run as mentioned by its _Verify:_ (got " + js([!!hookFns, strip(hookFns) === strip(engFns), notSuperset]) + ")");
+  }
+
+  // 1.22 review (finding 6) — ONE `cd <root> &&` stripping (spec.stripCdPrefix) for the observe hook's log and the reported run's
+  // lookup: reporting the exact command that ran (`cd <root> && node t1.js`) read unobserved, and a subagent's run in a git
+  // worktree (`cd <worktree> && node t1.js`) reached only the worktree's (git-ignored, never merged) log.
+  {
+    const js = JSON.stringify;
+    const obsJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
+    const mk = (dir) => {
+      S.initProject(dir, ["core"], "en");
+      const f = S.createFeature(dir, "Auth", ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Login\n  - _Verify: node t1.js_\n");
+      return f;
+    };
+    const pMain = path.join(tmp, "proj-122-cd-main"), pWt = path.join(tmp, "proj-122-cd-wt", "wt");
+    const fMain = mk(pMain), fWt = mk(pWt);
+    const logOf = (dir) => { try { return fs.readFileSync(path.join(dir, ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } };
+    const hook = (cwd, command, envDir) => spawnSync(process.execPath, [obsJs], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: envDir, SPEC_PROJECT_DIR: "" },
+      input: JSON.stringify({ session_id: "s", cwd, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command }, tool_response: { exit_code: 0 } }) });
+    const h1 = hook(pWt, "cd " + pWt + " && node t1.js", pMain);
+    const h2 = hook(pMain, "cd " + path.join(tmp, "elsewhere") + " && node t1.js", pMain);
+    const main = logOf(fMain.dir), wt = logOf(fWt.dir);
+    const look = [S.observedRun(pMain, "auth", "cd " + pMain + " && node t1.js", 0).observed, S.observedRun(pMain, "auth", "node t1.js", 0).observed,
+      S.observedRun(pMain, "auth", "cd " + path.join(tmp, "elsewhere") + " && node t1.js", 0).observed,
+      S.stripCdPrefix("cd sub && npm test", [path.join(pMain, "sub")], pMain), S.stripCdPrefix("cd sub && npm test", [pMain], pMain)];
+    ok(h1.status === 0 && h2.status === 0 && js(main.map((e) => e.command)) === js(["node t1.js"]) && js(wt.map((e) => e.command)) === js(["node t1.js"]) &&
+      js(look) === js([true, true, false, "npm test", "cd sub && npm test"]),
+      "1.22 review: a worktree's `cd <worktree> && node t1.js` is logged as `node t1.js` in the worktree's log AND the main project's (a cd into another folder is logged nowhere); observedRun strips `cd <root> &&` from the reported command too — one stripCdPrefix (got " +
+      js([main, wt, look]) + ")");
+  }
+
+  // 1.22 review (13) — the observe hook's pre-filter stat'ed, read and probed change.md in every feature folder on every Bash call
+  // (+133 ms at 150 features). It opens tasks.md once and looks at change.md only when there is no tasks.md; what it finds is
+  // unchanged (a change's change.md is still read, an oversized tasks.md still skipped).
+  {
+    const js = JSON.stringify;
+    const obsJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
+    const probe = path.join(tmp, "o122-probe.js"), out = path.join(tmp, "o122-probe.out");
+    fs.writeFileSync(probe, "const fs = require('fs'); let n = 0; for (const k of ['statSync', 'openSync', 'readFileSync', 'existsSync']) { const o = fs[k]; fs[k] = function (p, ...r) { if (typeof p === 'string' && /change\\.md$/.test(p)) n++; return o.call(this, p, ...r); }; }\n" +
+      "process.on('exit', () => require('fs').writeFileSync(" + js(out) + ", String(n)));\n");
+    const p = path.join(tmp, "o122-prefilter");
+    S.initProject(p, ["core"], "en");
+    for (let i = 0; i < 5; i++) {
+      const f = S.createFeature(p, "Feat " + i, ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "- [ ] 1. t\n  - _Verify: node t" + i + ".js_\n");
+    }
+    const big = S.createFeature(p, "Big", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(big.dir, "tasks.md"), "- [ ] 1. t\n  - _Verify: node big.js_\n" + "x".repeat(2 * 1024 * 1024 + 10) + "\n");
+    const ch = S.createFeature(p, "Tweak", undefined, "", undefined, "en", undefined, { size: "xs" });
+    fs.writeFileSync(path.join(ch.dir, "change.md"), fs.readFileSync(path.join(ch.dir, "change.md"), "utf8").replace(/_Verify: [^_\n]*_/, "_Verify: node change.js_"));
+    const hook = (command) => {
+      try { fs.unlinkSync(out); } catch { /* none */ }
+      spawnSync(process.execPath, ["-r", probe, obsJs], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" },
+        input: js({ session_id: "s", cwd: p, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command }, tool_response: { exit_code: 0 } }) });
+      return Number(fs.existsSync(out) ? fs.readFileSync(out, "utf8") : NaN);
+    };
+    const logged = (dir) => { try { return fs.readFileSync(path.join(dir, ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).command); } catch { return []; } };
+    const probes = hook("ls -la");
+    hook("node change.js");
+    hook("node big.js");
+    ok(probes === 2 && js(logged(ch.dir)) === js(["node change.js"]) && js(logged(big.dir)) === "[]",
+      "1.22 review: the observe hook's pre-filter touches change.md only in the folders without a tasks.md (the change's and steering/: 2 probes for 8 folders, not one or two each); a change's _Verify:_ is still logged, an oversized tasks.md still skipped (got " +
+      js([probes, logged(ch.dir), logged(big.dir)]) + ")");
   }
 };

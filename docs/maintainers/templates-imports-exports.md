@@ -21,6 +21,10 @@ trackers, release notes, milestones).
   `{{lang}}` `{{date}}`; an unknown `{{x}}` is left as is; no summary → the language's generic slot (`[TBD]` /
   `[a definir]` / `[por definir]`) so the scaffold still reads 'placeholder'. For steering, `{{name}}` / `{{slug}}` are the
   project folder's name and `{{tracks}}` the tracks init was given. For a spike, `{{summary}}` is its question.
+  **The summary is written through `safeSpecText`** (1.22 review) — into `{{summary}}` and every built-in scaffold that holds it
+  (requirements.md, classification.md, change.md, bug.md, the bug requirements), as the bug prefill and the spike question
+  are: its `<!--` paired with the scaffold's closing EARS-guidance `-->` and hid every criterion (placeholders 30 → 0, trace
+  5 ACs → 0, EARS 0 criteria). `createFeature` keeps the RAW text for the classifier (`writtenSummary` is only what is written).
 - **Track-block rule — ONE rule for an overridden design / requirements / tasks / test-plan:** every active track still
   gets what the built-in template would hold for it, appended at the end as spec_add_track appends it
   (`trackDesignBlock`, `trackRequirementsBlock` — renumbered after the template's own US-1 ACs when an ID would collide —,
@@ -64,7 +68,8 @@ trackers, release notes, milestones).
   - `plan` — a Claude Code plan-mode file (plansDirectory defaults to `~/.claude/plans`, OUTSIDE the project — the refusal
     says to copy it in or point plansDirectory inside) or a Cursor `.cursor/plans/*.plan.md` (front matter name / overview /
     todos): goals and acceptance-like bullets → US-1's criteria (EARS when they already read like one, else
-    `[NEEDS CLARIFICATION]`); checklists, else Cursor todos, else a Steps / Implementation section's items (an Approach / Abordagem / Enfoque section
+    `[NEEDS CLARIFICATION]`; a command-only bullet — "Run `npm test`", "`npm test` passes", 1.22 review: also with a trailing
+    "and expect …" / PT "e esperar …" / ES "y esperar …" clause, `planCommandOnly()` — stays in design.md); checklists, else Cursor todos, else a Steps / Implementation section's items (an Approach / Abordagem / Enfoque section
     only when there is no other), else its
     sub-headings → tasks keeping state; file paths a step names → `_Implements:_` (`planPaths()`: never a URL, absolute or
     home path, `..`, alias, glob; `:line` / `#L10` dropped; a single backticked name without a folder needs a known
@@ -73,12 +78,16 @@ trackers, release notes, milestones).
     `obj.m` are object fields: such a name needs a folder part, `scripts/build.cmd`), plus docs / config / data such as `.psd1`); the
     rest → design.md. A folder holding several plans is refused (name the file).
   - `execplan` — a Codex ExecPlan (PLANS.md): Validation and Acceptance → criteria; Progress (state kept) + Concrete Steps
-    → tasks (deduplicated), a step naming a check command → `_Verify:_`; Decision Log → design.md `## Decisions` (D-1…);
+    → tasks (deduplicated), a step naming a check command → `_Verify:_` (`planCommand`; 1.22 review 4: a leading `cd <dir> &&`
+    is kept — the runner / check test reads the command after it; dropping it imported `cd packages/web && npm test` as
+    `_Verify: npm test_`, which `done --run` ran at the root and the natural run read command-mismatch; `planCommandOnly`
+    reads a cd-led validation line the same way); Decision Log → design.md `## Decisions` (D-1…);
     Purpose → summary; living sections → design.md verbatim.
   - `bmad` — the PRD (`docs/prd.md`, sharded `docs/prd/`, v6 `_bmad-output/planning-artifacts/`) FR / NFR lines → FR-n /
     NFR-n; epic stories + story files (`docs/stories/*.md`; the file wins over the PRD's copy) → US-1…US-n in story order,
-    their ACs → US-n.AC-m; Tasks / Subtasks → `[USn]` tasks with `(AC: 1, 3)` → `_Requirements:_`; architecture + Dev
-    Notes → design.md. One story file imports one story.
+    their ACs → US-n.AC-m; Tasks / Subtasks → `[USn]` tasks with `(AC: 1, 3)` → `_Requirements:_` (1.22 review: a nested unit
+    citing none inherits its parent's — the nearest unit above with a smaller indent; a grandchild its inherited ones);
+    architecture + Dev Notes → design.md. One story file imports one story.
   - `fluidplan` (1.17) — a plan settled with the fluidplan skill (`.fluidplan/<id>/`, its plan.json, PLAN.md / DECISIONS.md —
     also at plan.json's `output` paths or fluidplan.config.json's `outputDir` (`fpConfig`) —, or PLAN.md's text inline,
     DECISIONS.md optionally following it). The finalized PLAN.md / DECISIONS.md win (PLAN.md is where fluidplan ticks tasks;
@@ -109,17 +118,78 @@ trackers, release notes, milestones).
     `mdPlainText()` (escapes + entities decoded outside code spans; a numeric reference to a control character kept).
     Never write a raw U+2028 / U+2029 (or its `\u` escape through the Edit tool): build it
     (`FP_LS_PS`). Pinned to fluidplan 755d1b2 (2026-09-26).
+- **spec-kit scenarios** (1.22 review): numbered items under the story, else — only under an explicit "Acceptance Scenarios"
+  label, as kiro.js reads its criteria — bulleted ones (`mdListItems(…, false)`); a bullet outside the label stays prose.
+- **A title that names no folder** (1.22 review): when the caller gives no `name` and the parser's `nameHint` (a plan's /
+  ExecPlan's / fluidplan's title, BMAD's PRD or story title) slugifies to nothing (`# Добавить тёмную тему`), importSpec uses the
+  parser's `nameFallback` — the name it had without the title (the plan file's stem, the folder, fp.id, the story file's stem);
+  inline text has none (its virtual file is `<tool>.md`): `importSpec.noUsableTitle` says to pass a name. A name the caller
+  gives is theirs (resolveFeature's own error).
 - **`spec_import` stays inside the project.** The source path must resolve inside `projectDir` — checked
   lexically first (nothing outside is even stat'ed), then by real path (a symlink out is refused) — and it is
   only read. Tool names are exact (`kiro` | `spec-kit` | `openspec` | `plan` | `execplan` | `bmad` | `fluidplan`, the schema enum) on
   both surfaces, and it never imports over an existing feature.
 - (**Flows** — the section's last bullet — moved to gates-and-approvals.md.)
+- **The brownfield scan and coverage** (engine/scan.js — area 13 of the suites; 1.22 review):
+  - **The cap counts code.** Both walk with `walkProject(…, {counts, gitignore})`: only a file `counts` says yes to — code
+    (`isCodeFile`, not a fixture) and, for the scan, a manifest (`MANIFEST_NAMES`, `*.csproj` / `*.psd1` / `*.cabal` /
+    `*.nimble`) — counts toward `cap` (scan 5000, coverage `COVERAGE_CAP`; coverage's `opts.cap` is engine-internal, for
+    tests); every other file is still visited, and `WALK_ENTRY_CAP` (200,000 folder entries) still ends a huge tree.
+    `truncated` = a counted file (or, past the entry cap, any entry) was left unvisited — "code was skipped". The scan's
+    `filesScanned` is every file visited, `codeFilesCounted` what the cap counted. The other walks (globs, trace, finish)
+    pass no `counts`: every file counts, as before.
+  - **Generated folders** (`gitignoreRules()`): the ROOT `.gitignore`'s plain directory patterns — a name, a leading / trailing
+    `/`, a path of names (a slash inside anchors it), simple classes (`[Bb]in/`, `[a-z]`), folded where the file system folds
+    case — skip a folder (and a top-level module); wildcards, escapes and negated classes are ignored (a pattern
+    read wrongly would hide code). **Negations (review 2):** a pattern a negation could re-include is not applied — the Python
+    template's `lib/` with `!frontend/src/lib/` hid a SvelteKit app's `frontend/src/lib/*.ts` (coverage 4 → 2 code files, its
+    `_Implements:_` "non-code"). `gitignoreNegationReincludes()` compares the negation's LAST name (after `!`, `/`, a trailing
+    `/` — Git re-includes nothing under a folder that stays excluded, so `!lib/keep.txt` brings back no `lib/`; review 4: one
+    ending in `/**` re-includes EVERY name below its folder, so it reads as any name — `!frontend/src/**` was read as `src` and
+    root `lib/` kept hiding frontend/src/lib/) with the
+    pattern's last name: the same name, or a wildcard / class (`!b*/`, `!*`) that could match it — a DP over the pattern's
+    units, exact for its classes; Visual Studio's `!**/[Pp]ackages/build/`, `!?*.[Cc]ache/` keep `[Bb]in/` / `[Oo]bj/`. The
+    line order is not read (a negation before its pattern loses in Git — dropping that pattern only shows more code). Bounded:
+    over `GITIGNORE_MAX_NEGATIONS` (200) negations or `GITIGNORE_NEGATION_BUDGET` unit comparisons, no pattern is applied.
+    **Nested negations (review 3):** only the ROOT .gitignore's negations were read — root `lib/` with `frontend/.gitignore`
+    holding `!src/lib/` (Git tracks frontend/src/lib/api.ts) still hid it. While walking, a folder's own .gitignore is read once
+    (`folderGitignore` — its head, the ignore-all test too) and `reincluded(text)` (gitignoreRules) turns OFF, for that folder's
+    subtree, every root pattern one of its negations could re-include (the same last-name rule); `walkProject` carries the set
+    down the stack (`gitignoreOffMerge` — a new set per folder, siblings never share one) and `dir(rel, off)` skips those. A
+    root pattern stays on elsewhere (`backend/lib/`). Bounded: `GITIGNORE_NESTED_MAX` (200) nested files weighed and ONE
+    `GITIGNORE_NEGATION_BUDGET` over all of them; a file over `GITIGNORE_MAX_CHARS`, over `GITIGNORE_MAX_NEGATIONS`
+    negations, past the cap or the budget turns every root pattern off below it (`GITIGNORE_ALL_OFF` — never hide code).
+    **Read as Git reads it (review 4):** `gitignoreLines` skips a leading UTF-8 BOM (it hid a nested file's first-line
+    negation) and drops only TRAILING unescaped spaces — `raw.trim()` turned `  lib/` / `lib/\t` / ` *` into patterns Git never
+    applies; `gitignoreHead` reads a UTF-16 file (FF FE / FE FF — Windows PowerShell 5.1's `echo lib/ > .gitignore`) as no
+    pattern (Git matches its raw bytes against nothing); a ROOT file over `GITIGNORE_MAX_CHARS` applies no pattern (its head
+    ended mid-line — `srcgen/` read as `src` — and a negation past it was never weighed); the ignore-all test reads the whole
+    file (`GITIGNORE_ALL_HEAD` + 1 characters: a longer one is no ignore-all — `*` + 4 KB of comments + `!keep.ts` was).
+    Known limit: case is folded with `toLowerCase` where the file system folds it, while Git's `core.ignorecase` folds ASCII
+    only (`Äpp/` hides `äpp/`, `[@-Z]` folds to `[@-z]`).
+    A folder (not the root) whose own `.gitignore` ignores everything (`gitignoresAll`: `*`,
+    re-including at most `.gitignore` / `.gitkeep` / `.keep`) is skipped too (Laravel's storage/framework/views). Never a
+    built-in `bin` (Ruby / Node keep code there). `testdata/` is a fixture folder (`isTestFixture`).
+  - **Manifests:** a root one is read only as a file or a link that stays inside the project (`projectFileInside`); nested
+    ones (`NESTED_MANIFESTS` — a package's manifest, never a per-folder CMakeLists / Makefile; never under a
+    `MANIFEST_FIXTURE_DIRS` folder: fixtures / `__fixtures__` / testdata and — review 2 — docs / doc / examples / example /
+    samples / sample: a Node app's Sphinx `docs/requirements.txt`, Jekyll `docs/Gemfile` and `examples/flask-client/` made its
+    stack "python (flask)" and "ruby") join the stack by name and the first `NESTED_MANIFEST_CAP` (20) are read for frameworks / test runners; the
+    root package.json alone gives entrypoints (listed first).
+  - **ASP.NET tokens:** `[controller]` = the class name minus "Controller", `[action]` = the decorated method
+    (`aspActionName`, its "Async" suffix dropped); one it can't name stays. **A projectDir that is no folder** → ok: false
+    (`brownfield.notFolder`; the CLI exits 1).
+  - **coverage's folder lookup:** `implementsTargets(…, sorted)` binary-searches keys sorted once per call
+    (`keysWithPrefix`) — the same files the scan of every key gives, in key order.
 
 ## Stakeholder export and release notes (1.14)
 - **`spec_export`** writes (with `write`) `.specs/exports/<slug>.<html|md>` (1.14 F5: `format: "csv"` → `<slug>.rtm.csv`,
   the traceability matrix — markdown-and-trace.md → Requirements traceability matrix) — the project: `project.<fmt>`, a feature
   slugged `project`: `project.feature.<fmt>` — with the `RE_AUTOGEN` marker family; `isGeneratedOrAbsent()` means never
-  over a hand-written file (an error). A feature renders in its language, the project in the project language. The HTML
+  over a hand-written file (an error), and (1.22 review) never through a link: `specsWriteContained()` (engine/files.js) refuses
+  — before anything is read or written — a `.specs/exports/` or a target document that is a symlink / junction or resolves
+  outside the real `.specs/` (a link inside the project is still refused), in every format, Gherkin's all-or-nothing write
+  included (`stakeholderExport.exportsLinked`). A feature renders in its language, the project in the project language. The HTML
   is offline by construction: a zero-dep markdown renderer (`expInline` and friends) escapes EVERY text run (`htmlEsc` —
   a `<script>` in a criterion is shown as text), keeps link targets only for http(s) / mailto, turns an image into its alt
   text, and loads no font, script or stylesheet URL (a test asserts it); roadmap palette, system light/dark + toggle,
