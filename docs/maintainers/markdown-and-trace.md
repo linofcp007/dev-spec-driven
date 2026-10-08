@@ -189,7 +189,10 @@ matrix.
   lines, headings, tables, HR and fenced code (fence *state* is tracked, so `const shall = 1` inside
   ` ``` ` is code, not an AC) — and only then lints each joined criterion. A comment-only line does
   **not** split a criterion. Issues report the criterion's start `line` (plus `endLine` when it spans
-  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`). `vague`
+  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`). `no-keyword`
+  (info) spares the ubiquitous form naming ITS system (review 5 — `RE_UBIQUITOUS`): "THE <name> SHALL" (one to four words: the
+  API, the billing service), PT "O / A / OS / AS <nome> (NÃO) DEVE(M) / DEVERÁ(ÃO)", ES "EL / LA / LOS / LAS <nombre> (NO)
+  DEBE(N) / DEBERÁ(N)" — only "THE SYSTEM" counted. `vague`
   skips a VERB use of clean / limpa / limpia (`VAGUE_VERB_NEXT`: followed by up / out / an article / a possessive / a
   quantifier / old / temporary / expired… — "THE SYSTEM SHALL clean up its temporary files"); "a clean UI" stays vague. A
   sub-list continues its parent only when the parent reads as a criterion: that modal test is cached per block (`curModal` —

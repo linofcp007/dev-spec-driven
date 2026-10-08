@@ -174,4 +174,16 @@ exports.run = async ({ ok, S, tmp, require, __dirname }) => {
       "review 5 (L31): US-1.AC-1.1 / US-1.AC-1.2 are no AC IDs — EARS names each (EN / PT / ES), trace_check lists them (unidentifiedCriteria), doctor's ears fails and ac-uniqueness passes, spec_upgrade's renumber item lists them (got " +
       js([trS.totalAcs, trS.unidentifiedCriteria, trS.verdict, evS.issues.map((i) => i.code), dc("ears"), dc("ac-uniqueness")]) + ")");
   }
+
+  { // EARS — the ubiquitous form names its system: "THE API SHALL …" (PT "A API DEVE …", ES "LA API DEBE …") needs no EARS keyword
+    const noKw = (t, l) => S.earsValidate("## Acceptance Criteria (EARS)\n\n1. **US-1.AC-1** — " + t, l).issues.filter((i) => i.code === "no-keyword").length;
+    const got = [["THE API SHALL return 200 for a valid request.", "en"], ["The billing service shall retry a failed charge twice.", "en"],
+      ["O serviço de faturação NÃO DEVE duplicar faturas.", "pt"], ["LA API DEBE devolver 200.", "es"], ["Payments SHALL be idempotent.", "en"],
+      ["Pagamentos DEVEM ser idempotentes.", "pt"]].map(([t, l]) => noKw(t, l));
+    const t0 = process.hrtime.bigint();
+    S.earsValidate("1. **US-1.AC-1** — SHALL " + "the ".repeat(25000) + "x", "en"); S.earsValidate("1. **US-1.AC-1** — DEVE a " + "b".repeat(100000), "pt");
+    const sec = Number(process.hrtime.bigint() - t0) / 1e9;
+    ok(js(got) === "[0,0,0,0,1,1]" && sec < 3,
+      "review 5: the EARS ubiquitous form 'THE <name> SHALL' (PT 'O/A <nome> DEVE', ES 'EL/LA <nombre> DEBE') gets no no-keyword note; a criterion with no article and no keyword still does; linear on 100 KB (got " + js([got, sec]) + ")");
+  }
 };

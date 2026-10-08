@@ -117,7 +117,11 @@ const RE_AC_HEADING = /acceptance criteria|crit[ée]rios de aceita[çc][ãa]o|cr
 // ID or an EARS keyword in CAPITALS — not for any "if/will/se" in ordinary prose (PT/ES reflexive "se").
 const RE_EARS_CAPS = new RegExp(B + "(WHEN|WHILE|IF|WHERE|QUANDO|ENQUANTO|SE|ONDE|CUANDO|MIENTRAS|SI|DONDE)" + E, "u");
 const RE_EARS_KEYWORD = new RegExp(B + "(WHEN|WHILE|IF|WHERE|QUANDO|ENQUANTO|SE|ONDE|CUANDO|MIENTRAS|SI|DONDE)" + E, "iu");
-const RE_UBIQUITOUS = /(THE SYSTEM SHALL|O SISTEMA (N[ÃA]O )?(DEVE|DEVER[ÁA])|EL SISTEMA (NO )?(DEBE|DEBER[ÁA]))/iu;
+// The ubiquitous form names ITS system (review 5): "THE <name> SHALL …" — the API, the billing service, the mobile app (one to
+// four words) —, PT "O / A / OS / AS <nome> (NÃO) DEVE(M) / DEVERÁ(ÃO)", ES "EL / LA / LOS / LAS <nombre> (NO) DEBE(N) /
+// DEBERÁ(N)"; only "THE SYSTEM" counted, so "THE API SHALL return 200" got a no-keyword note. Bounded (≤ 4 words): linear.
+const RE_UBIQUITOUS = new RegExp(B + "(?:THE[^\\S\\n]+(?:[^\\s]+[^\\S\\n]+){1,4}?SHALL|(?:O|A|OS|AS)[^\\S\\n]+(?:[^\\s]+[^\\S\\n]+){1,4}?(?:N[ÃA]O[^\\S\\n]+)?" +
+  "(?:DEVE|DEVEM|DEVER[ÁA]|DEVER[ÃA]O)|(?:EL|LA|LOS|LAS)[^\\S\\n]+(?:[^\\s]+[^\\S\\n]+){1,4}?(?:NO[^\\S\\n]+)?(?:DEBE|DEBEN|DEBER[ÁA]|DEBER[ÁA]N))" + E, "iu");
 // The scaffold's own edge cases / NFRs / success criteria (EC-1, NFR-1, SC-001) are stable IDs too.
 const RE_STABLE_ID = /(?<![A-Za-z0-9])(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
 // …of which a criterion's OWN ID is one trace_check reads: never a bare `AC-n` (RE_BARE_AC — not the AC-n of a US-n.AC-n, nor of
