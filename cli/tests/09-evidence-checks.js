@@ -220,4 +220,32 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
       "1.22 review: finish --run stamps the code BEFORE the checks run (a check editing an implementing file reads code-changed); done --run's run `at` is its start and its verify stamp the _Verify:_ it ran (edited meanwhile → stale-evidence) (got " +
       JSON.stringify([chk, d2.code, at2 - t0, t1 - t0, d3 && [d3.verified, d3.unverifiedReason]]).slice(0, 600) + ")");
   }
+
+  // 1.24 r6 B3: done --run / finish --run settle on the command's EXIT — a check that starts a background process (a dev server,
+  // a watcher) holding the output pipes made the CLI wait for THAT process, and --timeout refused a run that had exited 0. After
+  // the exit: a short drain (until the pipes close, ≈2 s at most), then the pipes are dropped, the exit status recorded and a
+  // note says a background process kept the output open; --timeout's timer stops at the exit.
+  {
+    const pb = path.join(tmp, "r6b3-bg");
+    Sga.initProject(pb, ["core"], "en", { checks: { serve: "node spawner-r6.js finish" } });
+    wGa(pb, "bg-r6.js", "require('fs').writeFileSync(process.argv[2], String(process.pid));\nsetTimeout(() => {}, 25000);\n");
+    wGa(pb, "spawner-r6.js", "const path = require('path');\nrequire('child_process').spawn(process.execPath, [path.join(__dirname, 'bg-r6.js'), path.join(__dirname, 'bg-' + process.argv[2] + '.pid')], " +
+      "{ stdio: 'inherit', detached: true }).unref();\nconsole.log('server started');\n");
+    const fb3 = Sga.createFeature(pb, "Serve", ["core"], "", undefined, "en");
+    wGa(fb3.dir, "tasks.md", "- [ ] 1. [US1] Starts the server\n  - _Verify: node spawner-r6.js done_\n");
+    const t0 = Date.now();
+    const d = rga(pb, ["done", fb3.slug, "1", "--run", "--timeout", "15"]);
+    const tookDone = Date.now() - t0;
+    const t1 = Date.now();
+    const f = rga(pb, ["finish", fb3.slug, "--run", "--json"]);
+    const tookFin = Date.now() - t1;
+    const fj = jsonGa(f.stdout);
+    const ev = (stGa(fb3).evidence || {})["1"];
+    const fc3 = (stGa(fb3).finishChecks || {}).serve;
+    for (const k of ["done", "finish"]) { try { process.kill(Number(fs.readFileSync(path.join(pb, "bg-" + k + ".pid"), "utf8"))); } catch { /* gone */ } }
+    ok(d.code === 0 && /Task 1 done \(verified\)/.test(d.out) && /server started/.test(d.out) && /a process it started .*kept its output open/.test(d.out) && ev && ev.exitCode === 0 &&
+      tookDone < 12000 && fj && fc3 && fc3.exitCode === 0 && /kept its output open/.test(f.out) && tookFin < 12000,
+      "1.24 r6 B3: done --run / finish --run on a check that leaves a background process holding the output settle at the command's exit (≈2 s drain, a note), record exit 0 and never wait for that process or hit --timeout (got " +
+      JSON.stringify([d.code, d.out.slice(0, 300), tookDone, ev && ev.exitCode, f.code, fc3, tookFin]).slice(0, 700) + ")");
+  }
 };

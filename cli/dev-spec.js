@@ -342,6 +342,9 @@ function runOnlyFlags() {
 // and its summary, each re-summarized shorter when together they'd pass the record's 2,000 characters (normalizeEvidence cuts
 // there) — where it kept the LAST command's summary alone. One command: its summary, as ever.
 const EVIDENCE_SUMMARY_MAX = 2000;
+// 1.24 r6 B3: done --run / finish --run — after the command EXITS, how long its output may still drain before the pipes are dropped
+// (a background process it started can hold them open for good).
+const RUN_DRAIN_MS = 2000;
 function runSummaries(parts) {
   if (parts.length === 1) return parts[0].summary;
   const budget = Math.floor(EVIDENCE_SUMMARY_MAX / parts.length);
@@ -956,6 +959,7 @@ async function main() {
           say("$ " + cmd);
           const x = await b5Exec(cmd, sh, M);
           if (x.summary) say(x.summary.replace(/^/gm, "  "));
+          if (x.heldOpen && !x.cantRun) say("  " + M.cliOutput.runHeldOpen(x.code)); // 1.24 r6 B3: settled at its exit
           // full review Ga1 / Ga9 / Ga10: a command that could not run (the shell never started, a signal, --timeout, output
           // over the buffer, WSL's launcher) is refused and NOTHING is recorded — it used to be recorded as exit 1 (an
           // _Expect: fail_ task was then ticked on a red run that never happened; a passing check recorded as failed).
@@ -1588,6 +1592,7 @@ async function main() {
         say("$ " + c.command + "   (" + c.name + ")");
         const x = await b5Exec(c.command, sh, M);
         if (x.summary) say(x.summary.replace(/^/gm, "  "));
+        if (x.heldOpen && !x.cantRun) say("  " + M.cliOutput.runHeldOpen(x.code)); // 1.24 r6 B3: settled at its exit
         // full review Ga1 / Ga9 / Ga10: a check that could not run is refused and NOTHING is recorded (all-or-nothing, like
         // spec_finish {evidence}) — it used to be recorded as a failed run (exit 1).
         if (x.cantRun) return { ok: false, couldNotRun: x.cantRun.code, check: c.name, error: M.runGate.checkRefused(c.name, c.command, x.cantRun.why) };
@@ -1626,6 +1631,7 @@ async function main() {
       return new Promise((resolve) => {
         const chunks = [[], []];
         let size = 0, error = null, settled = false, timer = null, grace = null, child = null;
+        let exited = null, drain = null, heldOpen = false; // 1.24 r6 B3: the command's exit, the drain after it, pipes still held then
         const killTree = () => {
           if (child && child.pid != null) {
             if (win) {
@@ -1643,10 +1649,11 @@ async function main() {
           settled = true;
           clearTimeout(timer);
           clearTimeout(grace);
+          clearTimeout(drain);
           process.removeListener("SIGINT", onSignal);
           process.removeListener("SIGTERM", onSignal);
           if (child) { try { child.stdout.destroy(); child.stderr.destroy(); child.unref(); } catch { /* already closed */ } }
-          resolve(b5ExecResult({ status, signal, error, stdout: Buffer.concat(chunks[0]).toString("utf8"), stderr: Buffer.concat(chunks[1]).toString("utf8") }, sh, M, timeoutS));
+          resolve(b5ExecResult({ status, signal, error, heldOpen, stdout: Buffer.concat(chunks[0]).toString("utf8"), stderr: Buffer.concat(chunks[1]).toString("utf8") }, sh, M, timeoutS));
         };
         try {
           // 1.21.1: a PowerShell shell (--shell pwsh / powershell, DEV_SPEC_SHELL) runs `<shell> -NoProfile -NonInteractive
@@ -1668,12 +1675,27 @@ async function main() {
         child.stdout.on("data", take(0));
         child.stderr.on("data", take(1));
         try { child.stdin.end(); } catch { /* no stdin */ }
-        child.on("close", (code, signal) => settle(code, signal));
+        // 1.24 r6 B3 — the run is over when the COMMAND exits, not when its pipes close: a background process it started (a dev
+        // server, a watcher) inherits them and kept the CLI waiting for that process — and --timeout refused a run that had
+        // exited 0. At the exit the --timeout timer stops; what is still in the pipes drains until 'close', RUN_DRAIN_MS at most,
+        // then the pipes are dropped and the exit status settles the run (heldOpen: the caller prints a note).
+        child.on("exit", (code, signal) => {
+          exited = { code, signal };
+          if (!error) clearTimeout(timer);
+          drain = setTimeout(() => { heldOpen = true; settle(code, signal); }, RUN_DRAIN_MS);
+        });
+        child.on("close", (code, signal) => settle(exited ? exited.code : code, exited ? exited.signal : signal));
         if (timeoutS) timer = setTimeout(() => { error = Object.assign(new Error("spawn " + b5ShellName(sh) + " ETIMEDOUT"), { code: "ETIMEDOUT" }); killTree(); }, timeoutS * 1000);
       });
     }
-    // A finished run → { code, output, summary, cantRun, crashed? } (b5Exec's verdict, unchanged by M13).
+    // A finished run → { code, output, summary, cantRun, crashed?, heldOpen } (b5Exec's verdict, unchanged by M13; heldOpen —
+    // 1.24 r6 B3: a background process still held the output pipes when the run settled at the command's exit).
     function b5ExecResult(run, sh, M, timeoutS) {
+      const r = b5Verdict(run, sh, M, timeoutS);
+      r.heldOpen = !!run.heldOpen;
+      return r;
+    }
+    function b5Verdict(run, sh, M, timeoutS) {
       const CRASH_SIGNALS = ["SIGSEGV", "SIGABRT", "SIGBUS", "SIGFPE", "SIGILL"]; // inside: hoisted above any outer const
       const output = (run.stdout || "") + (run.stderr || "") + (run.error ? "\n" + run.error.message : "");
       const summary = spec.summarizeRunOutput(output);

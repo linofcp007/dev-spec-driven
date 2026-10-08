@@ -1721,6 +1721,8 @@ const msg = {
       projectEnvNotDir: (name, dir) => `${name}=${dir} is a file, not a folder — fix or unset the variable.`,
       // 1.24 r6 B7: a project's own .specs/ folder named as the project (label: "--project <dir>" or "<VARIABLE>=<dir>")
       projectIsSpecs: (label, parent) => `${label} is the .specs folder of the project ${parent} — name the project folder itself: ${parent}`,
+      // 1.24 r6 B3: done --run / finish --run settled at the command's exit while a background process still held its output
+      runHeldOpen: (code) => `⚠ the command exited (${code}), but a process it started in the background kept its output open — the run was recorded at that exit; what that process prints later is not in the evidence.`,
     },
 
     // Gates: template placeholders, the approve gate (+ force), finish blockers, the bugfix execution gate,
