@@ -48,7 +48,7 @@ exports.run = ({ ok, run, tmp, CLI }) => {
     m4.code === 0 && fs.readFileSync(o4, "utf8") === gen + "ours\n" && m5.code === 1 && /usage: dev-spec merge-state <base> <ours> <theirs>/.test(m5.out),
     "1.21 F1a: an unparseable side merges nothing (exit 1, ours untouched); a generated ROADMAP.md both sides regenerated keeps ours (exit 0); two files is a usage error (got " + js([m3, m4.code, m5]) + ")");
   // 1.23 review (L13): with --json an unparseable side prints its refusal on stdout too ({ok: false, parseError, error}) — it printed nothing
-  const m3j = spawnSync(process.execPath, [CLI, "merge-state", b1, o3, put("t3j", "{ \"lang\": "), ".specs/x/.state.json", "--json"], { encoding: "utf8" });
+  const m3j = spawnSync(process.execPath, [CLI, "merge-state", b1, o3, put("t3j", "{ \"lang\": "), ".specs/x/.state.json", "--json"], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } }); // the harness's run() isolation: never the language of a .specs/ above the repo's cwd
   const j3 = (() => { try { return JSON.parse(m3j.stdout); } catch { return null; } })();
   ok(m3j.status === 1 && j3 && j3.ok === false && j3.parseError === "theirs" && /theirs is not valid JSON/.test(j3.error) && fs.readFileSync(o3, "utf8") === before3,
     "1.23 review: merge-state --json on an unparseable side prints {ok: false, parseError, error} on stdout, exit 1, ours untouched (got " + js([m3j.status, m3j.stdout.slice(0, 160)]) + ")");
