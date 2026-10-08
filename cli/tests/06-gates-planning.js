@@ -91,6 +91,22 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     rlF16.status === 0 && /DRY-RUN/.test(rlF16.stdout),
     "evals (CLI) switches: --set-baseline=false writes no baseline (=true does), --dry-run=maybe exits 2 with the argument error, --require-live=false without a key dry-runs (got " +
     JSON.stringify([sbF16, sbT16, drMb16, rlF16].map((r) => [r.status, r.baseline, (r.stderr || "").trim().slice(0, 80)])) + ")");
+  // 1.23 review (P1): every flag reaches the harness WHEREVER it stands — `evals --dry-run <f>` dropped it and ran LIVE (paid
+  // calls) —; a mistyped switch (--dryrun), a second word and a value flag without its value exit 2 before anything runs; --help
+  // prints the usage and runs nothing; a value flag before the feature keeps its value. With a key set (the stub keeps it offline).
+  const evAt16 = (args) => spawnSync(process.execPath, [CLI, ...args, "--project", ai16],
+    { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "dummy", NODE_OPTIONS: "--require " + JSON.stringify(stub16) } });
+  const pos16 = [["evals", "--dry-run", "ticket-summary"], ["--dry-run", "evals", "ticket-summary"]].map(evAt16);
+  const typo16 = evAt16(["evals", "ticket-summary", "--dryrun"]), extra16 = evAt16(["evals", "ticket-summary", "extra", "--dry-run"]);
+  const noVal16 = evAt16(["evals", "ticket-summary", "--dry-run", "--model"]), model16 = evAt16(["evals", "--model", "claude-x", "ticket-summary", "--dry-run"]);
+  const help16 = [["evals", "ticket-summary", "--help"], ["evals", "--help"]].map(evAt16);
+  ok(pos16.every((r) => r.status === 0 && /mode: DRY-RUN/.test(r.stdout) && !/mode: LIVE/.test(r.stdout)) &&
+    typo16.status === 2 && /unknown option --dryrun — did you mean --dry-run\? Nothing ran\./.test(typo16.stderr) && !/mode:/.test(typo16.stdout) &&
+    extra16.status === 2 && /unexpected argument 'extra' — one feature per run/.test(extra16.stderr) && noVal16.status === 2 && /missing value for --model/.test(noVal16.stderr) &&
+    model16.status === 0 && /model: claude-x .*DRY-RUN/.test(model16.stdout) &&
+    help16.every((r) => r.status === 0 && /^Usage: node run-evals\.js <feature>/.test(r.stdout) && !/mode:/.test(r.stdout)),
+    "1.23 review: evals forwards every flag wherever it stands (--dry-run before the feature dry-runs, never LIVE); --dryrun, an extra word and --model without a value exit 2 with nothing run; --help prints the usage (got " +
+    JSON.stringify([...pos16, typo16, extra16, noVal16, model16, ...help16].map((r) => [r.status, (r.stdout || "").split("\n")[1] || (r.stdout || "").slice(0, 40), (r.stderr || "").trim().slice(0, 70)])) + ")");
 
   // bug.md evidence in brackets ([object Object], [A-Z]) is content: doctor documents both sections and approve design passes.
   run(["bugfix", "Profile Name Shows Object", "--summary", "The profile header shows object text", "--project", w16]);

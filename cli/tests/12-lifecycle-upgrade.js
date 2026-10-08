@@ -56,6 +56,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
 
   // Switches read strictly; no .specs/ is an error (exit 1); PT output.
   const bad17 = run(["upgrade", "--apply=maybe", "--project", u17]);
+  fs.mkdirSync(path.join(tmp, "wp17-nothing"), { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one) — a folder without .specs/
   const none17 = run(["upgrade", "--project", path.join(tmp, "wp17-nothing")]);
   const pt17 = path.join(tmp, "wp17-pt");
   legacy17(pt17, "pt");

@@ -1057,9 +1057,18 @@ function cantRunRecord(r) {
   if (!isRecord(r) || typeof r.command !== "string" || r.command.trim() === "" || !Number.isInteger(r.exitCode)) return false;
   return CANT_RUN_EXIT.has(r.exitCode) || (r.exitCode !== 0 && !!couldNotRunOutput(r.summary));
 }
-// A run that proves a red test: a command that ran and exited non-zero (not a could-not-run code or output).
+// 1.23 review — the exit code of a run that CRASHED: a POSIX shell reports a child killed by SIGILL / SIGABRT / SIGBUS / SIGFPE /
+// SIGSEGV as 128 + the signal (132 · 134 · 135 · 136 · 139), Windows as an NTSTATUS — access violation, stack buffer overrun,
+// stack overflow, illegal instruction, integer divide by zero, a breakpoint — read as an unsigned or a signed 32-bit number.
+// A crash is a failed run (a re-check that crashes leaves the task unverified) but never a red test — it didn't fail for the
+// right reason: an _Expect: fail_ task's red proof refuses it (a segfault used to count as the test written first).
+const CRASH_EXIT = new Set([132, 134, 135, 136, 139,
+  ...[0xC0000005, 0xC0000409, 0xC00000FD, 0xC000001D, 0xC0000094, 0x80000003].flatMap((c) => [c, c - 0x100000000])]);
+function crashExit(code) { return Number.isInteger(code) && CRASH_EXIT.has(code); }
+// A run that proves a red test: a command that ran and exited non-zero (not a could-not-run code or output, not a crash).
 function isRedRun(r) {
-  return isRecord(r) && typeof r.command === "string" && r.command.trim() !== "" && Number.isInteger(r.exitCode) && r.exitCode !== 0 && !cantRunRecord(r);
+  return isRecord(r) && typeof r.command === "string" && r.command.trim() !== "" && Number.isInteger(r.exitCode) && r.exitCode !== 0 && !cantRunRecord(r) &&
+    !crashExit(r.exitCode);
 }
 // The red proof a record holds: its latest run, or `red` — the red run kept when a later run passed (recordEvidence). A
 // stale record (spec_impact --reopen: the spec it proved changed) proves nothing any more. One an UNDO made stale (staleBy
@@ -1134,6 +1143,8 @@ function expectFailRefusal(n, ev, ticked, lng) {
   // a missing test file, module or script, no test collected, a shell that could not start).
   const out = !CANT_RUN_EXIT.has(ev.exitCode) ? couldNotRunOutput(ev.summary) : null;
   if (out) return { ok: false, recorded: true, expected: "fail", couldNotRun: "output", error: X.cantRunOutput(n, ev.exitCode, out.text, ticked) };
+  // 1.23 review: a crash (crashExit) ran and failed — recorded as a failed run, refused as the red proof ("crash", stable)
+  if (crashExit(ev.exitCode)) return { ok: false, recorded: true, expected: "fail", couldNotRun: "crash", error: X.crashNotRed(n, ev.exitCode, ticked) };
   return { ok: false, recorded: true, expected: "fail", couldNotRun: "exit-code", error: X.cantRun(n, ev.exitCode, ticked) };
 }
 function expectFailResult(res, xf, n, lng) {
@@ -1919,7 +1930,7 @@ module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isR
   verifyPipeMasked, POSIX_SHELLS, PWSH_SHELLS, SHELL_WRAPPERS, WRAPPER_ARG_OPTS, lexShell, programName, setPipefail,
   shellScript, pipeMaskedIn, verifyPipes, expectsFail, CANT_RUN_EXIT, CANT_RUN_OUTPUT, RE_ASSERTION_RAN,
   RE_PESTER_FAILED, RE_PESTER_NOT_RUN, pesterRan, couldNotRunOutput, RE_PWSH_PARSE_FAILURE, pwshParseFailure, runsPwsh,
-  cantRunRecord, isRedRun, redProof, CMD_RULE, legacyRedRun, expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps,
+  cantRunRecord, CRASH_EXIT, crashExit, isRedRun, redProof, CMD_RULE, legacyRedRun, expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps,
   gitEvidence, OBSERVED_LOG, OBSERVED_MAX_BYTES, OBSERVED_WINDOW_MS, OBSERVED_MAX_COMMAND, OBSERVED_MAX_FEATURES,
   EVIDENCE_MODES, evidenceMode, evidenceSince, evidenceRule, evidenceModeInput, setEvidenceMode,
   observedLogFile, readObservedLog, observedRun, observedAny, observedStamp, RE_CD_STRIP, stripCdPrefix, runRootStamp, gitCommonDir, specsProjectOf,

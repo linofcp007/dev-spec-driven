@@ -50,8 +50,9 @@ slash commands are the same files — without it Claude Code lists every command
 - **Error codes**: an unknown prompt or bad prompt arguments, and an invalid / refused URI → `-32602` (Invalid params);
   a well-formed URI naming nothing → `-32002` (Resource not found); a `resources/read` error carries `data.uri`
   (JSON-RPC `error()` takes an optional `data`). Prompts and resources use the default project (SPEC_PROJECT_DIR /
-  CLAUDE_PROJECT_DIR / the client's first root / cwd — see Protocol → the default project from roots) — neither request
-  carries a projectDir — and speak its language.
+  CLAUDE_PROJECT_DIR / the client's first root / the nearest dev-spec project at or above cwd / cwd — see Protocol → the
+  default project from roots, and `resolveProjectDir` in conventions.md) — neither request carries a projectDir — and speak its
+  language.
 
 **Human approvals over MCP elicitation (1.21 F1b).** A client that declares `capabilities.elicitation` in `initialize` in form
 mode — `{}` (2025-06-18) or `{form: {…}}` (2025-11-25); `{url: {…}}` alone can't show a form and counts as no elicitation —

@@ -1579,6 +1579,9 @@ const msg = {
       usage: "Usage: node run-evals.js <feature> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
       noEvalsDir: (slug, dir) => `No evals/ dir for '${slug}' at ${dir}`,
       requireLive: "eval harness: ANTHROPIC_API_KEY is not set and --require-live was given — refusing to fall back to a dry run.",
+      // 1.23 review: a mistyped switch (--dryrun) or a stray word ran a LIVE, paid eval — refused before anything runs
+      unknownFlag: (flag, suggestion) => `eval harness: unknown option ${flag}` + (suggestion ? ` — did you mean ${suggestion}?` : "") + " Nothing ran.",
+      extraArg: (word) => `eval harness: unexpected argument '${word}' — one feature per run. Nothing ran.`,
       header: (slug) => `dev-spec-driven evals — feature '${slug}'`,
       config: (model, prompt, mode) => `  model: ${model}   prompt: ${prompt}   mode: ${mode}`,
       none: "(none)",
@@ -1724,6 +1727,16 @@ const msg = {
       unknownClient: (c, known) => `unknown client '${c}'. Known: ${known}`,
       // 1.22 review: --json on a command that prints text only (help, rules, mcp-config, evals) — a usage error, never that text
       noJson: (c) => `--json is not available for '${c}': it prints text only. Run it without --json.`,
+      // 1.23 review: each command takes its own options and arguments — one it doesn't read is an error, never silently ignored
+      flagNotFor: (flag, c, list) => `${flag} is not an option of '${c}'` + (list ? ` (its options: ${list})` : " (it takes none)") + `. Run \`${DEV_SPEC} help\`.`,
+      extraArgs: (c, extra) => `'${c}' got unexpected argument(s): ${extra}. Run \`${DEV_SPEC} help\` for its syntax.`,
+      needsRun: (flag) => `${flag} only applies with --run (how the commands run) — add --run, or leave ${flag} out.`,
+      runOrEvidence: "--run records the run it makes; --evidence / --exit / --cmd report a run made elsewhere — pass one or the other.",
+      // 1.23 review: --project names an existing folder (init alone creates it)
+      projectEmpty: "--project is empty — name the project folder, or leave --project out (the nearest folder above this one with a .specs/, else this one).",
+      projectUnexpanded: (v) => `--project ${v} holds a variable that was never expanded — pass the folder itself.`,
+      projectMissing: (dir) => `--project ${dir}: no such folder — check the path (only init creates a project folder).`,
+      projectNotDir: (dir) => `--project ${dir} is a file, not a folder.`,
     },
 
     // Gates: template placeholders, the approve gate (+ force), finish blockers, the bugfix execution gate,
@@ -2972,6 +2985,8 @@ const msg = {
       // full review Ga2: a non-zero run whose output shows the test never ran (a missing test file, module or script…).
       cantRunOutput: (n, code, what, ticked) => `Task ${n}: the run exited ${code}, but its output shows the test never ran (${what}) — that is no red test (_Expect: fail_): a missing test file, module or script is not the right reason. Write the test so it fails on an assertion (or "not implemented"), then record that run. ` + (ticked ? "Recorded; the task now counts as unverified." : "Not marking it done."),
       notRed: (cmd, what) => `\`${cmd}\` failed, but its output shows the test never ran (${what}) — that is no red test (_Expect: fail_): a missing test file, module or script is not the right reason. Nothing was recorded; the task stays open. Write the test so it fails on an assertion (or "not implemented"); then run done --run again.`,
+      // 1.23 review: a crash (exit 128 + SIGSEGV / SIGABRT…, a Windows crash code such as 0xC0000005) is a failed run, never a red test
+      crashNotRed: (n, code, ticked) => `Task ${n}: the run crashed (exit ${code} — a signal such as SIGSEGV / SIGABRT, or a Windows crash code) — that is no red test (_Expect: fail_): a crash is not the test failing for the right reason. Make the test fail on an assertion (or "not implemented"), then record that run. ` + (ticked ? "Recorded; the task now counts as unverified." : "Not marking it done."),
       prRed: "the expected red run (_Expect: fail_)",
       prRedKept: (code, day) => `red run before the fix: exit ${code}${day ? " on " + day : ""}`,
       doctorMissing: (list) => `T-IDs made green by done tasks without a recorded red run: ${list} — a test that never failed proves nothing. Mark the task that writes it with _Expect: fail_ and record its failing run before the fix (${DEV_SPEC} done <feature> <n> --run).`,

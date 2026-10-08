@@ -43,7 +43,7 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   // Every flag the help documents is known (the evals harness's and git log's own flags excepted); --help anywhere prints help.
   // (--json too — but the help itself is text only: `help --json` is a usage error since the 1.22 review, 16-conventions-flags.)
   const helpFlags = [...new Set((run(["help"]).out.match(/--[a-z][a-z-]*/g) || []).map((f) => f.slice(2)))]
-    .filter((f) => !["flag", "dry-run", "name-only", "relative", "json"].includes(f));
+    .filter((f) => !["flag", "dry-run", "set-baseline", "require-live", "model", "prompt", "max-items", "name-only", "relative", "json"].includes(f)); // (1.23 review: the help names every harness flag)
   const allFlags = run(["help", ...helpFlags.map((f) => (f === "lang" ? "--lang=en" : f === "project" ? "--project=" + pf : "--" + f + "=1"))]);
   const helpAnywhere = run(["done", "big", "2", "--help", "--project", pf]);
   ok(helpFlags.length > 50 && allFlags.code === 0 && /universal spec-driven CLI/.test(allFlags.out) && helpAnywhere.code === 0 && /universal spec-driven CLI/.test(helpAnywhere.out) &&

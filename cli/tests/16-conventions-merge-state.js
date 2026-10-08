@@ -47,11 +47,26 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   ok(m3.code === 1 && /theirs is not valid JSON/.test(m3.out) && fs.readFileSync(o3, "utf8") === before3 &&
     m4.code === 0 && fs.readFileSync(o4, "utf8") === gen + "ours\n" && m5.code === 1 && /usage: dev-spec merge-state <base> <ours> <theirs>/.test(m5.out),
     "1.21 F1a: an unparseable side merges nothing (exit 1, ours untouched); a generated ROADMAP.md both sides regenerated keeps ours (exit 0); two files is a usage error (got " + js([m3, m4.code, m5]) + ")");
+  // 1.23 review (L13): with --json an unparseable side prints its refusal on stdout too ({ok: false, parseError, error}) — it printed nothing
+  const m3j = spawnSync(process.execPath, [CLI, "merge-state", b1, o3, put("t3j", "{ \"lang\": "), ".specs/x/.state.json", "--json"], { encoding: "utf8" });
+  const j3 = (() => { try { return JSON.parse(m3j.stdout); } catch { return null; } })();
+  ok(m3j.status === 1 && j3 && j3.ok === false && j3.parseError === "theirs" && /theirs is not valid JSON/.test(j3.error) && fs.readFileSync(o3, "utf8") === before3,
+    "1.23 review: merge-state --json on an unparseable side prints {ok: false, parseError, error} on stdout, exit 1, ours untouched (got " + js([m3j.status, m3j.stdout.slice(0, 160)]) + ")");
 
   // --- with git: --install / --uninstall, then a real merge of two branches (skipped without git — the Docker images have it)
   const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
   const hasGit = (() => { try { const g = git(tmp, "--version"); return !g.error && g.status === 0; } catch { return false; } })();
   if (!hasGit) return;
+
+  // 1.23 review (L13): a hand-written overview goes to git merge-file — with --json its result is printed (it printed nothing)
+  const hw = "# Roadmap (by hand)\n\nline a\nline b\nline c\nline d\nline e\n";
+  const o6 = put("o6.md", hw.replace("line a", "line a (ours)")), o7 = put("o7.md", hw.replace("line a", "line a (ours)"));
+  const m6 = spawnSync(process.execPath, [CLI, "merge-state", put("b6.md", hw), o6, put("t6.md", hw.replace("line e", "line e (theirs)")), ".specs/ROADMAP.md", "--json"], { encoding: "utf8" });
+  const m7 = spawnSync(process.execPath, [CLI, "merge-state", put("b7.md", hw), o7, put("t7.md", hw.replace("line a", "line a (theirs)")), ".specs/ROADMAP.md", "--json"], { encoding: "utf8" });
+  const j6 = (() => { try { return JSON.parse(m6.stdout); } catch { return null; } })(), j7 = (() => { try { return JSON.parse(m7.stdout); } catch { return null; } })();
+  ok(m6.status === 0 && j6 && j6.ok === true && j6.merged === "text" && j6.clean === true && /line a \(ours\)[\s\S]*line e \(theirs\)/.test(fs.readFileSync(o6, "utf8")) &&
+    m7.status === 1 && j7 && j7.ok === true && j7.clean === false && j7.conflicts >= 1 && /<<<<<<< ours/.test(fs.readFileSync(o7, "utf8")),
+    "1.23 review: merge-state --json on a hand-written overview prints git merge-file's result ({merged: 'text', clean, conflicts}); exit 0 clean, 1 with conflict markers (got " + js([m6.status, j6, m7.status, j7]) + ")");
 
   const outside = path.join(tmp, "ms-no-repo");
   fs.mkdirSync(outside, { recursive: true });

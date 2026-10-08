@@ -15,17 +15,43 @@ const path = require("path");
 const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let errs, existingFeature, projectLang, roadmapPath;
-function __link(E) { ({ errs, existingFeature, projectLang, roadmapPath } = E); }
+let errs, existingFeature, isDevSpecDir, projectLang, roadmapPath;
+function __link(E) { ({ errs, existingFeature, isDevSpecDir, projectLang, roadmapPath } = E); }
 
 // ---------------------------------------------------------------------------
 // Paths & small fs helpers
 // ---------------------------------------------------------------------------
 
+// The project folder every surface works in (the CLI, the MCP server, the eval harness, the MCP resources): the explicit
+// argument (CLI --project, a tool's projectDir) > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the
+// working folder that holds a dev-spec .specs/ (nearestProject — run from a subfolder, a command used to start a SECOND,
+// nested .specs/ there) > the working folder itself (a project not set up yet: init creates it there).
+// 1.23 review: a value holding a variable left unexpanded — any "${", a leading $NAME, a %NAME% — is unusable and falls
+// through (a SPEC_PROJECT_DIR of "${CLAUDE_PROJECT_DIR}/", "$CLAUDE_PROJECT_DIR" or "%CLAUDE_PROJECT_DIR%" created that
+// literal folder; only a whole "${VAR}" was caught).
+const RE_UNEXPANDED_VAR = /\$\{|^\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%/;
+const PROJECT_MAX_UP = 64; // folders walked up from the working folder (a few stats each, never a walk down)
+function unexpandedVar(v) { return RE_UNEXPANDED_VAR.test(String(v == null ? "" : v).trim()); }
 function resolveProjectDir(arg) {
-  const usable = (v) => v != null && String(v).trim() && !/^\$\{[^}]*\}$/.test(String(v).trim()) ? String(v).trim() : null;
-  const dir = usable(arg) || usable(process.env.SPEC_PROJECT_DIR) || usable(process.env.CLAUDE_PROJECT_DIR) || process.cwd();
-  return path.resolve(dir);
+  const usable = (v) => (v != null && String(v).trim() && !unexpandedVar(v) ? String(v).trim() : null);
+  const dir = usable(arg) || usable(process.env.SPEC_PROJECT_DIR) || usable(process.env.CLAUDE_PROJECT_DIR);
+  if (dir) return path.resolve(dir);
+  const cwd = path.resolve(process.cwd());
+  return nearestProject(cwd) || cwd;
+}
+// The nearest folder at or above `start` that holds a dev-spec .specs/ (isDevSpecDir: roadmap.json, steering/ or a feature's
+// .state.json) — `start` itself also with any .specs/ folder (one made by hand before init) — or null. A network path is never
+// walked (isNetworkPath: no stat goes up a share).
+function nearestProject(start) {
+  if (isNetworkPath(start)) return null;
+  let dir = path.resolve(start);
+  for (let i = 0; i < PROJECT_MAX_UP; i++) {
+    if ((i === 0 && isDirSafe(path.join(dir, ".specs"))) || isDevSpecDir(dir)) return dir;
+    const up = path.dirname(dir);
+    if (up === dir) return null;
+    dir = up;
+  }
+  return null;
 }
 
 function specsRoot(projectDir) {
@@ -804,7 +830,7 @@ function isNetworkPath(p) {
   return host !== "wsl$" && host !== "wsl.localhost";
 }
 
-module.exports = { resolveProjectDir, specsRoot, ensureDir, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
+module.exports = { resolveProjectDir, unexpandedVar, nearestProject, specsRoot, ensureDir, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
   writeFileAtomic, SLEEP_CELL, sleepSync, LOCK_FILE, LOCK_WAIT_MS, LOCK_STALE_MS, LOCK_MAX_HOLD_MS, LOCK_RECLAIM_SUFFIX,
   LOCK_RECLAIM_STALE_MS, LOCK_NOTELESS_STALE_MS, LOCK_NESTED_MIN_MS, HELD_LOCKS, lockSnapshot, sameLockSnapshot,
   staleLock, reclaimStaleLock, releaseLock, lockWaitMs, withFeatureLock, withLockFile, acquireLockFile, featureLocked,

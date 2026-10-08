@@ -137,6 +137,7 @@ ok(run(["mcp-config", "all"]).out.includes("Claude Desktop"), "mcp-config all pr
 
 // v1.11 parity: steering subcommand, scriptable exit codes, --summary, CLAUDE_PROJECT_DIR
 const stDir = path.join(tmp, "steer-proj");
+fs.mkdirSync(stDir, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
 ok(/Created .*scale\.md/.test(run(["steering", "scale.md", "--project", stDir]).out) && /Exists/.test(run(["steering", "scale.md", "--project", stDir]).out), "steering <file> scaffolds one steering file (idempotent)");
 ok(run(["doctor", "Invoice Summary"]).code === 1 && run(["classify", "x"]).code === 0, "doctor exits 1 when a blocking check fails (scriptable)");
 const sumOut = run(["create", "Digest", "--summary", "summarize tickets with an LLM"]).out;
@@ -147,6 +148,7 @@ ok(rc.status === 0 && fs.existsSync(path.join(cpd, ".specs", "steering")), "the 
 
 // v1.12: done --run records evidence from the task's own _Verify:_ command; bugfix; finish; next --batch
 const vp = path.join(tmp, "v112-proj");
+fs.mkdirSync(vp, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
 run(["create", "Pay", "tdd", "--project", vp]);
 fs.writeFileSync(path.join(vp, ".specs", "pay", "tasks.md"),
   "- [ ] 1. [US1] ok task\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] failing task\n  - _Verify: node -e \"process.exit(3)\"_\n" +
