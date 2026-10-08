@@ -99,7 +99,8 @@ function walkProject(root, cap, onFile, opts = {}) {
     let off = offAbove;
     if (gi && relDir) {
       const own = folderGitignore(entries, pre, !!gi.reincluded);
-      if (own != null && gitignoresAll(own.slice(0, 4000))) continue;
+      // (review 4: only a whole file ignores all — `*` + 4,100 characters of comments + `!keep.ts` read as '*' from its head)
+      if (own != null && own.length <= GITIGNORE_ALL_HEAD && gitignoresAll(own)) continue;
       if (own != null && gi.reincluded) off = gitignoreOffMerge(off, gi.reincluded(own));
     }
     const dirs = [];
@@ -131,6 +132,37 @@ function walkProject(root, cap, onFile, opts = {}) {
 // bootstrap/cache/ do. Never a built-in name list: Ruby and Node keep real code in bin/.
 const GITIGNORE_MAX_CHARS = 100000;
 const GITIGNORE_MAX_PATTERNS = 2000;
+// A .gitignore's lines as Git reads them (review 4): a leading UTF-8 BOM skipped (a nested file's first-line negation was lost
+// to it), and only TRAILING unescaped spaces dropped — a leading blank or tab and a trailing tab are part of the pattern
+// (`raw.trim()` turned `  lib/` / `lib/\t` into `lib/`, hiding a lib/ Git tracks).
+function gitignoreLines(text) {
+  const t = String(text);
+  return (t.charCodeAt(0) === 0xfeff ? t.slice(1) : t).split(/\r?\n/).map((raw) => {
+    let end = raw.length;
+    while (end > 0 && raw[end - 1] === " ") {
+      let k = end - 2, bs = 0;
+      while (k >= 0 && raw[k] === "\\") { bs++; k--; }
+      if (bs % 2) break; // `\ ` — an escaped space stays
+      end--;
+    }
+    return raw.slice(0, end);
+  });
+}
+// A .gitignore's head (readFileHead), or "" for a UTF-16 one (FF FE / FE FF — Windows PowerShell 5.1's `echo lib/ > .gitignore`):
+// Git reads it as raw bytes and its patterns match nothing (review 4: it was decoded and applied, hiding lib/). null: unreadable.
+function gitignoreHead(file, maxChars) {
+  let fd = null;
+  try {
+    fd = fs.openSync(file, "r");
+    const b = Buffer.alloc(2);
+    if (fs.readSync(fd, b, 0, 2, 0) === 2 && ((b[0] === 0xff && b[1] === 0xfe) || (b[0] === 0xfe && b[1] === 0xff))) return "";
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) try { fs.closeSync(fd); } catch { /* already closed */ }
+  }
+  return readFileHead(file, maxChars);
+}
 // One name of a pattern → its units (a character, or the Set a class allows), or null when it holds anything else.
 function gitignoreName(s) {
   if (!s || s === "." || s === "..") return null;
@@ -167,8 +199,7 @@ function gitignoreName(s) {
 function gitignoreDirPatterns(text) {
   const pos = [], negs = [];
   let negOverflow = false;
-  for (const raw of String(text).split(/\r?\n/)) {
-    let l = raw.trim();
+  for (let l of gitignoreLines(text)) {
     if (!l || l[0] === "#") continue;
     if (FOLD_CASE) l = l.toLowerCase();
     if (l[0] === "!") {
@@ -207,13 +238,14 @@ function gitignoreDirPatterns(text) {
 const GITIGNORE_MAX_NAME = 255; // a longer name is no folder name (every file system's limit)
 const GITIGNORE_MAX_NEGATIONS = 200;
 const GITIGNORE_NEGATION_BUDGET = 4000000; // name-unit comparisons over all pattern × negation pairs
-// A negation's LAST name (after `!`, a leading `/`, a trailing `/` or `/**`) → its glob tokens ({ lit } · { one } · { star } ·
+// A negation's LAST name (after `!`, a leading `/`, a trailing `/`) → its glob tokens ({ lit } · { one } · { star } ·
 // { set, neg }; a class it can't read is { one }: any character), or undefined when it could be no folder name (empty, `.` /
 // `..`, longer than any name can be). (gitignoreNegationReincludes reads a missing token list as "any name".)
+// Review 4: one ending in `/**` re-includes EVERY name below its folder (`!frontend/src/**` brings back frontend/src/lib/) → null,
+// any name; it was read as its folder's own name (`src`), so root `lib/` kept hiding frontend/src/lib/*.ts — and `!/**` was dropped.
 function gitignoreNegationTokens(l) {
-  let s = l.trim();
-  while (s.endsWith("/**")) s = s.slice(0, -3);
-  s = s.replace(/\/+$/, "");
+  const s = l.replace(/\/+$/, "");
+  if (s === "**" || s.endsWith("/**")) return null;
   const last = s.slice(s.lastIndexOf("/") + 1);
   if (!last || last === "." || last === "..") return undefined;
   const tokens = [];
@@ -288,7 +320,10 @@ const GITIGNORE_NESTED_MAX = 200;
 const GITIGNORE_ALL_OFF = "all";
 function gitignoreRules(root, realRoot) {
   const file = path.join(root, ".gitignore");
-  const pats = projectFileInside(realRoot || root, file) ? gitignoreDirPatterns(readFileHead(file, GITIGNORE_MAX_CHARS) || "") : [];
+  // (review 4: a root file longer than GITIGNORE_MAX_CHARS applies no pattern — its head ends mid-line, `srcgen/` read as `src`,
+  // and a negation past the head was never weighed: never hide code Git may track, as a long nested file turns every pattern off)
+  const head = projectFileInside(realRoot || root, file) ? gitignoreHead(file, GITIGNORE_MAX_CHARS + 1) || "" : "";
+  const pats = head.length > GITIGNORE_MAX_CHARS ? [] : gitignoreDirPatterns(head);
   const dir = (rel, off) => {
     if (off === GITIGNORE_ALL_OFF) return false;
     const segs = (FOLD_CASE ? String(rel).toLowerCase() : String(rel)).split("/");
@@ -300,11 +335,11 @@ function gitignoreRules(root, realRoot) {
   let nested = 0, budget = GITIGNORE_NEGATION_BUDGET;
   const reincluded = (text) => {
     const s = String(text);
-    if (!/^[ \t]*!/m.test(s)) return null; // no negation: nothing re-included
+    const body = s.charCodeAt(0) === 0xfeff ? s.slice(1) : s; // (review 4: a BOM hid a first-line negation from this check)
+    if (!/^!/m.test(body)) return null; // no negation: nothing re-included
     if (s.length > GITIGNORE_MAX_CHARS || ++nested > GITIGNORE_NESTED_MAX) return GITIGNORE_ALL_OFF;
     const negs = [];
-    for (const raw of s.split(/\r?\n/)) {
-      let l = raw.trim();
+    for (let l of gitignoreLines(body)) {
       if (l[0] !== "!") continue;
       if (FOLD_CASE) l = l.toLowerCase();
       const tokens = gitignoreNegationTokens(l.slice(1));
@@ -335,8 +370,7 @@ function gitignoreOffMerge(above, mine) {
 // placeholder files that keep the empty folder in git. Any other rule → no (a narrower or a mixed list).
 function gitignoresAll(text) {
   let all = false;
-  for (const raw of String(text).split(/\r?\n/)) {
-    const l = raw.trim();
+  for (const l of gitignoreLines(text)) { // (review 4: ` *` / `*\t` are no '*' in Git)
     if (!l || l[0] === "#") continue;
     if (l === "*" || l === "/*" || l === "**" || l === "/**" || l === "**/*") { all = true; continue; }
     if (/^!\/?\.(?:gitignore|gitkeep|keep)$/.test(l)) continue;
@@ -344,11 +378,12 @@ function gitignoresAll(text) {
   }
   return all;
 }
-// A folder's own .gitignore text (its head: 4000 characters, or — when its negations are weighed — GITIGNORE_MAX_CHARS + 1),
-// null when it has none.
+// A folder's own .gitignore text (its head: GITIGNORE_ALL_HEAD + 1 characters, or — when its negations are weighed —
+// GITIGNORE_MAX_CHARS + 1), null when it has none ("" for a UTF-16 one: gitignoreHead).
+const GITIGNORE_ALL_HEAD = 4000;
 function folderGitignore(entries, pre, whole) {
   const g = entries.find((e) => e.name === ".gitignore");
-  return g && g.isFile() ? readFileHead(pre + ".gitignore", whole ? GITIGNORE_MAX_CHARS + 1 : 4000) || "" : null;
+  return g && g.isFile() ? gitignoreHead(pre + ".gitignore", (whole ? GITIGNORE_MAX_CHARS : GITIGNORE_ALL_HEAD) + 1) || "" : null;
 }
 // A ROOT file the scan reads (a manifest, the .gitignore): a regular file, or a link whose real path stays inside the project —
 // a committed `package.json -> /home/me/.npmrc` is never read (1.22 review; the walk itself never follows a link). realRoot: the

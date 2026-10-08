@@ -3,7 +3,7 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
-## [1.22.0] — 2026-10-02
+## [1.22.0] — 2026-10-08
 
 Reviews you can trust, and an optional simplification pass before finishing. Both ideas come from Anthropic's
 `code-review` and `code-simplifier` plugins (claude-plugins-official), rebuilt around the spec and the evidence gate:
@@ -51,14 +51,73 @@ local, no pull requests, no CI.
   pass before closing, the verify and simplifier rows in model selection, three new rationalizations.
 - `references/code-reuse-and-quality.md`: "The simplification pass" (the rules and why), a checklist item.
 - The evidence gate's "not-done" line now says "the subagent" (it covers the simplifier too).
+- **A run proves a task only when it IS the task's `_Verify:_` command.** Any other command (`echo ok` for `npm test`, another
+  test file, one of two `_Verify:_` commands alone, a `cd` into another folder) ticks the task but leaves it unverified —
+  the new reason `command-mismatch` (EN / PT / ES). Spacing, quotes, `\` vs `/`, a trailing `2>&1`, your own `cd <project
+  root> &&` / `set -o pipefail;` / `VAR=value` don't matter; a prefix the `_Verify:_` holds must be there. A project
+  check's run is held to its `meta.checks` command the same way (`changed`). Runs recorded by an older dev-spec keep the
+  verdict they had — a plugin update never turns a verified task unverified.
+- **Criteria numbered with a bare `AC-1` are flagged** — EARS warns (`no-id`), trace_check reports them
+  (`unidentifiedCriteria`), and doctor's `ears` check and the requirements / change-plan approvals fail instead of "all 0
+  ACs covered". `/spec-upgrade` lists such features with the way out (renumber them US-<story>.AC-<n>, then re-approve).
+- `references/subagent-execution.md`: in parallel mode the controller creates each worktree from the recorded BASE (the
+  Agent tool's isolation started from the default branch, without the earlier tasks).
+- Faster: the spec-hook ~173 → ~68 ms per edit outside `.specs/`, the Stop hook ~235 → ~88 ms on an idle project, a tick
+  with its ROADMAP.md refresh ~185 → ~65 ms (30 features × 40 tasks), the fast-forward ~1.2 → ~0.4 s, the pre-commit
+  check ~238 → ~127 ms, an English `list` ~144 → ~66 ms.
 
 ### Fixed
 - An implementer's "**Status:** `DONE`" (the status in backticks) read as no claim, so its report was never checked; a
   status token in inline code on the status line is read now — any other code span still isn't ("`order.status ===
   "blocked"`" or "with status `blocked`" in a commit line is no status).
+- **Evidence and runs.** `done --run` / `finish --run` take a run's time and stamps BEFORE it runs (an edit made during a
+  long run read as tested). Folders a run `cd`s into are resolved from the project root (`cd ../other-project && npm test`
+  proved `npm test`; `cd ./packages/web` or an absolute path didn't prove `cd packages/web`); a `cd` into a git worktree of
+  the project — beside it or inside it (`.claude/worktrees/<name>`) — is that worktree's root; `cd #` and a `cd` inside
+  `$(…)` / backticks prove nothing. An `_Expect: fail_` task is never verified by a red run of another test file. Its note
+  says to set the fix aside with `git stash push -- <the fix's files>` (a bare `git stash` also takes tasks.md and
+  .state.json). On a Portuguese or Spanish Windows, `done --run --shell cmd` took cmd.exe's own failure ("O sistema não
+  conseguiu localizar o caminho especificado", read from the console's code page) as a red run. Observed mode
+  (`meta.evidence: observed`) sees every form reported mode accepts (`tests\x.test.js`, a reversed join, `CI=1 …`, the steps
+  of a `_Verify:_` holding ` && ` run one by one). `* [ ]` / `+ [ ]` bullets are task lines; doctor warns about checkbox
+  lines it can't read as tasks (`unread-tasks`). A task number is an integer ≥ 0 on every surface; `depend --order` a safe
+  integer.
+- **The stop gate** read "0 tests failing", "none of the tests fail" or "the 2 failing tests now pass" as admissions and
+  stayed silent; tasks ticked by hand counted as no activity; only the first 50 features were read. The implementer's gate
+  checked the FIRST task report its reply named, not the last.
+- **The approval guard** let an approval through at `deny` behind an unquoted `cmd /c …`, `pwsh -Command …`, `Start-Process`,
+  `find -exec`, `winpty`, `flock` or `script -c`; and `SPEC_MCP_APPROVAL_HOOK=on` waved a deny-level approval through the MCP
+  server.
+- **Gates and lifecycle.** The Phase 4 `tests` approval is pending again once a T-ID is planned after it or a plan is
+  re-approved with other content. An approval over MCP elicitation records only what the user was shown (an edit meanwhile
+  is refused: `changedSincePreview`). A deleted approved artifact counts as a change (next_action: restore or revoke). A
+  re-approval of unchanged content after a finish no longer makes the finish stale. `_Affects:_` can name a heading holding
+  "," or ";". Doctor names the stale tests sign-off only while `tests` is pending. Hashing a file over 512 MiB works.
+- **Requirements and traceability.** A `<!--` in a feature's summary hid every criterion. `checkout/US-3.AC-2` written in
+  prose is another feature's criterion, not a required one. A spec of NFR-n / EC-n / SC-n criteria alone passes the gates,
+  and so does a criterion whose ID is not at its start (`… in 200 ms (NFR-1)`). Each criterion is judged by its own ID: one
+  numbered `AC-1` is flagged even when it cites a US-n.AC-m, and an `AC-2` it only quotes (in `_Supersedes:_`, behind
+  another feature's name, in a URL) is not its number. "clean" as a verb is no vague term. UTF-16 files (with a BOM) are
+  read everywhere.
+- **Classifier.** Two-factor / multi-factor authentication counts for +sec in Portuguese and Spanish too ("autenticação
+  forte de dois fatores", "inicia sesión con doble factor"), and only as authentication: "depende de dois fatores", "a
+  multi-factor risk model" or "a multi-factored discount" are no +sec signal. A track kept off with weak signals says so
+  ("off — weak signal only"), never "no signals matched".
+- **Brownfield scan and coverage.** The cap counts code files, not every file. Folders the ROOT `.gitignore` excludes are
+  skipped as Git reads them — its negations and a nested `.gitignore`'s (`!frontend/src/lib/`, `!src/**`), a BOM, a UTF-16
+  file (no pattern), leading blanks — and so are folders whose own `.gitignore` ignores everything; `testdata/` is fixtures.
+  Nested manifests (monorepos) join the stack; docs / examples manifests don't; a root manifest linked outside the project
+  is never read.
+- **Imports and exports.** `spec_export {write}` never writes through a linked folder or document. spec-kit's bulleted
+  scenarios, a title in a non-Latin script, BMAD subtasks (their parent's `(AC: n)`), "Run `npm test` and expect …" (no
+  criterion), a plan step's `cd packages/web && npm test` (imported whole as the `_Verify:_`), and a bare `AC-1` in imported
+  fluidplan prose are read correctly.
+- **CLI.** `--json` on a text-only command (help, rules, mcp-config, evals) is a usage error; `evals` exits 1 when the
+  harness never ran; `dev-spec rules agents` writes absolute paths.
 
 ### Tests
-- `node mcp/test.js` 1688 assertions (was 1680), `node cli/test-cli.js` 523 (was 522): the simplifier's SubagentStop gate
+- `node mcp/test.js` 1803 assertions (was 1680), `node cli/test-cli.js` 535 (was 522) — a regression per review finding,
+  and: the simplifier's SubagentStop gate
   — its `## Final runs` section: no report, a baseline only, a red run, a failed run hidden by a later passing one, a code
   quoted in output or in a fenced block, a check never run or without its code, a longer command starting with a
   check's, a check listed twice, a run nested under a group bullet, "# pass 212" output lines, a revert round with and without a new heading, a 256 KB

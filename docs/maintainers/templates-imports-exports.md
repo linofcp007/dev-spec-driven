@@ -78,7 +78,10 @@ trackers, release notes, milestones).
     `obj.m` are object fields: such a name needs a folder part, `scripts/build.cmd`), plus docs / config / data such as `.psd1`); the
     rest → design.md. A folder holding several plans is refused (name the file).
   - `execplan` — a Codex ExecPlan (PLANS.md): Validation and Acceptance → criteria; Progress (state kept) + Concrete Steps
-    → tasks (deduplicated), a step naming a check command → `_Verify:_`; Decision Log → design.md `## Decisions` (D-1…);
+    → tasks (deduplicated), a step naming a check command → `_Verify:_` (`planCommand`; 1.22 review 4: a leading `cd <dir> &&`
+    is kept — the runner / check test reads the command after it; dropping it imported `cd packages/web && npm test` as
+    `_Verify: npm test_`, which `done --run` ran at the root and the natural run read command-mismatch; `planCommandOnly`
+    reads a cd-led validation line the same way); Decision Log → design.md `## Decisions` (D-1…);
     Purpose → summary; living sections → design.md verbatim.
   - `bmad` — the PRD (`docs/prd.md`, sharded `docs/prd/`, v6 `_bmad-output/planning-artifacts/`) FR / NFR lines → FR-n /
     NFR-n; epic stories + story files (`docs/stories/*.md`; the file wins over the PRD's copy) → US-1…US-n in story order,
@@ -141,7 +144,9 @@ trackers, release notes, milestones).
     read wrongly would hide code). **Negations (review 2):** a pattern a negation could re-include is not applied — the Python
     template's `lib/` with `!frontend/src/lib/` hid a SvelteKit app's `frontend/src/lib/*.ts` (coverage 4 → 2 code files, its
     `_Implements:_` "non-code"). `gitignoreNegationReincludes()` compares the negation's LAST name (after `!`, `/`, a trailing
-    `/` or `/**` — Git re-includes nothing under a folder that stays excluded, so `!lib/keep.txt` brings back no `lib/`) with the
+    `/` — Git re-includes nothing under a folder that stays excluded, so `!lib/keep.txt` brings back no `lib/`; review 4: one
+    ending in `/**` re-includes EVERY name below its folder, so it reads as any name — `!frontend/src/**` was read as `src` and
+    root `lib/` kept hiding frontend/src/lib/) with the
     pattern's last name: the same name, or a wildcard / class (`!b*/`, `!*`) that could match it — a DP over the pattern's
     units, exact for its classes; Visual Studio's `!**/[Pp]ackages/build/`, `!?*.[Cc]ache/` keep `[Bb]in/` / `[Oo]bj/`. The
     line order is not read (a negation before its pattern loses in Git — dropping that pattern only shows more code). Bounded:
@@ -154,6 +159,14 @@ trackers, release notes, milestones).
     root pattern stays on elsewhere (`backend/lib/`). Bounded: `GITIGNORE_NESTED_MAX` (200) nested files weighed and ONE
     `GITIGNORE_NEGATION_BUDGET` over all of them; a file over `GITIGNORE_MAX_CHARS`, over `GITIGNORE_MAX_NEGATIONS`
     negations, past the cap or the budget turns every root pattern off below it (`GITIGNORE_ALL_OFF` — never hide code).
+    **Read as Git reads it (review 4):** `gitignoreLines` skips a leading UTF-8 BOM (it hid a nested file's first-line
+    negation) and drops only TRAILING unescaped spaces — `raw.trim()` turned `  lib/` / `lib/\t` / ` *` into patterns Git never
+    applies; `gitignoreHead` reads a UTF-16 file (FF FE / FE FF — Windows PowerShell 5.1's `echo lib/ > .gitignore`) as no
+    pattern (Git matches its raw bytes against nothing); a ROOT file over `GITIGNORE_MAX_CHARS` applies no pattern (its head
+    ended mid-line — `srcgen/` read as `src` — and a negation past it was never weighed); the ignore-all test reads the whole
+    file (`GITIGNORE_ALL_HEAD` + 1 characters: a longer one is no ignore-all — `*` + 4 KB of comments + `!keep.ts` was).
+    Known limit: case is folded with `toLowerCase` where the file system folds it, while Git's `core.ignorecase` folds ASCII
+    only (`Äpp/` hides `äpp/`, `[@-Z]` folds to `[@-z]`).
     A folder (not the root) whose own `.gitignore` ignores everything (`gitignoresAll`: `*`,
     re-including at most `.gitignore` / `.gitkeep` / `.keep`) is skipped too (Laravel's storage/framework/views). Never a
     built-in `bin` (Ruby / Node keep code there). `testdata/` is a fixture folder (`isTestFixture`).

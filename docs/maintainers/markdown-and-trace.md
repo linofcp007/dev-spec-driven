@@ -35,7 +35,7 @@ matrix.
   **A bare `AC-n` is no ID (1.22 review):** EARS still LINTS a unit led by one (`RE_LIST_DEFINES_AC` / `RE_LEAD_DEFINES_AC`), but
   its stable-ID check reads `RE_FULL_ID` (US-n.AC-n, T-, EC-, NFR-, SC-) — a bare one is `no-id` with `ears.bareAcId` ("write
   US-<story>.AC-<n>"). And the mirror of `earsUnlinted`: `earsUnidentified(reqText, ears)` — EARS linted criteria but
-  `requirementAcIds` is empty (bare IDs, or none) → the criteria as labels (each one's bare ID, else `L<line>`, from the
+  `requirementAcIds` is empty (bare IDs, or none; review 4: or a criterion is numbered with a bare AC-n) → the criteria as labels (each one's bare ID, else `L<line>`, from the
   result's non-enumerable `criteria`). trace_check reports them as the gap `unidentifiedCriteria` (first in `TRACE_GAP_ORDER`, a
   verdict kind; only present when non-empty, so every other result is unchanged), doctor's `ears` fails (`earsNoAcIds`), so do
   the requirements approval and a change's plan approval; the pre-commit check names them instead of "traceability clean (0
@@ -50,9 +50,25 @@ matrix.
   (`RE_LEAD_LABEL`; `- **US-1.AC-1** —`, `1. NFR-2:`, `### US-1.AC-3:`, `- [ ] (EC-1)`), with the token before a slash in front of
   it (`P1/US-1.AC-4`), or, with no lead, a table row's cell that is exactly such an ID (`RE_CELL_LABEL`). `ownStableId` is a
   US-n.AC-m / EC / NFR / SC label not behind another feature's slug (`featureRefTest`); a bare AC-n label is no ID whatever the
-  criterion cites, a T- ID (a test's) never a criterion's, and an ID that trails the text (`… (NFR-1)`) labels nothing — the
-  limit: write the ID first (the templates do). EARS's no-id lint reads the same label (with none, a non-T stable ID anywhere —
-  `RE_FULL_ID_NO_T`). `criteriaBareIds(reqText)` (the bare IDs the criteria are numbered with — `bareLabel`: the label, else a
+  criterion cites, and a T- ID (a test's) never a criterion's. **Review 4 — no label, an ID anywhere:** with NO label
+  (`criterionLabel` null), a non-T stable ID anywhere in the criterion's own text is its ID (`RE_FULL_ID_NO_T` over the text after
+  `stripSupersedes` / `stripForeignAcRefs`) — EARS's no-id lint reads the same (label, else that); `- THE SYSTEM SHALL answer … in
+  200 ms (NFR-1)`, `- **Latency (NFR-1):** …`, `- **[NFR-1]** …`, `a. NFR-1: …` were unidentified (doctor's ears failed, the
+  approval refused) while EARS counted their ID. **Review 4 — each criterion by its own ID:** `earsUnidentified` returned null
+  for any document with a US-n.AC-m in it, so `- AC-1: … (see US-1.AC-9)` escaped while the CITED ID became the only required AC;
+  now a criterion numbered with a bare AC-n (`bareLabel`) is named whatever the document defines, and one with no ID at all only
+  when the document defines no AC ID (beside US-n.AC-m criteria it stays EARS's no-id warn). trace_check lints for it when
+  `requiredAcs` is non-empty only if the text holds a bare AC-n (`RE_BARE_AC`) — no second EARS pass otherwise. `RE_BARE_AC`
+  never reads the AC-n of a US-n.AC-m — nor of an importer's ESCAPED `US-7\.AC-1` (an ID-led line of imported prose, demoted
+  so it defines nothing, e.g. a fluidplan page intro): that one was listed as an unidentified `AC-1` and the import read
+  gaps-found. `bareLabel`'s no-label branch reads the criterion's OWN text (`stripSupersedes`) with `RE_BARE_AC_OWN`: never
+  an AC-n behind a slash (another feature's `checkout/AC-2`, a URL's `/pages/AC-12`) or running into a letter / digit
+  (`AC-230V`) — each was the criterion's "number", and every gate and spec_upgrade's renumber item asked to renumber another
+  feature's ID. EARS's no-id lint reads the own text too (`stripSupersedes`, then `stripForeignAcRefs` with no feature folder:
+  every resolvable slug is another's) — a criterion whose only ID was a `_Supersedes:_` marker's or `checkout/US-3.AC-2`
+  counted as identified there, untraced with no warning (doctor named it). The fluidplan importer escapes a bare `AC-1` of
+  imported prose (`AC\-1`, `fpInert`) as it escapes `US-7\.AC-1`.
+  `criteriaBareIds(reqText)` (the bare IDs the criteria are numbered with — `bareLabel`: the label, else a
   bare AC-n in a criterion with no label) feeds spec_upgrade's renumber item (lifecycle.md → Upgrade).
   **`<feature>/US-n.AC-m` is another feature's (1.22 review):** `requirementAcIds` drops it (`stripForeignAcRefs` — the
   `_Supersedes:_` / `_Affects:_` syntax written in prose: "rules of checkout/US-3.AC-2 stay as they are" was a required AC no

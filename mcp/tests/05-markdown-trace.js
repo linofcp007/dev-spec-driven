@@ -1435,7 +1435,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     ok(noId.length === 2 && /'AC-1' is not a stable ID trace_check reads — write US-<story>\.AC-<n> \(e\.g\., US-1\.AC-1\)/.test(noId[0].msg) && eB.summary.withStableId === 0 &&
       trB.totalAcs === 0 && trB.verdict === "gaps-found" && js(trB.unidentifiedCriteria) === '["AC-1","AC-2"]' &&
       S.traceGapLines(trB, "en").some((l) => /^criteria with no US-<story>\.AC-<n> ID \(traceability counts none\): AC-1, AC-2$/.test(l)) &&
-      chk(docB, "ears").status === "fail" && /has criteria \(AC-1, AC-2\) but no AC ID trace_check reads/.test(chk(docB, "ears").detail) &&
+      chk(docB, "ears").status === "fail" && /has criteria \(AC-1, AC-2\) with no AC ID trace_check reads/.test(chk(docB, "ears").detail) &&
       chk(docB, "traceability").status === "fail" && apB.refused === true && (apB.failing || []).includes("ears") &&
       trN.verdict === "gaps-found" && js(trN.unidentifiedCriteria) === '["L5"]' &&
       trG.verdict === "pass" && trG.totalAcs === 1 && !("unidentifiedCriteria" in trG),
@@ -1628,5 +1628,79 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     ok(trR.verdict === "pass" && trR.totalAcs === 2 && js(trR.uncoveredByTasks) === "[]" && js(ids) === '["US-1.AC-1","US-1.AC-2"]',
       "1.22 review 3 (6): 'billing/US-3.AC-2' with no billing feature is a foreign reference (no required AC); 'Step-2/US-1.AC-2' labels a criterion — this feature's, and so is 'legacy/US-1.AC-2' citing the same ID (got " +
       js([trR.verdict, trR.totalAcs, trR.uncoveredByTasks, ids]) + ")");
+
+    // 1.22 review 4 (1): with NO label, a criterion's own stable ID may sit anywhere in it — `… in 200 ms (NFR-1)`, `**Latency (NFR-1):**`,
+    // `**[NFR-1]**`, `a. NFR-1:` — as earsValidate counts it (withStableId): ownStableId disagreed, so earsUnidentified named them, doctor's
+    // ears failed and the requirements approval was refused (they passed at c3c13ef). A bare AC-n label, another feature's
+    // `<slug>/US-n.AC-m` and a _Supersedes:_ reference are still no ID of its own.
+    const nfrAny = S.createFeature(d, "Nfr anywhere", ["core"], "", undefined, "en");
+    put(nfrAny.dir, "requirements.md", "# Requirements: latency\n\n## Summary\nThe API must stay fast.\n\n## Non-Functional Requirements\n\n" +
+      "- THE SYSTEM SHALL answer GET /orders within 200 ms at p95 (NFR-1)\n- **Availability (NFR-2):** THE SYSTEM SHALL keep 99.9% monthly availability\n" +
+      "- **[NFR-3]** THE SYSTEM SHALL keep its memory under 512 MB\n\na. NFR-4: THE SYSTEM SHALL start within 2 s\n");
+    put(nfrAny.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: NFR-1, NFR-2, NFR-3, NFR-4_\n");
+    const reqN = fs.readFileSync(path.join(nfrAny.dir, "requirements.md"), "utf8");
+    const evN = S.earsValidate(reqN, "en"), docN = S.specDoctor(d, nfrAny.slug), trN = S.traceCheck(d, nfrAny.slug);
+    approveBefore(d, nfrAny.slug, "requirements");
+    const apN = S.approvePhase(d, nfrAny.slug, "requirements");
+    const ownNo = ["- AC-1: WHEN x THE SYSTEM SHALL y (NFR-1)", "- WHEN x THE SYSTEM SHALL keep checkout/US-3.AC-2", "- WHEN x THE SYSTEM SHALL y _Supersedes: checkout/US-1.AC-1_"]
+      .map((t) => E.earsUnidentified(reqOf([t]), S.earsValidate(reqOf([t]), "en"), path.join(d, ".specs", "ref")));
+    ok(evN.summary.criteriaDetected === 4 && evN.summary.withStableId === 4 && E.earsUnidentified(reqN, evN, nfrAny.dir) === null && chk(docN, "ears").status === "pass" &&
+      !("unidentifiedCriteria" in trN) && !(apN.failing || []).includes("ears") && ownNo.every((u) => Array.isArray(u) && u.length === 1),
+      "1.22 review 4 (1): a criterion whose only ID is NOT at its start — `(NFR-1)` at the end, `**Availability (NFR-2):**`, `**[NFR-3]**`, `a. NFR-4:` — has its own stable ID (earsUnidentified null, doctor's ears passes, trace names no unidentified criterion, the approval doesn't fail on ears); a bare AC-n label, another feature's ID and a _Supersedes:_ reference still don't (got " +
+      js([evN.summary, E.earsUnidentified(reqN, evN, nfrAny.dir), chk(docN, "ears"), trN.unidentifiedCriteria, apN.failing, ownNo]) + ")");
+
+    // 1.22 review 4 (6): `- AC-1: … (see US-1.AC-9)` — any US-n.AC-m in the document returned null early, so the criterion numbered with a
+    // bare AC-1 escaped while the CITED ID became the only required criterion. Each criterion is judged by its own ID now; one with no ID at
+    // all beside US-n.AC-m criteria is still EARS's no-id warn only.
+    const cite = S.createFeature(d, "Cite us", ["core"], "", undefined, "en");
+    put(cite.dir, "requirements.md", reqOf(["- AC-1: WHEN the user logs in THE SYSTEM SHALL redirect (see US-1.AC-9)", "- US-1.AC-2: IF wrong THEN THE SYSTEM SHALL show an error",
+      "- THE SYSTEM SHALL log each attempt"]));
+    put(cite.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-9, US-1.AC-2_\n");
+    const reqC = fs.readFileSync(path.join(cite.dir, "requirements.md"), "utf8");
+    const trC = S.traceCheck(d, cite.slug), docC = S.specDoctor(d, cite.slug);
+    ok(js(E.earsUnidentified(reqC, S.earsValidate(reqC, "en"), cite.dir)) === '["AC-1"]' && js(trC.unidentifiedCriteria) === '["AC-1"]' && trC.verdict === "gaps-found" &&
+      chk(docC, "ears").status === "fail" && /\(AC-1\)/.test(chk(docC, "ears").detail || ""),
+      "1.22 review 4 (6): a criterion numbered with a bare AC-1 is unidentified even when the document cites a US-n.AC-m elsewhere (trace gaps-found, doctor's ears fails naming AC-1); an unnumbered one beside US-n.AC-m criteria is not listed (got " +
+      js([E.earsUnidentified(reqC, S.earsValidate(reqC, "en"), cite.dir), trC.unidentifiedCriteria, trC.verdict, chk(docC, "ears")]) + ")");
+
+    // 1.22 review 4 (6b): an importer demotes an ID-led line of imported prose by escaping it (`1. **US-7\.AC-1** — …`, a fluidplan page
+    // intro) — the AC-1 of that escaped US-7\.AC-1 is no bare AC-n: (6) listed it as an unidentified criterion and the import read gaps-found.
+    const BS = String.fromCharCode(92);
+    const esc = S.createFeature(d, "Escaped id", ["core"], "", undefined, "en");
+    put(esc.dir, "requirements.md", reqOf(["1. **US-7" + BS + ".AC-1** — WHEN x THE SYSTEM SHALL y", "- US-1.AC-1: WHEN the user logs in THE SYSTEM SHALL redirect"]));
+    put(esc.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1_\n");
+    const reqE = fs.readFileSync(path.join(esc.dir, "requirements.md"), "utf8");
+    const trE = S.traceCheck(d, esc.slug);
+    ok(E.earsUnidentified(reqE, S.earsValidate(reqE, "en"), esc.dir) === null && !("unidentifiedCriteria" in trE) && trE.verdict === "pass" && trE.totalAcs === 1 &&
+      !E.RE_BARE_AC.test("US-7" + BS + ".AC-1") && !E.RE_BARE_AC.test("US-7.AC-1") && E.RE_BARE_AC.test("AC-1") && E.RE_BARE_AC.test("(see AC-2)"),
+      "1.22 review 4 (6b): an escaped `US-7\\.AC-1` (an importer's demoted ID-led line) holds no bare AC-n — not listed as unidentified, trace passes; a bare AC-1 still reads as one (got " +
+      js([E.earsUnidentified(reqE, S.earsValidate(reqE, "en"), esc.dir), trE.unidentifiedCriteria, trE.verdict, trE.totalAcs]) + ")");
+
+    // 1.22 review 4 (6c): a bare AC-n an unlabelled criterion only QUOTES — in a _Supersedes:_ marker, behind another feature's slug or a
+    // URL's slash, or running into a letter (`AC-230V`) — is not its number: every gate (and spec_upgrade's renumber item) asked to
+    // renumber another feature's AC-2. And EARS reads the criterion's own text as ownStableId does: a criterion whose only ID is a
+    // _Supersedes:_ marker's or another feature's US-n.AC-m is a no-id warn (EARS counted it, so it stayed untraced with no warning).
+    S.createFeature(d, "Shopcart", ["core"], "", undefined, "en");
+    const quo = S.createFeature(d, "Quoted ids", ["core"], "", undefined, "en");
+    put(quo.dir, "requirements.md", reqOf(["- US-1.AC-1: WHEN the user logs in THE SYSTEM SHALL redirect",
+      "- WHEN a coupon is applied THE SYSTEM SHALL recompute the total _Supersedes: shopcart/AC-2_",
+      "- WHILE a sale runs THE SYSTEM SHALL keep the discount rules of shopcart/AC-3 unchanged",
+      "- THE SYSTEM SHALL follow https://wiki.example.com/pages/AC-12 and run on AC-230V mains"]));
+    put(quo.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1_\n");
+    const reqQ = fs.readFileSync(path.join(quo.dir, "requirements.md"), "utf8");
+    const evQ = S.earsValidate(reqQ, "en"), trQ = S.traceCheck(d, quo.slug);
+    const evSup = S.earsValidate(reqOf(["- US-1.AC-1: WHEN x THE SYSTEM SHALL y", "- WHEN the cart is empty THE SYSTEM SHALL show a hint _Supersedes: shopcart/US-1.AC-1_",
+      "- WHEN paid THE SYSTEM SHALL keep shopcart/US-3.AC-2 as it is"]), "en");
+    ok(E.earsUnidentified(reqQ, evQ, quo.dir) === null && !("unidentifiedCriteria" in trQ) && trQ.verdict === "pass" && js(E.criteriaBareIds(reqQ, quo.dir)) === "[]" &&
+      !evQ.issues.some((i) => /AC-2|AC-3|AC-12|AC-230/.test(i.msg || "")) && E.bareLabel("- AC-4: WHEN x THE SYSTEM SHALL y") === "AC-4" && E.bareLabel("- WHEN x THE SYSTEM SHALL y (AC-5)") === "AC-5" &&
+      evSup.summary.withStableId === 1 && evSup.issues.filter((i) => i.code === "no-id").length === 2,
+      "1.22 review 4 (6c): an AC-n inside _Supersedes:_, behind a slug or a URL's slash, or in `AC-230V` is no criterion's number (trace passes, no renumber item, no 'AC-2 is not a stable ID'); a _Supersedes:_ / another feature's US-n.AC-m is no criterion's own ID for EARS either — a no-id warn (got " +
+      js([E.earsUnidentified(reqQ, evQ, quo.dir), trQ.unidentifiedCriteria, trQ.verdict, E.criteriaBareIds(reqQ, quo.dir), evQ.issues.map((i) => i.msg), evSup.summary, evSup.issues.map((i) => i.code)]) + ")");
+
+    // 1.22 review 4 (6d): the fluidplan importer escapes a bare AC-n of imported prose (`AC\-1`) as it escapes US-n.AC-m — a page intro's
+    // `1. **AC-1** — WHEN …` was an unidentified criterion of the imported feature.
+    const inert = E.fpInert("1. **AC-1** — WHEN x THE SYSTEM SHALL y; see US-7.AC-2 and AC-3");
+    ok(inert === "1. **AC" + BS + "-1** — WHEN x THE SYSTEM SHALL y; see US-7" + BS + ".AC-2 and AC" + BS + "-3" && E.fpInert(inert) === inert && !E.RE_BARE_AC.test(inert),
+      "1.22 review 4 (6d): fpInert escapes a bare AC-n (`AC\\-1`), leaves an escaped US-7\\.AC-2 as it is, and is idempotent (got " + js(inert) + ")");
   }
 };

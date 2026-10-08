@@ -1361,7 +1361,7 @@ const msg = {
       acUnique: "AC IDs unique",
       earsDetail: (n, e, w) => `criteria=${n}, errors=${e}, warnings=${w}`,
       earsNoCriteria: (ids, file = "requirements.md") => `${file} cites AC IDs (${ids}) but no criterion was linted — EARS checks an AC written as a list item, heading or line that starts with its ID, or as a table row under an Acceptance Criteria heading`,
-      earsNoAcIds: (list, file = "requirements.md") => `${file} has criteria (${list}) but no AC ID trace_check reads — number each one US-<story>.AC-<n> (US-1.AC-1, US-1.AC-2 …); a bare AC-1 is not one`,
+      earsNoAcIds: (list, file = "requirements.md") => `${file} has criteria (${list}) with no AC ID trace_check reads — number each one US-<story>.AC-<n> (US-1.AC-1, US-1.AC-2 …); a bare AC-1 is not one`,
       designMissing: "design.md missing",
       mermaidOk: "has a diagram",
       mermaidMissing: "no mermaid diagram found",
@@ -1471,7 +1471,7 @@ const msg = {
       // _Expect: fail_ task: the red run BEFORE the fix lands (review 3: a red run of another command never counts — with the fix in,
       // it is set aside for the red run)
       commandMismatch: (n, slug, ran, verify, red) => `Task ${n}: the run recorded (\`${ran}\`) is not a run of its _Verify:_ command (${verify}) — it is ticked, but stays unverified until a ${red ? "FAILING " : ""}run of that command is recorded (the command as written — with several _Verify:_ commands, every one of them in ONE run joined with \` && \`; a \`cd <project root> &&\`, \`set -o pipefail;\` or VAR=value of your own in front is fine (a cd anywhere else is another run), but never drop one the _Verify:_ holds)` +
-        (red ? ` — record it BEFORE the fix lands, while the test still fails: ${DEV_SPEC} done ${slug} ${n} --run (a red run of another command never counts; with the fix already in, set it aside — git stash — for that run, then restore it).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
+        (red ? ` — record it BEFORE the fix lands, while the test still fails: ${DEV_SPEC} done ${slug} ${n} --run (a red run of another command never counts; with the fix already in, set it aside — git stash push -- <the fix's files>, not a bare git stash: it would take tasks.md and .state.json too — for that run, then restore it).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
       duplicateTasks: (list) => `task numbers used more than once: ${list} — complete/brief pick the first open one; renumber them`,
     },
     // 1.14 F1 — harness-observed evidence (hooks/observe-hook.js; roadmap.json meta.evidence "reported" | "observed").

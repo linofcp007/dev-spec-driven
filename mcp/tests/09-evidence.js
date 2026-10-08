@@ -1413,11 +1413,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     // counts — it no longer says "record the passing run … the red run on record then counts" (the grandfathering it advertised
     // verified a task with no red run of its own test).
     const notes = ["en", "pt", "es", "pt-BR"].map((l) => S.msg(l).evidenceGate.commandMismatch(1, "f", "x", "y", true));
-    ok(/BEFORE the fix lands, while the test still fails: .*done upgrade 1 --run \(a red run of another command never counts; with the fix already in, set it aside — git stash — for that run, then restore it\)\.$/.test(b1.note) &&
-      !notes.some((t) => /then counts|passa então a contar|cuenta entonces/.test(t)) && /ANTES de a correção entrar.*nunca conta; com a correção já feita, põe-na de parte — git stash/.test(notes[1]) &&
-      /ANTES de que entre la corrección.*nunca cuenta; con la corrección ya hecha, apártala — git stash/.test(notes[2]) && /nunca conta/.test(notes[3]) &&
+    ok(/BEFORE the fix lands, while the test still fails: .*done upgrade 1 --run \(a red run of another command never counts; with the fix already in, set it aside — git stash push -- <the fix's files>, not a bare git stash: it would take tasks\.md and \.state\.json too — for that run, then restore it\)\.$/.test(b1.note) &&
+      !notes.some((t) => /then counts|passa então a contar|cuenta entonces/.test(t)) &&
+      /ANTES de a correção entrar.*nunca conta; com a correção já feita, põe-na de parte — git stash push -- <os ficheiros da correção>, não um git stash simples: levaria também o tasks\.md e o \.state\.json/.test(notes[1]) &&
+      /ANTES de que entre la corrección.*nunca cuenta; con la corrección ya hecha, apártala — git stash push -- <los archivos de la corrección>, no un git stash a secas: se llevaría también tasks\.md y \.state\.json/.test(notes[2]) &&
+      /nunca conta/.test(notes[3]) && /git stash push -- <os arquivos da correção>/.test(notes[3]) &&
       !/BEFORE the fix lands/.test(S.msg("en").evidenceGate.commandMismatch(1, "f", "x", "y", false)),
-      "1.22 review 3 (1): the _Expect: fail_ command-mismatch note says to record the failing run BEFORE the fix lands, that a red run of another command never counts (the fix set aside with git stash), and no longer that the red run on record counts once the _Verify:_ passes (EN/PT/ES/pt-BR) (got " + js([b1.note, notes]) + ")");
+      "1.22 review 3 (1) + review 4: the _Expect: fail_ command-mismatch note says to record the failing run BEFORE the fix lands, that a red run of another command never counts (the fix set aside with `git stash push -- <the fix's files>` — a bare git stash takes tasks.md and .state.json too), and no longer that the red run on record counts once the _Verify:_ passes (EN/PT/ES/pt-BR) (got " + js([b1.note, notes]) + ")");
     // review 3 (1) — grandfathering only for red runs recorded BEFORE the command rule: every run is stamped `cmdRule` now, and a red run
     // of ANOTHER test file (or `false`) recorded under the rule, then the passing run of the _Verify:_, is no red proof — unexpected-pass.
     const fG = mkTasks(pR, "Grand", "- [ ] 1. [US1] Red A\n  - _Verify: npm test -- tests/a.test.js_\n  - _Expect: fail_\n" +
@@ -1581,6 +1583,30 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
         ev["2"].root === path.resolve(repo),
         "1.22 review 3 (4): `cd <git worktree of the project> && npm test` proves `npm test` (root stamped: the worktree); `cd <another repository's project holding the same feature> && npm test` does not (got " +
         js([a.verified, a.unverifiedReason, ev["1"].root, b.verified, ev["2"].root]) + ")");
+      // review 4: a worktree INSIDE the project (`.claude/worktrees/<name>`) is its own root — it was read as a folder of the main project
+      // (command-mismatch); a plain subfolder of the project still is one (the run went there: another run)
+      const nested = path.join(repo, ".claude", "worktrees", "agent-1");
+      git(repo, "worktree", "add", "-q", nested);
+      fs.appendFileSync(path.join(repo, ".specs", "auth", "tasks.md"), "- [ ] 3. [US1] C\n  - _Verify: npm test_\n- [ ] 4. [US1] D\n  - _Verify: npm test_\n");
+      fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+      const c = S.completeTask(repo, "auth", 3, { command: "cd " + nested + " && npm test", exitCode: 0 });
+      const dd = S.completeTask(repo, "auth", 4, { command: "cd " + path.join(repo, "src") + " && npm test", exitCode: 0 });
+      const ev2 = JSON.parse(fs.readFileSync(path.join(repo, ".specs", "auth", ".state.json"), "utf8")).evidence;
+      ok(fs.existsSync(path.join(nested, ".specs", "auth")) && c.verified === true && ev2["3"].root === path.resolve(nested) &&
+        dd.verified === false && dd.unverifiedReason === "command-mismatch" && ev2["4"].root === path.resolve(repo),
+        "1.22 review 4: `cd <repo>/.claude/worktrees/agent-1 && npm test` proves `npm test` (root stamped: that worktree); `cd <repo>/src && npm test` still does not (got " +
+        js([c.verified, c.unverifiedReason, ev2["3"].root, dd.verified, ev2["4"].root]) + ")");
+    }
+    { // review 4: observeRun logs ONE plain step of a `_Verify:_` holding ` && ` — observedRun's step-by-step fallback (proofPlainParts) reads
+      // them, and they were never logged: run as two Bash calls, `_Verify: npm run build && npm test_` read unobserved
+      const pS = path.join(tmp, "proj-122r4-steps");
+      S.initProject(pS, ["core"], "en");
+      const fS = S.createFeature(pS, "Steps", ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(fS.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] A\n  - _Verify: npm run build && npm test_\n");
+      const r = ["npm run build", "npm test", "npm run lint"].map((command) => S.observeRun(pS, { command, exitCode: 0 }).recorded.length);
+      const ob = S.observedRun(pS, fS.slug, "npm run build && npm test", 0, { expected: ["npm run build && npm test"] });
+      ok(js(r) === "[1,1,0]" && ob.observed === true,
+        "1.22 review 4: each plain step of `_Verify: npm run build && npm test_` run on its own is logged (another command is not) and the joined report reads observed (got " + js([r, ob]) + ")");
     }
     // hostile input: LINEAR (64 KB costs ~4× 16 KB — a quadratic matcher would cost ~16×), measured as a ratio so a slow machine
     // or a container doesn't flake; past PROOF_MAX_CHARS (64 KB) a command or _Verify:_ is never matched, at once.
@@ -1595,6 +1621,68 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     ok(ms64 / ms16 < 12 && ms64 < 15000 && big.every((x) => x === false) && msBig < 200,
       "1.22 review 3: runProvesVerify is linear on hostile commands and _Verify:_ values (backticks, $(, cd chains, quotes, ` && `, `#`, assignments) — 64 KB costs < 12× 16 KB (got " +
       ms16 + " → " + ms64 + " ms); past 64 KB nothing is matched, at once (" + msBig + " ms)");
+  }
+
+  // 1.22 review 4 (0) — upgrade safety: the command rule judged evidence RECORDED BEFORE it existed — after a plugin update, tasks an
+  // earlier release verified (`npx jest x` for `_Verify: npm test -- x`, a Windows path…) turned unverified (command-mismatch) and
+  // blocked /spec-finish, and so did a project check's run of another form. A run without the cmdRule stamp keeps the pre-1.22 verdict
+  // (any command with exit 0; an _Expect: fail_ task: any red run), in reported and observed mode; only stamped runs are judged by the
+  // rule — the same record stamped reads command-mismatch (a check's: changed), and a NEW run is stamped and judged.
+  {
+    const js = JSON.stringify;
+    const BS = String.fromCharCode(92);
+    const pU = path.join(tmp, "proj-122r4-upgrade");
+    S.initProject(pU, ["core"], "en", { checks: { test: "npm test" } });
+    const fU = S.createFeature(pU, "Legacy", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fU.dir, "tasks.md"), "# Tasks\n\n- [x] 1. [US1] A\n  - _Verify: npm test -- tests/x.test.js_\n" +
+      "- [x] 2. [US1] B\n  - _Verify: node --test tests/y.test.js_\n- [x] 3. [US1] Red first\n  - _Verify: node --test tests/z.test.js_\n  - _Expect: fail_\n");
+    const stF = path.join(fU.dir, ".state.json");
+    const at = new Date(Date.now() - 120000).toISOString(), atCheck = new Date(Date.now() - 60000).toISOString();
+    const run = (command, exitCode, extra) => ({ command, exitCode, summary: exitCode ? "not ok 1" : "ok 1", at, observed: true, ...extra });
+    const rec = (task, verify, r) => ({ ...r, task, verify, history: [{ ...r }] });
+    const writeState = (cmdRule) => { // the records as a pre-1.22 engine wrote them (no cmdRule) — or stamped
+      const st = JSON.parse(fs.readFileSync(stF, "utf8"));
+      const s = (r) => (cmdRule ? { ...r, cmdRule } : r);
+      st.evidence = {
+        1: rec("[US1] A", "npm test -- tests/x.test.js", s(run("npx jest tests/x.test.js", 0))),
+        2: rec("[US1] B", "node --test tests/y.test.js", s(run("node --test ." + BS + "tests" + BS + "y.test.js", 0))),
+        3: rec("[US1] Red first", "node --test tests/z.test.js", s(run("node --test --test-reporter=tap tests/z.test.js", 1, { expected: "fail" }))),
+      };
+      for (const k of ["1", "2", "3"]) st.evidence[k].history = [s(st.evidence[k].history[0])];
+      st.lastTickAt = at;
+      st.finishChecks = { test: { ...s({ command: "npx jest", exitCode: 0, summary: "12 passing", at: atCheck, observed: true }), check: "npm test", history: [s({ command: "npx jest", exitCode: 0, at: atCheck })] } };
+      fs.writeFileSync(stF, JSON.stringify(st, null, 2));
+    };
+    const verdicts = () => {
+      const un = S.verificationStatus(pU, "legacy", fU.dir).unverifiedDetail.map((d) => [d.number, d.reason]);
+      const doc = (S.specDoctor(pU, "legacy").checks || []).find((c) => c.id === "verification") || {};
+      const fin = S.finishFeature(pU, "legacy");
+      const up = (S.specUpgrade(pU).features || []).find((x) => x.name === "legacy") || {};
+      return { un, doc: doc.status, finUnverified: (fin.blockers || []).some((b) => /without verification evidence/.test(b)),
+        suite: (fin.suiteChecks || []).map((c) => c.status), up: (up.unverified || []).map((d) => [d.number, d.reason]),
+        status: S.statusFeature(pU, "legacy").tasks.list.map((t) => t.verified) };
+    };
+    writeState(null);
+    const pre = verdicts();
+    S.initProject(pU, ["core"], "en", { evidence: "observed" });
+    const preObserved = S.verificationStatus(pU, "legacy", fU.dir).unverifiedDetail.map((d) => [d.number, d.reason]);
+    const preSuiteObserved = S.finishFeature(pU, "legacy").suiteChecks.map((c) => c.status);
+    S.initProject(pU, ["core"], "en", { evidence: "reported" });
+    writeState(1);
+    const ruled = verdicts();
+    // a NEW run of the same other command is recorded under the rule (stamped) and judged by it
+    writeState(null);
+    const again = S.completeTask(pU, "legacy", 1, { command: "npx jest tests/x.test.js", exitCode: 0 });
+    const recAgain = JSON.parse(fs.readFileSync(stF, "utf8")).evidence["1"];
+    const finAgain = S.finishFeature(pU, "legacy", { evidence: [{ name: "test", command: "npx jest", exitCode: 0 }] });
+    const chkAgain = JSON.parse(fs.readFileSync(stF, "utf8")).finishChecks.test;
+    ok(js(pre) === js({ un: [], doc: "pass", finUnverified: false, suite: ["pass"], up: [], status: [true, true, true] }) && js(preObserved) === "[]" && js(preSuiteObserved) === '["pass"]' &&
+      js(ruled.un) === js([[1, "command-mismatch"], [2, "command-mismatch"], [3, "command-mismatch"]]) && ruled.doc === "warn" && ruled.finUnverified === true &&
+      js(ruled.suite) === '["changed"]' && js(ruled.up) === js(ruled.un) && js(ruled.status) === "[false,false,false]" &&
+      again.verified === false && again.unverifiedReason === "command-mismatch" && recAgain.cmdRule === 1 &&
+      finAgain.suiteChecks[0].status === "changed" && chkAgain.cmdRule === 1 && chkAgain.history[chkAgain.history.length - 1].cmdRule === 1,
+      "1.22 review 4 (0): records made before the command rule (no cmdRule stamp) whose commands differ from the _Verify:_ (`npx jest x`, `.\\tests\\y.test.js`, an _Expect: fail_ red run of another form) and a project check's run of another form keep their pre-1.22 verdict — verified / pass in status, doctor, finish, spec_upgrade, observed mode too; the same records stamped read command-mismatch / changed; a new run is stamped (task and finish check) and judged (got " +
+      js([pre, preObserved, preSuiteObserved, ruled, again.unverifiedReason, recAgain.cmdRule, finAgain.suiteChecks, chkAgain.cmdRule]) + ")");
   }
 
   // 1.22 review 3 (3) — observed mode sees the forms the matcher accepts: the observe hook's log (observeRun) and the lookup

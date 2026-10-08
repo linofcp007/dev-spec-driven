@@ -91,7 +91,11 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   bare script). After a failed
   run the `taskDone.shellHint` (retry with `--shell bash`) is printed only when `windowsShellFailure(output, code)` says
   cmd.exe itself failed (exit 9009, "is not recognized as an internal or external command", its syntax errors, "cannot
-  find the path specified" — EN/PT/ES wording) — never for a check that ran and failed.
+  find the path specified" — EN/PT/ES wording) — never for a check that ran and failed. **Review 4 — the OEM code page:**
+  cmd.exe (and Windows PowerShell 5.1) write their own messages in the console's OEM code page (850 on a PT / ES Windows)
+  while `b5Exec` decodes the output as UTF-8, so each accented letter arrives as U+FFFD: every accented class of the PT / ES
+  wordings (`RE_CMD_SHELL_FAILURE`, the PowerShell `couldNotRunOutput` patterns) takes U+FFFD too — on a PT Windows "O sistema
+  não conseguiu localizar o caminho especificado" never matched, and an `_Expect: fail_` task was ticked on cmd.exe's own failure.
 - **A run that could not happen is never evidence** (CLI `b5Exec()`, `done --run` and `finish --run`): it is refused with
   `{ok: false, couldNotRun}` + a localized `runGate` message and NOTHING is recorded (it used to be recorded as exit 1 —
   a passing check stored as failed, a red run that never happened). Stable `couldNotRun` codes: `shell-not-started` (spawn
@@ -160,7 +164,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   (`runRootStamp()`, completeTask and the finish checks; `runOf` keeps it): the project folder — as the RUN spells it when
   that differs (an 8.3 short name, a link: `realpathSync.native`) —, or a git worktree of the SAME repository (the same
   common git dir, `gitCommonDir()`) holding the feature's folder that the run's first absolute cd lands in (a subagent's
-  `cd <worktree> && npm test`; another repository's project with the same feature name is no worktree). The verdict reads
+  `cd <worktree> && npm test`; another repository's project with the same feature name is no worktree — review 4: a worktree
+  INSIDE the project, `.claude/worktrees/<name>` or `.worktrees/<name>`, too: the check ran only for a cd outside the project,
+  so its run was read in a folder of the main project and read command-mismatch). The verdict reads
   the stamp, so a record made on another machine (`cd /home/someone/proj/packages/web && …`, root `/home/someone/proj`)
   proves the same task here. A run field: the merge driver needs no rule for it. `proofKey(cmd, root)` is the resolved
   commands as one string. Anything else ticks but reads **`command-mismatch`**
@@ -187,9 +193,19 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   between dropped it), which proves nothing until such a pass follows; a red run of another command recorded under the rule
   is never carried (it can prove nothing). A record whose latest run is a pass of another command with no red proof still
   reads `unexpected-pass` (taskEvidenceIssue), never command-mismatch. The `_Expect: fail_` note says to record the red run
-  BEFORE the fix lands, that a red run of another command never counts, and — the fix already in — to set it aside (git stash)
-  for that run. A finish check's run is held to its `meta.checks` command the same way
-  (`suiteStatus` → `changed`). `observedRun`'s join lookup also tries the EXPECTED commands' logged runs (a `_Verify:_`
+  BEFORE the fix lands, that a red run of another command never counts, and — the fix already in — to set it aside (review 4:
+  `git stash push -- <the fix's files>` — a bare `git stash` would stash tasks.md and .state.json too) for that run. A finish
+  check's run is held to its `meta.checks` command the same way (`suiteStatus` → `changed`).
+  **Review 4 — upgrade safety (the rule never judges what was recorded before it):** the rule was applied to evidence an
+  earlier release recorded — after a plugin update, tasks it had verified (`npx jest x` reported for `_Verify: npm test -- x`, a
+  Windows path) turned command-mismatch and blocked /spec-finish, and so did a project check's run of another form. A record
+  whose LATEST run has no `cmdRule` stamp (`preRuleRun()`) keeps the pre-1.22 verdict: `taskEvidenceIssue` skips the command
+  check (any command with exit 0; an `_Expect: fail_` task: any red run on record), `observedProof` reads its runs without
+  `runProvesVerify` (and a pre-rule red proof carried under a stamped pass the same way), `redGreenGaps` takes any red run of
+  such a record, and `suiteStatus` judges an unstamped finish run by its `check` stamp alone. `recordFinishChecks` now stamps
+  every finish run `cmdRule` too. Every NEW run is stamped, so it is judged by the rule; the review-2 grandfathering (a pre-rule
+  red run of another form + a passing run of the `_Verify:_` itself) is unchanged. Like the other gates' grandfathering
+  (gates-and-approvals.md): a rule never flags what was recorded before it existed. `observedRun`'s join lookup also tries the EXPECTED commands' logged runs (a `_Verify:_`
   holding ` && ` is logged whole).
 - **Reason codes** (stable): `no-evidence` · `failed-run` · `manual-note-on-runnable-verify` ·
   `duplicate-number` · `stale-evidence` · `unexpected-pass` (1.14, `_Expect: fail_`) · `unobserved` (1.14 F1, only
@@ -216,8 +232,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `{exitCode: 0}` is a claim, not a run: a note replaces it as the summary). `stale: true` is set by
   `spec_impact --reopen`; only a new run (or, without a runnable `_Verify:_`, a new note) clears it. 1.14 F1: every run
   (the latest and each `history` entry) carries `observed: true | false | "cli"` (`runOf()` keeps it; older records have
-  none); 1.22 review 3: and `cmdRule: 1` (recorded under the command rule), plus `root` on a run with an absolute cd (see Which
-  run proves it).
+  none); 1.22 review 3: and `cmdRule: 1` (recorded under the command rule — review 4: a finish check's run too; a run without
+  it keeps the pre-1.22 verdict), plus `root` on a run with an absolute cd (see Which run proves it).
 - **Without a runnable `_Verify:_`** a task is outside the run gate: no record passes, a bare legacy
   `{exitCode: 0}` or a summary verifies, and `verificationStatus()` skips a `no-evidence` record there —
   only `failed-run` / `stale-evidence` / `duplicate-number` count against it.
@@ -288,7 +304,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   folder the stamp is compared with) → blocker `suite-evidence` (finish + the execution gate), doctor warn `suite-evidence`
   (once every task is done) and the stop gate: a check without a passing run since the last task activity on the code as
   it is now. `suiteChecks` status codes (stable): `pass` · `no-run` · `failed` · `changed` (the configured command changed
-  since the run, or — 1.22 review — the run is of another command: `runProvesVerify(run, [check])`) · `before-last-tick` ·
+  since the run, or — 1.22 review — the run is of another command: `runProvesVerify(run, [check])`, only for a run stamped
+  `cmdRule` — review 4) · `before-last-tick` ·
   `code-changed` (a passing run whose `code` stamp no longer matches — code edited after the checks ran; an unstamped run
   keeps the older rules) · `unobserved` (1.14 F1, only with `meta.evidence: "observed"`: a passing run whose `observed` is
   neither `true` nor `"cli"`; each item also carries the run's `observed`). next_action's `finish` / `drift` steps name `dev-spec finish <f> --run` / `spec_finish
@@ -516,7 +533,11 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   same flattened text as the report) exited with the reported code — a report of exit 0 after an observed exit 1 is not what
   the harness saw (`latestExitCode`); a passing report also counts when each expected command's latest logged run passed (a
   join run as separate Bash calls) — or, for one of several plain ` && ` steps (no cd / pipefail: `proofPlainParts`), each
-  step's. `expected` (1.22 review — `observedStamp` passes the task's `_Verify:_` values / `[the check's command]`; none → the
+  step's (review 4: `observeRun` logs such a step — it logged only runs of a whole `_Verify:_` value, so this fallback never
+  found one). Known limits (review 4, observed mode only): a run whose verdict depends on its `root` stamp (a sibling
+  worktree's `cd <wt>/packages/web && …`, `cd /d <wt>`, the project under its 8.3 short name) can still read unobserved; an
+  older failed joined run hides newer passing runs of its parts; the hook's pre-filter splits a quoted `;` in a run's own
+  `VAR="a;b"`. `expected` (1.22 review — `observedStamp` passes the task's `_Verify:_` values / `[the check's command]`; none → the
   reported command itself): a reported run that is not one of them (`runProvesVerify`) is never observed — another task's or
   check's logged run used to count. `root`: the run's `root` stamp (a worktree's), also a root `stripCdPrefix` strips.
   `observedStamp()`: every run `{command, exitCode}` that `spec_complete_task` / `done` and `spec_finish {evidence}` record

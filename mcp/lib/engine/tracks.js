@@ -665,11 +665,17 @@ const SIGNALS = {
     // Review 3 — the natural phrasings the auth-word list missed: the VERBS "iniciar sesión" / "iniciar sessão", "entrar", "log in" /
     // "sign in" ("Iniciar sesión con doble factor", "passam a entrar com dois fatores"), and the connectors "at" / PT "ao" / ES "al"
     // before one ("Require multifactor at login", "doble factor al iniciar sesión") — still only RIGHT NEXT to the factor word.
+    // Review 4 — PT / ES put the adjective AFTER the noun, between the auth word and the factor word ("autenticação forte de dois
+    // fatores", "autenticación obligatoria de doble factor" turned +sec off while "strong multi-factor authentication" kept it):
+    // one optional adjective slot; and the auth verbs conjugated ("The user logs in with multi-factor", "inicia sesión con…").
     cues: [
       { kind: "near", on: ["dois fatores", "multifator", "dos factores", "doble factor", "multi-factor", "multifactor"], then: "keep",
-        before: { words: [[["authenticat\\p{L}*", "auth", "log-?ins?", "log in", "sign-?ins?", "sign in", "sso", "verification", "autenticaç\\p{L}*",
-          "autenticac\\p{L}*", "autenticar", "verificaç\\p{L}*", "verificac\\p{L}*", "início de sessão", "inicio de sessao", "inicio de sesión",
-          "inicio de sesion", "iniciar sessão", "iniciar sessao", "iniciar sesión", "iniciar sesion", "entrar", "acesso", "acceso"],
+        before: { words: [[["authenticat\\p{L}*", "auth", "log-?ins?", "log in", "log(?:s|ged|ging) in", "sign-?ins?", "sign in", "sign(?:s|ed|ing) in",
+          "sso", "verification", "autenticaç\\p{L}*", "autenticac\\p{L}*", "autenticar", "verificaç\\p{L}*", "verificac\\p{L}*", "início de sessão",
+          "inicio de sessao", "inicio de sesión", "inicio de sesion", "iniciar sessão", "iniciar sessao", "iniciar sesión", "iniciar sesion",
+          "inicia[mn]? sess[ãa]o", "inicia[mn]? sesi[óo]n", "entrar", "acesso", "acceso"],
+        { optional: ["forte", "fortes", "fuerte", "obrigatóri[ao]", "obrigatori[ao]", "obligatori[ao]", "reforçad[ao]", "reforcad[ao]", "reforzad[ao]",
+          "adicional", "segur[ao]"] },
         { optional: ["de", "em", "com", "por", "a", "en", "con", "with", "via", "using", "by"] }]],
         chars: 48, edge: "letter" },
         after: { words: [[{ optional: ["de", "do", "da", "del", "para", "for", "of", "on", "at", "no", "na", "ao", "al", "en", "em"] }, { optional: ["o", "a", "the", "el", "la"] },
@@ -677,9 +683,11 @@ const SIGNALS = {
             "verificaç\\p{L}*", "verificac\\p{L}*", "início de sessão", "inicio de sessao", "inicio de sesión", "inicio de sesion", "iniciar sessão",
             "iniciar sessao", "iniciar sesión", "iniciar sesion", "entrar", "acesso", "acceso"]]],
         chars: 48 } },
-      // … anywhere else, no signal: the catch-all — the hit's own sentence always holds the hit, so this rule always fires
+      // … anywhere else, no signal: the catch-all — the hit's own sentence always holds the hit, so this rule always fires (review 4:
+      // with every inflection the keyword matcher accepts — "multi-factored" / "multifactored" missed the phrases and kept a weak signal)
       { kind: "sentence", on: ["dois fatores", "multifator", "dos factores", "doble factor", "multi-factor", "multifactor"], then: "none",
-        edge: "letter", phrases: ["dois fatores", "multifator(?:es)?", "dos factores", "doble factor(?:es)?", "multi-?factors?"] },
+        edge: "letter", phrases: ["dois fatores(?:e?s|ed|ing|d)?", "multifator(?:e?s|ed|ing|d)?", "dos factores(?:e?s|ed|ing|d)?", "doble factor(?:e?s|ed|ing|d)?",
+          "multi-?factor(?:e?s|ed|ing|d)?"] },
     ],
   },
   // +privacy (1.14): GDPR / RGPD. The regulation names moved here from +saas — one concept, one track.

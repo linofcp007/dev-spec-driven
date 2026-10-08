@@ -572,6 +572,16 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   ("autenticação iniciar sessão de dois fatores": the auth word is the second signal); 0 literals changed, 0 tracks switched off.
   Known cost: "entrar" is also everyday PT / ES ("O preço vai entrar com dois fatores de risco" reads a weak signal — a note,
   never ON alone).
+  **Review 4:** (1) the catch-all `sentence` rule's phrases take every inflection the keyword matcher accepts (`(?:e?s|ed|ing|d)?`
+  — INFLECTION): "a multi-factored discount and a security deposit" kept the weak signal and was ON; (2) PT / ES put the adjective
+  AFTER the noun, between the auth word and the factor word — one optional adjective slot in the `before` sequence (`forte(s)`,
+  `fuerte`, `obrigatóri[ao]`, `obligatori[ao]`, `reforçad[ao]`, `reforzad[ao]`, `adicional`, `segur[ao]`): "autenticação forte de
+  dois fatores" / "autenticación obligatoria de doble factor" were a hint while "strong multi-factor authentication" is ON; (3) the
+  auth verbs conjugated: `log(?:s|ged|ging) in`, `sign(?:s|ed|ing) in`, `inicia[mn]? sess[ãa]o`, `inicia[mn]? sesi[óo]n`. Checked
+  with the reviewer's cases (tests/04-tracks.js) — no differential run this round. Known costs left: `acesso` / `acceso` /
+  `verificação` in their everyday sense ("Os dois fatores de acesso ao crédito… e a segurança do emprego" is ON), a noun phrase
+  between the two words ("autenticação dos administradores com dois fatores" stays a hint), and a negated auth noun whose factor
+  word still counts ("Sem autenticação de dois fatores… registo de auditoria" is ON — negation reaches the first keyword only).
   **Reasoning:** a track kept off with weak / app-level words
   (`signals[t]` non-empty) reads `classify.offWeak` ("+api: off — weak signal only ('endpoint'), not enough on its own.", EN /
   PT / ES), never "no signals matched" beside a "Possible +api" note.
