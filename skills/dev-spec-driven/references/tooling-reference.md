@@ -67,7 +67,8 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   spike `question` / `decision` · `merge-conflicts` (a `mergeConflicts` list the git merge driver left in the feature's
   `.state.json` or in `roadmap.json` — pick each value, delete the list).
 - **Warn:** `steering` (core files missing, or files still holding template placeholders) · `success-criteria` ·
-  `priorities` · `mermaid` · `constitution-check` · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,
+  `priorities` · `mermaid` (no mermaid code block outside comments, or only the template's own diagram) ·
+  `constitution-check` · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,
   empty, still the template, or fewer than 2 options) · `design-risks` (its Risks section missing, empty or still the
   template) · `design-reuse` (its Reuse & Integration section missing, empty or still the template — a brownfield
   feature's filled `integration-plan.md` → Integration Points counts; the three never block an approval, a bugfix and a

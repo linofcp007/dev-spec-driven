@@ -1366,6 +1366,7 @@ const msg = {
       designMissing: "design.md missing",
       mermaidOk: "has a diagram",
       mermaidMissing: "no mermaid diagram found",
+      mermaidTemplate: "the mermaid diagram is still the template's (Component → Database) — draw this feature's architecture",
       constitutionOk: "present — verify each principle is checked",
       constitutionMissing: "no Constitution Check section in design",
       saasAllFilled: "all 5 filled",

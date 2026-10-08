@@ -612,6 +612,40 @@ function sectionContent(body) {
   });
   return { prose, code };
 }
+// A design's Mermaid diagram as doctor's `mermaid` check reads it (review 5, L28) → "present" | "template" | "missing": the fenced
+// blocks (``` or ~~~, any length) whose info string starts with "mermaid", outside HTML comments; "template" when every one still
+// holds the scaffold's own diagram (any language — whitespace folded). It was a substring test for "```mermaid": a ~~~mermaid fence
+// warned "missing", a "```mermaid" mentioned in a comment passed, and the untouched "A[Component] → C[(Database)]" passed.
+const RE_MERMAID_FENCE = /^\s*(?:`{3,}|~{3,})[ \t]*mermaid(?![\p{L}\p{N}_-])/iu;
+function mermaidBlocks(text) {
+  const st = { fence: null };
+  const out = [];
+  let cur = null;
+  for (const l of stripHtmlComments(text || "").split(/\r?\n/)) {
+    const f = fenceStep(st, l);
+    if (f === "open") { cur = RE_MERMAID_FENCE.test(l) ? [] : null; if (cur) out.push(cur); continue; }
+    if (f && st.fence) { if (cur) cur.push(l); continue; }
+    cur = null; // a closer, or outside any fence
+  }
+  return out.map((b) => b.join(" ").replace(/\s+/g, " ").trim());
+}
+const TEMPLATE_DIAGRAMS = {}; // lang group ("base" | "pt-BR") → Set of the scaffold's diagrams, rendered on first use
+function templateDiagrams(group) {
+  if (TEMPLATE_DIAGRAMS[group]) return TEMPLATE_DIAGRAMS[group];
+  const set = new Set();
+  for (const l of group === "base" ? i18n.BASE_LANGS : ["pt-BR"]) {
+    for (const size of [undefined, "s", "m"]) {
+      try { mermaidBlocks(i18n.design({ name: "x", tracks: ["core"], label: trackLabel(["core"]), slug: "x", summary: "", size }, l)).forEach((d) => set.add(d)); } catch { /* a builder's trouble never breaks a check */ }
+    }
+  }
+  return (TEMPLATE_DIAGRAMS[group] = set);
+}
+function mermaidState(design) {
+  const blocks = mermaidBlocks(design).filter(Boolean); // an empty block draws nothing
+  if (!blocks.length) return "missing";
+  const isTemplate = (d) => templateDiagrams("base").has(d) || templateDiagrams("pt-BR").has(d);
+  return blocks.every(isTemplate) ? "template" : "present";
+}
 // "n/a — <why it does not apply>" (EN / PT / ES; any emphasis around the n/a): the section's own text is that ONE line → "na"
 // when the reason holds at least NA_REASON_WORDS words, "na-short" when it holds fewer; anything else → null.
 const RE_NA_LEAD = /^\s*(?:[-*+]\s+|>\s*)?(?:\*\*|__|\*|_)?(?:n\/a|n\.a\.|not applicable|does not apply|n[ãa]o se aplica|n[ãa]o aplic[áa]vel|no (?:se )?aplica|no aplicable)(?:\*\*|__|\*|_)?(?![\p{L}\p{N}])/iu;
@@ -1281,7 +1315,7 @@ module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLi
   otherFeatureTest, featureProjectDir, planIdText, clarificationMarkers,
   templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
   headingEntries, headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, headingTextMatches, extractSection,
-  sectionContent, isTableSep, SLOT_MAX, bracketCloser,
+  sectionContent, isTableSep, SLOT_MAX, bracketCloser, mermaidBlocks, mermaidState,
   RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionLineKey, sectionOwnLines, RE_NA_LEAD, NA_REASON_WORDS, naAnswer,
   trackSectionReport, sectionVerdict, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
   RE_LIST_CHECKBOX, placeholderKey, isGenericSlot, unknownSteeringStub, LEGACY_TEMPLATE_PLACEHOLDERS, templateCorpus,

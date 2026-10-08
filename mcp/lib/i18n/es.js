@@ -1345,6 +1345,7 @@ const msg = {
       designMissing: "falta design.md",
       mermaidOk: "tiene un diagrama",
       mermaidMissing: "no se encontró diagrama mermaid",
+      mermaidTemplate: "el diagrama mermaid sigue siendo el de la plantilla (Componente → Base de Datos) — dibuja la arquitectura de esta función",
       constitutionOk: "presente — verifica que cada principio se comprueba",
       constitutionMissing: "sin sección Verificación de la Constitución en el diseño",
       saasAllFilled: "las 5 rellenadas",

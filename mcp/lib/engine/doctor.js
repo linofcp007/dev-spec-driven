@@ -20,7 +20,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText, flowPhaseIndex,
   FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority, hasSuccessCriteria,
   headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord, isSpikeDir, isTestCodePath,
-  legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang, outsideCodeTemplates,
+  legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mermaidState, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang, outsideCodeTemplates,
   overlapDoctorDetail, own, packOf, packRegistry, packTitle, packTracks, parseTasks, pendingGateList, PHASE_FILE,
   phaseActive, phaseContent, phaseFile, PHASES, placeholderSummary, planFileScopes, planIdText, projectLang,
   RE_CODE_TID, RE_CONSTITUTION_CHECK, readFileHead, readIfExists, readJson, readRoadmap, readState, realRootOf, redPhaseHint,
@@ -43,7 +43,7 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   expectsFail, extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText,
   flowPhaseIndex, FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority,
   hasSuccessCriteria, headingHasMarker, isDirSafe, isFeatureFolder, isInsideDir, isNetworkPath, isObj, isRecord,
-  isSpikeDir, isTestCodePath, legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang,
+  isSpikeDir, isTestCodePath, legacyPackName, legacyPackMarkerTrack, loadRoadmap, malformedMarkers, mermaidState, mergeConflictsCheck, missingPackTracks, packReservedSince, normalizeLang,
   outsideCodeTemplates, overlapDoctorDetail, own, packOf, packRegistry, packTitle, packTracks, parseTasks,
   pendingGateList, PHASE_FILE, phaseActive, phaseContent, phaseFile, PHASES, placeholderSummary, planFileScopes,
   planIdText, projectLang, RE_CODE_TID, RE_CONSTITUTION_CHECK, readFileHead, readIfExists, readJson, readRoadmap, readState,
@@ -676,7 +676,12 @@ function specDoctor(projectDir, name, opts = {}) {
   const design = readIfExists(path.join(dir, "design.md"));
   if (design == null) { if (kind !== "bugfix" && kind !== "change") add("design", "fail", m.designMissing); } // 1.21 F5: a change has no design
   else if (kind !== "bugfix") {
-    add("mermaid", /```mermaid/.test(design) ? "pass" : "warn", /```mermaid/.test(design) ? m.mermaidOk : m.mermaidMissing);
+    // review 5 (L28): a mermaid fence (``` or ~~~) outside comments, and not the scaffold's own diagram — while design.md is still
+    // a LATER phase's template the template diagram is no news (the placeholders check says so), as for the weigh checks
+    const diagram = mermaidState(design);
+    const laterDesign = ph.later.some((r) => r.file === "design.md");
+    add("mermaid", diagram === "present" || (diagram === "template" && laterDesign) ? "pass" : "warn",
+      diagram === "missing" ? m.mermaidMissing : diagram === "template" && !laterDesign ? m.mermaidTemplate : m.mermaidOk);
     add("constitution-check", RE_CONSTITUTION_CHECK.test(design) ? "pass" : "warn", RE_CONSTITUTION_CHECK.test(design) ? m.constitutionOk : m.constitutionMissing);
     // 1.17 A1 — design-tradeoffs / design-risks, 1.19 R1 — design-reuse: warns only (never a fail, never an approval check).
     // Not while design.md is still a LATER phase's template (nothing is being designed yet — the placeholders check already says

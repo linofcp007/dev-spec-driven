@@ -91,6 +91,30 @@ exports.run = async ({ ok, S, tmp, require, __dirname }) => {
       js([chk("sec-sections"), E.designWeighChecks(design, "en", {}).map((c) => c.id + ":" + c.state), secs]) + ")");
   }
 
+  { // L28 — doctor's mermaid check: a mermaid fence (``` or ~~~) outside comments, never the scaffold's own diagram
+    // It was a substring test for "```mermaid": a ~~~mermaid fence warned "missing", one mentioned in a comment passed, and the
+    // untouched template diagram (A[Component] → C[(Database)]) passed.
+    const T = "# D\n\n## Architecture\n";
+    const states = [
+      [T + "```mermaid\ngraph TD\n    A[Component] -->|action| B[Component]\n    B -->|query| C[(Database)]\n```\n", "template"],
+      [T + "```mermaid\ngraph TD\n  A[Componente] -->|ação| B[Componente]\n  B -->|query| C[(Banco de Dados)]\n```\n", "template"],
+      [T + "~~~mermaid\ngraph TD; Checkout-->Payments\n~~~\n", "present"], [T + "````mermaid\nsequenceDiagram\n  A->>B: pay\n````\n", "present"],
+      [T + "<!-- ```mermaid\ngraph TD; A-->B\n``` -->\nText\n", "missing"], [T + "```mermaid\n```\n", "missing"], [T + "```mermaidjs\nx\n```\n", "missing"]].map(([d, w]) => [E.mermaidState(d), w]);
+    const d = path.join(tmp, "proj-r5-mermaid");
+    S.initProject(d, ["core"], "en");
+    const f = S.createFeature(d, "Diagram check", ["core"], "", undefined, "en");
+    const fresh = (S.specDoctor(d, f.slug).checks.find((c) => c.id === "mermaid") || {}).status; // a later phase's template: no news
+    put(f.dir, "requirements.md", "# Feature: Diagram check\n\n## Summary\nShow the diagram.\n\n### US-1 (P1 — MVP): Diagram\n\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN a user opens the page THE SYSTEM SHALL show the diagram.\n\n## Success Criteria\n- **SC-001** — 95% of pages render in 1 s.\n");
+    const mer = () => S.specDoctor(d, f.slug).checks.find((c) => c.id === "mermaid") || {};
+    const tmpl = mer();
+    put(f.dir, "design.md", fs.readFileSync(path.join(f.dir, "design.md"), "utf8").replace(/```mermaid\n[\s\S]*?```/, "~~~mermaid\ngraph TD; Page-->Renderer\n~~~"));
+    const real = mer();
+    ok(states.every(([g, w]) => g === w) && fresh === "pass" && tmpl.status === "warn" && /template/.test(tmpl.detail) && real.status === "pass",
+      "review 5 (L28): mermaidState — the template's diagram (any language) is 'template', a ~~~ or ```` fence 'present', one in a comment or an empty / mermaidjs block 'missing'; doctor warns on the template diagram once the design is being written, passes a ~~~mermaid diagram (got " +
+      js([states, fresh, tmpl, real]) + ")");
+  }
+
   { // L32 (first half) — an INDENTED code block is code: its AC IDs define nothing, its lines are no criterion
     // "Example:\n\n    US-1.AC-7 example" was a required AC no task covered, and an EARS no-modal error.
     const d = path.join(tmp, "proj-r5-indented");
