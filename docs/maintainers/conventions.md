@@ -74,7 +74,8 @@ and U+FEFF gotchas are in CLAUDE.md.
 - **Rename follows every reference** (`renamePlan`, computed BEFORE the folder moves so the old slug still resolves,
   written after): roadmap.json dependsOn, `_Supersedes: <old>/…_` markers in other features' requirements.md (active
   and archived; never one in a comment/fence), and archived features' `.state.json → archived` records. A broken
-  archived state file that names the old slug refuses the rename.
+  archived state file that names the old slug refuses the rename. A backlog item named like the NEW slug is dropped
+  (`pruneBacklog`, as create and restore do — 1.24 r6 G5: it was listed under Features and Backlog) → `removedFromBacklog`.
 - **A change's requirements.md / tasks.md are its change.md (1.21 F5).** `readIfExists`, `existsCached`, `readContained`
   and `writeFileAtomic` alias a missing `requirements.md` / `tasks.md` to the folder's `change.md` when that folder's
   `.state.json` says `kind: "change"` (`changeAlias()`, files.js; `readRaw` / `existsRaw` are the unaliased readers). A raw

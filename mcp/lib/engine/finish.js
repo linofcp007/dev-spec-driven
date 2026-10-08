@@ -731,7 +731,11 @@ function renameFeatureLocked(projectDir, name, newName, moved) {
   const ms = pruneRoadmapRefs(projectDir, oldSlug, newSlug);
   for (const s of plan.supersedes) writeFileAtomic(s.file, s.text);
   for (const r of plan.records) writeFileAtomic(r.file, JSON.stringify(r.state, null, 2));
+  // 1.24 r6 (G5): the feature has a folder under the new name — a backlog item of that name is no longer planned-but-unspecced
+  // (create and restore drop it the same way; it was listed twice in ROADMAP.md, under Features and under Backlog)
+  const fromBacklog = pruneBacklog(projectDir, newSlug);
   const res = { ok: true, action: "rename", from: oldSlug, to: newSlug };
+  if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
   Object.assign(res, milestoneResult(ms)); // 1.16 E3
   const where = (x) => (x.archived ? "_archive/" : "") + x.feature;
   const fm = i18n.msg(featureLang(projectDir, newSlug));

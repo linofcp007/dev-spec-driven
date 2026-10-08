@@ -235,4 +235,60 @@ exports.run = async ({ ok, rpc, payload, S, tmp, __dirname }) => {
       js([c.slug, acs(c.slug), acs(plain.slug), heads(c.dir), heads(d.dir), imp.feature]) + ")");
   }
 
+  // 1.24 r6 G5: rename onto a backlog item's name kept the backlog item — ROADMAP.md listed the feature under Features AND under
+  // Backlog (create and restore already drop it: pruneBacklog). Rename drops it too and says so (removedFromBacklog).
+  {
+    const p = fresh("rename-backlog");
+    S.createFeature(p, "login", ["core"], "Users can log in");
+    const b = S.backlog(p, "add", "Single sign on", "later");
+    const rn = S.renameFeature(p, "login", "Single sign on");
+    ok(b.ok && rn.ok && rn.to === "single-sign-on" && js(rn.removedFromBacklog) === js(["Single sign on"]) && js(S.readRoadmap(p).backlog) === "[]" &&
+      !/\*\*Single sign on\*\*/.test(rd(p, ".specs", "ROADMAP.md")),
+      "1.24 r6 G5: renaming a feature onto a backlog item's name drops that item (removedFromBacklog) — never listed twice in ROADMAP.md (got " + js([rn.removedFromBacklog, S.readRoadmap(p).backlog]) + ")");
+  }
+
+  // 1.24 r6 G6: only the FIRST dependency cycle was reported (findCycle) — a → a hid b ↔ c — and a member of a cycle the forecast walk
+  // met second was overwritten with reason "dependency". Every cycle is reported now (the strongly connected components: roadmap
+  // `cycles`, one ROADMAP.md / .html line each, `cycle` = the first), and each member's forecast reason is "cycle".
+  {
+    const p = fresh("cycles");
+    for (const n of ["a", "b", "c", "d", "e", "f"]) S.createFeature(p, n, ["core"], "Users can do " + n);
+    for (const n of ["a", "b", "c", "d", "e", "f"]) fs.writeFileSync(path.join(p, ".specs", n, "tasks.md"), "# Tasks\n\n- [ ] 1. Step\n  - _Size: M_\n");
+    const rmf = path.join(p, ".specs", "roadmap.json");
+    const rm = JSON.parse(rd(rmf));
+    const deps = { a: ["a"], b: ["c"], c: ["b"], d: ["e"], e: ["f"], f: ["d"] };
+    for (const [k, v] of Object.entries(deps)) rm.features[k] = { ...(rm.features[k] || {}), dependsOn: v };
+    fs.writeFileSync(rmf, JSON.stringify(rm, null, 2));
+    // three completions so the project has a velocity (a forecast reason other than not-enough-data must come from the graph)
+    const g = S.createFeature(p, "Go", ["core"], "Users can go");
+    const now = Date.now();
+    fs.writeFileSync(path.join(g.dir, "tasks.md"), "# Tasks\n\n" + [1, 2, 3].map((n) => `- [x] ${n}. Step ${n}\n`).join("") + "- [ ] 4. Left\n");
+    const gs = JSON.parse(rd(g.dir, ".state.json"));
+    gs.ticks = { 1: new Date(now - 3 * 864e5).toISOString(), 2: new Date(now - 2 * 864e5).toISOString(), 3: new Date(now - 864e5).toISOString() };
+    fs.writeFileSync(path.join(g.dir, ".state.json"), JSON.stringify(gs, null, 2));
+    const r = S.roadmapReport(p, { write: true });
+    const view = r.roadmap || r;
+    const md = rd(p, ".specs", "ROADMAP.md");
+    const reasons = Object.fromEntries(view.features.map((f) => [f.name, f.forecast && f.forecast.reason]));
+    const lines = md.split("\n").filter((l) => /Circular dependency/.test(l));
+    const sets = (view.cycles || []).map((c) => [...new Set(c)].sort().join(","));
+    ok(r.ok && js(sets.slice().sort()) === js(["a", "b,c", "d,e,f"]) && js(view.cycle) === js(view.cycles[0]) && view.cycles.every((c) => c[0] === c[c.length - 1]) &&
+      lines.length === 3 && ["a", "b", "c", "d", "e", "f"].every((n) => reasons[n] === "cycle") && /a → a/.test(md) && /Circular dependency/.test(rd(p, ".specs", "ROADMAP.md")),
+      "1.24 r6 G6: every dependency cycle is reported (a → a, b ↔ c, d → e → f → d: roadmap `cycles`, one ROADMAP.md line each) and every member's forecast reason is 'cycle' (got " +
+      js({ cycles: view.cycles, lines, reasons }) + ")");
+    // G-I6: a dependency whose tasks are all ticked (no execution sign-off yet) is complete — 100%, met: its dependents get an ETA
+    const p2 = fresh("signoff-dep");
+    S.createFeature(p2, "A", ["core"], "Users can a");
+    S.createFeature(p2, "B", ["core"], "Users can b");
+    fs.writeFileSync(path.join(p2, ".specs", "a", "tasks.md"), "# Tasks\n\n" + [1, 2, 3, 4].map((n) => `- [x] ${n}. Step ${n}\n`).join(""));
+    const as = JSON.parse(rd(p2, ".specs", "a", ".state.json"));
+    as.ticks = { 1: new Date(now - 4 * 864e5).toISOString(), 2: new Date(now - 3 * 864e5).toISOString(), 3: new Date(now - 2 * 864e5).toISOString(), 4: new Date(now - 864e5).toISOString() };
+    fs.writeFileSync(path.join(p2, ".specs", "a", ".state.json"), JSON.stringify(as, null, 2));
+    fs.writeFileSync(path.join(p2, ".specs", "b", "tasks.md"), "# Tasks\n\n- [ ] 1. Step\n- [ ] 2. Step\n");
+    S.setDependency(p2, "b", ["a"]);
+    const v2 = S.roadmapReport(p2, {});
+    const fb = ((v2.roadmap || v2).features.find((f) => f.name === "b") || {});
+    ok(!S.readState(p2, "a").approvals.execution && !fb.blocked && fb.forecast && /^\d{4}-\d{2}-\d{2}$/.test(fb.forecast.eta || ""),
+      "1.24 r6 G-I6: a dependency whose every task is ticked but whose execution is not signed off is complete (100%) — its dependent is not blocked and gets an ETA (got " + js(fb.forecast) + ")");
+  }
 };

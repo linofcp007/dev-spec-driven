@@ -363,6 +363,61 @@ function findCycle(depsMap) {
   }
   return cycle;
 }
+// 1.24 r6 (G6) — EVERY dependency cycle (findCycle stops at the first: `a → a` hid `b ↔ c`): the strongly connected components
+// with more than one feature, or one naming itself (Tarjan's, iterative — no recursion depth). → [{ members, path }] in the order
+// their first feature appears in the map; `path` a cycle through the component's first feature (`a → b → c → a`, the shortest one
+// its own edges give, closed on its start — as findCycle reports one), `members` every feature of it (a component can hold more
+// than one cycle: each member is in one).
+function findCycles(depsMap) {
+  const depsOf = (n) => (Object.prototype.hasOwnProperty.call(depsMap, n) && Array.isArray(depsMap[n]) ? depsMap[n].filter((d) => typeof d === "string") : []);
+  const keys = Object.keys(depsMap);
+  const pos = new Map(keys.map((k, i) => [k, i]));
+  const index = new Map(), low = new Map(), onStack = new Set(), stack = [], comps = [];
+  let next = 0;
+  const visit = (v) => { index.set(v, next); low.set(v, next); next++; stack.push(v); onStack.add(v); };
+  for (const root of keys) {
+    if (index.has(root)) continue;
+    visit(root);
+    const work = [[root, 0]];
+    while (work.length) {
+      const top = work[work.length - 1];
+      const v = top[0];
+      const ds = depsOf(v);
+      if (top[1] < ds.length) {
+        const w = ds[top[1]++];
+        if (!index.has(w)) { visit(w); work.push([w, 0]); }
+        else if (onStack.has(w)) low.set(v, Math.min(low.get(v), index.get(w)));
+        continue;
+      }
+      work.pop();
+      if (work.length) { const u = work[work.length - 1][0]; low.set(u, Math.min(low.get(u), low.get(v))); }
+      if (low.get(v) !== index.get(v)) continue;
+      const comp = [];
+      for (let w = null; w !== v;) { w = stack.pop(); onStack.delete(w); comp.push(w); }
+      if (comp.length > 1 || depsOf(v).includes(v)) comps.push(comp);
+    }
+  }
+  const at = (n) => (pos.has(n) ? pos.get(n) : Infinity);
+  return comps.map((comp) => {
+    const members = comp.slice().sort((a, b) => at(a) - at(b) || (a < b ? -1 : a > b ? 1 : 0));
+    const start = members[0];
+    const inComp = new Set(comp);
+    // the shortest way back to `start` inside the component (breadth first)
+    const parent = new Map([[start, null]]);
+    const queue = [start];
+    let last = null;
+    for (let q = 0; q < queue.length && last === null; q++) {
+      for (const w of depsOf(queue[q])) {
+        if (!inComp.has(w)) continue;
+        if (w === start) { last = queue[q]; break; }
+        if (!parent.has(w)) { parent.set(w, queue[q]); queue.push(w); }
+      }
+    }
+    const back = [];
+    for (let n = last; n !== null; n = parent.get(n)) back.push(n);
+    return { members, path: back.reverse().concat(start) };
+  }).sort((a, b) => at(a.members[0]) - at(b.members[0]));
+}
 
 // dependsOn REPLACES the list ([] clears it); edits.add / edits.remove change it incrementally (applied in
 // that order, after a replacement); order sets the position. Nothing requested = a read: the current deps
@@ -445,7 +500,7 @@ function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
 
 function roadmap(projectDir) {
   const list = listFeatures(projectDir);
-  if (!list.exists) return { ok: true, specsDir: list.specsDir, features: [], overallPercent: 0, complete: 0, total: 0, cycle: null, backlog: [] };
+  if (!list.exists) return { ok: true, specsDir: list.specsDir, features: [], overallPercent: 0, complete: 0, total: 0, cycle: null, cycles: [], backlog: [] };
   const rm = readRoadmap(projectDir);
   const pctByName = Object.create(null); // a dep named "constructor" must not read Object.prototype's
   const feats = list.features.map((f) => {
@@ -460,10 +515,11 @@ function roadmap(projectDir) {
     f.blocked = f.unmetDeps.length > 0;
   }
   feats.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
-  const cycle = findCycle(Object.fromEntries(feats.map((f) => [f.name, f.dependsOn])));
+  // 1.24 r6 (G6): every cycle (`cycles`, one path each), `cycle` the first of them (as before: one path, or null)
+  const cycles = findCycles(Object.fromEntries(feats.map((f) => [f.name, f.dependsOn]))).map((c) => c.path);
   const overall = feats.length ? Math.round(feats.reduce((s, f) => s + f.percent, 0) / feats.length) : 0;
   const backlog = readRoadmap(projectDir).backlog || [];
-  return { ok: true, specsDir: list.specsDir, features: feats, cycle: cycle || null, overallPercent: overall, complete: feats.filter((f) => f.percent === 100).length, total: feats.length, backlog };
+  return { ok: true, specsDir: list.specsDir, features: feats, cycle: cycles[0] || null, cycles, overallPercent: overall, complete: feats.filter((f) => f.percent === 100).length, total: feats.length, backlog };
 }
 
 // ---------------------------------------------------------------------------
@@ -1302,7 +1358,7 @@ module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugi
   RESERVED_SLUGS, reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState,
   stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, wsText, sha1Hex, fingerprintMatches,
   BOM_CHAR, artifactMatches, uncheckTasks, phaseFile, FEATURE_SIZES, sizeInput, featureSize, isChangeDir, PLANNING_CEILING, PHASE_PERCENT, phasePercent, featurePercent,
-  roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, setDependency, dependencyUnlocked,
+  roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, findCycles, setDependency, dependencyUnlocked,
   roadmap, flatText, specNameText, addBacklog, BACKLOG_NOTE_MAX, BACKLOG_NOTE_SEP, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked, BACKLOG_ACTIONS, backlog,
   roadmapLang, roadmapChromeLang, setRoadmapLang, RE_AUTOGEN, isGeneratedOrAbsent, writeRoadmapMd, writeRoadmapHtml,
   writeRoadmapFile, maybeRefreshRoadmap, roadmapReport, featureDirs, locateFeatures,

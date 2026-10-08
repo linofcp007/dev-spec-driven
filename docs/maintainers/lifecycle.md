@@ -164,6 +164,15 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   the window) · `no-tasks` · `dependency` · `cycle` · `done`. Surfaces: `spec_roadmap` (`velocity`, each feature's
   `forecast`), the ROADMAP.md / .html ETA column ('—' without one) + velocity line, `spec_metrics.velocity`, the CLI
   roadmap. Pure reads of tasks.md + .state.json.
+- **Every dependency cycle (1.24 r6 G6).** `findCycles()` (state.js — Tarjan's strongly connected components, iterative; a
+  component of more than one feature, or one naming itself) → `{members, path}`; roadmap() returns `cycles` (each one's path,
+  `a → b → a`, the shortest through the component's first feature) and `cycle` = the first (as before). ROADMAP.md / .html write
+  one "Circular dependency" line per cycle, the CLI roadmap names the first in its head line and the others in
+  `roadmapTailLines`. `forecastData()` computes the components itself from the features' dependsOn: every member gets reason
+  `cycle` — only `findCycle`'s first cycle used to (a → a hid b ↔ c), and a member the walk met second was overwritten with
+  `dependency`. `findCycle` stays the refusal's check (spec_depend, restore). **A dependency done but not signed off**
+  (review 6 G-I6) needs nothing: every task ticked IS phase `complete` (100%, detectPhase — the execution sign-off is finish's
+  business), so its dependents are unblocked and chain their ETA from today (a test pins it).
 - **Overlaps** (`featureOverlaps()`): two ACTIVE features whose OPEN tasks plan the same files (`implementsKey`; a folder
   covers the files under it, a glob what it matches and its literal folder), or an active feature planning a file a
   FINISHED feature recorded in its drift baseline. Not an overlap: features ordered by a dependency (either way,
@@ -208,7 +217,7 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   ~180 → ~58; a one-shot `done` / tasks.md save ~470 → ~440. mcp/tests/08-tasks.js renders ROADMAP.md after each kind of
   change from the cache and fresh and compares them byte for byte. The PostToolUse hook does the same for hand-edits, skipping when the changed file IS a
   `ROADMAP.*`. HTML must stay **offline** — no CDN/external URLs (test asserts it). Backlog lives in
-  `roadmap.json` `backlog: [{name,note}]`; `spec_create` drops the backlog item with the same slug. Name and note are one
+  `roadmap.json` `backlog: [{name,note}]`; `spec_create` (and restore, and a rename onto that name — 1.24 r6) drops the backlog item with the same slug. Name and note are one
   line (`flatText()` on add and when rendered — a line break became a heading in ROADMAP.md); a name an ACTIVE feature
   already holds is refused (`backlogIsFeature`); `remove` is an alias of `rm` on every surface (`BACKLOG_ACTIONS`).
 - **What reaches ROADMAP.* from roadmap.json (1.23 review 5).** `dependsOn` is only shape-checked (a list of strings): the
