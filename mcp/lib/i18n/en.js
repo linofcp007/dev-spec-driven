@@ -1281,6 +1281,7 @@ const msg = {
       noModal: "Criterion has no modal verb (SHALL / DEVE / DEBE) — not a valid EARS statement.",
       noId: "Criterion has no stable ID (e.g., US-1.AC-1).",
       bareAcId: (id) => `'${id}' is not a stable ID trace_check reads — write US-<story>.AC-<n> (e.g., US-1.${id}).`,
+      subAcId: (id) => `'${id}' is a sub-criterion ID, not one trace_check reads — give each criterion its own US-<story>.AC-<n> (one level: US-1.AC-1, US-1.AC-2 …).`,
       vague: (term) => `Vague term '${term}' — replace with a concrete, testable value.`,
       noKeyword: "No EARS keyword (WHEN/WHILE/IF/WHERE · QUANDO/ENQUANTO/SE/ONDE · CUANDO/MIENTRAS/SI/DONDE). OK for ubiquitous requirements; confirm intentional.",
     },

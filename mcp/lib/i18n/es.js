@@ -1256,6 +1256,7 @@ const msg = {
       noModal: "El criterio no tiene verbo modal (SHALL / DEVE / DEBE) — no es una frase EARS válida.",
       noId: "El criterio no tiene ID estable (p. ej., US-1.AC-1).",
       bareAcId: (id) => `'${id}' no es un ID estable que trace_check lea — escribe US-<historia>.AC-<n> (p. ej., US-1.${id}).`,
+      subAcId: (id) => `'${id}' es un ID de subcriterio, no uno que trace_check lea — da a cada criterio su propio US-<historia>.AC-<n> (un solo nivel: US-1.AC-1, US-1.AC-2 …).`,
       vague: (term) => `Término vago '${term}' — sustitúyelo por un valor concreto y comprobable.`,
       noKeyword: "Sin palabra clave EARS (WHEN/WHILE/IF/WHERE · QUANDO/ENQUANTO/SE/ONDE · CUANDO/MIENTRAS/SI/DONDE). Aceptable en requisitos ubicuos; confirma que es intencionado.",
     },

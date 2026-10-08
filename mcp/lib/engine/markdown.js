@@ -166,12 +166,14 @@ function requirementAcIds(reqText, dir) {
 // covered) → this feature's only when the same ID LABELS one of the text's criteria (criterionLabelIds: "5. Step-2/US-1.AC-5 —
 // WHEN …"), else a foreign reference, removed. Without `dir` (a pure reader: a template, a pack's numbering, an import's task
 // fitting) every token of a slug's shape counts as another feature's — the limit: there "Step-2/US-1.AC-1" reads as one.
+// labelText (review 5, M5 — a text that CITES criteria: tasks.md, the test plan): the criteria whose labels decide a slug that
+// names no feature are requirements.md's, not the citing text's own (a task line labels no criterion).
 const RE_FOREIGN_AC = /(?<![\p{L}\p{N}_.-])([\p{L}\p{N}][\p{L}\p{N}_.-]*)[^\S\n]*\/[^\S\n]*(US-\d+\.AC-\d+)(?!\d)/gu;
 const RE_ID_TOKEN_END = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)$/;
 const RE_NOT_A_SLUG = /^(?:\d+(?:[._-]\d+)*|p\d+|(?:us|ac|t|ec|nfr|sc)-\d+)$/i;
 // A token before a slash that names no feature by its shape (an ID, a priority, a number, no letter): the ID after it is the text's own.
 const notASlug = (slug) => RE_ID_TOKEN_END.test(slug) || RE_NOT_A_SLUG.test(slug) || !/\p{L}/u.test(slug);
-function stripForeignAcRefs(text, dir) {
+function stripForeignAcRefs(text, dir, labelText) {
   const s = String(text || "");
   if (!s.includes("/")) return s;
   let kind = null, labels = null;
@@ -181,7 +183,7 @@ function stripForeignAcRefs(text, dir) {
     const k = kind(slug);
     if (k === "self") return whole;
     if (k === "other") return "";
-    if (!labels) labels = criterionLabelIds(s, kind);
+    if (!labels) labels = criterionLabelIds(labelText == null ? s : stripHtmlComments(labelText), kind);
     return labels.has(id) ? whole : "";
   });
 }
@@ -213,8 +215,9 @@ function otherFeatureTest(dir) {
 // bracket opener — `- **US-1.AC-1** — WHEN …`, `1. NFR-2: THE SYSTEM SHALL …`, `### US-1.AC-3: …`, `- [ ] (EC-1) IF …`), with the
 // token before a slash in front of it (`login/US-1.AC-1`, `P1/US-1.AC-1`); for a table row with no lead label, its cell that is
 // exactly such an ID. An ID cited later in the criterion ("… (see EC-1)", "… (T-01)") labels nothing. → {id, slug} | null.
-const RE_LEAD_LABEL = /^[ \t]*(?:#{1,6}[ \t]+)?(?:(?:\d+[.)]|[-*+])[ \t]+)?(?:\[[ xX]\][ \t]+)?(?:\*\*|__|\*|_|`|\[|\()?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?!\d)/u;
-const RE_CELL_LABEL = /^(?:\*\*|__|\*|_|`)?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?:\*\*|__|\*|_|`)?$/u;
+// Review 5 (L31): a sub-criterion ID (US-1.AC-1.2) is a label of its own — never its parent's US-1.AC-1 — and no stable ID (bareLabel).
+const RE_LEAD_LABEL = /^[ \t]*(?:#{1,6}[ \t]+)?(?:(?:\d+[.)]|[-*+])[ \t]+)?(?:\[[ xX]\][ \t]+)?(?:\*\*|__|\*|_|`|\[|\()?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+\.\d+|US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?!\d)/u;
+const RE_CELL_LABEL = /^(?:\*\*|__|\*|_|`)?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+\.\d+|US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?:\*\*|__|\*|_|`)?$/u;
 function criterionLabel(text) {
   const s = String(text || "");
   const m = RE_LEAD_LABEL.exec(s);
@@ -233,7 +236,7 @@ function criterionLabelIds(text, kind) {
   for (const line of String(text || "").split("\n")) {
     if (!line.includes("US-")) continue;
     const lab = criterionLabel(line);
-    if (!lab || !/^US-/.test(lab.id)) continue;
+    if (!lab || !/^US-\d+\.AC-\d+$/.test(lab.id)) continue; // (a sub-criterion ID labels no AC)
     if (!lab.slug || notASlug(lab.slug) || kind(lab.slug) !== "other") ids.add(lab.id);
   }
   return ids;

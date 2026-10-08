@@ -108,4 +108,46 @@ exports.run = async ({ ok, S, tmp, require, __dirname }) => {
       "review 5 (L32): a 4-space (or tab) indented code block holds no required AC and no criterion; a list item's continuation, a nested item and a lazy continuation stay text (got " +
       js([tr.verdict, tr.totalAcs, tr.uncoveredByTasks, ev.summary, kept]) + ")");
   }
+
+  { // M5 + L32 (second half) + L31 — ONE task-citation reader (trace_check = the matrix); T-IDs by number; sub-criterion IDs named
+    // trace_check read tasks.md whole: a "Deferred" note (or the title) naming US-1.AC-2 covered it while the matrix said no-task, and
+    // another feature's `checkout/US-2.AC-1` covered this feature's US-2.AC-1 (or was a phantom). Plan T-01 vs task T-1 was a gap
+    // the matrix didn't see. US-1.AC-1.1 / US-1.AC-1.2 collapsed into ONE required US-1.AC-1 (and doctor said "duplicate US-1.AC-1").
+    const d = path.join(tmp, "proj-r5-citations");
+    S.initProject(d, ["core", "tdd"], "en");
+    S.createFeature(d, "Checkout", ["core"], "", undefined, "en");
+    const f = S.createFeature(d, "Citations", ["core", "tdd"], "", undefined, "en");
+    const reqOf = (crit) => "# Feature: Citations\n\n## Summary\nx\n\n### US-1 (P1 — MVP): x\n\n#### Acceptance Criteria (EARS)\n" + crit.join("\n") + "\n";
+    put(f.dir, "requirements.md", reqOf(["1. **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL create a session.",
+      "2. **US-1.AC-2** — WHEN a user signs out THE SYSTEM SHALL end the session.", "3. **US-2.AC-1** — WHEN a session expires THE SYSTEM SHALL ask to sign in."]));
+    put(f.dir, "tasks.md", "# Tasks: Citations (US-1.AC-2 later)\n\n## Phase: Build\n- [ ] 1. Build sign-in\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-1_\n" +
+      "- [ ] 2. Keep checkout/US-2.AC-1 and checkout/US-3.AC-9 working\n  - _Requirements: US-1.AC-1_\n\n## Deferred\nUS-1.AC-2 is out of scope for this release.\n");
+    put(f.dir, "test-plan.md", "# Test Plan\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" +
+      "| T-01 | unit | example | sign-in | US-1.AC-1, US-1.AC-2, US-2.AC-1 | `tests/a.test.js` |\n| T-02 | unit | example | regression | checkout/US-3.AC-9 | `tests/b.test.js` |\n");
+    const tr = S.traceCheck(d, f.slug, { matrix: true });
+    const row = (id) => tr.matrix.rows.find((r) => r.id === id) || {};
+    ok(js(tr.uncoveredByTasks) === '["US-1.AC-2","US-2.AC-1"]' && js(tr.phantomAcsInTasks) === "[]" && js(tr.phantomAcsInTests) === "[]" &&
+      js(tr.phantomTestsInTasks) === "[]" && js(tr.testsNotMappedToTasks) === '["T-02"]' &&
+      tr.uncoveredByTasks.every((id) => js(row(id).gaps) === '["no-task"]') && js(row("US-1.AC-1").gaps) === "[]" && row("US-1.AC-1").tasks.some((t) => t.number === 1),
+      "review 5 (M5 / L32): trace_check reads what the TASKS cite — a Deferred note and the title cover nothing, another feature's checkout/US-2.AC-1 covers nothing and is no phantom (tasks or plan); a task's T-1 is the plan's T-01 — and the matrix gives the same gaps (got " +
+      js([tr.uncoveredByTasks, tr.phantomAcsInTasks, tr.phantomAcsInTests, tr.phantomTestsInTasks, tr.testsNotMappedToTasks, tr.matrix.rows.map((r) => r.id + ":" + r.gaps.join("+"))]) + ")");
+    const doc = S.specDoctor(d, f.slug);
+    const trc = doc.checks.find((c) => c.id === "traceability") || {};
+    ok(trc.status === "fail" && /US-1\.AC-2/.test(trc.detail) && /US-2\.AC-1/.test(trc.detail),
+      "review 5 (M5): doctor's traceability names the ACs only a note or another feature's reference cited (got " + js(trc) + ")");
+    // L31: sub-criterion IDs are no AC IDs — named by EARS, listed by trace_check / doctor, never a duplicate of their parent
+    const sub = S.createFeature(d, "Sub criteria", ["core"], "", undefined, "en");
+    const subReq = reqOf(["1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b.", "2. **US-1.AC-1.1** — WHEN c THE SYSTEM SHALL d.", "3. **US-1.AC-1.2** — WHEN e THE SYSTEM SHALL f."]);
+    put(sub.dir, "requirements.md", subReq);
+    put(sub.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1, US-1.AC-1.1_\n");
+    const trS = S.traceCheck(d, sub.slug), evS = S.earsValidate(subReq, "en"), docS = S.specDoctor(d, sub.slug);
+    const dc = (id) => (docS.checks.find((c) => c.id === id) || {}).status;
+    ok(trS.totalAcs === 1 && js(trS.unidentifiedCriteria) === '["US-1.AC-1.1","US-1.AC-1.2"]' && trS.verdict === "gaps-found" && js(trS.phantomAcsInTasks) === "[]" &&
+      evS.issues.filter((i) => i.code === "no-id").length === 2 && /sub-criterion ID/.test(evS.issues.find((i) => i.code === "no-id").msg) &&
+      dc("ears") === "fail" && dc("ac-uniqueness") === "pass" && js(E.criteriaBareIds(subReq, sub.dir)) === '["US-1.AC-1.1","US-1.AC-1.2"]' &&
+      js([...E.extractAcIds("US-1.AC-1.2 US-1.AC-3. and US-1.AC-12")]) === '["US-1.AC-3","US-1.AC-12"]' &&
+      /subcritério/.test(S.earsValidate(subReq, "pt").issues.find((i) => i.code === "no-id").msg) && /subcriterio/.test(S.earsValidate(subReq, "es").issues.find((i) => i.code === "no-id").msg),
+      "review 5 (L31): US-1.AC-1.1 / US-1.AC-1.2 are no AC IDs — EARS names each (EN / PT / ES), trace_check lists them (unidentifiedCriteria), doctor's ears fails and ac-uniqueness passes, spec_upgrade's renumber item lists them (got " +
+      js([trS.totalAcs, trS.unidentifiedCriteria, trS.verdict, evS.issues.map((i) => i.code), dc("ears"), dc("ac-uniqueness")]) + ")");
+  }
 };

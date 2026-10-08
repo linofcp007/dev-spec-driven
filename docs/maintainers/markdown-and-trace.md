@@ -85,7 +85,8 @@ matrix.
   bare AC-n in a criterion with no label) feeds spec_upgrade's renumber item (lifecycle.md → Upgrade).
   **`<feature>/US-n.AC-m` is another feature's (1.22 review):** `requirementAcIds` drops it (`stripForeignAcRefs` — the
   `_Supersedes:_` / `_Affects:_` syntax written in prose: "rules of checkout/US-3.AC-2 stay as they are" was a required AC no
-  task covered); a token that is itself an ID keeps the pair ("US-1.AC-1/US-1.AC-2"). tasks.md's references are read as before.
+  task covered); a token that is itself an ID keeps the pair ("US-1.AC-1/US-1.AC-2"). tasks.md's and the test plan's references
+  too since review 5 (M5 — below).
   **Review 2 — only ANOTHER feature's:** never a priority (`**P1/US-1.AC-1**`), a story (`US-1 / US-1.AC-1`), a number
   (`1.1/US-1.AC-1`) or a token with no letter (`RE_NOT_A_SLUG`) — every required AC of such a spec went to 0. With the feature's
   folder (`requirementAcIds(text, dir)` — trace_check, the matrix, doctor's / the approvals' `earsUnlinted` / `earsUnidentified`,
@@ -97,6 +98,23 @@ matrix.
   and then every `<x>/US-1.AC-5` citing it); otherwise a foreign reference, dropped. **The limit:** a reader with no folder (a
   template, a pack's numbering, the importer's task fitting) can't resolve — there every slug-shaped token counts as another
   feature's.
+  **What the TASKS cite — one reader (review 5, M5):** `taskCitations(blocks, dir, reqText)` (trace.js) = each task block's prose
+  (`taskProse` — its line and body, never a fenced example) with another feature's references dropped
+  (`stripForeignAcRefs(text, dir, reqText)` — a slug that names no feature is this feature's only when requirements.md LABELS
+  that ID with it: the third argument says whose labels decide) → `{ per, acs, tids }`. trace_check's `acsInTasks` /
+  `uncoveredByTasks` / `phantomAcsInTasks` / the tasks' T-IDs and the matrix's per-task citations both read it (doctor through
+  trace_check): tasks.md was read WHOLE — a "Deferred: US-1.AC-2" note or the title covered US-1.AC-2 (doctor "all ACs covered")
+  while the matrix said `no-task`, and `checkout/US-2.AC-1` covered this feature's US-2.AC-1 or was a phantom. The test plan's AC
+  references drop another feature's the same way (`uncoveredByTests`, `phantomAcsInTests`, the matrix's rows). `_Implements:_`
+  is still read from the whole file (a marker outside any task stays a gap). **T-IDs by number (review 5, L32):** trace_check
+  compares the plan's and the tasks' T-IDs by `tKey` (`testIdKeys` — T-01 = T-1, as the matrix and the test-code scan do),
+  reporting each as its file spells it. **Sub-criterion IDs (review 5, L31):** `US-1.AC-1.2` is NO AC ID — `extractAcIds`
+  refuses an ID followed by `.<digit>` (it read as US-1.AC-1: two sub-criteria collapsed into one required AC, a task citing
+  `.1` covered both, and doctor said "duplicate US-1.AC-1"). It is a label of its own (`RE_LEAD_LABEL` / `RE_CELL_LABEL`), no
+  stable ID (`RE_FULL_ID` / `RE_FULL_ID_NO_T` skip it): EARS's no-id lint names it (`ears.subAcId`), `bareLabel` returns it, so
+  `earsUnidentified` / trace_check's `unidentifiedCriteria`, doctor's `ears`, the approvals and spec_upgrade's renumber item
+  (`criteriaBareIds`) list it like a bare AC-n; `acDuplicates` no longer counts it as its parent. One stable ID per criterion
+  — the trace model has no hierarchy below the story.
   A test-plan row covering an AC requirements.md doesn't define is a gap (`phantomAcsInTests`, +tdd; fenced examples
   excluded), like a phantom AC in tasks — doctor fails and the test-plan approval is refused. Every reader of
   test-plan.md's IDs goes through `planIdText()` (comments AND fenced code out): coverage, planned T-IDs, the code
@@ -211,8 +229,8 @@ matrix.
   ACTIVE requirements (`activeDesign`: a removed track's criteria are out). Per row: `text` (`acOneLine`, ≤ 1000 chars),
   `template` (`placeholderReport`; a secondary ID trace doesn't count as defined), `design` (the design.md `##` sections
   naming the ID — a bugfix: `bug.md: …` + `design.md: …`, spec_impact's keys — plus, for a `[SEC]` / `[PRIVACY]`
-  criterion, that track's sections), `tasks` (the ACTIVE tasks whose PROSE — `taskProse`, never a fenced example — cites
-  the ID or one of its planned T-IDs: `{number, text, done, verified, reason, nothingToVerify?, cites, evidence}` —
+  criterion, that track's sections), `tasks` (the ACTIVE tasks whose PROSE — `taskCitations`, trace_check's reader (review 5,
+  M5): `taskProse`, never a fenced example, another feature's references out — cites the ID or one of its planned T-IDs: `{number, text, done, verified, reason, nothingToVerify?, cites, evidence}` —
   `taskVerification()` in the project's evidence mode (F1: `unobserved` under `"observed"`), `rtmEvidence()` = the latest
   record's command / exitCode / at / expected / observed / commit / dirty, or its note, `stale`), `tests` (+tdd: the T-IDs of
   the test-plan entries citing it — `planIdText`; with `code` the files naming each, `outsideCode` for a T-ID run outside
