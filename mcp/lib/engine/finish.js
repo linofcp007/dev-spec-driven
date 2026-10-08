@@ -1462,9 +1462,11 @@ function approvalInForceAt(hist, phase, t) {
   }
   return rec && recAt > revAt ? rec : null;
 }
-// An approval and a history record signed off the same content: both fingerprinted, the same fingerprint and designFingerprint.
-const sameApprovedContent = (a, rec) => isRecord(a) && isRecord(rec) && typeof a.fingerprint === "string" && !!a.fingerprint &&
-  a.fingerprint === rec.fingerprint && (a.designFingerprint || null) === (rec.designFingerprint || null);
+// An approval and a history record signed off the same content: both fingerprinted, the same fingerprint and designFingerprint —
+// or (1.24 review 6, E-I5) both carrying the whitespace-insensitive ones, equal: a re-approval after a whitespace-only edit changed nothing.
+const sameApprovedContent = (a, rec) => isRecord(a) && isRecord(rec) && ((typeof a.fingerprint === "string" && !!a.fingerprint &&
+  a.fingerprint === rec.fingerprint && (a.designFingerprint || null) === (rec.designFingerprint || null)) ||
+  (typeof a.wsFingerprint === "string" && !!a.wsFingerprint && a.wsFingerprint === rec.wsFingerprint && (a.designWsFingerprint || null) === (rec.designWsFingerprint || null)));
 // The phases revoked in `since` that no approval in it restores (a revoke then a re-approval reads "re-approved" alone).
 function revokedSinceList(since) {
   const back = new Set(since.filter((x) => x.kind === "approval").map((x) => x.phase));

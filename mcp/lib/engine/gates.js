@@ -223,6 +223,10 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (fp != null) entry.fingerprint = fp;
   if (file && file !== PHASE_FILE[p]) entry.file = file;
   if (dfp != null) entry.designFingerprint = dfp;
+  // 1.24 review 6 (E-I5): the whitespace-insensitive fingerprints too — a role's waiting sign-off (no snapshot) of the same content
+  // but trailing whitespace still counts, and changedSinceApproval tells a whitespace-only edit without a .history snapshot
+  if (raw != null) entry.wsFingerprint = wsFingerprint(raw, p);
+  if (design != null) entry.designWsFingerprint = wsFingerprint(design, p);
   // 1.22 review: the plan a Phase 4 sign-off covers — the T-IDs planned now, the plans' approvals (testsSignOffStale reads it)
   if (p === "tests") entry.testsPlan = testsPlanStamp(f.dir, tracks, state.approvals);
   if (failing.length) { entry.forced = true; entry.failing = failing; } // a clean re-approval replaces it
@@ -252,6 +256,8 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (entry.fingerprint) record.fingerprint = entry.fingerprint;
   // 1.22 review: a bugfix design's second fingerprint too — changesSince compares a re-approval with the record in force before it
   if (entry.designFingerprint) record.designFingerprint = entry.designFingerprint;
+  if (entry.wsFingerprint) record.wsFingerprint = entry.wsFingerprint; // 1.24 review 6 (E-I5)
+  if (entry.designWsFingerprint) record.designWsFingerprint = entry.designWsFingerprint;
   if (entry.testsPlan) record.testsPlan = entry.testsPlan; // 1.22 review
   if (entry.forced) { record.forced = true; record.failing = failing; }
   if (entry.waiver) record.waiver = entry.waiver;
@@ -452,7 +458,19 @@ function revokeApproval(projectDir, name, phase, by, opts) {
     if (!appr && !allWaiting.includes(role)) return { ok: false, notApproved: true, error: R.noSignOff(role, p, f.slug, allWaiting.join(", ")) };
   }
   const waiting = !appr && required.length ? [role] : allWaiting; // the sign-offs this revocation withdraws
-  if (opts.dryRun === true) return { ok: true, dryRun: true, feature: f.slug, phase: p, revoke: true }; // 1.21 F1b: the MCP server's preview
+  // 1.24 review 6 — what this revocation removes: the approval (its `at`) and the waiting sign-offs ({role: at}). The MCP server's
+  // preview carries it; a confirmed call whose approval / sign-offs changed while the user was asked (another approval recorded
+  // meanwhile — it would be revoked in place of the one the question named) refuses, nothing written (spec_feature remove's rule, 1.23).
+  const target = { approvedAt: appr && typeof appr.at === "string" ? appr.at : null,
+    withdrawn: Object.fromEntries(waiting.map((r) => [r, isRecord(state.signoffs[p][r]) && typeof state.signoffs[p][r].at === "string" ? state.signoffs[p][r].at : null])) };
+  if (opts.dryRun === true) return { ok: true, dryRun: true, feature: f.slug, phase: p, revoke: true, ...target }; // 1.21 F1b: the MCP server's preview
+  const pv = isObj(opts.preview) && own(opts.preview, "approvedAt") ? opts.preview : null;
+  if (pv) {
+    const canon = (m) => JSON.stringify(Object.entries(isObj(m) ? m : {}).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)));
+    if ((typeof pv.approvedAt === "string" ? pv.approvedAt : null) !== target.approvedAt || canon(pv.withdrawn) !== canon(target.withdrawn)) {
+      return { ok: false, changedSincePreview: true, code: "changed-since-preview", feature: f.slug, phase: p, revoke: true, error: R.changedSincePreview(p, f.slug) };
+    }
+  }
   const conf = confirmationOf(opts.confirmation); // 1.21 F1b
   const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory : [];
   const legacy = legacySeeds(state.approvals, hist);
@@ -598,16 +616,21 @@ function approvalRole(projectDir, slug, phase, role, lng) {
 function phaseContent(dir, phase, kind) {
   const file = phaseFile(phase, kind);
   const raw = file ? readIfExists(path.join(dir, file)) : null;
-  const c = { fingerprint: raw != null ? textFingerprint(raw, phase) : null, designFingerprint: null };
+  // (1.24 review 6, E-I5: + the whitespace-insensitive fingerprints a sign-off of the same content but whitespace matches)
+  const c = { fingerprint: raw != null ? textFingerprint(raw, phase) : null, designFingerprint: null, wsFingerprint: wsFingerprint(raw, phase), designWsFingerprint: null };
   // (1.21 verify V4: a change's plan signs off change.md ALONE — approvePhase records no designFingerprint for it; reading
   // tasks.md here, the alias of that very change.md, gave every role sign-off a second fingerprint no record carries: stale forever)
   if (file && file !== PHASE_FILE[phase] && kind !== "change") {
     const d = readIfExists(path.join(dir, PHASE_FILE[phase]));
-    if (d != null) c.designFingerprint = textFingerprint(d, phase);
+    if (d != null) { c.designFingerprint = textFingerprint(d, phase); c.designWsFingerprint = wsFingerprint(d, phase); }
   }
   return c;
 }
-const sameContent = (rec, c) => isRecord(rec) && (rec.fingerprint || null) === (c.fingerprint || null) && (rec.designFingerprint || null) === (c.designFingerprint || null);
+// A sign-off of this content: the same fingerprint (+ designFingerprint) — or (1.24 review 6, E6) the same whitespace-insensitive
+// one: an editor's trailing-whitespace trim / final newline after a role signed is no change (r5's rule for an approval; a waiting
+// sign-off has no snapshot to compare with). A record from before 1.24 has no wsFingerprint: the fingerprint alone decides.
+const sameContent = (rec, c) => isRecord(rec) && (((rec.fingerprint || null) === (c.fingerprint || null) && (rec.designFingerprint || null) === (c.designFingerprint || null)) ||
+  (typeof rec.wsFingerprint === "string" && !!rec.wsFingerprint && rec.wsFingerprint === c.wsFingerprint && (rec.designWsFingerprint || null) === (c.designWsFingerprint || null)));
 // r5 review — a phase with no file of its own (tests, execution) has no content to compare a sign-off with: one made BEFORE a change
 // of the feature (changesSince — a change request, an untick, a revocation, a re-approval of another phase with other content) signed
 // off a different feature. It no longer counts — the rule executionSignOffStale applies to a single execution approval (a role's
@@ -617,6 +640,8 @@ function signOffOutdated(state, phase, rec) {
   const t = timeOf(rec.at);
   return t != null && changesSince(state, t, phase).length > 0;
 }
+// The content keys a role sign-off record carries (what sameContent compares) — 1.24 review 6 (E-I5): + the whitespace-insensitive ones.
+const SIGNOFF_CONTENT_KEYS = ["fingerprint", "designFingerprint", "wsFingerprint", "designWsFingerprint"];
 // The role sign-offs an approval carries: its `roles`, or — a single approval that named a role (made while no role was required
 // for the phase) — that role, signed with the approval's own content. → { role: {by, at, fingerprint?, designFingerprint?, forced?, failing?} }
 function approvalRoleRecords(appr) {
@@ -624,7 +649,7 @@ function approvalRoleRecords(appr) {
   if (isObj(appr.roles)) return appr.roles;
   if (typeof appr.role !== "string" || !appr.role) return {};
   const rec = { by: appr.by, at: appr.at };
-  for (const k of ["fingerprint", "designFingerprint"]) if (appr[k]) rec[k] = appr[k];
+  for (const k of SIGNOFF_CONTENT_KEYS) if (appr[k]) rec[k] = appr[k];
   if (appr.forced === true) { rec.forced = true; rec.failing = Array.isArray(appr.failing) ? appr.failing : []; }
   return { [appr.role]: rec };
 }
@@ -650,7 +675,7 @@ function roleSignOffs(state, phase, required, content) {
 // → { complete, missing, signed }. approvals: the approvals whose role records count (approvePhase: approvalsInForce).
 function recordRoleSignOff(state, phase, entry, required, record, approvals = state.approvals) {
   const rec = { by: entry.by, at: entry.at };
-  for (const k of ["fingerprint", "designFingerprint"]) if (entry[k]) rec[k] = entry[k];
+  for (const k of SIGNOFF_CONTENT_KEYS) if (entry[k]) rec[k] = entry[k];
   if (entry.forced) { rec.forced = true; rec.failing = entry.failing; }
   if (entry.waiver) rec.waiver = entry.waiver; // 1.16 U3: a forced sign-off's waiver
   if (entry.batch) rec.batch = true;
@@ -674,8 +699,11 @@ function recordRoleSignOff(state, phase, entry, required, record, approvals = st
     const ids = [...new Set(forced.flatMap((x) => (Array.isArray(x.failing) ? x.failing : [])))];
     entry.forced = true; entry.failing = ids;
     record.forced = true; record.failing = ids;
-    // 1.16 U3: the approval carries a waiver when a forced sign-off that counts gave one (its own, else the strictest).
-    if (!entry.waiver) { const w = strictestWaiver(forced.map((x) => x.waiver)); if (w) entry.waiver = w; }
+    // 1.16 U3: the approval carries a waiver when a forced sign-off that counts gave one — 1.24 review 6 (E7): the STRICTEST of them
+    // (the earliest expiry), the completing sign-off's own included: it kept its own (no expiry) and another role's expiry was lost
+    // (doctor never warned waiver-expired, spec_finish never said expired).
+    const w = strictestWaiver(forced.map((x) => x.waiver));
+    if (w) entry.waiver = w;
     if (entry.waiver) record.waiver = entry.waiver;
   }
   record.roles = required.slice();
@@ -1599,8 +1627,8 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
       // (`designFingerprint`) — a design.md created since (a track added) is a change too. A deleted bug.md is one as well
       // (1.22 review); a deleted design.md is not (it only ever held a track's sections — spec_impact's rule).
       const bug = path.join(dir, a.file), design = path.join(dir, file);
-      if (!fs.existsSync(bug) || (!artifactMatches(bug, ph, a.fingerprint) && !wsOnlyEdit(dir, ph, a.file, a, "snapshot"))) out.push(a.file);
-      if (fs.existsSync(design) && !artifactMatches(design, ph, a.designFingerprint) && !wsOnlyEdit(dir, ph, file, a, "designSnapshot")) out.push(file);
+      if (!fs.existsSync(bug) || (!artifactMatches(bug, ph, a.fingerprint) && !wsSame(bug, ph, a.wsFingerprint) && !wsOnlyEdit(dir, ph, a.file, a, "snapshot"))) out.push(a.file);
+      if (fs.existsSync(design) && !artifactMatches(design, ph, a.designFingerprint) && !wsSame(design, ph, a.designWsFingerprint) && !wsOnlyEdit(dir, ph, file, a, "designSnapshot")) out.push(file);
       continue;
     }
     const rel = kind === "change" ? phaseFile(ph, kind) : file; // 1.21 F5: a change's plan approval signed off change.md
@@ -1611,7 +1639,8 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
     // design.md (here an older engine's approval without `file`) is never a change when deleted.
     if (!fs.existsSync(abs)) { if (!(kind === "bugfix" && rel === PHASE_FILE.design)) out.push(rel); continue; }
     if (a.fingerprint) {
-      if (!artifactMatches(abs, ph, a.fingerprint) && !wsOnlyEdit(dir, ph, rel, a, "snapshot")) out.push(rel); // r5 review: whitespace only
+      // r5 review: whitespace only — by the approval's wsFingerprint (1.24 review 6, E-I5), else its .history snapshot
+      if (!artifactMatches(abs, ph, a.fingerprint) && !wsSame(abs, ph, a.wsFingerprint) && !wsOnlyEdit(dir, ph, rel, a, "snapshot")) out.push(rel);
     } else if (a.at && ph !== "tasks") {
       try { if (fs.statSync(abs).mtime.getTime() > new Date(a.at).getTime()) { out.push(rel); byDate.push(rel); } } catch { /* ignore */ }
     }
@@ -1625,6 +1654,8 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
 // (`which`: snapshot | designSnapshot — the history record of that approval, the same `at`) when that snapshot still holds the
 // approved content (fingerprintMatches): equal once each line's trailing whitespace and the final blank lines are dropped (wsText).
 // No snapshot (an approval before 1.13, a .history not committed) → false: the fingerprint alone decides, as before.
+// 1.24 review 6 (E-I5): an approval recorded since carries its whitespace-insensitive fingerprint — wsSame() decides without a snapshot.
+const wsSame = (abs, phase, stored) => typeof stored === "string" && !!stored && wsFingerprint(readIfExists(abs), phase) === stored;
 function wsOnlyEdit(dir, phase, file, appr, which) {
   if (!isRecord(appr) || typeof appr.at !== "string") return false;
   const st = readJson(statePath(dir)).data;

@@ -142,6 +142,15 @@ flows, the bugfix kind.
   equal under `wsText()` (state.js — fingerprintText, each line's trailing whitespace and the final blank lines dropped;
   linear, no regex over a run of spaces) → not changed (`changedSinceApproval`, and spec_impact's `changed`). No snapshot
   (before 1.13, a `.history/` not committed) → the fingerprint alone decides, as before.
+  **1.24 review 6 (E6 / E-I5) — the whitespace-insensitive fingerprint is RECORDED:** every new approval, its history record and
+  each role sign-off carry `wsFingerprint` = sha1(`wsText`) (state.js `wsFingerprint()`; `designWsFingerprint` for a bugfix's
+  design.md) next to `fingerprint` (whose rule is unchanged). `changedSinceApproval` checks it (`wsSame()`) before the snapshot
+  fallback — no `.history/` needed —, `sameContent()` (role sign-offs: `roleSignOffs`, `recordRoleSignOff`, doctor's role view)
+  accepts a record whose `wsFingerprint` (+ `designWsFingerprint`) equals the content's (`phaseContent()` computes both), and
+  `changesSince`'s `sameApprovedContent` too (a re-approval after a whitespace-only edit changed nothing). A WAITING role
+  sign-off has no snapshot: an editor's trailing-whitespace trim after product signed made tech's sign-off "not complete"
+  (product's read stale — r5's rule held for single approvals only). Records from before 1.24 have none: the fingerprint and
+  the snapshot fallback decide, as before. (A field of the approval / sign-off records — the merge driver's rules carry it.)
 - **A deleted approved artifact is a change since its approval** (1.22 review — `changedSinceApproval()` skipped a missing
   file, so deleting an approved test-plan.md and its T-IDs read as "nothing changed" and the Phase 4 gate vanished; the
   tasks were approvable at once). It is listed like an edit (doctor's changed-since-approval, finish's blocker, the roadmap,
@@ -182,7 +191,8 @@ flows, the bugfix kind.
 - **Approval history.** `approvals[phase]` stays the latest approval (with its content `fingerprint`);
   every approval is ALSO appended to `.state.json → approvalHistory` `{phase, at, by, fingerprint, forced?,
   failing?, snapshot, file?, designSnapshot?, designFingerprint? (1.22 review — changesSince compares a re-approval with the
-  record in force before it), testsPlan? (a `tests` approval, 1.22 review)}` and the approved artifact is saved to
+  record in force before it), testsPlan? (a `tests` approval, 1.22 review), wsFingerprint? / designWsFingerprint? (1.24 review 6 —
+  the whitespace-insensitive ones)}` and the approved artifact is saved to
   `.specs/<f>/.history/<phase>@<n>.md` (tasks with checkboxes normalized; never overwrites an existing
   snapshot). An IDENTICAL re-approval (the fingerprint + designFingerprint of the phase's previous approval record, whose
   snapshot still holds them — `reuseSnapshot()`, r5 review) shares that snapshot path instead of writing a copy (60
@@ -245,7 +255,8 @@ flows, the bugfix kind.
   completing sign-off writes `approvals[<phase>]` (with `roles` `{<role>: {by, at, fingerprint…}}`) and the snapshot
   exactly like a single approval — so every reader of `approvals[<phase>]` (doctor approval-gates / `nextGate.missingRoles`
   / `pendingRoles`, next_action's "missing role", finish, ROADMAP.md attention, the guard hook, metrics) sees the phase
-  approved only then. A sign-off of OLDER content no longer counts (`phaseContent()` fingerprints; a phase with no file —
+  approved only then. A sign-off of OLDER content no longer counts (`phaseContent()` fingerprints — the same content but
+  whitespace still counts since 1.24 review 6, `wsFingerprint` above; a phase with no file —
   tests, execution — r5 review: a sign-off made before a change of the feature, `changesSince(state, at, phase)` — a change
   request, an untick, a revocation, a re-approval of another phase with other content — no longer counts, the rule
   `executionSignOffStale()` applies to a single approval: `signOffOutdated()` in `roleSignOffs()`, for the waiting
@@ -312,7 +323,10 @@ flows, the bugfix kind.
   gate that passes answers `waiverIgnored`. `waiverView` / `forcedApprovalList` / `strictestWaiver`: doctor warn
   `waiver-expired` (feature and spike doctors), the ROADMAP.md forced-approvals line (EXPIRED flagged), `spec_finish`
   `waivers` `[{phase, failing, reason?, expires?, expired}]` + a warning when expired + the merge summary's "Waived gates".
-  Metrics count `revokedApprovals` and `untickedTasks`.
+  Metrics count `revokedApprovals` and `untickedTasks`. **With roles (1.24 review 6, E7)** the completed approval carries the
+  STRICTEST waiver of the forced sign-offs that count (`strictestWaiver()` — the earliest expiry, else the first one), the
+  completing sign-off's own included: it kept its own (a waiver with no expiry) and another role's expiring waiver was lost —
+  doctor never warned `waiver-expired`, finish never said expired. The roles' records keep their own waivers.
 - **MCP-only surfaces** — `spec_stop_check {message, agent?}` = `stopCheck()` (the same decision as `dev-spec stop-check
   --json`); `spec_log {name, gitLog, max?}` = `taskCommits()` over git log TEXT the client supplies — the server still never
   runs git or any command (`dev-spec log` keeps running git itself; `log <f> - --max N` passes the window too). An empty
@@ -326,7 +340,7 @@ flows, the bugfix kind.
   waiting sign-off and a revocation record; a fast-forward passes it to every phase it approves. No reader branches on it — it is
   the audit trail of WHO approved (the human, in the client), next to `by`.
 - **`opts.dryRun`** — approvePhase runs everything up to its write and returns `{ok: true, dryRun: true, feature, phase, failing,
-  checks, fingerprint, designFingerprint?, role?, waiver?}` (revoke: `{dryRun, revoke: true}` after its own checks; through:
+  checks, fingerprint, designFingerprint?, role?, waiver?}` (revoke: `{dryRun, revoke: true, approvedAt, withdrawn}` after its own checks; through:
   `{dryRun, chain, fingerprints: {<phase>: {fingerprint, designFingerprint?}}}` — the phases it would walk, each gate running only
   when approved, and each one's content, `phaseContent()`); a refusal / error comes back exactly as without it. Only the server
   passes it (the preview before it asks the user — a gate that refuses anyway asks nobody); never a tool argument or a CLI flag.
@@ -340,7 +354,13 @@ flows, the bugfix kind.
   `spec_feature` remove has its own (1.23): `removePreview` returns `fingerprint` (`featureFolderFingerprint()`, finish.js — the
   folder's identity and every entry under it), the server passes it back as `manageFeature(…, {confirm, preview})`, and
   `removeFeatureLocked` refuses another folder under the name or an edited one (`changedSincePreview`, nothing deleted) —
-  mcp.md → Human approvals over MCP elicitation.
+  mcp.md → Human approvals over MCP elicitation. **A revocation (1.24 review 6):** the dry run names what it would remove —
+  `approvedAt` (the approval's `at`, or null) and `withdrawn` `{role: at}` (the waiting sign-offs) —, and `revokeApproval` with
+  `opts.preview` `{approvedAt, withdrawn}` refuses when they differ now (another approval recorded while the user was asked would
+  be revoked in place of the one the question named): `{ok: false, changedSincePreview: true, code: "changed-since-preview",
+  revoke: true}` + `revoke.changedSincePreview`, nothing written. **The server's part is pending:** mcp/server.js's
+  `elicitApproval` builds no preview for a revoke (`if (!pre.revoke)`) — it must pass `{approvedAt: pre.approvedAt, withdrawn:
+  pre.withdrawn}` back for this check to run over MCP.
 
 ## Flows (1.14 — from Import sources and flows)
 - **Flows:** `.state.json → flow: "design-first"` (`spec_create {flow}` / `create --flow`; changed with
