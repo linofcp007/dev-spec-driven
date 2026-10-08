@@ -19,7 +19,7 @@ copy of the demo and compares their output with this page.
 demo-project/
 ├── .specs/
 │   ├── steering/                       # constitution (the principles the design is checked against) + filled product/tech/structure/testing/scale/cost/observability
-│   ├── roadmap.json                    # usage-metering depends on api-keys; meta.specVersion 1.14.0
+│   ├── roadmap.json                    # usage-metering depends on api-keys; meta.specVersion = the dev-spec that wrote it
 │   ├── .gitignore                      # the lock and temp files dev-spec writes stay out of git
 │   ├── api-keys/                        # ← the fully-worked feature (core +tdd +saas), approved up to tasks
 │   │   ├── classification.md           # tracks + the signals, blast radius and hot-path call behind them

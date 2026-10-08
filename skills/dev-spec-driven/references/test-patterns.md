@@ -1,6 +1,6 @@
 # Test Patterns & Conventions
 
-This reference is specific to `test-spec-first`. It covers how to name tests, how to structure
+This reference is specific to the **+tdd** track. It covers how to name tests, how to structure
 them, how to choose a layer, and which anti-patterns to refuse.
 
 ## The Pyramid — and Why It Matters Here

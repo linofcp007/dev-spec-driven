@@ -689,7 +689,7 @@ override when present — create-only, never over an existing file.
 - **Variables:** `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}` `{{date}}` (`{{summary}}` is a spike's
   question); an unknown `{{x}}` is left as is; no summary → a generic `[TBD]` slot.
 - **Track blocks are the engine's.** An overridden `design.md` still gets each active track's sections (+tdd
-  Testability Notes, `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]`), `requirements.md` each marker track's criteria
+  Testability Notes, `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]` / `[API]` / `[UI]` / `[OBS]` / `[DATA]`), `requirements.md` each marker track's criteria
   (renumbered after the template's own US-1 ACs when they would collide), `tasks.md` its task block and
   `test-plan.md` its test rows — appended at the end, as `spec_add_track` does — unless the template already has that
   track's heading (for the test plan: already cites its criteria). A design template that carries some of a track's

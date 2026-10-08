@@ -232,7 +232,7 @@ clone's absolute paths, to paste into another project; `mcp-config <client>` pri
 |---|---|---|
 | `hooks/guard-hook.js` | PreToolUse (Write/Edit/MultiEdit/NotebookEdit) | Only with guard mode on: asks before an edit to a code file outside `.specs/` while no feature has approved, unfinished tasks — except a test file while a feature has an approved test plan and is unfinished (Phase 4 writes the failing tests first) and any code edit while an active spike exists (its prototype); with `guard: "scope"`, once tasks are approved, also for a code file no open task names in `_Implements:_` (test files excepted — the reason names the likely task or `/spec-converge`); silent otherwise |
 | `hooks/approval-hook.js` | PreToolUse (`Bash`, `PowerShell`, `spec_approve` / `spec_feature` / `spec_init` under any MCP prefix) | Only with `meta.approvalGuard` `ask` / `deny` (`init --approval-guard`): an agent's `spec_approve`, `spec_feature` remove with `confirm`, `dev-spec approve` / `feature remove --yes` through the Bash or PowerShell tool (also inside `bash -c` / `cmd /c` / `pwsh -Command`), or lowering the guard → `ask` (a permission prompt naming the feature, phase, role and `--force`; auto / bypass modes may skip it) or `deny` (refused in every mode; the user sees the `! node <clone>/cli/dev-spec.js …` command to run). Silent otherwise — a shell command not naming dev-spec is never read further; a guardrail, not a sandbox |
-| `hooks/spec-hook.js` | PostToolUse (Write/Edit) | On save: `requirements.md` → EARS lint + placeholders; `tasks.md` → traceability (+ EC/NFR/SC warnings); `design.md` → the active tracks' mandatory sections (`[SaaS]` `[AI]` `[SEC]` `[PRIVACY]` `[DIST]`), Constitution Check, placeholders; any spec file → roadmap refresh. Skips `.execution/` and `.specs/templates/` |
+| `hooks/spec-hook.js` | PostToolUse (Write/Edit) | On save: `requirements.md` → EARS lint + placeholders; `tasks.md` → traceability (+ EC/NFR/SC warnings); `design.md` → every active track's mandatory sections (`[SaaS]` `[AI]` `[SEC]` `[PRIVACY]` `[DIST]` `[API]` `[UI]` `[OBS]` `[DATA]`, and a track pack's), Constitution Check, placeholders; any spec file → roadmap refresh. Skips `.execution/` and `.specs/templates/` |
 | `hooks/spec-hook.js` | SessionStart | One status line per feature (at most 20, the most relevant — then one "+N more — /spec-status" line), plus one line per finished feature whose implementing files drifted, one line when features' open tasks plan the same files (cross-feature overlap), one line while `.specs/` comes from an older dev-spec (`meta.specVersion` absent or older — run `/spec-upgrade`), and one line when `.gitattributes` names the spec state's merge driver but git config runs it from a missing script or another copy (re-run `merge-state --install` after a plugin update — read as text, no git process) |
 | `hooks/observe-hook.js` | PostToolUse + PostToolUseFailure (Bash, PowerShell) | Logs a Bash (or PowerShell, with an explicit exit code) run of a task's runnable `_Verify:_` command (or its `&&` join) or of a `meta.checks` command — `{command, exitCode, at, event, session}` — to `.specs/<feature>/.execution/observed.jsonl` / `.specs/.execution/observed.jsonl` (git-ignored, ≤ 64 KB); interrupted or backgrounded runs are skipped. The engine then stamps each reported run `observed: true / false`. Prints nothing |
 | `hooks/stop-hook.js` | Stop | The end-of-turn evidence gate: when the closing message claims done / verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without passing evidence (or, all tasks done, project checks without a passing run), sends the turn back with the reason; never twice in a row; off with `meta.stopCheck: false` |
@@ -256,7 +256,7 @@ All artifacts live in `.specs/` at the project root:
 ```
 project-root/
 └── .specs/
-    ├── roadmap.json              # order + dependencies + backlog + meta (lang, roadmapLang, guard, stopCheck, checks, approvalRoles, changelogAt, specVersion, milestones)
+    ├── roadmap.json              # order + dependencies + backlog + meta (lang, roadmapLang, guard, stopCheck, evidence, approvalGuard, checks, approvalRoles, changelogAt, specVersion, milestones)
     ├── ROADMAP.md  (ROADMAP.html)   # generated — never hand-edit
     ├── SPECS.md                  # generated living catalog (spec_catalog write) — never hand-edit
     ├── RELEASE-NOTES.md          # generated release notes (spec_changelog write) — never hand-edit
@@ -337,7 +337,7 @@ merge time — unless a dependency orders them or `_Supersedes:_` declares it. T
 `spec_depend`, or re-plan the files.
 
 "Needs attention" lists, per feature: unmet dependencies, open clarifications, unfilled track sections
-(`[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]`), template placeholders in the current phase, artifacts changed since their
+(every active track's — `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]` / `[API]` / `[UI]` / `[OBS]` / `[DATA]` — and a track pack's), template placeholders in the current phase, artifacts changed since their
 approval, forced approvals, missing role sign-offs, overlaps, a spike past its timebox, and ticked tasks without a
 passing run — each named with its reason, as `spec_doctor` gives it (`#1 (latest run failed), #2 (note only,
 _Verify:_ command not run), #3`; no label = no run recorded).

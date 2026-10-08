@@ -2473,6 +2473,19 @@ const msg = {
 <!-- As normas de ${a.title} da equipa — todas as features +${a.name} as seguem (o spec_task_brief cita este ficheiro). -->
 - [fill me in]
 `,
+      // A regra que um campo do track.json viola / porque o track.json não é JSON — o motor passa um código (+ o limite), nunca texto
+      rule: (r) => {
+        const x = r && typeof r === "object" ? r : { id: r };
+        return ({
+          name: "= o nome da pasta", marker: "^[A-Z][A-Z0-9]{1,11}$", text: `2–${x.max} caracteres, uma só linha, sem [ ] < > \``,
+          line: `uma só linha, ≤ ${x.max} caracteres`, signals: "{ strong?, weak?, context? }", keywords: "[palavra-chave, …]",
+          sections: "[{ name, syn?, loose?, guidance? }, …] — pelo menos uma", section: "{ name, syn?, loose?, guidance? }",
+          lead: "um nome depois da numeração / do emoji / do travessão", texts: "[texto, …]",
+          guidance: `uma só linha, ≤ ${x.max} caracteres, sem <!-- -->`,
+        })[x.id] || String(x.id);
+      },
+      jsonWhy: (a) => (a.why === "comment" ? "um comentário /* nunca é fechado" : a.why === "object" ? "não é um objeto JSON"
+        : a.line ? `um erro de sintaxe na linha ${a.line}` : "um erro de sintaxe"),
       problems: {
         "linked-folder": "uma ligação (symlink / junction) ou uma pasta fora de .specs/ — ignorada: um pack só é lido da sua própria pasta.",
         "unknown-file": "não é um ficheiro de pack (track.json, requirements.md, tasks.md, test-plan.md, checklist.md, steering.md, <língua>/) — ignorado.",
@@ -2481,11 +2494,11 @@ const msg = {
         "name-reserved": (a) => `'${a.name}' está reservado (um track incluído, uma palavra para um, ou uma palavra que o dev-spec usa) — o pack é ignorado.`,
         "name-mismatch": (a) => `"name": "${a.name}" não é o nome da pasta '${a.folder}' — o pack é ignorado.`,
         "json-missing": "não há track.json — o pack é ignorado.",
-        "json-invalid": (a) => `o track.json não é JSON válido (${a.detail}) — o pack é ignorado.`,
+        "json-invalid": (a) => `o track.json não é JSON válido (${MSG.pt.trackPacks.jsonWhy(a)}) — o pack é ignorado.`,
         "too-big": (a) => `${a.file} tem mais de ${a.max} bytes — o pack é ignorado.`,
         "fragment-linked": (a) => `${a.file} não é um ficheiro normal dentro de .specs/ (é uma ligação ou uma pasta) — o pack é ignorado.`,
-        "field-missing": (a) => `falta "${a.field}" (${a.rule}) — o pack é ignorado.`,
-        "field-invalid": (a) => `"${a.field}" é inválido (${a.rule}) — o pack é ignorado.`,
+        "field-missing": (a) => `falta "${a.field}" (${MSG.pt.trackPacks.rule(a.rule)}) — o pack é ignorado.`,
+        "field-invalid": (a) => `"${a.field}" é inválido (${MSG.pt.trackPacks.rule(a.rule)}) — o pack é ignorado.`,
         "marker-invalid": (a) => `o marcador '${a.marker}' não é ^[A-Z][A-Z0-9]{1,11}$ — o pack é ignorado.`,
         "marker-reserved": (a) => `o marcador [${a.marker}] é do dev-spec (um marcador incluído, uma etiqueta de história / paralela ou um espaço genérico) — o pack é ignorado.`,
         "marker-duplicate": (a) => `o marcador ${a.marker} já é do pack +${a.other} — os marcadores são únicos; este pack é ignorado.`,

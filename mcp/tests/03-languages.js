@@ -11,7 +11,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
   {
     const I = require("./lib/i18n.js");
     // European-only vocabulary a pt-BR string must never hold (the transform's job) — whole words, case-insensitive.
-    const EU_ONLY = /(?<![\p{L}])(?:utilizador(?:es|as?)?|ficheiros?|ecrãs?|equipas?|registos?|registar|registad[oa]s?|palavras?-passe|telemóve(?:l|is)|secç(?:ão|ões)|factos?|contactos?|planead[oa]s?|planeamento|artefactos?|controlos?|contigo|tens|podes|queres)(?![\p{L}])|(?<![\p{L}])a correr(?![\p{L}])|por defeito|por omissão/iu;
+    const EU_ONLY = /(?<![\p{L}])(?:utilizador(?:es|as?)?|ficheiros?|ecrãs?|equipas?|registos?|registar|registad[oa]s?|palavras?-passe|telemóve(?:l|is)|secç(?:ão|ões)|factos?|contactos?|planead[oa]s?|planeamento|artefactos?|controlos?|contigo|tens|podes|queres)(?![\p{L}])|(?<![\p{L}])(?:a correr|à espera)(?![\p{L}])|por defeito|por omissão/iu;
     // 1. language codes: aliases fold to pt-BR; pt / pt-PT stay European; the strict reader refuses the unknown
     ok(["pt-BR", "pt_BR", "pt-br", "ptbr", "PT-BR", " pt_br "].every((l) => S.normalizeLang(l) === "pt-BR" && S.canonicalLang(l) === "pt-BR") &&
       ["pt", "pt-PT", "pt_pt", "PT"].every((l) => S.normalizeLang(l) === "pt" && S.canonicalLang(l) === "pt") &&

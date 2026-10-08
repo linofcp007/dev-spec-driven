@@ -2594,6 +2594,18 @@ const msg = {
 <!-- The team's ${a.title} standards — every +${a.name} feature follows them (spec_task_brief quotes this file). -->
 - [fill me in]
 `,
+      // A rule a track.json field breaks / why track.json is no JSON — the engine passes a code (+ its limit), never English text
+      rule: (r) => {
+        const x = r && typeof r === "object" ? r : { id: r };
+        return ({
+          name: "= the folder name", marker: "^[A-Z][A-Z0-9]{1,11}$", text: `2–${x.max} characters, one line, no [ ] < > \``,
+          line: `one line, ≤ ${x.max} characters`, signals: "{ strong?, weak?, context? }", keywords: "[keyword, …]",
+          sections: "[{ name, syn?, loose?, guidance? }, …] — at least one", section: "{ name, syn?, loose?, guidance? }",
+          lead: "a name after its numbering / emoji / dash", texts: "[text, …]", guidance: `one line, ≤ ${x.max} characters, no <!-- -->`,
+        })[x.id] || String(x.id);
+      },
+      jsonWhy: (a) => (a.why === "comment" ? "a /* comment is never closed" : a.why === "object" ? "not a JSON object"
+        : a.line ? `a syntax error on line ${a.line}` : "a syntax error"),
       problems: {
         "linked-folder": "a link (symlink / junction) or a folder outside .specs/ — ignored: a pack is read from its own folder only.",
         "unknown-file": "not a pack file (track.json, requirements.md, tasks.md, test-plan.md, checklist.md, steering.md, <lang>/) — ignored.",
@@ -2602,11 +2614,11 @@ const msg = {
         "name-reserved": (a) => `'${a.name}' is reserved (a built-in track, a word for one, or a word dev-spec uses) — the pack is ignored.`,
         "name-mismatch": (a) => `"name": "${a.name}" is not the folder name '${a.folder}' — the pack is ignored.`,
         "json-missing": "no track.json — the pack is ignored.",
-        "json-invalid": (a) => `track.json is not valid JSON (${a.detail}) — the pack is ignored.`,
+        "json-invalid": (a) => `track.json is not valid JSON (${MSG.en.trackPacks.jsonWhy(a)}) — the pack is ignored.`,
         "too-big": (a) => `${a.file} is larger than ${a.max} bytes — the pack is ignored.`,
         "fragment-linked": (a) => `${a.file} is not a regular file inside .specs/ (a link, or a folder) — the pack is ignored.`,
-        "field-missing": (a) => `"${a.field}" is missing (${a.rule}) — the pack is ignored.`,
-        "field-invalid": (a) => `"${a.field}" is invalid (${a.rule}) — the pack is ignored.`,
+        "field-missing": (a) => `"${a.field}" is missing (${MSG.en.trackPacks.rule(a.rule)}) — the pack is ignored.`,
+        "field-invalid": (a) => `"${a.field}" is invalid (${MSG.en.trackPacks.rule(a.rule)}) — the pack is ignored.`,
         "marker-invalid": (a) => `marker '${a.marker}' is not ^[A-Z][A-Z0-9]{1,11}$ — the pack is ignored.`,
         "marker-reserved": (a) => `marker [${a.marker}] is taken by dev-spec (a built-in marker, a story / parallel tag or a generic slot) — the pack is ignored.`,
         "marker-duplicate": (a) => `marker ${a.marker} is already the +${a.other} pack's — markers are unique; this pack is ignored.`,
