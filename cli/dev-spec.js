@@ -112,14 +112,18 @@
  *                                      with this clone's absolute paths, to paste into a project
  *   prompts [name] [--args "…"]        The MCP prompts (one per plugin command): list them, or print one rendered as
  *                                      prompts/get returns it ($ARGUMENTS ← --args, or the words after the name)
- *   bundle [--out <file.js>]           Build this clone's engine as ONE file (mcp/lib/spec.bundle.js, git-ignored) for a
- *                                      slow file system — used with DEV_SPEC_BUNDLE=1 (+ DEV_SPEC_BUNDLE_PATH for --out)
+ *   bundle [--out <file.js>] [--force] Build this clone's engine as ONE file (mcp/lib/spec.bundle.js, git-ignored) for a
+ *                                      slow file system — used with DEV_SPEC_BUNDLE=1 (+ DEV_SPEC_BUNDLE_PATH for --out);
+ *                                      an existing file that is no previous bundle is replaced only with --force
+ *   version (or --version / -V)        The version, this CLI's path, Node, the engine (modules or bundle — why a bundle was
+ *                                      skipped), the project, which input chose it, its language (--json too)
  *
  * Flags: --json (raw JSON output) · --project <dir> (an existing folder; only init creates one) · --lang en|pt|pt-BR|es
  *        The project: --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working one with a
- *        dev-spec .specs/ > the working folder. A path argument (scan, ears, import) is relative to the project when it was named
- *        (--project / the env), else to the working folder. Each command takes its own options: another one, or an extra
- *        argument, is a usage error (exit 1; with --json also {ok:false, error} on stdout).
+ *        dev-spec .specs/ > the working folder (a variable that chose it is checked like --project; a project's .specs/ is no
+ *        project). A path argument (scan, ears, import) is relative to the project when it was named (--project / the env),
+ *        else to the working folder. Each command takes its own options: another one, an extra argument or a single-value flag
+ *        given twice is a usage error (exit 1; with --json also {ok:false, error} on stdout).
  *        done: --run · --shell bash|pwsh|<path> · --timeout <s> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
  *        init: --check name="cmd" (repeatable) · finish: --run · --shell bash|pwsh|<path> · --timeout <s> · log: --max N (default 1000)
  *        undone: --reason "…" · approve: --revoke · --reason "…" · --expires YYYY-MM-DD|Nd (with --force: the waiver)
@@ -172,8 +176,10 @@ function projectText() { return cliText(spec.projectLang(projectDir)); }
 // Read all of stdin asynchronously — fs.readFileSync(0) is unreliable on Windows pipes (same rule as the hooks). The bytes are
 // decoded as a file is (spec.decodeText: a UTF-16 BOM decides, else UTF-8) — 1.23 review: a UTF-16 document (what Windows
 // PowerShell 5.1's `>` writes) piped into `ears -` read as "0 criteria, pass" and `import plan -` imported garbage.
+// 1.24 r6 B-I9: from a terminal (a TTY) the CLI seemed to hang — one line on stderr says it reads the terminal and how to end it.
 function readStdin(cb) {
   const chunks = [];
+  if (process.stdin.isTTY) console.error("dev-spec: " + projectText().stdinHint);
   process.stdin.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c), "utf8")));
   process.stdin.on("end", () => { try { cb(spec.decodeText(Buffer.concat(chunks))); } catch (e) { die(e.message); } });
   process.stdin.on("error", (e) => die(e.message));
@@ -211,22 +217,33 @@ VALUE_FLAGS.add("out"); // 1.20: bundle --out <file.js> — the one-file engine 
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 const ARGV0 = argv.slice(); // the command line as given — `evals` hands its own flags to run-evals.js (evalsArgs)
 let cmdIdx = -1; // where the command word stands in ARGV0
+// 1.24 r6 B5 — how many times each VALUE flag was given (`--k v` and `--k=v`): the parser keeps the last value, so a second one of
+// a single-value flag dropped the first silently (`approve … --role tech --role product` signed for product alone) — main()
+// refuses it (refuseRepeatedFlags); the flags a command collects every occurrence of are REPEATABLE_FLAGS.
+const flagCount = Object.create(null);
+const countFlag = (k) => { if (VALUE_FLAGS.has(k)) flagCount[k] = (flagCount[k] || 0) + 1; };
+let versionAsked = false; // 1.24 r6 B-I1: --version / -V
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   // `--` ends the options (POSIX): every later token is positional (`create -- --odd-name`) — it used to become flags[""].
   // argv is cut there, so the repeated-flag collectors below (depend --add, init --check, decide --affects…) stop there too.
   if (a === "--") { if (cmdIdx < 0 && !pos.length && i + 1 < argv.length) cmdIdx = i + 1; pos.push(...argv.slice(i + 1)); argv.splice(i); break; }
   if (a === "--json") flags.json = true;
-  else if (a.startsWith("--") && a.includes("=")) { const k = a.slice(2, a.indexOf("=")); flags[k] = a.slice(a.indexOf("=") + 1); }
+  // anywhere, like --help: the version command, nothing else runs (`--version=true|false` as a switch — the help documents it)
+  else if (a === "--version" || a === "-V" || /^--version=(?:true|1|yes|on)$/i.test(a)) versionAsked = true;
+  else if (/^--version=(?:false|0|no|off)$/i.test(a)) { /* off */ }
+  else if (a === "-h") flags.help = true; // 1.24 r6 B-I3: = --help (`status -h` looked for a feature named "h")
+  else if (a.startsWith("--") && a.includes("=")) { const k = a.slice(2, a.indexOf("=")); flags[k] = a.slice(a.indexOf("=") + 1); countFlag(k); }
   else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) {
     // A value flag never swallows the next flag: `--order --json` must not set order="--json". Only a
     // `--<letter>` token is a flag — `---` (front matter, an HR) or `-- draft` stays a value, like over MCP.
     if (argv[i + 1] === undefined || /^--[A-Za-z]/.test(argv[i + 1])) missingValue = missingValue || a.slice(2);
-    else flags[a.slice(2)] = argv[++i];
+    else { flags[a.slice(2)] = argv[++i]; countFlag(a.slice(2)); }
   }
   else if (a.startsWith("--")) flags[a.slice(2)] = true;
   else { if (!pos.length) cmdIdx = i; pos.push(a); }
 }
+if (versionAsked && pos[0] !== "help") pos.splice(0, pos.length, "version"); // the words of another command are not run (its flags: printVersion ignores them)
 const cmd = pos.shift();
 // 1.23 review (L14): Windows' `--project "C:\dir\"` reaches the CLI as `C:\dir"` (the backslash escapes the closing quote) — a
 // double quote is never part of a Windows path, so a trailing one is dropped.
@@ -234,12 +251,19 @@ if (process.platform === "win32" && typeof flags.project === "string") flags.pro
 // --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working folder with a dev-spec .specs/
 // > the working folder — the same resolution as the MCP server (spec.resolveProjectDir). --project is checked in main().
 const projectDir = spec.resolveProjectDir(flags.project);
+// 1.24 r6 B1 — WHICH input chose it, read with resolveProjectDir's own precedence (a value that is empty or holds an unexpanded
+// variable falls through): "flag" (--project) · "SPEC_PROJECT_DIR" · "CLAUDE_PROJECT_DIR" · "nearest" (a folder above the working
+// one with a dev-spec .specs/) · "cwd" (the working folder). checkProject() checks a named one; `version` reports it.
+const usableDir = (v) => v != null && String(v).trim() !== "" && !spec.unexpandedVar(v);
+const PROJECT_SOURCE = typeof flags.project === "string" && usableDir(flags.project) ? "flag"
+  : usableDir(process.env.SPEC_PROJECT_DIR) ? "SPEC_PROJECT_DIR"
+  : usableDir(process.env.CLAUDE_PROJECT_DIR) ? "CLAUDE_PROJECT_DIR"
+  : path.resolve(process.cwd()) === projectDir ? "cwd" : "nearest";
 // Where a PATH argument is read from (scan <path>, ears <file>, import <tool> <path>): the project folder when it was NAMED
 // (--project, SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR — as import always read it), else the working folder: a path typed in a
 // subfolder of the project found by walking up is relative to that subfolder, as in git (1.23 review L12: scan and ears read it
 // from the working folder even with --project, import from the project).
-const envProject = (v) => v != null && String(v).trim() !== "" && !spec.unexpandedVar(v);
-const projectNamed = typeof flags.project === "string" || envProject(process.env.SPEC_PROJECT_DIR) || envProject(process.env.CLAUDE_PROJECT_DIR);
+const projectNamed = typeof flags.project === "string" || PROJECT_SOURCE === "SPEC_PROJECT_DIR" || PROJECT_SOURCE === "CLAUDE_PROJECT_DIR";
 const argPath = (p) => path.resolve(projectNamed ? projectDir : process.cwd(), String(p));
 
 // Boolean switches: `--x` is true, `--x=true|false` (also 1/0, yes/no, on/off) sets it explicitly; any other `=value` is
@@ -283,6 +307,22 @@ function refuseUnknownFlags() {
   }
   die(projectText().unknownFlag("--" + bad, best ? "--" + best.c : null));
 }
+// 1.24 r6 B5 — a single-value flag given twice is a usage error, never last-wins (--role, --by, --cmd, --summary, --through,
+// --phase, --project, --lang… dropped the first value). REPEATABLE_FLAGS are the ones a command reads every occurrence of: depend
+// --add / --rm, init --check, append-tasks --req / --implements / --makes-green / --depends, decide --affects / --supersedes.
+// append-tasks keeps its own words for --task (one task per call) and --verify / --story / --heading / --size. `evals` is exempt
+// (its flags are run-evals.js's).
+const REPEATABLE_FLAGS = new Set(["add", "rm", "check", "req", "implements", "makes-green", "depends", "affects", "supersedes"]);
+function refuseRepeatedFlags() {
+  if (cmd === "evals") return;
+  const k = Object.keys(flagCount).find((n) => flagCount[n] > 1 && !REPEATABLE_FLAGS.has(n));
+  if (k === undefined) return;
+  if (cmd === "append-tasks" && ["task", "verify", "story", "heading", "size"].includes(k)) {
+    const AT = spec.msg(pos[0] != null ? spec.featureLang(projectDir, pos[0]) : spec.projectLang(projectDir)).appendTasks;
+    die(k === "task" ? AT.oneTaskPerCall : AT.oneValue(k));
+  }
+  die(projectText().flagTwice("--" + k));
+}
 function normalizeBoolFlags() {
   for (const k of BOOL_FLAGS) {
     if (typeof flags[k] !== "string") continue;
@@ -296,14 +336,20 @@ function normalizeBoolFlags() {
   }
 }
 // --cap / --max: an integer ≥ 1, like the MCP schema ({type: integer, minimum: 1}). parseInt read "1.5" as 1, "-3" as -3
-// (a scan of zero files, "truncated") and "abc" as the default. Absent → undefined (the engine's default).
-function intFlag(k) {
+// (a scan of zero files, "truncated") and "abc" as the default. Absent → undefined (the engine's default). `max`: the largest
+// value allowed (--timeout: TIMEOUT_MAX_S).
+function intFlag(k, max) {
   if (flags[k] === undefined) return undefined;
   const v = String(flags[k]).trim();
-  if (/^\d+$/.test(v) && Number.isSafeInteger(Number(v)) && Number(v) >= 1) return Number(v);
+  if (/^\d+$/.test(v) && Number.isSafeInteger(Number(v)) && Number(v) >= 1 && (max === undefined || Number(v) <= max)) return Number(v);
   const A = spec.msg(spec.projectLang(projectDir)).args;
-  return die(A.invalid(A.item("--" + k, A.type.integer + " " + A.atLeast(1), JSON.stringify(String(flags[k])))));
+  const most = max === undefined ? "" : projectText().atMost(max);
+  return die(A.invalid(A.item("--" + k, A.type.integer + " " + A.atLeast(1) + most, JSON.stringify(String(flags[k])))));
 }
+// 1.24 r6 B6 — done --run / finish --run --timeout <seconds>: at most Node's timer limit (2^31 - 1 ms) — a larger value became a
+// TimeoutOverflowWarning and a timer of 1 ms: the run was refused as "did not finish within --timeout 9999999 s".
+const TIMEOUT_MAX_S = Math.floor(2147483647 / 1000);
+const timeoutFlag = () => intFlag("timeout", TIMEOUT_MAX_S);
 // `dev-spec evals` (1.23 review P1): the words of the command line but the command, read with run-evals.js's own rules — its
 // value flags (--project, --model, --prompt, --max-items) take the next word unless it is a flag; the first plain word is the
 // feature, any other goes on (the harness refuses it). --project and its value are left out: the CLI passes its resolved project.
@@ -314,6 +360,7 @@ function evalsArgs() {
   const rest = [];
   for (let i = 0; i < toks.length; i++) {
     const a = toks[i];
+    if (a === "-h") { help = true; rest.push("--help"); continue; } // 1.24 r6 B-I3: -h = --help (the harness's usage)
     if (!a.startsWith("--")) { if (feature === null) feature = a; else rest.push(a); continue; }
     const eq = a.indexOf("=");
     const key = eq === -1 ? a.slice(2) : a.slice(2, eq);
@@ -335,6 +382,9 @@ function runOnlyFlags() {
 // and its summary, each re-summarized shorter when together they'd pass the record's 2,000 characters (normalizeEvidence cuts
 // there) — where it kept the LAST command's summary alone. One command: its summary, as ever.
 const EVIDENCE_SUMMARY_MAX = 2000;
+// 1.24 r6 B3: done --run / finish --run — after the command EXITS, how long its output may still drain before the pipes are dropped
+// (a background process it started can hold them open for good).
+const RUN_DRAIN_MS = 2000;
 function runSummaries(parts) {
   if (parts.length === 1) return parts[0].summary;
   const budget = Math.floor(EVIDENCE_SUMMARY_MAX / parts.length);
@@ -376,6 +426,17 @@ function fail(r, hint) {
   }
   console.error("dev-spec: " + r.error);
   if (hint) console.error(hint);
+  process.exit(1);
+}
+// 1.24 r6 B2 — stdout's reader went away (`export --md | head -1`, a pager quit): an EPIPE / EOF / ERR_STREAM_DESTROYED is the end
+// of the output, never a crash — exit quietly with the status the command set (the MCP server's rule since 1.22); any other stdout
+// error is one stderr line, exit 1. console.log swallows its own write errors, but process.stdout.write (export, catalog,
+// changelog, rules, trace --csv, prompts…) raised an unhandled 'error' — a stack trace and exit 1. Installed by main() after
+// the status line's render path, which keeps its own (exit 0 always).
+function stdoutError(e) {
+  const code = e && e.code;
+  if (code === "EPIPE" || code === "EOF" || code === "ERR_STREAM_DESTROYED") process.exit(process.exitCode || 0);
+  try { fs.writeSync(2, "dev-spec: " + (e && e.message ? e.message : String(e)) + "\n"); } catch { /* stderr gone too */ }
   process.exit(1);
 }
 // A usage line: the syntax stays as typed, the "usage:" prefix is in the project language.
@@ -420,7 +481,7 @@ const COMMAND_OPTIONS = {
   "next-action": { options: [], max: 1 },
   na: { options: [], max: 1 },
   "add-track": { options: ["tracks", "remove"] },
-  feature: { options: ["yes", "flow"], max: 3 },
+  feature: { options: ["yes", "flow"] }, // its arguments per action (remove / archive / restore: 2, rename / flow: 3) — checked in its case (1.24 r6 B4)
   rules: { options: [], max: 1 },
   import: { options: ["name", "lang", "tracks", "text"] },
   "append-tasks": { options: ["task", "req", "implements", "verify", "story", "parallel", "makes-green", "expect-fail", "size", "depends", "heading"], max: 1 },
@@ -439,8 +500,9 @@ const COMMAND_OPTIONS = {
   decide: { options: ["title", "decision", "context", "consequences", "affects", "supersedes", "discovery", "kind"] },
   "merge-state": { options: ["install", "uninstall", "check", "kind"] },
   "mcp-config": { options: [], max: 1 },
-  bundle: { options: ["out"] },
+  bundle: { options: ["out", "force"] }, // --force: overwrite an --out that is no previous bundle (1.24 r6 B8)
   statusline: { options: ["print-config"], max: 0 },
+  version: { options: [], max: 0 }, // 1.24 r6 B-I1 (--version / -V anywhere skip this check: they print the version, nothing else)
 };
 function checkCommandArgs() {
   const own = Object.prototype.hasOwnProperty.call(COMMAND_OPTIONS, cmd) ? COMMAND_OPTIONS[cmd] : null;
@@ -453,17 +515,32 @@ function checkCommandArgs() {
 // 1.23 review (L14) — --project names an existing FOLDER: an empty value, a variable left unexpanded (`$HOME/x`, `%DIR%`, `${…}`)
 // or a file is refused, and so is a folder that doesn't exist — except for init, which creates it (`create x --project <typo>`
 // used to create the whole mistyped tree; a file or `C:\dir"` ended in a raw ENOTDIR / ENOENT).
-function checkProjectFlag() {
-  if (!("project" in flags)) return;
+// 1.24 r6 B1 — SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR are checked the same way when one of them chose the project (PROJECT_SOURCE):
+// a mistyped one created that tree, a file ended in a raw ENOTDIR and `list` answered "No features" — the message names the
+// variable. A folder without .specs/ is fine (CLAUDE_PROJECT_DIR is whatever folder Claude Code opened). An empty or unexpanded
+// value still falls through (resolveProjectDir's rule). B7 — a dev-spec project's own .specs/ folder named as the project is
+// refused with the folder to name: it created .specs/.specs/, which then won every walk-up.
+function checkProject() {
   const T = projectText();
-  const v = typeof flags.project === "string" ? flags.project.trim() : "";
-  if (!v) die(T.projectEmpty);
-  if (spec.unexpandedVar(v)) die(T.projectUnexpanded(v));
+  let v, src;
+  if ("project" in flags) {
+    v = typeof flags.project === "string" ? flags.project.trim() : "";
+    if (!v) die(T.projectEmpty);
+    if (spec.unexpandedVar(v)) die(T.projectUnexpanded(v));
+    src = "--project";
+  } else if (PROJECT_SOURCE === "SPEC_PROJECT_DIR" || PROJECT_SOURCE === "CLAUDE_PROJECT_DIR") {
+    v = String(process.env[PROJECT_SOURCE]).trim();
+    src = PROJECT_SOURCE;
+  } else return;
   const abs = path.resolve(v);
+  const flag = src === "--project";
   let st = null;
   try { st = fs.statSync(abs); } catch { st = null; }
-  if (st && !st.isDirectory()) die(T.projectNotDir(abs));
-  if (!st && cmd !== "init") die(T.projectMissing(abs));
+  if (st && !st.isDirectory()) die(flag ? T.projectNotDir(abs) : T.projectEnvNotDir(src, abs));
+  if (!st && cmd !== "init") die(flag ? T.projectMissing(abs) : T.projectEnvMissing(src, abs));
+  const base = path.basename(abs);
+  const specsName = process.platform === "win32" || process.platform === "darwin" ? /^\.specs$/i.test(base) : base === ".specs";
+  if (st && specsName && spec.isDevSpecDir(path.dirname(abs))) die(T.projectIsSpecs(flag ? "--project " + abs : src + "=" + abs, path.dirname(abs)));
 }
 
 // ---- mcp-config snippets ---------------------------------------------------
@@ -558,12 +635,14 @@ function statusLineConfig() {
 async function main() {
   // 1.16 C1: the status line's render path runs before any flag / usage check — it must print its line or nothing, exit 0.
   if (cmd === "statusline" && !("print-config" in flags) && !("help" in flags)) return statusLineRender();
+  process.stdout.on("error", stdoutError); // 1.24 r6 B2: a reader that closed early ends the output quietly
   refuseUnknownFlags(); // `--rnu` is an error (did you mean --run?), never a silent switch
   // 1.21 review A3: `merge-state --check` is a switch there — `--check` is init's VALUE flag (init --check name="cmd"), so it can't
   // join spec.CLI_SWITCHES (normalizeBoolFlags would refuse `init --check test="npm test"`, and the approval hook's lexer would read
   // init's value as the next word): a bare `--check` after merge-state reads as on.
   if (cmd === "merge-state" && missingValue === "check") { missingValue = null; flags.check = true; }
   if (missingValue) die(projectText().missingValue(missingValue));
+  refuseRepeatedFlags(); // 1.24 r6 B5: `--role tech --role product` is an error, never last-wins
   // --lang is checked once, like the MCP `lang` enum: an unknown value (fr, spanish, portugues…) is refused before any
   // command runs — the engine would quietly turn it into 'en' and SAVE it (init rewrote the project language).
   if (flags.lang !== undefined) {
@@ -580,17 +659,25 @@ async function main() {
   // usage error, before anything runs: it printed the text on stdout with exit 0, and a script parsing it failed far away.
   const helpOnly = cmd === undefined || cmd === "help" || cmd === "-h" || cmd === "--help" || (on("help") && cmd !== "evals");
   if (on("json") && (helpOnly || TEXT_ONLY_COMMANDS.has(cmd))) die(projectText().noJson(helpOnly ? "help" : cmd), { text: true });
-  if (on("help") && cmd !== "evals") return console.log(helpText()); // `<command> --help` prints the help, runs nothing
+  // `<command> --help` / `-h` prints the help and runs nothing — 1.24 r6 B-I3: that command's part of it and its options
+  if (on("help") && cmd !== "evals") return console.log(helpFor(cmd));
+  // 1.24 r6 B-I1: --version / -V anywhere prints the version and runs nothing (the other command's words and flags unread); the
+  // `version` command reports the project it resolves — never refuses it (a missing one reads exists: false).
+  if (versionAsked && cmd === "version") return printVersion();
   if (!helpOnly) {
-    checkProjectFlag(); // 1.23 review L14: an existing folder (init alone may create it)
+    if (cmd !== "version") checkProject(); // 1.23 review L14: an existing folder (init alone may create it) — 1.24 r6 B1: the environment too
     checkCommandArgs(); // 1.23 review: the command's own options, at most its own arguments
   }
   switch (cmd) {
     case undefined:
-    case "help":
     case "-h":
     case "--help":
       return console.log(helpText());
+    case "help": // `help <command>`: that command's help (1.24 r6 B-I3)
+      return console.log(pos[0] != null ? helpFor(String(pos[0])) : helpText());
+
+    case "version": // 1.24 r6 B-I1 (also --version / -V)
+      return printVersion();
 
     case "classify": {
       if (!pos[0]) usage('dev-spec classify "<description>" [--name "<feature name>"] [--lang en|pt|pt-BR|es] [--explain]');
@@ -676,7 +763,9 @@ async function main() {
 
     case "bugfix":
     case "create": {
-      if (!pos[0]) usage('dev-spec create "<name>" [tracks...] [--lang en|pt|pt-BR|es]');
+      // 1.24 r6 B9: each its own usage (`bugfix` without a name printed create's)
+      if (!pos[0]) usage(cmd === "bugfix" ? 'dev-spec bugfix "<name>" [tracks...] [--summary "…"] [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] [--lang en|pt|pt-BR|es]'
+        : 'dev-spec create "<name>" [tracks...] [--summary "…"] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--lang en|pt|pt-BR|es]');
       const name = pos[0];
       const tr = withTracksFlag(pos.slice(1));
       const tracks = tr.length ? tr : undefined; // none → engine: keep existing / classify new
@@ -773,6 +862,11 @@ async function main() {
       const file = argPath(pos[0]);
       const isFile = fs.existsSync(file) && fs.statSync(file).isFile();
       if (isFile) return report(spec.earsValidate(spec.decodeText(fs.readFileSync(file)), textLang), cliText(textLang)); // UTF-16 too
+      // 1.24 r6 B9: a word that reads as a PATH (a separator, or a .md / .markdown / .txt name) and is no file — nor a feature of that
+      // name — is "no such file", never "Feature 'missing-md' not found" (its slug).
+      if ((/[\\/]/.test(String(pos[0])) || /\.(?:md|markdown|txt)$/i.test(String(pos[0]))) && !spec.existingFeature(projectDir, pos[0]).ok) {
+        return fail({ ok: false, error: projectText().earsNoFile(file) });
+      }
       return report(spec.earsFeature(projectDir, pos[0]), featureText(pos[0]));
     }
 
@@ -922,6 +1016,7 @@ async function main() {
           say("$ " + cmd);
           const x = await b5Exec(cmd, sh, M);
           if (x.summary) say(x.summary.replace(/^/gm, "  "));
+          if (x.heldOpen && !x.cantRun) say("  " + M.cliOutput.runHeldOpen(x.code)); // 1.24 r6 B3: settled at its exit
           // full review Ga1 / Ga9 / Ga10: a command that could not run (the shell never started, a signal, --timeout, output
           // over the buffer, WSL's launcher) is refused and NOTHING is recorded — it used to be recorded as exit 1 (an
           // _Expect: fail_ task was then ticked on a red run that never happened; a passing check recorded as failed).
@@ -1078,7 +1173,8 @@ async function main() {
 
     case "depend": {
       const syntax = "dev-spec depend <feature> [dep1 dep2 ...] [--add x[,y]] [--rm x[,y]] [--order N] [--clear]";
-      if (!pos[0]) usage(syntax);
+      // 1.24 r6 B4: deps (they REPLACE the list) and --clear (it empties it) contradict each other — the deps won silently
+      if (!pos[0] || (on("clear") && pos.length > 1)) usage(syntax);
       // The shared parser keeps only the LAST value of a repeated flag, so `--add b --add c` silently added c
       // alone. Collect every occurrence here, walking argv with the parser's own rules.
       const every = (name) => {
@@ -1187,6 +1283,12 @@ async function main() {
       // dev-spec feature <remove|archive|rename|restore|flow> <name> [new-name|flow] — remove needs --yes (= spec_feature confirm:true);
       // flow <name> <requirements-first|design-first> (or --flow) = spec_feature {action: "flow", flow} (C3)
       if (!pos[0] || !pos[1]) usage("dev-spec feature <remove|archive|rename|restore|flow> <name> [new-name|requirements-first|design-first] [--yes]");
+      // 1.24 r6 B4: each action reads its own arguments — remove / archive / restore the name, rename + the new name, flow + the
+      // flow (or --flow, never both) — and --flow only on flow: a word past them (or --flow elsewhere) was ignored silently.
+      const act = String(pos[0]).trim().toLowerCase();
+      const most = { remove: 2, archive: 2, restore: 2, rename: 3, flow: flags.flow !== undefined ? 2 : 3 }[act];
+      if (most !== undefined && pos.length > most) die(projectText().extraArgs("feature " + act, pos.slice(most).join(" ")));
+      if (most !== undefined && act !== "flow" && flags.flow !== undefined) die(projectText().flagNotFor("--flow", "feature " + act, act === "remove" ? "--yes" : ""));
       const T = featureText(pos[1]); // resolved BEFORE the folder moves or disappears
       const r = spec.manageFeature(projectDir, pos[0], pos[1], pos[2], { confirm: on("yes"), flow: flags.flow });
       if (!r.ok && r.needsConfirm) {
@@ -1297,12 +1399,9 @@ async function main() {
         }
         return vals;
       };
-      // A second --task is a second task: refused (one per call) rather than merged or dropped.
-      if (every("task").length > 1) die(T.oneTaskPerCall);
-      // Single-valued like over MCP: a second --verify would silently drop the first check (the evidence gate would
-      // never ask for it), a second --story/--heading the first choice — refused, never last-wins.
-      const twice = ["verify", "story", "heading", "size"].find((k) => every(k).length > 1);
-      if (twice) die(T.oneValue(twice));
+      // A second --task is a second task (one per call), a second --verify would drop the first check (the evidence gate would
+      // never ask for it), a second --story / --heading / --size the first choice — each refused before anything runs, in
+      // append-tasks' own words (refuseRepeatedFlags, 1.24 r6 B5: every single-value flag now).
       const task = { text: flags.task };
       const reqs = every("req"), impls = every("implements");
       if (reqs.length) task.requirements = reqs; // each may hold "a,b" — the engine splits it, same as over MCP
@@ -1554,6 +1653,7 @@ async function main() {
         say("$ " + c.command + "   (" + c.name + ")");
         const x = await b5Exec(c.command, sh, M);
         if (x.summary) say(x.summary.replace(/^/gm, "  "));
+        if (x.heldOpen && !x.cantRun) say("  " + M.cliOutput.runHeldOpen(x.code)); // 1.24 r6 B3: settled at its exit
         // full review Ga1 / Ga9 / Ga10: a check that could not run is refused and NOTHING is recorded (all-or-nothing, like
         // spec_finish {evidence}) — it used to be recorded as a failed run (exit 1).
         if (x.cantRun) return { ok: false, couldNotRun: x.cantRun.code, check: c.name, error: M.runGate.checkRefused(c.name, c.command, x.cantRun.why) };
@@ -1567,7 +1667,7 @@ async function main() {
     // engine (a bare `bash` on Windows → Git Bash, found through `git --exec-path` (read-only), %ProgramFiles% or PATH; WSL's
     // bash.exe launcher only when named by its path; wsl.exe refused — wsl-exe). → spec.resolveRunShell's result.
     function b5Shell() {
-      intFlag("timeout"); // --timeout <seconds>: an integer ≥ 1 — refused (exit 1) before anything runs
+      timeoutFlag(); // --timeout <seconds>: an integer ≥ 1 (≤ TIMEOUT_MAX_S) — refused (exit 1) before anything runs
       const req = (typeof flags.shell === "string" && flags.shell.trim()) || (process.env.DEV_SPEC_SHELL || "").trim() || "";
       const needsGit = process.platform === "win32" && /^bash(?:\.exe)?$/i.test(req);
       return spec.resolveRunShell(req, { gitExecPath: needsGit ? b5Git(["--exec-path"]) : null });
@@ -1586,12 +1686,13 @@ async function main() {
     // shell alone: the check it started ran on (and held the output pipes — the CLI waited for it all the same). Ctrl+C / a
     // SIGTERM to the CLI kills the tree too (a detached group no longer gets the terminal's Ctrl+C).
     function b5Exec(command, sh, M) {
-      const timeoutS = intFlag("timeout"); // --timeout <seconds>: an integer ≥ 1 (validated before anything runs — first call)
+      const timeoutS = timeoutFlag(); // --timeout <seconds>: an integer ≥ 1, ≤ TIMEOUT_MAX_S (validated before anything runs — first call)
       const win = process.platform === "win32";
       const MAX_OUTPUT = 64 * 1024 * 1024; // spawnSync's maxBuffer, as before
       return new Promise((resolve) => {
         const chunks = [[], []];
         let size = 0, error = null, settled = false, timer = null, grace = null, child = null;
+        let exited = null, drain = null, heldOpen = false; // 1.24 r6 B3: the command's exit, the drain after it, pipes still held then
         const killTree = () => {
           if (child && child.pid != null) {
             if (win) {
@@ -1609,10 +1710,11 @@ async function main() {
           settled = true;
           clearTimeout(timer);
           clearTimeout(grace);
+          clearTimeout(drain);
           process.removeListener("SIGINT", onSignal);
           process.removeListener("SIGTERM", onSignal);
           if (child) { try { child.stdout.destroy(); child.stderr.destroy(); child.unref(); } catch { /* already closed */ } }
-          resolve(b5ExecResult({ status, signal, error, stdout: Buffer.concat(chunks[0]).toString("utf8"), stderr: Buffer.concat(chunks[1]).toString("utf8") }, sh, M, timeoutS));
+          resolve(b5ExecResult({ status, signal, error, heldOpen, stdout: Buffer.concat(chunks[0]).toString("utf8"), stderr: Buffer.concat(chunks[1]).toString("utf8") }, sh, M, timeoutS));
         };
         try {
           // 1.21.1: a PowerShell shell (--shell pwsh / powershell, DEV_SPEC_SHELL) runs `<shell> -NoProfile -NonInteractive
@@ -1634,12 +1736,27 @@ async function main() {
         child.stdout.on("data", take(0));
         child.stderr.on("data", take(1));
         try { child.stdin.end(); } catch { /* no stdin */ }
-        child.on("close", (code, signal) => settle(code, signal));
+        // 1.24 r6 B3 — the run is over when the COMMAND exits, not when its pipes close: a background process it started (a dev
+        // server, a watcher) inherits them and kept the CLI waiting for that process — and --timeout refused a run that had
+        // exited 0. At the exit the --timeout timer stops; what is still in the pipes drains until 'close', RUN_DRAIN_MS at most,
+        // then the pipes are dropped and the exit status settles the run (heldOpen: the caller prints a note).
+        child.on("exit", (code, signal) => {
+          exited = { code, signal };
+          if (!error) clearTimeout(timer);
+          drain = setTimeout(() => { heldOpen = true; settle(code, signal); }, RUN_DRAIN_MS);
+        });
+        child.on("close", (code, signal) => settle(exited ? exited.code : code, exited ? exited.signal : signal));
         if (timeoutS) timer = setTimeout(() => { error = Object.assign(new Error("spawn " + b5ShellName(sh) + " ETIMEDOUT"), { code: "ETIMEDOUT" }); killTree(); }, timeoutS * 1000);
       });
     }
-    // A finished run → { code, output, summary, cantRun, crashed? } (b5Exec's verdict, unchanged by M13).
+    // A finished run → { code, output, summary, cantRun, crashed?, heldOpen } (b5Exec's verdict, unchanged by M13; heldOpen —
+    // 1.24 r6 B3: a background process still held the output pipes when the run settled at the command's exit).
     function b5ExecResult(run, sh, M, timeoutS) {
+      const r = b5Verdict(run, sh, M, timeoutS);
+      r.heldOpen = !!run.heldOpen;
+      return r;
+    }
+    function b5Verdict(run, sh, M, timeoutS) {
       const CRASH_SIGNALS = ["SIGSEGV", "SIGABRT", "SIGBUS", "SIGFPE", "SIGILL"]; // inside: hoisted above any outer const
       const output = (run.stdout || "") + (run.stderr || "") + (run.error ? "\n" + run.error.message : "");
       const summary = spec.summarizeRunOutput(output);
@@ -1680,6 +1797,8 @@ async function main() {
         }
         process.exitCode = r.block ? 1 : 0;
       };
+      // 1.24 r6 B4: the message is --message OR the words after the command (or a lone - : stdin) — both given, the words were dropped
+      if (flags.message !== undefined && pos.length) usage('dev-spec stop-check [--message "<text>" | <words…> | -] [--agent <type>]');
       if (flags.message === "-" || (flags.message === undefined && pos.length === 1 && pos[0] === "-")) return readStdin(runCheck);
       return runCheck(typeof flags.message === "string" ? flags.message : pos.join(" "));
     }
@@ -1689,7 +1808,7 @@ async function main() {
       // (= spec_create {name, kind: "spike", question, timebox}; `create "<name>" --kind spike` is the same call).
       if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--lang en|pt|pt-BR|es]');
       const tr = withTracksFlag(pos.slice(1));
-      const r = spec.createFeature(projectDir, pos[0], tr.length ? tr : undefined, flags.summary, undefined, flags.lang, "spike", { question: flags.question, timebox: flags.timebox, flow: flags.flow, brownfield: on("brownfield") }); // = create --kind spike (a flow gets its note)
+      const r = spec.createFeature(projectDir, pos[0], tr.length ? tr : undefined, flags.summary, undefined, flags.lang, "spike", { question: flags.question, timebox: flags.timebox, flow: flags.flow, brownfield: on("brownfield"), cli: true }); // = create --kind spike (a flow gets its note; cli: a refusal names the flag)
       if (!r.ok) return fail(r);
       return out(r, (r) => {
         const T = cliText(r.lang);
@@ -1738,6 +1857,8 @@ async function main() {
       const check = flags.check === true || /^(?:true|1|yes|on)$/i.test(String(flags.check === undefined ? "" : flags.check));
       if (flags.check !== undefined && !check && !/^(?:false|0|no|off)$/i.test(String(flags.check))) usage(msUsage);
       if (check) { if (pos.length || on("install") || on("uninstall")) usage(msUsage); return mergeDriverCheck(); }
+      // 1.24 r6 B4: --install / --uninstall take no file arguments, and not both (the file arguments, or --install, were ignored)
+      if ((on("install") || on("uninstall")) && (pos.length || (on("install") && on("uninstall")))) usage(msUsage);
       if (on("install") || on("uninstall")) return mergeDriverSetup(on("uninstall"));
       if (pos.length < 3 || pos.length > 4) usage(msUsage);
       return mergeStateRun(pos[0], pos[1], pos[2], pos[3]);
@@ -1751,11 +1872,22 @@ async function main() {
       // system: loaded only with DEV_SPEC_BUNDLE=1 (DEV_SPEC_BUNDLE_PATH=<file> for --out) and while it is current — rebuild
       // after every plugin update. Needs no project; never committed (git-ignored).
       const outFile = typeof flags.out === "string" ? path.resolve(flags.out) : null;
-      if (pos.length || (outFile && !/\.js$/i.test(outFile))) usage("dev-spec bundle [--out <file.js>]");
+      if (pos.length || (outFile && !/\.js$/i.test(outFile))) usage("dev-spec bundle [--out <file.js>] [--force]");
       const B = require(path.join(__dirname, "..", "scripts", "build.js"));
-      let r;
-      try { r = B.writeBundle(outFile || B.BUNDLE_PATH); } catch (e) { return die(e.message); }
       const T = projectText();
+      // 1.24 r6 B8: --out overwrote ANY file (`--out src/app.js` replaced the user's code). An existing file is replaced only when
+      // it is a previous bundle (its first lines: build.js's header) — or with --force.
+      const target = outFile || B.BUNDLE_PATH;
+      if (!on("force") && fs.existsSync(target)) {
+        let head = "";
+        try {
+          const fd = fs.openSync(target, "r");
+          try { const buf = Buffer.alloc(512); head = buf.subarray(0, fs.readSync(fd, buf, 0, 512, 0)).toString("utf8"); } finally { fs.closeSync(fd); }
+        } catch { head = ""; } // a folder, an unreadable file: not a bundle
+        if (!/^"use strict";\r?\n\/\/ GENERATED by scripts\/build\.js --bundle\b/.test(head)) die(T.bundleNotOurs(target));
+      }
+      let r;
+      try { r = B.writeBundle(target); } catch (e) { return die(e.message); }
       return out({ ok: true, ...r, env: outFile ? { DEV_SPEC_BUNDLE: "1", DEV_SPEC_BUNDLE_PATH: r.file } : { DEV_SPEC_BUNDLE: "1" } },
         () => console.log(T.bundleWrote(r.file, r.modules, Math.round(r.bytes / 1024)) + "\n" + T.bundleUse(outFile ? r.file : null)));
     }
@@ -1766,6 +1898,35 @@ async function main() {
     default:
       die(projectText().unknownCommand(cmd));
   }
+}
+
+// 1.24 r6 B-I1 — `dev-spec version` / --version / -V: what a bug report needs — the version, this CLI's path, Node, where the engine
+// loaded from (its modules, or the bundle; a requested bundle that was skipped and why — spec.engineSource), the project the
+// commands work in, which input chose it (PROJECT_SOURCE) and its language. --json: the same as data (stable keys and codes).
+function printVersion() {
+  const es = spec.engineSource || { kind: "modules", requested: false };
+  let exists = false;
+  try { exists = fs.statSync(projectDir).isDirectory(); } catch { exists = false; }
+  const lang = spec.projectLang(projectDir);
+  const r = { ok: true, version: spec.engineVersion(), cli: path.resolve(__filename).replace(/\\/g, "/"), node: process.version,
+    engine: { source: es.kind, bundle: es.requested ? { requested: true, file: es.file, skipped: es.skipped || null, ...(es.pathIgnored ? { pathIgnored: true } : {}) } : { requested: false } },
+    project: { dir: projectDir, source: PROJECT_SOURCE, exists, devSpec: exists && spec.isDevSpecDir(projectDir), lang } };
+  return out(r, (r) => {
+    const V = cliText(lang).version;
+    console.log(V.head(r.version));
+    console.log(V.cli(r.cli));
+    console.log(V.node(r.node));
+    const b = r.engine.bundle;
+    if (r.engine.source === "bundle") console.log(V.engineBundle(b.file));
+    else if (b.requested) {
+      console.log(V.engineSkipped(b.file, V.skip[b.skipped] || b.skipped));
+      const custom = b.file && path.resolve(b.file) !== path.resolve(__dirname, "..", "mcp", "lib", "spec.bundle.js");
+      console.log(V.rebuild(spec.DEV_SPEC + " bundle" + (custom ? " --out \"" + b.file + "\"" : "")));
+    } else console.log(V.engineModules);
+    if (b.pathIgnored) console.log(V.pathIgnored);
+    console.log(V.project(r.project.dir, V.src[r.project.source] || r.project.source));
+    console.log(!r.project.exists ? V.state.missing : r.project.devSpec ? V.state.devSpec(r.project.lang) : V.state.noSpecs(r.project.lang));
+  });
 }
 
 // `list` and a bare `status`: one line per feature, in the project language.
@@ -1830,7 +1991,7 @@ function mergeDriverSetup(uninstall) {
     try { return spawnSync("git", args, { cwd: projectDir, encoding: "utf8", windowsHide: true, timeout: 30000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { return { error: e }; }
   };
   const top = git(["rev-parse", "--show-toplevel"]);
-  if (!top || top.error || top.status !== 0) return fail({ ok: false, error: M.noGit(projectDir) });
+  if (!top || top.error || top.status !== 0) return fail({ ok: false, error: uninstall ? M.noGitUninstall(projectDir) : M.noGit(projectDir) }); // 1.24 r6 B9: each names its own switch
   const file = path.join(projectDir, ".gitattributes");
   let before = "";
   try { before = fs.readFileSync(file, "utf8"); } catch { before = ""; }
@@ -1925,6 +2086,30 @@ function printMatrix(feature, mx, lang) {
   console.log("  " + C.legend + (mx.code ? " · " + C.codeLegend : ""));
 }
 
+// 1.24 r6 B-I3 — one command's help: its lines of helpText() (every block whose first word is the command — approve has three —
+// with their continuation lines) + its options (COMMAND_OPTIONS; a value flag shows "…") + the global ones + where the whole
+// help is. An alias reads its command's block (na → next-action, milestones → milestone). No block (help, an unknown word):
+// the whole help. The blocks stay the one help text (English, like the rest of it); the frame lines are localized.
+const HELP_ALIASES = { na: "next-action", milestones: "milestone" };
+function helpFor(c) {
+  if (c == null) return helpText();
+  const name = Object.prototype.hasOwnProperty.call(HELP_ALIASES, c) ? HELP_ALIASES[c] : String(c);
+  const block = [];
+  let take = false;
+  for (const l of helpText().split("\n")) {
+    const m = /^ {2}([a-z][a-z-]*)(?=[\s(]|$)/.exec(l);
+    if (m) take = m[1] === name;
+    else if (!/^ {3,}\S/.test(l)) take = false;
+    if (take) block.push(l);
+  }
+  if (!block.length) return helpText();
+  const T = projectText();
+  const own = Object.prototype.hasOwnProperty.call(COMMAND_OPTIONS, c) ? COMMAND_OPTIONS[c] : null;
+  const lines = ["dev-spec " + name, ...block, ""];
+  if (own) lines.push(own.options.length ? T.cmdHelp.options(own.options.map((f) => "--" + f + (VALUE_FLAGS.has(f) ? " …" : "")).join("  ")) : T.cmdHelp.none);
+  lines.push(T.cmdHelp.global, T.cmdHelp.all);
+  return lines.join("\n");
+}
 function helpText() {
   return `dev-spec — universal spec-driven CLI (local, zero-dependency)
 
@@ -2093,12 +2278,22 @@ function helpText() {
                                   one rendered as prompts/get returns it ($ARGUMENTS ← --args, or the words after the name)
   bundle [--out <file.js>]        Build this clone's engine as ONE file (mcp/lib/spec.bundle.js, git-ignored) for a slow file
                                   system (Docker bind mount, network drive, WSL /mnt/c): set DEV_SPEC_BUNDLE=1 (with --out, also
-                                  DEV_SPEC_BUNDLE_PATH=<file>); rebuild after every plugin update — a stale bundle is ignored
+                                  DEV_SPEC_BUNDLE_PATH=<file>); rebuild after every plugin update — a stale bundle is ignored;
+                                  an existing --out that is no previous bundle is left alone unless --force
+  version                         The version, this CLI's path, Node, the engine it runs on (its modules, or the bundle — and why a
+                                  requested bundle was skipped), the project, which input chose it and its language; also
+                                  --version / -V anywhere (prints it, runs nothing)
 
   The project: --project <dir> (an existing folder — only init creates one) > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest
-  folder at or above the working one that holds a dev-spec .specs/ > the working folder. A path argument (scan, ears, import) is
-  relative to the project when it was named (--project or the environment), else to the working folder.
-  Each command takes its own options and arguments: another option, or one argument too many, is a usage error (exit 1).
+  folder at or above the working one that holds a dev-spec .specs/ > the working folder. A variable that chose it is checked like
+  --project (a missing folder or a file is refused, naming the variable); a project's own .specs/ folder is no project. A path
+  argument (scan, ears, import) is relative to the project when it was named (--project or the environment), else to the
+  working folder.
+  Each command takes its own options and arguments: another option, one argument too many, or a single-value flag given twice
+  is a usage error (exit 1) — repeatable: --add / --rm (depend), --check (init), --req / --implements / --makes-green /
+  --depends (append-tasks), --affects / --supersedes (decide).
+  <command> --help (or -h, or help <command>) prints that command's part of this help and its options; - as an argument reads
+  stdin (from a terminal: type the text, then Ctrl+D — Windows: Ctrl+Z, Enter).
 
   Flags: --json  --project <dir>  --lang en|pt|pt-BR|es (init/create/bugfix/spike/steering/roadmap/ears/classify/import/templates/tracks/signals)  --order N (depend)
          --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix|spike|change / --size xs|s|m|l (create; spike: --question, --timebox)  --text "…" (ears)
@@ -2117,7 +2312,8 @@ function helpText() {
          or an unexpected failure too ({"ok": false, "error": …[, "code": …]}).
          help, rules, mcp-config and evals print text only: --json there is a usage error (exit 1).
          --shell / --timeout go with --run (done, finish); --run and --evidence / --exit / --cmd exclude each other (done);
-         --timeout stops the command's whole process tree.
+         --timeout (at most 2147483 s) stops the command's whole process tree; a run ends when its command exits — a
+         background process it started (a server) holds nothing up beyond a 2 s drain.
 
   Works the same in Claude Code, Cursor, Windsurf, Copilot, Gemini/Codex CLI, or a plain shell.`;
 }

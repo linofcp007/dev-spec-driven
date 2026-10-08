@@ -133,7 +133,14 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   the output pipe: the CLI waited for it all the same); 3 s after the kill the run settles even if a pipe stays open. Ctrl+C /
   SIGTERM to the CLI kills the tree too (a detached group no longer gets the terminal's Ctrl+C). The 64 MB output cap, the
   codes and the stdout discipline are unchanged. `--shell` / `--timeout` without `--run` are a usage error (`needsRun`), and so is
-  `--run` with `--evidence` / `--exit` / `--cmd` (`runOrEvidence`).
+  `--run` with `--evidence` / `--exit` / `--cmd` (`runOrEvidence`). **The run ends at the command's EXIT (1.24 r6 B3)**, not
+  when its pipes close: a background process the check started (a dev server, a watcher — it inherits the pipes) kept the CLI
+  waiting for THAT process, and `--timeout` refused a run that had exited 0. On `'exit'` the `--timeout` timer stops, the output
+  still in the pipes drains until `'close'` — `RUN_DRAIN_MS` (2 s) at most —, then the pipes are dropped and the exit status
+  settles the run; `heldOpen` makes `done` / `finish` print `cliOutput.runHeldOpen` (what that process prints later is not in the
+  evidence). The background process itself is left running (it is the check's own doing). `--timeout` is at most 2147483 s
+  (`TIMEOUT_MAX_S`, Node's timer limit — 1.24 r6 B6: a larger value became a TimeoutOverflowWarning and a 1 ms timer, so the
+  run was refused as "did not finish within --timeout 9999999 s"); past it, a usage error before anything runs.
 - **A crash is never a red test (1.23 review L7).** `crashExit(code)` (evidence.js, `CRASH_EXIT`): 128 + SIGILL / SIGABRT /
   SIGBUS / SIGFPE / SIGSEGV as a POSIX shell reports a crashed child (132 · 134 · 135 · 136 · 139), and the Windows NTSTATUS
   crash codes — 0xC0000005 access violation, 0xC0000409 stack buffer overrun, 0xC00000FD stack overflow, 0xC000001D illegal

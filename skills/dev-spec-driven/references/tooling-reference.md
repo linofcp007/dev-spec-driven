@@ -161,9 +161,16 @@ result — a refused operation too (`{ok: false, error, …}` on stdout, exit 1,
 error or an unexpected failure (`{ok: false, error[, code]}`); human output is localized. The project: `--project <dir>`
 (an existing folder — only `init` creates one) > `SPEC_PROJECT_DIR` > `CLAUDE_PROJECT_DIR` > the nearest folder at or above
 the working one that holds a dev-spec `.specs/` (run from a subfolder, the CLI works in the project above) > the working
-folder; the MCP server resolves its default the same way. A path argument (`scan`, `ears`, `import`) is relative to the
+folder; the MCP server resolves its default the same way. A `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` that chose the project
+is checked like `--project` (a missing folder — `init` aside — or a file is refused, naming the variable), and a project's own
+`.specs/` folder is never taken for the project. A path argument (`scan`, `ears`, `import`) is relative to the
 project when it was named, else to the working folder. Each command takes its own options and arguments — another option,
-or one argument too many, is a usage error. Switches take `--x` or `--x=true|false`
+one argument too many, or a single-value flag given twice (only `--add` / `--rm`, `--check`, `--req` / `--implements` /
+`--makes-green` / `--depends` and `--affects` / `--supersedes` repeat) is a usage error; `<command> --help` (or `-h`, or
+`help <command>`) prints that command's part of the help and its options. `version` (or `--version` / `-V`)
+prints the version, the CLI's path, the engine it runs on (its modules, or the bundle — and why a requested bundle was
+skipped), the project, which input chose it and its language. A reader that closes the output early (`| head`) ends it
+quietly. Switches take `--x` or `--x=true|false`
 (any other value is an error) — so do the eval harness's (`--dry-run`, `--set-baseline`, `--require-live`), which
 `evals` forwards wherever they stand (an unknown one is refused, exit 2; `evals --help` prints its usage). `doctor` (FAIL), `trace` (gaps), `ears` (errors) and `drift` (drift, a stale baseline or an
 unreadable state) exit 1, so they are scriptable; so do `templates check` (an error), `finish` (not ready),
@@ -205,6 +212,7 @@ backlog [add|rm|remove <name> [note]]    scan [path] [--cap N] · coverage
 evals <feature> [--dry-run ...]          mcp-config [client] · rules <cursor|windsurf|copilot|gemini|agents>
 prompts [name] [--args "…"]              statusline [--print-config]
 merge-state --install | --uninstall | --check [--project <dir>]     merge-state <base> <ours> <theirs> [<path>]   (git's merge driver)
+bundle [--out <file.js>] [--force]       version (or --version / -V)
 ```
 
 **Teams — git's merge driver for the spec state.** `merge-state --install` writes `.gitattributes` (commit it) and this
@@ -242,7 +250,8 @@ commit and whether the tree was dirty, when git is available); `finish --run` ru
 choice; under cmd.exe a `pwsh -NoProfile -Command "…"` `_Verify:_` runs as written (its `$` is PowerShell's — never refused as
 POSIX syntax), while a POSIX shell (`/bin/sh`, `--shell bash`) takes the single-quoted script (it would expand a double-quoted
 `$LASTEXITCODE` to nothing — refused before anything runs; `references/verification.md` → PowerShell); a run that could not happen (no shell, a signal,
-`--timeout <seconds>` expired, output over 64 MB) records nothing. `log` reads `git log`
+`--timeout <seconds>` expired — at most 2147483 —, output over 64 MB) records nothing; a run ends when its command exits (a
+background process it started, such as a dev server, holds nothing up beyond a 2 s drain — a note says so). `log` reads `git log`
 (read-only; `-` reads a log from stdin) and lists per task the commits that cite it, plus the +tdd red-first check.
 `done --run` / `finish --run` runs are stamped `observed: "cli"` (they count as observed under `init --evidence
 observed`). `next --waves` prints the execution waves (+ cycles, blocked tasks); `trace --matrix` prints the requirements

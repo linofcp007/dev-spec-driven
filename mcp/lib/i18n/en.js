@@ -1189,6 +1189,8 @@ const msg = {
       // 1.21 review C9 — spec_create on an EXISTING change named with tracks: nothing is added, never silently
       tracksIgnored: (list, slug) => `Tracks not added — ${list}: '${slug}' is a change (size xs, core-only); a track makes it a feature — create one of size s (spec_create {size: "s", tracks}) and archive this change (spec_feature {action: "archive"}).`,
       changeCreated: (slug) => `'${slug}' is a change (size xs): ONE file, .specs/${slug}/change.md — its summary, 1–3 EARS criteria, the approach and 1–3 tasks with _Verify:_. Fill it, then approve the plan in one call (spec_approve {name: "${slug}", through: "tasks"}); after the tasks, spec_finish and the execution sign-off.`,
+      // 1.24 r6: the same note on the CLI (createFeature {cli: true}) — the CLI's own approve / finish lines
+      changeCreatedCli: (slug) => `'${slug}' is a change (size xs): ONE file, .specs/${slug}/change.md — its summary, 1–3 EARS criteria, the approach and 1–3 tasks with _Verify:_. Fill it, then approve the plan in one call: ${DEV_SPEC} approve ${slug} --through tasks; after the tasks, ${DEV_SPEC} finish ${slug} and the execution sign-off.`,
       sizeKept: (kept, asked) => `This feature's size is ${kept} — kept it (asked for ${asked}): a size is chosen once, when the feature is created.`,
       noGate: (phase, slug) => `'${slug}' is a change: its only approvals are the plan (phase tasks — change.md) and the execution sign-off — there is no ${phase} phase to approve.`,
       scope: (acs, tasks, maxAcs, maxTasks, extra) => `a change is XS — 1–${maxAcs} acceptance criteria and 1–${maxTasks} tasks, core only; change.md has ${acs} criteria and ${tasks} task(s)${extra ? ` and the track(s) ${extra}` : ""} — create it as a feature of size s instead (spec_create {size: "s"}) and archive this change`,
@@ -1733,6 +1735,49 @@ const msg = {
       projectUnexpanded: (v) => `--project ${v} holds a variable that was never expanded — pass the folder itself.`,
       projectMissing: (dir) => `--project ${dir}: no such folder — check the path (only init creates a project folder).`,
       projectNotDir: (dir) => `--project ${dir} is a file, not a folder.`,
+      // 1.24 r6 B1: SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR are checked like --project when one of them chose the project
+      projectEnvMissing: (name, dir) => `${name}=${dir}: no such folder — fix or unset the variable (only init creates a project folder).`,
+      projectEnvNotDir: (name, dir) => `${name}=${dir} is a file, not a folder — fix or unset the variable.`,
+      // 1.24 r6 B7: a project's own .specs/ folder named as the project (label: "--project <dir>" or "<VARIABLE>=<dir>")
+      projectIsSpecs: (label, parent) => `${label} is the .specs folder of the project ${parent} — name the project folder itself: ${parent}`,
+      // 1.24 r6 B-I1: `dev-spec version` / --version / -V (the codes — engine.source, bundle.skipped, project.source — stay English in --json)
+      version: {
+        head: (v) => `dev-spec-driven ${v || "(unknown version)"}`,
+        cli: (f) => `  CLI:      ${f}`,
+        node: (v) => `  Node.js:  ${v}`,
+        engineModules: "  engine:   its modules (mcp/lib/engine/)",
+        engineBundle: (f) => `  engine:   the one-file bundle ${f} (DEV_SPEC_BUNDLE=1)`,
+        engineSkipped: (f, why) => `  engine:   its modules — DEV_SPEC_BUNDLE=1, but the bundle ${f} was skipped: ${why}`,
+        skip: { missing: "there is no such file", "other-version": "it was built for another version", stale: "a module changed since it was built", broken: "it could not be loaded" },
+        rebuild: (cmd) => `            → ${cmd}`,
+        pathIgnored: "  (DEV_SPEC_BUNDLE_PATH ignored: not an absolute path to a .js file)",
+        project: (dir, src) => `  project:  ${dir} — ${src}`,
+        src: { flag: "named by --project", SPEC_PROJECT_DIR: "named by SPEC_PROJECT_DIR", CLAUDE_PROJECT_DIR: "named by CLAUDE_PROJECT_DIR", nearest: "the nearest folder above this one with a dev-spec .specs/", cwd: "the working folder" },
+        state: {
+          devSpec: (lang) => `            a dev-spec project · language: ${lang}`,
+          noSpecs: (lang) => `            no dev-spec .specs/ yet (init sets it up) · language: ${lang}`,
+          missing: "            the folder does not exist (init creates it)",
+        },
+      },
+      // 1.24 r6 B-I3: `<command> --help` / -h / help <command> — the frame around that command's lines of the help
+      cmdHelp: {
+        options: (list) => `  Its options: ${list}`,
+        none: "  It takes no option of its own.",
+        global: "  Every command: --json · --project <dir> · --help (-h) · --version (-V)",
+        all: `  Every command and the details: ${DEV_SPEC} help`,
+      },
+      // 1.24 r6 B-I9: an argument "-" read from a terminal (a TTY) — one stderr line before the CLI waits
+      stdinHint: "reading from the terminal — type or paste the text, then Ctrl+D on a line of its own (Windows: Ctrl+Z, then Enter).",
+      // 1.24 r6 B9: ears <path> naming no file (and no feature of that name)
+      earsNoFile: (file) => `${file}: no such file — ears takes a feature name, a markdown file, --text "…" or - (stdin).`,
+      // 1.24 r6 B8: bundle --out onto an existing file that is no previous bundle
+      bundleNotOurs: (file) => `${file} exists and is not a dev-spec bundle — nothing was written. Choose another --out, or add --force to overwrite it.`,
+      // 1.24 r6 B5: a single-value flag given twice (the last value used to win silently)
+      flagTwice: (flag) => `${flag} was given more than once — it takes a single value: give it once.`,
+      // 1.24 r6 B6: a bounded integer flag's upper end, after args.atLeast (--timeout ≤ Node's timer limit)
+      atMost: (n) => `, at most ${n}`,
+      // 1.24 r6 B3: done --run / finish --run settled at the command's exit while a background process still held its output
+      runHeldOpen: (code) => `⚠ the command exited (${code}), but a process it started in the background kept its output open — the run was recorded at that exit; what that process prints later is not in the evidence.`,
     },
 
     // Gates: template placeholders, the approve gate (+ force), finish blockers, the bugfix execution gate,
@@ -2261,6 +2306,8 @@ const msg = {
       parseError: (side, why) => `dev-spec merge-state: ${side} is not valid JSON (${why}) — nothing merged, ours left as it is; merge the file by hand.`,
       unreadable: (file) => `cannot read ${file}.`,
       noGit: (dir) => `${dir} is not inside a git repository (or git is not installed) — merge-state --install writes that repository's own git config.`,
+      // 1.24 r6 B9: --uninstall's own words (it said what --install writes)
+      noGitUninstall: (dir) => `${dir} is not inside a git repository (or git is not installed) — merge-state --uninstall removes that repository's own git config and .gitattributes lines; there is nothing to remove here.`,
       attrsAdded: (file) => `${file}: the merge driver's lines added (commit it — the whole team gets them):`,
       attrsKept: (file) => `${file}: the merge driver's lines are already there.`,
       attrsRemoved: (file) => `${file}: the merge driver's lines removed (commit it).`,
@@ -3255,6 +3302,8 @@ _Outcome: [go | no-go | pivot]_
 `,
       badTimebox: (v) => `timebox must be an end date (YYYY-MM-DD) or a duration from today (e.g. 3d, 2w, 8h) — got ${v}.`,
       spikeOnly: (arg) => `${arg} only applies to a spike (kind: "spike").`,
+      // 1.24 r6 B9: the CLI names its flag and its own way to make a spike (as bugPrefill.bugOnlyCli does)
+      spikeOnlyCli: (flag) => `${flag} only applies to a spike — create it as one: ${DEV_SPEC} spike "<name>" ${flag} "…" (or --kind spike).`,
       tracksIgnored: (list) => `A spike is core-only — tracks ignored (${list}); give them to the feature you spec after a 'go'.`,
       noTracks: (slug) => `'${slug}' is a spike — it has no tracks. After a 'go', spec the real feature with its tracks (spec_create).`,
       noGate: (phase, slug) => `'${slug}' is a spike: it has no ${phase} gate — it goes question → investigate → decide. Record the decision in spike.md → Decision (spec_decide logs it); spec_finish closes it.`,
