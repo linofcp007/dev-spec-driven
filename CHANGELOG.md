@@ -3,6 +3,39 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.23.1] — 2026-10-08
+
+What 1.23.0 left open from the fifth review.
+
+### Changed
+- **Every bugfix scaffolds two tasks** — the failing regression test, then the fix. Reproducing the bug and finding its
+  root cause stay in `bug.md`, gated by its requirements and design approvals, so after the tasks approval `next_action`
+  points straight at the regression test (it said "Implement task #1: Reproduce the bug" for work already done and gated).
+  Size xs no longer changes a bugfix's tasks.md (it still approves the plan in one call). Existing bugfix features keep
+  their four-task tasks.md, unchanged and valid: nothing rewrites them, `spec_upgrade` doesn't flag them, and their
+  root-cause task still gates the fix. The iron law is unchanged — while `bug.md → Root Cause` is empty, only the
+  regression test can be completed.
+- **SKILL.md is shorter** — 4,745 words / 33.7 KB in 1.22 → 4,277 / 30.6 KB: every rule stays; the detail lives in the
+  references it points to.
+
+### Fixed
+- `done --run --shell cmd` on a Spanish Windows: cmd.exe's "El nombre de archivo, el nombre de directorio o la sintaxis de
+  la etiqueta del volumen no son correctos" — the word order Spanish Windows prints — is cmd.exe's own failure, never an
+  `_Expect: fail_` task's red run (1.23.0 read only the other order); the Portuguese forms with é / estão / são too.
+- `spec_add_track` keeps a UTF-16 tasks.md in UTF-16 when it appends a track's tasks (it rewrote the file as UTF-8).
+- An AC ID in requirements.md's `#` title — written from the feature's name — no longer counts as a required criterion.
+- The approval hook's prompt names the feature the engine will act on (its slug), as the MCP server's question already
+  did — never the agent's raw text.
+- The demo's ROADMAP.html had missed the 1.16 milestone styles: regenerated, and now tested like its ROADMAP.md.
+
+### Docs
+- The maintainer notes say why the three working agents list both Bash and PowerShell (Claude Code: on a Windows without
+  Git Bash, PowerShell is the only shell; an unavailable tool in the list is dropped) and what a roadmap refresh costs with
+  many features (every file read once per call — no cross-call cache, on purpose: approvals fingerprint those files).
+
+### Tests
+- `node mcp/test.js` 1897 assertions (was 1892), `node cli/test-cli.js` 550 (was 549).
+
 ## [1.23.0] — 2026-10-08
 
 A fifth full review — eight areas (the MCP server, the CLI, the Claude Code hooks, tasks and evidence, gates and state,
