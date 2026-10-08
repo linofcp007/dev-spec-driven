@@ -1681,20 +1681,24 @@ function hasPriority(md) {
   // A line naming P1, P2 AND P3 is the priority legend, not a prioritized story.
   return realLines(md, /(?<![A-Za-z0-9])P1(?![0-9])/).some((l) => !(/(?<![A-Za-z0-9])P2(?![0-9])/.test(l) && /(?<![A-Za-z0-9])P3(?![0-9])/.test(l)));
 }
-// Duplicate AC DEFINITIONS (the ID opening a list item, optionally bold) — "as in US-1.AC-1" is a reference, and a
-// fenced example is no definition.
+// Duplicate AC DEFINITIONS — "as in US-1.AC-1" is a reference, and a fenced example or a comment is no definition. 1.24 review 6
+// (F2): read from the AC-defining units EARS lints (criterionBlocks {acUnits} → defs, criterionLabel's ID — a checkbox, italic, code or
+// bracketed ID, a heading, a table row, a paragraph line; only `- US-` / `1. **US-**` counted, so a second `- [ ] **US-1.AC-1**` vanished
+// from trace_check unnoticed), compared by number (F8: US-1.AC-01 is US-1.AC-1). A sub-criterion ID (US-1.AC-1.2 — review 5, L31) is
+// no duplicate of US-1.AC-1. → the duplicated IDs, each as first written.
 function acDuplicates(md) {
-  const seen = new Set(), dups = new Set();
-  // The indent within its line ([^\S\n\r\u2028\u2029]): the same IDs, without rescanning a long blank run from each of its
-  // line starts (1.17 H).
-  // (review 5, L31: a sub-criterion ID \u2014 US-1.AC-1.1, US-1.AC-1.2 \u2014 is no duplicate of US-1.AC-1; EARS names it)
-  for (const mm of stripFencedCode(stripHtmlComments(md || "")).matchAll(/^[^\S\n\r\u2028\u2029]*(?:\d+[.)]|[-*+])\s+(?:\*\*|__)?(US-\d+\.AC-\d+)(?!\.?\d)/gm)) (seen.has(mm[1]) ? dups : seen).add(mm[1]);
+  const first = new Map(), dups = new Set();
+  for (const d of criterionBlocks(md || "", { acUnits: true }).defs) {
+    if (!first.has(d.key)) first.set(d.key, d.id);
+    else dups.add(first.get(d.key));
+  }
   return [...dups];
 }
-// A section with real content: present, no `> **TODO**` sentinel, not empty, no template placeholder left.
+// A section with real content: present, no `> **TODO**` sentinel, something WRITTEN (hasProseOutsideBrackets → writtenContent — 1.24
+// review 6, F4: a "TBD" / "…" / "-" only section is not filled), no template placeholder left.
 function sectionFilled(md, syn) {
   const b = extractSection(md || "", syn);
-  return b != null && !RE_TODO_SENTINEL.test(b) && !!stripHtmlComments(b).trim() && !placeholderReport(b).length;
+  return b != null && !RE_TODO_SENTINEL.test(b) && hasProseOutsideBrackets(b) && !placeholderReport(b).length;
 }
 // bug.md's Reproduction / Root Cause as the bugfix gates judge them (doctor, approve requirements / design, complete_task's
 // root-cause gate, finish, the brief): present, no `> **TODO**` sentinel, not empty, and no bug-report placeholder left

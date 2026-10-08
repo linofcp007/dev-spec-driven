@@ -236,7 +236,7 @@ approval.
 **+tdd → Test Plan.** Enumerate every test (≥1 per AC; negative tests for every IF/THEN; boundary tests). Each test gets
 a stable ID (`T-01`) mapped to AC IDs, a layer (unit/integration/E2E, following the pyramid) and a **Kind**: `example`
 (one concrete case — WHEN / IF…THEN) or `property` (an invariant over generated inputs — ubiquitous, WHILE, "never /
-for every" rules like tenant isolation). The Coverage Check shows every AC in ≥1 test. Approve before writing test
+for every" rules like tenant isolation). The Coverage Check shows every AC in ≥1 test row (a Gaps note is no coverage). Approve before writing test
 code. `references/test-patterns.md`.
 
 **+ai → Eval Plan.** Three sets — **golden**, **adversarial**, **regression** — with grading per set, explicit ship

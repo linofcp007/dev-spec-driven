@@ -222,7 +222,8 @@ function otherFeatureTest(dir) {
 // token before a slash in front of it (`login/US-1.AC-1`, `P1/US-1.AC-1`); for a table row with no lead label, its cell that is
 // exactly such an ID. An ID cited later in the criterion ("… (see EC-1)", "… (T-01)") labels nothing. → {id, slug} | null.
 // Review 5 (L31): a sub-criterion ID (US-1.AC-1.2) is a label of its own — never its parent's US-1.AC-1 — and no stable ID (bareLabel).
-const RE_LEAD_LABEL = /^[ \t]*(?:#{1,6}[ \t]+)?(?:(?:\d+[.)]|[-*+])[ \t]+)?(?:\[[ xX]\][ \t]+)?(?:\*\*|__|\*|_|`|\[|\()?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+\.\d+|US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?!\d)/u;
+// 1.24 review 6 (F1): an emphasis AND a bracket opener (`- **[NFR-1]** …`) lead a label too — the EARS unit readers accept the same leads.
+const RE_LEAD_LABEL = /^[ \t]*(?:#{1,6}[ \t]+)?(?:(?:\d+[.)]|[-*+])[ \t]+)?(?:\[[ xX]\][ \t]+)?(?:\*\*|__|\*|_|`)?[[(]?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+\.\d+|US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?!\d)/u;
 const RE_CELL_LABEL = /^(?:\*\*|__|\*|_|`)?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+\.\d+|US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?:\*\*|__|\*|_|`)?$/u;
 function criterionLabel(text) {
   const s = String(text || "");
@@ -267,9 +268,10 @@ function planIdText(planText) {
   return stripFencedCode(stripHtmlComments(planText));
 }
 
-// Count unresolved [NEEDS CLARIFICATION: ...] markers in real content (not template comments).
+// Count unresolved [NEEDS CLARIFICATION: ...] markers in real content (not template comments). 1.24 review 6 (F11): never in fenced or
+// indented code either (stripFencedCode — every other reader's rule): an example of how to mark an open point blocked the design.
 function clarificationMarkers(md) {
-  const text = stripHtmlComments(md);
+  const text = stripFencedCode(stripHtmlComments(md));
   const out = [];
   const re = /\[NEEDS[ _-]CLARIFICATION:?([^\]\n]{0,500})\]/gi;
   let m;
@@ -442,6 +444,29 @@ function headingTextMatches(text, syns, inflect) {
   for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, ""); }
   return syns.some((s) => t.startsWith(s) && (!/[\p{L}\p{N}]/u.test(t.charAt(s.length)) || (inflect && RE_SYN_INFLECTION.test(t.slice(s.length)))));
 }
+// 1.24 review 6 (F7): can ONE heading answer both a section named / synonymed `x` and one named `y`? — headingTextMatches' rule (the
+// synonym STARTS the heading, word-bounded, an English inflection allowed on a track section): only when one key equals the other or
+// is a word-prefix of it ("offline" / "offline sync") or its inflection ("model" / "modeling notes"). Two such sections of ONE track
+// are answered by the longer one's heading: "## [MOB] Offline Sync" filled "Offline" too, so deleting the "Offline" section passed.
+const keyStarts = (s, t) => t.startsWith(s) && (!/[\p{L}\p{N}]/u.test(t.charAt(s.length)) || RE_SYN_INFLECTION.test(t.slice(s.length)));
+function synonymsOverlap(x, y) {
+  const a = String(x).trim().toLowerCase(), b = String(y).trim().toLowerCase();
+  return !!a && !!b && (keyStarts(a, b) || keyStarts(b, a));
+}
+// A track's section table → the pairs of sections that one heading can answer: [[name, other name, key, other key]] ([] when none —
+// the invariant every built-in table keeps; `tracks check` refuses a pack that breaks it, section-overlap). Keys: name + syn + loose.
+function sectionOverlaps(sections) {
+  const keys = (sections || []).map((s) => [...new Set([s.name, ...(s.syn || []), ...(s.loose || [])].filter((k) => typeof k === "string").map((k) => k.trim().toLowerCase()))]);
+  const out = [];
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      let hit = null;
+      for (const a of keys[i]) { for (const b of keys[j]) if (synonymsOverlap(a, b)) { hit = [a, b]; break; } if (hit) break; }
+      if (hit) out.push([sections[i].name, sections[j].name, hit[0], hit[1]]);
+    }
+  }
+  return out;
+}
 
 // marker = "[SaaS]" / "[AI]": a heading carrying the track marker wins, so "[AI] Observability for AI"
 // can no longer stand in for "[SaaS] Observability". Unmarked headings are the fallback (hand-written
@@ -535,9 +560,9 @@ function sectionState(design, sections, marker, opts = {}) {
     const body = extractSection(design, sec.syn, marker, sec.loose);
     if (body == null) return out("missing");
     // review 5 (M2 / L28): the sentinel as a reader sees it (a commented-out or quoted-in-code one is none), and nothing but
-    // structure — sub-headings, a rule, an empty table — is nothing written
+    // structure — sub-headings, a rule, an empty table — is nothing written; nor (1.24 review 6, F4) a generic slot / punctuation line
     if (RE_TODO_SENTINEL.test(stripFencedCode(stripHtmlComments(body)))) return out("unfilled");
-    const content = sectionContent(body);
+    const content = writtenContent(body);
     if (!content.prose.length && !content.code.length) return out("unfilled");
     const own = sectionOwnLines(body, opts.lang);
     if (!own.length) return out("template");
@@ -601,7 +626,7 @@ function sectionTemplateLines(lang) {
   return { sets, wild };
 }
 function sectionOwnLines(body, lang) {
-  const { prose, code } = sectionContent(body);
+  const { prose, code } = writtenContent(body); // (1.24 review 6, F4: a TBD beside the guidance line is no line of the author's)
   if (!prose.length) return code;
   const { sets, wild } = sectionTemplateLines(lang);
   return prose.filter((l) => { const k = sectionLineKey(l); return !sets.some((s) => s.has(k)) && !wild.some((w) => wildcardMatch(w, k)); }).concat(code);
@@ -630,6 +655,35 @@ function sectionContent(body) {
     prose.push(l);
   });
   return { prose, code };
+}
+// 1.24 review 6 (F4) — what a section's author WROTE: sectionContent() minus the prose lines that answer nothing — a generic slot
+// word (genericAnswer: TODO / TBD / TBC / FIXME / "…" / "a definir", "Pending" / "Pendente" / "Pendiente" / "to be decided" …, after
+// list / quote / checkbox markers, emphasis, a wrapping bracket and trailing punctuation: "- TBD", "**TBD**", "[TBD]", "- [ ] TODO",
+// "> TBD", "Pending.") and a line with no letter or digit ("-", "—", "...", "| - | - |"); a table row answers when one of its cells
+// does. A section holding only those read as filled — a [SEC] Threat Model "TBD" approved the design, a bugfix's Root Cause "TBD"
+// passed the iron law. A real one-word answer stays: "N/A", "None.", "No." (the honest "nothing here" a Risks section asks for; a
+// sized feature's na / na-short rule reads its own text). Fenced code is the author's (review C2). The ONE reader of sectionState,
+// sectionOwnLines and — through hasProseOutsideBrackets — gates.js's sectionFilled / bugSectionFilled and the spike / decision prose.
+// → { prose, code }. Linear.
+const RE_PENDING_ANSWER = /^(?:pending|pendente|pendiente|to be (?:defined|determined|decided|confirmed|written)|(?:a|por) (?:decidir|determinar|confirmar|preencher|rellenar))$/iu;
+function genericAnswer(s) {
+  let t = String(s).replace(/[*_`]+/g, "").trim();
+  let e = t.length;
+  while (e > 0 && ".:;!?".includes(t[e - 1])) e--; // trailing punctuation (a loop: linear on a long run of dots)
+  t = t.slice(0, e).trim();
+  if (t.startsWith("[") && t.endsWith("]")) t = t.slice(1, -1).trim(); // "[TBD]"
+  return isGenericSlot(t) || RE_PENDING_ANSWER.test(t);
+}
+const RE_LINE_MARKERS = /^[ \t]*(?:>[ \t]*)*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?(?:\[[ xX]\][ \t]+)?/;
+const RE_WORD_CHAR = /[\p{L}\p{N}]/u;
+function lineAnswers(l) {
+  if (/^\s*\|/.test(l)) return tableCells(l).some((c) => RE_WORD_CHAR.test(c) && !genericAnswer(c));
+  const rest = l.replace(RE_LINE_MARKERS, "");
+  return RE_WORD_CHAR.test(rest) && !genericAnswer(rest);
+}
+function writtenContent(body) {
+  const { prose, code } = sectionContent(body);
+  return { prose: prose.filter(lineAnswers), code };
 }
 // A design's Mermaid diagram as doctor's `mermaid` check reads it (review 5, L28) → "present" | "template" | "missing": the fenced
 // blocks (``` or ~~~, any length) whose info string starts with "mermaid", outside HTML comments; "template" when every one still
@@ -1258,7 +1312,7 @@ function chainPlaceholders(dir, tracks, kind, phase, blockingOnly, texts) {
     .map((a) => ({ ...artifactReport(dir, a.file, tracks, texts ? texts[a.file] : undefined), idx: a.idx })).filter((r) => r.state === "placeholder");
   return { all, blocking: all.filter((r) => r.idx <= cur), later: all.filter((r) => r.idx > cur) };
 }
-// Some prose once brackets (nested too), HTML comments and the TODO sentinel are set aside: a root cause written as
+// Some prose (written content — writtenContent) once brackets (nested too), HTML comments and the TODO sentinel are set aside: a root cause written as
 // nothing but "[the cause, with evidence]" is not written yet — whatever the bracket says. A bracket group is set aside when it
 // closes on its own line (its nested groups with it); an unbalanced "[" or "]" stays. ONE pass (review 5, P5): a stack of the
 // open "[" (emptied at each line break) marks each closed group in a difference array — removing the innermost groups again and
@@ -1282,7 +1336,10 @@ function hasProseOutsideBrackets(body) {
     else if (was && !cut) from = j;
   }
   if (!cut) outside.push(t.slice(from));
-  return /[\p{L}\p{N}]/u.test(outside.join(" "));
+  // 1.24 review 6 (F4): "prose" is WRITTEN content (writtenContent — never a generic slot line, TBD / TODO / "Pending." / "…", a
+  // punctuation-only line or bare structure) — a Root Cause "TBD" passed the iron law, a Constitution Check "TBD" its gate.
+  const w = writtenContent(outside.join(" "));
+  return w.prose.length > 0 || w.code.some((l) => RE_WORD_CHAR.test(l));
 }
 // bug.md is a bug REPORT: its Reproduction, Expected vs Actual and Root Cause quote logs, output and error text, full of
 // brackets that are evidence, not slots — `[object Object]`, `[WARN]`, a regex class `[A-Z]`, `[Error: ENOENT …]`,
@@ -1333,8 +1390,8 @@ module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLi
   notASlug, featureRefTest, RE_LEAD_LABEL, RE_CELL_LABEL, criterionLabel, criterionLabelIds,
   otherFeatureTest, featureProjectDir, planIdText, clarificationMarkers,
   templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
-  headingEntries, headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, headingTextMatches, extractSection,
-  sectionContent, isTableSep, SLOT_MAX, bracketCloser, mermaidBlocks, mermaidState,
+  headingEntries, headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, headingTextMatches, synonymsOverlap, sectionOverlaps, extractSection,
+  sectionContent, writtenContent, genericAnswer, lineAnswers, isTableSep, SLOT_MAX, bracketCloser, mermaidBlocks, mermaidState,
   RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionLineKey, sectionOwnLines, RE_NA_LEAD, NA_REASON_WORDS, naAnswer,
   trackSectionReport, sectionVerdict, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
   RE_LIST_CHECKBOX, placeholderKey, isGenericSlot, unknownSteeringStub, LEGACY_TEMPLATE_PLACEHOLDERS, templateCorpus,

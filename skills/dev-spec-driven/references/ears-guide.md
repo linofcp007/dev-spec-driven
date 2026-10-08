@@ -145,7 +145,10 @@ Complex requirements combine keywords. The order always follows temporal logic:
 - **Give every criterion its stable ID `US-<story>.AC-<n>`** (`US-1.AC-1`). A bare `AC-1` is not one: `ears_validate`
   flags it (`no-id`), and `trace_check`, `spec_doctor` and the requirements approval fail while no criterion carries a
   `US-n.AC-m` ID. Another feature's criterion is cited as `<feature>/US-n.AC-m` ("the rules of checkout/US-3.AC-2 stay")
-  — it is that feature's, never one of yours to cover.
+  — it is that feature's, never one of yours to cover. Lead the criterion with its ID (`- US-1.AC-1 — …`, `- [ ] **US-1.AC-1**
+  — …`, `- [US-1.AC-1] …`, a `### US-1.AC-1` heading, a table row under the Acceptance Criteria heading): an ID only cited at the
+  end of a sentence or in a quote is never checked, and `spec_doctor` / the requirements approval fail on it. Define each ID
+  once, and write it without leading zeros (`US-1.AC-1`, not `US-1.AC-01` — IDs are compared as written; `padded-id`).
 
 ### Avoid This
 

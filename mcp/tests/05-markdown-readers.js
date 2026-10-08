@@ -1,6 +1,6 @@
 "use strict";
-// Markdown readers (review 5): linear bracket scanning, the comment- and fence-aware heading reader (setext, indented ATX), section content, indented code, task citations, sub-criterion IDs, T-IDs by number.
-// The regressions of the fifth review's markdown / trace findings (P5, M2, M5, L28, L31, L32) — 05-markdown-trace.js holds the older ones.
+// Markdown readers (reviews 5 and 6): linear bracket scanning, the comment- and fence-aware heading reader (setext, indented ATX), section content, indented code, task citations, sub-criterion IDs, T-IDs by number; every AC definition linted and unique, written content, plan-entry coverage.
+// The regressions of the fifth review's markdown / trace findings (P5, M2, M5, L28, L31, L32) and of the sixth's (r6 F1–F4, F8–F11) — 05-markdown-trace.js holds the older ones.
 
 const fs = require("fs");
 const path = require("path");
@@ -203,5 +203,205 @@ exports.run = async ({ ok, S, tmp, require, __dirname }) => {
     const ids = E.requirementAcIds("# Title US-9.AC-1\n\n## US-1.AC-7 heading\n\n1. **US-1.AC-1** — WHEN a THE SYSTEM SHALL b\n");
     ok(plain === bold && plain === bare && plain > 0 && js([...ids].sort()) === js(["US-1.AC-1", "US-1.AC-7"]),
       "1.23.1: an AC ID in requirements.md's # title is no criterion (bold or plain); a ## heading's and a list item's still are (got " + js([plain, bold, bare, [...ids]]) + ")");
+  }
+
+  // ---- 1.24 review 6 — markdown / trace / doctor ----
+  const R6_HEAD = "# Feature: login\n\n## Summary\nUsers log in.\n\n## User Stories\n\n### US-1 (P1): Login\n**As a** user, **I want** to log in, **so that** I see my data.\n\n#### Acceptance Criteria (EARS)\n";
+  const R6_TAIL = "\n## Success Criteria\n- **SC-001** — 95% of logins succeed on first try\n";
+  const r6proj = (n, tracks) => { const p = path.join(tmp, "proj-r6-" + n); S.initProject(p, tracks || ["core"], "en"); return p; };
+  const r6feat = (p, name, tracks, req) => { const c = S.createFeature(p, name, tracks || ["core"], "x", undefined, "en"); if (req != null) put(c.dir, "requirements.md", req); return c; };
+  const status = (doc, id) => (doc.checks.find((c) => c.id === id) || {}).status;
+
+  // 1.24 r6 F1: EARS lints every unit that defines an AC ID trace_check counts — a `[US-1.AC-1]` / `(US-1.AC-1)` lead (a checkbox before it
+  // too) is linted like `- US-1.AC-1` — and an ID trace_check requires that NO linted criterion carries (a trailing "(US-1.AC-1)", a
+  // blockquote, an ID after a word) fails doctor's ears and the requirements approval: it was counted, never checked, and approved.
+  {
+    const p = r6proj("ears-ids");
+    const second = "- US-1.AC-2 — WHEN the account is locked THE SYSTEM SHALL email the owner\n";
+    const bad = {
+      bracket: "- [US-1.AC-1] User can log in with a password\n",
+      paren: "- (US-1.AC-1) User can log in with a password\n",
+      boxBracket: "- [ ] [US-1.AC-1] User can log in with a password\n",
+      trailing: "- WHEN the password is wrong the user sees an error (US-1.AC-1)\n",
+      quote: "> **US-1.AC-1** — the user sees an error\n\n",
+      afterWord: "- Login US-1.AC-1: the user sees an error\n",
+    };
+    const good = {
+      bracket: "- [US-1.AC-1] WHEN the password is wrong THE SYSTEM SHALL show an error\n",
+      boxBold: "- [ ] **US-1.AC-1** — WHEN the password is wrong THE SYSTEM SHALL show an error\n",
+      table: "| ID | Criterion |\n|---|---|\n| US-1.AC-1 | WHEN the password is wrong THE SYSTEM SHALL show an error |\n\n",
+      heading: "##### US-1.AC-1: Wrong password\nWHEN the password is wrong THE SYSTEM SHALL show an error\n\n",
+    };
+    const runForm = (k, line) => {
+      const c = r6feat(p, "F1 " + k, ["core"], R6_HEAD + line + second + R6_TAIL);
+      S.approvePhase(p, c.slug, "classification", "t", { force: true });
+      const ap = S.approvePhase(p, c.slug, "requirements", "t");
+      return { ap: ap.ok, why: ap.ok ? "" : String(ap.error).split("\n")[0], ears: status(S.specDoctor(p, c.slug), "ears") };
+    };
+    const badR = Object.entries(bad).map(([k, l]) => [k, runForm("bad " + k, l)]);
+    const goodR = Object.entries(good).map(([k, l]) => [k, runForm("good " + k, l)]);
+    const linted = ["bracket", "paren", "boxBracket"].map((k) => S.earsValidate(R6_HEAD + bad[k] + second, "en").issues.some((i) => i.code === "no-modal" && i.line === 12));
+    ok(badR.every(([, r]) => !r.ap && /ears/.test(r.why) && r.ears === "fail") && goodR.every(([, r]) => r.ap && r.ears === "pass") && linted.every(Boolean),
+      "1.24 r6 F1: an AC led by [ID] / (ID) is linted (no modal → error); an AC ID no linted criterion carries fails doctor's ears and the requirements approval; well-formed tables, headings, checkbox and bracket criteria still pass (got " +
+      js([badR, goodR, linted]) + ")");
+  }
+
+  // 1.24 r6 F2 + F8: ac-uniqueness reads the AC-DEFINING units — EARS's reader (criterionBlocks {acUnits} + criterionLabel): a duplicate
+  // written as a checkbox item, an italic / code / bracketed ID, a heading, a table row or a paragraph line was missed (only `- US-` /
+  // `1. **US-**` counted) and its second criterion vanished from trace_check. A reference (a coverage table, a Notes line) defines
+  // nothing, a sub-criterion ID is no duplicate of its parent, and IDs compare by number (US-1.AC-01 is US-1.AC-1).
+  {
+    const A = "WHEN the password is wrong THE SYSTEM SHALL show an error", B = "WHEN the account is locked THE SYSTEM SHALL email the owner";
+    const forms = {
+      checkbox: (id, t) => `- [ ] **${id}** — ${t}\n`,
+      checkboxPlain: (id, t) => `- [ ] ${id} — ${t}\n`,
+      italic: (id, t) => `- _${id}_ — ${t}\n`,
+      code: (id, t) => "- `" + id + "` — " + t + "\n",
+      bracket: (id, t) => `- [${id}] ${t}\n`,
+      heading: (id, t) => `##### ${id}\n${t}\n\n`,
+      table: (id, t) => `| ${id} | ${t} |\n`,
+      paragraph: (id, t) => `${id} — ${t}\n\n`,
+    };
+    const dup = Object.entries(forms).map(([k, f]) => [k, E.acDuplicates(R6_HEAD + (k === "table" ? "| ID | Criterion |\n|---|---|\n" : "") + f("US-1.AC-1", A) + f("US-1.AC-1", B) + R6_TAIL)]);
+    const padded = [E.acDuplicates(R6_HEAD + "- US-1.AC-1 — " + A + "\n- US-1.AC-01 — " + B + "\n"), E.acDuplicates(R6_HEAD + "- US-1.AC-1 — " + A + "\n- US-01.AC-1 — " + B + "\n")];
+    const refs = E.acDuplicates(R6_HEAD + "- US-1.AC-1 — " + A + "\n- US-1.AC-1.1 — " + B + "\n- US-1.AC-1.2 — " + B + "\n\n## Coverage\n| AC | Priority |\n|---|---|\n| US-1.AC-1 | P1 |\n\n## Notes\nUS-1.AC-1 depends on the IdP's error codes.\n");
+    const p = r6proj("ac-dups");
+    const c = r6feat(p, "Dups", ["core"], R6_HEAD + forms.checkbox("US-1.AC-1", A) + forms.checkbox("US-1.AC-1", B) + R6_TAIL);
+    S.approvePhase(p, c.slug, "classification", "t", { force: true });
+    const ap = S.approvePhase(p, c.slug, "requirements", "t");
+    const docSt = status(S.specDoctor(p, c.slug), "ac-uniqueness");
+    ok(dup.every(([, d]) => js(d) === '["US-1.AC-1"]') && padded.every((d) => js(d) === '["US-1.AC-1"]') && js(refs) === "[]" && docSt === "fail" && !ap.ok && /ac-uniqueness/.test(ap.error),
+      "1.24 r6 F2/F8: a duplicate AC in any defining form (checkbox, italic, code, bracket, heading, table row, paragraph) and a zero-padded twin fail ac-uniqueness (doctor + approval); references and sub-criterion IDs don't (got " +
+      js([dup, padded, refs, docSt, ap.ok]) + ")");
+  }
+
+  // 1.24 r6 F8: a zero-padded AC ID (US-1.AC-01, US-01.AC-1) is an EARS warning naming the canonical form — trace_check, tasks and the
+  // test plan compare AC IDs as written, so `US-1.AC-01` and a task's `US-1.AC-1` were an uncovered AC and a phantom with no hint why.
+  {
+    const ev = S.earsValidate(R6_HEAD + "- US-1.AC-01 — WHEN a THE SYSTEM SHALL b\n- US-02.AC-1 — WHEN c THE SYSTEM SHALL d\n- US-3.AC-3 — WHEN e THE SYSTEM SHALL f\n", "en");
+    const pad = ev.issues.filter((i) => i.code === "padded-id");
+    ok(ev.verdict === "pass" && pad.length === 2 && pad.every((i) => i.severity === "warn") && /US-1\.AC-1(?!\d)/.test(pad[0].msg) && /US-2\.AC-1(?!\d)/.test(pad[1].msg) && pad[0].line === 12,
+      "1.24 r6 F8: EARS warns `padded-id` on US-1.AC-01 / US-02.AC-1, naming US-1.AC-1 / US-2.AC-1 (got " + js(ev.issues) + ")");
+  }
+
+  // 1.24 r6 F3: an AC's test coverage comes from the test plan's ENTRIES only (a T-ID's table row or list item — testPlanEntries), never
+  // from any mention: an AC named in the Coverage Check's "Gaps" list or under "Out of Scope" counted as covered and the test-plan
+  // approval passed. Such an AC is uncovered (a gap — trace_check, the matrix's no-test and the approval agree) and the plan's naming
+  // of it is a visible warning, justifiedTestGaps.
+  {
+    const p = r6proj("plan-gaps", ["core", "tdd"]);
+    const req = R6_HEAD + "1. **US-1.AC-1** — WHEN the password is wrong THE SYSTEM SHALL show an error\n2. **US-1.AC-2** — WHEN the account is locked THE SYSTEM SHALL email the owner\n" +
+      "3. **US-1.AC-3** — WHEN the user logs out THE SYSTEM SHALL clear the session\n4. **US-1.AC-4** — WHEN the user resets the password THE SYSTEM SHALL email a link\n" + R6_TAIL;
+    const c = r6feat(p, "Plan gaps", ["core", "tdd"], req);
+    put(c.dir, "tasks.md", "# Tasks: login\n\n## Story US-1\n- [ ] 1. [US1] Login errors\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4_\n  - _Makes green: T-01, T-02_\n");
+    put(c.dir, "test-plan.md", "# Test Plan: login\n\n## Traceability Matrix\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" +
+      "| T-01 | unit | example | wrong password | US-1.AC-1 | `tests/login.test.js` |\n\n- T-02: a reset link is emailed (US-1.AC-4)\n\n## Coverage Check\nGaps (with justification):\n" +
+      "- US-1.AC-2 — not tested yet, next sprint\n\n## Out of Scope for Testing\n- US-1.AC-3 (logout is the framework's)\n");
+    const tr = S.traceCheck(p, c.slug, { matrix: true });
+    const row = (id) => tr.matrix.rows.find((r) => r.id === id) || { gaps: [] };
+    const warn = (tr.warnings || []).find((w) => w.kind === "justifiedTestGaps");
+    for (const ph of ["classification", "requirements", "design"]) S.approvePhase(p, c.slug, ph, "t", { force: true });
+    const ap = S.approvePhase(p, c.slug, "test-plan", "t");
+    ok(js(tr.uncoveredByTests) === '["US-1.AC-2","US-1.AC-3"]' && tr.verdict === "gaps-found" && !!warn && js(warn.items) === '["US-1.AC-2","US-1.AC-3"]' &&
+      row("US-1.AC-2").gaps.includes("no-test") && row("US-1.AC-3").gaps.includes("no-test") && !row("US-1.AC-1").gaps.length && !row("US-1.AC-4").gaps.includes("no-test") &&
+      !ap.ok && /traceability/.test(ap.error) && !S.traceGaps(tr).some((g) => g.kind === "justifiedTestGaps"),
+      "1.24 r6 F3: only a test-plan entry covers an AC — one named in the Gaps list / Out of Scope is uncovered (trace_check, the matrix's no-test, the test-plan approval refused) and listed as the warning justifiedTestGaps (got " +
+      js([tr.uncoveredByTests, tr.verdict, tr.warnings, ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4"].map((id) => row(id).gaps), ap.ok]) + ")");
+  }
+
+  // 1.24 r6 F4: ONE reader of what a section holds — writtenContent(): a generic slot line (TODO, TBD, "…", "Pending.", **TBD**, [TBD],
+  // `- [ ] TODO`) and a punctuation-only line (`-`, `—`, `...`) are no answer. A [SEC] section holding only "TBD" was filled (doctor "all 5
+  // filled", the design approved), a bugfix's Root Cause "TBD" passed the iron law, a Constitution Check "TBD" passed its gate, a Risks
+  // section "Pending." passed design-risks. A real one-word answer stays filled: "N/A", "None." (a Risks section's honest answer).
+  {
+    const SEC = [{ name: "Threat Model", syn: ["threat model"] }];
+    const st = (answer) => E.sectionState("# Design: x\n\n## [SEC] Threat Model\n" + answer + "\n\n## Other\nx\n", SEC, "[SEC]")[0].status;
+    const nothing = ["TBD", "TODO", "TODO.", "- TBD", "...", "…", "**TBD**", "[TBD]", "- [ ] TODO", "Pending.", "-", "—", "| TBD | TBD |", "TBD\n\n- ...\n\n—", "> TBD", "pendente", "Pendiente."];
+    const written = ["STRIDE per boundary; the login form is the entry point.", "N/A", "None.", "- Rate limit: 5 per minute", "```json\n{ \"limit\": 5 }\n```"];
+    const unf = nothing.map((a) => [a, st(a)]).filter(([, s]) => s !== "unfilled");
+    const fil = written.map((a) => [a, st(a)]).filter(([, s]) => s !== "filled");
+    const bug = (rc) => "# Bug: x\n\n## Reproduction\n1. open /login\n2. submit an empty password\n\n## Root Cause\n" + rc + "\n\n## Fix\nx\n";
+    const bugs = [["TBD", false], ["Pending.", false], ["- …", false], ["The handler reads `req.body.password.length` on an undefined body (stack trace in the log).", true]]
+      .map(([rc, want]) => E.bugSectionFilled(bug(rc), E.ROOT_CAUSE_SYN) === want);
+    const cons = [["TBD", false], ["**TBD**", false], ["- [x] Simplicity — one service, no new dependency", true]].map(([t, want]) => E.sectionFilled("# Design\n\n## Constitution Check\n" + t + "\n", E.CONSTITUTION_SYN) === want);
+    const risk = (t) => E.designWeighChecks("# Design\n\n## Risks\n" + t + "\n", "en").find((c) => c.id === "design-risks").state;
+    // end to end: a +sec design whose five sections say "TBD" fails sec-sections; a bugfix whose Root Cause says "TBD" fails root-cause
+    const p = r6proj("written", ["core"]);
+    const c = S.createFeature(p, "Written sec", ["core", "sec"], "x", undefined, "en");
+    const dfile = path.join(c.dir, "design.md");
+    fs.writeFileSync(dfile, fs.readFileSync(dfile, "utf8").replace(/(## \[SEC\] [^\n]+\n)> \*\*TODO\*\*[^\n]*\n- [^\n]*\n/g, (m, h) => h + "TBD\n"));
+    const secSt = status(S.specDoctor(p, c.slug), "sec-sections");
+    const b = S.createFeature(p, "Login crash", ["core", "tdd"], "Login crashes on empty password", undefined, "en", "bugfix", { reproduction: "1. open /login 2. submit empty password 3. 500" });
+    const bfile = path.join(b.dir, "bug.md");
+    fs.writeFileSync(bfile, fs.readFileSync(bfile, "utf8").replace(/(## Root Cause[^\n]*\n)[\s\S]*?(?=\n## )/, "$1TBD\n"));
+    const rcSt = status(S.specDoctor(p, b.slug), "root-cause");
+    ok(!unf.length && !fil.length && bugs.every(Boolean) && cons.every(Boolean) && risk("Pending.") === "template" && risk("None.") === "filled" && secSt === "fail" && rcSt === "fail",
+      "1.24 r6 F4: a section holding only a generic slot / punctuation line (TBD, TODO, …, -, —, Pending., **TBD**, [TBD]) is unfilled for the track sections, bug.md's Root Cause, the Constitution Check and design-risks; N/A and None. stay filled (got " +
+      js([unf, fil, bugs, cons, risk("Pending."), risk("None."), secSt, rcSt]) + ")");
+  }
+
+  // 1.24 r6 F9: a removed track's criteria are no required ACs — trace_check (and doctor's traceability through it) read requirements.md
+  // and tasks.md as ACTIVE (activeDesign / activeTasks), as the matrix and tracks.md's removal rule do: a feature that turned +saas off and
+  // deleted its +saas tasks failed traceability on the +saas criteria the matrix no longer lists. A task citing an inactive criterion is no
+  // phantom (it is defined, only inactive), and an inactive section's NFR raises no uncoveredNfr.
+  {
+    const p = r6proj("removed-track", ["core", "saas"]);
+    const c = S.createFeature(p, "Removed saas", ["core", "saas"], "x", undefined, "en");
+    const req = R6_HEAD + "1. **US-1.AC-1** — WHEN the password is wrong THE SYSTEM SHALL show an error\n\n## [SaaS] Scale & Tenancy\n" +
+      "5. **US-1.AC-5** — WHILE under peak load THE SYSTEM SHALL answer within 200 ms\n6. **US-1.AC-6** — THE SYSTEM SHALL scope every query by tenant\n- **NFR-1** — p95 under 200 ms at 500 rps\n" + R6_TAIL;
+    put(c.dir, "requirements.md", req);
+    put(c.dir, "tasks.md", "# Tasks: login\n\n## Story US-1\n- [ ] 1. [US1] Show the error\n  - _Requirements: US-1.AC-1_\n- [ ] 2. [US1] Note the tenancy work for later (US-1.AC-6)\n  - _Requirements: US-1.AC-1_\n");
+    const on = S.traceCheck(p, c.slug);
+    S.addTrack(p, c.slug, ["saas"], { remove: true });
+    const tr = S.traceCheck(p, c.slug, { matrix: true });
+    const rows = tr.matrix.rows.map((r) => r.id);
+    const docT = status(S.specDoctor(p, c.slug), "traceability");
+    ok(js(on.uncoveredByTasks) === '["US-1.AC-5"]' && tr.verdict === "pass" && tr.totalAcs === 1 && !tr.uncoveredByTasks.length && !tr.phantomAcsInTasks.length &&
+      !tr.uncoveredNfr.length && !rows.includes("US-1.AC-5") && !rows.includes("NFR-1") && docT === "pass",
+      "1.24 r6 F9: with +saas removed its [SaaS] criteria / NFRs are not required by trace_check or doctor (the matrix's rows), and a task citing one is no phantom (got " +
+      js([on.uncoveredByTasks, tr.verdict, tr.totalAcs, tr.uncoveredByTasks, tr.phantomAcsInTasks, tr.uncoveredNfr, rows, docT]) + ")");
+  }
+
+  // 1.24 r6 F10: doctor's constitution-check reads the gate's reader (sectionFilled on the active design): a "Constitution Check" only in an
+  // HTML comment passed doctor ("present") while the design approval refused it; a section saying "TBD" too.
+  {
+    const p = r6proj("constitution");
+    const c = S.createFeature(p, "Constitution", ["core"], "x", undefined, "en");
+    const dfile = path.join(c.dir, "design.md");
+    const base = fs.readFileSync(dfile, "utf8").replace(/\n## Constitution Check[\s\S]*?(?=\n## |$)/, "\n");
+    const run = (extra) => { fs.writeFileSync(dfile, base + extra); const d = S.specDoctor(p, c.slug).checks.find((x) => x.id === "constitution-check"); return d.status; };
+    const got = [run("\n<!-- Constitution Check: to do after the review -->\n"), run("\n## Constitution Check\nTBD\n"), run("\n## Constitution Check\n- [x] Simplicity — one service, no new dependency\n")];
+    ok(js(got) === '["warn","warn","pass"]', "1.24 r6 F10: doctor's constitution-check passes only a filled Constitution Check section (a comment or TBD warns, as the gate refuses) (got " + js(got) + ")");
+  }
+
+  // 1.24 r6 F11: [NEEDS CLARIFICATION] inside fenced code (an example of how to mark an open point) is no open question — every other reader
+  // skips fences; doctor and the gates counted it.
+  {
+    const fenced = "## Notes\nReviewers mark open points like this:\n\n```md\n- [NEEDS CLARIFICATION: which provider?]\n```\n\n    [NEEDS CLARIFICATION: indented example]\n";
+    const p = r6proj("clar-fence");
+    const c = r6feat(p, "Clar fence", ["core"], R6_HEAD + "1. **US-1.AC-1** — WHEN the password is wrong THE SYSTEM SHALL show an error\n" + R6_TAIL + "\n" + fenced);
+    const clar = status(S.specDoctor(p, c.slug), "clarifications");
+    ok(js(E.clarificationMarkers(fenced)) === "[]" && E.clarificationMarkers("A [NEEDS CLARIFICATION: which provider?] here").length === 1 && clar === "pass",
+      "1.24 r6 F11: a [NEEDS CLARIFICATION] in fenced / indented code is no open question (doctor's clarifications pass); in prose it still is (got " + js([E.clarificationMarkers(fenced), clar]) + ")");
+  }
+
+  // 1.24 r6 FI8: beside US-n.AC-m criteria, a criterion with a modal verb and no stable ID of its own traces nothing (EARS's no-id warn
+  // only) — trace_check says so too: the warning untracedCriteria (L<line>), doctor's traceability a warn. Never a gap; none for a
+  // criterion with its own ID (US-n.AC-m, NFR-n …).
+  {
+    const p = r6proj("untraced");
+    const c = r6feat(p, "Untraced", ["core"], R6_HEAD + "- US-1.AC-1 — WHEN the password is wrong THE SYSTEM SHALL show an error\n" +
+      "- WHEN the account is locked THE SYSTEM SHALL email the owner\n- **NFR-1** — THE SYSTEM SHALL answer within 200 ms\n" + R6_TAIL);
+    put(c.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1, NFR-1_\n");
+    const tr = S.traceCheck(p, c.slug);
+    const w = (tr.warnings || []).find((x) => x.kind === "untracedCriteria");
+    const docT = status(S.specDoctor(p, c.slug), "traceability");
+    const d2 = r6feat(p, "Traced", ["core"], R6_HEAD + "- US-1.AC-1 — WHEN the password is wrong THE SYSTEM SHALL show an error\n" + R6_TAIL);
+    put(d2.dir, "tasks.md", "# Tasks\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1_\n");
+    const clean = S.traceCheck(p, d2.slug);
+    ok(tr.verdict === "pass" && !!w && js(w.items) === '["L13"]' && js(tr.untracedCriteria) === '["L13"]' && docT === "warn" &&
+      clean.verdict === "pass" && !("untracedCriteria" in clean) && !(clean.warnings || []).some((x) => x.kind === "untracedCriteria"),
+      "1.24 r6 FI8: a modal criterion with no stable ID beside US-n.AC-m ones is the trace warning untracedCriteria (L13), doctor's traceability warns; never a gap (got " +
+      js([tr.verdict, tr.warnings, tr.untracedCriteria, docT, clean.verdict, clean.warnings]) + ")");
   }
 };

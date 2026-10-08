@@ -25,6 +25,6 @@ check for +obs; a bad row quarantined, an idempotent re-run / backfill, a freshn
 comes after the design approval: the criteria must match the approved design. Replace every template
 placeholder — the requirements gate refuses an approval while any remains. Run the `ears_validate`
 MCP tool to catch missing SHALL, missing IDs, vague words and leftover placeholders (issue `code`s: `no-modal`,
-`no-id`, `vague`, `placeholder`, `no-keyword`, `needs-clarification`), fix what it flags, run `/clarify`
+`no-id`, `vague`, `placeholder`, `no-keyword`, `needs-clarification`, `padded-id`), fix what it flags, run `/clarify`
 (`spec_clarify`) for the remaining gaps — or `/grill` for a deeper interrogation — then present for
 approval. See `references/ears-guide.md`.

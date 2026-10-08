@@ -613,7 +613,9 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   `'tdd,saas'` before the engine could split it or suggest a fix.
 - **Removal is non-destructive** (`spec_add_track {remove:true}` / `add-track --remove`): files stay, the
   result lists them as inactive, and doctor/status/next_action/roadmap stop requiring them (`activeTasks()`
-  drops a removed track's task section). `core` can't be removed; a bugfix keeps +tdd. **1.24 review 6 (E3):** removing
+  drops a removed track's task section). trace_check too since 1.24 review 6 (F9): its required ACs are the ACTIVE
+  requirements' (`activeDesign`), covered by the active tasks — the matrix's reading; an inactive criterion a task still cites is
+  no phantom (markdown-and-trace.md → Readers). `core` can't be removed; a bugfix keeps +tdd. **1.24 review 6 (E3):** removing
   +tdd or +ai drops a gate (the test / eval plan, Phase 4 — gates.js `phaseActive`), so with `meta.approvalGuard` on, an
   agent's removal naming one of them (`APPROVAL_GATED_TRACKS` in engine/guards.js — no other built-in track or a pack adds a
   phase) is a guard-down: asked / refused with the `add-track <f> <track> --remove` line the human runs
@@ -654,7 +656,11 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   RE_HEADING_LEAD lead stripped (numbering, `Section N`, an emoji, a dash — what `headingMatches` strips from the heading;
   F4 review R4; nothing left → `field-invalid`, a lead stripped → warn `section-name-lead`), and every synonym is
   MARKER-BOUND (`loose` = all of them — F4 review R7: a core `## Architecture` never satisfies a pack's Architecture; a
-  name equal to a core design heading, `coreDesignHeadingKeys()` over the EN / PT / ES design, warns `section-core-name`).
+  name equal to a core design heading, `coreDesignHeadingKeys()` over the EN / PT / ES design, warns `section-core-name`). Two
+  sections ONE heading can answer — a key equal to, a word-prefix of or an English inflection of another section's (`synonymsOverlap()`,
+  markdown.js: headingTextMatches' rule) — are an ERROR, `section-overlap` (1.24 review 6, F7: "## [MOB] Offline Sync" filled "Offline"
+  too, so deleting the Offline section passed doctor). `sectionOverlaps(table)` lists such pairs; every built-in table keeps none
+  (04-tracks-packs-lang asserts it — a new built-in section must too).
   Fragments: `packListItems()` (top-level item = at most one space before the bullet; lines
   indented ≥ 2 are its continuation), `packTableRows()` (six cells, header + separator skipped; else `fragment-row`);
   `{{acN}}` / `{{tN}}` beyond what the pack scaffolds in that language context → `fragment-ref` (its args name the context
@@ -702,7 +708,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   life) — in the per-call `GHOST_MARKERS`; `inactiveMarkerLines` / `inactiveTaskLines` drop those sections like a removed
   track's — no gate, no placeholder — and `trackAcIds` keeps only the lines whose owner IS the asked track (F4 review R5:
   ghost sections joined another track's criteria). Doctor warns `track-pack-missing` (absent vs invalid + its error codes). trace_check
-  reads whole files (as for a removed built-in track), so the pack's criteria and tasks still pair up there.
+  reads the active requirements and tasks (as for a removed built-in track — 1.24 review 6, F9): a ghost section's criteria are not
+  required, and a task citing one is no phantom.
 - **`spec_tracks` / `dev-spec tracks`** (`trackPacks()`): list (built-in rows + every pack entry, valid or not), init
   (`initTrackPack` — six files from `msg.trackPacks.init*`, create-only, the `inside()` link refusal of templates init;
   the marker = the name in capitals, `TRACK`-suffixed when reserved, numbered when taken), check (the loader's problems +

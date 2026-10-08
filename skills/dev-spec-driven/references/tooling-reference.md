@@ -29,9 +29,9 @@ Results are compact JSON.
 | `spec_list` | List all features with track set, phase, and task progress |
 | `spec_status` | One feature: kind (feature / bugfix / spike / change), flow, phase, artifacts, tasks (with `verified`), each active track's sections present vs filled (`secSections`, `privacySections`, `distSections` …), eval state |
 | `spec_next_action` | "You are here → do this next": one `step`, phase by phase (re-review → for the first unapproved phase: fill → fix → approve, the next phase only after that approval → fix → implement → verify → finish → finished / drift; a spike: fill → implement → decide → promote / archive / pivot) + `changedSinceApproval`; suggests `/spec-ff` when every planning artifact passes its gate |
-| `ears_validate` | Lint criteria: modal verb, stable IDs, vague words, placeholders — issue `code`s `no-modal` · `no-id` · `vague` · `placeholder` · `no-keyword` · `needs-clarification` |
+| `ears_validate` | Lint criteria: modal verb, stable IDs, vague words, placeholders — issue `code`s `no-modal` · `no-id` · `vague` · `placeholder` · `no-keyword` · `needs-clarification` · `padded-id` (a zero-padded `US-1.AC-01` — IDs are compared as written: write `US-1.AC-1`) |
 | `spec_clarify` | Requirement ambiguities/gaps before design (markers, placeholders with file:line, missing sections, IF…THEN, track gaps — tenant isolation, AI quality/cost, access denial, secrets, data subject rights, retention; with a glossary, every avoided word used — `glossary`; queues / events / concurrency / transactions named (two concepts, or one strong phrase; never the template's words) while neither requirements.md nor design.md states a consistency model, delivery guarantee or idempotency — one question, `nudges` `consistency-unstated`) |
-| `trace_check` | AC ↔ task ↔ test gaps (the verdict) + warnings for EC/NFR/SC, `phantomSupersedes` and `phantomAffects`; `code: true` scans test files for T-IDs; `matrix: true` adds the requirements traceability matrix (one row per AC / EC / NFR / SC — `status` verified · implemented · planned · untraced, `gaps` no-task · no-test · no-coverage, linked tasks + evidence, tests, design, decisions, supersedes, changed since approval; informational, never the verdict) |
+| `trace_check` | AC ↔ task ↔ test gaps (the verdict — a test-plan ROW covers an AC, never a Gaps / Out of Scope note; a removed track's criteria are not required) + warnings for EC/NFR/SC, `justifiedTestGaps` (+tdd: uncovered ACs the plan names only in such a note — still gaps), `untracedCriteria` (criteria with a modal verb but no ID beside US-n.AC-m ones, by line), `phantomSupersedes` and `phantomAffects`; `code: true` scans test files for T-IDs; `matrix: true` adds the requirements traceability matrix (one row per AC / EC / NFR / SC — `status` verified · implemented · planned · untraced, `gaps` no-task · no-test · no-coverage, linked tasks + evidence, tests, design, decisions, supersedes, changed since approval; informational, never the verdict) |
 | `spec_doctor` | One health-check → `readyToAdvance` (the checks are listed below) |
 | `spec_approve` | Record a phase approval — a GATE: refused while that phase's checks fail; `force: true` records it as forced; saves a `.history/` snapshot; `role` signs off as a role (`meta.approvalRoles`); `through` fast-forwards every active phase up to it, each through its own gate; with `force`, `reason` + `expires` (YYYY-MM-DD or `30d`) record the approval's `waiver` (doctor `waiver-expired` once it lapses, ROADMAP.md and the merge summary show it); `revoke: true` (+ `reason`) removes the phase's approval and its waiting role sign-offs — history record `revoked: true`, never a cascade (`laterApproved` stay approved; the phase is pending again); on a role-governed phase it names a listed `role`, and before the approval withdraws only that role's sign-off |
 | `spec_impact` | What an edit after approval touches (vs the approved snapshot): ACs/sections/tasks; `reopen: true` unticks the affected done tasks and marks their evidence stale — never a removed criterion's tasks: `retire` [{id, tasks, tests}] lists them to delete or repoint; `phase: "steering"` (no name = every active feature) lists the approvals made under steering that changed since (read-only) |
@@ -63,14 +63,16 @@ Results are compact JSON.
 Each check is pass / warn / fail; `readyToAdvance` means no fail.
 
 - **Fail when broken:** `requirements` (missing) · `ears` (a criterion without a modal verb, requirements.md
-  defining AC IDs of which no criterion was linted, or criteria with no `US-n.AC-m` ID — a bare `AC-1` is none) · `clarifications` (open
-  `[NEEDS CLARIFICATION]`) · `ac-uniqueness` · `placeholders` (template text in the current or an earlier phase's
+  defining an AC ID that no linted criterion carries — an AC is linted as a list item, heading or line led by its ID, `[ID]` /
+  `(ID)` too, or a table row under an Acceptance Criteria heading — or criteria with no `US-n.AC-m` ID — a bare `AC-1` is none) · `clarifications` (open
+  `[NEEDS CLARIFICATION]`) · `ac-uniqueness` (an AC ID defined twice — a list or checkbox item, a heading, a table row or a
+  line led by it; compared by number, `US-1.AC-01` = `US-1.AC-1`) · `placeholders` (template text in the current or an earlier phase's
   artifact; a later phase's only warns) · `design` (missing) · `saas-sections` / `ai-sections` / `sec-sections` /
   `privacy-sections` / `dist-sections` / `api-sections` / `ui-sections` / `obs-sections` / `data-sections` / `<pack>-sections` (an active track's mandatory design section missing, empty, still holding its `> **TODO**`
-  sentinel, or — 1.21 — holding nothing but the template's guidance line (a warn on a design approved before); a sized feature: an
+  sentinel, holding only a placeholder word or mark — TBD, TODO, …, `-`, "Pending" — or — 1.21 — nothing but the template's guidance line (a warn on a design approved before); a sized feature: an
   extended section may be absent at size s or answered `n/a — <reason of 4+ words>`, a section another active track covers counts) ·
   `change-scope` (a change: 1–3 criteria, 1–3 tasks, core only) · `traceability` (every gap kind with its IDs; the kinds a later phase's still-template file would cause
-  are deferred as a warn) · `task-deps` (only when some task declares `_Depends:_`: a value that is no task number, a
+  are deferred as a warn; a warn too for modal criteria with no ID beside US-n.AC-m ones — `untracedCriteria`) · `task-deps` (only when some task declares `_Depends:_`: a value that is no task number, a
   number no active task carries, a self-dependency, a cycle — the tasks approval refuses on it) · bugfix `root-cause` ·
   spike `spike` (spike.md missing) / `question` / `decision` · `merge-conflicts` (a `mergeConflicts` list the git merge driver left in the feature's
   `.state.json` or in `roadmap.json` — pick each value, delete the list) · `state` (the feature's `.state.json` is not
@@ -80,7 +82,8 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   spec_finish blocks on `roadmap` and next_action's one step is to repair it — every doctor reports it).
 - **Warn:** `steering` (core files missing, or files still holding template placeholders) · `success-criteria` ·
   `priorities` · `mermaid` (no mermaid code block outside comments, or only the template's own diagram) ·
-  `constitution-check` · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,
+  `constitution-check` (a `## Constitution Check` section with written content — the design gate's reader; a mention in a
+  comment or a "TBD" is none) · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,
   empty, still the template, or fewer than 2 options) · `design-risks` (its Risks section missing, empty or still the
   template) · `design-reuse` (its Reuse & Integration section missing, empty or still the template — a brownfield
   feature's filled `integration-plan.md` → Integration Points counts; the three never block an approval, a bugfix and a

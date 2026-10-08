@@ -10,8 +10,9 @@ Feature: $ARGUMENTS
 Run the `spec_doctor` MCP tool for this feature (CLI `dev-spec doctor <feature>`, exit 1 on FAIL) and report the
 result clearly: each check (pass/warn/fail), the recorded phase approvals, and the `readyToAdvance` verdict.
 
-- **Fails** (block advancing): `ears` errors (or requirements.md cites AC IDs but no criterion was linted — write each AC
-  as a list item, heading or line that starts with its ID, or a table row under an Acceptance Criteria heading — or it
+- **Fails** (block advancing): `ears` errors (or requirements.md cites an AC ID that no linted criterion carries — write each AC
+  as a list item, heading or line that starts with its ID (`[US-1.AC-1]` / `(US-1.AC-1)` too), or a table row under an
+  Acceptance Criteria heading — or it
   has criteria but no `US-n.AC-m` ID trace_check reads: number each one `US-1.AC-1`, `US-1.AC-2` …; a bare `AC-1` is
   not one),
   `clarifications` still open (a bugfix: in `bug.md` too), `ac-uniqueness`, `placeholders` (template

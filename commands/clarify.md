@@ -26,7 +26,7 @@ glossary's own terms; the result also carries `glossary` [{word, term, count, lo
 the glossary. Present the questions to the user, get
 answers, and fold them into `requirements.md` before moving to design — edge cases, NFRs and success criteria
 keep their stable IDs (`EC-1`, `NFR-1`, `SC-001`) so tasks and tests can trace them. Then re-run `ears_validate`
-(issue codes: `no-modal`, `no-id`, `vague`, `placeholder`, `no-keyword`, `needs-clarification`). Respond in the
+(issue codes: `no-modal`, `no-id`, `vague`, `placeholder`, `no-keyword`, `needs-clarification`, `padded-id`). Respond in the
 user's language (EN/PT/ES).
 
 If the user wants a deeper, decision-by-decision interrogation of their *understanding* (not just

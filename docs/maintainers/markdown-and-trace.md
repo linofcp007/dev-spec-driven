@@ -16,7 +16,17 @@ matrix.
   track section also accepts an English inflection of its name (s / es / ing — "Threat Modeling"). The unmarked fallback
   never takes a heading carrying another track's marker, nor (1.21 review B5 — `inOtherTrackContext`) one nested under a
   heading that does (the nearest marked ancestor decides): "### Data quality" under "## [PRIVACY] …" is +privacy's text.
-  "Unfilled" = the `> **TODO**` sentinel is still there OR the body is empty. `spec_status` reports each
+  "Unfilled" = the `> **TODO**` sentinel is still there OR the body holds nothing WRITTEN — **`writtenContent()` (1.24 review 6,
+  F4)**: `sectionContent()` (visible, no structure) minus every prose line that answers nothing: a generic slot word
+  (`genericAnswer()`: `isGenericSlot`'s TODO / TBD / TBC / FIXME / "…" / "a definir", plus "Pending" / "Pendente" / "Pendiente" /
+  "to be decided …" — after list / quote / checkbox markers, emphasis, a wrapping bracket and trailing punctuation: "- TBD", "**TBD**",
+  "[TBD]", "- [ ] TODO", "> TBD", "Pending.") and a line with no letter or digit ("-", "—", "..."); a table row answers when one
+  cell does. A [SEC] section saying "TBD" read as filled (doctor "all 5 filled", the design approved). A real one-word answer stays
+  filled — "N/A", "None.", "No." (on an UNSIZED feature; a sized one has its own `na` / `na-short` rule) — and fenced code is the
+  author's. ONE reader: `sectionState` and `sectionOwnLines` (a TBD beside the guidance line is no line of the author's — still
+  `template`), and `hasProseOutsideBrackets()` → gates.js's `sectionFilled()` (the Constitution Check) and `bugSectionFilled()` (a
+  bugfix's Reproduction / Root Cause), the spike / decision prose; quality.js's `genericUnit` (design-trade-offs / risks / reuse) is
+  `genericAnswer` — a Risks section saying "Pending." is `template`, "None." is filled. `spec_status` reports each
   section as present + filled (CLI ✓ filled · ◐ unfilled · ✗ missing; a sized feature's ○ optional, ✓ covered).
   **1.21 F5:** "template" = every visible line is a line of a track design block as the scaffold wrote it
   (`sectionOwnLines()` — exact lines of the built-in blocks, EN / PT / ES, pt-BR's for a pt-BR feature, the project's
@@ -76,7 +86,10 @@ matrix.
   approval refused) while EARS counted their ID. **Review 4 — each criterion by its own ID:** `earsUnidentified` returned null
   for any document with a US-n.AC-m in it, so `- AC-1: … (see US-1.AC-9)` escaped while the CITED ID became the only required AC;
   now a criterion numbered with a bare AC-n (`bareLabel`) is named whatever the document defines, and one with no ID at all only
-  when the document defines no AC ID (beside US-n.AC-m criteria it stays EARS's no-id warn). trace_check lints for it when
+  when the document defines no AC ID (beside US-n.AC-m criteria it stays EARS's no-id warn — and, since 1.24 review 6 (F-I8),
+  trace_check's warning `untracedCriteria`: the linted criteria with a modal verb and neither a stable ID of their own nor a bare /
+  sub-criterion one, as `L<line>` — only when some, in `TRACE_INFO_FIELDS`; doctor's `traceability` warns with it — one EARS pass per
+  trace, shared with `earsUnidentified`). trace_check lints for it when
   `requiredAcs` is non-empty only if the text holds a bare AC-n (`RE_BARE_AC`) — no second EARS pass otherwise. `RE_BARE_AC`
   never reads the AC-n of a US-n.AC-m — nor of an importer's ESCAPED `US-7\.AC-1` (an ID-led line of imported prose, demoted
   so it defines nothing, e.g. a fluidplan page intro): that one was listed as an unidentified `AC-1` and the import read
@@ -130,6 +143,22 @@ matrix.
   false pass) and planned a T-ID the tests gate demanded. A scaffolded test plan
   only gets the template rows of the track ACs requirements.md has (`testPlanTracks()`, shared by spec_create on an
   existing feature and spec_add_track — a track added after the requirements brings none).
+  **Test coverage = a test ENTRY (1.24 review 6, F3):** an AC is covered by the test plan only when one of its test entries cites
+  it — `testPlanEntries()`: a table row whose first cell holds a T-ID, a list item led by one (with its continuation lines) — the
+  matrix's `tests` reader; trace_check's `uncoveredByTests`, the matrix's `no-test` and the test-plan approval read the same set.
+  Any mention counted (`extractAcIds` over the whole plan): an AC named in the Coverage Check's "Gaps (with justification)" list or
+  under "Out of Scope for Testing" was covered, and the approval passed. Such an AC stays a gap — no test covers it; accepting it is
+  a forced approval — and the warning `justifiedTestGaps` (+tdd, a top-level array in `TRACE_INFO_FIELDS`, `TRACE_WARNING_ORDER`
+  after the secondary kinds; doctor's `traceability` detail repeats it unless the plan's kinds are deferred) lists the uncovered ACs
+  the plan names outside its entries, so the reader sees they are accounted for. `phantomAcsInTests` still reads every mention (a
+  typo in a Gaps note is a phantom).
+  **A removed track's criteria (1.24 review 6, F9):** trace_check reads the ACTIVE requirements (`activeDesign` — a turned-off
+  track's `[SaaS]` / `[AI]` / … sections, a missing pack's ghost sections) for the REQUIRED ACs and the ACTIVE tasks (`activeTasks`)
+  for their coverage — the matrix's rows and tasks, tracks.md's removal rule; it read the whole files, so a feature that removed
+  +saas and deleted its +saas tasks failed traceability (doctor too) on criteria the matrix no longer listed. A phantom is an ID
+  requirements.md defines NOWHERE (`definedAcs`, the whole text): a task or test row citing an inactive criterion is no typo. The
+  secondary IDs alike (`traceSecondary(…, allReqText)`: coverage asked of the active ones, phantoms against all); doctor's
+  `secondary-trace` count reads the active requirements too.
 - **Secondary IDs are trace WARNINGS, never the verdict**: EC-n / NFR-n need a task or (+tdd) a test-plan
   row, SC-nnn a test-plan row or a real quickstart.md line; compared by number (`SC-1` = `SC-001`); untouched
   template rows don't count. `warnings` = `[{kind, items}]`, excluded from `traceGaps()`.
@@ -192,7 +221,7 @@ matrix.
   lines, headings, tables, HR and fenced code (fence *state* is tracked, so `const shall = 1` inside
   ` ``` ` is code, not an AC) — and only then lints each joined criterion. A comment-only line does
   **not** split a criterion. Issues report the criterion's start `line` (plus `endLine` when it spans
-  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`). `no-keyword`
+  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`/`padded-id`). `no-keyword`
   (info) spares the ubiquitous form naming ITS system (review 5 — `RE_UBIQUITOUS`): "THE <name> SHALL" (one to four words: the
   API, the billing service), PT "O / A / OS / AS <nome> (NÃO) DEVE(M) / DEVERÁ(ÃO)", ES "EL / LA / LOS / LAS <nombre> (NO)
   DEBE(N) / DEBERÁ(N)" — only "THE SYSTEM" counted. `vague`
@@ -204,13 +233,30 @@ matrix.
   now ~0.2 s). Every unit
   that DEFINES an AC is its own criterion for the linter: an ID-led line or checkbox item, a heading led by an AC ID (its
   body absorbed) and a table row with a cell that is exactly an AC ID (under an Acceptance Criteria / story heading, with no
-  heading, or carrying a modal — elsewhere it is a summary table). Such a unit is a REFERENCE, never linted, when a list
+  heading, or carrying a modal — elsewhere it is a summary table). The ID may sit behind an emphasis, a code span, a bracket
+  or a parenthesis (`- [US-1.AC-1] …`, `- (US-1.AC-1) …`, `- [ ] [US-1.AC-1] …` — 1.24 review 6, F1: `RE_LIST_DEFINES_AC` /
+  `RE_LEAD_DEFINES_AC` take criterionLabel's openers; `- [US-1.AC-1] User can log in`, no modal, was counted by trace_check,
+  never linted, and approved). Such a unit is a REFERENCE, never linted, when a list
   item defines that ID anywhere or an earlier unit already did (a Notes line "US-1.AC-2 depends on …", a coverage table),
   and outside an acceptance-criteria context a line or heading defines one only when it carries a modal verb or a
-  capitalised EARS keyword. Doctor's `ears` FAILS (and the requirements approval
-  is refused) when requirements.md defines AC IDs but no criterion was linted (`earsUnlinted()`, `earsNoCriteria`). The
-  requirements.md save hook and the pre-commit validator call the same `earsValidate()`, so a table-row or heading AC
-  without a modal is an EARS error there too.
+  capitalised EARS keyword. **Per ID (1.24 review 6, F1):** doctor's `ears` FAILS (and the requirements / change-plan approval
+  is refused) when requirements.md defines an AC ID (`requirementAcIds`) that NO linted criterion carries in its own text
+  (`earsUnlinted()` → the IDs, `earsNoCriteria`) — it fired only when nothing at all was linted, so beside one well-formed
+  criterion `- WHEN … the user sees an error (US-1.AC-1)`, a blockquoted AC or `- Login US-1.AC-1: …` was a required AC EARS never
+  read. The raw-text `earsValidate()` (ears_validate, the requirements.md save hook, the pre-commit validator) has no such check —
+  it judges criteria, not a feature's ID set — but a table-row or heading AC without a modal is an EARS error there too.
+  **Zero-padded IDs (1.24 review 6, F8):** every reader compares AC IDs AS WRITTEN (tasks, the test plan, decisions, the brief, the
+  catalog) — comparing by number everywhere would touch each of them — so EARS warns `padded-id` on a US-n.AC-m with a leading zero
+  in the criterion's own text (`US-1.AC-01`, `US-01.AC-1` → "write US-1.AC-1"; `acKey`, `ears.paddedAcId`), and ac-uniqueness
+  compares by number (below). A task citing `US-1.AC-1` for a `US-1.AC-01` criterion stays a visible uncovered + phantom gap.
+  **AC definitions — ONE reader (1.24 review 6, F2):** `criterionBlocks(text, {acUnits})` also returns `defs` [{ id, key, line }] —
+  every US-n.AC-m DEFINITION in document order (criterionLabel's ID of a defining list item, heading, table row or paragraph line), a
+  repeat included: a unit repeating an ID is still a reference (never linted), but a definition again when it carries a modal verb,
+  or — a heading in an acceptance-criteria context — when no list item defines that ID. `acDuplicates()` (doctor's and the
+  approvals' `ac-uniqueness`) reads them by `key` (the number: US-1.AC-01 = US-1.AC-1); it read only `- US-` / `1. **US-**` items,
+  so a second `- [ ] **US-1.AC-1**` (or an italic / code / bracketed one, two headings, two table rows, two paragraph lines) passed
+  and its criterion vanished from trace_check. A coverage table, a Notes line, a heading over the list item that defines its ID
+  and a sub-criterion ID (US-1.AC-1.2) are no duplicates.
 - **Fences: one closer rule, `closesFence(line, marker)`** — every fence-aware reader (`stripFencedCode`,
   `criterionBlocks`, `designSections`, `headingEntries`, the placeholder scan, `mdListItems`, import, the task
   scanner's `fenceLine`) closes a fence only on a CommonMark closer: the opener's character, at least as long,
@@ -228,7 +274,9 @@ matrix.
   was a required AC and an EARS no-modal error.
 - **HTML-comment stripping** (`stripHtmlComments`): `ears`/`clarify`/`doctor` (for `[NEEDS
   CLARIFICATION]`) AND `trace_check` (for AC/test IDs and `_Implements:_`) all strip `<!-- -->`
-  first, so example markers in template-guidance comments don't count as real. Keep template
+  first, so example markers in template-guidance comments don't count as real. `clarificationMarkers()` (doctor, the gates, clarify,
+  the export) strips fenced and indented code too since 1.24 review 6 (F11) — `stripFencedCode`, as EARS's criterion blocks do: an
+  example of how to mark an open point, in a ```md block, blocked the design. (An inline code span still counts.) Keep template
   examples inside comments. A `<!--` that never closes is plain text everywhere — ONE comment reader, `commentLines()`, serves
   `stripHtmlComments`, `criterionBlocks` and the placeholder scan (and `scanTaskLines` keeps its own): a `<!--` inside
   fenced code or an inline code span is text, and a comment opens only when a `-->` outside code follows it: a stray marker used to hide every
@@ -256,7 +304,7 @@ matrix.
 - **Stable codes.** `status` (`RTM_STATUSES`): `untraced` (a trace gap names it) · `planned` (traced; a linked task still
   open, or none linked yet) · `implemented` (every linked task done, one not verified) · `verified` (every linked task
   done and verified — nothingToVerify counts). `gaps`: `no-task` (an AC no task cites) · `no-test` (+tdd: an AC no test-plan
-  line covers) · `no-coverage` (EC / NFR: no task or planned test; SC: no test-plan row or quickstart.md line — never for a
+  entry covers — a row or a T-ID-led item, never a Gaps note: 1.24 review 6, F3) · `no-coverage` (EC / NFR: no task or planned test; SC: no test-plan row or quickstart.md line — never for a
   scaffold's untouched EC / NFR / SC row, `template: true`, which trace_check doesn't warn about either) — exactly
   trace_check's gaps and secondary warnings for that ID. Labels are localized (`i18n.msg(lang).rtm`, EN/PT/ES).
 - **Surfaces.** `trace_check {matrix: true}` → `matrix` (informational — never the verdict; with `code` both share ONE

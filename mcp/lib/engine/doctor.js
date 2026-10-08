@@ -712,7 +712,13 @@ function specDoctor(projectDir, name, opts = {}) {
     const laterDesign = ph.later.some((r) => r.file === "design.md");
     add("mermaid", diagram === "present" || (diagram === "template" && laterDesign) ? "pass" : "warn",
       diagram === "missing" ? m.mermaidMissing : diagram === "template" && !laterDesign ? m.mermaidTemplate : m.mermaidOk);
-    add("constitution-check", RE_CONSTITUTION_CHECK.test(design) ? "pass" : "warn", RE_CONSTITUTION_CHECK.test(design) ? m.constitutionOk : m.constitutionMissing);
+    // 1.24 review 6 (F10): the design gate's reader — sectionFilled over the active design (a heading of its own, comments never count,
+    // "TBD" is no answer): a "Constitution Check" only named in an HTML comment (or a section saying TBD) passed here while the design
+    // approval refused it.
+    const consDesign = activeDesign(design, tracks);
+    const consFilled = sectionFilled(consDesign, CONSTITUTION_SYN);
+    add("constitution-check", consFilled ? "pass" : "warn", consFilled ? m.constitutionOk
+      : extractSection(consDesign, CONSTITUTION_SYN) == null ? m.constitutionMissing : G.constitutionUnfilled);
     // 1.17 A1 — design-tradeoffs / design-risks, 1.19 R1 — design-reuse: warns only (never a fail, never an approval check).
     // Not while design.md is still a LATER phase's template (nothing is being designed yet — the placeholders check already says
     // so). A design approved before a check existed (its approval lacks that check's stamp — `weigh` 1.17, `reuse` 1.19) is
@@ -785,18 +791,21 @@ function specDoctor(projectDir, name, opts = {}) {
       ...(laterFiles.includes("requirements.md") ? [...TRACE_TASK_KINDS, ...TRACE_PLAN_KINDS, "unidentifiedCriteria"].filter((k) => k !== "missingImplFiles") : []),
     ]);
     const kept = Object.fromEntries(Object.entries(tr).filter(([k]) => !deferKinds.has(k)));
-    const gapLines = traceGapLines(kept, lng);
+    // 1.24 review 6 (F3): the uncovered ACs the test plan names only in a note (Gaps / Out of Scope) — said beside the gap, never coverage
+    // … and (F-I8) the modal criteria with no stable ID beside US-n.AC-m ones (untracedCriteria): a warn — nothing can trace them
+    const untracedLines = laterFiles.includes("requirements.md") ? [] : traceWarningLines(tr, lng, ["untracedCriteria"]);
+    const gapLines = [...traceGapLines(kept, lng), ...(deferKinds.has("uncoveredByTests") ? [] : traceWarningLines(tr, lng, ["justifiedTestGaps"])), ...untracedLines];
     // The verdict's own kinds decide fail (testsNotMappedToTasks is listed, never failing — trace_check's verdict rule).
     const failing = traceGaps(kept).some((g) => TRACE_VERDICT_KINDS.has(g.kind));
     const deferred = traceGaps(tr).some((g) => deferKinds.has(g.kind) && TRACE_VERDICT_KINDS.has(g.kind));
     const deferredFiles = laterFiles.filter((x) => x === "tasks.md" || x === "test-plan.md" || x === "requirements.md").join(", "); // C3: + requirements.md (design-first)
     if (failing) add("traceability", "fail", gapLines.join("; "));
     else if (deferred) add("traceability", "warn", [G.traceDeferred(deferredFiles), ...gapLines].join("; "));
-    else add("traceability", "pass", [fm.traceGapText.allCovered(tr.totalAcs), ...gapLines].join("; "));
+    else add("traceability", untracedLines.length ? "warn" : "pass", [fm.traceGapText.allCovered(tr.totalAcs), ...gapLines].join("; "));
     // Secondary IDs (EC / NFR / SC): a warn, never a fail — only when requirements.md defines or the chain cites one.
     const D = fm.deepTrace;
     const secLines = traceWarningLines(tr, lng, TRACE_SECONDARY_KINDS);
-    const secDefined = secondaryDefinitions(criteriaText(dir) || "").defined.size;
+    const secDefined = secondaryDefinitions(activeDesign(criteriaText(dir) || "", tracks)).defined.size; // (1.24 review 6, F9: the active requirements, as trace_check)
     if (secLines.length || secDefined) add("secondary-trace", secLines.length ? "warn" : "pass", secLines.length ? secLines.join("; ") : D.secondaryOk(secDefined));
     // `_Supersedes:_` references that resolve to nothing (a typo, a removed feature): trace_check's warnings, surfaced
     // here too — until fixed, the living catalog shows the AC they meant to replace as current. Never a fail.

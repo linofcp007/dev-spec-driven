@@ -14,7 +14,7 @@ const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in pl
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders, clarificationMarkers,
   criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs, featureLang, ghostMarkers,
-  headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, isObj, isRecord, markerTracks, normalizeLang,
+  headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord, markerTracks, normalizeLang,
   OPTIONAL_TRACKS, packDesignBlock, packOf, packRegistry, packRequirementsBlock, packTracks, placeholderReport,
   projectLang, RE_EDGE_CASES, RE_INDEPENDENT_TEST, RE_LIST_ITEM, RE_NFR, RE_OUT_OF_SCOPE, RE_SUCCESS_CRITERIA,
   RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile, replaceHtmlCommentSpans,
@@ -25,7 +25,7 @@ let acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceho
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
-  featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, isObj, isRecord,
+  featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
   markerTracks, normalizeLang, OPTIONAL_TRACKS, packDesignBlock, packOf, packRegistry, packRequirementsBlock,
   packTracks, placeholderReport, projectLang, RE_EDGE_CASES, RE_INDEPENDENT_TEST, RE_LIST_ITEM, RE_NFR, RE_OUT_OF_SCOPE,
   RE_SUCCESS_CRITERIA, RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile,
@@ -818,8 +818,9 @@ function weighSectionHead(md, syns) {
   const end = index.find((h) => h.i > start.i && h.level <= start.level);
   return { level: start.level, title: start.text, body: lines.slice(start.body, end ? end.i : lines.length).join("\n") };
 }
-// A unit's text is a generic slot word (TODO, TBD, TBC, FIXME, "…", "a definir" — isGenericSlot), trailing punctuation aside.
-const genericUnit = (s) => isGenericSlot(stripEnd(String(s).replace(/[*_`]+/g, "").trim(), unitIn(".:;!?"))); // /[.:;!?]+$/
+// A unit's text is a generic slot word (TODO, TBD, TBC, FIXME, "…", "a definir" — isGenericSlot; "Pending", "[TBD]" — 1.24 review 6,
+// F4: genericAnswer, writtenContent's rule), emphasis and trailing punctuation aside: a Risks section saying "Pending." is no answer.
+const genericUnit = (s) => genericAnswer(s);
 // What a design section holds (A review 6): `entries` = table data rows (a table's header and separator rows skipped) + list items
 // at the section's outermost list level (indented up to 3 spaces; deeper ones are that item's pros / cons) — or, when that is
 // more, its sub-headings / bold-led paragraphs (one "### Option A" or "**Option A — …**" per option); `proseWords` = the words
