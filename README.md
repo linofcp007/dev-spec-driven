@@ -500,7 +500,7 @@ append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revo
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out]
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
 ```
 
 ### Why no GitHub Actions
@@ -1030,7 +1030,7 @@ append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revo
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out]
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
 ```
 
 ### Porque não há GitHub Actions
@@ -1565,7 +1565,7 @@ append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revo
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out]
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
 ```
 
 ### Por qué no hay GitHub Actions

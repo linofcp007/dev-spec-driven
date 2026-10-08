@@ -975,16 +975,28 @@ exports.run = async ({
     const sv = server23({});
     const iNew = await sv.req("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
     const iOdd = await sv.req("initialize", { protocolVersion: "2099-01-01", capabilities: {} });
-    // A tool that throws (spec_init where .specs is a FILE: the engine's mkdir fails) answers the JSON every other refusal is —
-    // {ok: false, error: "The tool failed: …", code} — never the bare text "ERROR: …" (1.23 review L24). (A projectDir that is
-    // itself a file is refused before the engine since 1.24 r6 A3: project-not-dir.)
-    const aFileProj = path.join(tmp, "proj-p23-specs-file");
-    fs.mkdirSync(aFileProj, { recursive: true });
-    fs.writeFileSync(path.join(aFileProj, ".specs"), "not a folder\n");
-    const thrown = await sv.req("tools/call", { name: "spec_init", arguments: { projectDir: aFileProj } });
+    await sv.stop();
+    // A tool that throws answers the JSON every other refusal is — {ok: false, error: "The tool failed: …", code} — never the
+    // bare text "ERROR: …" (1.23 review L24). The throw: a server whose fs.mkdirSync fails with EACCES for one project (a
+    // --require preload — the engine itself no longer throws on the shapes 1.23 used: since 1.24 r6 G7 a `.specs` FILE is a
+    // localized wrongKind refusal, and since A3 a projectDir that is a file is refused before the engine).
+    const throwProj = path.join(tmp, "proj-p23-throws");
+    fs.mkdirSync(throwProj, { recursive: true });
+    const preload = path.join(tmp, "p23-mkdir-eacces.js");
+    fs.writeFileSync(preload, [
+      "const fs = require('fs');",
+      "const mkdir = fs.mkdirSync;",
+      "fs.mkdirSync = function (p, ...rest) {",
+      "  if (String(p).includes('proj-p23-throws')) { const e = new Error(\"EACCES: permission denied, mkdir '\" + p + \"'\"); e.code = 'EACCES'; throw e; }",
+      "  return mkdir.call(this, p, ...rest);",
+      "};",
+    ].join("\n") + "\n");
+    const svThrow = server23({ NODE_OPTIONS: "--require \"" + preload.split(path.sep).join("/") + "\"" });
+    await svThrow.req("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
+    const thrown = await svThrow.req("tools/call", { name: "spec_init", arguments: { projectDir: throwProj } });
     let thrownOut = null;
     try { thrownOut = JSON.parse(thrown.result.content[0].text); } catch { thrownOut = null; }
-    await sv.stop();
+    await svThrow.stop();
     ok(iNew.result.protocolVersion === "2025-11-25" && iOdd.result.protocolVersion === "2025-11-25" &&
       thrown.result.isError === true && thrownOut && thrownOut.ok === false && /^The tool failed: E[A-Z]+/.test(thrownOut.error) && /^E[A-Z]+$/.test(thrownOut.code || "") &&
       /^A ferramenta falhou: x$/.test(I.msg("pt").args.toolFailed("x")) && /^La herramienta falló: x$/.test(I.msg("es").args.toolFailed("x")),
