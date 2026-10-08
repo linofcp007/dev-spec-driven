@@ -251,6 +251,13 @@ and U+FEFF gotchas are in CLAUDE.md.
   opened); an empty or unexpanded value still falls through. **B7:** a dev-spec project's own `.specs/` named as the project
   (`--project <proj>/.specs`, or the variable — `spec.isDevSpecDir(parent)`) is refused naming the parent
   (`cliOutput.projectIsSpecs`): it created `.specs/.specs/`, which then won every walk-up. `version` checks none of this — it reports.
+  **`version` / `--version` / `-V` (1.24 r6 B-I1)** — what a bug report needs: `{ok, version, cli, node, engine: {source:
+  modules|bundle, bundle: {requested, file?, skipped?: missing|other-version|stale|broken, pathIgnored?}}, project: {dir, source:
+  flag|SPEC_PROJECT_DIR|CLAUDE_PROJECT_DIR|nearest|cwd, exists, devSpec, lang}}` (`printVersion()`; human lines
+  `cliOutput.version.*`). The engine part is the facade's `spec.engineSource` — `loadEngine()` records where it loaded from and
+  why a requested bundle was skipped (the choice itself unchanged and silent). `--version` / `-V` anywhere (as `--help`) print it
+  and run nothing — the other command's words and flags are not read (`help --version` stays the help); the `version` command
+  takes no option or argument and never refuses its project (a missing one reads `exists: false`).
   **`evals` (P1)** forwards every word of the command line but the command and `--project` (the CLI passes its resolved one) —
   read with run-evals.js's rules (`evalsArgs()`: its value flags `--project` / `--model` / `--prompt` / `--max-items` take the
   next word): only the words after the feature were forwarded, so `evals --dry-run <f>` ran LIVE (paid calls). run-evals.js

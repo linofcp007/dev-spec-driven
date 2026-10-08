@@ -115,12 +115,15 @@
  *   bundle [--out <file.js>] [--force] Build this clone's engine as ONE file (mcp/lib/spec.bundle.js, git-ignored) for a
  *                                      slow file system — used with DEV_SPEC_BUNDLE=1 (+ DEV_SPEC_BUNDLE_PATH for --out);
  *                                      an existing file that is no previous bundle is replaced only with --force
+ *   version (or --version / -V)        The version, this CLI's path, Node, the engine (modules or bundle — why a bundle was
+ *                                      skipped), the project, which input chose it, its language (--json too)
  *
  * Flags: --json (raw JSON output) · --project <dir> (an existing folder; only init creates one) · --lang en|pt|pt-BR|es
  *        The project: --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working one with a
- *        dev-spec .specs/ > the working folder. A path argument (scan, ears, import) is relative to the project when it was named
- *        (--project / the env), else to the working folder. Each command takes its own options: another one, or an extra
- *        argument, is a usage error (exit 1; with --json also {ok:false, error} on stdout).
+ *        dev-spec .specs/ > the working folder (a variable that chose it is checked like --project; a project's .specs/ is no
+ *        project). A path argument (scan, ears, import) is relative to the project when it was named (--project / the env),
+ *        else to the working folder. Each command takes its own options: another one, an extra argument or a single-value flag
+ *        given twice is a usage error (exit 1; with --json also {ok:false, error} on stdout).
  *        done: --run · --shell bash|pwsh|<path> · --timeout <s> · --evidence "…" · --exit N · --cmd "…"   (value flags need a value; a following --flag is not one)
  *        init: --check name="cmd" (repeatable) · finish: --run · --shell bash|pwsh|<path> · --timeout <s> · log: --max N (default 1000)
  *        undone: --reason "…" · approve: --revoke · --reason "…" · --expires YYYY-MM-DD|Nd (with --force: the waiver)
@@ -217,12 +220,16 @@ let cmdIdx = -1; // where the command word stands in ARGV0
 // refuses it (refuseRepeatedFlags); the flags a command collects every occurrence of are REPEATABLE_FLAGS.
 const flagCount = Object.create(null);
 const countFlag = (k) => { if (VALUE_FLAGS.has(k)) flagCount[k] = (flagCount[k] || 0) + 1; };
+let versionAsked = false; // 1.24 r6 B-I1: --version / -V
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   // `--` ends the options (POSIX): every later token is positional (`create -- --odd-name`) — it used to become flags[""].
   // argv is cut there, so the repeated-flag collectors below (depend --add, init --check, decide --affects…) stop there too.
   if (a === "--") { if (cmdIdx < 0 && !pos.length && i + 1 < argv.length) cmdIdx = i + 1; pos.push(...argv.slice(i + 1)); argv.splice(i); break; }
   if (a === "--json") flags.json = true;
+  // anywhere, like --help: the version command, nothing else runs (`--version=true|false` as a switch — the help documents it)
+  else if (a === "--version" || a === "-V" || /^--version=(?:true|1|yes|on)$/i.test(a)) versionAsked = true;
+  else if (/^--version=(?:false|0|no|off)$/i.test(a)) { /* off */ }
   else if (a.startsWith("--") && a.includes("=")) { const k = a.slice(2, a.indexOf("=")); flags[k] = a.slice(a.indexOf("=") + 1); countFlag(k); }
   else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) {
     // A value flag never swallows the next flag: `--order --json` must not set order="--json". Only a
@@ -233,6 +240,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a.startsWith("--")) flags[a.slice(2)] = true;
   else { if (!pos.length) cmdIdx = i; pos.push(a); }
 }
+if (versionAsked && pos[0] !== "help") pos.splice(0, pos.length, "version"); // the words of another command are not run (its flags: printVersion ignores them)
 const cmd = pos.shift();
 // 1.23 review (L14): Windows' `--project "C:\dir\"` reaches the CLI as `C:\dir"` (the backslash escapes the closing quote) — a
 // double quote is never part of a Windows path, so a trailing one is dropped.
@@ -490,6 +498,7 @@ const COMMAND_OPTIONS = {
   "mcp-config": { options: [], max: 1 },
   bundle: { options: ["out", "force"] }, // --force: overwrite an --out that is no previous bundle (1.24 r6 B8)
   statusline: { options: ["print-config"], max: 0 },
+  version: { options: [], max: 0 }, // 1.24 r6 B-I1 (--version / -V anywhere skip this check: they print the version, nothing else)
 };
 function checkCommandArgs() {
   const own = Object.prototype.hasOwnProperty.call(COMMAND_OPTIONS, cmd) ? COMMAND_OPTIONS[cmd] : null;
@@ -647,8 +656,11 @@ async function main() {
   const helpOnly = cmd === undefined || cmd === "help" || cmd === "-h" || cmd === "--help" || (on("help") && cmd !== "evals");
   if (on("json") && (helpOnly || TEXT_ONLY_COMMANDS.has(cmd))) die(projectText().noJson(helpOnly ? "help" : cmd), { text: true });
   if (on("help") && cmd !== "evals") return console.log(helpText()); // `<command> --help` prints the help, runs nothing
+  // 1.24 r6 B-I1: --version / -V anywhere prints the version and runs nothing (the other command's words and flags unread); the
+  // `version` command reports the project it resolves — never refuses it (a missing one reads exists: false).
+  if (versionAsked && cmd === "version") return printVersion();
   if (!helpOnly) {
-    checkProject(); // 1.23 review L14: an existing folder (init alone may create it) — 1.24 r6 B1: the environment too
+    if (cmd !== "version") checkProject(); // 1.23 review L14: an existing folder (init alone may create it) — 1.24 r6 B1: the environment too
     checkCommandArgs(); // 1.23 review: the command's own options, at most its own arguments
   }
   switch (cmd) {
@@ -657,6 +669,9 @@ async function main() {
     case "-h":
     case "--help":
       return console.log(helpText());
+
+    case "version": // 1.24 r6 B-I1 (also --version / -V)
+      return printVersion();
 
     case "classify": {
       if (!pos[0]) usage('dev-spec classify "<description>" [--name "<feature name>"] [--lang en|pt|pt-BR|es] [--explain]');
@@ -1879,6 +1894,35 @@ async function main() {
   }
 }
 
+// 1.24 r6 B-I1 — `dev-spec version` / --version / -V: what a bug report needs — the version, this CLI's path, Node, where the engine
+// loaded from (its modules, or the bundle; a requested bundle that was skipped and why — spec.engineSource), the project the
+// commands work in, which input chose it (PROJECT_SOURCE) and its language. --json: the same as data (stable keys and codes).
+function printVersion() {
+  const es = spec.engineSource || { kind: "modules", requested: false };
+  let exists = false;
+  try { exists = fs.statSync(projectDir).isDirectory(); } catch { exists = false; }
+  const lang = spec.projectLang(projectDir);
+  const r = { ok: true, version: spec.engineVersion(), cli: path.resolve(__filename).replace(/\\/g, "/"), node: process.version,
+    engine: { source: es.kind, bundle: es.requested ? { requested: true, file: es.file, skipped: es.skipped || null, ...(es.pathIgnored ? { pathIgnored: true } : {}) } : { requested: false } },
+    project: { dir: projectDir, source: PROJECT_SOURCE, exists, devSpec: exists && spec.isDevSpecDir(projectDir), lang } };
+  return out(r, (r) => {
+    const V = cliText(lang).version;
+    console.log(V.head(r.version));
+    console.log(V.cli(r.cli));
+    console.log(V.node(r.node));
+    const b = r.engine.bundle;
+    if (r.engine.source === "bundle") console.log(V.engineBundle(b.file));
+    else if (b.requested) {
+      console.log(V.engineSkipped(b.file, V.skip[b.skipped] || b.skipped));
+      const custom = b.file && path.resolve(b.file) !== path.resolve(__dirname, "..", "mcp", "lib", "spec.bundle.js");
+      console.log(V.rebuild(spec.DEV_SPEC + " bundle" + (custom ? " --out \"" + b.file + "\"" : "")));
+    } else console.log(V.engineModules);
+    if (b.pathIgnored) console.log(V.pathIgnored);
+    console.log(V.project(r.project.dir, V.src[r.project.source] || r.project.source));
+    console.log(!r.project.exists ? V.state.missing : r.project.devSpec ? V.state.devSpec(r.project.lang) : V.state.noSpecs(r.project.lang));
+  });
+}
+
 // `list` and a bare `status`: one line per feature, in the project language.
 function main2list() {
   const r = spec.listFeatures(projectDir);
@@ -2206,11 +2250,18 @@ function helpText() {
                                   system (Docker bind mount, network drive, WSL /mnt/c): set DEV_SPEC_BUNDLE=1 (with --out, also
                                   DEV_SPEC_BUNDLE_PATH=<file>); rebuild after every plugin update — a stale bundle is ignored;
                                   an existing --out that is no previous bundle is left alone unless --force
+  version                         The version, this CLI's path, Node, the engine it runs on (its modules, or the bundle — and why a
+                                  requested bundle was skipped), the project, which input chose it and its language; also
+                                  --version / -V anywhere (prints it, runs nothing)
 
   The project: --project <dir> (an existing folder — only init creates one) > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest
-  folder at or above the working one that holds a dev-spec .specs/ > the working folder. A path argument (scan, ears, import) is
-  relative to the project when it was named (--project or the environment), else to the working folder.
-  Each command takes its own options and arguments: another option, or one argument too many, is a usage error (exit 1).
+  folder at or above the working one that holds a dev-spec .specs/ > the working folder. A variable that chose it is checked like
+  --project (a missing folder or a file is refused, naming the variable); a project's own .specs/ folder is no project. A path
+  argument (scan, ears, import) is relative to the project when it was named (--project or the environment), else to the
+  working folder.
+  Each command takes its own options and arguments: another option, one argument too many, or a single-value flag given twice
+  is a usage error (exit 1) — repeatable: --add / --rm (depend), --check (init), --req / --implements / --makes-green /
+  --depends (append-tasks), --affects / --supersedes (decide).
 
   Flags: --json  --project <dir>  --lang en|pt|pt-BR|es (init/create/bugfix/spike/steering/roadmap/ears/classify/import/templates/tracks/signals)  --order N (depend)
          --name "<feature>" (classify)  --summary "…"  --kind feature|bugfix|spike|change / --size xs|s|m|l (create; spike: --question, --timebox)  --text "…" (ears)
@@ -2229,7 +2280,8 @@ function helpText() {
          or an unexpected failure too ({"ok": false, "error": …[, "code": …]}).
          help, rules, mcp-config and evals print text only: --json there is a usage error (exit 1).
          --shell / --timeout go with --run (done, finish); --run and --evidence / --exit / --cmd exclude each other (done);
-         --timeout stops the command's whole process tree.
+         --timeout (at most 2147483 s) stops the command's whole process tree; a run ends when its command exits — a
+         background process it started (a server) holds nothing up beyond a 2 s drain.
 
   Works the same in Claude Code, Cursor, Windsurf, Copilot, Gemini/Codex CLI, or a plain shell.`;
 }

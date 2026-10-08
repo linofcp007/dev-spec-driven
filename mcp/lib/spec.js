@@ -25,25 +25,43 @@ try { require("module").enableCompileCache?.(); } catch { /* never a reason to f
 // no read (a plugin update or an edit since the build). A missing, broken or stale bundle: the modules, silently — hooks
 // and the status line print nothing about it. The bundle runs each module's source verbatim (its own __dirname, the same
 // load order and __link): no behaviour differs. docs/maintainers/architecture.md → The build.
+// 1.24 r6 B-I1: where it loaded from is recorded (ENGINE_SOURCE → the facade's `engineSource`, which `dev-spec version` reports):
+// { kind: "modules" | "bundle", requested (DEV_SPEC_BUNDLE on), file (the bundle looked for), skipped: null | "missing" |
+// "other-version" | "stale" | "broken", pathIgnored (a DEV_SPEC_BUNDLE_PATH that is no absolute .js path) } — the choice itself
+// is unchanged and still silent.
+let ENGINE_SOURCE = null;
 const { i18n, engine } = loadEngine();
 function loadEngine() {
-  if (/^(?:1|true|yes|on)$/i.test(String(process.env.DEV_SPEC_BUNDLE || "").trim())) {
+  const requested = /^(?:1|true|yes|on)$/i.test(String(process.env.DEV_SPEC_BUNDLE || "").trim());
+  let file = null, skipped = null, pathIgnored = false;
+  if (requested) {
     try {
       const fs = require("fs"), path = require("path");
       const given = String(process.env.DEV_SPEC_BUNDLE_PATH || "").trim();
-      const b = require(path.isAbsolute(given) && /\.js$/i.test(given) ? given : path.join(__dirname, "spec.bundle.js"));
-      const pkg = fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf8");
-      const version = JSON.parse(pkg.charCodeAt(0) === 0xfeff ? pkg.slice(1) : pkg).version;
-      const current = ([rel, size, mtimeMs]) => {
-        const st = fs.statSync(path.join(__dirname, ...String(rel).split("/")), { throwIfNoEntry: false });
-        return !!st && st.size === size && st.mtimeMs === mtimeMs;
-      };
-      if (b.stamp.version === String(version).trim() && b.stamp.files.length > 0 && b.stamp.files.every(current)) {
-        const req = b.load(__dirname);
-        return { i18n: req("./i18n.js"), engine: req("./engine/index.js") };
+      const usable = path.isAbsolute(given) && /\.js$/i.test(given);
+      pathIgnored = given !== "" && !usable;
+      file = usable ? given : path.join(__dirname, "spec.bundle.js");
+      skipped = fs.existsSync(file) ? "broken" : "missing"; // until the checks below pass
+      if (skipped === "broken") {
+        const b = require(file);
+        const pkg = fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf8");
+        const version = JSON.parse(pkg.charCodeAt(0) === 0xfeff ? pkg.slice(1) : pkg).version;
+        const current = ([rel, size, mtimeMs]) => {
+          const st = fs.statSync(path.join(__dirname, ...String(rel).split("/")), { throwIfNoEntry: false });
+          return !!st && st.size === size && st.mtimeMs === mtimeMs;
+        };
+        if (b.stamp.version !== String(version).trim()) skipped = "other-version";
+        else if (b.stamp.files.length > 0 && !b.stamp.files.every(current)) skipped = "stale";
+        else if (b.stamp.files.length > 0) {
+          const req = b.load(__dirname);
+          const loaded = { i18n: req("./i18n.js"), engine: req("./engine/index.js") };
+          ENGINE_SOURCE = { kind: "bundle", requested, file, skipped: null, pathIgnored };
+          return loaded;
+        }
       }
     } catch { /* missing, broken or foreign: the modules */ }
   }
+  ENGINE_SOURCE = { kind: "modules", requested, file, skipped, pathIgnored };
   return { i18n: require("./i18n.js"), engine: require("./engine/index.js") };
 }
 const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalGuardDecision, approvalGuardLevel,
@@ -78,6 +96,7 @@ module.exports = {
   CLI_SWITCHES, // the CLI's boolean switches — ONE list (cli/dev-spec.js BOOL_FLAGS, the approval hook's lexer)
   DEV_SPEC: i18n.DEV_SPEC, // 1.21 F3: `node "<clone>/cli/dev-spec.js"` — the runnable CLI line (tool descriptions, messages)
   portableCli: i18n.portableCli, // the runnable line → `dev-spec`, for text meant to be committed
+  engineSource: Object.freeze({ ...ENGINE_SOURCE }), // 1.24 r6 B-I1: modules or the bundle, and why a requested bundle was skipped (`dev-spec version`)
   VALID_TRACKS,
   PHASES,
   resolveProjectDir, // --project / projectDir > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest dev-spec project at or above cwd > cwd

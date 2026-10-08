@@ -1723,7 +1723,25 @@ const msg = {
       projectEnvNotDir: (name, dir) => `${name}=${dir} is a file, not a folder — fix or unset the variable.`,
       // 1.24 r6 B7: a project's own .specs/ folder named as the project (label: "--project <dir>" or "<VARIABLE>=<dir>")
       projectIsSpecs: (label, parent) => `${label} is the .specs folder of the project ${parent} — name the project folder itself: ${parent}`,
-      // 1.24 r6 B3: done --run / finish --run settled at the command's exit while a background process still held its output
+      // 1.24 r6 B-I1: `dev-spec version` / --version / -V (the codes — engine.source, bundle.skipped, project.source — stay English in --json)
+      version: {
+        head: (v) => `dev-spec-driven ${v || "(unknown version)"}`,
+        cli: (f) => `  CLI:      ${f}`,
+        node: (v) => `  Node.js:  ${v}`,
+        engineModules: "  engine:   its modules (mcp/lib/engine/)",
+        engineBundle: (f) => `  engine:   the one-file bundle ${f} (DEV_SPEC_BUNDLE=1)`,
+        engineSkipped: (f, why) => `  engine:   its modules — DEV_SPEC_BUNDLE=1, but the bundle ${f} was skipped: ${why}`,
+        skip: { missing: "there is no such file", "other-version": "it was built for another version", stale: "a module changed since it was built", broken: "it could not be loaded" },
+        rebuild: (cmd) => `            → ${cmd}`,
+        pathIgnored: "  (DEV_SPEC_BUNDLE_PATH ignored: not an absolute path to a .js file)",
+        project: (dir, src) => `  project:  ${dir} — ${src}`,
+        src: { flag: "named by --project", SPEC_PROJECT_DIR: "named by SPEC_PROJECT_DIR", CLAUDE_PROJECT_DIR: "named by CLAUDE_PROJECT_DIR", nearest: "the nearest folder above this one with a dev-spec .specs/", cwd: "the working folder" },
+        state: {
+          devSpec: (lang) => `            a dev-spec project · language: ${lang}`,
+          noSpecs: (lang) => `            no dev-spec .specs/ yet (init sets it up) · language: ${lang}`,
+          missing: "            the folder does not exist (init creates it)",
+        },
+      },
       // 1.24 r6 B9: ears <path> naming no file (and no feature of that name)
       earsNoFile: (file) => `${file}: no such file — ears takes a feature name, a markdown file, --text "…" or - (stdin).`,
       // 1.24 r6 B8: bundle --out onto an existing file that is no previous bundle
@@ -1732,6 +1750,7 @@ const msg = {
       flagTwice: (flag) => `${flag} was given more than once — it takes a single value: give it once.`,
       // 1.24 r6 B6: a bounded integer flag's upper end, after args.atLeast (--timeout ≤ Node's timer limit)
       atMost: (n) => `, at most ${n}`,
+      // 1.24 r6 B3: done --run / finish --run settled at the command's exit while a background process still held its output
       runHeldOpen: (code) => `⚠ the command exited (${code}), but a process it started in the background kept its output open — the run was recorded at that exit; what that process prints later is not in the evidence.`,
     },
 
