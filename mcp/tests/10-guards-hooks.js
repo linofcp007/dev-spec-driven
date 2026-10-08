@@ -280,4 +280,20 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
       "1.23 review 5 (M16, L8): the implementer's report shows its _Verify:_ (`tests\\login.test.js`) as `tests/login.test.js` or quoted — the matcher, not the raw text; another test file is still no run; a UTF-16 (LE / BE, BOM) report is decoded; the simplifier's check `node scripts\\lint.js` is run by `node scripts/lint.js` (a longer command still isn't), and a ~400 KB UTF-16 report is read from its end — an odd trailing byte too (got " +
       js([slash, quoted, other, le, be, leRed, sSlash, sLonger, sBig, sBigOdd]) + ")");
   }
+
+  // M8 merge follow-up: a SessionStart payload without `cwd` — the hook's own process folder holds ANOTHER .specs/ (the plugin's
+  // checkout, a dogfooding project) — reads CLAUDE_PROJECT_DIR's project, as before review 5; the process folder is the last resort.
+  {
+    const own = path.join(tmp, "proj-r5-ss-own"), exported = path.join(tmp, "proj-r5-ss-exported");
+    S.initProject(own, ["core"], "en");
+    S.createFeature(own, "Own Thing", ["core"]);
+    S.initProject(exported, ["core"], "en");
+    S.createFeature(exported, "Exported Thing", ["core"]);
+    const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: js({ hook_event_name: "SessionStart" }), cwd: own,
+      encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: exported, SPEC_PROJECT_DIR: "" }, timeout: 20000 });
+    const r2 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: js({ hook_event_name: "SessionStart" }), cwd: own,
+      encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" }, timeout: 20000 });
+    ok(/exported-thing/.test(r.stdout) && !/own-thing/.test(r.stdout) && /own-thing/.test(r2.stdout),
+      "1.23 review 5 (M8): SessionStart without a payload cwd lists CLAUDE_PROJECT_DIR's features, never the hook process folder's .specs/ (that one only when nothing is exported) (got " + js([r.stdout.slice(0, 160), r2.stdout.slice(0, 160)]) + ")");
+  }
 };

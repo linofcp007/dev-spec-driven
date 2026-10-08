@@ -112,7 +112,9 @@ function handle(payload, event) {
       // 1.23 review 5 (M8): the session's project (spec.sessionProject — the nearest dev-spec .specs/ at or above the cwd, a
       // worktree mapped to the checkout the MCP server writes in), else the folder Claude Code (or the user) exported, as before.
       const anchors = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR];
-      const s = spec.sessionProject({ cwd: typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : process.cwd(), anchors });
+      // No payload cwd → the anchors decide (as guard-hook): the hook's own process folder never outranks CLAUDE_PROJECT_DIR —
+      // it is the last resort below (a .specs/ there is the plugin's own checkout when the hook runs from it).
+      const s = spec.sessionProject({ cwd: typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null, anchors });
       const pdir = s ? s.project : process.env.CLAUDE_PROJECT_DIR || process.env.SPEC_PROJECT_DIR || payload.cwd || process.cwd();
       // Same gate as PostToolUse: another tool's .specs/ gets no dev-spec status block in every session's context.
       if (!isDevSpecProject(pdir)) process.exit(0);
