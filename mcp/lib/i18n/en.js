@@ -1153,6 +1153,8 @@ const msg = {
       failedTicked: (n, code) => `Task ${n} is already ticked, but its re-verification failed (exit ${code}) — recorded; it now counts as unverified until a passing run is recorded.`,
       badExit: (v) => `exitCode must be an integer (got '${v}').`,
       needsExit: "Evidence that names a command needs its exit code — or give only a summary for a manual check.",
+      // 1.24 r6 D7 — the failed-run refusal of a task whose _Expect:_ value is no `fail` (unknownExpect)
+      unknownExpect: (n, values) => `Task ${n} carries ${values.map((v) => "_Expect: " + v + "_").join(", ")} — the marker knows only \`fail\`, so as written the task must PASS. If its run must fail (a test written before its fix), write _Expect: fail_.`,
     },
     finish: {
       ready: (slug) => `'${slug}' is ready to finish — confirm the checks below, then merge locally or keep the branch.`,
@@ -1466,6 +1468,8 @@ const msg = {
       commandMismatch: (n, slug, ran, verify, red) => `Task ${n}: the run recorded (\`${ran}\`) is not a run of its _Verify:_ command (${verify}) — it is ticked, but stays unverified until a ${red ? "FAILING " : ""}run of that command is recorded (the command as written — with several _Verify:_ commands, every one of them in ONE run joined with \` && \`; a \`cd <project root> &&\`, \`set -o pipefail;\` or VAR=value of your own in front is fine (a cd anywhere else is another run), but never drop one the _Verify:_ holds)` +
         (red ? ` — record it BEFORE the fix lands, while the test still fails: ${DEV_SPEC} done ${slug} ${n} --run (a red run of another command never counts; with the fix already in, set it aside — git stash push -- <the fix's files>, not a bare git stash: it would take tasks.md and .state.json too — for that run, then restore it).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
       duplicateTasks: (list) => `task numbers used more than once: ${list} — complete/brief pick the first open one; renumber them`,
+      // 1.24 r6 D1 — doctor evidence-moved: a run recorded under a number whose task was renumbered
+      evidenceMoved: (list, slug) => `runs recorded under a task number belong to a task that now has another number (renumbered): ${list} — evidence is kept by number, so neither task reads that run any more; record the moved task's own run: ${DEV_SPEC} done ${slug} <n> --run`,
     },
     // 1.14 F1 — harness-observed evidence (hooks/observe-hook.js; roadmap.json meta.evidence "reported" | "observed").
     observed: {
@@ -2459,6 +2463,8 @@ const msg = {
       doctor: (list) => `marker-shaped text on a task line yields no marker: ${list} — the tools read nothing there (no check runs, no file is traced). Write it as _Verify: <command>_ / _Implements: <path>_ / _Depends: 3_ (italics, the value inside).`,
       // review 5 — a _Verify:_ value that looks garbled (doctor verify-suspicious)
       suspiciousVerify: (list) => `a _Verify:_ command looks garbled: ${list} — it starts with _ or * (a marker's delimiter read into it), holds a code span inside it (two commands written as one: give each its own _Verify:_; a command substitution reads better as $(…)), or has a quote with no partner. done --run runs it exactly as written: fix the marker.`,
+      // 1.24 r6 D7 — an _Expect:_ value other than fail (doctor expect-value)
+      expectValue: (list) => `an _Expect:_ value the tools don't know: ${list} — the only value is fail (_Expect: fail_: the task's run must FAIL, a test written before its fix); any other value leaves a task whose run must pass. Write _Expect: fail_, or drop the marker.`,
     },
     // A T-ID the test plan checks outside test code (load-test.md, evals/*.json) whose artifact is still the scaffold (doctor
     // outside-code-artifacts, a spec_finish warning — 1.14 full review Pa6).

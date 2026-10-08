@@ -15,12 +15,12 @@ let activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicate
   extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest, isBacktickUnit,
   isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, readIfExists, readRoadmap, realPathLoose,
   readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers, taskProse, timeOf, tKey, toPosix,
-  traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap;
+  traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps;
 function __link(E) { ({ activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
   existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest,
   isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, realPathLoose,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
-  taskProse, timeOf, tKey, toPosix, traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap } = E); }
+  taskProse, timeOf, tKey, toPosix, traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps } = E); }
 
 // Verification evidence (verification-before-completion): a task that declares _Verify: <command>_ is only
 // trustworthy when its result was recorded. Evidence lives in .state.json → evidence[<task number>].
@@ -351,13 +351,44 @@ const isRecord = (v) => v != null && typeof v === "object" && !Array.isArray(v);
 function evidenceRecords(slot) {
   return isRecord(slot) ? [slot, ...(Array.isArray(slot.others) ? slot.others.filter(isRecord) : [])] : [];
 }
+// 1.24 r6 D1 — the fallback (a record of this number stamped with another text: a title edit) never takes a record stamped with
+// the text of ANOTHER block of the same tasks.md (taskPeerStamps — the blocks of the read `block` came from): that task was
+// renumbered, and the record is its run. Inserting a task at the top and renumbering the list handed the old task 1's passing
+// `npm test` to the new task 1 (same _Verify:_) — ticked with no evidence, it read verified. A pure title edit leaves no block
+// with the old text, so it keeps its record. completeTask, storeEvidence, the untick and every verdict read through here.
 function ownRecord(slot, block, dup) {
   if (!isRecord(slot)) return dup ? undefined : slot;
   const text = taskStamp(block), verify = verifyStamp(block);
   const fits = (r) => r.verify == null || r.verify === verify;
   const recs = evidenceRecords(slot);
-  return recs.find((r) => r.task === text && fits(r)) ||
-    (dup ? undefined : recs.find((r) => !r.shared && fits(r) && (r === slot || r.task != null)));
+  const exact = recs.find((r) => r.task === text && fits(r));
+  if (exact || dup) return exact;
+  const peers = taskPeerStamps(block);
+  const moved = (r) => !!peers && typeof r.task === "string" && peers.has(r.task); // (r.task !== text here)
+  return recs.find((r) => !r.shared && fits(r) && (r === slot || r.task != null) && !moved(r));
+}
+// 1.24 r6 D1 — doctor `evidence-moved`: records a renumbering left under a number that is no longer their task's — stamped with
+// the text of a block of ANOTHER number and of no block of their own number (blocks: the active tasks). Neither task reads such
+// a record any more (ownRecord), so the moved task needs a new run. → [{ from, to, text }] (one per record), by number.
+function movedEvidence(blocks, evidence) {
+  if (!isRecord(evidence)) return [];
+  const byStamp = new Map(); // a task stamp → the numbers of the blocks carrying it
+  for (const b of blocks || []) {
+    const s = taskStamp(b);
+    const l = byStamp.get(s);
+    if (!l) byStamp.set(s, [b.number]);
+    else if (!l.includes(b.number)) l.push(b.number);
+  }
+  const out = [];
+  for (const key of Object.keys(evidence)) {
+    if (!/^\d{1,15}$/.test(key)) continue;
+    const n = parseInt(key, 10);
+    for (const r of evidenceRecords(evidence[key])) {
+      const nums = typeof r.task === "string" ? byStamp.get(r.task) : null;
+      if (nums && !nums.includes(n)) out.push({ from: n, to: nums[0], text: r.task });
+    }
+  }
+  return out.sort((a, b) => a.from - b.from || a.to - b.to);
 }
 function ownEvidence(evidence, block, dup) {
   return ownRecord(evidence[String(block.number)], block, dup);
@@ -952,6 +983,12 @@ function verifyPipes(block) {
 // written before its fix). Only `fail` (any case, backticks dropped) sets it; any other value leaves a must-pass task.
 function expectsFail(block) {
   return !!block && taskMarkers(block).expect.some((v) => /^fail$/i.test(stripEnds(v, isBacktickUnit).trim()));
+}
+// 1.24 r6 D7 — the _Expect:_ values of a task that are no `fail` (the only value the marker knows): `_Expect: failure_`, `red`,
+// PT `falha` left a must-pass task, silently — its red run was refused as a plain failed run. → [values] (backticks dropped):
+// doctor expect-value names them, and completeTask's failed-run refusal too (unknownExpect, stable).
+function unknownExpectValues(block) {
+  return !block ? [] : taskMarkers(block).expect.map((v) => stripEnds(v, isBacktickUnit).trim()).filter((v) => v && !/^fail$/i.test(v));
 }
 // Exit codes of a shell that could not run the command at all — never a red test: 126 (not executable), 127 (command not
 // found, POSIX shells), 9009 (cmd.exe: "… is not recognized as an internal or external command").
@@ -1924,7 +1961,7 @@ function untickedSince(evidence, block, dup, reason) {
   return isRecord(own) && own.stale === true && own.staleBy === "undo";
 }
 
-module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isRecord, evidenceRecords, ownRecord,
+module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isRecord, evidenceRecords, ownRecord, movedEvidence,
   ownEvidence, taskEvidenceIssue, taskVerification, EVIDENCE_HISTORY, EVIDENCE_OTHERS, recordEvidence, storeEvidence,
   runOf, stateEvidence, verificationStatus, RE_COUNT_KW, RE_COUNT_LINE, RE_ANSI, stripAnsi, summarizeRunOutput,
   RE_CMD_SHELL_FAILURE, windowsShellFailure, RE_WSL_LAUNCHER_DIR, isWslLauncher, PWSH_RUN_ARGS, RE_PWSH_PROGRAM,
@@ -1932,7 +1969,7 @@ module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isR
   pwshTracker, WRAPPER_OPTION_VALUES, WRAPPER_POSITIONALS, wrapperStep, posixShellSyntax, POSIX_DQ_ESCAPES, posixPwshScript,
   posixPwshScan,
   verifyPipeMasked, POSIX_SHELLS, PWSH_SHELLS, SHELL_WRAPPERS, WRAPPER_ARG_OPTS, lexShell, programName, setPipefail,
-  shellScript, pipeMaskedIn, verifyPipes, expectsFail, CANT_RUN_EXIT, CANT_RUN_OUTPUT, RE_ASSERTION_RAN,
+  shellScript, pipeMaskedIn, verifyPipes, expectsFail, unknownExpectValues, CANT_RUN_EXIT, CANT_RUN_OUTPUT, RE_ASSERTION_RAN,
   RE_PESTER_FAILED, RE_PESTER_NOT_RUN, pesterRan, couldNotRunOutput, RE_PWSH_PARSE_FAILURE, pwshParseFailure, runsPwsh,
   cantRunRecord, CRASH_EXIT, crashExit, isRedRun, redProof, CMD_RULE, legacyRedRun, expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps,
   gitEvidence, OBSERVED_LOG, OBSERVED_MAX_BYTES, OBSERVED_WINDOW_MS, OBSERVED_MAX_COMMAND, OBSERVED_MAX_FEATURES,

@@ -24,7 +24,7 @@ let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDeci
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
-  decodeText, existsRaw, changeAlias;
+  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues;
 function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
@@ -36,7 +36,7 @@ function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, b
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
-  decodeText, existsRaw, changeAlias } = E); }
+  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
 // scanner — so status/next/phase can never count a task that complete/brief/finish don't see.
@@ -612,8 +612,12 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   // Never tick on a failure; a failed re-check of a ticked task stays recorded (it is now unverified).
   if (failed && xf) return withObserved(expectFailRefusal(n, ev, alreadyDone, lng)); // B5: a pass (unexpected-pass) or a command that couldn't run
   if (failed) {
-    const out = { ok: false, recorded: true, error: (alreadyDone ? EV.failedTicked(n, ev.exitCode) : EV.failed(n, ev.exitCode)) + (redHint ? " " + redHint : "") };
+    // 1.24 r6 D7: an _Expect:_ value other than fail (`failure`, `red`…) — the refusal names it: the task is must-pass as written
+    const unknown = unknownExpectValues(task);
+    const hint = unknown.length ? EV.unknownExpect(n, unknown) : redHint;
+    const out = { ok: false, recorded: true, error: (alreadyDone ? EV.failedTicked(n, ev.exitCode) : EV.failed(n, ev.exitCode)) + (hint ? " " + hint : "") };
     if (redHint) out.redPhaseVerify = true; // stable: branch on it, never on the text
+    if (unknown.length) out.unknownExpect = unknown; // stable: the _Expect:_ values the marker doesn't know
     return withObserved(out);
   }
   const tracksNow = detectTracks(f.dir);
@@ -968,6 +972,19 @@ function backtickRuns(s) {
 // verification) — the last few results are kept by text. Callers get their own copies (they may annotate them).
 const TASK_BLOCKS_MEMO = new Map();
 const TASK_BLOCKS_MEMO_MAX = 32;
+// 1.24 r6 D1 — the tasks.md a block was read from, for ownRecord's renumber rule (evidence.js): every block taskBlocks() hands
+// out → the blocks of that read, and taskPeerStamps(block) → their task stamps (taskStamp: the text, ≤ 500 characters) — one
+// Set per scan, computed on first use and shared by its copies. A block built any other way (or copied by a caller) has none:
+// ownRecord then keeps its older rule.
+const BLOCK_PEERS = new WeakMap();
+const SCAN_STAMPS = new WeakMap();
+function taskPeerStamps(block) {
+  const blocks = block && typeof block === "object" ? BLOCK_PEERS.get(block) : undefined;
+  if (!blocks) return null;
+  let stamps = SCAN_STAMPS.get(blocks);
+  if (!stamps) { stamps = new Set(blocks.map(taskStamp)); SCAN_STAMPS.set(blocks, stamps); }
+  return stamps;
+}
 function taskBlocks(tasksText) {
   const key = String(tasksText || "");
   let blocks = TASK_BLOCKS_MEMO.get(key);
@@ -978,7 +995,7 @@ function taskBlocks(tasksText) {
     if (TASK_BLOCKS_MEMO.size >= TASK_BLOCKS_MEMO_MAX) TASK_BLOCKS_MEMO.delete(TASK_BLOCKS_MEMO.keys().next().value);
   }
   TASK_BLOCKS_MEMO.set(key, blocks);
-  return blocks.map((b) => ({ ...b, body: b.body.slice(), bodyCode: b.bodyCode.slice() }));
+  return blocks.map((b) => { const c = { ...b, body: b.body.slice(), bodyCode: b.bodyCode.slice() }; BLOCK_PEERS.set(c, blocks); return c; });
 }
 // ownLines (changeViews only): an array filled with true at every line index a task block holds — its task line, its body
 // lines and the fenced code it owns.
@@ -2028,7 +2045,7 @@ module.exports = { parseTasks, taskDescription, nextTask, parallelBatch, RE_DEP_
   taskDepsWaitList, taskDepsIssues, taskDepsCheck, RE_ROOT_CAUSE_TASK, bugfixGate, rootCauseTaskIndex, blockPosition,
   taskNumber, tasksBytes, textEncoding, encodeText, tasksRewrite, checkboxBytes, completeTask, UNDO_REASON_MAX, reasonInput, untickTask, RE_TASK_LINE_HEAD, taskLine, RE_CHECKPOINT,
   COMMENT_MASK, RE_TASK_FENCE_OPEN, RE_PARA_BREAK, scanTaskLines, fenceLine, indentOf, hasOutsideCode, backtickRuns,
-  TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, taskBlocks, scanTaskBlocks, RE_LIST_BOX_LINE, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse,
+  TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, BLOCK_PEERS, SCAN_STAMPS, taskPeerStamps, taskBlocks, scanTaskBlocks, RE_LIST_BOX_LINE, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse,
   RE_RED_PHASE_TASK, redPhaseTask, redPhaseHint, tasksProseText, changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, RE_TASK_MARKER_OPEN,
   MARKER_CLOSE_PUNCT, MARKER_SPANS_MEMO, MARKER_SPANS_MEMO_MAX, MARKER_MEMO_LINE_MAX, NO_MARKER_SPANS, taskMarkerSpans, scanMarkerSpans,
   taskMarkerValues, withoutTaskMarkers, WHOLE_VALUE_MARKERS, TASK_MARKERS_MEMO, TASK_MARKERS_MEMO_MAX, taskMarkers, scanTaskMarkers,
