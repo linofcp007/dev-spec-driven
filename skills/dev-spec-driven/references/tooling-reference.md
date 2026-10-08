@@ -61,7 +61,7 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   line led by it; compared by number, `US-1.AC-01` = `US-1.AC-1`) · `placeholders` (template text in the current or an earlier phase's
   artifact; a later phase's only warns) · `design` (missing) · `saas-sections` / `ai-sections` / `sec-sections` /
   `privacy-sections` / `dist-sections` / `api-sections` / `ui-sections` / `obs-sections` / `data-sections` / `<pack>-sections` (an active track's mandatory design section missing, empty, still holding its `> **TODO**`
-  sentinel, or — 1.21 — holding nothing but the template's guidance line (a warn on a design approved before); a sized feature: an
+  sentinel, holding only a placeholder word or mark — TBD, TODO, …, `-`, "Pending" — or — 1.21 — nothing but the template's guidance line (a warn on a design approved before); a sized feature: an
   extended section may be absent at size s or answered `n/a — <reason of 4+ words>`, a section another active track covers counts) ·
   `change-scope` (a change: 1–3 criteria, 1–3 tasks, core only) · `traceability` (every gap kind with its IDs; the kinds a later phase's still-template file would cause
   are deferred as a warn) · `task-deps` (only when some task declares `_Depends:_`: a value that is no task number, a
@@ -71,7 +71,8 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   valid JSON or has the wrong shape — next_action's one step is to repair it, spec_finish blocks on it).
 - **Warn:** `steering` (core files missing, or files still holding template placeholders) · `success-criteria` ·
   `priorities` · `mermaid` (no mermaid code block outside comments, or only the template's own diagram) ·
-  `constitution-check` · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,
+  `constitution-check` (a `## Constitution Check` section with written content — the design gate's reader; a mention in a
+  comment or a "TBD" is none) · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,
   empty, still the template, or fewer than 2 options) · `design-risks` (its Risks section missing, empty or still the
   template) · `design-reuse` (its Reuse & Integration section missing, empty or still the template — a brownfield
   feature's filled `integration-plan.md` → Integration Points counts; the three never block an approval, a bugfix and a

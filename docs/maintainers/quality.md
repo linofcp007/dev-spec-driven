@@ -84,7 +84,8 @@ nudge, the TDD micro-cycle.
   (what was chosen), not the options weighed; its entries would read as options.
 - **Counting (review 6)** — `designBody()`: table data rows (a header + separator alone is no row) + list items at the
   section's OUTERMOST level (indented up to 3 spaces; deeper ones are pros / cons) — or, when more, sub-headings / bold-led
-  paragraphs (`**Option A — …**`); units holding only a generic slot word (a bare TODO / TBD) → `template`; nothing else →
+  paragraphs (`**Option A — …**`); units holding only a generic slot word (a bare TODO / TBD; since 1.24 review 6, F4,
+  `genericUnit` = markdown.js's `genericAnswer` — writtenContent's rule: "Pending.", "[TBD]", "**TBD**" too) → `template`; nothing else →
   `empty`. Trade-offs: ≥ 2 entries, OR no option list and a written paragraph of ≥ `WEIGH_PROSE_WORDS` (3) words — the
   options weighed in prose, or "No key decision here: …" (the escape Risks has; detail "written as prose"); one listed
   option → `few`. Risks: any entry or any prose ("None." counts — an honest answer).

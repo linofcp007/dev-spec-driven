@@ -701,7 +701,13 @@ function specDoctor(projectDir, name, opts = {}) {
     const laterDesign = ph.later.some((r) => r.file === "design.md");
     add("mermaid", diagram === "present" || (diagram === "template" && laterDesign) ? "pass" : "warn",
       diagram === "missing" ? m.mermaidMissing : diagram === "template" && !laterDesign ? m.mermaidTemplate : m.mermaidOk);
-    add("constitution-check", RE_CONSTITUTION_CHECK.test(design) ? "pass" : "warn", RE_CONSTITUTION_CHECK.test(design) ? m.constitutionOk : m.constitutionMissing);
+    // 1.24 review 6 (F10): the design gate's reader — sectionFilled over the active design (a heading of its own, comments never count,
+    // "TBD" is no answer): a "Constitution Check" only named in an HTML comment (or a section saying TBD) passed here while the design
+    // approval refused it.
+    const consDesign = activeDesign(design, tracks);
+    const consFilled = sectionFilled(consDesign, CONSTITUTION_SYN);
+    add("constitution-check", consFilled ? "pass" : "warn", consFilled ? m.constitutionOk
+      : extractSection(consDesign, CONSTITUTION_SYN) == null ? m.constitutionMissing : G.constitutionUnfilled);
     // 1.17 A1 — design-tradeoffs / design-risks, 1.19 R1 — design-reuse: warns only (never a fail, never an approval check).
     // Not while design.md is still a LATER phase's template (nothing is being designed yet — the placeholders check already says
     // so). A design approved before a check existed (its approval lacks that check's stamp — `weigh` 1.17, `reuse` 1.19) is

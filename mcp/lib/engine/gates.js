@@ -1624,10 +1624,11 @@ function acDuplicates(md) {
   }
   return [...dups];
 }
-// A section with real content: present, no `> **TODO**` sentinel, not empty, no template placeholder left.
+// A section with real content: present, no `> **TODO**` sentinel, something WRITTEN (hasProseOutsideBrackets → writtenContent — 1.24
+// review 6, F4: a "TBD" / "…" / "-" only section is not filled), no template placeholder left.
 function sectionFilled(md, syn) {
   const b = extractSection(md || "", syn);
-  return b != null && !RE_TODO_SENTINEL.test(b) && !!stripHtmlComments(b).trim() && !placeholderReport(b).length;
+  return b != null && !RE_TODO_SENTINEL.test(b) && hasProseOutsideBrackets(b) && !placeholderReport(b).length;
 }
 // bug.md's Reproduction / Root Cause as the bugfix gates judge them (doctor, approve requirements / design, complete_task's
 // root-cause gate, finish, the brief): present, no `> **TODO**` sentinel, not empty, and no bug-report placeholder left

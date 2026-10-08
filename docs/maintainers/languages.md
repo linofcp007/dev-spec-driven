@@ -62,7 +62,7 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
 ## Localization gotchas (from Conventions & gotchas)
 - **Multilingual headings:** the `TRACK_SECTIONS` tables (`SAAS_SECTIONS` / `AI_SECTIONS` / `SEC_SECTIONS` /
   `PRIVACY_SECTIONS`) are `{name, syn:[…], loose?:[…]}` with EN/PT/ES synonyms; `extractSection` matches any synonym
-  (a `loose` one only in the track's context — see The track model). `doctor`/`clarify` use `RE_CONSTITUTION_CHECK`,
+  (a `loose` one only in the track's context — see The track model). `clarify` uses `RE_CONSTITUTION_CHECK` (doctor's `constitution-check` reads `CONSTITUTION_SYN` through `sectionFilled`, the gate's reader, since 1.24 review 6),
   `RE_SUCCESS_CRITERIA`, `RE_INDEPENDENT_TEST`, `RE_OUT_OF_SCOPE`, `RE_NFR`, `RE_EDGE_CASES`,
   `RE_GLOBAL_CONSTRAINTS`; `addTrack` uses `RE_TESTABILITY` for the +tdd block heading. Add a synonym when
   adding a language. Localized BODY content is in `mcp/lib/i18n.js` (its `i18n/<lang>.js` files), not the engine.

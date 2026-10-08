@@ -309,6 +309,37 @@ exports.run = async ({ ok, S, tmp, require, __dirname }) => {
       js([tr.uncoveredByTests, tr.verdict, tr.warnings, ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4"].map((id) => row(id).gaps), ap.ok]) + ")");
   }
 
+  // 1.24 r6 F4: ONE reader of what a section holds — writtenContent(): a generic slot line (TODO, TBD, "…", "Pending.", **TBD**, [TBD],
+  // `- [ ] TODO`) and a punctuation-only line (`-`, `—`, `...`) are no answer. A [SEC] section holding only "TBD" was filled (doctor "all 5
+  // filled", the design approved), a bugfix's Root Cause "TBD" passed the iron law, a Constitution Check "TBD" passed its gate, a Risks
+  // section "Pending." passed design-risks. A real one-word answer stays filled: "N/A", "None." (a Risks section's honest answer).
+  {
+    const SEC = [{ name: "Threat Model", syn: ["threat model"] }];
+    const st = (answer) => E.sectionState("# Design: x\n\n## [SEC] Threat Model\n" + answer + "\n\n## Other\nx\n", SEC, "[SEC]")[0].status;
+    const nothing = ["TBD", "TODO", "TODO.", "- TBD", "...", "…", "**TBD**", "[TBD]", "- [ ] TODO", "Pending.", "-", "—", "| TBD | TBD |", "TBD\n\n- ...\n\n—", "> TBD", "pendente", "Pendiente."];
+    const written = ["STRIDE per boundary; the login form is the entry point.", "N/A", "None.", "- Rate limit: 5 per minute", "```json\n{ \"limit\": 5 }\n```"];
+    const unf = nothing.map((a) => [a, st(a)]).filter(([, s]) => s !== "unfilled");
+    const fil = written.map((a) => [a, st(a)]).filter(([, s]) => s !== "filled");
+    const bug = (rc) => "# Bug: x\n\n## Reproduction\n1. open /login\n2. submit an empty password\n\n## Root Cause\n" + rc + "\n\n## Fix\nx\n";
+    const bugs = [["TBD", false], ["Pending.", false], ["- …", false], ["The handler reads `req.body.password.length` on an undefined body (stack trace in the log).", true]]
+      .map(([rc, want]) => E.bugSectionFilled(bug(rc), E.ROOT_CAUSE_SYN) === want);
+    const cons = [["TBD", false], ["**TBD**", false], ["- [x] Simplicity — one service, no new dependency", true]].map(([t, want]) => E.sectionFilled("# Design\n\n## Constitution Check\n" + t + "\n", E.CONSTITUTION_SYN) === want);
+    const risk = (t) => E.designWeighChecks("# Design\n\n## Risks\n" + t + "\n", "en").find((c) => c.id === "design-risks").state;
+    // end to end: a +sec design whose five sections say "TBD" fails sec-sections; a bugfix whose Root Cause says "TBD" fails root-cause
+    const p = r6proj("written", ["core"]);
+    const c = S.createFeature(p, "Written sec", ["core", "sec"], "x", undefined, "en");
+    const dfile = path.join(c.dir, "design.md");
+    fs.writeFileSync(dfile, fs.readFileSync(dfile, "utf8").replace(/(## \[SEC\] [^\n]+\n)> \*\*TODO\*\*[^\n]*\n- [^\n]*\n/g, (m, h) => h + "TBD\n"));
+    const secSt = status(S.specDoctor(p, c.slug), "sec-sections");
+    const b = S.createFeature(p, "Login crash", ["core", "tdd"], "Login crashes on empty password", undefined, "en", "bugfix", { reproduction: "1. open /login 2. submit empty password 3. 500" });
+    const bfile = path.join(b.dir, "bug.md");
+    fs.writeFileSync(bfile, fs.readFileSync(bfile, "utf8").replace(/(## Root Cause[^\n]*\n)[\s\S]*?(?=\n## )/, "$1TBD\n"));
+    const rcSt = status(S.specDoctor(p, b.slug), "root-cause");
+    ok(!unf.length && !fil.length && bugs.every(Boolean) && cons.every(Boolean) && risk("Pending.") === "template" && risk("None.") === "filled" && secSt === "fail" && rcSt === "fail",
+      "1.24 r6 F4: a section holding only a generic slot / punctuation line (TBD, TODO, …, -, —, Pending., **TBD**, [TBD]) is unfilled for the track sections, bug.md's Root Cause, the Constitution Check and design-risks; N/A and None. stay filled (got " +
+      js([unf, fil, bugs, cons, risk("Pending."), risk("None."), secSt, rcSt]) + ")");
+  }
+
   // 1.24 r6 F9: a removed track's criteria are no required ACs — trace_check (and doctor's traceability through it) read requirements.md
   // and tasks.md as ACTIVE (activeDesign / activeTasks), as the matrix and tracks.md's removal rule do: a feature that turned +saas off and
   // deleted its +saas tasks failed traceability on the +saas criteria the matrix no longer lists. A task citing an inactive criterion is no
@@ -331,4 +362,26 @@ exports.run = async ({ ok, S, tmp, require, __dirname }) => {
       js([on.uncoveredByTasks, tr.verdict, tr.totalAcs, tr.uncoveredByTasks, tr.phantomAcsInTasks, tr.uncoveredNfr, rows, docT]) + ")");
   }
 
+  // 1.24 r6 F10: doctor's constitution-check reads the gate's reader (sectionFilled on the active design): a "Constitution Check" only in an
+  // HTML comment passed doctor ("present") while the design approval refused it; a section saying "TBD" too.
+  {
+    const p = r6proj("constitution");
+    const c = S.createFeature(p, "Constitution", ["core"], "x", undefined, "en");
+    const dfile = path.join(c.dir, "design.md");
+    const base = fs.readFileSync(dfile, "utf8").replace(/\n## Constitution Check[\s\S]*?(?=\n## |$)/, "\n");
+    const run = (extra) => { fs.writeFileSync(dfile, base + extra); const d = S.specDoctor(p, c.slug).checks.find((x) => x.id === "constitution-check"); return d.status; };
+    const got = [run("\n<!-- Constitution Check: to do after the review -->\n"), run("\n## Constitution Check\nTBD\n"), run("\n## Constitution Check\n- [x] Simplicity — one service, no new dependency\n")];
+    ok(js(got) === '["warn","warn","pass"]', "1.24 r6 F10: doctor's constitution-check passes only a filled Constitution Check section (a comment or TBD warns, as the gate refuses) (got " + js(got) + ")");
+  }
+
+  // 1.24 r6 F11: [NEEDS CLARIFICATION] inside fenced code (an example of how to mark an open point) is no open question — every other reader
+  // skips fences; doctor and the gates counted it.
+  {
+    const fenced = "## Notes\nReviewers mark open points like this:\n\n```md\n- [NEEDS CLARIFICATION: which provider?]\n```\n\n    [NEEDS CLARIFICATION: indented example]\n";
+    const p = r6proj("clar-fence");
+    const c = r6feat(p, "Clar fence", ["core"], R6_HEAD + "1. **US-1.AC-1** — WHEN the password is wrong THE SYSTEM SHALL show an error\n" + R6_TAIL + "\n" + fenced);
+    const clar = status(S.specDoctor(p, c.slug), "clarifications");
+    ok(js(E.clarificationMarkers(fenced)) === "[]" && E.clarificationMarkers("A [NEEDS CLARIFICATION: which provider?] here").length === 1 && clar === "pass",
+      "1.24 r6 F11: a [NEEDS CLARIFICATION] in fenced / indented code is no open question (doctor's clarifications pass); in prose it still is (got " + js([E.clarificationMarkers(fenced), clar]) + ")");
+  }
 };

@@ -16,7 +16,17 @@ matrix.
   track section also accepts an English inflection of its name (s / es / ing — "Threat Modeling"). The unmarked fallback
   never takes a heading carrying another track's marker, nor (1.21 review B5 — `inOtherTrackContext`) one nested under a
   heading that does (the nearest marked ancestor decides): "### Data quality" under "## [PRIVACY] …" is +privacy's text.
-  "Unfilled" = the `> **TODO**` sentinel is still there OR the body is empty. `spec_status` reports each
+  "Unfilled" = the `> **TODO**` sentinel is still there OR the body holds nothing WRITTEN — **`writtenContent()` (1.24 review 6,
+  F4)**: `sectionContent()` (visible, no structure) minus every prose line that answers nothing: a generic slot word
+  (`genericAnswer()`: `isGenericSlot`'s TODO / TBD / TBC / FIXME / "…" / "a definir", plus "Pending" / "Pendente" / "Pendiente" /
+  "to be decided …" — after list / quote / checkbox markers, emphasis, a wrapping bracket and trailing punctuation: "- TBD", "**TBD**",
+  "[TBD]", "- [ ] TODO", "> TBD", "Pending.") and a line with no letter or digit ("-", "—", "..."); a table row answers when one
+  cell does. A [SEC] section saying "TBD" read as filled (doctor "all 5 filled", the design approved). A real one-word answer stays
+  filled — "N/A", "None.", "No." (on an UNSIZED feature; a sized one has its own `na` / `na-short` rule) — and fenced code is the
+  author's. ONE reader: `sectionState` and `sectionOwnLines` (a TBD beside the guidance line is no line of the author's — still
+  `template`), and `hasProseOutsideBrackets()` → gates.js's `sectionFilled()` (the Constitution Check) and `bugSectionFilled()` (a
+  bugfix's Reproduction / Root Cause), the spike / decision prose; quality.js's `genericUnit` (design-trade-offs / risks / reuse) is
+  `genericAnswer` — a Risks section saying "Pending." is `template`, "None." is filled. `spec_status` reports each
   section as present + filled (CLI ✓ filled · ◐ unfilled · ✗ missing; a sized feature's ○ optional, ✓ covered).
   **1.21 F5:** "template" = every visible line is a line of a track design block as the scaffold wrote it
   (`sectionOwnLines()` — exact lines of the built-in blocks, EN / PT / ES, pt-BR's for a pt-BR feature, the project's
@@ -261,7 +271,9 @@ matrix.
   was a required AC and an EARS no-modal error.
 - **HTML-comment stripping** (`stripHtmlComments`): `ears`/`clarify`/`doctor` (for `[NEEDS
   CLARIFICATION]`) AND `trace_check` (for AC/test IDs and `_Implements:_`) all strip `<!-- -->`
-  first, so example markers in template-guidance comments don't count as real. Keep template
+  first, so example markers in template-guidance comments don't count as real. `clarificationMarkers()` (doctor, the gates, clarify,
+  the export) strips fenced and indented code too since 1.24 review 6 (F11) — `stripFencedCode`, as EARS's criterion blocks do: an
+  example of how to mark an open point, in a ```md block, blocked the design. (An inline code span still counts.) Keep template
   examples inside comments. A `<!--` that never closes is plain text everywhere — ONE comment reader, `commentLines()`, serves
   `stripHtmlComments`, `criterionBlocks` and the placeholder scan (and `scanTaskLines` keeps its own): a `<!--` inside
   fenced code or an inline code span is text, and a comment opens only when a `-->` outside code follows it: a stray marker used to hide every

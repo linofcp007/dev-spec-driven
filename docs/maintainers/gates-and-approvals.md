@@ -29,7 +29,8 @@ flows, the bugfix kind.
   Root Cause quote `[object Object]`, `[WARN]`, `[A-Z]`, `[Error: …]` — a template text there counts only when it IS one
   of the bug report's own slots (`bugTemplateSlots()`) or its section holds no prose outside brackets
   (`hasProseOutsideBrackets()` — also required by `bugSectionFilled()`: a root cause written as nothing but
-  `[the cause, with evidence]` is not written). Every regex here must stay linear: `RE_STABLE_BRACKET`'s list
+  `[the cause, with evidence]` is not written; since 1.24 review 6 (F4) its "prose" is `writtenContent()`'s — a Root Cause
+  "TBD", "Pending." or "…" is not written either, and `sectionFilled()` (the Constitution Check gate) reads it too). Every regex here must stay linear: `RE_STABLE_BRACKET`'s list
   separator is `\s*(?:[,;/]\s*)?` — the old `\s*[,;/]?\s*` backtracked 2^k on a failing ID list. **Review 5 (P5) — nesting:**
   `scanBrackets()` learns every `[`'s closer from ONE stack pass (`bracketCloser()`) and walks the groups with an explicit
   stack of ranges (it rescanned to the closer at each level and recursed once per level: a 24 KB line of nested `[a [a …]]`
