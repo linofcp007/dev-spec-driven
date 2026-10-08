@@ -27,6 +27,25 @@ matrix.
   **Linear (1.22 review):** `inTrackContext` (a loose synonym under a marked ancestor) reads every heading's answer from ONE stack
   pass, like `inOtherTrackContext` — the back-walk per loose heading (`heads.indexOf` + a scan up) made 200 KB of "### Processors"
   with no `[PRIVACY]` heading cost status 9 s (now ~0.15 s).
+  **The ONE heading reader (review 5, M2):** `headingEntries(lines)` → `[{ i, level, text, body, atx, indent }]` — never a
+  heading inside fenced code or an HTML comment (`commentLines`; a line that starts inside a comment is none), an ATX heading
+  indented 0–3 spaces (closing `#`s and a trailing comment dropped from `text`), and a SETEXT heading: a ONE-line paragraph (after
+  a blank or comment-only line, a heading, a fence or the text's start) underlined by ≥ 3 `=` (level 1) or `-` (level 2) — a
+  multi-line paragraph over `---` is left alone, so YAML front matter never reads as a heading. `extractSection` (the marker read
+  in the heading's visible text), `sectionState`, `weighSectionHead` (quality.js), `bugPlaceholders`, `designSections` (tasks.js
+  — level-2 entries; a title drops its closing `##`, as weighSectionHead's does), `sectionDropLines` / `headingHasMarker`
+  (tracks.js) all read it — a `## [SEC] Threat Model` section wrapped in `<!-- … -->` read as present and filled (doctor "all 5
+  filled"), a commented-out `## Risks` passed design-risks. `headingIndex(lines)` (decisions, export, import, packs — readers
+  that parse the line themselves) = its ATX entries at the margin. **Sentinel and structure (review 5, L28):** `sectionState`
+  tests the `> **TODO**` sentinel on `stripFencedCode(stripHtmlComments(body))` (one kept in a comment or quoted in a code
+  example is none), and a body of structure only — sub-headings, a thematic break, a table's header / separator rows
+  (`sectionContent()`, `isTableSep()`) — is `unfilled` (it was "filled"). **Doctor's `mermaid` (review 5, L28):**
+  `mermaidState(design)` → present · template · missing — the fenced blocks (```` ``` ```` or `~~~`, any length) whose info
+  string starts with `mermaid`, outside HTML comments, an empty one drawing nothing; `template` when each still holds the
+  scaffold's own diagram (`templateDiagrams()` — the core design builder's, EN / PT / ES, pt-BR's on a miss, whitespace folded).
+  It warns `doctor.mermaidTemplate` on a template diagram — except while design.md is still a later phase's template (a pass,
+  as the weigh checks skip it). It was a substring test: a `~~~mermaid` fence warned, one quoted in a comment passed, the
+  untouched template diagram passed. A project template's own diagram is not known (the limit).
 - **A change's one file (1.21 review C1):** change.md holds the criteria AND the tasks — every reader takes its two views
   (`changeViews` / `criteriaText` / `tasksIdText`, tasks.js — gates-and-approvals.md → Right-sized rigor): trace_check's
   required ACs never include a task's `_Requirements:_` reference, and EARS never lints a task block.
@@ -72,7 +91,8 @@ matrix.
   bare AC-n in a criterion with no label) feeds spec_upgrade's renumber item (lifecycle.md → Upgrade).
   **`<feature>/US-n.AC-m` is another feature's (1.22 review):** `requirementAcIds` drops it (`stripForeignAcRefs` — the
   `_Supersedes:_` / `_Affects:_` syntax written in prose: "rules of checkout/US-3.AC-2 stay as they are" was a required AC no
-  task covered); a token that is itself an ID keeps the pair ("US-1.AC-1/US-1.AC-2"). tasks.md's references are read as before.
+  task covered); a token that is itself an ID keeps the pair ("US-1.AC-1/US-1.AC-2"). tasks.md's and the test plan's references
+  too since review 5 (M5 — below).
   **Review 2 — only ANOTHER feature's:** never a priority (`**P1/US-1.AC-1**`), a story (`US-1 / US-1.AC-1`), a number
   (`1.1/US-1.AC-1`) or a token with no letter (`RE_NOT_A_SLUG`) — every required AC of such a spec went to 0. With the feature's
   folder (`requirementAcIds(text, dir)` — trace_check, the matrix, doctor's / the approvals' `earsUnlinted` / `earsUnidentified`,
@@ -84,6 +104,23 @@ matrix.
   and then every `<x>/US-1.AC-5` citing it); otherwise a foreign reference, dropped. **The limit:** a reader with no folder (a
   template, a pack's numbering, the importer's task fitting) can't resolve — there every slug-shaped token counts as another
   feature's.
+  **What the TASKS cite — one reader (review 5, M5):** `taskCitations(blocks, dir, reqText)` (trace.js) = each task block's prose
+  (`taskProse` — its line and body, never a fenced example) with another feature's references dropped
+  (`stripForeignAcRefs(text, dir, reqText)` — a slug that names no feature is this feature's only when requirements.md LABELS
+  that ID with it: the third argument says whose labels decide) → `{ per, acs, tids }`. trace_check's `acsInTasks` /
+  `uncoveredByTasks` / `phantomAcsInTasks` / the tasks' T-IDs and the matrix's per-task citations both read it (doctor through
+  trace_check): tasks.md was read WHOLE — a "Deferred: US-1.AC-2" note or the title covered US-1.AC-2 (doctor "all ACs covered")
+  while the matrix said `no-task`, and `checkout/US-2.AC-1` covered this feature's US-2.AC-1 or was a phantom. The test plan's AC
+  references drop another feature's the same way (`uncoveredByTests`, `phantomAcsInTests`, the matrix's rows). `_Implements:_`
+  is still read from the whole file (a marker outside any task stays a gap). **T-IDs by number (review 5, L32):** trace_check
+  compares the plan's and the tasks' T-IDs by `tKey` (`testIdKeys` — T-01 = T-1, as the matrix and the test-code scan do),
+  reporting each as its file spells it. **Sub-criterion IDs (review 5, L31):** `US-1.AC-1.2` is NO AC ID — `extractAcIds`
+  refuses an ID followed by `.<digit>` (it read as US-1.AC-1: two sub-criteria collapsed into one required AC, a task citing
+  `.1` covered both, and doctor said "duplicate US-1.AC-1"). It is a label of its own (`RE_LEAD_LABEL` / `RE_CELL_LABEL`), no
+  stable ID (`RE_FULL_ID` / `RE_FULL_ID_NO_T` skip it): EARS's no-id lint names it (`ears.subAcId`), `bareLabel` returns it, so
+  `earsUnidentified` / trace_check's `unidentifiedCriteria`, doctor's `ears`, the approvals and spec_upgrade's renumber item
+  (`criteriaBareIds`) list it like a bare AC-n; `acDuplicates` no longer counts it as its parent. One stable ID per criterion
+  — the trace model has no hierarchy below the story.
   A test-plan row covering an AC requirements.md doesn't define is a gap (`phantomAcsInTests`, +tdd; fenced examples
   excluded), like a phantom AC in tasks — doctor fails and the test-plan approval is refused. Every reader of
   test-plan.md's IDs goes through `planIdText()` (comments AND fenced code out): coverage, planned T-IDs, the code
@@ -153,7 +190,10 @@ matrix.
   lines, headings, tables, HR and fenced code (fence *state* is tracked, so `const shall = 1` inside
   ` ``` ` is code, not an AC) — and only then lints each joined criterion. A comment-only line does
   **not** split a criterion. Issues report the criterion's start `line` (plus `endLine` when it spans
-  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`). `vague`
+  several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`). `no-keyword`
+  (info) spares the ubiquitous form naming ITS system (review 5 — `RE_UBIQUITOUS`): "THE <name> SHALL" (one to four words: the
+  API, the billing service), PT "O / A / OS / AS <nome> (NÃO) DEVE(M) / DEVERÁ(ÃO)", ES "EL / LA / LOS / LAS <nombre> (NO)
+  DEBE(N) / DEBERÁ(N)" — only "THE SYSTEM" counted. `vague`
   skips a VERB use of clean / limpa / limpia (`VAGUE_VERB_NEXT`: followed by up / out / an article / a possessive / a
   quantifier / old / temporary / expired… — "THE SYSTEM SHALL clean up its temporary files"); "a clean UI" stays vague. A
   sub-list continues its parent only when the parent reads as a criterion: that modal test is cached per block (`curModal` —
@@ -170,15 +210,20 @@ matrix.
   requirements.md save hook and the pre-commit validator call the same `earsValidate()`, so a table-row or heading AC
   without a modal is an EARS error there too.
 - **Fences: one closer rule, `closesFence(line, marker)`** — every fence-aware reader (`stripFencedCode`,
-  `criterionBlocks`, `designSections`, `headingIndex`, the placeholder scan, `mdListItems`, import, the task
+  `criterionBlocks`, `designSections`, `headingEntries`, the placeholder scan, `mdListItems`, import, the task
   scanner's `fenceLine`) closes a fence only on a CommonMark closer: the opener's character, at least as long,
   nothing after it but spaces. Never `line.trim().startsWith(fence)` — it closed an open backtick fence on a line
   carrying an info string (a `js` opener), and requirements.md then read inverted (its ACs vanished from EARS and
-  trace_check). `stripFencedCode`, `criterionBlocks`, `designSections`, `headingIndex` and the placeholder scan step
+  trace_check). `stripFencedCode`, `criterionBlocks`, `designSections`, `headingEntries` and the placeholder scan step
   through ONE helper, `fenceStep(st, line)`, which also applies CommonMark's list rule (the task scanner's too): a fence
   opened inside a list item (indented) ends with the item — a non-blank line less indented than its opener is outside.
   Without it one unclosed fence in a test-plan bullet blanked every row below it (no coverage, no planned T-IDs,
-  phantoms in tasks.md). An unclosed TOP-LEVEL fence still runs to the end of the file.
+  phantoms in tasks.md). An unclosed TOP-LEVEL fence still runs to the end of the file. **Indented code (review 5, L32):**
+  `codeBlockLines(lines)` = the fence lines + every line of an INDENTED code block (≥ 4 columns, a tab is 4; it starts after a
+  blank line, a heading, a fence or the text's start — never interrupting a paragraph — and never inside a list, which a heading
+  or a less-than-2-column line after a blank ends). `stripFencedCode` (so `requirementAcIds`, `planIdText`, the duplicate-ID and
+  success-criteria readers, the pack fragments, the weigh sections) and `criterionBlocks` read it: "Example:\n\n    US-1.AC-7 …"
+  was a required AC and an EARS no-modal error.
 - **HTML-comment stripping** (`stripHtmlComments`): `ears`/`clarify`/`doctor` (for `[NEEDS
   CLARIFICATION]`) AND `trace_check` (for AC/test IDs and `_Implements:_`) all strip `<!-- -->`
   first, so example markers in template-guidance comments don't count as real. Keep template
@@ -194,8 +239,8 @@ matrix.
   ACTIVE requirements (`activeDesign`: a removed track's criteria are out). Per row: `text` (`acOneLine`, ≤ 1000 chars),
   `template` (`placeholderReport`; a secondary ID trace doesn't count as defined), `design` (the design.md `##` sections
   naming the ID — a bugfix: `bug.md: …` + `design.md: …`, spec_impact's keys — plus, for a `[SEC]` / `[PRIVACY]`
-  criterion, that track's sections), `tasks` (the ACTIVE tasks whose PROSE — `taskProse`, never a fenced example — cites
-  the ID or one of its planned T-IDs: `{number, text, done, verified, reason, nothingToVerify?, cites, evidence}` —
+  criterion, that track's sections), `tasks` (the ACTIVE tasks whose PROSE — `taskCitations`, trace_check's reader (review 5,
+  M5): `taskProse`, never a fenced example, another feature's references out — cites the ID or one of its planned T-IDs: `{number, text, done, verified, reason, nothingToVerify?, cites, evidence}` —
   `taskVerification()` in the project's evidence mode (F1: `unobserved` under `"observed"`), `rtmEvidence()` = the latest
   record's command / exitCode / at / expected / observed / commit / dirty, or its note, `stale`), `tests` (+tdd: the T-IDs of
   the test-plan entries citing it — `planIdText`; with `code` the files naming each, `outsideCode` for a T-ID run outside

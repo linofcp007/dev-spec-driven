@@ -13,9 +13,9 @@
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName, noteGhostPacks, packOf,
+let acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName, noteGhostPacks, packOf,
   packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf;
-function __link(E) { ({ acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingIndex, isPackTrack, legacyPackName,
+function __link(E) { ({ acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName,
   noteGhostPacks, packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf } = E); }
 
 const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
@@ -142,8 +142,7 @@ function savedTracks(st) {
 // that merely ends in a lower-case "[sec]" / "[privacy]" (`### Timeout [sec]` — seconds) is no track section: matched
 // case-insensitively it was hidden while the track was off (inactiveMarkerLines) and made detectTracks infer +sec.
 function headingHasMarker(md, marker) {
-  const lines = stripHtmlComments(md).split(/\r?\n/);
-  return headingIndex(lines).some((i) => lines[i].includes(marker));
+  return headingEntries(String(md).split(/\r?\n/)).some((h) => h.text.includes(marker)); // the ONE heading reader (review 5, M2)
 }
 
 // The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
@@ -208,16 +207,18 @@ function activeTasks(tasksText, tracks) {
 // `owner` picks (a truthy value, e.g. the turned-off track), up to the next heading of the same or a higher level.
 // The ONE rule behind activeTasks / activeDesign, the gates (which need the real line numbers) and
 // spec_append_tasks (which must never land in a section the other tools hide, and names its track).
+// The headings are the ONE heading reader's (review 5, M2 — headingEntries: never one in a comment or a fence; a setext heading's
+// underline goes with it). owner reads the heading's line as written.
 function sectionDropLines(lines, owner) {
-  const heads = headingIndex(lines);
-  const level = (i) => lines[i].match(/^(#{1,6})/)[1].length;
+  const heads = headingEntries(lines);
   const drop = new Map();
-  for (const h of heads) {
-    const who = owner(lines[h]);
-    if (!who) continue;
-    const end = heads.find((x) => x > h && level(x) <= level(h));
-    for (let i = h; i < (end == null ? lines.length : end); i++) drop.set(i, who);
-  }
+  heads.forEach((h, k) => {
+    const who = owner(lines[h.i]);
+    if (!who) return;
+    let end = lines.length;
+    for (let j = k + 1; j < heads.length; j++) if (heads[j].level <= h.level) { end = heads[j].i; break; }
+    for (let i = h.i; i < end; i++) drop.set(i, who);
+  });
   return drop;
 }
 // tasks.md (text or lines): the template task blocks of tracks that are off (matched by their heading, in any language).
@@ -509,7 +510,7 @@ const SIGNALS = {
   tdd: {
     strong: [
       "billing", "payment", "refund", "invoice", "credit", "metering", "charge",
-      "subscription", "auth", "login", "signin", "sign-in", "session", "rbac", "sso",
+      "subscription", "auth", "login", "signin", "sign-in", "session", "rbac", "sso", "single sign-on", "oidc", "openid connect", "saml",
       "oauth", "jwt", "mfa", "2fa", "password", "authentication", "authorization",
       "migration", "integrity", "money", "currency", "decimal", "rounding", "settlement",
       "reconcile", "ledger", "checkout", "exactly-once", "state machine", "pricing",
@@ -576,16 +577,21 @@ const SIGNALS = {
       "embeddings", "tool use", "function calling", "reranker", "guardrail", "multimodal",
       "vlm", "vector search", "vector database", "image generation", "text generation",
       "language model", "artificial intelligence",
+      // review 5: a trained model is an AI feature too (evals, drift) — "Detect fraud with a machine learning model"
+      "machine learning", "machine-learning", "ml model", "deep learning", "neural network",
       // PT
       "alucina", "injeção de prompt", "injecao de prompt", "funcionalidade de ia",
       "produto de ia", "pesquisa semântica", "pesquisa semantica", "incorporação",
       "base de dados vetorial", "modelo de linguagem", "inteligência artificial", "inteligencia artificial",
+      "aprendizagem automática", "aprendizagem automatica", "aprendizagem de máquina", "modelo de ml", "rede neural", "redes neurais", // (review 5)
       // pt-BR (1.14 D1)
       "banco de dados vetorial", "busca semântica", "busca semantica", "recurso de ia",
+      "aprendizado de máquina", "aprendizado de maquina", // (review 5)
       // ES
       "inyección de prompt", "inyeccion de prompt", "función de ia", "producto de ia",
       "búsqueda semántica", "busqueda semantica", "incrustación", "base de datos vectorial",
       "modelo de lenguaje",
+      "aprendizaje automático", "aprendizaje automatico", "red neuronal", "redes neuronales", // (review 5)
     ],
     weak: [
       "prompt", "agent", "model", "generation", "summariz", "completion", "inference",
@@ -606,7 +612,12 @@ const SIGNALS = {
       "security audit", "security review", "security test", "security hardening", "sast", "dast", "attack surface",
       "privilege escalation", "ssrf", "remote code execution", "brute force attack", "brute-force attack", "credential stuffing",
       "session hijack", "clickjacking", "zero trust", "zero-trust", "mtls", "content security policy",
+      // review 5: role-based access control is an authorization design (the bare "access control" / "rbac" stay weak — inside the
+      // phrase they are shadowed: one strong signal)
+      "role-based access control", "role based access control",
       // PT
+      "controlo de acesso baseado em funções", "controlo de acesso baseado em perfis", "controle de acesso baseado em papéis",
+      "controle de acesso baseado em funções", "controle de acesso baseado em perfis",
       "modelo de ameaças", "modelação de ameaças", "modelagem de ameaças", "injeção de sql", "injeção sql",
       // (pluralize() returns early for a phrase ending in -ão / -ção / -ión: its plural first word is listed too)
       "injeção de código", "injeção de comandos", "teste de intrusão", "testes de intrusão", "teste de penetração",
@@ -623,6 +634,7 @@ const SIGNALS = {
       "inyección de comandos", "prueba de penetración", "pruebas de penetración", "prueba de intrusión", "pruebas de intrusión",
       "gestión de secretos", "cifrado en reposo", "auditoría de seguridad", "revisión de seguridad", "superficie de ataque",
       "escalada de privilegios", "escalamiento de privilegios", "ataque de fuerza bruta", "secuestro de sesión",
+      "control de acceso basado en roles", // (review 5)
       // C4 — aligned with EN (encryption in transit / at rest, security test)
       "cifrado en tránsito", "cifrado en transito", "encriptación en tránsito", "encriptación en reposo", "prueba de seguridad",
     ],
@@ -631,6 +643,9 @@ const SIGNALS = {
       "api key", "credential", "encryption", "encrypt", "tls", "cors", "csp", "audit log", "audit trail", "sanitiz",
       "input validation", "security", "hardening", "least privilege", "mfa", "2fa", "two-factor", "multi-factor", "multifactor",
       "firewall", "secrets",
+      // review 5 — the credential and the federation protocols are auth words like the others (weak: "user authentication with email and
+      // password" is two of them — +sec on; a password reset alone is a hint). One concept each (sec.concepts): "SSO (single sign-on)".
+      "password", "palavra-passe", "senha", "contraseña", "sso", "single sign-on", "oidc", "openid connect", "saml",
       "brute force", "brute-force", // weak: also an algorithm ("a brute-force search") — the attack phrase is strong
       // C4: the STRIDE methodology only as the upper-case acronym (an upper-case keyword is matched case-sensitively, see
       // classify): a lower-case "stride" is an array stride or a running stride. "STRIDE threat model" stays strong through
@@ -657,6 +672,12 @@ const SIGNALS = {
     // Full review Pb5: "at rest" / "in transit" (EN / PT / ES) the same way — beside "encrypt" they name data encryption
     // ("Encrypt customer PII at rest and in transit"), alone they are a patient at rest or a parcel in transit.
     context: ["permission", "permissão", "permiso", "at rest", "in transit", "em repouso", "em trânsito", "em transito", "en reposo", "en tránsito", "en transito"],
+    // review 5: one concept, one signal — "SSO (single sign-on)" is one hint, "OIDC single sign-on" two
+    concepts: {
+      sso: ["sso", "single sign-on"],
+      oidc: ["oidc", "openid connect"],
+      password: ["password", "palavra-passe", "senha", "contraseña"],
+    },
     // CUES (1.22 review 2) — the 1.22 factor words count only as AUTHENTICATION: "depende de dois fatores", "depende de dos factores",
     // "doble factor de ponderación", "a multi-factor risk model" were a weak +sec signal (one more weak word turned +sec on). Next
     // to an auth word — "autenticação de dois fatores", "login com dois fatores", "autenticación de doble factor", "doble factor de
@@ -918,6 +939,7 @@ const SIGNALS = {
       // ownership-ambiguous (the cues' `ambiguous` — strong beside an own cue; one concept: "the public API is a REST API" is one hint)
       "public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "problem details",
       "api pública", "api rest", "versão da api", "versões da api", "versión de la api", "versiones de la api",
+      "rest endpoint", "endpoint rest", "endpoints rest", // (review 5) an API-kind name too — ownership decides, as for "a REST API"
       "breaking change", "backward compatible", "backwards compatible", "backward-compatible", "backwards-compatible",
       "backward compatibility", "backwards compatibility", "sdk", "client library", "client libraries", "etag", "if-match",
       "if-none-match", "status code", "http status", "json schema", "request schema", "response schema", "cursor pagination",
@@ -944,7 +966,7 @@ const SIGNALS = {
     concepts: {
       // (1.19 T review) the ownership-ambiguous names: one hint, whichever of them a text uses
       kind: ["public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "api pública", "api rest",
-        "versão da api", "versões da api", "versión de la api", "versiones de la api"],
+        "versão da api", "versões da api", "versión de la api", "versiones de la api", "rest endpoint", "endpoint rest", "endpoints rest"],
       role: ["management api", "admin api"],
       compat: ["breaking change", "backward compatible", "backwards compatible", "backward-compatible", "backwards-compatible",
         "backward compatibility", "backwards compatibility", "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis",
@@ -995,8 +1017,10 @@ const SIGNALS = {
       {
         kind: "ownership",
         ambiguous: ["public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "problem details",
-          "api pública", "api rest", "versão da api", "versões da api", "versión de la api", "versiones de la api"],
-        kinds: ["public api", "rest api", "http api", "web api", "json api", "partner api", "api pública", "api rest"],
+          "api pública", "api rest", "versão da api", "versões da api", "versión de la api", "versiones de la api", "rest endpoint", "endpoint rest",
+          "endpoints rest"],
+        kinds: ["public api", "rest api", "http api", "web api", "json api", "partner api", "api pública", "api rest", "rest endpoint", "endpoint rest",
+          "endpoints rest"],
         ownNames: ["internal api", "api interna", "management api", "admin api"],
         thirdParty: ["provider", "providers", "supplier", "suppliers", "vendor", "vendors", "partner", "partners", "bank", "banks", "carrier",
           "carriers", "courier", "couriers", "merchant", "merchants", "third-party", "fornecedor", "fornecedores",

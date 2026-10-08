@@ -1617,7 +1617,8 @@ function acDuplicates(md) {
   const seen = new Set(), dups = new Set();
   // The indent within its line ([^\S\n\r\u2028\u2029]): the same IDs, without rescanning a long blank run from each of its
   // line starts (1.17 H).
-  for (const mm of stripFencedCode(stripHtmlComments(md || "")).matchAll(/^[^\S\n\r\u2028\u2029]*(?:\d+[.)]|[-*+])\s+(?:\*\*|__)?(US-\d+\.AC-\d+)(?!\d)/gm)) (seen.has(mm[1]) ? dups : seen).add(mm[1]);
+  // (review 5, L31: a sub-criterion ID \u2014 US-1.AC-1.1, US-1.AC-1.2 \u2014 is no duplicate of US-1.AC-1; EARS names it)
+  for (const mm of stripFencedCode(stripHtmlComments(md || "")).matchAll(/^[^\S\n\r\u2028\u2029]*(?:\d+[.)]|[-*+])\s+(?:\*\*|__)?(US-\d+\.AC-\d+)(?!\.?\d)/gm)) (seen.has(mm[1]) ? dups : seen).add(mm[1]);
   return [...dups];
 }
 // A section with real content: present, no `> **TODO**` sentinel, not empty, no template placeholder left.

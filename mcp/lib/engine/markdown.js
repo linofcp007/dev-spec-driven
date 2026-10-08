@@ -18,12 +18,12 @@ const { MARKER_TRACKS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, engineVersion, existingFeature, extractAcIds,
   featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket,
-  locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists, renderTrackTaskHeadings,
+  locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, RE_THEMATIC_BREAK, readIfExists, renderTrackTaskHeadings,
   replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf,
   VALID_TRACKS, wildcardMatch;
 function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, engineVersion, existingFeature,
   extractAcIds, featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf,
-  isPackMarkerBracket, locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, readIfExists,
+  isPackMarkerBracket, locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, RE_THEMATIC_BREAK, readIfExists,
   renderTrackTaskHeadings, replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS,
   useTemplateScopeOf, VALID_TRACKS, wildcardMatch } = E); }
 
@@ -117,9 +117,37 @@ function commentLines(lines) {
 // Fenced code blocks blanked line for line (the fence lines too) — criterionBlocks' fence rule, so an ID in a ``` example
 // is never a real one. Lines are kept (as empty ones): line-based rules — a table row, a marker's wrap — read the same.
 // An unclosed fence inside a list item ends with the item (fenceStep).
+// An INDENTED code block is code too (review 5, L32): "Example:\n\n    US-1.AC-7 …" defined a required AC (and an EARS no-modal error).
 function stripFencedCode(s) {
+  const lines = String(s || "").split("\n");
+  const code = codeBlockLines(lines);
+  return lines.map((line, i) => (code[i] ? "" : line)).join("\n");
+}
+// The code lines of a text, as CommonMark reads its blocks → flags[i] (1 = code): every fenced-code line (fenceStep, the fence
+// lines too) and every line of an INDENTED code block — indented 4 columns or more (a tab is 4), starting after a blank line, a
+// heading, a fence or the text's start (it never interrupts a paragraph: an indented line right after text is a lazy
+// continuation), and never inside a list (a list item's continuation and nested items are indented that deep; a list ends at a
+// heading, or at a line less indented than 2 columns after a blank line). Blank lines inside a run are blank anyway. Linear.
+const RE_CODE_LIST_ITEM = /^\s*(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)/;
+const RE_CODE_HEADING = /^ {0,3}#{1,6}(?:[ \t]|$)/;
+function codeBlockLines(lines) {
+  const flags = new Uint8Array(lines.length);
   const st = { fence: null };
-  return String(s || "").split("\n").map((line) => (fenceStep(st, line) ? "" : line)).join("\n");
+  let fresh = true, list = false, run = false;
+  const cols = (l) => { let c = 0; for (const ch of l) { if (ch === " ") c++; else if (ch === "\t") c += 4 - (c % 4); else break; if (c >= 8) break; } return c; };
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (fenceStep(st, l)) { flags[i] = 1; fresh = true; run = false; continue; }
+    if (!l.trim()) { fresh = true; continue; }
+    const ind = cols(l);
+    if (ind >= 4 && (run || (fresh && !list))) { flags[i] = 1; run = true; continue; }
+    run = false;
+    const heading = RE_CODE_HEADING.test(l);
+    if (RE_CODE_LIST_ITEM.test(l)) list = true;
+    else if (heading || (fresh && ind < 2)) list = false;
+    fresh = heading;
+  }
+  return flags;
 }
 // requirements.md's own AC IDs as the tools read them: outside HTML comments and fenced code, `_Supersedes:_`
 // references (another feature's ACs) left out — and so is any `<feature>/US-n.AC-m` (the _Supersedes:_ / _Affects:_ syntax)
@@ -138,12 +166,14 @@ function requirementAcIds(reqText, dir) {
 // covered) → this feature's only when the same ID LABELS one of the text's criteria (criterionLabelIds: "5. Step-2/US-1.AC-5 —
 // WHEN …"), else a foreign reference, removed. Without `dir` (a pure reader: a template, a pack's numbering, an import's task
 // fitting) every token of a slug's shape counts as another feature's — the limit: there "Step-2/US-1.AC-1" reads as one.
+// labelText (review 5, M5 — a text that CITES criteria: tasks.md, the test plan): the criteria whose labels decide a slug that
+// names no feature are requirements.md's, not the citing text's own (a task line labels no criterion).
 const RE_FOREIGN_AC = /(?<![\p{L}\p{N}_.-])([\p{L}\p{N}][\p{L}\p{N}_.-]*)[^\S\n]*\/[^\S\n]*(US-\d+\.AC-\d+)(?!\d)/gu;
 const RE_ID_TOKEN_END = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)$/;
 const RE_NOT_A_SLUG = /^(?:\d+(?:[._-]\d+)*|p\d+|(?:us|ac|t|ec|nfr|sc)-\d+)$/i;
 // A token before a slash that names no feature by its shape (an ID, a priority, a number, no letter): the ID after it is the text's own.
 const notASlug = (slug) => RE_ID_TOKEN_END.test(slug) || RE_NOT_A_SLUG.test(slug) || !/\p{L}/u.test(slug);
-function stripForeignAcRefs(text, dir) {
+function stripForeignAcRefs(text, dir, labelText) {
   const s = String(text || "");
   if (!s.includes("/")) return s;
   let kind = null, labels = null;
@@ -153,7 +183,7 @@ function stripForeignAcRefs(text, dir) {
     const k = kind(slug);
     if (k === "self") return whole;
     if (k === "other") return "";
-    if (!labels) labels = criterionLabelIds(s, kind);
+    if (!labels) labels = criterionLabelIds(labelText == null ? s : stripHtmlComments(labelText), kind);
     return labels.has(id) ? whole : "";
   });
 }
@@ -185,8 +215,9 @@ function otherFeatureTest(dir) {
 // bracket opener — `- **US-1.AC-1** — WHEN …`, `1. NFR-2: THE SYSTEM SHALL …`, `### US-1.AC-3: …`, `- [ ] (EC-1) IF …`), with the
 // token before a slash in front of it (`login/US-1.AC-1`, `P1/US-1.AC-1`); for a table row with no lead label, its cell that is
 // exactly such an ID. An ID cited later in the criterion ("… (see EC-1)", "… (T-01)") labels nothing. → {id, slug} | null.
-const RE_LEAD_LABEL = /^[ \t]*(?:#{1,6}[ \t]+)?(?:(?:\d+[.)]|[-*+])[ \t]+)?(?:\[[ xX]\][ \t]+)?(?:\*\*|__|\*|_|`|\[|\()?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?!\d)/u;
-const RE_CELL_LABEL = /^(?:\*\*|__|\*|_|`)?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?:\*\*|__|\*|_|`)?$/u;
+// Review 5 (L31): a sub-criterion ID (US-1.AC-1.2) is a label of its own — never its parent's US-1.AC-1 — and no stable ID (bareLabel).
+const RE_LEAD_LABEL = /^[ \t]*(?:#{1,6}[ \t]+)?(?:(?:\d+[.)]|[-*+])[ \t]+)?(?:\[[ xX]\][ \t]+)?(?:\*\*|__|\*|_|`|\[|\()?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+\.\d+|US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?!\d)/u;
+const RE_CELL_LABEL = /^(?:\*\*|__|\*|_|`)?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+\.\d+|US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?:\*\*|__|\*|_|`)?$/u;
 function criterionLabel(text) {
   const s = String(text || "");
   const m = RE_LEAD_LABEL.exec(s);
@@ -205,7 +236,7 @@ function criterionLabelIds(text, kind) {
   for (const line of String(text || "").split("\n")) {
     if (!line.includes("US-")) continue;
     const lab = criterionLabel(line);
-    if (!lab || !/^US-/.test(lab.id)) continue;
+    if (!lab || !/^US-\d+\.AC-\d+$/.test(lab.id)) continue; // (a sub-criterion ID labels no AC)
     if (!lab.slug || notASlug(lab.slug) || kind(lab.slug) !== "other") ids.add(lab.id);
   }
   return ids;
@@ -308,15 +339,55 @@ function fenceStep(st, line) {
 // indented under it, a lazy continuation before any blank line). → [{ ids: [T-ID …], text, cells, header }]
 const tableCells = (line) => line.trim().replace(/^\|/, "").replace(/\|\s*$/, "").split(/(?<!\\)\|/).map((c) => c.trim());
 
-// Heading lines outside fenced code (a "# comment" inside a bash block is not a heading).
-function headingIndex(lines) {
+// The headings of a markdown text as a reader of its STRUCTURE sees them — the ONE heading reader (review 5, M2): never in fenced
+// code ("# comment" in a bash block) nor in an HTML comment (a section commented out, `<!--` … `## [SEC] Threat Model` … `-->`, was
+// read as present and filled — doctor passed it; commentLines' rule: a "<!--" with no "-->" after it is text). An ATX heading
+// indented 0–3 spaces ("#"s, then a blank or a tab; its closing "#" sequence dropped, its trailing comment too) and a SETEXT
+// heading: a one-line paragraph — after a blank or comment-only line, a heading, a fence or the text's start — underlined by
+// at least three "=" (level 1) or "-" (level 2), as CommonMark reads them (a paragraph of several lines followed by "---" is left
+// alone, so YAML front matter is never a heading). Linear.
+// lines: the text split on "\n" (a trailing "\r" is harmless). → [{ i, level, text, body, atx, indent }]: i = the heading's
+// line (a setext heading's text line), body = the first line after it (after a setext underline), atx / indent = an ATX
+// heading and its leading spaces.
+const RE_SETEXT_UNDERLINE = /^ {0,3}(?:={3,}|-{3,})[ \t]*\r?$/;
+const RE_SETEXT_NOT_TEXT = /^\s*(?:[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$)|>|\||(?:[-*_][ \t]*){3,}\r?$)/; // a list item, quote, table row, rule
+function headingEntries(lines) {
+  const cl = lines.some((l) => l.includes("<!--")) ? commentLines(lines) : null; // no comment at all: the fences alone
+  const st = { fence: null };
+  const vis = (k) => (cl ? (cl[k].hidden ? "" : cl[k].vis) : lines[k]);
+  const code = (k) => (cl ? !!cl[k].fence : false); // (without comments, fenceStep is stepped in the loop, once per line)
+  const inComment = (k) => !!cl && (cl[k].hidden || (k > 0 && cl[k - 1].open)); // the line starts inside a comment
   const out = [];
-  const fst = { fence: null };
-  lines.forEach((l, i) => {
-    if (fenceStep(fst, l)) return;
-    if (/^#{1,6}\s/.test(l)) out.push(i);
-  });
+  let fresh = true; // the next line may start a setext heading's paragraph (the text's start, a blank line, a heading, a fence)
+  for (let i = 0; i < lines.length; i++) {
+    if (cl ? code(i) : fenceStep(st, lines[i])) { fresh = true; continue; }
+    const v = vis(i);
+    if (inComment(i) || !v.trim()) { fresh = fresh || !v.trim(); continue; }
+    let p = 0;
+    while (p < 3 && v[p] === " ") p++;
+    if (v[p] === "#") {
+      const h = atxHeading(v.slice(p), 1, 6, "closing");
+      if (h) { out.push({ i, level: h.level, text: h.text, body: i + 1, atx: true, indent: p }); fresh = true; continue; }
+    }
+    if (fresh && v[p] !== " " && v[p] !== "\t" && !RE_SETEXT_NOT_TEXT.test(v) && i + 1 < lines.length) { // (4+ spaces: code)
+      const nl = lines[i + 1];
+      const nextCode = cl ? code(i + 1) || inComment(i + 1) : false;
+      if (!nextCode && RE_SETEXT_UNDERLINE.test(cl ? vis(i + 1) : nl)) {
+        if (!cl) fenceStep(st, nl); // keep the fence state in step (an underline is never a fence line)
+        out.push({ i, level: nl.trim()[0] === "=" ? 1 : 2, text: v.trim(), body: i + 2, atx: false, indent: p });
+        i++;
+        fresh = true;
+        continue;
+      }
+    }
+    fresh = false;
+  }
   return out;
+}
+// The ATX heading lines at the margin (the "#"s first), outside fenced code and HTML comments — for the readers that parse the
+// line themselves (decisions, export, import, packs). The section readers use headingEntries (setext and indented ATX too).
+function headingIndex(lines) {
+  return headingEntries(lines).filter((e) => e.atx && e.indent === 0).map((e) => e.i);
 }
 
 // Does a heading line name one of the synonyms? Never a level-1 title — it carries the feature NAME
@@ -343,8 +414,11 @@ function headingLeadRe() {
 const RE_SYN_INFLECTION = /^(?:s|es|ing|ling)(?![\p{L}\p{N}])/u;
 function headingMatches(line, syns, inflect) {
   const m = atxHeading(line, 2, 6, "raw"); // /^#{2,6}\s+(.*)$/
-  if (!m) return false;
-  let t = m.text.toLowerCase();
+  return !!m && headingTextMatches(m.text, syns, inflect);
+}
+// The same test on a heading's TEXT (a headingEntries entry's — an ATX or setext heading of level ≥ 2; the caller keeps the H1 out).
+function headingTextMatches(text, syns, inflect) {
+  let t = String(text).toLowerCase();
   const lead = headingLeadRe();
   for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, ""); }
   return syns.some((s) => t.startsWith(s) && (!/[\p{L}\p{N}]/u.test(t.charAt(s.length)) || (inflect && RE_SYN_INFLECTION.test(t.slice(s.length)))));
@@ -366,9 +440,12 @@ function extractSection(md, synonyms, marker, loose) {
   const looseSet = new Set((loose || []).map((s) => s.toLowerCase()));
   const strict = looseSet.size ? syns.filter((s) => !looseSet.has(s)) : syns;
   const lines = (md || "").split(/\r?\n/);
-  const heads = headingIndex(lines);
-  const matches = (i, list) => headingMatches(lines[i], list || syns, !!marker); // a track section's heading may inflect its name
-  const level = (l) => (lines[l].match(/^(#{1,6})\s/) || ["", "######"])[1].length;
+  // The headings as the ONE heading reader sees them (review 5, M2: never in a comment or a fence; setext and indented ATX too);
+  // a heading's marker is read in its visible text (never a trailing comment's). The H1 title is never a section.
+  const heads = headingEntries(lines);
+  const matches = (h, list) => h.level >= 2 && headingTextMatches(h.text, list || syns, !!marker); // a track section's heading may inflect its name
+  const level = (h) => h.level;
+  const has = (h, mk) => h.text.includes(mk);
   // An enclosing heading (a lower level, above i — its parent, the parent's parent…) carries the marker: the heading sits in the
   // track's context. Every heading's answer comes from ONE linear pass (a stack of the enclosing headings), on first use — the
   // back-walk from each loose-synonym heading (heads.indexOf + a scan up) was quadratic: a 200 KB design.md of "### Processors"
@@ -383,7 +460,7 @@ function extractSection(md, synonyms, marker, loose) {
         while (stack.length && stack[stack.length - 1].lv >= lv) stack.pop();
         const inside = stack.length > 0 && stack[stack.length - 1].marked;
         inCtx.set(h, inside);
-        stack.push({ lv, marked: inside || lines[h].includes(marker) });
+        stack.push({ lv, marked: inside || has(h, marker) });
       }
     }
     return inCtx.get(i) === true;
@@ -404,22 +481,22 @@ function extractSection(md, synonyms, marker, loose) {
         const top = stack[stack.length - 1];
         const ctx = top ? top.own || top.ctx : null;
         ctxOf.set(h, ctx);
-        stack.push({ lv, own: MARKERS.find((x) => lines[h].includes(x)) || null, ctx });
+        stack.push({ lv, own: MARKERS.find((x) => has(h, x)) || null, ctx });
       }
     }
     const m = ctxOf.get(i);
     return !!m && m !== marker;
   };
-  let start = -1;
-  if (marker) start = heads.find((i) => lines[i].includes(marker) && matches(i));
-  if (start == null || start === -1) {
+  let start = null;
+  if (marker) start = heads.find((h) => has(h, marker) && matches(h));
+  if (!start) {
     const other = marker ? MARKERS.filter((m) => m !== marker) : [];
-    start = heads.find((i) => (matches(i, strict) || (marker && looseSet.size && matches(i) && inTrackContext(i))) && !other.some((m) => lines[i].includes(m)) &&
-      !(marker && inOtherTrackContext(i)));
+    start = heads.find((h) => (matches(h, strict) || (marker && looseSet.size && matches(h) && inTrackContext(h))) && !other.some((m) => has(h, m)) &&
+      !(marker && inOtherTrackContext(h)));
   }
-  if (start == null || start === -1) return null;
-  const end = heads.find((i) => i > start && level(i) <= level(start));
-  return lines.slice(start + 1, end == null ? lines.length : end).join("\n");
+  if (!start) return null;
+  const end = heads.find((h) => h.i > start.i && level(h) <= level(start));
+  return lines.slice(start.body, end ? end.i : lines.length).join("\n");
 }
 
 // The indent is read within its line ([^\S\n\r\u2028\u2029], not \s — a line start of a long blank run rescanned the whole
@@ -438,7 +515,11 @@ function sectionState(design, sections, marker, opts = {}) {
     const out = (status) => (opts.size ? { section: sec.name, status, tier: sec.tier === "extended" ? "extended" : "core" } : { section: sec.name, status });
     const body = extractSection(design, sec.syn, marker, sec.loose);
     if (body == null) return out("missing");
-    if (RE_TODO_SENTINEL.test(body) || !stripHtmlComments(body).trim()) return out("unfilled");
+    // review 5 (M2 / L28): the sentinel as a reader sees it (a commented-out or quoted-in-code one is none), and nothing but
+    // structure — sub-headings, a rule, an empty table — is nothing written
+    if (RE_TODO_SENTINEL.test(stripFencedCode(stripHtmlComments(body)))) return out("unfilled");
+    const content = sectionContent(body);
+    if (!content.prose.length && !content.code.length) return out("unfilled");
     const own = sectionOwnLines(body, opts.lang);
     if (!own.length) return out("template");
     if (opts.size) { const na = naAnswer(own); if (na) return out(na); }
@@ -501,17 +582,69 @@ function sectionTemplateLines(lang) {
   return { sets, wild };
 }
 function sectionOwnLines(body, lang) {
-  const st = { fence: null };
-  const prose = [], code = [];
-  for (const l of stripHtmlComments(body).split(/\r?\n/)) {
-    const f = fenceStep(st, l);
-    if (f === "open") continue; // a fence line is no content
-    if (f) { if (st.fence && l.trim()) code.push(l); continue; } // inside the fence (still open after the step) — its closer is no content
-    if (l.trim()) prose.push(l);
-  }
+  const { prose, code } = sectionContent(body);
   if (!prose.length) return code;
   const { sets, wild } = sectionTemplateLines(lang);
   return prose.filter((l) => { const k = sectionLineKey(l); return !sets.some((s) => s.has(k)) && !wild.some((w) => wildcardMatch(w, k)); }).concat(code);
+}
+// A section's content lines → { prose, code }: visible (comments out), not blank, outside fences (prose) or inside one (code — its
+// fence lines are no content). Structure is no content (review 5, L28): a heading (ATX or setext, its underline too), a thematic
+// break, a table's header and separator rows — a section of sub-headings, a rule or an empty table read as "filled".
+// A table's separator row ("|---|:--:|", "--- | ---"): every cell dashes with optional colons — cell by cell (linear).
+const isTableSep = (l) => {
+  const t = String(l).trim();
+  if (!t.includes("|") || !t.includes("-")) return false;
+  return t.replace(/^\|/, "").replace(/\|$/, "").split("|").every((c) => /^:?-+:?$/.test(c.trim()));
+};
+function sectionContent(body) {
+  const lines = stripHtmlComments(body).split(/\r?\n/);
+  const structure = new Set();
+  for (const h of headingEntries(lines)) { structure.add(h.i); if (!h.atx) structure.add(h.i + 1); }
+  const st = { fence: null };
+  const prose = [], code = [];
+  lines.forEach((l, i) => {
+    const f = fenceStep(st, l);
+    if (f === "open") return; // a fence line is no content
+    if (f) { if (st.fence && l.trim()) code.push(l); return; } // inside the fence (still open after the step) — its closer is no content
+    if (!l.trim() || structure.has(i) || RE_THEMATIC_BREAK.test(l)) return;
+    if (l.includes("|") && (isTableSep(l) || (i + 1 < lines.length && isTableSep(lines[i + 1])))) return; // a separator row, a header row
+    prose.push(l);
+  });
+  return { prose, code };
+}
+// A design's Mermaid diagram as doctor's `mermaid` check reads it (review 5, L28) → "present" | "template" | "missing": the fenced
+// blocks (``` or ~~~, any length) whose info string starts with "mermaid", outside HTML comments; "template" when every one still
+// holds the scaffold's own diagram (any language — whitespace folded). It was a substring test for "```mermaid": a ~~~mermaid fence
+// warned "missing", a "```mermaid" mentioned in a comment passed, and the untouched "A[Component] → C[(Database)]" passed.
+const RE_MERMAID_FENCE = /^\s*(?:`{3,}|~{3,})[ \t]*mermaid(?![\p{L}\p{N}_-])/iu;
+function mermaidBlocks(text) {
+  const st = { fence: null };
+  const out = [];
+  let cur = null;
+  for (const l of stripHtmlComments(text || "").split(/\r?\n/)) {
+    const f = fenceStep(st, l);
+    if (f === "open") { cur = RE_MERMAID_FENCE.test(l) ? [] : null; if (cur) out.push(cur); continue; }
+    if (f && st.fence) { if (cur) cur.push(l); continue; }
+    cur = null; // a closer, or outside any fence
+  }
+  return out.map((b) => b.join(" ").replace(/\s+/g, " ").trim());
+}
+const TEMPLATE_DIAGRAMS = {}; // lang group ("base" | "pt-BR") → Set of the scaffold's diagrams, rendered on first use
+function templateDiagrams(group) {
+  if (TEMPLATE_DIAGRAMS[group]) return TEMPLATE_DIAGRAMS[group];
+  const set = new Set();
+  for (const l of group === "base" ? i18n.BASE_LANGS : ["pt-BR"]) {
+    for (const size of [undefined, "s", "m"]) {
+      try { mermaidBlocks(i18n.design({ name: "x", tracks: ["core"], label: trackLabel(["core"]), slug: "x", summary: "", size }, l)).forEach((d) => set.add(d)); } catch { /* a builder's trouble never breaks a check */ }
+    }
+  }
+  return (TEMPLATE_DIAGRAMS[group] = set);
+}
+function mermaidState(design) {
+  const blocks = mermaidBlocks(design).filter(Boolean); // an empty block draws nothing
+  if (!blocks.length) return "missing";
+  const isTemplate = (d) => templateDiagrams("base").has(d) || templateDiagrams("pt-BR").has(d);
+  return blocks.every(isTemplate) ? "template" : "present";
 }
 // "n/a — <why it does not apply>" (EN / PT / ES; any emphasis around the n/a): the section's own text is that ONE line → "na"
 // when the reason holds at least NA_REASON_WORDS words, "na-short" when it holds fewer; anything else → null.
@@ -910,7 +1043,12 @@ function localeLoaded(rel) {
 }
 if (LOADED_STATS) i18n.onLocaleLoad(localeLoaded);
 // …and the slots of the project's own templates (.specs/templates/ — projectTemplateHas, 1.14).
-const isTemplatePlaceholder = (inner) => { const k = placeholderKey(inner); return isGenericSlot(inner) || templateSets().brackets.has(k) || templateSetsBr().brackets.has(k) || projectTemplateHas("brackets", k); };
+// A bracket longer than SLOT_MAX is no template's slot (only a generic one — "[TODO: …]" — can be that long): never keyed (review 5).
+const isTemplatePlaceholder = (inner) => {
+  if (String(inner).length > SLOT_MAX) return isGenericSlot(inner);
+  const k = placeholderKey(inner);
+  return isGenericSlot(inner) || templateSets().brackets.has(k) || templateSetsBr().brackets.has(k) || projectTemplateHas("brackets", k);
+};
 // A code span is opaque — `[Authorize]`, `[dependencies]`, `[aeiou]`, `[]`, `["a"]` are code — except a template's own
 // code-span slot (the bugfix test plan's `[path]` / `[caminho]` / `[ruta]`), which is unwrapped and scanned.
 const isCodeSlot = (body) => { const b = body.match(/^\[([^[\]]*)\]$/); if (!b) return false; const k = placeholderKey(b[1]); return templateSets().code.has(k) || templateSetsBr().code.has(k) || projectTemplateHas("code", k); };
@@ -970,43 +1108,58 @@ function bracketPlaceholders(line, refs) {
 // part of it), false = not (its nested groups are visited in turn — a template sentence half edited keeps its `[N]`).
 // Syntax (links, reference links, footnotes, callouts, wiki links, glued indexing, the list checkbox) and the exempt
 // contents (stable tags / IDs, NEEDS CLARIFICATION, the legacy core-only answer) are skipped whole, never visited.
-// codeSlot(body) says which code spans are unwrapped; every other span is blanked (columns kept). Linear per line.
+// codeSlot(body) says which code spans are unwrapped; every other span is blanked (columns kept). Linear per line (review 5,
+// P5): every "[" learns its closer from ONE stack pass (it rescanned to its closer at every nesting level), the groups are
+// walked with an explicit stack (one recursion per level overflowed the call stack: a 24 KB line of nested "[a [a …]]" threw
+// RangeError out of ears_validate, doctor and approve), and a group longer than SLOT_MAX is looked up nowhere — no template slot,
+// reference label or marker is that long, and keying each level's inner text made the walk quadratic.
+const SLOT_MAX = 1000; // longer than any template slot (the built-in corpus' longest is under 200) and CommonMark's link label (999)
+function bracketCloser(s) { // → closer[i] = the index of the "]" closing the "[" at i (nesting-aware, "\" escapes the next character), or -1
+  const closer = new Int32Array(s.length).fill(-1);
+  const open = [];
+  for (let j = 0; j < s.length; j++) {
+    const c = s[j];
+    if (c === "\\") { j++; continue; }
+    if (c === "[") open.push(j);
+    else if (c === "]" && open.length) closer[open.pop()] = j;
+  }
+  return closer;
+}
 function scanBrackets(line, refs, codeSlot, visit) {
   const s = replaceCodeSpans(line, (m, tick, body) =>
     codeSlot(body.trim()) ? tick.replace(/`/g, " ") + body + tick.replace(/`/g, " ") : " ".repeat(m.length));
+  if (!s.includes("[")) return;
   const box = s.match(RE_LIST_CHECKBOX);
-  const groupEnd = (i) => { // index of the "]" closing the "[" at i (nesting-aware), or -1
-    let depth = 0;
-    for (let j = i; j < s.length; j++) {
-      if (s[j] === "\\") { j++; continue; }
-      if (s[j] === "[") depth++;
-      else if (s[j] === "]" && --depth === 0) return j;
-    }
-    return -1;
-  };
-  const walk = (from, to) => {
+  const closer = bracketCloser(s);
+  // Frames [from, to]: a group's inner range is walked before the rest of the range that holds it (the recursion's order).
+  const frames = [[box ? box[0].length : 0, s.length]];
+  while (frames.length) {
+    const [from, to] = frames.pop();
     for (let i = from; i < to; i++) {
       if (s[i] === "\\") { i++; continue; }
       if (s[i] !== "[") continue;
-      const j = groupEnd(i);
-      if (j === -1 || j >= to) return; // unbalanced: nothing reliable after this point
+      const j = closer[i];
+      if (j === -1 || j >= to) break; // unbalanced: nothing reliable after this point in this range
       const inner = s.slice(i + 1, j);
       const before = i > 0 ? s[i - 1] : "";
       const after = s[j + 1] || "";
+      const short = inner.length <= SLOT_MAX;
       let skip = after === "(" || /[\p{L}\p{N}_]/u.test(before) ||
         (inner.startsWith("[") && inner.endsWith("]")) || inner.startsWith("^") || inner.startsWith("!") ||
-        refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || /^NEEDS[ _-]CLARIFICATION/i.test(inner) || RE_LEGACY_ANSWER.test(inner) ||
-        isPackMarkerBracket(inner); // a track pack's [MARKER] (1.15) is as stable as [SaaS]
+        (short && (refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || RE_LEGACY_ANSWER.test(inner) ||
+          isPackMarkerBracket(inner))) || /^NEEDS[ _-]CLARIFICATION/i.test(inner); // a track pack's [MARKER] (1.15) is as stable as [SaaS]
       let end = j;
       if (after === "[") { // reference link [x][y]: both halves are syntax
-        const k = groupEnd(j + 1);
+        const k = closer[j + 1];
         if (k !== -1) { skip = true; end = k; }
       }
-      if (!skip && !visit(inner, line.slice(i + 1, j))) walk(i + 1, j); // rawInner: code spans intact (columns kept)
+      if (!skip && !visit(inner, line.slice(i + 1, j))) { // rawInner: code spans intact (columns kept)
+        frames.push([end + 1, to], [i + 1, j]); // the group's inside next, then the rest of this range
+        break;
+      }
       i = end;
     }
-  };
-  walk(box ? box[0].length : 0, s.length);
+  }
 }
 
 // 'missing' | 'placeholder' | 'filled' for an artifact — `input` is { file } or { text }, or a string
@@ -1087,11 +1240,30 @@ function chainPlaceholders(dir, tracks, kind, phase, blockingOnly, texts) {
   return { all, blocking: all.filter((r) => r.idx <= cur), later: all.filter((r) => r.idx > cur) };
 }
 // Some prose once brackets (nested too), HTML comments and the TODO sentinel are set aside: a root cause written as
-// nothing but "[the cause, with evidence]" is not written yet — whatever the bracket says.
+// nothing but "[the cause, with evidence]" is not written yet — whatever the bracket says. A bracket group is set aside when it
+// closes on its own line (its nested groups with it); an unbalanced "[" or "]" stays. ONE pass (review 5, P5): a stack of the
+// open "[" (emptied at each line break) marks each closed group in a difference array — removing the innermost groups again and
+// again until nothing changed was quadratic in the nesting (60 KB of nested "[a" in bug.md: 2.9 s).
 function hasProseOutsideBrackets(body) {
-  let t = stripHtmlComments(body).replace(RE_TODO_SENTINEL_LINE, " ");
-  for (let prev = null; prev !== t;) { prev = t; t = t.replace(/\[[^[\]\n]*\]/g, " "); }
-  return /[\p{L}\p{N}]/u.test(t);
+  const t = stripHtmlComments(body).replace(RE_TODO_SENTINEL_LINE, " ");
+  const diff = new Int32Array(t.length + 1);
+  const open = [];
+  for (let j = 0; j < t.length; j++) {
+    const c = t[j];
+    if (c === "\n") open.length = 0;
+    else if (c === "[") open.push(j);
+    else if (c === "]" && open.length) { diff[open.pop()]++; diff[j + 1]--; }
+  }
+  const outside = []; // the text outside every closed group, in pieces (a letter outside the BMP stays whole)
+  let cut = 0, from = 0;
+  for (let j = 0; j < t.length; j++) {
+    const was = cut;
+    cut += diff[j];
+    if (!was && cut) outside.push(t.slice(from, j));
+    else if (was && !cut) from = j;
+  }
+  if (!cut) outside.push(t.slice(from));
+  return /[\p{L}\p{N}]/u.test(outside.join(" "));
 }
 // bug.md is a bug REPORT: its Reproduction, Expected vs Actual and Root Cause quote logs, output and error text, full of
 // brackets that are evidence, not slots — `[object Object]`, `[WARN]`, a regex class `[A-Z]`, `[Error: ENOENT …]`,
@@ -1102,18 +1274,19 @@ function hasProseOutsideBrackets(body) {
 // → the `items` (placeholderReport(text) entries) that still count.
 function bugPlaceholders(text, items) {
   const lines = String(text || "").split(/\r?\n/);
-  const heads = headingIndex(lines);
+  const heads = headingEntries(lines); // the ONE heading reader (review 5, M2): setext and indented headings, never one in a comment
+  const headAt = new Map(heads.map((h) => [h.i, h]));
   const slots = bugTemplateSlots();
   const unitCache = new Map();
   // A heading line is judged on its own text; any other line on its section's body (up to the next heading).
   const unitHasProse = (i) => {
-    const isHead = heads.includes(i);
-    const start = isHead ? i : heads.filter((h) => h < i).pop();
-    const key = isHead ? "h" + i : "s" + (start == null ? -1 : start);
+    const own = headAt.get(i);
+    const start = own || heads.filter((h) => h.i < i).pop();
+    const key = own ? "h" + i : "s" + (start ? start.i : -1);
     if (!unitCache.has(key)) {
-      const from = start == null ? 0 : start + 1;
-      const end = heads.find((h) => h > (start == null ? -1 : start));
-      const body = isHead ? lines[i].replace(/^#{1,6}\s+/, "") : lines.slice(from, end == null ? lines.length : end).join("\n");
+      const from = start ? start.body : 0;
+      const end = heads.find((h) => h.i > (start ? start.i : -1));
+      const body = own ? own.text : lines.slice(from, end ? end.i : lines.length).join("\n");
       unitCache.set(key, hasProseOutsideBrackets(body));
     }
     return unitCache.get(key);
@@ -1137,11 +1310,12 @@ function bugTemplateSlots() {
   return (BUG_SLOTS = set);
 }
 
-module.exports = { stripHtmlComments, commentLines, stripFencedCode, requirementAcIds, stripForeignAcRefs, RE_NOT_A_SLUG, RE_ID_TOKEN_END,
+module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLines, requirementAcIds, stripForeignAcRefs, RE_NOT_A_SLUG, RE_ID_TOKEN_END,
   notASlug, featureRefTest, RE_LEAD_LABEL, RE_CELL_LABEL, criterionLabel, criterionLabelIds,
   otherFeatureTest, featureProjectDir, planIdText, clarificationMarkers,
   templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
-  headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, extractSection,
+  headingEntries, headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, headingTextMatches, extractSection,
+  sectionContent, isTableSep, SLOT_MAX, bracketCloser, mermaidBlocks, mermaidState,
   RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionLineKey, sectionOwnLines, RE_NA_LEAD, NA_REASON_WORDS, naAnswer,
   trackSectionReport, sectionVerdict, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
   RE_LIST_CHECKBOX, placeholderKey, isGenericSlot, unknownSteeringStub, LEGACY_TEMPLATE_PLACEHOLDERS, templateCorpus,

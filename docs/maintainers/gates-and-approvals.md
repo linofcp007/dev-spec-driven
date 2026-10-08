@@ -30,7 +30,13 @@ flows, the bugfix kind.
   of the bug report's own slots (`bugTemplateSlots()`) or its section holds no prose outside brackets
   (`hasProseOutsideBrackets()` — also required by `bugSectionFilled()`: a root cause written as nothing but
   `[the cause, with evidence]` is not written). Every regex here must stay linear: `RE_STABLE_BRACKET`'s list
-  separator is `\s*(?:[,;/]\s*)?` — the old `\s*[,;/]?\s*` backtracked 2^k on a failing ID list.
+  separator is `\s*(?:[,;/]\s*)?` — the old `\s*[,;/]?\s*` backtracked 2^k on a failing ID list. **Review 5 (P5) — nesting:**
+  `scanBrackets()` learns every `[`'s closer from ONE stack pass (`bracketCloser()`) and walks the groups with an explicit
+  stack of ranges (it rescanned to the closer at each level and recursed once per level: a 24 KB line of nested `[a [a …]]`
+  threw RangeError out of ears / doctor / approve / clarify); a group longer than `SLOT_MAX` (1,000) is keyed nowhere (no
+  slot, reference label or marker is that long — only `isGenericSlot`'s `[TODO: …]` prefix is read); `hasProseOutsideBrackets()`
+  is one pass (a stack of open `[` emptied at each line break + a difference array — the repeated innermost-group removal was
+  quadratic).
   `detectPhase()`: `complete` / `executing` once tasks are ticked, `tasks-ready` once a real (non-placeholder)
   task exists; otherwise the earliest still-template chain artifact — so a fresh scaffold is phase `requirements`.
   Doctor's `placeholders` check fails for the current and earlier phases, warns for later ones;

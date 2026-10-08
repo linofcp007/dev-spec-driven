@@ -16,7 +16,7 @@ const i18n = require("../i18n.js");
 let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions, briefGlossary, briefSteering,
   bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir, errs, evidenceRule,
   existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds, extractSection,
-  extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headRest, idKey, implementsKey, implementsRel,
+  extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, headRest, idKey, implementsKey, implementsRel,
   inactiveTaskLines, isBacktickUnit, isObj, isPackTrack, isRecord, lineMap, markerTracks, maybeRefreshRoadmap,
   normalizeEvidence, normTaskHeading, observedAny, observedStamp, own, ownEvidence, ownRecord, packTracks, planIdText,
   projectChecks, RE_FENCE_CLOSE, RE_LIST_ITEM, RE_TEST_REF, readIfExists, readState, redProof, REPRO_SYN,
@@ -28,7 +28,7 @@ let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDeci
 function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
-  extractSection, extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headRest, idKey, implementsKey,
+  extractSection, extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, headRest, idKey, implementsKey,
   implementsRel, inactiveTaskLines, isBacktickUnit, isObj, isPackTrack, isRecord, lineMap, markerTracks,
   maybeRefreshRoadmap, normalizeEvidence, normTaskHeading, observedAny, observedStamp, own, ownEvidence, ownRecord,
   packTracks, planIdText, projectChecks, RE_FENCE_CLOSE, RE_LIST_ITEM, RE_TEST_REF, readIfExists, readState, redProof,
@@ -1443,17 +1443,13 @@ function testIndex(planText) {
   return map;
 }
 
-// design.md split into its `##` sections (nested `###` content stays in the body).
+// design.md split into its level-2 sections (nested `###` content stays in the body) — the ONE heading reader's (review 5, M2:
+// headingEntries — a setext "Title\n---" or an indented "  ## Title" is a section too; its title drops a closing "##", as
+// weighSectionHead's does).
 function designSections(designText) {
-  const out = [];
-  let cur = null;
-  const fst = { fence: null };
-  for (const line of stripHtmlComments(designText || "").split(/\r?\n/)) {
-    const h = !fenceStep(fst, line) && atxHeading(line, 2, 2); // /^##\s+(.*?)\s*$/
-    if (h) { cur = { title: h.text, body: [] }; out.push(cur); continue; }
-    if (cur) cur.body.push(line);
-  }
-  return out.map((s) => ({ title: s.title, body: s.body.join("\n").trim() }));
+  const lines = stripHtmlComments(designText || "").split(/\r?\n/);
+  const heads = headingEntries(lines).filter((h) => h.level === 2);
+  return heads.map((h, k) => ({ title: h.text, body: lines.slice(h.body, k + 1 < heads.length ? heads[k + 1].i : lines.length).join("\n").trim() }));
 }
 
 const BRIEF_DESIGN_BUDGET = 4000; // chars of design text carried into a brief (keeps it ~≤8 KB)
