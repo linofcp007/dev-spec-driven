@@ -19,3 +19,6 @@ phase. **After approval:** `spec_init {tracks, lang}` if `.specs/steering/` is m
 `spec_create {name, tracks, summary, lang}` once (the description as `summary`: a choice that differs from
 the suggestion is recorded as a correction for this project) (add `flow: "design-first"` when the architecture is the input); record the
 decisions in the `classification.md` it seeds and `spec_approve` the `classification` phase.
+
+Its `lang` is the language it read (`pt` for any Portuguese); a `langHint: "pt-BR"` says the wording is Brazilian — pass
+`lang: "pt-BR"` to `spec_init` / `spec_create` then.

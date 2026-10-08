@@ -360,6 +360,26 @@ function guessLang(text, fallback) {
   if (i18n.baseLang(f) === g) return f;
   return g === "en" && best < 2 && en < 2 ? f : g;
 }
+// 1.24 r6 H-I4 — which Portuguese: the guess answers `pt` for both variants (the classifier reads them alike), but a summary in
+// Brazilian wording should get Brazilian artifacts. `langHint: "pt-BR"` (the `lang` key stays `pt` — a stable field) when the
+// Brazilian markers outweigh the European ones: STRONG (2) — você, usuário, arquivo, cadastro / cadastrar, celular, aplicativo,
+// planilha, deletar, gerenciar / gerenciamento, the ê / ô before m / n + a vowel (eletrônico, gênero, acadêmico, prêmio); WEAK (1) —
+// tela, equipe, registro, contato, salvar, baixar, "o / do / no time" (the team). European: utilizador, ficheiro, ecrã, telemóvel,
+// equipa, palavra-passe, registo, contacto, facto, secção / acção, descarregar, gerir, utente, "está a <infinitive>", the é / ó before
+// m / n + a vowel (electrónico, género, prémio). A hint for the agent, never a reading change (pt and pt-BR classify alike).
+const PTBR_STRONG = W("você|vocês|voce|voces|usuário|usuários|usuária|usuárias|arquivo|arquivos|cadastro|cadastros|cadastrar|cadastrado|" +
+  "cadastrada|celular|celulares|aplicativo|aplicativos|planilha|planilhas|deletar|deletado|gerenciar|gerencia|gerenciamento|gerenciador|" +
+  "\\p{L}*[êô][mn][aeiouí]\\p{L}*");
+const PTBR_WEAK = W("tela|telas|equipe|equipes|registro|registros|contato|contatos|salvar|baixar|(?:o|do|no|ao|nosso|seu|pelo) time");
+const PTPT_STRONG = W("utilizador|utilizadores|utilizadora|ficheiro|ficheiros|ecrã|ecrãs|telemóvel|telemóveis|equipa|equipas|palavra-passe|" +
+  "palavras-passe|registo|registos|contacto|contactos|facto|factos|secção|secções|acção|acções|descarregar|gerir|utente|utentes|" +
+  "(?:está|estão|estou|estamos|estar) a \\p{L}+r|\\p{L}*[éó][mn][aeiou]\\p{L}*");
+function ptVariantHint(text) {
+  const n = (re) => new Set((text.match(re) || []).map((m) => m.toLowerCase())).size;
+  const br = 2 * n(PTBR_STRONG) + n(PTBR_WEAK);
+  const eu = 2 * n(PTPT_STRONG);
+  return br >= 2 && br > eu ? "pt-BR" : null;
+}
 // The language the classifier reads a NEW feature's summary in (full review Pb2): the explicit one, else the project's
 // configured language (roadmap.json meta.lang, set by spec_init) — the language the feature is written in. Never the 'en'
 // fallback: a project without meta.lang keeps the guess. ("Corrigir o cálculo do IVA no checkout" in a PT project read
@@ -1498,6 +1518,8 @@ function classify(description, opts = {}) {
     notes,
     mode: opts.mode || "spec",
     lang, // the language notes/reasoning were written in (explicit, or guessed from the text)
+    // 1.24 r6 H-I4: Brazilian wording read as `pt` — the agent passes lang "pt-BR" to spec_init / spec_create (absent otherwise)
+    ...(lang === "pt" && ptVariantHint(text) ? { langHint: "pt-BR" } : {}),
     reasoning: buildReasoning(tracks, signals, confidence, negated, C, OPT),
   };
   // 1.21 F5: the suggested size (a deterministic reading — stable `sizeReason`; the localized sentence in `sizeNote`, never in notes)

@@ -50,6 +50,7 @@ project > en): scaffolds and tool messages come out localized — fill the place
 markers (`_Requirements:_`, `_Verify:_`, `_Expect:_`…), tags (`[US1]`, `[shared]`, `[P]`), track names, the section
 markers (`[SaaS]` … `[DATA]`, case-sensitive) and `[NEEDS CLARIFICATION:]`. EARS keywords may be localized; if the
 user switches language, follow them.
+When `spec_classify` returns `langHint: "pt-BR"` (Brazilian wording), use `lang: "pt-BR"`.
 
 ## Core Principles
 
