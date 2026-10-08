@@ -48,6 +48,12 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   archive result names what the prune did — `dependentsPruned` (always), plus `incompleteDependency: true` and a
   warning `note` when the archived feature wasn't complete (its dependents now read as unblocked; the roadmap
   meets a dep at 100%). `rename` rewrites archived records too (`renamePlan()`), so restore finds the new slug.
+  **One slug active AND archived (1.23 review 5):** archive refuses (`err.alreadyArchived`) and restore refuses
+  (`restore.activeExists`) — each used to advise the other's refused step ("archive it", "Remove it there first", with no command
+  for either); both now name the one way out, a rename of the active feature (the runnable `feature rename` line). The state is not
+  made by rename any more: a rename onto a slug `_archive/` holds is refused (`err.renameArchived`, `archivedName: true`, nothing
+  moved). `spec_create` of a NEW feature whose slug an archived one holds is allowed (a name may be planned again) and says so
+  (`archivedTwin: true` + `createArchivedTwin`; spec_import puts it in `warnings`).
 - (The section's other two bullets moved: **Guard mode** → claude-code-integration.md, **Scoped steering** →
   templates-imports-exports.md.)
 
@@ -107,7 +113,11 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   The IDs and markers are English-stable; markers are read only between the heading and the first label; HTML comments
   and fenced code never hold an entry. `spec_decide` appends under the feature lock: numbered after the highest D-n, the
   existing bytes never rewritten (a BOM and CRLF kept — the entry follows the file's line ends; a code fence left open at
-  the end is closed first, by appending its closer — the entry was written unreadable and its D-n handed out again); title ≤ 200 and texts ≤
+  the end is closed first, by appending its closer — the entry was written unreadable and its D-n handed out again; since 1.23
+  review 5 this is `appendSpecText()` (decisions.js), THE append of every spec writer: spec_add_track's design sections and task
+  block, the covered sections a track removal restores (`restoreCoveredSections`) and the importer's design body + track blocks —
+  their `opts.trim` join; add_track's sections landed inside an open fence, read 'missing', and a re-add wrote them twice.
+  `appendTasks` (tasks.js) does not use it yet); title ≤ 200 and texts ≤
   20 000 characters. `_Affects:_` is validated when written (an AC defined in requirements.md, a T-ID planned in
   test-plan.md, an EC/NFR/SC ID written in requirements.md, anything else a design.md section heading — bug.md /
   design.md for a bugfix, spike.md for a spike; unknown → error `unknownAffects`, nothing written). **A heading holding "," /
@@ -164,6 +174,11 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   roadmap chrome language is `meta.roadmapLang`; `meta.lang` is the project language and only `spec_init`
   sets it. The other generated files — `SPECS.md`, `UPGRADE.md`, `RELEASE-NOTES.md`, `.specs/exports/*` — use the same
   marker family and `isGeneratedOrAbsent()`: a hand-written file of that name is never overwritten.
+  **A broken roadmap.json (1.23 review 5)** — one that doesn't parse or has the wrong shape (`roadmapError()`) — is read by
+  everyone as its sanitized copy; rendered from it, ROADMAP.md lost every dependency, backlog item and milestone while `roadmap
+  --write` exited 0. `writeRoadmapFile()` now refuses (`broken: true`, `err.roadmapNotWritten` after the roadmap.json error) and
+  keeps the last good file; `roadmapReport {write}` is then an error (MCP isError, CLI exit 1 — ROADMAP.html's refusal is not
+  repeated), its read-only view a warning (`err.roadmapViewPartial`), and `maybeRefreshRoadmap` skips both files.
 - **`spec_depend`**: `dependsOn` REPLACES the list (`[]` / CLI `--clear` clears), `add`/`remove` (CLI
   `--add`/`--rm`, repeatable) edit it, `name` alone is a read (a bare `dev-spec depend <f>` used to clear the
   deps). Every dependency must be an existing feature.
@@ -188,3 +203,13 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   `roadmap.json` `backlog: [{name,note}]`; `spec_create` drops the backlog item with the same slug. Name and note are one
   line (`flatText()` on add and when rendered — a line break became a heading in ROADMAP.md); a name an ACTIVE feature
   already holds is refused (`backlogIsFeature`); `remove` is an alias of `rm` on every surface (`BACKLOG_ACTIONS`).
+- **What reaches ROADMAP.* from roadmap.json (1.23 review 5).** `dependsOn` is only shape-checked (a list of strings): the
+  Mermaid graph draws edges between EXISTING features only, node ids prefixed (`mid()` → `f_<slug>` — a slug `end`, `graph` or
+  `subgraph` is a flowchart keyword that broke the graph) and labels without a raw quote (`mlabel`); every other place shows a
+  dependency through `depShown()` (a slug as it is; anything else quoted, one line, without `< > \` |`). A dependency no active
+  feature answers to (stale or hand-edited) is a "Needs attention" line (`depend.roadmapStale`) with the command that sets the
+  list again from the deps that exist (`depend <f> <deps…>`, `--clear` when none — `--rm` can't name an entry holding a space);
+  it still counts as unmet. A row's next task is read through `readContained` (a tasks.md linked outside `.specs/` reads as
+  absent — its lines were copied into the committed file) and every display truncation (the next-task cell's 42 / 60 units,
+  UPGRADE.md's details, the release notes' one-liners) goes through `cutText()` — never half a surrogate pair (an emoji cut at
+  the boundary wrote U+FFFD). `spec_import` refreshes the roadmap once, after its files (`createFeature(…, { refresh: false })`).

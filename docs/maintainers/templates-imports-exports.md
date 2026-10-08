@@ -129,6 +129,17 @@ trackers, release notes, milestones).
   lexically first (nothing outside is even stat'ed), then by real path (a symlink out is refused) — and it is
   only read. Tool names are exact (`kiro` | `spec-kit` | `openspec` | `plan` | `execplan` | `bmad` | `fluidplan`, the schema enum) on
   both surfaces, and it never imports over an existing feature.
+- **The import cap (1.23 review 5).** `IMPORT_MAX_BYTES` (2 MiB) counts CHARACTERS after decoding. A source over it — inline text,
+  or any file a parser reads (a plan, a folder source's design.md, a BMAD shard) — refuses the whole import (`tooLarge: true`,
+  `importSpec.tooLarge` naming the file(s) and the cap; nothing created). It used to be cut silently: a plan's Steps past the cut
+  were dropped and the import kept the scaffold's tasks saying no steps list was found. A file is stat'ed first — a text holds
+  at least one character per 3 bytes, so one over 3 × the cap is refused without being read whole; bytes are not characters (a
+  2.1 MB file of CJK text under the cap imports whole).
+- **What an import writes (1.23 review 5):** the name — the caller's or the title's — is one line (`flatText`: a line break opened a
+  heading in every file's title); the active tracks' design blocks follow the imported design body through `appendSpecText` (an
+  open code fence at its end closed first — a design ending inside a ```mermaid had the sections written into it), as do the
+  packs' task blocks; an archived feature holding the same slug is a warning (`createArchivedTwin`); the roadmap is refreshed
+  ONCE, after the imported files (createFeature's refresh skipped: `{ refresh: false }` — it rendered every feature twice).
 - (**Flows** — the section's last bullet — moved to gates-and-approvals.md.)
 - **The brownfield scan and coverage** (engine/scan.js — area 13 of the suites; 1.22 review):
   - **The cap counts code.** Both walk with `walkProject(…, {counts, gitignore})`: only a file `counts` says yes to — code

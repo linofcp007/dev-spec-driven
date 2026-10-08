@@ -13,6 +13,16 @@ and U+FEFF gotchas are in CLAUDE.md.
   transliterates accents (`Autenticação` → `autenticacao`) and falls back to the pre-1.11 slug
   (`autentica-o`) so old folders are still found. `slugify(undefined)` is `""`, never `"undefined"`.
   `listFeatures` skips dot-folders and non-slug folders (reported as `ignored`).
+  **spec_create on an existing folder (1.23 review 5)** is a re-run (idempotent: create-only writes) and now says so: `existed:
+  true` + `createExisted` (unless tracks were added — `tracks.addedOnCreate` says it), `createSummaryKept` when a summary it did
+  not write was given. A slug keeps the first 64 characters of `slugifyFull(name)`: a long name that reaches an EXISTING
+  feature whose title (`specTitle` of requirements.md / spike.md / bug.md) is another long name is refused (`slugTaken`,
+  `err.slugTaken` — it names the slug, by which that feature stays reachable); it used to answer ok and drop the new summary.
+  The name is written as ONE line wherever it lands (titles, `{{name}}` — `flatText`; createFeature, applyTracks, the
+  importer). **Never through a link:** `linkedSpecsFolder()` (scaffold.js, over `specsWriteContained`) refuses spec_init /
+  steering_scaffold through a linked `.specs/steering/`, and spec_create / add_track through a linked `.specs/<feature>/`
+  (or its steering, when a track brings a steering file) — `linked: true`, `err.specsLinked`, nothing written (spec_export and
+  templates init already refused); the export's Tasks table and the roadmap row read tasks.md through `readContained`.
 - **`spec_feature remove` needs `confirm: true`** (CLI `--yes`). Without it nothing is deleted and the
   result (an error with `needsConfirm`) lists what would be — `removePreview()` checks roadmap.json first
   and uses `lstat` (a symlink/junction is one entry, never followed). Prefer archive (reversible).
