@@ -545,7 +545,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
 
 ## Harness-observed evidence (1.14 F1)
 - **The log.** `hooks/observe-hook.js` (hooks.json **PostToolUse** and **PostToolUseFailure**, matcher `^(Bash|PowerShell)$` —
-  a PowerShell run only with an EXPLICIT exit code, its response shape being undocumented) logs a run of a task's runnable `_Verify:_` command (or of
+  a PowerShell run only with an EXPLICIT exit code, its response shape being undocumented; never the Monitor tool, which the
+  approval guard reads since 1.23: it streams a background command's lines and reports no finished run with its exit code) logs a run of a task's runnable `_Verify:_` command (or of
   all of a task's several commands joined, how `done --run` reports them) or of a `meta.checks` command — **1.22 review 3: as
   the evidence gate's matcher reads it** (`runProvesVerify` from the project root: one `_Verify:_` command, or all of a task's
   in any order; it used to log only the `_Verify:_` as written or its in-order join, so `node --test tests\x.test.js`, `npm test
