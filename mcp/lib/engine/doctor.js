@@ -35,7 +35,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
-  suspiciousVerify;
+  suspiciousVerify, worktreeProject;
 function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
@@ -59,7 +59,7 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   verifyPipes, waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
-  suspiciousVerify } = E); }
+  suspiciousVerify, worktreeProject } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -948,18 +948,21 @@ function isDevSpecDir(dir) {
 }
 // The project a status line is about: the nearest folder at or above one of the candidate folders (in order) that holds a
 // dev-spec .specs/ — a few stats per level, never a walk down. Unusable candidates (empty, an unexpanded `${VAR}`, a network
-// path — isNetworkPath, skipped before any fs call) are skipped.
+// path — isNetworkPath, skipped before any fs call) are skipped. 1.23 review 5 (M8): a folder found in a git worktree is the same
+// folder in the checkout of another candidate of the same repository (Claude Code's workspace.project_dir — where the MCP server
+// writes), else in the main checkout, when that one is dev-spec's (worktreeProject — the hooks' rule).
 // → the project folder | null
 function statusLineProject(candidates) {
   const seen = new Set();
-  for (const c of Array.isArray(candidates) ? candidates : []) {
+  const list = Array.isArray(candidates) ? candidates : [];
+  for (const c of list) {
     if (typeof c !== "string" || !c.trim() || /^\$\{[^}]*\}$/.test(c.trim()) || c.length > 4096 || isNetworkPath(c)) continue;
     let dir = path.resolve(c.trim());
     for (let i = 0; i < STATUS_MAX_UP; i++) {
       const key = FOLD_CASE ? dir.toLowerCase() : dir;
       if (seen.has(key)) break;
       seen.add(key);
-      if (isDevSpecDir(dir)) return dir;
+      if (isDevSpecDir(dir)) return worktreeProject(dir, list);
       const up = path.dirname(dir);
       if (up === dir) break;
       dir = up;

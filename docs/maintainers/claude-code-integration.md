@@ -21,6 +21,25 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   follows the same rules (see End-of-turn evidence gate), and so do the 1.14 observe hook (it prints nothing at all and
   exits as soon as it has appended its line) and approval hook (silent unless `meta.approvalGuard` is on — its only
   output is a permission decision).
+- **Which project a hook reads (1.23 review 5, M8): `sessionProject({cwd, anchors})`** (engine/guards.js, on the facade). The
+  MCP server is pinned to `SPEC_PROJECT_DIR` = `${CLAUDE_PROJECT_DIR}` (the folder Claude Code started in) and records approvals,
+  ticks and evidence THERE; the hooks read the payload's `cwd` first — in a git worktree (EnterWorktree, a subagent `cd`'d into
+  `.claude/worktrees/<n>` or a sibling checkout) the worktree's own copy of `.specs/`: the edit guard asked though the tasks were
+  approved, the stop gate saw no activity, the SubagentStop gate looked for the report where the implementer hadn't written it.
+  The resolver: the nearest folder at or above `cwd` holding a dev-spec `.specs/` (`sessionSpecs`: `isDevSpecDir` or a feature's
+  classification.md; ≤ `SESSION_MAX_UP` = 40 levels — a `cd`'d subfolder too —, never above an anchor that holds `cwd`: a dev-spec
+  folder above the session's own is another project; a network cwd is only itself), then `worktreeProject(near, anchors)`:
+  `gitCheckoutOf()` reads the nearest `.git` (a FILE: `gitdir:` → its `commondir` → `linked`; a submodule's `.git` file has no
+  commondir — no worktree); near in another checkout of the same repository as an anchor (`CLAUDE_PROJECT_DIR`,
+  `SPEC_PROJECT_DIR`; the status line's `workspace.project_dir`) → the same folder in the anchor's checkout; else, near in a
+  linked worktree → the same folder in the main checkout (the common dir's parent) — when that counterpart is dev-spec's.
+  Folders are compared by text, then by real path (`sessionSame()`: git writes gitdir / commondir with long names, the payload
+  may carry an 8.3 short name). No dev-spec folder near cwd → the first dev-spec anchor. → `{project, root, worktree}`;
+  `sessionPath(s, p, cwd)` spells a payload path under `project` when it lies in `root` (the worktree's checkout). The guard,
+  stop and observe hooks keep a raw pre-check over the nearest `.specs/` above cwd and the anchors (a superset; the engine
+  loads only when it passes) and then ask the engine; the spec-hook stamps `lastEditAt` of a worktree's tasks.md save in the
+  mapped project (its own state when that feature isn't there) and SessionStart reports the mapped project; the status line's
+  `statusLineProject()` maps what it found the same way (`worktreeProject(dir, candidates)`).
 - **Commands never reuse a Claude Code built-in name.** `/init`, `/status`, `/doctor` and `/commit`
   collided with the built-ins (a bare `/doctor` ran Claude Code's, and our own messages told users to
   "run /doctor"); they are `/spec-init`, `/spec-status`, `/spec-doctor`, `/spec-commit` since v1.11.
@@ -58,7 +77,10 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   NETWORK path on either side (`isNetworkPath` — the agent's Write target, an absolute `_Implements:_`; 1.16 verify NEW-3):
   its realpath opened an SMB connection to the host the agent named before the permission prompt (a hang, NTLM on Windows);
   `networkPathInside()` decides on the text — inside only under root's own `\\host\share\…` prefix (`\\?\UNC\` = `\\`, case
-  folded), so a project on a share stays guarded. The save hook (spec-hook) skips a network `.specs/` file outside the session's
+  folded), so a project on a share stays guarded. 1.23 review 5 (L21): the target is first read as the Windows file system
+  reads it (`guardTargetPath(p, win)`, win32 only — elsewhere `:` is a name character and `/c/` a folder): an NTFS stream suffix
+  on the last segment is dropped (`a.ts::$DATA` IS a.ts; `a.ts:x` a stream of it) and Git Bash's `/c/…` is `C:/…` — both were read
+  as no code / outside and allowed. The save hook (spec-hook) skips a network `.specs/` file outside the session's
   folders the same way. The session's own folders (payload `cwd`, CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR) are Claude Code's /
   the user's, not the agent's: the stop / observe / spec / guard hooks keep using a network cwd (a project on a share keeps
   its hooks; the observe hook's walk up stops at the share root), never realpath'ed by a hook.
@@ -174,7 +196,8 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
 
 ## Claude Code integration (1.16 C)
 - **Status line** — `statusLine(dir, {columns})` / `statusLineProject(dirs)` (walks up at most 40 folders to the nearest
-  dev-spec `.specs/`; reads each active feature's `.state.json` + tasks.md, ≤ 200 features; picks the most recently active
+  dev-spec `.specs/` — 1.23 review 5: in a git worktree, the same folder in the checkout of the payload's `workspace.project_dir`
+  or the main checkout, `worktreeProject()` —; reads each active feature's `.state.json` + tasks.md, ≤ 200 features; picks the most recently active
   feature with work under way, else the most recent). The step follows next_action's order but stays cheap — it runs the
   pending phase's approve checks, never the doctor, a code scan or the drift hash (`statusNext()`; review fixes): a spike
   takes next_action's own steps (fill · implement · blocked · decide — the decision, then its `_Outcome:_` · promote /

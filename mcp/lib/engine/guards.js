@@ -63,8 +63,9 @@ function guardCheck(projectDir, filePath, cwd) {
   const allow = (why, extra) => Object.assign({ guard: true, decision: "allow", why }, extra);
   if (typeof filePath !== "string" || !filePath.trim()) return allow("no-file");
   // Inside the project as text or through an alias of it (8.3 short name, junction, symlink — they were "outside" and
-  // allowed), spelled under pdir from here on.
-  const abs = insideDirAlias(pdir, path.resolve(cwd ? path.resolve(pdir, cwd) : pdir, filePath));
+  // allowed), spelled under pdir from here on. The path as the file system reads it first (guardTargetPath — 1.23 review 5:
+  // `a.ts::$DATA` and Git Bash's `/c/…` were allowed as no code / outside).
+  const abs = insideDirAlias(pdir, path.resolve(cwd ? path.resolve(pdir, guardTargetPath(cwd)) : pdir, guardTargetPath(filePath)));
   if (!abs) return allow("outside");
   // Case-folded where the filesystem folds case: `.SPECS/x.ts` IS the spec folder on Windows/macOS.
   const rel = toPosix(path.relative(pdir, abs));
@@ -111,6 +112,139 @@ function guardCheck(projectDir, filePath, cwd) {
   if (testing.length && isTestFile(rel)) return allow("tests-phase", { covering: testing });
   const list = (xs) => xs.slice(0, 3).join(", ") + (xs.length > 3 ? ", …" : "");
   return { guard: true, decision: "ask", why: "no-approved-tasks", pending, stale, reason: G.ask(list(pending), list(stale)) };
+}
+
+// 1.23 review 5 (L21) — a Write / Edit target as the Windows file system reads it (win: process.platform === "win32" by default;
+// elsewhere ':' is a file name character and /c/ a folder): an NTFS stream suffix on the last segment is dropped — `a.ts::$DATA`
+// IS a.ts, `a.ts:x` / `a.ts:x:$DATA` a stream of it (an edit of it all the same) — and Git Bash's `/c/…` is `C:/…` (`//host`
+// untouched). Both were read as no code / outside the project and allowed with the guard on.
+function guardTargetPath(p, win = process.platform === "win32") {
+  let s = String(p);
+  if (!win) return s;
+  const m = /^\/([A-Za-z])(?=\/|$)/.exec(s);
+  if (m) s = m[1].toUpperCase() + ":" + (s.slice(2) || "/");
+  const cut = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\")) + 1; // the last segment
+  const from = cut === 0 && /^[A-Za-z]:/.test(s) ? 2 : 0; // a drive-relative "C:a.ts" keeps its drive
+  const i = s.indexOf(":", cut + from);
+  return i > cut ? s.slice(0, i) : s;
+}
+
+// ---------------------------------------------------------------------------
+// 1.23 review 5 (M8) — the session's project, worktree-aware. The MCP server is pinned to SPEC_PROJECT_DIR = CLAUDE_PROJECT_DIR (the
+// folder Claude Code started in) and writes approvals / ticks / evidence there; the hooks used the payload's cwd first — in a git
+// worktree (EnterWorktree, a subagent cd'd into `.claude/worktrees/<n>` or a sibling checkout) that is the worktree's own copy of
+// .specs/, so the edit guard asked although the tasks were approved, the stop gate read no activity, and the SubagentStop gate looked
+// for a report the controller had the implementer write in the main checkout. One resolver for the hooks and the status line.
+// ---------------------------------------------------------------------------
+const SESSION_MAX_UP = 40; // folders walked up from a hook's cwd looking for a dev-spec .specs/ (the status line's STATUS_MAX_UP)
+const sessionUsable = (v) => typeof v === "string" && !!v.trim() && !/^\$\{[^}]*\}$/.test(v.trim()) && v.length <= 4096;
+// Two folders are one: the same text (case folded where the file system folds it), else the same real path — an 8.3 short name, a
+// link (git writes a worktree's gitdir / commondir with the long names). Never a network path's real path (no SMB connection).
+function sessionSame(a, b) {
+  if (!a || !b) return false;
+  const x = path.resolve(a), y = path.resolve(b);
+  if (FOLD_CASE ? x.toLowerCase() === y.toLowerCase() : x === y) return true;
+  if (isNetworkPath(x) || isNetworkPath(y)) return false;
+  try {
+    const rx = fs.realpathSync.native(x), ry = fs.realpathSync.native(y);
+    return FOLD_CASE ? rx.toLowerCase() === ry.toLowerCase() : rx === ry;
+  } catch { return false; }
+}
+// A .specs/ dev-spec owns (isDevSpecDir — roadmap.json, steering/, a feature's .state.json — or, as the hooks read it, a feature
+// folder with its classification.md).
+function sessionSpecs(dir) {
+  if (isDevSpecDir(dir)) return true;
+  const root = path.join(dir, ".specs");
+  return safeReaddir(root).some((n) => !n.startsWith(".") && fs.existsSync(path.join(root, n, "classification.md")));
+}
+// The git checkout holding dir — the nearest .git at or above it → { top, commonDir, linked } (linked: a `git worktree add`
+// checkout: a .git FILE whose git dir has a commondir; a submodule's .git file has none — no worktree), or null (no git, a network
+// path — never stat'ed, a .git that can't be read). At most ~2 small reads.
+function gitCheckoutOf(dir) {
+  if (!sessionUsable(dir) || isNetworkPath(dir)) return null;
+  let d = path.resolve(dir);
+  for (let k = 0; k < 64; k++) {
+    const dotGit = path.join(d, ".git");
+    let st = null;
+    try { st = fs.statSync(dotGit); } catch { st = null; }
+    if (st && st.isDirectory()) return { top: d, commonDir: dotGit, linked: false };
+    if (st && st.isFile()) {
+      let m = null;
+      try { m = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(fs.readFileSync(dotGit, "utf8").slice(0, 4096)); } catch { m = null; }
+      if (!m) return null;
+      const gitDir = path.resolve(d, m[1]);
+      let common = null;
+      try { common = path.resolve(gitDir, fs.readFileSync(path.join(gitDir, "commondir"), "utf8").trim()); } catch { common = null; }
+      return common ? { top: d, commonDir: common, linked: true } : { top: d, commonDir: gitDir, linked: false };
+    }
+    if (st) return null;
+    const up = path.dirname(d);
+    if (up === d) break;
+    d = up;
+  }
+  return null;
+}
+// near — a folder holding a dev-spec .specs/ — → the same folder in the checkout the session's state lives in: when near lies in
+// another checkout of the same repository as an anchor (CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR / the status line's project_dir — where
+// the MCP server writes), its counterpart in the anchor's checkout; else, near in a linked worktree, its counterpart in the main
+// checkout — when that counterpart holds a dev-spec .specs/. Otherwise near itself (an unrelated project, a nested project of a
+// monorepo, no git).
+function worktreeProject(near, anchors) {
+  const w = gitCheckoutOf(near);
+  if (!w) return near;
+  const rel = path.relative(w.top, path.resolve(near));
+  for (const a of Array.isArray(anchors) ? anchors : []) {
+    if (!sessionUsable(a) || isNetworkPath(a)) continue;
+    const wa = gitCheckoutOf(a);
+    if (!wa || sessionSame(wa.top, w.top) || !sessionSame(wa.commonDir, w.commonDir)) continue;
+    const m = path.join(wa.top, rel);
+    if (sessionSpecs(m)) return m;
+  }
+  if (w.linked && path.basename(w.commonDir).toLowerCase() === ".git") {
+    const main = path.dirname(w.commonDir);
+    const m = path.join(main, rel);
+    if (!sessionSame(main, w.top) && sessionSpecs(m)) return m;
+  }
+  return near;
+}
+// The project a hook reads, and the folder its payload's paths are relative to. opts: { cwd (the payload's), anchors
+// ([CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR]) }. The nearest folder at or above cwd holding a dev-spec .specs/ (≤ SESSION_MAX_UP levels —
+// a cd'd subfolder too —, never above an anchor that holds cwd: a dev-spec folder ABOVE the session's own is another project; a
+// network cwd is the user's own folder: only itself is looked at, never walked up nor mapped), mapped by worktreeProject; with
+// none, the first anchor that is a dev-spec project.
+// → { project (where the .specs/ state lives), root (the checkout folder of the payload's paths), worktree (root ≠ project) } | null
+function sessionProject(opts = {}) {
+  const anchors = (Array.isArray(opts.anchors) ? opts.anchors : []).filter(sessionUsable).map((v) => path.resolve(v.trim()));
+  let near = null;
+  if (sessionUsable(opts.cwd)) {
+    const c = opts.cwd.trim();
+    if (isNetworkPath(c)) near = sessionSpecs(c) ? path.resolve(c) : null;
+    else {
+      let d = path.resolve(c);
+      const stop = anchors.find((a) => !isNetworkPath(a) && withinRoot(a, d));
+      for (let i = 0; i < SESSION_MAX_UP; i++) {
+        if (sessionSpecs(d)) { near = d; break; }
+        const up = path.dirname(d);
+        if (up === d || (stop && sessionSame(d, stop))) break;
+        d = up;
+      }
+    }
+  }
+  if (near) {
+    const project = isNetworkPath(near) ? near : worktreeProject(near, anchors);
+    return { project, root: near, worktree: !sessionSame(project, near) };
+  }
+  for (const a of anchors) if (sessionSpecs(a)) return { project: a, root: a, worktree: false };
+  return null;
+}
+// A payload path (absolute, or relative to cwd) → the same file in the session's project: a file in the worktree's checkout
+// (session.root) is spelled under session.project. Anything else stays as it is (resolved).
+function sessionPath(session, p, cwd) {
+  if (typeof p !== "string" || !p.trim()) return p;
+  const base = sessionUsable(cwd) ? path.resolve(guardTargetPath(cwd)) : session && session.root ? session.root : process.cwd();
+  const abs = path.resolve(base, guardTargetPath(p));
+  if (!session || !session.worktree || !withinRoot(session.root, abs)) return abs;
+  return path.join(session.project, path.relative(session.root, abs));
 }
 
 // roadmap.json meta.guard ← on (spec_init {guard} / `dev-spec init --guard on|off`). No write when unchanged.
@@ -1370,7 +1504,8 @@ function implementerStopCheck(pdir, message, cl, res) {
   if (!cl.claim && !STATUS_DONE_RE.test(prose)) return res(false, "no-claim");
   // 1.22 review: the LAST task-N-report.md path the reply names (a report wins over a brief) — "Task 2 builds on task 1 (see
   // …/task-1-report.md). Report: …/task-2-report.md" was checked against task 1's report and passed.
-  const paths = [...message.slice(-STOP_MESSAGE_MAX).matchAll(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+task-(\d+)-(report|brief)\.md/gi)];
+  const tailText = message.slice(-STOP_MESSAGE_MAX);
+  const paths = [...tailText.matchAll(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+task-(\d+)-(report|brief)\.md/gi)];
   const m = paths.filter((x) => x[3].toLowerCase() === "report").pop() || paths.pop();
   if (!m) return res(false, "no-task", { claims: cl.claims });
   const f = existingFeature(pdir, m[1]);
@@ -1381,7 +1516,7 @@ function implementerStopCheck(pdir, message, cl, res) {
   const verify = task ? taskMarkers(task).verify : [];
   const info = { claims: cl.claims, lang: lng, feature: f.slug, task: n };
   if (!verify.length) return res(false, "nothing-to-verify", info);
-  const file = path.join(f.dir, ".execution", `task-${n}-report.md`);
+  const file = stopReportFile(pdir, path.join(f.dir, ".execution", `task-${n}-report.md`), tailText, m.index, `task-${n}-report.md`);
   const rel = toPosix(path.relative(pdir, file));
   const report = readStopReport(file);
   const X = i18n.msg(lng).stopGate.implementer;
@@ -1391,7 +1526,11 @@ function implementerStopCheck(pdir, message, cl, res) {
   else {
     const body = flat(report);
     const codes = reportExitCodes(body).map((x) => x.code);
-    const missing = verify.filter((c) => !body.includes(flat(c)));
+    // 1.23 review 5 (M16): a _Verify:_ command is shown when the report holds its text, or a command it writes (a code span) that
+    // IS a run of it by the evidence gate's matcher (runProvesVerify: `tests\x.test.js` = `tests/x.test.js`, quotes, a ` && ` join
+    // of the task's commands) — the raw text compare bounced `node --test tests/login.test.js` for `_Verify: node --test tests\login.test.js_`.
+    const spans = reportCommandSpans(report);
+    const missing = verify.filter((c) => !body.includes(flat(c)) && !spans.some((s) => runProvesVerify({ command: s }, [c], pdir) || runProvesVerify({ command: s }, verify, pdir)));
     const cmds = (missing.length ? missing : verify).map((c) => "`" + c + "`").join(", ");
     if (missing.length || !codes.length) problem = X.noRun(rel, cmds);
     // full review Ga5: the exit code must be the one the task needs — a must-pass _Verify:_ an exit 0 ("Status: DONE … exit
@@ -1402,15 +1541,68 @@ function implementerStopCheck(pdir, message, cl, res) {
   if (!problem) return res(false, "report-ok", info);
   return res(true, "implementer-evidence", { ...info, report: rel, reason: [X.head(n, f.slug) + " " + problem, X.todo].join("\n") });
 }
+// 1.23 review 5 (M8) — the report file a subagent's reply names. `own`: the project's copy (.specs/<f>/.execution/<name>); `text` /
+// `at`: the reply (its tail) and where the `.specs…` path it names starts. When that path is written out absolute — the controller
+// hands the implementer the report path in the MAIN checkout (subagent-execution.md, parallel mode), or a subagent in a worktree
+// writes its own copy — the file it names is read when it lies in the project or in another checkout of the project's repository
+// (`git worktree`: the same common git dir) and exists; else the project's copy. A path elsewhere is never read.
+function stopReportFile(pdir, own, text, at, name) {
+  const lineStart = text.lastIndexOf("\n", at - 1) + 1;
+  const head = text.slice(lineStart, at);
+  const named = text.slice(at).match(/^\.specs[\\/]+[^\\/\s`'"()<>]+[\\/]+\.execution[\\/]+/i);
+  if (!named || head.length > 4096) return own;
+  let repo; // the project's git common dir, read once (undefined: not yet)
+  for (let j = 0; j < head.length; j++) {
+    if (j > 0 && !/[\s`'"(<:=*>]/.test(head[j - 1])) continue;
+    if (!/^(?:[A-Za-z]:[\\/]|[\\/])/.test(head.slice(j))) continue;
+    const prefix = head.slice(j);
+    if (isNetworkPath(prefix)) continue;
+    const dir = path.resolve(guardTargetPath(prefix));
+    let inRepo = sessionSame(dir, pdir);
+    if (!inRepo) {
+      if (repo === undefined) { const g = gitCheckoutOf(pdir); repo = g ? g.commonDir : null; }
+      const g = repo ? gitCheckoutOf(dir) : null;
+      inRepo = !!g && sessionSame(g.commonDir, repo);
+    }
+    if (!inRepo) continue;
+    const file = path.join(dir, named[0], name);
+    if (fs.existsSync(file)) return file;
+  }
+  return own;
+}
+// The commands a report writes in code spans (`…` or ``…``) — what the implementer's gate matches against a _Verify:_ (1.23 review
+// 5, M16). Bounded: at most 500 spans, each ≤ 4000 characters (the evidence gate's command limit).
+function reportCommandSpans(report) {
+  const out = [];
+  for (const m of String(report).matchAll(/``\s?([^`\n]+?)\s?``|`([^`\n]+)`/g)) {
+    const s = (m[1] !== undefined ? m[1] : m[2]).trim();
+    if (s && s.length <= 4000) out.push(s);
+    if (out.length >= 500) break;
+  }
+  return out;
+}
 // A subagent's report, at most STOP_REPORT_MAX bytes of it (null when it can't be read) — the stop gates read one file
-// each: the implementer's from its start, the simplifier's from its END (`tail`), where its final runs are.
+// each: the implementer's from its start, the simplifier's from its END (`tail`), where its final runs are. 1.23 review 5 (L8): a
+// UTF-16 report (a BOM — Windows PowerShell 5.1's `>` / Out-File write one) is decoded as such (decodeText), its tail read from an
+// even offset so the code units stay aligned; a leading BOM is dropped.
 function readStopReport(file, tail) {
   try {
     const fd = fs.openSync(file, "r");
     try {
       const size = fs.fstatSync(fd).size;
-      const buf = Buffer.alloc(Math.min(STOP_REPORT_MAX, size));
-      return buf.toString("utf8", 0, fs.readSync(fd, buf, 0, buf.length, tail ? size - buf.length : 0));
+      const bom = Buffer.alloc(2);
+      const bn = size >= 2 ? fs.readSync(fd, bom, 0, 2, 0) : 0;
+      const le = bn === 2 && bom[0] === 0xff && bom[1] === 0xfe, be = bn === 2 && bom[0] === 0xfe && bom[1] === 0xff;
+      let len = Math.min(STOP_REPORT_MAX, size), pos = tail ? size - len : 0;
+      if ((le || be) && pos % 2) { pos++; len--; }
+      const buf = Buffer.alloc(len);
+      const n = fs.readSync(fd, buf, 0, len, pos);
+      let text;
+      if (pos === 0) text = decodeText(buf, n); // the BOM, when there is one, is in the buffer
+      else if (le) text = buf.toString("utf16le", 0, n - (n % 2));
+      else if (be) text = Buffer.from(buf.subarray(0, n - (n % 2))).swap16().toString("utf16le");
+      else text = buf.toString("utf8", 0, n);
+      return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
     } finally { fs.closeSync(fd); }
   } catch { return null; }
 }
@@ -1465,13 +1657,14 @@ function simplifierStopCheck(pdir, message, cl, res) {
   if (STATUS_NOT_DONE_RE.test(prose)) return res(false, "not-done");
   if (/(?<![\p{L}_])status\W{0,8}no_changes(?![\p{L}_])/iu.test(prose)) return res(false, "no-changes");
   if (!cl.claim && !STATUS_DONE_RE.test(prose)) return res(false, "no-claim");
-  const m = message.slice(-STOP_MESSAGE_MAX).match(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+simplify-report\.md/i);
+  const tailText = message.slice(-STOP_MESSAGE_MAX);
+  const m = tailText.match(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+simplify-report\.md/i);
   if (!m) return res(false, "no-report", { claims: cl.claims });
   const f = existingFeature(pdir, m[1]);
   if (!f.ok) return res(false, "no-report", { claims: cl.claims });
   const lng = featureLang(pdir, f.slug);
   const info = { claims: cl.claims, lang: lng, feature: f.slug };
-  const file = path.join(f.dir, ".execution", "simplify-report.md");
+  const file = stopReportFile(pdir, path.join(f.dir, ".execution", "simplify-report.md"), tailText, m.index, "simplify-report.md");
   const rel = toPosix(path.relative(pdir, file));
   const report = readStopReport(file, true);
   const X = i18n.msg(lng).stopGate.simplifier;
@@ -1482,9 +1675,18 @@ function simplifierStopCheck(pdir, message, cl, res) {
     const runs = finalRuns(report);
     if (!runs || !runs.length) problem = X.noFinal(rel);
     else {
-      const code = new Map(runs.map((r) => [r.command, r.code]));
       const list = (a) => a.map((c) => "`" + c + "`").join(", ");
-      const unrun = checks.filter((c) => code.get(c) == null).concat(runs.filter((r) => r.code == null && !checks.includes(r.command)).map((r) => r.command));
+      // 1.23 review 5 (M16): a check's run is the run line that IS a run of its command by the evidence gate's matcher
+      // (runProvesVerify — `\` vs `/`, quotes, spacing), the same text first; the last such line wins (finalRuns keeps each
+      // command's last line, in order). A longer command (`npm test -- t/x.test.js`) is still another run.
+      const runOf = (c) => {
+        let hit = null;
+        for (const r of runs) if (r.command === c || runProvesVerify({ command: r.command }, [c], pdir)) hit = r;
+        return hit;
+      };
+      const proven = new Set();
+      const unrun = checks.filter((c) => { const r = runOf(c); if (r) proven.add(r); return !r || r.code == null; })
+        .concat(runs.filter((r) => r.code == null && !proven.has(r)).map((r) => r.command));
       const failing = runs.filter((r) => r.code != null && r.code !== 0).map((r) => r.command);
       if (unrun.length) problem = X.noRun(rel, list(unrun));
       else if (failing.length) problem = X.notPassing(rel, list(failing));
@@ -1567,4 +1769,5 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, RE
   stopPastFailure, stopZeroCount, stopProse, stopClaims, stopActivity, SPEC_EDIT_LOCK_WAIT_MS, recordSpecEdit, stopTaskLabel, stopCheck, implementerStopCheck,
   scopeGuardDecision, APPROVAL_EDIT_TOOLS, RE_STATE_FILE, DEVSPEC_NAMES, devSpecGlob, isDevSpecWord, RE_COMSPEC_WORD, RE_APPROVAL_VERB,
   approvalPlain, APPROVAL_TEXT_PROGRAMS, APPROVAL_STDIN_RUNTIMES, APPROVAL_POSIX_SHELLS, withPositionals, stdinScriptAt,
-  decodePwshEncoded, approvalSpecsProject, approvalUnparsed, __link };
+  decodePwshEncoded, approvalSpecsProject, approvalUnparsed, guardTargetPath, SESSION_MAX_UP, sessionUsable, sessionSame, sessionSpecs,
+  gitCheckoutOf, worktreeProject, sessionProject, sessionPath, stopReportFile, reportCommandSpans, readStopReport, __link };

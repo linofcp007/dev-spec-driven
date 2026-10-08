@@ -224,8 +224,16 @@ function main(raw) {
   let spec = null;
   const dirs = projectDirsOf(payload);
   const parts = bodies(command);
-  for (const pdir of dirs) {
-    if (!parts.length || !mentioned(pdir, parts)) continue;
+  const hits = parts.length ? dirs.filter((d) => mentioned(d, parts)) : []; // the pre-filter, once per project
+  // 1.23 review 5 (M8): once some project passed the pre-filter, the session's project too (spec.sessionProject — a worktree's
+  // copy mapped to the checkout the MCP server records in), when it isn't one of them already (no CLAUDE_PROJECT_DIR exported).
+  if (hits.length) {
+    spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+    const s = spec.sessionProject({ cwd: payload.cwd, anchors: [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR] });
+    const key = (d) => (process.platform === "win32" || process.platform === "darwin" ? path.resolve(d).toLowerCase() : path.resolve(d));
+    if (s && !dirs.some((d) => key(d) === key(s.project)) && mentioned(s.project, parts)) { dirs.push(s.project); hits.push(s.project); }
+  }
+  for (const pdir of hits) {
     const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : pdir;
     spec = spec || require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
     // The engine strips a `cd <dir> &&` whose folder is this project or another one the run belongs to (dirs: a worktree's and
