@@ -102,6 +102,15 @@ flows, the bugfix kind.
   task is progress, not a spec edit. CRLF and a leading BOM are encoding, not content (`textFingerprint`): a
   "UTF-8 with BOM" re-save is no change. Compare through `fingerprintMatches` / `artifactMatches`, never `!==` —
   they also accept a fingerprint recorded (before the BOM was ignored) over a BOM-prefixed file.
+- **A whitespace-only edit is no change (r5 review).** Trailing spaces / tabs on a line and blank lines at the end (an
+  editor's "trim trailing whitespace" / "insert final newline", a formatter) needed a re-approval — every role re-signing —
+  and blocked spec_finish while spec_impact listed nothing. The recorded `fingerprint` KEEPS its rule (every approval
+  recorded so far stays valid, two records of the same content still compare equal — sign-offs, `changesSince`, the tests
+  stamp); when it no longer matches, `wsOnlyEdit()` compares the artifact with the approval's OWN `.history` snapshot (its
+  history record: the same `at`; `snapshot` / `designSnapshot`), provided the snapshot still holds the approved content:
+  equal under `wsText()` (state.js — fingerprintText, each line's trailing whitespace and the final blank lines dropped;
+  linear, no regex over a run of spaces) → not changed (`changedSinceApproval`, and spec_impact's `changed`). No snapshot
+  (before 1.13, a `.history/` not committed) → the fingerprint alone decides, as before.
 - **A deleted approved artifact is a change since its approval** (1.22 review — `changedSinceApproval()` skipped a missing
   file, so deleting an approved test-plan.md and its T-IDs read as "nothing changed" and the Phase 4 gate vanished; the
   tasks were approvable at once). It is listed like an edit (doctor's changed-since-approval, finish's blocker, the roadmap,
@@ -144,7 +153,11 @@ flows, the bugfix kind.
   failing?, snapshot, file?, designSnapshot?, designFingerprint? (1.22 review — changesSince compares a re-approval with the
   record in force before it), testsPlan? (a `tests` approval, 1.22 review)}` and the approved artifact is saved to
   `.specs/<f>/.history/<phase>@<n>.md` (tasks with checkboxes normalized; never overwrites an existing
-  snapshot). `.history/` is **not** self-ignored — it is meant to be committed with the spec. Approvals made
+  snapshot). An IDENTICAL re-approval (the fingerprint + designFingerprint of the phase's previous approval record, whose
+  snapshot still holds them — `reuseSnapshot()`, r5 review) shares that snapshot path instead of writing a copy (60
+  same-content re-approvals wrote 60 files); `<n>` counts the DISTINCT snapshot paths. spec_metrics' `rework` skips an
+  approval of the same content as the phase's previous one (a role re-signing, a revoke then re-approve); it still counts
+  in `approvalsTotal`; a phase without a fingerprint (tests) counts as before. `.history/` is **not** self-ignored — it is meant to be committed with the spec. Approvals made
   before the history are seeded as `legacy` records on the next approval.
 - A bugfix's design approval signs off **bug.md** (`phaseFile()`, recorded as `file`), plus a
   `designFingerprint` and a `<phase>@<n>.design.md` snapshot when a design.md exists (it holds the

@@ -322,10 +322,14 @@ function featureMetrics(projectDir, slug, dir) {
   }
   // First approval of each phase: the history; a phase approved only before 1.13 falls back to its (latest) approval —
   // approximate, like a seeded legacy record (the phase may have been approved earlier).
-  const first = {}, count = {};
+  // r5 review: an approval of the SAME content as the phase's previous approval (fingerprint + designFingerprint — a role re-signing,
+  // a fast-forward re-run, a revoke then re-approve) changed nothing: no rework. A phase without a fingerprint (tests) counts as before.
+  const first = {}, count = {}, lastContent = {};
   for (const h of history || []) {
     const t = timeOf(h.at);
-    count[h.phase] = (count[h.phase] || 0) + 1;
+    const content = typeof h.fingerprint === "string" && h.fingerprint ? h.fingerprint + "|" + (h.designFingerprint || "") : null;
+    if (content == null || lastContent[h.phase] !== content) count[h.phase] = (count[h.phase] || 0) + 1;
+    if (content != null) lastContent[h.phase] = content;
     if (t != null && (first[h.phase] == null || t < first[h.phase].t)) first[h.phase] = { t, approximate: h.legacy === true };
   }
   for (const [ph, a] of Object.entries(approvals)) {

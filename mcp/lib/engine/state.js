@@ -172,6 +172,17 @@ function fingerprintText(raw, phase) {
   return phase === "tasks" ? uncheckTasks(text) : text;
 }
 const sha1Hex = (text) => require("crypto").createHash("sha1").update(text).digest("hex");
+// r5 review — the text a WHITESPACE-ONLY edit leaves unchanged: fingerprintText with each line's trailing whitespace and the blank lines
+// at the end dropped (an editor's "trim trailing whitespace" / "insert final newline", a formatter). The recorded fingerprint keeps
+// its rule (every approval recorded so far stays valid, and two records of the same content still compare equal); this text is
+// compared with the approval's own .history snapshot when the fingerprint no longer matches (gates.js wsOnlyEdit) — linear: no
+// regex over a run of spaces.
+function wsText(raw, phase) {
+  const lines = fingerprintText(raw, phase).split("\n").map((l) => l.trimEnd());
+  let end = lines.length;
+  while (end > 0 && lines[end - 1] === "") end--;
+  return lines.slice(0, end).join("\n");
+}
 // Does this text still match a fingerprint an approval recorded? An approval recorded before the BOM was ignored
 // hashed the file with its BOM: that fingerprint still matches the same content (with or without the BOM now).
 function fingerprintMatches(raw, phase, stored) {
@@ -1215,7 +1226,7 @@ function mergeDriverStatus(projectDir, opts = {}) {
 
 module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, legacySlugify, RE_WIN_RESERVED,
   RESERVED_SLUGS, reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState,
-  stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, sha1Hex, fingerprintMatches,
+  stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, wsText, sha1Hex, fingerprintMatches,
   BOM_CHAR, artifactMatches, uncheckTasks, phaseFile, FEATURE_SIZES, sizeInput, featureSize, isChangeDir, PLANNING_CEILING, PHASE_PERCENT, phasePercent, featurePercent,
   roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, setDependency, dependencyUnlocked,
   roadmap, flatText, addBacklog, BACKLOG_NOTE_MAX, BACKLOG_NOTE_SEP, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked, BACKLOG_ACTIONS, backlog,

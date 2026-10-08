@@ -1460,5 +1460,41 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
       "r5 review M11: a bugfix's [NEEDS CLARIFICATION] in bug.md → Reproduction refuses the requirements gate, in its Root Cause the design gate (bug.md is its design); doctor's clarifications check fails and spec_clarify asks it (got " +
       js([bReq1.failing, bDes1.failing, bClar, bCl.questions]) + ")");
 
+    // Improvement a: a whitespace-only edit of an approved artifact (trailing spaces, blank lines at the end) is no change since its
+    // approval — judged against the approval's own snapshot; an approval without one (pre-1.13) keeps the fingerprint alone.
+    const d = filled("ws");
+    for (const ph of ["classification", "requirements"]) S.approvePhase(d.p, "widget", ph, "u");
+    d.w("requirements.md", REQ.replace("store it\n", "store it   \t\n").replace(/\n$/, "\n\n\n"));
+    const dNa = S.nextAction(d.p, "widget"), dIm = S.impactReport(d.p, "widget", { phase: "requirements" }), dDoc = S.specDoctor(d.p, "widget");
+    d.w("requirements.md", REQ.replace(/\n/g, "\r\n").replace(/\r\n$/, "")); // CRLF and no final newline
+    const dNa2 = S.nextAction(d.p, "widget");
+    d.w("requirements.md", REQ.replace("store it", "store it durably"));
+    const dNa3 = S.nextAction(d.p, "widget");
+    // no snapshot: the fingerprint alone decides
+    const dSt = JSON.parse(fs.readFileSync(path.join(d.f.dir, ".state.json"), "utf8"));
+    dSt.approvalHistory.forEach((h) => { delete h.snapshot; });
+    d.w(".state.json", JSON.stringify(dSt, null, 2));
+    d.w("requirements.md", REQ + "\n");
+    const dNa4 = S.nextAction(d.p, "widget");
+    ok(js(dNa.changedSinceApproval) === "[]" && dNa.step !== "re-review" && dIm.changed === false && !dDoc.checks.some((x) => x.id === "changed-since-approval") &&
+      js(dNa2.changedSinceApproval) === "[]" && js(dNa3.changedSinceApproval) === '["requirements.md"]' && js(dNa4.changedSinceApproval) === '["requirements.md"]',
+      "r5 review: a whitespace-only edit of an approved artifact (trailing spaces / tabs, blank lines at the end, a final newline dropped) is no change since its approval — next_action, doctor, spec_impact agree; a real edit still is; without the approval's snapshot the fingerprint alone decides (got " +
+      js([dNa.changedSinceApproval, dIm.changed, dNa2.changedSinceApproval, dNa3.changedSinceApproval, dNa4.changedSinceApproval]) + ")");
+
+    // Improvement b: an identical re-approval shares the previous snapshot (no second copy) and is no rework in spec_metrics; new
+    // content gets the next snapshot number.
+    const e = filled("reuse");
+    for (const ph of ["classification", "requirements"]) S.approvePhase(e.p, "widget", ph, "u");
+    const eRe = [1, 2, 3].map(() => S.approvePhase(e.p, "widget", "requirements", "u"));
+    const eSnaps = () => fs.readdirSync(path.join(e.f.dir, ".history")).filter((x) => x.startsWith("requirements")).sort();
+    const eM1 = S.metrics(e.p, "widget");
+    const eSnaps1 = eSnaps();
+    e.w("requirements.md", REQ.replace("store it", "store it durably"));
+    const eNew = S.approvePhase(e.p, "widget", "requirements", "u");
+    const eM2 = S.metrics(e.p, "widget");
+    ok(eRe.every((r) => r.ok && r.snapshot === ".history/requirements@1.md") && js(eSnaps1) === '["requirements@1.md"]' && eM1.rework === 0 && eM1.approvalsTotal === 5 &&
+      eNew.snapshot === ".history/requirements@2.md" && js(eSnaps()) === '["requirements@1.md","requirements@2.md"]' && eM2.rework === 1 && eM2.reworkByPhase.requirements === 1,
+      "r5 review: an identical re-approval shares the previous snapshot (.history/requirements@1.md, no copy) and is no rework in spec_metrics (still an approval in approvalsTotal); new content → requirements@2.md, rework 1 (got " +
+      js([eRe.map((r) => r.snapshot), eSnaps1, eM1.rework, eM1.approvalsTotal, eNew.snapshot, eM2.rework]) + ")");
   }
 };

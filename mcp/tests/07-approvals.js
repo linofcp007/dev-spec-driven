@@ -557,11 +557,12 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const eR = [S.approvePhase(p6, "login", "eval-plan", "u", { revoke: true }), S.approvePhase(p6, "login", "design", "u", { revoke: true, force: true }),
       S.approvePhase(p6, "login", null, "u", { revoke: true, through: "tasks" }), S.approvePhase(p6, "login", "design", "u", { revoke: true, expires: "30d" }),
       S.approvePhase(p6, "login", null, "u", { revoke: true })];
-    ok(ra6.ok && ra6.snapshot && m6.revokedApprovals === 1 && m6.reworkByPhase && m6.reworkByPhase.requirements === 1 && m6.untickedTasks === 0 && im6.ok && im6.changed === false &&
+    const snap6 = uSt(f6.dir).approvalHistory.filter((h) => h.phase === "requirements" && h.snapshot).map((h) => h.snapshot);
+    ok(ra6.ok && ra6.snapshot && snap6.length === 2 && snap6[0] === snap6[1] && m6.revokedApprovals === 1 && m6.reworkByPhase && m6.reworkByPhase.requirements === undefined && m6.untickedTasks === 0 && im6.ok && im6.changed === false &&
       eR.every((r) => r.ok === false) && eR[0].notApproved === true && /nothing to revoke/.test(eR[0].error) && /revoke takes no force or expires/.test(eR[1].error) &&
       /not through/.test(eR[2].error) && /revoke takes no force or expires/.test(eR[3].error) && /Name the phase whose approval to revoke/.test(eR[4].error) && uSt(f6.dir).approvals.design,
-      "1.16 U2: re-approving a revoked phase snapshots it again (metrics: revokedApprovals 1, rework counts approvals only; spec_impact diffs the new snapshot); revoking an unapproved phase, with force / expires / through, or without a phase is refused (got " +
-      js([m6.revokedApprovals, m6.reworkByPhase, eR.map((r) => r.error)]) + ")");
+      "1.16 U2: re-approving a revoked phase records it again (r5 review: the same content shares its snapshot and is no rework — metrics: revokedApprovals 1, no requirements rework; spec_impact diffs that snapshot); revoking an unapproved phase, with force / expires / through, or without a phase is refused (got " +
+      js([snap6, m6.revokedApprovals, m6.reworkByPhase, eR.map((r) => r.error)]) + ")");
     // Roles: a waiting sign-off is withdrawn (history record partial), then a completed approval by roles is revoked with its sign-offs.
     const p7 = uDir("revoke-roles");
     S.initProject(p7, ["core"], "en", { approvalRoles: { design: ["tech", "security"] } });

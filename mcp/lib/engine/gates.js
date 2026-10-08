@@ -25,7 +25,7 @@ let acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, ar
   taskDepsCheck, taskMarkers, taskVerification, testIndex, textFingerprint, timeOf, todayIso, traceCheck, traceGapLines,
   uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey;
+  CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey, changesSince, wsText;
 function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, artifactReport,
   artifactState, bugPlaceholders, clarificationMarkers, criterionBlocks, designSections, detectTracks,
   duplicateTaskNumbers, earsUnlinted, earsUnidentified, shortIdList, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection,
@@ -39,7 +39,7 @@ function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks,
   todayIso, traceCheck, traceGapLines, uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic,
   writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
-  CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey } = E); }
+  CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey, changesSince, wsText } = E); }
 
 // Phases that only exist for a track: an inactive track's artifact (kept on disk after add_track --remove)
 // is not a gate, not a phase and not a "changed since approval".
@@ -255,7 +255,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   // (1.22 review: a stale `tests` approval lends no role its sign-off — the roles sign the plan as it is now)
   const so = rc.roles.length ? recordRoleSignOff(state, p, entry, rc.roles, record, approvalsInForce(f.dir, tracks, state.approvals)) : dropRoleSignOffs(state, p);
   // A bugfix's design approval keeps design.md as it was too (<phase>@<n>.design.md): spec_impact diffs both files.
-  if (raw != null && (!so || so.complete)) Object.assign(record, writeSnapshot(f.dir, p, raw, hist, design));
+  if (raw != null && (!so || so.complete)) Object.assign(record, reuseSnapshot(f.dir, p, hist, fp, dfp) || writeSnapshot(f.dir, p, raw, hist, design)); // r5 review: reuse
   state.approvalHistory = hist.concat(legacy, [record]);
   if (!so || so.complete) {
     state.approvals[p] = entry;
@@ -891,7 +891,8 @@ function legacyRecord(ph, a) {
 // (a bugfix's design approval) is saved next to it as <phase>@<n>.design.md. → { snapshot, designSnapshot? }
 function writeSnapshot(dir, phase, raw, history, design) {
   const rel = (k, ext) => `${HISTORY_DIR}/${phase}@${k}${ext}`;
-  let n = (Array.isArray(history) ? history : []).filter((h) => isRecord(h) && h.phase === phase && typeof h.snapshot === "string").length + 1;
+  // (distinct snapshots: an identical re-approval shares its predecessor's — reuseSnapshot, r5 review)
+  let n = new Set((Array.isArray(history) ? history : []).filter((h) => isRecord(h) && h.phase === phase && typeof h.snapshot === "string").map((h) => h.snapshot)).size + 1;
   while (fs.existsSync(path.join(dir, rel(n, ".md"))) || (design != null && fs.existsSync(path.join(dir, rel(n, ".design.md"))))) n++;
   writeFileAtomic(path.join(dir, rel(n, ".md")), phase === "tasks" ? uncheckTasks(raw) : raw);
   if (design == null) return { snapshot: rel(n, ".md") };
@@ -899,6 +900,19 @@ function writeSnapshot(dir, phase, raw, history, design) {
   return { snapshot: rel(n, ".md"), designSnapshot: rel(n, ".design.md") };
 }
 
+// r5 review — an IDENTICAL re-approval (the content of the phase's previous approval: fingerprint and designFingerprint) shares that
+// approval's snapshot instead of writing another copy (60 same-content re-approvals wrote 60 files); its history record still says who
+// re-approved it and when. Only while that snapshot still holds the content (fingerprintMatches). → { snapshot, designSnapshot? } |
+// null (write a new one).
+function reuseSnapshot(dir, phase, history, fp, dfp) {
+  if (!fp) return null;
+  const prev = (Array.isArray(history) ? history : []).filter((h) => isApprovalRecord(h) && h.phase === phase).pop();
+  if (!prev || prev.fingerprint !== fp || (prev.designFingerprint || null) !== (dfp || null) || typeof prev.snapshot !== "string") return null;
+  if (!fingerprintMatches(historyText(dir, prev.snapshot), phase, fp)) return null;
+  if (dfp == null) return { snapshot: prev.snapshot };
+  if (typeof prev.designSnapshot !== "string" || !fingerprintMatches(historyText(dir, prev.designSnapshot), phase, dfp)) return null;
+  return { snapshot: prev.snapshot, designSnapshot: prev.designSnapshot };
+}
 // A history file, only inside the feature's .history (a hand-edited path never reads elsewhere) → its text, or null.
 function historyText(dir, rel) {
   if (typeof rel !== "string") return null;
@@ -1066,7 +1080,7 @@ function impactReport(projectDir, name, opts = {}) {
     if (reopen) Object.assign(res, { reopened: [], recorded: false, note: I.reopenNeedsSnapshot(phase) });
     return res;
   }
-  Object.assign(res, { baseline: "snapshot", snapshot: snap.rel, changed: textFingerprint(cur, phase) !== textFingerprint(snap.text, phase) });
+  Object.assign(res, { baseline: "snapshot", snapshot: snap.rel, changed: wsText(cur, phase) !== wsText(snap.text, phase) }); // r5 review: whitespace only is no change
   // A bugfix's design approval signed off bug.md AND design.md as it was then (its [SaaS]/[AI] sections, see
   // changedSinceApproval): both are diffed, each section keyed by its file ("bug.md: Root Cause") so they never collide.
   // designMd.baseline: 'snapshot'; 'absent' (no design.md at approval — every section is added); 'fingerprint-only'
@@ -1078,7 +1092,8 @@ function impactReport(projectDir, name, opts = {}) {
     curDesign = readIfExists(path.join(dir, PHASE_FILE.design));
     designBase = designBaseline(dir, snap, appr);
     if (curDesign != null || designBase && designBase.rel) {
-      const designChanged = curDesign != null && !fingerprintMatches(curDesign, phase, appr.designFingerprint);
+      const designChanged = curDesign != null && !fingerprintMatches(curDesign, phase, appr.designFingerprint) &&
+        !(designBase && designBase.rel && wsText(designBase.text, phase) === wsText(curDesign, phase)); // r5 review: whitespace only
       const designMd = { file: PHASE_FILE.design, baseline: !designBase ? "fingerprint-only" : designBase.rel ? "snapshot" : "absent", changed: designChanged };
       if (designBase && designBase.rel) designMd.snapshot = designBase.rel;
       res.designMd = designMd;
@@ -1510,8 +1525,8 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
       // (`designFingerprint`) — a design.md created since (a track added) is a change too. A deleted bug.md is one as well
       // (1.22 review); a deleted design.md is not (it only ever held a track's sections — spec_impact's rule).
       const bug = path.join(dir, a.file), design = path.join(dir, file);
-      if (!fs.existsSync(bug) || !artifactMatches(bug, ph, a.fingerprint)) out.push(a.file);
-      if (fs.existsSync(design) && !artifactMatches(design, ph, a.designFingerprint)) out.push(file);
+      if (!fs.existsSync(bug) || (!artifactMatches(bug, ph, a.fingerprint) && !wsOnlyEdit(dir, ph, a.file, a, "snapshot"))) out.push(a.file);
+      if (fs.existsSync(design) && !artifactMatches(design, ph, a.designFingerprint) && !wsOnlyEdit(dir, ph, file, a, "designSnapshot")) out.push(file);
       continue;
     }
     const rel = kind === "change" ? phaseFile(ph, kind) : file; // 1.21 F5: a change's plan approval signed off change.md
@@ -1522,12 +1537,30 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
     // design.md (here an older engine's approval without `file`) is never a change when deleted.
     if (!fs.existsSync(abs)) { if (!(kind === "bugfix" && rel === PHASE_FILE.design)) out.push(rel); continue; }
     if (a.fingerprint) {
-      if (!artifactMatches(abs, ph, a.fingerprint)) out.push(rel);
+      if (!artifactMatches(abs, ph, a.fingerprint) && !wsOnlyEdit(dir, ph, rel, a, "snapshot")) out.push(rel); // r5 review: whitespace only
     } else if (a.at && ph !== "tasks") {
       try { if (fs.statSync(abs).mtime.getTime() > new Date(a.at).getTime()) { out.push(rel); byDate.push(rel); } } catch { /* ignore */ }
     }
   }
   return opts.detail ? { changed: out, byDate, untracked } : out;
+}
+
+// r5 review — a whitespace-only edit of an approved artifact (trailing spaces, blank lines at the end: an editor's "trim trailing
+// whitespace" / "insert final newline", a formatter) is no change since its approval: it needed a re-approval (every role
+// re-signing) and blocked spec_finish while spec_impact listed nothing. The artifact against the approval's OWN .history snapshot
+// (`which`: snapshot | designSnapshot — the history record of that approval, the same `at`) when that snapshot still holds the
+// approved content (fingerprintMatches): equal once each line's trailing whitespace and the final blank lines are dropped (wsText).
+// No snapshot (an approval before 1.13, a .history not committed) → false: the fingerprint alone decides, as before.
+function wsOnlyEdit(dir, phase, file, appr, which) {
+  if (!isRecord(appr) || typeof appr.at !== "string") return false;
+  const st = readJson(statePath(dir)).data;
+  const hist = isObj(st) && Array.isArray(st.approvalHistory) ? st.approvalHistory : [];
+  const rec = hist.filter((h) => isApprovalRecord(h) && h.phase === phase && h.at === appr.at && typeof h[which] === "string").pop();
+  if (!rec) return false;
+  const snap = historyText(dir, rec[which]);
+  if (snap == null || !fingerprintMatches(snap, phase, which === "snapshot" ? appr.fingerprint : appr.designFingerprint)) return false;
+  const cur = readIfExists(path.join(dir, file));
+  return cur != null && wsText(cur, phase) === wsText(snap, phase);
 }
 
 // Success criteria / priorities count once they are REAL: the template's "Priorities: **P1** = …" legend, its
