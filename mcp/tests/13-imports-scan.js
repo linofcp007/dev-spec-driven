@@ -37,9 +37,10 @@ exports.run = async ({ ok, S, tmp, require }) => {
     // Visual Studio's negations (`!**/[Pp]ackages/build/`, `!?*.[Cc]ache/`, `!.vscode/settings.json`) re-include no bin / obj
     const vs = names("[Bb]in/\n[Oo]bj/\n!**/[Pp]ackages/build/\n!?*.[Cc]ache/\n!.vscode/settings.json\n");
     ok(js(names("lib/\nlib64/\n!frontend/src/lib/\n")) === '["lib64"]' && vs.length === 2 && js(names("bin/\nobj/\n!b*/\n")) === '["obj"]' &&
-      js(names("bin/\nobj/\n!*\n")) === "[]" && js(names("bin/\nobj/\n!bin/**\n")) === '["obj"]' && js(names("bin/\nobj/\n!lib/keep.txt\n")) === '["bin","obj"]' &&
+      // (review 4: `!bin/**` re-includes every name below bin/ — read as any name, so no pattern applies; it was read as `bin`)
+      js(names("bin/\nobj/\n!*\n")) === "[]" && js(names("bin/\nobj/\n!bin/**\n")) === "[]" && js(names("bin/\nobj/\n!lib/keep.txt\n")) === '["bin","obj"]' &&
       E.gitignoreNegationReincludes(E.gitignoreNegationTokens("l?b"), ["l", "i", "b"]) && !E.gitignoreNegationReincludes(E.gitignoreNegationTokens("*.d.ts"), ["l", "i", "b"]),
-      "1.22 review 2: gitignoreDirPatterns drops a pattern a negation could re-include (same last name, `!b*/`, `!*`, `!bin/**`) and keeps the others (`!lib/keep.txt`, Visual Studio's negations keep [Bb]in/ [Oo]bj/) (got " +
+      "1.22 review 2: gitignoreDirPatterns drops a pattern a negation could re-include (same last name, `!b*/`, `!*`; `!bin/**`: any name) and keeps the others (`!lib/keep.txt`, Visual Studio's negations keep [Bb]in/ [Oo]bj/) (got " +
       js([names("lib/\nlib64/\n!frontend/src/lib/\n"), vs, names("bin/\nobj/\n!b*/\n")]) + ")");
     // bounded: a hostile file (1,000 patterns, 150 wildcard negations) spends a fixed budget, then applies none of its patterns
     const hostile = Array.from({ length: 1000 }, (_, i) => "a".repeat(40) + i + "/").join("\n") + "\n" + Array.from({ length: 150 }, () => "!" + "*a".repeat(120)).join("\n");
@@ -96,5 +97,33 @@ exports.run = async ({ ok, S, tmp, require }) => {
       (scan.byExtension || []).includes(".ts:1") && covH.codeFiles === 1 && secs < 10 && E.GITIGNORE_NESTED_MAX === 200,
       "1.22 review 3 (7): root `lib/` + frontend/.gitignore `!src/lib/` — the scan and coverage read frontend/src/lib/api.ts (3 code files, api.ts covered); backend/lib/ is still left out; 300 hostile nested negation files stay bounded and keep their code (got " +
       js([cov.codeFiles, cov.coveredFiles, cov.nonCodeImplements, cov.uncoveredSample, scan.byExtension, covH.codeFiles, +secs.toFixed(3)]) + ")");
+  }
+
+  { // 1.22 review 4 — a .gitignore read as Git reads it (each case checked against `git ls-files --others --exclude-standard`)
+    const js = (v) => JSON.stringify(v);
+    const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const E = require("./lib/engine/index.js");
+    const BOM = String.fromCharCode(0xfeff);
+    const utf16 = (s) => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(s, "utf16le")]);
+    let n = 0;
+    const seen = (files) => { // files: { rel: content } → the files the scan / coverage walk reads (no .gitignore)
+      const root = path.join(tmp, "proj-122r4-gitignore-" + n++);
+      for (const [rel, s] of Object.entries(files)) put(root, rel, s);
+      const out = [];
+      E.walkProject(root, 1e6, (rel) => { if (!/(^|\/)\.gitignore$/.test(rel)) out.push(rel); }, { gitignore: E.gitignoreRules(root) });
+      return out.sort();
+    };
+    const got = [
+      seen({ ".gitignore": "lib/\n!frontend/src/**\n", "frontend/src/lib/api.ts": "x", "lib/gen.ts": "x" }),
+      seen({ ".gitignore": "lib/\n", "frontend/.gitignore": "!src/**\n", "frontend/src/lib/api.ts": "x", "backend/lib/gen.py": "x" }),
+      seen({ ".gitignore": "lib/\n", "frontend/.gitignore": BOM + "!src/lib/\r\n", "frontend/src/lib/api.ts": "x" }),
+      seen({ ".gitignore": utf16("lib/\r\n"), "lib/a.ts": "x", "gen/.gitignore": utf16("*"), "gen/b.ts": "x" }),
+      seen({ ".gitignore": "  lib/\nobj/   \n", "lib/a.ts": "x", "obj/b.cs": "x", "gen/.gitignore": " *\n", "gen/c.ts": "x" }),
+      seen({ "gen/.gitignore": "*\n" + "# x\n".repeat(1100) + "!keep.ts\n", "gen/keep.ts": "x", "tmp/.gitignore": "*\n!.gitignore\n", "tmp/d.ts": "x" }),
+      seen({ ".gitignore": "#" + "x".repeat(99996) + "\nsrcgen/\n", "src/a.ts": "x", "srcgen/b.ts": "x" }),
+    ];
+    ok(js(got) === js([["frontend/src/lib/api.ts", "lib/gen.ts"], ["frontend/src/lib/api.ts"], ["frontend/src/lib/api.ts"], ["gen/b.ts", "lib/a.ts"], ["gen/c.ts", "lib/a.ts"],
+      ["gen/keep.ts"], ["src/a.ts", "srcgen/b.ts"]]),
+      "1.22 review 4: a negation ending in /** re-includes every name below it (root — conservatively the whole pattern, lib/gen.ts too — and nested), a BOM before a nested file's first negation, a UTF-16 .gitignore (raw bytes to Git: no pattern), leading blanks kept / trailing ones dropped (` *` is no ignore-all), an ignore-all read from the whole file, a root file past its cap applying no pattern — each as Git reads it (got " + js(got) + ")");
   }
 };

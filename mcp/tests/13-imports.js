@@ -1482,5 +1482,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require }) => {
       !E.planCommandOnly("Run `npm test` and the page lists the orders") && !lb && msLb < 1000,
       "1.22 review F10: a command-only validation line with a trailing 'and expect …' clause stays in design.md, never a [NEEDS CLARIFICATION] criterion; any other trailing text still makes a criterion; linear on a long blank run (" + msLb + " ms; got " +
       js([xe.ok, xeReq.split("\n").filter((l) => /AC-\d/.test(l))]) + ")");
+
+    // 1.22 review 4: a step's `cd packages/web && npm test` is imported WHOLE as the _Verify:_ — the cd was dropped, so `done --run` ran
+    // `npm test` at the project root and the natural run (with its cd) read command-mismatch. A cd-led validation line is command-only.
+    put(ik, "plans/exec-cd.md", "# Web feed checks\n\n## Progress\n\n- [ ] Add `packages/web/src/feed.ts` and run `cd packages/web && npm test`\n\n" +
+      "## Validation and Acceptance\n\n- When the feed loads, the list shows 10 items\n- Run `cd packages/web && npm test`\n");
+    const xc = S.importSpec(ik, "execplan", "plans/exec-cd.md");
+    const xcTasks = xc.ok ? rd(ik, ".specs", xc.feature, "tasks.md") : "";
+    const xcAcs = (xc.ok ? rd(ik, ".specs", xc.feature, "requirements.md") : "").split("\n").filter((l) => /AC-\d/.test(l));
+    ok(xc.ok && /\n {2}- _Verify: cd packages\/web && npm test_\n/.test(xcTasks) && xcAcs.length === 1 && !/cd packages/.test(xcAcs.join(" ")) &&
+      E.planCommand(["cd packages/web && npm test"]) === "cd packages/web && npm test" && E.planCommand(["$ cd api && pytest -q"]) === "cd api && pytest -q" &&
+      E.planCommand(["cd packages/web && npm install"]) === null && E.planCommand(["cd packages/web"]) === null && E.planCommandOnly("Run `cd packages/web && npm test`"),
+      "1.22 review 4: a step naming `cd packages/web && npm test` imports `_Verify: cd packages/web && npm test_` (the cd kept — it was `npm test`, run at the root); a cd before a non-check (`npm install`) or alone is no _Verify:_; a cd-led validation line is no criterion (got " +
+      js([xc.ok, xcTasks, xcAcs]) + ")");
   }
 };
