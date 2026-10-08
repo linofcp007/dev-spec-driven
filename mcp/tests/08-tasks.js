@@ -152,6 +152,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     wsf("O sistema não conseguiu localizar o caminho especificado.", 1) && // this machine's own pt-PT cmd.exe wording
     !wsf("AssertionError: expected 2 to equal 3\n    at tests/x.test.js:4", 1) && !wsf("1 failing", 1) && !wsf("Error: Cannot find module './x'", 1),
     "windowsShellFailure: cmd.exe's own failures (unknown command / exit 9009, its syntax errors, a path it can't find; EN/PT/ES) — never a check that ran and failed");
+  // Review 4: cmd.exe / Windows PowerShell 5.1 write in the console's OEM code page (850 on a PT Windows); decoded as UTF-8, each
+  // accented letter arrives as U+FFFD — "O sistema n?o conseguiu localizar…" read as a red run (an _Expect: fail_ task ticked on it).
+  const RC = String.fromCharCode(0xfffd);
+  const oemPs = (t) => (S.couldNotRunOutput(t) || {}).kind;
+  ok(wsf("O sistema n" + RC + "o conseguiu localizar o caminho especificado.", 1) && wsf("'grep' n" + RC + "o " + RC + " reconhecido como um comando interno", 1) &&
+    wsf("A sintaxe do comando est" + RC + " incorreta.", 1) && !wsf("not ok 1 - n" + RC + "o", 1) &&
+    oemPs("Get-Greeting : O termo 'Get-Greeting' n" + RC + "o " + RC + " reconhecido como nome de cmdlet") === "test" &&
+    oemPs("O m" + RC + "dulo especificado 'Pester' n" + RC + "o foi carregado") === "test" &&
+    oemPs("n" + RC + "o pode ser carregado porque a execu" + RC + RC + "o de scripts foi desabilitada neste sistema") === "test",
+    "review 4: cmd.exe's and Windows PowerShell 5.1's PT wording decoded from the OEM code page (each accented letter U+FFFD) is still read as the shell's own failure / a run that could not happen");
   // Review fixes. A line that only LOOKS like a fence opener must not hide the tasks below it (CommonMark):
   // "```npm test```" is inline code; a fence left open in a task's body ends with that list item; a fence
   // that never closes is plain text — the feature must not read as complete with real tasks still open.

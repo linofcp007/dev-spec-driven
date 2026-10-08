@@ -486,12 +486,14 @@ function summarizeRunOutput(output, max = 500) {
 // "… is not recognized as an internal or external command"), a syntax error cmd.exe raised ("The syntax of the command is
 // incorrect", "… was unexpected at this time"), a path it could not resolve ("The system cannot find the path specified").
 // EN / PT / ES Windows wording. A check that ran and failed (`node tests/x.js` → exit 1) is none: it printed the hint on
-// every failed run.
+// every failed run. Review 4: cmd.exe writes these in the console's OEM code page (850 on a PT / ES Windows) and the CLI
+// decodes a run's output as UTF-8, so each accented letter arrives as U+FFFD — every accented class takes it too: a PT
+// Windows' "O sistema não conseguiu localizar o caminho especificado" never matched (an _Expect: fail_ task was ticked on it).
 const RE_CMD_SHELL_FAILURE = new RegExp([
-  "is not recognized as an internal or external command", "n[ãa]o [ée] reconhecido como (?:um )?comando interno", "no se reconoce como (?:un )?comando interno",
-  "the syntax of the command is incorrect", "a sintaxe do comando est[áa] incorreta", "la sintaxis del comando no es correcta",
-  "was unexpected at this time", "n[ãa]o era esperad[oa] (?:nesta altura|neste momento)", "era inesperad[oa] neste momento", "no se esperaba en este momento",
-  "cannot find the path specified", "n[ãa]o (?:pode|consegue|conseguiu) (?:encontrar|localizar) o caminho especificado", "no puede (?:encontrar|hallar) la ruta especificada",
+  "is not recognized as an internal or external command", "n[ãa\uFFFD]o [ée\uFFFD] reconhecido como (?:um )?comando interno", "no se reconoce como (?:un )?comando interno",
+  "the syntax of the command is incorrect", "a sintaxe do comando est[áa\uFFFD] incorreta", "la sintaxis del comando no es correcta",
+  "was unexpected at this time", "n[ãa\uFFFD]o era esperad[oa] (?:nesta altura|neste momento)", "era inesperad[oa] neste momento", "no se esperaba en este momento",
+  "cannot find the path specified", "n[ãa\uFFFD]o (?:pode|consegue|conseguiu) (?:encontrar|localizar) o caminho especificado", "no puede (?:encontrar|hallar) la ruta especificada",
   "the filename, directory name, or volume label syntax is incorrect",
 ].join("|"), "i");
 function windowsShellFailure(output, code) {
@@ -933,10 +935,11 @@ const CANT_RUN_OUTPUT = [
   // pwsh / powershell can't find; Pester 5+ finding no test file. A test that RAN and failed on such an error — the function
   // under test doesn't exist yet: "[-] Get-Greeting.T-01 … 12ms" then "The term 'Get-Greeting' is not recognized" — stays
   // red (RE_ASSERTION_RAN / pesterRan below). Every blank run between words is followed by a literal (1.21.1 review: `de\s+
-  // (?:um\s+)?\s*cmdlet` — two blank runs meeting — took 58 s on 200,000 blanks).
-  ["test", /(?:['"][^'"\r\n]{1,200}['"]\s+)?(?:is\s+not\s+recognized\s+as\s+(?:a|the)\s+name\s+of\s+a|n[ãa]o\s+[ée]\s+reconhecido\s+como\s+(?:um\s+)?nome\s+de(?:\s+um)?|no\s+se\s+reconoce\s+como\s+(?:el\s+)?nombre\s+de(?:\s+un)?)\s+cmdlet\b/i],
-  ["test", /\bThe\s+specified\s+module\s+['"][^'"\r\n]{1,300}['"]\s+was\s+not\s+loaded\b|\bO\s+m[óo]dulo\s+especificado\s+['"][^'"\r\n]{1,300}['"]\s+n[ãa]o\s+foi\s+carregado\b|\bNo\s+se\s+carg[óo]\s+el\s+m[óo]dulo\s+especificado\s+['"][^'"\r\n]{1,300}['"]/i],
-  ["test", /\bcannot\s+be\s+loaded\s+because\s+running\s+scripts\s+is\s+disabled\s+on\s+this\s+system\b|\bporque\s+a\s+execu[çc][ãa]o\s+de\s+scripts\s+(?:est[áa]|foi)\s+(?:desabilitad|desativad)[ao]\s+neste\s+sistema\b|\bporque\s+la\s+ejecuci[óo]n\s+de\s+scripts\s+est[áa]\s+deshabilitada\s+en\s+este\s+sistema\b|\bis\s+not\s+digitally\s+signed\.\s+You\s+cannot\s+run\s+this\s+script\b/i],
+  // (?:um\s+)?\s*cmdlet` — two blank runs meeting — took 58 s on 200,000 blanks). Review 4: an accented class takes U+FFFD too
+  // (Windows PowerShell 5.1 writes in the OEM code page, decoded as UTF-8 — see RE_CMD_SHELL_FAILURE).
+  ["test", /(?:['"][^'"\r\n]{1,200}['"]\s+)?(?:is\s+not\s+recognized\s+as\s+(?:a|the)\s+name\s+of\s+a|n[ãa\uFFFD]o\s+[ée\uFFFD]\s+reconhecido\s+como\s+(?:um\s+)?nome\s+de(?:\s+um)?|no\s+se\s+reconoce\s+como\s+(?:el\s+)?nombre\s+de(?:\s+un)?)\s+cmdlet\b/i],
+  ["test", /\bThe\s+specified\s+module\s+['"][^'"\r\n]{1,300}['"]\s+was\s+not\s+loaded\b|\bO\s+m[óo\uFFFD]dulo\s+especificado\s+['"][^'"\r\n]{1,300}['"]\s+n[ãa\uFFFD]o\s+foi\s+carregado\b|\bNo\s+se\s+carg[óo\uFFFD]\s+el\s+m[óo\uFFFD]dulo\s+especificado\s+['"][^'"\r\n]{1,300}['"]/i],
+  ["test", /\bcannot\s+be\s+loaded\s+because\s+running\s+scripts\s+is\s+disabled\s+on\s+this\s+system\b|\bporque\s+a\s+execu[çc\uFFFD][ãa\uFFFD]o\s+de\s+scripts\s+(?:est[áa\uFFFD]|foi)\s+(?:desabilitad|desativad)[ao]\s+neste\s+sistema\b|\bporque\s+la\s+ejecuci[óo\uFFFD]n\s+de\s+scripts\s+est[áa\uFFFD]\s+deshabilitada\s+en\s+este\s+sistema\b|\bis\s+not\s+digitally\s+signed\.\s+You\s+cannot\s+run\s+this\s+script\b/i],
   ["test", /\bThe\s+argument\s+['"][^'"\r\n]{1,400}['"]\s+(?:is\s+not\s+recognized\s+as\s+(?:the|a)\s+name\s+of\s+a\s+script\s+file|to\s+the\s+-File\s+parameter\s+does\s+not\s+exist)\b/i],
   ["test", /\bNo test files were found and no scriptblocks were provided\b/], // Pester 5 / 6: no *.Tests.ps1 under the path
 ];
@@ -1302,18 +1305,27 @@ function runRootStamp(command, projectDir, slug) {
   if (isNetworkPath(d)) return pdir;
   const at = path.resolve(d);
   const within = (base, p) => { const rel = path.relative(base, p); return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel)) ? rel : null; };
-  if (within(pdir, at) !== null) return pdir;
+  // (real paths: git writes a worktree's gitdir in its long form, a folder may be named by its 8.3 short form — ADMINI~1)
+  const key = (p) => { let r = p; try { r = fs.realpathSync.native(p); } catch { /* as given */ } return FOLD_CASE ? r.toLowerCase() : r; };
+  // a git worktree of the SAME repository holding the feature's folder, whose project the run's cd lands in → its root, or null
+  const worktree = () => {
+    if (typeof slug !== "string" || !slug) return null;
+    const wt = specsProjectOf(at);
+    if (!wt || !isDirSafe(path.join(wt, ".specs", slug))) return null;
+    const a = gitCommonDir(wt), b = gitCommonDir(pdir);
+    return a && b && key(a) === key(b) ? wt : null;
+  };
+  // Review 4: a worktree INSIDE the project (`.claude/worktrees/<name>`, `.worktrees/<name>`) is its own root — the cd was read as
+  // a folder of the main project, so `cd <repo>/.claude/worktrees/agent-1 && npm test` read command-mismatch for `_Verify: npm test_`.
+  if (within(pdir, at) !== null) {
+    const wt = at === pdir ? null : worktree();
+    return wt && key(wt) !== key(pdir) ? wt : pdir;
+  }
   // the project under another spelling (an 8.3 short name, a link): the stamp is the root as the RUN spells it, so its cds read inside
   // (realPathLoose: the folder the run went to may be gone — or never existed — by now)
   const rp = realPathLoose(pdir), ra = realPathLoose(at), relReal = rp && ra ? within(rp, ra) : null;
   if (relReal !== null) return relReal ? path.resolve(at, ...relReal.split(path.sep).map(() => "..")) : at;
-  if (typeof slug !== "string" || !slug) return pdir;
-  const wt = specsProjectOf(at);
-  if (!wt || !isDirSafe(path.join(wt, ".specs", slug))) return pdir;
-  const a = gitCommonDir(wt), b = gitCommonDir(pdir);
-  // (real paths: git writes a worktree's gitdir in its long form, a folder may be named by its 8.3 short form — ADMINI~1)
-  const key = (p) => { let r = p; try { r = fs.realpathSync.native(p); } catch { /* as given */ } return FOLD_CASE ? r.toLowerCase() : r; };
-  return a && b && key(a) === key(b) ? wt : pdir;
+  return worktree() || pdir;
 }
 // The repository's common git dir for a folder (fs only): the nearest `.git` up from it — a folder, or a worktree's `.git` FILE
 // (`gitdir: <path>`) whose `commondir` names the main one (as state.js's repoGitConfigText reads it) → a path, or null.
@@ -1405,7 +1417,10 @@ function observeRun(projectDir, run) {
   const bodies = observedBodies(key);
   if (!bodies.length) return { recorded: [] };
   const mentions = (text) => { const t = observedNorm(text); return bodies.every((b) => t.includes(b)); };
-  const proves = (list) => runProvesVerify({ command: key }, list, pdir);
+  // (review 4: or ONE plain ` && ` step of a value — observedRun's step-by-step fallback (proofPlainParts) looks them up, and they
+  // were never logged: `_Verify: npm run build && npm test_` run as two Bash calls read unobserved while reported mode verified it)
+  const proves = (list) => runProvesVerify({ command: key }, list, pdir) ||
+    (list.length === 1 && (proofPlainParts(list[0]) || []).some((p) => runProvesVerify({ command: key }, [p], pdir)));
   const entry = { command: key, exitCode: code, at: typeof run.at === "string" && Number.isFinite(Date.parse(run.at)) ? run.at : new Date().toISOString() };
   if (typeof run.event === "string" && run.event) entry.event = run.event.slice(0, 40);
   if (typeof run.session === "string" && run.session) entry.session = run.session.slice(0, 200);

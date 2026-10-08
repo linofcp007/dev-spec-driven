@@ -1413,11 +1413,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     // counts — it no longer says "record the passing run … the red run on record then counts" (the grandfathering it advertised
     // verified a task with no red run of its own test).
     const notes = ["en", "pt", "es", "pt-BR"].map((l) => S.msg(l).evidenceGate.commandMismatch(1, "f", "x", "y", true));
-    ok(/BEFORE the fix lands, while the test still fails: .*done upgrade 1 --run \(a red run of another command never counts; with the fix already in, set it aside — git stash — for that run, then restore it\)\.$/.test(b1.note) &&
-      !notes.some((t) => /then counts|passa então a contar|cuenta entonces/.test(t)) && /ANTES de a correção entrar.*nunca conta; com a correção já feita, põe-na de parte — git stash/.test(notes[1]) &&
-      /ANTES de que entre la corrección.*nunca cuenta; con la corrección ya hecha, apártala — git stash/.test(notes[2]) && /nunca conta/.test(notes[3]) &&
+    ok(/BEFORE the fix lands, while the test still fails: .*done upgrade 1 --run \(a red run of another command never counts; with the fix already in, set it aside — git stash push -- <the fix's files>, not a bare git stash: it would take tasks\.md and \.state\.json too — for that run, then restore it\)\.$/.test(b1.note) &&
+      !notes.some((t) => /then counts|passa então a contar|cuenta entonces/.test(t)) &&
+      /ANTES de a correção entrar.*nunca conta; com a correção já feita, põe-na de parte — git stash push -- <os ficheiros da correção>, não um git stash simples: levaria também o tasks\.md e o \.state\.json/.test(notes[1]) &&
+      /ANTES de que entre la corrección.*nunca cuenta; con la corrección ya hecha, apártala — git stash push -- <los archivos de la corrección>, no un git stash a secas: se llevaría también tasks\.md y \.state\.json/.test(notes[2]) &&
+      /nunca conta/.test(notes[3]) && /git stash push -- <os arquivos da correção>/.test(notes[3]) &&
       !/BEFORE the fix lands/.test(S.msg("en").evidenceGate.commandMismatch(1, "f", "x", "y", false)),
-      "1.22 review 3 (1): the _Expect: fail_ command-mismatch note says to record the failing run BEFORE the fix lands, that a red run of another command never counts (the fix set aside with git stash), and no longer that the red run on record counts once the _Verify:_ passes (EN/PT/ES/pt-BR) (got " + js([b1.note, notes]) + ")");
+      "1.22 review 3 (1) + review 4: the _Expect: fail_ command-mismatch note says to record the failing run BEFORE the fix lands, that a red run of another command never counts (the fix set aside with `git stash push -- <the fix's files>` — a bare git stash takes tasks.md and .state.json too), and no longer that the red run on record counts once the _Verify:_ passes (EN/PT/ES/pt-BR) (got " + js([b1.note, notes]) + ")");
     // review 3 (1) — grandfathering only for red runs recorded BEFORE the command rule: every run is stamped `cmdRule` now, and a red run
     // of ANOTHER test file (or `false`) recorded under the rule, then the passing run of the _Verify:_, is no red proof — unexpected-pass.
     const fG = mkTasks(pR, "Grand", "- [ ] 1. [US1] Red A\n  - _Verify: npm test -- tests/a.test.js_\n  - _Expect: fail_\n" +
@@ -1581,6 +1583,30 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
         ev["2"].root === path.resolve(repo),
         "1.22 review 3 (4): `cd <git worktree of the project> && npm test` proves `npm test` (root stamped: the worktree); `cd <another repository's project holding the same feature> && npm test` does not (got " +
         js([a.verified, a.unverifiedReason, ev["1"].root, b.verified, ev["2"].root]) + ")");
+      // review 4: a worktree INSIDE the project (`.claude/worktrees/<name>`) is its own root — it was read as a folder of the main project
+      // (command-mismatch); a plain subfolder of the project still is one (the run went there: another run)
+      const nested = path.join(repo, ".claude", "worktrees", "agent-1");
+      git(repo, "worktree", "add", "-q", nested);
+      fs.appendFileSync(path.join(repo, ".specs", "auth", "tasks.md"), "- [ ] 3. [US1] C\n  - _Verify: npm test_\n- [ ] 4. [US1] D\n  - _Verify: npm test_\n");
+      fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+      const c = S.completeTask(repo, "auth", 3, { command: "cd " + nested + " && npm test", exitCode: 0 });
+      const dd = S.completeTask(repo, "auth", 4, { command: "cd " + path.join(repo, "src") + " && npm test", exitCode: 0 });
+      const ev2 = JSON.parse(fs.readFileSync(path.join(repo, ".specs", "auth", ".state.json"), "utf8")).evidence;
+      ok(fs.existsSync(path.join(nested, ".specs", "auth")) && c.verified === true && ev2["3"].root === path.resolve(nested) &&
+        dd.verified === false && dd.unverifiedReason === "command-mismatch" && ev2["4"].root === path.resolve(repo),
+        "1.22 review 4: `cd <repo>/.claude/worktrees/agent-1 && npm test` proves `npm test` (root stamped: that worktree); `cd <repo>/src && npm test` still does not (got " +
+        js([c.verified, c.unverifiedReason, ev2["3"].root, dd.verified, ev2["4"].root]) + ")");
+    }
+    { // review 4: observeRun logs ONE plain step of a `_Verify:_` holding ` && ` — observedRun's step-by-step fallback (proofPlainParts) reads
+      // them, and they were never logged: run as two Bash calls, `_Verify: npm run build && npm test_` read unobserved
+      const pS = path.join(tmp, "proj-122r4-steps");
+      S.initProject(pS, ["core"], "en");
+      const fS = S.createFeature(pS, "Steps", ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(fS.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] A\n  - _Verify: npm run build && npm test_\n");
+      const r = ["npm run build", "npm test", "npm run lint"].map((command) => S.observeRun(pS, { command, exitCode: 0 }).recorded.length);
+      const ob = S.observedRun(pS, fS.slug, "npm run build && npm test", 0, { expected: ["npm run build && npm test"] });
+      ok(js(r) === "[1,1,0]" && ob.observed === true,
+        "1.22 review 4: each plain step of `_Verify: npm run build && npm test_` run on its own is logged (another command is not) and the joined report reads observed (got " + js([r, ob]) + ")");
     }
     // hostile input: LINEAR (64 KB costs ~4× 16 KB — a quadratic matcher would cost ~16×), measured as a ratio so a slow machine
     // or a container doesn't flake; past PROOF_MAX_CHARS (64 KB) a command or _Verify:_ is never matched, at once.

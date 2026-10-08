@@ -91,7 +91,11 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   bare script). After a failed
   run the `taskDone.shellHint` (retry with `--shell bash`) is printed only when `windowsShellFailure(output, code)` says
   cmd.exe itself failed (exit 9009, "is not recognized as an internal or external command", its syntax errors, "cannot
-  find the path specified" — EN/PT/ES wording) — never for a check that ran and failed.
+  find the path specified" — EN/PT/ES wording) — never for a check that ran and failed. **Review 4 — the OEM code page:**
+  cmd.exe (and Windows PowerShell 5.1) write their own messages in the console's OEM code page (850 on a PT / ES Windows)
+  while `b5Exec` decodes the output as UTF-8, so each accented letter arrives as U+FFFD: every accented class of the PT / ES
+  wordings (`RE_CMD_SHELL_FAILURE`, the PowerShell `couldNotRunOutput` patterns) takes U+FFFD too — on a PT Windows "O sistema
+  não conseguiu localizar o caminho especificado" never matched, and an `_Expect: fail_` task was ticked on cmd.exe's own failure.
 - **A run that could not happen is never evidence** (CLI `b5Exec()`, `done --run` and `finish --run`): it is refused with
   `{ok: false, couldNotRun}` + a localized `runGate` message and NOTHING is recorded (it used to be recorded as exit 1 —
   a passing check stored as failed, a red run that never happened). Stable `couldNotRun` codes: `shell-not-started` (spawn
@@ -160,7 +164,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   (`runRootStamp()`, completeTask and the finish checks; `runOf` keeps it): the project folder — as the RUN spells it when
   that differs (an 8.3 short name, a link: `realpathSync.native`) —, or a git worktree of the SAME repository (the same
   common git dir, `gitCommonDir()`) holding the feature's folder that the run's first absolute cd lands in (a subagent's
-  `cd <worktree> && npm test`; another repository's project with the same feature name is no worktree). The verdict reads
+  `cd <worktree> && npm test`; another repository's project with the same feature name is no worktree — review 4: a worktree
+  INSIDE the project, `.claude/worktrees/<name>` or `.worktrees/<name>`, too: the check ran only for a cd outside the project,
+  so its run was read in a folder of the main project and read command-mismatch). The verdict reads
   the stamp, so a record made on another machine (`cd /home/someone/proj/packages/web && …`, root `/home/someone/proj`)
   proves the same task here. A run field: the merge driver needs no rule for it. `proofKey(cmd, root)` is the resolved
   commands as one string. Anything else ticks but reads **`command-mismatch`**
@@ -527,7 +533,11 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   same flattened text as the report) exited with the reported code — a report of exit 0 after an observed exit 1 is not what
   the harness saw (`latestExitCode`); a passing report also counts when each expected command's latest logged run passed (a
   join run as separate Bash calls) — or, for one of several plain ` && ` steps (no cd / pipefail: `proofPlainParts`), each
-  step's. `expected` (1.22 review — `observedStamp` passes the task's `_Verify:_` values / `[the check's command]`; none → the
+  step's (review 4: `observeRun` logs such a step — it logged only runs of a whole `_Verify:_` value, so this fallback never
+  found one). Known limits (review 4, observed mode only): a run whose verdict depends on its `root` stamp (a sibling
+  worktree's `cd <wt>/packages/web && …`, `cd /d <wt>`, the project under its 8.3 short name) can still read unobserved; an
+  older failed joined run hides newer passing runs of its parts; the hook's pre-filter splits a quoted `;` in a run's own
+  `VAR="a;b"`. `expected` (1.22 review — `observedStamp` passes the task's `_Verify:_` values / `[the check's command]`; none → the
   reported command itself): a reported run that is not one of them (`runProvesVerify`) is never observed — another task's or
   check's logged run used to count. `root`: the run's `root` stamp (a worktree's), also a root `stripCdPrefix` strips.
   `observedStamp()`: every run `{command, exitCode}` that `spec_complete_task` / `done` and `spec_finish {evidence}` record
