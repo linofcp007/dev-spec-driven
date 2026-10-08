@@ -929,4 +929,21 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname 
       "1.22 review 3 (8): 'iniciar sesión con doble factor', 'entrar com dois fatores', 'multifactor at login' (and 'al iniciar sesión', 'ao entrar', 'log in with') are +sec's weak signal next to the auth verb / connector; ON beside another +sec word; a factor word away from one stays none (got " +
       js([natural.map(([t, l]) => sig(t, l)), stillNone.map(([t, l]) => sig(t, l))]) + ")");
   }
+
+  { // 1.22 review 4 — "multi-factored" / "multifactored" escaped the catch-all (a weak +sec signal: "a multi-factored discount and a security
+    // deposit" was ON); PT / ES put the adjective between the auth noun and the factor word ("autenticação forte de dois fatores" was a
+    // hint while "strong multi-factor authentication" is ON); a conjugated auth verb ("logs in", "signing in", "inicia sesión") was none.
+    const js = (x) => JSON.stringify(x);
+    const sig = (t, lang) => S.classify(t, { lang }).signals.sec;
+    const on = (t, lang) => S.classify(t, { lang }).tracks.includes("sec");
+    const offs = [["The pricing engine uses a multi-factored discount and a security deposit.", "en"], ["We need a multifactored scoring model and an encrypted export.", "en"]];
+    const ons = [["Adicionar autenticação forte de dois fatores", "pt"], ["Adicionar autenticação obrigatória de dois fatores para administradores", "pt"],
+      ["Añadir autenticación obligatoria de doble factor para administradores", "es"], ["Añadir autenticación reforzada de doble factor", "es"],
+      ["The user logs in with multi-factor and the session token is encrypted", "en"], ["El administrador inicia sesión con doble factor y un registro de auditoría", "es"],
+      ["Os utilizadores iniciam sessão com dois fatores e registo de auditoria", "pt"]];
+    ok(offs.every(([t, l]) => !on(t, l) && sig(t, l).length === 1) && !sig("Build a multi-factored risk model that scores loan applicants.", "en").length &&
+      ons.every(([t, l]) => on(t, l)) && !sig("O preço depende de dois fatores: o peso e a distância.", "pt").length,
+      "1.22 review 4: an inflected factor word away from an auth word is no signal ('multi-factored discount'); 'autenticação forte / obrigatória de dois fatores', 'autenticación obligatoria / reforzada de doble factor', 'logs in / inicia sesión / iniciam sessão com …' keep the factor word (ON with another +sec word) (got " +
+      js([offs.map(([t, l]) => sig(t, l)), ons.map(([t, l]) => [on(t, l), sig(t, l)])]) + ")");
+  }
 };
