@@ -8,6 +8,13 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
 `existingFeature()`.
 
 ## Hooks and commands (from Conventions & gotchas)
+- **The working agents list `Bash, PowerShell` (1.23 review 5 M12).** spec-implementer, spec-simplifier and spec-reviewer run
+  `_Verify:_` / `git diff`, so they need a shell on every platform. Claude Code's tools reference: on Windows WITHOUT Git
+  Bash the PowerShell tool is enabled automatically and there is no Bash tool; with Git Bash both exist; on Linux / macOS /
+  WSL PowerShell is opt-in. The sub-agents reference: a `tools:` entry that doesn't resolve is dropped, and only a list where
+  NOTHING resolves keeps the agent from launching — so naming both is safe everywhere, and naming Bash alone left the
+  agents shell-less on a PowerShell-only Windows (they could only answer NEEDS_CONTEXT). The tool names are the exact
+  strings of permission rules and hook matchers (`PowerShell`). spec-critic has no shell on purpose (read-only).
 - **Hooks never block and stay cheap.** Every hook exits 0 on any error or irrelevant event, emits at most
   one JSON object, has a 10 s timeout, and only acts on a `.specs/` dev-spec owns (`isDevSpecProject` — checked by
   PostToolUse AND SessionStart: another tool's `.specs/` gets no status block in every session). The PostToolUse hook:

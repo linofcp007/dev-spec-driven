@@ -132,7 +132,10 @@ function main(raw) {
   if (!level) return finish();
 
   const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
-  const r = spec.approvalGuardDecision(payload, LEVELS[level], { lang: spec.projectLang(dir), meta });
+  // resolveFeature (1.23 review 5, L26 — as the MCP server): the prompt and the command name the feature the engine will act on
+  // in that project — its slug — never the raw argument (slugify drops text in other scripts, which must not reach the prompt).
+  const resolveFeature = (n) => { const f = spec.existingFeature(dir, n); return f.ok ? f.slug : null; };
+  const r = spec.approvalGuardDecision(payload, LEVELS[level], { lang: spec.projectLang(dir), meta, resolveFeature });
   if (r.decision !== "ask" && r.decision !== "deny") return finish();
   const out = { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: r.decision, permissionDecisionReason: r.reason } };
   if (r.userNote) out.systemMessage = r.userNote; // deny: the reason goes to the agent — the user sees the command to run
