@@ -66,7 +66,7 @@ function loadEngine() {
 }
 const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalGuardDecision, approvalGuardLevel,
   approvalRolesOf, approvePhase, archiveFeature, artifactState, backlog, BACKLOG_ACTIONS, catalog, changelog,
-  checklistMd, clarify, classify, CLI_SWITCHES, compareSemver, completeTask, couldNotRunOutput, coverage, crashExit, createFeature,
+  checklistMd, clarify, classify, CLI_SWITCHES, compareSemver, completeTask, couldNotRunOutput, vacuousRun, coverage, crashExit, createFeature,
   crossFeatureAcs, csvCell, decide, decisionLog, designSaveCheck, detectPhase, detectTracks, drift, earsFeature,
   earsSteps, earsValidate, engineVersion, etaText, evidenceMode, existingFeature, expectsFail, EXPORT_FORMATS,
   exportSpecs, extractSection, featureFlow, featureLang, featureLocked, featureOverlaps, featurePercent,
@@ -168,6 +168,7 @@ module.exports = {
   windowsShellFailure, // `done --run` on Windows: did cmd.exe itself fail (unknown command / its syntax error)? — the --shell hint
   resolveRunShell, // full review Ga9: `done --run` / `finish --run` — the shell (a bare bash → Git Bash on Windows; WSL's launcher refused)
   isWslLauncher,
+  vacuousRun, // 1.24 r6 D4: a pass whose output shows no test ran (node --test "tests 0", go "[no tests to run]"…) — done --run refuses it (no-tests)
   couldNotRunOutput, // full review Ga2 / Ga9: a run's output shows it never exercised the check (WSL relay, spawn error, missing test file…)
   crashExit, // 1.23 review: a crash's exit code (128 + SIGILL/ABRT/BUS/FPE/SEGV, a Windows NTSTATUS crash) — a failed run, never a red test
   posixPwshScript, // 1.21.1 review: a pwsh script whose `$…` / backticks a POSIX shell (/bin/sh, bash) would expand first — refused

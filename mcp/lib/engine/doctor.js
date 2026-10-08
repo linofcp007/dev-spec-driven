@@ -35,7 +35,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
-  suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck;
+  suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers;
 function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
@@ -59,7 +59,7 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   verifyPipes, waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
-  suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck } = E); }
+  suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -831,6 +831,13 @@ function specDoctor(projectDir, name, opts = {}) {
   if (vs.withVerify || Object.keys(vs.evidence).length) {
     add("verification", vs.unverified.length ? "warn" : "pass", vs.unverified.length ? m.unverified(unverifiedLabel(vs, featureLang(projectDir, slug))) : m.verifiedOk);
   }
+  // 1.24 r6 D1 — a record a renumbering left under a number that is no longer its task's (stamped with the text of a task that
+  // now has another number): neither task reads it any more (ownRecord), so the moved task needs a new run. A warn.
+  const moved = movedEvidence(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""), vs.evidence);
+  if (moved.length) {
+    const item = (x) => "#" + x.from + " → #" + x.to + " «" + cleanTaskText(withoutTaskMarkers(x.text)).replace(/\s+/g, " ").trim().slice(0, 60) + "»";
+    add("evidence-moved", "warn", fm.evidenceGate.evidenceMoved(moved.slice(0, 8).map(item).join(", ") + (moved.length > 8 ? " " + fm.gates.more(moved.length - 8) : ""), slug));
+  }
   // B5 (warns): red-green — T-IDs made green with no recorded red run of an _Expect: fail_ task; suite-evidence — the project
   // checks (meta.checks) without a passing run since the last task activity, once every task is done (finish blocks on it).
   for (const c of b5DoctorChecks(projectDir, slug, dir, tracks, lng)) add(c.id, c.status, c.detail);
@@ -858,6 +865,10 @@ function specDoctor(projectDir, name, opts = {}) {
   // `done --run` runs it exactly as written. Active tasks only; a warn.
   const oddVerify = suspiciousVerify(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""));
   if (oddVerify.length) add("verify-suspicious", "warn", fm.markerSyntax.suspiciousVerify(oddVerify.map((o) => "#" + o.number + " " + o.values.map((v) => "«" + v + "»").join(", ")).join("; ")));
+  // 1.24 r6 D7 — an _Expect:_ value other than fail (failure, red, PT falha): the task stays must-pass, silently. Active tasks; a warn.
+  const oddExpect = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "")
+    .map((b) => ({ number: b.number, values: unknownExpectValues(b) })).filter((o) => o.values.length);
+  if (oddExpect.length) add("expect-value", "warn", fm.markerSyntax.expectValue(oddExpect.slice(0, 8).map((o) => "#" + o.number + " " + o.values.map((v) => "«" + v + "»").join(", ")).join("; ") + (oddExpect.length > 8 ? " " + fm.gates.more(oddExpect.length - 8) : "")));
   // 1.14 full review Pa6 — a test planned outside test code (load-test.md, evals/*.json) whose artifact is still the
   // scaffold, once that test is due (a done task makes it green, or every task is done). A warn; spec_finish repeats it.
   const ocTemplates = outsideCodeTemplates(projectDir, dir, tracks, greenDone);

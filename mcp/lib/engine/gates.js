@@ -1552,6 +1552,7 @@ const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-crit
   "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, "malformed-markers": 5, verification: 6, "outside-code-artifacts": 6 };
 CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
 CHECK_PHASE["verify-suspicious"] = 5; // review 5: a garbled _Verify:_ value (a warn)
+Object.assign(CHECK_PHASE, { "evidence-moved": 6, "expect-value": 5 }); // 1.24 r6: a renumbered task's run (D1); an _Expect:_ value other than fail (D7)
 Object.assign(CHECK_PHASE, { glossary: 1, "cross-feature-acs": 1, "steering-changed-since-approval": 2 }); // 1.16 Q (warns only)
 Object.assign(CHECK_PHASE, { "design-tradeoffs": 2, "design-risks": 2, "design-reuse": 2 }); // 1.17 A1, 1.19 R1 (warns only)
 CHECK_PHASE["change-scope"] = 1; // 1.21 F5: a change's size (1–3 criteria, 1–3 tasks, core only) — its plan, from the start

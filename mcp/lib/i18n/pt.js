@@ -1131,6 +1131,8 @@ const msg = {
       failedTicked: (n, code) => `A tarefa ${n} já está marcada, mas a nova verificação falhou (exit ${code}) — ficou registado; passa a contar como não verificada até se registar uma execução com sucesso.`,
       badExit: (v) => `O exitCode tem de ser um inteiro (recebido '${v}').`,
       needsExit: "Uma evidência que indica um comando precisa do exit code — ou dá só um resumo, para uma verificação manual.",
+      unknownExpect: (n, values) => `A tarefa ${n} tem ${values.map((v) => "_Expect: " + v + "_").join(", ")} — o marcador só conhece \`fail\`, por isso, tal como está escrita, a tarefa tem de PASSAR. Se a execução dela tem de falhar (um teste escrito antes da correção), escreve _Expect: fail_.`,
+      noTests: (n, what) => `Tarefa ${n}: a execução passou, mas o output mostra que nenhum teste correu (${what}) — uma execução que não testa nada não prova nada (um glob, um caminho ou um filtro que não apanha nenhum teste). Nada foi registado; a tarefa continua por fazer. Corrige o comando _Verify:_ (ou o teste que ele indica) e depois regista uma execução que corra o teste.`,
     },
     finish: {
       ready: (slug) => `'${slug}' está pronta para fechar — confirma as verificações abaixo e depois faz merge local ou mantém o branch.`,
@@ -1432,6 +1434,7 @@ const msg = {
       commandMismatch: (n, slug, ran, verify, red) => `Tarefa ${n}: a execução registada (\`${ran}\`) não é uma execução do seu comando _Verify:_ (${verify}) — fica marcada, mas continua não verificada até se registar uma execução ${red ? "QUE FALHE " : ""}desse comando (tal como está escrito — com vários comandos _Verify:_, todos eles numa SÓ execução unidos com \` && \`; um \`cd <raiz do projeto> &&\`, \`set -o pipefail;\` ou VAR=valor teu à frente serve (um cd para outra pasta é outra execução), mas nunca tires um que o _Verify:_ tenha)` +
         (red ? ` — regista-a ANTES de a correção entrar, enquanto o teste ainda falha: ${DEV_SPEC} done ${slug} ${n} --run (uma execução vermelha de outro comando nunca conta; com a correção já feita, põe-na de parte — git stash push -- <os ficheiros da correção>, não um git stash simples: levaria também o tasks.md e o .state.json — para essa execução e depois repõe-na).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
       duplicateTasks: (list) => `números de tarefa repetidos: ${list} — o complete/brief escolhem a primeira por fazer; renumera-as`,
+      evidenceMoved: (list, slug) => `execuções registadas sob um número de tarefa pertencem a uma tarefa que agora tem outro número (renumerada): ${list} — a evidência é guardada por número, por isso nenhuma das tarefas lê essa execução; regista a execução da tarefa movida: ${DEV_SPEC} done ${slug} <n> --run`,
     },
     observed: {
       on: "Modo de evidência OBSERVADO — uma tarefa cujo _Verify:_ tem um comando só fica verificada com uma execução com sucesso que o harness viu (no Claude Code, o hook de observação do plugin guarda cada execução Bash de um comando _Verify:_ ou de uma verificação do projeto) ou que o dev-spec done --run / finish --run fez; a execução de uma verificação do projeto também (roadmap.json meta.evidence). Um cliente só MCP não tem esse hook: regista as execuções dele com " + DEV_SPEC + " done <feature> <n> --run.",
@@ -2392,6 +2395,7 @@ const msg = {
       unreadTasks: (list) => `linhas com caixa de verificação que não são tarefas: ${list} — uma linha de tarefa é "- [ ] N. texto" (um marcador -, * ou +, depois o número); estas nunca são marcadas, incluídas num brief nem verificadas. Numera-as (ou torna-as subpassos de uma tarefa); uma linha com 4+ espaços de indentação depois de uma linha em branco, fora de uma lista, é um bloco de código — tira-lhe a indentação.`,
       doctor: (list) => `texto com forma de marcador numa linha de tarefa não dá nenhum marcador: ${list} — as ferramentas não leem nada aí (nenhuma verificação é executada, nenhum ficheiro é rastreado). Escreve-o como _Verify: <comando>_ / _Implements: <caminho>_ / _Depends: 3_ (em itálico, com o valor lá dentro).`,
       suspiciousVerify: (list) => `um comando _Verify:_ parece mal escrito: ${list} — começa por _ ou * (um delimitador do marcador lido como parte dele), tem código entre crases lá dentro (dois comandos escritos como um: dá a cada um o seu _Verify:_; uma substituição de comando lê-se melhor como $(…)) ou tem uma aspa sem par. O done --run corre-o tal como está escrito: corrige o marcador.`,
+      expectValue: (list) => `um valor de _Expect:_ que as ferramentas não conhecem: ${list} — o único valor é fail (_Expect: fail_: a execução da tarefa tem de FALHAR, um teste escrito antes da correção); qualquer outro valor deixa uma tarefa cuja execução tem de passar. Escreve _Expect: fail_, ou tira o marcador.`,
     },
     outsideCode: {
       doctor: (list) => `testes planeados fora do código de testes apontam para um artefacto que ainda é um modelo: ${list} — preenche-o (a execução de carga real, o conjunto de avaliação da própria feature) antes de considerar esses testes verificados.`,
@@ -2919,6 +2923,7 @@ const msg = {
       },
       wslBash: (p) => `--shell ${p} é o lançador bash.exe do WSL, que corre o comando dentro de uma distribuição Linux (ou falha com "execvpe(/bin/bash) failed") e não numa shell desta máquina — usado como pediste; uma execução que o WSL não consiga arrancar não é registada. A shell desta máquina é o Git Bash, que o --shell bash encontra (com o Git for Windows).`,
       wslExe: (p) => `--shell ${p} é o wsl.exe, que não é uma shell (rejeita o -c que qualquer execução numa shell usa) — recusado, nada foi executado. Indica o caminho do bash.exe do WSL para correr dentro do WSL, ou --shell bash para o Git Bash.`,
+      noTests: (cmd, what) => `\`${cmd}\` passou, mas o output mostra que nenhum teste correu (${what}) — uma execução que não testa nada não prova nada (um glob, um caminho ou um filtro que não apanha nenhum teste). Nada foi registado; a tarefa continua por fazer. Corrige o comando _Verify:_ (ou o teste que ele indica) e depois volta a correr o done --run.`,
       noGitBash: "--shell bash: não foi encontrado nenhum Git Bash (git --exec-path, %ProgramFiles%\\Git\\bin\\bash.exe, PATH) — um bash.exe em System32 ou WindowsApps é o lançador do WSL, que corre o comando dentro de uma distribuição Linux, por isso nunca é usado. Nada foi executado. Instala o Git for Windows, ou indica em --shell o caminho completo de um bash.exe.",
     },
     gitLog: {

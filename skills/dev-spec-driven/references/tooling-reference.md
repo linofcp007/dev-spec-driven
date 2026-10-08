@@ -38,7 +38,7 @@ Results are compact JSON.
 | `spec_decide` | Append one entry to the decision log `decisions.md` (`D-n`, `_Kind:_`, `_Date:_`, `_Affects:_` validated against the feature, `_Supersedes:_`) — append-only |
 | `spec_next_task` | The next task — the first open one whose `_Depends:_` are all done (`skipped` / `blocked` `[{number, waitsOn}]` when dependencies are in play; `next: null` + a note when none can start); `batch: true` → + the `[P]` tasks that can run beside it; `waves: true` → the execution waves of every open task + `cycles` + `blocked` |
 | `spec_task_brief` | Self-contained brief for one task (ACs + tests resolved, design context, a Reuse section — the design's Reuse & Integration entries for the task and the source files next to its own —, scoped steering, decisions, project checks, `_Expect: fail_`, pipe warnings, its `_Depends:_` and where each stands, DoD); default = the next task by `spec_next_task`'s rule; `write: true` → `.specs/<feature>/.execution/` |
-| `spec_complete_task` | The only way to tick task N, with `evidence {command, exitCode, summary}` — a failed run is recorded and refuses the tick; a runnable `_Verify:_` counts as verified only with `{command, exitCode: 0}` of its `_Verify:_` command (a run of another command ticks it unverified: `command-mismatch`); an `_Expect: fail_` task needs a failing run (a pass → `unexpectedPass`; a run that never reached the test — exit 126/127/9009, a missing test file or module — → `couldNotRun`); a piped command → `pipeMasked`; every run stamped `observed` (true / false; `"cli"` for `done --run`) — with `meta.evidence: "observed"` an unobserved run leaves it unverified (`unobserved`); a task ticked before its `_Depends:_` → `waitsOn` + a note (never refused); `undo: true` (+ `reason`) unticks it — its evidence turns stale (`staleBy: "undo"`, a re-tick needs a new run), `ticks[n]` dropped, `.state.json → unticks` {n, at, reason} |
+| `spec_complete_task` | The only way to tick task N, with `evidence {command, exitCode, summary}` — a failed run is recorded and refuses the tick; a runnable `_Verify:_` counts as verified only with `{command, exitCode: 0}` of its `_Verify:_` command (a run of another command ticks it unverified: `command-mismatch`); an `_Expect: fail_` task needs a failing run (a pass → `unexpectedPass`; a run that never reached the test — exit 126/127/9009, a missing test file or module, a test file that doesn't parse — → `couldNotRun`); a passing run whose summary shows no test ran ("tests 0", go "[no tests to run]"…) → `couldNotRun: "no-tests"`, nothing recorded; a failed run of a task whose `_Expect:_` value is not `fail` names it (`unknownExpect`); a piped command → `pipeMasked`; every run stamped `observed` (true / false; `"cli"` for `done --run`) — with `meta.evidence: "observed"` an unobserved run leaves it unverified (`unobserved`); a task ticked before its `_Depends:_` → `waitsOn` + a note (never refused); `undo: true` (+ `reason`) unticks it — its evidence turns stale (`staleBy: "undo"`, a re-tick needs a new run), `ticks[n]` dropped, `.state.json → unticks` {n, at, reason} |
 | `spec_append_tasks` | Converge: append new tasks under "Phase: Convergence" (existing tasks never renumbered; each task may carry `_Requirements:_`, `_Makes green:_`, `_Implements:_`, `_Verify:_`, `_Expect: fail_`, `_Size:_`, `_Depends:_`; unknown AC IDs, unplanned T-IDs, or a `depends` naming no task / closing a cycle refuse the call; `needsReapproval`) |
 | `spec_finish` | Close a feature: blockers (incl. `suite-evidence` with project checks) + warnings + fresh checks + a merge summary from the spec chain; `evidence` records the project checks you ran; `write: true` on a ready feature records the drift baseline |
 | `spec_drift` | Implementing files of finished features changed / missing / now present since the finish baseline |
@@ -96,9 +96,12 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   (project checks without a passing run since the last task activity — or run before the implementing files changed —
   once every task is done) · `duplicate-tasks` · `unread-tasks` (checkbox lines the task scanner does not read as tasks —
   an ordered-list `1. [ ] text`, an unnumbered `- [ ] text` outside every task, one in an indented code block) · `verify-pipes` (a `_Verify:_` that pipes) · `malformed-markers`
-  (text on a task line shaped like a marker that yields none — `**Verify:** …`, a bare `Verify:` — so nothing runs or is
+  (text on a task line shaped like a marker that yields none — `**Verify:** …`, a bare `Verify:`, an empty `_Verify:_` with
+  its value written after it — so nothing runs or is
   traced) · `verify-suspicious` (a `_Verify:_` value that looks garbled: it starts with `_` / `*`, holds a code span inside
-  it, or has a quote with no partner) · `outside-code-artifacts` (+tdd: a test planned outside test code — `load-test.md`, an eval set — whose
+  it, or has a quote with no partner) · `expect-value` (an `_Expect:_` value other than `fail` — `failure`, `red`: the task
+  stays must-pass) · `evidence-moved` (a run recorded under a task number whose task was renumbered — `#1 → #2`: neither
+  task reads it; record the moved task's own run) · `outside-code-artifacts` (+tdd: a test planned outside test code — `load-test.md`, an eval set — whose
   artifact is still the scaffold once a done task makes it green or every task is done; `spec_finish` repeats it as a
   warning) · `integration-plan` (brownfield template unfilled) · bugfix
   `reproduction` · `changed-since-approval` (names the `spec_impact` phases to diff) · `decision-affects` (phantom
@@ -250,8 +253,9 @@ commit and whether the tree was dirty, when git is available); `finish --run` ru
 choice; under cmd.exe a `pwsh -NoProfile -Command "…"` `_Verify:_` runs as written (its `$` is PowerShell's — never refused as
 POSIX syntax), while a POSIX shell (`/bin/sh`, `--shell bash`) takes the single-quoted script (it would expand a double-quoted
 `$LASTEXITCODE` to nothing — refused before anything runs; `references/verification.md` → PowerShell); a run that could not happen (no shell, a signal,
-`--timeout <seconds>` expired — at most 2147483 —, output over 64 MB) records nothing; a run ends when its command exits (a
-background process it started, such as a dev server, holds nothing up beyond a 2 s drain — a note says so). `log` reads `git log`
+`--timeout <seconds>` expired — at most 2147483 —, output over 64 MB) records nothing, and neither does a `done --run` that passed
+without running a test (`couldNotRun: "no-tests"`); a run ends when its command exits (a background process it started, such as a
+dev server, holds nothing up beyond a 2 s drain — a note says so). `log` reads `git log`
 (read-only; `-` reads a log from stdin) and lists per task the commits that cite it, plus the +tdd red-first check.
 `done --run` / `finish --run` runs are stamped `observed: "cli"` (they count as observed under `init --evidence
 observed`). `next --waves` prints the execution waves (+ cycles, blocked tasks); `trace --matrix` prints the requirements
