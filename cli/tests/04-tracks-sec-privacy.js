@@ -53,4 +53,13 @@ exports.run = ({ ok, run, tmp }) => {
   const usage = run(["add-track", "--project", a2]).out;
   ok(/core\/\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy/.test(help) && /\+tdd\/\+saas\/\+ai\/\+sec\/\+privacy\/\+dist(?:\/\+\w+)* \(additive, never overwrites\)/.test(help) && /<tdd\|saas\|ai\|sec\|privacy\|dist[|>]/.test(usage),
     "help and the add-track usage name the +sec / +privacy / +dist tracks");
+  // 1.24 r6 F5: a negated subject with a finite verb and a negative predicate over "without X" are requirements on the CLI too (= spec_classify)
+  const req = [["privacy", "No personal data is sent to the LLM provider"], ["sec", "Reject requests without a valid access token"],
+    ["sec", "Los usuarios sin MFA no pueden acceder al panel de administración"]].map(([tr, t]) => {
+    let j = null;
+    try { j = JSON.parse(run(["classify", t, "--json", "--project", a2]).out); } catch { /* invalid JSON */ }
+    return [tr, j && j.tracks];
+  });
+  ok(req.every(([tr, t]) => Array.isArray(t) && t.includes(tr)),
+    "1.24 r6 F5: classify keeps the track of 'No personal data is sent…' (+privacy), 'Reject requests without a valid access token' and ES 'sin MFA no pueden acceder' (+sec) (got " + JSON.stringify(req) + ")");
 };

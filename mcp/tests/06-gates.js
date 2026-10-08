@@ -625,7 +625,8 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     // classifier: PT 'no uso do/de' is the contraction em+o, never a negation across filler words
     const clsNo = ["Guia no uso do LLM", "Chatbot no uso do LLM para suporte", "Painel no uso de IA"].map((x) => S.classify(x));
     ok(clsNo[0].tracks.includes("ai") && !clsNo[0].negated.ai.length && !clsNo[0].notes.length &&
-      clsNo[1].tracks.includes("ai") && !clsNo[1].notes.some((n) => /negated/.test(n)) && !clsNo[2].negated.ai.length && clsNo[2].possible.some((p) => p.track === "ai"),
+      // (1.24 r6 F6: "IA" in capitals is a strong +ai signal — "Painel no uso de IA" is +ai, no longer a hint)
+      clsNo[1].tracks.includes("ai") && !clsNo[1].notes.some((n) => /negated/.test(n)) && !clsNo[2].negated.ai.length && clsNo[2].tracks.includes("ai"),
       "classifier: 'Guia no uso do LLM' keeps +ai ON (no negation, no false conflict note); 'no use of AI' still negates");
 
     // bugfix gate: the template's own FIX task ("Fix the root cause") never counts as the task that writes the root cause

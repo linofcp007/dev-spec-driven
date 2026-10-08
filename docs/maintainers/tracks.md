@@ -602,6 +602,91 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   "Erro de Login", "Exportar facturas", "Formulario de inicio de sesión"). Two existing test texts were re-worded: "Cifrar las
   contraseñas" is two +sec signals now (03-languages' lone-verb example is "las facturas"), "Excluir contas" is PT now (the tie
   example is "Excluir registros").
+  **Review 6 (1.24 r6) — negation (code, `negationOf()`):** three readings after a NOMINAL negation, each a requirement (the
+  track stays; the principle above: exclude only when the negation certainly governs the keyword):
+  (a) `nominalFollowRequires()` — an EN "no" opening a SUBJECT (at its stretch's start or after ensure / make sure / so / that…
+  — `SUBJECT_INTRO`; never after a verb: "WHEN the month has no invoices THE SYSTEM SHALL…" is an object) followed, within 4
+  words, by a finite verb (`SUBJECT_AUX` — is / are / may / can / must / will / has… — or `SUBJECT_VERBS` — leaks, reaches,
+  ends up, leaves, sees, accesses…): "No personal data is sent to the LLM provider", "Ensure no PII is written to the logs", "No
+  API keys are logged", "No tenant can access another tenant's records". An adoption participle after the auxiliary
+  (`ADOPT_PARTICIPLES` / `GOVERN_ADOPT`: needed, required, used, added, included, allowed…) keeps the exclusion — "No Kafka is
+  needed", "No LLM is used", "No feature flags will be added" — unless the item is data to protect (`protectedHead()`, as P3:
+  "No personal data is used for training", "No personal data is needed" keep +privacy); a bare participle ("No auth needed",
+  "No personal data needed for…"), "and" / "but" / "just" (`SUBJECT_END`) end the subject. PT / ES *nenhum / ningún* are no
+  negators at all — their twins were always kept. (b) the same function, for no / without / sem / sin: data to protect kept
+  out of a PLACE — the item's phrase (≤ 1 more word) then a place preposition (`PLACE_PREPS`: in / into / on / to / em / no /
+  nos / en / a…) whose object is no scope word (`SCOPE_WORDS`: this / feature / MVP / version / phase… *esta, funcionalidade,
+  versão · versión*): "No secrets in the repository", "No PII in logs", *"Sem dados pessoais nos logs", "Sin datos personales
+  en los registros"*; "No personal data in this feature", *"Sin datos personales en esta versión"*, a bare "No personal data."
+  still exclude. (c) `negativePredicate()` — a "without / sem / sin X" (`WITHOUT_WORDS`) a denying verb governs (`RE_DENY_VERB`
+  anywhere before it in the clause: reject / refuse / deny / block / forbid / prohibit / prevent / disallow, *rejeitar,
+  bloquear, impedir, proibir · rechazar, denegar, bloquear, impedir, prohibir*) or a negated / denying predicate after it (≤ 6
+  words, the clause: n't / cannot / never / "must not" / *não podem / no pueden* / "are rejected"): "Reject requests without a
+  valid access token", "Users without MFA must not access the admin panel", *"Rejeitar pedidos sem um token…", "Los usuarios
+  sin MFA no pueden acceder…"* — a double negation like "We won't ship without a canary release". Known edges (kept for the
+  human): "No password or Kafka is needed" keeps both (the protected item opens no list), "Without Kafka, the export must not
+  lose messages" keeps Kafka.
+  **Review 6 — recall (data, `SIGNALS`):** +ai strong — `AI` / `IA` in capitals (case-sensitive; a lower-case "ai" / "ia" stays
+  weak: PT "ia" is a verb form), speech-to-text / speech / voice recognition, `OCR` / optical character recognition, computer
+  vision, image recognition / classification, object detection, facial recognition, sentiment analysis / model / classifier, a
+  vision (-language) model, agentic, retrieval-augmented generation, `Whisper` (capitalised) / whisper model / API, DeepSeek,
+  `LLaMA` / `Llama 2-4` (capitalised and versioned only — ES "llama" = calls, a llama farm), + PT / ES; weak — transcription /
+  transcribe (people transcribe too). ai cues: an "IA" beside navigation / a sitemap / a taxonomy (information architecture), an
+  "AI" beside Illustrator / action items / vector files, a "Whisper" message / chat / mode or among players → none. +privacy
+  strong — medical / health / patient / clinical records, patient data, medical history, `PHI` / `EHR`, KYC, a passport number,
+  an SSN / social security / national insurance number, a user's location (user location, the user's / users' location,
+  location of the user(s)) + PT / ES (*registo médico, histórico clínico, prontuário, dados dos pacientes, localização do
+  utilizador · historial / historia clínica, expediente médico, ubicación del usuario*); weak — home / postal / mailing
+  address, dates of birth / birth date / `DOB`, location tracking / history, background / live / real-time location (one
+  concept `location`), passport, ID document / card, identity verification / check, fingerprint, facial recognition, health
+  information, call recordings (one concept `call`), `NIF` / `NIE` / `DNI` / `CPF` + PT / ES (*morada, cartão de cidadão,
+  impressões digitais · domicilio, documento de identidad, huellas dactilares*). +sec strong — card number(s), cardholder
+  (data), PCI DSS / PCI compliance (never a bare "pci": a PCI slot — +saas keeps its old "pci"), `PAN`, impersonate /
+  impersonation, HMAC, signature verification, a webhook signature / signed webhook / "signature … webhook", request signing,
+  a signing secret / key, bcrypt / argon2 / scrypt / pbkdf2 / password hashing / "hash … password", key / secret / credential /
+  token rotation, "rotate … keys / api key / credential / secret / token" (never "rotate the key art"), a public share link /
+  "share … public link" / "anyone with the link", unauthorized / unauthenticated access (`SIGNALS.sec.hazards` — never
+  negated: "No unauthorized access to the reports" is the requirement) + PT / ES (*número do cartão, personificar, assinatura do
+  webhook, rotação … credenciais, partilhar … link público, acesso não autorizado · número de tarjeta, suplantar, firma del
+  webhook, compartir … enlace público, acceso no autorizado*); weak — OAuth (+tdd strong too), login / sign in with Google /
+  Apple, social login (one concept `federated`), file upload (concept `upload`), a public / share link (concept `link`: a blog
+  post's share button too), "verify … signature" (a PDF form's too), user roles, a valid / invalid / expired token (concept
+  `token`), PT `segredos`, ES `secretos` (EN "secrets" had no twin). Two sec cue rules come FIRST: an `all` rule — an auth word
+  (MFA / 2FA / two-factor / authentication / an access token / an API key / a credential / SSO / a password / a valid token… +
+  PT / ES) right after "without / sem / sin" (+ an article, + valid) in a sentence that denies (reject / block / deny / prevent /
+  must not / cannot / never / nobody… + PT / ES) → strong (an access rule); a `sentence` rule — a credential word (API key,
+  secrets, credential, access / refresh token, password + PT / ES) beside logs (never "log in" / "logged in"), a repository /
+  git, plain text, hashing / bcrypt, a vault, rotation, a leak, hard-coding, masking / redacting (+ PT / ES; a bare PT / ES
+  "registo" / "registro" is also a sign-up — only "nos registos" / "en los registros") → strong. +saas: `tenant` moved to
+  STRONG (PT / ES *inquilino*, pt-BR *locatário* were already) with a saas cue: a tenant / an inquilino / a locatário in a
+  sentence about rent, a landlord, a lease, an apartment (*renda, senhorio, arrendamento, aluguel · alquiler, casero, piso*) is
+  no signal — "Os inquilinos pagam a renda ao senhorio" was +saas. A longer keyword is listed before its prefix (cardholder
+  data before cardholder); a plural `pluralize()` + the inflections already reach is never listed (the A2
+  self-match sweep fails on a keyword that can never win its place).
+  **Measured (review 6):** the differential (24fb470 vs the change) over 76,011 inputs — 14,127 string literals of both trees'
+  test files and evals + the reviewers' corpora, and a 29-frame sweep of every built-in keyword (2,138, old ∪ new: 61,884 texts;
+  the frames: the three F5 readings in EN / PT / ES, "No K.", "No K is needed.", "No K, just a CSV export.", "No K in this
+  feature.", "We don't use K.", "Without K the checkout is useless.", "Sem / Sin K.", "No K or Kafka is needed.", "We will not add
+  K or canary releases.", "Show K per tenant on the settings page.", "Add / Store K…"): 16,700 decisions changed. On the OLD
+  keywords' frames 11,861, every one a track switched ON — the F5 frames by construction (No K is sent 981, Ensure no K is
+  written 1,044, Reject requests without K 1,071, Requests without K are rejected 1,071, Users without K must not access 881,
+  Block logins without K 916, PT / ES 1,004–1,081 each, the place frames 19 each — the protected words) and the tenant frame
+  (1,702); "No K.", "No K, just…", "No K in this feature.", "We don't use K.", "Without K the checkout…", "Sem / Sin K." changed
+  NOTHING for an old keyword. On the new keywords' frames 4,099 on and 530 off — a new keyword now opens a negated list ("No OCR
+  or Kafka is needed", "We will not add OCR or canary releases") or carries the inner keyword of its phrase with it ("Sem
+  assinatura do webhook": webhook, "We don't use social login": login). The existing literals (12,177 of the base tree, with
+  the reviewers' 61 texts): 117 changed, ALL on (+sec 41, +ai 33, +saas 24, +privacy 21, +tdd 2 — "Session cookies, bcrypt",
+  "passwords are stored hashed", "Refresh tokens rotate", "No PII in logs", "Painel no uso de IA" (06-gates re-worded: a hint
+  before), "Um utilizador sem subscrição não pode usar…" +tdd); none switched off. Precision / recall (`1.24 r6` in
+  04-tracks-builtin.js): the recall corpus (141 EN / PT / ES one-liners) +ai 100% / 11% → 100% / 100% (38 positives, 9 hard
+  negatives), +privacy n/a / 0% → 100% / 100% (32, 8), +sec 100% / 3% → 100% / 100% (34, 9), +saas 50% / 43% → 100% / 100% (7, 4);
+  the negation set (56 texts) +privacy 100% / 21% → 100% / 100%, +sec – / 0% → 100% / 100%, +saas 100% / 40% → 100% / 100%, and
+  its 17 exclusions stay off; the reviewer's 45
+  (t7) +ai 3 → 20 / 21, +privacy 0 → 10 / 12, +sec 0 → 10 / 12 (left: a Copilot-style completion, "all data we hold about a user",
+  recorded calls, a lone file upload / API key — hints); a 71-text hold-out written after the tuning: +ai recall 25% → 91.7%,
+  +privacy 6.3% → 81.3%, +sec 0% → 100%, +saas 40% → 100%, precision 100% throughout (then six more words: sentiment model /
+  classifier, identity check, histórico clínico, live / real-time location — +ai 100%, +privacy 93.8%). Every older corpus
+  assertion still passes (1.17 D, 1.19 T8 / T review, F2a, +data).
 - **Tracks are persisted in `.state.json` `tracks`** (create / add_track / add_track --remove write them)
   and `detectTracks()` reads them first. Only features without a saved list (pre-1.13) fall back to
   their files, and there a `[SaaS]`/`[AI]` marker counts only on a real markdown heading (a Mermaid node
@@ -740,7 +825,11 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   (`ROLE_SUBJECTS` / `DESIGN_SUBJECTS`: a word in neither keeps the track, unless it is a singular component after a plain
   negation — 1.21 verify P2, `componentAt()`), and prove it with the differential (1.20 / the 1.21
   base / the last release candidate / the change), the verifier's sentence sets and every B / V / R / N / P case in
-  04-tracks-builtin.js.
+  04-tracks-builtin.js. What FOLLOWS a nominal negation can make it a requirement too (1.24 r6 F5 — Review 6 above): a negated
+  subject's finite verb ("No personal data is sent…"), data to protect kept out of a place ("No secrets in the repository"),
+  a denying predicate over "without X" ("Reject requests without a valid token", "Users without MFA must not…") —
+  `nominalFollowRequires()` / `negativePredicate()`; widening `SUBJECT_VERBS`, `PLACE_PREPS` or `RE_DENY_VERB` turns tracks
+  ON in every frame that uses them — measure it (the review-6 harness: 29 frames × every built-in keyword, old / new apart).
 - **Project signal overrides are the team's, never the engine's defaults.** A tuning that holds for everyone goes into
   `SIGNALS` (tracks.js); `.specs/classifier.json` is one project's learned or hand-set layer — never read it without a
   projectDir, never write it outside `writeSignalRecords()` (the roadmap lock, the never-rewrite-a-broken-file rule).
