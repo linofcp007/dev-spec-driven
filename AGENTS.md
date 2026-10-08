@@ -139,7 +139,7 @@ next, `dev-spec next-action <feature>` names the single next step.
   phase's artifact still holds template placeholders; a fresh feature starts at its first phase (`requirements`; `design`
   on the design-first flow).
 - **Evidence rules.** A task whose `_Verify:_` holds a runnable command counts as verified only with a recorded
-  run of it: exit code 0 — or, on an `_Expect: fail_` task (a red test, such as a bugfix's task 3), a failing run (see
+  run of it: exit code 0 — or, on an `_Expect: fail_` task (a red test, such as a bugfix's task 1), a failing run (see
   Red → green). **Can't run the command yourself?** Don't tick the task — not bare, not with a note: name the command
   and ask the user for its output (or to run `node cli/dev-spec.js done <feature> <n> --run` — the line the tool's
   note prints, the clone's path resolved: no `dev-spec` is on PATH unless linked), then record what they report —
@@ -178,8 +178,9 @@ next, `dev-spec next-action <feature>` names the single next step.
   "done" / "verified" while recently ticked tasks lack passing evidence. Other tools have no such hook: run
   `dev-spec stop-check --message "…"` yourself before claiming it (MCP-only: `spec_stop_check {message}`; `spec_log {name, gitLog}`
   reads the `git log --name-only --relative` text you pass — the MCP server never runs git).
-- **Bugfix iron law.** For a `dev-spec bugfix` feature, `doctor` fails until `bug.md` → Root Cause is
-  written, and the tasks after the root-cause task can't be completed before that.
+- **Bugfix iron law.** For a `dev-spec bugfix` feature, `doctor` fails (and the design approval is refused) until
+  `bug.md` → Root Cause is written, and the fix can't be completed before that. Its two tasks: 1 the failing
+  regression test, 2 the fix — the reproduction and the root cause live in `bug.md`, gated by the approvals.
 - **`dev-spec finish` blocks** on doctor failures, an artifact changed since its approval, placeholders
   anywhere in the chain, open or unverified tasks, pending approvals (a role still to sign included) and — with project
   checks set — a check without a passing run since the last task activity. Warnings (uncovered EC/NFR/SC

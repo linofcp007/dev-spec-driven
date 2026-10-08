@@ -42,16 +42,14 @@ What each active track adds at every phase — criteria, design sections, tests,
 
 ## Language (EN / PT / ES)
 
-Detect the language of the user's request and **mirror it** in everything: the conversation, your questions, the
-approval prompts AND the prose of the artifacts — **section headings included** (`## Critérios de Sucesso`,
-`## Verificação da Constituição`). The engine recognizes the mandatory headings in EN/PT/ES, so a localized spec still
-passes `doctor`/`clarify`. **Pass `lang`** on `spec_init` (project default) and `spec_create` (explicit `lang` >
-project default > en): artifacts, steering stubs and tool messages then come out localized — fill the placeholders,
-don't translate the scaffold. Keep the **structural tokens** as they are in every language: AC/SC IDs (`US-1.AC-1`,
-`SC-001`), test IDs (`T-01`), task markers (`_Requirements:_`, `_Makes green:_`, `_Implements:_`, `_Verify:_`,
-`_Expect:_`, `_Size:_`, `_Depends:_`), tags (`[US1]`, `[shared]`, `[P]`), track names, the section markers `[SaaS]`
-`[AI]` `[SEC]` `[PRIVACY]` `[DIST]` `[API]` `[UI]` `[OBS]` `[DATA]` (case-sensitive: `[sec]` is no marker) and
-`[NEEDS CLARIFICATION:]`. EARS keywords may be localized. If the user switches language, follow them.
+Detect the language of the user's request and **mirror it** everywhere — the conversation, your questions, the approval
+prompts and the artifacts' prose, **section headings included** (`## Critérios de Sucesso`); the engine recognizes the
+mandatory headings in EN/PT/ES. **Pass `lang`** on `spec_init` (the project default) and `spec_create` (explicit >
+project > en): scaffolds and tool messages come out localized — fill the placeholders, don't translate the scaffold.
+**Structural tokens** stay as they are in every language: AC/SC IDs (`US-1.AC-1`, `SC-001`), test IDs (`T-01`), task
+markers (`_Requirements:_`, `_Verify:_`, `_Expect:_`…), tags (`[US1]`, `[shared]`, `[P]`), track names, the section
+markers (`[SaaS]` … `[DATA]`, case-sensitive) and `[NEEDS CLARIFICATION:]`. EARS keywords may be localized; if the
+user switches language, follow them.
 
 ## Core Principles
 
@@ -79,15 +77,13 @@ don't translate the scaffold. Keep the **structural tokens** as they are in ever
 
 ## The local MCP server (use it — it's free and offline)
 
-The bundled zero-dependency MCP server **`spec-driven`** does the mechanical work; prefer it over hand-rolled edits:
+The bundled zero-dependency MCP server **`spec-driven`** does the mechanical work — prefer it over hand-rolled edits:
 `spec_classify` → `spec_init` → `spec_create` to start, `spec_doctor` / `spec_approve` / `spec_next_action` at every
-gate, `spec_next_task` / `spec_task_brief` / `spec_complete_task {evidence}` / `spec_finish` to execute. **Which tool
-when:** `references/tool-catalog.md`; the full tool table, CLI, hooks, MCP prompts and `specs://` resources:
-`references/tooling-reference.md`. The tools produce **skeletons and checks** (never overwriting your files); *you*
-fill them. No MCP connection (e.g. claude.ai)? Write the files by hand.
-
-**`dev-spec …` here names the CLI; a line you hand the user is the runnable one the tools print** —
-`node "<clone>/cli/dev-spec.js" …` (a plugin install has no `dev-spec` on PATH).
+gate, `spec_next_task` / `spec_task_brief` / `spec_complete_task {evidence}` / `spec_finish` to execute (which tool
+when: `references/tool-catalog.md`; the tool table, CLI, hooks, prompts and `specs://` resources:
+`references/tooling-reference.md`). The tools write **skeletons and checks**, never over your files; *you* fill them. No
+MCP connection (e.g. claude.ai)? Write the files by hand. `dev-spec …` here names the CLI; **a line you hand the user is
+the runnable one the tools print** — `node "<clone>/cli/dev-spec.js" …` (a plugin install has no `dev-spec` on PATH).
 
 ## First Things First: Mode, then Tracks
 
@@ -136,35 +132,34 @@ Phase 0 also picks a **size** (`spec_classify`'s `suggestedSize` is a draft; pas
 change: ONE `change.md` (summary, 1–3 EARS criteria, approach, 1–3 tasks with `_Verify:_`), core only, two approvals —
 the plan (`spec_approve {through: "tasks"}`) and execution; a track or a fourth task means size s. **s** — one story, no
 classification.md, each track's core-tier sections (an extended one may stay out, or answer `n/a — <reason>`); fill the
-whole plan, approve it in one call (+tdd / +ai: up to Phase 4). **m / l** — the full chain, duplicate track sections merged. An XS bugfix drops
-the reproduce / root-cause tasks (their gates remain). No size = the pre-1.21 scaffold. Every size keeps EARS, trace,
+whole plan, approve it in one call (+tdd / +ai: up to Phase 4). **m / l** — the full chain, duplicate track sections merged. A bugfix (any size) has
+no reproduce / root-cause tasks (their gates remain). No size = the pre-1.21 scaffold. Every size keeps EARS, trace,
 evidence, the iron law and the finish gate. `references/workflows.md`.
 
 ### Brownfield — adopt SDD in an EXISTING codebase
-No `.specs/` yet, or "spec our existing app": **scan** (`/scan`) → steering + a constitution that acknowledges the
-existing patterns → reverse-engineer specs of what the code does *today* (`/reverse`) → **coverage** (`/coverage`) →
-new features integration-aware (`spec_create {brownfield: true}` → `integration-plan.md`, `_Implements:_`). Specs or
-plans written elsewhere (Kiro, spec-kit, OpenSpec, a Claude Code or Cursor plan, a Codex ExecPlan, BMAD) come in with
-`/spec-import`. Adopt incrementally. `references/brownfield.md`.
+No `.specs/` yet, or "spec our existing app": `/scan` → steering + a constitution that acknowledges the existing
+patterns → `/reverse` (specs of what the code does *today*) → `/coverage` → new features integration-aware
+(`spec_create {brownfield: true}` → `integration-plan.md`, `_Implements:_`). Specs or plans written elsewhere (Kiro,
+spec-kit, OpenSpec, a Claude Code / Cursor plan, a Codex ExecPlan, fluidplan, BMAD): `/spec-import`.
+`references/brownfield.md`.
 
 ## Directory Structure and Steering
 
-Everything lives in `.specs/` at the project root: `steering/`, `roadmap.json` and one folder per feature — its
-artifacts (the tracks decide which), `decisions.md`, `retro.md` and `.history/` (approval snapshots — commit them);
-generated there: `ROADMAP.md`, `SPECS.md`, `RELEASE-NOTES.md`, `exports/`. Annotated tree:
-`references/tooling-reference.md`. **An existing `.specs/` from an older dev-spec** (the session-start line says so):
-run `/spec-upgrade` first — audit → apply (after an OK) → review.
+Everything lives in `.specs/` at the project root — `steering/`, `roadmap.json`, one folder per feature (its artifacts,
+`decisions.md`, `retro.md`, the `.history/` approval snapshots — commit them) and the generated `ROADMAP.md`,
+`SPECS.md`, `RELEASE-NOTES.md`, `exports/` (annotated tree: `references/tooling-reference.md`). **A `.specs/` from an
+older dev-spec** (the session-start line says so): `/spec-upgrade` first — audit → apply (after an OK) → review.
 
-**Steering.** Before any spec work, read whatever exists in `.specs/steering/`. Missing files are created **after
-Phase 0 approval** (step 4); add a track's steering file (`steering_scaffold`) the first time a later feature pulls in
-that track. One still full of placeholders steers nothing (`spec_doctor` names it). Scoped steering (front matter
-`inclusion`), the team's scaffolds in `.specs/templates/`, the optional `glossary.md`: `references/steering-templates.md`.
+**Steering.** Read whatever exists in `.specs/steering/` before any spec work. Missing files are created **after Phase 0
+approval** (step 4), a track's steering file (`steering_scaffold`) the first time a later feature pulls that track in.
+One still full of placeholders steers nothing (`spec_doctor` names it). Scoped steering, the team's `.specs/templates/`,
+`glossary.md`: `references/steering-templates.md`.
 
-**`constitution.md` is core (always).** It holds the project's non-negotiable principles (e.g. "every write is
-idempotent", "no PII in logs", "errors fail closed"). Every design carries a **Constitution Check** section;
-`spec_doctor` only checks that the section is there (the design approval also refuses it empty). Whether the design
-actually honours each principle is judged by the human at the gate and by the `spec-critic` agent
-(`/spec-doctor --deep`); `/prReview` checks the code against it. Keep the principles few, concrete, and testable.
+**`constitution.md` is core (always)** — the project's few, concrete, testable non-negotiables ("every write is
+idempotent", "no PII in logs"). Every design carries a **Constitution Check** section;
+`spec_doctor` only checks that the section is there (the design approval also refuses it empty) — whether the design
+honours each principle is judged by the human at the gate and by the `spec-critic` agent (`/spec-doctor --deep`);
+`/prReview` checks the code against it.
 
 ## Phase 0: Classification (`/classify`)
 
@@ -172,16 +167,13 @@ Decide the mode, then the track set. This is fast (5–10 min) and saves days of
 
 1. **Run `spec_classify`** with the feature description (and `projectDir` — the project's track packs are classified
    too) to get a recommended track set + the keyword signals that triggered each track. A draft, not gospel.
-2. **Sanity-check against the matrix** in `references/classification-matrix.md`. The rule of thumb: `+tdd` if
-   correctness matters or it's hard to undo (billing, auth, data integrity, tricky logic) · `+saas` if multi-tenant,
-   hot-path, background, an external contract, hard to roll back or cost-sensitive at scale · `+ai` if quality depends
-   on LLM/agent/embedding output or user input reaches a model · `+sec` if a mistake is a breach (credentials, a trust
-   boundary, who-may-do-what, secrets) · `+privacy` if it collects, stores, shares, profiles or deletes personal data ·
-   `+dist` if one write reaches more than one system or delivery, idempotency, concurrency or partial failures matter ·
-   `+api` if other code depends on the API's contract · `+ui` if it adds or changes a user-facing screen or flow ·
-   `+obs` if people depend on it staying up (SLOs, alerting, on-call, rollout) · `+data` if it moves data between stores on a
-   schedule or a stream and owns its quality (ETL, a warehouse, backfills). **When unsure, turn the track on.**
-   One auth word alone only makes `+sec` "possible"; the classifier's notes say so.
+2. **Sanity-check against `references/classification-matrix.md`.** Rule of thumb: `+tdd` correctness matters or it's
+   hard to undo · `+saas` multi-tenant, hot path, background, an external contract or cost at scale · `+ai` quality
+   depends on model output, or user input reaches a model · `+sec` a mistake is a breach (credentials, trust boundaries,
+   who-may-do-what, secrets) · `+privacy` personal data · `+dist` one write reaches several systems (idempotency,
+   concurrency, partial failure) · `+api` other code depends on the contract · `+ui` a user-facing screen or flow ·
+   `+obs` people depend on it staying up · `+data` it moves data between stores on a schedule or a stream and owns its
+   quality. **When unsure, turn the track on.** One auth word alone only makes `+sec` "possible".
 3. **Present for approval:** mode, active tracks, size, the signals, blast radius, and (per track) hot-path / autonomy /
    volume / compliance. If the user disagrees with the track set, adjust it now.
 4. **After Phase 0 approval:** `spec_init {tracks, lang}` if steering is missing, then
@@ -193,22 +185,18 @@ Worked examples: `references/classification-examples-saas.md`, `references/class
 
 ## Phase 1: Requirements (`/createSpec`)
 
-Transform the idea into formal, testable requirements in **EARS** syntax with **stable AC IDs** (`US-1.AC-1`, …) —
-the backbone of traceability (tests, tasks, commits, dashboards and alerts reference them), so assign them even on the
-lightest track. **Prioritize the user stories and make each independently shippable:** P1 / P2 / P3, P1 the MVP, each
-with a one-line *Independent Test*. Add **Success Criteria** — measurable, **technology-agnostic** outcomes (`SC-001`,
-e.g. "90% complete checkout in <30s") beside the EARS ACs. Give edge cases and NFRs stable IDs too (`EC-1`, `NFR-1`) —
-`trace_check` warns when no task or test covers them. **Mark any ambiguity inline** with
-`[NEEDS CLARIFICATION: question]`; **the design phase cannot start while any marker remains** (`spec_doctor` fails
-`clarifications`). Replace every template placeholder: a scaffold still a template counts as unwritten (`placeholders`
-check; approval refused). Each active track's criteria to consider: `references/track-checklists.md`.
+Turn the idea into testable requirements in **EARS** syntax with **stable AC IDs** (`US-1.AC-1`, …) — the backbone of
+traceability (tests, tasks, commits and alerts cite them), so assign them even on the lightest track. **Prioritize the
+user stories and make each independently shippable** (P1 the MVP, each with a one-line *Independent Test*). Add
+**Success Criteria** — measurable, **technology-agnostic** outcomes (`SC-001`) — and stable IDs for edge cases and NFRs
+(`EC-1`, `NFR-1`; `trace_check` warns when nothing covers them). **Mark any ambiguity inline** with
+`[NEEDS CLARIFICATION: question]`; **the design phase cannot start while any marker remains** (`clarifications`).
+Replace every template placeholder (`placeholders`: approval refused). Track criteria: `references/track-checklists.md`.
 
-Steps: read steering → ask clarifying questions (don't guess) → fill the scaffolded `requirements.md` → run
-`ears_validate` (missing SHALL / IDs, vague words) → **run `spec_clarify`** (`/clarify`: vague terms, leftover
-placeholders, missing edge cases / NFRs / out-of-scope / IF…THEN failure paths, track gaps, unstated consistency) and
-ask the user → for a deeper one-question-at-a-time interrogation offer `/grill` (its constraints round: atomicity,
-isolation, races, consistency, idempotency, failures, volume — minus what an active track's design sections already ask)
-→ present for approval.
+Steps: read steering → ask clarifying questions (don't guess) → fill `requirements.md` → `ears_validate` →
+**`spec_clarify`** (`/clarify`: vague terms, placeholders, missing edge cases / NFRs / out-of-scope / IF…THEN paths,
+track gaps) and ask the user → offer `/grill` for a one-question-at-a-time interrogation (its constraints round:
+atomicity, isolation, races, consistency, idempotency, failures, volume) → present for approval.
 
 ### EARS Quick Reference
 | Pattern | Keyword | Example |
@@ -225,21 +213,18 @@ testable and specific — no "fast", "user-friendly"; use concrete values. Full 
 
 ## Phase 2: Design (`/design`)
 
-Convert approved requirements into a technical blueprint (on a design-first feature this phase comes before Phase 1).
-Re-read steering + requirements, scan the codebase for patterns to match and code to reuse, then write `design.md`.
+Convert approved requirements into a technical blueprint (on a design-first feature this phase comes first). Re-read
+steering + requirements, scan the codebase for patterns to match and code to reuse, then write `design.md`.
 
-**Base sections (always):** Overview · Architecture (≥1 Mermaid diagram) · **Reuse & Integration** (existing modules /
-components / helpers reused or extended, with paths; what is new and why; where it lives) · **Alternatives & Trade-offs**
-(≥ 2 options per key decision — pros, cons, cost of being wrong, the one chosen and why) · Data Models · API Contracts ·
-Security · Error Handling · Testing Strategy · **Risks** (likelihood · impact · mitigation · owner) · **Constitution Check**
-(each principle of `steering/constitution.md` — a gate, re-checked after any change) · **Complexity Tracking** (justify what
-breaks a principle; empty is good). Doctor warns `design-tradeoffs` / `design-risks` / `design-reuse` (never blocks).
-`spec_create` always scaffolds `quickstart.md` (a manual acceptance scenario) and `checklist.md` — fill both; optionally
-`research.md`. **Each active track adds its mandatory sections** (+tdd Testability Notes, +ai 10; the rest: the table
-above) — what goes in each: `references/track-checklists.md`.
-
-Design principles: simplicity over cleverness, consistency with the codebase, known patterns over novelty. Present for
-approval before proceeding.
+**Base sections (always):** Overview · Architecture (≥1 Mermaid diagram) · **Reuse & Integration** (what is reused or
+extended, with paths; what is new and why) · **Alternatives & Trade-offs** (≥ 2 options per key decision, the one chosen
+and why) · Data Models · API Contracts · Security · Error Handling · Testing Strategy · **Risks** (likelihood · impact ·
+mitigation · owner) · **Constitution Check** (each principle — re-checked after any change) · **Complexity Tracking**
+(what breaks a principle; empty is good). Doctor warns `design-tradeoffs` / `design-risks` / `design-reuse` (never
+blocks). `spec_create` always scaffolds `quickstart.md` (a manual acceptance scenario) and `checklist.md` — fill both.
+**Each active track adds its mandatory sections** (+tdd Testability Notes, +ai 10, the rest: the table above; what goes
+in each: `references/track-checklists.md`). Simplicity over cleverness, consistency with the codebase; present for
+approval.
 
 ## Phase 3: Test Plan & Eval Plan (`/testPlan`, `/evalPlan`) — track-conditional
 
@@ -273,13 +258,11 @@ Phase 4 gate — its failing regression test is one of its tasks.
 
 ## Phase 5: Tasks (`/createTask`)
 
-Break the design into tasks (~30 min–2 h each). **Organize by user story (P1 first)** so each story is independently
-shippable: a `Setup` phase, a `Foundational` phase (blocks all stories), one phase per story (`Story US-1 (P1)`, …)
-ending with a **`**Checkpoint:**`** line where that story is independently testable, then a `Polish` phase. Within a
-story keep track-aware ordering (foundation → logic → API → UI → observability → load/eval). **Tag every task with its
-story** — `[US1]`/`[US2]`, or `[shared]` for cross-cutting/foundational/setup/polish — and mark **`[P]`** on tasks that
-can run in **parallel** (different files, no dependencies); tag order `[US1][P]`. Numbers ARE the order; 2–4 sub-steps
-each. Stories that aren't independent were mis-sliced — re-slice them.
+Break the design into tasks (~30 min–2 h each), **organized by user story (P1 first)**: `Setup`, `Foundational` (blocks
+all stories), one phase per story (`Story US-1 (P1)`, …) ending with a **`**Checkpoint:**`** line where it is
+independently testable, then `Polish`. **Tag every task with its story** (`[US1]`, or `[shared]`) and **`[P]`** when it
+can run in parallel (different files, no dependencies) — `[US1][P]`. Numbers ARE the order; stories that aren't
+independent were mis-sliced.
 
 Traceability markers per task:
 - Always: `_Requirements: US-1.AC-1, US-1.AC-2_` and `_Verify: <command that proves it>_` (no pipe: a pipeline

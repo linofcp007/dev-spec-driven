@@ -540,8 +540,12 @@ const RE_CMD_SHELL_FAILURE = new RegExp([
   "was unexpected at this time", "n[ãa\uFFFD]o era esperad[oa] (?:nesta altura|neste momento)", "era inesperad[oa] neste momento", "no se esperaba en este momento",
   "cannot find the path specified", "n[ãa\uFFFD]o (?:pode|consegue|conseguiu) (?:encontrar|localizar) o caminho especificado", "no puede (?:encontrar|hallar) la ruta especificada",
   "the filename, directory name, or volume label syntax is incorrect",
-  // review 5 (L10): the same message on a PT-PT / PT-BR / ES Windows, read between its fixed ends (a bounded gap)
-  "a sintaxe do nome d[eo] (?:ficheiro|arquivo)[^\\n]{0,120}?volume est[áa�] incorrec?ta", "la sintaxis del nombre del? archivo[^\\n]{0,120}?volumen no es correcta",
+  // review 5 (L10): the same message on a PT-PT / PT-BR / ES Windows, read between its fixed ends (a bounded gap). Both word
+  // orders Windows ships — "A sintaxe do nome …" and "O nome …, … ou a sintaxe da etiqueta …" (ES: "El nombre de archivo, el
+  // nombre de directorio o la sintaxis de la etiqueta del volumen no son correctos", as Spanish Windows prints it) — and its
+  // verb forms (está / é / estão / são, no es / no son), old PT-PT spelling (incorrecta) and OEM-decoded accents (U+FFFD).
+  "(?:a sintaxe do nome d[eo] (?:ficheiro|arquivo)|o nome d[eo] (?:ficheiro|arquivo),)[^\\n]{0,160}?volume[^\\n]{0,24}?(?:est[áa�]|est[ãa�]o|[ée�]|s[ãa�]o) incorrec?t[oa]s?",
+  "(?:la sintaxis del nombre del? archivo|el nombre del? archivo,)[^\\n]{0,160}?volumen no (?:es|son) correct[oa]s?",
 ].join("|"), "i");
 function windowsShellFailure(output, code) {
   return code === 9009 || RE_CMD_SHELL_FAILURE.test(String(output == null ? "" : output).slice(0, 200000));

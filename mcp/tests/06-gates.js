@@ -197,8 +197,19 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     ok(fin4b.blockers.some((b) => b === "bug.md → Root Cause is not filled — no fix before the root cause is known") && !fin4b.blockers.some((b) => /blocking checks: [^\n]*root-cause/.test(b)),
       "spec_finish on a bugfix: an unfilled Root Cause is its own blocker");
 
-    // (5) bugfix execution gate + brief context
+    // (5) bugfix execution gate + brief context — on a tasks.md that has a root-cause task: the four-task form every bugfix
+    // (but an XS one) was scaffolded with before the short form, kept verbatim in projects (never rewritten), EN and PT.
+    const legacyBugTasks = (lang) => (lang === "pt"
+      ? "# Tasks: x\n\n## Fase: Correção\n- [ ] 1. [shared] Reproduzir o bug de forma fiável e escrever os passos em bug.md → Reprodução\n  - _Requirements: US-1.AC-1_\n" +
+        "- [ ] 2. [shared] Encontrar a causa raiz com evidência; preencher bug.md → Causa Raiz (ainda sem corrigir)\n  - _Requirements: US-1.AC-1_\n" +
+        "- [ ] 3. [US1] Escrever o teste de regressão T-01 e vê-lo falhar pela razão certa (colar o output); acrescentar o teste de proteção T-02 (já passa)\n  - _Requirements: US-1.AC-1_\n  - _Verify: [comando que executa o T-01]_\n  - _Expect: fail_\n" +
+        "- [ ] 4. [US1] Corrigir a causa raiz — uma alteração, não um pacote; o teste de proteção T-02 continua verde\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01_\n  - _Verify: [comando da suite de testes completa]_\n"
+      : "# Tasks: x\n\n## Phase: Fix\n- [ ] 1. [shared] Reproduce the bug reliably and write the steps in bug.md → Reproduction\n  - _Requirements: US-1.AC-1_\n" +
+        "- [ ] 2. [shared] Find the root cause with evidence; fill bug.md → Root Cause (no fix yet)\n  - _Requirements: US-1.AC-1_\n" +
+        "- [ ] 3. [US1] Write regression test T-01 and watch it fail for the right reason (paste the output); add guard test T-02 (it passes already)\n  - _Requirements: US-1.AC-1_\n  - _Verify: [command that runs T-01]_\n  - _Expect: fail_\n" +
+        "- [ ] 4. [US1] Fix the root cause — one change, not a bundle; guard test T-02 stays green\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01_\n  - _Verify: [full test suite command]_\n");
     const f5 = S.createFeature(w5, "Null deref", undefined, "crash on save", undefined, "en", "bugfix");
+    write5(f5, "tasks.md", legacyBugTasks("en"));
     const tasks5 = () => read5(f5, "tasks.md");
     const c51 = S.completeTask(w5, f5.slug, 1);
     const c50 = S.completeTask(w5, f5.slug, 3); // the root-cause task (#2) still open: "do task 2 first"
@@ -220,12 +231,76 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const f5b = S.createFeature(w5, "Odd bug", undefined, "x", undefined, "en", "bugfix");
     write5(f5b, "tasks.md", "- [ ] 1. Investigate\n- [ ] 2. Patch it\n");
     const f5pt = S.createFeature(w5pt, "Falha", undefined, "x", undefined, "pt", "bugfix");
+    write5(f5pt, "tasks.md", legacyBugTasks("pt"));
     const pt3 = S.completeTask(w5pt, f5pt.slug, 3).error;
     const pt2 = S.completeTask(w5pt, f5pt.slug, 2);
     ok(/only task 1 can be completed/.test(S.completeTask(w5, f5b.slug, 2).error) && S.completeTask(w5, f5b.slug, 1).ok &&
       /A tarefa 3 ainda não pode ser concluída/.test(pt3) && /faz primeiro a tarefa 2/.test(pt3) && /^A tarefa 2 está marcada, mas bug\.md → Causa Raiz continua vazia/.test(pt2.note) &&
       /a tarefa 2 está marcada, mas o que ela entrega é essa secção/.test(S.completeTask(w5pt, f5pt.slug, 3).error),
       "no task mentions the Root Cause → only the first task can be completed; the refusal (and the ticked-root-cause-task note / refusal) is localized (PT)");
+    // The scaffold today (every size): no reproduce / root-cause task — 1 the red regression test, 2 the fix. With Root Cause
+    // empty (a design approval forced over it, or the section emptied) the iron law still holds: the fix is refused before
+    // anything is recorded ("only task 1"), the brief reports it gated; the red test itself can be recorded (no rootCausePending).
+    {
+      const fN = S.createFeature(w5, "Short bug", undefined, "x", undefined, "en", "bugfix");
+      write5(fN, "tasks.md", read5(fN, "tasks.md").replace("[command that runs T-01]", "node tests/t01.test.js").replace("[full test suite command]", "npm test"));
+      const bt = S.taskBlocks(read5(fN, "tasks.md"));
+      const fix = S.completeTask(w5, fN.slug, 2, { command: "npm test", exitCode: 0 });
+      const brFix = S.taskBrief(w5, fN.slug, 2);
+      const red = S.completeTask(w5, fN.slug, 1, { command: "node tests/t01.test.js", exitCode: 1, summary: "T-01 fails" });
+      ok(bt.length === 2 && S.expectsFail(bt[0]) && fix.ok === false && fix.gated === "root-cause" &&
+        /^Task 2 can't be completed yet: bug\.md → Root Cause is not filled and no task writes it — only task 1 can be completed/.test(fix.error) &&
+        !(stateOf(fN).evidence || {})["2"] && brFix.gated === "root-cause" && red.ok && !red.rootCausePending && /- \[x\] 1\./.test(read5(fN, "tasks.md")),
+        "bugfix short form: with Root Cause empty the fix (task 2) is refused and nothing recorded — only task 1 (the red regression test) can be completed; the brief says gated (got " +
+        JSON.stringify([bt.length, fix.error, brFix.gated, red.ok, red.rootCausePending]) + ")");
+    }
+    // Once bug.md and the plan are written and approved phase by phase, next_action points at task #1 — the failing regression
+    // test (it named "Reproduce the bug", work the requirements / design gates had already signed off). A tasks.md with the
+    // four tasks (scaffolded before) stays as it is and valid: a fresh one is still in `requirements` (its reproduce /
+    // root-cause steps are bug steps, never a breakdown), doctor reads it like a new one, spec_upgrade flags nothing about it
+    // and its apply leaves it byte for byte.
+    {
+      const pS = path.join(tmp, "proj-wp5-short");
+      S.initProject(pS, ["core"], "en");
+      const bS = S.createFeature(pS, "Sum skips first", undefined, "the sum skips the first item", undefined, "en", "bugfix");
+      const fillS = (rel, pairs) => { const fp = path.join(bS.dir, rel); let t = fs.readFileSync(fp, "utf8"); pairs.forEach(([x, y]) => { t = t.split(x).join(y); }); fs.writeFileSync(fp, t); };
+      fillS("requirements.md", [["[the condition that triggers the bug]", "the list has two or more items"], ["[the correct behavior]", "return the sum of every item"],
+        ["[the neighbouring behavior that already worked]", "the sum of an empty list as 0"], ["[nearby inputs that must keep working]", "an empty list"]]);
+      fillS("test-plan.md", [["[unit/integration]", "unit"], ["`[path]`", "`tests/t01.test.js`"]]);
+      fillS("tasks.md", [["[command that runs T-01]", "node tests/t01.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 18"], ["[full test suite command]", "npm test"]]);
+      fillS("bug.md", [["[correct behavior]", "the sum of every item"], ["[what happens — error message, output, log lines]", "the first item is missing"],
+        ["> **TODO** — exact steps, input and environment that reproduce it every time.", "total([1, 2]) returns 2."],
+        ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The loop starts at index 1 (sum.js:3)."],
+        ["[What changes and why it removes the root cause — one fix, not a bundle.]", "Start the loop at 0."]]);
+      const apS = ["requirements", "design", "test-plan", "tasks"].map((ph) => S.approvePhase(pS, bS.slug, ph, "u"));
+      const naS = S.nextAction(pS, bS.slug);
+      const redS = S.completeTask(pS, bS.slug, 1, { command: "node tests/t01.test.js", exitCode: 1, summary: "T-01 fails: got 2" });
+      const naS2 = S.nextAction(pS, bS.slug);
+      const greenS = S.completeTask(pS, bS.slug, 2, { command: "npm test", exitCode: 0, summary: "all passing" });
+      ok(apS.every((r) => r.ok) && naS.step === "implement" && /^Implement task #1: Write regression test T-01 and watch it fail/.test(naS.recommendation) &&
+        redS.ok && redS.redRecorded && naS2.step === "implement" && /^Implement task #2: Fix the root cause/.test(naS2.recommendation) &&
+        greenS.ok && greenS.verified && S.finishFeature(pS, bS.slug).readyToFinish === true,
+        "bugfix short form, gate by gate: after the tasks approval next_action → #1 the failing regression test, its red run recorded → #2 the fix, green → finish ready (got " +
+        JSON.stringify([apS.map((r) => r.ok), naS.recommendation, naS2.recommendation, redS.redRecorded, greenS.verified]) + ")");
+      const bN = S.createFeature(pS, "New one", undefined, "x", undefined, "en", "bugfix");
+      const bL = S.createFeature(pS, "Old one", undefined, "x", undefined, "en", "bugfix");
+      write5(bL, "tasks.md", legacyBugTasks("en"));
+      const bLp = S.createFeature(pS, "Antigo", undefined, "x", undefined, "pt", "bugfix");
+      write5(bLp, "tasks.md", legacyBugTasks("pt"));
+      const bLbr = S.createFeature(pS, "Antigo BR", undefined, "x", undefined, "pt-BR", "bugfix");
+      write5(bLbr, "tasks.md", legacyBugTasks("pt").replace("de forma fiável", "de forma confiável"));
+      const bLes = S.createFeature(pS, "Antiguo", undefined, "x", undefined, "es", "bugfix");
+      write5(bLes, "tasks.md", "# Tareas: x\n\n- [ ] 1. [shared] Reproducir el bug de forma fiable y escribir los pasos en bug.md → Reproducción\n  - _Requirements: US-1.AC-1_\n" +
+        "- [ ] 2. [shared] Encontrar la causa raíz con evidencia; rellenar bug.md → Causa Raíz (aún sin corregir)\n  - _Requirements: US-1.AC-1_\n");
+      const sig = (slug) => S.specDoctor(pS, slug).checks.map((c) => c.id + ":" + c.status).join();
+      const up = S.specUpgrade(pS);
+      const upOf = (slug) => { const f = up.features.find((x) => x.name === slug) || {}; return JSON.stringify([f.group, (f.doctor || {}).failing && f.doctor.failing.map((c) => c.id), (f.doctor || {}).warnings, f.pendingGates]); };
+      const upA = S.specUpgrade(pS, { apply: true });
+      ok([bL, bLp, bLbr, bLes, bN].every((b) => S.statusFeature(pS, b.slug).phase === "requirements") &&
+        sig(bL.slug) === sig(bN.slug) && upOf(bL.slug) === upOf(bN.slug) && upA.ok && read5(bL, "tasks.md") === legacyBugTasks("en") && read5(bLp, "tasks.md") === legacyBugTasks("pt"),
+        "a bugfix tasks.md with the four tasks (scaffolded before the short form) stays valid: phase requirements while fresh (its steps are bug steps — EN / PT / ES), doctor and the spec_upgrade audit read it like a new one, the upgrade's apply never rewrites it (got " +
+        JSON.stringify([S.statusFeature(pS, bL.slug).phase, sig(bL.slug), sig(bN.slug), upOf(bL.slug), upOf(bN.slug)]).slice(0, 900) + ")");
+    }
 
     // A red-phase task (its test must FAIL) carrying a must-pass _Verify:_ can never be verified: the refusal of its red
     // run, its unverified note and next_action's verify step say how to fix the TASK (move the command to the fix task, or
@@ -241,26 +316,25 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
       fillAll("requirements.md", /\[[^\]\n]+\]/g, "the refresh token has expired");
       fillAll("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
       fillAll("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
-      ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(d, b.slug, ph));
-      S.completeTask(d, b.slug, 1); S.completeTask(d, b.slug, 2);
+      ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(d, b.slug, ph)); // task 1 is the red one
       return b;
     };
     const rb = redBug(w5, "en");
-    const rbRun = S.completeTask(w5, rb.slug, 3, { command: "node tests/t01.test.js", exitCode: 1, summary: "1 failing" });
-    const rbNote = S.completeTask(w5, rb.slug, 3, { summary: "T-01 fails: the redirect loop" });
-    write5(rb, "tasks.md", read5(rb, "tasks.md").replace(/- \[ \] 4\./, "- [x] 4."));
+    const rbRun = S.completeTask(w5, rb.slug, 1, { command: "node tests/t01.test.js", exitCode: 1, summary: "1 failing" });
+    const rbNote = S.completeTask(w5, rb.slug, 1, { summary: "T-01 fails: the redirect loop" });
+    write5(rb, "tasks.md", read5(rb, "tasks.md").replace(/- \[ \] 2\./, "- [x] 2."));
     const rbNext = S.nextAction(w5, rb.slug);
     const rbPt = redBug(w5pt, "pt");
-    const rbPtRun = S.completeTask(w5pt, rbPt.slug, 3, { command: "node tests/t01.test.js", exitCode: 1 });
-    const plain = S.completeTask(w5, rb.slug, 4, { command: "npm test", exitCode: 1 });
-    ok(rbRun.ok === false && rbRun.redPhaseVerify === true && /verification failed \(exit 1\).*Task 3 writes a test that must FAIL \(the red phase\)/.test(rbRun.error) &&
-      /Mark task 3 with _Expect: fail_ — a run that FAILS is then its proof \(T-01 fails before the fix\)/.test(rbRun.error) &&
-      /node "[^"]*dev-spec\.js" done red-loop-en 3 --run\. Or move the command to the task that makes it green/.test(rbRun.error) &&
-      rbNote.ok && rbNote.unverifiedReason === "failed-run" && rbNote.redPhaseVerify === true && / — Task 3 writes a test that must FAIL/.test(rbNote.note) &&
-      rbNext.step === "verify" && /Task 3 writes a test that must FAIL/.test(rbNext.recommendation) &&
-      rbPtRun.redPhaseVerify === true && /A tarefa 3 escreve um teste que tem de FALHAR \(a fase vermelha\)/.test(rbPtRun.error) &&
+    const rbPtRun = S.completeTask(w5pt, rbPt.slug, 1, { command: "node tests/t01.test.js", exitCode: 1 });
+    const plain = S.completeTask(w5, rb.slug, 2, { command: "npm test", exitCode: 1 });
+    ok(rbRun.ok === false && rbRun.redPhaseVerify === true && /verification failed \(exit 1\).*Task 1 writes a test that must FAIL \(the red phase\)/.test(rbRun.error) &&
+      /Mark task 1 with _Expect: fail_ — a run that FAILS is then its proof \(T-01 fails before the fix\)/.test(rbRun.error) &&
+      /node "[^"]*dev-spec\.js" done red-loop-en 1 --run\. Or move the command to the task that makes it green/.test(rbRun.error) &&
+      rbNote.ok && rbNote.unverifiedReason === "failed-run" && rbNote.redPhaseVerify === true && / — Task 1 writes a test that must FAIL/.test(rbNote.note) &&
+      rbNext.step === "verify" && /Task 1 writes a test that must FAIL/.test(rbNext.recommendation) &&
+      rbPtRun.redPhaseVerify === true && /A tarefa 1 escreve um teste que tem de FALHAR \(a fase vermelha\)/.test(rbPtRun.error) &&
       plain.ok === false && !plain.redPhaseVerify && !/red phase/.test(plain.error) &&
-      /Task 3 is red by design/.test(read5(rb, "tasks.md")) && /A tarefa 3 é vermelha por natureza/.test(read5(rbPt, "tasks.md")),
+      /Task 1 is red by design/.test(read5(rb, "tasks.md")) && /A tarefa 1 é vermelha por natureza/.test(read5(rbPt, "tasks.md")),
       "a red-phase task with a must-pass _Verify:_: its red run's refusal, its note and next_action's verify step explain the fix (mark it _Expect: fail_, or move the command to the fix task) — PT too; a normal failing task gets no such hint; the bugfix template says so (got " +
       JSON.stringify([rbRun.error, rbNote.note, rbNext.step, plain.error].map((x) => String(x).slice(0, 90))) + ")");
 
@@ -280,8 +354,8 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const phE5 = docE5.checks.find((c) => c.id === "placeholders") || { detail: "" };
     approveBefore(w5, f5e.slug, "design");
     const apE5 = S.approvePhase(w5, f5e.slug, "design");
-    S.completeTask(w5, f5e.slug, 1); S.completeTask(w5, f5e.slug, 2);
-    const c3E5 = S.completeTask(w5, f5e.slug, 3);
+    S.completeTask(w5, f5e.slug, 1);
+    const cFixE5 = S.completeTask(w5, f5e.slug, 2); // the fix: after task 1, gated only while Root Cause is unfilled
     const finE5 = S.finishFeature(w5, f5e.slug);
     fs.writeFileSync(bugE5, bugE5Text.replace(/## Root Cause\n[^\n]*/, "## Root Cause\n[the cause, with evidence]"));
     const onlyE5 = (S.specDoctor(w5, f5e.slug).checks.find((c) => c.id === "root-cause") || {}).status;
@@ -291,10 +365,10 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const bugP5 = path.join(f5ept.dir, "bug.md");
     fs.writeFileSync(bugP5, fs.readFileSync(bugP5, "utf8").replace(/## Causa Raiz\n> \*\*TODO\*\*[^\n]*/, "## Causa Raiz\nnorm() só converte [A-Z] para minúsculas, por isso 'É' não bate certo (auth.js:40)."));
     const ptE5 = (S.specDoctor(w5pt, f5ept.slug).checks.find((c) => c.id === "root-cause") || {}).status;
-    ok(stE5("reproduction") === "pass" && stE5("root-cause") === "pass" && !/bug\.md/.test(phE5.detail) && apE5.ok && c3E5.ok && !c3E5.gated &&
+    ok(stE5("reproduction") === "pass" && stE5("root-cause") === "pass" && !/bug\.md/.test(phE5.detail) && apE5.ok && cFixE5.ok && !cFixE5.gated &&
       !finE5.blockers.some((b) => /Root Cause/.test(b)) && !finE5.placeholders.includes("bug.md") && onlyE5 === "fail" && slotE5 === "[correct behavior]" && ptE5 === "pass",
       "bugfix: a Reproduction / Root Cause quoting [object Object], [A-Z], [WARN] is documented (doctor, approve design, the root-cause gate, finish, placeholders; PT too); a bracket-only section and the report's own slots still count as unfilled (got " +
-      JSON.stringify([stE5("reproduction"), stE5("root-cause"), phE5.detail.slice(0, 80), apE5.ok, c3E5.ok, finE5.blockers.slice(0, 2), onlyE5, slotE5, ptE5]) + ")");
+      JSON.stringify([stE5("reproduction"), stE5("root-cause"), phE5.detail.slice(0, 80), apE5.ok, cFixE5.ok, finE5.blockers.slice(0, 2), onlyE5, slotE5, ptE5]) + ")");
 
     // (6) next_action: phase by phase — re-review → the first unapproved phase (fill → fix → approve) → implement → finish
     const f6 = S.createFeature(w5, "Order", ["saas"]);
@@ -555,8 +629,9 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
       "classifier: 'Guia no uso do LLM' keeps +ai ON (no negation, no false conflict note); 'no use of AI' still negates");
 
     // bugfix gate: the template's own FIX task ("Fix the root cause") never counts as the task that writes the root cause
+    // (on the four-task form bugfixes were scaffolded with before the short form, its root-cause step reworded)
     const fG = S.createFeature(w5, "Login crash", undefined, "crashes", undefined, "en", "bugfix");
-    write5(fG, "tasks.md", read5(fG, "tasks.md").replace("Find the root cause with evidence; fill bug.md → Root Cause (no fix yet)", "Find why it crashes, with evidence, and document it in bug.md"));
+    write5(fG, "tasks.md", legacyBugTasks("en").replace("Find the root cause with evidence; fill bug.md → Root Cause (no fix yet)", "Find why it crashes, with evidence, and document it in bug.md"));
     const g1 = S.completeTask(w5, fG.slug, 1), g4 = S.completeTask(w5, fG.slug, 4), g2 = S.completeTask(w5, fG.slug, 2);
     const brG = S.taskBrief(w5, fG.slug, 4);
     ok(g1.ok && g4.ok === false && g4.gated === "root-cause" && /only task 1 can be completed/.test(g4.error) && g2.ok === false && !/- \[x\] [24]\./.test(read5(fG, "tasks.md")) &&

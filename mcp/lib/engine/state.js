@@ -213,10 +213,11 @@ const uncheckDashTasks = (text) => text.replace(/^([^\S\n\r\u2028\u2029]*-\s*\[)
 const phaseFile = (phase, kind) => (phase === "design" && kind === "bugfix" ? "bug.md" : phase === "tasks" && kind === "change" ? "change.md" : PHASE_FILE[phase]);
 
 // 1.21 F5 — feature sizes: spec_create {size: xs | s | m | l} stored in .state.json `size` (a plain value — git's merge driver
-// needs no rule). xs = a change (one change.md) or an XS bugfix (no reproduce / root-cause tasks); s = one story, the track
-// sections of the "core" tier (TRACK_SECTIONS tier "extended" optional), the three weigh sections merged; m / l = the full chain
-// with the duplicate sections merged (TRACK_OVERLAPS, CORE_SUPERSEDED_BY). No size (every feature created before 1.21, and any
-// created without one) = the 1.20 rules and scaffolds exactly; spec_upgrade never assigns one.
+// needs no rule). xs = a change (one change.md) or an XS bugfix (its plan approved in one call — every bugfix's tasks.md is the
+// two-task form); s = one story, the track sections of the "core" tier (TRACK_SECTIONS tier "extended" optional), the three weigh
+// sections merged; m / l = the full chain with the duplicate sections merged (TRACK_OVERLAPS, CORE_SUPERSEDED_BY). No size
+// (every feature created before 1.21, and any created without one) = the 1.20 rules and scaffolds exactly — but a bugfix's
+// tasks.md (the short form at every size); spec_upgrade never assigns one.
 const FEATURE_SIZES = ["xs", "s", "m", "l"];
 // A size as given (MCP / CLI; case-folded) → { size } | { size: null } (not given) | { error }.
 function sizeInput(v, lng) {

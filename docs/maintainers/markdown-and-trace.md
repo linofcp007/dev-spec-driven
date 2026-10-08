@@ -92,7 +92,9 @@ matrix.
   **`<feature>/US-n.AC-m` is another feature's (1.22 review):** `requirementAcIds` drops it (`stripForeignAcRefs` — the
   `_Supersedes:_` / `_Affects:_` syntax written in prose: "rules of checkout/US-3.AC-2 stay as they are" was a required AC no
   task covered); a token that is itself an ID keeps the pair ("US-1.AC-1/US-1.AC-2"). tasks.md's and the test plan's references
-  too since review 5 (M5 — below).
+  too since review 5 (M5 — below). **The `#` title is no criterion (1.23.1):** `stripTitleLines` blanks every level-1 heading
+  before the IDs are read — the title is written from the feature's name, and a name holding `US-9.AC-1` (bold or plain) made
+  one more required AC no task covered; a `##` heading or a list item still defines one.
   **Review 2 — only ANOTHER feature's:** never a priority (`**P1/US-1.AC-1**`), a story (`US-1 / US-1.AC-1`), a number
   (`1.1/US-1.AC-1`) or a token with no letter (`RE_NOT_A_SLUG`) — every required AC of such a spec went to 0. With the feature's
   folder (`requirementAcIds(text, dir)` — trace_check, the matrix, doctor's / the approvals' `earsUnlinted` / `earsUnidentified`,

@@ -62,7 +62,16 @@ function linkedSpecsFolder(projectDir, files) {
 // closed first, its line ends kept; `opts` as there) — never through a link (linkedSpecsFolder). → true when written.
 function appendSpecFile(projectDir, file, raw, addition, opts) {
   if (linkedSpecsFolder(projectDir, [file])) return false;
-  writeFileAtomic(file, appendSpecText(raw, addition, opts));
+  const text = appendSpecText(raw, addition, opts);
+  // tasks.md keeps its own encoding (1.23.1 — review 5 P3's last write path: add_track turned a UTF-16 tasks.md into UTF-8):
+  // tasksRewrite encodes it as the file is (null — its bytes are no text — was refused up front by applyTracks; never written).
+  if (path.basename(file) === "tasks.md") {
+    const bytes = tasksRewrite(file, raw, text);
+    if (!bytes) return false;
+    writeFileAtomic(file, bytes);
+    return true;
+  }
+  writeFileAtomic(file, text);
   return true;
 }
 
@@ -817,7 +826,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     put("test-plan.md", scaf("bug-test-plan", () => i18n.bugTestPlan(name, lng)));
     ensureDir(path.join(dir, "tests", "unit"));
     ensureDir(path.join(dir, "tests", "integration"));
-    put("tasks.md", scaf("bug-tasks", () => (size ? i18n.bugTasks(name, lng, size) : i18n.bugTasks(name, lng)))); // 1.21 F5: xs drops the reproduce / root-cause tasks
+    put("tasks.md", scaf("bug-tasks", () => i18n.bugTasks(name, lng))); // every size: the red regression test + the fix (bug.md's gates hold reproduce / root cause)
     const res = finish({ ok: true, slug, dir, kind: "bugfix", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
     const given = Object.keys(bt);
     if (res.ok === false || !given.length) return res;

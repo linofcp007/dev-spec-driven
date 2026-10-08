@@ -18,9 +18,9 @@ several-tracks · public-api · cross-system · default); the human confirms it 
 
 - **A change stays XS.** A track, or more than 3 criteria / tasks, is refused (`change-scope`) — create it as a feature of
   size s instead, never silently. `spec_add_track` refuses a change.
-- **An XS bugfix** (`spec_create {kind: "bugfix", size: "xs"}`) drops the reproduce / root-cause tasks: the requirements
-  gate already needs bug.md → Reproduction and the design gate its Root Cause; only task 1 (the red regression test) can be
-  ticked while Root Cause is empty.
+- **A bugfix, any size** (`spec_create {kind: "bugfix"}`, `size: "xs"` for the one-call plan approval) has two tasks — 1
+  the red regression test, 2 the fix — and no reproduce / root-cause tasks: the requirements gate already needs bug.md →
+  Reproduction and the design gate its Root Cause; only task 1 can be ticked while Root Cause is empty.
 - **Size s — the extended sections.** Absent is fine; present, it must be filled, or answered by ONE line `n/a — <why it
   does not apply>` (EN / PT / ES; a reason of at least 4 words).
 - **Every size — a filled section is your own text.** The `> **TODO**` line deleted with the template's guidance bullet
@@ -30,7 +30,7 @@ several-tracks · public-api · cross-system · default); the human confirms it 
 
 | Command | What it does | Reference |
 |---|---|---|
-| `/spec-bugfix` | A defect as a light spec (`spec_create {kind:"bugfix"}` — prefill `reproduction`, `rootCause`, `condition`, `behaviour`; `includeBody` returns the scaffolds): `bug.md` + a one-story `IF … THEN THE SYSTEM SHALL …` requirement + regression test plan. Reproduction + root cause, then STOP for the `bug.md` approval; `spec_doctor` fails, the design approval is refused and every task after the root-cause task is refused until the root cause is written with evidence. The regression test (`_Expect: fail_`) is seen red before the fix — no shell? ask the user for the run, never a subagent hunting for one. After three failed fixes, question the design. | `references/bugfix.md` |
+| `/spec-bugfix` | A defect as a light spec (`spec_create {kind:"bugfix"}` — prefill `reproduction`, `rootCause`, `condition`, `behaviour`; `includeBody` returns the scaffolds): `bug.md` + a one-story `IF … THEN THE SYSTEM SHALL …` requirement + regression test plan. Reproduction + root cause, then STOP for the `bug.md` approval; `spec_doctor` fails, the design approval is refused and the fix task is refused until the root cause is written with evidence; after the tasks approval the next task is the regression test. The regression test (`_Expect: fail_`) is seen red before the fix — no shell? ask the user for the run, never a subagent hunting for one. After three failed fixes, question the design. | `references/bugfix.md` |
 | `/spec-spike` | A question → a decision (`kind: "spike"`): `spike.md`, timebox, go / no-go / pivot; `go` seeds the real feature. | `references/design-first.md` |
 | `/spec-simplify` | Optional, every task done, BEFORE `/spec-finish`: behaviour-preserving cleanups of the lines the feature's branch added or changed — the deferred minor smells first —, one commit each, the covering tests after each change and the project checks at the end; never a test, a contract, a dependency or code the feature didn't write. The pass is reviewed (the reviewer's simplify mode) and a confirmed finding is reverted, never repaired; each changed task's `_Verify:_` is re-recorded. `--subagents` dispatches the `spec-simplifier` agent (its SubagentStop gate wants a `## Final runs` section in its report with every run passing). With guard mode on, each edit of the pass asks the user. | `references/code-reuse-and-quality.md` |
 | `/spec-finish` | Blockers (doctor fails, open tasks, tasks without a passing run, project checks without a passing run since the last tick, pending approvals, artifacts changed since approval, placeholders, a missing root cause) and warnings, the checks to run fresh (`--run` runs the project checks), a merge title + summary built from the spec chain, and the drift baseline. A green run is evidence, not the sign-off: ask for an explicit yes on `execution` before `spec_approve`. The user then merges locally or keeps the branch — no pull requests, no CI; never merge or push on your own. | `references/verification.md` |

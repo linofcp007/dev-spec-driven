@@ -895,13 +895,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       fs.writeFileSync(t5, u16(be, "## Fase\r\n- [ ] 1. sessão\r\n- [ ] 2. início\r\n**Checkpoint:** ok\r\n"));
       const c = S.completeTask(p5, "bytes", 2);
       const a = S.appendTasks(p5, "bytes", [{ text: "Três" }]);
+      // 1.23.1 — add_track's append (the last write path that turned UTF-16 into UTF-8): the track's tasks land in UTF-16 too
+      const tr = S.addTrack(p5, "bytes", be ? "obs" : "saas");
       const out = fs.readFileSync(t5);
-      return [c.ok, a.ok, out[0], out[1], /- \[x\] 2\. início\r\n/.test(read16(out)), /- \[ \] \d+\. Três\r\n/.test(read16(out))];
+      return [c.ok, a.ok, out[0], out[1], /- \[x\] 2\. início\r\n/.test(read16(out)), /- \[ \] \d+\. Três\r\n/.test(read16(out)),
+        tr.ok && tr.added.some((x) => /^tasks\.md/.test(x)) && /- \[ \] \d+\. \[US1\]/.test(read16(out))];
     });
     ok(tick.ok && diff.length === 1 && afterTick[diff[0]] === 0x78 && untick.ok && afterUntick.equals(ansi) &&
       app.ok === false && /não está gravado em UTF-8/.test(app.error) && trk.ok === false && /não está gravado em UTF-8/.test(trk.error) && afterRefusals.equals(ansi) &&
       odd.ok === false && /UTF-8/.test(odd.error) && oddKept &&
-      js(r16) === js([[true, true, 0xff, 0xfe, true, true], [true, true, 0xfe, 0xff, true, true]]),
+      js(r16) === js([[true, true, 0xff, 0xfe, true, true, true], [true, true, 0xfe, 0xff, true, true, true]]),
       "review 5 (P3): a tasks.md in an ANSI code page is ticked and unticked byte for byte (the box's byte alone); append-tasks and add-track refuse it (PT message, nothing written); a box the bytes can't place is refused with nothing recorded; UTF-16 LE / BE stays UTF-16 through a tick and an append (got " +
       js([tick.ok, diff, untick.ok, afterUntick.equals(ansi), app.error, trk.error, afterRefusals.equals(ansi), odd.error, oddKept, r16]) + ")");
   }

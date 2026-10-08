@@ -425,9 +425,8 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
       ["> **TODO** — exact steps, input and environment that reproduce it every time.", "Log in with an expired refresh token."],
       ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The refresh handler redirects before clearing the cookie (auth.js:88)."],
       ["[What changes and why it removes the root cause — one fix, not a bundle.]", "Clear the cookie before redirecting."]]);
-    [1, 2].forEach((n) => S.completeTask(fz12, "login-loop", n));
-    S.completeTask(fz12, "login-loop", 3, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
-    S.completeTask(fz12, "login-loop", 4, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
+    S.completeTask(fz12, "login-loop", 1, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
+    S.completeTask(fz12, "login-loop", 2, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
     ["requirements", "design", "test-plan", "tasks"].forEach((p) => S.approvePhase(fz12, "login-loop", p));
     const fin12 = S.finishFeature(fz12, "login-loop", { write: true });
     const fst12 = JSON.parse(fs.readFileSync(path.join(fb12.dir, ".state.json"), "utf8"));
