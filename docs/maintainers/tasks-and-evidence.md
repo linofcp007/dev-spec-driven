@@ -444,8 +444,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   tick. A tick / untick / spec_impact --reopen now changes the checkbox's byte(s) only (`checkboxBytes()`: a line starts after
   its 0x0A byte, the bytes before the box must decode to exactly the text before it — else refused, `err.tasksNotText`, with
   nothing recorded; UTF-16: two bytes a character), found BEFORE `.state.json` is written. spec_append_tasks and a track's
-  template tasks (`applyTracks` checks first) write the file's own encoding (`tasksRewrite()`: UTF-8, or UTF-16 with its BOM —
-  it used to become UTF-8) and are refused, nothing written, when the bytes are no text in it. A file changed meanwhile (never
+  template tasks (`applyTracks` checks first; 1.23.1: its write itself — scaffold.js `appendSpecFile` on tasks.md — goes
+  through `tasksRewrite()` too, 1.23.0 still wrote UTF-8 there) write the file's own encoding (`tasksRewrite()`: UTF-8, or
+  UTF-16 with its BOM — it used to become UTF-8) and are refused, nothing written, when the bytes are no text in it. A file changed meanwhile (never
   under the feature lock) is written as before. Tasks are
   story-organized (P1 first) with `[P]` parallel markers + `**Checkpoint:**` lines; the design's
   `Constitution Check` section is checked by `doctor`.
