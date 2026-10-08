@@ -1284,5 +1284,45 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
       e3.task === "B" && e3.others.length === 1 && e3.others[0].task === "A" && e3.history.length === 1 && e3.history[0].command === "b" && !m2.conflicts.length && !m3.conflicts.length,
       "r5 review L17: evidence[n] of tasks sharing a number — the other side's `others` and its own record of another task are kept in `others` (never dropped, never merged into the winner's run history) (got " + js([e2, e3]) + ")");
 
+    // L19 — the locks
+    const lp = path.join(tmp, "proj-r5-locks");
+    S.initProject(lp, ["core"], "en");
+    const lf = S.createFeature(lp, "Locky", ["core"]);
+    const lock = path.join(lf.dir, ".lock");
+    const specJs = path.join(__dirname, "lib", "spec.js");
+    // a lock naming THIS pid and host, written before this process started (a recycled pid): reclaimed at once — a child process writes it
+    const kid = spawnSync(process.execPath, ["-e",
+      `const fs=require("fs"),os=require("os");const S=require(${js(specJs)});const L=${js(lock)};` +
+      `fs.writeFileSync(L, JSON.stringify({pid:process.pid,host:os.hostname(),at:"x",token:"old"}));const t=new Date(Date.now()-60000);fs.utimesSync(L,t,t);` +
+      `const r1=S.withFeatureLock(${js(lf.dir)},()=>"ran",{waitMs:300,onBusy:()=>"busy"});` +
+      `fs.writeFileSync(L, JSON.stringify({pid:process.pid,host:os.hostname(),at:"x",token:"new"}));` + // written while it runs: another engine instance of this process
+      `const r2=S.withFeatureLock(${js(lf.dir)},()=>"ran",{waitMs:300,onBusy:()=>"busy"});fs.rmSync(L,{force:true});process.stdout.write(JSON.stringify([r1,r2]));`],
+    { encoding: "utf8" });
+    let ownPid = null;
+    try { ownPid = JSON.parse(kid.stdout); } catch { ownPid = kid.stderr; }
+    // a foreign lock dated a day in the future (another machine's clock): stale — it never aged
+    fs.writeFileSync(lock, js({ pid: 4242, host: "other-host", at: "x", token: "f" }));
+    const fut = new Date(Date.now() + 86400000);
+    fs.utimesSync(lock, fut, fut);
+    const future = S.withFeatureLock(lf.dir, () => "ran", { waitMs: 300, onBusy: () => "busy" });
+    // a lock create refused with EPERM after the note's temp file was written (Windows: a lock being deleted) → waited for, then busy —
+    // it ran UNLOCKED after 10 refusals
+    const realLink = fs.linkSync, realOpen = fs.openSync, realWrite = fs.writeFileSync;
+    const isLock = (p) => path.basename(String(p)) === ".lock";
+    const eperm = () => { const e = new Error("EPERM: operation not permitted"); e.code = "EPERM"; return e; };
+    let ranLocked = false;
+    fs.linkSync = function (a, b) { if (isLock(b)) throw eperm(); return realLink.apply(this, arguments); };
+    fs.openSync = function (p, fl) { if (isLock(p) && fl === "wx") throw eperm(); return realOpen.apply(this, arguments); };
+    const tE = Date.now();
+    let contended;
+    try { contended = S.withFeatureLock(lf.dir, () => { ranLocked = true; return "ran"; }, { waitMs: 400, onBusy: () => "busy" }); } finally { fs.linkSync = realLink; fs.openSync = realOpen; }
+    const msE = Date.now() - tE;
+    // a folder that refuses every new file (the note's temp file itself: EACCES — read-only) still runs unlocked, as before
+    fs.writeFileSync = function (p) { if (/\.lock\.\d+\.\d+\.\d+\.tmp$/.test(String(p))) { const e = new Error("EACCES"); e.code = "EACCES"; throw e; } return realWrite.apply(this, arguments); };
+    let readOnly;
+    try { readOnly = S.withFeatureLock(lf.dir, () => "ran", { waitMs: 3000, onBusy: () => "busy" }); } finally { fs.writeFileSync = realWrite; }
+    ok(js(ownPid) === '["ran","busy"]' && future === "ran" && !fs.existsSync(lock) && contended === "busy" && ranLocked === false && msE >= 350 && readOnly === "ran",
+      "r5 review L19: the feature lock — a lock naming this pid and host written before this process started is reclaimed at once (one written since is respected: another engine instance), one dated in the future is stale, a lock create refused with EPERM (a lock being deleted) is waited for until the deadline and answers busy (never runs unlocked), a folder refusing every new file still runs unlocked (got " +
+      js([ownPid, future, contended, ranLocked, msE, readOnly]) + ")");
   }
 };

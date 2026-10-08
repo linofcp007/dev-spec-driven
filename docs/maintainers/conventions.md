@@ -113,7 +113,13 @@ and U+FEFF gotchas are in CLAUDE.md.
   `{ok:false, busy:true, error}` (`err.featureBusy`, localized) with nothing changed. A lock taken while this process already
   holds another (`LOCK_DEADLINE`: a folder move's roadmap lock inside its feature lock) waits only for the outer acquisition's
   remaining budget, at least `LOCK_NESTED_MIN_MS` — nested waits could add up to twice the wait. A dead holder's lock (same host)
-  is reclaimed at once, any other after 2 min (10 min while its pid still runs). **Mutual exclusion rules** (each one
+  is reclaimed at once, any other after 2 min (10 min while its pid still runs). r5 review: a note naming THIS pid and host
+  on a lock older than this process (`PROCESS_START_MS` — a recycled pid, a container's pid 1 with a fixed hostname) is
+  reclaimed at once (one written since may be another engine instance or worker of this process: respected, as before); the
+  age of a lock dated in the future (another machine's clock) counts too (`Math.abs`). A lock create refused with
+  EPERM / EACCES / EBUSY AFTER the note's temp file was written (Windows: a lock being deleted, a scanner's handle on it) is
+  waited for like a held lock — busy at the deadline; it ran UNLOCKED after 10 refusals. Only a folder that refuses the temp
+  file itself (`readOnly`: read-only, EROFS) still runs unlocked after 10 tries. **Mutual exclusion rules** (each one
   lost updates under contention while every call answered ok): a lock that can't be stat'ed is NEVER stale (it was
   just released — retry the create); a stale lock is removed only by `reclaimStaleLock()` — under `<lock>.reclaim`
   (O_EXCL) and only while the file is still the one judged stale (`lockSnapshot`: note + ino/mtime/size), so a

@@ -122,6 +122,7 @@ const LOCK_NOTELESS_STALE_MS = 5 * 1000;
 const LOCK_NESTED_MIN_MS = 500;
 let LOCK_DEADLINE = null; // the acquisition deadline of the outermost lock this process is inside (null: none)
 const HELD_LOCKS = new Map(); // lock key → this process's acquisition { token, ino, mtimeMs } (re-entrant, and what release checks)
+const PROCESS_START_MS = Date.now() - process.uptime() * 1000; // when this process started (staleLock: a lock older than it isn't its own)
 // The lock file as it is now: its note (raw text, null when it can't be read — a directory, a file being deleted) and
 // the stat that identifies it. null: gone, or it changed while being read (the caller just retries).
 function lockSnapshot(lock) {
@@ -139,10 +140,16 @@ const sameLockSnapshot = (a, b) => !!a && !!b && a.raw === b.raw && a.ino === b.
 function staleLock(lock) {
   const snap = lockSnapshot(lock);
   if (!snap) return null;
-  const age = Date.now() - snap.mtimeMs;
+  // r5 review: the age of a lock dated in the FUTURE (another machine's clock on a shared folder, a copied file) counts as well — it
+  // never aged, and blocked the feature until the clock caught up (a day ahead: a day). Symmetric with a clock that is behind.
+  const age = Math.abs(Date.now() - snap.mtimeMs);
   let info = null;
   try { info = JSON.parse(snap.raw); } catch { /* being written, or not ours */ }
   let stale = age > LOCK_STALE_MS || (!isObj(info) && snap.raw != null && age > LOCK_NOTELESS_STALE_MS);
+  // r5 review: a note naming THIS process (this host, this pid) on a lock written BEFORE this process started was left by an earlier
+  // process that had the same pid — a recycled pid, a container's pid 1 with a fixed hostname: its holder is gone (it waited
+  // LOCK_STALE_MS). One written since may be another engine instance or worker thread of this very process: respected, as before.
+  if (isObj(info) && info.host === require("os").hostname() && info.pid === process.pid && snap.mtimeMs < PROCESS_START_MS - 1000) stale = true;
   if (isObj(info) && info.host === require("os").hostname() && Number.isSafeInteger(info.pid) && info.pid > 0 && info.pid !== process.pid) {
     try {
       process.kill(info.pid, 0); // signal 0: an existence probe, nothing is sent
@@ -214,7 +221,7 @@ function withLockFile(lock, fn, opts = {}) {
   const note = JSON.stringify({ pid: process.pid, host: require("os").hostname(), at: new Date().toISOString(), token: mine.token });
   let acquired = false;
   let delay = 5;
-  let denied = 0; // consecutive EPERM/EACCES: Windows answers that for a lock being deleted — or the folder is read-only
+  let denied = 0; // consecutive refusals to create ANY file in the folder (acquireLockFile's readOnly): a read-only folder
   let stuck = false; // the last stale lock seen could not be removed
   while (!acquired) {
     try {
@@ -230,8 +237,13 @@ function withLockFile(lock, fn, opts = {}) {
         } else stuck = false;
         // Otherwise it waits like a held lock — a stale lock that can't be removed included: the deadline and the sleep
         // below always run (a `continue` here spun at 100% CPU forever on an undeletable one, freezing the MCP server).
-      } else if ((e.code === "EPERM" || e.code === "EACCES" || e.code === "EBUSY") && ++denied < 10) {
-        /* transient on Windows: retry below */
+      } else if (e.readOnly && ++denied < 10) {
+        /* the folder refused the note's temp file: maybe transient (a scanner) — retry below, then run unlocked */
+      } else if (!e.readOnly && (e.code === "EPERM" || e.code === "EACCES" || e.code === "EBUSY")) {
+        // r5 review: the temp file was written, the lock itself refused — Windows answers that for a lock being deleted (another
+        // holder's release, a scanner's open handle on it): a held lock, waited for until the deadline (busy). After 10 such answers
+        // in a row it ran UNLOCKED, beside the next holder.
+        denied = 0;
       } else {
         // No lock possible here (the folder vanished while we waited — removed / renamed / archived — or is read-only, or an
         // odd file system): run unlocked, as before, but on FRESH reads — the caller's pre-lock check ("the feature exists")
@@ -267,13 +279,17 @@ function withLockFile(lock, fn, opts = {}) {
 function acquireLockFile(lock, note, mine) {
   const tmp = lock + "." + process.pid + "." + Date.now() + "." + Math.floor(Math.random() * 1e6) + ".tmp";
   let linked = false;
+  let tmpWritten = false;
   try {
     fs.writeFileSync(tmp, note, { encoding: "utf8", flag: "wx" });
+    tmpWritten = true;
     fs.linkSync(tmp, lock);
     linked = true;
   } catch (e) {
     if (e.code === "EEXIST" || e.code === "ENOENT") throw e; // held (or a temp name taken: retried) / no folder: the caller decides
-    // no hard links here, or the temp file couldn't be written: the O_EXCL create below throws the real reason
+    // r5 review: no file at all can be created here — a read-only folder (or file system): the caller runs unlocked, as before
+    if (!tmpWritten && (e.code === "EACCES" || e.code === "EPERM" || e.code === "EROFS")) { e.readOnly = true; throw e; }
+    // no hard links here: the O_EXCL create below throws the real reason (EEXIST held; EPERM / EACCES: a lock being deleted)
   } finally {
     try { fs.unlinkSync(tmp); } catch { /* never created */ }
   }
