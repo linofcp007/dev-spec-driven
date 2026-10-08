@@ -14,10 +14,10 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let compareSemver, EVIDENCE_HISTORY, existsCached, isDirSafe, isObj, jsonRel, listFeatures, maybeRefreshCatalog, own,
+let compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures, maybeRefreshCatalog, own,
   positionPhase, readIfExists, readJson, renderRoadmapHtml, renderRoadmapMd, roadmapData, roadmapExtras, safeReaddir,
   shapeError, specsRoot, withRoadmapLock, writeFileAtomic;
-function __link(E) { ({ compareSemver, EVIDENCE_HISTORY, existsCached, isDirSafe, isObj, jsonRel, listFeatures,
+function __link(E) { ({ compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures,
   maybeRefreshCatalog, own, positionPhase, readIfExists, readJson, renderRoadmapHtml, renderRoadmapMd, roadmapData,
   roadmapExtras, safeReaddir, shapeError, specsRoot, withRoadmapLock, writeFileAtomic } = E); }
 
@@ -176,6 +176,17 @@ function fingerprintText(raw, phase) {
   return phase === "tasks" ? uncheckTasks(text) : text;
 }
 const sha1Hex = (text) => require("crypto").createHash("sha1").update(text).digest("hex");
+// r5 review — the text a WHITESPACE-ONLY edit leaves unchanged: fingerprintText with each line's trailing whitespace and the blank lines
+// at the end dropped (an editor's "trim trailing whitespace" / "insert final newline", a formatter). The recorded fingerprint keeps
+// its rule (every approval recorded so far stays valid, and two records of the same content still compare equal); this text is
+// compared with the approval's own .history snapshot when the fingerprint no longer matches (gates.js wsOnlyEdit) — linear: no
+// regex over a run of spaces.
+function wsText(raw, phase) {
+  const lines = fingerprintText(raw, phase).split("\n").map((l) => l.trimEnd());
+  let end = lines.length;
+  while (end > 0 && lines[end - 1] === "") end--;
+  return lines.slice(0, end).join("\n");
+}
 // Does this text still match a fingerprint an approval recorded? An approval recorded before the BOM was ignored
 // hashed the file with its BOM: that fingerprint still matches the same content (with or without the BOM now).
 function fingerprintMatches(raw, phase, stored) {
@@ -849,15 +860,37 @@ const mergeLaterTime = (b, o, t, p, ctx) => (typeof o === "string" && typeof t =
 const mergeEarlierTime = (b, o, t, p, ctx) => (typeof o === "string" && typeof t === "string" ? (mergeTime(t) < mergeTime(o) ? t : o) : mergeConflict(ctx, p, b, o, t));
 // evidence[n] / finishChecks[name]: the record whose latest run is the later; the same run on both sides → its annotations
 // merged (a note, a stale mark — an undo, a reopen); the runs of both histories, deduped, chronological, bounded.
+// r5 review: evidence[n] of two tasks that share the number n — a record carries its task's stamp (`task`) and the OTHER tasks'
+// records in `others` (storeEvidence). The merge kept the winning side's record and `others` only: the other side's `others`, and its
+// own record when it was another task's, were lost (and that task's runs were merged into the winner's history). Now: the runs of
+// the SAME task (or of records without a stamp — v1.12 / finishChecks) merge as before; every other task's record is kept in
+// `others`, one per task (the latest run), newest first, bounded (EVIDENCE_OTHERS) — storeEvidence's rule.
+const runTask = (r) => (isObj(r) && typeof r.task === "string" ? r.task : null);
 function mergeRunRecord(b, o, t, p, ctx) {
   if (!isObj(o) || !isObj(t)) return mergeConflict(ctx, p, b, o, t);
   const to = mergeTime(o.at), tt = mergeTime(t.at);
-  const rec = copyOwn(tt > to ? t : o);
-  if (to === tt) {
+  const win = tt > to ? t : o, lose = win === t ? o : t;
+  const rec = copyOwn(win);
+  const sameTask = runTask(win) === null || runTask(lose) === null || runTask(win) === runTask(lose);
+  if (to === tt && sameTask) {
     if (t.stale === true && o.stale !== true) { rec.stale = true; if (t.staleBy !== undefined) rec.staleBy = t.staleBy; }
     if (mergeTime(t.noteAt) > mergeTime(o.noteAt)) { rec.note = t.note; rec.noteAt = t.noteAt; }
   }
-  const runs = [o.history, t.history].filter(Array.isArray).flat().filter(isObj);
+  const others = [o.others, t.others].filter(Array.isArray).flat().filter(isObj);
+  if (!sameTask) others.push(lose);
+  if (others.length) {
+    const byTask = new Map();
+    for (const x of others) {
+      const k = runTask(x) !== null ? "t:" + runTask(x) : "c:" + mergeCanon(x);
+      if (runTask(x) !== null && runTask(x) === runTask(win)) continue; // the winner's own task
+      const prev = byTask.get(k);
+      if (!prev || mergeTime(x.at) > mergeTime(prev.at)) byTask.set(k, x);
+    }
+    const list = [...byTask.values()].map((x) => { const c = copyOwn(x); delete c.others; return c; })
+      .sort((x, y) => mergeTime(y.at) - mergeTime(x.at)).slice(0, EVIDENCE_OTHERS);
+    if (list.length) setOwn(rec, "others", list); else delete rec.others;
+  }
+  const runs = (sameTask ? [o.history, t.history] : [win.history]).filter(Array.isArray).flat().filter(isObj);
   if (runs.length) {
     const seen = new Set();
     const uniq = runs.filter((h) => { const c = mergeCanon(h); if (seen.has(c)) return false; seen.add(c); return true; });
@@ -872,6 +905,21 @@ function mergeFinished(b, o, t, p, ctx) {
   const firsts = [o.firstAt || o.at, t.firstAt || t.at].filter((x) => mergeTime(x) > -Infinity).sort((x, y) => mergeTime(x) - mergeTime(y));
   if (firsts.length && firsts[0] !== win.at) win.firstAt = firsts[0];
   return win;
+}
+// The revocations that cut waiting sign-offs: { all: phase → time (an approval revoked, or a partial revocation that withdrew every
+// waiting sign-off — the rule before 1.23), byRole: phase → role → time (r5 review: a partial revocation flagged `roleOnly` withdrew the
+// sign-off of the role it names in `roles` — the others stayed, and a merge keeps them) }.
+function signoffRevocations(hist) {
+  const all = Object.create(null), byRole = Object.create(null);
+  for (const h of Array.isArray(hist) ? hist : []) {
+    if (!isObj(h) || h.revoked !== true || typeof h.phase !== "string") continue;
+    const tm = mergeTime(h.at);
+    if (h.partial === true && h.roleOnly === true && Array.isArray(h.roles) && h.roles.length) {
+      const m = byRole[h.phase] || (byRole[h.phase] = Object.create(null));
+      for (const r of h.roles) if (typeof r === "string" && (!(r in m) || tm > m[r])) m[r] = tm;
+    } else if (!(h.phase in all) || tm > all[h.phase]) all[h.phase] = tm;
+  }
+  return { all, byRole };
 }
 // phase → the time of its latest revocation in the (merged) history; withPartial: also a revocation that withdrew only
 // waiting role sign-offs (nothing had been approved).
@@ -901,6 +949,18 @@ function mergeApprovals(hist) {
     return out;
   };
 }
+// approvals → without an approval older than a (non-partial) revocation of its phase — the same object when none is (r5 review).
+function pruneRevokedApprovals(a, hist) {
+  if (!isObj(a)) return a;
+  const revokedAt = revocationTimes(hist, false);
+  const out = {};
+  let dropped = false;
+  for (const ph of Object.keys(a)) {
+    if (isObj(a[ph]) && ph in revokedAt && revokedAt[ph] > mergeTime(a[ph].at)) { dropped = true; continue; }
+    setOwn(out, ph, a[ph]);
+  }
+  return dropped ? out : a;
+}
 // signoffs[phase][role]: the later sign-off (per role; a deleted-vs-changed entry keeps the change). The drop rule is
 // pruneSignoffs', applied to the 3-way RESULT.
 const mergeSignoffs = mergeMapWith(mergeMapWith((b, o, t, p, ctx) => (isObj(o) && isObj(t) ? laterAt(o, t) : mergeConflict(ctx, p, b, o, t))));
@@ -911,15 +971,16 @@ const mergeSignoffs = mergeMapWith(mergeMapWith((b, o, t, p, ctx) => (isObj(o) &
 // doctor / next_action say to complete them (any listed role signs again: approve <f> <phase> --role <role>).
 function pruneSignoffs(m, hist, approvals) {
   if (!isObj(m)) return m;
-  const revokedAt = revocationTimes(hist, true);
+  const rv = signoffRevocations(hist);
   const out = {};
   let dropped = false;
   for (const ph of Object.keys(m)) {
     if (!isObj(m[ph]) || !Object.keys(m[ph]).length) { setOwn(out, ph, m[ph]); continue; }
-    const cut = Math.max(ph in revokedAt ? revokedAt[ph] : -Infinity, isObj(ownVal(approvals, ph)) ? mergeTime(approvals[ph].at) : -Infinity);
+    const cut = Math.max(ph in rv.all ? rv.all[ph] : -Infinity, isObj(ownVal(approvals, ph)) ? mergeTime(approvals[ph].at) : -Infinity);
+    const byRole = ph in rv.byRole ? rv.byRole[ph] : Object.create(null);
     const roles = {};
     for (const r of Object.keys(m[ph])) {
-      if (isObj(m[ph][r]) && mergeTime(m[ph][r].at) <= cut) dropped = true;
+      if (isObj(m[ph][r]) && mergeTime(m[ph][r].at) <= Math.max(cut, r in byRole ? byRole[r] : -Infinity)) dropped = true;
       else setOwn(roles, r, m[ph][r]);
     }
     if (Object.keys(roles).length) setOwn(out, ph, roles);
@@ -931,7 +992,9 @@ function pruneSignoffs(m, hist, approvals) {
 function mergeFeatureState(b, o, t, ctx) {
   const H = mergeThree(ownVal(b, "approvalHistory"), o.approvalHistory, t.approvalHistory,
     () => mergeHistoryBy(HISTORY_ID)(ownVal(b, "approvalHistory"), o.approvalHistory, t.approvalHistory, ["approvalHistory"], ctx));
-  const A = mergeThree(ownVal(b, "approvals"), o.approvals, t.approvals, () => mergeApprovals(H)(ownVal(b, "approvals"), o.approvals, t.approvals, ["approvals"], ctx));
+  // (r5 review: "revocations win by time" on the 3-way RESULT — when only one side changed approvals, mergeThree handed that side back
+  // unfiltered, so an approval older than a revocation the other side recorded survived)
+  const A = pruneRevokedApprovals(mergeThree(ownVal(b, "approvals"), o.approvals, t.approvals, () => mergeApprovals(H)(ownVal(b, "approvals"), o.approvals, t.approvals, ["approvals"], ctx)), H);
   const SO = pruneSignoffs(mergeThree(ownVal(b, "signoffs"), o.signoffs, t.signoffs, () => mergeSignoffs(ownVal(b, "signoffs"), o.signoffs, t.signoffs, ["signoffs"], ctx)), H, A);
   // lastApprovedPhase: the phase of the latest merged approval (the engine's own rule after an approval or a revocation).
   const lastApproved = () => {
@@ -952,6 +1015,8 @@ function mergeFeatureState(b, o, t, ctx) {
     if (lap === undefined) delete out.lastApprovedPhase;
     else setOwn(out, "lastApprovedPhase", lap);
   }
+  // approvals: always the filtered result (the same reason — r5 review).
+  if ((own(o, "approvals") || own(t, "approvals")) && A !== undefined) setOwn(out, "approvals", A);
   // signoffs: always the pruned result (mergeObject's own 3-way hands back a side that alone changed them, unpruned).
   if (own(o, "signoffs") || own(t, "signoffs")) {
     if (SO === undefined) delete out.signoffs;
@@ -1230,7 +1295,7 @@ function mergeDriverStatus(projectDir, opts = {}) {
 
 module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugifyFull, legacySlugify, RE_WIN_RESERVED,
   RESERVED_SLUGS, reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState,
-  stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, sha1Hex, fingerprintMatches,
+  stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, wsText, sha1Hex, fingerprintMatches,
   BOM_CHAR, artifactMatches, uncheckTasks, phaseFile, FEATURE_SIZES, sizeInput, featureSize, isChangeDir, PLANNING_CEILING, PHASE_PERCENT, phasePercent, featurePercent,
   roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, setDependency, dependencyUnlocked,
   roadmap, flatText, addBacklog, BACKLOG_NOTE_MAX, BACKLOG_NOTE_SEP, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked, BACKLOG_ACTIONS, backlog,

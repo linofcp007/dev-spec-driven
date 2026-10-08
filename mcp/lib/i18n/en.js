@@ -1363,6 +1363,7 @@ const msg = {
       requirementsMissing: "requirements.md missing",
       clarificationsOpen: (n) => `${n} unresolved [NEEDS CLARIFICATION] — resolve before design`,
       clarificationsOpenPlan: (n) => `${n} unresolved [NEEDS CLARIFICATION] in change.md — resolve before approving the plan`, // a change (1.21 verify V7)
+      clarificationsOpenBug: (n) => `${n} unresolved [NEEDS CLARIFICATION] in bug.md — resolve them before approving its Reproduction / Root Cause`, // a bugfix (r5 review)
       clarificationsNone: "none open",
       scPresent: "present",
       scMissing: "no measurable SC-### success criteria",
@@ -1394,6 +1395,8 @@ const msg = {
       reReview: (files) => `Re-review: ${files} changed after the last approval — re-approve the affected phase.`,
       // 1.22 review: an approved artifact that was deleted — nothing to re-approve until it is back
       approvedMissing: (files, slug, phase) => `${files} was approved but no longer exists — restore it (it was deleted after its approval) or, if it is gone for good, withdraw that approval: /approve ${slug} ${phase} --revoke.`,
+      // r5 review: .state.json doesn't parse / has the wrong shape (error: readState's localized message) — the one step
+      stateInvalid: (error, slug) => `${error} Until it is repaired nothing can be approved, ticked or finished, and the approvals, ticks and evidence it holds can't be read — fix it by hand or restore it from git (conflict markers from a merge? resolve them; ${DEV_SPEC} merge-state --install merges it by meaning from then on), then /spec-doctor ${slug}.`,
       approveRequirements: (slug) => `Review & approve requirements — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Review & approve design — /approve ${slug} design.`,
       approveTasks: (slug) => `Review & approve the task breakdown — /approve ${slug} tasks.`,
@@ -1737,6 +1740,7 @@ const msg = {
       checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
       approveRefused: (phase, slug, ids, lines) => `Can't approve '${phase}' for '${slug}' — failing checks: ${ids}.\n${lines}\nFix them (details: /spec-doctor ${slug}), or pass force: true (CLI: --force) to record the approval anyway — it stays flagged as forced.`,
       approveNothing: (phase, slug, file) => `Nothing to approve: '${phase}' has no artifact in '${slug}' (${file} is missing, or its track is off) — not even with force.`,
+      approveUnreadable: (phase, slug, file) => `Nothing to approve: ${file} in '${slug}' can't be read (a folder of that name, no permission, or another program holding it) — make it a readable file, then approve '${phase}'.`, // r5 review
       approveForced: (ids) => `Approved with force — the failing checks are recorded with the approval: ${ids}.`,
       phaseOrder: (list, slug, first) => `earlier phases are not approved yet: ${list} — approve them first, in order (/approve ${slug} ${first})`,
       forcedGates: (list) => `approved with force over failing checks: ${list}`,
@@ -2381,7 +2385,7 @@ const msg = {
         steps: {
           "re-review": (s) => `re-review ${s.files.join(", ")}`,
           fill: (s) => `fill ${s.file}`,
-          fix: (s) => (s.file === "bug.md" ? "write the root cause in bug.md" : `fix the ${s.phase} gate`),
+          fix: (s) => (s.file === "bug.md" ? "write the root cause in bug.md" : s.file === ".state.json" ? "repair .state.json (it can't be read)" : `fix the ${s.phase} gate`),
           approve: (s) => `approve ${s.phase}`,
           tests: () => "write the tests, then approve them (Phase 4)",
           tasks: () => "break it into tasks",
@@ -2850,6 +2854,8 @@ const msg = {
       signedForced: (ids) => `Signed off with force — the failing checks are recorded with the sign-off: ${ids}.`,
       stillPending: (phase, missing) => `'${phase}' stays pending until every role has signed off its current content — ${missing}.`,
       approvedByRoles: (phase, roles) => `'${phase}' is approved — every role signed off the current content: ${roles}.`,
+      // r5 review: one person signing a phase for two required roles — a warning, never a refusal
+      sameSigner: (by, phase, roles) => `Note: ${by} signed '${phase}' for several roles (${roles}) — role sign-offs are meant to come from different people.`,
       staleSignOffs: (list) => `sign-offs made before the artifact changed no longer count (re-sign the current content): ${list}`,
       resigning: (list) => `re-sign in progress (the phase stays approved as it was until every role has signed the new content): ${list}`,
       unsigned: (list) => `approved without the role sign-offs now required (approved before the roles were configured or changed — counted as approved by an unknown role; ask each role to re-sign): ${list}`,
@@ -2907,6 +2913,9 @@ const msg = {
       signOffsToo: (roles) => `The role sign-offs waiting for it were withdrawn too: ${roles}.`,
       laterStay: (list, phase) => `Nothing cascades: the later phases stay approved (${list}); approving another phase is refused (phase-order) until '${phase}' is approved again.`,
       notApproved: (phase, slug) => `'${phase}' is not approved for ${slug} and no role sign-off is waiting for it — nothing to revoke.`,
+      // r5 review: with approval roles configured for the phase, a revocation names a listed role; before the approval it withdraws that role's own sign-off
+      roleRequired: (phase, slug, roles) => `'${phase}' is signed off per role (${roles}) — a revocation names the role revoking it: /approve ${slug} ${phase} --revoke --role <role>. Nothing recorded.`,
+      noSignOff: (role, phase, slug, waiting) => `'${role}' has no sign-off waiting for '${phase}' of ${slug} — nothing to withdraw (waiting: ${waiting}); a role withdraws only its own sign-off.`,
       phaseRequired: "Name the phase whose approval to revoke.",
       noThrough: "revoke takes one phase — not through (the fast-forward).",
       noForce: "revoke takes no force or expires — it removes an approval; reason says why.",
@@ -2915,7 +2924,7 @@ const msg = {
       signOffWhy: (list) => `the revocation of ${list}`,
     },
     waiver: {
-      badExpires: (v, max) => `expires must be an ISO date (YYYY-MM-DD, today or later, at most ${max} days ahead) or a number of days (30d, 1–${max}) — got ${v}.`,
+      badExpires: (v, max) => `expires must be an ISO date (YYYY-MM-DD, today or later in UTC — valid through that day, UTC — at most ${max} days ahead) or a number of days (30d, 1–${max}) — got ${v}.`,
       needsForce: "reason / expires describe a waiver — they go with force (reason also with revoke).",
       notForced: "The gate passed — nothing was waived: the reason / expiry were not recorded.",
       recorded: (reason, expires) => `Waiver recorded${reason ? `: ${reason}` : ""}${expires ? ` (expires ${expires})` : ""}.`,

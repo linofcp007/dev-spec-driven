@@ -41,7 +41,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   approvals and `meta.lang`). **Valid JSON of the wrong shape is refused the same way:** `readState()` checks
   the top level, `approvals`/`evidence`/`finishChecks`/`signoffs` (objects), `tracks`/`approvalHistory`/`changes`/`unticks` (lists);
   `loadRoadmap()` checks `features` and each entry, `dependsOn` (string lists), `meta`, `backlog`. Readers get
-  a sanitized copy; every mutator refuses BEFORE its destructive step. A leading BOM is tolerated.
+  a sanitized copy; every mutator refuses BEFORE its destructive step — and the readers SAY it (r5 review): doctor fails
+  `state`, next_action's one step is `fix` (`stateInvalid`), spec_finish blocks on `state`, the status line says repair
+  (gates-and-approvals.md → next_action) — read as empty, every gate looked pending and next_action said "approve". A leading BOM is tolerated.
   `writeIfAbsent` uses `flag:"wx"`. `writeFileAtomic`'s temp file never outlives the call: when the rename and the
   plain-write fallback both fail (read-only / locked target on Windows, a folder at that path) it is removed before
   the error is thrown — the best-effort refreshes swallow that error, and used to leave a `<file>.<pid>.<ts>.tmp`
@@ -55,11 +57,16 @@ and U+FEFF gotchas are in CLAUDE.md.
   append-only lists (`approvalHistory`, `changes`, `unticks`) → the union by identity (`HISTORY_ID` phase/at/by/revoked/partial/role
   · `CHANGE_ID` · `UNTICK_ID`; the same record with different fields — upgrade's seeded snapshot — gets both sides' fields),
   chronological once theirs added one; `evidence[n]` / `finishChecks[name]` → the record with the latest run `at` (a tie is the same
-  run: its note and stale mark merged), histories merged, deduped, bounded by `EVIDENCE_HISTORY` (a run's own fields — `observed`,
+  run: its note and stale mark merged; r5 review: tasks sharing the number n — a record's `task` stamp — keep every other
+  task's record in `others`, both sides' plus the losing side's own one, one per task, newest first, `EVIDENCE_OTHERS` —
+  they were dropped, and that task's runs merged into the winner's history), histories merged, deduped, bounded by `EVIDENCE_HISTORY` (a run's own fields — `observed`,
   1.22 review 3's `cmdRule` and `root` — travel with it: no rule of their own); `ticks[n]` / `lastTickAt` / `lastEditAt` (1.22 review: the spec-hook's stamp of a hand-saved tasks.md) → the
   later; `finished` → the later (firstAt the earliest); `createdAt` → the earlier; `approvals[phase]` → the later approval unless
-  a revocation record (`revoked: true`, not `partial`) is later — **revocations win by time**; `signoffs[phase][role]` → the later,
-  dropped when a revocation or the phase's merged approval is no earlier; `lastApprovedPhase` follows the merged approvals (never its
+  a revocation record (`revoked: true`, not `partial`) is later — **revocations win by time**, applied to the 3-way RESULT
+  (`pruneRevokedApprovals()`, r5 review: when only one side changed `approvals`, an approval older than the other side's
+  revocation survived); `signoffs[phase][role]` → the later,
+  dropped when a revocation or the phase's merged approval is no earlier (a partial revocation flagged `roleOnly` — r5
+  review, one role withdrawing its own sign-off — drops only the roles it names; one without the flag, all of them); `lastApprovedPhase` follows the merged approvals (never its
   own 3-way); `tracks` and every `dependsOn` / role list / milestone `features` → a 3-way SET merge; roadmap.json `features` (by
   slug), `backlog` (by name, case-insensitive; notes joined with ` · `), `meta.milestones` (by name), `meta.checks` /
   `meta.approvalRoles` (by key); `meta.specVersion` → the higher (`compareSemver`), `meta.changelogAt` → the later,
@@ -116,7 +123,13 @@ and U+FEFF gotchas are in CLAUDE.md.
   `{ok:false, busy:true, error}` (`err.featureBusy`, localized) with nothing changed. A lock taken while this process already
   holds another (`LOCK_DEADLINE`: a folder move's roadmap lock inside its feature lock) waits only for the outer acquisition's
   remaining budget, at least `LOCK_NESTED_MIN_MS` — nested waits could add up to twice the wait. A dead holder's lock (same host)
-  is reclaimed at once, any other after 2 min (10 min while its pid still runs). **Mutual exclusion rules** (each one
+  is reclaimed at once, any other after 2 min (10 min while its pid still runs). r5 review: a note naming THIS pid and host
+  on a lock older than this process (`PROCESS_START_MS` — a recycled pid, a container's pid 1 with a fixed hostname) is
+  reclaimed at once (one written since may be another engine instance or worker of this process: respected, as before); the
+  age of a lock dated in the future (another machine's clock) counts too (`Math.abs`). A lock create refused with
+  EPERM / EACCES / EBUSY AFTER the note's temp file was written (Windows: a lock being deleted, a scanner's handle on it) is
+  waited for like a held lock — busy at the deadline; it ran UNLOCKED after 10 refusals. Only a folder that refuses the temp
+  file itself (`readOnly`: read-only, EROFS) still runs unlocked after 10 tries. **Mutual exclusion rules** (each one
   lost updates under contention while every call answered ok): a lock that can't be stat'ed is NEVER stale (it was
   just released — retry the create); a stale lock is removed only by `reclaimStaleLock()` — under `<lock>.reclaim`
   (O_EXCL) and only while the file is still the one judged stale (`lockSnapshot`: note + ino/mtime/size), so a
