@@ -869,6 +869,21 @@ function mergeFinished(b, o, t, p, ctx) {
   if (firsts.length && firsts[0] !== win.at) win.firstAt = firsts[0];
   return win;
 }
+// The revocations that cut waiting sign-offs: { all: phase → time (an approval revoked, or a partial revocation that withdrew every
+// waiting sign-off — the rule before 1.23), byRole: phase → role → time (r5 review: a partial revocation flagged `roleOnly` withdrew the
+// sign-off of the role it names in `roles` — the others stayed, and a merge keeps them) }.
+function signoffRevocations(hist) {
+  const all = Object.create(null), byRole = Object.create(null);
+  for (const h of Array.isArray(hist) ? hist : []) {
+    if (!isObj(h) || h.revoked !== true || typeof h.phase !== "string") continue;
+    const tm = mergeTime(h.at);
+    if (h.partial === true && h.roleOnly === true && Array.isArray(h.roles) && h.roles.length) {
+      const m = byRole[h.phase] || (byRole[h.phase] = Object.create(null));
+      for (const r of h.roles) if (typeof r === "string" && (!(r in m) || tm > m[r])) m[r] = tm;
+    } else if (!(h.phase in all) || tm > all[h.phase]) all[h.phase] = tm;
+  }
+  return { all, byRole };
+}
 // phase → the time of its latest revocation in the (merged) history; withPartial: also a revocation that withdrew only
 // waiting role sign-offs (nothing had been approved).
 function revocationTimes(hist, withPartial) {
@@ -907,15 +922,16 @@ const mergeSignoffs = mergeMapWith(mergeMapWith((b, o, t, p, ctx) => (isObj(o) &
 // doctor / next_action say to complete them (any listed role signs again: approve <f> <phase> --role <role>).
 function pruneSignoffs(m, hist, approvals) {
   if (!isObj(m)) return m;
-  const revokedAt = revocationTimes(hist, true);
+  const rv = signoffRevocations(hist);
   const out = {};
   let dropped = false;
   for (const ph of Object.keys(m)) {
     if (!isObj(m[ph]) || !Object.keys(m[ph]).length) { setOwn(out, ph, m[ph]); continue; }
-    const cut = Math.max(ph in revokedAt ? revokedAt[ph] : -Infinity, isObj(ownVal(approvals, ph)) ? mergeTime(approvals[ph].at) : -Infinity);
+    const cut = Math.max(ph in rv.all ? rv.all[ph] : -Infinity, isObj(ownVal(approvals, ph)) ? mergeTime(approvals[ph].at) : -Infinity);
+    const byRole = ph in rv.byRole ? rv.byRole[ph] : Object.create(null);
     const roles = {};
     for (const r of Object.keys(m[ph])) {
-      if (isObj(m[ph][r]) && mergeTime(m[ph][r].at) <= cut) dropped = true;
+      if (isObj(m[ph][r]) && mergeTime(m[ph][r].at) <= Math.max(cut, r in byRole ? byRole[r] : -Infinity)) dropped = true;
       else setOwn(roles, r, m[ph][r]);
     }
     if (Object.keys(roles).length) setOwn(out, ph, roles);

@@ -402,8 +402,19 @@ function revokeApproval(projectDir, name, phase, by, opts) {
   const state = readState(projectDir, f.slug);
   if (state.invalid) return { ok: false, error: state.invalid };
   const appr = isRecord(state.approvals[p]) ? state.approvals[p] : null;
-  const waiting = isObj(state.signoffs) && isObj(state.signoffs[p]) ? Object.keys(state.signoffs[p]) : [];
-  if (!appr && !waiting.length) return { ok: false, notApproved: true, error: R.notApproved(p, f.slug) };
+  const allWaiting = isObj(state.signoffs) && isObj(state.signoffs[p]) ? Object.keys(state.signoffs[p]) : [];
+  if (!appr && !allWaiting.length) return { ok: false, notApproved: true, error: R.notApproved(p, f.slug) };
+  // r5 review — with roadmap.json meta.approvalRoles listing the phase, a revocation is a role's act like a sign-off: it names a
+  // listed role (any role, or none, revoked a role-governed approval); and before the approval exists it withdraws only THAT role's
+  // waiting sign-off (it withdrew every role's). An approval revoked by a role still drops every waiting sign-off (the phase starts
+  // over). No roles configured for the phase: as before (a role given is only recorded).
+  const required = approvalRolesOf(projectDir)[p] || [];
+  if (required.length) {
+    if (role == null) return { ok: false, roleRequired: true, roles: required, error: R.roleRequired(p, f.slug, required.join(", ")) };
+    if (!required.includes(role)) return { ok: false, roleNotListed: true, roles: required, error: i18n.msg(lng).governance.roleNotListed(role, p, required.join(", ")) };
+    if (!appr && !allWaiting.includes(role)) return { ok: false, notApproved: true, error: R.noSignOff(role, p, f.slug, allWaiting.join(", ")) };
+  }
+  const waiting = !appr && required.length ? [role] : allWaiting; // the sign-offs this revocation withdraws
   if (opts.dryRun === true) return { ok: true, dryRun: true, feature: f.slug, phase: p, revoke: true }; // 1.21 F1b: the MCP server's preview
   const conf = confirmationOf(opts.confirmation); // 1.21 F1b
   const hist = Array.isArray(state.approvalHistory) ? state.approvalHistory : [];
@@ -416,10 +427,13 @@ function revokeApproval(projectDir, name, phase, by, opts) {
     if (appr.forced === true) record.wasForced = true;
   } else record.partial = true; // only waiting sign-offs were withdrawn: nothing had been approved
   if (waiting.length) record.roles = waiting;
+  if (!appr && required.length) record.roleOnly = true; // r5 review: one role's own sign-off (the merge driver withdraws only it)
   if (conf) record.confirmed = conf;
   state.approvalHistory = hist.concat(legacy, [record]);
   delete state.approvals[p];
-  dropRoleSignOffs(state, p);
+  if (waiting.length < allWaiting.length) { // r5 review: one role withdraws its own waiting sign-off — the others stay
+    delete state.signoffs[p][role];
+  } else dropRoleSignOffs(state, p);
   if (state.lastApprovedPhase === p) {
     const rest = Object.entries(state.approvals).filter(([, a]) => isRecord(a)).sort((x, y) => (timeOf(x[1].at) || 0) - (timeOf(y[1].at) || 0));
     if (rest.length) state.lastApprovedPhase = rest[rest.length - 1][0];
@@ -557,6 +571,15 @@ function phaseContent(dir, phase, kind) {
   return c;
 }
 const sameContent = (rec, c) => isRecord(rec) && (rec.fingerprint || null) === (c.fingerprint || null) && (rec.designFingerprint || null) === (c.designFingerprint || null);
+// r5 review — a phase with no file of its own (tests, execution) has no content to compare a sign-off with: one made BEFORE a change
+// of the feature (changesSince — a change request, an untick, a revocation, a re-approval of another phase with other content) signed
+// off a different feature. It no longer counts — the rule executionSignOffStale applies to a single execution approval (a role's
+// sign-off made before an untick completed the approval once the last role signed). `state`: the full .state.json data.
+function signOffOutdated(state, phase, rec) {
+  if ((phase !== "tests" && phase !== "execution") || !isRecord(rec) || !isObj(state)) return false;
+  const t = timeOf(rec.at);
+  return t != null && changesSince(state, t, phase).length > 0;
+}
 // The role sign-offs an approval carries: its `roles`, or — a single approval that named a role (made while no role was required
 // for the phase) — that role, signed with the approval's own content. → { role: {by, at, fingerprint?, designFingerprint?, forced?, failing?} }
 function approvalRoleRecords(appr) {
@@ -578,7 +601,7 @@ function roleSignOffs(state, phase, required, content) {
   for (const r of required) {
     const waiting = own(so, r) && isRecord(so[r]) ? so[r] : null;
     const approved = own(fromAppr, r) && isRecord(fromAppr[r]) ? fromAppr[r] : null;
-    const hit = [waiting, approved].find((x) => x && sameContent(x, content));
+    const hit = [waiting, approved].find((x) => x && sameContent(x, content) && !signOffOutdated(state, phase, x)); // r5 review: tests / execution
     if (hit) valid[r] = hit;
     else if (waiting) stale.push(r);
   }
@@ -597,12 +620,16 @@ function recordRoleSignOff(state, phase, entry, required, record, approvals = st
   if (entry.confirmed) rec.confirmed = entry.confirmed; // 1.21 F1b
   const signoffs = isObj(state.signoffs) ? state.signoffs : {};
   const cur = isObj(signoffs[phase]) ? signoffs[phase] : {};
-  const view = roleSignOffs({ signoffs: { [phase]: { ...cur, [entry.role]: rec } }, approvals }, phase, required, entry);
+  // (the full state: a tests / execution sign-off is judged against the changes since it — r5 review)
+  const view = roleSignOffs({ ...state, signoffs: { [phase]: { ...cur, [entry.role]: rec } }, approvals }, phase, required, entry);
+  // r5 review: the other roles that count signed by the SAME person — a role sign-off is a second pair of eyes (a warning, never a refusal)
+  const sameBy = Object.keys(view.valid).filter((r) => r !== entry.role && isRecord(view.valid[r]) && view.valid[r].by === entry.by);
+  const same = sameBy.length ? { sameSigner: { by: entry.by, roles: [entry.role, ...sameBy] } } : {};
   if (view.missing.length) {
     signoffs[phase] = view.valid;
     state.signoffs = signoffs;
     record.partial = true;
-    return { complete: false, missing: view.missing, signed: view.signed };
+    return { complete: false, missing: view.missing, signed: view.signed, ...same };
   }
   entry.roles = view.valid;
   const forced = Object.values(view.valid).filter((x) => x.forced === true);
@@ -617,7 +644,7 @@ function recordRoleSignOff(state, phase, entry, required, record, approvals = st
   record.roles = required.slice();
   delete signoffs[phase];
   if (Object.keys(signoffs).length) state.signoffs = signoffs; else delete state.signoffs;
-  return { complete: true, missing: [], signed: view.signed };
+  return { complete: true, missing: [], signed: view.signed, ...same };
 }
 // A single approval (no role required for the phase any more): sign-offs still waiting from when roles were required are moot.
 // → null (approvePhase's "no role sign-off" marker)
@@ -633,7 +660,8 @@ function dropRoleSignOffs(state, phase) {
 function roleSignOffResult(res, so, phase, lng) {
   const E = i18n.msg(lng).governance;
   Object.assign(res, { complete: so.complete, missingRoles: so.missing, signedRoles: so.signed });
-  const note = so.complete ? E.approvedByRoles(phase, so.signed.join(", ")) : E.stillPending(phase, E.missing(so.missing));
+  let note = so.complete ? E.approvedByRoles(phase, so.signed.join(", ")) : E.stillPending(phase, E.missing(so.missing));
+  if (so.sameSigner) { res.sameSigner = so.sameSigner; note += " " + E.sameSigner(so.sameSigner.by, phase, so.sameSigner.roles.join(", ")); } // r5 review
   if (!so.complete) {
     Object.assign(res, { approved: null, signedOff: phase, pending: true });
     if (res.forced) res.note = E.signedForced(res.failing.join(", ")); // a sign-off, not an approval (yet)
@@ -699,7 +727,7 @@ function roleWaitList(projectDir, dir, st, tracks) {
   const out = [];
   for (const p of PHASES) {
     if (!cfg[p] || approvals[p] || !phaseActive(p, tracks) || !isObj(st.signoffs[p]) || !Object.keys(st.signoffs[p]).length) continue;
-    const v = roleSignOffs({ signoffs: st.signoffs, approvals }, p, cfg[p], phaseContent(dir, p, kind));
+    const v = roleSignOffs({ ...st, signoffs: st.signoffs, approvals }, p, cfg[p], phaseContent(dir, p, kind));
     if (v.missing.length) out.push({ phase: p, missing: v.missing });
   }
   return out;
@@ -739,7 +767,7 @@ function fastForwardPlan(projectDir, slug, dir, st, tracks, kind, pending, doc, 
     const g = doc.nextGate && doc.nextGate.phase === ph ? { artifact: true, checks: doc.nextGate.failing } : approvalChecks(projectDir, slug, dir, ph, tracks, kind, lng);
     if (!g.artifact || g.checks.length) return null;
     if (cfg[ph]) {
-      const v = roleSignOffs({ signoffs: st.signoffs, approvals }, ph, cfg[ph], phaseContent(dir, ph, kind));
+      const v = roleSignOffs({ ...st, signoffs: st.signoffs, approvals }, ph, cfg[ph], phaseContent(dir, ph, kind));
       if (v.missing.length !== 1 || (role && role !== v.missing[0])) return null;
       role = v.missing[0];
     }

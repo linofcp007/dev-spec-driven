@@ -522,7 +522,8 @@ function nextAction(projectDir, name, opts = {}) {
         const exAt = isRecord(approvals.execution) && typeof approvals.execution.at === "string" ? approvals.execution.at : null;
         const signOff = !approvals.execution ? {} : executionSignOffStale(st) ? { at: exAt ? exAt.slice(0, 10) : "?", why: signOffWhyText(st, lng) } : null;
         // With roadmap.json meta.approvalRoles.execution the sign-off is per role (a role-less /approve is refused): name
-        // the roles still missing and the one to sign as. A stale sign-off is renewed by any role's new sign-off.
+        // the roles still missing and the one to sign as. A stale sign-off is renewed by every role signing again (r5 review: a role's
+        // sign-off older than the change no longer counts — roleSignOffs): the role named is the first one still missing.
         const exRoles = approvalRolesOf(projectDir).execution || [];
         if (signOff && exRoles.length) {
           if (!approvals.execution) {
@@ -532,7 +533,7 @@ function nextAction(projectDir, name, opts = {}) {
             if (all) finishedComplete = true;
             Object.assign(signOff, { role: v.missing[0] || v.signed[0] || exRoles[0], missing: all ? fm.governance.signedAll(v.signed.join(", ")) : v.missing.length ? fm.governance.missing(v.missing) : null,
               signed: all ? "" : v.signed.join(", ") });
-          } else signOff.role = exRoles[0];
+          } else signOff.role = roleSignOffs(st, "execution", exRoles, phaseContent(dir, "execution", kind)).missing[0] || exRoles[0];
         }
         recommendation = nx.finished(slug, day, finishedDrift.files, signOff);
       }

@@ -569,15 +569,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const f7 = uFeature(p7, "login");
     ["classification", "requirements"].forEach((ph) => S.approvePhase(p7, "login", ph, "u"));
     const tech7 = S.approvePhase(p7, "login", "design", "u", { role: "tech" });
-    const w7 = S.approvePhase(p7, "login", "design", "u", { revoke: true, reason: "signed the wrong draft" });
+    const w7 = S.approvePhase(p7, "login", "design", "u", { revoke: true, role: "tech", reason: "signed the wrong draft" });
     const st7a = uSt(f7.dir);
     const rec7 = st7a.approvalHistory[st7a.approvalHistory.length - 1];
     S.approvePhase(p7, "login", "design", "u", { role: "tech" });
     const sec7 = S.approvePhase(p7, "login", "design", "u", { role: "security" });
-    const v7 = S.approvePhase(p7, "login", "design", "u", { revoke: true });
+    const v7 = S.approvePhase(p7, "login", "design", "u", { revoke: true, role: "security" });
     const st7b = uSt(f7.dir);
     ok(tech7.ok && tech7.pending && w7.ok && w7.revokedApproval === false && js(w7.withdrawnSignOffs) === '["tech"]' && /Withdrew the role sign-off\(s\) waiting for 'design' of login: tech/.test(w7.message) &&
-      st7a.signoffs === undefined && rec7.revoked === true && rec7.partial === true && js(rec7.roles) === '["tech"]' &&
+      st7a.signoffs === undefined && rec7.revoked === true && rec7.partial === true && js(rec7.roles) === '["tech"]' && rec7.roleOnly === true &&
       sec7.ok && sec7.complete === true && v7.ok && v7.revokedApproval === true && !st7b.approvals.design && st7b.signoffs === undefined &&
       S.specDoctor(p7, "login").pendingRoles.design && js(S.specDoctor(p7, "login").pendingRoles.design.missing) === '["tech","security"]',
       "1.16 U2 + roles: revoking a phase that only waits for sign-offs withdraws them (history record revoked + partial, the roles listed); a completed approval by roles is revoked with them — every role signs again (got " +
@@ -1161,5 +1161,103 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       hookForm.command.startsWith("! " + S.DEV_SPEC) && /Claude Code with the ! prefix/.test(hookForm.reason),
       "1.21 review A4: the MCP deny refusal hands a client outside Claude Code the plain runnable command (no leading `!`) and a reason that doesn't mention the `!` prefix — EN / PT / ES / pt-BR; the Claude Code hook keeps `! node …` (got " +
       js([rDeny.command, rDeny.error, plainAll.map((d) => d.reason), hookForm.command]) + ")");
+  }
+  { // r5 review (approvals) — a role's sign-off of a phase with no file (execution, tests) made before a change no longer counts;
+    // revoke is a role's act on a role-governed phase; one person signing two roles is warned; the waiver's expiry is a UTC date.
+    const js = JSON.stringify;
+    const rRun = 'node -e "process.exit(0)"';
+    const feature = (p) => {
+      const f = S.createFeature(p, "Widget", ["core"]);
+      const w = (rel, text) => fs.writeFileSync(path.join(f.dir, rel), text);
+      w("classification.md", "# Classification: Widget\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none beyond core\n\n## Blast Radius\nThe widget page only.\n\n## Compliance Tags\nnone\n");
+      w("requirements.md", ["# Feature: Widget", "", "## Summary", "Users can save widgets.", "", "### US-1 (P1 — MVP): Save widgets", "**Independent Test:** save one.", "",
+        "#### Acceptance Criteria (EARS)", "1. **US-1.AC-1** — WHEN a user saves a widget THE SYSTEM SHALL store it",
+        "2. **US-1.AC-2** — IF the widget name is empty THEN THE SYSTEM SHALL reject it with a message", "", "## Success Criteria", "- **SC-001** — 95% of saves finish under 200 ms", ""].join("\n"));
+      w("design.md", "# Design: Widget\n\n## Overview\nA store module.\n\n## Architecture\n```mermaid\ngraph TD\n  A[UI] --> B[Store]\n```\n\n## Constitution Check\n- [x] Simplicity — complies\n");
+      w("tasks.md", `# Tasks: Widget\n\n## Story US-1 (P1 — MVP)\n- [ ] 1. [US1] Store widgets\n  - _Requirements: US-1.AC-1, SC-001_\n  - _Verify: ${rRun}_\n- [ ] 2. [US1] Reject empty names\n  - _Requirements: US-1.AC-2_\n  - _Verify: ${rRun}_\n`);
+      return f;
+    };
+    const p = path.join(tmp, "proj-r5a-roles");
+    S.initProject(p, ["core"], "en", { approvalRoles: { design: ["tech", "product"], execution: ["tech", "product"] } });
+    const f = feature(p);
+    const st = () => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    ["classification", "requirements"].forEach((ph) => S.approvePhase(p, "widget", ph, "u"));
+
+    // L16: revoke on a role-governed phase names a listed role; before the approval it withdraws only that role's own sign-off.
+    S.approvePhase(p, "widget", "design", "alice", { role: "tech" });
+    const rvNone = S.approvePhase(p, "widget", "design", "x", { revoke: true });
+    const rvIntern = S.approvePhase(p, "widget", "design", "x", { revoke: true, role: "intern" });
+    const rvProduct = S.approvePhase(p, "widget", "design", "x", { revoke: true, role: "product" });
+    S.approvePhase(p, "widget", "design", "pat", { role: "product" }); // completes the approval (tech waited)
+    const doneDesign = st().approvals.design;
+    const rvApproved = S.approvePhase(p, "widget", "design", "pat", { revoke: true, role: "product" });
+    S.approvePhase(p, "widget", "design", "alice", { role: "tech" });
+    S.approvePhase(p, "widget", "design", "pat", { role: "product" }); // complete again (two people)
+    const p2 = path.join(tmp, "proj-r5a-roles-withdraw");
+    S.initProject(p2, ["core"], "en", { approvalRoles: { design: ["tech", "product", "security"] } });
+    feature(p2);
+    ["classification", "requirements"].forEach((ph) => S.approvePhase(p2, "widget", ph, "u"));
+    S.approvePhase(p2, "widget", "design", "alice", { role: "tech" });
+    S.approvePhase(p2, "widget", "design", "pat", { role: "product" });
+    const wd = S.approvePhase(p2, "widget", "design", "pat", { revoke: true, role: "product", reason: "signed too early" });
+    const st2 = JSON.parse(fs.readFileSync(path.join(tmp, "proj-r5a-roles-withdraw", ".specs", "widget", ".state.json"), "utf8"));
+    const rec2 = st2.approvalHistory[st2.approvalHistory.length - 1];
+    ok(rvNone.ok === false && rvNone.roleRequired === true && /a revocation names the role revoking it: \/approve widget design --revoke --role <role>/.test(rvNone.error) &&
+      rvIntern.ok === false && rvIntern.roleNotListed === true && rvProduct.ok === false && rvProduct.notApproved === true && /'product' has no sign-off waiting for 'design'/.test(rvProduct.error) &&
+      doneDesign && rvApproved.ok && rvApproved.revokedApproval === true &&
+      wd.ok && js(wd.withdrawnSignOffs) === '["product"]' && js(Object.keys(st2.signoffs.design)) === '["tech"]' && rec2.partial === true && rec2.roleOnly === true && js(rec2.roles) === '["product"]',
+      "r5 review L16: revoking a role-governed phase names a listed role (none → roleRequired, an unlisted one → roleNotListed, a role with nothing waiting → refused); before the approval a role withdraws only ITS sign-off (the others stay; history record partial + roleOnly) (got " +
+      js([rvNone.error, rvIntern.error, rvProduct.error, wd.withdrawnSignOffs, st2.signoffs, rec2]) + ")");
+    // the merge driver keeps the other roles' sign-offs a roleOnly revocation left (and drops what an old-style partial one withdrew)
+    const T = (d) => `2026-09-0${d}T00:00:00.000Z`;
+    const mg = S.mergeStateJson({ approvals: {} },
+      { approvals: {}, signoffs: { design: { tech: { at: T(2), by: "a" } } }, approvalHistory: [{ phase: "design", at: T(2), by: "a", role: "tech", partial: true }] },
+      { approvals: {}, signoffs: { design: { security: { at: T(1), by: "s" } } }, approvalHistory: [{ phase: "design", at: T(1), by: "s", role: "security", partial: true },
+        { phase: "design", at: T(3), by: "p", role: "product", revoked: true, partial: true, roles: ["product"], roleOnly: true }] }, "state");
+    ok(js(Object.keys(mg.merged.signoffs.design).sort()) === '["security","tech"]',
+      "r5 review L16: a roleOnly revocation merges as one role's withdrawal — the other roles' waiting sign-offs on either branch are kept (got " + js(mg.merged.signoffs) + ")");
+
+    // (c): one person signing a phase for two required roles completes it, with a warning (sameSigner + note) — never a refusal.
+    const p3 = path.join(tmp, "proj-r5a-same");
+    S.initProject(p3, ["core"], "en", { approvalRoles: { design: ["tech", "product"] } });
+    feature(p3);
+    ["classification", "requirements"].forEach((ph) => S.approvePhase(p3, "widget", ph, "u"));
+    const s1 = S.approvePhase(p3, "widget", "design", "alice", { role: "tech" });
+    const s2 = S.approvePhase(p3, "widget", "design", "alice", { role: "product" });
+    ok(s1.ok && !s1.sameSigner && s2.ok && s2.complete === true && js(s2.sameSigner) === '{"by":"alice","roles":["product","tech"]}' &&
+      /Note: alice signed 'design' for several roles \(product, tech\) — role sign-offs are meant to come from different people\./.test(s2.note),
+      "r5 review: the same person signing a phase for two required roles is approved with a warning (sameSigner {by, roles} + a note), never refused (got " + js([s2.sameSigner, s2.note]) + ")");
+
+    // L15: a role's waiting execution sign-off made before a change (an untick) no longer counts — the approval completes only once
+    // every role signed after it; next_action names the role still missing.
+    S.approvePhase(p, "widget", "tasks", "u");
+    [1, 2].forEach((n) => S.completeTask(p, "widget", n, { command: rRun, exitCode: 0 }));
+    S.finishFeature(p, "widget", { write: true });
+    const ex1 = S.approvePhase(p, "widget", "execution", "bob", { role: "tech" });
+    const tw = Date.now(); while (Date.now() - tw < 5) { /* the untick after the sign-off, never the same millisecond */ }
+    S.completeTask(p, "widget", 2, null, { undo: true, reason: "redo" });
+    const t0 = Date.now(); while (Date.now() - t0 < 5) { /* a later time stamp */ }
+    S.completeTask(p, "widget", 2, { command: rRun, exitCode: 0 });
+    S.finishFeature(p, "widget", { write: true });
+    const naEx = S.nextAction(p, "widget");
+    const ex2 = S.approvePhase(p, "widget", "execution", "carol", { role: "product" });
+    const ex3 = S.approvePhase(p, "widget", "execution", "bob", { role: "tech" });
+    const naEx2 = S.nextAction(p, "widget");
+    ok(ex1.ok && ex1.complete === false && naEx.step === "finished" && js(naEx.missingRoles) === '["tech","product"]' && /--role tech\./.test(naEx.recommendation) &&
+      ex2.ok && ex2.complete === false && js(ex2.missingRoles) === '["tech"]' && ex3.ok && ex3.complete === true && naEx2.step === "finished" && /Nothing left to do here/.test(naEx2.recommendation),
+      "r5 review L15: a role's execution sign-off made before an untick (a change since: changesSince) no longer counts — next_action asks every role again (tech first), product's sign-off alone doesn't complete it, tech signing again does (got " +
+      js([naEx.missingRoles, naEx.recommendation.slice(-70), ex2.missingRoles, ex3.complete]) + ")");
+    // …and a stale execution approval with roles names the first role still missing after one re-signs (no loop on the first role)
+    const tv = Date.now(); while (Date.now() - tv < 5) { /* a later time stamp */ }
+    S.completeTask(p, "widget", 1, null, { undo: true });
+    const t1 = Date.now(); while (Date.now() - t1 < 5) { /* a later time stamp */ }
+    S.completeTask(p, "widget", 1, { command: rRun, exitCode: 0 });
+    S.finishFeature(p, "widget", { write: true });
+    const naSt1 = S.nextAction(p, "widget");
+    S.approvePhase(p, "widget", "execution", "bob", { role: "tech" });
+    const naSt2 = S.nextAction(p, "widget");
+    ok(/re-confirm it: \/approve widget execution --role tech\./.test(naSt1.recommendation) && /re-confirm it: \/approve widget execution --role product\./.test(naSt2.recommendation),
+      "r5 review L15: a stale execution approval by roles is renewed by every role — next_action names tech, then (tech signed) product, never tech again (got " + js([naSt1.recommendation.slice(-60), naSt2.recommendation.slice(-60)]) + ")");
+
   }
 };

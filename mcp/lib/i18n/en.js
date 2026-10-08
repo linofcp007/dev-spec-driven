@@ -2809,6 +2809,8 @@ const msg = {
       signedForced: (ids) => `Signed off with force — the failing checks are recorded with the sign-off: ${ids}.`,
       stillPending: (phase, missing) => `'${phase}' stays pending until every role has signed off its current content — ${missing}.`,
       approvedByRoles: (phase, roles) => `'${phase}' is approved — every role signed off the current content: ${roles}.`,
+      // r5 review: one person signing a phase for two required roles — a warning, never a refusal
+      sameSigner: (by, phase, roles) => `Note: ${by} signed '${phase}' for several roles (${roles}) — role sign-offs are meant to come from different people.`,
       staleSignOffs: (list) => `sign-offs made before the artifact changed no longer count (re-sign the current content): ${list}`,
       resigning: (list) => `re-sign in progress (the phase stays approved as it was until every role has signed the new content): ${list}`,
       unsigned: (list) => `approved without the role sign-offs now required (approved before the roles were configured or changed — counted as approved by an unknown role; ask each role to re-sign): ${list}`,
@@ -2866,6 +2868,9 @@ const msg = {
       signOffsToo: (roles) => `The role sign-offs waiting for it were withdrawn too: ${roles}.`,
       laterStay: (list, phase) => `Nothing cascades: the later phases stay approved (${list}); approving another phase is refused (phase-order) until '${phase}' is approved again.`,
       notApproved: (phase, slug) => `'${phase}' is not approved for ${slug} and no role sign-off is waiting for it — nothing to revoke.`,
+      // r5 review: with approval roles configured for the phase, a revocation names a listed role; before the approval it withdraws that role's own sign-off
+      roleRequired: (phase, slug, roles) => `'${phase}' is signed off per role (${roles}) — a revocation names the role revoking it: /approve ${slug} ${phase} --revoke --role <role>. Nothing recorded.`,
+      noSignOff: (role, phase, slug, waiting) => `'${role}' has no sign-off waiting for '${phase}' of ${slug} — nothing to withdraw (waiting: ${waiting}); a role withdraws only its own sign-off.`,
       phaseRequired: "Name the phase whose approval to revoke.",
       noThrough: "revoke takes one phase — not through (the fast-forward).",
       noForce: "revoke takes no force or expires — it removes an approval; reason says why.",

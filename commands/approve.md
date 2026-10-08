@@ -66,16 +66,22 @@ and the role sign-offs waiting for it — and appends `{phase, at, by, revoked: 
 snapshot). It **never cascades**: later phases stay approved (`laterApproved`); the revoked phase is pending again, so
 doctor, next_action and finish ask for it, and approving another phase is refused (`phase-order`) until it is
 approved again. Revoking a phase that is not approved is an error; `execution` can be revoked too (its sign-off is
-then asked for again). Revoke only when the user asks — the approval guard gates it like an approval.
+then asked for again). On a phase signed off per role (below) a revocation is a role's act too: it names one of the
+phase's roles (`role` / `--role`); before the phase is approved it withdraws only that role's own waiting sign-off (the
+others stay). Revoke only when the user asks — the approval guard gates it like an approval.
 
 **Approvals by role** (opt-in: `.specs/roadmap.json → meta.approvalRoles`, set with `spec_init {approvalRoles}` / CLI
 `dev-spec init --roles requirements=product,design=tech+security`): a phase listed there needs `role` (CLI
 `--role <role>`, one of that phase's roles) and counts as approved only once **every** role has signed off its
 **current** content — until then the result says `pending` with the `missingRoles`, and doctor, next_action and finish
-keep naming them (ROADMAP.md too, once one role has signed). An edit after a role signed means that role signs again. A phase approved before the
+keep naming them (ROADMAP.md too, once one role has signed). An edit after a role signed means that role signs again —
+for `tests` and `execution`, which have no file of their own, any change of the feature after it (a change request, an
+undone task, a re-approval of another phase with other content). One person signing for two roles is recorded, with a
+warning (`sameSigner`): role sign-offs are meant to come from different people. A phase approved before the
 roles were configured stays approved (by an unknown role); doctor warns until each role re-signs. To approve several
 filled phases in one go, see `/spec-ff`.
 
 Each approval writes `.specs/<feature>/.state.json` (latest approval + content fingerprint), appends to
 `approvalHistory` and saves a snapshot `.specs/<feature>/.history/<phase>@<n>.md` — the baseline `/spec-impact`
-diffs a later edit against. Confirm what was recorded. Respond in the user's language (EN/PT/ES).
+diffs a later edit against (a re-approval of the same content shares the previous snapshot). An edit that only changes
+whitespace — trailing spaces, blank lines at the end — is no change since the approval. Confirm what was recorded. Respond in the user's language (EN/PT/ES).

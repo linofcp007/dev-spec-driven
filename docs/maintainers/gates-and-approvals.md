@@ -215,7 +215,12 @@ flows, the bugfix kind.
   exactly like a single approval — so every reader of `approvals[<phase>]` (doctor approval-gates / `nextGate.missingRoles`
   / `pendingRoles`, next_action's "missing role", finish, ROADMAP.md attention, the guard hook, metrics) sees the phase
   approved only then. A sign-off of OLDER content no longer counts (`phaseContent()` fingerprints; a phase with no file —
-  tests, execution — keeps its sign-offs until approved). readState refuses a non-object `signoffs`. Every required role
+  tests, execution — r5 review: a sign-off made before a change of the feature, `changesSince(state, at, phase)` — a change
+  request, an untick, a revocation, a re-approval of another phase with other content — no longer counts, the rule
+  `executionSignOffStale()` applies to a single approval: `signOffOutdated()` in `roleSignOffs()`, for the waiting
+  sign-offs AND the role records of the approval in force; callers pass the FULL state — a tech sign-off made before an
+  untick completed the approval once product signed). The same person (`by`) signing the phase for two required roles is
+  recorded with a warning — `sameSigner {by, roles}` + `governance.sameSigner` on the approve result — never refused. readState refuses a non-object `signoffs`. Every required role
   with a CURRENT sign-off and still no approval (sign-offs made on two branches the merge driver united — it never approves —
   or a role dropped from the config after the others signed): `pendingRoles[p].signoffsComplete` / `nextGate.signoffsComplete`
   / next_action's `signoffsComplete` (1.21 review A1) — never missing roles; the recommendation asks one of them to sign
@@ -256,7 +261,11 @@ flows, the bugfix kind.
   unchanged: `observedProof()` reads the kept red run's own stamp.
 - **Revoke** — `revokeApproval()` (`spec_approve {revoke, reason}` / `approve --revoke`): removes `approvals[p]` and
   `signoffs[p]`, appends `{phase, at, by, revoked: true, reason?, role?, roles?, approvedAt?, wasForced?, partial?}` (no
-  snapshot; pre-history approvals are seeded as legacy records first), never cascades (`laterApproved` stay approved — the
+  snapshot; pre-history approvals are seeded as legacy records first). **With roles (r5 review):** on a phase
+  `meta.approvalRoles` lists, a revocation names one of its roles (`role` — `revoke.roleRequired` / `governance.roleNotListed`;
+  any role or none revoked before); before the approval it withdraws only THAT role's waiting sign-off (`revoke.noSignOff`
+  when it has none; the record `partial` + `roleOnly: true`, `roles: [role]` — the merge driver withdraws only it), an
+  approval revoked by a role still drops every waiting sign-off. It never cascades (`laterApproved` stay approved — the
   revoked phase is pending again, so approving a later one is refused on `phase-order`). Refused with force / expires /
   through, and for a phase that isn't approved (`notApproved`). **Every reader of approvalHistory filters through
   `isApprovalRecord()`** — never `partial !== true` alone (a revoked record is no approval). The approval guard reads a
