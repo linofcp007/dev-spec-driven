@@ -13,7 +13,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
     const tw = (p, rel, text) => { const f = path.join(p, ".specs", "templates", ...rel.split("/")); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, text); return f; };
     const rd = (dir, f) => fs.readFileSync(path.join(dir, f), "utf8");
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
-    const today = () => new Date().toISOString().slice(0, 10);
+    const today = () => S.today(); // the local calendar date (1.25.1)
 
     // --- an override is used for new features: variables substituted, the active tracks' blocks appended (EN)
     const pe = b1("en");

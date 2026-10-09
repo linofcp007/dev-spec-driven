@@ -115,8 +115,10 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   (undecided, or with open tasks, its timebox not passed) exists (why `spike`, field `spikes` — prototype work; a spike has
   no tasks gate, so it is never listed as "awaiting approval"; at the `scope` level a spike never overrides the approved
   features' plan). A
-  tasks approval whose `fingerprint` no longer matches tasks.md (tasks appended/edited after it; ticks are
-  normalized) is `stale` — it covers nothing and the reason names it; an approval without a fingerprint counts.
+  tasks approval whose content no longer matches tasks.md (tasks appended/edited after it; ticks are
+  normalized) is `stale` — it covers nothing and the reason names it; an approval without a fingerprint counts. "Changed" is
+  next_action's own test (`approvedContentSame`, 1.25.1 — gates-and-approvals.md → Approval fingerprints): a whitespace-only edit
+  (trailing spaces, final blank lines, a "\r\r\n" file normalized to LF) leaves the approval covering.
   Inside / outside the project is decided on real paths too (`insideDirAlias()`: an 8.3 short name, a junction or a
   symlink to the project is inside — read only when the text comparison says outside; errors fall back to it). Never for a
   NETWORK path on either side (`isNetworkPath` — the agent's Write target, an absolute `_Implements:_`; 1.16 verify NEW-3):

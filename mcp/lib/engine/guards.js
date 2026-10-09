@@ -21,7 +21,8 @@ let activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
   validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption,
   decodeText, isNetworkPath, runProvesVerify, withinRoot;
-function __link(E) { ({ activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords,
+let approvedContentSame, proofIncomplete; // 1.25.1: gates.js (the guard's stale tasks approval) · evidence.js (an incomplete command runs nothing)
+function __link(E) { ({ approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
@@ -53,7 +54,9 @@ function guardEnabled(projectDir) {
 //   ask:   otherwise, with a localized `reason` (project language).
 // An approval covers only the tasks.md it signed off: when it carries a fingerprint and tasks.md no longer matches
 // it (tasks appended or edited after approval — ticking boxes is not an edit), the feature is `stale`, not covering:
-// "an approved spec that changed is not approved". An approval without a fingerprint (older state) still counts.
+// "an approved spec that changed is not approved". An approval without a fingerprint (older state) still counts. "Changed" is
+// next_action's and finish's own test (approvedContentSame, gates.js — 1.25.1): trailing whitespace, final blank lines or a
+// "\r\r\n" file normalized to LF are no edit.
 // meta.guard "scope" (1.14 C1): once tasks are approved, a code file must also be in the plan — scopeGuardDecision.
 function guardCheck(projectDir, filePath, cwd) {
   const pdir = path.resolve(projectDir);
@@ -97,7 +100,7 @@ function guardCheck(projectDir, filePath, cwd) {
     texts.set(name, tasksText);
     const ap = approvals.tasks || null;
     if (!ap) pending.push(name);
-    else if (isObj(ap) && typeof ap.fingerprint === "string" && ap.fingerprint && !fingerprintMatches(tasksText, "tasks", ap.fingerprint)) stale.push(name);
+    else if (isObj(ap) && typeof ap.fingerprint === "string" && ap.fingerprint && !approvedContentSame(dir, "tasks", ap, tasksText)) stale.push(name);
     else if (isObj(ap) && ap.forced) forced.push(name);
     else covering.push(name);
   }
@@ -1744,18 +1747,23 @@ function implementerStopCheck(pdir, message, cl, res) {
   if (report == null) problem = X.noReport(rel);
   else {
     const body = flat(report);
-    const codes = reportExitCodes(body).map((x) => x.code);
     // 1.23 review 5 (M16): a _Verify:_ command is shown when the report holds its text, or a command it writes (a code span) that
     // IS a run of it by the evidence gate's matcher (runProvesVerify: `tests\x.test.js` = `tests/x.test.js`, quotes, a ` && ` join
     // of the task's commands) — the raw text compare bounced `node --test tests/login.test.js` for `_Verify: node --test tests\login.test.js_`.
     const spans = reportCommandSpans(report);
     const missing = verify.filter((c) => !body.includes(flat(c)) && !spans.some((s) => runProvesVerify({ command: s }, [c], pdir) || runProvesVerify({ command: s }, verify, pdir)));
-    const cmds = (missing.length ? missing : verify).map((c) => "`" + c + "`").join(", ");
-    if (missing.length || !codes.length) problem = X.noRun(rel, cmds);
+    const list = (xs) => xs.map((c) => "`" + c + "`").join(", ");
     // full review Ga5: the exit code must be the one the task needs — a must-pass _Verify:_ an exit 0 ("Status: DONE … exit
-    // code: 1" was allowed), an _Expect: fail_ one a non-zero exit (its red run). A +tdd report may show the red run and then
-    // the green one: any matching code counts.
-    else if (expectsFail(task) ? !codes.some((c) => c !== 0) : !codes.includes(0)) problem = (expectsFail(task) ? X.notFailing : X.notPassing)(rel, cmds);
+    // code: 1" was allowed), an _Expect: fail_ one a non-zero exit (its red run). 1.25.1 (review 7): read per run — the codes of
+    // each _Verify:_ command's OWN runs (verifyRunCodes), its LAST run deciding: any exit 0 anywhere passed "Ran `npm test` → exit
+    // code: 1 … Ran `npm run lint` → exit code: 0". A +tdd report may show the red run and then the green one (the last is green).
+    const xf = expectsFail(task);
+    const per = verifyRunCodes(report, verify, pdir);
+    const unrun = verify.filter((c, i) => !per[i].length);
+    const wrong = verify.filter((c, i) => per[i].length && (xf ? per[i][per[i].length - 1] === 0 : per[i][per[i].length - 1] !== 0));
+    const earlier = wrong.some((c) => { const k = per[verify.indexOf(c)]; return xf ? k.some((x) => x !== 0) : k.includes(0); }); // the right code, then the wrong one
+    if (missing.length || unrun.length) problem = X.noRun(rel, list(missing.length ? missing : unrun));
+    else if (wrong.length) problem = (xf ? (earlier ? X.lastNotFailing : X.notFailing) : (earlier ? X.lastNotPassing : X.notPassing))(rel, list(wrong));
   }
   if (!problem) return res(false, "report-ok", info);
   return res(true, "implementer-evidence", { ...info, report: rel, reason: [X.head(n, f.slug) + " " + problem, X.todo].join("\n") });
@@ -1788,6 +1796,57 @@ function stopReportFile(pdir, own, text, at, name) {
     if (fs.existsSync(file)) return file;
   }
   return own;
+}
+// 1.25.1 (review 7) — the exit codes of each _Verify:_ command's OWN runs in an implementer's report, in order → [[codes of verify[0]'s
+// runs], [verify[1]'s], …]. Every other command a report shows (`npm run lint` → exit 0) has codes of its own: "Ran `npm test` → exit
+// code: 1 … Ran `npm run lint` → exit code: 0" passed as a green task (any exit 0 anywhere counted). Read line by line (the report as
+// written, each line's backticks dropped): a MENTION is a code span — a run of the _Verify:_ commands it proves by the evidence
+// gate's matcher (runProvesVerify: one of them, or a ` && ` join of all), else another command — or a _Verify:_ command's own text
+// on the line (`$ npm test`, a transcript); an exit code (reportExitCodes) belongs to the last mention before it on its line, else
+// to the first one after it there ("exit 0 for `npm test`"), else to the last mention of the lines above (an output block under
+// its command). A syntactically incomplete span (`npm test &&` — proofIncomplete) runs nothing it names. Bounded: the report is
+// already ≤ STOP_REPORT_MAX; ≤ 500 spans of ≤ 4000 characters are matched, as reportCommandSpans.
+function verifyRunCodes(report, verify, pdir) {
+  const per = verify.map(() => []);
+  const flatV = verify.map(flatReport);
+  const words = flatV.map((v) => (v ? new RegExp("(?<![\\w-])" + v.split(" ").map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[ \\t]+") + "(?![\\w-])", "g") : null));
+  const proves = (cmd) => {
+    if (proofIncomplete(cmd)) return [];
+    const all = runProvesVerify({ command: cmd }, verify, pdir);
+    return verify.map((c, i) => i).filter((i) => all || flatReport(cmd) === flatV[i] || runProvesVerify({ command: cmd }, [verify[i]], pdir));
+  };
+  let current = null; // the verify indices the codes below belong to ([] = another command), null = none named yet
+  let spansSeen = 0;
+  for (const raw of String(report).split(/\r?\n/)) {
+    const marks = []; // { at, to, prov: [verify indices] }
+    let text = "", k = 0;
+    for (const m of raw.matchAll(/``\s?([^`\n]+?)\s?``|`([^`\n]+)`/g)) {
+      text += raw.slice(k, m.index).replace(/`/g, "");
+      const cmd = (m[1] !== undefined ? m[1] : m[2]).trim();
+      const at = text.length;
+      text += cmd;
+      k = m.index + m[0].length;
+      // (a span that is an exit code itself — "`exit 0`", "exit code: `1`" — is no command)
+      const codeSpan = /^-?\d+$/.test(cmd) || reportExitCodes(cmd).some((x) => x.index === 0);
+      if (cmd && !codeSpan && cmd.length <= 4000 && spansSeen++ < 500) marks.push({ at, to: text.length, prov: proves(cmd) });
+    }
+    text += raw.slice(k).replace(/`/g, "");
+    words.forEach((re, i) => {
+      if (!re) return;
+      re.lastIndex = 0;
+      for (let w; (w = re.exec(text));) if (!marks.some((x) => w.index >= x.at && w.index < x.to)) marks.push({ at: w.index, to: w.index + w[0].length, prov: [i] });
+    });
+    marks.sort((a, b) => a.at - b.at);
+    for (const c of reportExitCodes(text)) {
+      if (marks.some((x) => c.index >= x.at && c.index < x.to)) continue; // inside a command (`node -e "process.exit(0)"`): no code
+      let owner = null;
+      for (const x of marks) if (x.at < c.index) owner = x;
+      if (!owner) owner = marks.find((x) => x.at > c.index) || null;
+      for (const i of owner ? owner.prov : current || []) per[i].push(c.code);
+    }
+    if (marks.length) current = marks[marks.length - 1].prov;
+  }
+  return per;
 }
 // The commands a report writes in code spans (`…` or ``…``) — what the implementer's gate matches against a _Verify:_ (1.23 review
 // 5, M16). Bounded: at most 500 spans, each ≤ 4000 characters (the evidence gate's command limit).

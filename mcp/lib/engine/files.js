@@ -172,33 +172,60 @@ function writeIfAbsent(file, content) {
 // locked target on Windows, a folder where the file should be) the error is thrown with the temp file already
 // removed — the best-effort roadmap/catalog refreshes and the hook swallow it, and they used to leave one
 // full-size `<file>.<pid>.<ts>.tmp` in the committed .specs/ per call. On Windows a brief lock (a scanner, an
-// indexer, a preview pane) is retried a few times first.
-const RENAME_RETRY_MS = [5, 15, 40];
+// indexer, a preview pane) is retried first.
+// 1.25.1 (review 7) — atomic, durable, and never torn in place:
+//   - the temp file is created exclusively ("wx": never written through a link planted at its name), written whole and fsynced
+//     BEFORE the rename (without it a crash right after the rename could leave the new name with no data — the rename's metadata
+//     may reach the disk first); after the rename the folder is fsynced where the platform can (POSIX; Windows can't open a
+//     folder for it — skipped; a file system that refuses it, ignored);
+//   - a rename Windows refuses (EPERM / EACCES / EBUSY — an antivirus scan, the indexer, a preview pane holding the file) is retried
+//     with backoff, ~1.6 s in all (it was ~60 ms) — never for a read-only target, which no wait fixes;
+//   - when it still fails, the write is REFUSED: the error is thrown with the temp file removed and the previous content
+//     untouched. The plain in-place write it fell back on truncated the file first (a crash, a full disk or a concurrent reader
+//     then met it empty or half written) and followed a link the write gate had checked a moment before.
+const RENAME_RETRY_MS = [5, 15, 40, 100, 200, 400, 800];
 const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+const FSYNC_UNSUPPORTED = new Set(["EINVAL", "ENOTSUP", "EPERM", "EISDIR", "EBADF"]); // a file system that can't sync: best effort
+const readOnlyTarget = (file) => { try { return (fs.statSync(file).mode & 0o200) === 0; } catch { return false; } };
+function fsyncDir(dir) {
+  if (process.platform === "win32") return;
+  let fd = null;
+  try { fd = fs.openSync(dir, "r"); fs.fsyncSync(fd); } catch { /* a folder that can't be synced: the rename stands */ } finally {
+    if (fd != null) try { fs.closeSync(fd); } catch { /* ignore */ }
+  }
+}
 function writeFileAtomic(file, content) {
   if (!existsRaw(file)) { const a = changeAlias(file); if (a) file = a; } // 1.21 F5: a change's tasks.md / requirements.md is its change.md
   specsWriteGate(file); // never through a link (a linked folder on the way, or the file itself), never over a folder
   if (CTX.DRY_RUN) { dryPut(file, content); return; } // 1.25: recorded, not written
   forgetCached(file);
   mkdirp(path.dirname(file));
+  const data = Buffer.isBuffer(content) ? content : ArrayBuffer.isView(content) ? Buffer.from(content.buffer, content.byteOffset, content.byteLength)
+    : Buffer.from(String(content), "utf8");
   const tmp = file + "." + process.pid + "." + Date.now() + ".tmp";
-  let moved = false;
+  let created = false, moved = false;
   try {
-    fs.writeFileSync(tmp, content, "utf8");
+    const fd = fs.openSync(tmp, "wx");
+    created = true;
+    try {
+      for (let off = 0; off < data.length;) off += fs.writeSync(fd, data, off, data.length - off);
+      try { fs.fsyncSync(fd); } catch (e) { if (!FSYNC_UNSUPPORTED.has(e.code)) throw e; }
+    } finally { fs.closeSync(fd); }
     for (let attempt = 0; ; attempt++) {
       try {
         fs.renameSync(tmp, file);
         moved = true;
         break;
       } catch (e) {
-        if (process.platform !== "win32" || attempt >= RENAME_RETRY_MS.length || !RENAME_RETRY_CODES.has(e.code)) break;
+        // refused — the previous content stays as it was (never a truncating in-place write)
+        if (process.platform !== "win32" || attempt >= RENAME_RETRY_MS.length || !RENAME_RETRY_CODES.has(e.code) || readOnlyTarget(file)) throw e;
         sleepSync(RENAME_RETRY_MS[attempt]);
       }
     }
-    if (!moved) fs.writeFileSync(file, content, "utf8"); // still locked / read-only: a plain write (may throw)
   } finally {
-    if (!moved) try { fs.unlinkSync(tmp); } catch { /* never created, or already gone */ }
+    if (created && !moved) try { fs.unlinkSync(tmp); } catch { /* already gone */ }
   }
+  fsyncDir(path.dirname(file));
 }
 // 1.24 r6 (G2 / G-I2) — THE write call for an engine module writing a spec file by any other means than writeFileAtomic /
 // writeIfAbsent / ensureDir: no module outside this one touches the disk with fs.writeFileSync / appendFileSync / renameSync /

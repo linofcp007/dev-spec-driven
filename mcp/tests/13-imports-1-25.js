@@ -28,7 +28,7 @@ exports.run = async ({ ok, rpc, S, tmp, require }) => {
     return out.join("\n");
   };
   const fresh = (n) => { const p = path.join(tmp, "proj-125-" + n); S.initProject(p, ["core"]); return p; };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = S.today(); // the local calendar date (1.25.1)
   const files = (dir) => { const out = []; const walk = (d, pre) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { if (e.isDirectory()) walk(path.join(d, e.name), pre + e.name + "/"); else if (!e.name.startsWith(".")) out.push(pre + e.name); } }; walk(dir, ""); return out.sort(); };
 
   // Kiro's steering: .kiro/steering/*.md, its front matter as dev-spec reads it (inclusion / fileMatchPattern).

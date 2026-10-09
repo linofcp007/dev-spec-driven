@@ -1732,6 +1732,7 @@ const msg = {
       finishChanged: (list) => `modificados tras su aprobación (revisar y volver a aprobar): ${list}`,
       bugGate: (n, first) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz está sin rellenar. Ninguna corrección antes de que la causa raíz esté escrita en bug.md — haz primero la tarea ${first} (encuentra la causa raíz con evidencia y escríbela allí).`,
       bugGateFirst: (n, first) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz está sin rellenar y ninguna tarea la escribe — solo la tarea ${first} puede completarse hasta que la causa raíz esté escrita en bug.md (ninguna corrección antes de la causa raíz).`,
+      bugGateFix: (n) => `La tarea ${n} aún no puede completarse: pone en verde la prueba de regresión — es una corrección — y bug.md → Causa Raíz está sin rellenar. Escribe allí primero la causa raíz, con su evidencia (ninguna corrección antes de que la causa raíz esté escrita en bug.md).`,
       bugGateTicked: (n, rc) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz sigue vacía — la tarea ${rc} está marcada, pero lo que entrega es esa sección. Escribe allí la causa raíz, con su evidencia (ninguna corrección antes de que la causa raíz esté escrita en bug.md).`,
       rootCauseTaskEmpty: (n) => `La tarea ${n} está marcada, pero bug.md → Causa Raíz sigue vacía — escribe allí la causa raíz, con su evidencia: las tareas siguientes (la prueba de regresión, la corrección) siguen rechazadas hasta que esté escrita.`,
       fill: (file, what, hint) => `Rellena ${file} — ${what}; luego ${hint}.`,
@@ -3027,6 +3028,8 @@ const msg = {
         noRun: (file, cmds) => `su informe (${file}) no muestra la ejecución del _Verify:_ — el comando exacto y su exit code: ${cmds}.`,
         notPassing: (file, cmds) => `su informe (${file}) no muestra ninguna ejecución correcta (exit 0) de ${cmds} — el _Verify:_ de una tarea DONE debe pasar.`,
         notFailing: (file, cmds) => `su informe (${file}) no muestra ninguna ejecución que falle (un exit code distinto de cero) de ${cmds} — la tarea tiene _Expect: fail_: su prueba es la ejecución en rojo.`,
+        lastNotPassing: (file, cmds) => `su informe (${file}) termina en una ejecución que falla de ${cmds} — la última ejecución suya que muestra el informe sale con un exit code distinto de cero; el _Verify:_ de una tarea DONE debe pasar con el código final.`,
+        lastNotFailing: (file, cmds) => `su informe (${file}) termina en una ejecución correcta de ${cmds} — la tarea tiene _Expect: fail_: la última ejecución suya que muestra el informe debe ser la roja (un exit code distinto de cero).`,
         todo: "Ejecuta el comando sobre el código final y pon en el informe el comando, su exit code y las últimas líneas de su salida — o informa BLOCKED / NEEDS_CONTEXT si no puede pasar. (Evidencia antes que afirmaciones: el controlador solo marca la tarea con esa ejecución.)",
       },
       simplifier: {

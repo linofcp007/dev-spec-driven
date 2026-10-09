@@ -200,9 +200,10 @@ function renderBrief(d, lang) {
 // Layout of a feature's retro.md (spec_metrics {write} — engine/finish.js calls a language's MSG.metrics.retro(m, fmt), which
 // renders through here): language-neutral, every label from that language's metrics.retroText (T), its phase names from
 // metrics.phase (P). It lived in en.js until 1.25.1 — a PT or ES retro loaded the English locale file to render.
+// fmt: { dur, today, day? } — day: a stored instant's calendar date (finish.js passes dayOf, the local date).
 function renderRetro(T, P, m, fmt) {
   const lt = m.leadTime || {};
-  const rows = [[T.created, m.createdAt ? m.createdAt.slice(0, 10) + (m.createdAtApproximate ? ` (${T.approximate})` : "") : T.unknown]];
+  const rows = [[T.created, m.createdAt ? (fmt.day ? fmt.day(m.createdAt) : m.createdAt.slice(0, 10)) + (m.createdAtApproximate ? ` (${T.approximate})` : "") : T.unknown]];
   for (const ph of ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "complete", "finished"]) {
     if (lt[ph]) rows.push([T.lead(P[ph] || ph), fmt.dur(lt[ph].hours) + (lt[ph].approximate ? ` (${T.approximate})` : "")]);
   }

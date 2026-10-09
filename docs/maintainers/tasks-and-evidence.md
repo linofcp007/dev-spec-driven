@@ -169,7 +169,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   instruction, 0xC0000094 integer divide by zero, 0x80000003 breakpoint — unsigned or signed. `isRedRun()` refuses them (a
   segfault was the red proof of an `_Expect: fail_` task); `expectFailRefusal()` answers `couldNotRun: "crash"`
   (`redGreen.crashNotRed`), recorded as a failed run like any crash — the CLI's own signal case (no exit status) keeps refusing
-  before anything is recorded. Exit 137 / 143 (a kill) and 130 (Ctrl+C) are no crash codes.
+  before anything is recorded. Exit 137 / 143 (a kill) and 130 (Ctrl+C) are no crash codes. **1.25.1 (review 7):** a crash is also a
+  failed RE-CHECK of an `_Expect: fail_` task (`expectFailIssue`: `cantRunRecord(e) || crashExit(e.exitCode)`) — a re-run that
+  segfaulted fell through to the red run carried forward, so the task stayed verified and finish didn't block.
 - **Several `_Verify:_` commands, all passing (1.23 review):** `done --run` records ONE run (`cmd1 && cmd2`, as ever) whose
   summary holds one section per command — `$ <command>` and its summary (`runSummaries()`), each re-summarized shorter
   (`summarizeRunOutput(output, room)`) when together they'd pass the record's 2,000 characters — where it kept the LAST
@@ -185,7 +187,10 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `{command, exitCode: 0}`; a note ticks it but leaves it unverified. `{exitCode}` alone and a command
   without its exit code are rejected; "exit 0" without a command is kept as a note. A non-zero run refuses
   the tick and is recorded — a failed re-check of a ticked task makes it unverified until a later pass.
-- **Which run proves it (1.22 review).** Until 1.22 the reported `command` was never compared with the `_Verify:_`:
+- **Which run proves it (1.22 review).** (1.25.1, review 7: a REPORTED command no shell runs as written — `npm test &&`,
+  `npm test |`, `&& npm test`, `a && && b`: `proofIncomplete()`, an operator with no command after / before it or right after
+  another — proves nothing; `proofSteps` dropped the empty step and `npm test &&` read as a run of `npm test`. Quotes and
+  substitutions are skipped whole; a lone `;` is fine.) Until 1.22 the reported `command` was never compared with the `_Verify:_`:
   `{command: "echo hello", exitCode: 0}` verified a task whose `_Verify:_` is `npm test`. `runProvesVerify(run, verify,
   root)` (evidence.js) is now part of the ONE verdict (`taskEvidenceIssue`, after `evidenceIssue` passed it): the proving run —
   the latest passing run, an `_Expect: fail_` task's red proof — must run the task's `_Verify:_` commands, EVERY one of
@@ -492,7 +497,16 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   state.js) takes the same bullets, and an approval fingerprinted the pre-1.22 way (`- [x]` only) still matches. A checkbox line
   the scanner doesn't read — an ordered-list checkbox `1. [ ] text`, an unnumbered `- [ ] text` outside every task block (a
   sub-step in a task's body is the task's; fences and comments hold none) — is named by doctor's `unread-tasks` warn
-  (`unreadTaskLines()`, `CHECK_PHASE` 5; the feature and the spike doctor). **Review 5 — CommonMark's indented code block:**
+  (`unreadTaskLines()`, `CHECK_PHASE` 5; the feature and the spike doctor). **1.25.1 (review 7) — a sibling is no body:** a
+  checkbox item at the task line's own indentation or less (or quoted) is never that task's lazy-continuation body — right under
+  `- [ ] 1. A`, a mistyped `- [ ] 2 B` / `- [ ] 2) B` / `- [~] 2. B` became task 1's body (its markers included) and vanished
+  from every tool; a deeper checkbox is still a sub-step. `unreadTaskLines()` (`RE_LIST_BOX_LINE`) names any one-character box
+  (`[~]`, `[-]`, `[/]` — a task app's states; a letter or digit is a link, no box) and a quoted one (`> - [ ] 1.`), skipped
+  silently before. **Setext phase headings (1.25.1):** `taskHeadings()` gives the scanner its phases — an ATX heading at the
+  margin, as ever, and a setext one ("Phase A" + `===` / `---`, its text at the margin) as `headingEntries` reads it; its
+  underline is part of the heading. The scanner read ATX only while `activeTasks` and the section readers read setext: every
+  phase was null and `taskSchedule` served a later section's task first; `spec_append_tasks` reads the same headings (a setext
+  phase is found; new tasks land under its underline). **Review 5 — CommonMark's indented code block:**
   outside every list, a line indented 4+ columns (`indentCols()`: a tab to the next multiple of 4) after a blank line, a heading
   or the top of the file is code, and so is each line after it while it stays indented or blank (`scanTaskLines`' `ind` state,
   `listStep()` — a list item opens the list, a heading or an unindented line after a blank one closes it): its `    - [ ] 1.
@@ -566,7 +580,14 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   every one of those commands (backticks / whitespace flattened) and the exit code the task needs ("exit 0", "exit code:
   1", "exited with code 0", "exit status 2", PT "código de saída", ES "código de salida"): an exit 0 for a must-pass
   `_Verify:_` (`notPassing` — "DONE … exit code: 1" was allowed), a non-zero exit for an `_Expect: fail_` task
-  (`notFailing`); any matching code in the report counts, so a report showing the red run and then the green one passes.
+  (`notFailing`). **1.25.1 (review 7) — per run:** any exit 0 anywhere passed "Ran `npm test` → exit code: 1 … Ran `npm run
+  lint` → exit code: 0". `verifyRunCodes()` reads the report line by line: a mention is a code span (the `_Verify:_` commands it
+  proves by `runProvesVerify` — one of them or a ` && ` join of all —, else another command; a span that is itself an exit code,
+  "`exit 0`", is none; an incomplete one, `npm test &&`, runs nothing) or a `_Verify:_` command's own text on the line (a
+  transcript's `$ npm test`); an exit code belongs to the last mention before it on its line, else the first after it there
+  ("exit 0 from `npm test`"), else the last mention above (an output block under its command); a code inside a command
+  (`process.exit(0)`) is none. EACH `_Verify:_` command needs a run with a code (`noRun`), and its LAST run decides — red then
+  green passes, green then red is `lastNotPassing` (`_Expect: fail_`: `lastNotFailing`, the last run must be the red one).
   STATUS BLOCKED / NEEDS_CONTEXT, no report path, or no runnable `_Verify:_` → allowed. **1.23 review 5 (M16):** a `_Verify:_`
   command is shown when the flattened report holds its text OR a command the report writes in a code span
   (`reportCommandSpans()`, ≤ 500 spans of ≤ 4000 characters) is a run of it by the evidence gate's matcher (`runProvesVerify`

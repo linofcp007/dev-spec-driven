@@ -1818,6 +1818,7 @@ const msg = {
       finishChanged: (list) => `changed after their approval (re-review, then re-approve): ${list}`,
       bugGate: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled. No fix before the root cause is written in bug.md — do task ${first} first (find the root cause with evidence and write it there).`,
       bugGateFirst: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled and no task writes it — only task ${first} can be completed until the root cause is written in bug.md (no fix before the root cause).`,
+      bugGateFix: (n) => `Task ${n} can't be completed yet: it makes the regression test green — a fix — and bug.md → Root Cause is not filled. Write the root cause there, with its evidence, first (no fix before the root cause is written in bug.md).`,
       bugGateTicked: (n, rc) => `Task ${n} can't be completed yet: bug.md → Root Cause is still empty — task ${rc} is ticked, but its deliverable is that section. Write the root cause there, with its evidence (no fix before the root cause is written in bug.md).`,
       rootCauseTaskEmpty: (n) => `Task ${n} is ticked, but bug.md → Root Cause is still empty — write the root cause there, with its evidence: the tasks after it (the regression test, the fix) stay refused until it is written.`,
       fill: (file, what, hint) => `Fill ${file} — ${what}; then ${hint}.`,
@@ -3220,6 +3221,9 @@ const msg = {
         noRun: (file, cmds) => `its report (${file}) doesn't show the _Verify:_ run — the exact command and its exit code: ${cmds}.`,
         notPassing: (file, cmds) => `its report (${file}) shows no passing run (exit 0) of ${cmds} — a DONE task's _Verify:_ must pass.`,
         notFailing: (file, cmds) => `its report (${file}) shows no failing run (a non-zero exit code) of ${cmds} — the task is marked _Expect: fail_: its proof is the red run.`,
+        // 1.25.1 (review 7): the codes are read per run — the LAST run of each _Verify:_ command decides
+        lastNotPassing: (file, cmds) => `its report (${file}) ends on a failing run of ${cmds} — the last run of it the report shows exits non-zero; a DONE task's _Verify:_ must pass on the final code.`,
+        lastNotFailing: (file, cmds) => `its report (${file}) ends on a passing run of ${cmds} — the task is marked _Expect: fail_: the last run of it the report shows must be the red one (a non-zero exit code).`,
         todo: "Run the command on the final code and put the command, its exit code and the last lines of its output in the report — or report BLOCKED / NEEDS_CONTEXT if it can't pass. (Evidence before claims: the controller ticks the task only with that run.)",
       },
       // 1.22 — the spec-simplifier's DONE (SubagentStop): its report must end with the final passing runs.

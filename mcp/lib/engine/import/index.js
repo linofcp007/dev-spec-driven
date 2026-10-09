@@ -21,7 +21,8 @@ let BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, 
   requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines, slugify, stripHtmlComments, testIndex,
   toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs, unknownTracksError, withTrackBlocks,
   writeFileAtomic, appendSpecText, flatText, specNameText, importSteering, isDryRun, STEERING_IMPORT_TOOLS, withDryRun;
-function __link(E) { ({ BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines,
+let today; // core.js — 1.25.1: the local calendar date (today / dayOf)
+function __link(E) { ({ today, BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines,
   DECISIONS_FILE, extractAcIds, fenceStep, headingHasMarker, indentOf, inertOutsideCode, insertPackRequirements,
   isInsideDir, isLtUnit, isPackTrack, isWsUnit, markerTracks, maybeRefreshRoadmap, normalizeLang, own, packOf,
   packRequirementsBlock, packTaskBlock, parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE,
@@ -411,8 +412,8 @@ function importRun(projectDir, tool, source, opts) {
   const L = i18n.msg(lng).importSpec;
   const warnings = [...readWarnings, ...model.warnings];
   if (cr.archivedTwin) warnings.push(i18n.msg(lng).createArchivedTwin(cr.slug)); // an archived feature has this slug too (1.23 review 5)
-  const note = inline ? i18n.msg(lng).claudeCode.importText.note(IMPORT_TOOLS[t], new Date().toISOString().slice(0, 10))
-    : L.note(IMPORT_TOOLS[t], srcRel, new Date().toISOString().slice(0, 10));
+  const note = inline ? i18n.msg(lng).claudeCode.importText.note(IMPORT_TOOLS[t], today())
+    : L.note(IMPORT_TOOLS[t], srcRel, today());
   const mapping = {};
 
   // Stories keep their printed numbers when those are unique (spec-kit's [USn] task tags point at them).
