@@ -8,7 +8,8 @@ with real content from the `references/` templates. No MCP connection (e.g. clau
   `approvalRoles`, `evidence: "observed"`, `approvalGuard`) → `spec_create` (one feature; `kind: "bugfix"` for a defect
   — prefill `reproduction`, `rootCause`, `condition`, `behaviour` and ask for `includeBody` instead of reading the
   scaffolds back; `kind: "spike"` for a question, `brownfield: true` in existing code, `flow: "design-first"`) — or
-  `spec_import` (Kiro / spec-kit / OpenSpec / a plan / a Codex ExecPlan / BMAD / fluidplan). The team's own scaffolds:
+  `spec_import` (Kiro / spec-kit / OpenSpec / a plan / a Codex ExecPlan / BMAD / fluidplan; Kiro steering / Cursor rules →
+  `.specs/steering/`; `dryRun: true` previews without writing). The team's own scaffolds:
   `spec_templates`; the team's own tracks: `spec_tracks`.
 - **Gates:** `ears_validate` · `spec_clarify` · `trace_check` (`code: true` → T-IDs in test files; `matrix: true` → the
   requirements traceability matrix) · `spec_doctor` (one "ready to advance?" verdict) · `spec_approve` (refused while

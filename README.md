@@ -69,8 +69,8 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 |---|---|
 | `spec_classify` | Recommend tracks from a description (multilingual keyword heuristic, weighted) |
 | `spec_init` | Scaffold `.specs/steering/` for the tracks; `lang` sets the project language, `guard` on · off · scope, `stopCheck` the end-of-turn evidence gate, `checks` the project's check commands, `approvalRoles` who signs off each phase, `evidence` reported · observed (only runs the harness saw verify), `approvalGuard` off · ask · deny (an agent's approval asks you / is refused) |
-| `spec_create` | Scaffold a feature folder for the active tracks (`kind: "bugfix"` for the bugfix flow, `kind: "spike"` for a timeboxed investigation, `brownfield: true` adds `integration-plan.md`, `flow: "design-first"` puts the design before the requirements) |
-| `spec_import` | Import a Kiro, spec-kit or OpenSpec spec, a Claude Code / Cursor plan, a Codex ExecPlan or BMAD docs as a new feature (IDs remapped to `US-N.AC-M`, tasks renumbered; a plan can come as `text` — plan mode keeps plans outside the project) |
+| `spec_create` | Scaffold a feature folder for the active tracks (`kind: "bugfix"` for the bugfix flow, `kind: "spike"` for a timeboxed investigation, `brownfield: true` adds `integration-plan.md`, `flow: "design-first"` puts the design before the requirements, `branch: "true"` starts it on its own git branch — recorded, the `git switch -c` returned for you to run) |
+| `spec_import` | Import a Kiro, spec-kit or OpenSpec spec, a Claude Code / Cursor plan, a Codex ExecPlan or BMAD docs as a new feature (IDs remapped to `US-N.AC-M`, tasks renumbered; a plan can come as `text` — plan mode keeps plans outside the project) — or Kiro steering / Cursor rules as `.specs/steering/` files; `dryRun` writes nothing |
 | `spec_templates` | Project templates: list, copy (`init`) or `check` the team's own scaffolds in `.specs/templates/`, which replace the built-in ones |
 | `spec_tracks` | Project-defined tracks: list, scaffold (`init`) or `check` the team's track packs in `.specs/tracks/<name>/` — each a marker track like `+sec` (signals, criteria, mandatory design sections, tasks, test rows, steering) |
 | `spec_list` / `spec_status` | Inspect features, phases, task progress, sections filled vs. present; each feature's kind (feature / bugfix / spike) and flow |
@@ -89,7 +89,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_clarify` | Surface requirement ambiguities/gaps before design (with a glossary: every word it says to avoid) |
 | `spec_metrics` | Lead times, rework, forced approvals, change requests, evidence pass rate; `write` creates a pre-filled `retro.md` |
 | `spec_catalog` | Living catalog of every feature's ACs, superseded ones marked (`_Supersedes:_` of a shipped feature; a draft's reads "to be superseded"), plus possible duplicate / conflicting criteria across active features; `write` → `.specs/SPECS.md` |
-| `spec_export` | One self-contained, offline, printable document (HTML or markdown) of a feature or of the whole project, for stakeholders — or the traceability matrix as CSV (`format: "csv"`), a Gherkin `.feature` per feature (`"gherkin"`: one scenario per acceptance criterion, its EARS clauses as Given / When / Then) or a CSV for Jira / Linear's importer (`"jira"` · `"linear"`: the feature, its stories, its tasks); `write` → `.specs/exports/` |
+| `spec_export` | One self-contained, offline, printable document (HTML or markdown) of a feature or of the whole project, for stakeholders — or the traceability matrix as CSV (`format: "csv"`), a Gherkin `.feature` per feature (`"gherkin"`: one scenario per acceptance criterion, its EARS clauses as Given / When / Then) a CSV for Jira / Linear's importer (`"jira"` · `"linear"`: the feature, its stories, its tasks) or the decision log as Architecture Decision Records (`"adr"`: one MADR file per decision, ADR number = its D-n); `write` → `.specs/exports/` |
 | `spec_changelog` | Release notes from the specs — Added / Changed / Fixed since a date or the last notes; `milestone` scopes them to a milestone's features; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Implementing files changed, missing or new since `spec_finish` recorded its baseline |
 | `spec_stop_check` | The end-of-turn evidence gate for MCP-only clients: would this closing message ("done", "verified") be sent back — ticked tasks without evidence, project checks without a passing run? |
@@ -229,12 +229,27 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   the project, or a Cursor `.cursor/plans/*.plan.md`), `execplan` (a Codex ExecPlan) and `bmad` (BMAD-METHOD PRD
   and stories) — and `fluidplan` (a plan settled with the fluidplan skill: `.fluidplan/<id>/` or its `PLAN.md` /
   `DECISIONS.md` → stories, criteria, tasks with `_Verify:_` / `_Depends:_`, and a `decisions.md` of the settled decisions).
-  The source must be inside the project and is only read.
+  The source must be inside the project and is only read. Steering too (1.25): `kiro-steering` (`.kiro/steering/`) and
+  `cursor-rules` (`.cursor/rules/*.mdc`, `.cursorrules`) become `.specs/steering/` files with their inclusion mode — never over
+  an existing one. `dryRun: true` (`--dry-run`) runs any import and writes nothing: what it would create, previewed.
 - **Deeper traceability** — `trace_check` warns about edge cases (EC-n), NFRs and success criteria
   (SC-nnn) nothing covers; `--code` looks for T-IDs in test names (`test("T-01 …")`, `def test_T01_…`).
   Test plans have a **Kind** column (`example` | `property`) with property-based testing guidance.
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
+
+### New in 1.25
+
+- **A branch per feature** — `dev-spec create "Login" --branch` scaffolds the spec, records where it started and switches
+  you onto `feature/login` (spec-kit's habit; over MCP the agent runs the returned `git switch -c`). next-action reminds you
+  to switch back, finish says "merge it into its base, or keep it", and `log` counts only the feature's commits.
+- **ADRs from the decision log** — `/spec-export <feature> --adr` turns `decisions.md` into MADR files
+  (`.specs/exports/adr/checkout/0003-use-stripe.md`), numbered by the decision's D-number so they never reshuffle; re-run it
+  any time.
+- **Bring your Kiro steering and Cursor rules** — `import kiro-steering` / `import cursor-rules` make them scoped steering
+  the task briefs follow; `--dry-run` shows what any import would write, and writes nothing.
+- **Tab completion** — `dev-spec completion powershell` (or bash, zsh, fish): commands, flags, phases, tracks and your
+  feature names, even from a plugin install with no `dev-spec` on PATH.
 
 ### New in 1.24
 
@@ -510,13 +525,14 @@ prints the raw result, and `help` lists every flag. A plugin install puts no `de
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates [list|init|check] · tracks [list|init|check]
-create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] [--branch [<name>]] · bugfix · spike · import [- | --text] [--dry-run] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
-catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
+catalog [--write] · export [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
+completion <powershell|bash|zsh|fish>   (shell completion: commands, flags, values, feature names — INSTALL.md)
 ```
 
 ### Why no GitHub Actions
@@ -588,8 +604,8 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 |---|---|
 | `spec_classify` | Recomenda tracks a partir de uma descrição (heurística multilíngue, com peso) |
 | `spec_init` | Cria `.specs/steering/` para os tracks; `lang` define a língua do projeto, `guard` on · off · scope, `stopCheck` o gate de evidência no fim do turno, `checks` os comandos de verificação do projeto, `approvalRoles` quem aprova cada fase, `evidence` reported · observed (só verificam as execuções que o harness viu), `approvalGuard` off · ask · deny (a aprovação de um agente pergunta-te / é recusada) |
-| `spec_create` | Cria a pasta da funcionalidade para os tracks ativos (`kind: "bugfix"` para o fluxo de bugfix, `kind: "spike"` para uma investigação com prazo, `brownfield: true` acrescenta `integration-plan.md`, `flow: "design-first"` põe o design antes dos requisitos) |
-| `spec_import` | Importa uma spec do Kiro, spec-kit ou OpenSpec, um plano do Claude Code / Cursor, um ExecPlan do Codex ou documentos BMAD como nova funcionalidade (IDs convertidos para `US-N.AC-M`, tarefas renumeradas; um plano pode vir como `text` — o plan mode guarda os planos fora do projeto) |
+| `spec_create` | Cria a pasta da funcionalidade para os tracks ativos (`kind: "bugfix"` para o fluxo de bugfix, `kind: "spike"` para uma investigação com prazo, `brownfield: true` acrescenta `integration-plan.md`, `flow: "design-first"` põe o design antes dos requisitos, `branch: "true"` começa-a no seu próprio branch git — registado, com o `git switch -c` devolvido para correres) |
+| `spec_import` | Importa uma spec do Kiro, spec-kit ou OpenSpec, um plano do Claude Code / Cursor, um ExecPlan do Codex ou documentos BMAD como nova funcionalidade (IDs convertidos para `US-N.AC-M`, tarefas renumeradas; um plano pode vir como `text` — o plan mode guarda os planos fora do projeto) — ou o steering do Kiro / as regras do Cursor como ficheiros de `.specs/steering/`; `dryRun` não escreve nada |
 | `spec_templates` | Templates do projeto: lista, copia (`init`) ou verifica (`check`) os scaffolds da equipa em `.specs/templates/`, que substituem os de origem |
 | `spec_tracks` | Tracks definidos pelo projeto: lista, cria (`init`) ou verifica (`check`) os track packs da equipa em `.specs/tracks/<nome>/` — cada um é um track com marcador como o `+sec` (sinais, critérios, secções obrigatórias do design, tarefas, linhas de teste, steering) |
 | `spec_list` / `spec_status` | Inspeciona funcionalidades, fases, progresso, secções preenchidas vs. presentes; o tipo de cada uma (feature / bugfix / spike) e o fluxo |
@@ -608,7 +624,7 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_clarify` | Expõe ambiguidades/lacunas dos requisitos antes do design (com um glossário: cada palavra que ele manda evitar) |
 | `spec_metrics` | Lead times, retrabalho, aprovações forçadas, pedidos de alteração, taxa de sucesso da evidência; `write` cria um `retro.md` pré-preenchido |
 | `spec_catalog` | Catálogo vivo dos ACs de todas as funcionalidades, com os substituídos assinalados (`_Supersedes:_` de uma funcionalidade entregue; o de um rascunho fica como "substituição prevista"), e os possíveis critérios duplicados / em conflito entre funcionalidades ativas; `write` → `.specs/SPECS.md` |
-| `spec_export` | Um documento autocontido, offline e imprimível (HTML ou markdown) de uma funcionalidade ou do projeto inteiro, para stakeholders — ou a matriz de rastreabilidade em CSV (`format: "csv"`), um `.feature` Gherkin por funcionalidade (`"gherkin"`: um cenário por critério de aceitação, com as cláusulas EARS como Dado / Quando / Então) ou um CSV para o importador do Jira / Linear (`"jira"` · `"linear"`: a funcionalidade, as histórias, as tarefas); `write` → `.specs/exports/` |
+| `spec_export` | Um documento autocontido, offline e imprimível (HTML ou markdown) de uma funcionalidade ou do projeto inteiro, para stakeholders — ou a matriz de rastreabilidade em CSV (`format: "csv"`), um `.feature` Gherkin por funcionalidade (`"gherkin"`: um cenário por critério de aceitação, com as cláusulas EARS como Dado / Quando / Então) um CSV para o importador do Jira / Linear (`"jira"` · `"linear"`: a funcionalidade, as histórias, as tarefas) ou o registo de decisões como Architecture Decision Records (`"adr"`: um ficheiro MADR por decisão, número do ADR = o seu D-n); `write` → `.specs/exports/` |
 | `spec_changelog` | Notas de versão a partir das specs — Added / Changed / Fixed desde uma data ou desde as últimas notas; `milestone` restringe-as às funcionalidades de um marco; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Ficheiros de implementação alterados, em falta ou novos desde que o `spec_finish` registou a baseline |
 | `spec_stop_check` | O gate de evidência do fim do turno para clientes só MCP: esta mensagem final ("feito", "verificado") seria devolvida — tarefas marcadas sem evidência, verificações do projeto sem execução bem-sucedida? |
@@ -752,7 +768,10 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   ficheiro do plan mode do Claude Code copiado para o projeto, ou um `.cursor/plans/*.plan.md` do Cursor), `execplan`
   (um ExecPlan do Codex) e `bmad` (PRD e stories do BMAD-METHOD) — e `fluidplan` (um plano decidido com a skill
   fluidplan: `.fluidplan/<id>/` ou o `PLAN.md` / `DECISIONS.md` dele → histórias, critérios, tarefas com `_Verify:_` /
-  `_Depends:_` e um `decisions.md` com as decisões tomadas). A origem tem de estar dentro do projeto e só é lida.
+  `_Depends:_` e um `decisions.md` com as decisões tomadas). A origem tem de estar dentro do projeto e só é lida. Também
+  steering (1.25): `kiro-steering` (`.kiro/steering/`) e `cursor-rules` (`.cursor/rules/*.mdc`, `.cursorrules`) passam a
+  ficheiros de `.specs/steering/` com o seu modo de inclusão — nunca por cima de um existente. `dryRun: true` (`--dry-run`)
+  corre qualquer importação sem escrever nada: mostra o que criaria.
 - **Rastreabilidade mais funda** — o `trace_check` avisa sobre casos-limite (EC-n), NFRs e critérios de
   sucesso (SC-nnn) sem cobertura; `--code` procura T-IDs nos nomes dos testes (`test("T-01 …")`,
   `def test_T01_…`). Os planos de testes têm uma coluna **Tipo** (Kind: `example` | `property`) com orientação
@@ -760,6 +779,19 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabalho, aprovações forçadas, pedidos de
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
+
+### Novidades da 1.25
+
+- **Um branch por funcionalidade** — `dev-spec create "Login" --branch` cria a spec, regista de onde partiu e muda para
+  `feature/login` (o hábito do spec-kit; por MCP o agente corre o `git switch -c` devolvido). O next-action lembra de
+  voltar a ele, o finish diz "faz merge na base ou mantém-no" e o `log` conta só os commits da funcionalidade.
+- **ADRs a partir do registo de decisões** — `/spec-export <feature> --adr` transforma o `decisions.md` em ficheiros MADR
+  (`.specs/exports/adr/checkout/0003-usar-stripe.md`), numerados pelo número D da decisão, para nunca se baralharem; pode
+  correr-se outra vez sempre que se quiser.
+- **Traz o steering do Kiro e as regras do Cursor** — `import kiro-steering` / `import cursor-rules` tornam-nos steering
+  com âmbito, que os briefs das tarefas seguem; `--dry-run` mostra o que qualquer importação escreveria, sem escrever nada.
+- **Completação com Tab** — `dev-spec completion powershell` (ou bash, zsh, fish): comandos, flags, fases, tracks e os
+  nomes das funcionalidades, mesmo numa instalação por plugin sem `dev-spec` no PATH.
 
 ### Novidades da 1.24
 
@@ -1059,13 +1091,14 @@ executável, `node "<clone>/cli/dev-spec.js" …` com o caminho resolvido (fiche
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates [list|init|check] · tracks [list|init|check]
-create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] [--branch [<name>]] · bugfix · spike · import [- | --text] [--dry-run] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
-catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
+catalog [--write] · export [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
+completion <powershell|bash|zsh|fish>   (completação na shell: comandos, opções, valores, nomes das features — INSTALL.md)
 ```
 
 ### Porque não há GitHub Actions
@@ -1137,8 +1170,8 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 |---|---|
 | `spec_classify` | Recomienda tracks desde una descripción (heurística multilingüe, ponderada) |
 | `spec_init` | Crea `.specs/steering/` para los tracks; `lang` fija el idioma del proyecto, `guard` on · off · scope, `stopCheck` el gate de evidencia al final del turno, `checks` los comandos de comprobación del proyecto, `approvalRoles` quién aprueba cada fase, `evidence` reported · observed (solo verifican las ejecuciones que el harness vio), `approvalGuard` off · ask · deny (la aprobación de un agente te pregunta / se rechaza) |
-| `spec_create` | Crea la carpeta de la función para los tracks activos (`kind: "bugfix"` para el flujo de bugfix, `kind: "spike"` para una investigación con plazo, `brownfield: true` añade `integration-plan.md`, `flow: "design-first"` pone el diseño antes de los requisitos) |
-| `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas; un plan puede llegar como `text` — el plan mode guarda los planes fuera del proyecto) |
+| `spec_create` | Crea la carpeta de la función para los tracks activos (`kind: "bugfix"` para el flujo de bugfix, `kind: "spike"` para una investigación con plazo, `brownfield: true` añade `integration-plan.md`, `flow: "design-first"` pone el diseño antes de los requisitos, `branch: "true"` la empieza en su propia rama git — registrada, con el `git switch -c` devuelto para que lo ejecutes) |
+| `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas; un plan puede llegar como `text` — el plan mode guarda los planes fuera del proyecto) — o el steering de Kiro / las reglas de Cursor como archivos de `.specs/steering/`; `dryRun` no escribe nada |
 | `spec_templates` | Plantillas del proyecto: lista, copia (`init`) o comprueba (`check`) los scaffolds del equipo en `.specs/templates/`, que sustituyen a los de origen |
 | `spec_tracks` | Tracks definidos por el proyecto: lista, crea (`init`) o comprueba (`check`) los track packs del equipo en `.specs/tracks/<nombre>/` — cada uno es un track con marcador como `+sec` (señales, criterios, secciones obligatorias del diseño, tareas, filas de prueba, steering) |
 | `spec_list` / `spec_status` | Inspecciona funciones, fases, progreso, secciones completadas vs. presentes; el tipo de cada una (feature / bugfix / spike) y el flujo |
@@ -1157,7 +1190,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_clarify` | Expone ambigüedades/lagunas de los requisitos antes del diseño (con un glosario: cada palabra que manda evitar) |
 | `spec_metrics` | Lead times, retrabajo, aprobaciones forzadas, solicitudes de cambio, tasa de éxito de la evidencia; `write` crea un `retro.md` prerrellenado |
 | `spec_catalog` | Catálogo vivo de los ACs de todas las funciones, con los sustituidos señalados (`_Supersedes:_` de una función entregada; el de un borrador queda "por sustituir"), y los posibles criterios duplicados / en conflicto entre funciones activas; `write` → `.specs/SPECS.md` |
-| `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders — o la matriz de trazabilidad en CSV (`format: "csv"`), un `.feature` Gherkin por función (`"gherkin"`: un escenario por criterio de aceptación, con las cláusulas EARS como Dado / Cuando / Entonces) o un CSV para el importador de Jira / Linear (`"jira"` · `"linear"`: la función, sus historias, sus tareas); `write` → `.specs/exports/` |
+| `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders — o la matriz de trazabilidad en CSV (`format: "csv"`), un `.feature` Gherkin por función (`"gherkin"`: un escenario por criterio de aceptación, con las cláusulas EARS como Dado / Cuando / Entonces) un CSV para el importador de Jira / Linear (`"jira"` · `"linear"`: la función, sus historias, sus tareas) o el registro de decisiones como Architecture Decision Records (`"adr"`: un archivo MADR por decisión, número del ADR = su D-n); `write` → `.specs/exports/` |
 | `spec_changelog` | Notas de la versión desde las specs — Added / Changed / Fixed desde una fecha o desde las últimas notas; `milestone` las limita a las funciones de un hito; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Archivos de implementación cambiados, ausentes o nuevos desde que `spec_finish` registró la línea base |
 | `spec_stop_check` | El gate de evidencia del final del turno para clientes solo MCP: ¿este mensaje final ("hecho", "verificado") se devolvería — tareas marcadas sin evidencia, comprobaciones del proyecto sin una ejecución correcta? |
@@ -1305,7 +1338,10 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   Code copiado al proyecto, o un `.cursor/plans/*.plan.md` de Cursor), `execplan` (un ExecPlan de Codex) y `bmad` (PRD
   e historias de BMAD-METHOD) — y `fluidplan` (un plan decidido con la skill fluidplan: `.fluidplan/<id>/` o su
   `PLAN.md` / `DECISIONS.md` → historias, criterios, tareas con `_Verify:_` / `_Depends:_` y un `decisions.md` con las
-  decisiones tomadas). El origen debe estar dentro del proyecto y solo se lee.
+  decisiones tomadas). El origen debe estar dentro del proyecto y solo se lee. También steering (1.25): `kiro-steering`
+  (`.kiro/steering/`) y `cursor-rules` (`.cursor/rules/*.mdc`, `.cursorrules`) pasan a archivos de `.specs/steering/` con su
+  modo de inclusión — nunca encima de uno existente. `dryRun: true` (`--dry-run`) ejecuta cualquier importación sin escribir
+  nada: muestra lo que crearía.
 - **Trazabilidad más profunda** — `trace_check` avisa de casos límite (EC-n), NFRs y criterios de éxito
   (SC-nnn) sin cobertura; `--code` busca T-IDs en los nombres de las pruebas (`test("T-01 …")`,
   `def test_T01_…`). Los planes de pruebas tienen una columna **Tipo** (Kind: `example` | `property`) con
@@ -1313,6 +1349,20 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabajo, aprobaciones forzadas, solicitudes de
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
+
+### Novedades de la 1.25
+
+- **Una rama por función** — `dev-spec create "Login" --branch` crea la spec, registra de dónde partió y te cambia a
+  `feature/login` (la costumbre de spec-kit; por MCP el agente ejecuta el `git switch -c` devuelto). next-action te recuerda
+  volver a ella, finish dice "fusiónala en su base o consérvala" y `log` cuenta solo los commits de la función.
+- **ADRs a partir del registro de decisiones** — `/spec-export <feature> --adr` convierte `decisions.md` en archivos MADR
+  (`.specs/exports/adr/checkout/0003-usar-stripe.md`), numerados por el número D de la decisión para que nunca se
+  reordenen; se puede volver a ejecutar cuando se quiera.
+- **Trae el steering de Kiro y las reglas de Cursor** — `import kiro-steering` / `import cursor-rules` los convierten en
+  steering con ámbito que siguen los briefs de las tareas; `--dry-run` muestra lo que escribiría cualquier importación, sin
+  escribir nada.
+- **Autocompletado con Tab** — `dev-spec completion powershell` (o bash, zsh, fish): comandos, flags, fases, tracks y los
+  nombres de tus funciones, incluso en una instalación por plugin sin `dev-spec` en el PATH.
 
 ### Novedades de la 1.24
 
@@ -1613,13 +1663,14 @@ línea ejecutable, `node "<clone>/cli/dev-spec.js" …` con la ruta resuelta (lo
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates [list|init|check] · tracks [list|init|check]
-create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] [--branch [<name>]] · bugfix · spike · import [- | --text] [--dry-run] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
-catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
+catalog [--write] · export [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
+completion <powershell|bash|zsh|fish>   (autocompletado en la shell: comandos, opciones, valores, nombres de las features — INSTALL.md)
 ```
 
 ### Por qué no hay GitHub Actions

@@ -244,7 +244,8 @@ US-1.AC-2,T-03,"Data Models"] [--supersedes D-1] [--discovery]`; `/spec-decide`)
   `design.md` (`bug.md` / `design.md` for a bugfix, `spike.md` for a spike). An unknown reference is refused
   (`unknownAffects`, nothing written); `supersedes` must name entries already in the log.
 - **Where it shows up:** `spec_task_brief` inlines the current entries citing the task's ACs / T-IDs (bounded);
-  the merge summary (`spec_finish`) and the stakeholder export get a Decisions section; `spec_catalog` lists each
+  the merge summary (`spec_finish`) and the stakeholder export get a Decisions section (and `spec_export {format:
+  "adr"}` turns the decisions into ADR files — §13); `spec_catalog` lists each
   feature's decisions (superseded ones marked); `trace_check` reports `_Affects:_` references that name nothing any
   more (`phantomAffects`, warnings); `spec_doctor` warns `decision-affects` (the same phantoms) and
   **`decision-affects-approved`** — a current decision recorded AFTER the approval of the requirements or the design it
@@ -347,6 +348,28 @@ suffix — `checkout/#3 (2)` — so every record has its own ID). Labels: the fe
 kind (bugfix / spike) and the AC IDs. The matrix CSV's rules apply (RFC 4180, the formula guard, a UTF-8 BOM); the
 AUTO-GENERATED marker is the LAST header cell — an empty column to leave unmapped in the import wizard, never a record
 that would become a work item. `write` → `.specs/exports/<feature>.<tracker>.csv` (the project: `project.<tracker>.csv`).
+
+**Architecture Decision Records (1.25 — `format: "adr"`, CLI `export [feature] --adr`).** The decision log (§11) as one
+[MADR](https://adr.github.io/madr/) file per decision, for teams that keep ADRs: `.specs/exports/adr/<feature>/NNNN-<title>.md`
+plus `<feature>/index.md`; without a name, every feature's folder (archived features under `adr/_archive/<slug>/` — an
+ADR log is history) and `adr/index.md`, one table of them all.
+
+- **Numbering** — per feature, the ADR number IS the decision's D-number (`D-3` → `0003`). The log is append-only, so a
+  decision recorded later takes the next number and never renumbers the others; a left-out entry is a gap. (A single
+  sequence across features would shift whenever a feature is removed or two branches merge decisions of interleaved
+  dates.) The file name's title part is the title in ASCII (`Use Stripe` → `0003-use-stripe.md`).
+- **Content** — MADR's front matter (`status: accepted` or `superseded by ADR-NNNN`, `date:` the entry's day; English in
+  every language, for tools), then the title, a localized Status / Date / Supersedes list, Context and Problem Statement,
+  Decision Outcome with its Consequences, and More Information (the feature folder, the log entry, each `_Affects:_`
+  reference linked to the file that defines it). Only the sections the log has text for — the log records no options or
+  pros and cons, so MADR's Considered Options and its siblings are never written. Headings in the feature's language.
+- **Supersession** — the superseded ADR says "Superseded by ADR-0003" (linked) and the newer one "Supersedes ADR-0001".
+- **Discoveries** (`_Kind: discovery_`) record what was learnt, not a choice: they are not ADRs — left out, listed in
+  the result's `excluded` and named in the feature's index.
+- **Write** — what changed is written (`written`), the rest kept (`unchanged`: a re-run writes nothing — no file holds
+  the date of the run), and the generated ADR files no decision backs any more (a removed or retitled decision, a
+  removed, renamed or archived feature) are removed (`removed`; a preview lists them as `stale`). A hand-written file is
+  never touched — one at a path the export writes refuses the whole export; a linked `adr/` folder too.
 
 ## 14. Steering amendments
 

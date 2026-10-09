@@ -337,7 +337,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   prompt argument that names a feature, the `specs://` template variables `slug` / `artifact` / `file` (≤ 100 values,
   prefix then substring); an unknown prompt / template / argument / ref → -32602; with prompts off `ref/prompt` → -32602.
 - **Plan-mode bridge** — `spec_import {tool: plan | execplan, text}` (`TEXT_IMPORT_TOOLS`; server.js `REQUIRED_ONE_OF`:
-  `path` or `text`) = the file import minus the source note (`inline: true`, `source: null`); CLI `import plan -` (stdin)
+  `path` or `text` — not for a steering tool, 1.25) = the file import minus the source note (`inline: true`, `source: null`); CLI `import plan -` (stdin)
   or `--text` (a word after the tool that is no track list, given with `--text`, is passed as the path: the engine's "path or
   text, not both"). `hooks/plan-hook.js` (PostToolUse, matcher `ExitPlanMode`): one line of `additionalContext` in a dev-spec
   project, silent and exit 0 otherwise (the payload is undocumented — `tool_input.plan` and a plan-file path read

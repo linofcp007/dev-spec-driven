@@ -83,12 +83,12 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   renderRoadmapHtml, renderRoadmapMd, resolveFeature, resolveProjectDir, unexpandedVar, resolveRunShell, resolveTask, restoreFeature,
   roadmap, roadmapData, roadmapReport, roadmapTailLines, RTM_STATUSES, scaffoldSteeringFile, scanCodebase, scanTestCode,
   setDependency, SIGNAL_CONCEPTS, SIGNALS, SIZE_POINTS, slugify, specDoctor, specsRoot, specUpgrade, specVersionStatus,
-  spikeInfo, statusFeature, statusLine, statusLineProject, steeringFingerprints, steeringFrontMatter, steeringGlobMatch,
+  spikeInfo, statusFeature, statusLine, statusLineProject, steeringFingerprints, steeringFrontMatter, steeringGlobMatch, STEERING_IMPORT_TOOLS,
   STOP_RECENT_HOURS, stopCheck, stopCheckEnabled, stopClaims, stripHtmlComments, summarizeRunOutput, supersedesMarkers,
   supersedesWarnings, taskBlocks, taskBrief, taskCommits, taskDependsSpec, taskMarkers, taskSchedule, taskSize,
   taskWaves, TEMPLATE_ARTIFACTS, templateBracketKeys, templateKey, templates, templateSets, traceCheck, traceGapLines,
   traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks, FEATURE_SIZES, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS,
-  changeViews, closestName, decodeText,
+  changeViews, closestName, decodeText, featureBranch, IMPORT_TOOLS,
   userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, windowsShellFailure, withFeatureLock, withinRoot,
   withReadCache, writeRoadmapHtml, writeRoadmapMd } = engine;
 
@@ -196,7 +196,9 @@ module.exports = {
 
   featurePlaceholders, // the gates' placeholder view of one artifact (active part, real line numbers)
 
-  importSpec,
+  importSpec, // 1.25: + dryRun (the whole pipeline in the write gate's dry-run sink) and the steering tools (kiro-steering · cursor-rules)
+  STEERING_IMPORT_TOOLS, // 1.25: the spec_import tools that write .specs/steering/ files, not a feature — their path is optional (server.js, the CLI)
+  IMPORT_TOOLS: Object.freeze(Object.keys(IMPORT_TOOLS)), // 1.25: the source formats importSpec reads (spec_import `tool`) — the CLI's completion offers them
   // 1.16 C — Claude Code integration: the status line, the plan-mode bridge, the user's DEV_SPEC_* defaults (fallbacks)
   statusLine,
   statusLineProject,
@@ -346,6 +348,9 @@ module.exports = {
   TRACK_OVERLAPS, // [{drop: [track, section], by: [[track, section]…]}]
   TRACK_TASK_OVERLAPS, // [{drop: [track, position], by: track}]
   changeViews, // (change.md text) → { criteria, tasks }: its criteria without the task blocks / the task blocks alone, line for line (1.21 review C1)
+
+  // 1.25 — a feature's own git branch (spec_create {branch} / `create --branch`; createFeature's opts.git: what git said, CLI only)
+  featureBranch, // (projectDir, name) → { name, base, commit, at, current, exists } | null — `log` reads the base commit from it
 };
 
 // Every engine entry point is ONE call with ONE read-cache scope (withReadCache): an MCP tool call, a CLI command, a

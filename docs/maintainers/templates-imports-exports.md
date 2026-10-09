@@ -2,7 +2,7 @@
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
 `.specs/templates/`, steering front matter, the `spec_import` sources, and every export (HTML / md / CSV, Gherkin,
-trackers, release notes, milestones).
+trackers, ADRs, release notes, milestones).
 
 ## Project templates (1.14) — `.specs/templates/`
 - **Resolution:** `.specs/templates/<lang>/<artifact>.md` wins over `.specs/templates/<artifact>.md`, which wins over the
@@ -59,10 +59,14 @@ trackers, release notes, milestones).
   lists `manual` ones. `steeringGlobMatch()` is a linear matcher with capped brace expansion — never a
   backtracking regex. Custom names (`steering_scaffold`) must match `^[a-z0-9][a-z0-9-]{0,62}\.md$` and not be
   a Windows device name or a prototype key. Doctor's `steering` check warns about files still templates.
+- **Steering imported from Kiro / Cursor (1.25)** — `spec_import {tool: "kiro-steering" | "cursor-rules"}` writes steering files
+  (import/steering.js — Import sources below); what they hold is real content, read by `steeringFrontMatter()` like any file
+  here. The steering logic itself is untouched: an imported file is never a template, and an existing one (spec_init's stub
+  included) is never overwritten.
 
 ## Import sources and flows (1.14)
-- **`spec_import` tools** (exact enum on both surfaces): `kiro` · `spec-kit` · `openspec` · `plan` · `execplan` · `bmad` · `fluidplan`,
-  same guarantees for all (a NEW feature, the source only read and inside the project, mapping + warnings, the localized
+- **`spec_import` tools** (exact enum on both surfaces): `kiro` · `spec-kit` · `openspec` · `plan` · `execplan` · `bmad` · `fluidplan`
+  (+ the steering tools `kiro-steering` · `cursor-rules`, 1.25 — below), same guarantees for all (a NEW feature, the source only read and inside the project, mapping + warnings, the localized
   "Imported from" note, tracks auto-classified unless given; nothing dropped silently — what no mapping takes goes to
   design.md (plan / ExecPlan) or requirements.md (PRD), or into a warning).
   - `plan` — a Claude Code plan-mode file (plansDirectory defaults to `~/.claude/plans`, OUTSIDE the project — the refusal
@@ -139,8 +143,9 @@ trackers, release notes, milestones).
   gives is theirs (resolveFeature's own error).
 - **`spec_import` stays inside the project.** The source path must resolve inside `projectDir` — checked
   lexically first (nothing outside is even stat'ed), then by real path (a symlink out is refused) — and it is
-  only read. Tool names are exact (`kiro` | `spec-kit` | `openspec` | `plan` | `execplan` | `bmad` | `fluidplan`, the schema enum) on
-  both surfaces, and it never imports over an existing feature.
+  only read. Tool names are exact (`kiro` | `spec-kit` | `openspec` | `plan` | `execplan` | `bmad` | `fluidplan` | `kiro-steering` |
+  `cursor-rules`, the schema enum) on both surfaces, and it never imports over an existing feature (nor a steering file).
+  `importSourceAt()` (import/index.js) is that rule, shared by the steering import (1.25).
 - **The import cap (1.23 review 5).** `IMPORT_MAX_BYTES` (2 MiB) counts CHARACTERS after decoding. A source over it — inline text,
   or any file a parser reads (a plan, a folder source's design.md, a BMAD shard) — refuses the whole import (`tooLarge: true`,
   `importSpec.tooLarge` naming the file(s) and the cap; nothing created). It used to be cut silently: a plan's Steps past the cut
@@ -153,6 +158,37 @@ trackers, release notes, milestones).
   open code fence at its end closed first — a design ending inside a ```mermaid had the sections written into it), as do the
   packs' task blocks; an archived feature holding the same slug is a warning (`createArchivedTwin`); the roadmap is refreshed
   ONCE, after the imported files (createFeature's refresh skipped: `{ refresh: false }` — it rendered every feature twice).
+- **Steering sources (1.25 — import/steering.js `importSteering`).** `kiro-steering` / `cursor-rules` write `.specs/steering/<name>.md`
+  files, no feature: `STEERING_IMPORT_TOOLS` (the facade exports it — server.js's `REQUIRED_ONE_OF` has an `unless` for them, so
+  `path` is optional over MCP; the CLI's usage too). No path → `STEERING_IMPORT_DEFAULTS` that exist (`.kiro/steering`;
+  `.cursor/rules` + `.cursorrules`); a path → a folder (its `.md` — Cursor: `.mdc` / `.md` — files, top level; sub-folders and
+  other files named in `wOthers`) or one file, through `importSourceAt` (inside the project, read with the cap). `name` /
+  `tracks` are a feature's — refused (`featureArgs`); `text` gets the existing `textOnly`. The name: the stem slugified
+  (`steeringTargetName` — `customSteeringError`'s rule: a Windows device name / a prototype key → skipped, `name`). **Kiro:**
+  the front matter kept verbatim when `steeringFrontMatter()` sees one (else `inclusion: always` written in — Kiro's default;
+  dev-spec would leave such a non-default file out of every brief); a mode dev-spec lacks (`auto`) → `wMode`. **Cursor:**
+  `ruleFrontMatter()` reads leniently (Cursor writes `globs: *.ts` — no YAML), `alwaysApply: true` → always, `globs`
+  (`cursorGlobs` — a comma string split outside braces, a YAML / inline list; a glob naming no folder → `**/` + it, as Cursor
+  matches it at any depth; a leading `./` or `/` dropped; quoted in the quote kind it lacks — `globQuoted`, steeringFrontMatter
+  unescapes nothing; both kinds → left out, `wGlobs`) → fileMatch, else manual; `description` kept (`yamlQuoted`; dev-spec never
+  reads it); `.cursorrules` → `cursorrules.md`, always; `dev-spec-driven.mdc` (the plugin's own rule, `rules cursor`) → skipped,
+  `own`. The body follows ONE provenance comment (`importSteering.note` — a brief never quotes a comment; the front matter must
+  stay the first line), line ends LF. **Create-only:** `existsRaw` then `writeIfAbsent` — an existing file is skipped,
+  `exists` (+ `template: true` when `isSteeringStub` / `artifactState` reads it as a stub: Kiro's product / tech / structure.md
+  are init's names — the message says to delete it and import again; never overwritten, never `--force`). Other reasons:
+  `duplicate` (two sources → one name), `empty`, `too-large` (over IMPORT_MAX_BYTES, or past `STEERING_IMPORT_MAX_CHARS` over the
+  call), `outside` (a link out), `unreadable`; `STEERING_IMPORT_MAX_FILES` (100) per call (`wLimit`). A linked `.specs/steering/`
+  is refused up front (`linkedSpecsFolder`). Result `{ok, kind: "steering", tool, toolName, sources, dir, lang, imported: [{file,
+  from, inclusion, patterns?}], skipped: [{file, from, reason, template?}], warnings}` — inclusion / patterns as
+  `steeringFrontMatter()` reads the written file back.
+- **Dry run (1.25 — `spec_import {dryRun: true}`, CLI `--dry-run`).** `importSpec` runs `importRun` (the import itself, every tool)
+  inside `withDryRun` (conventions.md → The dry-run sink): the same reads, refusals, classification and rendering, nothing
+  written — no feature folder, lock, roadmap refresh (`isDryRun()` skips `maybeRefreshRoadmap`) or .specs/.gitignore line. The
+  result (`dryRunResult`) is the real one + `dryRun: true` + `preview: [{file, chars, content, truncated?}]` — the files written
+  under the result's `dir` (the feature folder; the steering folder) in first-write order, dot files (.state.json) left out, each
+  cut to `DRY_RUN_FILE_CHARS` (4,000, at a line end) within `DRY_RUN_TOTAL_CHARS` (24,000) — and a refusal the real one's +
+  `dryRun: true`. `counts` {stories, criteria, tasks, decisions} is on every import's result (1.25). The parity test
+  (mcp/tests/13-imports-1-25.js) compares the dry answer with the real import that follows it, file by file.
 - (**Flows** — the section's last bullet — moved to gates-and-approvals.md.)
 - **The brownfield scan and coverage** (engine/scan.js — area 13 of the suites; 1.22 review):
   - **The cap counts code.** Both walk with `walkProject(…, {counts, gitignore})`: only a file `counts` says yes to — code
@@ -232,7 +268,34 @@ trackers, release notes, milestones).
   under the roadmap lock; nothing to report → nothing written or stamped (`note`).
 
 ## Exports and planning (1.16 E)
-- **Formats** — `EXPORT_FORMATS` = html · md · csv · gherkin · jira · linear (server.js reads its enum from there).
+- **Formats** — `EXPORT_FORMATS` = html · md · csv · gherkin · jira · linear · adr (server.js reads its enum from there).
+- **ADR (1.25)** — `format: "adr"` (CLI `export [f] --adr`; `exportAdr()` lives in engine/decisions.js beside the log it reads —
+  exportSpecs hands it over): the decision log as one MADR 4 file per DECISION, `.specs/exports/adr/<slug>/NNNN-<title>.md` +
+  `<slug>/index.md`; no name → every feature's (archived ones in `adr/_archive/<slug>/` — an ADR log is history; a twin slug
+  never collides) + `adr/index.md` (project language). **Numbering = the D-number, per feature** (D-3 → 0003, ≥ 4 digits):
+  the log is append-only and numbers after its highest D-n, so no number ever moves — a global sequence (by date across
+  features) would shift with every removed feature and every merge of interleaved dates, and keeping one stable needs a
+  registry (state to merge). Only a hand-deleted LAST entry lets spec_decide reuse its number (outside the log's contract).
+  The title part is `slugify(mdPlainText(title))` cut to `ADR_SLUG_MAX` (60; `decision` when empty) — a retitled decision
+  changes the file name: the old file is stale. **Content:** front matter `status` (accepted · superseded by ADR-NNNN ·
+  superseded — when the superseder is no ADR) and `date` (the log's day), English-stable in every language; then `# title`,
+  a localized Status / Date / Supersedes list, `## Context and Problem Statement`, `## Decision Outcome` + `### Consequences`,
+  `## More Information` (the feature, its log entry, each `_Affects:_` reference linked to its file — `entryRefs` /
+  `resolveAffect`: requirements.md or change.md, test-plan.md, the section's file; a phantom one as text) — only the
+  sections the log has text for: MADR's Considered Options / Decision Drivers / Pros and Cons are never written (the log
+  holds no such data). **Discoveries** are no ADR: left out, named in the feature's index and `excluded` (reason
+  `discovery`; also `duplicate-id` — a D-n written twice, the first kept — and `unsafe-file` — a decisions.md linked out of
+  .specs/, never read: `readContained`). **User text** stays markdown where it is prose; where it sits in our structure it is
+  inert: `adrLabel` escapes `[` `]` outside code spans (a title is never a live link — heading, index, link labels), `mdCell`
+  the `|`, `adrInert` every `<!--` (an unclosed one hid the rest of the file), `adrBlock` closes a fence the paragraph leaves
+  open and moves its headings below the section's; the front matter and the marker comment hold none. No date of the run
+  anywhere: a re-run is byte-identical. **Write** (all-or-nothing): the legacy `exports` feature, a linked target or scope
+  folder (`specsWriteContained`), a same-named file without the marker (`isGeneratedOrAbsent`) refuse it all (`skipped: true`
+  for the last); a file whose text is unchanged (CRLF read as LF) is not rewritten (`unchanged`); then `adrStaleFiles()` —
+  the scope's ADR-named (`RE_ADR_NAME`) / index.md regular files carrying the marker that the export no longer produces —
+  are removed (`removeSpecFile`) and the folders that leaves empty (`removeEmptySpecDir`, files.js — gated, never a link),
+  never above `adr/`. A feature export touches only its own folder (`adr/index.md` is the project export's). Without
+  `write`: `documents` (content) + `stale` (what a write would remove; nothing is listed through a linked scope).
 - **Gherkin** — `gherkinFeature()` (the matrix — `buildTraceMatrix` — gives the planned T-IDs and the supersession state):
   `# language: en|pt|es` first (pt-BR → pt), then the AUTO-GENERATED marker as a `#` comment; Feature tags = the tracks
   (marker without brackets, else the name) + `@bugfix`; one Scenario per current AC tagged with its ID, T-IDs and track
@@ -280,5 +343,5 @@ trackers, release notes, milestones).
   (`🏁 meta.milestones`, `milestone.attention.invalid` / `notList`, EN/PT/ES) and the CLI roadmap tail. `spec_changelog {milestone}` → that milestone's features + its archived ones, `since`
   defaulting to `all`, written to `RELEASE-NOTES.<milestoneFileKey>.md` without stamping `meta.changelogAt`
   (`changelogData(…, only)`).
-- CLI: switches `revoke`, `print-config`, `gherkin` (`spec.CLI_SWITCHES`); value flags `reason`, `expires`, `text`,
+- CLI: switches `revoke`, `print-config`, `gherkin`, `adr` (1.25) (`spec.CLI_SWITCHES`); value flags `reason`, `expires`, `text`,
   `tracker`, `milestone`.

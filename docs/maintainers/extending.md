@@ -44,7 +44,13 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
 - New import source → a parser module `engine/import/<tool>.js` (returns the import model — `newImportModel()`,
   `import/common.js` — from the source's text; reuse the shared readers there and plan.js's plan-text helpers), listed in
   `MODULES`; in `engine/import/index.js` its entry in `IMPORT_TOOLS` and `C3_PARSERS` (+ `TEXT_IMPORT_TOOLS` when it
-  reads a single document); the `tool` enum of `spec_import` in `mcp/server.js`, the CLI's `import` usage, and tests.
+  reads a single document); the `tool` enum of `spec_import` in `mcp/server.js`, the CLI's `import` usage, and tests. A source
+  that is no feature (1.25: steering — `STEERING_IMPORT_TOOLS`, import/steering.js) is dispatched by `importRun` before the
+  feature path; it reads through `importSourceAt` too. Every import is dry-runnable for free (`withDryRun`) as long as it
+  writes and reads back through the files.js primitives.
+- A dry run of another operation → wrap it in `withDryRun` (engine/files.js — conventions.md → The dry-run sink) and make every
+  read of what it wrote go through readRaw / existsRaw / readDirCached / safeReaddir / isDirSafe; add a parity test (dry answer
+  = the real call's, the tree byte-identical) — a raw fs read of a file it wrote would see the disk, not the sink.
 - A new reader of the track registries → the accessor functions (`allTracks()` / `optionalTracks()` / `markerTracks()` /
   `trackMarker()` / `trackSectionTable()` / `trackSteeringFiles()` / `trackSignalTable()`), never the built-in constants —
   those miss the project's track packs (only the process-wide template corpus and the built-in lists of `spec_tracks list`
@@ -54,7 +60,13 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   `VALUE_FLAGS`. Either one → the `COMMAND_OPTIONS` entry of every command that reads it (1.23 review: any other command refuses
   it), and a NEW command → its `COMMAND_OPTIONS` entry (its flags, `max` positionals) — conventions.md → CLI: each command
   reads its own options and arguments. A value flag a command reads EVERY occurrence of (an `every()` collector) → also
-  `REPEATABLE_FLAGS` (1.24 r6 B5: any other one given twice is a usage error).
+  `REPEATABLE_FLAGS` (1.24 r6 B5: any other one given twice is a usage error). Shell completion (1.25) reads those tables as
+  they are; a NEW command's positionals → a `COMMAND_ARGS` entry (feature names, phases, tracks…), a value flag with a known set
+  of values → `FLAG_VALUES` — a list the facade has is named by its `@source` (`completionModel()`), never copied
+  (conventions.md → Shell completion).
+- A tool argument that is a string OR a true/false switch (1.25 `spec_create {branch}`) → `type: "string"` (never a list-valued
+  type — mcp.md → Argument validation) + its key in server.js `BOOL_STRING_ARGS`, the engine reading `"true"` / `"false"`; a CLI
+  value flag whose value is optional → the parser's bare-flag case (as `--branch`), never `CLI_SWITCHES`.
 - New `.state.json` / `roadmap.json` key → decide how two branches merge it (conventions.md → Merging the spec state): an
   append-only list or a keyed map gets its rule in state.js (`mergeFeatureState`'s `FIELDS`, `ROADMAP_FIELDS`, `META_FIELDS`);
   a plain value needs nothing (3-way per key — both sides changed it differently = a conflict the user resolves).

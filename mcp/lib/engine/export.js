@@ -24,7 +24,7 @@ let acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM
   specsRoot, specsWriteContained, SPIKE_FILE, spikeInfo, stateFromFile, statePath, statusFeature, storyContext, stripEnd, stripEnds,
   stripHtmlComments, supersededByIndex, supersedesMarkers, taskBlocks, taskProse, taskSize, timeOf, trackAcIds,
   trackLabel, trackMarker, verificationStatus, withoutTaskMarkers, withRoadmapLock, writeFileAtomic, writeRoadmap,
-  wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached;
+  wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached, exportAdr;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM_CHAR,
   buildTraceMatrix, catalogData, changedSinceApproval, clarificationMarkers, cleanTaskText, closesFence, csvRecord, day,
   designSections, detectPhase, detectTracks, dirKey, existingFeature, extractAcIds, extractSection, fcDay, fcIso,
@@ -36,7 +36,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeadin
   sectionFirstParagraph, sha1Hex, SIZE_POINTS, slugify, specsRoot, specsWriteContained, SPIKE_FILE, spikeInfo, stateFromFile, statePath,
   statusFeature, storyContext, stripEnd, stripEnds, stripHtmlComments, supersededByIndex, supersedesMarkers, taskBlocks,
   taskProse, taskSize, timeOf, trackAcIds, trackLabel, trackMarker, verificationStatus, withoutTaskMarkers,
-  withRoadmapLock, writeFileAtomic, writeRoadmap, wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached } = E); }
+  withRoadmapLock, writeFileAtomic, writeRoadmap, wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached, exportAdr } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.14 B2 — stakeholder export (spec_export) · release notes from the specs (spec_changelog)
@@ -44,7 +44,9 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeadin
 
 // .specs/exports/ holds spec_export's documents: a reserved name (RESERVED_SLUGS), never a feature folder.
 const EXPORT_DIR = "exports";
-const EXPORT_FORMATS = ["html", "md", "csv", "gherkin", "jira", "linear"]; // csv (1.14 F5): the requirements traceability matrix; 1.16 E1 gherkin, E2 jira / linear
+// csv (1.14 F5): the requirements traceability matrix; 1.16 E1 gherkin, E2 jira / linear; 1.25 adr: the decision log as MADR files
+// (decisions.js — exportAdr)
+const EXPORT_FORMATS = ["html", "md", "csv", "gherkin", "jira", "linear", "adr"];
 const SUMMARY_SYN = ["summary", "resumo", "resumen"];
 const CRITERIA_SYN = ["acceptance criteria", "critérios de aceitação", "criterios de aceitacao", "critérios de aceite", "criterios de aceptación", "criterios de aceptacion"]; // a change's criteria (1.21 review C5)
 const SUCCESS_SYN = ["success criteria", "critérios de sucesso", "criterios de sucesso", "criterios de éxito", "criterios de exito"];
@@ -629,7 +631,8 @@ ${EXPORT_JS}
 // project.feature.<format> — a dot never appears in a slug, so no feature lands on another's file) with the AUTO-GENERATED
 // marker, never over a same-named file dev-spec did not generate. 1.14 F5 — format 'csv': the requirements traceability
 // matrix of the feature (the project: of every active feature) as .specs/exports/<slug>.rtm.csv (project.rtm.csv;
-// project.feature.rtm.csv) — matrixCsv's document form: UTF-8 BOM, the marker as its last record.
+// project.feature.rtm.csv) — matrixCsv's document form: UTF-8 BOM, the marker as its last record. 1.16: 'gherkin' (exportGherkin),
+// 'jira' | 'linear' (trackerCsv); 1.25: 'adr' — the decision log as MADR files under .specs/exports/adr/ (exportAdr, decisions.js).
 function exportSpecs(projectDir, opts = {}) {
   const pl = projectLang(projectDir);
   const fmt = opts.format == null || String(opts.format).trim() === "" ? "html" : String(opts.format).trim().toLowerCase();
@@ -639,6 +642,7 @@ function exportSpecs(projectDir, opts = {}) {
   }
   const root = specsRoot(projectDir);
   if (fmt === "gherkin") return exportGherkin(projectDir, opts, pl);
+  if (fmt === "adr") return exportAdr(projectDir, opts, pl); // 1.25: one MADR file per decision (decisions.js)
   let doc;
   let base;
   const tracker = TRACKERS.includes(fmt); // 1.16 E2 — one CSV for the tool's importer

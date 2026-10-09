@@ -66,7 +66,80 @@ function specsRoot(projectDir) {
 // never created or written through a link, nor over a path of the other kind.
 function ensureDir(p) {
   specsWriteGate(p, { dir: true });
+  if (CTX.DRY_RUN) { dryPut(p, null, true); return; } // 1.25: a dry run records the folder, creates nothing
   mkdirp(p);
+}
+
+// ---------------------------------------------------------------------------
+// 1.25 — the DRY-RUN sink (spec_import {dryRun}). withDryRun(fn) runs fn with every write primitive of this module —
+// writeFileAtomic, writeIfAbsent, ensureDir, specWrite, removeSpecFile — recording what it WOULD write in CTX.DRY_RUN instead
+// of touching the disk, and every reader of this module — readRaw (readIfExists, readJson), existsRaw (existsCached),
+// readDirCached, safeReaddir, isDirSafe — seeing those writes over the disk: the operation runs its whole pipeline (the gate's
+// refusals included, which still read the disk) and reads back what it "wrote". No lock is taken (withLockFile runs fn
+// straight) and .specs/.gitignore is not touched (ensureLockIgnore). Since no module outside this one writes with a raw fs call
+// (the write gate's source guard), nothing reaches the disk BY CONSTRUCTION. → { value: fn's result, writes: [{ file, text,
+// dir? }] in the order each was first written, with its last text (text null: removed; dir: a folder) }. Nested: the inner
+// call shares the outer sink. (A folder move or a link's removal has no record: inside a dry run it throws — dryRunRefused.)
+function withDryRun(fn) {
+  if (CTX.DRY_RUN) return { value: fn(), writes: dryWrites(CTX.DRY_RUN) };
+  const sink = { files: new Map(), children: new Map() };
+  CTX.DRY_RUN = sink;
+  try {
+    const value = fn();
+    return { value, writes: dryWrites(sink) };
+  } finally {
+    CTX.DRY_RUN = null;
+  }
+}
+const isDryRun = () => !!CTX.DRY_RUN;
+// The folder-level writes (a move, a link's removal) have no record in the sink: inside a dry run they are a bug, never a write.
+function dryRunRefused(what) {
+  if (CTX.DRY_RUN) throw Object.assign(new Error("dry run: " + what + " is not recorded"), { code: "EDRYRUN" });
+}
+const dryWrites = (sink) => [...sink.files.values()].map((e) => (e.dir ? { file: e.file, text: null, dir: true } : { file: e.file, text: e.text }));
+// Records `file` (its text — a Buffer is decoded; null: removed — or a folder) and the folders above it, each in its parent's
+// listing (readDirCached / safeReaddir merge them).
+function dryPut(file, content, dir) {
+  const sink = CTX.DRY_RUN;
+  const abs = path.resolve(String(file));
+  const k = readCacheKey(abs);
+  const prev = sink.files.get(k);
+  if (dir) { if (!prev || prev.text === null) sink.files.set(k, { file: abs, text: null, dir: true }); }
+  else sink.files.set(k, { file: abs, text: content == null ? null : Buffer.isBuffer(content) ? decodeText(content) : String(content) }); // in its FIRST write's place
+  forgetCached(abs, { dir: !!dir });
+  let cur = abs;
+  for (;;) {
+    const up = path.dirname(cur);
+    if (up === cur) break;
+    const uk = readCacheKey(up);
+    if (!sink.children.has(uk)) sink.children.set(uk, new Map());
+    const kids = sink.children.get(uk);
+    const known = kids.has(path.basename(cur));
+    kids.set(path.basename(cur), cur === abs && !dir ? (content == null ? null : "file") : "dir");
+    if (known && cur !== abs) break; // the folders above were recorded with it
+    cur = up;
+  }
+}
+// The sink's answer for p: { text } (a file it wrote — text null when it removed it), { dir: true }, or null (ask the disk).
+function dryEntry(p) {
+  const sink = CTX.DRY_RUN;
+  const k = readCacheKey(p);
+  const e = sink.files.get(k);
+  if (e) return e.dir ? { dir: true } : { text: e.text };
+  return sink.children.has(k) ? { dir: true } : null;
+}
+// A folder listing (Dirent-like entries, sorted by name) with the sink's files and folders merged in.
+function dryListing(d, entries) {
+  const kids = CTX.DRY_RUN.children.get(readCacheKey(d));
+  if (!kids) return entries;
+  const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+  const byName = new Map((entries || []).map((e) => [fold(e.name), e]));
+  for (const [name, kind] of kids) {
+    if (kind === null) { byName.delete(fold(name)); continue; }
+    if (byName.has(fold(name))) continue;
+    byName.set(fold(name), { name, isFile: () => kind === "file", isDirectory: () => kind === "dir", isSymbolicLink: () => false });
+  }
+  return [...byName.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 // The folders up to p, once the caller's gate has passed (it checked every folder on the way).
 function mkdirp(p) {
@@ -76,6 +149,12 @@ function mkdirp(p) {
 
 function writeIfAbsent(file, content) {
   specsWriteGate(file, { createOnly: true }); // the file itself may be a link: the "wx" create below never writes through it
+  if (CTX.DRY_RUN) { // 1.25: create-only in the sink too — a file there (on the disk or written earlier in the dry run) stays
+    const e = dryEntry(file);
+    if (e ? e.dir || e.text !== null : fs.existsSync(file)) return false;
+    dryPut(file, content);
+    return true;
+  }
   forgetCached(file);
   mkdirp(path.dirname(file));
   try {
@@ -99,6 +178,7 @@ const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
 function writeFileAtomic(file, content) {
   if (!existsRaw(file)) { const a = changeAlias(file); if (a) file = a; } // 1.21 F5: a change's tasks.md / requirements.md is its change.md
   specsWriteGate(file); // never through a link (a linked folder on the way, or the file itself), never over a folder
+  if (CTX.DRY_RUN) { dryPut(file, content); return; } // 1.25: recorded, not written
   forgetCached(file);
   mkdirp(path.dirname(file));
   const tmp = file + "." + process.pid + "." + Date.now() + ".tmp";
@@ -130,6 +210,7 @@ function specWrite(file, text, opts = {}) {
   if (opts.createOnly) return writeIfAbsent(file, text);
   if (!opts.append) return writeFileAtomic(file, text);
   specsWriteGate(file);
+  if (CTX.DRY_RUN) { dryPut(file, (readRaw(file) || "") + String(text)); return true; } // 1.25: the appended text, recorded
   forgetCached(file);
   const C = fs.constants;
   const fd = fs.openSync(file, C.O_WRONLY | C.O_APPEND | C.O_CREAT | (C.O_NOFOLLOW || 0), 0o666);
@@ -146,6 +227,7 @@ function specWrite(file, text, opts = {}) {
 // a link AT the path is removed as the link (unlink never follows). → true when removed, false when it wasn't there.
 function removeSpecFile(file) {
   specsWriteGate(file);
+  if (CTX.DRY_RUN) { const had = existsRaw(file); dryPut(file, null); return had; } // 1.25: recorded as removed
   forgetCached(file);
   try {
     fs.unlinkSync(file);
@@ -153,6 +235,20 @@ function removeSpecFile(file) {
   } catch (e) {
     if (e.code === "ENOENT") return false;
     throw e;
+  }
+}
+// 1.25 — a folder under .specs/ removed when it is EMPTY (the ADR export's emptied feature folders): through the gate (never a
+// link on the way, never the folder itself a link — rmdir would drop a Windows junction); one still holding anything stays. →
+// true when removed, false otherwise (absent, not empty, refused).
+function removeEmptySpecDir(dir) {
+  try { specsWriteGate(dir, { dir: true }); } catch { return false; }
+  dryRunRefused("removing a folder"); // the dry-run sink records no folder removal: never touch the disk in a dry run
+  forgetCached(dir, { dir: true });
+  try {
+    fs.rmdirSync(dir);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -286,6 +382,7 @@ function withLockFile(lock, fn, opts = {}) {
   // (A path of the wrong kind is the lock's own business: a folder named .lock is a stale lock that can't be removed — busy, stuck.)
   const refused = specsGateError(lock);
   if (refused && refused.gate.kind === "link") return opts.onRefused ? opts.onRefused(refused) : gateRefusal(refused);
+  if (CTX.DRY_RUN) return fn(); // 1.25: a dry run writes nothing — no lock file either (its writes go to the sink)
   ensureLockIgnore(specsDirOf(path.dirname(lock))); // before the lock exists: one left by a killed process is never committable
   const waitMs = Number.isSafeInteger(opts.waitMs) && opts.waitMs >= 0 ? opts.waitMs : lockWaitMs();
   const now0 = Date.now();
@@ -433,6 +530,7 @@ function withMoveLock(projectDir, dir, slug, rel, fn) {
 // 60 ms answered a raw EPERM under contention); still refused → the caller's localized "folder in use" (moveDirOrBusy).
 const DIR_RENAME_RETRY_MS = [10, 20, 40, 80, 120, 180, 250, 300, 400];
 function renameDirSync(from, to) {
+  dryRunRefused("a folder move");
   for (let attempt = 0; ; attempt++) {
     try {
       return fs.renameSync(from, to);
@@ -446,6 +544,7 @@ function renameDirSync(from, to) {
 // linked feature folder). unlink takes a link to a folder on every platform Node runs on (libuv removes a Windows junction /
 // directory symlink as the reparse point it is); rmdir is the fallback where it answers EPERM / EISDIR.
 function removeLinkEntry(p) {
+  dryRunRefused("a link removal");
   if (!fs.lstatSync(p).isSymbolicLink()) throw Object.assign(new Error("not a link: " + p), { code: "ENOTLINK" });
   try { fs.unlinkSync(p); } catch (e) {
     if (e.code !== "EPERM" && e.code !== "EISDIR" && e.code !== "EACCES") throw e;
@@ -483,7 +582,7 @@ const ROADMAP_LOCK_FILE = ".roadmap.lock";
 const LOCK_IGNORE_LINES = [LOCK_FILE, LOCK_FILE + LOCK_RECLAIM_SUFFIX, ROADMAP_LOCK_FILE, ROADMAP_LOCK_FILE + LOCK_RECLAIM_SUFFIX,
   "*.[0-9]*.[0-9]*.tmp", ".removing-*/"];
 function ensureLockIgnore(specsDir) {
-  if (!specsDir) return;
+  if (!specsDir || CTX.DRY_RUN) return; // 1.25: housekeeping a dry run skips (its raw writes would bypass the sink)
   const file = path.join(specsDir, ".gitignore");
   try {
     // 1.24 r6 (G2): a committed .specs/.gitignore that is a link is left alone \u2014 the lock lines were appended to the file it
@@ -808,6 +907,7 @@ function readFileHead(file, maxChars) {
   }
 }
 function readRaw(file) {
+  if (CTX.DRY_RUN) { const e = dryEntry(file); if (e) return e.dir ? null : e.text; } // 1.25: what the dry run wrote
   const k = CTX.READ_CACHE ? readCacheKey(file) : null;
   if (k !== null && CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
   let text;
@@ -839,6 +939,7 @@ function existsCached(p) {
   return existsRaw(p) || !!changeAlias(p);
 }
 function existsRaw(p) {
+  if (CTX.DRY_RUN) { const e = dryEntry(p); if (e) return e.dir || e.text !== null; } // 1.25
   if (!CTX.READ_CACHE) return fs.existsSync(p);
   const k = EXISTS_KEY + readCacheKey(p);
   if (CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
@@ -848,6 +949,10 @@ function existsRaw(p) {
 }
 // fs.readdirSync(d, { withFileTypes: true }) sorted by name, served from the same scope (walkProject); null = unreadable.
 function readDirCached(d) {
+  if (CTX.DRY_RUN) return dryListing(d, readDirDisk(d)); // 1.25: the disk's listing (cached) + the dry run's writes
+  return readDirDisk(d);
+}
+function readDirDisk(d) {
   const k = CTX.READ_CACHE ? DIR_KEY + readCacheKey(d) : null;
   if (k !== null && CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
   let entries = null;
@@ -903,11 +1008,13 @@ function invalidateReadCache() {
 }
 
 function safeReaddir(p) {
+  let names;
   try {
-    return fs.readdirSync(p);
+    names = fs.readdirSync(p);
   } catch {
-    return [];
+    names = [];
   }
+  return CTX.DRY_RUN ? dryListing(p, names.map((name) => ({ name }))).map((e) => e.name) : names; // 1.25: + the dry run's writes
 }
 
 // Is `p` the root itself or inside it? path.relative, not `root + sep`: a drive root (C:\, or Q:\ from subst) already
@@ -917,7 +1024,10 @@ function withinRoot(root, p) {
   return rel === "" || (rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel));
 }
 
-const isDirSafe = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
+const isDirSafe = (p) => {
+  if (CTX.DRY_RUN) { const e = dryEntry(p); if (e) return !!e.dir; } // 1.25
+  try { return fs.statSync(p).isDirectory(); } catch { return false; }
+};
 // Windows and macOS file systems are case-insensitive: `_Implements: SRC/App.js_` names src/app.js there.
 const FOLD_CASE = process.platform === "win32" || process.platform === "darwin";
 const toPosix = (p) => String(p).split(path.sep).join("/");
@@ -1003,8 +1113,9 @@ function isNetworkPath(p) {
   return host !== "wsl$" && host !== "wsl.localhost";
 }
 
-module.exports = { resolveProjectDir, unexpandedVar, nearestProject, specsRoot, ensureDir, mkdirp, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
-  writeFileAtomic, specWrite, removeSpecFile, GATE_CODES, specsRootOf, realSpecsRoot, specsWriteBlock, gateRel, gateMessage, specsGateError,
+module.exports = { resolveProjectDir, unexpandedVar, nearestProject, specsRoot, ensureDir, withDryRun, isDryRun, dryRunRefused, dryWrites, dryPut,
+  dryEntry, dryListing, readDirDisk, mkdirp, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
+  writeFileAtomic, specWrite, removeSpecFile, removeEmptySpecDir, GATE_CODES, specsRootOf, realSpecsRoot, specsWriteBlock, gateRel, gateMessage, specsGateError,
   specsWriteGate, gateRefusal, featureLangSafe, SLEEP_CELL, sleepSync, LOCK_FILE, LOCK_WAIT_MS, LOCK_STALE_MS, LOCK_MAX_HOLD_MS, LOCK_RECLAIM_SUFFIX,
   LOCK_RECLAIM_STALE_MS, LOCK_NOTELESS_STALE_MS, LOCK_NESTED_MIN_MS, HELD_LOCKS, lockSnapshot, sameLockSnapshot,
   staleLock, reclaimStaleLock, releaseLock, lockWaitMs, withFeatureLock, withLockFile, acquireLockFile, featureLocked,

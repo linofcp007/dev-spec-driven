@@ -202,7 +202,10 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
         !sMain.worktree && same(sOther.project, other) && !sOther.worktree && same(path.dirname(S.sessionPath(sIn, path.join(wt, "src", "login.ts"), wt)), p2);
       // the edit guard: tasks approved in the main checkout (forced — the gates' checks aside) cover an edit made in the worktree
       S.approvePhase(p, "auth", undefined, "me", { force: true, through: "tasks" });
-      const pre = (cwd, fp) => ({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: "Edit", tool_input: { file_path: fp, old_string: "a", new_string: "b" } });
+      // its own session id, its once-a-session marker (1.24 C-I8, in the OS temp folder) cleared first: a previous run of the
+      // suite — or 10-guards.js, running in parallel with session "s" — would otherwise have shown the FORCED note already
+      try { fs.unlinkSync(require("../hooks/hook-utils.js").sessionFlagFile("forced-note", "s-m8")); } catch { /* none */ }
+      const pre = (cwd, fp) => ({ session_id: "s-m8", hook_event_name: "PreToolUse", cwd, tool_name: "Edit", tool_input: { file_path: fp, old_string: "a", new_string: "b" } });
       const gWt = hookOut("guard-hook", pre(wt, path.join(wt, "src", "login.ts")), { CLAUDE_PROJECT_DIR: p });
       const gSib = hookOut("guard-hook", pre(sib, path.join(sib, "src", "login.ts")), {});
       const guardOk = decisionOf(gWt) !== "ask" && /FORCED/.test((gWt.json || {}).systemMessage || "") && decisionOf(gSib) !== "ask";

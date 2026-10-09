@@ -67,7 +67,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
   finish.js                    spec_finish and the drift baseline (spec_drift); remove / rename / archive / restore;
                                _Supersedes:_ and .specs/SPECS.md; spec_metrics (+ retro.md)
   roadmap-md.js                ROADMAP.md / .html (roadmapData), forecasts, cross-feature overlaps
-  decisions.js                 decisions.md (spec_decide) and the spike kind
+  decisions.js                 decisions.md (spec_decide), its ADR export (spec_export format adr — 1.25) and the spike kind
   export.js                    spec_export (the escaping markdown renderer, the document model, Gherkin, tracker CSV);
                                spec_changelog and spec_milestone
   guards.js                    guard mode (meta.guard, the scope guard), the end-of-turn stop gate, the human approval guard
@@ -77,7 +77,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
                                test file (isTestFile) the scan, coverage, the test-code scan and guard mode share (1.21.1)
   import/                      spec_import: index.js (the entry point, task import) · common.js (the shared readers) · one
                                parser per tool — kiro.js · speckit.js · openspec.js · plan.js (plan + execplan) · bmad.js ·
-                               fluidplan.js
+                               fluidplan.js · steering.js (1.25: Kiro steering / Cursor rules → .specs/steering/)
 mcp/lib/i18n.js                the localized content's FACADE: assembles the tables (BUILD / STEERING / EVALS_README / MSG / BRIEF)
                                — each language's file loads on its first use — and exports the public API — EN/PT/ES + pt-BR
 mcp/lib/i18n/                  en.js · pt.js · es.js (every table's block for that language) · common.js (language codes, the
@@ -88,6 +88,9 @@ mcp/test.js                    the MCP suite's entry point — `node mcp/test.js
 mcp/tests/                     its files, one per area: NN-<area>[-<topic>].js (each exports run(ctx)) + harness.js (the
                                server under test, ok / rpc / payload, the shared helpers) — see testing.md → The suites
 cli/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; also prints MCP configs, rule files and prompts)
+cli/completion.js              1.25 shell completion: the scripts `completion <shell>` prints (from the CLI's tables) and the hidden
+                               `__complete` (feature names, Node core only — answered before the engine loads)
+cli/completion/                its templates: dev-spec.bash · .zsh · .fish · .ps1 (conventions.md → Shell completion)
 cli/test-cli.js                the CLI suite's entry point — `node cli/test-cli.js` (never a top-level bin/: CLAUDE.md → Never ship a top-level bin/)
 cli/tests/                     its files: NN-<area>-<topic>.js (NN = the same area numbers as mcp/tests/) + harness.js
 scripts/build.js               `npm run build`: the committed corpus (--check: exit 1 when stale) · --bundle [--out]: the bundle

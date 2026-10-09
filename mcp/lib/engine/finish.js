@@ -29,7 +29,8 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus, suiteSummaryLines,
   taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines, trackLabel,
   unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject, withMoveLock,
-  withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions;
+  withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
+  branchNameOk, branchView; // 1.25 (create --branch)
 function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
@@ -45,7 +46,8 @@ function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport, bugS
   spikeFinish, spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus,
   suiteSummaryLines, taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines,
   trackLabel, unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject,
-  withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions } = E); }
+  withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
+  branchNameOk, branchView } = E); }
 
 // ---------------------------------------------------------------------------
 // spec_finish — close a feature LOCALLY: readiness report + a merge summary generated from the spec chain
@@ -108,6 +110,14 @@ function commitTitle(prefix, text) {
   return prefix + shortTitle(text, Math.max(24, COMMIT_TITLE_MAX - prefix.length));
 }
 
+// 1.25 — a ready feature started on its own branch: the two local options named with it (" Branch x (from main): 1. merge it into
+// main locally — git switch main, then git merge x · 2. keep the branch."); a base no shell could take unquoted is not put in a
+// command (the generic line). → "" without a branch.
+function finishBranchLine(branch, lng) {
+  if (!branch) return "";
+  return " " + i18n.msg(lng).branch.finishLine(branch.name, branchNameOk(branch.base) ? branch.base : null);
+}
+
 function finishFeature(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
@@ -126,7 +136,16 @@ function finishFeature(projectDir, name, opts = {}) {
   }
   const state = readState(projectDir, slug);
   const kind = state.kind || "feature";
-  if (kind === "spike") return spikeFinish(projectDir, f, opts, recordedChecks); // 1.14 C2: ready once the decision is written
+  // 1.25: the feature's own git branch (create --branch) — named in the result (`branch`) and in the merge summary
+  const branch = opts.gateOnly ? null : branchView(projectDir, state);
+  if (kind === "spike") { // 1.14 C2: ready once the decision is written
+    const sr = spikeFinish(projectDir, f, opts, recordedChecks);
+    if (branch && sr && sr.ok !== false) {
+      sr.branch = branch;
+      if (sr.readyToFinish) sr.message += finishBranchLine(branch, lng);
+    }
+    return sr;
+  }
   // Deep traceability — WARNINGS, never blockers: uncovered / phantom EC·NFR·SC, and planned tests no test file names.
   // One walk of the test code (only when an active +tdd plan has T-IDs), shared with doctor's tests-in-code check.
   const scan = tracks.includes("tdd") && extractTestIds(planIdText(readIfExists(path.join(dir, "test-plan.md")) || "")).size ? scanTestCode(projectDir) : null;
@@ -202,6 +221,7 @@ function finishFeature(projectDir, name, opts = {}) {
   const summary = sectionFirstParagraph(reqs, ["summary", "resumo", "resumen"]) || slug;
   const mergeTitle = commitTitle(`${kind === "bugfix" ? "fix" : "feat"}(${slug}): `, summary);
   const body = [F.prSummary, summary, ""];
+  if (branch) body.push(i18n.msg(lng).branch.summary(branch.name, branch.base, branch.commit ? branch.commit.slice(0, 7) : null), ""); // 1.25
   if (kind === "bugfix") {
     const bug = readIfExists(path.join(dir, "bug.md")) || "";
     const rc = extractSection(bug, ROOT_CAUSE_SYN);
@@ -260,7 +280,7 @@ function finishFeature(projectDir, name, opts = {}) {
     kind,
     tracks: trackLabel(tracks),
     readyToFinish: ready,
-    message: ready ? F.ready(slug) : F.notReady(slug),
+    message: ready ? F.ready(slug) + finishBranchLine(branch, lng) : F.notReady(slug),
     blockers,
     warnings, // localized lines; readyToFinish ignores them
     openTasks: open,
@@ -274,6 +294,7 @@ function finishFeature(projectDir, name, opts = {}) {
     wrote: write,
   };
   if (baseline) res.baseline = baseline;
+  if (branch) res.branch = branch; // 1.25: {name, base, commit, at, current, exists} — option 1 merges `name` into `base` locally
   if (forcedList.length) res.waivers = waiverResult(forcedList); // 1.16 U3: [{phase, failing, reason?, expires?, expired}]
   if (suite.items.length) res.suiteChecks = suite.items; // B5: [{name, command, status, exitCode?, at?, …}] — status is a stable code
   if (recordedChecks) res.recordedChecks = recordedChecks; // B5: the runs this call recorded

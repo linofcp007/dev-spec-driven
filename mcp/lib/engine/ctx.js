@@ -5,7 +5,7 @@
  *
  * ONE object, mutated in place and never re-bound: every module reads and writes CTX.NAME at call time (a destructured copy
  * would go stale). It holds what lives as long as ONE engine call — the read-cache scope that withReadCache (files.js) opens
- * and closes, resetting every field below but BUILTIN_CORPUS_BUILD — and nothing else: a module's own lazy caches stay
+ * and closes, resetting every field below but DRY_RUN (withDryRun's own) and BUILTIN_CORPUS_BUILD — and nothing else: a module's own lazy caches stay
  * private `let`s in that module. A new field shared by two modules goes here, with its reset in withReadCache when it is
  * per call.
  */
@@ -21,6 +21,10 @@ const CTX = {
   // packs.js — the project's track packs
   PACK_MEMO: null, // { root, dirKey, reg } — the current call's track packs (withReadCache scope)
   GHOST_MARKERS: null, // Map(name → "[TOKEN]") — the missing packs' markers noteGhostPacks records (packs.js), same scope
+  // files.js — 1.25: the dry-run sink while withDryRun(fn) runs ({ files: Map(key → { file, text, dir? }), children: Map(folder key →
+  // Map(name → "file" | "dir" | null)) }): every write primitive records into it instead of the disk, every reader sees it. Set and
+  // cleared by withDryRun itself (not by withReadCache), so it never outlives the engine call that opened it.
+  DRY_RUN: null,
   // markdown.js — > 0 while renderTemplateSets / renderTemplateSetsBr render the process-wide built-in corpus (npm run build,
   // or a process whose corpus.generated.json doesn't match its sources): isPackMarkerBracket (packs.js) then never reads a
   // pack marker as stable (not per call: the corpus is rendered at most once per process)

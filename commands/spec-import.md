@@ -1,14 +1,14 @@
 ---
-description: Import a Kiro, spec-kit or OpenSpec spec, a plan (Claude Code, Cursor, Codex, fluidplan) or BMAD docs as a new feature.
-argument-hint: "[kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan] [path, or the plan's text] [--name n] [--tracks tdd,saas] [--lang pt]"
+description: Import a Kiro, spec-kit or OpenSpec spec, a plan (Claude Code, Cursor, Codex, fluidplan) or BMAD docs as a feature; Kiro / Cursor rules as steering.
+argument-hint: "[kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan|kiro-steering|cursor-rules] [path, or the plan's text] [--name n] [--tracks tdd,saas] [--lang pt] [--dry-run]"
 ---
 
 Use the **dev-spec-driven** skill, import from other tools (`references/brownfield.md` → Import).
 
 Args: $ARGUMENTS
 
-Call the `spec_import` MCP tool `{tool, path, name?, tracks?, lang?}` (CLI
-`dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--tracks tdd,saas] [--lang pt]`) — or, for
+Call the `spec_import` MCP tool `{tool, path, name?, tracks?, lang?, dryRun?}` (CLI
+`dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--tracks tdd,saas] [--lang pt] [--dry-run]`) — or, for
 a plan / ExecPlan / fluidplan PLAN.md, `{tool, text, …}` with the document's markdown instead of `path` (CLI `dev-spec import plan - < plan.md`
 reads stdin, `--text "…"` takes it inline):
 
@@ -57,6 +57,20 @@ references are rewritten; tasks are renumbered 1…K keeping their checkbox stat
   rejected decisions → `decisions.md` (D-1…) + `design.md` Decisions / Alternatives & Trade-offs; working rules → Global
   Constraints; decisions still open → requirements.md "Open decisions" with `[NEEDS CLARIFICATION]` — tell the user to
   settle them (in fluidplan, or with `spec_clarify`) before approving.
+
+**Steering** — `kiro-steering` (`.kiro/steering/*.md`) and `cursor-rules` (`.cursor/rules/*.mdc`, the legacy `.cursorrules`)
+bring another tool's standing rules in as `.specs/steering/<name>.md` files — no feature; `path` is optional (the tool's own
+places by default); `name` / `tracks` / `text` are refused. Kiro's front matter is kept (it is dev-spec's; a file without one
+gets Kiro's default, `inclusion: always`); a Cursor rule with `alwaysApply: true` → `inclusion: always`, with `globs` →
+`inclusion: fileMatch` + `fileMatchPattern` (a glob naming no folder, `*.tsx`, matches at any depth: `**/*.tsx`), else
+`inclusion: manual` (its `description` kept); `.cursorrules` → `cursorrules.md`, always. An existing steering file is never
+overwritten: it is listed in `skipped` (`template: true` when it is still spec_init's stub — ask the user, then delete it and
+import again). Task briefs then carry each file by its mode. Show the user `imported` (file, mode, patterns) and `skipped`.
+
+**Dry run** — `dryRun: true` (CLI `--dry-run`) runs the whole import and writes nothing (no file, folder, lock or roadmap
+refresh): the same result plus `dryRun: true` and `preview` (each file it would write — its size and its first characters).
+Use it to show the user what an import would create (the feature, its tracks, `counts`, `mapping`, `warnings`) before running
+it for real; a refusal is the real import's.
 
 Show the user: the files written, the **ID mapping** (`mapping`: old → new) and every **warning** (criteria
 not in EARS form, stories without criteria, carried or skipped sections, unresolved task references). Then treat

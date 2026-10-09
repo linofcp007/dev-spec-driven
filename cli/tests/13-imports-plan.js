@@ -28,8 +28,8 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const again = run(["import", "plan", ".claude/plans/dark.md", "--project", c3]);
   const bad = run(["import", "notion", "x", "--project", c3]);
   ok(home.code === 1 && /outside the project[^\n]*plansDirectory \(default ~\/\.claude\/plans/.test(home.out) && sev.code === 1 && sevJ && sevJ.ok === false && /several documents \(a\.md, b\.md\)/.test(sevJ.error) &&
-    again.code === 1 && /already exists/.test(again.out) && bad.code === 1 && /Known: kiro, spec-kit, openspec, plan, execplan, bmad, fluidplan\./.test(bad.out),
-    "import plan refusals exit 1: ~/.claude/plans (outside — says how to bring the plan in), a folder of several plans (--json: the refusal on stdout), an existing feature; an unknown format lists the six");
+    again.code === 1 && /already exists/.test(again.out) && bad.code === 1 && /Known: kiro, spec-kit, openspec, plan, execplan, bmad, fluidplan, kiro-steering, cursor-rules\./.test(bad.out),
+    "import plan refusals exit 1: ~/.claude/plans (outside — says how to bring the plan in), a folder of several plans (--json: the refusal on stdout), an existing feature; an unknown format lists every one (1.25: the steering tools too)");
   put("exec/health.md", "# Health endpoint\n\n## Purpose / Big Picture\n\nOperators can check the API.\n\n## Progress\n\n- [x] (2025-10-01 13:00Z) Add `src/health.ts`\n- [ ] Ping the database and run `npm test`\n\n" +
     "## Decision Log\n\n- Decision: SELECT 1 as the ping.\n  Rationale: cheap.\n\n## Validation and Acceptance\n\n- If the database is down, the endpoint returns 503\n");
   const exJ = json(["import", "execplan", "exec/health.md", "--json", "--project", c3]);

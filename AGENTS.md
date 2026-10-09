@@ -60,11 +60,12 @@ dev-spec init [--evidence reported|observed] [--approval-guard off|ask|deny]   #
 dev-spec steering <file> [--lang]              # one steering file from its template (constitution.md, tech.md, …) or a custom scoped one (api-rules.md)
 dev-spec templates [list|init|check] [artifact] [--lang]   # the team's own scaffolds in .specs/templates/ (replace the built-in ones)
 dev-spec tracks [list|init <name>|check] [name] [--lang]   # the team's own tracks: packs in .specs/tracks/<name>/ (marker tracks like +sec)
-dev-spec create "<name>" [tracks...] [--size xs|s|m|l] [--lang] [--summary "…"] [--brownfield] [--flow design-first]  # scaffold the feature (no tracks → auto-classify; --size: xs = one change.md, s = no classification.md; --brownfield → integration-plan.md)
+dev-spec create "<name>" [tracks...] [--size xs|s|m|l] [--lang] [--summary "…"] [--brownfield] [--flow design-first] [--branch [<name>]]  # scaffold the feature (no tracks → auto-classify; --size: xs = one change.md, s = no classification.md; --brownfield → integration-plan.md; --branch → its own git branch: feature/<slug>, recorded and switched to — bugfix / spike too)
 dev-spec bugfix "<name>" [--summary "…"]       # bugfix flow: reproduce → root cause → regression test → fix
 dev-spec spike "<name>" [--question "…"] [--timebox 3d]   # a timeboxed investigation that ends in a decision (go / no-go / pivot)
 dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name "<feature>"] [--tracks …]   # another tool's spec, a plan, an ExecPlan, BMAD docs or a fluidplan plan → a NEW feature (IDs remapped)
 dev-spec import <plan|execplan|fluidplan> - | --text "<markdown>"   # the same from the plan's text (stdin or inline) — a plan kept outside the project
+dev-spec import <kiro-steering|cursor-rules> [path]   # Kiro steering / Cursor rules → .specs/steering/ files (never over an existing one); any import: --dry-run writes nothing
 dev-spec status [feature] | list               # progress, phase, tracks, sections filled vs present
 dev-spec clarify <feature>                      # surface requirement gaps before design
 dev-spec doctor <feature>                      # health-check → ready to advance? (exit 1 on FAIL — scriptable)
@@ -94,6 +95,7 @@ dev-spec catalog [--write]                     # living catalog of every feature
 dev-spec export [feature] [--md|--csv] [--write]   # one offline, printable document (HTML / markdown) for stakeholders, or the traceability matrix as CSV → .specs/exports/
 dev-spec export [feature] --gherkin [--write]  # BDD: one Gherkin .feature per feature — a scenario per current AC, its EARS clauses as Given / When / Then
 dev-spec export [feature] --tracker jira|linear [--write]   # a CSV for Jira's / Linear's importer (feature → stories → tasks; nothing is sent)
+dev-spec export [feature] --adr [--write]      # the decision log as ADRs: one MADR file per decision (ADR number = its D-n) → .specs/exports/adr/<feature>/
 dev-spec changelog [--since <date|last|all>] [--milestone <name>] [--write]   # release notes from the specs (Added / Changed / Fixed) → .specs/RELEASE-NOTES.md
 dev-spec drift [feature]                       # implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
 dev-spec upgrade [--apply]                     # after updating dev-spec-driven: audit .specs/ against the new rules (read-only); --apply = the safe migrations + .specs/UPGRADE.md
@@ -251,7 +253,9 @@ next, `dev-spec next-action <feature>` names the single next step.
   — or a Claude Code / Cursor plan, a Codex ExecPlan, BMAD docs, a fluidplan plan (its settled decisions → `decisions.md`) — into a new feature: criteria become `US-N.AC-M` (EARS
   where possible, else `[NEEDS CLARIFICATION]`), tasks are renumbered keeping their checkbox state. The source must be
   inside the project and is never modified (a Claude Code plan lives under `~/.claude/plans` — pass its text instead:
-  `dev-spec import plan - < plan.md`, or `--text "…"`).
+  `dev-spec import plan - < plan.md`, or `--text "…"`). `dev-spec import kiro-steering|cursor-rules [path]` brings Kiro's
+  `.kiro/steering/` / Cursor's `.cursor/rules/*.mdc` and `.cursorrules` in as `.specs/steering/` files with their inclusion
+  mode (never over an existing file). `--dry-run` on any import writes nothing and shows what it would create.
 - **Spikes.** `dev-spec spike "<name>" --question "…" --timebox 3d` scaffolds `spike.md` + investigation tasks, with no
   requirements / design gates: investigate, then write the Decision (`_Outcome: go | no-go | pivot_` + the rationale).
   Go → spec the real feature; no-go → archive the spike. Prototype code stays outside `.specs/`.

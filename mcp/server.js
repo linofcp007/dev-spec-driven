@@ -99,6 +99,7 @@ const TOOLS = [
         lang: { type: "string", enum: LANG_ENUM, description: "Language for the generated artifacts. Defaults to the project language (roadmap.json meta.lang), else en." },
         brownfield: { type: "boolean", description: "The feature lands in an EXISTING codebase: also scaffold integration-plan.md (integration points, modifications, sequencing, risks)." },
         flow: { type: "string", enum: [...spec.FLOWS], description: "Phase order: 'design-first' = classification → design → requirements → test / eval plan → tests → tasks (work that starts from an architecture); 'requirements-first' (default). A new feature only (later: spec_feature {action: 'flow'}); a bugfix ignores it." },
+        branch: { type: "string", description: "'true' or a name: the feature's own git branch (default feature/<slug>; fix/, spike/ by kind), recorded with its base — run the returned branch.command yourself (this server never runs git)." },
         projectDir: PROJECT_DIR,
       },
       required: ["name"],
@@ -229,19 +230,20 @@ const TOOLS = [
   {
     name: "spec_import",
     description:
-      "Import a spec written for another tool as a NEW dev-spec feature (never over an existing feature; the source is only read). `tool`: 'kiro' (.kiro/specs/<name>/), 'spec-kit' (specs/<nnn-name>/ — spec.md, plan.md, tasks.md), 'openspec' (openspec/specs/<capability>/ or a change folder openspec/changes/<id>/), 'plan' (a Markdown plan — Claude Code plan mode, a Cursor .cursor/plans/*.plan.md), 'execplan' (a Codex ExecPlan), 'bmad' (BMAD-METHOD: the PRD + its epics and stories, or one story file) or 'fluidplan' (a .fluidplan/<id>/ plan folder, its plan.json, PLAN.md or DECISIONS.md). Each scenario becomes ONE EARS criterion where possible (else its text is kept with [NEEDS CLARIFICATION]); IDs are remapped to US-N.AC-M (`mapping` {oldId: newId}); tasks are renumbered keeping their ticks, [P] / [USn] tags, files (_Implements:_), verify commands (_Verify:_) and dependencies; decisions go to decisions.md / design.md; every artifact notes 'Imported from <tool> <path> on <date>'. `path` must resolve inside the project (a folder holding several plans is refused — name the file); `text` (plan / execplan / fluidplan only, instead of path) is the document itself — e.g. a Claude Code plan, kept in ~/.claude/plans OUTSIDE the project. Tracks: `tracks`, else auto-classified from the imported requirements. Returns {feature, files, mapping, warnings}.",
+      "Import a spec written for another tool as a NEW dev-spec feature (never over an existing feature; the source is only read). `tool`: 'kiro' (.kiro/specs/<name>/), 'spec-kit' (specs/<nnn-name>/ — spec.md, plan.md, tasks.md), 'openspec' (openspec/specs/<capability>/ or openspec/changes/<id>/), 'plan' (a Markdown plan — Claude Code plan mode, a Cursor .cursor/plans/*.plan.md), 'execplan' (a Codex ExecPlan), 'bmad' (BMAD PRD + stories, or one story file) or 'fluidplan' (a .fluidplan/<id>/ folder, its plan.json, PLAN.md or DECISIONS.md); 'kiro-steering' (.kiro/steering/*.md) / 'cursor-rules' (.cursor/rules/*.mdc, .cursorrules) write .specs/steering/ files instead (path optional; an existing name is skipped, never overwritten). Each scenario becomes ONE EARS criterion where possible (else kept with [NEEDS CLARIFICATION]); IDs are remapped to US-N.AC-M (`mapping` {oldId: newId}); tasks are renumbered keeping their ticks, [P] / [USn] tags, files (_Implements:_), verify commands (_Verify:_) and dependencies; decisions go to decisions.md / design.md; every artifact notes 'Imported from <tool> <path> on <date>'. `path` must resolve inside the project (a folder holding several plans is refused — name the file); `text` (plan / execplan / fluidplan only, instead of path) is the document itself — e.g. a Claude Code plan, kept in ~/.claude/plans OUTSIDE the project. Tracks: `tracks`, else auto-classified. `dryRun: true` writes nothing: the same result plus `preview` (each file, bounded). Returns {feature, files, mapping, counts, warnings}.",
     inputSchema: {
       type: "object",
       properties: {
-        tool: { type: "string", enum: ["kiro", "spec-kit", "openspec", "plan", "execplan", "bmad", "fluidplan"], description: "The format of the source spec." },
+        tool: { type: "string", enum: ["kiro", "spec-kit", "openspec", "plan", "execplan", "bmad", "fluidplan", "kiro-steering", "cursor-rules"], description: "The format of the source spec." },
         path: { type: "string", description: "The spec's folder or file, relative to the project root or absolute — inside the project. Required unless `text` is given." },
         text: { type: "string", description: "tool 'plan' / 'execplan' / 'fluidplan' only, instead of `path`: the document's markdown itself (fluidplan: its PLAN.md, DECISIONS.md may follow) — e.g. an approved Claude Code plan, kept in ~/.claude/plans outside the project. The result then has inline: true, source: null." },
         name: { type: "string", description: "Feature name (default: the source's title, else its folder or file name). An existing feature with that slug is an error." },
         tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai | sec | privacy | dist | api | ui | obs | data, or a project track pack (spec_tracks); 'tdd,saas' / '+saas +ai' are split" }, description: "Active tracks ('core' always added). Omit to auto-classify from the imported requirements." },
         lang: { type: "string", enum: LANG_ENUM, description: "Language of the generated artifacts (headings, notes). Defaults to the project language, else en. The imported text itself is kept as written." },
+        dryRun: { type: "boolean", description: "Write nothing." },
         projectDir: PROJECT_DIR,
       },
-      required: ["tool"], // + `path` or `text` — the engine says which is missing (a schema can't express "one of")
+      required: ["tool"], // + `path` or `text` (not for a steering tool) — the engine says which is missing (a schema can't express "one of")
     },
   },
 
@@ -364,7 +366,7 @@ const TOOLS = [
   {
     name: "spec_export",
     description:
-      "Stakeholder export: ONE self-contained, offline, printable document for people who don't read markdown folders (product, legal, clients). With `name`: that feature in its language — summary, user stories with their EARS acceptance criteria (superseded ones struck through), the requirements, the design (a bugfix: bug.md), the test plan, the tasks (done / verified), decisions, approvals and a traceability matrix. Without `name`: the whole project — the roadmap summary, each active feature's requirements digest and the living catalog. `format`: 'html' (default — light/dark, print-ready, every spec text escaped, no external URL), 'md', 'csv' (the requirements traceability matrix — RFC 4180, formula-safe, UTF-8 BOM; written as .rtm.csv), 'gherkin' (a .feature per feature: one Scenario per current criterion tagged @US-n.AC-m + its T-IDs, the EARS clauses as Given / When / Then verbatim — never invented behaviour; PT / ES in Gherkin's dialect) or 'jira' | 'linear' (a CSV for the tracker's own importer: feature → stories → tasks; nothing is sent anywhere). Without `write` the document comes back as `content`; `write: true` writes .specs/exports/<feature|project>.<format> (AUTO-GENERATED marker) and returns `file` + `bytes` — a hand-written file, or one reached through a link, is never overwritten (an error). CLI: dev-spec export [feature] [--md | --csv | --gherkin | --tracker jira|linear] [--write].",
+      "Stakeholder export: ONE self-contained, offline, printable document for product, legal and clients. With `name`: that feature in its language — summary, user stories with their EARS acceptance criteria (superseded ones struck through), the requirements, the design (a bugfix: bug.md), the test plan, the tasks (done / verified), decisions, approvals and a traceability matrix. Without `name`: the whole project — the roadmap summary, each active feature's requirements digest and the living catalog. `format`: 'html' (default — light/dark, print-ready, every spec text escaped, no external URL), 'md', 'csv' (the requirements traceability matrix — RFC 4180, formula-safe, UTF-8 BOM; written as .rtm.csv), 'gherkin' (a .feature per feature: one Scenario per current criterion tagged @US-n.AC-m + its T-IDs, the EARS clauses as Given / When / Then verbatim — never invented behaviour; PT / ES in Gherkin's dialect), 'jira' | 'linear' (a CSV for the tracker's own importer: feature → stories → tasks; nothing is sent anywhere) or 'adr' (decisions.md as MADR files — ADR number = D-n, discoveries left out — in .specs/exports/adr/<feature>/; a write removes the generated ones no decision backs). Without `write` the document comes back as `content`; `write: true` writes .specs/exports/<feature|project>.<format> (AUTO-GENERATED marker) and returns `file` + `bytes` — a hand-written file, or one reached through a link, is never overwritten (an error). CLI: dev-spec export [feature] [--md | --csv | --gherkin | --adr | --tracker jira|linear] [--write].",
     inputSchema: {
       type: "object",
       properties: {
@@ -447,7 +449,8 @@ const TOOLS = [
 // (spec_roadmap / spec_catalog / spec_export / spec_changelog / spec_metrics / spec_task_brief write with `write: true`,
 // spec_impact with `reopen`, spec_upgrade with `apply`, spec_templates / spec_tracks with `init` — so they are not read-only;
 // a read-only tool never touches .specs/ — mcp/test.js snapshots the tree around each). destructiveHint: only spec_feature
-// (`remove` deletes a feature folder) — every other writer only adds or updates what it owns. idempotentHint: a second
+// (`remove` deletes a feature folder) — every other writer only adds or updates what it owns (1.25: spec_export {format:
+// "adr"} also removes the ADR files it generated that no decision backs any more — never a hand-written one). idempotentHint: a second
 // identical call changes nothing more (a tick, an approval, an appended task or decision, finish's evidence each add a record:
 // false). openWorldHint: false everywhere — local files only, no network, no command, no git.
 const READ_ONLY = Object.freeze({ readOnlyHint: true, openWorldHint: false });
@@ -506,7 +509,7 @@ function runTool(name, args, extra) {
       // lang, else the project's (same as the CLI: the engine classifies, never the surface — full review Pb2).
       return spec.createFeature(pdir, args.name, args.tracks, args.summary, undefined, args.lang, args.kind, { brownfield: args.brownfield === true, flow: args.flow, question: args.question, timebox: args.timebox,
         reproduction: args.reproduction, rootCause: args.rootCause, condition: args.condition, behaviour: args.behaviour, includeBody: args.includeBody === true, // flow (C3), question / timebox (C2 spike), the bugfix prefill + bodies (1.21 F3)
-        size: args.size }); // 1.21 F5: the feature's size (= `create --size`)
+        size: args.size, branch: args.branch }); // 1.21 F5: the feature's size (= `create --size`); 1.25: its own git branch (= `create --branch`)
     }
     case "spec_list":
       return spec.listFeatures(pdir);
@@ -556,7 +559,7 @@ function runTool(name, args, extra) {
         ...(extra && TYPE_CHECK.object(extra.preview) ? { preview: extra.preview } : {}) });
 
     case "spec_import": // the engine refuses a path outside the project (same call as the CLI's `import`); text: 1.16 C4 (`import plan -`)
-      return spec.importSpec(pdir, args.tool, args.path, { name: args.name, tracks: args.tracks, lang: args.lang, text: args.text });
+      return spec.importSpec(pdir, args.tool, args.path, { name: args.name, tracks: args.tracks, lang: args.lang, text: args.text, dryRun: args.dryRun === true });
 
     case "spec_append_tasks":
       return spec.appendTasks(pdir, args.name, args.tasks, { heading: args.heading });
@@ -578,7 +581,7 @@ function runTool(name, args, extra) {
     case "spec_tracks": // the same engine call as the CLI's `tracks [list|init <name>|check] [name] [--lang]` / `signals [list|set|forget] …`
       return spec.trackPacks(pdir, args.action, { name: args.name, lang: args.lang, op: args.op, track: args.track, word: args.word, effect: args.effect });
 
-    case "spec_export": // the same engine call as the CLI's `export [feature] [--md|--csv|--gherkin|--tracker jira|linear] [--write]`
+    case "spec_export": // the same engine call as the CLI's `export [feature] [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write]`
       return spec.exportSpecs(pdir, { name: args.name, format: args.format, write: args.write === true });
     case "spec_changelog": // the same engine call as the CLI's `changelog [--since …] [--write]`
       return spec.changelog(pdir, { since: args.since, write: args.write === true, milestone: args.milestone });
@@ -813,8 +816,9 @@ function error(id, code, message, data) {
 // Required arguments per tool, straight from the advertised inputSchema — a missing `name` must be an
 // error, not a folder called "undefined".
 // Groups of arguments of which ONE is required — a schema's `required` can't say "path or text" (spec_import, 1.16 C4): none
-// given → the group's first name is reported missing, as a required key would be.
-const REQUIRED_ONE_OF = { spec_import: [["path", "text"]] };
+// given → the group's first name is reported missing, as a required key would be. `unless`: the call needs none of them (1.25: a
+// steering import — kiro-steering / cursor-rules — reads the tool's own folder when no path is given).
+const REQUIRED_ONE_OF = { spec_import: [{ names: ["path", "text"], unless: (a) => spec.STEERING_IMPORT_TOOLS.includes(a.tool) }] };
 // Required string arguments for which an empty (or whitespace-only) value is a real value, not "not given" (1.16 U review 5):
 // an empty git log is what `git log` prints in a repository without commits (→ 0 commits), an empty closing message claims
 // nothing (→ no-claim) — the CLI's `log <f> -` / `stop-check --message ""` accept them, so MCP does too.
@@ -825,7 +829,7 @@ function missingArgs(toolName, args) {
   const emptyOk = hasOwn(EMPTY_OK, toolName) ? EMPTY_OK[toolName] : [];
   const given = (k) => !(args[k] === undefined || args[k] === null || (typeof args[k] === "string" && !args[k].trim() && !emptyOk.includes(k)));
   const missing = tool.inputSchema.required.filter((k) => !given(k));
-  for (const group of hasOwn(REQUIRED_ONE_OF, toolName) ? REQUIRED_ONE_OF[toolName] : []) if (!group.some(given)) missing.push(group[0]);
+  for (const group of hasOwn(REQUIRED_ONE_OF, toolName) ? REQUIRED_ONE_OF[toolName] : []) if (!group.unless(args) && !group.names.some(given)) missing.push(group.names[0]);
   return missing;
 }
 
@@ -973,11 +977,20 @@ function invalidArgs(toolName, args) {
 // matches it literally). Only the schema's own top-level keys are read; a value that folds to no member is left as given
 // (the enum error names it).
 const EXACT_ENUMS = { spec_import: new Set(["tool"]) };
+// 1.25: a string that also reads 'true' / 'false' (spec_create {branch}: 'true' = the default name, or the name itself) — a boolean
+// given for it becomes that string before validation (the schema stays one plain `type`, as guard's on / off: some MCP clients
+// reject a list-valued type).
+const BOOL_STRING_ARGS = { spec_create: new Set(["branch"]) };
 function foldEnumArgs(toolName, args) {
   const tool = TOOLS.find((t) => t.name === toolName);
   if (!tool || !tool.inputSchema || !tool.inputSchema.properties) return args;
   let out = args;
   for (const [k, s] of Object.entries(tool.inputSchema.properties)) {
+    if (BOOL_STRING_ARGS[toolName] && BOOL_STRING_ARGS[toolName].has(k) && hasOwn(args, k) && typeof args[k] === "boolean") {
+      if (out === args) out = { ...args };
+      out[k] = String(args[k]);
+      continue;
+    }
     // A boolean for an on/off string enum → "on" / "off" (spec_init {guard: true} — a boolean until 1.14 added "scope"; one plain
     // string enum stays portable: some MCP clients reject a schema whose `type` is a list).
     if (Array.isArray(s.enum) && s.enum.includes("on") && s.enum.includes("off") && hasOwn(args, k) && typeof args[k] === "boolean") {

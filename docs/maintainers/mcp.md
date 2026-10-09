@@ -121,7 +121,8 @@ object properties. A task `number` (spec_task_brief, spec_complete_task) carries
 be an integer"; 0 is a task number: next serves a hand-written task 0, so refusing it looped next → complete); the engine
 refuses the CLI's raw word in these same words (`msg(lang).args` —
 conventions.md → CLI boolean switches), and a roadmap `order` past the safe range alike. It iterates the SCHEMA's keys, never the caller's (`__proto__` arguments are ignored);
-an absent or `null` value means "not given". Last, **projectDir** (`projectDirArg` — 1.24 r6 A2 / A3), read without any fs call
+an absent or `null` value means "not given". `REQUIRED_ONE_OF` (spec_import: `path` or `text`) is a group `{names, unless}` —
+1.25: `unless` the tool is a steering one (`spec.STEERING_IMPORT_TOOLS`: its path defaults to the tool's own folder). Last, **projectDir** (`projectDirArg` — 1.24 r6 A2 / A3), read without any fs call
 first (`parseProjectDir`): not given — absent, blank, or holding a variable a client left unexpanded (`spec.unexpandedVar`: any
 `${`, a leading `$NAME`, a `%NAME%` — only a whole `${VAR}` was caught, so with roots `$HOME` / `${workspaceFolder}/` went to the
 server's cwd) → the client's root when roots gave the default project, else left out (the engine's default); a relative `..`
@@ -147,7 +148,10 @@ straight to the engine and the 1.12 MCP accepted them; `spec_import`'s `tool` st
 (`EXACT_ENUMS`). The engine and the CLI fold `backlog`'s action too (`ADD` adds on every surface).
 A schema `type` is always ONE string, never a list (`["string", "boolean"]` — not every MCP client handles list-valued
 types): `spec_init`'s `guard` is a plain string enum `on | off | scope`, and `foldEnumArgs` turns a boolean into
-`"on"` / `"off"` for any string enum holding both (the pre-1.14 `guard: true` keeps working).
+`"on"` / `"off"` for any string enum holding both (the pre-1.14 `guard: true` keeps working). A free string that also reads
+`'true'` / `'false'` (1.25 — `spec_create {branch}`: `'true'` = the default branch name, else the name) is listed in
+`BOOL_STRING_ARGS`: a boolean given for it becomes its word (`"true"` / `"false"`) before validation, and the engine reads the
+words (any case) — `branch: true` works, the schema stays `type: "string"`.
 A tool that THROWS (a file system error — `.specs` being a file) answers the JSON every other refusal is
 (1.23 — it was the bare text `ERROR: <message>`): `toolFailure()` → `{ok: false, error: args.toolFailed(<message>), code: <the
 error's code, e.g. ENOTDIR>}` with `isError: true`, in the project's language.

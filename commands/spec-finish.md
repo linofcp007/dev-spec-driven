@@ -40,7 +40,9 @@ records the drift baseline and needs the project checks green on the final code.
    `--force --reason "…" --expires …` (`waivers` in the result); an expired waiver is a warning: re-approve that
    phase without force, or renew the waiver with the user.
 4. Offer exactly two options: **1. merge into the base branch locally** (fast-forward when possible, the
-   summary as the commit message) **· 2. keep the branch as-is.** Integration is local by design: pull requests and
+   summary as the commit message) **· 2. keep the branch as-is.** A feature started on its own branch (`spec_create
+   {branch}` / `create --branch`) has `branch` in the result — `{name, base, commit}`: name both (option 1 is `git switch
+   <base>`, then `git merge <name>`; the ready `message` says it too). Integration is local by design: pull requests and
    CI are not part of this workflow (they cost money and aren't needed). Execute only
    the option the user picks; after merging, run the full suite again on the result. Pushing the merged
    base branch is a separate step the user must approve.

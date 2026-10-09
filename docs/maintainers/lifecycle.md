@@ -61,6 +61,51 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
 - (The section's other two bullets moved: **Guard mode** → claude-code-integration.md, **Scoped steering** →
   templates-imports-exports.md.)
 
+## A feature's own git branch (1.25 — `create --branch`, `spec_create {branch}`)
+- **What it records.** `.state.json → branch` = `{name, base, commit, at}`: the branch the feature started on, the branch HEAD
+  named then (`base`; null on a detached HEAD) and HEAD's commit (null in a repository without a commit); `at` = the feature's
+  `createdAt` (a re-run that records one later: that time). Only when asked and recorded — a feature without one has no key (the
+  1.24 state, byte for byte). `featureBranchRecord()` (state.js) is THE reader: a record whose name is no usable branch (a hand
+  edit) reads as none.
+- **The name** (`branchInput()`, scaffold.js): `true` / `"true"` → `defaultBranchName(kind, slug)` — `feature/<slug>` (a feature,
+  a change), `fix/<slug>` (a bugfix — finish's `fix(...)` title), `spike/<slug>`; a string → itself, trimmed; `false` / `"false"`
+  → none. `branchNameOk()` (state.js): letters, digits, `.` `_` `+` `-` `/` only — the command is handed out UNQUOTED (one line
+  that reads the same in sh, PowerShell and cmd.exe; a name with a space, a quote, `$ ; | & , ( )` would need a shell's own quoting)
+  — then git's rules (check-ref-format --branch): no `..` / `//`, no part starting with `.` or ending with `.lock`, no leading `-`
+  / `/`, no trailing `/` / `.`, not `HEAD`, ≤ 200 characters. Refused (`branch.invalid`, `branch.empty`) BEFORE anything is
+  written, like size / kind.
+- **The engine never runs git** (the hard rule): `gitRepoFacts()` (state.js) READS the repository as files — the nearest `.git`
+  up from the project (a folder, or a worktree's / submodule's `.git` FILE → its gitdir; the branches live in `commondir`, HEAD
+  in the worktree's own gitdir — `gitDirsOf()`), HEAD (`ref: refs/heads/<x>` → base, a bare sha → detached), the loose ref or
+  its packed-refs line (the commit; does a branch exist). A reftable repository (`<commondir>/reftable/`) can't be read that way:
+  base / commit / exists are null (unknown). The CLI hands what git ITSELF says instead (`createFeature(…, {git})` — `{repo,
+  base, commit, current, exists(name)}` from `rev-parse --is-inside-work-tree`, `symbolic-ref --short HEAD`, `rev-parse --verify
+  HEAD^{commit}`, `rev-parse --verify refs/heads/<name>`; `{repo: false}` outside a work tree; nothing when git can't run — then
+  the files). `planBranch()` decides: no repository → not recorded (`reason: "no-git"`); a branch of that name that EXISTS →
+  not recorded, no command (`reason: "exists"` — it may hold other work: never adopted, never switched onto silently); else
+  recorded, with `command` (`git switch -c <name>`) and `args` (git's arguments — the CLI runs them without a shell). A re-run
+  keeps the recorded branch (`kept: true`; another name asked is noted, never recorded) and hands out the way onto it — `git
+  switch <name>` (`-c` while the branch isn't there yet), nothing when HEAD is on it. An existing feature without one gets it on
+  a re-run (`storeFeatureBranch`, under the feature lock createFeature's re-run holds). Over MCP the result's `note` says to run
+  the command (`branch.run`; the CLI runs it itself, so not there).
+- **The CLI** (`create` / `bugfix` / `spike --branch [<name>]`): git read first (`branchGitFacts`), the engine records, then
+  `branchSwitch` runs `branch.args` and adds `switched` / `created` / `current` / `error` to the result (`--json`). It switches only
+  onto a branch it creates or the feature's OWN recorded one. **Exit 1 whenever the feature does not end up on its branch** — no
+  repository, the name taken, git missing (the record made from the files stays; the line names the command), `git switch`
+  refused (e.g. `refs/heads/zz` exists, so `zz/x` can't — the record stays: a re-run tries again) — the feature itself is created
+  all the same (partial success = 1, as `upgrade --apply`). `--branch` is a value flag whose value is OPTIONAL (bare = the
+  default name — conventions.md → CLI); a track word as its spaced value (`create x --branch tdd`) is refused as ambiguous.
+- **The readers.** `spec_status` / `spec_next_action` / `spec_finish` carry `branch` (`branchView()`: the record + `current`, the
+  branch HEAD names now, and `exists` — from the files, per call). next_action appends `branch.notOn` (`git switch <name>` first)
+  to the step's recommendation while HEAD is on another branch and the phase isn't complete — the step itself never changes.
+  finish: a line in the merge summary (`branch.summary`, under the Summary paragraph) and, ready, the two local options with the
+  names in `message` (`finishBranchLine` — a base no shell could take unquoted is left out of the command); a spike's finish /
+  next_action carry `branch` too (its merge summary has no line — decisions.js untouched). `dev-spec log` reads `git log
+  <commit>..HEAD` from the recorded commit (older commits are no work of this feature; a commit git no longer knows → the whole
+  log) and says so (`since` + `branch.logSince`); `spec_log` / `log -` read the text they are given, as before. Drift needs no
+  start: it compares against the finish baseline. No hook reads the record.
+- **Merging it** (conventions.md → Merging the spec state): `branch` → the EARLIER record (`mergeBranchRecord`).
+
 ## Upgrade (1.13) — `meta.specVersion` and `spec_upgrade`
 - **The engine's version** is `engineVersion()`: `package.json` at the clone's root (three levels above `engine/upgrade.js`), read once; not readable or not
   x.y.z → `null`, and then nothing is stamped and no notice is shown (never a guessed version). Versions are compared by
@@ -134,7 +179,10 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   must name existing entries; a superseded entry is retired (the brief and `decision-affects-approved` skip it, the catalog
   marks it). Readers: the brief (bounded), finish's merge summary, spec_export, spec_catalog (count + titles),
   trace_check (`phantomAffects`, warnings — never a gap), doctor (`decision-affects`, and `decision-affects-approved` for
-  a current decision recorded AFTER the approval of the requirements / design it names).
+  a current decision recorded AFTER the approval of the requirements / design it names), and (1.25) the ADR export —
+  `spec_export {format: "adr"}` (`exportAdr`, decisions.js): one MADR file per decision whose ADR number IS its D-number
+  (one more reason the log never renumbers), superseded ↔ supersedes linked, discoveries left out —
+  templates-imports-exports.md → Exports and planning has the rules.
 - **Spike kind** (`kind: "spike"`, `question`, `timebox` `YYYY-MM-DD` | `3d`): spike.md (Question · Timebox · Options
   considered · Evidence · Decision + `_Outcome: go | no-go | pivot_` · Follow-up — localized headings matched by
   `SPIKE_SYN`; `_Outcome:_` also reads the PT/ES words and yes/no) + investigation tasks; core-only; `gateWalk`,

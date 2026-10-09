@@ -52,7 +52,22 @@ and U+FEFF gotchas are in CLAUDE.md.
   merge summary (spec text) written into the user's shell profile (the in-place `fs.writeFileSync` of the derived files and
   the appends followed file links; `writeFileAtomic`'s rename replaced a file link but wrote through a folder link). Known
   limit: a write after another in one call can still be refused (a tasks.md that is itself a link: `done` records its
-  evidence in .state.json, then the tick is refused) — nothing is ever written THROUGH a link.
+  evidence in .state.json, then the tick is refused) — nothing is ever written THROUGH a link. Removals go through it too:
+  `removeSpecFile` (a link AT the path is unlinked as the link) and (1.25) `removeEmptySpecDir` — an EMPTY folder only, never
+  one that is a link (rmdir would drop a Windows junction), false on any refusal (the ADR export's emptied folders).
+- **The dry-run sink (1.25 — `withDryRun(fn)`, engine/files.js).** Because every write goes through the primitives above, a dry
+  run is ONE switch there: while `CTX.DRY_RUN` is set, `writeFileAtomic` / `writeIfAbsent` / `ensureDir` / `specWrite` /
+  `removeSpecFile` record what they would write (`dryPut`: the text, in its first write's place; a folder; a removal) instead of
+  touching the disk — after the gate, so a dry run meets the real refusals — and the readers `readRaw` (readIfExists, readJson),
+  `existsRaw` (existsCached), `readDirCached`, `safeReaddir` and `isDirSafe` see those records over the disk (`dryEntry` /
+  `dryListing`), so the operation reads back what it "wrote" and computes exactly what the real call would. `withLockFile`
+  runs fn without a lock (no lock file), `ensureLockIgnore` returns at once (its raw writes would bypass the sink), and a
+  folder move, a link's removal or an emptied folder's removal (`removeEmptySpecDir`) — which have no record — throws `EDRYRUN` (`dryRunRefused`). Nothing reaches the disk BY
+  CONSTRUCTION (the raw-write source guard keeps it true). Its only caller is `spec_import {dryRun}` (import/index.js
+  `importSpec` → `dryRunResult`, which also skips the roadmap refresh: `isDryRun()`); the sink lives in CTX (cleared by
+  withDryRun itself, never by withReadCache). A reader outside files.js that reads with a raw fs call does NOT see the sink —
+  an operation made dry-runnable must read what it wrote through these readers (the import's parity test compares every
+  previewed file with the real import's).
 - **The project folder: `resolveProjectDir()` (files.js) — every surface's default.** The explicit argument (CLI `--project`, a
   tool's `projectDir`) > `SPEC_PROJECT_DIR` > `CLAUDE_PROJECT_DIR` > **the nearest folder at or above the working folder that
   holds a dev-spec .specs/** (`nearestProject()`: `isDevSpecDir` — roadmap.json, steering/ or a feature's .state.json — the
@@ -113,7 +128,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   task's record in `others`, both sides' plus the losing side's own one, one per task, newest first, `EVIDENCE_OTHERS` —
   they were dropped, and that task's runs merged into the winner's history), histories merged, deduped, bounded by `EVIDENCE_HISTORY` (a run's own fields — `observed`,
   1.22 review 3's `cmdRule` and `root` — travel with it: no rule of their own); `ticks[n]` / `lastTickAt` / `lastEditAt` (1.22 review: the spec-hook's stamp of a hand-saved tasks.md) → the
-  later; `finished` → the later (firstAt the earliest); `createdAt` → the earlier; `approvals[phase]` → the later approval unless
+  later; `finished` → the later (firstAt the earliest); `createdAt` → the earlier; `branch` (1.25 — create --branch) → the EARLIER
+  record by its `at` (where the feature started first; a record without a time reads as the later; the same time: one name → one
+  record, ours' fields over theirs', two names → a conflict); `approvals[phase]` → the later approval unless
   a revocation record (`revoked: true`, not `partial`) is later — **revocations win by time**, applied to the 3-way RESULT
   (`pruneRevokedApprovals()`, r5 review: when only one side changed `approvals`, an approval older than the other side's
   revocation survived); `signoffs[phase][role]` → the later,
@@ -255,7 +272,11 @@ and U+FEFF gotchas are in CLAUDE.md.
 - **CLI `--lang` is the MCP enum**: `main()` refuses anything outside the MCP `lang` enum (case-folded) with the
   localized `args.invalid` message before dispatch — the engine's `normalizeLang()` would turn `fr` into `en` and save it.
 - **CLI exit codes are scriptable**: `doctor` (FAIL), `trace` (gaps), `ears` (errors), `finish` (not ready),
-  `drift` (drift, a stale baseline or an error) and any refused operation exit 1. The eval harness
+  `drift` (drift, a stale baseline or an error) and any refused operation exit 1 — and (1.25) `create` / `bugfix` / `spike
+  --branch` when the feature does not end up on its branch (lifecycle.md → A feature's own git branch: it is created all the same).
+  **A value flag whose value is optional** (1.25 — `--branch [<name>]`): the parser reads a bare `--branch` (the last word, or a
+  flag after it) as `true` instead of a missing value; it stays a VALUE flag (never in `CLI_SWITCHES` — `--branch <name>` takes the
+  next word), and `branchSpaced` remembers a spaced value so `create x --branch tdd` (a track word) is refused as ambiguous. The eval harness
   (`mcp/evals/run-evals.js`, also `dev-spec evals`) exits 2 on a usage error (a `--max-items` that isn't an
   integer ≥ 1 — it graded nothing and scored 0/0 = 100% — or, run directly, a `--json`: its report is text) and 1 on an
   invalid set (an empty one included); `dev-spec evals --json` never reaches the harness — the CLI refuses it first
@@ -312,6 +333,43 @@ and U+FEFF gotchas are in CLAUDE.md.
   next word): only the words after the feature were forwarded, so `evals --dry-run <f>` ran LIVE (paid calls). run-evals.js
   refuses an unknown flag (did-you-mean, exit 2 — `--dryrun` ran live too), a value flag without its value and a second word,
   and prints its usage on `--help` (it ran the eval).
+- **Shell completion (1.25): `completion <powershell|bash|zsh|fish>`** prints a script (stdout only — `TEXT_ONLY_COMMANDS`, so
+  `--json` is a usage error; it reads no project, so `checkProject()` skips it like `version`: it runs from a shell profile).
+  `completionModel()` builds it from the CLI's own tables — every command (`COMMAND_OPTIONS` keys + `help`, `evals`; a test
+  checks every `case` label is there), each one's flags (its `COMMAND_OPTIONS` + `GLOBAL_OPTIONS`; evals: run-evals.js's
+  switches, `EVALS_SWITCHES`, + `EVALS_VALUE_FLAGS`), the value flags (`VALUE_FLAGS` — the word after one is its value, never
+  a positional), **`COMMAND_ARGS`** (a command's positionals: per position words or a source, `"..."` repeats the last,
+  `"<cmd> <word>"` the positions a first word picks — `feature restore` → archived names; `HELP_ALIASES` copy their command's)
+  and **`FLAG_VALUES`** (`"<flag>"`, or `"<cmd> --<flag>"` where commands differ: `init --evidence` is a mode, `done --evidence` a
+  summary) — and the value lists their `@sources` name, read from the facade (`LANGS`, `VALID_TRACKS`, `PHASES`, `FLOWS`,
+  `FEATURE_SIZES`, `SIZE_POINTS`, `TRACKERS`, `APPROVAL_GUARD_LEVELS`, `IMPORT_TOOLS` (1.25), `TEMPLATE_ARTIFACTS`, the backlog /
+  milestone actions) or the CLI (`mcpConfigBlocks()`, `RULE_FILES`, `commands/*.md`). `cli/completion.js` fills the template of
+  the shell (`cli/completion/dev-spec.{bash,zsh,fish,ps1}`; `#@` lines are maintainer notes, never printed; LF always). One
+  algorithm in the four: walk the words before the cursor (a value flag eats the next word, `--` ends the flags, `-h` / `-V`
+  skipped) → the command, its first positional, the position; then the flag's values (`--flag=` and a `a,b,` list keep their
+  prefix — bash splits `--lang=p` into `--lang` `=` `p`), the command's flags (a word starting `-`), the commands, or the
+  position's spec. Tables: bash / zsh a `case` per table (bash 3.2 — macOS — has no associative array), fish two parallel
+  lists read with `contains -i` (a `switch` pattern would read the `*` of `init#*` as a wildcard; `string join` of one word
+  returns 1 — the lookup returns 0 itself), PowerShell hashtables (never a `$T` beside a `$t`: its names are case-blind).
+  **Feature names** (`@feature` / `@archived`) are the only call the script makes on Tab: `dev-spec __complete
+  features|archived [--project <dir>]` — handled on the CLI's FIRST lines, before `spec.js` loads (`cli/completion.js`
+  `complete()`, Node core only: a mirror of `resolveProjectDir` / `nearestProject` / `isDevSpecDir` / `isNetworkPath` and of
+  `listFeatures`' `isFeatureFolder` rule, the `_archive/` listing beside it); never an error, never a refusal, exit 0. It costs
+  about Node's startup (Windows: ~80 ms against ~70 ms for `node -e 0` and ~450 ms for `list`); a test compares it with the
+  engine on 8 layouts and checks no `mcp/lib` module loads — **change the engine's resolution or listing rule and the
+  mirror follows** (the test fails otherwise). **The CLI the script runs** is this CLI's absolute path (no `dev-spec` on PATH in
+  a plugin install) — resolved at completion time: in a plugin's versioned folder (`…/dev-spec-driven/<version>/cli/dev-spec.js`)
+  the newest installed `<version>` (a plugin update replaces the folder, and the old one lingers for days), else that path,
+  else a `dev-spec` on PATH; the generated message `cliOutput.completionGone` when none is left. Without a `dev-spec` on PATH
+  the script defines `dev-spec` as a shell function running that CLI (PowerShell: each array argument — `--tracks tdd,saas`
+  parsed as a list — joined back with `,` IN PLACE in `$args`, so `--timebox 3d` stays "3d"; a copy would pass the number 3;
+  piped input goes on). The tables are the generating version's: save the script again after an update for new commands /
+  flags (documented, not detected). PowerShell 5.1 decodes a native command's output with the OEM code page, so the PowerShell
+  script is ASCII: a non-ASCII path or message rides as base64 (`QUOTE.powershell`), the header's install line names the file
+  instead. PowerShell completes nothing after a bare `-` / `--` (its own parameter syntax — a letter first). Tests:
+  cli/tests/16-conventions-completion.js runs bash (Git Bash on Windows) and Windows PowerShell (TabExpansion2) for real, zsh
+  (compadd / compset stubbed) and fish (`complete -C`) where installed (`DEV_SPEC_TEST_ZSH` / `DEV_SPEC_TEST_FISH`), and reads
+  each script's tables back.
 - **CLI boolean switches are read with `on(k)`, never by truthiness**: `--x=false` is the string "false" (truthy),
   so `done --run=false` ran the `_Verify:_` commands. `normalizeBoolFlags()` (every name in `BOOL_FLAGS`) turns
   `true|false|1|0|yes|no|on|off` into booleans and refuses any other value. `BOOL_FLAGS` is `[...spec.CLI_SWITCHES]`
@@ -327,7 +385,8 @@ and U+FEFF gotchas are in CLAUDE.md.
   word with no block → the whole help. A new command gets its block in `helpText()` starting `  <name> ` at two spaces. An explicit
   `--include-body=false` / `--include-brief=false` is passed through as false (`boolFlag()`), as MCP receives it.
   The eval harness (`mcp/evals/run-evals.js`, which `evals` forwards to untouched) applies the same rule to its own
-  switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise).
+  switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise). 1.25: `dry-run` is a CLI switch too (`import
+  --dry-run`), so `normalizeBoolFlags()` skips it under `evals` — the harness reads its own `--dry-run=maybe` (exit 2).
   Numeric flags that MCP bounds (`--cap`, `--max`) and the CLI-only `--timeout` go through `intFlag()` (integer ≥ 1; `--timeout`
   also ≤ 2147483 — `timeoutFlag()`, Node's timer limit, 1.24 r6 B6: `cliOutput.atMost`).
   The engine refuses what the MCP schema refuses where the CLI passes raw strings: `taskNumber()` (digits only — `"1.9"` / `"2abc"` are not

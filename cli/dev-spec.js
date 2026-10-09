@@ -29,7 +29,8 @@
  *   signals [list | set <track> <word> off|weak|strong | forget <track> <word>]  The classifier's signal overrides of this
  *                                      project (.specs/classifier.json — learned from Phase 0 corrections, or set by hand)
  *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
- *                                      --brownfield → + integration-plan.md; --flow design-first → design before requirements)
+ *                                      --brownfield → + integration-plan.md; --flow design-first → design before requirements;
+ *                                      --branch [<name>] → its own git branch, recorded with its base and switched to — also bugfix / spike)
  *   bugfix "<name>" [--summary]         Scaffold the bugfix flow (bug.md + regression test plan)
  *                                      [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] prefill
  *                                      bug.md + the regression criterion; [--include-body] (--json: the scaffolds' bodies)
@@ -80,6 +81,7 @@
  *                                      [--csv] the traceability matrix as CSV (UTF-8 BOM) → .specs/exports/<feature|project>.rtm.csv
  *                                      [--gherkin] one Gherkin .feature per feature (a scenario per AC, EARS → Given/When/Then) → <feature>.feature
  *                                      [--tracker jira|linear] a CSV for the tracker's importer (feature → stories → tasks) → <feature|project>.<tracker>.csv
+ *                                      [--adr] the decision log as MADR files (ADR number = D-n) → .specs/exports/adr/<feature>/NNNN-<title>.md
  *   changelog [--since d|last|all] [--write]  Release notes from the specs → .specs/RELEASE-NOTES.md (+ meta.changelogAt);
  *                                      --milestone <name>: that milestone's features only → .specs/RELEASE-NOTES.<milestone>.md
  *   milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]  Milestones in roadmap.json (meta.milestones): each one's
@@ -102,6 +104,8 @@
  *   coverage                           Brownfield: % of code files named in _Implements:_ (per folder)
  *   import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--lang] [--tracks …]  Import another tool's spec / a plan as a NEW feature
  *   import <plan|execplan|fluidplan> - | --text "<markdown>"   … a plan from stdin or inline (Claude Code keeps plans in ~/.claude/plans)
+ *   import <kiro-steering|cursor-rules> [path]   Kiro steering / Cursor rules → .specs/steering/ (never over an existing file)
+ *   import … --dry-run                 Write nothing: what the import would do (the same result + a bounded preview)
  *   statusline [--print-config]        One line for Claude Code's status line (reads its session JSON on stdin; prints nothing
  *                                      outside a dev-spec project; exit 0 always); --print-config prints the settings.json snippet
  *   evals <feature> [--dry-run ...]    Run the local eval harness (+ai) — every flag goes to it wherever it stands; it refuses
@@ -117,6 +121,8 @@
  *                                      an existing file that is no previous bundle is replaced only with --force
  *   version (or --version / -V)        The version, this CLI's path, Node, the engine (modules or bundle — why a bundle was
  *                                      skipped), the project, which input chose it, its language (--json too)
+ *   completion <powershell|bash|zsh|fish>  The shell's completion script (commands, flags, values, feature names) — built from
+ *                                      COMMAND_OPTIONS / COMMAND_ARGS / FLAG_VALUES; it calls the hidden `__complete` on Tab
  *
  * Flags: --json (raw JSON output) · --project <dir> (an existing folder; only init creates one) · --lang en|pt|pt-BR|es
  *        The project: --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working one with a
@@ -131,15 +137,19 @@
  *        on Windows --shell bash is Git Bash (never WSL's System32 / WindowsApps bash.exe)
  *        upgrade: --apply (the safe migrations: tracks, history baselines, .gitignore, meta.specVersion, UPGRADE.md)
  *        prompts: --args "…" (the command's arguments, = prompts/get {arguments: {args}})
- *        import: --text "<markdown>" (a plan / ExecPlan's text, = spec_import {text}) · statusline: --print-config
+ *        import: --text "<markdown>" (a plan / ExecPlan's text, = spec_import {text}) · --dry-run (nothing written, = spec_import {dryRun}) · statusline: --print-config
  *        Switches: --x or --x=true|false (1/0, yes/no, on/off). --json prints a refusal's {ok:false,…} result on stdout (exit 1).
- *        help, rules, mcp-config and evals print text only: --json there is a usage error (exit 1).
+ *        help, rules, mcp-config, evals and completion print text only: --json there is a usage error (exit 1).
  */
 
 const fs = require("fs");
 const path = require("path");
+// 1.25 — `dev-spec __complete features|archived [--project <dir>]`: the completion scripts' hidden call on Tab (feature names),
+// answered BEFORE the engine loads — cli/completion.js reads .specs/ itself — since it runs on every Tab (≈ node's own startup).
+if (process.argv[2] === "__complete") return require(path.join(__dirname, "completion.js")).complete(process.argv.slice(3));
 const { spawn, spawnSync } = require("child_process");
 const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+const COMPLETION = require(path.join(__dirname, "completion.js")); // 1.25: `completion <shell>` (and the hidden __complete, above)
 
 const SERVER = path.resolve(__dirname, "..", "mcp", "server.js");
 const EVALS = path.resolve(__dirname, "..", "mcp", "evals", "run-evals.js");
@@ -214,6 +224,11 @@ VALUE_FLAGS.add("depends"); // 1.14 F3: append-tasks --depends 3,5 (repeatable) 
 VALUE_FLAGS.add("out"); // 1.20: bundle --out <file.js> — the one-file engine written elsewhere (a read-only clone: DEV_SPEC_BUNDLE_PATH)
 // 1.21 F3: bugfix <name> --reproduction "…" --root-cause "…" --condition "…" --behaviour "…" (= spec_create's bugfix prefill)
 ["reproduction", "root-cause", "condition", "behaviour"].forEach((k) => VALUE_FLAGS.add(k));
+// 1.25: create / bugfix / spike --branch [<name>] (= spec_create {branch}) — a value flag whose value is OPTIONAL: a bare --branch (the
+// last word, or a flag after it) is true, the default name; --branch=<name> / --branch <name> names it. branchSpaced: the name was the
+// next word — a track word there (`create x --branch tdd`) is refused as ambiguous (branchFlag).
+VALUE_FLAGS.add("branch");
+let branchSpaced = false;
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 const ARGV0 = argv.slice(); // the command line as given — `evals` hands its own flags to run-evals.js (evalsArgs)
 let cmdIdx = -1; // where the command word stands in ARGV0
@@ -237,8 +252,11 @@ for (let i = 0; i < argv.length; i++) {
   else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) {
     // A value flag never swallows the next flag: `--order --json` must not set order="--json". Only a
     // `--<letter>` token is a flag — `---` (front matter, an HR) or `-- draft` stays a value, like over MCP.
-    if (argv[i + 1] === undefined || /^--[A-Za-z]/.test(argv[i + 1])) missingValue = missingValue || a.slice(2);
-    else { flags[a.slice(2)] = argv[++i]; countFlag(a.slice(2)); }
+    if (argv[i + 1] === undefined || /^--[A-Za-z]/.test(argv[i + 1])) {
+      if (a === "--branch") { flags.branch = true; countFlag("branch"); } // 1.25: its value is optional — bare = the default name
+      else missingValue = missingValue || a.slice(2);
+    }
+    else { flags[a.slice(2)] = argv[++i]; countFlag(a.slice(2)); if (a === "--branch") branchSpaced = true; }
   }
   else if (a.startsWith("--")) flags[a.slice(2)] = true;
   else { if (!pos.length) cmdIdx = i; pos.push(a); }
@@ -326,6 +344,7 @@ function refuseRepeatedFlags() {
 function normalizeBoolFlags() {
   for (const k of BOOL_FLAGS) {
     if (typeof flags[k] !== "string") continue;
+    if (cmd === "evals" && k === "dry-run") continue; // 1.25: import's switch has the name of run-evals.js's own flag — evals hands it over unread
     const v = flags[k].trim().toLowerCase();
     if (["true", "1", "yes", "on"].includes(v)) flags[k] = true;
     else if (["false", "0", "no", "off"].includes(v)) flags[k] = false;
@@ -450,14 +469,14 @@ function usage(syntax) {
 // `done … --timeout 0` without --run did nothing. `max` absent = the command reads any number (a name and tracks, words of a
 // message…) or checks its own (templates, export, decide…). `evals` is not listed: its flags are run-evals.js's.
 const GLOBAL_OPTIONS = ["json", "project", "help"];
-const CREATE_OPTIONS = ["tracks", "summary", "lang", "brownfield", "flow", "question", "timebox", "reproduction", "root-cause", "condition", "behaviour", "include-body", "size"];
+const CREATE_OPTIONS = ["tracks", "summary", "lang", "brownfield", "flow", "question", "timebox", "reproduction", "root-cause", "condition", "behaviour", "include-body", "size", "branch"];
 const COMMAND_OPTIONS = {
   classify: { options: ["name", "lang", "explain"] },
   signals: { options: ["lang"] },
   init: { options: ["lang", "tracks", "guard", "stop-check", "check", "approval-guard", "evidence", "roles"] },
   create: { options: ["kind", ...CREATE_OPTIONS] },
   bugfix: { options: CREATE_OPTIONS },
-  spike: { options: ["tracks", "summary", "lang", "question", "timebox", "flow", "brownfield"] },
+  spike: { options: ["tracks", "summary", "lang", "question", "timebox", "flow", "brownfield", "branch"] },
   list: { options: [], max: 0 },
   status: { options: [], max: 1 },
   doctor: { options: [], max: 1 },
@@ -483,7 +502,7 @@ const COMMAND_OPTIONS = {
   "add-track": { options: ["tracks", "remove"] },
   feature: { options: ["yes", "flow"] }, // its arguments per action (remove / archive / restore: 2, rename / flow: 3) — checked in its case (1.24 r6 B4)
   rules: { options: [], max: 1 },
-  import: { options: ["name", "lang", "tracks", "text"] },
+  import: { options: ["name", "lang", "tracks", "text", "dry-run"] },
   "append-tasks": { options: ["task", "req", "implements", "verify", "story", "parallel", "makes-green", "expect-fail", "size", "depends", "heading"], max: 1 },
   impact: { options: ["phase", "reopen"], max: 1 },
   metrics: { options: ["write"], max: 1 },
@@ -493,7 +512,7 @@ const COMMAND_OPTIONS = {
   prompts: { options: ["args"] },
   templates: { options: ["lang"] },
   tracks: { options: ["lang"] },
-  export: { options: ["md", "html", "csv", "gherkin", "tracker", "write"] },
+  export: { options: ["md", "html", "csv", "gherkin", "adr", "tracker", "write"] },
   changelog: { options: ["since", "write", "milestone"] },
   log: { options: ["max"], max: 2 }, // <feature> [-]
   "stop-check": { options: ["message", "agent"] },
@@ -503,7 +522,40 @@ const COMMAND_OPTIONS = {
   bundle: { options: ["out", "force"] }, // --force: overwrite an --out that is no previous bundle (1.24 r6 B8)
   statusline: { options: ["print-config"], max: 0 },
   version: { options: [], max: 0 }, // 1.24 r6 B-I1 (--version / -V anywhere skip this check: they print the version, nothing else)
+  completion: { options: [], max: 1 }, // 1.25: completion <powershell|bash|zsh|fish>
 };
+// 1.25 — shell completion (`completion <shell>`, cli/completion.js): what a command's positional arguments are, for its script.
+// Per position (the first word after the command first): words to offer, or a source — @feature / @archived (the project's
+// feature names, read on Tab), @command, @file, @dir, or a value list completionModel() names (@track, @phase…); null offers
+// nothing there, a trailing "..." repeats the last one. "<cmd> <word>" holds the positions after a first word that picks them
+// (feature restore → archived names). A command without an entry still completes its name and its COMMAND_OPTIONS flags; an
+// alias (HELP_ALIASES) reads its command's entries.
+const COMMAND_ARGS = {
+  signals: ["list set forget"], "signals set": [null, "@track", null, "off weak strong"], "signals forget": [null, "@track"],
+  init: ["@track..."], templates: ["list init check", "@template"], tracks: ["list init check"],
+  create: [null, "@track..."], bugfix: [null, "@track..."], spike: [null, "@track..."],
+  status: ["@feature"], doctor: ["@feature"], trace: ["@feature"], clarify: ["@feature"], ears: ["@feature @file"], next: ["@feature"],
+  "next-action": ["@feature"], brief: ["@feature"], done: ["@feature"], undone: ["@feature"], finish: ["@feature"], decide: ["@feature"],
+  "append-tasks": ["@feature"], impact: ["@feature"], metrics: ["@feature"], drift: ["@feature"], export: ["@feature"], log: ["@feature", "-"],
+  evals: ["@feature"], approve: ["@feature", "@phase"], "add-track": ["@feature", "@optional-track..."], depend: ["@feature", "@feature..."],
+  feature: ["remove archive rename restore flow"], "feature remove": [null, "@feature"], "feature archive": [null, "@feature"],
+  "feature rename": [null, "@feature"], "feature restore": [null, "@archived"], "feature flow": [null, "@feature", "@flow"],
+  backlog: ["@backlog-action"], milestone: ["@milestone-action"], "milestone add": [null, null, null, "@feature..."],
+  import: ["@import-tool", "@file"], scan: ["@dir"], rules: ["@rules-tool"], "mcp-config": ["@mcp-client"], prompts: ["@prompt"],
+  "merge-state": ["@file..."], help: ["@command"], completion: ["@shell"],
+};
+// The values of a value flag where the set is known — "<flag>" for every command that takes it, "<command> --<flag>" where commands
+// differ (init --evidence is a mode, done --evidence a summary). The same specs as COMMAND_ARGS.
+const FLAG_VALUES = {
+  lang: "@lang", tracks: "@track", flow: "@flow", tracker: "@tracker", "approval-guard": "@approval-guard", guard: "on off scope",
+  "stop-check": "on off", through: "@through", phase: "requirements design test-plan eval-plan tasks steering", since: "last all",
+  shell: "bash pwsh powershell cmd", project: "@dir", out: "@file",
+  "init --evidence": "reported observed", "create --kind": "feature bugfix spike change", "create --size": "@size", "bugfix --size": "@size",
+  "append-tasks --size": "@task-size", "append-tasks --story": "shared", "decide --kind": "decision discovery",
+  "merge-state --kind": "state roadmap generated", "depend --add": "@feature", "depend --rm": "@feature", "evals --prompt": "@file",
+};
+// `evals` forwards its flags to mcp/evals/run-evals.js: its switches (BOOL_FLAGS there) for the completion script.
+const EVALS_SWITCHES = ["dry-run", "set-baseline", "require-live"];
 function checkCommandArgs() {
   const own = Object.prototype.hasOwnProperty.call(COMMAND_OPTIONS, cmd) ? COMMAND_OPTIONS[cmd] : null;
   if (!own) return; // an unknown command (its own error), evals (run-evals.js), help
@@ -545,6 +597,16 @@ function checkProject() {
 
 // ---- mcp-config snippets ---------------------------------------------------
 function mcpConfig(client) {
+  const blocks = mcpConfigBlocks();
+  if (client && client !== "all") {
+    // Own keys only: 'constructor' / 'toString' are not clients.
+    if (!Object.prototype.hasOwnProperty.call(blocks, client)) die(projectText().unknownClient(client, Object.keys(blocks).join(", ") + ", all"));
+    return blocks[client];
+  }
+  return Object.values(blocks).join("\n\n");
+}
+// One config block per client (their names are the completion script's mcp-config values too).
+function mcpConfigBlocks() {
   // Forward slashes: valid in JSON without escaping and accepted by Node on Windows.
   const S = SERVER.replace(/\\/g, "/");
   const ROOT = path.resolve(__dirname, "..").replace(/\\/g, "/");
@@ -559,18 +621,21 @@ function mcpConfig(client) {
     codex: "OpenAI Codex CLI — ~/.codex/config.toml:\n[mcp_servers.spec-driven]\ncommand = \"node\"\nargs = [" + JSON.stringify(S) + "]", // basic string: safe for paths with ' (forward slashes need no escaping)
     generic: "Generic stdio MCP client:\n  command: node\n  args: [\"" + S + "\"]",
   };
-  if (client && client !== "all") {
-    // Own keys only: 'constructor' / 'toString' are not clients.
-    if (!Object.prototype.hasOwnProperty.call(blocks, client)) die(projectText().unknownClient(client, Object.keys(blocks).join(", ") + ", all"));
-    return blocks[client];
-  }
-  return Object.values(blocks).join("\n\n");
+  return blocks;
 }
+// `rules <tool>`: the rule file each tool reads, in this clone (printed with its paths made absolute).
+const RULE_FILES = {
+  cursor: ".cursor/rules/dev-spec-driven.mdc",
+  windsurf: ".windsurf/rules/dev-spec-driven.md",
+  copilot: ".github/copilot-instructions.md",
+  gemini: "GEMINI.md",
+  agents: "AGENTS.md",
+};
 
 // ---- dispatch --------------------------------------------------------------
 const CLI_LANGS = spec.LANGS; // = the MCP tools' `lang` enum (en · pt · es · pt-BR)
 // The commands whose output is text only — no structured result — so --json is refused there (main; the help too).
-const TEXT_ONLY_COMMANDS = new Set(["rules", "mcp-config", "evals"]);
+const TEXT_ONLY_COMMANDS = new Set(["rules", "mcp-config", "evals", "completion"]);
 
 // ---- statusline (1.16 C1) ----------------------------------------------------
 // Claude Code runs the settings.json "statusLine" command after every assistant message (debounced, cancelled when a newer
@@ -665,7 +730,9 @@ async function main() {
   // `version` command reports the project it resolves — never refuses it (a missing one reads exists: false).
   if (versionAsked && cmd === "version") return printVersion();
   if (!helpOnly) {
-    if (cmd !== "version") checkProject(); // 1.23 review L14: an existing folder (init alone may create it) — 1.24 r6 B1: the environment too
+    // 1.23 review L14: an existing folder (init alone may create it) — 1.24 r6 B1: the environment too. `version` reports the project
+    // and `completion` reads none (it runs from a shell profile, wherever that starts): neither refuses it.
+    if (cmd !== "version" && cmd !== "completion") checkProject();
     checkCommandArgs(); // 1.23 review: the command's own options, at most its own arguments
   }
   switch (cmd) {
@@ -765,20 +832,28 @@ async function main() {
     case "bugfix":
     case "create": {
       // 1.24 r6 B9: each its own usage (`bugfix` without a name printed create's)
-      if (!pos[0]) usage(cmd === "bugfix" ? 'dev-spec bugfix "<name>" [tracks...] [--summary "…"] [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] [--lang en|pt|pt-BR|es]'
-        : 'dev-spec create "<name>" [tracks...] [--summary "…"] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--lang en|pt|pt-BR|es]');
+      if (!pos[0]) usage(cmd === "bugfix" ? 'dev-spec bugfix "<name>" [tracks...] [--summary "…"] [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] [--branch [<name>]] [--lang en|pt|pt-BR|es]'
+        : 'dev-spec create "<name>" [tracks...] [--summary "…"] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
       const name = pos[0];
       const tr = withTracksFlag(pos.slice(1));
       const tracks = tr.length ? tr : undefined; // none → engine: keep existing / classify new
+      const branch = branchFlag(); // 1.25: --branch [<name>] — what git says is read BEFORE the engine records anything
+      const git = branch ? branchGitFacts() : undefined;
       // the engine classifies a new feature in its language (the explicit --lang, else the project's) — same as spec_create
       const r = spec.createFeature(projectDir, name, tracks, flags.summary, undefined, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind,
         { brownfield: on("brownfield"), flow: flags.flow, question: flags.question, timebox: flags.timebox, // = spec_create {brownfield, flow, question, timebox,
           reproduction: flags.reproduction, rootCause: flags["root-cause"], condition: flags.condition, behaviour: flags.behaviour, // the bugfix prefill (1.21 F3)
           cli: true, // 1.21 review A8: a refusal names the flag (--root-cause), not the MCP key (rootCause)
           includeBody: boolFlag("include-body") === true, // … includeBody} — the bodies are in the --json result
-          size: flags.size }); // 1.21 F5: --size xs|s|m|l (= spec_create {size}; xs = a change: one change.md)
+          size: flags.size, // 1.21 F5: --size xs|s|m|l (= spec_create {size}; xs = a change: one change.md)
+          branch, git }); // 1.25: = spec_create {branch}; git: what git said here (the engine reads no git process — MCP: the repository's files)
       if (!r.ok) return fail(r);
-      return out(r, (r) => { const T = cliText(r.lang); console.log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : "")); });
+      const switched = branch ? branchSwitch(r, git) : null; // runs `git switch -c <name>` — the engine never does
+      return out(r, (r) => {
+        const T = cliText(r.lang);
+        console.log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : ""));
+        if (switched) console.log(switched);
+      });
     }
 
     case "list":
@@ -794,6 +869,7 @@ async function main() {
         console.log(T.statusTasks(r.tasks.done, r.tasks.total, r.tasks.next ? "#" + r.tasks.next.number + " " + r.tasks.next.text : null));
         // ✓ only when FILLED (the doctor's rule): ◐ present but still a TODO/empty, ✗ missing — in the feature language.
         const fm = spec.msg(spec.featureLang(projectDir, r.feature));
+        if (r.branch) console.log(fm.branch.statusLine(r.branch.name, r.branch.base, r.branch.commit ? r.branch.commit.slice(0, 7) : null, r.branch.current)); // 1.25
         // 1.21 F5: a sized feature's rows carry `status` — ○ an optional section left out (size s), ✓ one another track covers,
         // the template-only / short n/a states named
         const marks = (list) => list.map((s) => (s.filled ? (s.status === "missing" ? "○ " : "✓ ") : s.present ? "◐ " : "✗ ") + (fm.sectionNames[s.section] || s.section) +
@@ -1329,14 +1405,7 @@ async function main() {
 
     case "rules": {
       // dev-spec rules <cursor|windsurf|copilot|gemini|agents> — a per-tool rule file from THIS clone, with its
-      // relative paths made absolute so it works pasted into any project (like mcp-config, never committed).
-      const RULE_FILES = {
-        cursor: ".cursor/rules/dev-spec-driven.mdc",
-        windsurf: ".windsurf/rules/dev-spec-driven.md",
-        copilot: ".github/copilot-instructions.md",
-        gemini: "GEMINI.md",
-        agents: "AGENTS.md",
-      };
+      // relative paths made absolute so it works pasted into any project (like mcp-config, never committed). RULE_FILES: above.
       if (!pos[0]) usage("dev-spec rules <" + Object.keys(RULE_FILES).join("|") + ">");
       const tool = String(pos[0]).toLowerCase();
       // Own keys only: `constructor`/`__proto__` would pass a plain lookup and crash path.join.
@@ -1362,10 +1431,13 @@ async function main() {
       // spec_import: <path> resolves against the project root and must stay inside it.
       // 1.16 C4: `import plan|execplan|fluidplan -` reads the document's markdown from stdin, `--text "<markdown>"` takes it inline
       // (= spec_import {tool, text} — a plan kept outside the project, e.g. Claude Code's ~/.claude/plans).
-      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data] · import <plan|execplan|fluidplan> - | --text \"<markdown>\"";
+      // 1.25: `import kiro-steering|cursor-rules [<path>]` (= spec_import {tool}: another tool's steering → .specs/steering/; no path →
+      // the tool's own folder) and `--dry-run` on every form (= spec_import {dryRun: true}: nothing written, the same result + preview).
+      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data] [--dry-run] · import <plan|execplan|fluidplan> - | --text \"<markdown>\" · import <kiro-steering|cursor-rules> [<path>] [--dry-run]";
       const fromStdin = pos[1] === "-";
       const hasText = typeof flags.text === "string";
-      if (!pos[0] || (!pos[1] && !hasText) || (fromStdin && hasText)) usage(usageLine);
+      const steering = spec.STEERING_IMPORT_TOOLS.includes(pos[0]);
+      if (!pos[0] || (!pos[1] && !hasText && !steering) || (fromStdin && hasText)) usage(usageLine);
       // With --text the words after the tool are tracks; with - or a path, the words after it. A word after the tool that is no
       // track list next to --text is a path given with it: passed as the source, so the engine answers its "path or text, not
       // both" (as spec_import {path, text} does) — never "Unknown track: 'plans/x.md'".
@@ -1376,15 +1448,25 @@ async function main() {
         : path.relative(projectDir, argPath(p)).split(path.sep).join("/") || ".");
       const doImport = (text) => {
         const r = spec.importSpec(projectDir, pos[0], text != null && !pathWithText ? undefined : source(pos[1]), { name: flags.name, lang: flags.lang,
-          tracks: withTracksFlag(pos.slice(hasText && !pathWithText ? 1 : 2)), text });
+          tracks: withTracksFlag(pos.slice(hasText && !pathWithText ? 1 : 2)), text, dryRun: flags["dry-run"] === true });
         if (!r.ok) return fail(r);
         return out(r, (r) => {
           const B = spec.msg(r.lang).importSpec;
-          console.log(B.done(r.toolName, r.inline ? spec.msg(r.lang).claudeCode.importText.label : r.source, r.feature, r.label, r.lang));
-          console.log("  " + r.files.join(", "));
-          const ids = Object.entries(r.mapping);
-          console.log(B.mapping(ids.length, ids.slice(0, 6).map(([a, b]) => a + " → " + b).join(", ") + (ids.length > 6 ? ", …" : "")));
+          const D = spec.msg(r.lang).importSteering;
+          if (r.dryRun) console.log(D.dryRun);
+          if (r.kind === "steering") { // 1.25: the steering files written (or that would be), each with its mode
+            console.log((r.dryRun ? D.wouldSteering : D.done)(r.toolName, r.imported.length, r.skipped.length));
+            r.imported.forEach((x) => console.log(D.line(x.file, x.from, x.inclusion, (x.patterns || []).join(", "))));
+          } else {
+            const src = r.inline ? spec.msg(r.lang).claudeCode.importText.label : r.source;
+            console.log((r.dryRun ? D.would : B.done)(r.toolName, src, r.feature, r.label, r.lang));
+            if (r.dryRun) { r.preview.forEach((p) => console.log(D.previewFile(p.file, p.chars, p.truncated))); console.log(D.counts(r.counts)); }
+            else console.log("  " + r.files.join(", "));
+            const ids = Object.entries(r.mapping);
+            console.log(B.mapping(ids.length, ids.slice(0, 6).map(([a, b]) => a + " → " + b).join(", ") + (ids.length > 6 ? ", …" : "")));
+          }
           r.warnings.forEach((w) => console.log("  ⚠ " + w));
+          if (r.dryRun) console.log(D.jsonHint);
         });
       };
       if (fromStdin) return readStdin((text) => doImport(text));
@@ -1538,21 +1620,35 @@ async function main() {
     }
 
     case "export": {
-      // dev-spec export [feature] [--md|--csv|--gherkin|--tracker jira|linear] [--write] — the stakeholder document (= spec_export
+      // dev-spec export [feature] [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write] — the stakeholder document (= spec_export
       // {name, format, write}): printed on stdout, or written to .specs/exports/ (never over a hand-written file → exit 1). No
-      // feature = the whole project (--gherkin: one .feature per feature). --tracker takes the tool's name (the MCP format).
-      const syntax = "dev-spec export [feature] [--md|--csv|--gherkin|--tracker jira|linear] [--write]";
+      // feature = the whole project (--gherkin: one .feature per feature; --adr: every feature's ADRs + adr/index.md). --tracker
+      // takes the tool's name (the MCP format).
+      const syntax = "dev-spec export [feature] [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write]";
       const tracker = flags.tracker === undefined ? null : String(flags.tracker).trim().toLowerCase();
-      if (pos.length > 1 || [on("md"), on("html"), on("csv"), on("gherkin"), tracker !== null].filter(Boolean).length > 1) usage(syntax);
+      if (pos.length > 1 || [on("md"), on("html"), on("csv"), on("gherkin"), on("adr"), tracker !== null].filter(Boolean).length > 1) usage(syntax);
       if (tracker !== null && !spec.TRACKERS.includes(tracker)) {
         const A = spec.msg(spec.projectLang(projectDir)).args;
         die(A.invalid(A.item("--tracker", A.oneOf(spec.TRACKERS.join(", ")), JSON.stringify(String(flags.tracker)))));
       }
-      const format = tracker || (on("md") ? "md" : on("csv") ? "csv" : on("gherkin") ? "gherkin" : "html");
+      const format = tracker || (on("md") ? "md" : on("csv") ? "csv" : on("gherkin") ? "gherkin" : on("adr") ? "adr" : "html");
       const r = spec.exportSpecs(projectDir, { name: pos[0], format, write: on("write") });
       if (!r.ok) return fail(r);
       const M = spec.msg(r.lang);
+      const relOut = (f) => path.relative(projectDir, f).split(path.sep).join("/");
       return out(r, (r) => {
+        if (r.format === "adr") { // 1.25: one MADR file per decision + the indexes — written (and the stale ones removed), or each printed under its path
+          const A = M.adr;
+          if (r.written) { // --write
+            r.written.forEach((f) => console.log(M.stakeholderExport.wrote(f)));
+            r.removed.forEach((f) => console.log(A.removed(f)));
+            if (r.note) console.log(r.note);
+            return console.log(A.summary(r.adrs, r.written.length, r.unchanged.length, r.removed.length));
+          }
+          if (r.note) console.error(r.note); // stdout stays the documents alone
+          r.stale.forEach((f) => console.error(A.stale(relOut(f))));
+          return r.documents.forEach((d, i) => process.stdout.write((i ? "\n" : "") + "<!-- ── " + relOut(d.file) + " ── -->\n" + d.content));
+        }
         if (r.format === "gherkin" && r.scope === "project") { // one .feature per feature: written, or each printed under its path
           if (r.wrote) { r.files.forEach((f) => console.log(M.stakeholderExport.wrote(f))); return console.log(M.gherkin.wroteMany(r.files.length, r.scenarios)); }
           if (!r.documents.length) return console.log(M.gherkin.noFeatures);
@@ -1592,10 +1688,17 @@ async function main() {
         return out(r, (r) => r.lines.forEach((l) => console.log(l)));
       };
       if (pos[1] === "-") return readStdin((text) => report(text, { max: intFlag("max") })); // --max: the window the piped log was read with (= spec_log {max})
-      const text = b5Git(["-c", "core.quotePath=false", "-c", "log.showSignature=false", "log", "--no-color", "--no-decorate", "--no-abbrev-commit",
-        "--pretty=medium", "--date=iso-strict", "--name-only", "--relative", "--max-count=" + max]);
+      const logArgs = ["-c", "core.quotePath=false", "-c", "log.showSignature=false", "log", "--no-color", "--no-decorate", "--no-abbrev-commit",
+        "--pretty=medium", "--date=iso-strict", "--name-only", "--relative", "--max-count=" + max];
+      // 1.25: a feature started on its own branch (create --branch) recorded the commit it started from — the log is read from there
+      // (`<commit>..HEAD`: older commits are no work of this feature); a commit git no longer knows → the whole log, as before.
+      const fb = spec.featureBranch(projectDir, fx.slug);
+      const since = fb && fb.commit ? { base: fb.base, commit: fb.commit } : null;
+      let text = since ? b5Git([...logArgs, since.commit + "..HEAD", "--"]) : null;
+      const ranged = text != null;
+      if (!ranged) text = b5Git(logArgs);
       if (text == null) return fail({ ok: false, error: spec.msg(spec.featureLang(projectDir, fx.slug)).gitLog.noGit });
-      return report(text, { max });
+      return report(text, { max, ...(ranged ? { since } : {}) });
     }
     // Helpers of done --run / finish --run / init --check / log (function declarations: hoisted across this switch block).
     // `git` is only ever read here: rev-parse, status, log — local, no network, no lock (GIT_OPTIONAL_LOCKS=0).
@@ -1813,10 +1916,13 @@ async function main() {
     case "spike": {
       // dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d|2w|8h] [--summary …] [--lang] — the spike shortcut
       // (= spec_create {name, kind: "spike", question, timebox}; `create "<name>" --kind spike` is the same call).
-      if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--lang en|pt|pt-BR|es]');
+      if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
       const tr = withTracksFlag(pos.slice(1));
-      const r = spec.createFeature(projectDir, pos[0], tr.length ? tr : undefined, flags.summary, undefined, flags.lang, "spike", { question: flags.question, timebox: flags.timebox, flow: flags.flow, brownfield: on("brownfield"), cli: true }); // = create --kind spike (a flow gets its note; cli: a refusal names the flag)
+      const branch = branchFlag(); // 1.25: --branch [<name>] (spike/<slug> by default), as create
+      const git = branch ? branchGitFacts() : undefined;
+      const r = spec.createFeature(projectDir, pos[0], tr.length ? tr : undefined, flags.summary, undefined, flags.lang, "spike", { question: flags.question, timebox: flags.timebox, flow: flags.flow, brownfield: on("brownfield"), cli: true, branch, git }); // = create --kind spike (a flow gets its note; cli: a refusal names the flag)
       if (!r.ok) return fail(r);
+      const switched = branch ? branchSwitch(r, git) : null;
       return out(r, (r) => {
         const T = cliText(r.lang);
         const SP = spec.msg(r.lang).spike;
@@ -1824,6 +1930,7 @@ async function main() {
         const si = spec.spikeInfo(r.dir);
         if (si.question) console.log(SP.cliQuestion(si.question));
         if (si.timebox.state === "date") console.log(SP.cliUntil(si.timebox.date));
+        if (switched) console.log(switched);
       });
     }
     case "decide": {
@@ -1902,6 +2009,19 @@ async function main() {
     case "statusline": // --print-config (the render path runs before the flag checks, in main)
       return on("print-config") ? statusLineConfig() : statusLineRender();
 
+    case "completion": {
+      // 1.25 — dev-spec completion <powershell|bash|zsh|fish>: the shell's completion script on stdout, nothing else (it is saved
+      // to a file or evaluated as it is) — built from this CLI's own tables (completionModel). How to install it: completion --help.
+      const syntax = "dev-spec completion <" + COMPLETION.SHELLS.join("|") + ">";
+      if (pos[0] == null || !String(pos[0]).trim()) usage(syntax);
+      const sh = COMPLETION.shellName(pos[0]);
+      if (!sh) {
+        const A = spec.msg(spec.projectLang(projectDir)).args;
+        die(A.invalid(A.item("<shell>", A.oneOf(COMPLETION.SHELLS.join(", ")), JSON.stringify(String(pos[0])))));
+      }
+      return process.stdout.write(COMPLETION.script(sh, completionModel()));
+    }
+
     default:
       die(projectText().unknownCommand(cmd));
   }
@@ -1934,6 +2054,38 @@ function printVersion() {
     console.log(V.project(r.project.dir, V.src[r.project.source] || r.project.source));
     console.log(!r.project.exists ? V.state.missing : r.project.devSpec ? V.state.devSpec(r.project.lang) : V.state.noSpecs(r.project.lang));
   });
+}
+
+// 1.25 — what `completion <shell>` fills its script with (cli/completion.js): every command (COMMAND_OPTIONS, + help and evals) and
+// its flags (+ --json --project --help), the flags that take a value, COMMAND_ARGS and FLAG_VALUES (an alias reads its command's),
+// and the value lists their @sources name — from the facade where it has them, so a new command, flag or value completes with
+// nothing else to touch. `cli`: this CLI, which the script runs for feature names (and as `dev-spec` without one on PATH).
+function completionModel() {
+  const cli = path.resolve(__filename).replace(/\\/g, "/");
+  const globalFlags = GLOBAL_OPTIONS.map((f) => "--" + f);
+  const commands = [...new Set([...Object.keys(COMMAND_OPTIONS), "evals", "help"])].sort();
+  const flags = {};
+  for (const c of commands) {
+    const own = c === "evals" ? [...EVALS_SWITCHES, ...[...EVALS_VALUE_FLAGS].filter((f) => f !== "project")] : c === "help" ? [] : COMMAND_OPTIONS[c].options;
+    flags[c] = [...new Set([...own, ...GLOBAL_OPTIONS])].map((f) => "--" + f);
+  }
+  const args = { ...COMMAND_ARGS };
+  for (const [alias, target] of Object.entries(HELP_ALIASES)) {
+    for (const k of Object.keys(COMMAND_ARGS)) if (k === target || k.startsWith(target + " ")) args[alias + k.slice(target.length)] = COMMAND_ARGS[k];
+  }
+  const values = {};
+  for (const [k, v] of Object.entries(FLAG_VALUES)) values[k.includes(" ") ? k : "--" + k] = v;
+  let prompts = [];
+  try { prompts = fs.readdirSync(path.join(__dirname, "..", "commands")).filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3)).sort(); } catch { prompts = []; }
+  const sources = {
+    lang: spec.LANGS, track: spec.VALID_TRACKS, "optional-track": spec.OPTIONAL_TRACKS, phase: spec.PHASES,
+    through: spec.PHASES.filter((p) => p !== "execution"), flow: spec.FLOWS, size: spec.FEATURE_SIZES, "task-size": Object.keys(spec.SIZE_POINTS),
+    tracker: spec.TRACKERS, "approval-guard": spec.APPROVAL_GUARD_LEVELS, "import-tool": spec.IMPORT_TOOLS, template: Object.keys(spec.TEMPLATE_ARTIFACTS),
+    "backlog-action": spec.BACKLOG_ACTIONS, "milestone-action": spec.MILESTONE_ACTIONS, "mcp-client": [...Object.keys(mcpConfigBlocks()), "all"],
+    "rules-tool": Object.keys(RULE_FILES), prompt: prompts, shell: COMPLETION.SHELLS,
+  };
+  return { version: spec.engineVersion(), cli, gone: projectText().completionGone(cli), commands, rootFlags: [...globalFlags, "--version"], globalFlags,
+    valueFlags: [...new Set([...VALUE_FLAGS, ...EVALS_VALUE_FLAGS])].map((f) => "--" + f), flags, args, values, sources };
 }
 
 // `list` and a bare `status`: one line per feature, in the project language.
@@ -2063,6 +2215,71 @@ function mergeDriverCheck() {
   });
 }
 
+// ---- create / bugfix / spike --branch [<name>] (1.25) ------------------------------------------------------------------------
+// The feature's own git branch (= spec_create {branch}). The engine never runs git: it validates the name, decides and RECORDS
+// `.state.json → branch` {name, base, commit, at}; this CLI reads what git says BEFORE that (branchGitFacts — inside a work tree?
+// the base branch and commit, does the name exist?) and runs the engine's `branch.command` AFTER it (branchSwitch: `git switch -c
+// <name>` — or `git switch <name>`, the feature's own branch on a re-run). Never onto a branch the feature doesn't own: one of that
+// name that exists already is not recorded and not switched to. Exit 1 whenever the feature does not end up on its branch (not a
+// repository, the name exists, git can't run or failed — the feature itself is created all the same; the record stays, with the
+// command to run); --json: the engine's result, `branch` + switched / created / error.
+// The flag → undefined (absent) · true (bare: the default name) · false (--branch=false) · the name (validated by the engine).
+function branchFlag() {
+  const v = flags.branch;
+  if (v === undefined || v === true) return v;
+  const s = String(v).trim();
+  if (/^(?:true|yes|on)$/i.test(s)) return true;
+  if (/^(?:false|no|off)$/i.test(s)) return false;
+  // `create x --branch tdd`: the word after --branch is read as its value — a track word there was meant as a track
+  if (branchSpaced && s) { const pt = spec.parseTracks(s); if (pt.given && !pt.unknown.length) die(spec.msg(flags.lang || spec.projectLang(projectDir)).branch.cliTrackWord(s)); }
+  return s;
+}
+// What git says in the project folder → undefined (git can't run here: the engine reads the repository's files instead, and
+// branchSwitch says why nothing was switched) · { repo: false } (not inside a work tree) · { repo: true, base, commit, current,
+// exists(name) } — read only (rev-parse, symbolic-ref: no lock, no network).
+function branchGitFacts() {
+  const g = (args) => {
+    try { return spawnSync("git", args, { cwd: projectDir, encoding: "utf8", timeout: 30000, windowsHide: true, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { return { error: e }; }
+  };
+  const inside = g(["rev-parse", "--is-inside-work-tree"]);
+  if (!inside || inside.error) return undefined;
+  if (inside.status !== 0 || String(inside.stdout || "").trim() !== "true") return { repo: false };
+  const sym = g(["symbolic-ref", "--quiet", "--short", "HEAD"]); // the branch HEAD names — an unborn one too; exit 1: detached
+  const base = sym && !sym.error && sym.status === 0 ? String(sym.stdout || "").trim() || null : null;
+  const rev = g(["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]); // nothing yet in a repository without a commit
+  const sha = rev && !rev.error && rev.status === 0 ? String(rev.stdout || "").trim() : "";
+  return { repo: true, base, commit: /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(sha) ? sha : null, current: base,
+    exists: (name) => { const s = g(["rev-parse", "--verify", "--quiet", "refs/heads/" + name]); return !s || s.error ? null : s.status === 0; } };
+}
+// After the engine's create: run its branch.command (r.branch.args — git's arguments, never through a shell) → the human line, or
+// null. Adds to r.branch: switched (true / false), created (a new branch), current, error (git's first lines); sets exit 1 unless
+// the feature ends up on its branch.
+function branchSwitch(r, git) {
+  const b = r.branch;
+  if (!b) return null;
+  const B = spec.msg(r.lang).branch;
+  if (!b.recorded) { process.exitCode = 1; return null; } // not a repository / the name exists: the engine's note says it
+  if (!b.command || !Array.isArray(b.args)) {
+    if (b.current === b.name) return B.cliOn(b.name);
+    process.exitCode = 1;
+    return null;
+  }
+  if (git === undefined) { b.switched = false; b.error = "git"; process.exitCode = 1; return B.cliGitMissing(b.command); }
+  let s;
+  try { s = spawnSync("git", b.args, { cwd: projectDir, encoding: "utf8", timeout: 30000, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { s = { error: e }; }
+  if (!s || s.error || s.status !== 0) {
+    const why = String((s && (s.stderr || (s.error && s.error.message))) || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 2).join(" ").slice(0, 300);
+    b.switched = false;
+    b.error = why || "exit " + (s && s.status);
+    process.exitCode = 1;
+    return B.cliFailed(b.command, why);
+  }
+  b.switched = true;
+  b.created = b.args.includes("-c");
+  b.current = b.name;
+  return b.created ? B.cliCreated(b.name, b.base, b.commit ? b.commit.slice(0, 7) : null) : B.cliSwitched(b.name);
+}
+
 // 1.14 F5 — `trace <f> --matrix`: the requirements traceability matrix as a table (localized headers and notes; IDs as written).
 function printMatrix(feature, mx, lang) {
   const R = spec.msg(lang).rtm;
@@ -2118,6 +2335,7 @@ function helpFor(c) {
   return lines.join("\n");
 }
 function helpText() {
+  const CLI_PATH = path.resolve(__filename).replace(/\\/g, "/"); // completion's install lines name this CLI
   return `dev-spec — universal spec-driven CLI (local, zero-dependency)
 
   classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data), multilingual
@@ -2152,6 +2370,11 @@ function helpText() {
   create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike|change, --size xs|s|m|l, --lang en|pt|pt-BR|es)
                                   --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase);
                                   --flow design-first: classification → design → requirements → … (starts from an architecture)
+                                  --branch [<name>] (also bugfix / spike): start it on its own git branch — feature/<slug> (fix/,
+                                  spike/ by kind) or the name given — recorded in .state.json with the branch and commit it starts
+                                  from, then git switch -c <name>; never onto a branch that exists already. Exit 1 when the feature
+                                  is not on its branch at the end (not a repository, the name exists, git failed) — it is created
+                                  all the same. Put tracks before --branch (or --branch=<name>)
   bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
                                   --reproduction "…" --root-cause "…" --condition "…" --behaviour "…" prefill bug.md and the
                                   IF … THEN criterion (a text left out stays a slot); --include-body: the bodies in --json
@@ -2229,6 +2452,10 @@ function helpText() {
                                   --tracker jira|linear: a CSV for the tracker's own importer (nothing is sent) — the feature as the
                                   parent, its stories, its tasks under their [USn] story; labels = slug, tracks, AC IDs
                                   → --write: .specs/exports/<feature|project>.<tracker>.csv
+                                  --adr: the decision log as Architecture Decision Records — one MADR file per decision (ADR
+                                  number = its D-n; discoveries left out; superseded ones linked both ways) + an index; no
+                                  feature = every feature's (archived too) + adr/index.md → --write: .specs/exports/adr/
+                                  <feature>/NNNN-<title>.md — unchanged files kept, the generated ones no decision backs removed
   changelog [--since d] [--write] Release notes from the specs: Added (shipped features + their ACs) · Changed (superseded ACs,
                                   change requests) · Fixed (bugfixes + root cause); --since <ISO date|last|all> (default: since the
                                   last written notes); --write → .specs/RELEASE-NOTES.md and stamps meta.changelogAt
@@ -2246,7 +2473,8 @@ function helpText() {
   log <feature> [--max N] [-]     Per task, the commits whose message cites it — "task #N" / "#N" with the feature name (as /spec-commit
                                   writes "Part of .specs/<feature>/ task #N."), or its T-/AC IDs ("Makes T-01 green") — and, +tdd, a
                                   red-first check (implementation committed before its test?); reads git log (read-only, local, --max
-                                  commits, default 1000); - reads a log from stdin (git log --name-only --relative)
+                                  commits, default 1000 — from the commit it started on when it has its own branch: create --branch);
+                                  - reads a log from stdin (git log --name-only --relative)
   merge-state [--install|--uninstall|--check] [--project <dir>]   Teams: git merges the spec state SEMANTICALLY — .gitattributes
                                   (commit it) + this clone's git config (merge.dev-spec-state.driver; every teammate runs it once, and
                                   again after each plugin update — the driver names this clone's path); --uninstall removes both;
@@ -2273,6 +2501,11 @@ function helpText() {
                                   plan.json + answers.json, PLAN.md + DECISIONS.md → tasks, criteria, decisions.md)
   import <plan|execplan|fluidplan> - | --text "<markdown>"   The same from the document's text: - reads stdin (dev-spec import plan - < plan.md),
                                   --text takes it inline — for a plan outside the project (Claude Code keeps plans in ~/.claude/plans)
+  import <kiro-steering|cursor-rules> [path]   Another tool's steering → .specs/steering/<name>.md (default: .kiro/steering/ ·
+                                  .cursor/rules/ + .cursorrules): Kiro's front matter kept; a Cursor rule's alwaysApply → always,
+                                  globs → fileMatch, else manual; an existing steering file is never overwritten (skipped, reported)
+  import … --dry-run              Write nothing — no file, folder, lock or roadmap refresh: what the import would do (the files with
+                                  their size, counts, mapping, warnings; --json adds each file's content, bounded)
   statusline [--print-config]     One line for Claude Code's status line: the most active feature, its tasks, unverified ticks, the next
                                   step (reads the session JSON on stdin; nothing outside a dev-spec project; exit 0 always);
                                   --print-config prints the settings.json "statusLine" snippet with this clone's path
@@ -2290,6 +2523,18 @@ function helpText() {
   version                         The version, this CLI's path, Node, the engine it runs on (its modules, or the bundle — and why a
                                   requested bundle was skipped), the project, which input chose it and its language; also
                                   --version / -V anywhere (prints it, runs nothing)
+  completion <powershell|bash|zsh|fish>   Print the shell's completion script on stdout: the commands, their flags, the values
+                                  they take (--lang, --flow, --size, phases, tracks…) and the project's feature names (read from
+                                  .specs/ on Tab, without loading the engine). Save it once, then load it from the shell's profile:
+                                    PowerShell 5.1 / 7: node "${CLI_PATH}" completion powershell > "$HOME\\dev-spec-completion.ps1"
+                                      then add this line to $PROFILE:  . "$HOME\\dev-spec-completion.ps1"
+                                    bash: node "${CLI_PATH}" completion bash > ~/.dev-spec-completion.bash
+                                      then add to ~/.bashrc:  . ~/.dev-spec-completion.bash
+                                    zsh:  … completion zsh > ~/.dev-spec-completion.zsh — in ~/.zshrc, after compinit:  . ~/.dev-spec-completion.zsh
+                                    fish: … completion fish > ~/.config/fish/conf.d/dev-spec.fish
+                                  Without a dev-spec on PATH the script also defines dev-spec (this CLI); from a plugin's versioned
+                                  folder it follows an update to the newest installed version — save it again then to complete the
+                                  new version's commands and flags
 
   The project: --project <dir> (an existing folder — only init creates one) > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest
   folder at or above the working one that holds a dev-spec .specs/ > the working folder. A variable that chose it is checked like
@@ -2310,14 +2555,14 @@ function helpText() {
          --revoke / --reason "…" / --expires YYYY-MM-DD|Nd (approve)  --reason "…" (undone)
          --brownfield / --flow design-first (create)  --flow (feature flow)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
-         --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
+         --md / --csv / --gherkin / --adr / --write (export)  --since <ISO date|last|all> / --write (changelog)
          --text "<markdown>" (import plan|execplan|fluidplan)  --print-config (statusline)  --install / --uninstall / --check (merge-state)
          --guard on|off|scope / --stop-check on|off / --approval-guard off|ask|deny / --evidence reported|observed (init)  --message "…" / --agent <type> (stop-check)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
          With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1 — a usage error
          or an unexpected failure too ({"ok": false, "error": …[, "code": …]}).
-         help, rules, mcp-config and evals print text only: --json there is a usage error (exit 1).
+         help, rules, mcp-config, evals and completion print text only: --json there is a usage error (exit 1).
          --shell / --timeout go with --run (done, finish); --run and --evidence / --exit / --cmd exclude each other (done);
          --timeout (at most 2147483 s) stops the command's whole process tree; a run ends when its command exits — a
          background process it started (a server) holds nothing up beyond a 2 s drain.

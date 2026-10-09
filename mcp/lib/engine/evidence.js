@@ -1987,6 +1987,9 @@ function taskCommits(projectDir, name, logText, opts = {}) {
   }
   const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
   const lines = [G.head(slug, commits.length, citing, truncated)];
+  // 1.25: opts.since {base, commit} — the CLI read the log from the feature's start (`git log <commit>..HEAD`: its branch record)
+  const since = isObj(opts.since) && typeof opts.since.commit === "string" && opts.since.commit ? { base: typeof opts.since.base === "string" ? opts.since.base : null, commit: opts.since.commit } : null;
+  if (since) lines.push(i18n.msg(lng).branch.logSince(since.base, since.commit.slice(0, 7)));
   for (const t of info) {
     const list = t.commits.slice(0, 5).map((c) => G.commitRef(commits[c.idx].short, cut(commits[c.idx].subject, 60), c.via.join(", ")));
     if (t.commits.length > 5) list.push(G.more(t.commits.length - 5));
@@ -2003,7 +2006,7 @@ function taskCommits(projectDir, name, logText, opts = {}) {
   warnings.forEach((w) => lines.push("  ▲ " + w));
   if (!citing) lines.push(G.conventions(slug));
   return {
-    ok: true, feature: slug, lang: lng, commits: commits.length, truncated, citing,
+    ok: true, feature: slug, lang: lng, commits: commits.length, truncated, citing, ...(since ? { since } : {}),
     tasks: info.map((t) => ({ number: t.b.number, text: t.b.text, done: t.b.done,
       commits: t.commits.map((c) => ({ hash: commits[c.idx].hash, short: commits[c.idx].short, subject: commits[c.idx].subject, date: commits[c.idx].date, via: c.via })) })),
     redFirst, warnings, lines,
