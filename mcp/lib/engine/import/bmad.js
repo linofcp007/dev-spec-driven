@@ -304,6 +304,4 @@ function parseBmad(dir, read0, W, src) {
   return model;
 }
 
-module.exports = { markEmptyHeadings, RE_BMAD_STORY_START, bmadStoryHead, RE_PRD_WORDS, bmadPrdTitle,
-  RE_BMAD_EPIC_STORY_START, bmadEpicStory, RE_BMAD_FR_HEAD, bmadFrLine, RE_BMAD_FR_HEADING, bmadFrHeading, boldThenText,
-  RE_BMAD_WORKFLOW, RE_BMAD_PRD_DESIGN, parseBmad, __link };
+module.exports = { parseBmad, __link };

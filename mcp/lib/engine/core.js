@@ -483,9 +483,8 @@ function today(now, utc) {
 // shown as a date. (`String(iso).slice(0, 10)` showed its UTC date.)
 const dayOf = (instant) => (instant == null || instant === "" ? "" : today(instant));
 
-module.exports = { isWsUnit, RE_LINE_TERMINATOR, isLtUnit, lastLtIndex, stripHashComment, quotedValue, unitIn,
-  wsOrUnitIn, isSlashUnit, isBacktickUnit, stripEnd, stripStart, stripEnds, restAfterBlanks, plusAfterBlanks, headRest,
-  headPlus, replaceHtmlCommentSpans, codeSpans, replaceCodeSpans, atxHeading, GLOB_MAX_ALTS, globNorm,
-  steeringGlobMatch, globMatcher, isImplementsGlob, globAlternatives, globDpMatch, implementsRefs, projectGlob,
-  globFiles, globFolderNames, implementsPath, isDigitUnit, stripHashLineAnchor, colonLineAnchorAt, implementsRel,
-  implementsKey, implementsTargets, keysWithPrefix, own, blankFacts, osaDistance, closestName, today, dayOf, __link };
+module.exports = { isWsUnit, RE_LINE_TERMINATOR, isLtUnit, stripHashComment, quotedValue, unitIn, wsOrUnitIn, isSlashUnit,
+  isBacktickUnit, stripEnd, stripStart, stripEnds, restAfterBlanks, plusAfterBlanks, headRest, headPlus,
+  replaceHtmlCommentSpans, codeSpans, replaceCodeSpans, atxHeading, steeringGlobMatch, globMatcher, isImplementsGlob,
+  implementsRefs, globFiles, implementsPath, colonLineAnchorAt, implementsRel, implementsKey, implementsTargets, own,
+  blankFacts, closestName, today, dayOf, __link };

@@ -209,6 +209,4 @@ function steeringText(t, text, legacy, L, from, date, warn) {
   return lines.join("\n") + "\n\n" + note + "\n\n" + body + "\n";
 }
 
-module.exports = { STEERING_IMPORT_TOOLS, STEERING_IMPORT_DEFAULTS, STEERING_IMPORT_MAX_FILES, STEERING_IMPORT_MAX_CHARS,
-  STEERING_SOURCE_EXT, ruleFrontMatter, cursorGlobs, yamlQuoted, globQuoted, steeringTargetName, importSteering, steeringText,
-  __link };
+module.exports = { STEERING_IMPORT_TOOLS, importSteering, __link };

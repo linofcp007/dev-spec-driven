@@ -63,14 +63,14 @@ matrix.
 - **AC/test IDs**: `US-<n>.AC-<n>` and `T-<n>`. Extraction uses a lookbehind guard, NOT `\b` —
   markdown italics (`_US-1.AC-1_`) make `\b` fail because `_` is a word char. Don't reintroduce `\b`.
   **A bare `AC-n` is no ID (1.22 review):** EARS still LINTS a unit led by one (`RE_LIST_DEFINES_AC` / `RE_LEAD_DEFINES_AC`), but
-  its stable-ID check reads `RE_FULL_ID` (US-n.AC-n, T-, EC-, NFR-, SC-) — a bare one is `no-id` with `ears.bareAcId` ("write
+  its stable-ID check reads `ownStableId` (US-n.AC-n, EC-, NFR-, SC-) — a bare one is `no-id` with `ears.bareAcId` ("write
   US-<story>.AC-<n>"). And the mirror of `earsUnlinted`: `earsUnidentified(reqText, ears)` — EARS linted criteria but
   `requirementAcIds` is empty (bare IDs, or none; review 4: or a criterion is numbered with a bare AC-n) → the criteria as labels (each one's bare ID, else `L<line>`, from the
   result's non-enumerable `criteria`). trace_check reports them as the gap `unidentifiedCriteria` (first in `TRACE_GAP_ORDER`, a
   verdict kind; only present when non-empty, so every other result is unchanged), doctor's `ears` fails (`earsNoAcIds`), so do
   the requirements approval and a change's plan approval; the pre-commit check names them instead of "traceability clean (0
   ACs)". A spec numbered AC-1, AC-2 used to trace 0 ACs and pass everything ("all 0 ACs covered"). **Only a criterion with NO
-  stable ID counts (review 2):** one carrying `NFR-n` / `EC-n` / `SC-nnn` (`RE_FULL_ID`) has its own — trace's secondary
+  stable ID counts (review 2):** one carrying `NFR-n` / `EC-n` / `SC-nnn` (`ownStableId`) has its own — trace's secondary
   warnings read it — so a performance spec of NFR-1, NFR-2 alone passes (it failed doctor, trace and the requirements approval);
   a criterion with no ID beside them is still named, and so is one whose only ID is another feature's (`checkout/US-3.AC-2`) or
   a `_Supersedes:_` reference (`ownStableId` — requirementAcIds' reading). **Review 3 — the LABEL, never a mention:** any ID
@@ -133,7 +133,7 @@ matrix.
   reporting each as its file spells it. **Sub-criterion IDs (review 5, L31):** `US-1.AC-1.2` is NO AC ID — `extractAcIds`
   refuses an ID followed by `.<digit>` (it read as US-1.AC-1: two sub-criteria collapsed into one required AC, a task citing
   `.1` covered both, and doctor said "duplicate US-1.AC-1"). It is a label of its own (`RE_LEAD_LABEL` / `RE_CELL_LABEL`), no
-  stable ID (`RE_FULL_ID` / `RE_FULL_ID_NO_T` skip it): EARS's no-id lint names it (`ears.subAcId`), `bareLabel` returns it, so
+  stable ID (`RE_OWN_LABEL_ID` / `RE_FULL_ID_NO_T` skip it): EARS's no-id lint names it (`ears.subAcId`), `bareLabel` returns it, so
   `earsUnidentified` / trace_check's `unidentifiedCriteria`, doctor's `ears`, the approvals and spec_upgrade's renumber item
   (`criteriaBareIds`) list it like a bare AC-n; `acDuplicates` no longer counts it as its parent. One stable ID per criterion
   — the trace model has no hierarchy below the story.

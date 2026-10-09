@@ -139,10 +139,10 @@ flows, the bugfix kind.
   would name the task refused).
 
 ## Approval fingerprints and pending gates (from Conventions & gotchas)
-- **Approvals record a content fingerprint** of the phase's artifact (`artifactFingerprint`; tasks.md
+- **Approvals record a content fingerprint** of the phase's artifact (`textFingerprint`; tasks.md
   with checkboxes normalized). `next_action` compares each artifact with ITS OWN approval — ticking a
-  task is progress, not a spec edit. CRLF and a leading BOM are encoding, not content (`textFingerprint`): a
-  "UTF-8 with BOM" re-save is no change. Compare through `fingerprintMatches` / `artifactMatches`, never `!==` —
+  task is progress, not a spec edit. CRLF and a leading BOM are encoding, not content (`fingerprintText`): a
+  "UTF-8 with BOM" re-save is no change. Compare through `fingerprintMatches`, never `!==` —
   they also accept a fingerprint recorded (before the BOM was ignored) over a BOM-prefixed file.
 - **A whitespace-only edit is no change (r5 review).** Trailing spaces / tabs on a line and blank lines at the end (an
   editor's "trim trailing whitespace" / "insert final newline", a formatter) needed a re-approval — every role re-signing —

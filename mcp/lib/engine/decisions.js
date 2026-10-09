@@ -14,7 +14,7 @@ const { BOM_CHAR } = require("./state.js"); // load time
 const { TRACE_INFO_FIELDS } = require("./trace.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
-  existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
+  existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
   maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
   readIfExists, readJson,
@@ -25,7 +25,7 @@ let activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTra
   backtickRuns, EXPORT_DIR, featureDirs, isGeneratedOrAbsent, mdCell, mdPlainText, normalizeLang, projectLang, readContained, readDirCached,
   removeEmptySpecDir, removeSpecFile, shiftHeadings, slugify, specsRoot, specsWriteContained, squeezeBlankLines, stateFromFile, withinRoot;
 function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTracks, duplicateTaskNumbers,
-  ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
+  ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
   maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
   readIfExists, readJson,
@@ -1021,13 +1021,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   return res;
 }
 
-module.exports = { DECISIONS_FILE, DECISION_TITLE_MAX, DECISION_TEXT_MAX, RE_DECISION_HEAD_START, isBlankUnit,
-  decisionHead, stripClosingHashes, underscoreMarkerLine, RE_DECISION_MARKER_HEAD, decisionMarker, DECISION_LABELS,
-  RE_DECISION_LABEL, BRIEF_DECISIONS_MAX, BRIEF_DECISIONS_CHARS, RE_LEADING_BOM, blankHtmlComments, splitRefs, affectPieces, rejoinRefs, affectsRefs, AFFECTS_JOIN_MAX,
-  normDecisionId, decisionLabelKey, decisionLog, retiredDecisions, decisionSectionKeys, decisionTargets, resolveAffect,
-  trimBlanksEnd, safeSpecText, appendSpecText, decisionInput, decisionEntryLines, decide, decisionsTrace, affectsWarnings,
-  decisionDoctorChecks, briefDecisions, decisionSummaryLines, catalogDecisions, ADR_DIR, ADR_INDEX, ADR_SLUG_MAX, RE_ADR_NAME, adrNumber,
-  adrFileName, adrInert, adrLabel, adrBlock, posixRel, adrModel, adrRef, adrStatusText, adrDocs, adrProjectIndex, adrStaleFiles, exportAdr, SPIKE_FILE, SPIKE_SYN, RE_OUTCOME_HEAD,
-  outcomeMarker, OUTCOME_SYN, normOutcome, spikeProse, spikeFilled, spikeOutcome, spikeParagraph, validIsoDay,
-  spikeTimebox, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeSeed, spikeDoctor, spikeNextAction,
-  spikeFinish, __link };
+module.exports = { DECISIONS_FILE, DECISION_TITLE_MAX, decisionLog, retiredDecisions, safeSpecText, appendSpecText,
+  decisionEntryLines, decide, decisionsTrace, affectsWarnings, decisionDoctorChecks, briefDecisions, decisionSummaryLines,
+  catalogDecisions, exportAdr, SPIKE_FILE, validIsoDay, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeDoctor,
+  spikeNextAction, spikeFinish, __link };

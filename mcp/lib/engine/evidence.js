@@ -12,13 +12,13 @@ const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs, existingFeature,
-  extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest, isBacktickUnit,
+  extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, headRest, isBacktickUnit,
   isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, readIfExists, readRoadmap, realPathLoose,
   readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers, taskProse, timeOf, tKey, toPosix,
   traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps;
 let dayOf; // core.js — 1.25.1: the local calendar date (today / dayOf)
 function __link(E) { ({ dayOf, featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
-  existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest,
+  existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, headRest,
   isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, realPathLoose,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
   taskProse, timeOf, tKey, toPosix, traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps } = E); }
@@ -313,8 +313,6 @@ function commandsCoverVerify(run, keys) {
   }
   return reach[n * size + full] === 1;
 }
-// Two commands with the same proofKey (from the same project root) are one command to the evidence gate.
-const proofKey = (cmd, root) => JSON.stringify(proofCommands(proofSteps(cmd), proofBase(root)));
 // 1.25.1 (review 7) — a command no shell runs as written: a `&&`, `||`, `|` or `|&` with no command after it (`npm test &&`,
 // `npm test |`) or none before it (`&& npm test`, `a; || b`), or right after another one (`a && && b`, `a | ; b`). proofSteps drops
 // the empty step, so a REPORTED `npm test &&` read as a run of `npm test`: runProvesVerify now refuses it (it proves no _Verify:_).
@@ -864,8 +862,6 @@ function verifyPipeMasked(cmd) {
 const POSIX_SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "fish"]);
 const PWSH_SHELLS = new Set(["pwsh", "powershell"]);
 const SHELL_WRAPPERS = new Set(["env", "command", "exec", "nohup", "time", "busybox", "wsl", "sudo", "doas", "nice", "ionice", "timeout", "setsid", "stdbuf"]);
-// every wrapper option that takes a value (per wrapper: WRAPPER_OPTION_VALUES — wrapperStep reads that)
-const WRAPPER_ARG_OPTS = new Set([...WRAPPER_OPTION_VALUES.values()].flat());
 // Split a command line into words and operators the way a shell reads it — enough to find pipes, `set` and shell scripts.
 // A word keeps its unquoted value `v` and its spelling as written (`raw`, quotes and escapes included — programName reads it).
 function lexShell(s) {
@@ -2091,24 +2087,14 @@ function untickedSince(evidence, block, dup, reason) {
   return isRecord(own) && own.stale === true && own.staleBy === "undo";
 }
 
-module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isRecord, evidenceRecords, ownRecord, movedEvidence,
-  ownEvidence, taskEvidenceIssue, taskVerification, EVIDENCE_HISTORY, EVIDENCE_OTHERS, recordEvidence, storeEvidence,
-  runOf, stateEvidence, verificationStatus, RE_COUNT_KW, RE_COUNT_LINE, RE_ANSI, stripAnsi, RE_CARET_LINE, RE_SYNTAX_ERROR_LINE, summarizeRunOutput,
-  RE_CMD_SHELL_FAILURE, windowsShellFailure, RE_WSL_LAUNCHER_DIR, isWslLauncher, PWSH_RUN_ARGS, RE_PWSH_PROGRAM,
-  isPwshShell, isPosixShellName, resolveRunShell, PWSH_VALUE_OPTS, PWSH_VALUE_ALIASES, RE_PWSH_COMMAND_OPT, pwshOption,
-  pwshTracker, WRAPPER_OPTION_VALUES, WRAPPER_POSITIONALS, wrapperStep, posixShellSyntax, POSIX_DQ_ESCAPES, posixPwshScript,
-  posixPwshScan,
-  verifyPipeMasked, RE_CMD_CONTROL, commandHasControl, controlVisible, verifyControls, POSIX_SHELLS, PWSH_SHELLS, SHELL_WRAPPERS, WRAPPER_ARG_OPTS, lexShell, programName, setPipefail,
-  shellScript, pipeMaskedIn, verifyPipes, expectsFail, unknownExpectValues, CANT_RUN_EXIT, CANT_RUN_OUTPUT, RE_ASSERTION_RAN,
-  RE_PESTER_FAILED, RE_PESTER_NOT_RUN, pesterRan, couldNotRunOutput, VACUOUS_OUTPUT, RE_TESTS_RAN, vacuousRun, RE_PWSH_PARSE_FAILURE, pwshParseFailure, runsPwsh,
-  cantRunRecord, CRASH_EXIT, crashExit, isRedRun, redProof, CMD_RULE, legacyRedRun, expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps,
-  gitEvidence, OBSERVED_LOG, OBSERVED_MAX_BYTES, OBSERVED_WINDOW_MS, OBSERVED_MAX_COMMAND, OBSERVED_MAX_FEATURES,
-  EVIDENCE_MODES, evidenceMode, evidenceSince, evidenceRule, evidenceModeInput, setEvidenceMode,
-  observedLogFile, readObservedLog, observedRun, observedAny, observedStamp, RE_CD_STRIP, stripCdPrefix, runRootStamp, gitCommonDir, specsProjectOf,
-  RE_PLAIN_ARG, RE_PROOF_CD, RE_PROOF_PIPEFAIL, RE_PROOF_ENV, PROOF_MAX_STEPS, PROOF_MAX_KEYS, unquotePlainArgs, splitAndSteps,
-  proofSteps, proofSubstAt, proofSubstEnd, proofUnwrapCode, parseProofDir, joinProofDir, RE_PROOF_OPAQUE_DIR, cdInto, proofBase,
-  proofFolderKey, proofCommands, proofCommandIs, commandsCoverVerify, proofKey, proofIncomplete, runProvesVerify, observedProof,
-  observeRun, observedNorm, RE_OBSERVED_ENV, observedBodies, observedKey, proofPlainParts, appendObserved, trimObservedLog, lastTaskActivity, CHECK_NAME_RE, CHECKS_MAX, validCheckName,
-  validCheckCmd, projectChecks, checksInput, checksPlanError, writeChecks, recordFinishChecks, suiteStatus,
-  suiteCodeStamp, runStartStamp, runStartOf, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, GITLOG_MAX_COMMITS, parseGitLog,
-  taskCommits, unverifiedLabel, specChangedSince, untickedSince, __link };
+module.exports = { normalizeEvidence, taskStamp, isRecord, evidenceRecords, ownRecord, movedEvidence, ownEvidence,
+  taskVerification, EVIDENCE_HISTORY, EVIDENCE_OTHERS, storeEvidence, stateEvidence, verificationStatus, RE_ANSI,
+  summarizeRunOutput, windowsShellFailure, isWslLauncher, isPwshShell, resolveRunShell, pwshOption, posixShellSyntax,
+  posixPwshScript, verifyPipeMasked, commandHasControl, controlVisible, verifyControls, verifyPipes, expectsFail,
+  unknownExpectValues, CANT_RUN_OUTPUT, RE_ASSERTION_RAN, RE_PESTER_FAILED, RE_PESTER_NOT_RUN, pesterRan, couldNotRunOutput,
+  vacuousRun, RE_PWSH_PARSE_FAILURE, pwshParseFailure, runsPwsh, crashExit, isRedRun, redProof, expectFailRun,
+  expectFailRefusal, expectFailResult, gitEvidence, OBSERVED_MAX_BYTES, evidenceMode, evidenceRule, evidenceModeInput,
+  setEvidenceMode, observedRun, observedAny, observedStamp, stripCdPrefix, runRootStamp, proofIncomplete, runProvesVerify,
+  observeRun, observedNorm, observedBodies, projectChecks, checksInput, checksPlanError, writeChecks, recordFinishChecks,
+  suiteStatus, runStartStamp, runStartOf, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, parseGitLog, taskCommits,
+  unverifiedLabel, specChangedSince, untickedSince, __link };

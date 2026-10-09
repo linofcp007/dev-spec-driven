@@ -12,25 +12,25 @@ const path = require("path");
 const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders, clarificationMarkers,
+let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clarificationMarkers,
   criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs, featureLang, ghostMarkers,
   headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord, markerTracks, normalizeLang,
   OPTIONAL_TRACKS, packDesignBlock, packOf, packRegistry, packRequirementsBlock, packTracks, placeholderReport,
   projectLang, RE_EDGE_CASES, RE_INDEPENDENT_TEST, RE_LIST_ITEM, RE_NFR, RE_OUT_OF_SCOPE, RE_SUCCESS_CRITERIA,
   RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile, replaceHtmlCommentSpans,
-  savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter, stripEnd, stripEnds,
+  savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter, stripEnds,
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs;
-function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders,
+function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
   markerTracks, normalizeLang, OPTIONAL_TRACKS, packDesignBlock, packOf, packRegistry, packRequirementsBlock,
   packTracks, placeholderReport, projectLang, RE_EDGE_CASES, RE_INDEPENDENT_TEST, RE_LIST_ITEM, RE_NFR, RE_OUT_OF_SCOPE,
   RE_SUCCESS_CRITERIA, RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile,
   replaceHtmlCommentSpans, savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter,
-  stripEnd, stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
+  stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs } = E); }
@@ -783,11 +783,7 @@ const DESIGN_WEIGH_STAMPS = { weigh: "1.17", reuse: "1.19" };
 // of … e / ou / de … y / o / en …) — never a modifier: "## Risk-based rate limiting", "## Options parser", "## Riskiest
 // assumptions" are other sections. Trailing emphasis, emoji or closing #s are fine (no letter or digit after the synonym).
 const RE_WEIGH_HEADING_REST = /^(?:[^\p{L}\p{N}]*$|\s*[:,;(\[/&+|—–.]|\s+-(?=\s|$)|\s+(?:and|or|vs|versus|for|of|to|in|on|per|with|e|ou|de|do|da|dos|das|para|por|em|no|na|com|y|o|u|del|en|con)(?![\p{L}\p{N}]))/u;
-function weighHeadingMatches(line, syns) {
-  const m = atxHeading(line, 2, 6, "raw"); // /^#{2,6}\s+(.*)$/ — never the H1 title (it carries the feature name)
-  return !!m && weighTextMatches(m.text, syns);
-}
-// The same test on a heading's text (a headingEntries entry — ATX or setext; the caller keeps the H1 out).
+// The test on a heading's text (a headingEntries entry — ATX or setext; the caller keeps the H1 out).
 function weighTextMatches(text, syns) {
   let t = String(text).toLowerCase();
   const lead = headingLeadRe();
@@ -849,7 +845,6 @@ function designBody(body) {
   const listed = top <= 3 ? items.filter((n) => n < top + 2).length : 0;
   return { entries: Math.max(rows + listed, heads), proseWords, generic };
 }
-const designEntries = (body) => designBody(body).entries;
 // A trade-offs section with no option list passes on a written paragraph of at least this many words: the options weighed in
 // prose, or the honest "No key decision here: the feature only reads existing data" (A review 6 — the escape Risks has).
 const WEIGH_PROSE_WORDS = 3;
@@ -904,9 +899,6 @@ function designWeighChecks(design, lang, opts = {}) {
     return { id, status: st.status === "filled" ? "pass" : "warn", detail, state: st.status, entries: st.entries };
   });
 }
-// A design approval made before 1.17 (A review 3): an approval record without the `weigh` stamp approvePhase adds since 1.17.
-// With a stamp name (R1): made before that stamp's check existed — `reuse` for the 1.19 design-reuse check.
-const designApprovedBeforeWeigh = (approvals, stamp = "weigh") => isRecord(approvals && approvals.design) && approvals.design[stamp] !== true;
 
 // 1.19 R2 — the task brief's "Reuse" section: search before you write, starting where the plan points. Two bounded parts:
 // the design's Reuse & Integration entries that name this task's files (the file, a sibling in its folder, a folder above it),
@@ -1379,21 +1371,6 @@ function clarifyChange(projectDir, f, c) {
   return clarifyResult(projectDir, f, tracks, fm, add, questions, null);
 }
 
-module.exports = { XAC_DUPLICATE, XAC_CONFLICT, XAC_TRIGGER, XAC_RESPONSE, XAC_MIN_WORDS, XAC_MAX_CRITERIA,
-  XAC_MAX_COMPARISONS, XAC_MAX_PAIRS, XAC_STOP, XAC_MODALS, RE_XAC_SYS_MODAL, RE_XAC_MODAL, XAC_TRIGGER_NEG, RE_XAC_NT,
-  RE_XAC_CANNOT, RE_XAC_NEG, RE_XAC_IDS, xacNumber, xacStem, xacWords, RE_XAC_NUM, xacNumbers, acShape, xacClauseSim,
-  xacOpposed, acSkeleton, templateShapeTable, builtinTemplateAcs, projectTemplateAcs, jaccard, XAC_FEATURE_CACHE,
-  XAC_FEATURE_CACHE_MAX, XAC_RACY_MS, xacStatSig, xacContextSig, xacFeatureRows, xacTable, crossFeatureAcs,
-  crossFeatureAcsOf, comparePair, crossAcItem, crossAcDoctorDetail, renderCrossAcsMd, GLOSSARY_FILE,
-  GLOSSARY_MAX_ENTRIES, GLOSSARY_MAX_AVOID, GLOSSARY_MAX_HITS, GLOSSARY_BRIEF_MAX, GLOSSARY_BRIEF_CHARS,
-  RE_GLOSSARY_ITEM, escRe, foldTerm, glossaryEntries, glossaryEntry, RE_WORD_BEFORE, RE_WORD_AFTER, wordListRe,
-  GLOSS_TEMPLATE_LINES, glossLineKey, glossPatternSegs, glossVisibleLines, glossAddLines, glossNewSet,
-  glossBuiltinLines, glossProjectLines, glossSpans, glossUserParts, glossaryHits, briefGlossary, TRADEOFFS_SYN,
-  RISKS_SYN, DESIGN_WEIGH, DESIGN_WEIGH_IDS, RE_WEIGH_HEADING_REST, weighHeadingMatches, weighSection, weighSectionHead, genericUnit,
-  designBody, designEntries, WEIGH_PROSE_WORDS, designWeighState, designWeighChecks, designApprovedBeforeWeigh,
-  REUSE_SYN, WEIGH_MERGED_SYN, DESIGN_WEIGH_STAMPS, designReuseFallback, BRIEF_REUSE_MAX_ENTRIES, BRIEF_REUSE_CHARS, BRIEF_REUSE_MAX_FILES,
-  BRIEF_REUSE_MAX_DIRS, BRIEF_REUSE_DIR_ENTRIES, RE_REUSE_PATH, reuseUnits, reuseInsideRel, reuseProbe, reuseTargets, reuseEntryMatches,
-  readDirBounded, reuseNearbyFiles, reuseQuotedSection, briefReuse,
-  RE_RATE_LIMIT, RE_ACCESS_DENIED, RE_SUBJECT_RIGHTS, CONSTRAINT_KINDS, CONSTRAINT_SIGNALS, CONSTRAINT_RE,
-  constraintSignalRe, RE_CONSISTENCY_ANSWER, RE_ACID, CONSTRAINT_MAX_WORDS, userSpecText, constraintNudge,
-  RE_DIST_DELIVERY, RE_DIST_FAILURE, clarify, clarifyResult, CHANGE_SUMMARY_SYN, CHANGE_APPROACH_SYN, clarifyChange, __link };
+module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
+  TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, REUSE_SYN, reuseQuotedSection, briefReuse,
+  clarify, __link };

@@ -276,7 +276,7 @@ const NEGATORS = ["no", "not", "without", "never", "skip", "exclude", "avoid", "
 
 // Words that may sit between a negator and the keyword ("sem uso de IA", "without the use of any LLM").
 const NEG_FILLER = new Set(["uso", "use", "usage", "of", "de", "do", "da", "del", "the", "a", "an", "any", "qualquer", "nenhum", "nenhuma", "ningún", "ninguna", "ningun", "el", "la", "o"]);
-// The English ones — the only fillers a wide "no" may negate across (see isNegated).
+// The English ones — the only fillers a wide "no" may negate across (see negationOf).
 const NEG_FILLER_EN = new Set(["use", "usage", "of", "the", "a", "an", "any"]);
 
 // Phrases that negate a signal shortly AFTER the keyword ("auth is not needed", "auth não é preciso").
@@ -391,19 +391,13 @@ function configuredLang(projectDir, lang) {
   return typeof l === "string" && l.trim() ? normalizeLang(l) : projectDir ? newProjectLang(projectDir) : undefined;
 }
 
-function isNegated(text, idx, kwLen, lang, cased) {
-  return negatedBefore(text, idx, lang, cased) || negatedAfter(text, idx, kwLen);
-}
 // "<keyword> ... not needed/required" shortly after.
 function negatedAfter(text, idx, kwLen) {
   const after = text.slice(idx + (kwLen || 0), idx + (kwLen || 0) + 30).toLowerCase();
   return NEG_AFTER.test(after);
 }
-// A negator BEFORE the match — the negation a coordinated list carries on to its next items (coordinatedNegation).
-function negatedBefore(text, idx, lang, cased) {
-  return negatorBefore(text, idx, lang, cased) !== null;
-}
-// The negator that EXCLUDES the match at idx … end (the word, lower-case) — or null. (1.21 verify N1: only a CERTAIN exclusion —
+// A negator BEFORE the match — the negation a coordinated list carries on to its next items (coordinatedNegation):
+// the negator that EXCLUDES the match at idx … end (the word, lower-case) — or null. (1.21 verify N1: only a CERTAIN exclusion —
 // negationOf; when in doubt the track stays: a track wrongly off loses rigor, an extra one is a one-word removal in Phase 0.)
 function negatorBefore(text, idx, lang, cased, end) {
   const n = negationOf(text, idx, end == null ? idx : end, lang, cased);
@@ -1886,10 +1880,5 @@ function signalOverrides(projectDir, op, opts = {}) {
     lines: [G.setDone(track, word, effect, r.replaced ? r.replaced.effect : null)] });
 }
 
-module.exports = { conceptMap, SIGNAL_CONCEPTS, SIGNAL_HAZARDS, SIGNAL_CUES, NEGATORS, NEG_FILLER, NEG_FILLER_EN, NEG_AFTER,
-  W, PT_STRONG, PT_STRONG_CHARS, PT_WEAK, ES_STRONG, ES_STRONG_CHARS, ES_WEAK, EN_WORDS, CLAUSE_START, INF_WORDS, INF, PT_INF,
-  ES_INF, PTES_INF, ES_NO_INF,
-  guessLang, configuredLang, isNegated, negatedBefore, negatedAfter, coordinatedNegation, listLink, STEMS, VERB_STEMS, IRREGULAR_FORMS,
-  KW_GAP, KW_GAP_RE, INFLECTION, ACRONYM_INFLECTION, ADJ_SUFFIX, KW_RE, pluralize, KW_LITERAL, KW_CACHE_MAX, KW_PLAIN, keywordLiteral,
-  keywordRe, keywordPattern, PATH_HEADS, splitWordPairs, classify, buildReasoning, SIGNAL_FILE, SIGNAL_OVERRIDE_MIN, SIGNAL_OVERRIDE_MAX,
-  SIGNAL_EFFECTS, SIGNAL_OPS, readSignalOverrides, learnSignalOverrides, signalLearnNote, signalOverrides, __link };
+module.exports = { SIGNAL_CONCEPTS, guessLang, configuredLang, classify, learnSignalOverrides, signalLearnNote,
+  signalOverrides, __link };

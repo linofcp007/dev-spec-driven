@@ -248,8 +248,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   INSIDE the project, `.claude/worktrees/<name>` or `.worktrees/<name>`, too: the check ran only for a cd outside the project,
   so its run was read in a folder of the main project and read command-mismatch). The verdict reads
   the stamp, so a record made on another machine (`cd /home/someone/proj/packages/web && …`, root `/home/someone/proj`)
-  proves the same task here. A run field: the merge driver needs no rule for it. `proofKey(cmd, root)` is the resolved
-  commands as one string. Anything else ticks but reads **`command-mismatch`**
+  proves the same task here. A run field: the merge driver needs no rule for it. `proofCommands(proofSteps(cmd), proofBase(root))` are
+  the resolved commands. Anything else ticks but reads **`command-mismatch`**
   (`evidenceGate.commandMismatch`, EN/PT/ES — the note names the command recorded and the `_Verify:_`; with several, all of
   them in one ` && ` run). A run's command is kept up to `OBSERVED_MAX_COMMAND` (4000 — review 2: `normalizeEvidence` and
   the finish runs cut it at 500 BEFORE the comparison, so a faithful long `_Verify:_`, or a join past 500, read

@@ -14,7 +14,7 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText, codeBlockLines, commentLines,
   decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey, duplicateTaskNumbers, evidenceRule,
-  existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, gitEvidence, globFiles, GUARD_CODE_EXT,
+  existingFeature, featureDirs, featureLang, FOLD_CASE, gitEvidence, globFiles, GUARD_CODE_EXT,
   historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord, isCodeFile, isImplementsGlob, isObj, isRecord, isTestFixture,
   isSlashUnit, isTestFile, isWsUnit, readFileHead, testNamed, italic, latestSnapshot, mdCell, mdPlainText, normWs, oneLiner, ownEvidence,
   packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained, readIfExists, readJson, realLines,
@@ -25,7 +25,7 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir, approvedContentSame, wsText, headingEntries;
 function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
   codeBlockLines, commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
-  duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE,
+  duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, FOLD_CASE,
   gitEvidence, globFiles, GUARD_CODE_EXT, historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord,
   isCodeFile, isImplementsGlob, isObj, isRecord, isSlashUnit, isTestFile, isTestFixture, readFileHead, testNamed, isWsUnit, italic, latestSnapshot, mdCell, mdPlainText,
   normWs, oneLiner, ownEvidence, packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained,
@@ -126,12 +126,11 @@ const RE_UBIQUITOUS = new RegExp(B + "(?:THE[^\\S\\n]+(?:[^\\s]+[^\\S\\n]+){1,4}
   "(?:DEVE|DEVEM|DEVER[ÁA]|DEVER[ÃA]O)|(?:EL|LA|LOS|LAS)[^\\S\\n]+(?:[^\\s]+[^\\S\\n]+){1,4}?(?:NO[^\\S\\n]+)?(?:DEBE|DEBEN|DEBER[ÁA]|DEBER[ÁA]N))" + E, "iu");
 // The scaffold's own edge cases / NFRs / success criteria (EC-1, NFR-1, SC-001) are stable IDs too.
 const RE_STABLE_ID = /(?<![A-Za-z0-9])(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
-// …of which a criterion's OWN ID is one trace_check reads: never a bare `AC-n` (RE_BARE_AC — not the AC-n of a US-n.AC-n, nor of
-// an importer's escaped `US-7\.AC-1`: an ID-led line of imported prose, demoted so it defines nothing — review 4).
-// (review 5, L31: never a sub-criterion ID — US-1.AC-1.2 is no US-1.AC-1)
-const RE_FULL_ID = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+(?!\.?\d)|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
+// …of which a criterion's OWN ID is never a bare `AC-n` (RE_BARE_AC — not the AC-n of a US-n.AC-n, nor of an importer's escaped
+// `US-7\.AC-1`: an ID-led line of imported prose, demoted so it defines nothing — review 4).
 const RE_BARE_AC = /(?<![A-Za-z0-9]|US-\d+\\?\.)AC-\d+(?!\d)/;
-// …and the stable IDs a criterion with no label may carry anywhere (EARS's no-id lint): never a T- ID (a test's — review 3).
+// …and the stable IDs a criterion with no label may carry anywhere (EARS's no-id lint): never a T- ID (a test's — review 3), never
+// a sub-criterion ID (review 5, L31 — US-1.AC-1.2 is no US-1.AC-1).
 const RE_FULL_ID_NO_T = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+(?!\.?\d)|EC-\d+|NFR-\d+|SC-\d+)/;
 
 // A unit that DEFINES an AC for the EARS linter (criterionBlocks {acUnits}) — 1.14 full review Pa2: only list items were
@@ -1679,16 +1678,10 @@ function rtmProjectMarkdown(projectDir, lang, features) {
   return [italic(R.projectLegend), "", `| ${R.projectCols.join(" | ")} |`, `|${R.projectCols.map(() => "---").join("|")}|`, ...rows].join("\n");
 }
 
-module.exports = { VAGUE_WORDS, VAGUE_RE, VAGUE_RE_ALL, RE_LIST_ITEM, RE_NUMBERED, RE_BLOCK_BREAK, B, E, RE_MODAL_EN,
-  RE_MODAL_CAPS, RE_MODAL_SYSTEM, RE_LIST_DEFINES_AC, RE_MODAL, RE_MODAL_LOOSE, RE_AC_SHAPE, RE_AC_HEADING,
-  RE_EARS_CAPS, RE_EARS_KEYWORD, RE_UBIQUITOUS, RE_STABLE_ID, RE_FULL_ID, RE_BARE_AC, RE_FULL_ID_NO_T, RE_OWN_LABEL_ID, ownStableId, bareLabel, RE_LEAD_DEFINES_AC, RE_CELL_AC, criterionBlocks,
-  VAGUE_VERB_NEXT, vagueTermsOf, earsFeature, earsUnlinted, earsUnidentified, criteriaBareIds, shortIdList, earsValidate, extractAcIds, RE_SUB_AC, extractTestIds, testIdKeys, taskCitations, traceCheck, TRACE_INFO_FIELDS, TRACE_GAP_ORDER,
-  TRACE_VERDICT_KINDS, TRACE_TASK_KINDS, TRACE_PLAN_KINDS, traceGaps, traceGapLines, TRACE_WARNING_ORDER,
-  TRACE_SECONDARY_KINDS, traceWarnings, traceWarningLines, RE_SECONDARY_ID, RE_SECONDARY_ID_LINE, idKey, secondaryIds,
-  secondaryDefinitions, traceSecondary, testPlanEntries, RE_CODE_TID, CODE_TRACE_CAP, CODE_TRACE_READ_CAP,
-  CODE_TRACE_FILES_PER_ID, isTestCodePath, tKey, specFeatureDirs, scanTestCode,
-  allPlannedTestKeys, RE_FILE_COLUMN, pathUnder, pathNames, scannableTestPath, nonCodeArtifactPath, codePathToken,
-  planFileScopes, fileCellTokens, outsideCodeTemplates, otherPlanTestFiles, traceTestCode, RTM_STATUSES, RTM_KIND_ORDER,
-  RTM_TEXT_MAX, acNums, supersededByIndex, shippedSupersedeKeys, featureShipped, rtmEvidence, buildTraceMatrix,
-  traceMatrix, RE_CSV_FORMULA, csvCell, csvRecord, RTM_CSV_COLS, rtmTaskWords, rtmEvidenceWords, matrixCsv, RTM_ICON,
-  rtmCell, rtmTextCell, rtmMarkdown, rtmProjectMarkdown, __link };
+module.exports = { RE_LIST_ITEM, B, E, RE_MODAL, RE_EARS_KEYWORD, RE_BARE_AC, bareLabel, criterionBlocks, earsFeature,
+  earsUnlinted, earsUnidentified, criteriaBareIds, shortIdList, earsValidate, extractAcIds, extractTestIds, traceCheck,
+  TRACE_INFO_FIELDS, TRACE_VERDICT_KINDS, TRACE_TASK_KINDS, TRACE_PLAN_KINDS, traceGaps, traceGapLines,
+  TRACE_SECONDARY_KINDS, traceWarningLines, idKey, secondaryIds, secondaryDefinitions, testPlanEntries, RE_CODE_TID,
+  isTestCodePath, tKey, scanTestCode, planFileScopes, outsideCodeTemplates, traceTestCode, RTM_STATUSES, supersededByIndex,
+  shippedSupersedeKeys, featureShipped, buildTraceMatrix, traceMatrix, csvCell, csvRecord, matrixCsv, rtmMarkdown,
+  rtmProjectMarkdown, __link };

@@ -14,13 +14,13 @@ const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, extractTestIds, headingIndex,
-  isInsideDir, isObj, MARKER_TRACKS, normalizeLang, parseTasks, planIdText, projectLang, PROTO_KEYS, RE_CUSTOM_STEERING,
+  isInsideDir, isObj, MARKER_TRACKS, normalizeLang, planIdText, projectLang, PROTO_KEYS, RE_CUSTOM_STEERING,
   RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, readJson,
   requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, synonymsOverlap, stripHtmlComments, taskDescription, templateBracketKeys,
   templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING, trackAcIds, trackMarker,
   trackTaskHeading, VALID_TRACKS, writeIfAbsent, nextTaskNumber;
 function __link(E) { ({ acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, extractTestIds,
-  headingIndex, isInsideDir, isObj, MARKER_TRACKS, normalizeLang, parseTasks, planIdText, projectLang, PROTO_KEYS,
+  headingIndex, isInsideDir, isObj, MARKER_TRACKS, normalizeLang, planIdText, projectLang, PROTO_KEYS,
   RE_CUSTOM_STEERING, RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists,
   readJson, requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, synonymsOverlap, stripHtmlComments, taskDescription,
   templateBracketKeys, templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING,
@@ -980,14 +980,8 @@ function initTrackPack(projectDir, name, lang, lng) {
   return { ok: true, action: "init", name: n, marker: "[" + token + "]", dir, lang: lng, created, kept, lines };
 }
 
-module.exports = { TRACK_PACKS_DIR, PACK_JSON, PACK_FRAGMENTS, PACK_LIMITS, RE_PACK_NAME, RE_PACK_MARKER,
-  RE_PACK_MARKER_RESERVED, RE_PACK_KEYWORD, PACK_KEYS, PACK_SECTION_KEYS, PACK_TIERS, PACK_RESERVED_WORDS,
-  packReservedName, RE_PACK_ITEM, RE_TABLE_SEPARATOR, packTextOk, packGuidanceOk, stripJsonComments, packScan,
-  readPackItem, packListItems, packTableRows, RE_PACK_VAR, RE_PACK_GUIDANCE_VAR, packSectionKey, coreDesignHeadingKeys,
-  packVarRefs, parsePackFragment, packLocalized, PACK_CACHE, loadPack, loadPackScan, loadTrackPacks, NO_PACKS,
-  packRegistry, packTracks, packOf, isPackTrack, isPackMarkerBracket, packMarkersFor, noteGhostPacks, ghostMarkers,
-  savedPackName, legacyPackName, legacyPackMarkerTrack, TRACK_RESERVED_SINCE, packReservedSince, missingPackTracks,
-  packLocal, packTitle, packFragment, packSubst, packCtx, packSubstBasic, packDesignBlock, packRequirementsBlock,
-  insertPackRequirements, packPlanRows, packTaskBlock, packTestRowsBlock, packChecklistBlock, packSteeringStub,
-  trackSteeringStub, RE_PACK_WILD_VAR, RE_PACK_WILD_VAR_G, PACK_CORPUS_CACHE, packCorpusSets, localizePackProblem,
-  trackPacks, listTrackPacks, checkTrackPacks, initTrackPack, __link };
+module.exports = { PACK_LIMITS, RE_PACK_MARKER_RESERVED, RE_PACK_KEYWORD, packTableRows, packRegistry, packTracks, packOf,
+  isPackTrack, isPackMarkerBracket, packMarkersFor, noteGhostPacks, ghostMarkers, savedPackName, legacyPackName,
+  legacyPackMarkerTrack, packReservedSince, missingPackTracks, packTitle, packDesignBlock, packRequirementsBlock,
+  insertPackRequirements, packTaskBlock, packTestRowsBlock, packChecklistBlock, trackSteeringStub, packCorpusSets,
+  trackPacks, __link };

@@ -66,7 +66,7 @@ nudge, the TDD micro-cycle.
   `weigh` + ▲ notes (never unclean — kept for a pre-1.17 approval too: an edit means a re-approval, which asks); `templates
   check` warns `tradeoffs-missing` / `risks-missing`. No artifact is ever edited.
 - **Pre-1.17 approvals are never flagged (review 3).** `approvePhase` stamps `weigh: true` on a design approval (and its
-  history record) since 1.17; `designApprovedBeforeWeigh(approvals)` = an approvals.design without it. Then doctor turns
+  history record) since 1.17; an approvals.design without it (`designWeighChecks`' `opts.approval`) predates it. Then doctor turns
   what would warn into a PASS whose detail says so (`designWeigh.legacyApproval`): only a design not approved yet, or
   approved by 1.17+, is warned — a finished feature following the advice would re-open re-review, changed-since-approval,
   a stale finish and the execution sign-off (the 1.16 `steering` precedent). spec_upgrade lists the two ids under
@@ -141,7 +141,7 @@ nudge, the TDD micro-cycle.
   services / helpers, Integration points, Integration with the existing system / code, PT Reutilização / Reaproveitamento /
   Reúso / Componentes existentes / Pontos de integração / Integração com o sistema existente, ES Reutilización /
   Aprovechamiento / Componentes existentes / Puntos de integración / Integración con el sistema existente… — never a bare
-  "Integration" or "Existing" (the heading must NAME the section: `weighHeadingMatches`). **Brownfield:** when the design's
+  "Integration" or "Existing" (the heading must NAME the section: `weighTextMatches`). **Brownfield:** when the design's
   section is missing or empty and `integration-plan.md` → Integration Points (a REUSE_SYN heading) is filled, the check passes
   with state `integration` (`designReuseFallback`); a template section still warns.
 - **The stamp scheme** — `approvePhase` stamps a design approval (and its history record) `weigh: true` (1.17) AND `reuse:

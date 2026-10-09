@@ -139,6 +139,21 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   module's private cache is a `let` WITH an initializer (`= null`, `= undefined`), so it never reads as a linked name.
   mcp/test.js ("1.18 module rule") checks all of it from the sources, plus the load-time graph (acyclic, every engine →
   engine / i18n → i18n require marked `// load time`) and that every module in `MODULES` is loaded.
+- **Exports — only what crosses the module's boundary (1.27).** A module's `module.exports` lists the names something
+  OUTSIDE it uses: another engine module (in its `let` list and `__link`, or a `// load time` require), the facade (`spec.js`
+  takes it from the engine), a surface (mcp/server.js, prompts-resources.js, the CLI, the hooks, scripts/ — build.js renders
+  the corpus and the stop-claim filter from `E` — and the eval harness) or a test that reaches an internal through the engine
+  (`require("./lib/engine/index.js").x`, or a script a test runs). Everything else is private to the module: a top-level
+  `function` / `const` only it calls, never exported — so `E` holds the engine's cross-module surface alone (856 names in 1.27;
+  2,083 before, 1,214 of them exported and used only inside their own module) and no name gets linked by accident. A module
+  links only the names its code uses. To call another module's helper: export it from the module that owns it, add it to your
+  `let` list and `__link`. When its last outside user goes: drop it from `module.exports` (an unused link from the `let` list and
+  `__link`). mcp/test.js ("1.27 module boundaries", mcp/tests/16-conventions.js) checks it from the sources with a small
+  zero-dependency scanner (code told from comments, strings, template and regex literals): (a) every linked name is used in the
+  module's code; (b) every exported name is used outside it — linked or required at load time by another module, taken by the
+  facade, read by a surface or a test (its code, or a string it runs); (c) every facade key is read by a surface or a test, and
+  every engine name the facade takes is used in it. An export kept with no outside use goes into that test's `EXPORT_ALLOW`
+  with its reason (none today). The facade keys only tests read (80 in 1.27) stay: the tests drive the engine through them.
 - **Shared mutable state lives in `engine/ctx.js`:** ONE object, `CTX`, mutated in place and never re-bound (a destructured
   copy would go stale) — the read cache and everything else one engine call scopes (`CTX.READ_CACHE`, `CTX.GLOB_CACHE`,
   `CTX.XAC_MEMO`, `CTX.TEMPLATE_SCOPE_ROOT`, `CTX.TEMPLATE_MEMO`, `CTX.PACK_MEMO`, `CTX.GHOST_MARKERS`, reset by

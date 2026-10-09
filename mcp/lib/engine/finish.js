@@ -19,7 +19,7 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir, errs,
   evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs, featureFlow,
   featureLang, featurePercent, featureShipped, featureVelocity, findCycle, FOLD_CASE, forcedApprovalList, forecastInput,
-  forgetCached, globFiles, implementsPath, implementsRefs, invalidateReadCache, isApprovalRecord, isBacktickUnit,
+  globFiles, implementsPath, implementsRefs, invalidateReadCache, isApprovalRecord, isBacktickUnit,
   isDirSafe, isFeatureFolder, isGeneratedOrAbsent, isImplementsGlob, isInsideDir, isObj, isRecord, isRedRun,
   legacySlugify, listFeatures, locateFeatures, LOCK_FILE, maybeRefreshRoadmap, milestonesFollow, moveDirOrBusy,
   normalizeLang, ownEvidence, parseTasks, pendingGateList, PHASES, placeholderReport, placeholderSummary, planIdText,
@@ -37,7 +37,7 @@ function __link(E) { ({ today, dayOf, acIndex, activeDesign, activeTasks, artifa
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
   featureFlow, featureLang, featurePercent, featureShipped, featureVelocity, findCycle, FOLD_CASE, forcedApprovalList,
-  forecastInput, forgetCached, globFiles, implementsPath, implementsRefs, invalidateReadCache, isApprovalRecord,
+  forecastInput, globFiles, implementsPath, implementsRefs, invalidateReadCache, isApprovalRecord,
   isBacktickUnit, isDirSafe, isFeatureFolder, isGeneratedOrAbsent, isImplementsGlob, isInsideDir, isObj, isRecord,
   isRedRun, legacySlugify, listFeatures, locateFeatures, LOCK_FILE, maybeRefreshRoadmap, milestonesFollow,
   moveDirOrBusy, normalizeLang, ownEvidence, parseTasks, pendingGateList, PHASES, placeholderReport, placeholderSummary,
@@ -1677,13 +1677,8 @@ function baselineDrift(root, rootReal, fin) {
   return { unchanged, changed, missing, nowPresent, ignored, drifted: changed.length + missing.length + nowPresent.length > 0 };
 }
 
-module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, COMMIT_TITLE_MAX, commitTitle, finishFeature, METRIC_PHASES, timeOf, round1,
-  round2, isoOf, hoursFrom, featureMetrics, stats, metrics, fmtHours, metricsLines, pruneRoadmapRefs, milestoneResult,
-  pruneRoadmapRefsLocked, removeFeature, TOMBSTONE_PREFIX, TOMBSTONE_SWEEP_AGE_MS, sweepTombstones, removeFeatureLocked, featureFolderFingerprint,
-  archiveFeature, archiveFeatureLocked, renameFeature, renameFeatureLocked, renamePlan, renameSupersedesRefs,
-  removePreview, manageFeature, SUP_NL, RE_SUPERSEDES_SRC, RE_SUPERSEDES_OPEN_SRC, stripSupersedes, blockLines, lineMap,
-  criterionAc, supersedesMarkers, dirKey, resolveSupersedes, supersedesTrace, supersedesWarnings, acOneLine,
-  catalogData, renderCatalogMd, catalog, maybeRefreshCatalog, archiveRecord, reinsertDep, archivedFeature,
-  restoreFeature, restoreFeatureLocked, fileHash, projectFile, realRootOf, BASELINE_CAP, baselineFiles,
-  recordFinishBaseline, staleFinish, changesSince, approvalInForceAt, sameApprovedContent, revokedSinceList, executionSignOffStale, signOffWhyText,
-  staleFinishText, drift, baselineDrift, __link };
+module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, commitTitle, finishFeature, timeOf, round1, round2,
+  stats, metrics, metricsLines, removeFeature, archiveFeature, renameFeature, manageFeature, stripSupersedes, blockLines,
+  lineMap, supersedesMarkers, dirKey, resolveSupersedes, supersedesTrace, supersedesWarnings, acOneLine, catalogData,
+  catalog, maybeRefreshCatalog, restoreFeature, fileHash, realRootOf, baselineFiles, recordFinishBaseline, staleFinish,
+  changesSince, sameApprovedContent, executionSignOffStale, signOffWhyText, staleFinishText, drift, baselineDrift, __link };

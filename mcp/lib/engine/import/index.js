@@ -622,6 +622,4 @@ function importRun(projectDir, tool, source, opts) {
   };
 }
 
-module.exports = { IMPORT_TOOLS, IMPORT_MAX_BYTES, TEXT_IMPORT_TOOLS, IMPORT_DOT_ROOTS, IMPORT_SOURCE_EXT, IMPORT_READ_EXT, importHiddenPart, commentInert, inertBlock, RE_IMPORT_TASK_HEAD,
-  replaceRequirementsMarkers, replaceUnderscoreList, importTasks, fitTemplateTasks, C3_PARSERS, DRY_RUN_FILE_CHARS, DRY_RUN_TOTAL_CHARS,
-  importSpec, dryRunResult, importSourceAt, importRun, __link };
+module.exports = { IMPORT_TOOLS, IMPORT_MAX_BYTES, importHiddenPart, importSpec, importSourceAt, __link };

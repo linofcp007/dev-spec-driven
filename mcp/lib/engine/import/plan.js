@@ -621,9 +621,5 @@ function parseExecPlan(dir, read, W, src) {
   return model;
 }
 
-module.exports = { RE_PLAN_CHECKBOX_HEAD, planCheckbox, RE_PLAN_ITEM_HEAD, RE_PLAN_ITEM_BOX, planItem, PLAN_EXT_AMBIGUOUS, PLAN_FILE_EXT,
-  PLAN_NOT_FILES, PLAN_BARE_FILES, planPaths, PLAN_TOKEN_LEAD, PLAN_TOKEN_TRAIL, planTokenTrim, RE_PLAN_RUNNER,
-  RE_PLAN_CHECK, planCommand, planCommandOnly, PLAN_COND, earsFromPlanText, planBlocks, checkboxUnits, markUnit,
-  unitProse, unitCode, planTaskLines, planDone, planHeadingText, planSections, headingUnit, unusedMarkdown,
-  planFrontMatter, singleDoc, planStory, unwrapDocFence, RE_PLAN_CRITERIA, RE_PLAN_STEPS, RE_PLAN_APPROACH,
-  RE_PLAN_SUMMARY, parsePlan, RE_EXEC_SECTION, parseExecPlan, __link };
+module.exports = { PLAN_EXT_AMBIGUOUS, PLAN_FILE_EXT, planPaths, planCommand, planCommandOnly, earsFromPlanText,
+  checkboxUnits, unitProse, planTaskLines, planDone, planHeadingText, planStory, parsePlan, parseExecPlan, __link };

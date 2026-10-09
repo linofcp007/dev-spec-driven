@@ -132,5 +132,4 @@ function parseKiro(dir, read, W) {
   return model;
 }
 
-module.exports = { KIRO_COND, kiroCondMatch, RE_KIRO_REQ_TITLE, RE_KIRO_INTRO, RE_KIRO_REQS, RE_KIRO_STORY_HEAD,
-  kiroStoryHeading, earsFromKiro, parseKiro, __link };
+module.exports = { parseKiro, __link };

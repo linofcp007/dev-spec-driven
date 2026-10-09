@@ -212,11 +212,6 @@ function featureRefTest(dir) {
     return memo.get(slug);
   };
 }
-// The pre-review-3 reading (does the slug name ANOTHER feature?) — kept for its callers.
-function otherFeatureTest(dir) {
-  const k = featureRefTest(dir);
-  return (slug) => k(slug) === "other";
-}
 // Review 3 — the ID that LABELS a criterion: the one that leads it (after a heading mark, a list marker, a checkbox, an emphasis /
 // bracket opener — `- **US-1.AC-1** — WHEN …`, `1. NFR-2: THE SYSTEM SHALL …`, `### US-1.AC-3: …`, `- [ ] (EC-1) IF …`), with the
 // token before a slash in front of it (`login/US-1.AC-1`, `P1/US-1.AC-1`); for a table row with no lead label, its cell that is
@@ -1468,18 +1463,14 @@ function builtinTemplateReqs() {
   return (TEMPLATE_REQS = i18n.LANGS.flatMap((l) => (Object.prototype.hasOwnProperty.call(by, l) ? by[l] : []).map((t) => [t, l])));
 }
 
-module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLines, requirementAcIds, stripForeignAcRefs, RE_NOT_A_SLUG, RE_ID_TOKEN_END,
-  notASlug, featureRefTest, RE_LEAD_LABEL, RE_CELL_LABEL, criterionLabel, criterionLabelIds,
-  otherFeatureTest, featureProjectDir, planIdText, clarificationMarkers,
-  templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
-  headingEntries, headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, headingTextMatches, synonymsOverlap, sectionOverlaps, extractSection,
-  sectionContent, writtenContent, genericAnswer, lineAnswers, isTableSep, SLOT_MAX, bracketCloser, mermaidBlocks, mermaidState,
-  RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionLineKey, sectionOwnLines, RE_NA_LEAD, NA_REASON_WORDS, naAnswer,
-  trackSectionReport, sectionVerdict, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
-  RE_LIST_CHECKBOX, placeholderKey, isGenericSlot, unknownSteeringStub, LEGACY_TEMPLATE_PLACEHOLDERS, templateCorpus,
-  templateBracketKeys, templateSets, templateSetsBr, CORPUS_FILE, CORPUS_SOURCES, corpusSourcesHash, renderCorpusData,
-  builtinCorpusSource, builtinTaskHeadings, isTemplatePlaceholder, isCodeSlot, visibleLines, placeholderReport,
-  bracketPlaceholders, scanBrackets, artifactState, headingsOnly, RE_MANUAL_VERIFY, artifactReport, featurePlaceholders,
-  placeholderSummary, chainPlaceholders, hasProseOutsideBrackets, bugPlaceholders, RE_TODO_SENTINEL_LINE,
-  bugTemplateSlots, renderBugSlots, renderSectionLines, renderTemplateDiagrams, templateDiagramSet, renderSteeringStubs, isSteeringStub,
+module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLines, requirementAcIds, stripForeignAcRefs,
+  notASlug, featureRefTest, criterionLabel, planIdText, clarificationMarkers, templateTaskSet, bugStepSet, isBugStep,
+  isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells, headingEntries, headingIndex,
+  RE_HEADING_LEAD, headingLeadRe, headingMatches, synonymsOverlap, sectionOverlaps, extractSection, genericAnswer,
+  mermaidState, RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionOwnLines, trackSectionReport,
+  sectionVerdict, isGenericSlot, unknownSteeringStub, templateCorpus, templateBracketKeys, templateSets, templateSetsBr,
+  CORPUS_FILE, CORPUS_SOURCES, corpusSourcesHash, renderCorpusData, builtinCorpusSource, builtinTaskHeadings,
+  isTemplatePlaceholder, placeholderReport, bracketPlaceholders, artifactState, headingsOnly, artifactReport,
+  featurePlaceholders, placeholderSummary, chainPlaceholders, hasProseOutsideBrackets, bugPlaceholders, bugTemplateSlots,
+  renderBugSlots, renderSectionLines, renderTemplateDiagrams, templateDiagramSet, renderSteeringStubs, isSteeringStub,
   renderTemplateReqs, builtinTemplateReqs, __link };

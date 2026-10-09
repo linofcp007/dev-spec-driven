@@ -1169,15 +1169,10 @@ function isNetworkPath(p) {
   return host !== "wsl$" && host !== "wsl.localhost";
 }
 
-module.exports = { resolveProjectDir, unexpandedVar, expandHome, nearestProject, specsRoot, ensureDir, withDryRun, isDryRun, dryRunRefused, dryWrites, dryPut,
-  dryEntry, dryListing, readDirDisk, mkdirp, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
-  writeFileAtomic, specWrite, removeSpecFile, removeEmptySpecDir, GATE_CODES, specsRootOf, realSpecsRoot, specsWriteBlock, gateRel, gateMessage, specsGateError,
-  specsWriteGate, gateRefusal, featureLangSafe, SLEEP_CELL, sleepSync, LOCK_FILE, LOCK_WAIT_MS, LOCK_STALE_MS, LOCK_MAX_HOLD_MS, LOCK_RECLAIM_SUFFIX,
-  LOCK_RECLAIM_STALE_MS, LOCK_NOTELESS_STALE_MS, LOCK_NESTED_MIN_MS, HELD_LOCKS, lockSnapshot, sameLockSnapshot,
-  staleLock, reclaimStaleLock, releaseLock, lockWaitMs, withFeatureLock, withLockFile, acquireLockFile, featureLocked,
-  featureBusyResult, withMoveLock, DIR_RENAME_RETRY_MS, renameDirSync, removeLinkEntry, moveDirOrBusy, ROADMAP_LOCK_FILE,
-  LOCK_IGNORE_LINES, ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel,
-  shapeError, withReadCache, readCacheKey, EXISTS_KEY, DIR_KEY, CONTAINED_KEY, specsFileContained,
-  specsFileContainedNow, specsWriteContained, readContained, readIfExists, readFileHead, readRaw, decodeText, existsCached, existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, globWalkReaches,
-  invalidateReadCache, safeReaddir, withinRoot, isDirSafe, FOLD_CASE, toPosix, isInsideDir, realPathLoose, plainUnc,
-  networkPathInside, insideDirAlias, isNetworkPath, __link };
+module.exports = { resolveProjectDir, unexpandedVar, expandHome, specsRoot, ensureDir, withDryRun, isDryRun, writeIfAbsent,
+  writeFileAtomic, specWrite, removeSpecFile, removeEmptySpecDir, specsWriteBlock, gateRefusal, LOCK_FILE, withFeatureLock,
+  featureLocked, featureBusyResult, withMoveLock, renameDirSync, removeLinkEntry, moveDirOrBusy, LOCK_IGNORE_LINES,
+  ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel, shapeError, withReadCache,
+  readCacheKey, specsFileContained, specsWriteContained, readContained, readIfExists, readFileHead, decodeText, existsCached,
+  existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, invalidateReadCache, safeReaddir, withinRoot, isDirSafe,
+  FOLD_CASE, toPosix, isInsideDir, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, __link };

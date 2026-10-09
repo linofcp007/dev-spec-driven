@@ -291,7 +291,7 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   (hooks/precommit-check.js: the root's `.specs/` and every nested one a staged path names; a generated file that was STAGED is
   `git add`ed again so the commit holds the fresh one — an unstaged one stays unstaged). **The lag and why it is safe:** ROADMAP.md /
   SPECS.md / ROADMAP.html are at most one turn behind the specs (a project another agent tool edits never had the hook). Nothing
-  reads them for a decision: approvals fingerprint a feature's own artifacts (`artifactFingerprint` over requirements / design /
+  reads them for a decision: approvals fingerprint a feature's own artifacts (`textFingerprint` over requirements / design /
   test-plan / tasks… — never a generated file); spec_roadmap, the catalog, next_action, doctor, the status line and the stop gate
   compute from the specs; export.js only asks whether SPECS.md exists; the hooks read ROADMAP.md for its AUTO-GENERATED marker
   only (`isDevSpecProject`). The one reader that served the file — the `specs://roadmap` / `specs://catalog` resources — serves
