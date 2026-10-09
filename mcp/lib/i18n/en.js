@@ -7,7 +7,7 @@
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded, stopLineClaim } = require("./common.js"); // load time
+const { DEV_SPEC, stopLineClaim } = require("./common.js"); // load time
 // The assembled tables and the shared retro.md layout (renderRetro) — call-time use only; mcp/lib/i18n.js links them when it loads this file.
 let BUILD, MSG, renderRetro;
 function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
@@ -301,59 +301,36 @@ Outcomes the feature must achieve — business/UX, not implementation. Quantify 
       ],
     },
   },
-};
-
-// ===========================================================================
-// Artifact builders, one set per language. EN is the canonical reference; since 1.13 its templates are
-// internally consistent (every template AC planned and tasked) — the gates would otherwise flag the scaffold.
-// ===========================================================================
-const build = {
-    classification(a) {
-      const sig = a.signals || { tdd: [], saas: [], ai: [] };
-      const sigLine = (t) =>
-        a.tracks.includes(t)
-          ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[signal]"} — [why it applies]`
-          : null;
-      const signalLines = signalTracks(a.tracks).map(sigLine).filter(Boolean).join("\n") || "- none beyond core";
-      return (
-`# Classification: ${a.name}
-
-## Mode
-Spec
-
-## Active Tracks
-${a.label}
-
-## Signals
-${signalLines}
-
-## Blast Radius
-[What breaks if this is wrong? Who is affected? Recoverable? How fast?]
-${a.tracks.includes("saas") ? "\n## Hot Path?\n[Yes/No — if yes, load-test.md is required.]\n" : ""}${a.tracks.includes("ai") ? "\n## Autonomy Level\n[Advisory | Semi-autonomous | Autonomous]\n" : ""}${a.tracks.includes("saas") || a.tracks.includes("ai") ? "\n## Volume / Cost Projection\n- Launch / 6mo / 2yr: [load, ~$/month]\n" : ""}
-## Compliance Tags
-[GDPR | PCI | HIPAA | SOC2 | none]
-
-${a.summary ? "## Summary\n" + a.summary + "\n" : ""}`
-      );
-    },
-
-    design(a) {
-      const extra = ["tdd", ...MARKER_TRACK_ORDER].filter((t) => a.tracks.includes(t)).map((t) => BUILD.en.trackDesignBlock(t)).join("");
-      if (a.size) return BUILD.en.sizedDesign(a, extra);
-      return (
-`# Design: ${a.name}
-
-## Overview
-[How this integrates with the existing system. Key decisions and rationale.]
-
-## Architecture
+  // classification — its headings and slots; the layout lists a signal line per active track (signalTracks: +tdd, the marker
+  // tracks, then a project's packs) and the Hot Path / Autonomy / Volume sections only with +saas / +ai.
+  classification: {
+    title: (name) => `# Classification: ${name}`,
+    mode: "## Mode\nSpec",
+    activeTracks: "## Active Tracks",
+    signals: "## Signals",
+    signalSlot: "[signal]",
+    whySlot: "[why it applies]",
+    noSignals: "- none beyond core",
+    blastRadius: "## Blast Radius\n[What breaks if this is wrong? Who is affected? Recoverable? How fast?]",
+    hotPath: "## Hot Path?\n[Yes/No — if yes, load-test.md is required.]",
+    autonomy: "## Autonomy Level\n[Advisory | Semi-autonomous | Autonomous]",
+    volume: "## Volume / Cost Projection\n- Launch / 6mo / 2yr: [load, ~$/month]",
+    compliance: "## Compliance Tags\n[GDPR | PCI | HIPAA | SOC2 | none]",
+    summary: "## Summary",
+  },
+  // design — every core section (a heading and its body). The layout picks them by size: no size → the 1.20 design; s → the
+  // three weigh sections merged into `decisions`; m / l → the shorter reuse table, and a core section a track supersedes left out
+  // (CORE_SUPERSEDED_BY). The active tracks' sections (designBlocks) go after Complexity Tracking, then the footer.
+  design: {
+    title: (name) => `# Design: ${name}`,
+    overview: "## Overview\n[How this integrates with the existing system. Key decisions and rationale.]",
+    architecture: `## Architecture
 \`\`\`mermaid
 graph TD
     A[Component] -->|action| B[Component]
     B -->|query| C[(Database)]
-\`\`\`
-
-## Reuse & Integration
+\`\`\``,
+    reuse: `## Reuse & Integration
 <!-- Search before you write (references/code-reuse-and-quality.md): what this feature takes from the codebase before
      it adds anything. One row per unit, with its path. Reuse = an existing module, component, helper or service used
      as is; Extend = an existing unit this feature changes (its callers keep working); New = nothing existing fits —
@@ -364,214 +341,251 @@ graph TD
 | Extend | [existing unit this feature changes] | [its path] | [the change — existing callers keep working] |
 | New | [new unit] | [where it will live] | [why nothing existing fits — what was searched] |
 
-**Module boundaries:** [where the new code lives, what it exposes and what it may import — features depend on shared code, never the reverse]
+**Module boundaries:** [where the new code lives, what it exposes and what it may import — features depend on shared code, never the reverse]`,
+    reuseSized: `## Reuse & Integration
+<!-- Search before you write (references/code-reuse-and-quality.md): what this feature takes from the codebase before
+     it adds anything. One row per unit, with its path — Reuse (used as is), Extend (changed; its callers keep working)
+     or New (nothing existing fits — say what was searched). A greenfield project says so in one line. -->
+| Kind | What | Where (path) | Why / notes |
+|---|---|---|---|
+| [Reuse / Extend / New] | [the unit] | [its path] | [why — for New: what was searched] |
 
-## Alternatives & Trade-offs
+**Module boundaries:** [where the new code lives, what it exposes and what it may import — features depend on shared code, never the reverse]`,
+    decisions: `## Decisions, reuse & risks
+<!-- One short answer each. What this reuses (with its path) — or "nothing to reuse"; the option chosen, the one
+     rejected and why — or "no alternative worth weighing"; what could go wrong and how it is caught — or "no material
+     risk, because X". Blank is not an answer. -->
+- **Reuse:** [existing module or helper reused, with its path — or nothing to reuse]
+- **Decision:** [the option chosen, the one rejected and why]
+- **Risk:** [what could go wrong and how it is caught — or no material risk, because …]`,
+    alternatives: `## Alternatives & Trade-offs
 <!-- The options weighed for each key decision — e.g. strong vs eventual consistency, monolith vs service, sync vs
      async, optimistic vs pessimistic locking. At least two per decision (one option alone was never weighed), what
      choosing wrong would cost, the one chosen and why. One row per option. -->
 | Decision | Option | Pros | Cons | Cost if wrong | Chosen |
 |---|---|---|---|---|---|
 | [key decision] | [option A] | [pros] | [cons] | [cost of being wrong] | [✓ — why] |
-| [key decision] | [option B] | [pros] | [cons] | [cost of being wrong] | [✗ — why not] |
-
-## Data Models
+| [key decision] | [option B] | [pros] | [cons] | [cost of being wrong] | [✗ — why not] |`,
+    dataModels: `## Data Models
 \`\`\`typescript
 interface Entity {
   id: string;
   // fields with comments explaining purpose
 }
-\`\`\`
-
-## API Contracts
+\`\`\``,
+    apiContracts: `## API Contracts
 ### POST /api/resource
 - **Request:** \`{ field: type }\`
 - **Response (200):** \`{ field: type }\`
-- **Errors:** 400 (validation), 401 (auth), 404 (not found)
-
-## Security Considerations
-[Auth, validation, data exposure risks]
-
-## Error Handling
-[Strategy per failure mode from requirements]
-
-## Testing Strategy
-- Unit / Integration / E2E: [what each covers]
-
-## Risks
+- **Errors:** 400 (validation), 401 (auth), 404 (not found)`,
+    security: "## Security Considerations\n[Auth, validation, data exposure risks]",
+    errorHandling: "## Error Handling\n[Strategy per failure mode from requirements]",
+    errorHandlingSized: `## Error Handling
+Each IF…THEN criterion in requirements.md already names a failure and its recovery — add here only what spans them (retries, fallbacks, the messages users see), or leave it at that.`,
+    testing: "## Testing Strategy\n- Unit / Integration / E2E: [what each covers]",
+    risks: `## Risks
 <!-- What could make this design wrong or the delivery late — technical, delivery, data, business. One row per risk;
      an honest "no material risk, because X" is fine — blank is not. -->
 | Risk | Likelihood | Impact | Mitigation | Owner |
 |---|---|---|---|---|
-| [what could go wrong] | [low / medium / high] | [low / medium / high] | [how we prevent or detect it] | [who watches it] |
-
-## Constitution Check
+| [what could go wrong] | [low / medium / high] | [low / medium / high] | [how we prevent or detect it] | [who watches it] |`,
+    constitution: `## Constitution Check
 Verify this design against each principle in \`steering/constitution.md\`. GATE: must pass before
 implementation; re-check after any design change.
 - [ ] [Principle 1] — complies
 - [ ] [Principle 2] — complies
-(If a principle cannot be met, do NOT silently break it — record it in Complexity Tracking below.)
-
-## Complexity Tracking
+(If a principle cannot be met, do NOT silently break it — record it in Complexity Tracking below.)`,
+    complexity: `## Complexity Tracking
 Justify anything that violates a constitution principle or adds non-obvious complexity. Empty is good.
 | What | Why it's needed | Simpler alternative rejected because |
-|---|---|---|
-| [e.g., second cache layer] | [reason] | [why the simple option fails] |
-${extra}
-<!-- Tracks active: ${a.label}. Mandatory track sections above must have real
-     content — an honest "not needed because X" is fine; blank is not. -->
-`
-      );
-    },
-
-    // 1.21 F5 — the design of a SIZED feature (a.size s | m | l; xs is a change, no design). Every size: Complexity Tracking
-    // without the example row the placeholder gate refused, Error Handling pointing at the IF…THEN criteria (never asked twice),
-    // and a core section a track's own sections supersede left out (CORE_SUPERSEDED_BY). M / L: Reuse & Integration with one
-    // example row. S: the three weigh sections merged into ONE "Decisions, reuse & risks" section (designWeighChecks reads it),
-    // no Data Models / API Contracts / Security Considerations / Testing Strategy examples. The track blocks (`extra`) are the
-    // full ones — the engine keeps a size's tiers and drops the sections another active track covers (engine/scaffold.js).
-    sizedDesign(a, extra) {
-      const s = a.size === "s";
-      const out = [`# Design: ${a.name}`, "", "## Overview", "[How this integrates with the existing system. Key decisions and rationale.]", "",
-        "## Architecture", "```mermaid", "graph TD", "    A[Component] -->|action| B[Component]", "    B -->|query| C[(Database)]", "```", ""];
-      if (s) {
-        out.push("## Decisions, reuse & risks",
-          "<!-- One short answer each. What this reuses (with its path) — or \"nothing to reuse\"; the option chosen, the one",
-          "     rejected and why — or \"no alternative worth weighing\"; what could go wrong and how it is caught — or \"no material",
-          "     risk, because X\". Blank is not an answer. -->",
-          "- **Reuse:** [existing module or helper reused, with its path — or nothing to reuse]",
-          "- **Decision:** [the option chosen, the one rejected and why]",
-          "- **Risk:** [what could go wrong and how it is caught — or no material risk, because …]", "");
-      } else {
-        out.push("## Reuse & Integration",
-          "<!-- Search before you write (references/code-reuse-and-quality.md): what this feature takes from the codebase before",
-          "     it adds anything. One row per unit, with its path — Reuse (used as is), Extend (changed; its callers keep working)",
-          "     or New (nothing existing fits — say what was searched). A greenfield project says so in one line. -->",
-          "| Kind | What | Where (path) | Why / notes |", "|---|---|---|---|",
-          "| [Reuse / Extend / New] | [the unit] | [its path] | [why — for New: what was searched] |", "",
-          "**Module boundaries:** [where the new code lives, what it exposes and what it may import — features depend on shared code, never the reverse]", "",
-          "## Alternatives & Trade-offs",
-          "<!-- The options weighed for each key decision — e.g. strong vs eventual consistency, monolith vs service, sync vs",
-          "     async, optimistic vs pessimistic locking. At least two per decision (one option alone was never weighed), what",
-          "     choosing wrong would cost, the one chosen and why. One row per option. -->",
-          "| Decision | Option | Pros | Cons | Cost if wrong | Chosen |", "|---|---|---|---|---|---|",
-          "| [key decision] | [option A] | [pros] | [cons] | [cost of being wrong] | [✓ — why] |",
-          "| [key decision] | [option B] | [pros] | [cons] | [cost of being wrong] | [✗ — why not] |", "",
-          "## Data Models", "```typescript", "interface Entity {", "  id: string;", "  // fields with comments explaining purpose", "}", "```", "");
-        if (!coreSuperseded(a, "apiContracts")) out.push("## API Contracts", "### POST /api/resource", "- **Request:** `{ field: type }`", "- **Response (200):** `{ field: type }`",
-          "- **Errors:** 400 (validation), 401 (auth), 404 (not found)", "");
-        if (!coreSuperseded(a, "securityConsiderations")) out.push("## Security Considerations", "[Auth, validation, data exposure risks]", "");
-      }
-      if (!coreSuperseded(a, "errorHandling")) out.push("## Error Handling",
-        "Each IF…THEN criterion in requirements.md already names a failure and its recovery — add here only what spans them (retries, fallbacks, the messages users see), or leave it at that.", "");
-      if (!s && !coreSuperseded(a, "testingStrategy")) out.push("## Testing Strategy", "- Unit / Integration / E2E: [what each covers]", "");
-      if (!s) out.push("## Risks",
-        "<!-- What could make this design wrong or the delivery late — technical, delivery, data, business. One row per risk;",
-        "     an honest \"no material risk, because X\" is fine — blank is not. -->",
-        "| Risk | Likelihood | Impact | Mitigation | Owner |", "|---|---|---|---|---|",
-        "| [what could go wrong] | [low / medium / high] | [low / medium / high] | [how we prevent or detect it] | [who watches it] |", "");
-      out.push("## Constitution Check", "Verify this design against each principle in `steering/constitution.md`. GATE: must pass before",
-        "implementation; re-check after any design change.", "- [ ] [Principle 1] — complies", "- [ ] [Principle 2] — complies",
-        "(If a principle cannot be met, do NOT silently break it — record it in Complexity Tracking below.)", "",
-        "## Complexity Tracking", "Justify anything that violates a constitution principle or adds non-obvious complexity. Empty is good.",
-        "| What | Why it's needed | Simpler alternative rejected because |", "|---|---|---|");
-      return out.join("\n") + "\n" + extra + `
-<!-- Tracks active: ${a.label} · size ${a.size}. Mandatory track sections above must have real content — an honest
-     "n/a — <why it does not apply>" is fine; blank or the template's guidance line is not. -->
-`;
-    },
-
-    tasks(a) {
-      const green = a.tracks.includes("tdd") ? templateTests(a.tracks) : null; // each template test made green by one task
-      const evalMarker = a.tracks.includes("ai") ? "\n  - _Affects evals: golden (maintain baseline)_" : "";
-      const metricMarker = a.tracks.includes("saas") ? "\n  - _Emits metrics: req_duration_ms{feature=" + a.slug + "}_" : "";
-      let n = 0;
-      const id = () => ++n;
-      // 1.21 F5 — size S: one core task (US-1's two criteria), then the track blocks (the engine keeps, per track, the tasks
-      // that implement a criterion — engine/scaffold.js trimTrackTasks); no setup / foundational / US-2 / polish phases.
-      if (a.size === "s") {
-        const green1 = a.tracks.includes("tdd") ? templateTests(a.tracks, "s") : null;
-        let body =
-`## Story US-1 (P1 — MVP)
-- [ ] ${id()}. [US1] [Core behavior for US-1]
-  - _Requirements: US-1.AC-1, US-1.AC-2_${greenLine(green1, "US-1.AC-1", "US-1.AC-2")}${metricMarker}${evalMarker}
-  - _Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_
-**Checkpoint:** US-1 is fully functional and independently testable/shippable.
-`;
-        for (const t of MARKER_TRACK_ORDER) {
-          if (!a.tracks.includes(t)) continue;
-          const block = BUILD.en.trackTasks({ track: t, start: n + 1, green: green1 });
-          body += block;
-          n += (block.match(/^- \[ \] \d+\./gm) || []).length;
-        }
-        return (
-`# Tasks: ${a.name}
-
-<!-- Tracks: ${a.label} · size s. One story; every task carries _Requirements:_ (TDD tasks _Makes green:_) and a
-     _Verify: <command>_ — spec_complete_task records its result as the task's evidence. Use _Implements: path_ to tie a
-     task to a real source file. -->
-
-## Global Constraints
-<!-- Exact values every task must respect, copied verbatim from the spec/steering — spec_task_brief inlines this section
-     into every task brief. -->
-- [e.g. Node >= 20 · no new runtime dependencies · API field names in snake_case]
-
-${body}`
-        );
-      }
-      let phases =
-`## Phase: Setup
-- [ ] ${id()}. [shared][P] [project/dev setup if needed — deps, scaffolding]
-
-## Phase: Foundational (blocks all stories)
-- [ ] ${id()}. [shared] [Models, schemas, indexes shared across stories]
-  - _Requirements: US-1.AC-1_${metricMarker}
-
-## Story US-1 (P1 — MVP)
-- [ ] ${id()}. [US1] [Core behavior for US-1]
-  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenLine(green, "US-1.AC-1", "US-1.AC-2", "US-1.AC-3")}${evalMarker}
-  - _Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_
-- [ ] ${id()}. [US1][P] [parallelizable task — different file, no deps]
-  - _Requirements: US-1.AC-4_${greenLine(green, "US-1.AC-4")}
-**Checkpoint:** US-1 is fully functional and independently testable/shippable.
-`;
-      for (const t of MARKER_TRACK_ORDER) {
-        if (!a.tracks.includes(t)) continue;
-        const block = BUILD.en.trackTasks({ track: t, start: n + 1, green });
-        phases += block;
-        n += (block.match(/^- \[ \] \d+\./gm) || []).length;
-      }
-      phases +=
-`
-## Story US-2 (P2)
-- [ ] ${id()}. [US2] [Behavior for US-2]
-  - _Requirements: US-2.AC-1_${greenLine(green, "US-2.AC-1")}
-**Checkpoint:** US-2 works without breaking US-1.
-
-## Phase: Polish (cross-cutting)
-- [ ] ${id()}. [shared][P] [docs, cleanup, edge-case hardening]
-`;
-      return (
-`# Tasks: ${a.name}
-
-<!-- Tracks: ${a.label}. Organized by user story so each is independently shippable
+|---|---|---|`,
+    complexityExample: "| [e.g., second cache layer] | [reason] | [why the simple option fails] |",
+    footer: (label) => `<!-- Tracks active: ${label}. Mandatory track sections above must have real
+     content — an honest "not needed because X" is fine; blank is not. -->`,
+    footerSized: (label, size) => `<!-- Tracks active: ${label} · size ${size}. Mandatory track sections above must have real content — an honest
+     "n/a — <why it does not apply>" is fine; blank or the template's guidance line is not. -->`,
+  },
+  // tasks — headings, the template tasks' text and the comments; the layout numbers the tasks, writes their [US1] / [shared] / [P]
+  // tags, _Requirements:_ / _Makes green:_ / _Verify:_ lines and the markers of +saas / +ai, and inserts the track blocks after
+  // US-1 (size s: one story, then the track blocks).
+  tasks: {
+    title: (name) => `# Tasks: ${name}`,
+    intro: (label) => `<!-- Tracks: ${label}. Organized by user story so each is independently shippable
      (P1 first). Each task is tagged with its story: [US1]/[US2] or [shared] for cross-cutting work.
      [P] = parallelizable (different files, no deps). Every task carries _Requirements:_; TDD tasks
      carry _Makes green:_. Use _Implements: path_ to tie a task to a real source file. A **Checkpoint**
      marks where a story is independently testable.
      If the stories are NOT independently shippable, they were mis-sliced — re-slice them, or fall
-     back to a technical-layer layout (Foundation→Logic→API→…) keeping the [US1] tags. -->
-
-## Global Constraints
+     back to a technical-layer layout (Foundation→Logic→API→…) keeping the [US1] tags. -->`,
+    introS: (label) => `<!-- Tracks: ${label} · size s. One story; every task carries _Requirements:_ (TDD tasks _Makes green:_) and a
+     _Verify: <command>_ — spec_complete_task records its result as the task's evidence. Use _Implements: path_ to tie a
+     task to a real source file. -->`,
+    constraints: `## Global Constraints
 <!-- Exact values every task must respect, copied verbatim from the spec/steering (version floors,
      naming rules, limits, formats) — spec_task_brief inlines this section into every task brief.
      Give each task a _Verify: <command>_: spec_complete_task records its result as the task's evidence. -->
-- [e.g. Node >= 20 · no new runtime dependencies · API field names in snake_case]
+- [e.g. Node >= 20 · no new runtime dependencies · API field names in snake_case]`,
+    constraintsS: `## Global Constraints
+<!-- Exact values every task must respect, copied verbatim from the spec/steering — spec_task_brief inlines this section
+     into every task brief. -->
+- [e.g. Node >= 20 · no new runtime dependencies · API field names in snake_case]`,
+    setup: "## Phase: Setup",
+    setupTask: "[project/dev setup if needed — deps, scaffolding]",
+    foundational: "## Phase: Foundational (blocks all stories)",
+    foundationalTask: "[Models, schemas, indexes shared across stories]",
+    story1: "## Story US-1 (P1 — MVP)",
+    coreTask: "[Core behavior for US-1]",
+    verify: "[command that proves it, e.g. npm test -- path/to/file.test.js]",
+    parallelTask: "[parallelizable task — different file, no deps]",
+    checkpoint1: "US-1 is fully functional and independently testable/shippable.",
+    story2: "## Story US-2 (P2)",
+    story2Task: "[Behavior for US-2]",
+    checkpoint2: "US-2 works without breaking US-1.",
+    polish: "## Phase: Polish (cross-cutting)",
+    polishTask: "[docs, cleanup, edge-case hardening]",
+  },
+  // testPlan — the heading and the text around the traceability matrix; rows: the layer names and descriptions
+  // templateTestRows (i18n/common.js) writes the template's rows with.
+  testPlan: {
+    title: (name) => `# Test Plan: ${name}`,
+    head: `## Strategy
+- **Test runner:** []
+- **Mocking approach:** []
+- **Coverage target:** []
+- **Critical paths requiring 100% branch coverage:** []
 
-${phases}`
-      );
+## Traceability Matrix
+
+<!-- Kind — example: one concrete input → expected output; the default for event-driven criteria (WHEN …, IF … THEN).
+     property: an invariant checked over many generated inputs (fast-check, Hypothesis, jqwik, gopter, FsCheck); use it
+     for ubiquitous criteria (THE SYSTEM SHALL always …), WHILE (state-driven) criteria and any "never / for every" rule —
+     tenant isolation, an encode → decode round-trip, totals that always balance. Values stay example / property.
+     Put the Test ID in the test's name (test("T-01 …"), def test_T01_…) so trace_check {code: true} finds it. -->
+
+| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |
+|---------|-------|------|-------------|-----------------|------|`,
+    tail: `## Coverage Check
+Every AC must appear in at least one "Covers" cell. Gaps (with justification):
+- [none]
+
+## Test Data & Fixtures
+- []
+
+## Out of Scope for Testing
+- []
+`,
+    rows: {
+      integration: "integration",
+      load: "load",
+      behavior: "[behavior]",
+      acSlot: "[the AC IDs this test covers]",
+      recovery: "[error condition → recovery]",
+      property: "[always-true property]",
+      tenant: "tenant A never reads tenant B's records",
+      latency: "P95 latency within the performance budget",
+      golden: "golden set ≥ the quality threshold",
+      injection: "adversarial: injected instructions are ignored",
+      cost: "cost per request within budget",
+      unauthenticated: "abuse case: an unauthenticated request gets 401 and no data",
+      forbidden: "abuse case: user B never reads user A's resource (403 + audit event)",
+      noSecrets: "no secret, token or stack trace in any response or log",
+      exportData: "a subject's export holds all of their personal data, machine-readable",
+      erasure: "after erasure no store still holds the subject's personal data",
+      retention: "records past their retention period are deleted or anonymized",
+      outboxCrash: "crash between the DB commit and the publish: the event is still delivered",
+      duplicateDelivery: "the same message delivered twice (or N times) has exactly one effect",
+      lostUpdate: "concurrent updates to the same record: no update is lost silently",
+      dependencyDown: "a dependency down: degrade / retry with backoff, the critical path is not blocked",
+      contract: "contract",
+      problemJson: "contract test: a request missing a required field gets 400 problem+json naming it",
+      idempotencyReplay: "a create replayed with the same Idempotency-Key has one effect and returns the first response",
+      staleEtag: "an update with a stale If-Match gets 412 and changes nothing",
+      breakingDiff: "breaking-change diff: the contract against the published version reports no breaking change",
+      component: "component",
+      visual: "visual",
+      keyboardA11y: "keyboard-only walk-through + an automated accessibility check (axe): every action reachable, focus visible, no violation",
+      formErrors: "a form with invalid fields: every value kept, each error named in text, focus on the summary",
+      emptyState: "visual regression of the view's states: the empty state explains why and offers the next action",
+      loadError: "a failed load: an error with Retry, the content already shown kept",
+      telemetry: "every request emits the metric, a structured log line and a trace with one correlation ID; no personal data in the log",
+      burnAlert: "a staged failure burns the error budget: the burn-rate alert fires and pages with the runbook link",
+      rollbackDrill: "rollback drill: a canary whose error rate crosses the threshold stops the rollout and rolls back",
+      readiness: "fault injection: a dependency down → readiness fails, liveness passes, recovery without a restart",
+      dataQuality: "data-quality checks on fixture batches: a null key, a duplicate and an out-of-range row are quarantined with their rule, the valid rows load",
+      idempotentRerun: "a partition re-run or backfilled twice leaves the same rows as one run — no duplicate, no gap",
+      freshness: "a partition older than the freshness SLA: the freshness check fails and alerts the owner",
+      schemaChange: "schema-change compatibility: an added optional column passes, a removed / renamed column or a narrowed type is rejected before the load",
     },
+  },
+  // checklist — the items: the core four, +tdd's, then per marker track its sections item (n: the design sections to fill —
+  // the track's design block, or a sized feature's count) and two more; saasLoadOnly replaces +saas's third with +obs on a sized
+  // feature (+obs checks the telemetry). done: the closing two.
+  checklist: {
+    title: (name, label) => `# Checklist: ${name}
 
+Tracks: ${label}. Tick before calling the feature done.`,
+    core: [
+      "Requirements: every AC is testable, has a stable ID, no vague terms (run `ears`).",
+      "Design: respects the project constitution (no principle violated).",
+      "Design: at least one Mermaid diagram; security + error handling covered.",
+      "Traceability: every AC maps to a task (run `trace`).",
+    ],
+    tdd: ["TDD: all planned tests written and red for the right reason before code.", "TDD: test commits land before implementation commits."],
+    saas: [
+      (n) => `SaaS: ${n} mandatory design sections filled (no TODO).`,
+      "SaaS: tenant isolation enforced (`WHERE tenant_id = ?`).",
+      "SaaS: metrics/logs/alerts emitted; load test meets budget (hot path).",
+    ],
+    ai: [
+      (n) => `AI: ${n} mandatory design sections filled (no TODO).`,
+      "AI: golden ≥ threshold, adversarial safety 100%, regression maintained.",
+      "AI: prompts versioned in prompts/vN.md; cost within budget.",
+    ],
+    sec: [
+      (n) => `SEC: ${n} mandatory design sections filled (no TODO) — threat model reviewed.`,
+      "SEC: authentication + object-level authorization enforced, deny by default; no secret in code or logs.",
+      "SEC: SAST, dependency audit and abuse-case tests clean on a local run.",
+    ],
+    privacy: [
+      (n) => `PRIVACY: ${n} mandatory design sections filled (no TODO) — DPIA decision recorded.`,
+      "PRIVACY: access/export and erasure work end to end, across every store and processor.",
+      "PRIVACY: retention job scheduled; privacy notice and records of processing updated.",
+    ],
+    dist: [
+      (n) => `DIST: ${n} mandatory design sections filled (no TODO) — every cross-system write has its mitigation (outbox / inbox / saga) or an accepted risk.`,
+      "DIST: consumers idempotent (inbox or a unique key in the effect's transaction); retries with backoff + jitter and a DLQ; nothing non-idempotent retried blindly.",
+      "DIST: failure-injection tests (crash between commit and publish, duplicate delivery, concurrent updates, dependency down) green on a local run.",
+    ],
+    api: [
+      (n) => `API: ${n} mandatory design sections filled (no TODO) — the contract file (OpenAPI / .proto / GraphQL schema) is in the repo and named by a task's Implements marker.`,
+      "API: errors are problem+json with stable codes; creates take an Idempotency-Key; updates honour If-Match; list endpoints page with a stable cursor.",
+      "API: contract tests and the breaking-change diff against the published version green on a local run; anything removed is deprecated with a Sunset date.",
+    ],
+    ui: [
+      (n) => `UI: ${n} mandatory design sections filled (no TODO) — every state of the state matrix designed; new components entered through the design system.`,
+      "UI: WCAG 2.2 AA — the automated accessibility check clean on a local run, plus a manual keyboard and screen-reader pass with its findings fixed.",
+      "UI: responsive at every breakpoint, strings in the catalogue (text expansion, RTL checked); LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 measured.",
+    ],
+    obs: [
+      (n) => `OBS: ${n} mandatory design sections filled (no TODO) — each SLO has an error budget, each alert a runbook, the rollback criteria are numbers.`,
+      "OBS: the metrics, structured logs (correlation ID, no personal data) and traces the design names are emitted — seen, not assumed.",
+      "OBS: an alert fired in a staged failure, a rollback drill done and the health checks verified with a dependency down.",
+    ],
+    data: [
+      (n) => `DATA: ${n} mandatory design sections filled (no TODO) — every dataset has a schema, an owner and a compatibility rule; every check says what a failure does.`,
+      "DATA: the data-quality checks run at ingestion and before publishing — a bad row quarantined, never loaded; the freshness alert reaches the owner.",
+      "DATA: a partition re-run and a backfill rehearsed on real-sized data give the same rows as one run; retention and partitioning applied as designed.",
+    ],
+    saasLoadOnly: "SaaS: load test meets budget (hot path).",
+    done: ["Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`)."],
+  },
+};
+
+// ===========================================================================
+// Artifact builders, one set per language. EN is the canonical reference; since 1.13 its templates are
+// internally consistent (every template AC planned and tasked) — the gates would otherwise flag the scaffold.
+// ===========================================================================
+const build = {
     bugReport(a) {
       return `# Bug: ${a.name}
 
@@ -670,62 +684,6 @@ ${a.summary || "[one line: the bug being fixed]"}
   - _Verify: [full test suite command]_
 **Checkpoint:** the bug no longer reproduces and the full suite is green.
 `;
-    },
-
-    testPlan(name, tracks, acs, size) {
-      const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
-        { integration: "integration", load: "load", behavior: "[behavior]", acSlot: "[the AC IDs this test covers]", recovery: "[error condition → recovery]", property: "[always-true property]",
-          tenant: "tenant A never reads tenant B's records", latency: "P95 latency within the performance budget",
-          golden: "golden set ≥ the quality threshold", injection: "adversarial: injected instructions are ignored", cost: "cost per request within budget",
-          unauthenticated: "abuse case: an unauthenticated request gets 401 and no data", forbidden: "abuse case: user B never reads user A's resource (403 + audit event)",
-          noSecrets: "no secret, token or stack trace in any response or log", exportData: "a subject's export holds all of their personal data, machine-readable",
-          erasure: "after erasure no store still holds the subject's personal data", retention: "records past their retention period are deleted or anonymized",
-          outboxCrash: "crash between the DB commit and the publish: the event is still delivered", duplicateDelivery: "the same message delivered twice (or N times) has exactly one effect",
-          lostUpdate: "concurrent updates to the same record: no update is lost silently", dependencyDown: "a dependency down: degrade / retry with backoff, the critical path is not blocked",
-          contract: "contract", problemJson: "contract test: a request missing a required field gets 400 problem+json naming it", idempotencyReplay: "a create replayed with the same Idempotency-Key has one effect and returns the first response",
-          staleEtag: "an update with a stale If-Match gets 412 and changes nothing", breakingDiff: "breaking-change diff: the contract against the published version reports no breaking change",
-          component: "component", visual: "visual", keyboardA11y: "keyboard-only walk-through + an automated accessibility check (axe): every action reachable, focus visible, no violation",
-          formErrors: "a form with invalid fields: every value kept, each error named in text, focus on the summary", emptyState: "visual regression of the view's states: the empty state explains why and offers the next action",
-          loadError: "a failed load: an error with Retry, the content already shown kept",
-          telemetry: "every request emits the metric, a structured log line and a trace with one correlation ID; no personal data in the log",
-          burnAlert: "a staged failure burns the error budget: the burn-rate alert fires and pages with the runbook link", rollbackDrill: "rollback drill: a canary whose error rate crosses the threshold stops the rollout and rolls back",
-          readiness: "fault injection: a dependency down → readiness fails, liveness passes, recovery without a restart",
-          dataQuality: "data-quality checks on fixture batches: a null key, a duplicate and an out-of-range row are quarantined with their rule, the valid rows load",
-          idempotentRerun: "a partition re-run or backfilled twice leaves the same rows as one run — no duplicate, no gap",
-          freshness: "a partition older than the freshness SLA: the freshness check fails and alerts the owner",
-          schemaChange: "schema-change compatibility: an added optional column passes, a removed / renamed column or a narrowed type is rejected before the load" }, acs, size);
-      return (
-`# Test Plan: ${name}
-
-## Strategy
-- **Test runner:** []
-- **Mocking approach:** []
-- **Coverage target:** []
-- **Critical paths requiring 100% branch coverage:** []
-
-## Traceability Matrix
-
-<!-- Kind — example: one concrete input → expected output; the default for event-driven criteria (WHEN …, IF … THEN).
-     property: an invariant checked over many generated inputs (fast-check, Hypothesis, jqwik, gopter, FsCheck); use it
-     for ubiquitous criteria (THE SYSTEM SHALL always …), WHILE (state-driven) criteria and any "never / for every" rule —
-     tenant isolation, an encode → decode round-trip, totals that always balance. Values stay example / property.
-     Put the Test ID in the test's name (test("T-01 …"), def test_T01_…) so trace_check {code: true} finds it. -->
-
-| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |
-|---------|-------|------|-------------|-----------------|------|
-${rows}
-
-## Coverage Check
-Every AC must appear in at least one "Covers" cell. Gaps (with justification):
-- [none]
-
-## Test Data & Fixtures
-- []
-
-## Out of Scope for Testing
-- []
-`
-      );
     },
 
     evalPlan(name) {
@@ -827,31 +785,6 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
 - [ ] Success Criteria (SC-…) are observably met.
 `
       );
-    },
-
-    checklist(a) {
-      const items = [
-        "Requirements: every AC is testable, has a stable ID, no vague terms (run `ears`).",
-        "Design: respects the project constitution (no principle violated).",
-        "Design: at least one Mermaid diagram; security + error handling covered.",
-        "Traceability: every AC maps to a task (run `trace`).",
-      ];
-      // 1.21 F5: a sized feature's section counts (a.sectionCounts — the size's tiers, the overlaps merged) and, with +obs on, the
-      // +saas line without the telemetry +obs already checks (one line, not two). No size: the counts and lines as ever.
-      const cnt = (t, n) => (a.sectionCounts && a.sectionCounts[t] != null ? a.sectionCounts[t] : n);
-      if (a.tracks.includes("tdd")) items.push("TDD: all planned tests written and red for the right reason before code.", "TDD: test commits land before implementation commits.");
-      if (a.tracks.includes("saas")) items.push("SaaS: " + cnt("saas", 5) + " mandatory design sections filled (no TODO).", "SaaS: tenant isolation enforced (`WHERE tenant_id = ?`).", a.size && a.tracks.includes("obs") ? "SaaS: load test meets budget (hot path)." : "SaaS: metrics/logs/alerts emitted; load test meets budget (hot path).");
-      if (a.tracks.includes("ai")) items.push("AI: " + cnt("ai", 10) + " mandatory design sections filled (no TODO).", "AI: golden ≥ threshold, adversarial safety 100%, regression maintained.", "AI: prompts versioned in prompts/vN.md; cost within budget.");
-      if (a.tracks.includes("sec")) items.push("SEC: " + cnt("sec", 5) + " mandatory design sections filled (no TODO) — threat model reviewed.", "SEC: authentication + object-level authorization enforced, deny by default; no secret in code or logs.", "SEC: SAST, dependency audit and abuse-case tests clean on a local run.");
-      if (a.tracks.includes("privacy")) items.push("PRIVACY: " + cnt("privacy", 6) + " mandatory design sections filled (no TODO) — DPIA decision recorded.", "PRIVACY: access/export and erasure work end to end, across every store and processor.", "PRIVACY: retention job scheduled; privacy notice and records of processing updated.");
-      if (a.tracks.includes("dist")) items.push("DIST: " + cnt("dist", 5) + " mandatory design sections filled (no TODO) — every cross-system write has its mitigation (outbox / inbox / saga) or an accepted risk.", "DIST: consumers idempotent (inbox or a unique key in the effect's transaction); retries with backoff + jitter and a DLQ; nothing non-idempotent retried blindly.", "DIST: failure-injection tests (crash between commit and publish, duplicate delivery, concurrent updates, dependency down) green on a local run.");
-      if (a.tracks.includes("api")) items.push("API: " + cnt("api", 5) + " mandatory design sections filled (no TODO) — the contract file (OpenAPI / .proto / GraphQL schema) is in the repo and named by a task's Implements marker.", "API: errors are problem+json with stable codes; creates take an Idempotency-Key; updates honour If-Match; list endpoints page with a stable cursor.", "API: contract tests and the breaking-change diff against the published version green on a local run; anything removed is deprecated with a Sunset date.");
-      if (a.tracks.includes("ui")) items.push("UI: " + cnt("ui", 5) + " mandatory design sections filled (no TODO) — every state of the state matrix designed; new components entered through the design system.", "UI: WCAG 2.2 AA — the automated accessibility check clean on a local run, plus a manual keyboard and screen-reader pass with its findings fixed.", "UI: responsive at every breakpoint, strings in the catalogue (text expansion, RTL checked); LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 measured.");
-      if (a.tracks.includes("obs")) items.push("OBS: " + cnt("obs", 5) + " mandatory design sections filled (no TODO) — each SLO has an error budget, each alert a runbook, the rollback criteria are numbers.", "OBS: the metrics, structured logs (correlation ID, no personal data) and traces the design names are emitted — seen, not assumed.", "OBS: an alert fired in a staged failure, a rollback drill done and the health checks verified with a dependency down.");
-      if (a.tracks.includes("data")) items.push("DATA: " + cnt("data", 5) + " mandatory design sections filled (no TODO) — every dataset has a schema, an owner and a compatibility rule; every check says what a failure does.", "DATA: the data-quality checks run at ingestion and before publishing — a bad row quarantined, never loaded; the freshness alert reaches the owner.", "DATA: a partition re-run and a backfill rehearsed on real-sized data give the same rows as one run; retention and partitioning applied as designed.");
-      items.push("Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`).");
-      return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Tick before calling the feature done.\n\n" +
-        items.map((i) => "- [ ] " + i).join("\n") + "\n";
     },
 
     integrationPlan(name) {

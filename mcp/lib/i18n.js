@@ -30,7 +30,7 @@
  */
 
 const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests, DEV_SPEC, DEV_SPEC_SCRIPT, cliPrefix, portableCli, FEATURE_SIZES,
-  TEMPLATE_ACS, MARKER_TRACK_ORDER, MARKER_TAG, greenLine } = require("./i18n/common.js");
+  TEMPLATE_ACS, MARKER_TRACK_ORDER, MARKER_TAG, greenLine, signalTracks, templateTestRows, coreSuperseded } = require("./i18n/common.js");
 // The pt-BR derivation (i18n/pt-br.js) loads on its first use — a table's "pt-BR" entry, toPtBr, derivePtBr: a process
 // that never meets pt-BR (most hooks) doesn't load it.
 let PTBR = null;
@@ -256,6 +256,18 @@ const TRACK_TASK_PLAN = {
   data: [{ ac: [35], green: true }, { ac: [32, 34], green: true }, { ac: [33], green: true }, { ac: [33] }, { ac: [32, 33, 34, 35] }],
 };
 const LAYOUTS = {
+  // classification.md: a signal line per active track (signalTracks: +tdd, the marker tracks, then a project's packs — up to six
+  // distinct signals each), the Hot Path / Autonomy / Volume sections only with +saas / +ai, the Summary only when given.
+  classification(T, a) {
+    const K = T.classification;
+    const sig = a.signals || { tdd: [], saas: [], ai: [] };
+    const sigLine = (t) => (a.tracks.includes(t) ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || K.signalSlot} — ${K.whySlot}` : null);
+    const saas = a.tracks.includes("saas"), ai = a.tracks.includes("ai");
+    return `${K.title(a.name)}\n\n${K.mode}\n\n${K.activeTracks}\n${a.label}\n\n${K.signals}\n${signalTracks(a.tracks).map(sigLine).filter(Boolean).join("\n") || K.noSignals}\n\n` +
+      `${K.blastRadius}\n${saas ? "\n" + K.hotPath + "\n" : ""}${ai ? "\n" + K.autonomy + "\n" : ""}${saas || ai ? "\n" + K.volume + "\n" : ""}\n${K.compliance}\n\n` +
+      (a.summary ? K.summary + "\n" + a.summary + "\n" : "");
+  },
+
   // requirements.md: the title and Summary, the user stories up to the core criteria (size S: one story, two criteria), then
   // each active track's criteria under its marker's heading — inactive (not a gate, not a placeholder) once the track is off;
   // they keep their TEMPLATE_ACS numbers at every size (US-1.AC-5…) — then the rest.
@@ -264,6 +276,97 @@ const LAYOUTS = {
     const trackAcs = MARKER_TRACK_ORDER.filter((t) => a.tracks.includes(t)).map((t) => `\n\n#### ${MARKER_TAG[t]} ${R.trackAcsHeading}\n` +
       TEMPLATE_ACS[t].map((id, i) => `${id.slice(id.lastIndexOf("-") + 1)}. **${id}** — ${R.trackAcs[t][i]}`).join("\n")).join("");
     return `${R.title(a.name)}\n\n${R.summary}\n${a.summary || R.summarySlot}\n\n${s ? R.storyS : R.stories}${trackAcs}\n\n${s ? R.endS : R.end}`;
+  },
+
+  // design.md: the core sections, then the active tracks' (trackDesignBlock, +tdd first), then the footer. No size: the 1.20
+  // design. A SIZED feature (1.21 F5 — s | m | l; xs is a change, no design): Error Handling points at the IF…THEN criteria (never
+  // asked twice), Complexity Tracking has no example row (the placeholder gate refused it), and a core section a track's own
+  // sections supersede is left out (CORE_SUPERSEDED_BY). M / L: Reuse & Integration with one example row. S: the three weigh
+  // sections merged into ONE "Decisions, reuse & risks" (designWeighChecks reads it), no Data Models / API Contracts / Security
+  // Considerations / Testing Strategy / Risks. The track blocks are the full ones — the engine keeps a size's tiers and drops the
+  // sections another active track covers (engine/scaffold.js).
+  design(T, a) {
+    const D = T.design;
+    const extra = ["tdd", ...MARKER_TRACK_ORDER].filter((t) => a.tracks.includes(t)).map((t) => LAYOUTS.trackDesignBlock(T, t)).join("");
+    if (!a.size) {
+      return [D.title(a.name), D.overview, D.architecture, D.reuse, D.alternatives, D.dataModels, D.apiContracts, D.security, D.errorHandling, D.testing,
+        D.risks, D.constitution, D.complexity + "\n" + D.complexityExample].join("\n\n") + "\n" + extra + "\n" + D.footer(a.label) + "\n";
+    }
+    const s = a.size === "s", keep = (key) => !coreSuperseded(a, key);
+    const secs = [D.title(a.name), D.overview, D.architecture];
+    if (s) secs.push(D.decisions);
+    else {
+      secs.push(D.reuseSized, D.alternatives, D.dataModels);
+      if (keep("apiContracts")) secs.push(D.apiContracts);
+      if (keep("securityConsiderations")) secs.push(D.security);
+    }
+    if (keep("errorHandling")) secs.push(D.errorHandlingSized);
+    if (!s && keep("testingStrategy")) secs.push(D.testing);
+    if (!s) secs.push(D.risks);
+    secs.push(D.constitution, D.complexity);
+    return secs.join("\n\n") + "\n" + extra + "\n" + D.footerSized(a.label, a.size) + "\n";
+  },
+
+  // tasks.md, organized by user story: Setup, Foundational, US-1 (its core task and a parallel one), the active tracks' task blocks
+  // (trackTasks, numbered on), US-2, Polish. Size S (1.21 F5): one core task (US-1's two criteria), then the track blocks (the
+  // engine keeps, per track, the tasks that implement a criterion — engine/scaffold.js trimTrackTasks); no setup / foundational /
+  // US-2 / polish phases. +tdd: each template test made green by one task (_Makes green:_, templateTests of the tracks and size);
+  // +saas: the latency metric on the first task that carries it; +ai: the golden baseline on the core task.
+  tasks(T, a) {
+    const K = T.tasks, s = a.size === "s";
+    const green = a.tracks.includes("tdd") ? templateTests(a.tracks, s ? "s" : undefined) : null;
+    const evals = a.tracks.includes("ai") ? "\n  - _Affects evals: golden (maintain baseline)_" : "";
+    const metrics = a.tracks.includes("saas") ? "\n  - _Emits metrics: req_duration_ms{feature=" + a.slug + "}_" : "";
+    const verify = `\n  - _Verify: ${K.verify}_`;
+    let n = 0;
+    // one task line (numbered in order), its _Requirements:_ and — makesGreen — the _Makes green:_ of those criteria
+    const task = (tags, text, acs, makesGreen) => `- [ ] ${++n}. ${tags} ${text}` + (acs ? `\n  - _Requirements: ${acs.join(", ")}_` : "") +
+      (makesGreen ? greenLine(green, ...acs) : "");
+    const trackBlocks = () => {
+      let out = "";
+      for (const t of MARKER_TRACK_ORDER) {
+        if (!a.tracks.includes(t)) continue;
+        const block = LAYOUTS.trackTasks(T, { track: t, start: n + 1, green });
+        out += block;
+        n += (block.match(/^- \[ \] \d+\./gm) || []).length;
+      }
+      return out;
+    };
+    if (s) {
+      const story = `${K.story1}\n${task("[US1]", K.coreTask, ["US-1.AC-1", "US-1.AC-2"], true)}${metrics}${evals}${verify}\n**Checkpoint:** ${K.checkpoint1}\n`;
+      return `${K.title(a.name)}\n\n${K.introS(a.label)}\n\n${K.constraintsS}\n\n${story}${trackBlocks()}`;
+    }
+    let phases = `${K.setup}\n${task("[shared][P]", K.setupTask)}\n\n${K.foundational}\n${task("[shared]", K.foundationalTask, ["US-1.AC-1"])}${metrics}\n\n` +
+      `${K.story1}\n${task("[US1]", K.coreTask, ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3"], true)}${evals}${verify}\n` +
+      `${task("[US1][P]", K.parallelTask, ["US-1.AC-4"], true)}\n**Checkpoint:** ${K.checkpoint1}\n`;
+    phases += trackBlocks();
+    phases += `\n${K.story2}\n${task("[US2]", K.story2Task, ["US-2.AC-1"], true)}\n**Checkpoint:** ${K.checkpoint2}\n\n${K.polish}\n${task("[shared][P]", K.polishTask)}\n`;
+    return `${K.title(a.name)}\n\n${K.intro(a.label)}\n\n${K.constraints}\n\n${phases}`;
+  },
+
+  // test-plan.md: the traceability matrix's rows are templateTestRows' (i18n/common.js — tracks: which template ACs get a planned
+  // test; acs: the real AC IDs instead, one generic row each; size: S plans its two core criteria), worded with text.testPlan.rows.
+  testPlan(T, name, tracks, acs, size) {
+    const P = T.testPlan;
+    const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`, P.rows, acs, size);
+    return `${P.title(name)}\n\n${P.head}\n${rows}\n\n${P.tail}`;
+  },
+
+  // checklist.md: the core items, +tdd's, each active marker track's three (the first counts its design sections — a sized
+  // feature's own count, a.sectionCounts, else its whole design block; with +obs on a sized feature, +saas's third item leaves
+  // the telemetry to +obs: one line, not two), then the closing two.
+  checklist(T, a) {
+    const K = T.checklist;
+    const count = (t) => (a.sectionCounts && a.sectionCounts[t] != null ? a.sectionCounts[t] : T.designBlocks[t].length);
+    const items = [...K.core];
+    if (a.tracks.includes("tdd")) items.push(...K.tdd);
+    for (const t of MARKER_TRACK_ORDER) {
+      if (!a.tracks.includes(t)) continue;
+      const [sections, second, third] = K[t];
+      items.push(sections(count(t)), second, t === "saas" && a.size && a.tracks.includes("obs") ? K.saasLoadOnly : third);
+    }
+    items.push(...K.done);
+    return K.title(a.name, a.label) + "\n\n" + items.map((i) => "- [ ] " + i).join("\n") + "\n";
   },
 
   // One track's design sections (design() appends the active tracks'; spec_add_track writes one into an existing design.md):
