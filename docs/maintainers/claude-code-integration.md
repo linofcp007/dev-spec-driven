@@ -111,7 +111,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   every command but `/spec` and `/spec-bugfix`: documented for command files (code.claude.com/docs/en/skills — the same front
   matter as skills, except `name` / `paths`), a user-only command's description leaves the model's context entirely, the
   user still types it, and Claude can't run it on its own (nor preload it into a subagent). The model-visible listing is those
-  two descriptions + the skill's: 1,249 characters (5,718 before); mcp/tests/10-guards-review6.js holds it ≤ 1,500, each
+  two descriptions + the skill's: 776 characters (5,718 before: 46 commands' 4,707 + the skill's 1,011); mcp/tests/10-guards-review6.js holds it ≤ 1,500, each
   description ≤ 125 characters, one English line (the multilingual triggers live in SKILL.md's description). The model reaches
   the rest through the skill and the MCP tools, so a model-invocable command never tells it to RUN a user-only one
   (17-docs-review7: "record it with `spec_approve`", never "with /approve"). The prompts loader (prompts-resources.js
