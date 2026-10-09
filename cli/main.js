@@ -476,17 +476,18 @@ function enterProcessContext(io) {
     apply(io.env);
     undo.push(() => apply(before));
   }
+  const restore = () => { while (undo.length) undo.pop()(); };
   if (io.cwd && path.resolve(io.cwd) !== process.cwd()) {
     const before = process.cwd();
-    process.chdir(io.cwd);
+    try { process.chdir(io.cwd); } catch (e) { restore(); throw e; } // nothing half-applied
     undo.push(() => { try { process.chdir(before); } catch { /* gone */ } });
   }
-  return () => { while (undo.length) undo.pop()(); };
+  return restore;
 }
 
 // One CLI call → a promise of its exit code (also handed to io.done). Synchronous unless the command waits.
 function main(argv, io) {
-  const restore = enterProcessContext(io);
+  let restore = () => {};
   let c = null;
   const finish = (e) => {
     let code;
@@ -506,6 +507,7 @@ function main(argv, io) {
     return code;
   };
   try {
+    restore = enterProcessContext(io); // (a working folder that can't be entered: one error line, like any other)
     c = createContext(argv, io);
     const r = dispatch(c);
     if (r && typeof r.then === "function") return r.then(() => finish(), (e) => finish(e));

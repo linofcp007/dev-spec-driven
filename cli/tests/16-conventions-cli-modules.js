@@ -181,6 +181,7 @@ exports.run = async ({ ok, all, eq, run, runIn, spawnIn, tmp, CLI, __dirname }) 
         spawnIn(["done", "login", "x", "--json", "--project", p]), // an argument error
         spawnIn(["list"], { env: { ...process.env, SPEC_PROJECT_DIR: p, MAIN_MOD_PROBE: "1" }, cwd: other }),
         spawnIn(["version", "--json"], { env: { ...process.env, SPEC_PROJECT_DIR: "" }, cwd: other }),
+        spawnIn(["list"], { env: { ...process.env, MAIN_MOD_PROBE: "2" }, cwd: path.join(tmp, "main-mod-no-such-folder") }), // can't be entered
       ];
     } finally {
       process.exit = realExit;
@@ -196,6 +197,7 @@ exports.run = async ({ ok, all, eq, run, runIn, spawnIn, tmp, CLI, __dirname }) 
       argError: rs[4].status === 1 && j4 && j4.code === "invalid-arguments", list: rs[5].status === 0 && /login/.test(rs[5].stdout),
       // the working folder given: the project resolved from it (it, or a dev-spec project above it)
       cwd: rs[6].status === 0 && v6 && (v6.project.source === "cwd" ? v6.project.dir === path.resolve(tmp, "main-mod-cwd") : v6.project.source === "nearest"),
+      badCwd: rs[7].status === 1 && /^dev-spec: .*main-mod-no-such-folder/.test(rs[7].stderr) && rs[7].stdout === "",
       envRestored: envNow() === envBefore && !("MAIN_MOD_PROBE" in process.env), cwdRestored: process.cwd() === cwdBefore,
     });
   }
