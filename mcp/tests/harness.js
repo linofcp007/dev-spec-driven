@@ -183,7 +183,7 @@ async function setup(chain) {
   notify("notifications/initialized", {});
 
   const list = await rpc("tools/list", {});
-  ok(list.result.tools.length === 38, "tools/list returns 38 tools (got " + list.result.tools.length + ")");
+  ok(list.result.tools.length === 32, "tools/list returns 32 tools (got " + list.result.tools.length + ")");
   // The advertised contract matches taskVerification(): a nothingToVerify task is verified — doctor / finish / ROADMAP.md
   // never list it (the description said they "keep listing such a task", a clause left over from the unverified sentence).
   const ctDesc = (list.result.tools.find((t) => t.name === "spec_complete_task") || {}).description || "";
