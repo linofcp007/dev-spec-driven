@@ -2,7 +2,7 @@
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
 `.specs/templates/`, steering front matter, the `spec_import` sources, and every export (HTML / md / CSV, Gherkin,
-trackers, release notes, milestones).
+trackers, ADRs, release notes, milestones).
 
 ## Project templates (1.14) — `.specs/templates/`
 - **Resolution:** `.specs/templates/<lang>/<artifact>.md` wins over `.specs/templates/<artifact>.md`, which wins over the
@@ -232,7 +232,34 @@ trackers, release notes, milestones).
   under the roadmap lock; nothing to report → nothing written or stamped (`note`).
 
 ## Exports and planning (1.16 E)
-- **Formats** — `EXPORT_FORMATS` = html · md · csv · gherkin · jira · linear (server.js reads its enum from there).
+- **Formats** — `EXPORT_FORMATS` = html · md · csv · gherkin · jira · linear · adr (server.js reads its enum from there).
+- **ADR (1.25)** — `format: "adr"` (CLI `export [f] --adr`; `exportAdr()` lives in engine/decisions.js beside the log it reads —
+  exportSpecs hands it over): the decision log as one MADR 4 file per DECISION, `.specs/exports/adr/<slug>/NNNN-<title>.md` +
+  `<slug>/index.md`; no name → every feature's (archived ones in `adr/_archive/<slug>/` — an ADR log is history; a twin slug
+  never collides) + `adr/index.md` (project language). **Numbering = the D-number, per feature** (D-3 → 0003, ≥ 4 digits):
+  the log is append-only and numbers after its highest D-n, so no number ever moves — a global sequence (by date across
+  features) would shift with every removed feature and every merge of interleaved dates, and keeping one stable needs a
+  registry (state to merge). Only a hand-deleted LAST entry lets spec_decide reuse its number (outside the log's contract).
+  The title part is `slugify(mdPlainText(title))` cut to `ADR_SLUG_MAX` (60; `decision` when empty) — a retitled decision
+  changes the file name: the old file is stale. **Content:** front matter `status` (accepted · superseded by ADR-NNNN ·
+  superseded — when the superseder is no ADR) and `date` (the log's day), English-stable in every language; then `# title`,
+  a localized Status / Date / Supersedes list, `## Context and Problem Statement`, `## Decision Outcome` + `### Consequences`,
+  `## More Information` (the feature, its log entry, each `_Affects:_` reference linked to its file — `entryRefs` /
+  `resolveAffect`: requirements.md or change.md, test-plan.md, the section's file; a phantom one as text) — only the
+  sections the log has text for: MADR's Considered Options / Decision Drivers / Pros and Cons are never written (the log
+  holds no such data). **Discoveries** are no ADR: left out, named in the feature's index and `excluded` (reason
+  `discovery`; also `duplicate-id` — a D-n written twice, the first kept — and `unsafe-file` — a decisions.md linked out of
+  .specs/, never read: `readContained`). **User text** stays markdown where it is prose; where it sits in our structure it is
+  inert: `adrLabel` escapes `[` `]` outside code spans (a title is never a live link — heading, index, link labels), `mdCell`
+  the `|`, `adrInert` every `<!--` (an unclosed one hid the rest of the file), `adrBlock` closes a fence the paragraph leaves
+  open and moves its headings below the section's; the front matter and the marker comment hold none. No date of the run
+  anywhere: a re-run is byte-identical. **Write** (all-or-nothing): the legacy `exports` feature, a linked target or scope
+  folder (`specsWriteContained`), a same-named file without the marker (`isGeneratedOrAbsent`) refuse it all (`skipped: true`
+  for the last); a file whose text is unchanged (CRLF read as LF) is not rewritten (`unchanged`); then `adrStaleFiles()` —
+  the scope's ADR-named (`RE_ADR_NAME`) / index.md regular files carrying the marker that the export no longer produces —
+  are removed (`removeSpecFile`) and the folders that leaves empty (`removeEmptySpecDir`, files.js — gated, never a link),
+  never above `adr/`. A feature export touches only its own folder (`adr/index.md` is the project export's). Without
+  `write`: `documents` (content) + `stale` (what a write would remove; nothing is listed through a linked scope).
 - **Gherkin** — `gherkinFeature()` (the matrix — `buildTraceMatrix` — gives the planned T-IDs and the supersession state):
   `# language: en|pt|es` first (pt-BR → pt), then the AUTO-GENERATED marker as a `#` comment; Feature tags = the tracks
   (marker without brackets, else the name) + `@bugfix`; one Scenario per current AC tagged with its ID, T-IDs and track
@@ -280,5 +307,5 @@ trackers, release notes, milestones).
   (`🏁 meta.milestones`, `milestone.attention.invalid` / `notList`, EN/PT/ES) and the CLI roadmap tail. `spec_changelog {milestone}` → that milestone's features + its archived ones, `since`
   defaulting to `all`, written to `RELEASE-NOTES.<milestoneFileKey>.md` without stamping `meta.changelogAt`
   (`changelogData(…, only)`).
-- CLI: switches `revoke`, `print-config`, `gherkin` (`spec.CLI_SWITCHES`); value flags `reason`, `expires`, `text`,
+- CLI: switches `revoke`, `print-config`, `gherkin`, `adr` (1.25) (`spec.CLI_SWITCHES`); value flags `reason`, `expires`, `text`,
   `tracker`, `milestone`.

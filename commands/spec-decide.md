@@ -25,7 +25,9 @@ Decisions and discoveries made while planning or implementing get lost in chat a
 3. An unknown `affects` reference is refused (`unknownAffects`, nothing written): fix the typo, or name the section as
    the design spells it — a heading holding a comma (`Decisions, reuse & risks`) is named as it is, and written quoted.
 4. Say where it now shows up: the task brief of every task citing those ACs / T-IDs, the merge summary
-   (`/spec-finish`), the stakeholder export, the catalog. If `spec_doctor` then warns `decision-affects-approved`
+   (`/spec-finish`), the stakeholder export, the catalog — and, for a team that keeps Architecture Decision Records, the
+   ADR export (`/spec-export <feature> --adr`: one MADR file per decision, ADR number = its D-n; discoveries are not
+   exported). If `spec_doctor` then warns `decision-affects-approved`
    (the decision came after requirements / design were approved), re-review with `/spec-impact`, update the spec and
    re-approve.
 

@@ -52,7 +52,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   merge summary (spec text) written into the user's shell profile (the in-place `fs.writeFileSync` of the derived files and
   the appends followed file links; `writeFileAtomic`'s rename replaced a file link but wrote through a folder link). Known
   limit: a write after another in one call can still be refused (a tasks.md that is itself a link: `done` records its
-  evidence in .state.json, then the tick is refused) — nothing is ever written THROUGH a link.
+  evidence in .state.json, then the tick is refused) — nothing is ever written THROUGH a link. Removals go through it too:
+  `removeSpecFile` (a link AT the path is unlinked as the link) and (1.25) `removeEmptySpecDir` — an EMPTY folder only, never
+  one that is a link (rmdir would drop a Windows junction), false on any refusal (the ADR export's emptied folders).
 - **The project folder: `resolveProjectDir()` (files.js) — every surface's default.** The explicit argument (CLI `--project`, a
   tool's `projectDir`) > `SPEC_PROJECT_DIR` > `CLAUDE_PROJECT_DIR` > **the nearest folder at or above the working folder that
   holds a dev-spec .specs/** (`nearestProject()`: `isDevSpecDir` — roadmap.json, steering/ or a feature's .state.json — the

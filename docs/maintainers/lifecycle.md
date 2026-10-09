@@ -134,7 +134,10 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   must name existing entries; a superseded entry is retired (the brief and `decision-affects-approved` skip it, the catalog
   marks it). Readers: the brief (bounded), finish's merge summary, spec_export, spec_catalog (count + titles),
   trace_check (`phantomAffects`, warnings — never a gap), doctor (`decision-affects`, and `decision-affects-approved` for
-  a current decision recorded AFTER the approval of the requirements / design it names).
+  a current decision recorded AFTER the approval of the requirements / design it names), and (1.25) the ADR export —
+  `spec_export {format: "adr"}` (`exportAdr`, decisions.js): one MADR file per decision whose ADR number IS its D-number
+  (one more reason the log never renumbers), superseded ↔ supersedes linked, discoveries left out —
+  templates-imports-exports.md → Exports and planning has the rules.
 - **Spike kind** (`kind: "spike"`, `question`, `timebox` `YYYY-MM-DD` | `3d`): spike.md (Question · Timebox · Options
   considered · Evidence · Decision + `_Outcome: go | no-go | pivot_` · Follow-up — localized headings matched by
   `SPIKE_SYN`; `_Outcome:_` also reads the PT/ES words and yes/no) + investigation tasks; core-only; `gateWalk`,
