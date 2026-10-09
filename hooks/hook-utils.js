@@ -2,13 +2,17 @@
 
 /**
  * dev-spec-driven — what the hooks share BEFORE the engine loads (zero-dependency: Node core only; it never requires the engine,
- * so a hook's cheap pre-check stays cheap). Not a hook itself: hooks/hooks.json runs the hook scripts, which require this file.
+ * so a hook's cheap pre-check stays cheap). Not a hook itself: hooks/hooks.json runs the hook scripts, which require this file —
+ * and (1.25.1) mcp/server.js, for the projectDir parser it shares with the approval hook.
  *
  *   - utf16OrUtf8 / textOf / jsonOf / readText / readJson — a file as the engine reads it (files.js decodeText): a UTF-16 BOM (FF FE / FE FF —
  *     Windows PowerShell 5.1's Out-File and `>` write one) decides, else UTF-8; the BOM itself dropped (1.24 review 6, C3: the
  *     approval, guard and stop hooks read a UTF-16 roadmap.json / .state.json as UTF-8 — the guards "off", the gate blind). The
  *     guard, stop and observe hooks check for the BOM inline and require this file only then: their hot paths stay as cheap.
- *   - editTargets — a Write / Edit target as the file system reads it, the engine's approvalEditTargets (C5).
+ *   - editTargets — a Write / Edit target as the file system reads it, the engine's approvalEditTargets (C5; 1.25.1: its real path
+ *     on every platform — a folder linked to .specs/).
+ *   - parseProjectDir / fileUriToPath / unexpandedVar — ONE reading of an MCP tool's projectDir (a path or a local file:// URI), the
+ *     approval hook's and the MCP server's (1.25.1, review 7).
  *   - approvalProjects — the projects an approval-shaped tool call may act on, for the approval hook's raw level read (C4).
  *   - sessionFlagFile — a tiny per-session marker in the OS temp folder (the guard hook's forced-approval note, once a session).
  *   - claimProse / claimMatch — the stop gate's claim scan as the Stop hook's pre-filter (1.24 r6 I-I4), from the build's
@@ -78,8 +82,10 @@ function fsTargetPath(p, win = process.platform === "win32") {
   return i > cut ? s.slice(0, i) : s;
 }
 // A Write / Edit target (absolute, or relative to cwd) → the paths the file system reads it as: [resolved] — `./`, `..` and a stream
-// suffix taken out — plus, on Windows, when a segment looks like an 8.3 short name (`ROADMA~1.JSO`, `STATE~1.JSO`), its real path
-// (the file's, else its parent's + the name). A network path is never resolved on the disk. The engine's approvalEditTargets.
+// suffix taken out — plus its real path (the file's, else its folder's + the name): an 8.3 short name (`ROADMA~1.JSO`) and (1.25.1,
+// review 7) a folder linked to .specs/ or to a feature folder (`ln -s .specs sx` → `sx/roadmap.json`). A network path is never resolved
+// on the disk. The engine's approvalEditTargets. (The approval hook calls it only for a path naming .specs, a short name or one of the
+// guarded file names — RE_EDIT_MAYBE.)
 function editTargets(fp, cwd, win = process.platform === "win32") {
   const s = fsTargetPath(String(fp).trim(), win);
   if (isNetwork(s)) return [s];
@@ -89,14 +95,54 @@ function editTargets(fp, cwd, win = process.platform === "win32") {
   let abs;
   try { abs = path.resolve(base, s); } catch { return [s]; }
   const out = [abs];
-  if (win && /~\d/.test(abs)) {
-    let real = null;
-    try { real = fs.realpathSync.native(abs); } catch {
-      try { real = path.join(fs.realpathSync.native(path.dirname(abs)), path.basename(abs)); } catch { real = null; }
-    }
-    if (real && real !== abs) out.push(real);
+  let real = null;
+  try { real = fs.realpathSync.native(abs); } catch {
+    try { real = path.join(fs.realpathSync.native(path.dirname(abs)), path.basename(abs)); } catch { real = null; }
   }
+  if (real && real !== abs) out.push(real);
   return out;
+}
+// 1.25.1 (review 7, finding 5) — ONE reading of an MCP tool's projectDir, shared by the approval hook and mcp/server.js (it accepted a
+// local file:// URI the hook read as a relative folder: spec_approve {projectDir: "file:///…/projA", force: true} went through at ask).
+// The engine's unexpanded-variable rule (files.js unexpandedVar — mcp/tests/10-guards-review7.js checks they agree): `${…}`, a leading
+// `$NAME`, a `%NAME%`.
+const RE_UNEXPANDED_VAR = /\$\{|^\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%/;
+const unexpandedVar = (v) => RE_UNEXPANDED_VAR.test(String(v == null ? "" : v).trim());
+const RE_DOTDOT = /(^|[\\/])\.\.([\\/]|$)/;
+// A leading ~ (alone, ~/ or ~\) is the home folder — PowerShell 5.1 and MCP arguments never expand it (engine/files.js RE_HOME_PREFIX).
+const RE_HOME_PREFIX = /^~(?=$|[\\/])/;
+// A local file:// URI → its absolute path, else null (a host other than localhost, '..', a control character; on Windows a drive path
+// only — file:///C:/x, file:///c%3A/x).
+function fileUriToPath(uri) {
+  const m = /^file:\/\/([^/?#]*)(\/[^?#]*)$/i.exec(String(uri).trim());
+  if (!m || (m[1] && m[1].toLowerCase() !== "localhost")) return null;
+  let p;
+  try { p = decodeURIComponent(m[2]); } catch { return null; }
+  if (/[\u0000-\u001f\u007f]/.test(p)) return null;
+  if (process.platform === "win32") {
+    if (!/^\/[A-Za-z]:(\/|$)/.test(p)) return null;
+    p = p.slice(1);
+  }
+  if (RE_DOTDOT.test(p) || isNetwork(p)) return null;
+  return path.resolve(p);
+}
+// projectDir as a tool argument, read WITHOUT any fs call → { none: true } not given (absent, blank, a variable left unexpanded) · { dir }
+// the absolute folder (a local file:// URI is its path; a relative one resolves from `base`) · { code } refused: project-dotdot (a '..'
+// segment), project-network (a network / device path, a file:// URI naming a host) or project-uri (a file:// URI that is no local path).
+// The MCP server refuses the call on a code; the approval hook can't tell which project such a call acts on — it asks (fails closed).
+function parseProjectDir(v, base) {
+  if (typeof v !== "string" || !v.trim() || unexpandedVar(v)) return { none: true };
+  const s = v.trim();
+  if (RE_DOTDOT.test(s)) return { code: "project-dotdot" };
+  let p = s;
+  if (/^file:/i.test(s)) {
+    const host = /^file:\/\/([^/?#]*)/i.exec(s);
+    if (host && host[1] && host[1].toLowerCase() !== "localhost") return { code: "project-network" };
+    p = fileUriToPath(s);
+    if (!p) return { code: "project-uri" };
+  } else if (RE_HOME_PREFIX.test(p)) p = path.join(os.homedir(), p.slice(1)); // "~/zz": the home folder's zz (files.js expandHome)
+  if (isNetwork(p)) return { code: "project-network" };
+  return { dir: path.resolve(base || process.cwd(), p) };
 }
 
 // The nearest folder at or above dir holding a .specs/ folder (≤ 40 levels — the engine's SESSION_MAX_UP), else null. A network path
@@ -213,4 +259,4 @@ function claimMatch(message, f) {
 }
 
 module.exports = { utf16OrUtf8, textOf, jsonOf, readText, readJson, isUtf16, isNetwork, shareOf, fsTargetPath, editTargets, nearestSpecs, approvalProjects, sessionFlagFile,
-  claimProse, claimMatch };
+  claimProse, claimMatch, RE_UNEXPANDED_VAR, unexpandedVar, RE_DOTDOT, fileUriToPath, parseProjectDir };

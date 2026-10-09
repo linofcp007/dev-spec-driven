@@ -218,4 +218,34 @@ exports.run = async ({ ok, rpc, payload, S, tmp }) => {
       "1.25 create --branch: the merge driver knows `branch` — one side's record is taken; two records → the EARLIER (`at`: where the feature started first; none = later); the same time and two names → a conflict (ours kept); the same name → one record (ours' fields over theirs') (got " +
       js([earlier.merged.branch, tie.conflicts, same.merged.branch, noTime.merged.branch]) + ")");
   }
+
+  // 1.25.1 (review 7): spec_log = `dev-spec log <f> --json` for a feature on its own branch — the CLI reads `git log <commit>..HEAD`;
+  // spec_log's description names that range, and a log handed in that holds the start commit (a full log) is cut there (it and the
+  // older commits are no work of the feature) and labelled `since`, as the CLI's. Without a branch record nothing changes.
+  {
+    const p = fresh("log");
+    fakeGit(p, "ref: refs/heads/main", { main: SHA });
+    payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "Pay", tracks: ["core"], branch: true, projectDir: p } }));
+    fs.writeFileSync(path.join(p, ".specs", "pay", "tasks.md"), "# Tasks\n\n## Phase: Build\n- [ ] 1. [US1] First\n- [ ] 2. [US1] Second\n");
+    const commit = (sha, msg) => `commit ${sha}\nAuthor: T <t@example.com>\nDate:   2026-10-01T10:00:00+00:00\n\n    ${msg}\n\nsrc/a.js\n`;
+    const full = [commit("c".repeat(40), "feat(pay): task #2"), commit("d".repeat(40), "feat(pay): task #1"), commit(SHA, "chore: start"), commit("e".repeat(40), "feat(pay): task #2 (older work, before the branch)")].join("\n");
+    const ranged = full.slice(0, full.indexOf("commit " + SHA));
+    const viaFull = payload(await rpc("tools/call", { name: "spec_log", arguments: { name: "pay", gitLog: full, projectDir: p } }));
+    const viaRange = payload(await rpc("tools/call", { name: "spec_log", arguments: { name: "pay", gitLog: ranged, projectDir: p } }));
+    const cli = S.taskCommits(p, "pay", ranged, { max: 1000, since: { base: "main", commit: SHA } }); // what `dev-spec log pay` hands the engine
+    const whole = S.taskCommits(p, "pay", full, { since: null }); // the CLI's fallback (git no longer knows the commit): the whole log
+    const desc = (await rpc("tools/list", {})).result.tools.find((t) => t.name === "spec_log").description;
+    const plain = fresh("log-plain");
+    S.createFeature(plain, "Pay", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(plain, ".specs", "pay", "tasks.md"), "# Tasks\n\n## Phase: Build\n- [ ] 1. [US1] First\n- [ ] 2. [US1] Second\n");
+    const noBranch = payload(await rpc("tools/call", { name: "spec_log", arguments: { name: "pay", gitLog: full, projectDir: plain } }));
+    const counts = (r) => r.tasks.map((t) => t.commits.length).join();
+    ok(viaFull.ok && viaFull.commits === 2 && counts(viaFull) === "1,1" && js(viaFull.since) === js({ base: "main", commit: SHA }) &&
+      viaRange.commits === 2 && js(viaRange.tasks) === js(viaFull.tasks) && js(viaRange.since) === js(viaFull.since) &&
+      js(cli.tasks) === js(viaFull.tasks) && js(cli.since) === js(viaFull.since) && whole.commits === 4 && !whole.since &&
+      noBranch.commits === 4 && counts(noBranch) === "1,2" && !noBranch.since &&
+      /git log <branch\.commit>\.\.HEAD --name-only --relative/.test(desc),
+      "1.25.1 r7: spec_log on a feature with its own branch reads the range the CLI reads (<commit>..HEAD) — a full log is cut at the start commit, a ranged one taken as it is, both labelled since, the same result as the CLI's; the description names the range; a feature without a branch reads the whole log (got " +
+      js([viaFull.commits, counts(viaFull), viaFull.since, viaRange.commits, cli.commits, whole.commits, noBranch.commits, counts(noBranch)]) + ")");
+  }
 };

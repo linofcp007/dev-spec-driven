@@ -34,7 +34,7 @@
 // A clause-start 3rd person read as an order ("— liberta o nome" → "libere") goes into RE_PTBR_NOT_IMPERATIVE; a word the
 // maps miss into PTBR_WORDS / PTBR_PHRASES; anything else into PTBR_OVERRIDES. mcp/test.js (pD1) lints every string.
 // ===========================================================================
-const { DEV_SPEC } = require("./common.js"); // load time \u2014 the runnable CLI line (1.21 F3), protected whole in stage 0
+const { DEV_SPEC, MARKER_TRACK_ORDER } = require("./common.js"); // load time \u2014 the runnable CLI line (1.21 F3), protected whole in stage 0; the track tags (RE_PTBR_CLAUSE)
 const PTBR_KEEP = "\uE000", PTBR_END = "\uE001"; // private-use sentinels around a protected segment's index
 const PTBR_W = "\\p{L}\\p{N}_"; // word characters
 
@@ -66,6 +66,8 @@ const PTBR_OVERRIDES = [
   ["dispara e chama com a ligação ao runbook", "dispara e aciona o plantão com o link para o runbook"],
   // review 5 — a symlink is a "link" in Brazil (the phrase table misses this one: its "symlink / junction" reads as a path)
   ["uma ligação (symlink / junction)", "um link (symlink / junction)"],
+  // 1.25.1 review — enclisis mid-sentence reads European (the phrase table can't see it: tasks.md is held as a file name first)
+  ["uma alteração ao tasks.md revê-se e volta a aprovar-se", "uma alteração no tasks.md é revisada e aprovada de novo"],
 ];
 
 // 1. The European progressive a + infinitive → the Brazilian gerund. correr = a process running → rodando.
@@ -150,6 +152,26 @@ const PTBR_PHRASES = {
   "uma ligação (link simbólico, junction)": "um link (simbólico ou junction)",
   "é uma ligação ou uma pasta": "é um link ou uma pasta", "uma ligação para fora do projeto": "um link simbólico para fora do projeto",
   "repõe a ligação": "restaura o vínculo", "ligação ao harness": "integração com o harness",
+  // 1.25.1 review — a link is a "link" (a "ligação" is a phone call, "liga-o" reads "call him / turn it on")
+  "uma ligação (link simbólico)": "um link simbólico", "apaga só a ligação": "apaga só o link", "remover a ligação": "remover o link",
+  "liga-o em": "coloque o link em", "liga-o aqui": "coloque o link aqui",
+  "é uma ligação ou não é um ficheiro normal": "é um link ou não é um arquivo normal", // merge-state's linked .gitattributes
+  "liga-o —": "ative-o —", // observed.unguarded: "turn the approval guard on" (keys are lower case; the case follows the source)
+  // 1.25.1 review — enclisis after a subject or mid-sentence reads European: Brazil puts the pronoun first, says it in the
+  // passive, or (an instruction) uses the você imperative
+  "aplica-se": "se aplica", "aplicam-se mais entradas": "há mais entradas aplicáveis", "perder-se-ia": "se perderia",
+  "cria-se sem tamanho (o prazo limita-o)": "é criado sem tamanho (o prazo o limita)", "cria-se uma feature": "crie uma feature",
+  "cria-se uma de tamanho s": "crie uma de tamanho s", "cria-se como feature de tamanho s": "crie uma feature de tamanho s",
+  "arquiva-se esta alteração": "arquive esta alteração", "o tamanho escolhe-se uma vez": "o tamanho é escolhido uma vez",
+  "acrescenta-se uma quando se aplica": "acrescente uma quando se aplica", "ou responde-se": "ou responda",
+  "importa-se pelo seu próprio caminho": "é importada pelo seu próprio caminho", "lê-se melhor como": "fica mais legível como",
+  "ao marcar uma tarefa regista-se evidência": "ao marcar uma tarefa, a evidência é registrada",
+  "escrevem-se depois de": "são escritos depois de", "parecem-se com": "se parecem com", "podem contradizer-se": "podem se contradizer",
+  "comporta-se como": "se comporta como", "torna-se um": "se torna um", "uma cópia repõe-na": "uma cópia a redefine",
+  "para a começar a seguir": "para começar a acompanhá-la", "põe-na de parte": "coloque-a de lado", "depois repõe-na": "depois restaure-a",
+  "off desliga-o": "off o desliga", // "<cli> init --guard off turns it off"
+  // the interrogative "why" is two words in Brazil
+  "<porque não se aplica>": "<por que não se aplica>", "porque foi abandonado": "por que foi abandonado",
 };
 // "põe X a verde" (make X pass) → "faz X passar"; "postos a verde" → "deixados verdes"; a leftover "a verde" → "verde(s)".
 const PTBR_GREEN_VERB = { põe: ["faz", "passar"], põem: ["fazem", "passar"], pôr: ["fazer", "passar"], pondo: ["fazendo", "passar"],
@@ -174,6 +196,7 @@ const PTBR_YOU_SUBJ = {
   confies: "confie", adiciones: "adicione", aproves: "aprove", removas: "remova", voltes: "volte", precises: "precise",
   tenhas: "tenha", possas: "possa", queiras: "queira", sejas: "seja", estejas: "esteja", vás: "vá", ignores: "ignore",
   mexas: "mexa", toques: "toque", reescrevas: "reescreva", apresentes: "apresente", declares: "declare", afirmes: "afirme",
+  tires: "tire",
 };
 const PTBR_POSSESSIVE = { teu: "seu", tua: "sua", teus: "seus", tuas: "suas" };
 
@@ -223,9 +246,17 @@ const RE_PTBR_NOT_IMPERATIVE = [
   /^cumpre[ \t]*(?:\n|$)/iu, // the Constitution Check's status: "[Principle 1] — complies"
   /^lista[ \t]+(?:de|dos|das|do|da)(?![\p{L}])/iu, // the noun: "Lista de recursos…"
   /^planeia (?:os mesmos|ficheiros|\uE000)/iu, // a doctor overlap line: "(this feature) plans the same files as …"
+  /^começa por(?![\p{L}])/iu, // a description: "(the command) starts with _ or *" — never "comece por" (1.25.1)
 ];
+// The tags a task line carries before its text: the story / parallel tags, every built-in track's marker (MARKER_TRACK_ORDER —
+// [SaaS] … [DATA]; mcp/tests/03-languages.js checks the list against the engine's TRACK_MARKER) and a track pack's (an
+// upper-case token of 2–12, engine/packs.js RE_PACK_MARKER). 1.25.1: the list stopped at [PRIVACY], so "[API] Escreve …"
+// kept its European imperative.
+const PTBR_TRACK_TAGS = MARKER_TRACK_ORDER.map((t) => (t === "saas" ? "SaaS" : t.toUpperCase()));
 // Where a clause starts: a line (after its list marker / checkbox / number / [tags] / bold), after . ! ? : ; — – → ( “ «.
-const RE_PTBR_CLAUSE = /(?:^|\n)[ \t]*(?:>[ \t]*)*(?:(?:[-*+•]|\d+[.)])[ \t]+)?(?:\[[ xX]\][ \t]+)?(?:\d+[.)][ \t]+)?(?:\[(?:US\d+|P|shared|SaaS|AI|SEC|PRIVACY)\][ \t]*)*(?:\*\*|__)?[ \t]*|[.!?…][ \t]+(?:\*\*|__)?|[:;][ \t]+|[—–→⇒][ \t]*|[([][ \t]*|[“«][ \t]*/g;
+const RE_PTBR_CLAUSE = new RegExp(String.raw`(?:^|\n)[ \t]*(?:>[ \t]*)*(?:(?:[-*+•]|\d+[.)])[ \t]+)?(?:\[[ xX]\][ \t]+)?(?:\d+[.)][ \t]+)?` +
+  String.raw`(?:\[(?:US\d+|P|shared|` + PTBR_TRACK_TAGS.join("|") + String.raw`|[A-Z][A-Z0-9]{1,11})\][ \t]*)*(?:\*\*|__)?[ \t]*` +
+  String.raw`|[.!?…][ \t]+(?:\*\*|__)?|[:;][ \t]+|[—–→⇒][ \t]*|[([][ \t]*|[“«][ \t]*`, "g");
 
 // 5. Single words (a key may carry a hyphen: palavra-passe). Verb forms not listed keep their spelling (it is shared).
 const PTBR_WORDS = {

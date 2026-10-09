@@ -22,7 +22,7 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile, statePath, stripEnd, stripEnds,
   criterionLabel, notASlug, featureRefTest, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
-  useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir;
+  useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir, approvedContentSame, wsText, headingEntries;
 function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
   codeBlockLines, commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
   duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE,
@@ -34,7 +34,7 @@ function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atx
   statePath, stripEnd, stripEnds, criterionLabel, notASlug, featureRefTest, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
   taskMarkerValues, taskProse, tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds,
   trackLabel, trackMarker, unitIn, useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews,
-  isChangeDir } = E); }
+  isChangeDir, approvedContentSame, wsText, headingEntries } = E); }
 
 // ---------------------------------------------------------------------------
 // EARS linting
@@ -175,6 +175,11 @@ function criterionBlocks(text, opts = {}) {
   const cl = commentLines(all); // comments and fenced code as every reader sees them (a code span's "<!--" is text)
   // review 5 (L32): an INDENTED code block (codeBlockLines over the visible text) is code like a fence — its lines define nothing
   const icode = codeBlockLines(cl.map((c) => (c.hidden ? "" : c.vis)));
+  // 1.25.1: a SETEXT heading (a one-line paragraph over === / ---, the ONE heading reader's — headingEntries) is a heading here too:
+  // "Acceptance Criteria\n-------------------" opened no section (its criteria were linted outside an AC context, the strict rule),
+  // its text read as a paragraph criterion and its underline as a break. Its text line is the heading; the underline is skipped.
+  const setext = new Map(), underline = new Set();
+  for (const h of headingEntries(all)) if (!h.atx) { setext.set(h.i, h); underline.add(h.i + 1); }
   // acUnits: a table row, heading or paragraph line led by an AC ID is a REFERENCE — never a criterion to lint — when a list
   // item defines that ID anywhere, or an earlier unit already did ("US-1.AC-2 depends on the IdP's error codes." in Notes, a
   // "| US-1.AC-1 | P1 |" coverage table); outside an acceptance-criteria context it defines one only when it reads like one
@@ -215,6 +220,7 @@ function criterionBlocks(text, opts = {}) {
     if (c.fence === "open") return flush(); // an unclosed fence in a list item ends with the item (fenceStep)
     if (c.fence) return; // inside a fence: no content, no criteria ("const shall = 1")
     if (icode[i]) return flush(); // an indented code block: code, and the end of the criterion before it
+    if (underline.has(i)) return; // a setext heading's underline (1.25.1): no content, no break — an AC heading's body may follow
     const line = c.vis;
     if (!line.trim()) {
       // A blank source line ends the criterion; a line that held only a comment does not. An AC heading's body may
@@ -223,7 +229,8 @@ function criterionBlocks(text, opts = {}) {
       return;
     }
     cleaned.push({ line: ln, text: line.trim() });
-    const hd = atxHeading(stripStart(line, isWsUnit), 1, 6, "raw"); // /^\s*(#{1,6})\s+(.*)$/
+    const se = setext.get(i);
+    const hd = atxHeading(stripStart(line, isWsUnit), 1, 6, "raw") || (se ? { level: se.level, text: se.text } : null); // /^\s*(#{1,6})\s+(.*)$/ · setext
     if (hd) {
       while (stack.length && stack[stack.length - 1].level >= hd.level) stack.pop();
       stack.push({ level: hd.level, text: hd.text.trim() });
@@ -239,6 +246,7 @@ function criterionBlocks(text, opts = {}) {
         }
         if (redefines(ht, parent, true)) noteDef(labelOf(ht), ln); // a duplicate definition — still no criterion of its own
       }
+      if (se) return flush(); // a setext heading ends the criterion above, as an ATX one does (RE_BLOCK_BREAK below)
     }
     if (acUnits && /^\s*\|/.test(line)) {
       flush();
@@ -309,7 +317,7 @@ const RE_PADDED_AC = /^US-(?:0\d+\.AC-\d+|\d+\.AC-0\d+)$/;
 // ears_validate {name} / `dev-spec ears <feature>`: lint a feature's requirements.md (resolver-aware).
 function earsFeature(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const text = criteriaText(f.dir); // a change: its change.md without the task blocks (1.21 review C1)
   const lng = featureLang(projectDir, f.slug);
   if (text == null) return { ok: false, error: i18n.msg(lng).err.requirementsMissing(f.slug) };
@@ -554,7 +562,7 @@ function taskCitations(blocks, dir, reqText) {
 // an _Implements:_ glob walk may look at (default COVERAGE_CAP) — engine-internal (tests), never a tool argument.
 function traceCheck(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const dir = f.dir;
   // Strip HTML comments so example markers in template guidance don't count as real refs.
   // 1.21 review C1: a change's change.md is read as two views — its criteria without the task blocks, its task blocks alone —
@@ -576,6 +584,8 @@ function traceCheck(projectDir, name, opts = {}) {
   const activeReqs = activeDesign(rawReqs, tracks);
   const requiredAcs = requirementAcIds(activeReqs, dir);
   const definedAcs = activeReqs === rawReqs ? requiredAcs : requirementAcIds(rawReqs, dir);
+  // 1.25.1: never silently — the ACs an inactive section holds (a turned-off track's / a missing pack's) are a warning, inactiveAcs
+  const inactiveAcs = definedAcs === requiredAcs ? [] : [...definedAcs].filter((id) => !requiredAcs.has(id));
   // review 5 (M5): what the TASKS cite — taskCitations, the matrix's reader (never a Notes paragraph or the title; never another
   // feature's `<slug>/US-n.AC-m`); the test plan without another feature's references either
   const cites = taskCitations(blocks, dir, rawReqs);
@@ -669,6 +679,7 @@ function traceCheck(projectDir, name, opts = {}) {
     phantomAcsInTasks,
     ...(unidentified ? { unidentifiedCriteria: unidentified } : {}), // only when there are some: the result is otherwise unchanged
     ...(untraced.length ? { untracedCriteria: untraced } : {}), // a warning (F-I8) — likewise only when there are some
+    ...(inactiveAcs.length ? { inactiveAcs } : {}), // a warning (1.25.1) — the criteria of an inactive track section, never required
     implementsFiles: implFiles,
     missingImplFiles,
     plannedImplFiles,
@@ -738,7 +749,7 @@ function traceCheck(projectDir, name, opts = {}) {
 // missing _Implements:_ files). Any array field a later version adds is a gap kind too, unless listed as
 // informational here.
 // planned = an OPEN task's file, not written yet; the deep-traceability warnings (TRACE_WARNING_ORDER) are warnings.
-const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "unresolvedImplGlobs", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "removedAcs", "justifiedTestGaps", "untracedCriteria"]);
+const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "unresolvedImplGlobs", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "removedAcs", "justifiedTestGaps", "untracedCriteria", "inactiveAcs"]);
 const TRACE_GAP_ORDER = ["unidentifiedCriteria", "uncoveredByTasks", "phantomAcsInTasks", "uncoveredByTests", "phantomAcsInTests", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
 // The kinds trace_check's verdict counts (testsNotMappedToTasks is listed, never failing), and the kinds that read
 // tasks.md / test-plan.md — doctor defers the latter while that artifact is still a later phase's template.
@@ -777,12 +788,13 @@ function traceGapLines(tr, lang) {
 // an _Implements:_ glob whose bounded walk stopped at its cap before any match. justifiedTestGaps (+tdd, a top-level array — 1.24
 // review 6, F3): uncovered ACs the test plan names only outside its test entries (a Gaps / Out of Scope note) — they stay
 // uncoveredByTests gaps; the warning says the plan accounts for them. untracedCriteria (only when some — F-I8): modal criteria with no
-// stable ID beside US-n.AC-m ones (L<line>).
-const TRACE_WARNING_ORDER = ["uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "untracedCriteria", "justifiedTestGaps", "plannedNotInCode", "inCodeNotInPlan", "unresolvedImplGlobs"];
+// stable ID beside US-n.AC-m ones (L<line>). inactiveAcs (only when some — 1.25.1): the ACs requirements.md defines only in an
+// inactive section (a turned-off track's, a missing pack's) — not required, named so they never vanish silently.
+const TRACE_WARNING_ORDER = ["uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "untracedCriteria", "inactiveAcs", "justifiedTestGaps", "plannedNotInCode", "inCodeNotInPlan", "unresolvedImplGlobs"];
 const TRACE_SECONDARY_KINDS = TRACE_WARNING_ORDER.slice(0, 4);
 function traceWarnings(tr) {
   const src = { ...(tr && tr.code ? { plannedNotInCode: tr.code.plannedNotInCode, inCodeNotInPlan: tr.code.inCodeNotInPlan } : {}) };
-  for (const k of [...TRACE_SECONDARY_KINDS, "untracedCriteria", "justifiedTestGaps", "unresolvedImplGlobs"]) if (tr && Array.isArray(tr[k])) src[k] = tr[k];
+  for (const k of [...TRACE_SECONDARY_KINDS, "untracedCriteria", "inactiveAcs", "justifiedTestGaps", "unresolvedImplGlobs"]) if (tr && Array.isArray(tr[k])) src[k] = tr[k];
   return TRACE_WARNING_ORDER.filter((k) => Array.isArray(src[k]) && src[k].length).map((k) => ({ kind: k, items: src[k].slice() }));
 }
 // The warnings as localized "label: ID, ID" lines (kinds = a subset, e.g. the secondary ones for doctor).
@@ -852,14 +864,31 @@ function traceSecondary(dir, reqText, blocks, planText, tracks, allReqText) {
   for (const [k, id] of cited) if (!all.has(k)) out.phantomSecondary.push(id);
   return out;
 }
+// 1.25.1 — what else a plan writes as a test entry: a GFM table WITHOUT its outer pipes ("Test ID | Covers" over "--- | ---", then
+// "T-01 | US-1.AC-1" — a row may drop them in a piped table too), a table whose T-IDs sit in a "Test ID" / "ID" column that is not the
+// first ("| # | Test ID | Covers |"), and a heading led by a T-ID ("### T-01 — expired token rejected" + its body, up to the next
+// heading, table or T-ID item). Each was read as no entry: coverage 0/N, the plan's ACs listed as justifiedTestGaps.
+const RE_GFM_SEP = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+const RE_TEST_ID_HEADER = /^(?:test[\s_-]*ids?|t[\s_-]?ids?|ids?|ids? (?:do|de|da|del) (?:teste|testes|prueba|pruebas|la prueba))$/i;
 function testPlanEntries(planText) {
   const out = [];
   let header = null;
   let sep = false;
   let inTable = false;
+  let idCol = 0; // the table's T-ID column: the one whose header reads Test ID / ID (EN / PT / ES), else the first
   let item = null; // the list entry being continued: { indent, blank, entry }
+  let head = null; // the T-ID heading entry being continued (1.25.1): its body lines join its text
   const tidLead = (line) => RE_LIST_ITEM.test(line) && line.replace(RE_LIST_ITEM, "").replace(/^[\s*`_]+/, "").match(/^T-\d+(?!\d)/);
-  for (const line of planIdText(planText || "").split(/\r?\n/)) {
+  const headLead = (line) => { const h = /^\s{0,3}#{1,6}\s+(.*)$/.exec(line); return h ? h[1].replace(/^[\s*`_[]+/, "").match(/^T-\d+(?!\d)/) : null; };
+  // a pipe-less GFM table's header: a line with a pipe over a delimiter row
+  const pipeless = (line, next) => line.includes("|") && !/^\s*\|/.test(line) && next !== undefined && next.includes("|") && next.includes("-") && RE_GFM_SEP.test(next);
+  const lines = planIdText(planText || "").split(/\r?\n/);
+  for (let n = 0; n < lines.length; n++) {
+    const line = lines[n];
+    if (head) {
+      if (/^\s{0,3}#{1,6}\s/.test(line) || /^\s*\|/.test(line) || tidLead(line) || pipeless(line, lines[n + 1])) head = null;
+      else { if (line.trim()) head.text += "\n" + line.trim(); continue; }
+    }
     if (item) {
       const indent = line.match(/^\s*/)[0].length;
       if (!line.trim()) { item.blank = true; continue; }
@@ -867,15 +896,29 @@ function testPlanEntries(planText) {
       if (!tidLead(line) && (indent > item.indent || (!item.blank && !block))) { item.entry.text += "\n" + line.trim(); continue; }
       item = null;
     }
-    if (/^\s*\|/.test(line)) {
-      if (!inTable) { inTable = true; header = tableCells(line); sep = false; continue; }
-      if (!sep && /^\s*\|[\s:|-]+$/.test(line.trim())) { sep = true; continue; }
+    // a table line: one that opens with a pipe, a row of the open table (a GFM row may drop its outer pipes — never a list item, a
+    // heading or a quote), or a pipe-less table's header
+    const rowOf = inTable && line.includes("|") && !RE_LIST_ITEM.test(line) && !/^\s*(?:#|>)/.test(line);
+    if (/^\s*\|/.test(line) || rowOf || (!inTable && pipeless(line, lines[n + 1]))) {
+      if (!inTable) {
+        inTable = true; header = tableCells(line); sep = false;
+        const h = header.findIndex((c) => RE_TEST_ID_HEADER.test(c.replace(/[*_`]/g, "").trim()));
+        idCol = h >= 0 ? h : 0;
+        continue;
+      }
+      if (!sep && line.includes("-") && RE_GFM_SEP.test(line)) { sep = true; continue; }
       const cells = tableCells(line);
-      const ids = [...extractTestIds(cells[0] || "")];
+      const ids = [...extractTestIds(cells[idCol] || "")];
       if (ids.length) out.push({ ids, text: line.trim(), cells, header });
       continue;
     }
     inTable = false;
+    const hm = headLead(line);
+    if (hm) {
+      head = { ids: [hm[0]], text: line.trim(), cells: null, header: null };
+      out.push(head);
+      continue;
+    }
     const m = tidLead(line);
     if (m) {
       const entry = { ids: [m[0]], text: line.trim(), cells: null, header: null };
@@ -1298,6 +1341,23 @@ function rtmEvidence(rec) {
   if (rec.stale === true) o.stale = true;
   return Object.keys(o).length ? o : null;
 }
+// 1.25.1 — the matrix's indexes. A row's key (an AC by its ID, an EC / NFR / SC by its number key — the `cites` rule), the keys an
+// item cites (its ACs, its secondary IDs: a Map's or a Set's keys), item lists → Map(key → the item indexes, ascending), and the
+// ascending union of index lists (the candidates of a row, in document order — the order the old full scans produced).
+const rtmKey = (row) => (row.kind === "ac" ? "a" + row.id : "s" + row.key);
+function* rtmKeys(acs, sec) { for (const a of acs) yield "a" + a; for (const k of sec.keys()) yield "s" + k; }
+function rtmIndex(items, keysOf) {
+  const m = new Map();
+  items.forEach((it, n) => {
+    for (const k of keysOf(it)) { const l = m.get(k); if (!l) m.set(k, [n]); else if (l[l.length - 1] !== n) l.push(n); }
+  });
+  return m;
+}
+function rtmMerge(lists) {
+  const seen = new Set();
+  for (const l of lists) if (l) for (const n of l) seen.add(n);
+  return [...seen].sort((a, b) => a - b);
+}
 // traceMatrix for a resolved feature ({ slug, dir }). opts: code (+ scan: a scanTestCode() result or a function returning
 // one), supBy (a supersededByIndex() result to reuse).
 function buildTraceMatrix(projectDir, f, opts = {}) {
@@ -1344,6 +1404,9 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const tinfo = taskCites.per; // { b, acs, sec, tids: Map(T-ID key → spelling) }
   const tasksAcs = taskCites.acs;
   const tasksSec = new Set(tinfo.flatMap((t) => [...t.sec.keys()]));
+  // 1.25.1 — the rows read INDEXES built once (rtmIndex): each row scanned every task, test entry, design section and decision —
+  // O(rows × (tasks + tests)): 2,800 stories took the matrix 6.4 s beside a 0.6 s trace. A row's key: rtmKey.
+  const tasksBy = rtmIndex(tinfo, (t) => rtmKeys(t.acs, t.sec)), tasksByTid = rtmIndex(tinfo, (t) => t.tids.keys());
 
   // The test plan (+tdd only — an inactive artifact otherwise, as trace_check reads it).
   const planOn = phaseActive("test-plan", tracks);
@@ -1353,6 +1416,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   // trace_check's uncoveredByTests set: the ACs the plan's test ENTRIES cite (1.24 review 6, F3 — never a Gaps / Out of Scope note)
   const planAcs = new Set(entries.flatMap((e) => [...e.acs]));
   const planSec = new Set(entries.flatMap((e) => [...e.sec.keys()]));
+  const entriesBy = rtmIndex(entries, (e) => rtmKeys(e.acs, e.sec)); // (1.25.1 — the rows' index)
   const quickSec = secondaryIds(realLines(read("quickstart.md") || "", RE_SECONDARY_ID_LINE).join("\n"));
   let code = null;
   if (opts.code && planOn) code = traceTestCode(projectDir, dir, planText, requirementAcIds(reqs, dir), opts.scan);
@@ -1367,6 +1431,9 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   }
   const dinfo = dsecs.map((s) => { const hay = s.title + "\n" + s.body; return { title: s.title, acs: extractAcIds(hay), sec: secondaryIds(hay) }; });
   const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs (1.15)
+  // (1.25.1 — the rows' index: the sections citing a key, and each track marker's sections)
+  const dinfoBy = rtmIndex(dinfo, (d) => rtmKeys(d.acs, d.sec));
+  for (const m of trackMarks) m.secs = dinfo.map((d, n) => (d.title.includes(m.marker) ? n : -1)).filter((n) => n >= 0);
 
   // decisions.md — the current entries (a later entry's _Supersedes: D-n_ retires D-n).
   const decRaw = read(DECISIONS_FILE);
@@ -1382,6 +1449,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     }
     return { id: e.id, title: e.title, kind: e.kind, acs, secIds };
   });
+  const decsBy = rtmIndex(decs, (d) => rtmKeys(d.acs, d.secIds)); // (1.25.1 — the rows' index)
 
   // _Supersedes:_ both ways.
   const own = resolveSupersedes(projectDir, dir, supersedesMarkers(reqs), new Map()).valid;
@@ -1401,10 +1469,11 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
       const before = requirementIndex(snapReq);
       // (a change: the views' blank lines stand for task lines — a task added or moved is no change of the criteria)
       const cmp = (t) => (change ? t.split("\n").filter((l) => l.trim()).join("\n") : t);
-      Object.assign(approval, { baseline: "snapshot", snapshot: snap.rel, changed: textFingerprint(cmp(reqRaw), "requirements") !== textFingerprint(cmp(snapReq), "requirements") });
+      // (1.25.1, review 7: whitespace only is no change — spec_impact's and changedSinceApproval's rule, wsText)
+      Object.assign(approval, { baseline: "snapshot", snapshot: snap.rel, changed: wsText(cmp(reqRaw), "requirements") !== wsText(cmp(snapReq), "requirements") });
       rowChanged = (row) => { const o = before.get(row.id); return !o || normWs(o.text) !== normWs(row.raw); };
     } else if (appr.fingerprint) {
-      const changed = !fingerprintMatches(change ? fullReq : reqRaw, apPhase, appr.fingerprint);
+      const changed = !approvedContentSame(dir, apPhase, appr, change ? fullReq : reqRaw); // the shared test (gates.js — 1.25.1)
       Object.assign(approval, { baseline: "fingerprint-only", changed });
       rowChanged = () => (changed ? null : false); // THAT the file changed, not which criterion
     } else Object.assign(approval, { baseline: "none", changed: null });
@@ -1412,9 +1481,9 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
 
   const out = rows.map((row) => {
     const tests = [];
-    for (const e of entries) {
-      if (!cites(row, e.acs, e.sec)) continue;
-      for (const id of e.ids) if (!tests.some((t) => tKey(t.id.slice(2)) === tKey(id.slice(2)))) tests.push({ id });
+    const rk = rtmKey(row), seenT = new Set();
+    for (const n of entriesBy.get(rk) || []) { // (1.25.1: the entries citing the row, in plan order — the index)
+      for (const id of entries[n].ids) { const k = tKey(id.slice(2)); if (!seenT.has(k)) { seenT.add(k); tests.push({ id }); } }
     }
     if (code) for (const t of tests) {
       const k = tKey(t.id.slice(2));
@@ -1423,7 +1492,9 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     }
     const testKeys = new Set(tests.map((t) => tKey(t.id.slice(2))));
     const tasks = [];
-    for (const t of tinfo) {
+    // (1.25.1) the tasks that cite the row or one of its tests — the indexes, in task order
+    const cand = rtmMerge([tasksBy.get(rk), ...tests.map((tt) => tasksByTid.get(tKey(tt.id.slice(2))))]);
+    for (const t of cand.map((n) => tinfo[n])) {
       const via = [];
       if (cites(row, t.acs, t.sec)) via.push(row.id);
       for (const tt of tests) if (t.tids.has(tKey(tt.id.slice(2)))) via.push(tt.id);
@@ -1445,8 +1516,8 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
       gaps.push("no-coverage"); // a scaffold's untouched EC/NFR/SC row is no gap — trace_check warns about none (review R11)
     }
     const status = gaps.length ? "untraced" : !tasks.length || tasks.some((t) => !t.done) ? "planned" : tasks.some((t) => !t.verified) ? "implemented" : "verified";
-    const design = dinfo.filter((d) => cites(row, d.acs, d.sec) || (row.kind === "ac" && trackMarks.some((m) => m.acs.has(row.id) && d.title.includes(m.marker)))).map((d) => d.title);
-    const decisions = decs.filter((d) => (row.kind === "ac" ? d.acs.has(row.id) : d.secIds.has(row.key))).map((d) => ({ id: d.id, title: d.title, kind: d.kind }));
+    const design = rtmMerge([dinfoBy.get(rk), ...(row.kind === "ac" ? trackMarks.filter((m) => m.acs.has(row.id)).map((m) => m.secs) : [])]).map((n) => dinfo[n].title);
+    const decisions = (decsBy.get(rk) || []).map((n) => decs[n]).map((d) => ({ id: d.id, title: d.title, kind: d.kind }));
     const r = {
       id: row.id,
       kind: row.kind,
@@ -1483,7 +1554,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
 // files naming each planned T-ID (bounded walk; opts.scan reuses one).
 function traceMatrix(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   return buildTraceMatrix(projectDir, f, opts);
 }
 

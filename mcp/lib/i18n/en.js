@@ -7,10 +7,10 @@
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded } = require("./common.js"); // load time
-// The assembled tables — call-time use only; mcp/lib/i18n.js links them once every language has loaded.
-let BUILD, MSG;
-function __link(T) { ({ BUILD, MSG } = T); }
+const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded, stopLineClaim } = require("./common.js"); // load time
+// The assembled tables and the shared retro.md layout (renderRetro) — call-time use only; mcp/lib/i18n.js links them when it loads this file.
+let BUILD, MSG, renderRetro;
+function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
 
 // ===========================================================================
 // Artifact builders, one set per language. EN is the canonical reference; since 1.13 its templates are
@@ -1133,6 +1133,23 @@ const evalsReadme = "# Evals\n\n" +
     "Item shape: `{ id, input, expect: { type, value|rubric } }`. Grader types: contains | equals | regex | refuse | judge.\n" +
     "The system prompt is read from the latest `../prompts/vN.md` (its `## System` section).\n";
 
+// 1.25.1 — what the stop gate's claims (msg.stopGate.claims) are made of. A claim is about the WORK — a task, the feature, the fix,
+// everything, the tests — never a bare verb: "I verified that the bug is in the parser", "the migration was completed in 2023", "The
+// pay() function is implemented in src/pay.ts" were sent back while any recent tick was unverified (one more round-trip a turn).
+const STOP_EN_DONE = String.raw`(?:done|finished|complete|completed|implemented|verified)`;
+// …and more of them: "implemented and verified", "done, tested and working".
+const STOP_EN_CHAIN = String.raw`(?:\s*(?:,|&|and)\s*(?:now\s+|fully\s+)?(?:done|finished|complete|completed|implemented|verified|tested|working))*`;
+// Its clause ends right there ("Login is implemented.", "Work complete —"): "is implemented in src/pay.ts" describes the code.
+const STOP_EN_END = String.raw`(?=[ \t]*(?:[.!,;:—–)]|$|\p{Extended_Pictographic}|\u2713|\u2714))`;
+// A first person's verb ends its sentence ("I've finished.") — a comma or a colon after it introduces what was found.
+const STOP_EN_END1 = String.raw`(?=[ \t]*(?:[.!;)]|$|\p{Extended_Pictographic}|\u2713|\u2714))`;
+// The work a first person finished: a task (task 3, tasks 1-3), the feature, the fix, the changes, everything, it…
+const STOP_EN_WORK = String.raw`(?:(?:(?:the|all|every|each|both|my|our|remaining|last|final|this|that|these|those)\s+|all\s+of\s+the\s+|the\s+rest\s+of\s+the\s+)*(?:\d+\s+)?(?:tasks?(?:\s+#?\d+(?:\s*(?:,|and|&|[-–]|to)\s*#?\d+)*)?|steps?(?:\s+#?\d+)?|features?|stor(?:y|ies)|fix(?:es)?|bugfix|changes?|implementation|work|plan|checks?)|everything|it|them|all|both)(?![\p{L}\p{N}_])`;
+// What the rest of a "Done." line names when it claims the work (common.js stopLineClaim).
+const STOP_EN_TESTED = String.raw`(?:tests?|tasks?|suites?|checks?|builds?|lint|verified|passing|passes|passed|green|implemented)`;
+// A gerund after "finished" / "done" is another activity ("I've finished reading the code") — unless it is the work's own.
+const STOP_EN_ING = String.raw`(?!\s+(?!implementing|fixing|building|wiring|writing|adding|testing|verifying)\p{L}+ing(?![\p{L}\p{N}_]))`;
+
 // ===========================================================================
 // Human-readable tool messages (doctor / clarify / next-action / add-track /
 // init notes / hook output). Functions so callers interpolate freely.
@@ -1211,6 +1228,7 @@ const msg = {
       // spec_classify's size suggestion (a reason code → the sentence)
       suggest: {
         "trivial-change": "Suggested size xs — a trivial change (a typo, a copy or config tweak, a one-line fix): a change, one change.md, two approvals.",
+        "small-change": "Suggested size xs — one small behaviour change (a clearer error message, a default or a limit, one empty or missing input handled): a change, one change.md with 1–3 criteria and tasks, two approvals.",
         "single-unit": "Suggested size s — one unit of work (one endpoint, screen, button, field…) with at most one track that has design sections: one story, the core-tier track sections, the plan approved in one call.",
         "several-tracks": "Suggested size l — three or more tracks with design sections: the full chain.",
         "public-api": "Suggested size l — a public API (outside consumers, a contract to keep): the full chain.",
@@ -1484,7 +1502,9 @@ const msg = {
     },
     // 1.14 F1 — harness-observed evidence (hooks/observe-hook.js; roadmap.json meta.evidence "reported" | "observed").
     observed: {
-      on: "Evidence mode OBSERVED — a task whose _Verify:_ holds a command is verified only by a passing run the harness saw (in Claude Code the plugin's observe hook logs every Bash run of a _Verify:_ or project-check command) or that dev-spec done --run / finish --run made itself; a project check's run likewise (roadmap.json meta.evidence). An MCP-only client has no such hook: record its runs with " + DEV_SPEC + " done <feature> <n> --run.",
+      on: "Evidence mode OBSERVED — a task whose _Verify:_ holds a command is verified only by a passing run the harness saw (in Claude Code the plugin's observe hook logs every Bash run of a _Verify:_ or project-check command) or that dev-spec done --run / finish --run made itself; a project check's run likewise (roadmap.json meta.evidence). An MCP-only client has no such hook: record its runs with " + DEV_SPEC + " done <feature> <n> --run. With the PowerShell tool alone (Windows without Git Bash) a run is logged only when Claude Code reports its exit code — record the others with --run too.",
+      // 1.25.1 (review 7): observed evidence is only as strong as the approval guard
+      unguarded: "Observed evidence is only as strong as the approval guard, and it is off (meta.approvalGuard): an agent appending one line to an .execution/observed.jsonl forges an observed run. Turn it on — " + DEV_SPEC + " init --approval-guard ask (or deny) — so writing that log is asked or refused.",
       off: "Evidence mode REPORTED — the runs an agent reports verify as given (roadmap.json meta.evidence); each record still says whether the harness observed it.",
       badValue: (v) => `--evidence takes reported or observed (got '${v}').`,
       badInput: (v) => `evidence must be "reported" or "observed" (got '${v}').`,
@@ -1535,6 +1555,7 @@ const msg = {
       atLeast: (n) => `≥ ${n}`,
       atMost: (n) => `≤ ${n}`, // 1.24 r6 A5: a schema `maximum`
       between: (lo, hi) => `between ${lo} and ${hi}`, // 1.24 r6 A5: `minimum` and `maximum`
+      atLeastItems: (n) => `with at least ${n} item${n === 1 ? "" : "s"}`, // 1.25.1: a schema `minItems` (spec_append_tasks.tasks)
       // 1.24 r6 A1: a top-level argument the tool's inputSchema doesn't list (it was dropped, and the call did something else)
       unknownArgs: (tool, items, valid) => `Unknown argument${items.length > 1 ? "s" : ""} for ${tool}: ${items.map((u) => u.argument + (u.didYouMean ? ` (did you mean ${u.didYouMean}?)` : "")).join(", ")} — nothing was done. ${tool} takes: ${valid}.`,
       notObject: "arguments must be a JSON object.",
@@ -1543,6 +1564,8 @@ const msg = {
       // 1.24 r6 A3: projectDir names an existing folder (the CLI's --project rule) — spec_init alone creates one
       projectMissing: (dir) => `projectDir ${dir}: no such folder — check the path (only spec_init creates a project folder).`,
       projectNotDir: (dir) => `projectDir ${dir} is a file, not a folder.`,
+      // 1.25.1 (review 7): spec_import reads (and, dry, returns) the files its path names — only in the default project or a dev-spec one
+      projectNoSpecs: (dir) => `projectDir ${dir} holds no dev-spec project (a .specs/ with roadmap.json, steering/ or a feature) — spec_import reads files only in the default project or one spec_init set up: run spec_init with this projectDir first.`,
       projectUri: (uri) => `projectDir ${uri} is not a local file:// URI of a folder (file:///C:/path on Windows, file:///path elsewhere).`,
       // tools/call naming no tool of tools/list (JSON-RPC -32602 Invalid params) — 1.14 full review S2.
       unknownTool: (name) => `Unknown tool: ${name} — tools/list lists the tools this server provides.`,
@@ -1818,6 +1841,7 @@ const msg = {
       finishChanged: (list) => `changed after their approval (re-review, then re-approve): ${list}`,
       bugGate: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled. No fix before the root cause is written in bug.md — do task ${first} first (find the root cause with evidence and write it there).`,
       bugGateFirst: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled and no task writes it — only task ${first} can be completed until the root cause is written in bug.md (no fix before the root cause).`,
+      bugGateFix: (n) => `Task ${n} can't be completed yet: it makes the regression test green — a fix — and bug.md → Root Cause is not filled. Write the root cause there, with its evidence, first (no fix before the root cause is written in bug.md).`,
       bugGateTicked: (n, rc) => `Task ${n} can't be completed yet: bug.md → Root Cause is still empty — task ${rc} is ticked, but its deliverable is that section. Write the root cause there, with its evidence (no fix before the root cause is written in bug.md).`,
       rootCauseTaskEmpty: (n) => `Task ${n} is ticked, but bug.md → Root Cause is still empty — write the root cause there, with its evidence: the tasks after it (the regression test, the fix) stay refused until it is written.`,
       fill: (file, what, hint) => `Fill ${file} — ${what}; then ${hint}.`,
@@ -1886,6 +1910,9 @@ const msg = {
       pathRequired: "path required — the folder (or a file) of the spec to import.",
       outside: (p) => `'${p}' is outside the project — spec_import only reads inside the project directory.`,
       notFound: (p) => `'${p}' not found.`,
+      // 1.25.1 (review 7): never a hidden folder or file but the importers' own; a file named as the source is a document format
+      hidden: (p, part) => `'${p}' is in a hidden folder or is a hidden file (${part}) — spec_import reads none but the importers' own: .kiro/, .cursor/, .cursorrules, .fluidplan/, .agent/ (Codex), .claude/plans/.`,
+      notSource: (p) => `'${p}' is no spec source spec_import reads — name a .md / .markdown / .mdc / .txt / .json / .yaml / .yml file, or the source's folder.`,
       nothing: (tool, p) => `No ${tool} spec files found in '${p}'.`,
       exists: (slug) => `Feature '${slug}' already exists — import never overwrites it. Pass another name.`,
       tooLarge: (rel, max) => `${rel} is over ${max} characters — too large to import whole (the part past the limit, a plan's steps included, would be lost). Split or shorten it, then import again; nothing was created.`,
@@ -1928,6 +1955,8 @@ const msg = {
       skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts", quickstart: "Quickstart" },
       skFrom: (file) => `> From spec-kit \`${file}\`.`,
       wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts, quickstart) without the plan`,
+      // 1.25.1: spec-kit's functional requirements are carried as prose (## Functional Requirements) — no criterion traces the ones no scenario covers
+      wUncoveredFr: (list) => `functional requirements no acceptance scenario covers — carried as prose under "Functional Requirements", so no task or test traces them: ${list}. Turn each into an EARS criterion with an AC ID (or cite it in one) before approving the requirements`,
       wUnreadable: (file) => `${file} points outside the project — skipped`,
       done: (tool, rel, slug, label, lang) => `Imported ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  mapping: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
@@ -2136,33 +2165,8 @@ const msg = {
         followUps: "## Follow-ups",
         followUpsNote: "<!-- Candidate backlog items — add the ones you accept with spec_backlog (dev-spec backlog add \"<name>\" \"<note>\"). -->",
       },
-      // The ONE retro layout; each language passes its own retroText (lazy MSG reference — MSG is complete at call time).
-      buildRetro: (T, P, m, fmt) => {
-        const lt = m.leadTime || {};
-        const rows = [[T.created, m.createdAt ? m.createdAt.slice(0, 10) + (m.createdAtApproximate ? ` (${T.approximate})` : "") : T.unknown]];
-        for (const ph of ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "complete", "finished"]) {
-          if (lt[ph]) rows.push([T.lead(P[ph] || ph), fmt.dur(lt[ph].hours) + (lt[ph].approximate ? ` (${T.approximate})` : "")]);
-        }
-        const by = m.reworkByPhase ? Object.entries(m.reworkByPhase).map(([ph, n]) => `${P[ph] || ph} ${n}`).join(", ") : "";
-        const reworkValue = m.rework == null ? null : m.rework + (by ? ` (${by})` : "");
-        rows.push([T.rework, reworkValue == null ? T.reworkUnknown
-          : m.reworkLowerBound && Array.isArray(m.legacyPhases) ? T.reworkPartial(reworkValue, m.legacyPhases.map((ph) => P[ph] || ph).join(", ")) : reworkValue]);
-        rows.push([T.forced, String(m.forcedApprovals)]);
-        rows.push([T.changes, `${m.changeRequests} (${T.reopened(m.reopenedTasks)})`]);
-        rows.push([T.passRate, m.evidence && m.evidence.runs ? T.runs(m.evidence.passRate, m.evidence.passing, m.evidence.runs) : T.noRuns]);
-        rows.push([T.tasks, T.tasksValue(m.tasks.done, m.tasks.total)]);
-        rows.push([T.clar, String(m.openClarifications)]);
-        const sig = [];
-        if (m.reworkByPhase) for (const [ph, n] of Object.entries(m.reworkByPhase)) sig.push(T.sigRework(P[ph] || ph, n + 1));
-        if (m.forcedApprovals) sig.push(T.sigForced(m.forcedApprovals));
-        if (m.reopenedTasks) sig.push(T.sigReopened(m.reopenedTasks));
-        if (m.evidence && m.evidence.runs && m.evidence.passRate < 100) sig.push(T.sigPass(m.evidence.passRate));
-        if (m.openClarifications) sig.push(T.sigClar(m.openClarifications));
-        return [T.title(m.feature), "", T.intro(fmt.today), "", T.metrics, "", T.header, "|---|---|", ...rows.map(([k, v]) => `| ${k} | ${v} |`), "",
-          T.well, "", "- ", "", T.hurt, "", ...(sig.length ? [T.signals(sig.join("; "))] : []), "- ", "", T.amend, "", T.amendNote, "- ", "",
-          T.followUps, "", T.followUpsNote, "- ", ""].join("\n");
-      },
-      retro: (m, fmt) => MSG.en.metrics.buildRetro(MSG.en.metrics.retroText, MSG.en.metrics.phase, m, fmt),
+      // retro.md: the one layout (i18n.js renderRetro, linked) with this language's retroText and phase names
+      retro: (m, fmt) => renderRetro(MSG.en.metrics.retroText, MSG.en.metrics.phase, m, fmt),
     },
 
     // Deep traceability (trace_check warnings, doctor secondary-trace / tests-in-code, finish, hook). Never blocking.
@@ -2173,6 +2177,7 @@ const msg = {
         uncoveredSuccessCriteria: "success criteria (SC) that no test or quickstart step checks",
         phantomSecondary: "tasks / test plan cite unknown EC/NFR/SC IDs (typos?)",
         untracedCriteria: "criteria with a modal verb but no ID of their own (by line) — no task or test can trace them: number each one US-<story>.AC-<n>",
+        inactiveAcs: "ACs under the heading of a track that is off (or a missing track pack) — not required, not traced: add the track back, or move them out of that section if they are core criteria",
         justifiedTestGaps: "ACs the test plan names only in a note (Gaps / Out of Scope), never in a test row — still uncovered: add a row, or approve the test plan with force to accept the gap",
         plannedNotInCode: "planned tests that no test file names (put the T-ID in the test name)",
         inCodeNotInPlan: "T-IDs in test code that no feature's test plan lists",
@@ -2269,6 +2274,11 @@ const msg = {
         // 1.23 review 5: a shell command the guard can't read — too long (a.length characters) or in a form it can't follow
         if (a.kind === "unreadable") {
           if (a.why === "partial") return "run a tool call the approval guard received only in part (its input was cut off) that names dev-spec or .specs/"; // 1.24 review 6
+          // 1.25.1 (review 7): a script fed to a shell out of sight; an unknown program on .specs/ files; the hook's own failure; a projectDir
+          if (a.why === "fed") return "feed a shell a script the approval guard can't see (piped from a file or a program, or a process substitution) in a command that names dev-spec or .specs/";
+          if (a.why === "specs-arg") return "run a program the approval guard doesn't know on .specs/, its roadmap.json or a .state.json (it may change them)";
+          if (a.why === "error") return "run a tool call the approval guard could not check (it failed) while the approval guard is on";
+          if (a.why === "project") return "act on a project folder (projectDir) the approval guard can't read";
           return a.why === "too-long" ? `run a shell command too long for the approval guard to read (${a.length} characters) that names dev-spec or .specs/`
             : "run a shell command that names the dev-spec CLI with an approval word in a form the approval guard can't read (an unknown launcher, a glob, a variable or a joined string)";
         }
@@ -2292,6 +2302,10 @@ const msg = {
           }
           if (a.setting === "check") return a.to == null ? `remove the project check '${a.name}' (meta.checks)` : `change the command of the project check '${a.name}' (meta.checks)`;
           if (a.setting === "roadmap") return "change .specs/roadmap.json from the shell — write, move or delete it (it holds the approval guard and the project's gates)";
+          // 1.25.1 (review 7): a glob / variable / whole-folder write or removal under .specs/; a link made to .specs/
+          if (a.setting === "specs") return a.source === "edit" ? "move or delete .specs/ or a folder in it with a file tool (it holds roadmap.json and the features' .state.json)"
+            : "change .specs/ from the shell — write, move or delete through a glob, a variable or a whole folder that may reach roadmap.json or a feature's .state.json";
+          if (a.setting === "link") return "link a name to .specs/ or to a file in it (a symbolic link, junction or hard link) — writes through the link would reach roadmap.json and the .state.json files unseen";
           return `lower the approval guard from ${a.from} to ${a.to}`;
         }
         if (a.revoke) return `revoke the approval of the ${a.phase || "?"} phase of '${f}'` + (a.role ? ` as ${a.role}` : "") + (a.by ? ` in the name of '${a.by}'` : "");
@@ -2351,6 +2365,8 @@ const msg = {
       noGitUninstall: (dir) => `${dir} is not inside a git repository (or git is not installed) — merge-state --uninstall removes that repository's own git config and .gitattributes lines; there is nothing to remove here.`,
       attrsAdded: (file) => `${file}: the merge driver's lines added (commit it — the whole team gets them):`,
       attrsKept: (file) => `${file}: the merge driver's lines are already there.`,
+      // 1.25.1 (review 7): --install / --uninstall never write through a link
+      attrsNotFile: (file) => `${file} is a link or not a regular file — merge-state never writes through it (it would change the file it points at): replace it with a plain .gitattributes and run it again.`,
       attrsRemoved: (file) => `${file}: the merge driver's lines removed (commit it).`,
       attrsNone: (file) => `${file}: no merge driver line to remove.`,
       configSet: (key, value) => `git config ${key} = ${value}`,
@@ -2521,6 +2537,7 @@ const msg = {
           head: "Status line — add this to ~/.claude/settings.json (every project) or to a project's .claude/settings.local.json (this machine only — the path is this machine's, so never the committed .claude/settings.json):",
           after: "It prints one line — the most active feature, its tasks, unverified ticks and the next step — and nothing outside a dev-spec project.",
           cacheNote: "This path is a versioned copy in Claude Code's plugin cache (…/plugins/cache/…): after a plugin update run /spec-statusline again — the old copy is removed 14 days after an update.",
+          cacheFollows: "This CLI is a versioned copy in Claude Code's plugin cache (…/plugins/cache/…): the command looks up the newest installed version of the plugin at each run, so it keeps working after a plugin update — no need to run /spec-statusline again.",
           tryIt: (cmd) => `Try it: echo '{"cwd": "<your project>"}' | ${cmd}`,
         },
       },
@@ -2599,6 +2616,13 @@ const msg = {
       runHint: (cmd) => `⚠ \`${cmd}\` pipes into another command: the shell reports only the LAST command's exit code, so a failing check can be recorded as passing — drop the pipe, or start it with \`set -o pipefail;\` under bash (--shell bash); cmd.exe has no pipefail.`,
       doctor: (list) => `a _Verify:_ command pipes into another one — a failing check can exit 0 (a pipeline reports its LAST command's code): ${list}. Drop the pipe or use \`set -o pipefail\` (bash).`,
       completeNote: (n, cmd) => `Task ${n}: the recorded command pipes into another one (\`${cmd}\`) — its exit 0 is the LAST command's, so this pass may hide a failing check. Drop the pipe (or use \`set -o pipefail\` under bash) and re-run.`,
+    },
+    // 1.25.1 (review 7): a _Verify:_ / project check command holding a control character (shown with \u escapes) — doctor fails
+    // verify-control; done --run / finish --run run nothing
+    verifyControl: {
+      doctor: (list) => `a command holds a control character (an escape sequence, a carriage return…) — a terminal shows another command than the one that runs: ${list}. Retype it as plain text; done --run / finish --run refuse it.`,
+      run: (n, cmd) => `Task ${n}: its _Verify:_ command holds a control character (${cmd}) — a terminal would show another command than the one that runs. Nothing ran: retype it as plain text in tasks.md.`,
+      checks: (list) => `Project check ${list}: its command holds a control character — a terminal would show another command than the one that runs. Nothing ran: set it again (${DEV_SPEC} init --check name="cmd").`,
     },
 
     // Project templates (.specs/templates/) — spec_templates / `dev-spec templates`, and the {{summary}} slot of a scaffold.
@@ -3193,27 +3217,48 @@ const msg = {
     // EVERY language (an agent may answer in another language than the project's) as whole words, case-insensitive. Conservative
     // on purpose: a claim counts only outside code and quotes, not in a question, and not after a negator or a condition.
     stopGate: {
+      // 1.25.1: no bare verb — "verified", "implemented", "completed" alone claimed "I verified that the bug is in the parser" and
+      // "the migration was completed in 2023" (STOP_EN_* above, common.js stopLineClaim).
       claims: [
-        String.raw`all\s+(?:done|finished|complete|completed|green)`,
+        String.raw`all\s+(?:done|finished|complete|completed|implemented|verified|green)`,
         String.raw`(?:tasks?|steps?)\s+#?\d+(?:\s*(?:,|and|&|[-–]|to)\s*#?\d+)*\s+(?:(?:is|are|has\s+been|have\s+been)\s+)?(?:now\s+)?(?:done|finished|complete|completed|implemented|verified)`,
         String.raw`all\s+(?:(?:the|of\s+the)\s+)?(?:\d+\s+)?(?:tasks?|steps?|items?|stories|checks?)\s+(?:(?:are|have\s+been|now)\s+)*(?:done|finished|complete|completed|implemented|verified|green|passing)`,
-        // …ending its clause ("Feature complete.", "Fix done ✅") — never "the implementation done so far", "the task done list"
-        String.raw`(?:feature|story|task|implementation|fix|bugfix|refactor|migration)\s+(?:now\s+)?(?:done|finished|complete|completed|implemented|verified)(?=[ \t]*(?:[.!,;:—–)]|$|\p{Extended_Pictographic}|✓|✔))`,
-        String.raw`[\p{L}\p{N}_]+(?:['’](?:s|m|re)|\s+is|\s+are|\s+am|\s+has\s+been|\s+have\s+been)\s+(?:now\s+|all\s+|fully\s+)?(?:done|finished|complete|completed|implemented|verified)`,
-        String.raw`(?:i|we)(?:['’]ve|\s+have)\s+(?:now\s+|just\s+|also\s+)?(?:finished|completed|implemented|verified)`,
-        String.raw`^[ \t*_#>\p{Extended_Pictographic}\uFE0F\u2713\u2714-]*(?:all\s+)?(?:done|finished|complete|completed|implemented|verified)[*_]*(?=[ \t]*(?:[.,!:—–\p{Extended_Pictographic}\u2713\u2714-]|$))`,
+        // …ending its clause ("Feature complete.", "Fix done ✅", "Work complete —") — never "the implementation done so far", "the task done list"
+        String.raw`(?:feature|story|task|implementation|fix|bugfix|refactor|migration|work|everything)\s+(?:now\s+)?${STOP_EN_DONE}${STOP_EN_END}`,
+        // "Login is implemented.", "It's complete.", "The flow is implemented and tested." — the clause ends there…
+        String.raw`[\p{L}\p{N}_]+(?:['’](?:s|m|re)|\s+is|\s+are|\s+am|\s+has\s+been|\s+have\s+been)\s+(?:now\s+|all\s+|fully\s+)?${STOP_EN_DONE}${STOP_EN_CHAIN}${STOP_EN_END}`,
+        // …or the work is its subject ("everything is done and pushed") — not done BY or IN something ("Validation is done in the controller")
+        String.raw`(?:everything|work|feature|tasks?|steps?|stor(?:y|ies)|implementation|fix|bugfix|refactor(?:ing)?|migration|changes)(?:['’]s|\s+is|\s+are|\s+has\s+been|\s+have\s+been)\s+(?:now\s+|all\s+|fully\s+)?${STOP_EN_DONE}(?!\s+(?:by|in|on|at|via|through|with|using|inside|within|from|elsewhere|separately|later)(?![\p{L}\p{N}_]))`,
+        String.raw`(?:i['’]m|we['’]re|i\s+am|we\s+are)\s+(?:now\s+|all\s+)?(?:done|finished)${STOP_EN_ING}`,
+        // first person: "I've implemented the parser" — not "I've verified that…", "I've finished reading…"
+        String.raw`(?:i|we)(?:['’]ve|\s+have)\s+(?:now\s+|just\s+|also\s+|already\s+)?(?:finished|completed|implemented|verified)(?!\s+(?:that|whether|if|how|why|what|where|when|which|who)(?![\p{L}\p{N}_]))${STOP_EN_ING}`,
+        // "I implemented task 3", "We finished." — a simple past claims the work only with it ("I verified that the bug is…" doesn't)
+        String.raw`(?:i|we)\s+(?:now\s+|just\s+|also\s+|already\s+)?(?:finished|completed|implemented|verified)${STOP_EN_CHAIN}(?:\s+${STOP_EN_WORK}|${STOP_EN_END1})`,
+        // …and "implemented" builds the work whatever its object ("I implemented the retry logic") — not "…that" / "…how"
+        String.raw`(?:i|we)\s+(?:now\s+|just\s+|also\s+|already\s+)?implemented(?=\s+(?!(?:that|whether|if|how|why|what|where|when|which|who)(?![\p{L}\p{N}_]))[\p{L}\p{N}_])`,
+        // "Done.", "✅ Done", "Implemented and verified.", "Implemented the retry logic." — "Done. I updated the README as you asked."
+        // claims no task, "Implemented in 2019, the parser…" no work (common.js)
+        stopLineClaim(String.raw`(?:all\s+)?${STOP_EN_DONE}${STOP_EN_CHAIN}`, STOP_EN_TESTED,
+          String.raw`(?:(?:with\s+)?${STOP_EN_WORK}|(?<=implemented\s+)(?:the|a|an|all|both|each|every|my|our|this|these|those|its|their)(?![\p{L}\p{N}_]))`),
         String.raw`status\W{0,8}done(?:_with_concerns)?`,
         String.raw`(?:all\s+(?:the\s+)?(?:\d+\s+)?|the\s+)?(?:unit\s+|integration\s+|e2e\s+)?tests?\s+(?:(?:are|now|all|still)\s+)*(?:pass|passes|passed|passing|green)`,
         String.raw`[1-9]\d*\s*(?:\/\s*\d+\s+)?(?:tests?\s+)?(?:passing|passed)`,
         String.raw`(?:everything|it|all|this)\s+(?:now\s+)?works`,
         String.raw`(?:fully|thoroughly)\s+tested|tested\s+and\s+(?:working|verified)`,
-        String.raw`verified|implemented|finished|completed`,
+        // "Ready to merge.", "Good to go." (1.25.1 — "Work complete — ready to merge." claimed nothing)
+        String.raw`(?:ready|good)\s+(?:to\s+(?:merge|ship|release|deploy|go)|for\s+(?:(?:the|a)\s+)?(?:merge|merging|release|shipping|deploy(?:ment)?|review|pr|pull\s+request|production))`,
       ],
+      // 1.25.1 — the words every claim above holds at least one of (whole words, case-insensitive): a message holding none of a
+      // language's triggers runs none of its claim patterns (the engine's stopClaims, the Stop hook's pre-filter) — most closing messages
+      // claim nothing, and compiling every pattern of every language cost each Stop ~35 ms. A new claim pattern adds its word here
+      // (mcp/tests/10-guards-hooks-r7.js checks every claim test message is still read the same).
+      triggers: [String.raw`done|finished|complete|completed|implemented|verified|tested|green|pass|passes|passed|passing|works|ready|good|status`],
       // Up to 3 words before a claim, in the same sentence: it is negated or only a condition / a plan ("not done", "once the
-      // tests pass", "I'll verify"). Words ending in n't / 'll count too (the engine checks those suffixes).
+      // tests pass", "I'll verify"). Words ending in n't / 'll count too (the engine checks those suffixes). 1.25.1: "how" — "Here's how
+      // the retry is implemented:" describes the code.
       negators: ["not", "never", "no", "nothing", "nor", "none", "without", "cannot", "will", "would", "should", "must", "need", "needs", "to",
         "going", "gonna", "can", "could", "may", "might", "until", "unless", "before", "once", "when", "whenever", "after", "if", "whether",
-        "almost", "nearly", "partially", "partly", "yet"],
+        "almost", "nearly", "partially", "partly", "yet", "how"],
       // The message says plainly that something is NOT verified (or fails): never sent back.
       admissions: [
         String.raw`(?:not|never|\p{L}+n['’]t)\s+(?:(?:been|yet|fully|actually|be|all|really)\s+){0,2}(?:verified|tested|run)`,
@@ -3245,6 +3290,9 @@ const msg = {
         noRun: (file, cmds) => `its report (${file}) doesn't show the _Verify:_ run — the exact command and its exit code: ${cmds}.`,
         notPassing: (file, cmds) => `its report (${file}) shows no passing run (exit 0) of ${cmds} — a DONE task's _Verify:_ must pass.`,
         notFailing: (file, cmds) => `its report (${file}) shows no failing run (a non-zero exit code) of ${cmds} — the task is marked _Expect: fail_: its proof is the red run.`,
+        // 1.25.1 (review 7): the codes are read per run — the LAST run of each _Verify:_ command decides
+        lastNotPassing: (file, cmds) => `its report (${file}) ends on a failing run of ${cmds} — the last run of it the report shows exits non-zero; a DONE task's _Verify:_ must pass on the final code.`,
+        lastNotFailing: (file, cmds) => `its report (${file}) ends on a passing run of ${cmds} — the task is marked _Expect: fail_: the last run of it the report shows must be the red one (a non-zero exit code).`,
         todo: "Run the command on the final code and put the command, its exit code and the last lines of its output in the report — or report BLOCKED / NEEDS_CONTEXT if it can't pass. (Evidence before claims: the controller ticks the task only with that run.)",
       },
       // 1.22 — the spec-simplifier's DONE (SubagentStop): its report must end with the final passing runs.

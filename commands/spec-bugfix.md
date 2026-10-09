@@ -24,9 +24,10 @@ Bug: $ARGUMENTS
 4. **STOP for the approvals.** Fill the AC with the real condition and correct behaviour, the test plan's File column
    and the tasks' `_Verify:_` commands, run `spec_doctor`, then present the reproduction, the root cause with its
    evidence and the fix you propose — and wait. "Fix it" / "corrige isto" / "arréglalo" asks for the outcome; it is
-   **not** an approval of your root cause: don't touch the product code in this turn. On the user's yes, `/approve`
-   requirements, **design** (a bugfix has no design of its own — its design approval signs off `bug.md`, gated on the
-   Root Cause), test-plan and tasks — or all four at once with `/spec-ff` once they said so.
+   **not** an approval of your root cause: don't touch the product code in this turn. On the user's yes, record it with
+   `spec_approve` — requirements, **design** (a bugfix has no design of its own — its design approval signs off `bug.md`,
+   gated on the Root Cause), test-plan and tasks — or all four at once with `spec_approve {through: "tasks"}` once they
+   said so. (`/approve` and `/spec-ff` are the user's own commands — they may type them; you can't run them.)
 5. **Failing regression test** (T-01, task 1) — the scaffold marks task 1 `_Expect: fail_`; fill its `_Verify:_` with the
    command that runs T-01, write the test and see it fail for the right reason: `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> 1 --run` (or
    `spec_complete_task {…, evidence}` with the failing run) records the red run; a passing run is refused, and so is
@@ -39,7 +40,7 @@ Bug: $ARGUMENTS
    blocks it).
 
 **A small, obvious defect (size xs):** `spec_create {kind: "bugfix", size: "xs"}` — the same two tasks; fill the whole
-plan, then approve it in one call (`/spec-ff`). **A bugfix scaffolded before** (four tasks: 1 reproduce, 2 root cause,
+plan, then — on the user's yes — approve it in one call (`spec_approve {through: "tasks"}`). **A bugfix scaffolded before** (four tasks: 1 reproduce, 2 root cause,
 3 the red test, 4 the fix) stays valid as it is: tick 1 and 2 with a note once `bug.md` holds them, then 3 and 4.
 
 After three failed fixes, stop and discuss the design with the user. If the fix needs a design decision or

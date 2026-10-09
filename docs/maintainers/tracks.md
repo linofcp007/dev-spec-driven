@@ -82,7 +82,7 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   SIGNALS.api — strong: contract-level words only (RESTful, OpenAPI, Swagger, GraphQL, gRPC, protobuf, API versioning, the API
   contract / spec, API consumers, third-party developers, a developer portal, contract tests, problem+json, RFC 9457,
   Idempotency-Key, rate-limit headers incl. `X-RateLimit-Remaining` / `-Limit` / `-Reset` by name, Retry-After, Sunset); weak
-  (anchors): the **ownership-ambiguous** names (`API_AMBIGUOUS`: a public / REST / HTTP / web / JSON / partner API, an API
+  (anchors): the **ownership-ambiguous** names (the ownership cue's `ambiguous`: a public / REST / HTTP / web / JSON / partner API, an API
   version, problem details — one concept `kind`), a breaking change, backward compatibility, an SDK / client library, ETag /
   If-Match, status codes, JSON Schema, cursor pagination, deprecation, an internal / management / admin API / API gateway / API
   docs; **generic**: api, endpoint, route, request (IRREGULAR_FORMS: the noun only, never "requested"), pagination.
@@ -98,8 +98,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   clause, a build verb whose direct object it is: "Build a REST API", "Criar uma API REST"). An ambiguous name is strong with an
   own cue, or (the API-kind names) when it opens its clause or follows a plain article + ≤ 2 lowercase adjectives ("REST API
   for the mobile app", "add rate limiting to the public API"); "Stripe REST API integration" stays weak. **1.19 verify 2:** an
-  ALL-CAPS organisation acronym is an owner too ("la API pública del BCE", "the ECB's public API" — `RE_API_ACRONYM`, never a
-  technical one: `API_TECH_ACRONYMS` REST / CRM / SDK / HR…); a past participle right after a determiner is an adjective, no
+  ALL-CAPS organisation acronym is an owner too ("la API pública del BCE", "the ECB's public API" — `RE_CUE_ACRONYM` in
+  engine/classify.js, never a technical one: the ownership cue's `techAcronyms` REST / CRM / SDK / HR…); a past participle right after a determiner is an adjective, no
   own verb ("Replace the deprecated Google Places API calls"); breaking compatibility as a VERB (`API_BREAK_VERBS`: break
   compatibility, quebrar a compatibilidade, romper la compatibilidad…) is a weak compat anchor and a hazard, so PT "não pode
   quebrar a compatibilidade da API pública" is +api like EN / ES. An API **key** stays
@@ -132,17 +132,17 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   tablero / cuadro de mando), menu, icon, widget, layout, theme. A dashboard is +ui's generic word only, never +obs's ("a
   metrics dashboard for sales"). **Cues (1.19 T review — `SIGNALS.ui.cues`: kinds sentence, near, text, clause — 1.20):** in a CLAUSE (`cueClause()`:
   CUE_BOUNDARY . ! ? ; : or a line break — a colon after a short label, ≤ 4 words, joins the label to what it introduces:
-  "Profile page: the GET /me handler…", "Sin backend: …") that says the work is backend-only (`RE_UI_BACKEND`: an HTTP method +
+  "Profile page: the GET /me handler…", "Sin backend: …") that says the work is backend-only (the `clause` cue's `mention`: an HTTP method +
   path, a request / route handler, an endpoint, the backend, an API — never "API keys" / "chave de API" —, a data layer /
   repository / SQL, "already exists" / já existe / ya existe) a page type and frontend / UI / UX are GENERIC ("a PATCH
   /me/preferences handler that the settings page calls; the UI already exists"); an empty state in a sentence about a state
   machine is weak ("the empty state blocks sales"). **1.19 verify 1** (the sentence-wide test lost +ui): a backend word does not
   count when a negator governs it (≤ 4 words back in the clause — no / not / without / n't / sem / não / nem / sin / ni; PT "no"
   is em + o: `lang` is the cue's 4th argument) — "no backend changes", "does not touch the backend", "needs no API changes" —
-  nor when it FOLLOWS the page word with a consumer verb between them (`UI_CONSUMER_VERBS`: "The landing page loads its
+  nor when it FOLLOWS the page word with a consumer verb between them (the `clause` cue's `consumers`: "The landing page loads its
   testimonials from the CMS API"; a backend word before the page — "a handler that the settings page calls" — or right after
   it — "the profile page backend", "the admin page's API" — still demotes); nothing is demoted in a text that says "frontend
-  only" / "apenas frontend" / "solo frontend" (`RE_UI_FRONTEND_ONLY`, tested once per text); "the frontend team" / "equipa de
+  only" / "apenas frontend" / "solo frontend" (a `text` cue, `then: "keep"`, tested once per text); "the frontend team" / "equipa de
   frontend" names a team (generic). The genericOnly note no longer offers "the frontend" as an anchor.
 - **+obs (1.19 T)** — the tenth built-in marker track `[OBS]` (observability & operability): TRACK_MARKER, `OBS_SECTIONS` (SLIs &
   SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health & Capacity — no section is named "Observability", +saas's;
@@ -528,8 +528,13 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   carries a marker carries another track's — built-in or a pack's): "### Qualidade dos dados (LGPD art. 6º, V)" under
   "## [PRIVACY] Fundamento de Licitude e Finalidade" is +privacy's text, never the deleted `[DATA] Qualidade dos Dados`; an
   unmarked top-level "## Data Quality" still satisfies it. Only for a track section (a `marker`), never a core one.
+  `AI_SECTIONS` "Fallback & Degradation" too (1.25.1): `fallback` / `degradação` / `degradación` alone are loose — an unmarked
+  "## Fallbacks" (a payment processor's) answered the deleted [AI] section; "Fallback & Degradation" / "… and …" / "Fallback e
+  Degradação" / "Fallback y Degradación" stay strict.
 - **Markers are case-sensitive tokens** everywhere (`headingHasMarker`, `inactiveMarkerLines`, `trackAcIds`,
   `extractSection`, the brief): `### Timeout [sec]` is prose, never +sec. `RE_STABLE_BRACKET` lists `SEC` / `PRIVACY`.
+  `inactiveMarkerLines` also needs the marker to LEAD the heading (1.25.1 — `headingLeadMarkers`: "#### [SEC] Acceptance Criteria",
+  "## [AI] 7. Fallback…", "### 3. [AI] …"; never "### US-2 (P1): API notes [API]") — trace_check warns `inactiveAcs` for what it hides.
 - **Signal tiers** (`SIGNALS[track]`): `strong` (turns a track on alone), `weak` (score 1 — two weak ones, or a strong
   one, turn it on; a lone weak one is only "possible"), and `context` (corroborating-only, e.g. `permission` for +sec:
   weak evidence ONLY beside another non-negated signal of that track; alone it is no signal, no "possible" note, no
@@ -747,7 +752,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   too, so deleting the Offline section passed doctor). `sectionOverlaps(table)` lists such pairs; every built-in table keeps none
   (04-tracks-packs-lang asserts it — a new built-in section must too).
   Fragments: `packListItems()` (top-level item = at most one space before the bullet; lines
-  indented ≥ 2 are its continuation), `packTableRows()` (six cells, header + separator skipped; else `fragment-row`);
+  indented ≥ 2 are its continuation), `packTableRows()` (six cells, header + separator skipped; else `fragment-row`; a `\|` is a
+  pipe inside a cell — 1.25.1, `tableCells`' rule: "encode \| decode" split the row into seven cells and refused the pack);
   `{{acN}}` / `{{tN}}` beyond what the pack scaffolds in that language context → `fragment-ref` (its args name the context
   and the file the count comes from — F4 review R10). Warnings only:
   unknown keys / files / variables, an empty fragment (the default is used), a steering name a built-in track also uses.
@@ -756,7 +762,9 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   guidance — `packSubstBasic()` fills its `{{title}}` / `{{marker}}` / `{{name}}` / `{{slug}}`; `trackDesignBlock(tr, lang,
   vars)`), `packRequirementsBlock` (`#### [MARKER] <title> — Acceptance Criteria (EARS)`, numbered after the highest
   US-1 AC of the text it joins; `insertPackRequirements()` puts it before the first REAL `#`/`##`/`###` heading after the
-  last US-1 criterion — `commentLines()`: never one inside an HTML comment or fence, F4 review R3 — else at the end), `packTaskBlock` (`## Story US-1 — [MARKER] <title>`, numbered after the last task;
+  last US-1 criterion — `commentLines()`: never one inside an HTML comment or fence, F4 review R3 — else at the end), `packTaskBlock` (`## Story US-1 — [MARKER] <title>`, numbered after the last task — 1.25.1: from `spec_add_track`, after every
+  number in use, the state's leftover evidence / tick numbers too, `nextTaskNumber()` as `spec_append_tasks` and the built-in
+  tracks' `trackTaskBlock` (a removed task's run was inherited by the track's first new task);
   `_Requirements:_` added when a task has none — the pack's AC IDs per `trackAcIds`, else the track's `acPlaceholder`;
   the DEFAULT task also gets `_Makes green:_` from `packPlanRows()`; a fragment line whose `{{tN}}` / `{{tests}}` names no
   planned test is dropped), `packTestRowsBlock` (`## [MARKER] <Traceability Matrix>` + the built-in header, T-IDs after
@@ -818,10 +826,20 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   listed endings only — `encript`, `cifr`, `criptograf`: never "cifra"; the self-match sweep probes them by infinitive),
   and `-based/-powered/…` adjectives (`AI-powered`), while rejecting `-<letter>` compounds
   (`claude-plugin`) and dotted/slashed identifiers. `-<digit>` stays legal (`gpt-4`). **A glued version (review 5, L29):** a
-  built-in one-word keyword of 2–5 letters (an acronym: oauth, gpt, tls, llm, saml) or a `VERSIONED_NAMES` product (claude, gemini,
-  mistral) takes `VERSION_TAIL` — digits, dot-digits, one letter — before its inflection: "OAuth2", "GPT4", "GPT4o", "TLS1.3",
+  built-in one-word keyword of 2–5 letters (an acronym: oauth, gpt, tls, llm, saml) or a `VERSIONED_NAMES` product (Claude, Gemini,
+  Mistral) takes `VERSION_TAIL` — digits, dot-digits, one letter — before its inflection: "OAuth2", "GPT4", "GPT4o", "TLS1.3",
   "Claude3", "Gemini1.5" were no signal at all; a longer word never does ("Billing10x"), nor a track pack's keyword. When you add a
-  keyword, add it to the self-match sweep's expectations if it needs a new suffix class.
+  keyword, add it to the self-match sweep's expectations if it needs a new suffix class. **1.25.1 — everyday words:** a product
+  name that is an everyday word in lower case is written CAPITALISED in the table (matched case-sensitively — Claude, Gemini,
+  Mistral, Copilot, RAG, Cohere, Stable Diffusion, Pinecone; `VERSIONED_NAMES` holds the table's spelling), its capitalised
+  everyday senses are ai cues (Claude Monet, a Gemini zodiac page, the Mistral wind, a Copilot for pilots), and SIGNALS.tdd / saas
+  have cues for credits (photo / film / course), "in charge of", a battery charge, a therapy / training session, a cron EXPRESSION
+  helper; 'tool use' is weak. `-compatible` joined `ADJ_SUFFIX` ("the OpenAI-compatible endpoint"). Training / predicting with a
+  model are gap keywords ("train … model", "model … trained", "predict … churn"; PT / ES through the VERB_STEMS trein- / entren-).
+  **Measured:** the differential (b7978f8 vs the fix) over 16,125 string literals of the test files, evals and the review's
+  phrasings: 76 decisions changed (tracks or size), each one a phrasing the fix targets (or a test message naming one of its words);
+  a 14-frame sweep of every keyword of both tables (30,716 texts): 369 changed — +ai off only for the lower-case claude / gemini /
+  mistral / copilot / rag / tool use, +ai on only for the new keywords.
 - **Negation never vetoes a track**, it annotates it. "the system shall not hallucinate" negates
   `hallucinat` on a feature that is unmistakably `+ai`. So when a track is on *and* has negated
   keywords, `classify` emits a conflict note ("+ai is ON although 'llm' appeared negated") for the
@@ -841,6 +859,10 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   a denying predicate over "without X" ("Reject requests without a valid token", "Users without MFA must not…") —
   `nominalFollowRequires()` / `negativePredicate()`; widening `SUBJECT_VERBS`, `PLACE_PREPS` or `RE_DENY_VERB` turns tracks
   ON in every frame that uses them — measure it (the review-6 harness: 29 frames × every built-in keyword, old / new apart).
+  **1.25.1:** "no more X" / "no más X" (`NO_MORE`) is a replacement, never an exclusion ("No more manual invoices: generate them
+  automatically"; "no more than 3" a limit), and an INSUFFICIENCY predicate over "without X" keeps the track (`insufficientAfter()`:
+  a copula — ≤ 2 adverbs between — then incomplete / useless / broken / unusable / not usable…, `INSUFF_COPULA` / `INSUFF_ADJ`, EN /
+  PT / ES, within 10 words of the item's clause): "Without an LLM summary the ticket view is incomplete".
 - **Project signal overrides are the team's, never the engine's defaults.** A tuning that holds for everyone goes into
   `SIGNALS` (tracks.js); `.specs/classifier.json` is one project's learned or hand-set layer — never read it without a
   projectDir, never write it outside `writeSignalRecords()` (the roadmap lock, the never-rewrite-a-broken-file rule).

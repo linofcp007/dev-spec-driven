@@ -14,7 +14,7 @@ tree. It is read-only and hashes only the recorded files. The session-start hook
 drifted active feature.
 
 Report per feature: files **changed**, **missing**, or **now present** (missing at finish), and list apart the
-features without a baseline (`unbaselined` — finished before 1.13, or never finished with `write`), those whose
+features without a baseline (`unbaselined` — finished by an older version that recorded none, or never finished with `write`), those whose
 tasks are open again (`reopened`), and those that changed since their finish and are done again (`stale`, with
 `why`: a change request or a re-approval of changed content after the finish — a re-approval of the same content
 changes nothing —, or — for an active feature — an `_Implements:_` file the

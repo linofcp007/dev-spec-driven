@@ -52,7 +52,8 @@ matrix.
   (`sectionContent()`, `isTableSep()`) — is `unfilled` (it was "filled"). **Doctor's `mermaid` (review 5, L28):**
   `mermaidState(design)` → present · template · missing — the fenced blocks (```` ``` ```` or `~~~`, any length) whose info
   string starts with `mermaid`, outside HTML comments, an empty one drawing nothing; `template` when each still holds the
-  scaffold's own diagram (`templateDiagrams()` — the core design builder's, EN / PT / ES, pt-BR's on a miss, whitespace folded).
+  scaffold's own diagram (`templateDiagramSet()` — the core design builder's, every language and design size, pt-BR's too,
+  whitespace folded; read from the committed corpus, `renderTemplateDiagrams()` when it is stale).
   It warns `doctor.mermaidTemplate` on a template diagram — except while design.md is still a later phase's template (a pass,
   as the weigh checks skip it). It was a substring test: a `~~~mermaid` fence warned, one quoted in a comment passed, the
   untouched template diagram passed. A project template's own diagram is not known (the limit).
@@ -151,14 +152,23 @@ matrix.
   a forced approval — and the warning `justifiedTestGaps` (+tdd, a top-level array in `TRACE_INFO_FIELDS`, `TRACE_WARNING_ORDER`
   after the secondary kinds; doctor's `traceability` detail repeats it unless the plan's kinds are deferred) lists the uncovered ACs
   the plan names outside its entries, so the reader sees they are accounted for. `phantomAcsInTests` still reads every mention (a
-  typo in a Gaps note is a phantom).
+  typo in a Gaps note is a phantom). **1.25.1 — the entry shapes:** a GFM table WITHOUT its outer pipes (a header with a pipe over a
+  delimiter row `--- | ---`; a row of an open table may drop them too — never a list item, heading or quote), the T-IDs read from the
+  column whose header is a Test ID / T-ID / ID (`RE_TEST_ID_HEADER`, EN / PT / ES — "| # | Test ID | Covers |"), else the first, and a
+  heading led by a T-ID ("### T-01 — …" + its body, up to the next heading, a table or a T-ID item). Each read as no entry: covered
+  0/N and every AC a `justifiedTestGaps` warning.
   **A removed track's criteria (1.24 review 6, F9):** trace_check reads the ACTIVE requirements (`activeDesign` — a turned-off
   track's `[SaaS]` / `[AI]` / … sections, a missing pack's ghost sections) for the REQUIRED ACs and the ACTIVE tasks (`activeTasks`)
   for their coverage — the matrix's rows and tasks, tracks.md's removal rule; it read the whole files, so a feature that removed
   +saas and deleted its +saas tasks failed traceability (doctor too) on criteria the matrix no longer listed. A phantom is an ID
   requirements.md defines NOWHERE (`definedAcs`, the whole text): a task or test row citing an inactive criterion is no typo. The
   secondary IDs alike (`traceSecondary(…, allReqText)`: coverage asked of the active ones, phantoms against all); doctor's
-  `secondary-trace` count reads the active requirements too.
+  `secondary-trace` count reads the active requirements too. **1.25.1 — only a LEADING marker, never silently:** a section is
+  inactive only when the off track's marker LEADS its heading (`headingLeadMarkers()` — after numbering, emphasis, an emoji,
+  "Section N:"; a run of markers counts): `### US-2 (P1): API notes [API]` is a core story and its ACs are required (it hid them, and
+  doctor passed them untasked). What an inactive section holds is the warning `inactiveAcs` (the ACs requirements.md defines only
+  there — `TRACE_INFO_FIELDS`, `TRACE_WARNING_ORDER` after `untracedCriteria`, only when some); doctor's `traceability` detail names
+  them without changing its status.
 - **Secondary IDs are trace WARNINGS, never the verdict**: EC-n / NFR-n need a task or (+tdd) a test-plan
   row, SC-nnn a test-plan row or a real quickstart.md line; compared by number (`SC-1` = `SC-001`); untouched
   template rows don't count. `warnings` = `[{kind, items}]`, excluded from `traceGaps()`.
@@ -196,7 +206,10 @@ matrix.
   Pester `tests/Login.Tests.ps1` naming T-01 was never found, a UTF-16 requirements.md traced 0 ACs. The BOM stays the U+FEFF
   every reader drops (a rewrite of such a file is UTF-8 — except tasks.md, written back in its own encoding since review 5:
   tasks-and-evidence.md → Tasks: ONE scanner); the importer, the specs:// resources, the requirements.md save hook,
-  `dev-spec ears <file>` and the observe hook's pre-filter read the same way. Until 1.21.1 the scan read only the scanner's
+  `dev-spec ears <file>` and the observe hook's pre-filter read the same way. **CR-only line endings (1.25.1):** `decodeText()` also
+  reads a text holding CRs and NO LF as lines (`crOnlyToLf` — every reader splits on "\n"): a feature saved with bare `\r` traced
+  0 ACs beside its planned tests, doctor's placeholders failed and status said phase requirements; a text with any LF is left
+  as it is ("\r\r\n" keeps its 1.24 r6 D3 reading), and a rewrite of such a file is LF. Until 1.21.1 the scan read only the scanner's
   short `CODE_EXT` and a PowerShell project's tests gate never passed. The scan (`scanTestCode()`) is bounded and read-only; a plan row whose File column names a
   concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts; a test file
   ANOTHER feature's plan (active or archived) names in its File column — and this feature's plan does not — never counts
@@ -212,14 +225,19 @@ matrix.
   `plannedImplFiles`, not a gap; a done task's missing file (or any path outside the project) stays
   `missingImplFiles`. `spec_coverage` = code files named in any `_Implements:_` (file, folder or glob) of any
   feature, active or archived. Every reader resolves a reference through `implementsPath()` (`:12` / `#L12` anchors
-  dropped) — trace_check included, reporting the spelling the task wrote; an anchor alone names nothing (missing).
+  dropped) — trace_check included, reporting the spelling the task wrote; an anchor alone names nothing (missing). A trailing
+  ANNOTATION after a path-like token is the author's note (1.25.1 — `RE_IMPL_ANNOTATED`: " (the helper)", " — new export", " - new
+  export", backticks around the path allowed): `_Implements: src/lib/a.ts (the helper)_` was a missing file that blocked doctor and
+  finish; a path holding spaces is read as written.
   Comparisons go through `implementsRel()` (+ backticks, `./`, trailing `/`) / `implementsKey()` (+ FOLD_CASE):
   `next --batch` (a shared file — or a folder and a file under it — ends the batch) and the brief's design sections.
 - **`earsValidate` is criterion-based, never line-based.** EARS phrasing (`ENQUANTO … QUANDO … O
   SISTEMA DEVE …`) wraps past one line, and markdown list items continue across lines (indented or
   lazy). `criterionBlocks()` folds physical lines into logical criteria FIRST — bounded by blank
   lines, headings, tables, HR and fenced code (fence *state* is tracked, so `const shall = 1` inside
-  ` ``` ` is code, not an AC) — and only then lints each joined criterion. A comment-only line does
+  ` ``` ` is code, not an AC) — and only then lints each joined criterion. Its section stack takes the SETEXT headings of
+  `headingEntries()` too (1.25.1 — "Acceptance Criteria" over `-------` opened no AC context, its text read as a paragraph and its
+  underline as a break; the underline is skipped now, so an AC heading's body still follows it). A comment-only line does
   **not** split a criterion. Issues report the criterion's start `line` (plus `endLine` when it spans
   several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`/`padded-id`). `no-keyword`
   (info) spares the ubiquitous form naming ITS system (review 5 — `RE_UBIQUITOUS`): "THE <name> SHALL" (one to four words: the
@@ -301,6 +319,11 @@ matrix.
   changed (`changed: null` when it did — unknown which row); none → `null`. Plus `approval` (with `baseline: snapshot |
   fingerprint-only | none`), `counts` {rows, verified, implemented, planned, untraced, template, superseded}, `lang`,
   `kind`, `tracks`.
+- **Linear (1.25.1):** every row reads INDEXES built once per matrix (`rtmIndex()` — key → the item indexes, ascending; `rtmKey()`:
+  an AC by its ID, an EC / NFR / SC by its number key; `rtmMerge()` keeps document order): the test entries citing the row, the
+  tasks citing it or one of its tests' T-IDs, the design sections (+ each active track marker's), the decisions. Each row scanned
+  every task, test entry, section and decision — 2,800 stories (8,400 rows) took the matrix 5.5–6.4 s beside a 0.5 s trace; now
+  ~0.5 s, the same rows (mcp/tests/05-markdown-r7-readers.js bounds it at max(1.5 s, 4 × the plain trace)).
 - **Stable codes.** `status` (`RTM_STATUSES`): `untraced` (a trace gap names it) · `planned` (traced; a linked task still
   open, or none linked yet) · `implemented` (every linked task done, one not verified) · `verified` (every linked task
   done and verified — nothingToVerify counts). `gaps`: `no-task` (an AC no task cites) · `no-test` (+tdd: an AC no test-plan

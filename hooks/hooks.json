@@ -2,21 +2,23 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write|Edit|NotebookEdit",
+        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell|Monitor",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-hook.js\"",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/guard-hook.js"],
             "timeout": 10
           }
         ]
       },
       {
-        "matcher": "^(Bash|PowerShell|Monitor|Write|Edit|(mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track))$",
+        "matcher": "^(Bash|PowerShell|Monitor|Write|Edit|NotebookEdit|(mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track)|mcp__.+__(?!spec_|steering_scaffold|ears_validate|trace_check)[\\w-]*?([Ww]rite|[Ee]dit|[Cc]reate|[Mm]ove|[Rr]ename|[Dd]elete|[Rr]emove|[Cc]opy|[Aa]ppend|[Pp]atch|[Rr]eplace|[Ss]ave|[Pp]ut|[Uu]pload|[Mm]kdir|[Tt]ouch|[Tt]runcate|[Uu]nlink|[Ii]nsert)[\\w-]*)$",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/approval-hook.js\"",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/approval-hook.js"],
             "timeout": 10
           }
         ]
@@ -28,7 +30,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/spec-hook.js\"",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/spec-hook.js"],
             "timeout": 10
           }
         ]
@@ -38,7 +41,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/observe-hook.js\"",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/observe-hook.js"],
+            "async": true,
             "timeout": 10
           }
         ]
@@ -48,7 +53,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/plan-hook.js\"",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/plan-hook.js"],
             "timeout": 10
           }
         ]
@@ -60,7 +66,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/observe-hook.js\"",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/observe-hook.js"],
+            "async": true,
             "timeout": 10
           }
         ]
@@ -71,7 +79,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/spec-hook.js\"",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/spec-hook.js"],
             "timeout": 10
           }
         ]
@@ -82,7 +91,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.js\"",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.js"],
             "timeout": 10
           }
         ]
@@ -94,7 +104,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.js\"",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.js"],
             "timeout": 10
           }
         ]

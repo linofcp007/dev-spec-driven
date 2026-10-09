@@ -18,13 +18,13 @@ let acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, 
   RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, readJson,
   requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, synonymsOverlap, stripHtmlComments, taskDescription, templateBracketKeys,
   templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING, trackAcIds, trackMarker,
-  trackTaskHeading, VALID_TRACKS, writeIfAbsent;
+  trackTaskHeading, VALID_TRACKS, writeIfAbsent, nextTaskNumber;
 function __link(E) { ({ acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, extractTestIds,
   headingIndex, isInsideDir, isObj, MARKER_TRACKS, normalizeLang, parseTasks, planIdText, projectLang, PROTO_KEYS,
   RE_CUSTOM_STEERING, RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists,
   readJson, requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, synonymsOverlap, stripHtmlComments, taskDescription,
   templateBracketKeys, templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING,
-  trackAcIds, trackMarker, trackTaskHeading, VALID_TRACKS, writeIfAbsent } = E); }
+  trackAcIds, trackMarker, trackTaskHeading, VALID_TRACKS, writeIfAbsent, nextTaskNumber } = E); }
 
 // ---------------------------------------------------------------------------
 // Project-defined tracks (1.15) — track packs in .specs/tracks/<name>/
@@ -182,7 +182,8 @@ function packTableRows(text) {
       if (RE_TABLE_SEPARATOR.test((lines[i + 1] || "").trim())) return; // the header row
     }
     if (RE_TABLE_SEPARATOR.test(t)) return;
-    const cells = t.slice(1, t.endsWith("|") && t.length > 1 ? -1 : undefined).split("|").map((c) => c.trim());
+    // (1.25.1) a "\|" is a pipe inside a cell (GFM; tableCells' rule) — "a \| b" in a Description split the row into seven cells
+    const cells = t.slice(1, t.endsWith("|") && !t.endsWith("\\|") && t.length > 1 ? -1 : undefined).split(/(?<!\\)\|/).map((c) => c.trim());
     if (cells.length !== 6) bad.push(i + 1);
     else rows.push({ cells, line: i + 1 });
   });
@@ -718,10 +719,11 @@ function packPlanRows(planText, acs) {
 // The task block — `## Story US-1 — [MARKER] <title>`, numbered after the last task — or null when tasks.md already has it (a
 // heading carrying the marker). Each task cites the pack's criteria as requirements.md defines them (trackAcIds; none yet → the
 // track's criterion slot) and, on a +tdd plan with the pack's rows, makes their tests green.
-function packTaskBlock(pack, tasksText, reqText, planText, lang, vars) {
+// start: the first task's number (spec_add_track: nextTaskNumber over tasks.md AND the state — 1.25.1); default: after tasks.md's last.
+function packTaskBlock(pack, tasksText, reqText, planText, lang, vars, first) {
   if (trackTaskHeading(pack.name, tasksText)) return null;
   const P = i18n.msg(lang).trackPacks;
-  const start = parseTasks(tasksText).reduce((a, t) => Math.max(a, t.number), 0) + 1;
+  const start = Number.isSafeInteger(first) && first > 0 ? first : nextTaskNumber(tasksText);
   const acs = [...trackAcIds(reqText || "", pack.name)];
   const rows = packPlanRows(planText, acs);
   const ctx = packCtx(pack, lang, acs, rows.map((r) => r.tid), vars);

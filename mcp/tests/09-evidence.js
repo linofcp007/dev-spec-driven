@@ -660,9 +660,10 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
 
     // hooks.json: PostToolUse (matcher Bash) and PostToolUseFailure (matcher Bash) run hooks/observe-hook.js, beside spec-hook's entry.
     const hc = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
-    const obsCmd = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/observe-hook.js"';
-    const wired = (ev) => (hc[ev] || []).find((e) => e.matcher === "^(Bash|PowerShell)$" && e.hooks[0].command === obsCmd && e.hooks[0].timeout === 10); // + PowerShell (review R5)
-    ok(!!wired("PostToolUse") && !!wired("PostToolUseFailure") && (hc.PostToolUse || []).some((e) => e.matcher === "Write|Edit" && /spec-hook\.js/.test(e.hooks[0].command)) &&
+    // (1.25.1: exec form — `node` spawned directly, the script its one argument: no shell per spawn)
+    const execOf = (h) => (h && h.command === "node" && Array.isArray(h.args) && h.args.length === 1 ? h.args[0] : "");
+    const wired = (ev) => (hc[ev] || []).find((e) => e.matcher === "^(Bash|PowerShell)$" && execOf(e.hooks[0]) === "${CLAUDE_PLUGIN_ROOT}/hooks/observe-hook.js" && e.hooks[0].timeout === 10); // + PowerShell (review R5)
+    ok(!!wired("PostToolUse") && !!wired("PostToolUseFailure") && (hc.PostToolUse || []).some((e) => e.matcher === "Write|Edit" && /spec-hook\.js/.test(execOf(e.hooks[0]))) &&
       !fs.readFileSync(obsJs, "utf8").includes(String.fromCharCode(0xfeff)),
       "feature F1: hooks.json runs hooks/observe-hook.js on PostToolUse and PostToolUseFailure (matcher ^(Bash|PowerShell)$, timeout 10) beside spec-hook's Write|Edit entry; no literal BOM in observe-hook.js");
 
@@ -742,11 +743,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const c1 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 1, evidence: { command: "node t1.js", exitCode: 2, summary: "1 failing" } });
     S.observeRun(pO, { command: "node t1.js", exitCode: 0 });
     const c1b = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 1, evidence: { command: "node t1.js", exitCode: 0 } });
-    const c2 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0, observed: "cli" } }); // a caller can't claim "cli"
+    // a caller can't claim "cli": 1.25.1 (review 7) — `observed` is no key of evidence's schema, so the call is refused (unknown-argument)
+    const c2claim = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0, observed: "cli" } });
+    const c2 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0 } });
     const c4 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 4 });
     const st1 = obsState(fO);
     const docR = S.specDoctor(pO, fO.slug).checks.find((c) => c.id === "verification");
-    ok(c1.p.ok === false && c1.p.observed === true && c1b.p.ok && c1b.p.verified && c1b.p.observed === true && c2.p.ok && c2.p.verified === true && c2.p.observed === false &&
+    ok(c2claim.p.ok === false && c2claim.p.code === "unknown-argument" && c2claim.p.unknown[0].argument === "evidence.observed" &&
+      c1.p.ok === false && c1.p.observed === true && c1b.p.ok && c1b.p.verified && c1b.p.observed === true && c2.p.ok && c2.p.verified === true && c2.p.observed === false &&
       !c2.p.unverifiedReason && c4.p.ok && c4.p.observed === undefined && st1.evidence["1"].observed === true && st1.evidence["1"].history[0].observed === true &&
       st1.evidence["2"].observed === false && S.evidenceMode(pO) === "reported" && docR.status === "pass",
       "feature F1: default (meta.evidence reported) — the verdict is unchanged; every reported run is stamped observed true | false in its record and the result (a failed run too); a caller-given observed is ignored; no command → no stamp (got " +
@@ -1437,7 +1441,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     ok(/BEFORE the fix lands, while the test still fails: .*done upgrade 1 --run \(a red run of another command never counts; with the fix already in, set it aside — git stash push -- <the fix's files>, not a bare git stash: it would take tasks\.md and \.state\.json too — for that run, then restore it\)\.$/.test(b1.note) &&
       !notes.some((t) => /then counts|passa então a contar|cuenta entonces/.test(t)) &&
       /ANTES de a correção entrar.*nunca conta; com a correção já feita, põe-na de parte — git stash push -- <os ficheiros da correção>, não um git stash simples: levaria também o tasks\.md e o \.state\.json/.test(notes[1]) &&
-      /ANTES de que entre la corrección.*nunca cuenta; con la corrección ya hecha, apártala — git stash push -- <los archivos de la corrección>, no un git stash a secas: se llevaría también tasks\.md y \.state\.json/.test(notes[2]) &&
+      /ANTES de que entre la corrección.*nunca cuenta; con la corrección ya hecha, apártala — git stash push -- <los ficheros de la corrección>, no un git stash a secas: se llevaría también tasks\.md y \.state\.json/.test(notes[2]) &&
       /nunca conta/.test(notes[3]) && /git stash push -- <os arquivos da correção>/.test(notes[3]) &&
       !/BEFORE the fix lands/.test(S.msg("en").evidenceGate.commandMismatch(1, "f", "x", "y", false)),
       "1.22 review 3 (1) + review 4: the _Expect: fail_ command-mismatch note says to record the failing run BEFORE the fix lands, that a red run of another command never counts (the fix set aside with `git stash push -- <the fix's files>` — a bare git stash takes tasks.md and .state.json too), and no longer that the red run on record counts once the _Verify:_ passes (EN/PT/ES/pt-BR) (got " + js([b1.note, notes]) + ")");

@@ -14,7 +14,7 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
   server). Never add a `.github/workflows/` for this project, never open PRs — merge locally and push.
   No user-facing text may steer users toward PRs or CI (a test scans the prose; CHANGELOG is exempt).
 - **Zero runtime dependencies.** The MCP server and all scripts use only Node core (`fs`, `path`, `os`,
-  `readline`, `string_decoder`, `child_process`, `crypto`, `module` — the compile cache —, built-in `fetch`). No `npm
+  `string_decoder`, `child_process`, `crypto`, `module` — the compile cache —, built-in `fetch`). No `npm
   install` required. Keep it that way.
 - Specs always live in `.specs/` (no alternate directory detection).
 
@@ -96,13 +96,16 @@ marked `// load time` (an acyclic graph); every other one is a bare `let` bound 
 
 **i18n:** every user-facing string lives in `mcp/lib/i18n/*` — `en.js` · `pt.js` · `es.js` hold the same keys (EN is the
 reference), assembled by the `mcp/lib/i18n.js` facade; pt-BR is DERIVED from pt (`i18n/pt-br.js`, `toPtBr`), never
-written by hand. IDs and markers stay English-stable (languages.md).
+written by hand. IDs and markers stay English-stable (languages.md). The one English-only output is the CLI's help text
+(`--help`, `help <command>`'s command lines — `helpText()`), whatever `--lang` says; only `help <command>`'s frame lines follow the project language.
 
 ## Gotchas that bite in every area
 - **Hooks: never reference `hooks/hooks.json` in `plugin.json`.** Claude Code auto-loads the standard
   `hooks/hooks.json` from the plugin root. Declaring `"hooks": "./hooks/hooks.json"` in the manifest
   loads it a SECOND time → `Duplicate hooks file detected` and the plugin fails to load hooks (the bug
-  fixed in 1.9.1). `manifest.hooks` is ONLY for *additional* hook files at non-standard paths.
+  fixed in 1.9.1). `manifest.hooks` is ONLY for *additional* hook files at non-standard paths. Every entry is EXEC form
+  (`"command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/<x>.js"]` — no shell per spawn; Claude Code ≥ 2.1.139), never
+  shell form (claude-code-integration.md → Hooks and commands).
 - **Never write a literal U+FEFF into source.** The Edit tool can turn the escape `\uFEFF` inside a regex or string into
   the raw BOM character (invisible, and it breaks the match). Build it: `String.fromCharCode(0xfeff)` /
   `new RegExp("^" + String.fromCharCode(0xfeff))` (as prompts-resources.js does), or check the bytes after an edit.
@@ -143,9 +146,9 @@ AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(2052 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(2132 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
-`node cli/test-cli.js` adds 599 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 610 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior — in the file of its
 AREA: `mcp/tests/NN-<area>.js` / `cli/tests/NN-<area>-<topic>.js` (NN is the area, the same in both; `--list` says what
 each holds; `--only <file|area|NN>` runs a part, plus the files it needs — testing.md → The suites). Keep

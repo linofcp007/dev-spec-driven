@@ -8,10 +8,10 @@
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded } = require("./common.js"); // load time
-// The assembled tables — call-time use only; mcp/lib/i18n.js links them once every language has loaded.
-let BUILD, MSG;
-function __link(T) { ({ BUILD, MSG } = T); }
+const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded, stopLineClaim } = require("./common.js"); // load time
+// The assembled tables and the shared retro.md layout (renderRetro) — call-time use only; mcp/lib/i18n.js links them when it loads this file.
+let BUILD, MSG, renderRetro;
+function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
 
 // ===========================================================================
 // Artifact builders, one set per language. EN is the canonical reference; since 1.13 its templates are
@@ -1056,7 +1056,7 @@ funciona de ponta a ponta. Mantém-no concreto; qualquer pessoa deve conseguir s
     },
 
     promptStub(name) {
-      return "# Prompt v1 — " + name + "\n\n## System\nÉs um assistente útil para " + name + ". Sê preciso e conciso. Se não souberes, di-lo. Recusa pedidos fora da tua tarefa.\n\n## User Template\n[mensagem do utilizador / {{variáveis}}]\n";
+      return "# Prompt v1 — " + name + "\n\n## System\nÉs um assistente útil para " + name + ". Sê preciso e conciso. Se não souberes, di-lo. Recusa pedidos fora da tua tarefa.\n\n## User Template\n[mensagem do utilizador / {{variables}}]\n";
     },
   };
 
@@ -1110,6 +1110,23 @@ const evalsReadme = "# Evals\n\n" +
     "Ficheiros de conjunto: `golden.json`, `adversarial.json`, opcional `regression.json`.\n" +
     "Formato de item: `{ id, input, expect: { type, value|rubric } }`. Tipos de grader: contains | equals | regex | refuse | judge.\n" +
     "O system prompt é lido do `../prompts/vN.md` mais recente (a sua secção `## System`).\n";
+
+// 1.25.1 — what the stop gate's claims (msg.stopGate.claims) are made of: a claim is about the WORK (a task, the feature, everything,
+// the tests), never a bare verb — "Verifiquei o ficheiro…", "Concluí que o problema…", "Acabei de ler o código", "O método está
+// implementado em src/pay.ts" were sent back while any recent tick was unverified. See en.js (STOP_EN_*).
+const STOP_PT_DONE = String.raw`(?:feit[oa]s?|conclu[íi]d[oa]s?|terminad[oa]s?|implementad[oa]s?|verificad[oa]s?|finalizad[oa]s?|resolvid[oa]s?|complet[oa]s?|pront[oa]s?)`;
+const STOP_PT_CHAIN = String.raw`(?:\s*(?:,|e|&)\s*(?:${STOP_PT_DONE}|testad[oa]s?|a\s+funcionar|funcionando))*`;
+// Its clause ends right there ("A correção está concluída.") — "está implementado em src/pay.ts" describes the code.
+const STOP_PT_END = String.raw`(?=[ \t]*(?:[.!,;:—–)]|$|\p{Extended_Pictographic}|\u2713|\u2714))`;
+const STOP_PT_END1 = String.raw`(?=[ \t]*(?:[.!;)]|$|\p{Extended_Pictographic}|\u2713|\u2714))`;
+// Not done IN / BY something ("está implementado em src/pay.ts", "foi feito pelo middleware", "pronto para começar").
+const STOP_PT_NOT_WHERE = String.raw`(?!\s+(?:em|no|na|nos|nas|num|numa|por|pel[oa]s?|via|com|através|dentro|desde|para|pra)(?![\p{L}\p{N}_]))`;
+// The work a first person finished: a tarefa (tarefa 3, tarefas 1-3), a feature, a correção, as alterações, tudo…
+const STOP_PT_WORK = String.raw`(?:(?:(?:a|as|o|os|toda|todas|todo|todos|esta|estas|este|estes|essa|essas|esse|esses|ambas|ambos|minha|minhas|nossa|nossas|última|últimas|restantes)\s+)*(?:\d+\s+)?(?:tarefas?(?:\s+#?\d+(?:\s*(?:,|e|[-–]|a)\s*#?\d+)*)?|passos?(?:\s+#?\d+)?|features?|funcionalidades?|hist[óo]rias?|implementa[çc][ãa]o|corre[çc](?:[ãa]o|[õo]es)|altera[çc](?:[ãa]o|[õo]es)|mudan[çc]as?|trabalho|plano|bugfix)|tudo)(?![\p{L}\p{N}_])`;
+// What the rest of a "Feito." line names when it claims the work (common.js stopLineClaim).
+const STOP_PT_TESTED = String.raw`(?:testes?|tarefas?|suites?|verificad[oa]s?|passam|passaram|passou|passando|verdes?|implementad[oa]s?|implementei|build|lint)`;
+// A first person's completion verb (singular and plural).
+const STOP_PT_I = String.raw`(?:terminei|conclu[íi]|implementei|verifiquei|acabei|finalizei|testei|termin[áa]mos|conclu[íi]mos|implement[áa]mos|verific[áa]mos|acab[áa]mos|finaliz[áa]mos|test[áa]mos)`;
 
 // ===========================================================================
 // Human-readable tool messages (doctor / clarify / next-action / add-track /
@@ -1182,6 +1199,7 @@ const msg = {
       coveredComment: (label) => `Esta secção também responde a ${label} — os dois tracks estão ativos, por isso uma secção chega (uma secção ${label} própria também conta).`,
       suggest: {
         "trivial-change": "Tamanho sugerido xs — uma alteração trivial (uma gralha, um texto ou uma configuração, uma correção de uma linha): uma alteração, um change.md, duas aprovações.",
+        "small-change": "Tamanho sugerido xs — uma pequena alteração de comportamento (uma mensagem de erro mais clara, um valor por omissão ou um limite, uma entrada vazia ou em falta tratada): uma alteração, um change.md com 1–3 critérios e tarefas, duas aprovações.",
         "single-unit": "Tamanho sugerido s — uma unidade de trabalho (um endpoint, ecrã, botão, campo…) com no máximo um track com secções de design: uma história, as secções core dos tracks, o plano aprovado numa só chamada.",
         "several-tracks": "Tamanho sugerido l — três ou mais tracks com secções de design: a cadeia completa.",
         "public-api": "Tamanho sugerido l — uma API pública (consumidores externos, um contrato a manter): a cadeia completa.",
@@ -1437,7 +1455,8 @@ const msg = {
       evidenceMoved: (list, slug) => `execuções registadas sob um número de tarefa pertencem a uma tarefa que agora tem outro número (renumerada): ${list} — a evidência é guardada por número, por isso nenhuma das tarefas lê essa execução; regista a execução da tarefa movida: ${DEV_SPEC} done ${slug} <n> --run`,
     },
     observed: {
-      on: "Modo de evidência OBSERVADO — uma tarefa cujo _Verify:_ tem um comando só fica verificada com uma execução com sucesso que o harness viu (no Claude Code, o hook de observação do plugin guarda cada execução Bash de um comando _Verify:_ ou de uma verificação do projeto) ou que o dev-spec done --run / finish --run fez; a execução de uma verificação do projeto também (roadmap.json meta.evidence). Um cliente só MCP não tem esse hook: regista as execuções dele com " + DEV_SPEC + " done <feature> <n> --run.",
+      on: "Modo de evidência OBSERVADO — uma tarefa cujo _Verify:_ tem um comando só fica verificada com uma execução com sucesso que o harness viu (no Claude Code, o hook de observação do plugin guarda cada execução Bash de um comando _Verify:_ ou de uma verificação do projeto) ou que o dev-spec done --run / finish --run fez; a execução de uma verificação do projeto também (roadmap.json meta.evidence). Um cliente só MCP não tem esse hook: regista as execuções dele com " + DEV_SPEC + " done <feature> <n> --run. Só com a ferramenta PowerShell (Windows sem Git Bash), uma execução fica registada apenas quando o Claude Code dá o seu código de saída — as outras registam-se também com --run.",
+      unguarded: "A evidência observada só é tão forte quanto o guarda de aprovações, e ele está desligado (meta.approvalGuard): um agente que acrescente uma linha a um .execution/observed.jsonl forja uma execução observada. Liga-o — " + DEV_SPEC + " init --approval-guard ask (ou deny) — para que escrever esse registo seja perguntado ou recusado.",
       off: "Modo de evidência REPORTADO — as execuções que um agente reporta verificam tal como são dadas (roadmap.json meta.evidence); cada registo continua a dizer se o harness a observou.",
       badValue: (v) => `--evidence aceita reported ou observed (recebido '${v}').`,
       badInput: (v) => `evidence tem de ser "reported" ou "observed" (recebido '${v}').`,
@@ -1484,12 +1503,14 @@ const msg = {
       atLeast: (n) => `≥ ${n}`,
       atMost: (n) => `≤ ${n}`,
       between: (lo, hi) => `entre ${lo} e ${hi}`,
+      atLeastItems: (n) => `com pelo menos ${n} ${n === 1 ? "item" : "itens"}`,
       unknownArgs: (tool, items, valid) => `Argumento${items.length > 1 ? "s" : ""} desconhecido${items.length > 1 ? "s" : ""} para ${tool}: ${items.map((u) => u.argument + (u.didYouMean ? ` (será ${u.didYouMean}?)` : "")).join(", ")} — nada foi feito. ${tool} aceita: ${valid}.`,
       notObject: "arguments tem de ser um objeto JSON.",
       dotdot: "projectDir não pode conter segmentos de caminho '..'.",
       network: (dir) => `projectDir tem de ser uma pasta local — um caminho de rede ou de dispositivo (${dir}) é recusado, para que uma chamada de ferramenta nunca aponte este servidor local para outra máquina; abre o projeto localmente (ou arranca o servidor com ele como pasta de trabalho).`,
       projectMissing: (dir) => `projectDir ${dir}: essa pasta não existe — verifica o caminho (só o spec_init cria a pasta de um projeto).`,
       projectNotDir: (dir) => `projectDir ${dir} é um ficheiro, não uma pasta.`,
+      projectNoSpecs: (dir) => `projectDir ${dir} não tem um projeto dev-spec (uma .specs/ com roadmap.json, steering/ ou uma feature) — o spec_import só lê ficheiros no projeto por omissão ou num que o spec_init preparou: corre primeiro o spec_init com este projectDir.`,
       projectUri: (uri) => `projectDir ${uri} não é um URI file:// local de uma pasta (file:///C:/caminho no Windows, file:///caminho nos outros sistemas).`,
       unknownTool: (name) => `Ferramenta desconhecida: ${name} — tools/list lista as ferramentas deste servidor.`,
       noTool: "tools/call precisa de params.name (o nome da ferramenta — ver tools/list).",
@@ -1733,6 +1754,7 @@ const msg = {
       finishChanged: (list) => `alterados depois da aprovação (rever e voltar a aprovar): ${list}`,
       bugGate: (n, first) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz está por preencher. Nenhuma correção antes de a causa raiz estar escrita no bug.md — faz primeiro a tarefa ${first} (encontra a causa raiz com evidência e escreve-a lá).`,
       bugGateFirst: (n, first) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz está por preencher e nenhuma tarefa a escreve — só a tarefa ${first} pode ser concluída até a causa raiz estar escrita no bug.md (nenhuma correção antes da causa raiz).`,
+      bugGateFix: (n) => `A tarefa ${n} ainda não pode ser concluída: torna o teste de regressão verde — é uma correção — e bug.md → Causa Raiz está por preencher. Escreve lá primeiro a causa raiz, com a evidência (nenhuma correção antes de a causa raiz estar escrita no bug.md).`,
       bugGateTicked: (n, rc) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz continua vazia — a tarefa ${rc} está marcada, mas o que ela entrega é essa secção. Escreve lá a causa raiz, com a evidência (nenhuma correção antes de a causa raiz estar escrita no bug.md).`,
       rootCauseTaskEmpty: (n) => `A tarefa ${n} está marcada, mas bug.md → Causa Raiz continua vazia — escreve lá a causa raiz, com a evidência: as tarefas seguintes (o teste de regressão, a correção) continuam recusadas até estar escrita.`,
       fill: (file, what, hint) => `Preenche ${file} — ${what}; depois ${hint}.`,
@@ -1794,6 +1816,8 @@ const msg = {
       pathRequired: "falta o caminho — a pasta (ou um ficheiro) da spec a importar.",
       outside: (p) => `'${p}' está fora do projeto — o spec_import só lê dentro da pasta do projeto.`,
       notFound: (p) => `'${p}' não encontrado.`,
+      hidden: (p, part) => `'${p}' está numa pasta oculta ou é um ficheiro oculto (${part}) — o spec_import não lê nenhum além dos dos importadores: .kiro/, .cursor/, .cursorrules, .fluidplan/, .agent/ (Codex), .claude/plans/.`,
+      notSource: (p) => `'${p}' não é uma fonte de spec que o spec_import leia — indica um ficheiro .md / .markdown / .mdc / .txt / .json / .yaml / .yml, ou a pasta da fonte.`,
       nothing: (tool, p) => `Não foram encontrados ficheiros de spec ${tool} em '${p}'.`,
       exists: (slug) => `A feature '${slug}' já existe — a importação nunca a substitui. Indica outro nome.`,
       tooLarge: (rel, max) => `${rel} tem mais de ${max} caracteres — demasiado grande para importar inteiro (a parte além do limite, incluindo os passos de um plano, perder-se-ia). Divide-o ou encurta-o e importa de novo; nada foi criado.`,
@@ -1835,6 +1859,7 @@ const msg = {
       skDocs: { research: "Investigação", dataModel: "Modelo de dados", contracts: "Contratos", quickstart: "Arranque rápido" },
       skFrom: (file) => `> Do spec-kit \`${file}\`.`,
       wNoPlanDocs: (file) => `não há ${file} na origem — o design.md tem os documentos de design encontrados ao lado (investigação, modelo de dados, contratos, arranque rápido) sem o plano`,
+      wUncoveredFr: (list) => `requisitos funcionais que nenhum cenário de aceitação cobre — ficaram como texto em "Requisitos Funcionais", por isso nenhuma tarefa nem teste os rastreia: ${list}. Transforma cada um num critério EARS com um ID de AC (ou cita-o num) antes de aprovar os requisitos`,
       wUnreadable: (file) => `${file} aponta para fora do projeto — ignorado`,
       done: (tool, rel, slug, label, lang) => `Importado de ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  correspondência: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
@@ -2031,7 +2056,8 @@ const msg = {
         followUps: "## Seguimento",
         followUpsNote: "<!-- Candidatos ao backlog — acrescenta os que aceitares com spec_backlog (dev-spec backlog add \"<nome>\" \"<nota>\"). -->",
       },
-      retro: (m, fmt) => MSG.en.metrics.buildRetro(MSG.pt.metrics.retroText, MSG.pt.metrics.phase, m, fmt),
+      // retro.md: the one layout (i18n.js renderRetro, linked) with this language's retroText and phase names
+      retro: (m, fmt) => renderRetro(MSG.pt.metrics.retroText, MSG.pt.metrics.phase, m, fmt),
     },
 
     deepTrace: {
@@ -2041,6 +2067,7 @@ const msg = {
         uncoveredSuccessCriteria: "critérios de sucesso (SC) sem teste nem passo do quickstart que os verifique",
         phantomSecondary: "tarefas / plano de testes citam IDs EC/NFR/SC desconhecidos (gralhas?)",
         untracedCriteria: "critérios com verbo modal mas sem ID próprio (por linha) — nenhuma tarefa nem teste os pode rastrear: numera cada um US-<história>.AC-<n>",
+        inactiveAcs: "ACs sob o cabeçalho de um track desligado (ou de um pacote de track em falta) — não são exigidos nem rastreados: volta a ligar o track, ou tira-os dessa secção se forem critérios do core",
         justifiedTestGaps: "ACs que o plano de testes só nomeia numa nota (Lacunas / Fora de Âmbito), nunca numa linha de teste — continuam sem cobertura: acrescenta uma linha, ou aprova o plano de testes com force para aceitar a lacuna",
         plannedNotInCode: "testes planeados que nenhum ficheiro de teste nomeia (põe o T-ID no nome do teste)",
         inCodeNotInPlan: "T-IDs no código de teste que nenhum plano de testes lista",
@@ -2130,6 +2157,10 @@ const msg = {
         if (a.kind === "remove") return `apagar definitivamente a feature '${f}' (a pasta em .specs/, as aprovações e o histórico)`;
         if (a.kind === "unreadable") {
           if (a.why === "partial") return "executar uma chamada de ferramenta que o guarda de aprovações só recebeu em parte (a entrada veio cortada) e que menciona dev-spec ou .specs/";
+          if (a.why === "fed") return "dar a uma shell um script que o guarda de aprovações não consegue ver (vindo de um ficheiro ou de um programa por pipe, ou de uma substituição de processo) num comando que menciona dev-spec ou .specs/";
+          if (a.why === "specs-arg") return "correr um programa que o guarda de aprovações não conhece sobre .specs/, o seu roadmap.json ou um .state.json (pode alterá-los)";
+          if (a.why === "error") return "executar uma chamada de ferramenta que o guarda de aprovações não conseguiu verificar (falhou) com o guarda de aprovações ligado";
+          if (a.why === "project") return "agir sobre uma pasta de projeto (projectDir) que o guarda de aprovações não consegue ler";
           return a.why === "too-long" ? `correr um comando de shell demasiado longo para o guarda de aprovações o ler (${a.length} caracteres) que menciona dev-spec ou .specs/`
             : "correr um comando de shell que menciona a CLI do dev-spec com uma palavra de aprovação numa forma que o guarda de aprovações não consegue ler (um lançador desconhecido, um glob, uma variável ou uma string concatenada)";
         }
@@ -2149,6 +2180,9 @@ const msg = {
           }
           if (a.setting === "check") return a.to == null ? `remover a verificação do projeto '${a.name}' (meta.checks)` : `alterar o comando da verificação do projeto '${a.name}' (meta.checks)`;
           if (a.setting === "roadmap") return "alterar .specs/roadmap.json a partir da shell — escrevê-lo, movê-lo ou apagá-lo (é lá que estão o guarda de aprovações e os gates do projeto)";
+          if (a.setting === "specs") return a.source === "edit" ? "mover ou apagar .specs/ ou uma pasta dentro dela com uma ferramenta de ficheiros (é lá que estão o roadmap.json e os .state.json das features)"
+            : "alterar .specs/ a partir da shell — escrever, mover ou apagar através de um glob, de uma variável ou de uma pasta inteira que pode chegar ao roadmap.json ou ao .state.json de uma feature";
+          if (a.setting === "link") return "criar um link para .specs/ ou para um ficheiro lá dentro (link simbólico, junction ou hard link) — o que se escrever através dele chega ao roadmap.json e aos .state.json sem ser visto";
           return `baixar o guarda de aprovações de ${a.from} para ${a.to}`;
         }
         if (a.revoke) return `revogar a aprovação da fase ${a.phase || "?"} de '${f}'` + (a.role ? ` como ${a.role}` : "") + (a.by ? ` em nome de '${a.by}'` : "");
@@ -2197,6 +2231,7 @@ const msg = {
       noGitUninstall: (dir) => `${dir} não está dentro de um repositório git (ou o git não está instalado) — merge-state --uninstall retira a configuração git e as linhas do .gitattributes desse repositório; aqui não há nada a retirar.`,
       attrsAdded: (file) => `${file}: linhas do merge driver adicionadas (faz commit — toda a equipa as recebe):`,
       attrsKept: (file) => `${file}: o ficheiro já tem as linhas do merge driver.`,
+      attrsNotFile: (file) => `${file} é uma ligação ou não é um ficheiro normal — o merge-state nunca escreve através dele (alteraria o ficheiro para onde aponta): substitui-o por um .gitattributes normal e corre-o de novo.`,
       attrsRemoved: (file) => `${file}: linhas do merge driver removidas (faz commit).`,
       attrsNone: (file) => `${file}: sem linhas do merge driver para remover.`,
       configSet: (key, value) => `git config ${key} = ${value}`,
@@ -2356,6 +2391,7 @@ const msg = {
           head: "Status line — acrescenta isto ao ~/.claude/settings.json (todos os projetos) ou ao .claude/settings.local.json de um projeto (só nesta máquina — o caminho é desta máquina, por isso nunca no .claude/settings.json versionado):",
           after: "Resultado: uma linha — a feature mais ativa, as suas tarefas, as tarefas por verificar e o próximo passo — e nada fora de um projeto dev-spec.",
           cacheNote: "Este caminho é uma cópia com versão na cache de plugins do Claude Code (…/plugins/cache/…): depois de atualizar o plugin, volta a correr /spec-statusline — a cópia antiga é apagada 14 dias após uma atualização.",
+          cacheFollows: "Este CLI é uma cópia com versão na cache de plugins do Claude Code (…/plugins/cache/…): o comando procura a versão instalada mais recente do plugin a cada execução, por isso continua a funcionar depois de uma atualização — não é preciso voltar a correr /spec-statusline.",
           tryIt: (cmd) => `Experimenta: echo '{"cwd": "<pasta do projeto>"}' | ${cmd}`,
         },
       },
@@ -2438,6 +2474,11 @@ const msg = {
       runHint: (cmd) => `⚠ \`${cmd}\` encaminha a saída para outro comando (pipe): a shell só reporta o exit code do ÚLTIMO comando, por isso uma verificação que falha pode ficar registada como bem-sucedida — tira o pipe, ou começa-o com \`set -o pipefail;\` em bash (--shell bash); o cmd.exe não tem pipefail.`,
       doctor: (list) => `um comando _Verify:_ encaminha a saída para outro (pipe) — uma verificação que falha pode sair com 0 (um pipeline reporta o código do ÚLTIMO comando): ${list}. Tira o pipe ou usa \`set -o pipefail\` (bash).`,
       completeNote: (n, cmd) => `Tarefa ${n}: o comando registado encaminha a saída para outro (\`${cmd}\`) — o seu exit 0 é o do ÚLTIMO comando, por isso esta passagem pode esconder uma verificação que falha. Tira o pipe (ou usa \`set -o pipefail\` em bash) e corre-o de novo.`,
+    },
+    verifyControl: {
+      doctor: (list) => `um comando tem um carácter de controlo (uma sequência de escape, um retorno de carro…) — um terminal mostra um comando diferente do que é executado: ${list}. Reescreve-o como texto simples; o done --run / finish --run recusam-no.`,
+      run: (n, cmd) => `Tarefa ${n}: o seu comando _Verify:_ tem um carácter de controlo (${cmd}) — um terminal mostraria um comando diferente do que é executado. Nada foi executado: reescreve-o como texto simples no tasks.md.`,
+      checks: (list) => `Verificação do projeto ${list}: o seu comando tem um carácter de controlo — um terminal mostraria um comando diferente do que é executado. Nada foi executado: define-a de novo (${DEV_SPEC} init --check nome="cmd").`,
     },
 
     templates: {
@@ -2991,17 +3032,34 @@ const msg = {
     },
 
     stopGate: {
+      // 1.25.1: no bare verb or participle — "verifiquei", "concluí", "implementado" alone claimed "Verifiquei o ficheiro…", "Concluí
+      // que o problema…", "O método está implementado em src/pay.ts" (STOP_PT_* above, common.js stopLineClaim).
       claims: [
-        String.raw`(?:está|estão|esta|ficou|ficaram|foi|foram|já\s+está|já\s+estão)\s+(?:tudo\s+)?(?:feit[oa]s?|conclu[íi]d[oa]s?|terminad[oa]s?|implementad[oa]s?|verificad[oa]s?|finalizad[oa]s?|resolvid[oa]s?)`,
+        // "A correção está concluída.", "Foi implementado e testado." — the clause ends there…
+        String.raw`(?:está|estão|esta|ficou|ficaram|foi|foram|já\s+está|já\s+estão)\s+(?:tudo\s+|totalmente\s+|agora\s+)?${STOP_PT_DONE}${STOP_PT_CHAIN}${STOP_PT_END}`,
+        // …or the work is its subject ("a funcionalidade está concluída e publicada"), or "está tudo feito"
+        String.raw`(?:tudo|tarefas?|feature|funcionalidade|hist[óo]rias?|implementa[çc][ãa]o|corre[çc][ãa]o|altera[çc](?:[ãa]o|[õo]es)|mudan[çc]as|trabalho|bugfix)\s+(?:(?:já|agora)\s+)?(?:está|estão|ficou|ficaram|foi|foram)\s+(?:tudo\s+|totalmente\s+|agora\s+)?${STOP_PT_DONE}${STOP_PT_NOT_WHERE}`,
+        String.raw`(?:está|estão|ficou|ficaram|já\s+está|já\s+estão)\s+tudo\s+${STOP_PT_DONE}${STOP_PT_NOT_WHERE}`,
         String.raw`tarefas?\s+#?\d+(?:\s*(?:,|e|[-–]|a)\s*#?\d+)*\s+(?:(?:est[áa]|est[ãa]o|foi|foram|ficou|ficaram)\s+)?(?:feit[oa]s?|conclu[íi]d[oa]s?|terminad[oa]s?|implementad[oa]s?|verificad[oa]s?)`,
         String.raw`todas\s+as\s+(?:\d+\s+)?tarefas\s+(?:(?:est[ãa]o|foram|ficaram|já)\s+)*(?:feitas|conclu[íi]das|terminadas|implementadas|verificadas|finalizadas|prontas)`,
-        String.raw`^[ \t*_#>\p{Extended_Pictographic}\uFE0F\u2713\u2714-]*(?:tudo\s+)?(?:feito|conclu[íi]do|terminado|implementado|verificado|finalizado)[*_]*(?=[ \t]*(?:[.,!:—–\p{Extended_Pictographic}\u2713\u2714-]|$))`,
-        String.raw`tudo\s+(?:feito|pronto|conclu[íi]do|terminado|verde|funciona|a\s+funcionar)`,
+        // "Feito.", "✅ Concluído", "Implementado e verificado." — "Pronto, aqui está o resumo." claims no task (common.js)
+        stopLineClaim(String.raw`(?:tudo\s+)?(?:feit[oa]|conclu[íi]d[oa]|terminad[oa]|implementad[oa]|verificad[oa]|finalizad[oa]|pront[oa])${STOP_PT_CHAIN}`, STOP_PT_TESTED,
+          String.raw`(?:${STOP_PT_WORK}|(?<=implementad[oa]s?\s+)(?:o|a|os|as|um|uma)(?![\p{L}\p{N}_]))`),
+        // "Tarefa concluída.", "Trabalho concluído —" (ending its clause)
+        String.raw`(?:feature|funcionalidade|hist[óo]ria|tarefa|implementa[çc][ãa]o|corre[çc][ãa]o|bugfix|refactor|migra[çc][ãa]o|trabalho)\s+(?:agora\s+)?(?:feit[oa]|conclu[íi]d[oa]|terminad[oa]|implementad[oa]|verificad[oa]|finalizad[oa]|complet[oa]|pront[oa])${STOP_PT_END}`,
+        String.raw`tudo\s+(?:feito|pronto|conclu[íi]do|terminado|verificado|implementado|testado|verde|funciona|a\s+funcionar)`,
         String.raw`(?:todos\s+os\s+(?:\d+\s+)?|os\s+)?testes?\s+(?:(?:já|agora|todos)\s+)*(?:passam|passaram|passa|passou|est[ãa]o\s+a\s+passar|a\s+passar|est[ãa]o\s+verdes|ficaram\s+verdes|verdes)`,
         String.raw`(?:isto|já)\s+funciona`,
-        String.raw`terminei|concluí|implementei|verifiquei|acabei|finalizei`,
-        String.raw`conclu[íi]d[oa]s?|verificad[oa]s?|implementad[oa]s?`,
+        // first person: "Implementei a tarefa 3", "Terminei." — not "Verifiquei o ficheiro", "Concluí que…", "Acabei de ler…"
+        String.raw`${STOP_PT_I}(?:\s+(?:já|agora|também))?(?:\s*(?:,|e)\s*${STOP_PT_I})*(?:\s+${STOP_PT_WORK}|${STOP_PT_END1})`,
+        // …and "implementei" builds the work whatever its object ("Implementei a lógica de retry") — not "…que" / "…como"
+        String.raw`(?:implementei|implement[áa]mos)(?=\s+(?!(?:que|se|como|porque|onde|quando|qual)(?![\p{L}\p{N}_]))[\p{L}\p{N}_])`,
+        // "Pronto para merge" (1.25.1 — it claimed nothing)
+        String.raw`pront[oa]s?\s+(?:para|pra)\s+(?:(?:o|a|um|uma|fazer|fazer\s+o)\s+)?(?:merge|integrar|integra[çc][ãa]o|entrega|entregar|release|lan[çc]amento|deploy|produ[çc][ãa]o|revis[ãa]o|review|pr|pull\s+request)`,
       ],
+      // 1.25.1 — the words every claim above holds at least one of (see en.js): pt-BR's own claims (funcionando, passando, rodando)
+      // included — pt-BR keeps pt's list raw.
+      triggers: [String.raw`${STOP_PT_DONE}|${STOP_PT_I}|testad[oa]s?|verdes?|funciona|funcionar|funcionando|passam|passaram|passa|passou|passar|passando|rodando`],
       negators: ["não", "nunca", "nem", "nada", "sem", "falta", "faltam", "ser", "quando", "depois", "antes", "se", "até", "vou", "vamos", "irei",
         "devo", "deve", "devem", "precisa", "precisam", "tenho", "temos", "quase", "parcialmente", "possa", "possam", "ainda"],
       admissions: [
@@ -3028,6 +3086,8 @@ const msg = {
         noRun: (file, cmds) => `o relatório (${file}) não mostra a execução do _Verify:_ — o comando exato e o seu exit code: ${cmds}.`,
         notPassing: (file, cmds) => `o relatório (${file}) não mostra nenhuma execução com sucesso (exit 0) de ${cmds} — o _Verify:_ de uma tarefa DONE tem de passar.`,
         notFailing: (file, cmds) => `o relatório (${file}) não mostra nenhuma execução a falhar (um exit code diferente de zero) de ${cmds} — a tarefa tem _Expect: fail_: a prova é a execução vermelha.`,
+        lastNotPassing: (file, cmds) => `o relatório (${file}) termina numa execução a falhar de ${cmds} — a última execução dele que o relatório mostra sai com um exit code diferente de zero; o _Verify:_ de uma tarefa DONE tem de passar no código final.`,
+        lastNotFailing: (file, cmds) => `o relatório (${file}) termina numa execução com sucesso de ${cmds} — a tarefa tem _Expect: fail_: a última execução dele que o relatório mostra tem de ser a vermelha (um exit code diferente de zero).`,
         todo: "Corre o comando no código final e põe no relatório o comando, o exit code e as últimas linhas do output — ou reporta BLOCKED / NEEDS_CONTEXT se não puder passar. (Evidência antes de afirmações: o controlador só marca a tarefa com essa execução.)",
       },
       simplifier: {

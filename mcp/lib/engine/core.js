@@ -356,8 +356,14 @@ function globFolderNames(g) {
 }
 // The code files one reference names (keys of `code`): the file itself, every code file under a folder, or a
 // glob's matches. `path/to/file.js:12` and `#L12` anchors are dropped; a path outside the project names nothing.
+// 1.25.1: a trailing ANNOTATION after the path — " (the helper)", " — new export", " - new export" — is the author's note, never part
+// of the path: `_Implements: src/lib/a.ts (the helper)_` was a missing file that blocked finish. Only after a path-like token (no
+// whitespace in it — backticks around it allowed); a path with spaces is read as written.
+const RE_IMPL_ANNOTATED = /^`?([^`\s]+)`?\s+(?:\(|[—–]|-\s)/;
 const implementsPath = (ref) => {
-  const s = stripHashLineAnchor(String(ref).trim().replace(/\\/g, "/")); // .replace(/#L?\d+.*$/, "")
+  const raw = String(ref).trim().replace(/\\/g, "/");
+  const ann = RE_IMPL_ANNOTATED.exec(raw);
+  const s = stripHashLineAnchor(ann ? ann[1] : raw); // .replace(/#L?\d+.*$/, "")
   const c = colonLineAnchorAt(s); // .replace(/:\d+(?:[-:]\d+)*$/, "")
   return (c === -1 ? s : s.slice(0, c)).trim();
 };
@@ -458,9 +464,28 @@ function closestName(word, candidates, limit) {
   return best ? best.c : null;
 }
 
+// 1.25.1 (review 7) — THE calendar date (YYYY-MM-DD) of a moment, as the person working reads it on a calendar: the LOCAL date.
+// `new Date().toISOString().slice(0, 10)` (eleven places, two helpers) is the UTC date — something written between 00:00 and 01:00
+// in Lisbon (UTC+1 in summer) was dated the day before. now: a Date, a timestamp (ms) or an ISO string (a stored instant); omitted /
+// undefined: this moment (a test passes its own). A YYYY-MM-DD string is a calendar date already: returned as it is, never shifted
+// by a time zone. → "" for a value that is no date. utc (true): the UTC date — only where a contract says UTC (a waiver's
+// `expires`: spec_approve's schema and waiver.badExpires say "today or later in UTC"). Stored timestamps stay ISO instants (UTC):
+// only the calendar-date strings written into the specs and shown to people come from here.
+function today(now, utc) {
+  if (typeof now === "string" && /^\d{4}-\d{2}-\d{2}$/.test(now.trim())) return now.trim();
+  const d = now === undefined ? new Date() : now instanceof Date ? now : new Date(now);
+  if (!Number.isFinite(d.getTime())) return "";
+  const two = (n) => String(n).padStart(2, "0");
+  return utc ? String(d.getUTCFullYear()).padStart(4, "0") + "-" + two(d.getUTCMonth() + 1) + "-" + two(d.getUTCDate())
+    : String(d.getFullYear()).padStart(4, "0") + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate());
+}
+// A STORED instant's calendar date (today's rule) — "" when there is none (null, "", not a date): a finish / approval / tick time
+// shown as a date. (`String(iso).slice(0, 10)` showed its UTC date.)
+const dayOf = (instant) => (instant == null || instant === "" ? "" : today(instant));
+
 module.exports = { isWsUnit, RE_LINE_TERMINATOR, isLtUnit, lastLtIndex, stripHashComment, quotedValue, unitIn,
   wsOrUnitIn, isSlashUnit, isBacktickUnit, stripEnd, stripStart, stripEnds, restAfterBlanks, plusAfterBlanks, headRest,
   headPlus, replaceHtmlCommentSpans, codeSpans, replaceCodeSpans, atxHeading, GLOB_MAX_ALTS, globNorm,
   steeringGlobMatch, globMatcher, isImplementsGlob, globAlternatives, globDpMatch, implementsRefs, projectGlob,
   globFiles, globFolderNames, implementsPath, isDigitUnit, stripHashLineAnchor, colonLineAnchorAt, implementsRel,
-  implementsKey, implementsTargets, keysWithPrefix, own, blankFacts, osaDistance, closestName, __link };
+  implementsKey, implementsTargets, keysWithPrefix, own, blankFacts, osaDistance, closestName, today, dayOf, __link };

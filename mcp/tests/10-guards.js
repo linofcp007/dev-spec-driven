@@ -121,9 +121,12 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const hooksCfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
     const preCfg = (hooksCfg.PreToolUse || [])[0] || {};
     // (1.23 review 5: MultiEdit is no Claude Code tool any more — a dead entry; the engine still reads a MultiEdit payload)
-    ok(preCfg.matcher === "Write|Edit|NotebookEdit" && preCfg.hooks[0].command === 'node "${CLAUDE_PLUGIN_ROOT}/hooks/guard-hook.js"' && preCfg.hooks[0].timeout === 10 &&
+    // (1.25.1: every hook in exec form — `node` + the script as its one argument, no shell per spawn: hookScript reads it)
+    // (1.25.1 review 7: + the shell tools — the files a Bash / PowerShell / Monitor command writes)
+    const hookScript = (h) => (h && h.command === "node" && Array.isArray(h.args) && h.args.length === 1 ? h.args[0] : "");
+    ok(preCfg.matcher === "Write|Edit|NotebookEdit|Bash|PowerShell|Monitor" && hookScript(preCfg.hooks[0]) === "${CLAUDE_PLUGIN_ROOT}/hooks/guard-hook.js" && preCfg.hooks[0].timeout === 10 &&
       hooksCfg.PostToolUse && hooksCfg.SessionStart && !fs.readFileSync(guardJs, "utf8").includes(String.fromCharCode(0xfeff)),
-      "hooks.json wires the guard as PreToolUse (Write|Edit|NotebookEdit, timeout 10) beside the existing hooks; no literal BOM in guard-hook.js");
+      "hooks.json wires the guard as PreToolUse (Write|Edit|NotebookEdit|Bash|PowerShell|Monitor, timeout 10) beside the existing hooks; no literal BOM in guard-hook.js");
 
     // (H3) zero-dep glob + Kiro-compatible front matter.
     const globCases = [["src/api/**", "src/api/users.ts", true], ["src/api/**", "src/apix/users.ts", false], ["src/api/**", "src/lib/x.ts", false],
@@ -634,9 +637,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const hooksCfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
     const stopCfg = ((hooksCfg.Stop || [])[0] || {});
     const subCfg = ((hooksCfg.SubagentStop || [])[0] || {});
-    const cmd = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.js"';
+    const cmd = (h) => h.command === "node" && JSON.stringify(h.args) === JSON.stringify(["${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.js"]); // 1.25.1: exec form
     const re = new RegExp(subCfg.matcher || "^$");
-    ok(stopCfg.matcher === undefined && stopCfg.hooks[0].command === cmd && stopCfg.hooks[0].timeout === 10 && subCfg.hooks[0].command === cmd && subCfg.hooks[0].timeout === 10 &&
+    ok(stopCfg.matcher === undefined && cmd(stopCfg.hooks[0]) && stopCfg.hooks[0].timeout === 10 && cmd(subCfg.hooks[0]) && subCfg.hooks[0].timeout === 10 &&
       re.test("dev-spec-driven:spec-implementer") && re.test("spec-implementer") && re.test("dev-spec-driven:spec-simplifier") && re.test("spec-simplifier") &&
       !re.test("dev-spec-driven:spec-reviewer") && !re.test("dev-spec-driven:spec-critic") && !re.test("spec-simplifier-x") && !re.test("Explore") && !re.test("general-purpose") &&
       hooksCfg.PreToolUse && hooksCfg.PostToolUse && hooksCfg.SessionStart,
@@ -1065,13 +1068,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     // hooks.json: the guard stays first; the approval hook is a PreToolUse entry whose matcher (an anchored regex) covers the shell
     // tools and the approve-shaped MCP tools only; every hook command names a script that exists.
     const hooksCfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
-    const apCfg = (hooksCfg.PreToolUse || []).find((e) => e.hooks && e.hooks.some((h) => /approval-hook\.js/.test(h.command))) || {};
+    // (1.25.1: exec form — `node` + the script as its one argument; hookLine reads both forms' words)
+    const hookLine = (h) => [h.command, ...(Array.isArray(h.args) ? h.args : [])].join(" ");
+    const apCfg = (hooksCfg.PreToolUse || []).find((e) => e.hooks && e.hooks.some((h) => /approval-hook\.js/.test(hookLine(h)))) || {};
     let mre = null;
     try { mre = new RegExp(apCfg.matcher); } catch { /* checked below */ }
-    const scripts = Object.values(hooksCfg).flat().flatMap((e) => e.hooks.map((h) => (/\$\{CLAUDE_PLUGIN_ROOT\}\/(hooks\/[\w.-]+\.js)/.exec(h.command) || [])[1]));
-    ok(mre && hooksCfg.PreToolUse[0].hooks[0].command.includes("guard-hook.js") && apCfg.hooks[0].command === 'node "${CLAUDE_PLUGIN_ROOT}/hooks/approval-hook.js"' && apCfg.hooks[0].timeout === 10 &&
-      names.concat(["Bash", "PowerShell", "Monitor", "Write", "Edit", "mcp__spec-driven__spec_feature", "mcp__plugin_dev-spec-driven_spec-driven__spec_init"]).every((n) => mre.test(n)) &&
-      ["NotebookEdit", "BashOutput", "mcp__spec-driven__spec_status", "mcp__spec-driven__spec_approve_all", "WebFetch", "xBash", "MonitorX", "Read"].every((n) => !mre.test(n)) &&
+    const scripts = Object.values(hooksCfg).flat().flatMap((e) => e.hooks.map((h) => (/\$\{CLAUDE_PLUGIN_ROOT\}\/(hooks\/[\w.-]+\.js)/.exec(hookLine(h)) || [])[1]));
+    ok(mre && hookLine(hooksCfg.PreToolUse[0].hooks[0]).includes("guard-hook.js") && hookLine(apCfg.hooks[0]) === "node ${CLAUDE_PLUGIN_ROOT}/hooks/approval-hook.js" && apCfg.hooks[0].timeout === 10 &&
+      names.concat(["Bash", "PowerShell", "Monitor", "Write", "Edit", "mcp__spec-driven__spec_feature", "mcp__plugin_dev-spec-driven_spec-driven__spec_init",
+        // 1.25.1 (review 7): NotebookEdit and another MCP server's file tools (by the verb in the name — never dev-spec's own tools)
+        "NotebookEdit", "mcp__filesystem__write_file", "mcp__desktop-commander__edit_block", "mcp__filesystem__move_file", "mcp__x__str-replace"]).every((n) => mre.test(n)) &&
+      ["BashOutput", "mcp__spec-driven__spec_status", "mcp__spec-driven__spec_approve_all", "WebFetch", "xBash", "MonitorX", "Read", "mcp__spec-driven__spec_create",
+        "mcp__plugin_dev-spec-driven_spec-driven__spec_append_tasks", "mcp__linear__get_issue"].every((n) => !mre.test(n)) &&
       scripts.length >= 6 && scripts.every((s) => s && fs.existsSync(path.join(__dirname, "..", s))),
       "feature F2: hooks.json wires hooks/approval-hook.js as PreToolUse (timeout 10) after the guard, its anchored matcher covering Bash, PowerShell, Monitor (1.23), Write / Edit (1.23: .specs/roadmap.json, .state.json) and spec_approve / spec_feature / spec_init under any MCP prefix only; every hook command names an existing script (got " +
       JSON.stringify([apCfg.matcher, scripts]) + ")");

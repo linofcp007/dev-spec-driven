@@ -32,10 +32,18 @@ function __link(E) { ({ errs, existingFeature, featureLang, isDevSpecDir, projec
 const RE_UNEXPANDED_VAR = /\$\{|^\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%/;
 const PROJECT_MAX_UP = 64; // folders walked up from the working folder (a few stats each, never a walk down)
 function unexpandedVar(v) { return RE_UNEXPANDED_VAR.test(String(v == null ? "" : v).trim()); }
+// 1.25.1 (review 7): a leading ~ (alone, ~/ or ~ and a backslash) is the home folder — PowerShell 5.1 hands a native command its ~ as
+// typed, and an MCP client's argument or JSON config is never expanded: --project ~/zz / projectDir "~/zz" made a folder literally
+// named "~" in the working folder. ~user stays as written (no user database lookup). cli/completion.js mirrors it.
+const RE_HOME_PREFIX = /^~(?=$|[\\/])/;
+function expandHome(p) {
+  const s = String(p == null ? "" : p);
+  return RE_HOME_PREFIX.test(s) ? path.join(require("os").homedir(), s.slice(1)) : s;
+}
 function resolveProjectDir(arg) {
   const usable = (v) => (v != null && String(v).trim() && !unexpandedVar(v) ? String(v).trim() : null);
   const dir = usable(arg) || usable(process.env.SPEC_PROJECT_DIR) || usable(process.env.CLAUDE_PROJECT_DIR);
-  if (dir) return path.resolve(dir);
+  if (dir) return path.resolve(expandHome(dir));
   const cwd = path.resolve(process.cwd());
   return nearestProject(cwd) || cwd;
 }
@@ -172,33 +180,60 @@ function writeIfAbsent(file, content) {
 // locked target on Windows, a folder where the file should be) the error is thrown with the temp file already
 // removed — the best-effort roadmap/catalog refreshes and the hook swallow it, and they used to leave one
 // full-size `<file>.<pid>.<ts>.tmp` in the committed .specs/ per call. On Windows a brief lock (a scanner, an
-// indexer, a preview pane) is retried a few times first.
-const RENAME_RETRY_MS = [5, 15, 40];
+// indexer, a preview pane) is retried first.
+// 1.25.1 (review 7) — atomic, durable, and never torn in place:
+//   - the temp file is created exclusively ("wx": never written through a link planted at its name), written whole and fsynced
+//     BEFORE the rename (without it a crash right after the rename could leave the new name with no data — the rename's metadata
+//     may reach the disk first); after the rename the folder is fsynced where the platform can (POSIX; Windows can't open a
+//     folder for it — skipped; a file system that refuses it, ignored);
+//   - a rename Windows refuses (EPERM / EACCES / EBUSY — an antivirus scan, the indexer, a preview pane holding the file) is retried
+//     with backoff, ~1.6 s in all (it was ~60 ms) — never for a read-only target, which no wait fixes;
+//   - when it still fails, the write is REFUSED: the error is thrown with the temp file removed and the previous content
+//     untouched. The plain in-place write it fell back on truncated the file first (a crash, a full disk or a concurrent reader
+//     then met it empty or half written) and followed a link the write gate had checked a moment before.
+const RENAME_RETRY_MS = [5, 15, 40, 100, 200, 400, 800];
 const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+const FSYNC_UNSUPPORTED = new Set(["EINVAL", "ENOTSUP", "EPERM", "EISDIR", "EBADF"]); // a file system that can't sync: best effort
+const readOnlyTarget = (file) => { try { return (fs.statSync(file).mode & 0o200) === 0; } catch { return false; } };
+function fsyncDir(dir) {
+  if (process.platform === "win32") return;
+  let fd = null;
+  try { fd = fs.openSync(dir, "r"); fs.fsyncSync(fd); } catch { /* a folder that can't be synced: the rename stands */ } finally {
+    if (fd != null) try { fs.closeSync(fd); } catch { /* ignore */ }
+  }
+}
 function writeFileAtomic(file, content) {
   if (!existsRaw(file)) { const a = changeAlias(file); if (a) file = a; } // 1.21 F5: a change's tasks.md / requirements.md is its change.md
   specsWriteGate(file); // never through a link (a linked folder on the way, or the file itself), never over a folder
   if (CTX.DRY_RUN) { dryPut(file, content); return; } // 1.25: recorded, not written
   forgetCached(file);
   mkdirp(path.dirname(file));
+  const data = Buffer.isBuffer(content) ? content : ArrayBuffer.isView(content) ? Buffer.from(content.buffer, content.byteOffset, content.byteLength)
+    : Buffer.from(String(content), "utf8");
   const tmp = file + "." + process.pid + "." + Date.now() + ".tmp";
-  let moved = false;
+  let created = false, moved = false;
   try {
-    fs.writeFileSync(tmp, content, "utf8");
+    const fd = fs.openSync(tmp, "wx");
+    created = true;
+    try {
+      for (let off = 0; off < data.length;) off += fs.writeSync(fd, data, off, data.length - off);
+      try { fs.fsyncSync(fd); } catch (e) { if (!FSYNC_UNSUPPORTED.has(e.code)) throw e; }
+    } finally { fs.closeSync(fd); }
     for (let attempt = 0; ; attempt++) {
       try {
         fs.renameSync(tmp, file);
         moved = true;
         break;
       } catch (e) {
-        if (process.platform !== "win32" || attempt >= RENAME_RETRY_MS.length || !RENAME_RETRY_CODES.has(e.code)) break;
+        // refused — the previous content stays as it was (never a truncating in-place write)
+        if (process.platform !== "win32" || attempt >= RENAME_RETRY_MS.length || !RENAME_RETRY_CODES.has(e.code) || readOnlyTarget(file)) throw e;
         sleepSync(RENAME_RETRY_MS[attempt]);
       }
     }
-    if (!moved) fs.writeFileSync(file, content, "utf8"); // still locked / read-only: a plain write (may throw)
   } finally {
-    if (!moved) try { fs.unlinkSync(tmp); } catch { /* never created, or already gone */ }
+    if (created && !moved) try { fs.unlinkSync(tmp); } catch { /* already gone */ }
   }
+  fsyncDir(path.dirname(file));
 }
 // 1.24 r6 (G2 / G-I2) — THE write call for an engine module writing a spec file by any other means than writeFileAtomic /
 // writeIfAbsent / ensureDir: no module outside this one touches the disk with fs.writeFileSync / appendFileSync / renameSync /
@@ -380,7 +415,7 @@ function withLockFile(lock, fn, opts = {}) {
   // HERE, once, before the lock exists and before fn writes anything (the lock, the ticks, approvals, briefs and decisions all
   // landed in the folder the link points at). → opts.onRefused(error) | the refusal result ({ ok: false, linked: true, error }).
   // (A path of the wrong kind is the lock's own business: a folder named .lock is a stale lock that can't be removed — busy, stuck.)
-  const refused = specsGateError(lock);
+  const refused = lockGateError(lock);
   if (refused && refused.gate.kind === "link") return opts.onRefused ? opts.onRefused(refused) : gateRefusal(refused);
   if (CTX.DRY_RUN) return fn(); // 1.25: a dry run writes nothing — no lock file either (its writes go to the sink)
   ensureLockIgnore(specsDirOf(path.dirname(lock))); // before the lock exists: one left by a killed process is never committable
@@ -442,6 +477,20 @@ function withLockFile(lock, fn, opts = {}) {
     HELD_LOCKS.delete(key);
     releaseLock(lock, mine); // only our own: after a folder move the old path is empty — or another process's lock
   }
+}
+// The write gate on a lock file, with the lock file's own TRANSIENT refusals retried (1.25.1): on Windows a lock another holder is
+// releasing sits "delete pending" for a moment, and lstat / realpath of it answer EPERM — the gate read that as "unreadable, maybe
+// a link" and the waiter was refused (2 of 180 contended backlog adds failed with "…/.roadmap.lock: that file is a link"). Only a
+// refusal naming the lock FILE itself is retried (a linked folder on the way is refused at once); a real link at the lock path
+// lstats fine and is refused again on every try.
+const LOCK_GATE_RETRY_MS = [2, 5, 10, 20, 40, 80];
+function lockGateError(lock) {
+  let e = specsGateError(lock);
+  for (let i = 0; e && e.gate.kind === "link" && e.gate.file && i < LOCK_GATE_RETRY_MS.length; i++) {
+    sleepSync(LOCK_GATE_RETRY_MS[i]);
+    e = specsGateError(lock);
+  }
+  return e;
 }
 // Create `lock` holding `note` — atomically: the note goes to a temp file (named like writeFileAtomic's, so the maintained
 // .specs/.gitignore covers it) that is hard-linked into place — linkSync fails with EEXIST exactly like an O_EXCL create —
@@ -925,7 +974,13 @@ function readRaw(file) {
 // never found (the tests gate never passed), a UTF-16 requirements.md traced 0 ACs. The BOM is kept as the U+FEFF a UTF-8 BOM
 // reads as, so every reader that drops one drops this one too (a rewrite of such a file is UTF-8). Every reader of spec / test
 // text goes through it: readRaw (readIfExists, readContained), readFileHead, the importer, the resources, the save hooks.
+// 1.25.1 — CR-only line endings (classic Mac, some exporters): a text holding a CR and no LF at all has its CRs read as line breaks.
+// Every reader splits on "\n" (or \r?\n): such a requirements.md was ONE line — trace 0 ACs beside 13 planned tests, doctor's
+// placeholders failed, status said phase requirements. A text with any LF is left alone ("\r\r\n" keeps its reading — 1.24 r6 D3).
 function decodeText(buf, n = buf.length) {
+  return crOnlyToLf(decodeBytes(buf, n));
+}
+function decodeBytes(buf, n) {
   if (n >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.toString("utf16le", 0, n - (n % 2));
   if (n >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
     const le = Buffer.from(buf.subarray(0, n - (n % 2))); // a copy: the caller's buffer stays as it was
@@ -933,6 +988,7 @@ function decodeText(buf, n = buf.length) {
   }
   return buf.toString("utf8", 0, n);
 }
+const crOnlyToLf = (t) => (t.includes("\r") && !t.includes("\n") ? t.replace(/\r/g, "\n") : t);
 // fs.existsSync, served from the same scope (the per-feature file probes of listFeatures / detectPhase / detectTracks) — a
 // change's requirements.md / tasks.md exist as its change.md (changeAlias, 1.21 F5).
 function existsCached(p) {
@@ -1113,7 +1169,7 @@ function isNetworkPath(p) {
   return host !== "wsl$" && host !== "wsl.localhost";
 }
 
-module.exports = { resolveProjectDir, unexpandedVar, nearestProject, specsRoot, ensureDir, withDryRun, isDryRun, dryRunRefused, dryWrites, dryPut,
+module.exports = { resolveProjectDir, unexpandedVar, expandHome, nearestProject, specsRoot, ensureDir, withDryRun, isDryRun, dryRunRefused, dryWrites, dryPut,
   dryEntry, dryListing, readDirDisk, mkdirp, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
   writeFileAtomic, specWrite, removeSpecFile, removeEmptySpecDir, GATE_CODES, specsRootOf, realSpecsRoot, specsWriteBlock, gateRel, gateMessage, specsGateError,
   specsWriteGate, gateRefusal, featureLangSafe, SLEEP_CELL, sleepSync, LOCK_FILE, LOCK_WAIT_MS, LOCK_STALE_MS, LOCK_MAX_HOLD_MS, LOCK_RECLAIM_SUFFIX,

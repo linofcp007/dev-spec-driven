@@ -4,7 +4,9 @@
 /**
  * dev-spec-driven — guard hook (opt-in, zero-dependency). Kiro's supervised mode, spec-shaped.
  *
- * Wired from hooks/hooks.json as PreToolUse (Write|Edit|NotebookEdit). It does NOTHING unless the
+ * Wired from hooks/hooks.json as PreToolUse (Write|Edit|NotebookEdit|Bash|PowerShell|Monitor — the shell tools since 1.25.1, review 7:
+ * `sed -i src/a.ts`, `cat > src/a.ts <<EOF`, `Set-Content src\a.ts`, `cp x src/a.ts` edited code with no prompt; each file a command
+ * writes — spec.shellWriteTargets, the approval guard's own reader — goes through the same check). It does NOTHING unless the
  * project turned guard mode on (`.specs/roadmap.json` meta.guard === true — spec_init {guard: true} /
  * `dev-spec init --guard on`; 1.16: while meta.guard is unset, the user's DEV_SPEC_GUARD_DEFAULT decides). When on, a
  * code edit outside `.specs/` while no feature has approved, unfinished
@@ -19,11 +21,27 @@
  * and the decision reads roadmap.json plus each feature's .state.json / tasks.md — never a repo walk.
  * The edited file's path is the agent's: a network one (\\host\share\…) is never stat'ed or realpath'ed — inside / outside
  * is decided on its text (spec.networkPathInside), so no SMB connection goes to a host the agent named (1.16 verify NEW-3).
- * The candidate project folders (the payload's cwd, CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR) are Claude Code's / the user's.
+ * The candidate project folders (the payload's cwd, CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR) are Claude Code's / the user's — and (1.25.1,
+ * review 7: a monorepo whose packages/app/.specs has the guard on, the session at the repository's root) the nearest .specs/ above the
+ * edited file's folder, never for a network path.
  */
 
 const fs = require("fs");
 const path = require("path");
+
+// 1.25.1 (review 7): the shell tools — the engine reads which files a command writes (spec.shellWriteTargets). Before it loads, a
+// command must hold an output redirection or the name of a program that writes, removes, moves, copies or extracts files (the
+// engine's readers — mcp/tests/10-guards-review7.js checks every one it reads matches) — read-only commands, test runs and git (the
+// edit guard leaves git to the user) exit here.
+const SHELLS = new Set(["Bash", "PowerShell", "Monitor"]);
+const RE_SHELL_WRITE = new RegExp("[>]|(?:^|[^\\w.-])(?:tee|sed|perl|ruby|g?awk|mawk|nawk|cp|mv|install|scp|ln|dd|rm|rmdir|unlink|shred|truncate|" +
+  "r?ed|ex|vi|vim|nvim|view|sponge|curl|wget|rsync|(?:bsd)?tar|unzip|7z[ar]?|zip|patch|dos2unix|unix2dos|sort|uniq|iconv|xxd|base64|" +
+  "find[^|;&\\n]*-(?:delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)|" +
+  "del|erase|rd|copy|move|ren|rename|robocopy|xcopy|mklink|junction|subst|fsutil|mount|set-content|add-content|out-file|clear-content|new-item|" +
+  "remove-item|move-item|copy-item|rename-item|tee-object|export-csv|export-clixml|expand-archive|sc|ac|ni|ri|mi|cpi|rni|clc|epcsv)(?![\\w-])|" +
+  "\\[(?:system\\.)?io\\.(?:file|directory)\\]::", "i");
+// A shell command's path-like words (holding a / or \) — the nearest .specs/ above each is a candidate project (a monorepo's package).
+const RE_PATH_WORD = /(?:^|[\s'"=<>|;&(])[^\s'"<>|;&()]*[\\/][^\s'"<>|;&()]*/g;
 
 // A JSON file as the engine reads it: UTF-8, or UTF-16 with a BOM (1.24 review 6, C3 — Windows PowerShell 5.1's Out-File: a UTF-16
 // file read as UTF-8 didn't parse), decoded by hook-utils.js — required only for such a file (the hot path stays cheap). Throws on a
@@ -116,28 +134,49 @@ function main(raw) {
   const event = payload.hook_event_name || payload.hookEventName || "";
   if (event && event !== "PreToolUse") return finish();
   const ti = payload.tool_input || payload.toolInput || {};
-  const target = [ti.file_path, ti.notebook_path, ti.path].find((v) => typeof v === "string" && v.trim());
-  if (!target) return finish();
+  const tool = typeof payload.tool_name === "string" ? payload.tool_name : typeof payload.toolName === "string" ? payload.toolName : "";
+  // 1.25.1 (review 7, finding 8): a shell command — only one that may write a file (an output redirection, a writer by name) goes on
+  const command = SHELLS.has(tool) && typeof ti.command === "string" ? ti.command : null;
+  if (command !== null && !RE_SHELL_WRITE.test(command)) return finish();
+  const target = command !== null ? null : [ti.file_path, ti.notebook_path, ti.path].find((v) => typeof v === "string" && v.trim());
+  if (!target && command === null) return finish();
 
   // The raw pre-check: is the guard on in any project this edit may belong to — the nearest .specs/ at or above the session's cwd
-  // (a cd'd subfolder, a worktree), the project dir Claude Code (or the user) exported? The engine then picks THE project
-  // (spec.sessionProject, 1.23 review 5: a worktree's copy of .specs/ maps to the checkout the MCP server writes in) and spells
-  // the edited file under it (spec.sessionPath).
+  // (a cd'd subfolder, a worktree), the project dir Claude Code (or the user) exported, and (1.25.1, finding 9 — a monorepo) the nearest
+  // .specs/ above the edited file's folder (a shell command's path-like words)? The engine then picks THE project (spec.sessionProject,
+  // 1.23 review 5: a worktree's copy of .specs/ maps to the checkout the MCP server writes in) and spells the edited file under it.
   const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null;
   const anchors = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR]
     .filter((v) => typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim()));
-  if (![nearestSpecs(cwd) || cwd, ...anchors].filter(Boolean).map((v) => path.resolve(v)).some(guardOn)) return finish();
+  const local = (p) => typeof p === "string" && p.trim() && !/^[\\/]{2}/.test(p.trim());
+  const near = (p) => { try { return local(p) ? nearestSpecs(path.dirname(path.resolve(cwd && local(cwd) ? cwd : process.cwd(), p))) : null; } catch { return null; } };
+  const words = target ? [target] : (command.match(RE_PATH_WORD) || []).slice(0, 8).map((w) => w.replace(/^[\s'"=<>|;&(]+/, ""));
+  const cands = [nearestSpecs(cwd) || cwd, ...anchors, ...words.map(near)].filter(Boolean).map((v) => path.resolve(v));
+  if (![...new Set(cands)].some(guardOn)) return finish();
 
   const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
-  const s = spec.sessionProject({ cwd, anchors });
-  if (!s) return finish();
-  const r = spec.guardCheck(s.project, spec.sessionPath(s, target, cwd), s.project);
-  if (r.decision === "ask") {
-    return finish({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: r.reason } });
+  const targets = target ? [target] : spec.shellWriteTargets(command, tool === "PowerShell" ? "ps" : "bash");
+  let note = null;
+  const s0 = spec.sessionProject({ cwd, anchors });
+  for (const t of targets) {
+    // the session's project and the nearest one above the file (a monorepo's package) — each guarded one decides; the first ask wins
+    const abs = local(t) ? spec.sessionPath(s0 || { root: cwd || process.cwd() }, t, cwd) : null;
+    const own = abs ? spec.sessionProject({ cwd: path.dirname(abs), anchors }) : null;
+    const seen = new Set();
+    for (const s of [s0, own]) {
+      if (!s || seen.has(s.project)) continue;
+      seen.add(s.project);
+      const r = spec.guardCheck(s.project, spec.sessionPath(s, t, cwd), s.project);
+      if (r.decision === "ask") {
+        return finish({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: r.reason } });
+      }
+      if (r.note && !note) note = r.note;
+    }
   }
   // Allowed by a FORCED approval only: say so to the user (systemMessage never changes the permission flow) — once a session (1.24
   // review 6, C-I8: it was printed on every code edit). Keyed by the payload's session_id: a marker in the OS temp folder holding the
   // note (another set of forced features shows it again); no session_id → every time, as before.
+  const r = { note };
   if (r.note) {
     const sid = typeof payload.session_id === "string" && payload.session_id.trim() ? payload.session_id : null;
     if (sid) {

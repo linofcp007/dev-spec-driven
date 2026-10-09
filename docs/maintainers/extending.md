@@ -23,7 +23,9 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   `mcp/test.js` builds the expected set from the live `tools/list`: a missing or phantom row in any language fails
   the suite), a `TOOL_ANNOTATIONS` entry in `mcp/server.js` (1.16 — mcp/test.js requires one per tool and snapshots `.specs/`
   around every read-only one), the tool count every doc states (below), and (usually) a thin command in `commands/`.
-- New command → a `commands/<name>.md` with `description` + `argument-hint` front matter; it is automatically an MCP
+- New command → a `commands/<name>.md` with `description` + `argument-hint` front matter (the hint ≤ 130 characters —
+  autocomplete cuts a longer one, the body lists every flag; no hint at all when the command takes no argument, never an
+  empty one — 1.25.1 review, `mcp/tests/17-docs-review7.js`); it is automatically an MCP
   prompt too (bump the exact command count in `mcp/tests/17-docs.js` and the README command lists). Never a Claude Code built-in
   name.
 - **The counts the docs state** (1.24 review 6 — INTEGRATIONS.md still said 51 prompts at 55, integrations/README.md 34
@@ -85,6 +87,10 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   the regenerated `mcp/lib/engine/corpus.generated.json` with it (architecture.md → The build; mcp/test.js fails until you
   do). A module that the corpus render starts to run through goes into `CORPUS_SOURCES` (the V8-coverage test names it).
   Never commit `mcp/lib/spec.bundle.js` (git-ignored, built on demand).
+- Renaming or removing a code identifier → the maintainer notes that cite it: `mcp/tests/17-docs-review7.js` fails on a
+  backticked name — CONST_CASE, camelCase, a call like foo() or PascalCase — in CLAUDE.md or `docs/maintainers/*.md` that no
+  code file holds (1.25.1 review: tracks.md still named six classifier constants the 1.20 cue rules had replaced). A name
+  from outside the code (a Claude Code settings key) goes into that test's allowlist.
 - Keep `SKILL.md` the source of truth for the workflow — the rules an agent needs at decision time, ≤ 5,000 words
   (1.21: `mcp/tests/01-core.js` counts them; it is loaded whole every time the skill fires). Lookup material goes into
   `references/` with a one-line pointer ("read X when Y"): the tool catalog (`tool-catalog.md`), per-track material

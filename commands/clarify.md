@@ -30,5 +30,5 @@ keep their stable IDs (`EC-1`, `NFR-1`, `SC-001`) so tasks and tests can trace t
 user's language (EN/PT/ES).
 
 If the user wants a deeper, decision-by-decision interrogation of their *understanding* (not just
-gaps in the text), point them to `/grill` — it runs the dev-grill engine and folds the resulting
-shared-understanding into `requirements.md` as EARS statements.
+gaps in the text), point them to `/grill` — one question at a time, each with a recommended answer, down the decision tree — which
+folds the resulting shared understanding into `requirements.md` as EARS statements.

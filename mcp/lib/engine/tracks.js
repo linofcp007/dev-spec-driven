@@ -201,7 +201,7 @@ function sectionDropLines(lines, owner) {
   const heads = headingEntries(lines);
   const drop = new Map();
   heads.forEach((h, k) => {
-    const who = owner(lines[h.i]);
+    const who = owner(lines[h.i], h);
     if (!who) return;
     let end = lines.length;
     for (let j = k + 1; j < heads.length; j++) if (heads[j].level <= h.level) { end = heads[j].i; break; }
@@ -221,10 +221,35 @@ function inactiveTaskLines(tasks, tracks) {
 // design.md / requirements.md: the [SaaS] / [AI] / [SEC] / [PRIVACY] headed sections of tracks that are off (+ a track pack's
 // that is off, or saved by the feature but gone from the project — ghostMarkers, 1.15).
 // The marker is matched case-sensitively (C4, see headingHasMarker): `### Timeout [sec]` is never a [SEC] section.
+// 1.25.1: the marker must LEAD the heading (headingLeadMarkers) — the scaffold writes "#### [SEC] Acceptance Criteria (EARS)" /
+// "## [AI] 7. Fallback & Degradation"; a story heading that merely mentions one ("### US-2 (P1): API notes [API]") is the core's,
+// and its criteria were out of trace_check (doctor passed them untasked). trace_check names what this hides (inactiveAcs).
 function inactiveMarkerLines(md, tracks) {
   const off = markerTracks().filter((t) => !tracks.includes(t)).map((t) => [t, trackMarker(t)]).concat(ghostMarkers());
   if (!off.length) return new Map();
-  return sectionDropLines(md.split(/\r?\n/), (l) => { const hit = off.find(([, m]) => l.includes(m)); return hit && hit[0]; });
+  return sectionDropLines(String(md).split(/\r?\n/), (l, h) => {
+    const lead = headingLeadMarkers(h.text);
+    const hit = lead.length ? off.find(([, m]) => lead.includes(m)) : null;
+    return hit && hit[0];
+  });
+}
+// The [TOKEN] markers that LEAD a heading's text, in order — after the decoration headingTextMatches strips (emphasis, dashes,
+// numbering, "Section N:", an emoji): "[SEC] [PRIVACY] Data protection" → both; "5. [AI] Model Strategy" → [AI]; "US-2 (P1): API
+// notes [API]" → none. Case-sensitive tokens, as written (C4).
+const RE_MARKER_DECOR = /^(?:[\s*_—–:-]+|[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}]+|(?:section|sec[çc][ãa]o|se[çc][ãa]o|secci[óo]n)\s+\d+[.:)]?(?=\s|$)|\d+(?:\.\d+)*[.):]?(?=\s))/iu;
+const RE_MARKER_TOKEN = /^\[[A-Za-z][A-Za-z0-9]*\]/;
+function headingLeadMarkers(text) {
+  let t = String(text || "").slice(0, 400);
+  const out = [];
+  for (let guard = 0; guard < 40; guard++) {
+    const d = RE_MARKER_DECOR.exec(t);
+    if (d && d[0].length) { t = t.slice(d[0].length); continue; }
+    const m = RE_MARKER_TOKEN.exec(t);
+    if (!m) break;
+    out.push(m[0]);
+    t = t.slice(m[0].length);
+  }
+  return out;
 }
 
 // classification.md → the line under "## Active Tracks" (EN/PT/ES — the line the template generates) gets the
@@ -261,7 +286,10 @@ const AI_SECTIONS = [
   { name: "Latency Budget", syn: ["latency budget", "orçamento de latência", "presupuesto de latencia"], tier: "extended" },
   { name: "Eval Strategy", syn: ["eval strategy", "estratégia de eval", "estrategia de eval", "estratégia de avaliação", "estrategia de evaluación"] },
   { name: "Safety & Abuse", syn: ["safety & abuse", "safety and abuse", "segurança e abuso", "seguridad y abuso"] },
-  { name: "Fallback & Degradation", syn: ["fallback", "degradação", "degradación"] },
+  // 1.25.1: the bare words are ordinary design words (loose — on an [AI] heading or under one): an unmarked "## Fallbacks" (a payment
+  // retry, a CDN's) satisfied the deleted [AI] section; the whole name stays strict (the reference's "## Section 7: Fallback & Degradation")
+  { name: "Fallback & Degradation", syn: ["fallback & degradation", "fallback and degradation", "fallback e degradação", "fallback e degradacao",
+    "fallback y degradación", "fallback y degradacion", "fallback", "degradação", "degradación"], loose: ["fallback", "degradação", "degradación"] },
   { name: "Observability for AI", syn: ["observability for ai", "observabilidade de ai", "observabilidade de ia", "observabilidad de ia"], tier: "extended" },
   { name: "Model Lifecycle", syn: ["model lifecycle", "ciclo de vida do modelo", "ciclo de vida del modelo"], tier: "extended" },
   { name: "Multi-modality", syn: ["multi-modality", "multimodality", "multimodalidade", "multimodalidad"], tier: "extended" },
@@ -524,6 +552,28 @@ const SIGNALS = {
       "permissão", "permiso", "fuso horário", "fuso horario", "zona horaria",
       "concorrência", "concurrencia", "agendamento",
     ],
+    // CUES (1.25.1) — the everyday senses of three money / auth words: a photo's / a film's / a course's credits, who is "in charge of"
+    // something and a battery's charge, a therapy / training / jam session — no signal at all ("Add photo credits under each gallery
+    // image", "Show who is in charge of each project", "Add a notes field to each therapy session"; a credit card, a late-payment charge
+    // and a login session keep theirs)
+    cues: [
+      { kind: "near", on: ["credit"], then: "none",
+        before: { words: ["photos?", "images?", "pictures?", "films?", "movies?", "videos?", "songs?", "music", "authors?", "artists?", "contributors?",
+          "end", "opening", "closing", "course", "academic", "ects", "college", "university", "school"], chars: 16, edge: "letter" },
+        after: { words: ["rolls?", "lines?", "screens?", "sequences?", "hours?", ["(?:the|each|every|a|an|our|their)", ["photographers?", "authors?",
+          "artists?", "creators?", "contributors?", "illustrators?", "sources?"]], "photographers?", "authors?", "artists?", "creators?"], chars: 28, plural: true } },
+      { kind: "near", on: ["charge"], then: "none",
+        before: { words: ["in", "battery", "batteries", "phone", "full", "static", "electric", "electrical", "ev", "device", "partial", "fast"], chars: 14, edge: "letter" },
+        after: { words: ["levels?", "cycles?", "indicators?", "percentage", "states?", "status", "stations?", "ports?", "cables?", "points?", "time",
+          ["(?:the|a|your|my|their|its)", ["batter(?:y|ies)", "phones?", "devices?", "cars?", "laptops?", "vehicles?"]], "batter(?:y|ies)"], chars: 24, plural: true } },
+      { kind: "near", on: ["session", "sessão", "sessao", "sesión", "sesion"], then: "none",
+        before: { words: ["therapy", "training", "jam", "photo", "coaching", "counseling", "counselling", "yoga", "practice", "study", "brainstorming",
+          "planning", "recording", "tasting", "workout", "gym", "tutoring", "mentoring", "rehearsal", "breakout", "poster", "q&a", "ama",
+          "parliamentary", "court", "plenary", "group", "massage", "physio", "physiotherapy"], chars: 16, edge: "letter" },
+        after: { words: [["de", ["terapia", "treino", "treinos", "fotos", "fotografia", "ioga", "yoga", "estudo", "coaching", "formação", "mentoria",
+          "música", "gravação", "fisioterapia", "massagem", "entrenamiento", "estudio", "formación", "mentoría", "grabación", "masaje", "ensaio", "ensayo"]]],
+        chars: 24, plural: true } },
+    ],
   },
   saas: {
     strong: [
@@ -567,14 +617,37 @@ const SIGNALS = {
           "property managers?", "property management", "evictions?", "rendas?", "senhori[oa]s?", "arrendamentos?", "arrendatári[oa]s?", "aluguel",
           "aluguer", "aluguéis", "alugueis", "imóve(?:l|is)", "apartamentos?", "condomínios?", "fiador(?:es)?", "despejos?", "alquiler(?:es)?",
           "caser[oa]s?", "arrendador(?:es)?", "pisos?", "inmuebles?", "fianzas?", "desahucios?"] },
+      // (1.25.1) a cron EXPRESSION helper — a parser, a validator, a builder, a describer — is a text utility, not a scheduled job ("Add
+      // a cron expression helper", "Validate the cron syntax in the form"); "Run the purge as a cron job" keeps its signal
+      { kind: "all", on: ["cron"], then: "none", rules: [
+        { kind: "near", after: { words: ["expressions?", "syntax", "strings?", "patterns?", "format"], chars: 16 } },
+        { kind: "sentence", edge: "letter", phrases: ["helpers?", "parsers?", "pars(?:e|es|ed|ing)", "validators?", "validat(?:e|es|ed|ing|ion)",
+          "builders?", "editors?", "formatters?", "generators?", "explainers?", "pickers?", "inputs?", "fields?", "widgets?", "humaniz(?:e|es|ed|er|ing)",
+          "human-readable", "describ(?:e|es|ed|er|ing)", "previews?", "librar(?:y|ies)", "utilit(?:y|ies)", "linters?"] },
+      ] },
     ],
   },
   ai: {
     strong: [
-      "llm", "gpt", "claude", "openai", "anthropic", "gemini", "mistral", "chatbot",
-      "copilot", "rag", "fine-tune", "finetune", "fine tune", "hallucinat",
+      // 1.25.1: the product names that are everyday words in lower case are matched case-sensitively — "Claude" / "Gemini" / "Mistral" /
+      // "Copilot" / "RAG" (a claude monet print, a gemini zodiac page, the mistral wind, a copilot's seat, a rag rug are no AI; the
+      // capitalised everyday senses are ai cues); 'tool use' is weak (a workshop's tool use log)
+      "llm", "gpt", "Claude", "openai", "anthropic", "Gemini", "Mistral", "chatbot",
+      "Copilot", "RAG", "fine-tune", "finetune", "fine tune", "hallucinat",
       "prompt injection", "ai feature", "ai product", "semantic search", "embedding",
-      "embeddings", "tool use", "function calling", "reranker", "guardrail", "multimodal",
+      "embeddings", "function calling", "reranker", "guardrail", "multimodal",
+      // 1.25.1 — recall: the well-known AI products, frameworks and vector stores ("Add a ChatGPT plugin", "Run Ollama locally", "Index docs
+      // with LlamaIndex", "Store vectors in pgvector"); "Cohere" / "Stable Diffusion" / "Pinecone" are everyday words in lower case
+      "chatgpt", "ollama", "Cohere", "Stable Diffusion", "dall-e", "dall·e", "midjourney", "llamaindex", "langchain", "langgraph",
+      "hugging face", "huggingface", "amazon bedrock", "aws bedrock", "pgvector", "qdrant", "weaviate", "milvus", "faiss", "chromadb", "Pinecone",
+      "vector store", "vector index",
+      // … and training or predicting with a model: "Train a classifier to tag tickets", "Retrain the model nightly", "Predict churn for each
+      // customer" (a gap keyword: ≤ 3 words between, never across a sentence)
+      "train … model", "train … classifier", "model … trained", "retrain … model", "retrain … classifier", "predict … churn", "churn prediction",
+      "predictive model", "prediction model",
+      // PT / ES (trein- / entren-: VERB_STEMS — treinar, treina, treinado…; entrenar, entrena, entrenado…)
+      "trein … modelo", "trein … classificador", "modelo … treinado", "retrein … modelo", "prever … churn", "previsão de churn", "modelo preditivo",
+      "entren … modelo", "entren … clasificador", "modelo … entrenado", "reentren … modelo", "predecir … churn", "predicción de churn", "modelo predictivo",
       "vlm", "vector search", "vector database", "image generation", "text generation",
       "language model", "artificial intelligence",
       // review 5: a trained model is an AI feature too (evals, drift) — "Detect fraud with a machine learning model"
@@ -616,6 +689,8 @@ const SIGNALS = {
       "prompt", "agent", "model", "generation", "summariz", "completion", "inference",
       "tokens", "token cost", "assistant", "temperature", "context window", "retrieval",
       "moderation", "few-shot", "sampling", "ai", "generative",
+      // 1.25.1: an LLM's tool use (strong until 1.25 — "The tool use log for the workshop machines"), a classifier, a prediction
+      "tool use", "classifier", "predict", "rerank", "classificador", "clasificador",
       // 1.24 r6 F-I5: a transcription may be done by people ("transcribe the interview notes") — an anchor
       "transcription", "transcribe", "transcribing",
       // PT/ES
@@ -635,6 +710,23 @@ const SIGNALS = {
         phrases: ["information architecture", "navigation", "sitemaps?", "site maps?", "taxonom(?:y|ies)", "card sorting", "wayfinding"] },
       { kind: "sentence", on: ["AI"], then: "none", edge: "letter",
         phrases: ["adobe illustrator", "illustrator", "action items?", "vector files?", "eps", "svg"] },
+      // (1.25.1) the capitalised everyday senses of the product names: the painter / composer Claude, the Gemini star sign, the Mistral
+      // wind, an aircraft's Copilot — and a workshop's "tool use", an e-mail / reset / API "token" (no LLM token)
+      { kind: "near", on: ["Claude"], then: "none",
+        after: { words: ["monet", "debussy", "shannon", "lorrain", "van damme", "rains", "lévi-strauss", "levi-strauss", "chabrol", "lelouch"], chars: 16 } },
+      { kind: "sentence", on: ["Gemini"], then: "none", edge: "letter",
+        phrases: ["zodiac", "horoscopes?", "astrolog(?:y|ical|ers?)", "star signs?", "birth charts?", "constellations?", "signo", "signos", "zodíaco", "horóscopos?"] },
+      { kind: "sentence", on: ["Mistral"], then: "none", edge: "letter",
+        phrases: ["winds?", "weather", "forecasts?", "gusts?", "provence", "sailing", "sailors?", "vento", "viento"] },
+      { kind: "sentence", on: ["Copilot"], then: "none", edge: "letter",
+        phrases: ["pilots?", "aviation", "cockpits?", "flights?", "airlines?", "aircraft", "planes?", "rally", "co-driver"] },
+      { kind: "sentence", on: ["tool use"], then: "none", edge: "letter",
+        phrases: ["workshops?", "machines?", "machinery", "power tools?", "hand tools?", "tool sheds?", "tool cribs?", "equipment", "garage",
+          "construction", "site safety", "wrench(?:es)?", "drills?", "saws?"] },
+      { kind: "near", on: ["tokens"], then: "none",
+        before: { words: ["e-?mail", "reset", "verification", "access", "refresh", "auth", "api", "csrf", "magic(?:-link)?", "invite", "invitation",
+          "session", "bearer", "jwt", "oauth", "one-time", "confirmation", "security", "login", "password", "device", "push", "unsubscribe",
+          "payment", "card", "game", "loyalty", "bus", "transit", "arcade"], chars: 16, edge: "letter" } },
     ],
   },
   // +sec (1.14). Auth words stay WEAK here (they are +tdd's strong signals): an auth feature is only "possibly"
@@ -1702,6 +1794,6 @@ module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, p
   TRACK_ALIASES, suggestTrack, unknownTracksError, trackLabel, SIGNALS, allTracks, optionalTracks, markerTracks, trackMarker, trackSectionTable, trackSteeringFiles, trackSignalTable,
   detectTracks, savedTracks, headingHasMarker, TRACK_MARKER, MARKER_TRACKS, trackAcIds, normTaskHeading, TASK_HEADINGS,
   renderTrackTaskHeadings, trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
-  inactiveMarkerLines, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
+  inactiveMarkerLines, headingLeadMarkers, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
   SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, OBS_SECTIONS, DATA_SECTIONS, TRACK_SECTIONS,
   TRACK_OVERLAPS, TRACK_TASK_OVERLAPS, activeSectionTracks, activeDesign, __link };

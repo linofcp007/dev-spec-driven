@@ -1,11 +1,8 @@
 ---
 description: Brownfield — measure how much existing code the specs cover (files in _Implements:_) and list the gaps.
-argument-hint: ""
 ---
 
-Use the **dev-spec-driven** skill brownfield coverage check.
-
-Args: $ARGUMENTS
+Use the **dev-spec-driven** skill brownfield coverage check. It takes no arguments: it measures the whole project.
 
 Run the `spec_coverage` MCP tool (CLI `dev-spec coverage`). Coverage is measured through the **`_Implements:_`**
 markers of every feature's tasks (active or archived): a code file counts as covered when some marker names it —

@@ -300,9 +300,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     ok(sxc9.testsInCode["T-01"].join() === "src/auth/login.test.ts" && sxc9.testsInCode["T-02"].join() === "packages/api/tests/unit/session.test.ts" &&
       sxc9.testsInCode["T-04"].join() === "tests/load/checkout.k6.js" && sxc9.plannedNotInCode.join() === "T-03" && sxd9.status === "warn" && /: T-03 — /.test(sxd9.detail),
       "a bare file name and a package-relative File cell satisfy T-01 / T-02; `token.test.ts` doesn't match oldtoken.test.ts; a .md under tests/ scopes nothing (got " + JSON.stringify(sxc9) + ")");
-    ok(/columna Archivo \(o Fichero\) del plan/.test(S.msg("es").deepTrace.testsInCodeMissing("T-01")) &&
-      /\| Fichero \|/.test(fs.readFileSync(path.join(S.createFeature(sx9, "Fallo", ["tdd"], undefined, undefined, "es", "bugfix").dir, "test-plan.md"), "utf8")),
-      "ES advice names both spellings of the column (the ES bugfix plan says Fichero, the feature plan Archivo)");
+    // (1.25.1 review: ES says "fichero" for a file — the feature plan's column is Fichero too now; a plan scaffolded before says
+    // Archivo, which the column reader still takes)
+    const esPlan9 = S.createFeature(sx9, "Plan ES", ["tdd"], undefined, undefined, "es").dir;
+    ok(/columna Fichero \(o Archivo, en un plan más antiguo\) del plan/.test(S.msg("es").deepTrace.testsInCodeMissing("T-01")) &&
+      /\| Fichero \|/.test(fs.readFileSync(path.join(S.createFeature(sx9, "Fallo", ["tdd"], undefined, undefined, "es", "bugfix").dir, "test-plan.md"), "utf8")) &&
+      /\| Fichero \|/.test(fs.readFileSync(path.join(esPlan9, "test-plan.md"), "utf8")),
+      "ES advice names both spellings of the column (the ES feature and bugfix plans say Fichero, an older plan Archivo)");
 
     // A row whose File column names only a non-code artifact (the scaffold's own load row `load-test.md`, its eval rows
     // `evals/*.json`, a Gherkin .feature) is run outside test code: plannedOutsideCode, never plannedNotInCode — a done

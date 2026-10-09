@@ -18,7 +18,8 @@ let activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSi
   taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf, unverifiedLabel, verificationStatus,
   waiverView,
   featureSize, trackSectionReport, sectionVerdict, featureDirs, findCycles, isSpikeDir, spikePhase;
-function __link(E) { ({ activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSinceApproval,
+let today; // core.js — 1.25.1: the local calendar date (today / dayOf)
+function __link(E) { ({ today, activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSinceApproval,
   clarificationMarkers, detectTracks, duplicateTaskNumbers, flatText, FOLD_CASE, globMatcher, implementsRel,
   isImplementsGlob, isObj, isRecord, MILESTONE_ICON, milestoneAttention, milestoneInvalidInfo, milestoneLine,
   milestoneStatuses, normalizeLang, ownRecord, parseTasks, PHASE_PERCENT, phaseActive, PHASES, readContained, readIfExists, readJson,
@@ -446,7 +447,7 @@ ${backList ? `<ul>${backList}</ul>` : `<p class="sub">${t.backlogEmpty}</p>`}
 // XS=1 S=2 M=3 L=5 XL=8 points; an unsized task counts as its feature's median sized task (M when none is sized). When a
 // task was ticked is recorded by spec_complete_task (state.ticks[n] = ISO — recordTick); a task ticked before 1.14 falls
 // back to its evidence (the first passing run, else the record's time); a tick made by hand has no time and is not counted.
-// Velocity = points completed per WORKING day (Mon–Fri, UTC days) over the last FORECAST_WINDOW_DAYS calendar days,
+// Velocity = points completed per WORKING day (Mon–Fri, local calendar days) over the last FORECAST_WINDOW_DAYS calendar days,
 // counted from the day of the first completion in that window through today — project-wide, and per feature once the
 // feature has FORECAST_MIN_TASKS completions of its own in the window. A planned feature's ETA = its open points ÷ that
 // velocity, in working days from today — or from the working day after the ETA of each unfinished dependency — with a
@@ -484,9 +485,12 @@ function taskCompletedAt(state, block, dup) {
   const at = timeOf(rec.at);
   return at != null ? at : timeOf(rec.noteAt);
 }
-const fcDay = (t) => Math.floor(t / FC_DAY_MS) * FC_DAY_MS; // the UTC day a time falls on
+// The day a time falls on — 1.25.1 (review 7): the LOCAL calendar day (it was the UTC one: a task ticked at 00:30 in Lisbon counted
+// the day before, "today" too), as the UTC midnight of that date, so the working-day arithmetic below (FC_DAY_MS steps, getUTCDay)
+// and fcIso stay exact — no daylight-saving hour in between.
+const fcDay = (t) => { const d = new Date(t); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
 const fcWeekend = (d) => { const w = new Date(d).getUTCDay(); return w === 0 || w === 6; };
-const fcIso = (d) => new Date(d).toISOString().slice(0, 10);
+const fcIso = (d) => today(d, true); // a day stamp (fcDay) → its date
 function fcWorkingDays(from, to) { // working days in [from, to], both UTC days
   let n = 0;
   for (let d = from; d <= to; d += FC_DAY_MS) if (!fcWeekend(d)) n++;

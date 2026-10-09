@@ -171,6 +171,18 @@ function templateTestRows(tracks, row, L, acs, size) {
   return rows.join("\n");
 }
 
+// 1.25.1 — the stop gate's line-start claim (each language's stopGate.claims builds its own from its words): "Done.", "✅ Feito",
+// "Hecho — 12 tests pass", "Completed task 3". The word opening its line (after markup or an emoji) claims the work only when it
+// stands alone on that line (punctuation, markup or an emoji after it), an emoji follows it, the rest of the line names the tests /
+// tasks / verification (`tested`), or the work itself follows it (`work`). "Done. I updated the README as you asked." and "Listo,
+// aquí tienes el resumen." say nothing about a feature's tasks: the gate sent such turns back while any recent tick was unverified.
+// `words`, `tested`, `work`: regex sources. → a regex source (the engine wraps it as a whole word, flags gimu).
+function stopLineClaim(words, tested, work) {
+  const mark = String.raw`[ \t*_#>\p{Extended_Pictographic}\uFE0F\u2713\u2714-]`;
+  const emoji = String.raw`(?:\p{Extended_Pictographic}|\u2713|\u2714)`;
+  return String.raw`^${mark}*${words}[*_]*(?:(?=[ \t]*${emoji})|(?=[ \t]*(?:[.,!:—–-]+[ \t*_\uFE0F]*)?(?:${emoji}[ \t\uFE0F]*)*$)` +
+    String.raw`|(?=[ \t]*[.,!:—–-][^\n]*?(?<![\p{L}\p{N}_])${tested}(?![\p{L}\p{N}_]))|\s+${work})`;
+}
 
 module.exports = { BASE_LANGS, LANGS, LANG_ALIASES, canonicalLang, normalizeLang, baseLang, TEMPLATE_ACS, MARKER_TRACK_ORDER, signalTracks, templateTests, greenLine, templateTestRows,
-  cliQuote, cliPrefix, DEV_SPEC_SCRIPT, DEV_SPEC, portableCli, FEATURE_SIZES, SIZE_CORE_ACS, coreTemplateAcs, CORE_SUPERSEDED_BY, coreSuperseded };
+  cliQuote, cliPrefix, DEV_SPEC_SCRIPT, DEV_SPEC, portableCli, FEATURE_SIZES, SIZE_CORE_ACS, coreTemplateAcs, CORE_SUPERSEDED_BY, coreSuperseded, stopLineClaim };

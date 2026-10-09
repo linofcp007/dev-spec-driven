@@ -21,7 +21,8 @@ let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValid
   specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription, taskMarkerValues,
   tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel, trackMarker,
   trackSectionTable, trackTaskBlock, trackTaskHeading, trackTemplateAcs, TRADEOFFS_SYN, weighSection, writeIfAbsent;
-function __link(E) { ({ acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, existsCached,
+let today; // core.js — 1.25.1: the local calendar date (today / dayOf)
+function __link(E) { ({ today, acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, existsCached,
   extractAcIds, extractSection, extractTestIds, headingHasMarker, inactiveMarkerLines, insertPackRequirements,
   isInsideDir, isObj, isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock,
   packCorpusSets, packOf, packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText,
@@ -175,7 +176,7 @@ function templateVars(v, lang) {
     summary,
     tracks: trackLabel(normalizeTracks(v.tracks || ["core"])),
     lang: normalizeLang(lang),
-    date: new Date().toISOString().slice(0, 10),
+    date: today(),
   };
 }
 function renderTemplate(text, vars) {

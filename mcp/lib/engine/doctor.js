@@ -12,7 +12,7 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks, approvalRolesOf,
+let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks, approvalRolesOf,
   approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled, chainPlaceholders,
   changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN, crossAcDoctorDetail,
   crossFeatureAcs, decisionDoctorChecks, designApprovedBeforeWeigh, designWeighChecks, detectPhase, detectTracks,
@@ -36,8 +36,9 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
-  branchView; // 1.25 (create --branch)
-function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
+  branchView, evidenceMode, approvalGuardLevel; // branchView: 1.25 (create --branch); the last two: 1.25.1 (review 7 — observed-unguarded)
+let dayOf; // core.js — 1.25.1: the local calendar date (today / dayOf)
+function __link(E) { ({ dayOf, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
   crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designApprovedBeforeWeigh, designWeighChecks, detectPhase,
@@ -61,14 +62,14 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
-  branchView } = E); }
+  branchView, evidenceMode, approvalGuardLevel } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
 // replaces the design) and template placeholders — as structured fields plus a short localized `text`.
 function designSaveCheck(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const design = readIfExists(path.join(f.dir, "design.md"));
   const lng = featureLang(projectDir, f.slug);
   const fm = i18n.msg(lng);
@@ -212,7 +213,7 @@ function listFeatures(projectDir) {
 
 function statusFeature(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const tracks = detectTracks(dir);
   const artifacts = fs
@@ -296,7 +297,7 @@ function statusFeature(projectDir, name) {
 // opts.doctor: this feature's specDoctor() result, already computed in the same call (spec_upgrade) — never run twice.
 function nextAction(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   if (isSpikeDir(f.dir)) return withBranchStep(projectDir, f.slug, readState(projectDir, f.slug), spikeNextAction(projectDir, f, opts)); // 1.14 C2 (+ 1.25 its branch)
   const { slug, dir } = f;
   const tracks = detectTracks(dir);
@@ -486,7 +487,7 @@ function nextAction(projectDir, name, opts = {}) {
         finishedDrift = { finishedAt: typeof fin.at === "string" ? fin.at : null, files: Object.keys(fin.files).length, changed: dr.changed, missing: dr.missing, nowPresent: dr.nowPresent, drifted: dr.drifted };
       }
       if (stale) staleBaseline = stale;
-      const day = fin && typeof fin.at === "string" ? fin.at.slice(0, 10) : "?";
+      const day = (fin && dayOf(fin.at)) || "?";
       // Every task ticked, but not every tick verified: spec_finish and the execution sign-off refuse on exactly these
       // (verificationStatus) — never "close the feature" / "finished, nothing left to do" while a latest run failed or a
       // runnable _Verify:_ was never run (that looped: next_action → /spec-finish → refused → next_action …).
@@ -519,7 +520,7 @@ function nextAction(projectDir, name, opts = {}) {
         // Finished once, then changed (a change request, a re-approval, a new implementing file) and done again: finish it
         // AGAIN — a fresh readiness report, merge summary and baseline — then the execution sign-off again. step stays
         // "finish"; staleBaseline says why.
-        recommendation = nx.refinish(slug, stale.finishedAt ? stale.finishedAt.slice(0, 10) : "?", staleFinishText(stale, lng));
+        recommendation = nx.refinish(slug, dayOf(stale.finishedAt) || "?", staleFinishText(stale, lng));
       } else if (fin && suiteGap.length) {
         // Finished, but a project check (meta.checks) has no passing run since the last task activity (a task re-run after
         // the finish, a check whose command changed…): spec_finish refuses on it, doctor warns, the stop gate sends a "done"
@@ -534,7 +535,7 @@ function nextAction(projectDir, name, opts = {}) {
         // No execution approval → sign it off; one that predates a later change (an upgraded feature's new tests sign-off,
         // a change request) → re-confirm it, naming what came after — never "missing" when it exists.
         const exAt = isRecord(approvals.execution) && typeof approvals.execution.at === "string" ? approvals.execution.at : null;
-        const signOff = !approvals.execution ? {} : executionSignOffStale(st) ? { at: exAt ? exAt.slice(0, 10) : "?", why: signOffWhyText(st, lng) } : null;
+        const signOff = !approvals.execution ? {} : executionSignOffStale(st) ? { at: dayOf(exAt) || "?", why: signOffWhyText(st, lng) } : null;
         // With roadmap.json meta.approvalRoles.execution the sign-off is per role (a role-less /approve is refused): name
         // the roles still missing and the one to sign as. A stale sign-off is renewed by every role signing again (r5 review: a role's
         // sign-off older than the change no longer counts — roleSignOffs): the role named is the first one still missing.
@@ -614,7 +615,7 @@ function withBranchStep(projectDir, slug, st, res) {
 // already warn / fail (1.16 Q review).
 function specDoctor(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   if (isSpikeDir(f.dir)) return spikeDoctor(projectDir, f); // 1.14 C2
   const { slug, dir, root } = f;
   const tracks = detectTracks(dir);
@@ -633,6 +634,9 @@ function specDoctor(projectDir, name, opts = {}) {
   // unknown (read as none, they failed open): approve / revoke / spec_finish refuse on it, so doctor FAILS naming it
   const rmc = roadmapGovernanceCheck(projectDir, lng);
   if (rmc) add(rmc.id, rmc.status, rmc.detail);
+  // 1.25.1 (review 7): observed evidence (meta.evidence) is only as strong as the approval guard — with it off, one line appended to
+  // an .execution/observed.jsonl forges an observed run: a warn naming the fix
+  if (evidenceMode(projectDir) === "observed" && approvalGuardLevel(projectDir) === "off") add("observed-unguarded", "warn", fm.observed.unguarded);
 
   // Steering
   const steeringDir = path.join(root, "steering");
@@ -811,7 +815,9 @@ function specDoctor(projectDir, name, opts = {}) {
     // 1.24 review 6 (F3): the uncovered ACs the test plan names only in a note (Gaps / Out of Scope) — said beside the gap, never coverage
     // … and (F-I8) the modal criteria with no stable ID beside US-n.AC-m ones (untracedCriteria): a warn — nothing can trace them
     const untracedLines = laterFiles.includes("requirements.md") ? [] : traceWarningLines(tr, lng, ["untracedCriteria"]);
-    const gapLines = [...traceGapLines(kept, lng), ...(deferKinds.has("uncoveredByTests") ? [] : traceWarningLines(tr, lng, ["justifiedTestGaps"])), ...untracedLines];
+    // … and (1.25.1) the ACs an inactive track section holds (inactiveAcs): named in the detail, never a warn by themselves
+    const gapLines = [...traceGapLines(kept, lng), ...(deferKinds.has("uncoveredByTests") ? [] : traceWarningLines(tr, lng, ["justifiedTestGaps"])), ...untracedLines,
+      ...traceWarningLines(tr, lng, ["inactiveAcs"])];
     // The verdict's own kinds decide fail (testsNotMappedToTasks is listed, never failing — trace_check's verdict rule).
     const failing = traceGaps(kept).some((g) => TRACE_VERDICT_KINDS.has(g.kind));
     const deferred = traceGaps(tr).some((g) => deferKinds.has(g.kind) && TRACE_VERDICT_KINDS.has(g.kind));
@@ -874,6 +880,16 @@ function specDoctor(projectDir, name, opts = {}) {
   const pipeTasks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "")
     .map((b) => ({ number: b.number, cmds: verifyPipes(b) })).filter((p) => p.cmds.length);
   if (pipeTasks.length) add("verify-pipes", "warn", fm.verifyPipe.doctor(pipeTasks.map((p) => "#" + p.number + " " + p.cmds.map((c) => "`" + c + "`").join(", ")).join("; ")));
+  // 1.25.1 (review 7) — a _Verify:_ (or a stored project check) holding a control character (an ESC / OSC sequence, a lone CR…): a
+  // terminal shows another command than the one that runs — a cloned tasks.md could print `$ npm test` while done --run ran something
+  // else. done --run / finish --run refuse it; a FAIL here, the command named with its control characters escaped. Active tasks only.
+  const ctlTasks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "")
+    .map((b) => ({ number: b.number, cmds: verifyControls(b) })).filter((p) => p.cmds.length);
+  const ctlChecks = projectChecks(projectDir).unsafe || [];
+  if (ctlTasks.length || ctlChecks.length) {
+    add("verify-control", "fail", fm.verifyControl.doctor(ctlTasks.map((p) => "#" + p.number + " " + p.cmds.map((c) => "`" + controlVisible(c) + "`").join(", "))
+      .concat(ctlChecks.map((n) => "meta.checks." + n)).join("; ")));
+  }
   // 1.14 full review Pa1 — marker-shaped text that yields no marker (`**Verify:** npm test`, `Verify: npm test`): the tools
   // read nothing there — no check runs, no file is traced. Active tasks only; a warn.
   const oddMarkers = malformedMarkers(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""));
@@ -1027,7 +1043,7 @@ function statusLineProject(candidates) {
   const list = Array.isArray(candidates) ? candidates : [];
   for (const c of list) {
     if (typeof c !== "string" || !c.trim() || /^\$\{[^}]*\}$/.test(c.trim()) || c.length > 4096 || isNetworkPath(c)) continue;
-    let dir = path.resolve(c.trim());
+    let dir = path.resolve(expandHome(c.trim())); // 1.25.1: a leading ~ is the home folder
     for (let i = 0; i < STATUS_MAX_UP; i++) {
       const key = FOLD_CASE ? dir.toLowerCase() : dir;
       if (seen.has(key)) break;

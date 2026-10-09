@@ -489,6 +489,24 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
       "the roadmap-busy error exists in EN, PT and ES");
   }
 
+  { // 1.25.1 — a lock another holder is releasing sits "delete pending" on Windows: lstat of it answers EPERM for a moment. The
+    // write gate read that as "unreadable, maybe a link" and refused the waiter (2 of 180 contended backlog adds failed with
+    // "…/.roadmap.lock: that file is a link"). Simulated: the lock path's first two lstats answer EPERM.
+    const pLg = path.join(tmp, "proj-r7-lockgate");
+    S.initProject(pLg, ["core"], "en");
+    const lockLg = path.resolve(pLg, ".specs", ".roadmap.lock");
+    const realLstat = fs.lstatSync;
+    let thrownLg = 0;
+    fs.lstatSync = function (p, ...rest) {
+      if (thrownLg < 2 && path.resolve(String(p)) === lockLg) { thrownLg++; const e = new Error("EPERM: operation not permitted, lstat"); e.code = "EPERM"; throw e; }
+      return realLstat.call(this, p, ...rest);
+    };
+    let rLg;
+    try { rLg = S.backlog(pLg, "add", "transient"); } finally { fs.lstatSync = realLstat; }
+    ok(thrownLg === 2 && rLg && rLg.ok === true && (S.readRoadmap(pLg).backlog || []).length === 1,
+      "a lock file whose lstat answers EPERM for a moment (being released) is waited for, never refused as a link (got " + JSON.stringify([thrownLg, rLg && rLg.ok, rLg && rLg.error]) + ")");
+  }
+
   { // A4.1 — scripts/test-docker.js (`npm run test:docker`): zero-dependency, offline-checkable parts — no Docker needed here.
     const dockerJs = path.join(root, "scripts", "test-docker.js");
     const src = fs.readFileSync(dockerJs, "utf8");
@@ -1118,7 +1136,10 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     const RAW = /\bfs\.(?:writeFileSync|appendFileSync|renameSync|mkdirSync|copyFileSync|cpSync|symlinkSync|linkSync|writeSync|truncateSync|createWriteStream|rmdirSync)\s*\(|\bfs\.openSync\s*\([^)]*["'](?:w|a|r\+)|\{[^}]*\b(?:writeFileSync|appendFileSync|renameSync|mkdirSync|copyFileSync|cpSync)\b[^}]*\}\s*=\s*require\(\s*["']fs["']\s*\)/;
     const ALLOW = new Set([path.join("mcp", "lib", "engine", "files.js")]);
     const hits = [];
-    for (const f of libSources()) {
+    // 1.25.1 (review 7): the eval harness (mcp/evals/*.js) writes .specs/<f>/evals/baseline.json — through spec.writeSpecFile (the
+    // gate) since its raw fs.writeFileSync followed a link under .specs/; the guard reads its sources too
+    const evalSources = fs.readdirSync(path.join(root, "mcp", "evals")).filter((n) => n.endsWith(".js")).map((n) => path.join(root, "mcp", "evals", n));
+    for (const f of libSources().concat(evalSources)) {
       const relf = path.relative(root, f);
       if (ALLOW.has(relf)) continue;
       fs.readFileSync(f, "utf8").split(/\r?\n/).forEach((l, i) => { if (RAW.test(l) && !/^\s*\/\//.test(l)) hits.push(relf.split(path.sep).join("/") + ":" + (i + 1) + " " + l.trim().slice(0, 90)); });
@@ -1128,8 +1149,26 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
       const at = files.indexOf(h);
       return at >= 0 && /specsWriteGate\(/.test(files.slice(at, files.indexOf("\n}\n", at)));
     });
-    ok(!hits.length && gated && /const refused = specsGateError\(lock\)/.test(files),
-      "1.24 r6 G-I2: no mcp/lib source but engine/files.js writes with a raw fs call (writeFileSync / appendFileSync / renameSync / mkdirSync …) — every write goes through the gate (writeFileAtomic, writeIfAbsent, ensureDir, specWrite each call specsWriteGate; withLockFile checks the lock's path) (got " +
-      JSON.stringify({ hits, gated }) + ")");
+    // withLockFile checks the lock's path through lockGateError (1.25.1: the lock file's own transient refusals retried), which is
+    // the gate itself
+    const lockGate = files.slice(files.indexOf("function lockGateError"), files.indexOf("\n}\n", files.indexOf("function lockGateError")));
+    // …and spec.writeSpecFile answers the gate's refusal through a linked folder (the harness prints it, exit 1), writes otherwise
+    const pe = path.join(tmp, "proj-r7-evals");
+    S.initProject(pe, ["core"], "en");
+    S.createFeature(pe, "Bot", ["core", "ai"], "", undefined, "en");
+    const evDir = path.join(pe, ".specs", "bot", "evals");
+    const okWrite = S.writeSpecFile(path.join(evDir, "baseline.json"), "{}\n");
+    const elsewhere = path.join(tmp, "proj-r7-evals-elsewhere");
+    fs.mkdirSync(elsewhere, { recursive: true });
+    fs.rmSync(evDir, { recursive: true, force: true });
+    let linkedEv = true;
+    try { fs.symlinkSync(elsewhere, evDir, "junction"); } catch { linkedEv = false; }
+    const refusedWrite = linkedEv ? S.writeSpecFile(path.join(evDir, "baseline.json"), "{}\n") : null;
+    const harness = fs.readFileSync(path.join(root, "mcp", "evals", "run-evals.js"), "utf8");
+    ok(!hits.length && gated && /const refused = lockGateError\(lock\)/.test(files) && /specsGateError\(lock\)/.test(lockGate) && evalSources.length >= 1 &&
+      okWrite.ok === true && (!linkedEv || (refusedWrite.ok === false && refusedWrite.linked === true && !fs.existsSync(path.join(elsewhere, "baseline.json")))) &&
+      /spec\.writeSpecFile\(baselineFile/.test(harness),
+      "1.24 r6 G-I2: no mcp/lib source but engine/files.js writes with a raw fs call (writeFileSync / appendFileSync / renameSync / mkdirSync …) — every write goes through the gate (writeFileAtomic, writeIfAbsent, ensureDir, specWrite each call specsWriteGate; withLockFile checks the lock's path); 1.25.1 r7: the eval harness's sources too — its baseline.json goes through spec.writeSpecFile, which refuses a linked evals/ folder" +
+      (linkedEv ? "" : " (no junction here: that part skipped)") + " (got " + JSON.stringify({ hits, gated, okWrite, refusedWrite }) + ")");
   }
 };

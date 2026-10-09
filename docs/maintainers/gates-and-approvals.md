@@ -17,6 +17,11 @@ flows, the bugfix kind.
   templates' slots (1.14 — see Project templates) — and the `> **TODO**`
   sentinel. Everything else in brackets is the user's content: `[free: 60, pro: 600]`, `[admin, billing-manager, read
   only]`, `[10 MB, 25 MB for pro]` (1.13's shape heuristics refused those and blocked upgraded, finished 1.12 specs).
+  **1.25.1 — an empty / ellipsis bracket by its place:** `[]` / `[ ]` (the corpus key `""`) and `[...]` / `[…]` are slots only as
+  a field's WHOLE value, where every template writes them (`bracketPlaceholders()` → `wholeValueAt()`): the line's own value after a
+  list marker / checkbox / quote ("- []", "1. []"), a label's after its colon ("- **Test runner:** []", "Secret store: [] — …"), a
+  table cell's or an item of a " · " field list — never glued to the text after it (`[]string`). "THE SYSTEM SHALL return HTTP 200
+  with an empty array []" and "… append [...]" were placeholders (EARS warned, doctor failed, the approval was refused).
   `scanBrackets()` walks outermost first and descends into a non-placeholder group, so a half-edited template sentence
   still reports the `[N]` left inside it. Syntax is skipped whole (links, reference links, footnotes, callouts, wiki
   links, glued indexing `x[0]`, checkboxes) and so are stable tags/IDs, `[NEEDS CLARIFICATION]` and the legacy
@@ -127,6 +132,11 @@ flows, the bugfix kind.
   scaffolded before the short form, or one the user wrote) can be ticked
   (`rootCauseTaskIndex()`), but then returns `rootCausePending: true` + a note; once it is ticked the refusal of a
   later task is `bugGateTicked` ("the section is still empty"), never "do task N first".
+  **1.25.1 (review 7) — a fix is gated wherever it sits:** a task carrying `_Makes green:_` (it turns the regression test green)
+  is refused while Root Cause is unfilled even BEFORE the root-cause task — tasks [the red test, the fix, "Document the root cause in
+  bug.md"] let the fix tick first, the position rule alone (`pos <= rc`) allowed it. Its refusal names the root-cause task
+  (`bugGate` / `bugGateTicked`); a fix that is task 1 with no root-cause task gets `bugGateFix` ("only task 1 can be completed"
+  would name the task refused).
 
 ## Approval fingerprints and pending gates (from Conventions & gotchas)
 - **Approvals record a content fingerprint** of the phase's artifact (`artifactFingerprint`; tasks.md
@@ -145,13 +155,22 @@ flows, the bugfix kind.
   (before 1.13, a `.history/` not committed) → the fingerprint alone decides, as before.
   **1.24 review 6 (E6 / E-I5) — the whitespace-insensitive fingerprint is RECORDED:** every new approval, its history record and
   each role sign-off carry `wsFingerprint` = sha1(`wsText`) (state.js `wsFingerprint()`; `designWsFingerprint` for a bugfix's
-  design.md) next to `fingerprint` (whose rule is unchanged). `changedSinceApproval` checks it (`wsSame()`) before the snapshot
+  design.md) next to `fingerprint` (whose rule is unchanged). `changedSinceApproval` checks it (`approvedContentSame()`, gates.js) before the snapshot
   fallback — no `.history/` needed —, `sameContent()` (role sign-offs: `roleSignOffs`, `recordRoleSignOff`, doctor's role view)
   accepts a record whose `wsFingerprint` (+ `designWsFingerprint`) equals the content's (`phaseContent()` computes both), and
   `changesSince`'s `sameApprovedContent` too (a re-approval after a whitespace-only edit changed nothing). A WAITING role
   sign-off has no snapshot: an editor's trailing-whitespace trim after product signed made tech's sign-off "not complete"
   (product's read stale — r5's rule held for single approvals only). Records from before 1.24 have none: the fingerprint and
   the snapshot fallback decide, as before. (A field of the approval / sign-off records — the merge driver's rules carry it.)
+  **1.25.1 (review 7) — ONE test for every reader:** `approvedContentSame(dir, phase, appr, raw, design?)` (gates.js) is "is this
+  text still the content that approval record signed off" — the fingerprint, else the recorded wsFingerprint, else the own-snapshot
+  `wsOnlyEdit` — and every reader of a change since approval asks it: `changedSinceApproval`, the edit guard's stale tasks approval
+  (`guardCheck` compared the fingerprint alone: trailing spaces in tasks.md, or a "\r\r\n" file normalized to LF, made it ask
+  "re-approve" while next_action and finish said unchanged), the traceability matrix's approval baseline (its snapshot path compares
+  `wsText`, its fingerprint-only path asks the predicate) and spec_impact's design.md. Two RECORDS are compared by
+  `sameApprovedContent` (finish.js): the Phase 4 stamp (`planStampHolds` — a test plan re-approved after a whitespace-only edit
+  keeps the `tests` sign-off in force: the history record of the stamped fingerprint and the approval now share a wsFingerprint)
+  and the metrics' rework count (such a re-approval is no rework). Never compare an approval's fingerprint by hand.
 - **A deleted approved artifact is a change since its approval** (1.22 review — `changedSinceApproval()` skipped a missing
   file, so deleting an approved test-plan.md and its T-IDs read as "nothing changed" and the Phase 4 gate vanished; the
   tasks were approvable at once). It is listed like an edit (doctor's changed-since-approval, finish's blocker, the roadmap,
@@ -236,7 +255,8 @@ flows, the bugfix kind.
 - **`spec_metrics`** derives everything from `.state.json`, `.history/` and the artifacts (`createdAt` is
   stored by createFeature; older features get an approximate one). `write` creates `retro.md` (writeIfAbsent).
 - **`spec_append_tasks`** (converge) appends only: numbers after every number in use (tasks.md + leftover
-  evidence records and tick times — a new task never inherits a removed one's run or completion time), all-or-nothing validation (phantom AC IDs, non-relative paths, bad story, multi-line markers,
+  evidence records and tick times — a new task never inherits a removed one's run or completion time; `nextTaskNumber()`,
+  tasks.js, which a track's template tasks read too since 1.25.1 — tracks.md), all-or-nothing validation (phantom AC IDs, non-relative paths, bad story, multi-line markers,
   inactive-track / Global Constraints headings), a read-back check that existing tasks didn't change, and
   CRLF / BOM / missing final newline preserved. An approved task list → `needsReapproval`. Per task, besides `requirements`
   / `implements` / `verify` / `story` / `parallel`: `makesGreen` (T-IDs — `T-1`, `t-01`, `T01` accepted —, each planned in
@@ -394,9 +414,12 @@ iron law, phase order, the finish / execution gate, every track criterion scaffo
 - **Input.** `spec_create {size: xs | s | m | l}` / `create --size` (`sizeInput()`, state.js — case-folded; the MCP enum; a
   new feature only: an existing one keeps its size, `sizes.sizeKept` note). Stored as `.state.json → size` only when given
   (a plain value — the merge driver needs no rule); `featureSize(dir)` reads it (null for any other value). `res.size` on a
-  sized create. `spec_classify` suggests one — `suggestedSize`, `sizeReason` (stable: trivial-change · several-tracks ·
-  public-api · cross-system · single-unit · default — `suggestSize()`, classify.js: a deterministic EN / PT / ES reading of
-  the request, never the track count alone; the localized `sizeNote`, never in `notes`); nothing applies it by itself.
+  sized create. `spec_classify` suggests one — `suggestedSize`, `sizeReason` (stable: trivial-change · small-change (1.25.1) ·
+  several-tracks · public-api · cross-system · single-unit · default — `suggestSize()`, classify.js: a deterministic EN / PT / ES
+  reading of the request, never the track count alone; the localized `sizeNote`, never in `notes`); nothing applies it by itself.
+  `small-change` (xs, no marker track — `SIZE_SMALL`): one small behaviour change — a clearer / friendlier error message, a default /
+  timeout / limit changed, one empty / missing input handled ("Return a clearer error message when the orders route gets an empty
+  customer id" was m / default).
 - **xs = the change kind** (`kind: "change"`; size xs on a plain feature IS a change; kind change with s / m / l, a spike
   with any size, a change with an optional track → refused before any write — `sizes.changeSize` / `spikeNoSize` /
   `changeTracks`). ONE file, `change.md` (`i18n.change` — summary · 1–3 EARS criteria · approach · 1–3 tasks with

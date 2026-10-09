@@ -29,7 +29,7 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
     const hk = hookOut("approval-hook", pre("Monitor", "node cli/dev-spec.js approve alpha tasks"));
     const tail = hookOut("approval-hook", pre("Monitor", "tail -f build.log"));
     const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
-    const ap = (cfg.PreToolUse || []).find((e) => e.hooks.some((h) => /approval-hook/.test(h.command)));
+    const ap = (cfg.PreToolUse || []).find((e) => e.hooks.some((h) => /approval-hook/.test([h.command, ...(h.args || [])].join(" "))));
     ok(eng.decision === "deny" && eng.actions[0].kind === "approve" && decisionOf(hk) === "deny" && tail.stdout === "" && tail.status === 0 &&
       new RegExp(ap.matcher).test("Monitor") && E.APPROVAL_SHELL_TOOLS.has("Monitor"),
       "1.23 review 5 (P4): an approval run through the Monitor tool is refused at deny (engine and hook, bash syntax); a Monitor command that runs no approval stays silent; hooks.json's matcher covers Monitor (got " +
@@ -135,8 +135,9 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
     const enc = Buffer.from("node cli/dev-spec.js approve a b", "utf16le").toString("base64");
     const texts = ["node cli/dev-spec.js approve a b", "node (\"cli/dev\" + \"-spec.js\") approve a b", "node cli/dev-sp?c.js approve a b", "ls *.md",
       "npm test", "powershell -enc " + enc, "cat .specs/x", "echo hello"];
-    const hookCand = new Function("const RE_CANDIDATE = /dev-?spec|\\.specs/i;\n" + (/const RE_VERB = [^\n]+\n/.exec(src) || [""])[0] +
-      (/const candidate = \(c\) => \{[\s\S]*?\n\};/.exec(src) || ["const candidate = () => null;"])[0] + "\nreturn candidate;")();
+    // (1.25.1: the hook's own pattern constants — RE_CANDIDATE, RE_VERB, RE_DOT_GLOB, RE_WRITE_WORD — read from its source)
+    const consts = ["RE_CANDIDATE", "RE_VERB", "RE_DOT_GLOB", "RE_WRITE_WORD"].map((n) => (new RegExp("const " + n + " = [^\\n]+\\n").exec(src) || [""])[0]).join("");
+    const hookCand = new Function(consts + (/const candidate = \(c\) => \{[\s\S]*?\n\};/.exec(src) || ["const candidate = () => null;"])[0] + "\nreturn candidate;")();
     const bad = texts.filter((t) => E.approvalCandidate(t) && !hookCand(t));
     ok(!bad.length && hookCand("ls *.md") === false && E.approvalCandidate("powershell -enc " + enc) === true,
       "1.23 review 5: the approval hook's pre-check lets through every command the engine's approvalCandidate would read (joined strings, globs with an approval word, -EncodedCommand) (missed: " + js(bad) + ")");

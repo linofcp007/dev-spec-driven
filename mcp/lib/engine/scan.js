@@ -777,6 +777,8 @@ function isMigrationFile(dirsLc, name, ext) {
 const PY_ENTRY = new Set(["main.py", "app.py", "manage.py", "wsgi.py", "asgi.py", "__main__.py", "run.py", "server.py"]);
 const NODE_ROOT_ENTRY = new Set(["index.js", "server.js", "app.js", "main.js", "index.mjs", "server.mjs", "index.ts", "server.ts", "app.ts", "main.ts"]);
 function entryKind(rel, name, depth) {
+  // 1.25.1: a test file is never an entrypoint — tests/app.py (the app a test serves), tests/main.go were "python" / "go main"
+  if (isTestFile(rel)) return null;
   if (PY_ENTRY.has(name) && depth <= 2) return "python";
   // a top-level PowerShell script (build.ps1, deploy.ps1 — Pester's *.Tests.ps1 is a test); a module's RootModule comes
   // from its .psd1 manifest (scanCodebase)
@@ -926,7 +928,8 @@ function scanCodebase(projectDir, opts = {}) {
       return; // tests call routes (supertest's api.get('/x')), they don't declare them
     }
     if (ext === ".py") { const im = txt.match(RE_PY_WEB_IMPORT); if (im) frameworks.add(im[1]); } // FastAPI/Flask without a manifest
-    if (/@SpringBootApplication\b/.test(txt)) addEntry(rel, "spring boot");
+    // (1.25.1) a Java / Kotlin source only: a JS string, a Python comment or a script naming the annotation is no Spring Boot app
+    if ((ext === ".java" || ext === ".kt") && /@SpringBootApplication\b/.test(txt)) addEntry(rel, "spring boot");
     else if (ext === ".java" && /\bstatic\s+void\s+main\s*\(/.test(txt)) addEntry(rel, "java main");
     else if (ext === ".kt" && /^[^\S\n\r\u2028\u2029]*fun\s+main\s*\(/m.test(txt)) addEntry(rel, "kotlin main"); // indents within their line (1.17 H)
     const found = scanRoutes(rel, txt);
@@ -1004,7 +1007,8 @@ function scanCodebase(projectDir, opts = {}) {
       if (Object.prototype.hasOwnProperty.call(NODE_FRAMEWORKS, d)) frameworks.add(NODE_FRAMEWORKS[d]);
       if (Object.prototype.hasOwnProperty.call(NODE_TEST_RUNNERS, d)) testFws.add(NODE_TEST_RUNNERS[d]);
     });
-    stackHints.push(parsed ? "node (" + depList.slice(0, 12).join(", ") + (depList.length > 12 ? ", …" : "") + ")" : "node");
+    // (1.25.1) a package.json with no dependency: "node", never "node ()"
+    stackHints.push(parsed && depList.length ? "node (" + depList.slice(0, 12).join(", ") + (depList.length > 12 ? ", …" : "") + ")" : "node");
   }
   entrypoints.unshift(...pkgEntries);
   const pyManifest = ["requirements.txt", "requirements-dev.txt", "pyproject.toml", "setup.py", "setup.cfg", "Pipfile"].map(text).join("\n").toLowerCase();

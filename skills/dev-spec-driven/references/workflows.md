@@ -6,7 +6,7 @@ The commands beside the main pipeline (Phase 0 → 6 in `SKILL.md`), what they d
 
 A feature's size decides how much scaffold and how many approvals it costs; the gates that keep a spec honest — EARS on
 every criterion, trace, the evidence gate, the bugfix iron law, phase order, the finish and execution gates — hold at
-every size. `spec_classify` suggests one (`suggestedSize` + a stable `sizeReason`: trivial-change · single-unit ·
+every size. `spec_classify` suggests one (`suggestedSize` + a stable `sizeReason`: trivial-change · small-change · single-unit ·
 several-tracks · public-api · cross-system · default); the human confirms it in Phase 0 and `spec_create {size}` (CLI
 `--size`) records it in `.state.json`. No size = the pre-1.21 scaffold and rules exactly; `spec_upgrade` never assigns one.
 

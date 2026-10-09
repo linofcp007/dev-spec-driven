@@ -63,6 +63,12 @@ function nearestProject(start) {
   }
   return null;
 }
+// files.js expandHome (1.25.1): a leading ~ (alone, ~/ or ~ and a backslash) is the home folder — the CLI expands --project with it.
+const RE_HOME_PREFIX = /^~(?=$|[\\/])/;
+function expandHome(p) {
+  const s = String(p == null ? "" : p);
+  return RE_HOME_PREFIX.test(s) ? path.join(require("os").homedir(), s.slice(1)) : s;
+}
 // --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working one with a dev-spec .specs/ >
 // the working folder (an empty value or one holding an unexpanded variable falls through) — the CLI's resolution.
 function resolveProject(arg, env) {
@@ -71,9 +77,45 @@ function resolveProject(arg, env) {
   // Windows: `--project "C:\dir\"` reaches node as `C:\dir"` — the CLI drops the trailing quote (1.23 review L14)
   const flag = typeof arg === "string" && process.platform === "win32" ? arg.replace(/"+$/, "") : arg;
   const dir = usable(flag) || usable(e.SPEC_PROJECT_DIR) || usable(e.CLAUDE_PROJECT_DIR);
-  if (dir) return path.resolve(dir);
+  if (dir) return path.resolve(expandHome(dir));
   const cwd = path.resolve(process.cwd());
   return nearestProject(cwd) || cwd;
+}
+// doctor.js statusLineProject's null rule (1.25.1, review 7) — the status line's pre-check, before the engine loads: is there a
+// folder holding a dev-spec .specs/ at or above one of the candidates (STATUS_MAX_UP levels; an empty / non-string / whole-${VAR} /
+// over-long / network candidate skipped)? false → the engine would answer null (an empty line): nothing to load. true → the engine
+// decides (it also maps a worktree to its checkout, which only ever starts from a folder this walk finds).
+const STATUS_MAX_UP = 40;
+function statusProbe(candidates) {
+  for (const c of Array.isArray(candidates) ? candidates : []) {
+    if (typeof c !== "string" || !c.trim() || /^\$\{[^}]*\}$/.test(c.trim()) || c.length > 4096 || isNetworkPath(c)) continue;
+    let dir = path.resolve(expandHome(c.trim()));
+    for (let i = 0; i < STATUS_MAX_UP; i++) {
+      if (isDevSpecDir(dir)) return true;
+      const up = path.dirname(dir);
+      if (up === dir) break;
+      dir = up;
+    }
+  }
+  return false;
+}
+
+// 1.25.1 (review 7) — the status line command `statusline --print-config` prints (and /spec-statusline writes into settings.json).
+// In a plugin's versioned folder (…/dev-spec-driven/<version>/cli/dev-spec.js) the plain `node "<that path>" statusline` broke at the
+// first plugin update (Claude Code removes the old folder 14 days later): the command finds the newest installed <version> holding
+// cli/dev-spec.js at each run — the completion scripts' rule (numeric parts, a missing part 0) — in a node one-liner that holds no
+// shell syntax but its two double-quoted arguments (no ", $, `, %, !, backslash): cmd.exe, PowerShell, sh and bash pass it alike.
+// It sets argv[1] to the CLI it found and requires it (dev-spec.js reads argv.slice(2): `statusline`). A plugin folder whose path
+// holds one of those characters, or any other CLI (a clone), gets the plain command.
+const STATUSLINE_LAUNCHER = "const f=require('fs'),p=require('path'),b=process.argv[1],k=(s)=>s.split('.').map((x)=>parseInt(x,10)||0)," +
+  "c=(x,y)=>{const a=k(x),d=k(y);for(let i=0;i<Math.max(a.length,d.length);i++){const e=(a[i]||0)-(d[i]||0);if(e)return e}return 0};" +
+  "let v=[];try{v=f.readdirSync(b).filter((d)=>f.existsSync(p.join(b,d,'cli','dev-spec.js'))).sort(c)}catch(e){}" +
+  "if(v.length){process.argv[1]=p.join(b,v[v.length-1],'cli','dev-spec.js');require(process.argv[1])}";
+function statuslineCommand(cli) {
+  const p = String(cli).split(path.sep).join("/").replace(/\\/g, "/");
+  const m = /^(.*\/dev-spec-driven)\/[^/]+\/cli\/dev-spec\.js$/.exec(p);
+  if (!m || /["$`%!\\]/.test(m[1])) return { command: `node "${p}" statusline`, follows: false };
+  return { command: `node -e "${STATUSLINE_LAUNCHER}" "${m[1]}" statusline`, follows: true };
 }
 
 // state.js: slugify, RE_WIN_RESERVED-free (a listing shows what is there), RESERVED_SLUGS / reservedSlug, isFeatureFolder.
@@ -218,4 +260,4 @@ function script(shell, model) {
   return body.replace(/@@([A-Z_]+)@@/g, (m, k) => (Object.prototype.hasOwnProperty.call(fill, k) ? fill[k] : m));
 }
 
-module.exports = { SHELLS, shellName, complete, script, tables, resolveProject, featureNames, archivedNames };
+module.exports = { SHELLS, shellName, complete, script, tables, resolveProject, expandHome, statusProbe, STATUSLINE_LAUNCHER, statuslineCommand, featureNames, archivedNames };

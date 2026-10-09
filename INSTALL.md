@@ -2,7 +2,8 @@
 
 This is a Claude Code **plugin** with a bundled **local MCP server**. It needs **Node.js** on your
 PATH (the MCP server is plain Node — no `npm install`, no dependencies). Check with `node --version`
-(v18+; tested on v24).
+(v18+; tested on v24). Its hooks need **Claude Code 2.1.139 or later** (`claude --version`): they run in exec form — `node`
+started directly with the hook's script, no shell per call — which older versions don't read (their hooks would not run).
 
 There is **no GitHub Actions and no cloud component** — nothing to configure remotely, nothing that
 costs money per run.
@@ -180,7 +181,9 @@ NOT also reference it, or Claude Code reports `Duplicate hooks file detected`): 
 traceability, saving a `design.md` checks the active tracks' mandatory sections, and session start
 prints feature status plus one line per finished feature whose files drifted since `/spec-finish` (one line while
 `.specs/` comes from an older dev-spec — see *Updating* — and one when two features' open tasks plan the same files). To
-turn them off, disable the plugin (or empty `hooks/hooks.json`).
+turn them off, disable the plugin (or empty `hooks/hooks.json`). Each hook is `node` started directly with its script (exec
+form, Claude Code 2.1.139+): on Windows a shell-form hook went through Git Bash (+~40 ms a call) or, without Git Bash,
+PowerShell (+~300 ms a call), and a Write / Edit runs three hooks.
 
 **Evidence gate at the end of a turn (on by default).** A Stop hook (`hooks/stop-hook.js`, also on SubagentStop for the
 `spec-implementer` and `spec-simplifier` agents, checked on their reports) sends Claude back to work — once — when its closing message says a task or feature is done or
@@ -195,7 +198,9 @@ Other tools don't run the hook; `dev-spec stop-check --message "<text>"` gives t
 
 **Guard mode (opt-in, off by default).** A PreToolUse hook (`hooks/guard-hook.js`) that, once you turn
 it on for a project, asks for confirmation before Claude writes or edits a code file outside `.specs/`
-while no feature has approved, unfinished tasks. It stays silent when the guard is off and never blocks
+while no feature has approved, unfinished tasks — through Write / Edit and (1.25.1) a Bash / PowerShell command that
+writes one (`sed -i`, a redirect, `tee`, `cp`, `Set-Content`…; reads, test runs, builds and git don't prompt). In a
+monorepo the nearest `.specs/` above the edited file counts too. It stays silent when the guard is off and never blocks
 on its own errors:
 
 ```powershell
@@ -208,27 +213,42 @@ store the setting but don't enforce it.
 
 **Observed evidence (the log is always on; the rule is opt-in).** A PostToolUse hook (`hooks/observe-hook.js`, the Bash tool — and PowerShell when it reports an exit code)
 silently logs each run of a task's `_Verify:_` command or a project check to a git-ignored `.execution/observed.jsonl`,
-so every recorded run says whether Claude Code actually saw it (`observed`). To verify tasks only with runs the
-harness saw (or that `dev-spec done --run` made):
+so every recorded run says whether Claude Code actually saw it (`observed`). It runs in the background (`async`): Claude
+never waits for it — in a headless `claude -p` session, the run made just before the session ends may go unlogged. To
+verify tasks only with runs the harness saw (or that `dev-spec done --run` made):
 
 ```powershell
 node "$plugin\cli\dev-spec.js" init --evidence observed   # or spec_init {evidence: "observed"}; --evidence reported to go back
 ```
 
+Observed evidence is only as strong as the approval guard below: with it off, an agent appending one line to
+`.execution/observed.jsonl` forges an observed run (`init` and `dev-spec doctor` — `observed-unguarded` — say so). Turn
+the approval guard on with it. With the PowerShell tool alone (Windows without Git Bash) a run is logged only when Claude
+Code reports its exit code — record the others with `dev-spec done <feature> <n> --run`.
+
 **Human approval guard (opt-in, off by default).** A PreToolUse hook (`hooks/approval-hook.js`) that makes approvals a
-human act: when Claude calls `spec_approve` (even with force), runs `dev-spec approve` / `feature remove --yes`, or tries
-to lower the guard, you are asked (`ask`) or the call is refused (`deny` — you approve yourself, in your terminal or with
-Claude Code's `!` prefix):
+human act: when Claude calls `spec_approve` (even with force), runs `dev-spec approve` / `feature remove --yes`, tries
+to lower the guard, or writes the spec state itself (`.specs/roadmap.json`, a feature's `.state.json`, the observed log —
+through Write / Edit, another MCP server's file tools, or a shell command: a redirect, a writer, a glob, a link to
+`.specs/`), you are asked (`ask`) or the call is refused (`deny` — you approve yourself, in your terminal or with Claude
+Code's `!` prefix):
 
 ```powershell
 node "$plugin\cli\dev-spec.js" init --approval-guard deny   # or ask; off to disable (only you can lower it)
 ```
 
-`ask` relies on Claude Code's permission prompt, which auto mode still shows and only bypass-permissions mode may skip;
-`deny` holds in every mode.
-Both are guardrails, not a sandbox. In other MCP clients the MCP server enforces the same setting itself: a client that
-supports MCP elicitation shows you the question (Approve + an optional note) and only your explicit approve records it; a
-client without it runs `ask` as before and refuses `deny` with the command to run yourself.
+`ask` relies on Claude Code's permission prompt, which auto mode still shows and only bypass-permissions mode may skip.
+`deny` is refused in auto mode too — but a session in bypass-permissions mode, or with hooks disabled, runs no hook at all.
+
+**What the guards are — and aren't.** They stop accidents and casual workarounds, not a determined agent with a shell.
+They read each command as text (nothing is run or evaluated) and ask whenever a command names dev-spec or `.specs/` in a
+form they can't follow. Known limits: an inline script or a script file the agent wrote (`node -e`, `python -c`,
+`./x.sh`), a variable, alias or function defined in an earlier command, encoded or downloaded text fed to a shell
+(`… | base64 -d | bash`), a copy of the CLI under another name, git forms whose files can't be known from the command
+(`git apply`, `git stash pop`, `git reset --hard`, a branch switch), an archive extracted into the project root, and a
+link to `.specs/` made by one of those routes. In other MCP clients the MCP server enforces the same setting itself: a
+client that supports MCP elicitation shows you the question (Approve + an optional note) and only your explicit approve
+records it; a client without it runs `ask` as before and refuses `deny` with the command to run yourself.
 
 **Teams: a merge driver for the spec state (opt-in, once per clone).** Two branches that both approve phases, tick tasks or
 record evidence change the same `.specs/<feature>/.state.json` and `.specs/roadmap.json` — a plain git merge conflicts on
@@ -269,7 +289,8 @@ node "$plugin\cli\dev-spec.js" statusline --print-config   # prints the "statusL
 
 Put that entry in `~/.claude/settings.json` (every project) or a project's `.claude/settings.local.json` (the path is this
 machine's — keep it out of a committed `.claude/settings.json`). A plugin installed from a git marketplace lives in a
-versioned cache folder: run `/spec-statusline` again after an update. It reads `.specs/` (at Phase 4 also the few test files
+versioned cache folder: there the printed command finds the newest installed version at each run, so it survives plugin
+updates (1.25.1). It reads `.specs/` (at Phase 4 also the few test files
 the test plan names — never a repo walk, never a network folder), names the same next step as `/next-action` (it doesn't
 check drift, so a finished feature reads "finished", not "clean"), exits 0 always and costs no tokens.
 

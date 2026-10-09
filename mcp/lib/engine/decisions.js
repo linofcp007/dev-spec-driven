@@ -13,7 +13,7 @@ const i18n = require("../i18n.js");
 const { BOM_CHAR } = require("./state.js"); // load time
 const { TRACE_INFO_FIELDS } = require("./trace.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
+let activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
   maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
@@ -24,7 +24,7 @@ let activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, dupl
   waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail, roadmapGovernanceCheck,
   backtickRuns, EXPORT_DIR, featureDirs, isGeneratedOrAbsent, mdCell, mdPlainText, normalizeLang, projectLang, readContained, readDirCached,
   removeEmptySpecDir, removeSpecFile, shiftHeadings, slugify, specsRoot, specsWriteContained, squeezeBlankLines, stateFromFile, withinRoot;
-function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers,
+function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTracks, duplicateTaskNumbers,
   ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
   maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
@@ -374,7 +374,7 @@ function decisionEntryLines(e, D) {
 // entry to decisions.md (created with its localized header when absent). Under the feature lock (featureLocked).
 function decide(projectDir, name, input) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const lng = featureLang(projectDir, slug);
   const D = i18n.msg(lng).decisions;
@@ -460,11 +460,11 @@ function decisionDoctorChecks(projectDir, slug, dir, state, kind, lng, tr) {
     const reqRefs = res.filter((r) => r.type === "ac" || r.type === "secondary").map((r) => r.ref);
     const desRefs = res.filter((r) => r.type === "section").map((r) => r.ref);
     if (reqRefs.length && rq != null && e.at > rq) {
-      hits.push(D.affectsApprovedEntry(e.id, reqRefs.join(", "), "requirements.md", day(new Date(rq).toISOString())));
+      hits.push(D.affectsApprovedEntry(e.id, reqRefs.join(", "), "requirements.md", dayOf(rq)));
       if (!phases.includes("requirements")) phases.push("requirements");
     }
     if (desRefs.length && ds != null && e.at > ds) {
-      hits.push(D.affectsApprovedEntry(e.id, desRefs.join(", "), phaseFile("design", kind), day(new Date(ds).toISOString())));
+      hits.push(D.affectsApprovedEntry(e.id, desRefs.join(", "), phaseFile("design", kind), dayOf(ds)));
       if (!phases.includes("design")) phases.push("design");
     }
   }
@@ -612,7 +612,7 @@ function adrModel(projectDir, f, archived) {
   let targets = null;
   for (const e of log) {
     if (m.byId.has(e.id)) { m.excluded.push({ feature: slug, id: e.id, title: e.title, reason: "duplicate-id" }); continue; }
-    const x = { id: e.id, n: e.n, title: e.title || e.id, date: e.at == null ? null : new Date(e.at).toISOString().slice(0, 10),
+    const x = { id: e.id, n: e.n, title: e.title || e.id, date: dayOf(e.at) || null,
       supersedes: e.supersedes.filter((s) => s !== e.id), supersededBy: retired.get(e.id) || null, entry: e, file: null };
     m.byId.set(e.id, x);
     if (e.kind === "discovery") { m.excluded.push({ feature: slug, id: e.id, title: e.title, reason: "discovery" }); continue; }
@@ -723,7 +723,7 @@ function exportAdr(projectDir, opts, pl) {
   let scope;
   if (opts.name != null && String(opts.name).trim() !== "") {
     const f = existingFeature(projectDir, opts.name);
-    if (!f.ok) return { ok: false, error: f.error };
+    if (!f.ok) return { ok: false, error: f.error, code: f.code };
     models = [adrModel(projectDir, f, false)];
     scope = "feature";
   } else {
@@ -845,7 +845,6 @@ function spikeTimebox(body) {
   for (const m of t.matchAll(/(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)/g)) if (validIsoDay(m[0])) return { state: "date", date: m[0] };
   return { state: "nodate" };
 }
-const todayIso = () => new Date().toISOString().slice(0, 10);
 // Everything the spike tools read from spike.md.
 function spikeInfo(dir) {
   const text = readIfExists(path.join(dir, SPIKE_FILE));
@@ -855,7 +854,7 @@ function spikeInfo(dir) {
   const tb = spikeTimebox(extractSection(text, SPIKE_SYN.timebox));
   const decisionFilled = spikeFilled(d);
   return { text, questionFilled: spikeFilled(q), decisionFilled, outcome: decisionFilled ? spikeOutcome(d) : null, question: spikeFilled(q) ? spikeParagraph(q) : null,
-    rationale: decisionFilled ? spikeParagraph(d) : null, timebox: tb, timeboxPassed: !decisionFilled && tb.state === "date" && tb.date < todayIso() ? tb.date : null };
+    rationale: decisionFilled ? spikeParagraph(d) : null, timebox: tb, timeboxPassed: !decisionFilled && tb.state === "date" && tb.date < today() ? tb.date : null };
 }
 const isSpikeDir = (dir) => (readJson(statePath(dir)).data || {}).kind === "spike";
 // detectPhase for a spike (tasks: parseTasks of its tasks.md).
@@ -887,7 +886,7 @@ function spikeCreateInput(opts, M) {
   if (!m) return { error: SP.badTimebox(JSON.stringify(s)) };
   const u = m[2][0].toLowerCase();
   const ms = u === "h" ? 3600e3 : u === "w" || u === "s" ? 7 * 864e5 : 864e5;
-  return { ...out, until: new Date(Date.now() + parseInt(m[1], 10) * ms).toISOString().slice(0, 10), raw: s };
+  return { ...out, until: today(Date.now() + parseInt(m[1], 10) * ms), raw: s };
 }
 // The go seed: the spike's name without its "spike" words, and a summary from its question + decision.
 function spikeSeed(slug, s) {
@@ -1030,5 +1029,5 @@ module.exports = { DECISIONS_FILE, DECISION_TITLE_MAX, DECISION_TEXT_MAX, RE_DEC
   decisionDoctorChecks, briefDecisions, decisionSummaryLines, catalogDecisions, ADR_DIR, ADR_INDEX, ADR_SLUG_MAX, RE_ADR_NAME, adrNumber,
   adrFileName, adrInert, adrLabel, adrBlock, posixRel, adrModel, adrRef, adrStatusText, adrDocs, adrProjectIndex, adrStaleFiles, exportAdr, SPIKE_FILE, SPIKE_SYN, RE_OUTCOME_HEAD,
   outcomeMarker, OUTCOME_SYN, normOutcome, spikeProse, spikeFilled, spikeOutcome, spikeParagraph, validIsoDay,
-  spikeTimebox, todayIso, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeSeed, spikeDoctor, spikeNextAction,
+  spikeTimebox, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeSeed, spikeDoctor, spikeNextAction,
   spikeFinish, __link };

@@ -106,21 +106,31 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
     walk(I.brief("pt"), I.brief("pt-BR"), "BRIEF", 0);
     for (const n of I.steeringKnownFiles()) brPairs.push(["STEERING." + n, I.steeringStub(n, "pt"), I.steeringStub(n, "pt-BR")]);
     brPairs.push(["EVALS_README", I.evalsReadme("pt"), I.evalsReadme("pt-BR")]);
-    const allTr = ["tdd", "saas", "ai", "sec", "privacy"];
-    for (const t of [[], ...allTr.map((x) => [x]), allTr]) {
-      const a = { name: "ARGN", tracks: ["core", ...t], label: ["core", ...t].join(" +"), slug: "argn", summary: "", signals: { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"], sec: ["owasp"], privacy: ["gdpr"] } };
-      for (const b of ["classification", "requirements", "design", "tasks", "checklist"]) brPairs.push(["BUILD." + b + "/" + t.join("+"), I[b](a, "pt"), I[b](a, "pt-BR")]);
-      brPairs.push(["BUILD.testPlan/" + t.join("+"), I.testPlan("ARGN", "pt", a.tracks), I.testPlan("ARGN", "pt-BR", a.tracks)]);
+    // every built-in track (1.25.1 review: the five of 1.14 left +dist / +api / +ui / +obs / +data's builders unlinted), and size s
+    const allTr = ["tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
+    for (const size of [undefined, "s"]) for (const t of [[], ...allTr.map((x) => [x]), allTr]) {
+      const a = { name: "ARGN", tracks: ["core", ...t], label: ["core", ...t].join(" +"), slug: "argn", summary: "", size, signals: { tdd: ["tdd"], saas: ["tenant"], ai: ["llm"], sec: ["owasp"], privacy: ["gdpr"] } };
+      const at = "/" + t.join("+") + (size ? "/" + size : "");
+      for (const b of ["classification", "requirements", "design", "tasks", "checklist"]) brPairs.push(["BUILD." + b + at, I[b](a, "pt"), I[b](a, "pt-BR")]);
+      brPairs.push(["BUILD.testPlan" + at, I.testPlan("ARGN", "pt", a.tracks, undefined, size), I.testPlan("ARGN", "pt-BR", a.tracks, undefined, size)]);
     }
     for (const b of ["evalPlan", "loadTest", "quickstart", "integrationPlan", "promptStub", "bugTestPlan", "bugTasks"]) brPairs.push(["BUILD." + b, I[b]("ARGN", "pt"), I[b]("ARGN", "pt-BR")]);
     brPairs.push(["BUILD.bugReport", I.bugReport({ name: "ARGN" }, "pt"), I.bugReport({ name: "ARGN" }, "pt-BR")], ["BUILD.bugRequirements", I.bugRequirements({ name: "ARGN" }, "pt"), I.bugRequirements({ name: "ARGN" }, "pt-BR")]);
     const euLeft = brPairs.filter(([, , b]) => typeof b !== "string" || EU_ONLY.test(b)).map(([w, , b]) => w + ": " + (typeof b === "string" ? (b.match(EU_ONLY) || [])[0] : typeof b));
     ok(brPairs.length > 1500 && euLeft.length === 0,
       "pD1: lint — no pt-BR string holds a European-only word (utilizador, ficheiro, ecrã, equipa, registo, palavra-passe, telemóvel, 'a correr', tens, podes…): " + brPairs.length + " strings (" + euLeft.slice(0, 6).join(" · ") + ")");
-    const STABLE = /US-\d+\.AC-\d+|SC-\d{3}|T-\d+|EC-\d+|NFR-\d+|\[(?:SaaS|AI|SEC|PRIVACY|US\d+|P|shared)\]|\[NEEDS CLARIFICATION|> \*\*TODO\*\*|\*\*Checkpoint:\*\*|_(?:Requirements|Makes green|Affects evals|Emits metrics|Implements|Verify|Supersedes|Expect|Size):|```(?:mermaid|typescript)|## System|## User Template|`[^`\n]+`|\/spec-[a-z-]+|\b(?:QUANDO|ENQUANTO|ENTÃO|O SISTEMA(?: NÃO)? DEVE)\b/g;
+    // (1.25.1 review: every track's marker — read from the engine's TRACK_MARKER; the list stopped at [PRIVACY] — and the
+    // _Depends:_, decision-log and spike markers)
+    const markerAlt = Object.values(S.TRACK_MARKER).map((m) => m.replace(/[[\]]/g, "\\$&")).join("|");
+    const STABLE = new RegExp(String.raw`US-\d+\.AC-\d+|SC-\d{3}|T-\d+|EC-\d+|NFR-\d+|` + markerAlt + String.raw`|\[(?:US\d+|P|shared)\]|\[NEEDS CLARIFICATION|> \*\*TODO\*\*|\*\*Checkpoint:\*\*|` +
+      String.raw`_(?:Requirements|Makes green|Affects evals|Emits metrics|Implements|Verify|Supersedes|Expect|Size|Depends|Kind|Date|Affects|Outcome):|` +
+      "```(?:mermaid|typescript)|## System|## User Template|`[^`\\n]+`|" + String.raw`\/spec-[a-z-]+|\b(?:QUANDO|ENQUANTO|ENTÃO|O SISTEMA(?: NÃO)? DEVE)\b`, "g");
     const stableLost = brPairs.filter(([, a, b]) => typeof b === "string" && (a.match(STABLE) || []).join("\n") !== (b.match(STABLE) || []).join("\n")).map(([w]) => w);
     ok(stableLost.length === 0, "pD1: English-stable tokens survive unchanged in every pt-BR string — IDs, [SaaS]/[AI] tags, [NEEDS CLARIFICATION], > **TODO**, **Checkpoint:**, _Marker:_ tags, code spans, /spec-* commands, EARS keywords (" + stableLost.slice(0, 5).join(", ") + ")");
-    const notIdem = brPairs.filter(([, , b]) => typeof b === "string" && I.toPtBr(b) !== b).map(([w]) => w);
+    // (the stop gate's regex sources are pt's kept RAW — i18n.js defineDerivedLocale —, never derived text: 1.25.1's "corre[çc]…"
+    // and "num|numa" in them are PT-PT words to match, not a translation to redo)
+    const RAW_BR = /^MSG\.stopGate\.(?:claims|triggers|negators|admissions|fixed|zeroes|passNow)\[/;
+    const notIdem = brPairs.filter(([w, , b]) => typeof b === "string" && !RAW_BR.test(w) && I.toPtBr(b) !== b).map(([w]) => w);
     ok(notIdem.length === 0, "pD1: the pt-BR transform is idempotent — a Brazilian string passes through unchanged (" + notIdem.slice(0, 5).join(", ") + ")");
     // (an array compares by its first element's kind: pt-BR's stop-gate pattern lists are pt's plus the Brazilian gerunds)
     const shape = (v, d = 0) => (d > 6 ? "…" : typeof v === "function" ? "fn" : Array.isArray(v) ? "[" + (v.length ? shape(v[0], d + 1) : "") + "]" : v && typeof v === "object" && !(v instanceof RegExp) ? "{" + Object.keys(v).map((k) => k + ":" + shape(v[k], d + 1)).join(",") + "}" : typeof v);
@@ -140,6 +150,72 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
       I.toPtBr("O utilizador guarda o ficheiro `src/ficheiro.js` em .specs/utilizador/ — corre `npm test` e regista o resultado.") ===
       "O usuário guarda o arquivo `src/ficheiro.js` em .specs/utilizador/ — execute `npm test` e registre o resultado.",
       "pD1: arguments, code spans and paths are kept verbatim; mid-sentence 3rd person vs clause-start imperative (corre → execute, regista → registre)");
+    // 1.25.1 review — the clause detector skips EVERY track tag before a task's text (the built-in list stopped at [PRIVACY]:
+    // "[API] Escreve … corre-os" kept its European imperative) and a track pack's (an upper-case token, engine/packs.js)
+    const tagged = (m) => I.toPtBr("- [ ] 3. " + m + " Escreve os testes e corre-os");
+    ok([...Object.values(S.TRACK_MARKER), "[KAFKA]"].every((m) => tagged(m) === "- [ ] 3. " + m + " Escreva os testes e execute-os") &&
+      I.toPtBr("- [ ] 4. [US1][P] [DATA] Corre a migração") === "- [ ] 4. [US1][P] [DATA] Execute a migração",
+      "1.25.1 review: pt-BR turns the imperative after every track tag — [SaaS] … [DATA] (the engine's TRACK_MARKER) and a pack's [KAFKA] (got " + JSON.stringify(tagged("[API]")) + ")");
+    // … a 3rd-person description at a clause start stays one ("— começa por _ ou *": the command starts with); European residue
+    // (a link is no "ligação", enclisis after a subject, the interrogative "porque") goes through the derivation's tables
+    const brM = I.msg("pt-BR"), sv = brM.markerSyntax.suspiciousVerify("x");
+    const spikeBr = brM.spike.report({ name: "s" }) + brM.spike.tasks("s") + brM.spike.next.investigate(1, "t", "s");
+    ok(sv.includes("— começa por _ ou *") && !sv.includes("comece por") && sv.includes("fica mais legível como $(") &&
+      brM.impact.reopenTasks === "reopen se aplica a requirements, design, test-plan e eval-plan — uma alteração no tasks.md é revisada e aprovada de novo; não reabre nada." &&
+      brM.sizes.sizeKept("m", "s").endsWith("o tamanho é escolhido uma vez, ao criar a feature.") &&
+      /— crie uma de tamanho s \(.*\) e arquive esta alteração \(/.test(brM.sizes.tracksIgnored("+sec", "x")) &&
+      /é um link simbólico ou aponta/.test(brM.err.specsLinkedFile("a")) && /apaga só o link — .*remover o link\.$/.test(brM.featureOps.removeNeedsConfirmLink("x")) &&
+      !/liga-o|ligue-o/.test(spikeBr) && /coloque o link em Evidência/.test(spikeBr) && /no-go: por que foi abandonado/.test(spikeBr) &&
+      /<por que não se aplica>/.test(brM.sizes.extendedComment("[SEC]", "a")) && /, ou responda em uma linha/.test(brM.sizes.extendedComment("[SEC]", "a")) &&
+      /nunca tire um que o _Verify:_ tenha.*coloque-a de lado.*depois restaure-a\)\.$/.test(brM.evidenceGate.commandMismatch(1, "f", "x", "y", true)),
+      "1.25.1 review: pt-BR — 'começa por' stays a description; a link is 'link' (never 'ligação' / 'liga-o'); enclisis after a subject → proclisis, the passive or " +
+      "the você imperative; 'por que' asks why (got " + JSON.stringify([sv.slice(40, 90), brM.impact.reopenTasks]) + ")");
+    const EU_RESIDUE = /(?<![\p{L}])(?:ligaç(?:ão|ões)|liga-[oa]s?|ligue-[oa]s?|\p{L}+-se-ia|(?:cria|aplica|aplicam|arquiva|escolhe|revê|regista|registra|escrevem|parecem|comporta|torna|importa|acrescenta|responde)-se|tires|porque foi)(?![\p{L}])/iu;
+    const residueLeft = brPairs.filter(([, , b]) => typeof b === "string" && EU_RESIDUE.test(b)).map(([w, , b]) => w + ": " + b.match(EU_RESIDUE)[0]);
+    ok(residueLeft.length === 0, "1.25.1 review: lint — no pt-BR string keeps a European 'ligação' / 'liga-o', an enclitic '-se' after its subject or 'porque' asking why (" + residueLeft.slice(0, 6).join(" · ") + ")");
+    // 1.25.1 review — template variables ({{…}}) are English-stable: the PT prompt stub wrote {{variáveis}}. Every artifact
+    // builder (every track) and steering stub names the same variables, in the same order, in each language.
+    const varsOf = (s) => (String(s).match(/\{\{[^{}\n]*\}\}/g) || []).join(" ");
+    const varText = (l) => [...["classification", "requirements", "design", "tasks", "checklist"].map((b) => I[b]({ name: "n", tracks: ["core", ...allTr], label: "core", slug: "n", summary: "", signals: {} }, l)),
+      ...["evalPlan", "loadTest", "quickstart", "integrationPlan", "promptStub", "bugTestPlan", "bugTasks"].map((b) => I[b]("n", l)), I.testPlan("n", l, ["core", ...allTr]),
+      ...I.steeringKnownFiles().map((n) => I.steeringStub(n, l))].map(varsOf);
+    // 1.25.1 review — ES says "fichero" for a file (it said both, 92 / 67); "archivo" / "archivar" is the feature ARCHIVE
+    // (restore.renamedRecords read "registros de archivo" — file records). Only the test plan's older column name is named.
+    const esTexts = [];
+    const esWalk = (v, depth) => {
+      if (depth > 8) return;
+      if (typeof v === "string") return void esTexts.push(v);
+      if (Array.isArray(v)) return void v.forEach((x) => esWalk(x, depth + 1));
+      if (typeof v === "function") return void probes.forEach((p) => { let r; try { r = v(...p); } catch { return; } esWalk(r, depth + 1); });
+      if (v && typeof v === "object" && !(v instanceof RegExp)) for (const k of Object.keys(v)) if (k !== "stopGate") esWalk(v[k], depth + 1);
+    };
+    esWalk(I.msg("es"), 0); esWalk(I.brief("es"), 0);
+    for (const tracks of [["core"], ["core", ...allTr]]) for (const b of ["classification", "requirements", "design", "tasks", "checklist", "change"]) esTexts.push(I[b]({ name: "n", tracks, label: "core", slug: "n", summary: "", signals: {} }, "es"));
+    for (const b of ["evalPlan", "loadTest", "quickstart", "integrationPlan", "promptStub", "bugTestPlan", "bugTasks"]) esTexts.push(I[b]("n", "es"));
+    esTexts.push(I.testPlan("n", "es", ["core", ...allTr]), I.evalsReadme("es"), ...I.steeringKnownFiles().map((n) => I.steeringStub(n, "es")));
+    const esFile = esTexts.map((t) => t.replace(/columna Fichero \(o Archivo, en un plan más antiguo\)/g, "")).filter((t) => /(?<![\p{L}])[Aa]rchivos?(?![\p{L}])/u.test(t));
+    ok(esTexts.length > 1000 && !esFile.length && /registros de archivado/.test(I.msg("es").restore.renamedRecords("x")) && /\| Fichero \|/.test(I.testPlan("n", "es", ["core", "tdd"])),
+      "1.25.1 review: ES says 'fichero' for a file in every message and scaffold (the archive keeps archivo / archivado) (" + esTexts.length + " strings; " + esFile.slice(0, 2).map((t) => t.slice(0, 80)).join(" · ") + ")");
+    // 1.25.1 review — PT / ES retro.md rendered through MSG.en.metrics.buildRetro: a Portuguese or Spanish process loaded the
+    // English locale file to write it. The layout is i18n.js's renderRetro now; a fresh process renders all three without en.js.
+    {
+      const { spawnSync } = require("child_process");
+      const probe = spawnSync(process.execPath, ["-e", [
+        "const I = require(" + JSON.stringify(require.resolve("./lib/i18n.js")) + ");",
+        "const m = { feature: 'x', leadTime: { design: { hours: 3 } }, reworkByPhase: { design: 1 }, rework: 1, evidence: { runs: 2, passing: 1, passRate: 50 }, tasks: { done: 1, total: 2 }, openClarifications: 1, forcedApprovals: 0, changeRequests: 1, reopenedTasks: 1 };",
+        "const out = ['pt', 'es', 'pt-BR'].map((l) => I.msg(l).metrics.retro(m, { dur: (h) => h + 'h', today: '2026-01-01' }));",
+        "const en = Object.keys(require.cache).some((k) => /[\\\\/]i18n[\\\\/]en\\.js$/.test(k));",
+        "process.stdout.write(JSON.stringify({ en, heads: out.map((t) => t.split('\\n')[0]), design: out.map((t) => t.includes(' | 3h |') && t.includes('<!-- ')) }));",
+      ].join("\n")], { encoding: "utf8", timeout: 60000 });
+      let got = null;
+      try { got = JSON.parse(probe.stdout); } catch { got = { stdout: probe.stdout, stderr: String(probe.stderr).slice(0, 300) }; }
+      ok(got && got.en === false && JSON.stringify(got.heads) === JSON.stringify(["# Retrospetiva: x", "# Retrospectiva: x", "# Retrospectiva: x"]) &&
+        got.design.every(Boolean) && typeof I.renderRetro === "function" && !("buildRetro" in I.msg("en").metrics),
+        "1.25.1 review: a PT / ES / pt-BR retro.md renders through i18n.js's renderRetro without loading the English locale file (got " + JSON.stringify(got) + ")");
+    }
+    const enVars = varText("en");
+    ok(enVars.join(" ").includes("{{variables}}") && ["pt", "es", "pt-BR"].every((l) => JSON.stringify(varText(l)) === JSON.stringify(enVars)),
+      "1.25.1 review: {{template variables}} are English-stable — every builder and steering stub names the same ones in PT / ES / pt-BR as in EN (got pt " + JSON.stringify(varsOf(I.promptStub("n", "pt"))) + ")");
 
     // 4. the classifier: Brazilian words still read as Portuguese ('no' = em+o, never a negator); an explicit pt-BR answers in pt-BR
     // (only Brazilian markers here — cadastro, usuário, senha, arquivo, tela: before D1 this read as English and "no LLM" negated +ai)

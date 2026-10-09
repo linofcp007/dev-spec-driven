@@ -5,7 +5,10 @@
  * dev-spec-driven — harness-observed evidence (zero-dependency). "Evidence before claims", seen where the command runs.
  *
  * Wired from hooks/hooks.json for PostToolUse and PostToolUseFailure, matcher Bash|PowerShell (https://code.claude.com/docs/en/hooks) —
- * a PowerShell run is logged only with an explicit exit code (its response shape is undocumented).
+ * a PowerShell run is logged only with an explicit exit code (its response shape is undocumented). Both entries are `"async": true`
+ * (1.25.1): it prints nothing and decides nothing, so Claude Code never waits for it — the docs: an async hook runs in the background,
+ * its decision fields have no effect, its timeout isn't enforced, and `claude -p` kills one still running at teardown (the last run
+ * of a headless session may go unlogged).
  * spec_complete_task / spec_finish {evidence} record the {command, exitCode} an agent REPORTS; in Claude Code the harness
  * sees every Bash run, so this hook logs the runs that matter — a task's runnable _Verify:_ command (or the " && " join of a
  * task's commands) or a project check (roadmap.json meta.checks) — and the engine then stamps each reported run
@@ -161,6 +164,12 @@ function exitCodeOf(payload, failure, strict) {
 // decodeText, 1.22 review) without loading the engine for this pre-filter: hook-utils.js textOf (shared since 1.24 review 6), required
 // only for such a file; anything else is UTF-8.
 const textOfBuf = (buf) => (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff)) ? require("./hook-utils.js").textOf(buf) : buf.toString("utf8"));
+// 1.25.1 (review 7): a scaffold's untouched `_Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_` names
+// `npm test` — every `npm test` loaded the engine (~100 ms: 152 vs 59 ms a Bash call) to log nothing. A WHOLE bracketed _Verify:_
+// value (backticks around it allowed) is a placeholder the engine never runs (tasks.js scanTaskMarkers: `^\[.*\]$` after the
+// backtick units are dropped) — taken out of the tasks text before the match. Only a whole value on its line: `[ -f a ] && npm test`
+// stays, so the filter is still a superset.
+const RE_VERIFY_PLACEHOLDER = /_Verify:[ \t]*`*[ \t]*\[[^\n]*?\][ \t]*`*[ \t]*_/gi;
 // The plain-text pre-filter: are the command's bodies written in a feature's tasks.md or in a meta.checks command at all? Only
 // then is the engine loaded (it parses the tasks for real and skips archived features).
 function mentioned(pdir, parts) {
@@ -185,7 +194,7 @@ function mentioned(pdir, parts) {
     const got = raw === null ? readTasksText(path.join(root, d.name, "change.md")) : raw;
     if (typeof got !== "string") continue;
     // (the " && " join of a task's commands — how done --run reports them — is never written whole: every part is, review R6)
-    if (has(got)) return true;
+    if (has(got.replace(RE_VERIFY_PLACEHOLDER, " "))) return true;
   }
   return false;
 }

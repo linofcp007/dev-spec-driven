@@ -145,7 +145,16 @@ trackers, ADRs, release notes, milestones).
   lexically first (nothing outside is even stat'ed), then by real path (a symlink out is refused) — and it is
   only read. Tool names are exact (`kiro` | `spec-kit` | `openspec` | `plan` | `execplan` | `bmad` | `fluidplan` | `kiro-steering` |
   `cursor-rules`, the schema enum) on both surfaces, and it never imports over an existing feature (nor a steering file).
-  `importSourceAt()` (import/index.js) is that rule, shared by the steering import (1.25).
+  `importSourceAt()` (import/index.js) is that rule, shared by the steering import (1.25). **What it may read (1.25.1, review
+  7)** — `spec_import {projectDir: "<home>/.aws", tool: "plan", path: "credentials", dryRun: true}` returned the credentials in its
+  `preview`: never a hidden folder or file (`importHiddenPart`: a path segment starting with `.`, lexically before any stat and by
+  real path — a link into one) but the importers' own as the path's first segment (`IMPORT_DOT_ROOTS`: `.kiro`, `.cursor`,
+  `.cursorrules`, `.fluidplan`, `.agent` — Codex's ExecPlans) and `.claude/plans/` (a plansDirectory inside the project); a FILE
+  named as the source is a document (`IMPORT_SOURCE_EXT`: md, markdown, mdc, txt, json, yaml, yml, or `.cursorrules`), and every
+  file a parser reads is a kind importers know (`IMPORT_READ_EXT`: + spec-kit's contracts/ kinds) — else a `wUnreadable` warning.
+  Refusals carry a stable `code`: `import-outside` · `import-not-found` · `import-hidden` · `import-not-source`. Over MCP an explicit
+  `projectDir` that is not the default project must hold a dev-spec `.specs/` (`project-no-specs`, mcp.md → Argument validation);
+  the CLI is user-driven (`--project` any folder) and gets the engine's rules.
 - **The import cap (1.23 review 5).** `IMPORT_MAX_BYTES` (2 MiB) counts CHARACTERS after decoding. A source over it — inline text,
   or any file a parser reads (a plan, a folder source's design.md, a BMAD shard) — refuses the whole import (`tooLarge: true`,
   `importSpec.tooLarge` naming the file(s) and the cap; nothing created). It used to be cut silently: a plan's Steps past the cut
@@ -236,6 +245,10 @@ trackers, ADRs, release notes, milestones).
     samples / sample: a Node app's Sphinx `docs/requirements.txt`, Jekyll `docs/Gemfile` and `examples/flask-client/` made its
     stack "python (flask)" and "ruby") join the stack by name and the first `NESTED_MANIFEST_CAP` (20) are read for frameworks / test runners; the
     root package.json alone gives entrypoints (listed first).
+  - **Entrypoints and the stack label (1.25.1):** a test file (`isTestFile`) is never an entrypoint (`tests/app.py` was a "python"
+    one — `entryKind`'s Python rule reaches depth 2); `@SpringBootApplication` marks a `.java` / `.kt` source only (any code file
+    naming it — a JS string, a Python comment — was a "spring boot" entrypoint); a package.json with no dependency is the stack
+    "node", never "node ()".
   - **ASP.NET tokens:** `[controller]` = the class name minus "Controller", `[action]` = the decorated method
     (`aspActionName`, its "Async" suffix dropped); one it can't name stays. **A projectDir that is no folder** → ok: false
     (`brownfield.notFolder`; the CLI exits 1).

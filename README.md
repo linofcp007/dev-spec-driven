@@ -335,8 +335,8 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 
 ### New in 1.18
 
-- **The engine as modules** — `mcp/lib/spec.js` is a facade over `mcp/lib/engine/` (20 modules by concept plus one
-  importer per source tool), `i18n.js` over one file per language; a pure refactor, proven behaviour-identical.
+- **The engine as modules** — `mcp/lib/spec.js` is a facade over `mcp/lib/engine/` (20 modules by concept at the time —
+  today's count is in the tree below — plus one importer per source tool), `i18n.js` over one file per language; a pure refactor, proven behaviour-identical.
 
 ### New in 1.17
 
@@ -407,11 +407,14 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **Evidence the harness saw** — in Claude Code a hook logs every Bash run of a `_Verify:_` or project-check command,
   and each run an agent reports is stamped `observed: true | false` (`"cli"` for `done --run` / `finish --run`). Opt in
   with `init --evidence observed` and only such runs verify a task (reason `unobserved` otherwise); the default
-  `reported` keeps today's rule. Not a security boundary; MCP-only clients have no hook — use `done --run`.
+  `reported` keeps today's rule. Not a security boundary: only as strong as the approval guard (with it off, a line
+  appended to the log forges a run — `init` and the doctor say so); MCP-only clients have no hook — use `done --run`.
 - **Human approval guard** — `init --approval-guard ask|deny` (off by default): an agent's `spec_approve`, a feature
-  removal, `dev-spec approve` run through its shell, or lowering the guard asks you first (`ask` — Claude Code's auto /
-  bypass modes may skip the prompt) or is refused in every mode (`deny` — you run the command it shows in your own
-  terminal or with Claude Code's `!` prefix). A guardrail on the approve paths, not a sandbox.
+  removal, `dev-spec approve` run through its shell, a shell or file-tool write of the spec state, or lowering the guard
+  asks you first (`ask` — Claude Code shows the prompt in auto mode too; only bypass-permissions mode may skip it) or is
+  refused (`deny` — you run the command it shows in your own terminal or with Claude Code's `!` prefix). It stops
+  accidents and casual workarounds, not a determined agent with a shell (an inline script, a script file it wrote) — a
+  guardrail, not a sandbox.
 - **Task dependencies and waves** — a task may carry `_Depends: 3, 5_`: the next task is then the first open one whose
   dependencies are done, `dev-spec next <f> --waves` (`spec_next_task {waves}`) groups the open tasks into waves that can
   run at once (no shared `_Implements:_` file), and doctor fails `task-deps` on a cycle or an unknown number. A tasks.md
@@ -442,6 +445,8 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   own `ANTHROPIC_API_KEY`**; `--dry-run` validates offline, `--set-baseline` records a baseline.
 
 ### Quick start
+
+Requires Node.js 18+ on PATH and Claude Code 2.1.139 or later (the hooks run in exec form — no shell per call).
 
 Install from GitHub (recommended — works on any machine, no paths to edit):
 
@@ -887,8 +892,8 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 
 ### Novidades da 1.18
 
-- **O motor em módulos** — `mcp/lib/spec.js` passa a fachada sobre `mcp/lib/engine/` (20 módulos por conceito e um
-  importador por ferramenta de origem), o `i18n.js` sobre um ficheiro por língua; um refactor puro, com comportamento
+- **O motor em módulos** — `mcp/lib/spec.js` passa a fachada sobre `mcp/lib/engine/` (20 módulos por conceito na
+  altura — a contagem de hoje está na árvore abaixo — e um importador por ferramenta de origem), o `i18n.js` sobre um ficheiro por língua; um refactor puro, com comportamento
   comprovadamente idêntico.
 
 ### Novidades da 1.17
@@ -969,12 +974,14 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   uma verificação do projeto, e cada execução que um agente reporta leva o carimbo `observed: true | false` (`"cli"` para
   `done --run` / `finish --run`). Com `init --evidence observed` (opcional), só essas execuções verificam uma tarefa
   (motivo `unobserved` caso contrário); o modo por omissão, `reported`, mantém a regra de hoje. Não é uma fronteira de
-  segurança; um cliente só MCP não tem hook — usa `done --run`.
+  segurança: só é tão forte quanto a guarda das aprovações (desligada, uma linha acrescentada ao registo forja uma
+  execução — o `init` e o doctor avisam); um cliente só MCP não tem hook — usa `done --run`.
 - **Guarda humana das aprovações** — `init --approval-guard ask|deny` (desligada por omissão): o `spec_approve` de um
-  agente, a remoção de uma funcionalidade, um `dev-spec approve` corrido pela shell dele, ou baixar a guarda,
-  pergunta-te primeiro (`ask` — os modos auto / bypass do Claude Code podem saltar a pergunta) ou é recusado em qualquer
-  modo (`deny` — corres tu o comando indicado no teu terminal ou com o prefixo `!` do Claude Code). Uma barreira nos
-  caminhos de aprovação, não uma sandbox.
+  agente, a remoção de uma funcionalidade, um `dev-spec approve` corrido pela shell dele, uma escrita do estado da spec
+  pela shell ou por uma ferramenta de ficheiros, ou baixar a guarda, pergunta-te primeiro (`ask` — o Claude Code mostra a
+  pergunta também no modo auto; só o modo bypass-permissions a pode saltar) ou é recusado (`deny` — corres tu o comando
+  indicado no teu terminal ou com o prefixo `!` do Claude Code). Trava acidentes e contornos casuais, não um agente
+  determinado com uma shell (um script inline, um ficheiro de script que ele escreveu) — uma barreira, não uma sandbox.
 - **Dependências entre tarefas e vagas** — uma tarefa pode ter `_Depends: 3, 5_`: a próxima tarefa passa a ser a
   primeira aberta cujas dependências estão feitas, `dev-spec next <f> --waves` (`spec_next_task {waves}`) agrupa as
   tarefas abertas em vagas que podem correr ao mesmo tempo (sem ficheiros `_Implements:_` partilhados), e o doctor falha
@@ -1007,6 +1014,8 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   baseline.
 
 ### Começar rápido
+
+Requer Node.js 18+ no PATH e Claude Code 2.1.139 ou posterior (os hooks correm em exec form — sem shell em cada chamada).
 
 Instala a partir do GitHub (recomendado — funciona em qualquer máquina, sem caminhos para editar):
 
@@ -1458,8 +1467,8 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 
 ### Novedades de la 1.18
 
-- **El motor en módulos** — `mcp/lib/spec.js` pasa a ser una fachada sobre `mcp/lib/engine/` (20 módulos por concepto y un
-  importador por herramienta de origen), `i18n.js` sobre un archivo por idioma; un refactor puro, con comportamiento
+- **El motor en módulos** — `mcp/lib/spec.js` pasa a ser una fachada sobre `mcp/lib/engine/` (20 módulos por concepto en
+  ese momento — el recuento de hoy está en el árbol de abajo — y un importador por herramienta de origen), `i18n.js` sobre un archivo por idioma; un refactor puro, con comportamiento
   demostradamente idéntico.
 
 ### Novedades de la 1.17
@@ -1541,12 +1550,15 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   una comprobación del proyecto, y cada ejecución que un agente reporta lleva el sello `observed: true | false`
   (`"cli"` para `done --run` / `finish --run`). Con `init --evidence observed` (opcional), solo esas ejecuciones
   verifican una tarea (motivo `unobserved` si no); el modo por defecto, `reported`, mantiene la regla de hoy. No es una
-  frontera de seguridad; un cliente solo MCP no tiene hook — usa `done --run`.
+  frontera de seguridad: solo es tan fuerte como la guardia de las aprobaciones (desactivada, una línea añadida al
+  registro falsifica una ejecución — `init` y el doctor lo avisan); un cliente solo MCP no tiene hook — usa `done --run`.
 - **Guardia humana de las aprobaciones** — `init --approval-guard ask|deny` (desactivada por defecto): el
-  `spec_approve` de un agente, la eliminación de una función, un `dev-spec approve` ejecutado por su shell, o bajar la
-  guardia, te pregunta primero (`ask` — los modos auto / bypass de Claude Code pueden saltarse la pregunta) o se rechaza
-  en cualquier modo (`deny` — ejecutas tú el comando indicado en tu terminal o con el prefijo `!` de Claude Code). Una
-  barrera en los caminos de aprobación, no una sandbox.
+  `spec_approve` de un agente, la eliminación de una función, un `dev-spec approve` ejecutado por su shell, una escritura
+  del estado de la spec por la shell o por una herramienta de archivos, o bajar la guardia, te pregunta primero (`ask` —
+  Claude Code muestra la pregunta también en el modo auto; solo el modo bypass-permissions puede saltarla) o se rechaza
+  (`deny` — ejecutas tú el comando indicado en tu terminal o con el prefijo `!` de Claude Code). Frena accidentes y rodeos
+  casuales, no a un agente decidido con una shell (un script inline, un archivo de script que él escribió) — una
+  barrera, no una sandbox.
 - **Dependencias entre tareas y oleadas** — una tarea puede llevar `_Depends: 3, 5_`: la siguiente tarea pasa a ser la
   primera abierta cuyas dependencias están hechas, `dev-spec next <f> --waves` (`spec_next_task {waves}`) agrupa las
   tareas abiertas en oleadas que pueden ejecutarse a la vez (sin archivos `_Implements:_` compartidos), y el doctor falla
@@ -1579,6 +1591,8 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   conexión, `--set-baseline` registra una baseline.
 
 ### Inicio rápido
+
+Requiere Node.js 18+ en el PATH y Claude Code 2.1.139 o posterior (los hooks se ejecutan en exec form — sin shell en cada llamada).
 
 Instala desde GitHub (recomendado — funciona en cualquier máquina, sin rutas que editar):
 
@@ -1714,7 +1728,7 @@ dev-spec-driven/                      ← plugin root
 │   ├── server.js                     ← local stdio MCP server (38 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine's facade (the one object the server, CLI and hooks require)
-│   ├── lib/engine/                   ← the engine, one module per concern (classify, scaffold, lint, trace, doctor, gates, impact, roadmap, scan, import/)
+│   ├── lib/engine/                   ← the engine: 22 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
 │   ├── lib/i18n.js                   ← localized content's facade (artifact + steering builders, messages)
 │   ├── lib/i18n/                     ← each language's text (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources

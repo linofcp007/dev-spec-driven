@@ -31,7 +31,8 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject, withMoveLock,
   withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
   branchNameOk, branchView; // 1.25 (create --branch)
-function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
+let today, dayOf; // core.js — 1.25.1: the local calendar date (today / dayOf)
+function __link(E) { ({ today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
@@ -120,7 +121,7 @@ function finishBranchLine(branch, lng) {
 
 function finishFeature(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const lng = featureLang(projectDir, slug);
   const F = i18n.msg(lng).finish;
@@ -243,7 +244,7 @@ function finishFeature(projectDir, name, opts = {}) {
       // full review Ga8: an _Expect: fail_ task's red run is labelled as the EXPECTED failure (a bare "→ exit 1" read as a
       // failing check), and a passing re-run after the fix names the red run it keeps as the proof.
       const RG = i18n.msg(lng).redGreen;
-      const redTag = ev && expectsFail(b) ? (isRedRun(ev) ? RG.prRed : ev.exitCode === 0 && isRedRun(ev.red) ? RG.prRedKept(ev.red.exitCode, typeof ev.red.at === "string" ? ev.red.at.slice(0, 10) : "") : "") : "";
+      const redTag = ev && expectsFail(b) ? (isRedRun(ev) ? RG.prRed : ev.exitCode === 0 && isRedRun(ev.red) ? RG.prRedKept(ev.red.exitCode, dayOf(ev.red.at)) : "") : "";
       const shown = ev ? [ev.command ? codeSpan(ev.command) + (ev.exitCode != null ? " → exit " + ev.exitCode : "") + (redTag ? ` (${redTag})` : "") : ev.exitCode != null ? "exit " + ev.exitCode : "",
         oneLine(ev.summary), commitTag(ev)].filter(Boolean) : [];
       const tail = shown.length ? " — " + shown.join(" · ") : hasVerify ? " — " + F.noEvidence : "";
@@ -348,12 +349,14 @@ function featureMetrics(projectDir, slug, dir) {
   // approximate, like a seeded legacy record (the phase may have been approved earlier).
   // r5 review: an approval of the SAME content as the phase's previous approval (fingerprint + designFingerprint — a role re-signing,
   // a fast-forward re-run, a revoke then re-approve) changed nothing: no rework. A phase without a fingerprint (tests) counts as before.
-  const first = {}, count = {}, lastContent = {};
+  // 1.25.1 (review 7): "the same content" is sameApprovedContent's — a re-approval after a whitespace-only edit (an editor's
+  // trailing-whitespace trim: the same wsFingerprint, 1.24 review 6) is no rework either.
+  const first = {}, count = {}, lastRec = {};
   for (const h of history || []) {
     const t = timeOf(h.at);
-    const content = typeof h.fingerprint === "string" && h.fingerprint ? h.fingerprint + "|" + (h.designFingerprint || "") : null;
-    if (content == null || lastContent[h.phase] !== content) count[h.phase] = (count[h.phase] || 0) + 1;
-    if (content != null) lastContent[h.phase] = content;
+    const fingerprinted = typeof h.fingerprint === "string" && !!h.fingerprint;
+    if (!fingerprinted || !sameApprovedContent(h, lastRec[h.phase])) count[h.phase] = (count[h.phase] || 0) + 1;
+    if (fingerprinted) lastRec[h.phase] = h;
     if (t != null && (first[h.phase] == null || t < first[h.phase].t)) first[h.phase] = { t, approximate: h.legacy === true };
   }
   for (const [ph, a] of Object.entries(approvals)) {
@@ -447,7 +450,7 @@ function metrics(projectDir, name, opts = {}) {
   const write = opts.write === true;
   if (name != null && String(name).trim() !== "") {
     const f = existingFeature(projectDir, name);
-    if (!f.ok) return { ok: false, error: f.error };
+    if (!f.ok) return { ok: false, error: f.error, code: f.code };
     const lng = featureLang(projectDir, f.slug);
     const M = i18n.msg(lng).metrics;
     const res = { ok: true, scope: "feature", lang: lng, ...featureMetrics(projectDir, f.slug, f.dir) };
@@ -455,7 +458,7 @@ function metrics(projectDir, name, opts = {}) {
     if (write) {
       const file = path.join(f.dir, "retro.md");
       const rel = path.relative(projectDir, file).split(path.sep).join("/");
-      const written = writeIfAbsent(file, i18n.portableCli(M.retro(res, { dur: fmtHours, today: new Date().toISOString().slice(0, 10) })));
+      const written = writeIfAbsent(file, i18n.portableCli(M.retro(res, { dur: fmtHours, today: today(), day: dayOf })));
       res.retro = { path: rel, written };
       res.note = written ? M.retroWritten(rel) : M.retroExists(rel);
     }
@@ -503,7 +506,7 @@ function metricsLines(r) {
   const leads = (m) => [...METRIC_PHASES, "complete", "finished"].filter((ph) => m.leadTime[ph]).map((ph) => `${M.phase[ph] || ph} ${fmtHours(m.leadTime[ph].hours)}`);
   const pass = (e) => (e.runs ? `${e.passRate}%` : "—");
   if (r.scope === "feature") {
-    const out = [M.head(r.feature, r.tracks, r.createdAt ? r.createdAt.slice(0, 10) : M.unknown, r.createdAtApproximate ? M.source[r.createdAtSource] || M.unknown : null)];
+    const out = [M.head(r.feature, r.tracks, dayOf(r.createdAt) || M.unknown, r.createdAtApproximate ? M.source[r.createdAtSource] || M.unknown : null)];
     const l = leads(r);
     out.push(l.length ? M.leadTimes(l.join(" · ")) : M.noLeadTimes);
     const byPhase = r.reworkByPhase ? Object.entries(r.reworkByPhase).map(([ph, n]) => `${M.phase[ph] || ph} ${n}`).join(", ") : "";
@@ -523,7 +526,7 @@ function metricsLines(r) {
   const out = [M.projectHead(r.features.length)];
   const w = Math.min(28, Math.max(8, ...r.features.map((m) => m.feature.length)));
   for (const m of r.features) {
-    out.push("  " + m.feature.padEnd(w) + "  " + M.row(m.createdAt ? m.createdAt.slice(0, 10) : "—", fmtHours(m.leadTime.complete && m.leadTime.complete.hours),
+    out.push("  " + m.feature.padEnd(w) + "  " + M.row(dayOf(m.createdAt) || "—", fmtHours(m.leadTime.complete && m.leadTime.complete.hours),
       m.rework == null ? "—" : m.rework + (m.reworkLowerBound ? "+" : ""), m.forcedApprovals, m.changeRequests, pass(m.evidence), `${m.tasks.done}/${m.tasks.total}`));
   }
   const A = r.aggregates;
@@ -578,7 +581,7 @@ function pruneRoadmapRefsLocked(projectDir, slug, renameTo, archived) {
 // about over elicitation; another folder under that name now, or the same one edited since, is refused (changedSincePreview).
 function removeFeature(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   sweepTombstones(f.root);
   // 1.24 r6 (G1) — a feature folder that is a LINK (a symbolic link, a junction): only the link goes — the folder it points at and
   // its files stay — under the roadmap lock alone: the feature lock would be created THROUGH the link (it was: a .lock left in the
@@ -598,7 +601,7 @@ function isLinkEntry(p) {
 }
 function removeLinkedFeatureLocked(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
@@ -659,7 +662,7 @@ function sweepTombstones(root) {
 }
 function removeFeatureLocked(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir, root } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
@@ -679,14 +682,14 @@ function removeFeatureLocked(projectDir, name, opts = {}) {
 
 function archiveFeature(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const res = withMoveLock(projectDir, f.dir, f.slug, null, (moved) => withRoadmapLock(projectDir, () => archiveFeatureLocked(projectDir, name, moved)));
   if (res.ok) maybeRefreshRoadmap(projectDir);
   return res;
 }
 function archiveFeatureLocked(projectDir, name, moved) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir, root } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
@@ -725,16 +728,16 @@ function archiveFeatureLocked(projectDir, name, moved) {
 function renameFeature(projectDir, name, newName) {
   if (newName == null || !String(newName).trim()) return { ok: false, error: errs(projectDir).renameNeedsName };
   const from = existingFeature(projectDir, name);
-  if (!from.ok) return { ok: false, error: from.error };
+  if (!from.ok) return { ok: false, error: from.error, code: from.code };
   const res = withMoveLock(projectDir, from.dir, from.slug, null, (moved) => withRoadmapLock(projectDir, () => renameFeatureLocked(projectDir, name, newName, moved)));
   if (res.ok) maybeRefreshRoadmap(projectDir);
   return res;
 }
 function renameFeatureLocked(projectDir, name, newName, moved) {
   const from = existingFeature(projectDir, name);
-  if (!from.ok) return { ok: false, error: from.error };
+  if (!from.ok) return { ok: false, error: from.error, code: from.code };
   const to = resolveFeature(projectDir, newName);
-  if (!to.ok) return { ok: false, error: to.error };
+  if (!to.ok) return { ok: false, error: to.error, code: to.code };
   const oldSlug = from.slug;
   const newSlug = to.slug;
   if (newSlug === oldSlug) return { ok: false, error: errs(projectDir).sameSlug };
@@ -859,7 +862,7 @@ function renameSupersedesRefs(projectDir, fromDir, raw, oldKey, newSlug) {
 // What `remove` would delete, returned INSTEAD of deleting when the caller hasn't confirmed.
 function removePreview(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   // Same order as removeFeature: never preview (and promise) a delete that the confirmed call would refuse.
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
@@ -1029,7 +1032,6 @@ function supersedesWarnings(tr, lang) {
 
 // --- catalog ---
 
-const day = (iso) => String(iso || "").slice(0, 10);
 // One line of an AC for the catalog: whitespace folded, its own leading ID and the _Supersedes:_ marker dropped.
 function acOneLine(text, id, max = 200) { // max: the length cap (spec_export shows the whole criterion: Infinity)
   // A sub-list bullet that only carried the marker ("… owner - _Supersedes: x/US-1.AC-3_") goes with it, and so do the
@@ -1140,7 +1142,7 @@ function renderCatalogMd(data, lang, proj) {
   for (const f of data.features) {
     const SP = i18n.msg(lang).spike; // 1.14 C2: a spike reads apart (its question + decision instead of ACs)
     md += `\n## ${icon[f.status]} ${f.feature} — ${C.status[f.status]}${f.status === "active" ? ` (${P[f.phase] || f.phase})` : ""}${f.kind === "spike" ? " · 🔬 " + SP.kind : ""}\n\n`;
-    const meta = [f.tracks, f.finishedAt ? C.finishedOn(day(f.finishedAt)) : null, f.archivedAt ? C.archivedOn(day(f.archivedAt)) : null].filter(Boolean);
+    const meta = [f.tracks, f.finishedAt ? C.finishedOn(dayOf(f.finishedAt)) : null, f.archivedAt ? C.archivedOn(dayOf(f.archivedAt)) : null].filter(Boolean);
     md += `_${meta.join(" · ")}_\n\n`;
     const pre = [];
     if (f.spike) pre.push(`- ${SP.catalogQuestion(f.spike.question || "—")}`, `- ${f.spike.outcome ? SP.catalogOutcome(f.spike.outcome) : SP.catalogPending}`);
@@ -1591,9 +1593,9 @@ function drift(projectDir, name, opts = {}) {
   let sources;
   if (named) {
     const f = resolveFeature(projectDir, name);
-    if (!f.ok) return { ok: false, error: f.error };
+    if (!f.ok) return { ok: false, error: f.error, code: f.code };
     sources = locateFeatures(projectDir, name);
-    if (!sources.length) return { ok: false, error: errs(projectDir).notFound(f.slug, f.root) };
+    if (!sources.length) return { ok: false, code: "feature-not-found", error: errs(projectDir).notFound(f.slug, f.root) };
   } else sources = featureDirs(projectDir);
   if (opts.activeOnly) sources = sources.filter((s) => !s.archived);
   const withBase = [];
@@ -1679,7 +1681,7 @@ module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, COMMIT_
   pruneRoadmapRefsLocked, removeFeature, TOMBSTONE_PREFIX, TOMBSTONE_SWEEP_AGE_MS, sweepTombstones, removeFeatureLocked, featureFolderFingerprint,
   archiveFeature, archiveFeatureLocked, renameFeature, renameFeatureLocked, renamePlan, renameSupersedesRefs,
   removePreview, manageFeature, SUP_NL, RE_SUPERSEDES_SRC, RE_SUPERSEDES_OPEN_SRC, stripSupersedes, blockLines, lineMap,
-  criterionAc, supersedesMarkers, dirKey, resolveSupersedes, supersedesTrace, supersedesWarnings, day, acOneLine,
+  criterionAc, supersedesMarkers, dirKey, resolveSupersedes, supersedesTrace, supersedesWarnings, acOneLine,
   catalogData, renderCatalogMd, catalog, maybeRefreshCatalog, archiveRecord, reinsertDep, archivedFeature,
   restoreFeature, restoreFeatureLocked, fileHash, projectFile, realRootOf, BASELINE_CAP, baselineFiles,
   recordFinishBaseline, staleFinish, changesSince, approvalInForceAt, sameApprovedContent, revokedSinceList, executionSignOffStale, signOffWhyText,
