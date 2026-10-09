@@ -59,9 +59,10 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
                                git-linked evidence
   trace.js                     criterion blocks + the EARS linter; trace_check, its gaps and the deep warnings (EC / NFR / SC,
                                T-IDs in test code); the requirements traceability matrix, its CSV and export section
-  gates.js                     the gate walk, pending gates, changedSinceApproval, approvalChecks, flows, detectPhase;
+  gates.js                     the gate walk, pending gates, changedSinceApproval, flows, detectPhase;
                                spec_approve (force, waivers, revoke, roles, the fast-forward); .history/ snapshots, spec_impact
-  doctor.js                    spec_doctor, spec_next_action, the design.md save check; spec_status (one feature, or the list), the status line,
+  doctor.js                    the check registry (1.27: DOCTOR_CHECKS, GATES — every doctor and approval check, approvalChecks),
+                               spec_doctor, spec_next_action, the design.md save check; spec_status (one feature, or the list), the status line,
                                the plan-mode bridge, the DEV_SPEC_* defaults
   quality.js                   cross-feature ACs (Q2), the glossary (Q3), design trade-offs / risks (A1) and reuse (1.19 R1),
                                the brief's Reuse section (R2), the constraint nudge (A2), spec_clarify
