@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp, approveBefore, shipFeature, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, shipFeature, __dirname }) => {
 
   { // --- 1.13 WP9: deep traceability (EC/NFR/SC warnings, T-IDs in test code) + property-based test plans ---
     const call9 = async (args) => payload(await rpc("tools/call", { name: "trace_check", arguments: args }));
@@ -1309,9 +1309,11 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, approveBefore, shipFeature
     const want = ["test/deploy.bats", "src/codec_test.cc", "lua/codec_spec.lua", "R/test-codec.R", "src/Codec.Tests.ps1", "t/basic.t", "src/codec_tests.erl", "test/CodecSpec.hs", "src/core_test.clj", "", "", "",
       "", "", "tests/test_schema.sql"];
     const got = want.map((_, i) => where(i + 1));
-    const t0 = Date.now();
-    const lin = [S.isTestFile("test_" + "a.".repeat(100000) + "x"), S.isTestFile("x" + "_test".repeat(20000) + ".q"), S.isTestFile(".test".repeat(20000) + "."), S.isTestFile("t/" + "x".repeat(100000) + ".tests.ps1q")];
-    const linMs = Date.now() - t0;
+    const { linMs, lin } = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      const t0 = Date.now();
+      const lin = [S.isTestFile("test_" + "a.".repeat(100000) + "x"), S.isTestFile("x" + "_test".repeat(20000) + ".q"), S.isTestFile(".test".repeat(20000) + "."), S.isTestFile("t/" + "x".repeat(100000) + ".tests.ps1q")];
+      return { linMs: Date.now() - t0, lin };
+    }, (s) => s.linMs < 3000);
     ok(js(got) === js(want) && sc.scanned === 10 && !sc.truncated && lin.join() === "false,false,false,false" && linMs < 3000,
       "1.21.1 languages: scanTestCode finds T-IDs in a .bats suite, a _test.cc (T02_…), a _spec.lua, a test-x.R, a *.Tests.ps1 outside tests/, Perl's t/basic.t, a _tests.erl, test/*Spec.hs, a _test.clj and a pgTAP tests/test_*.sql — never in notes.t, src/DevSpec.hs, a source file or a tests/fixtures/*.sql fixture; the test-name rule stays linear on 100,000-character names (got " +
       js([got, sc.scanned, linMs]) + ")");

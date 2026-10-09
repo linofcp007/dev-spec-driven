@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBefore, __dirname }) => {
 
   { // --- 1.13 WP2: tracks, scaffolds & sections (own block scope: no name clashes with other packages) ---
   const w2 = path.join(tmp, "proj-wp2");
@@ -187,10 +187,12 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, __dir
   ok(words.join("|") === "[caminho]|[ruta]", "placeholderReport: C# attributes, TOML/INI tables and regex classes in code spans are code; PT `[caminho]` / ES `[ruta]` still are placeholders (got " + words.join("|") + ")");
   // RE_STABLE_BRACKET is linear: a bracket of space-separated IDs followed by a word used to backtrack 2^k (26 IDs ≈ 9 s,
   // freezing the MCP server and timing the hooks out). 40 single- and double-spaced IDs must take milliseconds.
-  const redosT0 = Date.now();
-  const redos = [S.placeholderReport("[" + "US-1 ".repeat(40) + "x]"), S.placeholderReport("Related: [" + Array.from({ length: 40 }, (_, i) => "US-" + (1 + (i % 3)) + ".AC-" + i).join("  ") + " and follow-ups]"),
-    S.placeholderReport("[" + "US-1 ".repeat(40) + "[trigger]]")];
-  const redosMs = Date.now() - redosT0;
+  const { redosMs, redos } = remeasure(() => { // 1.26: measured once more on a timing-only miss
+    const redosT0 = Date.now();
+    const redos = [S.placeholderReport("[" + "US-1 ".repeat(40) + "x]"), S.placeholderReport("Related: [" + Array.from({ length: 40 }, (_, i) => "US-" + (1 + (i % 3)) + ".AC-" + i).join("  ") + " and follow-ups]"),
+      S.placeholderReport("[" + "US-1 ".repeat(40) + "[trigger]]")];
+    return { redosMs: Date.now() - redosT0, redos };
+  }, (s) => s.redosMs < 500);
   ok(redosMs < 500 && !redos[0].length && !redos[1].length && redos[2].map((p) => p.text).join() === "[trigger]" && !S.placeholderReport("[US-1.AC-1 T-01] [US-1.AC-1, T-01] [US-1.AC-1/T-01] [US-1.AC-1T-01]").length,
     "placeholderReport: 40 space-separated IDs + a word in one bracket is checked in linear time (" + redosMs + " ms) and is content (no template writes it); a template slot nested inside it is still found; ID lists (space, comma, slash, glued) stay exempt");
   // A bracket is a placeholder only when a template writes that text: written-out lists, values and prose of the user's own
@@ -425,9 +427,12 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, __dir
       clWcag.tracks.includes("a11y") && !clNot.tracks.includes("a11y"),
       "feature F4: spec_classify reads the pack's signals as literal words (\"wcag 2.1\" — the dot is no wildcard: \"wcag 2x1\" stays off); without the project no pack (got " + js(cl.tracks) + " " + js(clWcag.tracks) + "/" + js(clNot.tracks) + ")");
     // Linear on adversarial text, with the pack's keywords in play.
-    const t0 = Date.now();
-    S.classify(("a".repeat(5000) + "(a+)+$ wcag 2. screen-readerx ").repeat(40), { projectDir: tp });
-    ok(Date.now() - t0 < 5000, "feature F4: classify with a pack stays linear on a 200 KB adversarial text (" + (Date.now() - t0) + " ms)");
+    const advMs = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      const t0 = Date.now();
+      S.classify(("a".repeat(5000) + "(a+)+$ wcag 2. screen-readerx ").repeat(40), { projectDir: tp });
+      return Date.now() - t0;
+    }, (ms) => ms < 5000);
+    ok(advMs < 5000, "feature F4: classify with a pack stays linear on a 200 KB adversarial text (" + advMs + " ms)");
 
     // spec_create +tdd +a11y: criteria under #### [A11Y] (after the US-1 ones, before US-2), design sections with the TODO sentinel,
     // the task block, the test rows, the checklist item and the steering file.
@@ -761,9 +766,11 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, __dir
       writePack(r9, n, { ...A11Y_OBJ, name: n, marker: "PK" + String.fromCharCode(65 + i), steering: n + ".md" }, fr);
     }
     S.listFeatures(r9); // warm the caches
-    const r9s = Date.now();
-    for (let i = 0; i < 5; i++) S.featurePlaceholders(r9, "form", "requirements.md");
-    const r9ms = (Date.now() - r9s) / 5;
+    const r9ms = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      const r9s = Date.now();
+      for (let i = 0; i < 5; i++) S.featurePlaceholders(r9, "form", "requirements.md");
+      return (Date.now() - r9s) / 5;
+    }, (ms) => ms < 1000);
     ok(r9t1 === "Accessibility" && r9t2 === "Accessible UI" && /#### \[A11Y\] Accessible UI — Acceptance Criteria \(EARS\)\n5\. \*\*US-1\.AC-5\*\* — THE SYSTEM SHALL label every \[form field\]/.test(r9Req) &&
       S.featurePlaceholders(r9, "form", "requirements.md").items.some((x) => x.text === "[form field]") && r9ms < 1000,
       "F4 review R9: pack edits (track.json, a fragment) are picked up by the next call despite the cross-call cache; 20 packs × 4 languages stay cheap once warm (" + r9ms.toFixed(1) + " ms per call)");

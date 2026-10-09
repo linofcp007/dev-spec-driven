@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp, require }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require }) => {
 
   { // --- 1.13 WP6: brownfield depth (scan routes/tests/entrypoints/env/migrations, coverage by _Implements:_), spec_import, integration-plan ---
     const call6 = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); let body; try { body = JSON.parse(res.result.content[0].text); } catch { body = { ok: false, error: res.result.content[0].text }; } return { isError: !!res.result.isError, body }; };
@@ -1518,9 +1518,11 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, require }) => {
     const xe = S.importSpec(ik, "execplan", "plans/exec-expect.md");
     const xeReq = xe.ok ? rd(ik, ".specs", xe.feature, "requirements.md") : "";
     const longBlank = "Run `npm test`" + " ".repeat(200000) + "x";
-    t0 = Date.now();
-    const lb = E.planCommandOnly(longBlank);
-    const msLb = Date.now() - t0;
+    const { lb, msLb } = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      t0 = Date.now();
+      const r = E.planCommandOnly(longBlank);
+      return { lb: r, msLb: Date.now() - t0 };
+    }, (s) => s.msLb < 1000);
     ok(xe.ok && /US-1\.AC-1\*\* — WHEN the feed is requested twice/.test(xeReq) && !/US-1\.AC-2|npm test/.test(xeReq) &&
       /Run `npm test` and expect all tests to pass\./.test(rd(ik, ".specs", xe.feature, "design.md")) &&
       E.planCommandOnly("Run `npm test` and expect all tests to pass.") && E.planCommandOnly("`pytest -q`, and expect 3 passing") && E.planCommandOnly("Corre `npm test` e esperar verde") &&

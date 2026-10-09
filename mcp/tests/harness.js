@@ -8,8 +8,9 @@
  *   ok(cond, label)          one assertion — "  ok   - <label>" / "  FAIL - <label>"
  *   all(label, conds)        one assertion over many conditions ({ name: cond } or [() => cond, …]): a FAIL names the false
  *                            ones · eq(actual, expected, label): JSON deep equality, a FAIL shows the first difference
- *                            (scripts/test-runner.js assertHelpers — prefer all() beyond ~4 conditions)
- *   rpc(method, params)     one JSON-RPC request → its reply (no reply within 15 s fails the run, never drains to exit 0)
+ *                            (scripts/test-runner.js assertHelpers — prefer all() beyond ~4 conditions) · remeasure(measure,
+ *                            holds): a timing-bound check's sample, measured once more on a miss (no assertion)
+ *   rpc(method, params)      one JSON-RPC request → its reply (no reply within 15 s fails the run, never drains to exit 0)
  *   rawOnce(line)            a raw line → the first id-null (or batch) reply — malformed-input tests
  *   notify(method, params)   a notification (no reply)
  *   payload(res)             a tools/call reply's JSON payload

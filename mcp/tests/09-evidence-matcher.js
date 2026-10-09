@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, S, tmp, __dirname, require }) => {
+exports.run = async ({ ok, remeasure, S, tmp, __dirname, require }) => {
   const js = JSON.stringify;
   const E = require(path.join(__dirname, "lib", "engine", "index.js"));
   const PV = (cmd, verify, root) => S.runProvesVerify({ command: cmd, exitCode: 0, cmdRule: 1 }, Array.isArray(verify) ? verify : [verify], root);
@@ -40,7 +40,8 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
       "| ".repeat(n / 2), "Set-Location -Path ".repeat(n / 19), ". /".repeat(n / 3), "npm run test ".repeat(n / 13)];
     const timeAll = (n) => { const t = Date.now(); for (const h of hostile(n)) { PV(h, "npm test", R); PV("npm test", h, R); E.observedBodies(h); E.observedNorm(h); } return Date.now() - t; };
     timeAll(4096); // warm up
-    const ms16 = Math.max(timeAll(16 * 1024), 5), ms64 = timeAll(64 * 1000);
+    // 1.26: both sizes measured once more on a timing-only miss (a load spike in one of them broke the ratio); quadratic misses both
+    const { ms16, ms64 } = remeasure(() => ({ ms16: Math.max(timeAll(16 * 1024), 5), ms64: timeAll(64 * 1000) }), (x) => x.ms64 / x.ms16 < 12 && x.ms64 < 15000);
     ok(ms64 / ms16 < 12 && ms64 < 15000, "review 5 (L9): the new readings stay linear on hostile commands (operators, ./ runs, quotes, pushd chains) — 64 KB costs < 12× 16 KB (got " + ms16 + " → " + ms64 + " ms)");
   }
 
@@ -78,10 +79,12 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
       "O nome do arquivo, o nome do diretório ou a sintaxe do rótulo do volume está incorreta.", "O nome do arquivo, o nome do diret" + FFFD + "rio ou a sintaxe do r" + FFFD + "tulo do volume s" + FFFD + "o incorretos."];
     const notShell = ["not ok 1 - the volume label is incorrect", "A sintaxe do teste falhou: esperado 2, recebido 3", "1 failing"];
     const wrong = shell.filter((s) => !S.windowsShellFailure(s, 1)).map((s) => "missed: " + s).concat(notShell.filter((s) => S.windowsShellFailure(s, 1)).map((s) => "flagged: " + s));
-    const t = Date.now();
-    S.windowsShellFailure("A sintaxe do nome de ficheiro " + "x".repeat(199000), 1);
-    S.windowsShellFailure(("la sintaxis del nombre de archivo " + " ".repeat(150)).repeat(1000), 1);
-    const ms = Date.now() - t;
+    const ms = remeasure(() => {
+      const t = Date.now();
+      S.windowsShellFailure("A sintaxe do nome de ficheiro " + "x".repeat(199000), 1);
+      S.windowsShellFailure(("la sintaxis del nombre de archivo " + " ".repeat(150)).repeat(1000), 1);
+      return Date.now() - t;
+    }, (x) => x < 500); // 1.26: measured once more on a miss
     ok(!wrong.length && ms < 500, "review 5 (L10): windowsShellFailure knows cmd.exe's invalid-name message in PT-PT (old and new spelling), PT-BR (U+FFFD accents too) and ES, never a test's output; linear on 200 KB (wrong: " + js(wrong) + ", " + ms + " ms)");
   }
 };

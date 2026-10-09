@@ -8,7 +8,7 @@ const { spawnSync } = require("child_process");
 
 // Runs after 17-docs-evals, in the same process: it reads the behavioural fixtures it built under tmp (a3-eval-fixtures/): 1.16 Q2 and 1.19 R1 re-check them.
 exports.deps = ["17-docs-evals"];
-exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, shipFeature, require, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBefore, shipFeature, require, __dirname }) => {
 
   // 1.16 package (Q) — spec quality: steering amendments, cross-feature ACs, glossary.
 
@@ -359,13 +359,17 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, shipF
         for (const x of [fp, path.join(q2t, ".specs", "feature-" + f, ".state.json")]) fs.utimesSync(x, past, past);
       }
     };
-    touchAll();
-    t0 = Date.now();
-    const xCold = S.crossFeatureAcs(q2t);
-    const msCold = Date.now() - t0;
-    const warm = [];
-    for (let i = 0; i < 3; i++) { t0 = Date.now(); S.crossFeatureAcs(q2t); warm.push(Date.now() - t0); }
-    const msWarm = Math.min(...warm);
+    // 1.26: cold and warm measured once more (touched again: a cold call again) on a timing-only miss — a load spike in the cold
+    // call's shadow or in all three warm ones; a cache that stopped working misses every sample
+    const { xCold, msCold, msWarm } = remeasure(() => {
+      touchAll();
+      t0 = Date.now();
+      const cold = S.crossFeatureAcs(q2t);
+      const coldMs = Date.now() - t0;
+      const warm = [];
+      for (let i = 0; i < 3; i++) { t0 = Date.now(); S.crossFeatureAcs(q2t); warm.push(Date.now() - t0); }
+      return { xCold: cold, msCold: coldMs, msWarm: Math.min(...warm) };
+    }, (s) => s.msWarm * 2 <= s.msCold + 10 && s.msWarm < 3000);
     const f7 = path.join(q2t, ".specs", "feature-7", "requirements.md"), f8 = path.join(q2t, ".specs", "feature-8", "requirements.md");
     const f7raw = fs.readFileSync(f7, "utf8");
     fs.writeFileSync(f7, f7raw + "21. **US-1.AC-21** — WHEN a webhook delivery fails twice THE SYSTEM SHALL pause the webhook subscription\n");
@@ -673,9 +677,11 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, shipF
     // token only starts at a token boundary), the brief is localized (PT).
     const many = "## Reuse & Integration\n" + Array.from({ length: 12 }, (_, i) => `- Reuse \`src/orders/r${i}.ts\` — helper ${i}.\n`).join("") + "- " + "a".repeat(200000) + "\n\n";
     wDesign(rf, design(many));
-    const t0 = Date.now();
-    const bMany = S.taskBrief(rp, rf.slug, 1);
-    const manyMs = Date.now() - t0;
+    const { manyMs, bMany } = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      const t0 = Date.now();
+      const bMany = S.taskBrief(rp, rf.slug, 1);
+      return { manyMs: Date.now() - t0, bMany };
+    }, (s) => s.manyMs < 3000);
     const ptp = rDir("brief-pt");
     S.initProject(ptp, ["core"], "pt");
     const ptf = S.createFeature(ptp, "Encomendas", ["core"], "", undefined, "pt");

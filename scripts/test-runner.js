@@ -23,7 +23,7 @@
  *   node <suite> [--only <file|area|NN>[,…]]... [--list] [--times] [--jobs <n>] [--help]
  */
 
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -224,6 +224,16 @@ function usageError(msg, usage) {
 }
 
 const secs = (ms) => (ms / 1000).toFixed(1) + " s";
+// The longest a chain may run (1.26): the slowest takes ~1 min idle, a few under load or on a slow mount — 30 min means hung.
+// DEV_SPEC_TEST_CHAIN_TIMEOUT_S overrides it (seconds — the runner's own test uses a few).
+const CHAIN_TIMEOUT_MS = (/^[1-9]\d*$/.test(String(process.env.DEV_SPEC_TEST_CHAIN_TIMEOUT_S || "")) ? +process.env.DEV_SPEC_TEST_CHAIN_TIMEOUT_S : 1800) * 1000;
+// Kill a chain and what it started: on Windows a process's children outlive it (taskkill /T takes the tree); elsewhere SIGKILL.
+function killTree(kid) {
+  try {
+    if (process.platform === "win32" && kid.pid) spawnSync("taskkill", ["/pid", String(kid.pid), "/T", "/F"], { stdio: "ignore", timeout: 30000 });
+    else kid.kill("SIGKILL");
+  } catch { try { kid.kill(); } catch {} }
+}
 
 // The parent: select, schedule, print. `opts`: { suite, dir, entry, tmpPrefix }.
 function runParent(opts) {
@@ -266,17 +276,41 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
   // writes to stderr after its total line never voids the count.
   // Every chain is hermetic (1.26 — isolate() above): the host's steering variables dropped, a fresh empty temp folder as its
   // working folder (removed once it closed).
+  // A loaded machine (1.26): spawn() THROWS when the OS refuses a process (spawn UNKNOWN / EAGAIN — memory or handle pressure),
+  // and that crashed the whole run, every other chain's output lost (it is printed at the end); now it is tried once more a
+  // second later, then the chain fails. A chain still running after CHAIN_TIMEOUT_MS (a hung child — a CLI process that never
+  // exits) is killed with its process tree and fails ("without a clean total"), so the suite never hangs.
   const runChain = (chain) => new Promise((resolve) => {
-    let out = "", stdout = "";
+    let out = "", stdout = "", cwd = null, watchdog = null, settled = false;
     const started = Date.now();
-    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), opts.tmpPrefix || "dev-spec-test-"));
-    const env = { ...hermeticEnv(process.env), [CHAIN_ENV]: chain.map((f) => f.stem).join(","), [CWD_ENV]: cwd };
-    const done = (r) => { rmTmpDir(cwd); resolve(r); };
-    const kid = spawn(process.execPath, [opts.entry], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
-    kid.stdout.on("data", (d) => { out += d; stdout += d; });
-    kid.stderr.on("data", (d) => (out += d));
-    kid.on("error", (e) => done({ chain, out: out + "\n" + e.message, stdout, code: 1, ms: Date.now() - started }));
-    kid.on("close", (code) => done({ chain, out, stdout, code, ms: Date.now() - started }));
+    const name = chain.map((f) => f.stem).join(" + ");
+    const done = (r) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      if (cwd) rmTmpDir(cwd);
+      resolve({ chain, ms: Date.now() - started, ...r });
+    };
+    const start = (attempt) => {
+      let kid;
+      try {
+        cwd = cwd || fs.mkdtempSync(path.join(os.tmpdir(), opts.tmpPrefix || "dev-spec-test-"));
+        const env = { ...hermeticEnv(process.env), [CHAIN_ENV]: chain.map((f) => f.stem).join(","), [CWD_ENV]: cwd };
+        kid = spawn(process.execPath, [opts.entry], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+      } catch (e) {
+        if (attempt === 0) return void setTimeout(() => start(1), 1000);
+        return done({ out: `# ${name}: could not start its process (twice): ${e.message}\n`, stdout: "", code: 1 });
+      }
+      watchdog = setTimeout(() => {
+        out += `\n# ${name}: still running after ${secs(CHAIN_TIMEOUT_MS)} — killed with its child processes (a hung process?)\n`;
+        killTree(kid);
+      }, CHAIN_TIMEOUT_MS);
+      kid.stdout.on("data", (d) => { out += d; stdout += d; });
+      kid.stderr.on("data", (d) => (out += d));
+      kid.on("error", (e) => done({ out: out + "\n" + e.message, stdout, code: 1 }));
+      kid.on("close", (code) => done({ out, stdout, code }));
+    };
+    start(0);
   });
   // At most one process per CPU at a time (each MCP chain also runs its own server), the longest chains first; results
   // keep the chain order.
@@ -338,6 +372,7 @@ async function settle() {
 //                       evaluated — no short circuit — and the FAIL line is followed by one `false: <name>` line per false one.
 //   eq(actual, expected, label)   deep equality through JSON (as `js(a) === js(b)` — key order counts); a FAIL is followed by
 //                       the FIRST difference: its path ($.features[2].name), what was found and what was expected.
+//   remeasure(measure, holds)   no assertion: a timing-bound check's sample, measured once more on a miss (below).
 // Prefer all() over `ok(a && b && …)` beyond ~4 conditions (docs/maintainers/testing.md → Adding a test).
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 const thunkSource = (fn) => String(fn).replace(/^\s*(?:async\s*)?\(\s*\)\s*=>\s*/, "").replace(/\s+/g, " ").trim();
@@ -391,7 +426,18 @@ function assertHelpers(ok) {
     ok(!d, d ? `${label}\n      ${d}` : label);
     return !d;
   };
-  return { all, eq };
+  return { all, eq, remeasure };
+}
+// remeasure(measure, holds, tries = 2) — for a timing-bound check (1.26; not an assertion): measure() → a sample (the times and
+// whatever the check reads), holds(sample) → whether its time bound holds. On a miss it measures again (up to `tries` samples)
+// and returns the last one — a passing retry, or the last miss. A load spike on a shared machine fails one sample, not two; a
+// real regression (the linear scan gone quadratic, a wait come back) fails them all. Measure the baseline INSIDE measure()
+// when the bound is relative, so a retry re-measures both. sample.tries says how many it took.
+function remeasure(measure, holds, tries = 2) {
+  let s, n = 0;
+  do { s = measure(); n++; } while (n < tries && !holds(s));
+  if (s && typeof s === "object") { try { Object.defineProperty(s, "tries", { value: n, enumerable: false, configurable: true }); } catch {} }
+  return s;
 }
 
 // A child: run the files of one chain, in order, in this process. `setup(files)` → { ctx, counts(), fail(label), end() } —
@@ -445,4 +491,4 @@ function main(opts) {
 }
 
 module.exports = { main, exitFlushed, rmTmpDir, sweepStaleTmp, loadFiles, selectFiles, buildChains, matchesToken, isolate, hermeticEnv,
-  assertHelpers, firstDiff, CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_TEST_FILE };
+  assertHelpers, firstDiff, remeasure, CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_TEST_FILE, CHAIN_TIMEOUT_MS };

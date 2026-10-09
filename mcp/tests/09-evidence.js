@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname, require }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname, require }) => {
 
   { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -1098,11 +1098,13 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname, require }
 
     // 6. Linear on hostile output (the run gate reads up to 200,000 characters of it).
     const N = 100000;
-    const t0 = Date.now();
-    const hostile = ["[-] " + "x ".repeat(N) + "q", "Expected " + "a".repeat(2 * N), "'".repeat(2 * N), ("is " + " ".repeat(300)).repeat(N / 300) + "not", ("The argument '" + "a".repeat(390) + "' ").repeat(N / 400),
-      ("\"" + "a".repeat(199)).repeat(N / 200) + " is not recognized", ESC + "]" + "a".repeat(2 * N), ("Tests Passed: 1, ").repeat(N / 16)];
-    const hostileKinds = hostile.map((s) => cnr(s));
-    const hostileMs = Date.now() - t0;
+    const { hostileMs, hostile, hostileKinds } = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      const t0 = Date.now();
+      const hostile = ["[-] " + "x ".repeat(N) + "q", "Expected " + "a".repeat(2 * N), "'".repeat(2 * N), ("is " + " ".repeat(300)).repeat(N / 300) + "not", ("The argument '" + "a".repeat(390) + "' ").repeat(N / 400),
+        ("\"" + "a".repeat(199)).repeat(N / 200) + " is not recognized", ESC + "]" + "a".repeat(2 * N), ("Tests Passed: 1, ").repeat(N / 16)];
+      const hostileKinds = hostile.map((s) => cnr(s));
+      return { hostileMs: Date.now() - t0, hostile, hostileKinds };
+    }, (s) => s.hostileMs < 5000);
     ok(hostileMs < 5000 && hostileKinds.every((k) => k === null),
       "1.21.1 languages: couldNotRunOutput stays linear on 200,000-character hostile outputs (a '[-] ' line with no duration, 'Expected ' runs, quote runs, blank runs between the words) (got " + js([hostileMs, hostileKinds]) + ")");
   }
@@ -1576,12 +1578,14 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname, require }
 
     // …and the matching stays bounded: keys that are prefixes of each other, 199 steps, 12 commands.
     const keysH = Array.from({ length: 12 }, (_, i) => "a" + " && a".repeat(i));
-    const t0 = Date.now();
-    S.runProvesVerify({ command: Array.from({ length: 199 }, () => "a").join(" && ") + " && z" }, keysH);
-    S.runProvesVerify({ command: '"'.repeat(200000) }, ["npm test"]);
-    S.runProvesVerify({ command: "A=1 ".repeat(50000) + "npm test" }, ["npm test"]);
-    S.runProvesVerify({ command: "cd x && ".repeat(25000) + "npm test" }, ["npm test"]);
-    const msH = Date.now() - t0;
+    const { msH } = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      const t0 = Date.now();
+      S.runProvesVerify({ command: Array.from({ length: 199 }, () => "a").join(" && ") + " && z" }, keysH);
+      S.runProvesVerify({ command: '"'.repeat(200000) }, ["npm test"]);
+      S.runProvesVerify({ command: "A=1 ".repeat(50000) + "npm test" }, ["npm test"]);
+      S.runProvesVerify({ command: "cd x && ".repeat(25000) + "npm test" }, ["npm test"]);
+      return { msH: Date.now() - t0 };
+    }, (s) => s.msH < 1500);
     ok(msH < 1500, "1.22 review 2: runProvesVerify stays bounded on hostile inputs (199 steps × 12 nested keys, 200,000 quotes, 50,000 assignments, 25,000 cds) — " + msH + " ms");
   }
 
@@ -1688,10 +1692,14 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname, require }
       "cd " + "../".repeat(n / 3) + " && npm test", "#".repeat(n), "CI=1 ".repeat(n / 5) + "npm test", "$(" + "(".repeat(n) + ")"];
     const timeAll = (n) => { const t = Date.now(); for (const h of hostile(n)) { PV(h, ["npm test"], "/r"); PV("npm test", [h], "/r"); } return Date.now() - t; };
     timeAll(4096); // warm up
-    const ms16 = Math.max(timeAll(16 * 1024), 5), ms64 = timeAll(64 * 1000);
-    const tBig = Date.now();
-    const big = [PV("`".repeat(1024 * 1024), ["npm test"], "/r"), PV("npm test", ["a && ".repeat(200000)], "/r"), PV("npm test " + "x".repeat(70000), ["npm test " + "x".repeat(70000)], "/r")];
-    const msBig = Date.now() - tBig;
+    // 1.26: the ratio and the "at once" bound are measured once more on a timing-only miss (one load spike in ms64 or msBig failed
+    // them); a quadratic scan or a big input matched in full misses every sample.
+    const { ms16, ms64, big, msBig } = remeasure(() => {
+      const s16 = Math.max(timeAll(16 * 1024), 5), s64 = timeAll(64 * 1000);
+      const tBig = Date.now();
+      const b = [PV("`".repeat(1024 * 1024), ["npm test"], "/r"), PV("npm test", ["a && ".repeat(200000)], "/r"), PV("npm test " + "x".repeat(70000), ["npm test " + "x".repeat(70000)], "/r")];
+      return { ms16: s16, ms64: s64, big: b, msBig: Date.now() - tBig };
+    }, (s) => s.ms64 / s.ms16 < 12 && s.ms64 < 15000 && s.msBig < 200);
     ok(ms64 / ms16 < 12 && ms64 < 15000 && big.every((x) => x === false) && msBig < 200,
       "1.22 review 3: runProvesVerify is linear on hostile commands and _Verify:_ values (backticks, $(, cd chains, quotes, ` && `, `#`, assignments) — 64 KB costs < 12× 16 KB (got " +
       ms16 + " → " + ms64 + " ms); past 64 KB nothing is matched, at once (" + msBig + " ms)");

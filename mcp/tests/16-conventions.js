@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, root, tmp, libSources, require, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSources, require, __dirname }) => {
 
   { // --- 1.13 batch 4: localized roadmap phase / doctor ears detail / add-track entries, guard code types, numbers & enums refused on every surface ---
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -387,10 +387,16 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, libSources, require,
       for (const p of leftovers14) { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, "x"); }
       const probe14 = [".specs/alpha/.lock", ".specs/alpha/.lock.reclaim", ".specs/_archive/old/.lock", ".specs/.roadmap.lock", ".specs/.roadmap.lock.reclaim",
         ".specs/alpha/tasks.md.4242.1790000000000.tmp", ".specs/alpha/.lock.4242.1790000000000.77.tmp", ".specs/roadmap.json.1.2.tmp"];
-      const ignored14 = (g14(["check-ignore", "--", ...probe14]).stdout || "").split(/\r?\n/).filter(Boolean);
-      const status14 = g14(["status", "--porcelain", "--untracked-files=all"]).stdout || "";
-      giGit14 = ignored14.length === probe14.length && !/\.lock|\.tmp|\.removing-/.test(status14) && /\.specs\/\.gitignore/.test(status14) && /\.specs\/alpha\/tasks\.md/.test(status14)
-        ? "ok" : JSON.stringify([ignored14, status14]);
+      // 1.26: asked once more when git answers nothing — on a loaded machine `check-ignore` once listed none of the probes while
+      // `status` showed them ignored; its exit code and stderr go into the label
+      const gitSaw = remeasure(() => {
+        const ci = g14(["check-ignore", "--", ...probe14]);
+        const ignored = (ci.stdout || "").split(/\r?\n/).filter(Boolean);
+        const status = g14(["status", "--porcelain", "--untracked-files=all"]).stdout || "";
+        const good = ignored.length === probe14.length && !/\.lock|\.tmp|\.removing-/.test(status) && /\.specs\/\.gitignore/.test(status) && /\.specs\/alpha\/tasks\.md/.test(status);
+        return { good, ignored, status, code: ci.status, err: String(ci.stderr || (ci.error && ci.error.message) || "").slice(0, 200) };
+      }, (x) => x.good);
+      giGit14 = gitSaw.good ? "ok" : JSON.stringify([gitSaw.ignored, gitSaw.status, gitSaw.code, gitSaw.err]);
       fs.rmSync(path.join(gif14.dir, ".lock"), { force: true });
       for (const p of leftovers14) fs.rmSync(p, { force: true });
       fs.rmSync(path.join(gi14, ".specs", ".removing-beta-0a1b2c3d"), { recursive: true, force: true });
@@ -458,11 +464,14 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, libSources, require,
     // L5 — a lock taken inside another waits only for what is left of the outer budget (at least ~0.5 s), never a second full wait.
     const nestALk = S.createFeature(rmPLk, "Nest outer", ["core"]);
     const nestBLk = S.createFeature(rmPLk, "Nest inner", ["core"]);
-    fs.writeFileSync(path.join(nestBLk.dir, ".lock"), JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString(), token: "someone-else" }));
-    const tNestLk = Date.now();
-    const nestLk = S.withFeatureLock(nestALk.dir, () => S.withFeatureLock(nestBLk.dir, () => "inner ran", { onBusy: () => "inner busy" }), { waitMs: 100 });
-    const nestMsLk = Date.now() - tNestLk;
-    fs.rmSync(path.join(nestBLk.dir, ".lock"), { force: true });
+    const { nestLk, nestMsLk } = remeasure(() => { // 1.26: measured once more on a timing-only miss (the ~0.5 s floor is the wait itself)
+      fs.writeFileSync(path.join(nestBLk.dir, ".lock"), JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString(), token: "someone-else" }));
+      const tNestLk = Date.now();
+      const r = S.withFeatureLock(nestALk.dir, () => S.withFeatureLock(nestBLk.dir, () => "inner ran", { onBusy: () => "inner busy" }), { waitMs: 100 });
+      const ms = Date.now() - tNestLk;
+      fs.rmSync(path.join(nestBLk.dir, ".lock"), { force: true });
+      return { nestLk: r, nestMsLk: ms };
+    }, (s) => s.nestMsLk < 3000);
     ok(nestLk === "inner busy" && nestMsLk < 3000, "a nested lock waits for the outer budget's remainder (~0.5 s floor), not a second full DEV_SPEC_LOCK_WAIT_MS (" + nestMsLk + " ms)");
     const giLines14 = ".lock\n.lock.reclaim\n.roadmap.lock\n.roadmap.lock.reclaim\n*.[0-9]*.[0-9]*.tmp\n.removing-*/\n";
     ok(giInit14 === giLines14 && giMerged14 === "# mine\r\n.lock\r\n.lock.reclaim\r\n.roadmap.lock\r\n.roadmap.lock.reclaim\r\n*.[0-9]*.[0-9]*.tmp\r\n.removing-*/\r\n" &&

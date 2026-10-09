@@ -7,8 +7,9 @@
  *   ok(cond, label)   one assertion — "  ok   - <label>" / "  FAIL - <label>"
  *   all(label, conds) · eq(actual, expected, label)   one assertion each: all() over many conditions ({ name: cond } or
  *                     [() => cond, …] — a FAIL names the false ones), eq() a JSON deep equality (a FAIL shows the first
- *                     difference) — scripts/test-runner.js assertHelpers; prefer all() beyond ~4 conditions
- *   run(args)        one `node cli/dev-spec.js <args>` → { out: stdout + stderr, code } — its default project is `tmp`
+ *                     difference) — scripts/test-runner.js assertHelpers; prefer all() beyond ~4 conditions ·
+ *                     remeasure(measure, holds): a timing-bound check's sample, measured once more on a miss
+ *   run(args)         one `node cli/dev-spec.js <args>` → { out: stdout + stderr, code } — its default project is `tmp`
  *                     (SPEC_PROJECT_DIR); a file makes its own projects under it (--project path.join(tmp, "…"))
  *   tmp · CLI         this process's temp dir · cli/dev-spec.js
  *   require · __dirname · __filename   cli/test-cli.js's, so the test code reads paths from cli/ —

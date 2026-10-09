@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, rawOnce, payload, S, root, tmp, SERVER, child, require }) => {
+exports.run = async ({ ok, all, remeasure, rpc, rawOnce, payload, S, root, tmp, SERVER, child, require }) => {
 
   { // 1.14 C4 — /spec-tour + the fixes from the independent review of the first 1.14 packages.
     const c4Root = path.join(tmp, "proj-c4");
@@ -195,9 +195,10 @@ exports.run = async ({ ok, all, rpc, rawOnce, payload, S, root, tmp, SERVER, chi
       "final review S1: stop gate — a hand-fresh tasks.md or a future lastTickAt is no recent activity; a real recent tick still blocks, and no reason (EN/PT/ES/pt-BR) suggests `--run` (got " +
       JSON.stringify([sClone.why, sFuture.why, sNow.block]) + ")");
     // S2: a planted private-use sentinel never makes the pt-BR transform expand (it used to double the string per pass).
-    const tS2 = Date.now();
-    const planted = S.msg("pt-BR").stopGate.taskLine("a00", "x");
-    ok(typeof planted === "string" && planted.length < 200 && Date.now() - tS2 < 1000, "final review S2: pt-BR text holding the transform's sentinels is left as it is, in bounded time (got " + JSON.stringify([planted && planted.length, Date.now() - tS2]) + ")");
+    // (1.26: every bounded-time check below is measured once more on a timing-only miss — remeasure)
+    const s2 = remeasure(() => { const tS2 = Date.now(); const p = S.msg("pt-BR").stopGate.taskLine("a00", "x"); return { planted: p, ms: Date.now() - tS2 }; }, (x) => x.ms < 1000);
+    const planted = s2.planted;
+    ok(typeof planted === "string" && planted.length < 200 && s2.ms < 1000, "final review S2: pt-BR text holding the transform's sentinels is left as it is, in bounded time (got " + JSON.stringify([planted && planted.length, s2.ms]) + ")");
     // S3: decisions.md / an exported artifact that is a symlink out of the project is never followed.
     const outside = path.join(tmp, "final-review-secret.txt");
     fs.writeFileSync(outside, "TOP-SECRET-KEY");
@@ -221,20 +222,21 @@ exports.run = async ({ ok, all, rpc, rawOnce, payload, S, root, tmp, SERVER, chi
     mkF("Long globs", "# Tasks\n\n" + Array.from({ length: 150 }, (_, i) => `- [ ] ${i + 1}. [US1] t\n  - _Implements: src/${longSeg}/**/${longSeg}${i}*/x*.js_\n`).join(""));
     mkF("Long paths", "# Tasks\n\n" + Array.from({ length: 100 }, (_, i) => `- [ ] ${i + 1}. [US1] t\n  - _Implements: src/${longSeg}/${longSeg}/${longSeg}${i}/x.js_\n`).join(""));
     mkF("Too long", "# Tasks\n\n- [ ] 1. [US1] t\n  - _Implements: src/" + "b".repeat(600) + ".js_\n");
-    const tS4 = Date.now();
-    const ov = S.featureOverlaps(fr);
-    ok(Date.now() - tS4 < 3000 && ov.truncated === true, "final review S4: the overlap check is budgeted by work (pattern × path) and a reference over 512 chars is skipped — bounded time, marked truncated (got " + JSON.stringify([Date.now() - tS4, ov.truncated]) + ")");
+    const s4 = remeasure(() => { const tS4 = Date.now(); const o = S.featureOverlaps(fr); return { ov: o, ms: Date.now() - tS4 }; }, (x) => x.ms < 3000);
+    const ov = s4.ov;
+    ok(s4.ms < 3000 && ov.truncated === true, "final review S4: the overlap check is budgeted by work (pattern × path) and a reference over 512 chars is skipped — bounded time, marked truncated (got " + JSON.stringify([s4.ms, ov.truncated]) + ")");
     // S5 + S6: a long _Verify:_ with many \" and a huge unclosed-emphasis paragraph stay linear.
     const longVerify = "echo \"" + "%\\\"".repeat(20000) + "\"";
     mkF("Long verify", "# Tasks\n\n- [ ] 1. [US1] t\n  - _Verify: " + longVerify + "_\n");
-    const tS5 = Date.now();
-    S.specDoctor(fr, "long-verify");
-    const dS5 = Date.now() - tS5;
     const big = mkF("Big para", "# Tasks\n\n- [ ] 1. [US1] t\n");
     fs.writeFileSync(path.join(big.dir, "requirements.md"), "# Big\n\n## Summary\n" + "a *b _c ~~d **e ".repeat(15000) + "\n");
-    const tS6 = Date.now();
-    const bigEx = S.exportSpecs(fr, { name: "big-para", format: "html" });
-    const dS6 = Date.now() - tS6;
+    const { dS5, dS6, bigEx } = remeasure(() => {
+      const tS5 = Date.now();
+      S.specDoctor(fr, "long-verify");
+      const d5 = Date.now() - tS5, tS6 = Date.now();
+      const ex = S.exportSpecs(fr, { name: "big-para", format: "html" });
+      return { dS5: d5, dS6: Date.now() - tS6, bigEx: ex };
+    }, (x) => x.dS5 < 5000 && x.dS6 < 5000);
     ok(dS5 < 5000 && bigEx.ok && dS6 < 5000, "final review S5/S6: a 60 KB _Verify:_ full of \\\" and a 240 KB paragraph of unclosed * _ ~~ ** render in bounded time (got " + JSON.stringify([dS5, dS6]) + ")");
     // pt-BR: descriptive 3rd-person verbs stay descriptive; "gerado/arquivado a <date>" → "em".
     const BR = S.msg("pt-BR");
@@ -257,10 +259,12 @@ exports.run = async ({ ok, all, rpc, rawOnce, payload, S, root, tmp, SERVER, chi
       "full review R1: 'was' / 'havia' / 'había' near a failure keep it an admission, a negator anywhere keeps it too; 'the implementation done so far' is no claim (got " +
       JSON.stringify([honest.map(adm), noClaim.map((m) => S.stopClaims(m).claim)]) + ")");
     // R10: the admission / claim scans are linear (bounded look-back and tail).
-    const tR10 = Date.now();
-    S.stopClaims("was 2 failing. ".repeat(1400));
-    S.stopClaims("all done ".repeat(2300));
-    const dR10 = Date.now() - tR10;
+    const dR10 = remeasure(() => {
+      const tR10 = Date.now();
+      S.stopClaims("was 2 failing. ".repeat(1400));
+      S.stopClaims("all done ".repeat(2300));
+      return Date.now() - tR10;
+    }, (x) => x < 1500); // 1.26: once more on a miss
     ok(dR10 < 1500, "full review R10: 20 KB of admissions or claims scans in bounded time (got " + dR10 + " ms)");
     // R2: another plan's File cell owns only its EXACT path — a monorepo package's same-named test file stays this feature's.
     const r2 = path.join(tmp, "proj-review-r2");

@@ -112,6 +112,34 @@ exports.run = async ({ all, eq }) => {
       js({ want, out: h.out.split(/\r?\n/).filter((l) => /FAIL|^ {6}|passed/.test(l)) }) + ")");
   }
 
+  // 1.26 — a loaded machine: remeasure() (a timing-bound check's sample, measured once more on a miss — no assertion of its own)
+  // returns a passing retry or the last miss, with how many samples it took; a chain still running after the chain timeout
+  // (DEV_SPEC_TEST_CHAIN_TIMEOUT_S; 30 min by default) is killed and fails the suite — it never hangs it.
+  {
+    w("tests/09-remeasure.js", `// remeasure(): once more on a miss
+exports.run = async ({ ok, remeasure }) => {
+  let n = 0, m = 0, k = 0;
+  const pass2 = remeasure(() => ({ v: ++n }), (s) => s.v >= 2);
+  const never = remeasure(() => ({ v: ++m }), () => false);
+  const first = remeasure(() => ({ v: ++k }), () => true);
+  console.log("REMEASURE " + JSON.stringify([pass2.v, pass2.tries, n, never.v, never.tries, m, first.v, first.tries, k, Object.keys(pass2)]));
+  ok(true, "remeasured");
+};
+`);
+    w("tests/10-hang.js", `// a chain that never finishes
+exports.run = () => new Promise(() => { setInterval(() => {}, 1000); });
+`);
+    const rm = fake("--only", "09");
+    const line = (rm.stdout.split(/\r?\n/).find((l) => l.startsWith("REMEASURE ")) || "").slice(10);
+    const hang = (() => { const r = spawnSync(process.execPath, [path.join(root, "suite.js"), "--only", "10"], { encoding: "utf8", env: { ...env, DEV_SPEC_TEST_CHAIN_TIMEOUT_S: "3" }, timeout: 60000 });
+      return { code: r.status, stdout: r.stdout || "", out: (r.stdout || "") + (r.stderr || "") }; })();
+    ok(rm.code === 0 && line === js([2, 2, 2, 2, 2, 2, 1, 1, 1, ["v"]]) &&
+      hang.code === 1 && lastLine(hang.stdout) === "0 passed, 1 failed" && /# 10-hang: still running after 3\.0 s — killed with its child processes/.test(hang.out) &&
+      /FAIL - 10-hang exited with code \S+ without a clean total/.test(hang.out),
+      "1.26: remeasure() measures once more on a miss (a passing retry, or the last miss; .tries says how many — non-enumerable), never on a pass; a chain still running after DEV_SPEC_TEST_CHAIN_TIMEOUT_S is killed and fails the suite (got " +
+      js([rm.code, line, hang.code, lastLine(hang.stdout), hang.out.split(/\r?\n/).filter((l) => /still running|FAIL/.test(l))]) + ")");
+  }
+
   // 1.26 — hermetic chains: a suite started from a folder holding a .specs/ (the maintainer's dogfood one at the repo root: lang
   // pt) with SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR, DEV_SPEC_DEFAULT_LANG… exported runs every chain in a fresh, empty temp folder
   // of its own (removed afterwards) with none of those variables — the suites' own DEV_SPEC_TEST_* and any other variable kept.

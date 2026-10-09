@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, list, __dirname }) => {
 
   {
   // --- 1.13 WP1: ONE task scanner, numeric task numbers, one duplicate resolver, the evidence gate ---
@@ -1091,9 +1091,11 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirnam
     }
     ok(!wrong.length && n === 36, "1.24 r6 D-I6: on " + n + " tasks.md variants the whole-file scanner, parseTasks and the active view (+sec off / on) read the same task numbers (wrong: " + js(wrong.slice(0, 6)) + ")");
     const CR = String.fromCharCode(13);
-    const t0 = Date.now();
-    const hostile = [S.taskBlocks("- [ ] 1. a" + CR.repeat(200000) + "b\n- [ ] 2. c" + CR.repeat(200000) + "\n"), E.activeTasks(("## Story US-1 — Security" + CR.repeat(100000) + "\n").repeat(2), ["core"])];
-    const ms = Date.now() - t0;
+    const { ms, hostile } = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      const t0 = Date.now();
+      const hostile = [S.taskBlocks("- [ ] 1. a" + CR.repeat(200000) + "b\n- [ ] 2. c" + CR.repeat(200000) + "\n"), E.activeTasks(("## Story US-1 — Security" + CR.repeat(100000) + "\n").repeat(2), ["core"])];
+      return { ms: Date.now() - t0, hostile };
+    }, (s) => s.ms < 3000);
     ok(ms < 3000 && hostile[0].length === 2, "1.24 r6 D3: trailing-CR stripping stays linear (200,000 CRs before text / at a line's end) (got " + js([ms, hostile[0].length]) + ")");
   }
 

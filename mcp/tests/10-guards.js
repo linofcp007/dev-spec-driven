@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, __dirname }) => {
 
   // --- 1.13 WP11: guard mode (PreToolUse hook), scoped steering (front matter, custom files, brief, doctor), design.md save check ---
   {
@@ -155,11 +155,14 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
       !S.steeringFrontMatter("---\n  indented prose first\nkey: v\n---\nx").frontMatter,
       "steeringFrontMatter: a 'description: |' block scalar and a nested map are continuation lines (an indented 'inclusion: always' inside one is ignored); the first line must still be a key");
     // The glob is a linear DP (no backtracking regex): pathological user patterns answer at once.
-    const tGlob = Date.now();
-    const globFast = S.steeringGlobMatch("**/".repeat(12) + "x.ts", "a/".repeat(25) + "y.ts") === false && S.steeringGlobMatch("**/".repeat(12) + "x.ts", "a/".repeat(25) + "x.ts") === true &&
-      S.steeringGlobMatch("*a*a*a*a*a*a*a*b", "a".repeat(40)) === false && S.steeringGlobMatch("*a*a*a*a*a*a*a*b", "a".repeat(40) + "b") === true &&
-      S.steeringGlobMatch("a/**/**/b.ts", "a/b.ts") === true && S.steeringGlobMatch("{a,b}".repeat(9), "ab".repeat(4) + "a") === false;
-    ok(globFast && Date.now() - tGlob < 1000, "steeringGlobMatch: repeated '**/' and '*a*a*…' patterns against deep paths answer in well under a second (was minutes); > 256 brace alternatives → no match");
+    const { globFast, globMs } = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      const tGlob = Date.now();
+      const fast = S.steeringGlobMatch("**/".repeat(12) + "x.ts", "a/".repeat(25) + "y.ts") === false && S.steeringGlobMatch("**/".repeat(12) + "x.ts", "a/".repeat(25) + "x.ts") === true &&
+        S.steeringGlobMatch("*a*a*a*a*a*a*a*b", "a".repeat(40)) === false && S.steeringGlobMatch("*a*a*a*a*a*a*a*b", "a".repeat(40) + "b") === true &&
+        S.steeringGlobMatch("a/**/**/b.ts", "a/b.ts") === true && S.steeringGlobMatch("{a,b}".repeat(9), "ab".repeat(4) + "a") === false;
+      return { globFast: fast, globMs: Date.now() - tGlob };
+    }, (s) => s.globMs < 1000);
+    ok(globFast && globMs < 1000, "steeringGlobMatch: repeated '**/' and '*a*a*…' patterns against deep paths answer in well under a second (was minutes); > 256 brace alternatives → no match");
 
     // (H3) spec_task_brief: default files, always, fileMatch on _Implements:_ (quoted, front matter stripped), manual listed.
     const b11 = path.join(tmp, "proj-wp11-brief");
@@ -1175,9 +1178,10 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
       "feature F2 review R3: the lexer reads the tool's shell — Bash \\⏎ continuation, \\x escapes, $'…' (ANSI-C), PowerShell's backtick (escape and `⏎), cmd's ^; launchers with value options (sudo -u, doas -u, exec -a, node -r / --require, timeout -s) and bin runners (npm exec / x, pnpm dlx, yarn dlx, bunx, bun x, deno run, env -S, npx -c), \"$( )\", a substitution / variable / redirection before the program → caught; npm install / run, yarn add, echo $'…', # and <# #> comments, a quoted commit message, a PowerShell here-string → not (got " +
       JSON.stringify([r3Bad, r3NoBad]) + ")");
     const n64 = 64 * 1024;
-    const r3Times = ["$(".repeat(n64 / 2), BS.repeat(n64), "`".repeat(n64), "<<EOF" + NL.repeat(n64 / 2), "$'" + BS.repeat(n64), '"$('.repeat(n64 / 3), "${".repeat(n64 / 2),
+    const r3Times = remeasure(() => ["$(".repeat(n64 / 2), BS.repeat(n64), "`".repeat(n64), "<<EOF" + NL.repeat(n64 / 2), "$'" + BS.repeat(n64), '"$('.repeat(n64 / 3), "${".repeat(n64 / 2),
       "${$(".repeat(n64 / 4), "a<<b ".repeat(n64 / 5) + NL + "x", '@"' + NL + "$(".repeat(n64 / 2), "`$(".repeat(n64 / 3), ("x" + NL).repeat(n64 / 2)]
-      .map((c) => { const t0 = Date.now(); sh("dev-spec " + c); sh("dev-spec " + c, "PowerShell"); sh("cmd /c \"dev-spec " + c + "\""); return Date.now() - t0; });
+      .map((c) => { const t0 = Date.now(); sh("dev-spec " + c); sh("dev-spec " + c, "PowerShell"); sh("cmd /c \"dev-spec " + c + "\""); return Date.now() - t0; }),
+      (s) => s.every((t) => t < 2000)); // 1.26: measured once more on a timing-only miss
     ok(r3Times.every((t) => t < 2000), "feature F2 review R3: the lexer stays linear on 64 KB of $( / \\ / ` / heredocs / $' / \"$( / ${ / here-strings (each < 2 s, got " + JSON.stringify(r3Times) + " ms)");
 
     // R9: a heredoc body is data — skipped (<<'EOF', <<"EOF", <<\EOF, <<-EOF), read only for $( ) / `…` when unquoted, or as the

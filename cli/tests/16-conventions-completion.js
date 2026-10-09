@@ -53,7 +53,7 @@ function readScript(text, shell) {
 // A shell that runs: the first of the candidates that answers --version.
 const probe = (cands) => cands.filter(Boolean).find((b) => { try { return spawnSync(b, ["--version"], { encoding: "utf8", timeout: 20000 }).status === 0; } catch { return false; } });
 
-exports.run = async ({ ok, all, run, tmp, CLI }) => {
+exports.run = async ({ ok, all, remeasure, run, tmp, CLI }) => {
   const ROOT = path.join(path.dirname(CLI), "..");
   const S = require(path.join(ROOT, "mcp", "lib", "spec.js"));
   const C = require(path.join(ROOT, "cli", "completion.js"));
