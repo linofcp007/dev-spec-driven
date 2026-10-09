@@ -133,13 +133,19 @@ written by hand. IDs and markers stay English-stable (languages.md). The one Eng
 mcp/server.js                  the MCP stdio server: tools, prompts, resources, argument validation
 mcp/servers.json               the plugin's MCP registration (plugin.json → mcpServers; never a root .mcp.json)
 mcp/lib/spec.js                the engine's FACADE — every surface requires it, never an engine module directly
+mcp/lib/operations.js          THE operations table: each operation's MCP tool, CLI command(s), arguments and engine call, once
+mcp/lib/probe.js               THE dev-spec project rule + walks (Node core only): hooks, status line, completion, the engine
+mcp/lib/latin1-scan.js         the stop gate's claim scan on a one-byte projection of a wide text (Node core only)
 mcp/lib/spec.bundle.js         GIT-IGNORED, built on demand (dev-spec bundle): the engine in one file — DEV_SPEC_BUNDLE=1 only
 mcp/lib/engine/                ALL domain logic, one module per concern (index.js loads MODULES; ctx.js holds CTX; import/;
                                corpus.generated.json — GENERATED: the built-in placeholder corpus)
 mcp/lib/i18n.js · i18n/        the localized content: en.js · pt.js · es.js · common.js · pt-br.js (the derivation)
 mcp/lib/prompts-resources.js   MCP prompts (= commands/*.md) + specs:// resources
-cli/dev-spec.js                the universal CLI's entry point over the same facade (the same defaults as MCP) — its commands:
-                               cli/commands.js (ONE table: options, args, help, handler) · main(argv, io): cli/main.js
+cli/dev-spec.js                the CLI's entry point alone (bin, printed CLI lines, git's merge driver, the status line)
+cli/main.js · cli/commands.js  main(argv, io) — parse, shared checks, dispatch, c.call · THE command table (options, args, help,
+                               completion, handler — everything else derives from it)
+cli/run.js · cli/git.js        done --run / finish --run's runs (process tree, verdict) · every git call (one gitRun)
+cli/completion.js              shell completion + the hidden __complete and the status line's pre-check (no engine)
 hooks/                         hooks.json (auto-loaded) + guard / approval / observe / spec / stop / plan hooks + pre-commit
 commands/ · agents/            the 22 slash commands (also the MCP prompts) · the 5 plugin subagents
 skills/dev-spec-driven/        SKILL.md (the workflow — its source of truth) + references/ (read on demand)
