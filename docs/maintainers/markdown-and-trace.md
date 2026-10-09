@@ -228,7 +228,9 @@ matrix.
   SISTEMA DEVE …`) wraps past one line, and markdown list items continue across lines (indented or
   lazy). `criterionBlocks()` folds physical lines into logical criteria FIRST — bounded by blank
   lines, headings, tables, HR and fenced code (fence *state* is tracked, so `const shall = 1` inside
-  ` ``` ` is code, not an AC) — and only then lints each joined criterion. A comment-only line does
+  ` ``` ` is code, not an AC) — and only then lints each joined criterion. Its section stack takes the SETEXT headings of
+  `headingEntries()` too (1.25.1 — "Acceptance Criteria" over `-------` opened no AC context, its text read as a paragraph and its
+  underline as a break; the underline is skipped now, so an AC heading's body still follows it). A comment-only line does
   **not** split a criterion. Issues report the criterion's start `line` (plus `endLine` when it spans
   several) and a stable `code` (`no-modal`/`no-id`/`vague`/`placeholder`/`no-keyword`/`needs-clarification`/`padded-id`). `no-keyword`
   (info) spares the ubiquitous form naming ITS system (review 5 — `RE_UBIQUITOUS`): "THE <name> SHALL" (one to four words: the

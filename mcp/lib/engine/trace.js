@@ -22,7 +22,7 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile, statePath, stripEnd, stripEnds,
   criterionLabel, notASlug, featureRefTest, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
-  useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir;
+  useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir, headingEntries;
 function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
   codeBlockLines, commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
   duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE,
@@ -34,7 +34,7 @@ function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atx
   statePath, stripEnd, stripEnds, criterionLabel, notASlug, featureRefTest, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
   taskMarkerValues, taskProse, tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds,
   trackLabel, trackMarker, unitIn, useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews,
-  isChangeDir } = E); }
+  isChangeDir, headingEntries } = E); }
 
 // ---------------------------------------------------------------------------
 // EARS linting
@@ -175,6 +175,11 @@ function criterionBlocks(text, opts = {}) {
   const cl = commentLines(all); // comments and fenced code as every reader sees them (a code span's "<!--" is text)
   // review 5 (L32): an INDENTED code block (codeBlockLines over the visible text) is code like a fence — its lines define nothing
   const icode = codeBlockLines(cl.map((c) => (c.hidden ? "" : c.vis)));
+  // 1.25.1: a SETEXT heading (a one-line paragraph over === / ---, the ONE heading reader's — headingEntries) is a heading here too:
+  // "Acceptance Criteria\n-------------------" opened no section (its criteria were linted outside an AC context, the strict rule),
+  // its text read as a paragraph criterion and its underline as a break. Its text line is the heading; the underline is skipped.
+  const setext = new Map(), underline = new Set();
+  for (const h of headingEntries(all)) if (!h.atx) { setext.set(h.i, h); underline.add(h.i + 1); }
   // acUnits: a table row, heading or paragraph line led by an AC ID is a REFERENCE — never a criterion to lint — when a list
   // item defines that ID anywhere, or an earlier unit already did ("US-1.AC-2 depends on the IdP's error codes." in Notes, a
   // "| US-1.AC-1 | P1 |" coverage table); outside an acceptance-criteria context it defines one only when it reads like one
@@ -215,6 +220,7 @@ function criterionBlocks(text, opts = {}) {
     if (c.fence === "open") return flush(); // an unclosed fence in a list item ends with the item (fenceStep)
     if (c.fence) return; // inside a fence: no content, no criteria ("const shall = 1")
     if (icode[i]) return flush(); // an indented code block: code, and the end of the criterion before it
+    if (underline.has(i)) return; // a setext heading's underline (1.25.1): no content, no break — an AC heading's body may follow
     const line = c.vis;
     if (!line.trim()) {
       // A blank source line ends the criterion; a line that held only a comment does not. An AC heading's body may
@@ -223,7 +229,8 @@ function criterionBlocks(text, opts = {}) {
       return;
     }
     cleaned.push({ line: ln, text: line.trim() });
-    const hd = atxHeading(stripStart(line, isWsUnit), 1, 6, "raw"); // /^\s*(#{1,6})\s+(.*)$/
+    const se = setext.get(i);
+    const hd = atxHeading(stripStart(line, isWsUnit), 1, 6, "raw") || (se ? { level: se.level, text: se.text } : null); // /^\s*(#{1,6})\s+(.*)$/ · setext
     if (hd) {
       while (stack.length && stack[stack.length - 1].level >= hd.level) stack.pop();
       stack.push({ level: hd.level, text: hd.text.trim() });
@@ -239,6 +246,7 @@ function criterionBlocks(text, opts = {}) {
         }
         if (redefines(ht, parent, true)) noteDef(labelOf(ht), ln); // a duplicate definition — still no criterion of its own
       }
+      if (se) return flush(); // a setext heading ends the criterion above, as an ATX one does (RE_BLOCK_BREAK below)
     }
     if (acUnits && /^\s*\|/.test(line)) {
       flush();

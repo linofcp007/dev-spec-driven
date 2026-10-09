@@ -102,4 +102,15 @@ exports.run = async ({ ok, S, tmp, require }) => {
     ok(js(shapes) === js(["T-01", "T-02", "T-03", "T-04"]),
       "1.25.1 (6): a GFM row without its outer pipes continues a piped table, a T-ID list item after it is its own entry, a 'T-ID' column is the ID column, a T-ID in another column of a table with no ID column is no entry (got " + js(shapes) + ")");
   }
+
+  { // 1.25.1 (7): EARS reads SETEXT headings like ATX ones — the section stack comes from the ONE heading reader
+    const body = (h) => "# Requirements: X\n\n" + h + "\n\n1. the admin should be able to export invoices\n2. o sistema deve exportar as faturas\n\n" +
+      "## Notes\n\n- **US-1.AC-1** — WHEN an admin clicks Export THE SYSTEM SHALL download a CSV.\n";
+    const lint = (t) => S.earsValidate(t).issues.map((i) => i.code).sort().join(",");
+    const atx = lint(body("## Acceptance Criteria")), setext = lint(body("Acceptance Criteria\n-------------------"));
+    const blocks = E.criterionBlocks("Spec\n====\n\nAcceptance Criteria\n-------------------\n\n- **US-1.AC-1** — WHEN x THE SYSTEM SHALL y.\n").blocks;
+    ok(atx === setext && /no-modal/.test(setext) && blocks.length === 1 && blocks[0].section === "Spec / Acceptance Criteria",
+      "1.25.1 (7): an 'Acceptance Criteria' setext heading opens the AC context (a numbered item that reads like a requirement is linted, as under '## Acceptance Criteria'); the heading lines are no criteria and the section path holds them (got " +
+      js([atx, setext, blocks.map((b) => [b.section, b.text])]) + ")");
+  }
 };
