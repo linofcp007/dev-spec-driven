@@ -131,4 +131,22 @@ exports.run = async ({ ok, S, tmp, require }) => {
     ok(tr.verdict === "pass" && js(tr.missingImplFiles) === "[]" && cov.coveredFiles === 2,
       "1.25.1 (10): a done task's annotated _Implements:_ files exist — no missingImplFiles (it blocked doctor and finish), coverage counts both (got " + js([tr.verdict, tr.missingImplFiles, cov.coveredFiles]) + ")");
   }
+
+  { // 1.25.1 (14): CR-only line endings — the shared decode step reads a text with CRs and no LF as lines (a text with any LF is unchanged)
+    const p = fresh("cr-only");
+    const files = {
+      "requirements.md": "# Requirements: Cr\n\n## User Stories\n\n### US-1 (P1): Sessions\n\n#### Acceptance Criteria (EARS)\n- **US-1.AC-1** — WHEN a token expires THE SYSTEM SHALL reject it with 401.\n- **US-1.AC-2** — WHEN a refresh token is valid THE SYSTEM SHALL issue a new token.\n",
+      "tasks.md": "# Tasks\n\n- [ ] 1. Reject expired tokens\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01, T-02_\n",
+      "test-plan.md": "# Test Plan\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n| T-01 | unit | example | expired | US-1.AC-1 | `tests/a.test.js` |\n| T-02 | unit | example | refresh | US-1.AC-2 | `tests/a.test.js` |\n",
+    };
+    const sum = (slug) => { const t = S.traceCheck(p, slug); return [t.verdict, t.totalAcs, t.coveredByTasks, t.coveredByTests, t.plannedTests].join(","); };
+    const mk = (name, eol) => {
+      const f = S.createFeature(p, name, ["tdd"], name, null, "en");
+      for (const [n, t] of Object.entries(files)) fs.writeFileSync(path.join(f.dir, n), t.replace(/\n/g, eol));
+      return f.slug;
+    };
+    const lf = sum(mk("Cr lf", "\n")), cr = sum(mk("Cr only", "\r")), crlf = sum(mk("Cr crlf", "\r\n"));
+    ok(lf === "pass,2,2,2,2" && cr === lf && crlf === lf && E.decodeText(Buffer.from("a\rb\r")) === "a\nb\n" && E.decodeText(Buffer.from("a\r\r\nb")) === "a\r\r\nb",
+      "1.25.1 (14): a feature saved with bare CR line endings traces as its LF / CRLF twin (it read 0 ACs beside the planned tests); decodeText turns CRs into line breaks only in a text with no LF (got " + js([lf, cr, crlf]) + ")");
+  }
 };

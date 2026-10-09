@@ -205,7 +205,10 @@ matrix.
   Pester `tests/Login.Tests.ps1` naming T-01 was never found, a UTF-16 requirements.md traced 0 ACs. The BOM stays the U+FEFF
   every reader drops (a rewrite of such a file is UTF-8 — except tasks.md, written back in its own encoding since review 5:
   tasks-and-evidence.md → Tasks: ONE scanner); the importer, the specs:// resources, the requirements.md save hook,
-  `dev-spec ears <file>` and the observe hook's pre-filter read the same way. Until 1.21.1 the scan read only the scanner's
+  `dev-spec ears <file>` and the observe hook's pre-filter read the same way. **CR-only line endings (1.25.1):** `decodeText()` also
+  reads a text holding CRs and NO LF as lines (`crOnlyToLf` — every reader splits on "\n"): a feature saved with bare `\r` traced
+  0 ACs beside its planned tests, doctor's placeholders failed and status said phase requirements; a text with any LF is left
+  as it is ("\r\r\n" keeps its 1.24 r6 D3 reading), and a rewrite of such a file is LF. Until 1.21.1 the scan read only the scanner's
   short `CODE_EXT` and a PowerShell project's tests gate never passed. The scan (`scanTestCode()`) is bounded and read-only; a plan row whose File column names a
   concrete test path counts only in that file/folder; another feature's `.specs/<f>/tests/` never counts; a test file
   ANOTHER feature's plan (active or archived) names in its File column — and this feature's plan does not — never counts
