@@ -87,40 +87,42 @@ exports.run = async ({ ok, root, require }) => {
     // approval with spec_approve after the user's yes — never "record it with /approve". /grill needs no other skill and hands off to
     // /design (the user is already in Phase 1). /spec-tracks lists every reserved pack marker; /spec-templates every template.
     const skill = ws(rd("skills", "dev-spec-driven", "SKILL.md"));
-    const bug = ws(rd("commands", "spec-bugfix.md")), grill = ws(rd("commands", "grill.md")), clarify = ws(rd("commands", "clarify.md"));
+    // (1.26: /grill is /clarify --grill, /spec-tracks and /spec-templates are /spec-setup tracks | templates, /spec-ff is
+    // /approve --through; every command but /spec and /spec-bugfix is user-only)
+    const bug = ws(rd("commands", "spec-bugfix.md")), clarify = ws(rd("commands", "clarify.md")), grill = clarify;
     const fm = (n) => (rd("commands", n).split(/^---$/m)[1] || "");
     const userOnly = fs.readdirSync(path.join(root, "commands")).filter((n) => /^disable-model-invocation: true$/m.test(fm(n))).map((n) => "/" + n.slice(0, -3));
     // a model instruction that RUNS a user-only command: "record it with /approve", "`/approve` requirements", "approve it … (`/spec-ff`)"
     const runsUserOnly = (t) => userOnly.some((c) => new RegExp("(?:record it with |then |phase \\(|in one call \\(|at once with |On the user's yes, )`" + c.replace(/[-/]/g, "\\$&") + "[` ]").test(t));
     const cmdTexts = fs.readdirSync(path.join(root, "commands")).filter((n) => n.endsWith(".md") && !/^disable-model-invocation: true$/m.test(fm(n))).map((n) => [n, ws(rd("commands", n))]);
     const offenders = [["SKILL.md", skill], ...cmdTexts].filter(([, t]) => runsUserOnly(t)).map(([n]) => n);
-    ok(userOnly.includes("/approve") && userOnly.includes("/spec-ff") && !offenders.length &&
-      /record it with `spec_approve \{name, phase\}`/.test(skill) && /`\/approve` and `\/spec-ff` are the user's own commands/.test(skill) &&
+    ok(userOnly.includes("/approve") && userOnly.length >= 20 && !offenders.length &&
+      /record it with `spec_approve \{name, phase\}`/.test(skill) && /`\/approve`(?: and `\/spec-ff` are| is) the user's own command/.test(skill) &&
       /On the user's yes, record it with `spec_approve`/.test(bug) && /`spec_approve \{through: "tasks"\}` once they said so/.test(bug) && !/On the user's yes, `\/approve`/.test(bug),
       "1.25.1 review: SKILL.md and the model-run commands record an approval with spec_approve on the user's yes — never by running the user-only /approve or /spec-ff (" + js(offenders) + ")");
     const reserved = require("./lib/engine/index.js").RE_PACK_MARKER_RESERVED;
-    const tracksCmd = ws(rd("commands", "spec-tracks.md"));
+    const tracksCmd = ws(rd("commands", "spec-setup.md"));
     const markerRule = ((tracksCmd.split("`marker` (")[1] || "").split("`title`")[0].split(" never ")[1] || "").replace(/an ID's shape/, "");
     const plainAlts = reserved.source.replace(/^\^\(\?:|\)\$$/g, "").split("|").filter((a) => /^[A-Z]+$/.test(a));
     const listedWords = markerRule.match(/\b[A-Z][A-Z0-9]*\b/g) || [];
     ok(plainAlts.length >= 15 && plainAlts.every((a) => listedWords.includes(a)) && listedWords.every((w) => reserved.test(w)) &&
       ["US1", "P1", "AC1", "SC1", "EC1", "NFR1", "T1"].every((w) => listedWords.includes(w) && reserved.test(w)),
-      "1.25.1 review: /spec-tracks names every reserved pack marker of RE_PACK_MARKER_RESERVED (the nine built-in markers, the reserved words, the ID shapes) and nothing it doesn't reserve (missing " +
+      "1.25.1 review: /spec-setup tracks names every reserved pack marker of RE_PACK_MARKER_RESERVED (the nine built-in markers, the reserved words, the ID shapes) and nothing it doesn't reserve (missing " +
       js(plainAlts.filter((a) => !listedWords.includes(a))) + ")");
     const S = require("./lib/spec.js");
-    const tplLine = ws(rd("commands", "spec-templates.md")).split("Artifacts:")[1] || "";
+    const tplLine = ws(rd("commands", "spec-setup.md")).split("Artifacts:")[1] || "";
     const tplNames = Object.keys(S.TEMPLATE_ARTIFACTS || require("./lib/engine/index.js").TEMPLATE_ARTIFACTS);
     ok(tplNames.length >= 17 && tplNames.every((a) => new RegExp("(?<![\\w-])" + a + "(?![\\w-])").test(tplLine.split("(incl.")[0])),
-      "1.25.1 review: /spec-templates lists every template artifact (change included) (missing " + js(tplNames.filter((a) => !new RegExp("(?<![\\w-])" + a + "(?![\\w-])").test(tplLine.split("(incl.")[0]))) + ")");
+      "1.25.1 review: /spec-setup templates lists every template artifact (change included) (missing " + js(tplNames.filter((a) => !new RegExp("(?<![\\w-])" + a + "(?![\\w-])").test(tplLine.split("(incl.")[0]))) + ")");
     ok(!/dev-grill/.test(grill + clarify) && /\*\*One question at a time\*\*/.test(grill) && /\*\*Recommend an answer\*\*/.test(grill) && /\*\*Walk the decision tree\*\*/.test(grill) &&
-      /fold them into `requirements\.md`/.test(grill) && /hand off to `\/design` \(Phase 2\)/.test(grill) && !/hand off to `\/design` or `\/createSpec`/.test(grill) &&
+      /fold them into `requirements\.md`/.test(grill) && /hand off to `\/spec <feature> design` \(Phase 2\)/.test(grill) && !/hand off to `\/design` or `\/createSpec`/.test(grill) &&
       /record the requirements approval with `spec_approve`/.test(grill),
-      "1.25.1 review: /grill is self-contained (one question at a time, a recommended answer, the decision tree, folded into requirements.md), names no dev-grill skill and hands off to /design");
+      "1.25.1 review: /clarify --grill is self-contained (one question at a time, a recommended answer, the decision tree, folded into requirements.md), names no dev-grill skill and hands off to /spec's design phase");
     // argument hints: none empty (a command without arguments has no hint), none past 130 characters (autocomplete cuts it)
     const hints = fs.readdirSync(path.join(root, "commands")).filter((n) => n.endsWith(".md")).map((n) => [n, (fm(n).match(/^argument-hint: "(.*)"$/m) || [])[1]]);
     const badHints = hints.filter(([, h]) => h !== undefined && (!h.trim() || h.length > 130)).map(([n, h]) => n + " (" + h.length + ")");
-    ok(hints.length === 55 && !badHints.length && hints.find(([n]) => n === "coverage.md")[1] === undefined && hints.find(([n]) => n === "spec-init.md")[1].length <= 130,
-      "1.25.1 review: no command has an empty argument-hint (coverage takes none: no hint) or one past 130 characters (spec-init's was 264) (" + js(badHints) + ")");
+    ok(hints.length === 22 && !badHints.length && hints.find(([n]) => n === "spec-setup.md")[1].length <= 130,
+      "1.25.1 review: no command has an empty argument-hint (a command taking none has no hint) or one past 130 characters (spec-init's was 264; the umbrella /spec-setup's ≤ 130) (" + js(badHints) + ")");
     // version archaeology in model instructions: a behaviour, never "before 1.16" / "an upgraded 1.12 one"
     const versioned = [["SKILL.md", skill], ...fs.readdirSync(path.join(root, "commands")).filter((n) => n.endsWith(".md")).map((n) => [n, ws(rd("commands", n))])]
       .flatMap(([n, t]) => (t.match(/(?:before|≤|pre-|upgraded|— |\()1\.\d{1,2}\b[^.;)]{0,30}/g) || []).map((m) => n + ": " + m));

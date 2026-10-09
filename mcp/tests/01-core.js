@@ -621,8 +621,9 @@ exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, require, __dirna
   ok(!fs.existsSync(path.join(root, ".mcp.json")) && fs.existsSync(path.join(root, pj.mcpServers)) &&
     /\$\{CLAUDE_PLUGIN_ROOT\}\/mcp\/server\.js/.test(fs.readFileSync(path.join(root, pj.mcpServers), "utf8")),
     "plugin.json → mcp/servers.json (no root .mcp.json), server path via ${CLAUDE_PLUGIN_ROOT}");
-  ok(["spec-init", "spec-status", "spec-doctor", "spec-commit"].every((c) => fs.existsSync(path.join(root, "commands", c + ".md"))) &&
-    !["init", "status", "doctor", "commit"].some((c) => fs.existsSync(path.join(root, "commands", c + ".md"))),
+  // (1.26: /spec-init → /spec-setup init, /spec-commit → /executeTask commit; the built-in names stay out either way)
+  ok(["spec-setup", "spec-status", "spec-doctor", "spec-review"].every((c) => fs.existsSync(path.join(root, "commands", c + ".md"))) &&
+    !["init", "status", "doctor", "commit", "review"].some((c) => fs.existsSync(path.join(root, "commands", c + ".md"))),
     "commands that collided with Claude Code built-ins are renamed spec-*");
   // 1.21 F3: SKILL.md is loaded whole when the skill fires (the 1.19 eval run: ~17.5k → ~38k tokens of context), so it keeps
   // the rules an agent needs at decision time and points to the lookup material (tool catalog, per-track checklists,

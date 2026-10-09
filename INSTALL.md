@@ -36,7 +36,7 @@ git clone https://github.com/linofcp007/dev-spec-driven.git
 claude --plugin-dir ./dev-spec-driven
 ```
 
-`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 55 commands, the 4 agents, the
+`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 22 commands, the 4 agents, the
 hooks and the `spec-driven` MCP server (32 tools) load for that session.
 
 > The rest of this guide uses a `$plugin` variable for the plugin's folder — here, your clone. Set it once (PowerShell):
@@ -204,7 +204,7 @@ monorepo the nearest `.specs/` above the edited file counts too. It stays silent
 on its own errors:
 
 ```powershell
-node "$plugin\cli\dev-spec.js" init --guard on    # or /spec-guard, or spec_init {guard: "on"}; --guard off to disable
+node "$plugin\cli\dev-spec.js" init --guard on    # or /spec-setup guard on, or spec_init {guard: "on"}; --guard off to disable
 node "$plugin\cli\dev-spec.js" init --guard scope # stricter: once tasks are approved, also a code file no open task names
 ```
 
@@ -276,12 +276,12 @@ node "$plugin\cli\dev-spec.js" merge-state --install   # points it at the curren
 
 **Plan-mode bridge (always on, one line of context).** A PostToolUse hook on `ExitPlanMode` (`hooks/plan-hook.js`): when
 you approve a plan in Claude Code's plan mode inside a dev-spec project, Claude is reminded that the plan can become a spec
-— `/spec-import` with the plan's text (`spec_import {tool: "plan", text}`, CLI `dev-spec import plan - < plan.md`), since
+— `/spec-adopt import` with the plan's text (`spec_import {tool: "plan", text}`, CLI `dev-spec import plan - < plan.md`), since
 plan mode keeps plans in `~/.claude/plans`, outside the project. It never imports by itself and is silent elsewhere.
 
 **Status line (opt-in).** `dev-spec statusline` prints one line for Claude Code's status bar — the feature with work under
 way, its tasks, unverified ticks and the next step (`◆ billing · 4/9 tasks · 1 unverified · next: approve tasks`), in the
-project language, and nothing outside a dev-spec project. `/spec-statusline` sets it up after you confirm; by hand:
+project language, and nothing outside a dev-spec project. `/spec-setup statusline` sets it up after you confirm; by hand:
 
 ```powershell
 node "$plugin\cli\dev-spec.js" statusline --print-config   # prints the "statusLine" entry with this clone's absolute path
@@ -291,7 +291,7 @@ Put that entry in `~/.claude/settings.json` (every project) or a project's `.cla
 machine's — keep it out of a committed `.claude/settings.json`). A plugin installed from a git marketplace lives in a
 versioned cache folder: there the printed command finds the newest installed version at each run, so it survives plugin
 updates (1.25.1). It reads `.specs/` (at Phase 4 also the few test files
-the test plan names — never a repo walk, never a network folder), names the same next step as `/next-action` (it doesn't
+the test plan names — never a repo walk, never a network folder), names the same next step as `/spec <feature>` (it doesn't
 check drift, so a finished feature reads "finished", not "clean"), exits 0 always and costs no tokens.
 
 **Your defaults (environment variables, 1.16).** Three optional settings for every project that doesn't set its own —
@@ -299,9 +299,9 @@ each is a fallback; a project's `.specs/roadmap.json` always wins:
 
 | Variable | Default | What it does |
 |---|---|---|
-| `DEV_SPEC_DEFAULT_LANG` | unset (= en) | The language a NEW project gets when `/spec-init` or its first feature names none (`en`, `pt`, `pt-BR`, `es`) — seeded into `meta.lang`, so the project keeps it on every machine. A project that has a language, or already has features, keeps its own. |
+| `DEV_SPEC_DEFAULT_LANG` | unset (= en) | The language a NEW project gets when `/spec-setup init` or its first feature names none (`en`, `pt`, `pt-BR`, `es`) — seeded into `meta.lang`, so the project keeps it on every machine. A project that has a language, or already has features, keeps its own. |
 | `DEV_SPEC_STOP_CHECK` | on | `off` switches the end-of-turn evidence gate off for every project that doesn't set `meta.stopCheck` itself (`init --stop-check on\|off` pins a project). |
-| `DEV_SPEC_GUARD_DEFAULT` | off | Guard mode (`off` / `on` / `scope`) for every project that doesn't set `meta.guard` (`/spec-guard` pins a project). |
+| `DEV_SPEC_GUARD_DEFAULT` | off | Guard mode (`off` / `on` / `scope`) for every project that doesn't set `meta.guard` (`/spec-setup guard` pins a project). |
 
 In Claude Code put them in the `env` block of `~/.claude/settings.json` (you, every project) or a project's
 `.claude/settings.local.json` — Claude Code hands that block to the hooks, the MCP server and the commands Claude runs, so

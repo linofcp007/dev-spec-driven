@@ -108,10 +108,10 @@ exports.run = async ({
   // a step of AGENTS.md's pipeline, its sub-bullets included (1.24 r6 H-I6 split step 6 into them), whitespace-normalized
   const docsStep = (n) => (docsAgents.split("\n" + n + ". **")[1] || "").split(/\n(?:\d+\. \*\*|\n)/)[0].replace(/\s+/g, " ");
   ok(/for a task whose `_Verify:_` names a runnable command, a text note alone/.test(docsStep(6)) && /`_Verify: <command>_` always/.test(docsStep(5)) &&
-    /`_Verify: <command>_` always/.test(docsRead("commands", "createTask.md")) && /target tests/.test(docsRead("commands", "createTask.md")) &&
+    /`_Verify: <command>_` always/.test(docsRead("commands", "spec.md")) && /target tests/.test(docsRead("commands", "spec.md")) &&
     ((docsRef("example-spec-combined.md").split("## tasks.md")[1] || "").split("\n---")[0].match(/_Verify: /g) || []).length === 7 &&
-    /\*\*Constitution\*\*[^\n]*constitution\.md/.test(docsRead("commands", "prReview.md")) && /`\/prReview` \| [^|\n]*constitution/.test(docsRef("workflows.md")),
-    "_Verify:_ is an always-marker in AGENTS.md step 5, /createTask and the combined example; a note verifies only a non-runnable task; /prReview checks the constitution (its row: references/workflows.md since 1.21 F3)");
+    /\*\*Constitution\*\*[^\n]*constitution\.md/.test(docsRead("commands", "spec-review.md")) && /`\/(?:prReview|spec-review)[^`|\n]*` \| [^|\n]*constitution/.test(docsRef("workflows.md")),
+    "_Verify:_ is an always-marker in AGENTS.md step 5, /spec's tasks phase (/createTask until 1.26) and the combined example; a note verifies only a non-runnable task; /spec-review branch checks the constitution (its row: references/workflows.md since 1.21 F3)");
   // Prose that lagged behind 1.13 behaviour. (a) The ROADMAP.md "needs attention" line NAMES each unverified task with its
   // reason — README/AGENTS said it "shows how many each feature has". (b) reopen never unticks a REMOVED criterion's tasks
   // (`retire` lists them) — every surface that says "reopen unticks the affected tasks" must carry that exception in the
@@ -134,12 +134,12 @@ exports.run = async ({
   const docsReopenBad = docsReopenSurfaces.flatMap(([f, t, n]) => { const s = docsReopen(t); return s.length < n ? [f + " (" + s.length + " < " + n + ")"] : s.filter((x) => !/\bretire\b/.test(x)).map((x) => f + ": " + x); });
   ok(!docsReopenBad.length, "README (EN/PT/ES), AGENTS.md, tooling-reference and SKILL.md: every 'reopen unticks' sentence says a removed criterion's tasks are never unticked (retire) (bad: " + docsReopenBad.join(" | ") + ")");
   const docsApprove = docsWs(docsRead("commands", "approve.md"));
-  const docsGate = (from, to) => (docsApprove.split(from)[1] || "").split(to)[0];
   const apDesc = (list.result.tools.find((t) => t.name === "spec_approve") || {}).description || "";
-  ok(/`traceability` \(every AC has a test row, and no row cites an AC requirements\.md doesn't define\)/.test(docsGate("; test-plan: ", "; eval-plan: ")) &&
-    !/test-plan|doesn't define/.test(docsGate("; tasks: ", "; tests (")) && /`traceability` \(every AC covered by a task, no phantom AC \/ T-IDs in tasks\)/.test(docsGate("; tasks: ", "; tests (")) &&
-    !/tasks: [^;]*row citing/.test(apDesc), // 1.26: the per-phase check lists left spec_approve's description (the refusal names the failing ids; /approve lists them)
-    "/approve + spec_approve: a test-plan row citing an undefined AC fails the TEST-PLAN gate's traceability (approvalChecks) — never listed under the tasks gate");
+  // 1.26: the per-phase check lists left spec_approve's description AND /approve — a refusal names its failing check ids (the
+  // engine's approvalChecks is the one list); neither may put a test-plan row under the tasks gate should one come back.
+  ok(!/; tasks: [^;]*(?:test-plan|doesn't define|row citing)/.test(docsApprove) && /refusal names its failing check ids/.test(docsApprove) &&
+    !/tasks: [^;]*row citing/.test(apDesc),
+    "/approve + spec_approve: a test-plan row citing an undefined AC fails the TEST-PLAN gate's traceability (approvalChecks) — never listed under the tasks gate; /approve shows the refusal's failing check ids");
   // 1.20: the notes are CLAUDE.md (the index) + docs/maintainers/*.md — a moved section is read from its topic file, and
   // what no note may say is checked across all of them.
   const docsNotes = docsWs(maintainerNotes());
@@ -152,12 +152,12 @@ exports.run = async ({
   // since its finish: finish it again, nothing drifted) and on an unreadable .state.json. Every surface documenting drift's
   // exit code names the stale baseline; none says drift alone.
   const docsDriftExit = [["tooling-reference.md", docsRef("tooling-reference.md"), /`drift` \(drift, a stale baseline or an unreadable state\) exit 1/],
-    ["AGENTS.md", docsAgents, /\(exit 1 on drift or a stale baseline\)/], ["commands/spec-drift.md", docsRead("commands", "spec-drift.md"), /exit 1 on drift or a stale baseline/],
+    ["AGENTS.md", docsAgents, /\(exit 1 on drift or a stale baseline\)/], ["commands/spec-report.md", docsRead("commands", "spec-report.md"), /exit 1 on drift or a stale baseline/],
     ["change-management.md", docsRef("change-management.md"), /exit 1 on drift or a stale baseline/], ["cli/dev-spec.js", docsRead("cli", "dev-spec.js"), /\(exit 1 on drift or a stale baseline\)/],
     ["docs/maintainers/conventions.md", docsConventions, /`drift` \(drift, a stale baseline or an error\)/]];
   const docsDriftBad = docsDriftExit.filter(([, t, re]) => !re.test(docsWs(t)) || /`drift` \(drift\)/.test(docsWs(t))).map(([f]) => f)
     .concat(/`drift` \(drift\)/.test(docsNotes) ? ["the maintainer notes (CLAUDE.md + docs/maintainers/)"] : []);
-  ok(!docsDriftBad.length, "every surface documenting drift's exit code (tooling-reference, AGENTS.md, /spec-drift, change-management, CLI help, the maintainer notes' CLI exit codes) says a stale baseline exits 1 too, never 'drift (drift)' alone (bad: " + docsDriftBad.join(", ") + ")");
+  ok(!docsDriftBad.length, "every surface documenting drift's exit code (tooling-reference, AGENTS.md, /spec-report drift, change-management, CLI help, the maintainer notes' CLI exit codes) says a stale baseline exits 1 too, never 'drift (drift)' alone (bad: " + docsDriftBad.join(", ") + ")");
   { // 1.20 docs: CLAUDE.md is loaded into EVERY Claude Code session in this repository, so it is a short index — the hard
     // constraints, the layout in brief and a topic map — over docs/maintainers/, whose files are read on demand. An
     // `@docs/…` import would inline them all again. The map and the folder agree both ways, and the hard constraints
@@ -223,10 +223,13 @@ exports.run = async ({
     agentTools("spec-implementer.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell" &&
     agentTools("spec-simplifier.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell",
     "4 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer adds a shell, the implementer and the simplifier Write/Edit and a shell — Bash and (1.23 review 5) PowerShell: Claude Code on Windows without Git Bash has only the PowerShell tool, and a tools list with an unresolved entry still launches — none gets the Agent tool");
-  const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
-  ok(cmdFiles.length === 55 && ["spec-simplify.md", "spec-statusline.md", "spec-milestone.md", "spec-tracks.md", "spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
-    "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
-    "55 commands incl. the 1.22 /spec-simplify, the 1.16 /spec-statusline, /spec-milestone, the 1.15 /spec-tracks, the 1.14 /spec-tour, /spec-decide, /spec-spike, /spec-ff, /spec-export, /spec-changelog, /spec-templates, /spec-bugfix, /spec-finish, /spec-review-feedback and the 1.13 /spec-impact, /spec-metrics, /spec-converge, /spec-import, /spec-catalog, /spec-drift, /spec-guard, /spec-superpowers, /spec-upgrade");
+  // 1.26: the 55 commands folded into 22 — the phase commands into /spec, the rest into umbrella commands with subcommands
+  // (docs/maintainers/extending.md → The 1.26 command set has the old → new table); the exact set, nothing else.
+  const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md")).sort();
+  const cmdSet = ["approve", "clarify", "ds", "dss", "dsx", "eval", "executeTask", "feature", "roadmap", "spec", "spec-adopt", "spec-bugfix", "spec-change",
+    "spec-doctor", "spec-finish", "spec-report", "spec-review", "spec-setup", "spec-spike", "spec-status", "spec-tour", "spec-upgrade"].map((x) => x + ".md").sort();
+  ok(cmdFiles.length === 22 && cmdFiles.join() === cmdSet.join(),
+    "22 commands: /spec (+ /ds), /spec-bugfix, /clarify, /approve, /spec-doctor, /executeTask (+ /dsx), /spec-status (+ /dss), /roadmap, /spec-review, /spec-finish, /spec-spike, /spec-change, /feature, /spec-report, /spec-adopt, /spec-setup, /eval, /spec-upgrade, /spec-tour (got " + cmdFiles.join(", ") + ")");
   const evalRoot = path.join(root, "evals");
   // `fixtures/` holds the behavioural cases' shared scaffold (lib.sh + project trees) — not a case. Behavioural cases
   // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below.
@@ -301,15 +304,16 @@ exports.run = async ({
     const dWs = (t) => t.replace(/\s+/g, " ");
     // D1: red-green counts only _Makes green:_ IDs — a bugfix's guard test T-02 shows up only on a pre-1.14 bugfix
     // (its task 4 still lists it); the docs said it "is expected here" / "is named there too" on every bugfix.
-    const d1Docs = [dRead("commands", "spec-doctor.md"), dRef("verification.md"), dRef("test-patterns.md")].map(dWs);
-    // (1.25.1 review: the command says "an older bugfix scaffold" — a model instruction states the behaviour, not the release)
-    ok(d1Docs.every((t) => !/T-02 is expected here|is named there too/.test(t) && /before 1\.14|an older bugfix scaffold/.test(t) && /remove (?:T-02|it) from (?:that|there|task 4)/.test(t)),
-      "full review D1: spec-doctor / verification / test-patterns — T-02 in red-green only on a pre-1.14 bugfix; the fix is removing it from task 4's _Makes green:_");
+    // (1.26: /spec-doctor no longer explains each check — its result does, and tooling-reference.md lists them; the references keep it)
+    const d1Docs = [dRef("verification.md"), dRef("test-patterns.md")].map(dWs);
+    ok(d1Docs.every((t) => !/T-02 is expected here|is named there too/.test(t) && /before 1\.14|an older bugfix scaffold/.test(t) && /remove (?:T-02|it) from (?:that|there|task 4)/.test(t)) &&
+      !/T-02 is expected here|is named there too/.test(dWs(dRead("commands", "spec-doctor.md"))),
+      "full review D1: verification / test-patterns — T-02 in red-green only on a pre-1.14 bugfix; the fix is removing it from task 4's _Makes green:_ (/spec-doctor says nothing else)");
     // D2: the canonical _Expect: fail_ example keeps _Makes green:_ off the red task (the fix task makes it green).
     const d2Ex = ((dRef("verification.md").split("## Red → green")[1] || "").match(/```markdown\n([\s\S]*?)\n```/) || [])[1] || "";
     ok(/_Expect: fail_/.test(d2Ex) && !/_Makes green:/.test(d2Ex), "full review D2: verification.md's _Expect: fail_ example has no _Makes green:_ on the red task");
     // D3: design section examples use the template's heading ("Data Models"); decide refuses "Data Model" on a fresh scaffold.
-    const d3Surfaces = [dRead("cli", "dev-spec.js"), dRead("mcp", "server.js"), dRead("commands", "spec-decide.md"), dRef("change-management.md")];
+    const d3Surfaces = [dRead("cli", "dev-spec.js"), dRead("mcp", "server.js"), dRead("commands", "spec-change.md"), dRef("change-management.md")];
     const d3p = path.join(tmp, "fr-d3");
     S.initProject(d3p, ["core"], "en");
     S.createFeature(d3p, "Keys", ["core"]);
@@ -337,18 +341,19 @@ exports.run = async ({
         if (/^[[\]{}#&*!|>%@`,]/.test(v) || /^[-?:](?:\s|$)/.test(v) || /: |:$/.test(v) || /\s#/.test(v)) d4Bad.push(f.join("/") + ":" + (i + 1) + " plain scalar");
       }
     }
-    const d4Catalog = require("./lib/prompts-resources.js").listPrompts().find((x) => x.name === "spec-catalog");
-    ok(d4Files.length === 60 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
-      "full review D4: all 55 commands + 4 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
+    const d4Report = require("./lib/prompts-resources.js").listPrompts().find((x) => x.name === "spec-report");
+    ok(d4Files.length === 27 && d4Bad.length === 0 && d4Report && /^Reports from the specs: the living catalog, drift since finish/.test(d4Report.description),
+      "full review D4: all 22 commands + 4 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-report's quoted description");
     // D5: guard is a string enum on | off | scope — the docs told agents to pass guard: true / false.
-    const d5Docs = [dRead("commands", "spec-guard.md"), dRead("commands", "spec-init.md"), dRef("tooling-reference.md")];
+    const d5Docs = [dRead("commands", "spec-setup.md"), dRef("tooling-reference.md")]; // 1.26: /spec-guard + /spec-init → /spec-setup guard | init
     const d5Schema = list.result.tools.find((t) => t.name === "spec_init").inputSchema.properties.guard;
     ok(d5Schema.type === "string" && d5Schema.enum.join() === "on,off,scope" &&
       d5Docs.every((t) => !/guard: (?:true|false)\b|`true` \/ `"scope"`|`true` \/ `false`/.test(t) && /"on"/.test(t) && /"off"/.test(t) && /"scope"/.test(t)),
-      "full review D5: /spec-guard, /spec-init and the tooling reference pass guard as \"on\" / \"off\" / \"scope\" (the schema's string enum)");
+      "full review D5: /spec-setup (guard, init) and the tooling reference pass guard as \"on\" / \"off\" / \"scope\" (the schema's string enum)");
     // D6: spec_approve's description lists every execution check (suite-evidence; a spike's spike / decision), one line.
     const d6Desc = list.result.tools.find((t) => t.name === "spec_approve").description;
-    // (1.26: the per-phase check lists left the description — a refusal names its failing check ids; /approve lists each gate's)
+    // (1.26: the per-phase check lists left the description and /approve — a refusal names its failing check ids; /approve still
+    // says what gates `execution`)
     ok(!/\n/.test(d6Desc) && /REFUSES it while the phase's checks fail/.test(d6Desc) && /spec_finish's blockers[\s\S]{0,400}`suite-evidence`/.test(dWs(dRead("commands", "approve.md"))),
       "full review D6: spec_approve's description says the gate refuses while the phase's checks fail; /approve names the execution gate's suite-evidence");
     // 1.21 review A8: no tool description runs two sentences together (spec_approve read "…the user runs).WAIVERS:")
@@ -383,23 +388,24 @@ exports.run = async ({
     ok(d7ExRed && d7Greened.length >= 13 && d7Greened.every((id) => new RegExp("(?<![A-Za-z0-9])" + id + "(?!\\d)").test(d7ExRed.split("\n")[0])) &&
       !/all four tracks|every track at once/.test(dRef("example-spec-combined.md")),
       "full review D7: example-spec.md's red-run task (_Expect: fail_) names every T-ID made green; example-spec-combined is no longer titled 'all four tracks'");
-    // D8: the tour fills classification.md before it approves it; the bugfix flow records task 1's red run before the fix
-    // (task 2) — the short form: the reproduction and the root cause are bug.md's, gated by the approvals, never a task to tick.
+    // D8: the tour fills its plan before it approves it (1.26: a size-xs change — change.md, one plan approval — instead of
+    // classification.md and four gates); the bugfix flow records task 1's red run before the fix (task 2) — the short form: the
+    // reproduction and the root cause are bug.md's, gated by the approvals, never a task to tick.
     const d8Tour = dWs(dRead("commands", "spec-tour.md")), d8Bug = dWs(dRead("commands", "spec-bugfix.md")), d8Ref = dWs(dRef("bugfix.md"));
-    ok(/3\. \*\*Classify\*\*.*classification\.md.*7\. \*\*Approve\*\*/.test(d8Tour) &&
+    ok(/3\. \*\*Classify and size\*\*.*4\. \*\*Plan\*\* — fill `change\.md`.*5\. \*\*Approve\*\*/.test(d8Tour) &&
       /\(T-01, task 1\) — the scaffold marks task 1 `_Expect: fail_`/.test(d8Bug) && /done <feature> 1 --run/.test(d8Bug) && /\*\*Fix the cause\*\* \(one change, task 2\)/.test(d8Bug) &&
       d8Bug.indexOf("done <feature> 1 --run") < d8Bug.indexOf("done <feature> 2 --run") && !/done <feature> [34]\b/.test(d8Bug) &&
       /no task stands for them/.test(d8Ref) && /\*\*Failing regression test\*\* \(task 1\)/.test(d8Ref) && /\*\*Fix\*\* \(task 2\)/.test(d8Ref),
-      "full review D8: /spec-tour records the decision in classification.md (step 3) before approving it (step 7); /spec-bugfix and references/bugfix.md: task 1 is the red regression test (its red run first), task 2 the fix — no reproduce / root-cause task to tick");
+      "full review D8: /spec-tour sizes the change (step 3) and fills change.md (step 4) before approving it (step 5); /spec-bugfix and references/bugfix.md: task 1 is the red regression test (its red run first), task 2 the fix — no reproduce / root-cause task to tick");
     // D9: the implementer and the reviewer get explicit tool lists — no Agent tool (they never dispatch subagents).
     const d9Tools = (x) => ((dRead("agents", x).split(/^---$/m)[1] || "").match(/^tools: (.*)$/m) || [])[1] || "";
     ok(["spec-implementer.md", "spec-reviewer.md", "spec-critic.md"].every((x) => d9Tools(x) && !/\b(?:Agent|Task)\b/.test(d9Tools(x))) &&
       !/\b(?:Write|Edit)\b/.test(d9Tools("spec-reviewer.md")) && /\bBash\b/.test(d9Tools("spec-reviewer.md")) && /\bWrite\b.*\bEdit\b/.test(d9Tools("spec-implementer.md")),
       "full review D9: spec-implementer (Read/Write/Edit/Glob/Grep/Bash) and spec-reviewer (read-only + Bash) declare tools — neither can dispatch subagents");
-    // D10: spec_scan takes no path — /scan says to pass the folder as projectDir.
-    const d10 = dRead("commands", "scan.md");
+    // D10: spec_scan takes no path — /spec-adopt scan (/scan until 1.26) says to pass the folder as projectDir.
+    const d10 = dRead("commands", "spec-adopt.md");
     ok(!list.result.tools.find((t) => t.name === "spec_scan").inputSchema.properties.path && !/\[optional path\]/.test(d10) && /as `projectDir`/.test(d10),
-      "full review D10: /scan no longer hints at a path argument spec_scan doesn't have; it passes the folder as projectDir");
+      "full review D10: /spec-adopt scan no longer hints at a path argument spec_scan doesn't have; it passes the folder as projectDir");
     // D11: the evidence rule sits in the initialize instructions, but not first — the CHANGELOG said they "open with it".
     ok(/Evidence before claims/.test(init.result.instructions) && !/^Evidence/.test(init.result.instructions) && !/instructions open with it/.test(dWs(dRead("CHANGELOG.md"))),
       "full review D11: the CHANGELOG no longer says the initialize instructions open with the evidence rule");
@@ -438,7 +444,7 @@ exports.run = async ({
       /an explicit yes for THAT phase/.test(tools.spec_approve);
     const prefill = ["reproduction", "rootCause", "condition", "behaviour", "includeBody"].every((k) => bugCmd.includes("`" + k) || bugCmd.includes(k + "`")) &&
       /--root-cause/.test(docsWs(bugT)) && /prefill/i.test(tools.spec_create) && tools.spec_complete_task.includes(S.DEV_SPEC + " done <feature> <n> --run");
-    ok(!bareRun.length && runnableCmds.length >= 8 && !bareHandOff.length && !noSubagent.length && signOff && prefill,
+    ok(!bareRun.length && runnableCmds.length >= 6 && !bareHandOff.length && !noSubagent.length && signOff && prefill,
       "1.21 F3: command files hand over runnable `--run` lines (node \"${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js\" …), the skill and references the `node \"<clone>/cli/dev-spec.js\"` line; no shell → ask the user, never a subagent (bugfix command, verification / bugfix / red-flags references, SKILL.md, the complete_task description, the MCP instructions); a green run is evidence, not the execution sign-off (/spec-finish, SKILL.md, spec_finish / spec_approve); the bugfix prefill is documented (got " +
       JSON.stringify({ bareRun, runnableCmds: runnableCmds.length, bareHandOff, noSubagent, signOff, prefill }) + ")");
   }
@@ -466,7 +472,7 @@ exports.run = async ({
     // P5: spec_create's tracks is an array — a comma string is refused ("tracks must be an array").
     const mdDirs = [["commands"], ["agents"], ["skills", "dev-spec-driven", "references"]];
     const strTracks = mdDirs.flatMap((d) => fs.readdirSync(path.join(root, ...d)).filter((f) => f.endsWith(".md") && /\btracks: "/.test(docsRead(...d, f))).map((f) => d.join("/") + "/" + f));
-    ok(!strTracks.length && /tracks: \["tdd", "a11y"\]/.test(docsRead("commands", "spec-tracks.md")),
+    ok(!strTracks.length && /tracks: \["tdd", "a11y"\]/.test(docsRead("commands", "spec-setup.md")),
       "1.22 review P5: no command, agent or reference passes spec_create a comma string for tracks (got " + JSON.stringify(strTracks) + ")");
     // P6: SubagentStop matches spec-(implementer|simplifier) — no doc says the implementer only.
     const hooksJson = docsRead("hooks", "hooks.json");
@@ -474,35 +480,37 @@ exports.run = async ({
       /SubagentStop for the `spec-implementer` and `spec-simplifier` agents/.test(docsWs(docsRead("INSTALL.md"))) &&
       !/\(the `spec-implementer` agent only\)|SubagentStop for the `spec-implementer` agent\)/.test(docsWs(docsRef("verification.md") + docsRead("INSTALL.md"))),
       "1.22 review P6: verification.md and INSTALL.md name both SubagentStop agents (spec-implementer, spec-simplifier), as hooks.json matches");
-    // P7: /approve and /spec-doctor list every built-in track's sections check and a pack's; /spec-doctor the 1.14–1.21 ids;
-    // the critic checks the +api / +ui / +obs / +data design sections. Every id named is one the engine emits.
+    // P7: the doctor's check list names every built-in track's sections check and a pack's, and the 1.14–1.21 ids; the critic
+    // checks the +api / +ui / +obs / +data design sections. Every id named is one the engine emits. (1.26: /approve and
+    // /spec-doctor no longer carry the catalogue — the result names each check, /spec-doctor points to tooling-reference.md's list.)
     const engineSrc = libSources().map((f) => fs.readFileSync(f, "utf8")).join("\n");
-    const apW = docsWs(docsRead("commands", "approve.md")), drW = docsWs(docsRead("commands", "spec-doctor.md"));
+    const drW = docsWs(docsRef("tooling-reference.md")), drCmd = docsWs(docsRead("commands", "spec-doctor.md"));
     const secIds = ["api-sections", "ui-sections", "obs-sections", "data-sections"];
     const drIds = ["task-deps", "change-scope", "merge-conflicts", "design-tradeoffs", "design-risks", "design-reuse", "waiver-expired", "track-pack-missing"];
     const criticTracks = (docsRead("agents", "spec-critic.md").match(/^\| \*\*Tracks\*\* \|.*$/m) || [""])[0];
-    ok(secIds.every((id) => apW.includes("`" + id + "`") && drW.includes("`" + id + "`") && engineSrc.includes('"' + id + '"')) &&
-      apW.includes("`<pack>-sections`") && drW.includes("`<pack>-sections`") && /`task-deps`/.test(cut(apW, "; tasks: ", "; tests (")) &&
-      drIds.every((id) => drW.includes("`" + id + "`") && engineSrc.includes('"' + id + '"')) &&
+    ok(secIds.every((id) => drW.includes("`" + id + "`") && engineSrc.includes('"' + id + '"')) && drW.includes("`<pack>-sections`") &&
+      drIds.every((id) => drW.includes("`" + id + "`") && engineSrc.includes('"' + id + '"')) && /references\/tooling-reference\.md` → spec_doctor/.test(drCmd) &&
       ["+api: the `[API]`", "+ui: the `[UI]`", "+obs: the `[OBS]`", "+data: the `[DATA]`"].every((w) => criticTracks.includes(w)),
-      "1.22 review P7: /approve and /spec-doctor name api- / ui- / obs- / data- / <pack>-sections; /spec-doctor task-deps, change-scope, merge-conflicts and the design-tradeoffs / risks / reuse, waiver-expired, track-pack-missing warnings (each an engine id); the critic's Tracks row covers +api / +ui / +obs / +data");
+      "1.22 review P7: tooling-reference.md's doctor list (where /spec-doctor points) names api- / ui- / obs- / data- / <pack>-sections, task-deps, change-scope, merge-conflicts and the design-tradeoffs / risks / reuse, waiver-expired, track-pack-missing warnings (each an engine id); the critic's Tracks row covers +api / +ui / +obs / +data");
     // P8: the observe hook logs PowerShell runs (with an explicit exit code) — its row no longer says the opposite.
     const obsRow = (docsRef("tooling-reference.md").match(/^\| `hooks\/observe-hook\.js` \|.*$/m) || [""])[0];
     ok(/or PowerShell, with an explicit exit code/.test(obsRow) && !/PowerShell runs are not observed/.test(obsRow),
       "1.22 review P8: tooling-reference's observe-hook row says PowerShell runs are logged (explicit exit code) — no contradicting tail");
     // P9: a subagent (or an MCP prompt) can't resolve a bare `references/…`, run `dev-spec` or follow "agent X → section":
     // the agents name the plugin's skills/dev-spec-driven/references/ (the controller passes the folder), the final review
-    // gets spec_log's output, /spec-simplify and /prReview carry the report headings and the 0–100 scale inline.
-    const agentDocs = ["spec-implementer.md", "spec-reviewer.md", "spec-simplifier.md", "spec-critic.md"].map((a) => [a, docsRead("agents", a)]);
+    // gets spec_log's output, /spec-review simplify and branch (/spec-simplify, /prReview until 1.26) carry the report headings and
+    // the 0–100 scale inline; 1.26: a command names a reference by its full path (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/…`).
+    const agentDocs = ["spec-implementer.md", "spec-reviewer.md", "spec-simplifier.md", "spec-critic.md"].map((a) => [a, docsRead("agents", a)])
+      .concat(fs.readdirSync(path.join(root, "commands")).filter((f) => f.endsWith(".md")).map((f) => ["commands/" + f, docsRead("commands", f)]));
     const bareRefs = agentDocs.filter(([, t]) => /(?<!skills\/dev-spec-driven\/)references\/[\w.-]+\.md/.test(t)).map(([a]) => a);
-    const revW = docsWs(docsRead("agents", "spec-reviewer.md")), simpW = docsWs(docsRead("commands", "spec-simplify.md")), prrW = docsWs(docsRead("commands", "prReview.md"));
+    const revW = docsWs(docsRead("agents", "spec-reviewer.md")), simpW = docsWs(docsRead("commands", "spec-review.md")), prrW = simpW;
     ok(!bareRefs.length && !/dev-spec log/.test(revW) && /the `spec_log` output the controller passed/.test(revW) &&
       /6\. the references folder path/.test(sub) && /the `spec_log \{name, gitLog\}` output/.test(cut(sub, "## Final review", "## The simplification pass")) &&
       /the report path \(`\.specs\/<feature>\/\.execution\/simplify-report\.md`\) and the references folder path/.test(sub) &&
       !/agents\/spec-simplifier\.md` → Report/.test(simpW) && ["`## Baseline`", "`## Changes`", "`## Dropped`", "`## Left alone`", "`## Final runs` LAST"].every((h) => simpW.includes(h)) &&
       /`` - `<the exact command>` → exit 0 \(212 passing\) ``/.test(simpW) &&
       !/agent → Calibration/.test(prrW) && /Rate each 0–100: \*\*0\*\* not real[^.]*\*\*25\*\* might be real, unverified · \*\*50\*\* verified but minor[^.]*\*\*75\*\*[^.]*\*\*100\*\* direct evidence/.test(prrW),
-      "1.22 review P9: the agents cite the plugin's skills/dev-spec-driven/references/ (the controller passes the folder; bare: " + JSON.stringify(bareRefs) + "); the final review gets spec_log's output, never a bare dev-spec log; /spec-simplify inlines the report headings and the Final-runs line; /prReview the 0–100 scale");
+      "1.22 review P9: the agents cite the plugin's skills/dev-spec-driven/references/ (the controller passes the folder; bare: " + JSON.stringify(bareRefs) + "); the final review gets spec_log's output, never a bare dev-spec log; /spec-review inlines the simplify report headings and the Final-runs line, and the branch review's 0–100 scale");
     // P10: the reviewer's calibration lives in agents/spec-reviewer.md → Calibration, not in subagent-execution.md.
     ok(/\*\*Classify\*\* with the reviewer's calibration \(the plugin's `agents\/spec-reviewer\.md` → Calibration\)/.test(docsRef("code-reuse-and-quality.md")) &&
       /^### Calibration$/m.test(docsRead("agents", "spec-reviewer.md")),

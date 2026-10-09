@@ -102,9 +102,11 @@ const ROOT4 = path.resolve(__dirname, "..").replace(/\\/g, "/");
 const rulesOut = ["cursor", "windsurf", "copilot", "gemini", "agents"].map((t) => ({ t, r: run(["rules", t]) }));
 ok(rulesOut.every(({ r }) => r.code === 0 && r.out.includes(ROOT4 + "/") && !/(?<![\w./-])(?:\.\.\/)*(?:cli\/dev-spec\.js|mcp\/server\.js|AGENTS\.md|skills\/dev-spec-driven|agents\/[\w.-]+\.md|commands\/[\w.-]+\.md)/.test(r.out)),
   "rules <cursor|windsurf|copilot|gemini|agents> prints each rule file with absolute paths only");
-// 1.22 review: AGENTS.md cites the plugin's agents/ and commands/ files — `rules agents` makes them absolute too.
-ok(["agents/spec-reviewer.md", "commands/spec-review-feedback.md", "commands/spec-simplify.md"].every((p) => rulesOut[4].r.out.includes(ROOT4 + "/" + p)),
-  "rules agents: agents/spec-reviewer.md, commands/spec-review-feedback.md and commands/spec-simplify.md printed with this clone's absolute path");
+// 1.22 review: AGENTS.md cites the plugin's agents/ and commands/ files — `rules agents` makes them absolute too. (1.26: every one
+// AGENTS.md cites, whichever they are — the 55 commands became 22 — and agents/spec-reviewer.md among them)
+const citedA4 = [...new Set((fs.readFileSync(path.join(__dirname, "..", "AGENTS.md"), "utf8").match(/(?<![\w./-])(?:agents|commands)\/[\w.-]+\.md/g) || []))];
+ok(citedA4.includes("agents/spec-reviewer.md") && citedA4.every((p) => rulesOut[4].r.out.includes(ROOT4 + "/" + p)),
+  "rules agents: every agents/… and commands/… file AGENTS.md cites (" + citedA4.join(", ") + ") printed with this clone's absolute path");
 // 1.22 review: the four short rule files write `dev-spec <command>` — each says what it stands for, and the copy names this clone.
 ok(rulesOut.slice(0, 4).every(({ r }) => r.out.includes("Below, `dev-spec <command>` stands for `node \"" + ROOT4 + "/cli/dev-spec.js\" <command>`") && /`spec_stop_check \{message\}`/.test(r.out)),
   "rules cursor|windsurf|copilot|gemini: `dev-spec <command>` is spelled out as this clone's `node \"…/cli/dev-spec.js\" <command>`; the stop-check names spec_stop_check over MCP");

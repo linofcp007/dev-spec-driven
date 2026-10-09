@@ -677,10 +677,11 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
 
     // R3 — the prose: the implementer searches before it writes (a hard step) and reports a Reuse block; the reviewer checks new code
     // against the EXISTING codebase (a duplicate is Important); the controller files refactor candidates in the backlog; /executeTask,
-    // red-flags, /design, AGENTS.md and SKILL.md (≤ 5,000 words — 1.21 F3) say so — and none of the new text steers toward PRs or CI.
+    // red-flags, /spec's design phase (/design until 1.26), AGENTS.md and SKILL.md (≤ 5,000 words — 1.21 F3) say so — and none of the new
+    // text steers toward PRs or CI.
     const impl = rRd("agents", "spec-implementer.md"), rev = rRd("agents", "spec-reviewer.md"), sub = rRd("skills", "dev-spec-driven", "references", "subagent-execution.md");
     const exec = rRd("commands", "executeTask.md"), flags = rRd("skills", "dev-spec-driven", "references", "red-flags.md"), skill = rRd("skills", "dev-spec-driven", "SKILL.md");
-    const dcmd = rRd("commands", "design.md"), agentsMd = rRd("AGENTS.md"), guide = rRd("skills", "dev-spec-driven", "references", "code-reuse-and-quality.md");
+    const dcmd = rRd("commands", "spec.md"), agentsMd = rRd("AGENTS.md"), guide = rRd("skills", "dev-spec-driven", "references", "code-reuse-and-quality.md");
     const implSearch = cut(impl, "3. **Search before you write**", "4. If anything is unclear");
     const implReuse = cut(impl, "- **Reuse** — a `### Reuse` block", "- Files changed; commits");
     const revQuality = cut(rev, "### 4. Code quality", "### Calibration");
@@ -696,17 +697,19 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
       /refactor:/.test(execReuse) && /duplicate in the existing codebase/.test(exec) &&
       /"I'll write a quick helper" \| Search first/.test(flags) && /"I'll copy this function and tweak it"/.test(flags) && /rule of three/.test(flags) &&
       /\*\*Reuse & Integration\*\*/.test(skill) && /design-reuse/.test(skill) && /code-reuse-and-quality\.md/.test(skill) && /\*\*Search before you write:\*\*/.test(skill) &&
-      skill.split(/\s+/).filter(Boolean).length <= 5000 && /\*\*Every design names what it reuses:\*\*/.test(dcmd) && /design-reuse/.test(dcmd) &&
+      skill.split(/\s+/).filter(Boolean).length <= 5000 && /\*\*design\*\* — [^\n]*Reuse & Integration/.test(dcmd) &&
       /\*\*Reuse & Integration\*\*/.test(agentsMd) && /design-reuse/.test(agentsMd) && /Search before you write/.test(agentsMd) && /design-reuse/.test(guide) &&
       [implSearch, implReuse, revQuality, subRefactor, execReuse].every((t) => t.length > 100 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
-      "1.19 R3: spec-implementer searches before it writes (a hard step: concept + synonyms, reuse → extend → create, no copy-paste) and reports a Reuse block; spec-reviewer checks every new unit against the existing codebase (a duplicate is Important, smells Minor); the controller files refactor candidates in the backlog (subagent-execution.md, /executeTask); red-flags, /design, AGENTS.md and SKILL.md (≤ 5,000 words — 1.21 F3) name them; no PR / CI steering in the new text (got " +
+      "1.19 R3: spec-implementer searches before it writes (a hard step: concept + synonyms, reuse → extend → create, no copy-paste) and reports a Reuse block; spec-reviewer checks every new unit against the existing codebase (a duplicate is Important, smells Minor); the controller files refactor candidates in the backlog (subagent-execution.md, /executeTask); red-flags, /spec's design phase, AGENTS.md and SKILL.md (≤ 5,000 words — 1.21 F3) name them; no PR / CI steering in the new text (got " +
       js([implSearch.length, implReuse.length, revQuality.length, subRefactor.length, execReuse.length, skill.split(/\s+/).filter(Boolean).length]) + ")");
 
     // 1.22 — the prose of the verify pass, the written-rules / history angle and the simplification pass (adapted from
     // Anthropic's code-review / code-simplifier plugins): the reviewer rates findings and lists what is not one, the
     // controller verifies each before a fix round (80+), /prReview verifies before it reports, the simplifier keeps the
     // feature's lines, never a test, one commit each, and proves it — and none of the new text steers toward PRs or CI.
-    const simp = rRd("agents", "spec-simplifier.md"), scmd = rRd("commands", "spec-simplify.md"), prr = rRd("commands", "prReview.md");
+    // (1.26: /prReview and /spec-simplify are the `branch` and `simplify` modes of /spec-review — each read as its own section.)
+    const specReview = rRd("commands", "spec-review.md");
+    const simp = rRd("agents", "spec-simplifier.md"), scmd = cut(specReview, "**simplify", "**feedback"), prr = cut(specReview, "**branch**", "**converge**");
     const revNot = cut(rev, "**Not a finding**", "## Re-review mode"), revVerify = cut(rev, "## Verify mode", "## Final mode");
     const revRules = cut(rev, "### 5. Written rules and history", "### Calibration"), revSimp = cut(rev, "## Simplify mode", "## Verify mode");
     const subVerify = cut(sub, "### 6. Verify the findings", "### 7. Fix loop"), subSimp = cut(sub, "## The simplification pass", "## Closing");
@@ -722,8 +725,8 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
       /Only lines the branch added or changed/.test(simp) && /\*\*Never a test\*\*/.test(simp) && /\*\*Never a contract:\*\*/.test(simp) && /commit it alone/.test(simp) &&
       /never edit the test, never fix forward/.test(simp) && /\*\*`## Final runs`\*\* — LAST in the file/.test(simp) && /ONE line\s+per run/.test(simp) && /NO_CHANGES/.test(simp) && /Adapted from Anthropic's `code-simplifier` plugin/.test(simp) &&
       /\*\*before\*\*\s+`\/spec-finish`/.test(scmd) && /\*\*reverted\*\*\s+\(`git revert <sha>`/.test(scmd) && /done <feature> <n> --run/.test(scmd) && /Never "behaviour unchanged" without the runs/.test(scmd) &&
-      /\| Never a test, fixture or snapshot \|/.test(guideSimp) && /\/spec-simplify/.test(skill) && /\/spec-simplify/.test(exec) && /verify-mode reviewer/.test(exec) &&
-      /agents\/spec-reviewer\.md` → Verify mode/.test(agentsMd) && /commands\/spec-simplify\.md/.test(agentsMd) &&
+      /\| Never a test, fixture or snapshot \|/.test(guideSimp) && /\/spec-simplify|\/spec-review[^\n]*simplify/.test(skill) && /\/spec-review <feature> simplify/.test(exec) && /verify-mode reviewer/.test(exec) &&
+      /agents\/spec-reviewer\.md` → Verify mode/.test(agentsMd) && /commands\/spec-(?:simplify|review)\.md/.test(agentsMd) &&
       // review 1: an ❌ is never unconfirmed (nor pre-existing), a break on untouched lines is the diff's, the verifier gets the
       // report, the simplify pass records the checks again, documents guard mode, never runs the built-in /simplify, and the
       // simplify reviewer gets its inputs; reverts take the dependent commits and stop on a conflict; AGENTS.md scopes the rule
@@ -741,7 +744,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
       /with no `\*\*Confidence:\*\*` line/.test(rev) && /its verdict\s+decides, not a confidence/.test(subVerify) &&
       /at the margin/.test(simp) && /INDENTED lines/.test(simp) && /to the end of the file/.test(simp) &&
       [revNot, revVerify, revRules, revSimp, subVerify, subSimp, guideSimp, simp, scmd].every((t) => t.length > 200 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
-      "1.22: spec-reviewer rates findings, lists what is not one, verifies one finding fresh (verify mode), checks the written rules + history and a simplification diff (simplify mode); the controller verifies each finding before a fix round (80+ confirmed, 50–79 unconfirmed, < 50 refuted) and runs the simplification pass (reverted, not repaired); /prReview verifies before it reports; the simplifier keeps the feature's lines, never a test or contract, one commit each, the final runs last; /spec-simplify, /executeTask, SKILL.md, AGENTS.md and the guide name them; no PR / CI steering (got " +
+      "1.22: spec-reviewer rates findings, lists what is not one, verifies one finding fresh (verify mode), checks the written rules + history and a simplification diff (simplify mode); the controller verifies each finding before a fix round (80+ confirmed, 50–79 unconfirmed, < 50 refuted) and runs the simplification pass (reverted, not repaired); /spec-review branch verifies before it reports; the simplifier keeps the feature's lines, never a test or contract, one commit each, the final runs last; /spec-review simplify, /executeTask, SKILL.md, AGENTS.md and the guide name them; no PR / CI steering (got " +
       js([revNot.length, revVerify.length, revRules.length, revSimp.length, subVerify.length, subSimp.length, guideSimp.length, simp.length, scmd.length]) + ")");
 
     // R4 — steering: structure.md gains Module Boundaries and Shared Code slots, the constitution's example principles a reuse rule

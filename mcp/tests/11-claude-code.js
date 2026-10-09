@@ -265,7 +265,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
     const vals = (m) => (m.result && m.result.completion) || null;
     const pr = { ref: { type: "ref/prompt", name: "spec-status" }, argument: { name: "args", value: "bi" } };
     const cp = [await comp(pr), await comp({ ...pr, ref: { type: "ref/prompt", name: "spec-doctor" }, argument: { name: "args", value: "" } }),
-      await comp({ ...pr, argument: { name: "args", value: "billing x" } }), await comp({ ref: { type: "ref/prompt", name: "classify" }, argument: { name: "args", value: "a" } }),
+      await comp({ ...pr, argument: { name: "args", value: "billing x" } }), await comp({ ref: { type: "ref/prompt", name: "spec-bugfix" }, argument: { name: "args", value: "a" } }),
       await comp({ ...pr, argument: { name: "args", value: "ILL" } })];
     ok(JSON.stringify(csInit.result.capabilities.completions) === "{}" && JSON.stringify(vals(cp[0])) === '{"values":["billing"],"total":1,"hasMore":false}' &&
       vals(cp[1]).values.join() === "auth,billing" && vals(cp[2]).values.length === 0 && vals(cp[3]).values.length === 0 && vals(cp[4]).values.join() === "billing",

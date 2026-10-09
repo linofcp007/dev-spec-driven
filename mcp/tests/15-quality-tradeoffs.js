@@ -178,17 +178,18 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, require })
       "1.17 A2: spec_clarify asks ONE consistency question (nudges consistency-unstated, ≤ 3 signals) when the spec names a queue / events / a transaction and neither the requirements nor the design answer it; answered → none; PT 'fila' + 'evento' fires, ES 'fila' (a row) + 'evento' doesn't (one concept), ES 'cola' + 'evento' does; a bugfix is never asked (got " +
       js([n1.nudges, n2.nudges, n3.nudges, nPt, nEsRow, nEsQ, nB.nudges]) + ")");
 
-    // A2 / A3 — the prose: /grill's constraints round, the micro-cycle (spec-implementer, test-patterns, /executeTask, the superpowers
-    // precedence row), the critic's trade-offs row, /design and SKILL.md — and none of the new text steers toward PRs or CI.
-    const grill = aRd("commands", "grill.md"), impl = aRd("agents", "spec-implementer.md"), tpat = aRd("skills", "dev-spec-driven", "references", "test-patterns.md");
-    const exec = aRd("commands", "executeTask.md"), sup = aRd("commands", "spec-superpowers.md"), critic = aRd("agents", "spec-critic.md"), dcmd = aRd("commands", "design.md");
+    // A2 / A3 — the prose: the grill's constraints round (/clarify --grill since 1.26), the micro-cycle (spec-implementer, test-patterns,
+    // /executeTask, the superpowers precedence row — /spec-setup superpowers), the critic's trade-offs row, /spec's design phase and
+    // SKILL.md — and none of the new text steers toward PRs or CI.
+    const grill = aRd("commands", "clarify.md"), impl = aRd("agents", "spec-implementer.md"), tpat = aRd("skills", "dev-spec-driven", "references", "test-patterns.md");
+    const exec = aRd("commands", "executeTask.md"), sup = aRd("commands", "spec-setup.md"), critic = aRd("agents", "spec-critic.md"), dcmd = aRd("commands", "spec.md");
     const skill = aRd("skills", "dev-spec-driven", "SKILL.md");
-    const round = cut(grill, "**Constraints round**", "4. When you reach");
+    const round = cut(grill, "**Constraints round**", "Write each settled answer");
     const micro = cut(tpat, "## The micro-cycle inside a task", "## Anti-Patterns to Reject");
     const implCycle = cut(impl, "## The micro-cycle (tdd tasks)", "## Hard rules");
     const excuses = ["Too simple to test", "I'll test after", "Just this once", "keep the code as a reference", "Manual testing is enough", "TDD slows me down"];
     const flags = ["passed on its first run", "can't explain why it failed", "written after the code"];
-    const newProse = [round, micro, implCycle, cut(dcmd, "**Every design weighs", "Re-read steering"), (critic.match(/^\| \*\*Trade-offs & risks\*\*.*$/m) || [""])[0]];
+    const newProse = [round, micro, implCycle, cut(dcmd, "- **design**", "- **test-plan**"), (critic.match(/^\| \*\*Trade-offs & risks\*\*.*$/m) || [""])[0]];
     ok(["Atomicity", "ACID and isolation", "isolation level", "Race conditions", "concurrently", "Consistency model", "Delivery and idempotency", "idempoten", "Dependency failure", "Volume and growth", "Business outcome", "Success Criterion"]
       .every((w) => round.includes(w)) && /\*\*Alternatives & Trade-offs\*\*/.test(round) &&
       /obra\/superpowers[^\n]*\n?[^\n]*\(MIT\)/.test(micro) && excuses.every((e) => micro.includes(e)) && flags.every((f) => micro.includes(f)) && /one\s+behaviour at a time/.test(micro) &&
@@ -196,10 +197,10 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, require })
       /one behaviour at a time/.test(implCycle) && /obra\/superpowers/.test(implCycle) && /\(MIT\)/.test(implCycle) && /deleted and redone from the test/.test(implCycle) &&
       /Watch it fail for the right reason/.test(implCycle) && /Refactor only on green/.test(implCycle) && /No production code without a failing test first/.test(impl) &&
       /micro-cycle/.test(exec) && /deleted and redone/.test(exec) && /\| test-driven-development \| [^\n]*micro-cycle[^\n]*\|/.test(sup) &&
-      /Trade-offs & risks/.test(critic) && /at least two REAL options/.test(critic) && /Alternatives & Trade-offs/.test(dcmd) && /\*\*Risks\*\*/.test(dcmd) &&
+      /Trade-offs & risks/.test(critic) && /at least two REAL options/.test(critic) && /Alternatives & Trade-offs, Risks/.test(dcmd) &&
       /\*\*Alternatives & Trade-offs\*\*/.test(skill) && /design-tradeoffs/.test(skill) && /micro-cycle/.test(skill) && /constraints round/.test(skill) && skill.split(/\s+/).filter(Boolean).length <= 5000 &&
       newProse.every((t) => t.length > 50 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
-      "1.17 A2 / A3: /grill has the constraints round (atomicity, ACID + isolation, races, consistency, delivery + idempotency, dependency failure, volume, a measurable outcome); the micro-cycle (credited to obra/superpowers, MIT) with its rationalizations and red flags is in test-patterns.md, spec-implementer.md and /executeTask; the superpowers row, the critic's trade-offs row, /design and SKILL.md (≤ 5,000 words — 1.21 F3) name them; no PR / CI steering in the new text (got " +
+      "1.17 A2 / A3: /clarify --grill has the constraints round (atomicity, ACID + isolation, races, consistency, delivery + idempotency, dependency failure, volume, a measurable outcome); the micro-cycle (credited to obra/superpowers, MIT) with its rationalizations and red flags is in test-patterns.md, spec-implementer.md and /executeTask; the superpowers row (/spec-setup), the critic's trade-offs row, /spec's design phase and SKILL.md (≤ 5,000 words — 1.21 F3) name them; no PR / CI steering in the new text (got " +
       js([newProse.map((t) => t.length), skill.split(/\s+/).filter(Boolean).length]) + ")");
 
     // 1.17 A review 1 — the nudge never reads the plugin's own template text: a pristine scaffold of every track (+saas's "Concurrent users …

@@ -287,24 +287,31 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
     for (const s of [sid, sid + "-b"]) try { fs.unlinkSync(HU.sessionFlagFile("forced-note", s)); } catch { /* gone */ }
   }
 
-  // C-I1 + the listing budget — the human-only commands carry `disable-model-invocation: true` (Claude Code then never runs them on
-  // its own); the command descriptions are short English lines (the PT / ES tails filled Claude Code's shared skill-listing budget:
-  // 15 commands were listed with no description). The MCP prompts still list every command.
+  // C-I1 + the listing budget — Claude Code lists every model-invocable skill and command with its description under ONE budget
+  // shared by all installed plugins (1 % of the context window; on overflow descriptions are dropped — 15 dev-spec commands were
+  // listed with none). 1.26: only /spec and /spec-bugfix stay model-invocable; every other command carries
+  // `disable-model-invocation: true` — its description leaves the model's context, the user still types it — so the model-visible
+  // listing (those two descriptions + the skill's) stays ≤ 1,500 characters. The MCP prompts still list every command.
   {
     const PR = require("./lib/prompts-resources.js");
     const dir = path.join(__dirname, "..", "commands");
     const files = fs.readdirSync(dir).filter((f) => f.endsWith(".md")).sort();
     const fm = Object.fromEntries(files.map((f) => [f.slice(0, -3), PR.parseFrontMatter(fs.readFileSync(path.join(dir, f), "utf8")).data]));
-    const human = ["approve", "ds", "dss", "dsx", "spec-ff", "spec-guard", "spec-statusline", "spec-superpowers", "spec-tour"];
+    const modelInvocable = ["spec", "spec-bugfix"];
+    const human = Object.keys(fm).filter((n) => !modelInvocable.includes(n)).sort();
     const marked = Object.keys(fm).filter((n) => fm[n]["disable-model-invocation"] === "true").sort();
     const descs = Object.values(fm).map((d) => d.description || "");
     const total = descs.reduce((n, d) => n + d.length, 0);
-    const long = Object.keys(fm).filter((n) => (fm[n].description || "").length > 150 || !(fm[n].description || "").length);
+    const long = Object.keys(fm).filter((n) => (fm[n].description || "").length > 125 || !(fm[n].description || "").length);
     const tails = Object.keys(fm).filter((n) => / PT - | ES - |Atalho|Atajo/.test(fm[n].description || ""));
+    const skillDesc = PR.parseFrontMatter(fs.readFileSync(path.join(__dirname, "..", "skills", "dev-spec-driven", "SKILL.md"), "utf8")).data.description || "";
+    const visible = modelInvocable.reduce((n, c) => n + ((fm[c] || {}).description || "").length, 0) + skillDesc.length;
     const listed = PR.listPrompts({ lang: "en" }).map((x) => x.name);
-    ok(js(marked) === js(human) && !long.length && !tails.length && total <= 6000 && human.every((n) => listed.includes(n)) && listed.length === files.length,
-      "1.24 r6 C-I1: approve, spec-ff, spec-guard, spec-statusline, spec-superpowers, spec-tour and the aliases ds / dss / dsx carry disable-model-invocation: true (no other command); every description is one short English line (≤ 150 chars, no PT / ES tail, " +
-      total + " chars in all ≤ 6000 — Claude Code's skill-listing budget); the MCP prompts list every command (got " + js([marked, long, tails]) + ")");
+    ok(js(marked) === js(human) && modelInvocable.every((n) => fm[n] && fm[n]["disable-model-invocation"] === undefined) && !long.length && !tails.length &&
+      total <= 2600 && skillDesc.length > 200 && visible <= 1500 && listed.length === files.length && files.every((f) => listed.includes(f.slice(0, -3))),
+      "1.24 r6 C-I1 + 1.26: only /spec and /spec-bugfix are model-invocable — every other command carries disable-model-invocation: true; the model-visible listing (their descriptions + the skill's) is " +
+      visible + " ≤ 1,500 chars; every description is one short English line (≤ 125 chars, no PT / ES tail, " + total + " chars in all); the MCP prompts list every command (got " +
+      js([marked.length, human.length, long, tails]) + ")");
   }
 
   // C-I9 — the aliases hand over to the full command (its file, resolved by Claude Code and by the MCP prompt alike) instead of a lossy summary.
