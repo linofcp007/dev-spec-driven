@@ -44,11 +44,11 @@ size keeps EARS, trace, evidence, the bugfix iron law and the finish gate (`refe
 ## Language
 
 Mirror the user's language everywhere — conversation, questions, approval prompts, the artifacts' prose and headings
-(the engine reads them in EN/PT/ES); follow the user if they switch. Pass `lang` to `spec_init` (the project default) and `spec_create`: `en`, `pt`
-(European Portuguese), `pt-BR` (Brazilian: você, arquivo, usuário…) or `es` — scaffolds and messages come back
-localized: fill the placeholders, don't translate them. `spec_classify` reads any Portuguese as `pt`: pick `pt-BR` from
-the user's wording (`langHint: "pt-BR"` hints it). IDs, task markers, tags (`[US1]`, `[P]`), track names, the section
-markers (`[SaaS]` … `[DATA]`) and `[NEEDS CLARIFICATION:]` never change.
+(the engine reads them in EN/PT/ES); follow the user if they switch. Pass `lang` to `spec_init` (the project default)
+and `spec_create`: `en`, `pt` (European Portuguese), `pt-BR` (Brazilian: você, arquivo, usuário…) or `es` — scaffolds
+and messages come back localized: fill the placeholders, don't translate them. `spec_classify` reads any Portuguese
+as `pt`: pick `pt-BR` from the user's wording (`langHint: "pt-BR"` hints it). IDs, task markers, tags (`[US1]`, `[P]`),
+track names, the section markers (`[SaaS]` … `[DATA]`) and `[NEEDS CLARIFICATION:]` never change.
 
 ## Core Principles
 
@@ -144,10 +144,10 @@ concept and synonyms — reuse, else extend, else create; a refactor outside the
 - **+ai generation/prompt task:** a new `prompts/vN.md` → the full eval harness → keep it only if golden held or rose
   and adversarial held → `spec_complete_task {evidence}` with the score delta.
 
-Blocked → pause and discuss; don't improvise outside the design. A gap a test or a measurement shows sends you back to that phase; a wrong "green" test
-is a plan change with approval — never edit a test to pass. Decisions and discoveries go to `decisions.md`
-(`spec_decide`). In Claude Code a Stop hook returns a "done" without passing evidence: run the check or say what is
-unverified.
+Blocked → pause and discuss; don't improvise outside the design. A gap a test or a measurement shows sends you back
+to that phase; a wrong "green" test is a plan change with approval — never edit a test to pass. Decisions and
+discoveries go to `decisions.md` (`spec_decide`). In Claude Code a Stop hook returns a "done" without passing
+evidence: run the check or say what is unverified.
 
 **Subagents (opt-in, ~6+ independent tasks, 2–3× the tokens):** per task `spec_task_brief {name, number, write: true}`,
 dispatch **`dev-spec-driven:spec-implementer`** with its path, send the diff to **`dev-spec-driven:spec-reviewer`**,
@@ -173,7 +173,8 @@ summary and ask for an explicit yes. Roles, waivers, revoking: `references/chang
 
 `spec_finish` lists the blockers, the checks to run fresh and a merge summary (`write`: the drift baseline). After the
 `execution` sign-off the user picks **merge into the base branch locally** or **keep the branch** — no pull requests,
-no CI; never merge or push on your own (pushing the merged base is a step they approve too). An approved artifact edited later: `spec_impact` lists what each change
-reaches; with the user's OK, `reopen: true` unticks the affected done tasks (a removed criterion's are never redone —
-`retire` lists them), then re-approve. Decisions, drift, metrics, exports, archive and the user's other commands:
-`references/workflows.md`, `references/change-management.md`; every file: `references/index.md`.
+no CI; never merge or push on your own (pushing the merged base is a step they approve too). An approved artifact
+edited later: `spec_impact` lists what each change reaches; with the user's OK, `reopen: true` unticks the affected
+done tasks (a removed criterion's are never redone — `retire` lists them), then re-approve. Decisions, drift, metrics,
+exports, archive and the user's other commands: `references/workflows.md`, `references/change-management.md`; every
+file: `references/index.md`.
