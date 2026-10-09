@@ -1187,12 +1187,29 @@ function placeholderReport(text) {
 
 function bracketPlaceholders(line, refs) {
   const found = [];
-  scanBrackets(line, refs, isCodeSlot, (inner, raw) => {
+  scanBrackets(line, refs, isCodeSlot, (inner, raw, i, j, s) => {
     if (!isTemplatePlaceholder(raw)) return false;
+    // 1.25.1: an EMPTY ([] / [ ]) or ELLIPSIS ([...] / […]) bracket is a slot only where a template writes one — a field's whole value
+    if (RE_BARE_SLOT.test(raw) && !wholeValueAt(s, i, j)) return false;
     found.push("[" + inner + "]");
     return true;
   });
   return found;
+}
+// 1.25.1 — every empty / ellipsis slot the templates write is a field's WHOLE value: the line's own (after a list marker, a checkbox
+// or a quote: "- []", "1. []"), a label's after its colon ("- **Test runner:** []", "Secret store: [] — never in code…", "SAST: [] ·
+// dependency audit: []"), a table cell's or an item of a " · " field list. Anywhere else it is the user's text — "THE SYSTEM SHALL
+// return HTTP 200 with an empty array []", "… append [...]", "returns a []string" (glued to the text after it) failed placeholders
+// and refused the approval.
+const RE_BARE_SLOT = /^\s*(?:\.{3,}|…+)?\s*$/u;
+const RE_VALUE_LEAD = /^\s*(?:>\s*)*(?:(?:[-*+]|\d+[.)])(?:\s+\[[ xX]\])?)?$/;
+function wholeValueAt(s, i, j) {
+  if (/[\p{L}\p{N}_]/u.test(s[j + 1] || "")) return false; // glued to the text after it: `[]string`, `[...]rest`
+  let k = i;
+  while (k > 0 && /[\s*_]/.test(s[k - 1])) k--; // spaces and emphasis ("**Label:** []")
+  if (k === 0) return true;
+  const c = s[k - 1];
+  return c === ":" || c === "|" || c === "·" || RE_VALUE_LEAD.test(s.slice(0, k));
 }
 
 // The bracket groups of one line, outermost first: visit(inner, rawInner) → true = a placeholder (its nested groups are
@@ -1244,7 +1261,7 @@ function scanBrackets(line, refs, codeSlot, visit) {
         const k = closer[j + 1];
         if (k !== -1) { skip = true; end = k; }
       }
-      if (!skip && !visit(inner, line.slice(i + 1, j))) { // rawInner: code spans intact (columns kept)
+      if (!skip && !visit(inner, line.slice(i + 1, j), i, j, s)) { // rawInner: code spans intact (columns kept); the group's place (1.25.1)
         frames.push([end + 1, to], [i + 1, j]); // the group's inside next, then the rest of this range
         break;
       }

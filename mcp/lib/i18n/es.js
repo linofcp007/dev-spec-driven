@@ -1198,6 +1198,7 @@ const msg = {
       coveredComment: (label) => `Esta sección también responde a ${label} — los dos tracks están activos, así que basta una sección (una sección ${label} propia también cuenta).`,
       suggest: {
         "trivial-change": "Tamaño sugerido xs — un cambio trivial (una errata, un texto o una configuración, un arreglo de una línea): un cambio, un change.md, dos aprobaciones.",
+        "small-change": "Tamaño sugerido xs — un pequeño cambio de comportamiento (un mensaje de error más claro, un valor por defecto o un límite, una entrada vacía o ausente tratada): un cambio, un change.md con 1–3 criterios y tareas, dos aprobaciones.",
         "single-unit": "Tamaño sugerido s — una unidad de trabajo (un endpoint, pantalla, botón, campo…) con como mucho un track con secciones de diseño: una historia, las secciones core de los tracks, el plan aprobado en una sola llamada.",
         "several-tracks": "Tamaño sugerido l — tres o más tracks con secciones de diseño: la cadena completa.",
         "public-api": "Tamaño sugerido l — una API pública (consumidores externos, un contrato que mantener): la cadena completa.",
@@ -1852,6 +1853,7 @@ const msg = {
       skDocs: { research: "Investigación", dataModel: "Modelo de datos", contracts: "Contratos", quickstart: "Inicio rápido" },
       skFrom: (file) => `> De spec-kit \`${file}\`.`,
       wNoPlanDocs: (file) => `no hay ${file} en el origen — design.md tiene los documentos de diseño encontrados a su lado (investigación, modelo de datos, contratos, inicio rápido) sin el plan`,
+      wUncoveredFr: (list) => `requisitos funcionales que ningún escenario de aceptación cubre — quedaron como texto en "Requisitos Funcionales", así que ninguna tarea ni prueba los traza: ${list}. Convierte cada uno en un criterio EARS con un ID de AC (o cítalo en uno) antes de aprobar los requisitos`,
       wUnreadable: (file) => `${file} apunta fuera del proyecto — omitido`,
       done: (tool, rel, slug, label, lang) => `Importado de ${tool} ${rel} → función '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  correspondencia: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
@@ -2059,6 +2061,7 @@ const msg = {
         uncoveredSuccessCriteria: "criterios de éxito (SC) sin prueba ni paso del quickstart que los verifique",
         phantomSecondary: "las tareas / el plan de pruebas citan IDs EC/NFR/SC desconocidos (¿erratas?)",
         untracedCriteria: "criterios con verbo modal pero sin ID propio (por línea) — ninguna tarea ni prueba puede trazarlos: numera cada uno US-<historia>.AC-<n>",
+        inactiveAcs: "ACs bajo el encabezado de un track desactivado (o de un paquete de track que falta) — no se exigen ni se trazan: vuelve a activar el track, o sácalos de esa sección si son criterios del core",
         justifiedTestGaps: "ACs que el plan de pruebas solo nombra en una nota (Lagunas / Fuera de Alcance), nunca en una fila de prueba — siguen sin cobertura: añade una fila, o aprueba el plan de pruebas con force para aceptar la laguna",
         plannedNotInCode: "pruebas planificadas que ningún fichero de prueba nombra (pon el T-ID en el nombre de la prueba)",
         inCodeNotInPlan: "T-IDs en el código de prueba que ningún plan de pruebas incluye",

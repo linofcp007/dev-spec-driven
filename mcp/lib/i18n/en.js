@@ -1228,6 +1228,7 @@ const msg = {
       // spec_classify's size suggestion (a reason code → the sentence)
       suggest: {
         "trivial-change": "Suggested size xs — a trivial change (a typo, a copy or config tweak, a one-line fix): a change, one change.md, two approvals.",
+        "small-change": "Suggested size xs — one small behaviour change (a clearer error message, a default or a limit, one empty or missing input handled): a change, one change.md with 1–3 criteria and tasks, two approvals.",
         "single-unit": "Suggested size s — one unit of work (one endpoint, screen, button, field…) with at most one track that has design sections: one story, the core-tier track sections, the plan approved in one call.",
         "several-tracks": "Suggested size l — three or more tracks with design sections: the full chain.",
         "public-api": "Suggested size l — a public API (outside consumers, a contract to keep): the full chain.",
@@ -1946,6 +1947,8 @@ const msg = {
       skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts", quickstart: "Quickstart" },
       skFrom: (file) => `> From spec-kit \`${file}\`.`,
       wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts, quickstart) without the plan`,
+      // 1.25.1: spec-kit's functional requirements are carried as prose (## Functional Requirements) — no criterion traces the ones no scenario covers
+      wUncoveredFr: (list) => `functional requirements no acceptance scenario covers — carried as prose under "Functional Requirements", so no task or test traces them: ${list}. Turn each into an EARS criterion with an AC ID (or cite it in one) before approving the requirements`,
       wUnreadable: (file) => `${file} points outside the project — skipped`,
       done: (tool, rel, slug, label, lang) => `Imported ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  mapping: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
@@ -2166,6 +2169,7 @@ const msg = {
         uncoveredSuccessCriteria: "success criteria (SC) that no test or quickstart step checks",
         phantomSecondary: "tasks / test plan cite unknown EC/NFR/SC IDs (typos?)",
         untracedCriteria: "criteria with a modal verb but no ID of their own (by line) — no task or test can trace them: number each one US-<story>.AC-<n>",
+        inactiveAcs: "ACs under the heading of a track that is off (or a missing track pack) — not required, not traced: add the track back, or move them out of that section if they are core criteria",
         justifiedTestGaps: "ACs the test plan names only in a note (Gaps / Out of Scope), never in a test row — still uncovered: add a row, or approve the test plan with force to accept the gap",
         plannedNotInCode: "planned tests that no test file names (put the T-ID in the test name)",
         inCodeNotInPlan: "T-IDs in test code that no feature's test plan lists",

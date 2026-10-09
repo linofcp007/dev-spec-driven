@@ -966,7 +966,13 @@ function readRaw(file) {
 // never found (the tests gate never passed), a UTF-16 requirements.md traced 0 ACs. The BOM is kept as the U+FEFF a UTF-8 BOM
 // reads as, so every reader that drops one drops this one too (a rewrite of such a file is UTF-8). Every reader of spec / test
 // text goes through it: readRaw (readIfExists, readContained), readFileHead, the importer, the resources, the save hooks.
+// 1.25.1 — CR-only line endings (classic Mac, some exporters): a text holding a CR and no LF at all has its CRs read as line breaks.
+// Every reader splits on "\n" (or \r?\n): such a requirements.md was ONE line — trace 0 ACs beside 13 planned tests, doctor's
+// placeholders failed, status said phase requirements. A text with any LF is left alone ("\r\r\n" keeps its reading — 1.24 r6 D3).
 function decodeText(buf, n = buf.length) {
+  return crOnlyToLf(decodeBytes(buf, n));
+}
+function decodeBytes(buf, n) {
   if (n >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.toString("utf16le", 0, n - (n % 2));
   if (n >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
     const le = Buffer.from(buf.subarray(0, n - (n % 2))); // a copy: the caller's buffer stays as it was
@@ -974,6 +980,7 @@ function decodeText(buf, n = buf.length) {
   }
   return buf.toString("utf8", 0, n);
 }
+const crOnlyToLf = (t) => (t.includes("\r") && !t.includes("\n") ? t.replace(/\r/g, "\n") : t);
 // fs.existsSync, served from the same scope (the per-feature file probes of listFeatures / detectPhase / detectTracks) — a
 // change's requirements.md / tasks.md exist as its change.md (changeAlias, 1.21 F5).
 function existsCached(p) {

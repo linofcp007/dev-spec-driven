@@ -154,6 +154,9 @@ function parseSpecKit(dir, read, W) {
     });
     model.carried.push(...leftoverExtras(lines, hs, used)); // e.g. ### Non-Functional Requirements (NFR-001)
     for (const x of [...model.extra, ...model.carried]) for (const l of x.lines) for (const id of l.match(/(?<![A-Za-z0-9])(?:FR|SC)-\d+(?!\d)/g) || []) model.mapping[id] = id;
+    // 1.25.1: the functional requirements travel as prose — never silently: the ones no acceptance scenario covers are named
+    const frs = uncoveredFrs((model.extra.find((x) => x.key === "functional") || { lines: [] }).lines, model.stories.flatMap((s) => s.criteria.map((c) => c.raw)));
+    if (frs.length) model.warnings.push(W.wUncoveredFr(frs.join(", ")));
   }
   // 1.24 r6 (G-I3): research.md, data-model.md, contracts/ and quickstart.md are design — each under its own heading after plan.md
   // (they were skipped with a warning: "not imported"). Read through `read` like every source file: inside the project, a file
@@ -165,6 +168,29 @@ function parseSpecKit(dir, read, W) {
   if (tasks != null) model.tasks = { text: specKitTaskMarkers(tasks), file: "tasks.md" };
   else model.warnings.push(W.wNoTasks);
   return model;
+}
+
+// 1.25.1 — spec-kit's FR-xxx lines (the "Functional Requirements" section's) → the IDs NO acceptance scenario covers: a scenario covers
+// an FR that it cites, or whose every content word (≥ 4 letters, no modal / "system" / "users" filler, a plural folded) it holds — "FR-001:
+// System MUST allow users to create albums" is "they create an album named Trip"; "FR-002: … reorder albums by drag and drop", or an
+// FR still [NEEDS CLARIFICATION], is no scenario's. They were carried as prose with no warning, and nothing traced them.
+const FR_FILLER = new Set(["system", "systems", "must", "should", "shall", "allow", "allows", "able", "user", "users", "that", "this", "with", "from",
+  "into", "their", "they", "them", "when", "then", "also", "each", "every", "have", "will", "which", "provide", "provides", "support", "supports",
+  "enable", "enables", "sistema", "deve", "devem", "permitir", "utilizador", "utilizadores", "usuário", "usuários", "debe", "deben", "usuario",
+  "usuarios", "para", "como", "cada", "todos", "todas", "pelo", "pela", "por"]);
+const frWords = (s) => (String(s).toLowerCase().match(/\p{L}{4,}/gu) || []).filter((w) => !FR_FILLER.has(w)).map((w) => w.replace(/(?<!s)s$/, ""));
+function uncoveredFrs(frLines, scenarios) {
+  const scen = scenarios.map((t) => ({ text: String(t), words: new Set(frWords(t)) }));
+  const out = [];
+  for (const l of frLines) {
+    const m = /(?<![A-Za-z0-9])(FR-\d+)(?!\d)[*_\s]*:?[*_\s]*(.*)$/.exec(l);
+    if (!m || out.includes(m[1])) continue;
+    const id = m[1], body = m[2];
+    const words = /NEEDS[ _-]CLARIFICATION/i.test(body) ? [] : frWords(body);
+    const cited = scen.some((s) => new RegExp("(?<![A-Za-z0-9])" + id + "(?!\\d)").test(s.text));
+    if (!cited && !(words.length && scen.some((s) => words.every((w) => s.words.has(w))))) out.push(id);
+  }
+  return out;
 }
 
 // 1.24 r6 (G-I1) — spec-kit's tasks.md says which story a task serves ([US1]) and names the files it touches in its text: the import

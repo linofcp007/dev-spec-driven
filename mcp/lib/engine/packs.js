@@ -182,7 +182,8 @@ function packTableRows(text) {
       if (RE_TABLE_SEPARATOR.test((lines[i + 1] || "").trim())) return; // the header row
     }
     if (RE_TABLE_SEPARATOR.test(t)) return;
-    const cells = t.slice(1, t.endsWith("|") && t.length > 1 ? -1 : undefined).split("|").map((c) => c.trim());
+    // (1.25.1) a "\|" is a pipe inside a cell (GFM; tableCells' rule) — "a \| b" in a Description split the row into seven cells
+    const cells = t.slice(1, t.endsWith("|") && !t.endsWith("\\|") && t.length > 1 ? -1 : undefined).split(/(?<!\\)\|/).map((c) => c.trim());
     if (cells.length !== 6) bad.push(i + 1);
     else rows.push({ cells, line: i + 1 });
   });

@@ -236,6 +236,10 @@ trackers, ADRs, release notes, milestones).
     samples / sample: a Node app's Sphinx `docs/requirements.txt`, Jekyll `docs/Gemfile` and `examples/flask-client/` made its
     stack "python (flask)" and "ruby") join the stack by name and the first `NESTED_MANIFEST_CAP` (20) are read for frameworks / test runners; the
     root package.json alone gives entrypoints (listed first).
+  - **Entrypoints and the stack label (1.25.1):** a test file (`isTestFile`) is never an entrypoint (`tests/app.py` was a "python"
+    one — `entryKind`'s Python rule reaches depth 2); `@SpringBootApplication` marks a `.java` / `.kt` source only (any code file
+    naming it — a JS string, a Python comment — was a "spring boot" entrypoint); a package.json with no dependency is the stack
+    "node", never "node ()".
   - **ASP.NET tokens:** `[controller]` = the class name minus "Controller", `[action]` = the decorated method
     (`aspActionName`, its "Async" suffix dropped); one it can't name stays. **A projectDir that is no folder** → ok: false
     (`brownfield.notFolder`; the CLI exits 1).

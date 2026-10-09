@@ -528,8 +528,13 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   carries a marker carries another track's — built-in or a pack's): "### Qualidade dos dados (LGPD art. 6º, V)" under
   "## [PRIVACY] Fundamento de Licitude e Finalidade" is +privacy's text, never the deleted `[DATA] Qualidade dos Dados`; an
   unmarked top-level "## Data Quality" still satisfies it. Only for a track section (a `marker`), never a core one.
+  `AI_SECTIONS` "Fallback & Degradation" too (1.25.1): `fallback` / `degradação` / `degradación` alone are loose — an unmarked
+  "## Fallbacks" (a payment processor's) answered the deleted [AI] section; "Fallback & Degradation" / "… and …" / "Fallback e
+  Degradação" / "Fallback y Degradación" stay strict.
 - **Markers are case-sensitive tokens** everywhere (`headingHasMarker`, `inactiveMarkerLines`, `trackAcIds`,
   `extractSection`, the brief): `### Timeout [sec]` is prose, never +sec. `RE_STABLE_BRACKET` lists `SEC` / `PRIVACY`.
+  `inactiveMarkerLines` also needs the marker to LEAD the heading (1.25.1 — `headingLeadMarkers`: "#### [SEC] Acceptance Criteria",
+  "## [AI] 7. Fallback…", "### 3. [AI] …"; never "### US-2 (P1): API notes [API]") — trace_check warns `inactiveAcs` for what it hides.
 - **Signal tiers** (`SIGNALS[track]`): `strong` (turns a track on alone), `weak` (score 1 — two weak ones, or a strong
   one, turn it on; a lone weak one is only "possible"), and `context` (corroborating-only, e.g. `permission` for +sec:
   weak evidence ONLY beside another non-negated signal of that track; alone it is no signal, no "possible" note, no
@@ -747,7 +752,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   too, so deleting the Offline section passed doctor). `sectionOverlaps(table)` lists such pairs; every built-in table keeps none
   (04-tracks-packs-lang asserts it — a new built-in section must too).
   Fragments: `packListItems()` (top-level item = at most one space before the bullet; lines
-  indented ≥ 2 are its continuation), `packTableRows()` (six cells, header + separator skipped; else `fragment-row`);
+  indented ≥ 2 are its continuation), `packTableRows()` (six cells, header + separator skipped; else `fragment-row`; a `\|` is a
+  pipe inside a cell — 1.25.1, `tableCells`' rule: "encode \| decode" split the row into seven cells and refused the pack);
   `{{acN}}` / `{{tN}}` beyond what the pack scaffolds in that language context → `fragment-ref` (its args name the context
   and the file the count comes from — F4 review R10). Warnings only:
   unknown keys / files / variables, an empty fragment (the default is used), a steering name a built-in track also uses.
@@ -820,10 +826,20 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   listed endings only — `encript`, `cifr`, `criptograf`: never "cifra"; the self-match sweep probes them by infinitive),
   and `-based/-powered/…` adjectives (`AI-powered`), while rejecting `-<letter>` compounds
   (`claude-plugin`) and dotted/slashed identifiers. `-<digit>` stays legal (`gpt-4`). **A glued version (review 5, L29):** a
-  built-in one-word keyword of 2–5 letters (an acronym: oauth, gpt, tls, llm, saml) or a `VERSIONED_NAMES` product (claude, gemini,
-  mistral) takes `VERSION_TAIL` — digits, dot-digits, one letter — before its inflection: "OAuth2", "GPT4", "GPT4o", "TLS1.3",
+  built-in one-word keyword of 2–5 letters (an acronym: oauth, gpt, tls, llm, saml) or a `VERSIONED_NAMES` product (Claude, Gemini,
+  Mistral) takes `VERSION_TAIL` — digits, dot-digits, one letter — before its inflection: "OAuth2", "GPT4", "GPT4o", "TLS1.3",
   "Claude3", "Gemini1.5" were no signal at all; a longer word never does ("Billing10x"), nor a track pack's keyword. When you add a
-  keyword, add it to the self-match sweep's expectations if it needs a new suffix class.
+  keyword, add it to the self-match sweep's expectations if it needs a new suffix class. **1.25.1 — everyday words:** a product
+  name that is an everyday word in lower case is written CAPITALISED in the table (matched case-sensitively — Claude, Gemini,
+  Mistral, Copilot, RAG, Cohere, Stable Diffusion, Pinecone; `VERSIONED_NAMES` holds the table's spelling), its capitalised
+  everyday senses are ai cues (Claude Monet, a Gemini zodiac page, the Mistral wind, a Copilot for pilots), and SIGNALS.tdd / saas
+  have cues for credits (photo / film / course), "in charge of", a battery charge, a therapy / training session, a cron EXPRESSION
+  helper; 'tool use' is weak. `-compatible` joined `ADJ_SUFFIX` ("the OpenAI-compatible endpoint"). Training / predicting with a
+  model are gap keywords ("train … model", "model … trained", "predict … churn"; PT / ES through the VERB_STEMS trein- / entren-).
+  **Measured:** the differential (b7978f8 vs the fix) over 16,125 string literals of the test files, evals and the review's
+  phrasings: 76 decisions changed (tracks or size), each one a phrasing the fix targets (or a test message naming one of its words);
+  a 14-frame sweep of every keyword of both tables (30,716 texts): 369 changed — +ai off only for the lower-case claude / gemini /
+  mistral / copilot / rag / tool use, +ai on only for the new keywords.
 - **Negation never vetoes a track**, it annotates it. "the system shall not hallucinate" negates
   `hallucinat` on a feature that is unmistakably `+ai`. So when a track is on *and* has negated
   keywords, `classify` emits a conflict note ("+ai is ON although 'llm' appeared negated") for the
@@ -843,6 +859,10 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   a denying predicate over "without X" ("Reject requests without a valid token", "Users without MFA must not…") —
   `nominalFollowRequires()` / `negativePredicate()`; widening `SUBJECT_VERBS`, `PLACE_PREPS` or `RE_DENY_VERB` turns tracks
   ON in every frame that uses them — measure it (the review-6 harness: 29 frames × every built-in keyword, old / new apart).
+  **1.25.1:** "no more X" / "no más X" (`NO_MORE`) is a replacement, never an exclusion ("No more manual invoices: generate them
+  automatically"; "no more than 3" a limit), and an INSUFFICIENCY predicate over "without X" keeps the track (`insufficientAfter()`:
+  a copula — ≤ 2 adverbs between — then incomplete / useless / broken / unusable / not usable…, `INSUFF_COPULA` / `INSUFF_ADJ`, EN /
+  PT / ES, within 10 words of the item's clause): "Without an LLM summary the ticket view is incomplete".
 - **Project signal overrides are the team's, never the engine's defaults.** A tuning that holds for everyone goes into
   `SIGNALS` (tracks.js); `.specs/classifier.json` is one project's learned or hand-set layer — never read it without a
   projectDir, never write it outside `writeSignalRecords()` (the roadmap lock, the never-rewrite-a-broken-file rule).

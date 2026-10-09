@@ -114,7 +114,10 @@ is a draft for the human, who confirms Phase 0.
   not access the admin panel", *"Rejeitar pedidos sem um token…", "Los usuarios sin MFA no pueden acceder…"* (an access rule:
   the auth word is a strong +sec signal there). Still excluded: the bare phrase ("No personal data."), a scope ("No personal
   data in this feature", *"Sin datos personales en esta versión"*), an adoption participle ("No LLM is needed", "No Kafka or
-  RabbitMQ is required", "No auth needed").
+  RabbitMQ is required", "No auth needed"). **1.25.1:** "no more X" is a replacement, never an exclusion ("No more manual
+  invoices: generate them automatically", *"No más facturas manuales…"* keep +tdd; "no more than 3 retries" is a limit); and a
+  "without X" followed by an insufficiency predicate needs X — "Without an LLM summary the ticket view is incomplete / useless /
+  not usable", *"Sem um resumo por LLM a vista fica incompleta", "Sin un resumen con LLM la vista queda incompleta"* keep +ai.
 - **This project's own corrections** (1.21): when the human confirms Phase 0 with other tracks than suggested — `spec_create`
   with `tracks` and the same description as `summary` — the words that drove the suggestion are recorded in
   `.specs/classifier.json`. After **two consistent corrections** a word the team keeps rejecting for a track stops turning it on
@@ -220,6 +223,16 @@ Illustrator is none), speech-to-text / speech recognition, OCR, computer vision,
 analysis, a vision model, agentic, retrieval-augmented generation, `Whisper`, `LLaMA` / `Llama 3` (capitalised and versioned —
 ES "llama" = calls), DeepSeek (+ PT / ES: *reconhecimento de fala, visão computacional, análise de sentimento · voz a texto,
 visión artificial, análisis de sentimiento*). **Weak:** transcription / transcribe (*transcrição, transcripción*).
+1.25.1 — the named products, frameworks and vector stores are strong too: ChatGPT, Ollama, DALL-E, Midjourney, LlamaIndex, LangChain /
+LangGraph, Hugging Face, Amazon / AWS Bedrock, pgvector, Qdrant, Weaviate, Milvus, FAISS, ChromaDB, a vector store / index; so is
+training or predicting with a model — "train … model / classifier", "a model … trained", "retrain … model", "predict … churn", a
+predictive model (*treinar … modelo / classificador, prever … churn · entrenar … modelo / clasificador, predecir … churn*); "X-compatible"
+names X ("the OpenAI-compatible endpoint"). **Case-sensitive** where the lower-case word is an everyday one: `Claude`, `Gemini`,
+`Mistral`, `Copilot`, `RAG`, `Cohere`, `Stable Diffusion`, `Pinecone` — "a rag rug", "claude monet", "the mistral wind" are no signal,
+and the capitalised everyday senses are cues (Claude Monet, a Gemini zodiac page, the Mistral wind, a Copilot's seat for pilots).
+**Weak:** tool use (a workshop's "tool use log" is none), a classifier, predict, rerank; an e-mail / reset / API token is no
+LLM token. Everyday senses of +tdd / +saas words are no signal either: photo / film / course credits, "in charge of", a battery
+charge, a therapy / training session, a cron EXPRESSION helper / parser / validator (a cron job keeps +saas).
 
 See `classification-examples-ai.md` for worked AI examples across chatbots, RAG, and agents.
 
