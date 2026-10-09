@@ -157,9 +157,9 @@ exports.run = ({ ok, all, tmp, CLI, require, __dirname }) => {
   ok(JSON.stringify(w8) === JSON.stringify(["0:no-claim", "0:no-claim", "0:no-claim", "1:unverified", "1:unverified"]),
     "1.25.1 (r7 finding 1): stop-check — a bare verb or 'Done.' before an unrelated summary claims nothing (exit 0, no-claim); 'Work complete — ready to merge.' / 'Pronto para merge' are claims sent back while a tick is unverified (exit 1) (got " + JSON.stringify(w8) + ")");
 
-  // help and the header docblock document stop-check, --stop-check and --guard scope.
+  // help and the command table document stop-check, --stop-check and --guard scope.
   const hC1 = rc1(["help"]).out;
-  const docC1 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const docC1 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   ok(["stop-check [--message \"<text>\"|-] [--agent <type>]", "--stop-check on|off", "--guard on|off|scope"].every((w) => hC1.includes(w) && docC1.includes(w)),
-    "help and the header docblock document stop-check, init --stop-check and init --guard scope");
+    "help and the command table document stop-check, init --stop-check and init --guard scope");
 };

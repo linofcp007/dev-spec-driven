@@ -38,8 +38,8 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   ok(nul.code === 1 && /reserved name/.test(nul.out) && upper.code === 1 && /Unknown steering file 'Api\.md'/.test(upper.out) && /custom scoped steering file/.test(upper.out),
     "steering with an unsafe custom name exits 1 (reserved device name / not lowercase .md)");
   const help11 = run(["help"]).out;
-  ok(/--guard on\|off/.test(help11) && /custom scoped file/.test(help11) && /--guard on\|off/.test(fs.readFileSync(CLI, "utf8").split("*/")[0]),
-    "help and the header docblock document init --guard on|off and custom steering files");
+  ok(/--guard on\|off/.test(help11) && /custom scoped file/.test(help11) && /--guard on\|off/.test(require(path.join(path.dirname(CLI), "commands.js")).helpText()),
+    "help and the command table document init --guard on|off and custom steering files");
 
   // 1.21.1 languages: `init --guard on` guards a PowerShell project — the guard hook asks before a .ps1 / .psm1 edit (code) and
   // stays silent on the .psd1 manifest (data), as spec_init {guard} + the hook do on MCP.

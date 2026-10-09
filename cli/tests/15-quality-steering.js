@@ -66,9 +66,9 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     sgPt.code === 0 && /^# Glossário\n/.test(fs.readFileSync(path.join(qp, ".specs", "steering", "glossary.md"), "utf8")),
     "1.16 Q3 CLI: steering glossary.md writes the stub (PT with --project in a PT project); clarify asks about the avoided word with file:line; brief quotes the entry; doctor warns glossary (got " + js([cl.out.slice(-300), dg.out.match(/glossary —.*/)]) + ")");
   const help = run(["help"]).out;
-  const doc0 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const doc0 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   ok(/impact \[feature\] --phase steering/.test(help) && /impact \[feature\] --phase steering/.test(doc0) && /glossary\.md/.test(help) && /glossary\.md/.test(doc0),
-    "1.16 Q CLI: help and the docblock document `impact [feature] --phase steering` and the glossary.md steering template");
+    "1.16 Q CLI: help and the command table document `impact [feature] --phase steering` and the glossary.md steering template");
   // 1.16 Q review 6: a glossary past 300 entries says so — clarify prints the note, --json carries glossaryTruncated.
   let big = "# Glossary\n\n- **Customer** — a person or company with a signed contract. _Avoid: client, user_\n";
   for (let i = 0; i < 304; i++) big += `- **Term${i}** — definition ${i}. _Avoid: zzword${i}_\n`;

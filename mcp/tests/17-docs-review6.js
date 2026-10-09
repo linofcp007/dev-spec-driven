@@ -113,7 +113,7 @@ exports.run = async ({ ok, S, root, tmp, list }) => {
   }
 
   { // 1.24 r6 H11: README's CLI summary (EN / PT / ES) names every command the CLI has (tracks and bundle were missing)
-    const cmds = [...rd("cli", "dev-spec.js").matchAll(/^ {4}case "([a-z][a-z-]*)":/gm)].map((m) => m[1]).filter((c) => !["help", "na", "milestones"].includes(c));
+    const cmds = require(path.join(root, "cli", "commands.js")).COMMANDS.map((e) => e.name).filter((c) => c !== "help"); // the CLI's table (aliases aside)
     const missing = LANG_HEADS.map((h) => {
       const block = (subsec(langSec(h), /(?:The `dev-spec` CLI|A CLI `dev-spec`|La CLI `dev-spec`)/).match(/```text\n([\s\S]*?)```/) || [])[1] || "";
       return [h, block.length, cmds.filter((c) => !new RegExp("(?:^|[\\s·])" + c + "(?=[\\s\\[<]|$)", "m").test(block))];

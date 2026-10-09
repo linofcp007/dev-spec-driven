@@ -105,12 +105,12 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   const clw = run(["changelog", "--milestone", "Past", "--write", "--project", ep]);
   const clBad = run(["changelog", "--milestone", "nope", "--project", ep]);
   const help = run(["help"]).out;
-  const doc = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const doc = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   ok(cl.code === 0 && /^# Release notes — p16e-proj — Past\n/.test(cl.stdout) && /\n### Checkout\n/.test(cl.stdout) &&
     clw.code === 0 && fs.existsSync(path.join(ep, ".specs", "RELEASE-NOTES.past.md")) && SE.readRoadmap(ep).meta.changelogAt === undefined &&
     clBad.code === 1 && /No milestone 'nope'/.test(clBad.out) &&
     [help, doc].every((t) => /milestone \[add <name> <YYYY-MM-DD> <features…> \| rm <name> \| list\]/.test(t) && /--gherkin/.test(t) && /--tracker jira\|linear/.test(t) && /--milestone <name>/.test(t)),
-    "1.16 E3 (CLI): changelog --milestone <name> scopes the notes (→ RELEASE-NOTES.<milestone>.md, meta.changelogAt untouched); an unknown milestone exits 1; help and the docblock document milestone, --gherkin, --tracker, --milestone (got " + js(cl.stdout.slice(0, 200)) + ")");
+    "1.16 E3 (CLI): changelog --milestone <name> scopes the notes (→ RELEASE-NOTES.<milestone>.md, meta.changelogAt untouched); an unknown milestone exits 1; help and the command table document milestone, --gherkin, --tracker, --milestone (got " + js(cl.stdout.slice(0, 200)) + ")");
 
   // --- 1.16 E review (CLI) ---
   SE.createFeature(ep, "User Login", ["core"], "", undefined, "en");

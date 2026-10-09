@@ -61,11 +61,11 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     "feature F1: doctor and stop-check list the unobserved task; finish --run stamps its project-check runs observed: \"cli\" (pass) while the unobserved task still blocks (got " +
     JSON.stringify([stop.code, tst, finj.blockers]).slice(0, 400) + ")");
 
-  // Back to reported: the same records verify (today's rule); help and the header docblock document --evidence.
+  // Back to reported: the same records verify (today's rule); help and the command table document --evidence.
   rob(po, ["init", "--evidence", "reported"]);
   const docR = rob(po, ["doctor", fo.slug]);
   const help = run(["--help"]).out;
-  const docblock = fs.readFileSync(CLI, "utf8").slice(0, 12000);
+  const docblock = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   ok(!/not observed by the harness/.test(docR.out) && help.includes("--evidence reported|observed") && docblock.includes("--evidence reported|observed"),
-    "feature F1: back to meta.evidence reported the unobserved run verifies again; --help and the header docblock document init --evidence reported|observed");
+    "feature F1: back to meta.evidence reported the unobserved run verifies again; --help and the command table document init --evidence reported|observed");
 };

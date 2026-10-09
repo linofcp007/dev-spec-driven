@@ -159,7 +159,7 @@ exports.run = async ({
   // exit code names the stale baseline; none says drift alone.
   const docsDriftExit = [["tooling-reference.md", docsRef("tooling-reference.md"), /`drift` \(drift, a stale baseline or an unreadable state\) exit 1/],
     ["AGENTS.md", docsAgents, /\(exit 1 on drift or a stale baseline\)/], ["commands/spec-report.md", docsRead("commands", "spec-report.md"), /exit 1 on drift or a stale baseline/],
-    ["change-management.md", docsRef("change-management.md"), /exit 1 on drift or a stale baseline/], ["cli/dev-spec.js", docsRead("cli", "dev-spec.js"), /\(exit 1 on drift or a stale baseline\)/],
+    ["change-management.md", docsRef("change-management.md"), /exit 1 on drift or a stale baseline/], ["cli/commands.js (the CLI help)", docsRead("cli", "commands.js"), /\(exit 1 on drift or a stale baseline\)/],
     ["docs/maintainers/conventions.md", docsConventions, /`drift` \(drift, a stale baseline or an error\)/]];
   const docsDriftBad = docsDriftExit.filter(([, t, re]) => !re.test(docsWs(t)) || /`drift` \(drift\)/.test(docsWs(t))).map(([f]) => f)
     .concat(/`drift` \(drift\)/.test(docsNotes) ? ["the maintainer notes (CLAUDE.md + docs/maintainers/)"] : []);
@@ -328,7 +328,7 @@ exports.run = async ({
     const d2Ex = ((dRef("verification.md").split("## Red → green")[1] || "").match(/```markdown\n([\s\S]*?)\n```/) || [])[1] || "";
     ok(/_Expect: fail_/.test(d2Ex) && !/_Makes green:/.test(d2Ex), "full review D2: verification.md's _Expect: fail_ example has no _Makes green:_ on the red task");
     // D3: design section examples use the template's heading ("Data Models"); decide refuses "Data Model" on a fresh scaffold.
-    const d3Surfaces = [dRead("cli", "dev-spec.js"), dRead("mcp", "server.js"), dRead("commands", "spec-change.md"), dRef("change-management.md")];
+    const d3Surfaces = [dRead("cli", "commands.js"), dRead("mcp", "server.js"), dRead("commands", "spec-change.md"), dRef("change-management.md")];
     const d3p = path.join(tmp, "fr-d3");
     S.initProject(d3p, ["core"], "en");
     S.createFeature(d3p, "Keys", ["core"]);

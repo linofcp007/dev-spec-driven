@@ -57,22 +57,19 @@ exports.run = async ({ ok, all, remeasure, run, tmp, CLI }) => {
   const ROOT = path.join(path.dirname(CLI), "..");
   const S = require(path.join(ROOT, "mcp", "lib", "spec.js"));
   const C = require(path.join(ROOT, "cli", "completion.js"));
-  const src = fs.readFileSync(CLI, "utf8");
-  // The CLI's tables as it holds them: the literal block from GLOBAL_OPTIONS to checkCommandArgs (COMMAND_OPTIONS, COMMAND_ARGS,
-  // FLAG_VALUES, EVALS_SWITCHES), evaluated alone.
-  const block = src.slice(src.indexOf("const GLOBAL_OPTIONS"), src.indexOf("function checkCommandArgs"));
-  const T = new Function(block + "; return { GLOBAL_OPTIONS, COMMAND_OPTIONS, COMMAND_ARGS, FLAG_VALUES, EVALS_SWITCHES };")();
+  // The CLI's tables (1.27): its command table, cli/commands.js, and what it derives (COMMAND_OPTIONS, COMMAND_ARGS, FLAG_VALUES…).
+  const T = require(path.join(ROOT, "cli", "commands.js"));
   const cliFwd = fwd(path.resolve(CLI));
   const gen = (shell, env) => spawnSync(process.execPath, [CLI, "completion", shell], { encoding: "utf8", env: env || cleanEnv(), cwd: tmp });
   const scripts = {};
   for (const sh of SHELLS) scripts[sh] = gen(sh);
 
-  // 1.25 completion: every shell's script holds every command (COMMAND_OPTIONS, + help and evals — every `case` label of the CLI)
-  // and, for each command, every flag of its COMMAND_OPTIONS (+ --json --project --help): a new command or flag completes with
-  // nothing else to touch. `__complete` (hidden) is no command of the list.
+  // 1.25 completion: every shell's script holds every command (COMMAND_OPTIONS, + help and evals — every command and alias of the
+  // CLI's table) and, for each command, every flag of its COMMAND_OPTIONS (+ --json --project --help): a new command or flag
+  // completes with nothing else to touch. `__complete` (hidden) is no command of the list.
   {
     const want = [...new Set([...Object.keys(T.COMMAND_OPTIONS), "evals", "help"])];
-    const cases = [...src.matchAll(/^ {4}case "([a-z][a-z-]*)":/gm)].map((m) => m[1]);
+    const cases = [...T.COMMAND_INDEX.keys()];
     const missing = {};
     for (const sh of SHELLS) {
       const r = scripts[sh];

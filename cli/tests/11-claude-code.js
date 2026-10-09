@@ -137,9 +137,11 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
     () => imj.source === null, () => imj.feature === "json-mode",
   ]);
   const help16 = run(["help"]).out;
-  const doc16 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  // 1.27: the help IS the command table's (cli/commands.js) — the entries of statusline and import hold those lines
+  const T16 = require(path.join(__dirname, "commands.js"));
+  const doc16 = ["statusline", "import"].map((n) => T16.commandFor(n).help).join("\n");
   ok([help16, doc16].every((t) => /statusline \[--print-config\]/.test(t) && /import <plan\|execplan\|fluidplan> - \| --text "<markdown>"/.test(t)) && S16.CLI_SWITCHES.has("print-config"),
-    "1.16: help and the header docblock document statusline [--print-config] and import <plan|execplan> - | --text; print-config is one of spec.CLI_SWITCHES");
+    "1.16: help and the command table document statusline [--print-config] and import <plan|execplan> - | --text; print-config is one of spec.CLI_SWITCHES");
   // 1.16 C review 5: a UNC folder in the session JSON is never stat'ed (an unreachable host hung the status line for minutes) —
   // a TEST-NET address (192.0.2.1, never routed), a child process with its own timeout; silent and fast on every platform.
   // "Fast" is relative (1.20 review — a flat 10 s flaked under the parallel runner: 13 s with the machine full, ~0.4 s alone):

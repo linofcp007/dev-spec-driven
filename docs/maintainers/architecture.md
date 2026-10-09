@@ -308,7 +308,7 @@ Two distinct distribution targets, deliberately kept separate — never conflate
   `${CLAUDE_PLUGIN_ROOT}`, so the user's editor must point at *this clone's* absolute `mcp/server.js`.
   That host-specific config is **generated on demand, never committed**: `node cli/dev-spec.js
   mcp-config <client>` (`claude-desktop|claude-code|cursor|windsurf|vscode|gemini|codex|generic|all`) prints a ready
-  config with the absolute path resolved from `__dirname` (`mcpConfig()` in `cli/dev-spec.js`). The
+  config with the absolute path resolved from `__dirname` (`mcpConfigBlocks()` in `cli/commands.js`). The
   `integrations/*` templates carry the literal `/ABSOLUTE/PATH/TO/dev-spec-driven/…` placeholder as a
   copy-paste fallback. (There is **no** `install_host_context` symbol — the mechanism is `mcp-config`.)
 - **Rule files the same way:** `node cli/dev-spec.js rules <cursor|windsurf|copilot|gemini|agents>` prints

@@ -393,10 +393,10 @@ exports.run = async ({ ok, remeasure, rpc, payload, S, tmp, list, require }) => 
       I.msg(l).drift.hookLine("csv-export", 2), I.msg(l).governance.ffHint("csv-export", "design, tasks")];
     const want = ["done csv-export 2 --run", "finish csv-export --run", "drift csv-export", "approve csv-export --through tasks"];
     const perLang = ["en", "pt", "es", "pt-BR"].map((l) => run(l).every((m, k) => m.includes(I.DEV_SPEC + " " + want[k]) && !/(?<![\w/.-])dev-spec (?:done|finish|drift|approve) /.test(m)));
-    // 1.21 review A2: the command list is the CLI's own — every `case "<name>":` label of cli/dev-spec.js (a hand-written list went
-    // stale: `dev-spec signals …` and `dev-spec merge-state --install` slipped through) — and a message builder is called with
+    // 1.21 review A2: the command list is the CLI's own — every command and alias of its table, cli/commands.js (a hand-written list
+    // went stale: `dev-spec signals …` and `dev-spec merge-state --install` slipped through) — and a message builder is called with
     // several argument shapes (strings, lists, records, numbers), so one that maps a list is swept too, not skipped.
-    const cliCommands = [...new Set([...fs.readFileSync(path.join(__dirname, "..", "..", "cli", "dev-spec.js"), "utf8").matchAll(/^\s*case "([a-z][a-z0-9-]*)":/gm)].map((m) => m[1]))];
+    const cliCommands = [...require(path.resolve(__dirname, "..", "..", "cli", "commands.js")).COMMAND_INDEX.keys()];
     const RE_BARE = new RegExp("(?<![\\w/.-])dev-spec (" + cliCommands.join("|") + ")(?![\\w-])(?! —)");
     const ALLOWED = new Set(["observed.on", "metrics.retroText.followUpsNote", "catalog.autogen", "approvalGuard.on.ask", "approvalGuard.on.deny", "upgrade.md.autogen",
       "upgrade.md.intro", "trackPacks.initJson", "stakeholderExport.autogen", "rtm.autogen", "releaseNotes.autogen", "gherkin.autogen", "trackerCsv.autogen",

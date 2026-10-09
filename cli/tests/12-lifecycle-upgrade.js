@@ -70,9 +70,9 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
     ptAp17.code === 0 && /^Migrações aplicadas/m.test(ptAp17.out) && /^Relatório: \.specs\/UPGRADE\.md/m.test(ptAp17.out),
     "upgrade: --apply=maybe is refused (exit 1), no .specs/ exits 1; a PT project gets European-Portuguese output");
 
-  // help + the header docblock list the subcommand and its flag.
+  // help + the command table list the subcommand and its flag.
   const help17 = run(["help"]).out;
-  const doc17 = fs.readFileSync(CLI, "utf8").split("*/")[0];
-  ok(/upgrade \[--apply\]/.test(help17) && /--apply \(upgrade\)/.test(help17) && /upgrade \[--apply\]/.test(doc17) && /upgrade: --apply/.test(doc17),
-    "help and the header docblock list upgrade [--apply]");
+  const doc17 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
+  ok(/upgrade \[--apply\]/.test(help17) && /--apply \(upgrade\)/.test(help17) && /upgrade \[--apply\]/.test(doc17),
+    "help and the command table list upgrade [--apply]");
 };

@@ -103,12 +103,12 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   ok(sa8.code === 0 && bi8.code === 0 && bi8.out.includes("  ~ design.md: [SaaS] Performance Budget") && bi8.out.includes(".history/design@1.design.md") && !bi8.out.includes("no changes since the approval"),
     "impact --phase design on a bugfix +saas lists the edited design.md section (its design approval snapshots design.md too)");
   const help8 = run(["help"]).out;
-  const doc8 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const doc8 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   const after8 = (t) => { const a = t.indexOf("approve <feature> <phase>"), i = t.indexOf("impact <feature>"), m = t.indexOf("metrics [feature]"); return a !== -1 && i > a && m > i && m < t.indexOf("add-track <feature>"); };
   ok(after8(help8) && after8(doc8) && ["--phase", "--reopen", "--write"].every((x) => help8.includes(x) && doc8.includes(x)),
-    "help and the header docblock list impact + metrics right after approve, with --phase / --reopen / --write");
+    "help and the command table list impact + metrics right after approve, with --phase / --reopen / --write");
   // --reopen never unticks a REMOVED criterion's tasks (retire lists them) — help said it unticks "the affected done tasks", full stop.
   const reopenDoc8 = (t) => { const i = t.indexOf("impact <feature>"); return t.slice(i, t.indexOf("metrics [feature]", i)).replace(/\s+/g, " "); };
   ok([help8, doc8].every((t) => /--reopen unticks the affected done tasks.*never a removed criterion's.*retire`? lists/.test(reopenDoc8(t))),
-    "help and the header docblock: --reopen never unticks a removed criterion's tasks — retire lists them");
+    "help and the command table: --reopen never unticks a removed criterion's tasks — retire lists them");
 };

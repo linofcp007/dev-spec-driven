@@ -41,7 +41,7 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   ok(/▲ requisitos não funcionais \(NFR\) sem tarefa nem teste que os cubra: NFR-3/.test(pt9.out) && /testes no código: 1\/5 T-ID\(s\) planeado\(s\) nomeado\(s\) em 1 ficheiro\(s\) de teste/.test(pt9.out),
     "trace (PT feature): warnings and the tests-in-code summary in Portuguese (T-01 matches by number, whichever feature wrote the test)");
   ok(/usage: dev-spec trace <feature> \[--code\]/.test(run(["trace", "--project", w9]).out) && /trace <feature> \[--code\]/.test(run(["help"]).out) &&
-    /trace <feature> \[--code\]/.test(fs.readFileSync(CLI, "utf8").split("*/")[0]), "usage, help and the docblock show trace --code");
+    /trace <feature> \[--code\]/.test(require(path.join(path.dirname(CLI), "commands.js")).helpText()), "usage, help and the command table show trace --code");
   // Review round: the feature's own .specs/<f>/tests/ is scanned; test_t2_… is not a T-ID; a concrete File cell scopes the
   // match (tests/session.test.js's T-01 — Deep's test — no longer passes Clock's T-01).
   run(["create", "Clock", "tdd", "--project", w9]);

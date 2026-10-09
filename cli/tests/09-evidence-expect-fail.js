@@ -176,9 +176,9 @@ if (hasGitB5) {
     JSON.stringify(lg.out.slice(0, 500)) + ")");
 } else ok(true, "dev-spec log over a real git repository — skipped (git is not available)");
 
-// help and the header docblock document the new command and flags.
+// help and the command table document the new command and flags.
 const hB5 = rb5(["help"]).out;
-const docB5 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+const docB5 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
 ok(["log <feature> [--max N] [-]", "--check name=\"cmd\"", "finish <feature> [--write] [--include-body] [--run]", "_Expect: fail_"].every((w) => hB5.includes(w) && docB5.includes(w)),
-  "help and the header docblock document log, init --check, finish --run and _Expect: fail_");
+  "help and the command table document log, init --check, finish --run and _Expect: fail_");
 };

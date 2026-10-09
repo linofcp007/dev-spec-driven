@@ -211,11 +211,11 @@ ok(trW10.code === 0 && /verdict=pass {2}ACs=1 /.test(trW10.out) && !/⚠|never c
   catWr10.includes("~~**US-1.AC-3** — WHEN z THE SYSTEM SHALL w~~ — superseded by `wrapped/US-1.AC-1`") && catWr10.includes("_(supersedes `billing/US-1.AC-2`, `billing/US-1.AC-3`)_"),
   "a _Supersedes:_ marker wrapped onto its next line: trace exit 0 with no phantom warning, doctor traceability passes, catalog strikes both targets through");
 
-// help + docblock: catalog / drift right after the feature line, restore on it.
+// help + the command table: catalog / drift right after the feature line, restore on it.
 const help10 = run(["help"]).out;
-const doc10 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+const doc10 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
 const hFeat = help10.indexOf("feature <remove|archive|rename|restore>"), hCat = help10.indexOf("  catalog [--write]"), hDrift = help10.indexOf("  drift [feature]");
 ok(hFeat > 0 && hCat > hFeat && hDrift > hCat && hDrift < help10.indexOf("  roadmap [") && /restore brings an archived feature back/.test(help10) &&
-  /rename \| restore a feature/.test(doc10) && /catalog \[--write\]/.test(doc10) && /drift \[feature\]/.test(doc10),
-  "help and the header docblock list catalog / drift (right after feature) and feature restore");
+  /feature <remove\|archive\|rename\|restore>/.test(doc10) && /catalog \[--write\]/.test(doc10) && /drift \[feature\]/.test(doc10),
+  "help and the command table list catalog / drift (right after feature) and feature restore");
 };

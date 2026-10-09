@@ -50,7 +50,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     "prompts in a PT project: header, preamble and errors in European Portuguese");
 
   const helpA1 = run(["help"]).out;
-  const docA1 = fs.readFileSync(CLI, "utf8").split("*/")[0];
-  ok(/prompts \[name\] \[--args "…"\]/.test(helpA1) && /--args "…" \(prompts\)/.test(helpA1) && /prompts \[name\] \[--args "…"\]/.test(docA1) && /prompts: --args "…"/.test(docA1),
-    "help and the header docblock list prompts [name] [--args \"…\"] and the --args flag");
+  const docA1 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
+  ok(/prompts \[name\] \[--args "…"\]/.test(helpA1) && /--args "…" \(prompts\)/.test(helpA1) && /prompts \[name\] \[--args "…"\]/.test(docA1),
+    "help and the command table list prompts [name] [--args \"…\"] and the --args flag");
 };

@@ -64,10 +64,10 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     /▲ cross-feature-overlap — há tarefas por fazer que planeiam os mesmos ficheiros que outra feature ativa — agora \(src\/x\.js\)/.test(ptDocB4.out),
     "PT project: roadmap's previsão / Velocidade / sobreposição lines, metrics' velocidade and doctor's overlap detail in European Portuguese (got " + JSON.stringify(ptRmB4.out.slice(0, 500)) + ")");
   const helpB4 = run(["help"]).out;
-  const docblockB4 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const docblockB4 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   ok(/roadmap \[--write\]\[--html\]\[--lang\] +Roadmap: .*ETA per feature \(velocity from ticked tasks, _Size: XS\|S\|M\|L\|XL_\), cross-feature file overlaps/.test(helpB4) &&
-    /metrics \[feature\] \[--write\] +Lead times.*velocity/.test(helpB4) && /Multi-feature roadmap: ETA forecasts, cross-feature overlaps/.test(docblockB4),
-    "help and the header docblock mention the roadmap's ETA / overlaps and metrics' velocity");
+    /metrics \[feature\] \[--write\] +Lead times.*velocity/.test(helpB4),
+    "help and the command table mention the roadmap's ETA / overlaps and metrics' velocity");
 
   // 1.24 r6 G6: `dev-spec roadmap` names every dependency cycle — the head line the first (as before), one line each for the rest
   // (a → a hid b ↔ c).

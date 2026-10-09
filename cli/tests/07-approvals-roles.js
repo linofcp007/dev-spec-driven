@@ -118,9 +118,8 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     "PT: the role sign-off, the fast-forward summary and --roles none (cleared) print in European Portuguese");
 
   const helpB3 = run(["help"]).out;
-  const docB3 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const docB3 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   ok(/--roles requirements=product,design=tech\+security/.test(helpB3) && /approve <feature> --through <phase> {2}Fast-forward \(\/approve --through\)/.test(helpB3) &&
-    /--role ROLE \/ --through PHASE \(approve\)/.test(helpB3) && /--roles requirements=product,design=tech\+security/.test(docB3) && /approve <feature> --through <phase>/.test(docB3) &&
-    /--role ROLE = the role you sign off for/.test(docB3),
-    "help and the header docblock document init --roles, approve --role and approve --through");
+    /--role ROLE \/ --through PHASE \(approve\)/.test(helpB3) && /--roles requirements=product,design=tech\+security/.test(docB3) && /approve <feature> --through <phase>/.test(docB3),
+    "help and the command table document init --roles, approve --role and approve --through");
 };

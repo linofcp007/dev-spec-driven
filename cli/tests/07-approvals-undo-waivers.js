@@ -85,15 +85,15 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
     cw.code === 0 && cw.j && js(cw.j.waiver) === js(ew.waiver) && cw.j.note === ew.note && js(cw.j.failing) === js(ew.failing),
     "1.16 U2/U3: `approve --revoke --json` and `approve --force --reason --expires --json` print spec_approve {revoke} / {force, reason, expires}'s results (MCP ↔ CLI parity) (got " +
     js([cr.j && cr.j.message, cw.j && cw.j.waiver]) + ")");
-  // ES wording of a CLI refusal; the help and the header docblock document the new command and flags.
+  // ES wording of a CLI refusal; the help and the command table document the new command and flags.
   const ps = mk("es", "es");
   const rs = run(["approve", "login", "design", "--force", "--expires", "pronto", "--project", ps]);
   const help = run(["help"]).out;
-  const doc = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const doc = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   ok(rs.code === 1 && /expires debe ser una fecha ISO/.test(rs.out) &&
     [/undone <feature> <n> \[--reason "…"\]/, /approve <feature> <phase> --revoke \[--reason "…"\]/, /--expires YYYY-MM-DD\|30d/].every((re) => re.test(help) && re.test(doc)) &&
     SU.CLI_SWITCHES.has("revoke") && !SU.CLI_SWITCHES.has("reason") && !SU.CLI_SWITCHES.has("expires"),
-    "1.16 U: an ES refusal is Spanish; help and the header docblock document undone / --revoke / --reason / --expires; --revoke is in spec.CLI_SWITCHES, --reason / --expires take a value (got " + js(rs.out.trim()) + ")");
+    "1.16 U: an ES refusal is Spanish; help and the command table document undone / --revoke / --reason / --expires; --revoke is in spec.CLI_SWITCHES, --reason / --expires take a value (got " + js(rs.out.trim()) + ")");
 
   // The approval guard (deny): an agent's `approve … --revoke` is refused, and the command handed to the human revokes as is.
   const pd = path.join(tmp, "p16u-deny");

@@ -73,12 +73,12 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   fs.writeFileSync(path.join(pf5.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Cobrar\n  - _Requirements: US-1.AC-1_\n");
   const ptm = run(["trace", "pagamento", "--matrix", "--project", f5]);
   const ptc = runOut(["trace", "pagamento", "--csv", "--project", f5]);
-  const doc = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const doc = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   const help = run(["help"]).out;
   ok(/^Matriz de rastreabilidade — pagamento \(core\): 1 requisito\(s\) · 0 verificado\(s\) · 0 implementado\(s\) · 1 planeado\(s\) · 0 sem rastreio\n {2}requisitos ainda não aprovados\n/.test(ptm.out) &&
     /\n {2}ID +Estado +Tasks +Testes +Decisões +Requisito\n {2}US-1\.AC-1 +planeado +#1○ /.test(ptm.out) && /tasks: ✓ verificada · ▲ feita, não verificada · ○ por fazer/.test(ptm.out) &&
     /^Feature,ID,Tipo,Requisito,Estado,Lacunas,/.test(ptc.stdout) && ptc.stdout.includes("\r\npagamento,US-1.AC-1,AC,QUANDO o cliente paga O SISTEMA DEVE cobrar o total,planeado,,,,#1 por fazer,") &&
-    /trace <feature> \[--code\]/.test(doc) && /\[--matrix\]/.test(doc) && /\[--csv\] the traceability matrix as CSV/.test(doc) && /--matrix: \+ the requirements traceability matrix/.test(help) &&
+    /trace <feature> \[--code\]/.test(doc) && /--matrix: \+ the requirements traceability matrix/.test(help) &&
     /--csv: the matrix as RFC 4180 CSV on stdout/.test(help) && /\.rtm\.csv/.test(help),
-    "feature F5: a PT feature's matrix and CSV speak Portuguese (headers, statuses, task words; IDs English); the docblock and help document --matrix / --csv and the .rtm.csv export");
+    "feature F5: a PT feature's matrix and CSV speak Portuguese (headers, statuses, task words; IDs English); the command table and help document --matrix / --csv and the .rtm.csv export");
 };

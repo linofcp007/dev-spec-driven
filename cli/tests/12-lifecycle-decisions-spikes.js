@@ -104,10 +104,10 @@ ok(skPt.code === 0 && /  pergunta: Redis ou Memcached\?\n  timebox: até \d{4}-\
   docPt.code === 1 && /✗ decision — spike\.md → Decisão ainda não está escrita/.test(docPt.out),
   "PT: spike prints pergunta / timebox até; decide writes '# Decisões:' (a spike section as _Affects:_); doctor speaks Portuguese (got " + JSON.stringify([skPt.out, docPt.out.slice(0, 200)]) + ")");
 
-// help and the header docblock document spike and decide.
+// help and the command table document spike and decide.
 const hC2 = rc2(["help"]).out;
-const docC2 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+const docC2 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
 ok(['spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]', 'decide <feature> --title "…" --decision "…"', "--kind feature|bugfix|spike"].every((w) => hC2.includes(w)) &&
   ['spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]', 'decide <feature> --title "…" --decision "…"'].every((w) => docC2.includes(w)),
-  "help and the header docblock document spike, decide and --kind spike");
+  "help and the command table document spike, decide and --kind spike");
 };

@@ -67,9 +67,9 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   // Localized: tracks init --lang pt writes Portuguese comments and speaks Portuguese; the help documents the command.
   const ip = r(["tracks", "init", "mobile", "--lang", "pt"]);
   const help = run(["help"]).out;
-  const doc = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const doc = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   const mj = path.join(f4, ".specs", "tracks", "mobile", "track.json");
   ok(ip.code === 0 && /Track pack \+mobile criado/.test(ip.out) && fs.existsSync(mj) && /um track definido pelo projeto/.test(fs.readFileSync(mj, "utf8")) &&
     /tracks \[list\|init <name>\|check\]/.test(help) && /tracks \[list\|init <name>\|check\]/.test(doc) && r(["tracks", "bogus"]).code === 1,
-    "feature F4: tracks init --lang pt (Portuguese files and messages); help and the docblock document `tracks`; an unknown action exits 1");
+    "feature F4: tracks init --lang pt (Portuguese files and messages); help and the command table document `tracks`; an unknown action exits 1");
 };

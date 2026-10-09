@@ -539,8 +539,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
   // the BMAD importer — it matched only the exact "status:" form). A class letter quantified right after an anchor, a group
   // opener or an alternation, with no backslash, is the tell.
   {
-    const srcFiles = [...libSources().map((f) => path.relative(root, f)), "mcp/server.js", "cli/dev-spec.js",
-      "hooks/guard-hook.js", "hooks/stop-hook.js", "hooks/spec-hook.js", "hooks/observe-hook.js", "hooks/approval-hook.js",
+    const srcFiles = [...libSources().map((f) => path.relative(root, f)), "mcp/server.js", "cli/dev-spec.js", "cli/main.js", "cli/commands.js",
+      "cli/run.js", "cli/git.js", "cli/completion.js", "hooks/guard-hook.js", "hooks/stop-hook.js", "hooks/spec-hook.js", "hooks/observe-hook.js", "hooks/approval-hook.js",
       "hooks/plan-hook.js", "hooks/precommit-check.js", "scripts/build.js"].filter((f) => fs.existsSync(path.join(root, f)));
     const lit = /(^|[=(,:!&|?;{}\s])\/((?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+)\/([dgimsuvy]*)/gm;
     const stripped = /(^|[(|^?:])(?:s[*+?]|d[+*]|w[+*])|[^\\\p{L}](?:s[*+])(?:[\p{L}:$)]|$)/u;

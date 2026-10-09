@@ -127,9 +127,9 @@ ok(rbad.code === 1 && /cursor, windsurf, copilot, gemini, agents/.test(rbad.out)
 const help4 = run(["help"]).out;
 ok(["finish", "steering", "bugfix", "clarify", "roadmap", "depend", "backlog", "scan", "coverage", "rules <tool>", "generic", "--max", "--kind", "--include-body", "--text", "--yes", "--name"]
   .every((w) => help4.includes(w)) && help4.indexOf("rules <tool>") > help4.indexOf("mcp-config [client]"), "help lists every subcommand and flag (rules right after mcp-config)");
-const doc4 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+const doc4 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
 ok(["finish", "steering", "bugfix", "clarify", "roadmap", "depend", "backlog", "scan", "coverage", "rules", "generic", "--max", "--kind", "--include-body", "--text", "--yes"]
-  .every((w) => doc4.includes(w)), "the header docblock lists every subcommand and flag too");
+  .every((w) => doc4.includes(w)), "the command table's help (cli/commands.js — the docblock points there) lists every subcommand and flag too");
 
 // Localized human output — PT project (feature commands: feature language; project commands: project language).
 const pt4 = path.join(tmp, "wp4-pt");
@@ -174,11 +174,13 @@ ok(dashSum.code === 0 && /'dashy'/.test(dashSum.out) && run(["depend", "gaps", "
 const rproto = ["constructor", "__proto__", "toString"].map((t) => run(["rules", t]));
 ok(rproto.every((r) => r.code === 1 && /unknown tool '/.test(r.out) && /cursor, windsurf, copilot, gemini, agents/.test(r.out) && !/argument must be/.test(r.out)),
   "rules constructor/__proto__/toString → 'unknown tool', not a Node TypeError");
-// Every flag the CLI reads is documented (docblock + help), aliases included.
-const flagsRead = [...new Set([...fs.readFileSync(CLI, "utf8").matchAll(/\bflags(?:\.([a-z]+)|\["([a-z-]+)"\])/g)].map((m) => "--" + (m[1] || m[2])))]
+// Every flag the CLI reads is documented (the help — 1.27: the command table's, cli/commands.js; the flags are read there and in
+// cli/main.js), aliases included.
+const cliSrc4 = ["main.js", "commands.js"].map((f) => fs.readFileSync(path.join(path.dirname(CLI), f), "utf8")).join("\n");
+const flagsRead = [...new Set([...cliSrc4.matchAll(/\bflags(?:\.([a-z]+)|\["([a-z-]+)"\])/g)].map((m) => "--" + (m[1] || m[2])))]
   .filter((x) => x !== "--json" && x !== "--project");
 ok(flagsRead.length >= 15 && flagsRead.every((x) => doc4.includes(x)) && ["--by", "--include-brief", "--run", "--evidence", "--exit", "--cmd", "--md"].every((x) => doc4.includes(x)),
-  "the header docblock lists every flag the CLI reads (missing: " + flagsRead.filter((x) => !doc4.includes(x)).join(",") + ")");
+  "the command table's help lists every flag the CLI reads (missing: " + flagsRead.filter((x) => !doc4.includes(x)).join(",") + ")");
 ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(x)).every((x) => help4.includes(x)) && /--md/.test(help4) && /alias: na/.test(help4),
   "help mentions every flag it owns plus the --md and na aliases");
 };

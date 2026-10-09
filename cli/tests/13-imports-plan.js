@@ -77,8 +77,8 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     flBug.code === 1 && /is a bugfix: it follows its own fixed phase order/.test(flBug.out) && flNone.code === 1 && /flow required/.test(flNone.out),
     "roadmap shows a fresh design-first feature at 8%; feature flow <name> <flow> / --flow sets it (idempotent), a bad or missing flow and a bugfix exit 1 (got " + JSON.stringify([rmOut.split("\n").filter((l) => /port-engine/.test(l)), fl.out, flNone.out]).slice(0, 400) + ")");
   const help = run(["help"]).out;
-  const doc = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const doc = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   ok(/import <kiro\|spec-kit\|openspec\|plan\|execplan\|bmad\|fluidplan> <path>/.test(help) && /import <kiro\|spec-kit\|openspec\|plan\|execplan\|bmad\|fluidplan> <path>/.test(doc) &&
     /feature flow <name> <requirements-first\|design-first>/.test(help) && /--flow design-first/.test(help) && /--flow design-first/.test(doc),
-    "help and the header docblock document import plan|execplan|bmad, create --flow design-first and feature flow");
+    "help and the command table document import plan|execplan|bmad, create --flow design-first and feature flow");
 };
