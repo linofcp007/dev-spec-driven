@@ -151,7 +151,11 @@ matrix.
   a forced approval — and the warning `justifiedTestGaps` (+tdd, a top-level array in `TRACE_INFO_FIELDS`, `TRACE_WARNING_ORDER`
   after the secondary kinds; doctor's `traceability` detail repeats it unless the plan's kinds are deferred) lists the uncovered ACs
   the plan names outside its entries, so the reader sees they are accounted for. `phantomAcsInTests` still reads every mention (a
-  typo in a Gaps note is a phantom).
+  typo in a Gaps note is a phantom). **1.25.1 — the entry shapes:** a GFM table WITHOUT its outer pipes (a header with a pipe over a
+  delimiter row `--- | ---`; a row of an open table may drop them too — never a list item, heading or quote), the T-IDs read from the
+  column whose header is a Test ID / T-ID / ID (`RE_TEST_ID_HEADER`, EN / PT / ES — "| # | Test ID | Covers |"), else the first, and a
+  heading led by a T-ID ("### T-01 — …" + its body, up to the next heading, a table or a T-ID item). Each read as no entry: covered
+  0/N and every AC a `justifiedTestGaps` warning.
   **A removed track's criteria (1.24 review 6, F9):** trace_check reads the ACTIVE requirements (`activeDesign` — a turned-off
   track's `[SaaS]` / `[AI]` / … sections, a missing pack's ghost sections) for the REQUIRED ACs and the ACTIVE tasks (`activeTasks`)
   for their coverage — the matrix's rows and tasks, tracks.md's removal rule; it read the whole files, so a feature that removed

@@ -856,14 +856,31 @@ function traceSecondary(dir, reqText, blocks, planText, tracks, allReqText) {
   for (const [k, id] of cited) if (!all.has(k)) out.phantomSecondary.push(id);
   return out;
 }
+// 1.25.1 — what else a plan writes as a test entry: a GFM table WITHOUT its outer pipes ("Test ID | Covers" over "--- | ---", then
+// "T-01 | US-1.AC-1" — a row may drop them in a piped table too), a table whose T-IDs sit in a "Test ID" / "ID" column that is not the
+// first ("| # | Test ID | Covers |"), and a heading led by a T-ID ("### T-01 — expired token rejected" + its body, up to the next
+// heading, table or T-ID item). Each was read as no entry: coverage 0/N, the plan's ACs listed as justifiedTestGaps.
+const RE_GFM_SEP = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+const RE_TEST_ID_HEADER = /^(?:test[\s_-]*ids?|t[\s_-]?ids?|ids?|ids? (?:do|de|da|del) (?:teste|testes|prueba|pruebas|la prueba))$/i;
 function testPlanEntries(planText) {
   const out = [];
   let header = null;
   let sep = false;
   let inTable = false;
+  let idCol = 0; // the table's T-ID column: the one whose header reads Test ID / ID (EN / PT / ES), else the first
   let item = null; // the list entry being continued: { indent, blank, entry }
+  let head = null; // the T-ID heading entry being continued (1.25.1): its body lines join its text
   const tidLead = (line) => RE_LIST_ITEM.test(line) && line.replace(RE_LIST_ITEM, "").replace(/^[\s*`_]+/, "").match(/^T-\d+(?!\d)/);
-  for (const line of planIdText(planText || "").split(/\r?\n/)) {
+  const headLead = (line) => { const h = /^\s{0,3}#{1,6}\s+(.*)$/.exec(line); return h ? h[1].replace(/^[\s*`_[]+/, "").match(/^T-\d+(?!\d)/) : null; };
+  // a pipe-less GFM table's header: a line with a pipe over a delimiter row
+  const pipeless = (line, next) => line.includes("|") && !/^\s*\|/.test(line) && next !== undefined && next.includes("|") && next.includes("-") && RE_GFM_SEP.test(next);
+  const lines = planIdText(planText || "").split(/\r?\n/);
+  for (let n = 0; n < lines.length; n++) {
+    const line = lines[n];
+    if (head) {
+      if (/^\s{0,3}#{1,6}\s/.test(line) || /^\s*\|/.test(line) || tidLead(line) || pipeless(line, lines[n + 1])) head = null;
+      else { if (line.trim()) head.text += "\n" + line.trim(); continue; }
+    }
     if (item) {
       const indent = line.match(/^\s*/)[0].length;
       if (!line.trim()) { item.blank = true; continue; }
@@ -871,15 +888,29 @@ function testPlanEntries(planText) {
       if (!tidLead(line) && (indent > item.indent || (!item.blank && !block))) { item.entry.text += "\n" + line.trim(); continue; }
       item = null;
     }
-    if (/^\s*\|/.test(line)) {
-      if (!inTable) { inTable = true; header = tableCells(line); sep = false; continue; }
-      if (!sep && /^\s*\|[\s:|-]+$/.test(line.trim())) { sep = true; continue; }
+    // a table line: one that opens with a pipe, a row of the open table (a GFM row may drop its outer pipes — never a list item, a
+    // heading or a quote), or a pipe-less table's header
+    const rowOf = inTable && line.includes("|") && !RE_LIST_ITEM.test(line) && !/^\s*(?:#|>)/.test(line);
+    if (/^\s*\|/.test(line) || rowOf || (!inTable && pipeless(line, lines[n + 1]))) {
+      if (!inTable) {
+        inTable = true; header = tableCells(line); sep = false;
+        const h = header.findIndex((c) => RE_TEST_ID_HEADER.test(c.replace(/[*_`]/g, "").trim()));
+        idCol = h >= 0 ? h : 0;
+        continue;
+      }
+      if (!sep && line.includes("-") && RE_GFM_SEP.test(line)) { sep = true; continue; }
       const cells = tableCells(line);
-      const ids = [...extractTestIds(cells[0] || "")];
+      const ids = [...extractTestIds(cells[idCol] || "")];
       if (ids.length) out.push({ ids, text: line.trim(), cells, header });
       continue;
     }
     inTable = false;
+    const hm = headLead(line);
+    if (hm) {
+      head = { ids: [hm[0]], text: line.trim(), cells: null, header: null };
+      out.push(head);
+      continue;
+    }
     const m = tidLead(line);
     if (m) {
       const entry = { ids: [m[0]], text: line.trim(), cells: null, header: null };

@@ -76,4 +76,30 @@ exports.run = async ({ ok, S, tmp, require }) => {
     ok(ph && !/requirements\.md/.test(ph.detail || "") && !(ears.issues || []).some((i) => i.code === "placeholder"),
       "1.25.1 (5): doctor's placeholders and EARS no longer read 'an empty array []' / 'append [...]' as template slots (got " + js([ph, (ears.issues || []).map((i) => i.code)]) + ")");
   }
+
+  { // 1.25.1 (6): test-plan entries — a pipe-less GFM table, a table whose T-IDs sit in a "Test ID" column that is not the first, T-ID headings
+    const p = fresh("plan-shapes");
+    const req = ["# Requirements: Tokens", "", "## User Stories", "", "### US-1 (P1): Sessions", "", "#### Acceptance Criteria (EARS)",
+      "- **US-1.AC-1** — WHEN a token expires THE SYSTEM SHALL reject it with 401.", "- **US-1.AC-2** — WHEN a refresh token is valid THE SYSTEM SHALL issue a new token.", ""].join("\n");
+    const tasks = "# Tasks\n\n- [ ] 1. Reject expired tokens\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01, T-02_\n";
+    const plans = {
+      pipeless: "# Test Plan\n\nTest ID | Layer | Covers (AC IDs)\n--- | --- | ---\nT-01 | unit | US-1.AC-1\nT-02 | unit | US-1.AC-2\n",
+      numbered: "# Test Plan\n\n| # | Test ID | Covers (AC IDs) |\n|---|---|---|\n| 1 | T-01 | US-1.AC-1 |\n| 2 | T-02 | US-1.AC-2 |\n",
+      headings: "# Test Plan\n\n## Tests\n\n### T-01 — expired token rejected\n- Layer: unit\n- Covers: US-1.AC-1\n\n### T-02: refresh issues a new token\nCovers US-1.AC-2.\n\n## Coverage Check\n- Gaps: none\n",
+    };
+    const got = Object.entries(plans).map(([name, plan]) => {
+      const f = S.createFeature(p, "Tokens " + name, ["tdd"], "Tokens", null, "en");
+      put(path.join(f.dir, "requirements.md"), req);
+      put(path.join(f.dir, "tasks.md"), tasks);
+      put(path.join(f.dir, "test-plan.md"), plan);
+      const tr = S.traceCheck(p, f.slug, { matrix: true });
+      return [name, tr.coveredByTests, js(tr.uncoveredByTests), js(tr.justifiedTestGaps), tr.matrix.rows.filter((r) => (r.gaps || []).includes("no-test")).length];
+    });
+    ok(got.every((g) => g[1] === 2 && g[2] === "[]" && g[3] === "[]" && g[4] === 0),
+      "1.25.1 (6): a pipe-less GFM table ('T-01 | US-1.AC-1'), a '| # | Test ID | Covers |' table and '### T-01 …' heading entries cover their ACs — trace_check 2/2, no justifiedTestGaps, no 'no-test' row in the matrix (got " + js(got) + ")");
+    const shapes = E.testPlanEntries("| Test ID | Covers |\n|---|---|\n| T-01 | US-1.AC-1 |\nT-02 | US-1.AC-2\n- T-03 covers US-1.AC-3\n\n| T-ID | Test | Covers |\n|---|---|---|\n| T-04 | login | US-1.AC-1 |\n\n| Step | Notes |\n|---|---|\n| 1 | then T-05 runs |\n")
+      .map((e) => e.ids.join());
+    ok(js(shapes) === js(["T-01", "T-02", "T-03", "T-04"]),
+      "1.25.1 (6): a GFM row without its outer pipes continues a piped table, a T-ID list item after it is its own entry, a 'T-ID' column is the ID column, a T-ID in another column of a table with no ID column is no entry (got " + js(shapes) + ")");
+  }
 };
