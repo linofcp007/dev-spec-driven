@@ -55,8 +55,8 @@ function emit(eventName, text) {
 }
 
 // The hooks run in EVERY project. Only touch a .specs/ that dev-spec owns (another tool may use the name) — the project probe's one
-// rule (mcp/lib/probe.js isDevSpecProject: roadmap.json, steering/, or a feature folder with its .state.json / classification.md),
-// required lazily: an edit outside .specs/ loads nothing.
+// rule (mcp/lib/probe.js isDevSpecProject: roadmap.json, steering/, a ROADMAP.md dev-spec generated — a v1.8-era project —, or a
+// feature folder with its .state.json / classification.md), required lazily: an edit outside .specs/ loads nothing.
 let P = null;
 const probe = () => P || (P = require(path.join(__dirname, "..", "mcp", "lib", "probe.js")));
 const isDevSpecProject = (pdir) => probe().isDevSpecProject(pdir);
