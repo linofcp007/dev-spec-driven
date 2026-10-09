@@ -17,7 +17,7 @@ These are not the `+ai` feature evals of a user's project (those live in `mcp/ev
 
 | Case | Expects |
 |---|---|
-| `trigger-spec-en` / `-pt` / `-es` | a `dev-spec-driven:*` skill or command fires on "spec this before coding" |
+| `trigger-spec-en` / `-pt` / `-es` | a `dev-spec-driven:*` skill or command (the skill, `/spec` or `/spec-bugfix` — the only model-invocable commands) fires on "spec this before coding" |
 | `trigger-bugfix-en` | it fires on a defect report asking for a proper fix |
 | `trigger-upgrade-pt` | it fires on "I updated the plugin — update this project's specs and review what isn't implemented" (PT) |
 | `no-trigger-unrelated` | nothing from the plugin fires on a general-knowledge question |
