@@ -30,15 +30,10 @@
 const fs = require("fs");
 const path = require("path");
 
-// A JSON file as the engine reads it: UTF-8, or UTF-16 with a BOM (1.24 review 6, C3 — Windows PowerShell 5.1's Out-File: a UTF-16
-// file read as UTF-8 didn't parse), decoded by hook-utils.js — required only for such a file (the hot path stays cheap). Throws on a
-// missing or broken file.
-function readJsonFile(file) {
-  const buf = fs.readFileSync(file);
-  if (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff))) return require("./hook-utils.js").jsonOf(buf);
-  const t = buf.toString("utf8");
-  return JSON.parse(t.charCodeAt(0) === 0xfeff ? t.slice(1) : t);
-}
+// The project probe (mcp/lib/probe.js): the one dev-spec project rule, the session's candidate projects, a JSON file read as the engine
+// reads it (UTF-8, or UTF-16 with a BOM — 1.24 review 6, C3). Required once the event is a Stop / SubagentStop.
+let P = null;
+const probe = () => P || (P = require(path.join(__dirname, "..", "mcp", "lib", "probe.js")));
 
 let done = false;
 let ran = false;
@@ -50,24 +45,6 @@ function finish(obj) {
   done = true;
   if (!obj) process.exit(0);
   process.stdout.write(JSON.stringify(obj), () => process.exit(0));
-}
-
-// The hooks run in EVERY project: only a .specs/ that dev-spec owns (roadmap.json, steering/, or a feature folder with its
-// .state.json / classification.md) is looked at.
-function isDevSpecProject(dir) {
-  const root = path.join(dir, ".specs");
-  try {
-    if (!fs.statSync(root).isDirectory()) return false;
-  } catch {
-    return false;
-  }
-  if (fs.existsSync(path.join(root, "roadmap.json")) || fs.existsSync(path.join(root, "steering"))) return true;
-  try {
-    return fs.readdirSync(root, { withFileTypes: true }).some((d) => d.isDirectory() &&
-      (fs.existsSync(path.join(root, d.name, ".state.json")) || fs.existsSync(path.join(root, d.name, "classification.md"))));
-  } catch {
-    return false;
-  }
 }
 
 // The user's default (1.16 — the environment variable DEV_SPEC_STOP_CHECK, e.g. from Claude Code's settings.json `env`) set to
@@ -84,7 +61,7 @@ function userStopCheckOff() {
 // Read raw: the engine is loaded only when the gate may have something to say.
 function gateOff(dir) {
   try {
-    const j = readJsonFile(path.join(dir, ".specs", "roadmap.json"));
+    const j = probe().readJsonFile(path.join(dir, ".specs", "roadmap.json"));
     const meta = !!j && typeof j === "object" && !!j.meta && typeof j.meta === "object" ? j.meta : {};
     return meta.stopCheck === false || (typeof meta.stopCheck !== "boolean" && userStopCheckOff());
   } catch {
@@ -121,25 +98,10 @@ function recentActivity(dir) {
     try { st = fs.statSync(file); } catch { continue; } // no state: no recorded activity
     if (st.size > 1024 * 1024) return true;
     let j;
-    try { j = readJsonFile(file); } catch { continue; } // unreadable: the engine skips it too (UTF-16 with a BOM is read — 1.24 review 6, C3)
+    try { j = probe().readJsonFile(file); } catch { continue; } // unreadable: the engine skips it too (UTF-16 with a BOM is read — 1.24 review 6, C3)
     if (walk(j, 0)) return true;
   }
   return false;
-}
-
-// The nearest folder at or above cwd that holds a dev-spec .specs/ (≤ 40 levels — a cd'd subfolder, a worktree) — a candidate for the
-// raw pre-check only. A network or device path (\\host\share, \\?\…) is the user's own folder: taken as it is, never walked.
-function nearestDevSpec(cwd) {
-  if (!cwd) return null;
-  if (/^[\\/]{2}/.test(cwd.trim())) return cwd;
-  let d = path.resolve(cwd);
-  for (let i = 0; i < 40; i++) {
-    if (isDevSpecProject(d)) return d;
-    const up = path.dirname(d);
-    if (up === d) break;
-    d = up;
-  }
-  return null;
 }
 
 // 1.24 r6 I-I1 — the end of the turn: a ROADMAP.md / SPECS.md left stale by spec saves (the save hook's stamp, spec.ROADMAP_STALE_FILE
@@ -227,13 +189,12 @@ function main(raw) {
   const event = payload.hook_event_name || payload.hookEventName || "";
   if (event !== "Stop" && event !== "SubagentStop") return finish();
 
-  // The raw pre-check: the projects this stop may be about — the nearest dev-spec .specs/ at or above the session's cwd (a cd'd
-  // subfolder, a worktree), the project dir Claude Code (or the user) exported — with the gate on. The engine then picks THE
-  // project (spec.sessionProject, 1.23 review 5: a worktree's copy of .specs/ maps to the checkout the MCP server records in).
+  // The raw pre-check: the projects this stop may be about (probe.sessionProjects — the nearest dev-spec .specs/ at or above the
+  // session's cwd: a cd'd subfolder, a worktree; the project dir Claude Code or the user exported) — with the gate on. The engine then
+  // picks THE project (spec.sessionProject, 1.23 review 5: a worktree's copy of .specs/ maps to the checkout the MCP server records in).
   const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null;
-  const anchors = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR]
-    .filter((v) => typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim()));
-  const projects = [...new Set([nearestDevSpec(cwd), ...anchors].filter(Boolean).map((v) => path.resolve(v)))].filter(isDevSpecProject);
+  const anchors = probe().sessionAnchors();
+  const projects = probe().sessionProjects({ cwd, anchors });
   refreshStale(projects); // 1.24 r6 I-I1: the turn's spec saves → ROADMAP.md / SPECS.md, once
   if (payload.stop_hook_active === true) return finish(); // already sent back once: never twice in a row
   const cands = projects.filter((d) => !gateOff(d));

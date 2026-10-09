@@ -204,14 +204,15 @@ exports.run = async ({ ok, all, remeasure, run, tmp, CLI }) => {
   }
 
   // 1.25 completion: __complete never errs (an unknown word, no word, a second word, a missing project: nothing, exit 0), never loads a
-  // module of mcp/lib (a preload lists the loaded modules at exit), and costs about node's own startup — well under a command that
-  // loads the engine (medians of 5; bounded relative to `node -e 0` measured here, as testing.md asks).
+  // module of mcp/lib but the engine-free project probe (1.27: mcp/lib/probe.js — a preload lists the loaded modules at exit), and costs
+  // about node's own startup — well under a command that loads the engine (medians of 5; bounded relative to `node -e 0` measured here,
+  // as testing.md asks).
   {
     const env0 = cleanEnv();
     const q = (args, cwd) => spawnSync(process.execPath, [CLI, "__complete", ...args], { encoding: "utf8", cwd: cwd || p, env: env0 });
     const odd = [q(["nope"]), q([]), q(["features", "extra"]), q(["features", "--project", path.join(tmp, "c125-missing")])];
     const pre = path.join(tmp, "c125-preload.js");
-    fs.writeFileSync(pre, "process.on('exit', () => { const sep = String.fromCharCode(92); const m = Object.keys(require.cache).filter((f) => f.split(sep).join('/').includes('/mcp/lib/')); process.stderr.write('LOADED ' + JSON.stringify(m)); });");
+    fs.writeFileSync(pre, "process.on('exit', () => { const sep = String.fromCharCode(92); const m = Object.keys(require.cache).filter((f) => f.split(sep).join('/').includes('/mcp/lib/') && !f.split(sep).join('/').endsWith('/mcp/lib/probe.js')); process.stderr.write('LOADED ' + JSON.stringify(m)); });");
     const pl = spawnSync(process.execPath, ["-r", pre, CLI, "__complete", "features"], { encoding: "utf8", cwd: p, env: env0 });
     const time = (args) => { const t0 = process.hrtime.bigint(); spawnSync(process.execPath, args, { cwd: p, env: env0 }); return Number(process.hrtime.bigint() - t0) / 1e6; };
     const node0 = [], fast = [], list = [];
@@ -219,7 +220,7 @@ exports.run = async ({ ok, all, remeasure, run, tmp, CLI }) => {
     const [n, f, l] = [median(node0), median(fast), median(list)];
     ok(odd.every((r) => r.status === 0 && r.stdout === "" && r.stderr === "") && /LOADED \[\]$/.test(pl.stderr) && pl.stdout.split("\n").includes("login") &&
       f < l && f <= Math.max(250, 2.5 * n),
-      "1.25 completion: __complete answers nothing (exit 0) to an unknown / missing / extra word or a missing project, loads no mcp/lib module, and takes " + Math.round(f) +
+      "1.25 completion: __complete answers nothing (exit 0) to an unknown / missing / extra word or a missing project, loads no mcp/lib module but the probe, and takes " + Math.round(f) +
       " ms (node -e 0: " + Math.round(n) + " ms; `list`, which loads the engine: " + Math.round(l) + " ms) (got " + JSON.stringify([odd.map((r) => [r.status, r.stdout, r.stderr]), pl.stderr.slice(-300)]) + ")");
   }
 

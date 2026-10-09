@@ -500,10 +500,12 @@ exports.run = async ({ ok, all, S, tmp, rpc, payload, __dirname, require }) => {
       return fs.existsSync(log);
     };
     const logged = [5, 12, 13, 20].map(runAt);
+    // 1.27: no hook walks on its own any more — each runs the project probe's walk (mcp/lib/probe.js), bounded by its SESSION_MAX_UP
     const src = (h) => fs.readFileSync(path.join(__dirname, "..", "hooks", h), "utf8");
-    const bounds = { guard: /for \(let i = 0; i < (\d+); i\+\+\)/.exec(src("guard-hook.js")), stop: /for \(let i = 0; i < (\d+); i\+\+\) \{\s*if \(isDevSpecProject/.exec(src("stop-hook.js")),
-      observe: /const MAX_UP = (\d+);/.exec(src("observe-hook.js")), utils: /const MAX_UP = (\d+);/.exec(src("hook-utils.js")) };
-    const nums = Object.fromEntries(Object.entries(bounds).map(([k, m]) => [k, m ? Number(m[1]) : null]));
+    const PB = require("./lib/probe.js");
+    const viaProbe = (h, re) => (re.test(src(h)) && !/for \(let i = 0; i < \d+; i\+\+\)/.test(src(h)) ? PB.SESSION_MAX_UP : null);
+    const nums = { guard: viaProbe("guard-hook.js", /sessionProjects\(/), stop: viaProbe("stop-hook.js", /sessionProjects\(/),
+      observe: viaProbe("observe-hook.js", /sessionProjects\(/), utils: viaProbe("hook-utils.js", /P\.nearestProject\(/) };
     ok(js(logged) === js([true, true, true, true]) && Object.values(nums).every((n) => n === E.SESSION_MAX_UP),
       "1.24 r6 I2: the observe hook finds the project from a cwd 13 and 20 levels below it (it stopped at 12) — every hook walks up SESSION_MAX_UP (" + E.SESSION_MAX_UP + ") folders (got " +
       js({ logged, nums }) + ")");
