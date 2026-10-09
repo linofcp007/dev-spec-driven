@@ -113,7 +113,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   task's record in `others`, both sides' plus the losing side's own one, one per task, newest first, `EVIDENCE_OTHERS` —
   they were dropped, and that task's runs merged into the winner's history), histories merged, deduped, bounded by `EVIDENCE_HISTORY` (a run's own fields — `observed`,
   1.22 review 3's `cmdRule` and `root` — travel with it: no rule of their own); `ticks[n]` / `lastTickAt` / `lastEditAt` (1.22 review: the spec-hook's stamp of a hand-saved tasks.md) → the
-  later; `finished` → the later (firstAt the earliest); `createdAt` → the earlier; `approvals[phase]` → the later approval unless
+  later; `finished` → the later (firstAt the earliest); `createdAt` → the earlier; `branch` (1.25 — create --branch) → the EARLIER
+  record by its `at` (where the feature started first; a record without a time reads as the later; the same time: one name → one
+  record, ours' fields over theirs', two names → a conflict); `approvals[phase]` → the later approval unless
   a revocation record (`revoked: true`, not `partial`) is later — **revocations win by time**, applied to the 3-way RESULT
   (`pruneRevokedApprovals()`, r5 review: when only one side changed `approvals`, an approval older than the other side's
   revocation survived); `signoffs[phase][role]` → the later,
@@ -255,7 +257,11 @@ and U+FEFF gotchas are in CLAUDE.md.
 - **CLI `--lang` is the MCP enum**: `main()` refuses anything outside the MCP `lang` enum (case-folded) with the
   localized `args.invalid` message before dispatch — the engine's `normalizeLang()` would turn `fr` into `en` and save it.
 - **CLI exit codes are scriptable**: `doctor` (FAIL), `trace` (gaps), `ears` (errors), `finish` (not ready),
-  `drift` (drift, a stale baseline or an error) and any refused operation exit 1. The eval harness
+  `drift` (drift, a stale baseline or an error) and any refused operation exit 1 — and (1.25) `create` / `bugfix` / `spike
+  --branch` when the feature does not end up on its branch (lifecycle.md → A feature's own git branch: it is created all the same).
+  **A value flag whose value is optional** (1.25 — `--branch [<name>]`): the parser reads a bare `--branch` (the last word, or a
+  flag after it) as `true` instead of a missing value; it stays a VALUE flag (never in `CLI_SWITCHES` — `--branch <name>` takes the
+  next word), and `branchSpaced` remembers a spaced value so `create x --branch tdd` (a track word) is refused as ambiguous. The eval harness
   (`mcp/evals/run-evals.js`, also `dev-spec evals`) exits 2 on a usage error (a `--max-items` that isn't an
   integer ≥ 1 — it graded nothing and scored 0/0 = 100% — or, run directly, a `--json`: its report is text) and 1 on an
   invalid set (an empty one included); `dev-spec evals --json` never reaches the harness — the CLI refuses it first

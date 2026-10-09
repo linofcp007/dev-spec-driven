@@ -69,7 +69,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 |---|---|
 | `spec_classify` | Recommend tracks from a description (multilingual keyword heuristic, weighted) |
 | `spec_init` | Scaffold `.specs/steering/` for the tracks; `lang` sets the project language, `guard` on · off · scope, `stopCheck` the end-of-turn evidence gate, `checks` the project's check commands, `approvalRoles` who signs off each phase, `evidence` reported · observed (only runs the harness saw verify), `approvalGuard` off · ask · deny (an agent's approval asks you / is refused) |
-| `spec_create` | Scaffold a feature folder for the active tracks (`kind: "bugfix"` for the bugfix flow, `kind: "spike"` for a timeboxed investigation, `brownfield: true` adds `integration-plan.md`, `flow: "design-first"` puts the design before the requirements) |
+| `spec_create` | Scaffold a feature folder for the active tracks (`kind: "bugfix"` for the bugfix flow, `kind: "spike"` for a timeboxed investigation, `brownfield: true` adds `integration-plan.md`, `flow: "design-first"` puts the design before the requirements, `branch: "true"` starts it on its own git branch — recorded, the `git switch -c` returned for you to run) |
 | `spec_import` | Import a Kiro, spec-kit or OpenSpec spec, a Claude Code / Cursor plan, a Codex ExecPlan or BMAD docs as a new feature (IDs remapped to `US-N.AC-M`, tasks renumbered; a plan can come as `text` — plan mode keeps plans outside the project) |
 | `spec_templates` | Project templates: list, copy (`init`) or `check` the team's own scaffolds in `.specs/templates/`, which replace the built-in ones |
 | `spec_tracks` | Project-defined tracks: list, scaffold (`init`) or `check` the team's track packs in `.specs/tracks/<name>/` — each a marker track like `+sec` (signals, criteria, mandatory design sections, tasks, test rows, steering) |
@@ -510,7 +510,7 @@ prints the raw result, and `help` lists every flag. A plugin install puts no `de
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates [list|init|check] · tracks [list|init|check]
-create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] [--branch [<name>]] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
@@ -588,7 +588,7 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 |---|---|
 | `spec_classify` | Recomenda tracks a partir de uma descrição (heurística multilíngue, com peso) |
 | `spec_init` | Cria `.specs/steering/` para os tracks; `lang` define a língua do projeto, `guard` on · off · scope, `stopCheck` o gate de evidência no fim do turno, `checks` os comandos de verificação do projeto, `approvalRoles` quem aprova cada fase, `evidence` reported · observed (só verificam as execuções que o harness viu), `approvalGuard` off · ask · deny (a aprovação de um agente pergunta-te / é recusada) |
-| `spec_create` | Cria a pasta da funcionalidade para os tracks ativos (`kind: "bugfix"` para o fluxo de bugfix, `kind: "spike"` para uma investigação com prazo, `brownfield: true` acrescenta `integration-plan.md`, `flow: "design-first"` põe o design antes dos requisitos) |
+| `spec_create` | Cria a pasta da funcionalidade para os tracks ativos (`kind: "bugfix"` para o fluxo de bugfix, `kind: "spike"` para uma investigação com prazo, `brownfield: true` acrescenta `integration-plan.md`, `flow: "design-first"` põe o design antes dos requisitos, `branch: "true"` começa-a no seu próprio branch git — registado, com o `git switch -c` devolvido para correres) |
 | `spec_import` | Importa uma spec do Kiro, spec-kit ou OpenSpec, um plano do Claude Code / Cursor, um ExecPlan do Codex ou documentos BMAD como nova funcionalidade (IDs convertidos para `US-N.AC-M`, tarefas renumeradas; um plano pode vir como `text` — o plan mode guarda os planos fora do projeto) |
 | `spec_templates` | Templates do projeto: lista, copia (`init`) ou verifica (`check`) os scaffolds da equipa em `.specs/templates/`, que substituem os de origem |
 | `spec_tracks` | Tracks definidos pelo projeto: lista, cria (`init`) ou verifica (`check`) os track packs da equipa em `.specs/tracks/<nome>/` — cada um é um track com marcador como o `+sec` (sinais, critérios, secções obrigatórias do design, tarefas, linhas de teste, steering) |
@@ -1059,7 +1059,7 @@ executável, `node "<clone>/cli/dev-spec.js" …` com o caminho resolvido (fiche
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates [list|init|check] · tracks [list|init|check]
-create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] [--branch [<name>]] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
@@ -1137,7 +1137,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 |---|---|
 | `spec_classify` | Recomienda tracks desde una descripción (heurística multilingüe, ponderada) |
 | `spec_init` | Crea `.specs/steering/` para los tracks; `lang` fija el idioma del proyecto, `guard` on · off · scope, `stopCheck` el gate de evidencia al final del turno, `checks` los comandos de comprobación del proyecto, `approvalRoles` quién aprueba cada fase, `evidence` reported · observed (solo verifican las ejecuciones que el harness vio), `approvalGuard` off · ask · deny (la aprobación de un agente te pregunta / se rechaza) |
-| `spec_create` | Crea la carpeta de la función para los tracks activos (`kind: "bugfix"` para el flujo de bugfix, `kind: "spike"` para una investigación con plazo, `brownfield: true` añade `integration-plan.md`, `flow: "design-first"` pone el diseño antes de los requisitos) |
+| `spec_create` | Crea la carpeta de la función para los tracks activos (`kind: "bugfix"` para el flujo de bugfix, `kind: "spike"` para una investigación con plazo, `brownfield: true` añade `integration-plan.md`, `flow: "design-first"` pone el diseño antes de los requisitos, `branch: "true"` la empieza en su propia rama git — registrada, con el `git switch -c` devuelto para que lo ejecutes) |
 | `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas; un plan puede llegar como `text` — el plan mode guarda los planes fuera del proyecto) |
 | `spec_templates` | Plantillas del proyecto: lista, copia (`init`) o comprueba (`check`) los scaffolds del equipo en `.specs/templates/`, que sustituyen a los de origen |
 | `spec_tracks` | Tracks definidos por el proyecto: lista, crea (`init`) o comprueba (`check`) los track packs del equipo en `.specs/tracks/<nombre>/` — cada uno es un track con marcador como `+sec` (señales, criterios, secciones obligatorias del diseño, tareas, filas de prueba, steering) |
@@ -1613,7 +1613,7 @@ línea ejecutable, `node "<clone>/cli/dev-spec.js" …` con la ruta resuelta (lo
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates [list|init|check] · tracks [list|init|check]
-create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] [--branch [<name>]] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
