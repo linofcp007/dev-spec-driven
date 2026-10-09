@@ -56,7 +56,7 @@ exports.run = async ({
     ok(rPhase.ok && rPhase.approved === "design" && rLang.ok && rLang.lang === "pt" && rKind.ok && rKind.kind === "bugfix" &&
       rBl.ok && rBl.backlog.some((b) => b.name === "Later thing") && rBlList.ok && rBlList.backlog.length === 1 &&
       body(rFeat).needsConfirm === true && !/one of/.test(errText(rFeat)) && !/one of/.test(errText(rImp)) &&
-      rTool.result.isError && /tool must be one of: kiro, spec-kit, openspec, plan, execplan, bmad, fluidplan \(got "Kiro"\)/.test(errText(rTool)) && // 1.14 C3: + plan · execplan · bmad; 1.17 F: + fluidplan
+      rTool.result.isError && /tool must be one of: kiro, spec-kit, openspec, plan, execplan, bmad, fluidplan, kiro-steering, cursor-rules \(got "Kiro"\)/.test(errText(rTool)) && // 1.14 C3: + plan · execplan · bmad; 1.17 F: + fluidplan; 1.25: + the steering tools
       rBadPh.result.isError && /phase must be one of: .* \(got "Desing"\)/.test(errText(rBadPh)),
       "MCP enums are case-insensitive where the engine folds them (phase ' Design ', lang 'PT', kind 'Bugfix', backlog 'ADD'/'LIST', feature 'Remove', impact 'DESIGN'); spec_import's tool stays exact; a typo is still refused as given");
     const rNested =await call("spec_complete_task", { name: "arg-check", number: 2, evidence: { command: "npm test", exitCode: "0" }, projectDir: w3 });
