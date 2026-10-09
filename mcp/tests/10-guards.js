@@ -121,9 +121,10 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const hooksCfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
     const preCfg = (hooksCfg.PreToolUse || [])[0] || {};
     // (1.23 review 5: MultiEdit is no Claude Code tool any more — a dead entry; the engine still reads a MultiEdit payload)
-    ok(preCfg.matcher === "Write|Edit|NotebookEdit" && preCfg.hooks[0].command === 'node "${CLAUDE_PLUGIN_ROOT}/hooks/guard-hook.js"' && preCfg.hooks[0].timeout === 10 &&
+    // (1.25.1 review 7: + the shell tools — the files a Bash / PowerShell / Monitor command writes)
+    ok(preCfg.matcher === "Write|Edit|NotebookEdit|Bash|PowerShell|Monitor" && preCfg.hooks[0].command === 'node "${CLAUDE_PLUGIN_ROOT}/hooks/guard-hook.js"' && preCfg.hooks[0].timeout === 10 &&
       hooksCfg.PostToolUse && hooksCfg.SessionStart && !fs.readFileSync(guardJs, "utf8").includes(String.fromCharCode(0xfeff)),
-      "hooks.json wires the guard as PreToolUse (Write|Edit|NotebookEdit, timeout 10) beside the existing hooks; no literal BOM in guard-hook.js");
+      "hooks.json wires the guard as PreToolUse (Write|Edit|NotebookEdit|Bash|PowerShell|Monitor, timeout 10) beside the existing hooks; no literal BOM in guard-hook.js");
 
     // (H3) zero-dep glob + Kiro-compatible front matter.
     const globCases = [["src/api/**", "src/api/users.ts", true], ["src/api/**", "src/apix/users.ts", false], ["src/api/**", "src/lib/x.ts", false],
