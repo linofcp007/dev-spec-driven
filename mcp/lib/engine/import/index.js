@@ -20,14 +20,15 @@ let BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, 
   parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE, RE_TESTABILITY, readIfExists,
   requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines, slugify, stripHtmlComments, testIndex,
   toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs, unknownTracksError, withTrackBlocks,
-  writeFileAtomic, appendSpecText, flatText, specNameText;
+  writeFileAtomic, appendSpecText, flatText, specNameText, importSteering, isDryRun, STEERING_IMPORT_TOOLS, withDryRun;
 function __link(E) { ({ BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines,
   DECISIONS_FILE, extractAcIds, fenceStep, headingHasMarker, indentOf, inertOutsideCode, insertPackRequirements,
   isInsideDir, isLtUnit, isPackTrack, isWsUnit, markerTracks, maybeRefreshRoadmap, normalizeLang, own, packOf,
   packRequirementsBlock, packTaskBlock, parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE,
   RE_TESTABILITY, readIfExists, requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines,
   slugify, stripHtmlComments, testIndex, toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs,
-  unknownTracksError, withTrackBlocks, writeFileAtomic, appendSpecText, flatText, specNameText } = E); }
+  unknownTracksError, withTrackBlocks, writeFileAtomic, appendSpecText, flatText, specNameText, importSteering, isDryRun,
+  STEERING_IMPORT_TOOLS, withDryRun } = E); }
 
 // ---------------------------------------------------------------------------
 // spec_import — a spec written for another tool (Kiro · spec-kit · OpenSpec) becomes a NEW dev-spec feature
@@ -37,7 +38,9 @@ function __link(E) { ({ BOM_CHAR, classify, closesFence, decodeText, configuredL
 // imported content. Requirement/story N, criterion/scenario M → US-N.AC-M; scenarios become ONE EARS criterion
 // where possible (else the text is kept with [NEEDS CLARIFICATION]); spec-kit FR-xxx / SC-xxx lines keep their IDs.
 
-const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec", plan: "plan", execplan: "ExecPlan", bmad: "BMAD", fluidplan: "fluidplan" }; // C3: + plan · execplan · bmad; 1.17 F: + fluidplan
+// C3: + plan · execplan · bmad; 1.17 F: + fluidplan; 1.25: + kiro-steering · cursor-rules (→ .specs/steering/ files, import/steering.js)
+const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec", plan: "plan", execplan: "ExecPlan", bmad: "BMAD", fluidplan: "fluidplan",
+  "kiro-steering": "Kiro steering", "cursor-rules": "Cursor rules" };
 const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 const TEXT_IMPORT_TOOLS = ["plan", "execplan", "fluidplan"]; // 1.16 C4: the single-document sources spec_import {text} accepts (1.17 F: a fluidplan PLAN.md, DECISIONS.md after it)
 // An imported line never opens an HTML comment (1.17 F review): every parser reads its source without its comments, so a `<!--`
@@ -248,7 +251,79 @@ function fitTemplateTasks(tasksText, reqText, planText, lng) {
 }
 const C3_PARSERS = { plan: parsePlan, execplan: parseExecPlan, bmad: parseBmad, fluidplan: parseFluidplan };
 
+// 1.25 — spec_import {dryRun: true} / `dev-spec import … --dry-run`: the WHOLE pipeline (every tool, the steering ones too) runs in
+// the write gate's dry-run sink (files.js withDryRun) — the same reads, checks, refusals, classification and rendering as a real
+// import, nothing written: no file, folder, lock or roadmap refresh. The result is the real one plus `dryRun: true` and `preview`
+// — the files it would write into the feature's folder (the steering folder for a steering import), each with its size and its
+// first DRY_RUN_FILE_CHARS characters (cut at a line end; DRY_RUN_TOTAL_CHARS over all of them: the reply stays bounded). A
+// refusal is the real import's refusal, plus `dryRun: true`.
+const DRY_RUN_FILE_CHARS = 4000;
+const DRY_RUN_TOTAL_CHARS = 24000;
 function importSpec(projectDir, tool, source, opts = {}) {
+  if (opts.dryRun !== true) return importRun(projectDir, tool, source, opts);
+  const { value, writes } = withDryRun(() => importRun(projectDir, tool, source, opts));
+  return dryRunResult(value, writes);
+}
+function dryRunResult(r, writes) {
+  if (!r || r.ok === false || !r.dir) return { ok: false, dryRun: true, ...r };
+  let budget = DRY_RUN_TOTAL_CHARS;
+  const preview = [];
+  for (const w of writes) {
+    if (w.dir || w.text == null) continue;
+    const rel = path.relative(r.dir, w.file);
+    if (!rel || rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel)) continue;
+    const file = toPosix(rel);
+    if (file.split("/").some((s) => s.startsWith("."))) continue; // .state.json — the engine's own record, not an artifact
+    let content = w.text.slice(0, Math.min(DRY_RUN_FILE_CHARS, budget));
+    const cut = content.length < w.text.length ? content.lastIndexOf("\n") : -1;
+    if (cut > 0) content = content.slice(0, cut + 1);
+    budget -= content.length;
+    preview.push({ file, chars: w.text.length, content, ...(content.length < w.text.length ? { truncated: true } : {}) });
+  }
+  return { ok: true, dryRun: true, ...r, preview };
+}
+// The source a path names, as every importer reads it: inside the project — lexically first (nothing outside is even stat'ed),
+// then by real path (a symlink out) — and each file through `read` (inside the project; over IMPORT_MAX_BYTES characters → its
+// name in `tooLarge`, never cut). → { refused } | { realRoot, realSrc, isFileSrc, dir, rel, read, readWarnings, tooLarge }.
+// 1.25: shared with the steering import (import/steering.js).
+function importSourceAt(projectDir, t, source, W, lang0) {
+  const C = i18n.msg(lang0).claudeCode.importText;
+  const root = path.resolve(projectDir);
+  const readWarnings = [];
+  const tooLarge = new Set(); // the source files over IMPORT_MAX_BYTES characters (1.23 review 5 — refused, never cut)
+  const abs = path.resolve(root, String(source).trim());
+  const shown = String(source).trim();
+  // A leading ~ is the home folder (outside), never a folder named "~"; a plan's refusal says where plan mode keeps plans (C3) and
+  // that its text can be imported instead (1.16 C4).
+  const outside = () => ({ refused: { ok: false, error: W.outside(shown) + (t === "plan" ? " " + i18n.msg(lang0).importPlans.plansDir + " " + C.orText : "") } });
+  if (/^~(?:[\\/]|$)/.test(shown) || !isInsideDir(root, abs)) return outside();
+  if (!fs.existsSync(abs)) return { refused: { ok: false, error: W.notFound(shown) } };
+  let realRoot, realSrc;
+  try { realRoot = fs.realpathSync.native(root); realSrc = fs.realpathSync.native(abs); } catch { return { refused: { ok: false, error: W.notFound(shown) } }; }
+  if (!isInsideDir(realRoot, realSrc)) return outside();
+  const isFileSrc = !fs.statSync(realSrc).isDirectory();
+  const dir = isFileSrc ? path.dirname(realSrc) : realSrc;
+  const rel = toPosix(path.relative(realRoot, dir)) || ".";
+  const read = (file) => {
+    try {
+      if (!fs.existsSync(file)) return null;
+      const real = fs.realpathSync.native(file);
+      if (!isInsideDir(realRoot, real)) { readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file)))); return null; }
+      const st = fs.statSync(real);
+      if (!st.isFile()) return null;
+      // 1.23 review 5 — a source file over the cap refuses the import (never cut: the steps past it were lost). Stat'ed first:
+      // a text holds at least one character per 3 bytes, so a file over 3 × the cap is over it without being read whole.
+      const big = () => { tooLarge.add(toPosix(path.relative(realRoot, real))); return null; };
+      if (st.size > 3 * IMPORT_MAX_BYTES) return big();
+      const text = decodeText(fs.readFileSync(real));
+      if (text.length > IMPORT_MAX_BYTES) return big();
+      return text.replace(new RegExp("^" + BOM_CHAR), "");
+    } catch { return null; }
+  };
+  return { realRoot, realSrc, isFileSrc, dir, rel, read, readWarnings, tooLarge };
+}
+
+function importRun(projectDir, tool, source, opts) {
   // The language of the import's own text (warnings, design.md's Decisions heading…): explicit, else the project's configured one,
   // else — a brand-new project (1.16 C2) — the user's DEV_SPEC_DEFAULT_LANG, spec_create's resolution (configuredLang).
   const lang0 = normalizeLang(opts.lang || configuredLang(projectDir) || projectLang(projectDir));
@@ -257,6 +332,8 @@ function importSpec(projectDir, tool, source, opts = {}) {
   // (no aliases, no case folding: 'speckit' / 'Kiro' are refused on both surfaces).
   const t = typeof tool === "string" && own(IMPORT_TOOLS, tool) ? tool : null;
   if (!t) return { ok: false, error: W.unknownTool(tool == null ? "" : tool, Object.keys(IMPORT_TOOLS).join(", ")) };
+  // 1.25: a steering source (.kiro/steering/, .cursor/rules/, .cursorrules) → .specs/steering/ files, no feature (`text` is refused below)
+  if (STEERING_IMPORT_TOOLS.includes(t) && opts.text == null) return importSteering(projectDir, t, source, opts, lang0);
   // 1.16 C4 — the plan-mode bridge: `text` imports a single-document source (a plan / an ExecPlan) from its markdown, no file
   // needed — Claude Code keeps plans in plansDirectory (~/.claude/plans by default, outside the project), so the plan the user
   // approved is passed as text. Same parser, same mapping, same guarantees; nothing is read from disk for it.
@@ -269,8 +346,8 @@ function importSpec(projectDir, tool, source, opts = {}) {
     if (!stripHtmlComments(opts.text).split(BOM_CHAR).join("").trim()) return { ok: false, error: C.empty(IMPORT_TOOLS[t]) };
   } else if (source == null || !String(source).trim()) return { ok: false, error: W.pathRequired + (TEXT_IMPORT_TOOLS.includes(t) ? " " + C.orText : "") };
   const root = path.resolve(projectDir);
-  const readWarnings = [];
-  const tooLarge = new Set(); // the source files over IMPORT_MAX_BYTES characters (1.23 review 5 — refused, never cut)
+  let readWarnings = [];
+  let tooLarge = new Set(); // the source files over IMPORT_MAX_BYTES characters (1.23 review 5 — refused, never cut)
   let realRoot, realSrc, isFileSrc, dir, rel, read;
   if (inline) {
     try { realRoot = fs.realpathSync.native(root); } catch { realRoot = root; } // a project folder not created yet is fine
@@ -284,35 +361,9 @@ function importSpec(projectDir, tool, source, opts = {}) {
     const doc = opts.text.replace(new RegExp("^" + BOM_CHAR), "");
     read = (file) => (file === realSrc ? doc : null);
   } else {
-    const abs = path.resolve(root, String(source).trim());
-    const shown = String(source).trim();
-    // Lexical check first (nothing outside the project is even stat'ed), then the real paths (a symlink out). A leading ~ is the
-    // home folder (outside), never a folder named "~"; a plan's refusal says where plan mode keeps plans (C3) and that its text
-    // can be imported instead (1.16 C4).
-    const outside = () => ({ ok: false, error: W.outside(shown) + (t === "plan" ? " " + i18n.msg(lang0).importPlans.plansDir + " " + C.orText : "") });
-    if (/^~(?:[\\/]|$)/.test(shown) || !isInsideDir(root, abs)) return outside();
-    if (!fs.existsSync(abs)) return { ok: false, error: W.notFound(shown) };
-    try { realRoot = fs.realpathSync.native(root); realSrc = fs.realpathSync.native(abs); } catch { return { ok: false, error: W.notFound(shown) }; }
-    if (!isInsideDir(realRoot, realSrc)) return outside();
-    isFileSrc = !fs.statSync(realSrc).isDirectory();
-    dir = isFileSrc ? path.dirname(realSrc) : realSrc;
-    rel = toPosix(path.relative(realRoot, dir)) || ".";
-    read = (file) => {
-      try {
-        if (!fs.existsSync(file)) return null;
-        const real = fs.realpathSync.native(file);
-        if (!isInsideDir(realRoot, real)) { readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file)))); return null; }
-        const st = fs.statSync(real);
-        if (!st.isFile()) return null;
-        // 1.23 review 5 \u2014 a source file over the cap refuses the import (never cut: the steps past it were lost). Stat'ed first:
-        // a text holds at least one character per 3 bytes, so a file over 3 \u00D7 the cap is over it without being read whole.
-        const big = () => { tooLarge.add(toPosix(path.relative(realRoot, real))); return null; };
-        if (st.size > 3 * IMPORT_MAX_BYTES) return big();
-        const text = decodeText(fs.readFileSync(real));
-        if (text.length > IMPORT_MAX_BYTES) return big();
-        return text.replace(/^\uFEFF/, "");
-      } catch { return null; }
-    };
+    const at = importSourceAt(projectDir, t, source, W, lang0);
+    if (at.refused) return at.refused;
+    ({ realRoot, realSrc, isFileSrc, dir, rel, read, readWarnings, tooLarge } = at);
   } // inline (1.16 C4) or a path
   // C3 parsers also get the file named (a plan among several), the language and the real root: { file, lang, root }.
   const parse = own(C3_PARSERS, t) ? C3_PARSERS[t] : t === "kiro" ? parseKiro : t === "spec-kit" ? parseSpecKit : parseOpenSpec;
@@ -454,7 +505,9 @@ function importSpec(projectDir, tool, source, opts = {}) {
     put("design.md", [i18n.msg(lng).tracks.designTitle(name), "", note, "", blocks ? appendSpecText(body, blocks, { trim: true }) : body].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n");
   }
 
+  let taskCount = 0; // 1.25: the imported tasks (`counts.tasks`) — none when the scaffold's tasks.md is kept
   if (model.tasks && model.tasks.numbered) {
+    taskCount = model.taskKeys.length;
     // 1.17 F (fluidplan): the parser numbered its tasks itself — its _Depends:_ name those numbers, its _Requirements:_ the AC IDs
     // the stories above got — so the text is written as it is (importTasks would renumber, and read a title's leading "10 " as an id).
     model.taskKeys.forEach((k, j) => { mapping[k] = "task " + (j + 1); });
@@ -471,6 +524,7 @@ function importSpec(projectDir, tool, source, opts = {}) {
       return null;
     };
     const tk = importTasks(model.tasks.text, refs, name, lng, W, mapping, warnings);
+    taskCount = tk.count;
     // C3: a synthesized task list (plan / ExecPlan / BMAD) — one task per source item, in order: its item → the new task number.
     if (Array.isArray(model.taskKeys) && model.taskKeys.length === tk.count) {
       model.taskKeys.forEach((k, j) => { mapping[k] = "task " + (j + 1); });
@@ -507,7 +561,11 @@ function importSpec(projectDir, tool, source, opts = {}) {
   const clsText = readIfExists(clsFile);
   if (clsText != null) put("classification.md", clsText.replace(/^(#\s[^\n]*\n)/, (h1) => `${h1}\n${note}\n`));
   if (model.skipped.length) warnings.push(W.wSkipped(model.skipped.join(", ")));
-  maybeRefreshRoadmap(projectDir);
+  if (!isDryRun()) maybeRefreshRoadmap(projectDir); // 1.25: a dry run renders no roadmap (it would only be recorded, at a walk's cost)
+  // 1.25 — what the mapping holds, counted (a dry run shows them before anything is written): stories, criteria, tasks, decisions
+  const decisionIds = new Set(Object.values(mapping).filter((v) => /^D-\d+$/.test(v)));
+  const counts = { stories: model.stories.length, criteria: model.stories.reduce((n, s) => n + s.criteria.length, 0), tasks: taskCount,
+    decisions: Array.isArray(model.decisions) && model.decisions.length ? model.decisions.length : decisionIds.size };
   return {
     ok: true,
     feature: cr.slug,
@@ -523,9 +581,11 @@ function importSpec(projectDir, tool, source, opts = {}) {
     files: cr.created.slice(),
     imported: written,
     mapping,
+    counts,
     warnings,
   };
 }
 
 module.exports = { IMPORT_TOOLS, IMPORT_MAX_BYTES, TEXT_IMPORT_TOOLS, commentInert, inertBlock, RE_IMPORT_TASK_HEAD,
-  replaceRequirementsMarkers, replaceUnderscoreList, importTasks, fitTemplateTasks, C3_PARSERS, importSpec, __link };
+  replaceRequirementsMarkers, replaceUnderscoreList, importTasks, fitTemplateTasks, C3_PARSERS, DRY_RUN_FILE_CHARS, DRY_RUN_TOTAL_CHARS,
+  importSpec, dryRunResult, importSourceAt, importRun, __link };

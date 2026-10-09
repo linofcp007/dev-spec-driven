@@ -4,11 +4,11 @@
  "sources": {
   "mcp/lib/i18n.js": 17223,
   "mcp/lib/i18n/common.js": 14181,
-  "mcp/lib/i18n/en.js": 349251,
-  "mcp/lib/i18n/es.js": 357853,
+  "mcp/lib/i18n/en.js": 352076,
+  "mcp/lib/i18n/es.js": 360613,
   "mcp/lib/i18n/pt-br.js": 48280,
-  "mcp/lib/i18n/pt.js": 356354,
-  "mcp/lib/engine/guards.js": 139273
+  "mcp/lib/i18n/pt.js": 359134,
+  "mcp/lib/engine/guards.js": 139412
  },
  "word": {
   "pre": "(?<![\\p{L}\\p{N}_])(?:",

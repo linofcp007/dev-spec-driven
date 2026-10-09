@@ -83,7 +83,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   renderRoadmapHtml, renderRoadmapMd, resolveFeature, resolveProjectDir, unexpandedVar, resolveRunShell, resolveTask, restoreFeature,
   roadmap, roadmapData, roadmapReport, roadmapTailLines, RTM_STATUSES, scaffoldSteeringFile, scanCodebase, scanTestCode,
   setDependency, SIGNAL_CONCEPTS, SIGNALS, SIZE_POINTS, slugify, specDoctor, specsRoot, specUpgrade, specVersionStatus,
-  spikeInfo, statusFeature, statusLine, statusLineProject, steeringFingerprints, steeringFrontMatter, steeringGlobMatch,
+  spikeInfo, statusFeature, statusLine, statusLineProject, steeringFingerprints, steeringFrontMatter, steeringGlobMatch, STEERING_IMPORT_TOOLS,
   STOP_RECENT_HOURS, stopCheck, stopCheckEnabled, stopClaims, stripHtmlComments, summarizeRunOutput, supersedesMarkers,
   supersedesWarnings, taskBlocks, taskBrief, taskCommits, taskDependsSpec, taskMarkers, taskSchedule, taskSize,
   taskWaves, TEMPLATE_ARTIFACTS, templateBracketKeys, templateKey, templates, templateSets, traceCheck, traceGapLines,
@@ -196,7 +196,8 @@ module.exports = {
 
   featurePlaceholders, // the gates' placeholder view of one artifact (active part, real line numbers)
 
-  importSpec,
+  importSpec, // 1.25: + dryRun (the whole pipeline in the write gate's dry-run sink) and the steering tools (kiro-steering · cursor-rules)
+  STEERING_IMPORT_TOOLS, // 1.25: the spec_import tools that write .specs/steering/ files, not a feature — their path is optional (server.js, the CLI)
   // 1.16 C — Claude Code integration: the status line, the plan-mode bridge, the user's DEV_SPEC_* defaults (fallbacks)
   statusLine,
   statusLineProject,

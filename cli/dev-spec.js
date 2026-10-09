@@ -102,6 +102,8 @@
  *   coverage                           Brownfield: % of code files named in _Implements:_ (per folder)
  *   import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--lang] [--tracks …]  Import another tool's spec / a plan as a NEW feature
  *   import <plan|execplan|fluidplan> - | --text "<markdown>"   … a plan from stdin or inline (Claude Code keeps plans in ~/.claude/plans)
+ *   import <kiro-steering|cursor-rules> [path]   Kiro steering / Cursor rules → .specs/steering/ (never over an existing file)
+ *   import … --dry-run                 Write nothing: what the import would do (the same result + a bounded preview)
  *   statusline [--print-config]        One line for Claude Code's status line (reads its session JSON on stdin; prints nothing
  *                                      outside a dev-spec project; exit 0 always); --print-config prints the settings.json snippet
  *   evals <feature> [--dry-run ...]    Run the local eval harness (+ai) — every flag goes to it wherever it stands; it refuses
@@ -131,7 +133,7 @@
  *        on Windows --shell bash is Git Bash (never WSL's System32 / WindowsApps bash.exe)
  *        upgrade: --apply (the safe migrations: tracks, history baselines, .gitignore, meta.specVersion, UPGRADE.md)
  *        prompts: --args "…" (the command's arguments, = prompts/get {arguments: {args}})
- *        import: --text "<markdown>" (a plan / ExecPlan's text, = spec_import {text}) · statusline: --print-config
+ *        import: --text "<markdown>" (a plan / ExecPlan's text, = spec_import {text}) · --dry-run (nothing written, = spec_import {dryRun}) · statusline: --print-config
  *        Switches: --x or --x=true|false (1/0, yes/no, on/off). --json prints a refusal's {ok:false,…} result on stdout (exit 1).
  *        help, rules, mcp-config and evals print text only: --json there is a usage error (exit 1).
  */
@@ -326,6 +328,7 @@ function refuseRepeatedFlags() {
 function normalizeBoolFlags() {
   for (const k of BOOL_FLAGS) {
     if (typeof flags[k] !== "string") continue;
+    if (cmd === "evals" && k === "dry-run") continue; // 1.25: import's switch has the name of run-evals.js's own flag — evals hands it over unread
     const v = flags[k].trim().toLowerCase();
     if (["true", "1", "yes", "on"].includes(v)) flags[k] = true;
     else if (["false", "0", "no", "off"].includes(v)) flags[k] = false;
@@ -483,7 +486,7 @@ const COMMAND_OPTIONS = {
   "add-track": { options: ["tracks", "remove"] },
   feature: { options: ["yes", "flow"] }, // its arguments per action (remove / archive / restore: 2, rename / flow: 3) — checked in its case (1.24 r6 B4)
   rules: { options: [], max: 1 },
-  import: { options: ["name", "lang", "tracks", "text"] },
+  import: { options: ["name", "lang", "tracks", "text", "dry-run"] },
   "append-tasks": { options: ["task", "req", "implements", "verify", "story", "parallel", "makes-green", "expect-fail", "size", "depends", "heading"], max: 1 },
   impact: { options: ["phase", "reopen"], max: 1 },
   metrics: { options: ["write"], max: 1 },
@@ -1362,10 +1365,13 @@ async function main() {
       // spec_import: <path> resolves against the project root and must stay inside it.
       // 1.16 C4: `import plan|execplan|fluidplan -` reads the document's markdown from stdin, `--text "<markdown>"` takes it inline
       // (= spec_import {tool, text} — a plan kept outside the project, e.g. Claude Code's ~/.claude/plans).
-      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data] · import <plan|execplan|fluidplan> - | --text \"<markdown>\"";
+      // 1.25: `import kiro-steering|cursor-rules [<path>]` (= spec_import {tool}: another tool's steering → .specs/steering/; no path →
+      // the tool's own folder) and `--dry-run` on every form (= spec_import {dryRun: true}: nothing written, the same result + preview).
+      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data] [--dry-run] · import <plan|execplan|fluidplan> - | --text \"<markdown>\" · import <kiro-steering|cursor-rules> [<path>] [--dry-run]";
       const fromStdin = pos[1] === "-";
       const hasText = typeof flags.text === "string";
-      if (!pos[0] || (!pos[1] && !hasText) || (fromStdin && hasText)) usage(usageLine);
+      const steering = spec.STEERING_IMPORT_TOOLS.includes(pos[0]);
+      if (!pos[0] || (!pos[1] && !hasText && !steering) || (fromStdin && hasText)) usage(usageLine);
       // With --text the words after the tool are tracks; with - or a path, the words after it. A word after the tool that is no
       // track list next to --text is a path given with it: passed as the source, so the engine answers its "path or text, not
       // both" (as spec_import {path, text} does) — never "Unknown track: 'plans/x.md'".
@@ -1376,15 +1382,25 @@ async function main() {
         : path.relative(projectDir, argPath(p)).split(path.sep).join("/") || ".");
       const doImport = (text) => {
         const r = spec.importSpec(projectDir, pos[0], text != null && !pathWithText ? undefined : source(pos[1]), { name: flags.name, lang: flags.lang,
-          tracks: withTracksFlag(pos.slice(hasText && !pathWithText ? 1 : 2)), text });
+          tracks: withTracksFlag(pos.slice(hasText && !pathWithText ? 1 : 2)), text, dryRun: flags["dry-run"] === true });
         if (!r.ok) return fail(r);
         return out(r, (r) => {
           const B = spec.msg(r.lang).importSpec;
-          console.log(B.done(r.toolName, r.inline ? spec.msg(r.lang).claudeCode.importText.label : r.source, r.feature, r.label, r.lang));
-          console.log("  " + r.files.join(", "));
-          const ids = Object.entries(r.mapping);
-          console.log(B.mapping(ids.length, ids.slice(0, 6).map(([a, b]) => a + " → " + b).join(", ") + (ids.length > 6 ? ", …" : "")));
+          const D = spec.msg(r.lang).importSteering;
+          if (r.dryRun) console.log(D.dryRun);
+          if (r.kind === "steering") { // 1.25: the steering files written (or that would be), each with its mode
+            console.log((r.dryRun ? D.wouldSteering : D.done)(r.toolName, r.imported.length, r.skipped.length));
+            r.imported.forEach((x) => console.log(D.line(x.file, x.from, x.inclusion, (x.patterns || []).join(", "))));
+          } else {
+            const src = r.inline ? spec.msg(r.lang).claudeCode.importText.label : r.source;
+            console.log((r.dryRun ? D.would : B.done)(r.toolName, src, r.feature, r.label, r.lang));
+            if (r.dryRun) { r.preview.forEach((p) => console.log(D.previewFile(p.file, p.chars, p.truncated))); console.log(D.counts(r.counts)); }
+            else console.log("  " + r.files.join(", "));
+            const ids = Object.entries(r.mapping);
+            console.log(B.mapping(ids.length, ids.slice(0, 6).map(([a, b]) => a + " → " + b).join(", ") + (ids.length > 6 ? ", …" : "")));
+          }
           r.warnings.forEach((w) => console.log("  ⚠ " + w));
+          if (r.dryRun) console.log(D.jsonHint);
         });
       };
       if (fromStdin) return readStdin((text) => doImport(text));
@@ -2273,6 +2289,11 @@ function helpText() {
                                   plan.json + answers.json, PLAN.md + DECISIONS.md → tasks, criteria, decisions.md)
   import <plan|execplan|fluidplan> - | --text "<markdown>"   The same from the document's text: - reads stdin (dev-spec import plan - < plan.md),
                                   --text takes it inline — for a plan outside the project (Claude Code keeps plans in ~/.claude/plans)
+  import <kiro-steering|cursor-rules> [path]   Another tool's steering → .specs/steering/<name>.md (default: .kiro/steering/ ·
+                                  .cursor/rules/ + .cursorrules): Kiro's front matter kept; a Cursor rule's alwaysApply → always,
+                                  globs → fileMatch, else manual; an existing steering file is never overwritten (skipped, reported)
+  import … --dry-run              Write nothing — no file, folder, lock or roadmap refresh: what the import would do (the files with
+                                  their size, counts, mapping, warnings; --json adds each file's content, bounded)
   statusline [--print-config]     One line for Claude Code's status line: the most active feature, its tasks, unverified ticks, the next
                                   step (reads the session JSON on stdin; nothing outside a dev-spec project; exit 0 always);
                                   --print-config prints the settings.json "statusLine" snippet with this clone's path

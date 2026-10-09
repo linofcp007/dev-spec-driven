@@ -1931,6 +1931,38 @@ const msg = {
       mapping: (n, sample) => `  mapping: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
     },
 
+    // 1.25 — spec_import kiro-steering / cursor-rules (another tool's steering → .specs/steering/), and the CLI's lines for both
+    // imports' --dry-run. The `skipped` reason codes (exists, duplicate, name, own, too-large, empty, outside, unreadable) stay English.
+    importSteering: {
+      note: (tool, rel, date) => `<!-- Imported from ${tool} ${rel} on ${date}. -->`,
+      nothing: (tool, where) => `No ${tool} files found in ${where}.`,
+      featureArgs: (args, tool) => `${args}: a ${tool} import writes .specs/steering/ files, not a feature — leave it out.`,
+      skipped: (from, why) => `${from}: not imported — ${why}`,
+      reasons: {
+        exists: (file) => `.specs/steering/${file} already exists (never overwritten — rename or delete it, then import again)`,
+        template: (file) => `.specs/steering/${file} already exists — still the template spec_init wrote: delete it, then import again (never overwritten)`,
+        duplicate: (file) => `another file of this import already became ${file}`,
+        name: () => "its name has no usable characters (a-z, 0-9) for a steering file",
+        "too-large": (file, max) => `over ${max} characters`,
+        empty: () => "it holds no content",
+        outside: () => "it points outside the project",
+        unreadable: () => "not a readable file",
+        own: () => "it is dev-spec's own rule file (written by `rules cursor`), not the project's steering",
+      },
+      wOthers: (list) => `not imported (not a steering file; a sub-folder imports by its own path): ${list}`,
+      wMode: (from, mode) => `${from}: inclusion '${mode}' has no dev-spec equivalent — read as manual (a task brief lists it as available on request)`,
+      wGlobs: (from, list) => `${from}: glob(s) holding both kinds of quotes left out of fileMatchPattern: ${list}`,
+      wLimit: (n, max) => `${n} more file(s) not imported — one import takes at most ${max}; import the rest by path`,
+      done: (tool, n, m) => `Imported ${tool} → ${n} steering file(s) in .specs/steering/` + (m ? `, ${m} skipped` : ""),
+      line: (file, from, inclusion, patterns) => `  ${file} ← ${from} (${inclusion}${patterns ? ": " + patterns : ""})`,
+      dryRun: "Dry run — nothing was written.",
+      would: (tool, rel, slug, label, lang) => `Would import ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
+      wouldSteering: (tool, n, m) => `Would import ${tool} → ${n} steering file(s) in .specs/steering/` + (m ? `, ${m} skipped` : ""),
+      counts: (c) => `  ${c.stories} story(ies), ${c.criteria} criterion(a), ${c.tasks} task(s), ${c.decisions} decision(s)`,
+      previewFile: (file, chars, cut) => `  ${file} — ${chars} characters${cut ? " (preview cut)" : ""}`,
+      jsonHint: "--json prints each file's content (a bounded preview).",
+    },
+
     // spec_append_tasks / `dev-spec append-tasks` (converge). Markers, IDs and **Checkpoint:** stay English-stable.
     appendTasks: {
       heading: "Phase: Convergence",

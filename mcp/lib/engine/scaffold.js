@@ -225,6 +225,31 @@ function customSteeringStub(fileName, lng) {
   return i18n.msg(lng).scopedSteering.customStub(title, "src/api/**");
 }
 
+// A front-matter value: 'x' / "x" → x; a trailing " # comment" is dropped (inside quotes a '#' is kept).
+function frontMatterScalar(v) {
+  const s = String(v).trim();
+  const q = quotedValue(s);
+  return (q != null ? q : stripHashComment(s)).trim();
+}
+// "[a, 'b', "{c,d}/**"]" → items (a plain value → [it]); commas inside quotes or {braces} don't split. (1.25: also the steering
+// import's reader of a Cursor rule's `globs` — import/steering.js.)
+function frontMatterValues(v) {
+  const s = String(v).trim().replace(/^(\[.*\])\s+#.*$/, "$1");
+  if (!(s.startsWith("[") && s.endsWith("]"))) return [frontMatterScalar(s)].filter(Boolean);
+  const out = [];
+  let cur = "", q = null, depth = 0;
+  for (const c of s.slice(1, -1)) {
+    if (q) { if (c === q) q = null; cur += c; continue; }
+    if (c === '"' || c === "'") q = c;
+    else if (c === "{") depth++;
+    else if (c === "}" && depth) depth--;
+    else if (c === "," && !depth) { out.push(cur); cur = ""; continue; }
+    cur += c;
+  }
+  out.push(cur);
+  return out.map(frontMatterScalar).filter(Boolean);
+}
+
 // Front matter of a steering file (Kiro-compatible keys):
 //   ---
 //   inclusion: always | fileMatch | manual
@@ -253,29 +278,8 @@ function steeringFrontMatter(text) {
   // Keys live at the first key's indentation; deeper lines are continuations (a block scalar's `inclusion: x`
   // text must not set the mode). List items under an empty fileMatchPattern stay items at any indentation.
   const keyIndent = inner[firstKey].match(/^\s*/)[0].length;
-  // 'x' / "x" → x; a trailing " # comment" is dropped (inside quotes a '#' is kept).
-  const unquote = (v) => {
-    const s = String(v).trim();
-    const q = quotedValue(s);
-    return (q != null ? q : stripHashComment(s)).trim();
-  };
-  // "[a, 'b', "{c,d}/**"]" → items; commas inside quotes or {braces} don't split.
-  const values = (v) => {
-    const s = String(v).trim().replace(/^(\[.*\])\s+#.*$/, "$1");
-    if (!(s.startsWith("[") && s.endsWith("]"))) return [unquote(s)].filter(Boolean);
-    const out = [];
-    let cur = "", q = null, depth = 0;
-    for (const c of s.slice(1, -1)) {
-      if (q) { if (c === q) q = null; cur += c; continue; }
-      if (c === '"' || c === "'") q = c;
-      else if (c === "{") depth++;
-      else if (c === "}" && depth) depth--;
-      else if (c === "," && !depth) { out.push(cur); cur = ""; continue; }
-      cur += c;
-    }
-    out.push(cur);
-    return out.map(unquote).filter(Boolean);
-  };
+  const unquote = frontMatterScalar;
+  const values = frontMatterValues;
   let inclusion = null;
   const patterns = [];
   let inList = false; // under "fileMatchPattern:" with an empty value → YAML "- item" lines follow
@@ -1381,8 +1385,8 @@ function removeTrack(projectDir, name, track) {
   return addTrack(projectDir, name, track, { remove: true });
 }
 
-module.exports = { steeringFilesForTracks, initProject, scaffoldSteeringFile, RE_CUSTOM_STEERING, PROTO_KEYS,
-  customSteeringError, customSteeringStub, steeringFrontMatter, BRIEF_STEERING_BUDGET, briefSteering,
+module.exports = { linkedSpecsFolder, steeringFilesForTracks, initProject, scaffoldSteeringFile, RE_CUSTOM_STEERING, PROTO_KEYS,
+  customSteeringError, customSteeringStub, frontMatterScalar, frontMatterValues, steeringFrontMatter, BRIEF_STEERING_BUDGET, briefSteering,
   steeringPlaceholders, classificationMd, requirementsMd, trackDesignBlock, designMd, tasksMd, testPlanMd, evalPlanMd,
   loadTestMd, SAMPLE_GOLDEN, SAMPLE_ADVERSARIAL, quickstartMd, checklistMd, sizedTrackSections, sizeDesignText, RE_SIZE_TASK, sizeTasksText, sizedSectionCounts, integrationPlanMd, BUG_PREFILL, bugCreateInput, createdBodies, createFeature,
   pruneBacklog, STEERING_GOVERNED, safeSteeringName, STEERING_MAX_PATTERNS, governingSteering, steeringTargetsMatch,
