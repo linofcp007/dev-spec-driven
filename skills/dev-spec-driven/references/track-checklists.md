@@ -70,7 +70,7 @@ re-runs, late-arriving data, the backfill procedure) · Lineage & Ownership (sou
 Retention & Cost (retention per layer — personal data per `references/privacy-track.md` —, partitioning, query cost). See
 `references/data-pipeline-patterns.md`.
 
-**Sizes (1.21 — `references/workflows.md` → Sizes).** Each track's sections carry a tier. At **size s** only the core
+**Sizes (`references/workflows.md` → Sizes).** Each track's sections carry a tier. At **size s** only the core
 tier is scaffolded and required; an extended section may stay out, or be answered by one line `n/a — <why it does not
 apply>` (4+ words):
 

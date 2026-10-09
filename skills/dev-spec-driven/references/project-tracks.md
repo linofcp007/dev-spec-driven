@@ -3,8 +3,8 @@
 Read on demand from `SKILL.md`. The built-in tracks are core, +tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs and +data. A team that needs
 its own domain rigor (+a11y, +mobile, +dbmigration, +compliance…) defines it as a **track pack**: a folder in
 `.specs/tracks/<name>/`. A valid pack behaves like a built-in *marker* track (+sec, +privacy) everywhere — it is
-classified, scaffolded, gated, traced, briefed, exported and removed the same way. Manage packs with `/spec-tracks`
-(MCP `spec_tracks`, CLI `dev-spec tracks [list|init <name>|check]`).
+classified, scaffolded, gated, traced, briefed, exported and removed the same way. Manage packs with `spec_tracks`
+(CLI `dev-spec tracks [list|init <name>|check]`; the user's `/spec-setup tracks`).
 
 ## The folder
 

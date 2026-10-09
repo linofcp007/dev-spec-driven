@@ -39,7 +39,7 @@ The engine enforces it at every step, not only in doctor:
   Its snapshot and fingerprint are `bug.md`'s, so an edit to the root cause after approval shows up as
   `changed-since-approval` and in `spec_impact --phase design` (sections keyed `bug.md: Root Cause`). A bugfix has
   no Phase 4 (`tests`) gate: its failing regression test is task 1. Once the user has reviewed `bug.md`, the test
-  plan and the tasks and says go, `/spec-ff` (`spec_approve {through: "tasks"}`) records requirements → design →
+  plan and the tasks and says go, `spec_approve {through: "tasks"}` records requirements → design →
   test-plan → tasks in one call, each through its own gate.
 - **Execution gate.** While `Root Cause` is unfilled (a design approval forced over it, or the section emptied
   since), `spec_complete_task` (and `dev-spec done --run`, which then runs nothing) **refuses the fix** — every task

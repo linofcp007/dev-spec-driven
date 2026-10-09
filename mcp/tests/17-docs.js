@@ -116,8 +116,8 @@ exports.run = async ({
   ok(/for a task whose `_Verify:_` names a runnable command, a text note alone/.test(docsStep(6)) && /`_Verify: <command>_` always/.test(docsStep(5)) &&
     /`_Verify: <command>_` always/.test(docsRead("commands", "createTask.md")) && /target tests/.test(docsRead("commands", "createTask.md")) &&
     ((docsRef("example-spec-combined.md").split("## tasks.md")[1] || "").split("\n---")[0].match(/_Verify: /g) || []).length === 7 &&
-    /\*\*Constitution\*\*[^\n]*constitution\.md/.test(docsRead("commands", "prReview.md")) && /`\/prReview` \| [^|\n]*constitution/.test(docsRef("workflows.md")),
-    "_Verify:_ is an always-marker in AGENTS.md step 5, /createTask and the combined example; a note verifies only a non-runnable task; /prReview checks the constitution (its row: references/workflows.md since 1.21 F3)");
+    /\*\*Constitution\*\*[^\n]*constitution\.md/.test(docsRead("commands", "prReview.md")) && /`\/spec-review branch` \| [^|\n]*constitution/.test(docsRef("workflows.md")),
+    "_Verify:_ is an always-marker in AGENTS.md step 5, /createTask and the combined example; a note verifies only a non-runnable task; /prReview checks the constitution (its row: references/workflows.md since 1.21 F3 — /spec-review branch since 1.26)");
   // Prose that lagged behind 1.13 behaviour. (a) The ROADMAP.md "needs attention" line NAMES each unverified task with its
   // reason — README/AGENTS said it "shows how many each feature has". (b) reopen never unticks a REMOVED criterion's tasks
   // (`retire` lists them) — every surface that says "reopen unticks the affected tasks" must carry that exception in the
