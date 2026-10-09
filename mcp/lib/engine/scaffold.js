@@ -29,7 +29,8 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
-  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub; // 1.23 review 5 · 1.24 r6
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
+  branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts; // 1.23 review 5 · 1.24 r6 · 1.25 (create --branch)
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -47,7 +48,8 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
-  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub } = E); }
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
+  branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts } = E); }
 
 // 1.23 review 5 — the first of `files` a write would reach through a link (a .specs/<feature>/ or .specs/steering/ that is a
 // symbolic link / junction, or resolves outside the real .specs/ — specsWriteContained) → that folder as `.specs/<rel>/`, else
@@ -607,6 +609,49 @@ function createdBodies(dir, created) {
   return bodies;
 }
 
+// 1.25 — spec_create {branch} / `create --branch [<name>]`: the feature's own git branch. → null (not asked: absent / false /
+// "false") · { name, given } (true / "true" → <prefix>/<slug> by kind — feature/ · fix/ for a bugfix · spike/ — or the name given,
+// as typed) · { error }. (MCP's schema types it a string; a boolean is read as its word — server.js BOOL_STRING_ARGS.)
+function branchInput(v, slug, kind, lng) {
+  if (v == null || v === false) return null;
+  const B = i18n.msg(lng).branch;
+  if (typeof v !== "boolean" && typeof v !== "string") { const A = i18n.msg(lng).args; return { error: A.invalid(A.item("branch", A.type.boolean + " | " + A.type.string, JSON.stringify(v))) }; }
+  const name = String(v).trim();
+  if (/^false$/i.test(name)) return null;
+  if (/^true$/i.test(name)) return { name: defaultBranchName(kind, slug), given: false };
+  if (!name) return { error: B.empty };
+  return branchNameOk(name) ? { name, given: true } : { error: B.invalid(name) };
+}
+// What becomes of the branch asked for (never runs git): facts — what git said (the CLI: opts.git), else the repository's files
+// (gitRepoFacts). rec: the branch the feature already has (a re-run keeps it). → { view, record?, askedOther? } — view: the result's
+// `branch` { name, base?, commit?, at?, recorded, reason?: "no-git" | "exists", kept?, current?, command?, args? }; record: what to
+// write into .state.json. `command` (+ `args`, git's arguments) is how to get onto the feature's branch from here: `git switch -c
+// <name>` for a branch to create, `git switch <name>` for the feature's own one (a re-run), none when HEAD is on it already. A
+// branch of that name that already exists is never recorded nor switched to (it may hold other work).
+function planBranch(projectDir, ask, rec, facts) {
+  const f = facts !== undefined ? facts : gitRepoFacts(projectDir);
+  const repo = !!(f && f.repo);
+  const current = repo ? f.current || null : null;
+  const existsOf = (n) => (repo && typeof f.exists === "function" ? f.exists(n) : null);
+  const cmd = (name, create) => ({ command: "git switch " + (create ? "-c " : "") + name, args: ["switch", ...(create ? ["-c"] : []), name] });
+  if (rec) {
+    const view = { ...rec, recorded: true, kept: true, current };
+    if (repo && current !== rec.name) Object.assign(view, cmd(rec.name, existsOf(rec.name) === false));
+    return { view, askedOther: ask.given && ask.name !== rec.name ? ask.name : null };
+  }
+  if (!repo) return { view: { name: ask.name, recorded: false, reason: "no-git" } };
+  if (existsOf(ask.name) === true) return { view: { name: ask.name, recorded: false, reason: "exists", current } };
+  const record = { name: ask.name, base: typeof f.base === "string" && f.base ? f.base : null, commit: typeof f.commit === "string" && f.commit ? f.commit : null };
+  return { record, view: { ...record, recorded: true, current, ...cmd(ask.name, true) } };
+}
+// .state.json → branch of an EXISTING feature (a re-run that asks for one it lacks), like storeCreateFlow.
+function storeFeatureBranch(dir, record) {
+  const j = readJson(statePath(dir));
+  if (!isObj(j.data)) return;
+  j.data.branch = record;
+  writeFileAtomic(statePath(dir), JSON.stringify(j.data, null, 2));
+}
+
 // opts.brownfield: the feature lands in an existing codebase — also scaffold integration-plan.md.
 // opts.reproduction / rootCause / condition / behaviour: a bugfix's prefill (1.21 F3, bugCreateInput); opts.includeBody: return
 // the created artifacts' bodies (`bodies`).
@@ -685,6 +730,13 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   }
   const bugIn = bugfix && bugGiven.length ? bugCreateInput(opts, bugMsg()) : { texts: {} };
   if (bugIn.error) return { ok: false, error: bugIn.error };
+  // 1.25 — the feature's own git branch (opts.branch: true | a name), validated before anything is written. opts.git: what git itself
+  // said (the CLI — { repo, base, commit, current, exists(name) }, or { repo: false } outside a work tree); else the repository's files.
+  // A NEW feature records it in its first .state.json; an existing one without a branch gets it now; one with a branch keeps it.
+  const branchAsk = branchInput(opts && opts.branch, slug, storedKind || askedKind || "feature", existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir)));
+  if (branchAsk && branchAsk.error) return { ok: false, error: branchAsk.error };
+  const branchPlan = branchAsk ? planBranch(projectDir, branchAsk, existed ? featureBranchRecord(storedState) : null, opts.git) : null;
+  if (branchPlan && branchPlan.record && existed && storedState.invalid) return { ok: false, error: storedState.invalid };
   // An EXISTING feature keeps every track it has, plus the new ones asked for — those go through the same
   // path as spec_add_track below (a re-run never drops a track and never re-classifies). A bugfix is always
   // test-first (the regression test is its proof), plus any track it is given — on a NEW bugfix those go
@@ -731,8 +783,12 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   const createdAt = new Date().toISOString();
   const kindOut = bugfix ? "bugfix" : spike ? "spike" : change ? "change" : null;
   // 1.21 F5: `size` only when one was given (a change is xs) — a feature created without one has no key (the 1.20 state, byte for byte)
-  writeIfAbsent(statePath(dir), JSON.stringify({ lang: lng, ...(kindOut ? { kind: kindOut } : {}), ...(size ? { size } : {}), tracks: t, ...packMarkersFor(t), approvals: {}, createdAt }, null, 2));
+  // 1.25: `branch` only when one was asked for and recorded (a feature created without one has no key)
+  const branchRecord = branchPlan && branchPlan.record ? { ...branchPlan.record, at: createdAt } : null;
+  writeIfAbsent(statePath(dir), JSON.stringify({ lang: lng, ...(kindOut ? { kind: kindOut } : {}), ...(size ? { size } : {}), tracks: t, ...packMarkersFor(t), approvals: {}, createdAt,
+    ...(branchRecord ? { branch: branchRecord } : {}) }, null, 2));
   if (flowInfo.store) storeCreateFlow(dir, flowInfo.store); // C3: a NEW plain feature created design-first
+  if (branchRecord && existed) storeFeatureBranch(dir, branchRecord); // an existing feature without a branch: recorded now (under its lock)
 
   const created = [];
   const skip = [];
@@ -792,6 +848,13 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     const flowNote = flowInfo.store ? i18n.msg(lng).flow.created(flowOrderText(dir, t, flowInfo.store)) : flowInfo.note;
     if (flowNote) res.note = res.note ? res.note + " " + flowNote : flowNote;
     if (flowInfo.flow === "design-first") res.flow = "design-first";
+    if (branchPlan) { // 1.25 — the feature's own git branch: recorded, kept (a re-run), or not recorded and why (a note says it)
+      const v = res.branch = branchRecord ? { ...branchRecord, ...branchPlan.view } : branchPlan.view;
+      const B = i18n.msg(lng).branch;
+      const bn = v.reason === "no-git" ? B.noGit(v.name) : v.reason === "exists" ? B.exists(v.name)
+        : [branchPlan.askedOther ? B.kept(v.name, branchPlan.askedOther) : null, v.command && !(opts && opts.cli === true) ? B.run(v.command) : null].filter(Boolean).join(" "); // the CLI runs the command itself
+      if (bn) res.note = res.note ? res.note + " " + bn : bn;
+    }
     if (opts && opts.includeBody === true) res.bodies = createdBodies(dir, created); // 1.21 F3
     return res;
   };
