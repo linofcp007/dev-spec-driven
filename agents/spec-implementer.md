@@ -160,7 +160,8 @@ Write the full report to the report path, in the brief's language:
   proof. Several `_Verify:_` commands → report each; they are recorded as one run (`cmd1 && cmd2`, exit 0 only if
   every one passed). In Claude Code a SubagentStop hook reads this file when you report DONE: without each `_Verify:_`
   command and the exit code the task needs in it — `exit 0` for a must-pass `_Verify:_`, a non-zero exit for an
-  `_Expect: fail_` task — your stop is sent back.
+  `_Expect: fail_` task — your stop is sent back. It reads the codes per run: write each command's exit code next to it (the
+  last run of each `_Verify:_` command decides; another command's exit 0 never counts for it).
 - **Project checks:** each command, its exit code and the output tail (when the brief lists them).
 - **Reuse** — a `### Reuse` block, always (the search itself is the evidence; the controller and the reviewer read it
   before the diff):

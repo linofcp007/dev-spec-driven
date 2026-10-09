@@ -121,8 +121,9 @@ dispatch and review them as one unit. Record the implementer's agent ID (fix rou
 task whose `_Verify:_` holds a runnable command, the plugin's SubagentStop hook opens the report named in its reply
 (`.specs/<feature>/.execution/task-N-report.md`) and sends the stop back unless the report carries **each
 `_Verify:_` command, verbatim, and the exit code the task needs** ("exit 0", "exit code: 1", "código de saída 0"…): an
-exit 0 for a must-pass `_Verify:_`, a non-zero exit for an `_Expect: fail_` task (a report showing the red run and then
-the green one passes). BLOCKED / NEEDS_CONTEXT and tasks without a runnable `_Verify:_` pass. So an implementer's DONE
+exit 0 for a must-pass `_Verify:_`, a non-zero exit for an `_Expect: fail_` task — read per run: each command's own exit code,
+the LAST run of it deciding (a report showing the red run and then the green one passes; another command's exit 0 never
+stands in for it). BLOCKED / NEEDS_CONTEXT and tasks without a runnable `_Verify:_` pass. So an implementer's DONE
 reaches you only with its evidence written down — still read it: the gate reads the report's text, it never ran the
 command (`spec_complete_task` records the run you pass it, and refuses a failed one).
 `dev-spec stop-check --agent spec-implementer --message "<its reply>"` shows the gate's decision; `spec_init {stopCheck: false}` turns the Stop and SubagentStop gates off for the project.
