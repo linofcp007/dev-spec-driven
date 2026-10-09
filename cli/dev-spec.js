@@ -29,7 +29,8 @@
  *   signals [list | set <track> <word> off|weak|strong | forget <track> <word>]  The classifier's signal overrides of this
  *                                      project (.specs/classifier.json — learned from Phase 0 corrections, or set by hand)
  *   create "<name>" [tracks...]         Scaffold a feature (auto-classifies if no tracks; --summary, --kind, --lang,
- *                                      --brownfield → + integration-plan.md; --flow design-first → design before requirements)
+ *                                      --brownfield → + integration-plan.md; --flow design-first → design before requirements;
+ *                                      --branch [<name>] → its own git branch, recorded with its base and switched to — also bugfix / spike)
  *   bugfix "<name>" [--summary]         Scaffold the bugfix flow (bug.md + regression test plan)
  *                                      [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] prefill
  *                                      bug.md + the regression criterion; [--include-body] (--json: the scaffolds' bodies)
@@ -214,6 +215,11 @@ VALUE_FLAGS.add("depends"); // 1.14 F3: append-tasks --depends 3,5 (repeatable) 
 VALUE_FLAGS.add("out"); // 1.20: bundle --out <file.js> — the one-file engine written elsewhere (a read-only clone: DEV_SPEC_BUNDLE_PATH)
 // 1.21 F3: bugfix <name> --reproduction "…" --root-cause "…" --condition "…" --behaviour "…" (= spec_create's bugfix prefill)
 ["reproduction", "root-cause", "condition", "behaviour"].forEach((k) => VALUE_FLAGS.add(k));
+// 1.25: create / bugfix / spike --branch [<name>] (= spec_create {branch}) — a value flag whose value is OPTIONAL: a bare --branch (the
+// last word, or a flag after it) is true, the default name; --branch=<name> / --branch <name> names it. branchSpaced: the name was the
+// next word — a track word there (`create x --branch tdd`) is refused as ambiguous (branchFlag).
+VALUE_FLAGS.add("branch");
+let branchSpaced = false;
 let missingValue = null; // reported in main(), once --project is known (message in the project language)
 const ARGV0 = argv.slice(); // the command line as given — `evals` hands its own flags to run-evals.js (evalsArgs)
 let cmdIdx = -1; // where the command word stands in ARGV0
@@ -237,8 +243,11 @@ for (let i = 0; i < argv.length; i++) {
   else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) {
     // A value flag never swallows the next flag: `--order --json` must not set order="--json". Only a
     // `--<letter>` token is a flag — `---` (front matter, an HR) or `-- draft` stays a value, like over MCP.
-    if (argv[i + 1] === undefined || /^--[A-Za-z]/.test(argv[i + 1])) missingValue = missingValue || a.slice(2);
-    else { flags[a.slice(2)] = argv[++i]; countFlag(a.slice(2)); }
+    if (argv[i + 1] === undefined || /^--[A-Za-z]/.test(argv[i + 1])) {
+      if (a === "--branch") { flags.branch = true; countFlag("branch"); } // 1.25: its value is optional — bare = the default name
+      else missingValue = missingValue || a.slice(2);
+    }
+    else { flags[a.slice(2)] = argv[++i]; countFlag(a.slice(2)); if (a === "--branch") branchSpaced = true; }
   }
   else if (a.startsWith("--")) flags[a.slice(2)] = true;
   else { if (!pos.length) cmdIdx = i; pos.push(a); }
@@ -450,14 +459,14 @@ function usage(syntax) {
 // `done … --timeout 0` without --run did nothing. `max` absent = the command reads any number (a name and tracks, words of a
 // message…) or checks its own (templates, export, decide…). `evals` is not listed: its flags are run-evals.js's.
 const GLOBAL_OPTIONS = ["json", "project", "help"];
-const CREATE_OPTIONS = ["tracks", "summary", "lang", "brownfield", "flow", "question", "timebox", "reproduction", "root-cause", "condition", "behaviour", "include-body", "size"];
+const CREATE_OPTIONS = ["tracks", "summary", "lang", "brownfield", "flow", "question", "timebox", "reproduction", "root-cause", "condition", "behaviour", "include-body", "size", "branch"];
 const COMMAND_OPTIONS = {
   classify: { options: ["name", "lang", "explain"] },
   signals: { options: ["lang"] },
   init: { options: ["lang", "tracks", "guard", "stop-check", "check", "approval-guard", "evidence", "roles"] },
   create: { options: ["kind", ...CREATE_OPTIONS] },
   bugfix: { options: CREATE_OPTIONS },
-  spike: { options: ["tracks", "summary", "lang", "question", "timebox", "flow", "brownfield"] },
+  spike: { options: ["tracks", "summary", "lang", "question", "timebox", "flow", "brownfield", "branch"] },
   list: { options: [], max: 0 },
   status: { options: [], max: 1 },
   doctor: { options: [], max: 1 },
@@ -765,20 +774,28 @@ async function main() {
     case "bugfix":
     case "create": {
       // 1.24 r6 B9: each its own usage (`bugfix` without a name printed create's)
-      if (!pos[0]) usage(cmd === "bugfix" ? 'dev-spec bugfix "<name>" [tracks...] [--summary "…"] [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] [--lang en|pt|pt-BR|es]'
-        : 'dev-spec create "<name>" [tracks...] [--summary "…"] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--lang en|pt|pt-BR|es]');
+      if (!pos[0]) usage(cmd === "bugfix" ? 'dev-spec bugfix "<name>" [tracks...] [--summary "…"] [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] [--branch [<name>]] [--lang en|pt|pt-BR|es]'
+        : 'dev-spec create "<name>" [tracks...] [--summary "…"] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
       const name = pos[0];
       const tr = withTracksFlag(pos.slice(1));
       const tracks = tr.length ? tr : undefined; // none → engine: keep existing / classify new
+      const branch = branchFlag(); // 1.25: --branch [<name>] — what git says is read BEFORE the engine records anything
+      const git = branch ? branchGitFacts() : undefined;
       // the engine classifies a new feature in its language (the explicit --lang, else the project's) — same as spec_create
       const r = spec.createFeature(projectDir, name, tracks, flags.summary, undefined, flags.lang, cmd === "bugfix" ? "bugfix" : flags.kind,
         { brownfield: on("brownfield"), flow: flags.flow, question: flags.question, timebox: flags.timebox, // = spec_create {brownfield, flow, question, timebox,
           reproduction: flags.reproduction, rootCause: flags["root-cause"], condition: flags.condition, behaviour: flags.behaviour, // the bugfix prefill (1.21 F3)
           cli: true, // 1.21 review A8: a refusal names the flag (--root-cause), not the MCP key (rootCause)
           includeBody: boolFlag("include-body") === true, // … includeBody} — the bodies are in the --json result
-          size: flags.size }); // 1.21 F5: --size xs|s|m|l (= spec_create {size}; xs = a change: one change.md)
+          size: flags.size, // 1.21 F5: --size xs|s|m|l (= spec_create {size}; xs = a change: one change.md)
+          branch, git }); // 1.25: = spec_create {branch}; git: what git said here (the engine reads no git process — MCP: the repository's files)
       if (!r.ok) return fail(r);
-      return out(r, (r) => { const T = cliText(r.lang); console.log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : "")); });
+      const switched = branch ? branchSwitch(r, git) : null; // runs `git switch -c <name>` — the engine never does
+      return out(r, (r) => {
+        const T = cliText(r.lang);
+        console.log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : ""));
+        if (switched) console.log(switched);
+      });
     }
 
     case "list":
@@ -794,6 +811,7 @@ async function main() {
         console.log(T.statusTasks(r.tasks.done, r.tasks.total, r.tasks.next ? "#" + r.tasks.next.number + " " + r.tasks.next.text : null));
         // ✓ only when FILLED (the doctor's rule): ◐ present but still a TODO/empty, ✗ missing — in the feature language.
         const fm = spec.msg(spec.featureLang(projectDir, r.feature));
+        if (r.branch) console.log(fm.branch.statusLine(r.branch.name, r.branch.base, r.branch.commit ? r.branch.commit.slice(0, 7) : null, r.branch.current)); // 1.25
         // 1.21 F5: a sized feature's rows carry `status` — ○ an optional section left out (size s), ✓ one another track covers,
         // the template-only / short n/a states named
         const marks = (list) => list.map((s) => (s.filled ? (s.status === "missing" ? "○ " : "✓ ") : s.present ? "◐ " : "✗ ") + (fm.sectionNames[s.section] || s.section) +
@@ -1592,10 +1610,17 @@ async function main() {
         return out(r, (r) => r.lines.forEach((l) => console.log(l)));
       };
       if (pos[1] === "-") return readStdin((text) => report(text, { max: intFlag("max") })); // --max: the window the piped log was read with (= spec_log {max})
-      const text = b5Git(["-c", "core.quotePath=false", "-c", "log.showSignature=false", "log", "--no-color", "--no-decorate", "--no-abbrev-commit",
-        "--pretty=medium", "--date=iso-strict", "--name-only", "--relative", "--max-count=" + max]);
+      const logArgs = ["-c", "core.quotePath=false", "-c", "log.showSignature=false", "log", "--no-color", "--no-decorate", "--no-abbrev-commit",
+        "--pretty=medium", "--date=iso-strict", "--name-only", "--relative", "--max-count=" + max];
+      // 1.25: a feature started on its own branch (create --branch) recorded the commit it started from — the log is read from there
+      // (`<commit>..HEAD`: older commits are no work of this feature); a commit git no longer knows → the whole log, as before.
+      const fb = spec.featureBranch(projectDir, fx.slug);
+      const since = fb && fb.commit ? { base: fb.base, commit: fb.commit } : null;
+      let text = since ? b5Git([...logArgs, since.commit + "..HEAD", "--"]) : null;
+      const ranged = text != null;
+      if (!ranged) text = b5Git(logArgs);
       if (text == null) return fail({ ok: false, error: spec.msg(spec.featureLang(projectDir, fx.slug)).gitLog.noGit });
-      return report(text, { max });
+      return report(text, { max, ...(ranged ? { since } : {}) });
     }
     // Helpers of done --run / finish --run / init --check / log (function declarations: hoisted across this switch block).
     // `git` is only ever read here: rev-parse, status, log — local, no network, no lock (GIT_OPTIONAL_LOCKS=0).
@@ -1813,10 +1838,13 @@ async function main() {
     case "spike": {
       // dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d|2w|8h] [--summary …] [--lang] — the spike shortcut
       // (= spec_create {name, kind: "spike", question, timebox}; `create "<name>" --kind spike` is the same call).
-      if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--lang en|pt|pt-BR|es]');
+      if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
       const tr = withTracksFlag(pos.slice(1));
-      const r = spec.createFeature(projectDir, pos[0], tr.length ? tr : undefined, flags.summary, undefined, flags.lang, "spike", { question: flags.question, timebox: flags.timebox, flow: flags.flow, brownfield: on("brownfield"), cli: true }); // = create --kind spike (a flow gets its note; cli: a refusal names the flag)
+      const branch = branchFlag(); // 1.25: --branch [<name>] (spike/<slug> by default), as create
+      const git = branch ? branchGitFacts() : undefined;
+      const r = spec.createFeature(projectDir, pos[0], tr.length ? tr : undefined, flags.summary, undefined, flags.lang, "spike", { question: flags.question, timebox: flags.timebox, flow: flags.flow, brownfield: on("brownfield"), cli: true, branch, git }); // = create --kind spike (a flow gets its note; cli: a refusal names the flag)
       if (!r.ok) return fail(r);
+      const switched = branch ? branchSwitch(r, git) : null;
       return out(r, (r) => {
         const T = cliText(r.lang);
         const SP = spec.msg(r.lang).spike;
@@ -1824,6 +1852,7 @@ async function main() {
         const si = spec.spikeInfo(r.dir);
         if (si.question) console.log(SP.cliQuestion(si.question));
         if (si.timebox.state === "date") console.log(SP.cliUntil(si.timebox.date));
+        if (switched) console.log(switched);
       });
     }
     case "decide": {
@@ -2063,6 +2092,71 @@ function mergeDriverCheck() {
   });
 }
 
+// ---- create / bugfix / spike --branch [<name>] (1.25) ------------------------------------------------------------------------
+// The feature's own git branch (= spec_create {branch}). The engine never runs git: it validates the name, decides and RECORDS
+// `.state.json → branch` {name, base, commit, at}; this CLI reads what git says BEFORE that (branchGitFacts — inside a work tree?
+// the base branch and commit, does the name exist?) and runs the engine's `branch.command` AFTER it (branchSwitch: `git switch -c
+// <name>` — or `git switch <name>`, the feature's own branch on a re-run). Never onto a branch the feature doesn't own: one of that
+// name that exists already is not recorded and not switched to. Exit 1 whenever the feature does not end up on its branch (not a
+// repository, the name exists, git can't run or failed — the feature itself is created all the same; the record stays, with the
+// command to run); --json: the engine's result, `branch` + switched / created / error.
+// The flag → undefined (absent) · true (bare: the default name) · false (--branch=false) · the name (validated by the engine).
+function branchFlag() {
+  const v = flags.branch;
+  if (v === undefined || v === true) return v;
+  const s = String(v).trim();
+  if (/^(?:true|yes|on)$/i.test(s)) return true;
+  if (/^(?:false|no|off)$/i.test(s)) return false;
+  // `create x --branch tdd`: the word after --branch is read as its value — a track word there was meant as a track
+  if (branchSpaced && s) { const pt = spec.parseTracks(s); if (pt.given && !pt.unknown.length) die(spec.msg(flags.lang || spec.projectLang(projectDir)).branch.cliTrackWord(s)); }
+  return s;
+}
+// What git says in the project folder → undefined (git can't run here: the engine reads the repository's files instead, and
+// branchSwitch says why nothing was switched) · { repo: false } (not inside a work tree) · { repo: true, base, commit, current,
+// exists(name) } — read only (rev-parse, symbolic-ref: no lock, no network).
+function branchGitFacts() {
+  const g = (args) => {
+    try { return spawnSync("git", args, { cwd: projectDir, encoding: "utf8", timeout: 30000, windowsHide: true, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { return { error: e }; }
+  };
+  const inside = g(["rev-parse", "--is-inside-work-tree"]);
+  if (!inside || inside.error) return undefined;
+  if (inside.status !== 0 || String(inside.stdout || "").trim() !== "true") return { repo: false };
+  const sym = g(["symbolic-ref", "--quiet", "--short", "HEAD"]); // the branch HEAD names — an unborn one too; exit 1: detached
+  const base = sym && !sym.error && sym.status === 0 ? String(sym.stdout || "").trim() || null : null;
+  const rev = g(["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]); // nothing yet in a repository without a commit
+  const sha = rev && !rev.error && rev.status === 0 ? String(rev.stdout || "").trim() : "";
+  return { repo: true, base, commit: /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(sha) ? sha : null, current: base,
+    exists: (name) => { const s = g(["rev-parse", "--verify", "--quiet", "refs/heads/" + name]); return !s || s.error ? null : s.status === 0; } };
+}
+// After the engine's create: run its branch.command (r.branch.args — git's arguments, never through a shell) → the human line, or
+// null. Adds to r.branch: switched (true / false), created (a new branch), current, error (git's first lines); sets exit 1 unless
+// the feature ends up on its branch.
+function branchSwitch(r, git) {
+  const b = r.branch;
+  if (!b) return null;
+  const B = spec.msg(r.lang).branch;
+  if (!b.recorded) { process.exitCode = 1; return null; } // not a repository / the name exists: the engine's note says it
+  if (!b.command || !Array.isArray(b.args)) {
+    if (b.current === b.name) return B.cliOn(b.name);
+    process.exitCode = 1;
+    return null;
+  }
+  if (git === undefined) { b.switched = false; b.error = "git"; process.exitCode = 1; return B.cliGitMissing(b.command); }
+  let s;
+  try { s = spawnSync("git", b.args, { cwd: projectDir, encoding: "utf8", timeout: 30000, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { s = { error: e }; }
+  if (!s || s.error || s.status !== 0) {
+    const why = String((s && (s.stderr || (s.error && s.error.message))) || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 2).join(" ").slice(0, 300);
+    b.switched = false;
+    b.error = why || "exit " + (s && s.status);
+    process.exitCode = 1;
+    return B.cliFailed(b.command, why);
+  }
+  b.switched = true;
+  b.created = b.args.includes("-c");
+  b.current = b.name;
+  return b.created ? B.cliCreated(b.name, b.base, b.commit ? b.commit.slice(0, 7) : null) : B.cliSwitched(b.name);
+}
+
 // 1.14 F5 — `trace <f> --matrix`: the requirements traceability matrix as a table (localized headers and notes; IDs as written).
 function printMatrix(feature, mx, lang) {
   const R = spec.msg(lang).rtm;
@@ -2152,6 +2246,11 @@ function helpText() {
   create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike|change, --size xs|s|m|l, --lang en|pt|pt-BR|es)
                                   --brownfield also scaffolds integration-plan.md (a feature landing in an existing codebase);
                                   --flow design-first: classification → design → requirements → … (starts from an architecture)
+                                  --branch [<name>] (also bugfix / spike): start it on its own git branch — feature/<slug> (fix/,
+                                  spike/ by kind) or the name given — recorded in .state.json with the branch and commit it starts
+                                  from, then git switch -c <name>; never onto a branch that exists already. Exit 1 when the feature
+                                  is not on its branch at the end (not a repository, the name exists, git failed) — it is created
+                                  all the same. Put tracks before --branch (or --branch=<name>)
   bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
                                   --reproduction "…" --root-cause "…" --condition "…" --behaviour "…" prefill bug.md and the
                                   IF … THEN criterion (a text left out stays a slot); --include-body: the bodies in --json
@@ -2246,7 +2345,8 @@ function helpText() {
   log <feature> [--max N] [-]     Per task, the commits whose message cites it — "task #N" / "#N" with the feature name (as /spec-commit
                                   writes "Part of .specs/<feature>/ task #N."), or its T-/AC IDs ("Makes T-01 green") — and, +tdd, a
                                   red-first check (implementation committed before its test?); reads git log (read-only, local, --max
-                                  commits, default 1000); - reads a log from stdin (git log --name-only --relative)
+                                  commits, default 1000 — from the commit it started on when it has its own branch: create --branch);
+                                  - reads a log from stdin (git log --name-only --relative)
   merge-state [--install|--uninstall|--check] [--project <dir>]   Teams: git merges the spec state SEMANTICALLY — .gitattributes
                                   (commit it) + this clone's git config (merge.dev-spec-state.driver; every teammate runs it once, and
                                   again after each plugin update — the driver names this clone's path); --uninstall removes both;
