@@ -507,19 +507,17 @@ Superpowers' own instructions say CLAUDE.md takes precedence over its skills, so
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; everywhere,
 `/plugin disable` — both also drop the superpowers skills this plugin doesn't replace.
 
-### Commands (55)
+### Commands (22)
 
-`/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
-`/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
-`/next-action` · `/add-track` · `/feature` · `/eval` · `/roadmap` · `/depend` · `/backlog` ·
-`/scan` · `/reverse` · `/coverage` · `/spec-status` · `/spec-commit` · `/spec-bugfix` · `/spec-finish` · `/spec-review-feedback` · `/prReview` · `/promptReview` ·
-`/migrateModel` — aliases `/ds` `/dsx` `/dss`.
-New in 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
-`/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
-New in 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
-`/spec-tour`. New in 1.15: `/spec-tracks`.
-New in 1.16: `/spec-statusline`, `/spec-milestone`. New in 1.22: `/spec-simplify`.
-(As a plugin they are namespaced, e.g. `/dev-spec-driven:design`; in other MCP clients they are the server's prompts.)
+`/spec [feature | idea] [phase]` · `/spec-bugfix` · `/clarify [--grill]` · `/approve [phase | --through p] [--force | --revoke]` ·
+`/spec-doctor [--deep]` · `/executeTask [--subagents] | commit` · `/spec-status` · `/roadmap [depend | backlog | milestone]` ·
+`/spec-review [branch | converge | simplify | feedback | prompt]` · `/spec-finish` · `/spec-spike` ·
+`/spec-change [impact | decide | track ±x]` · `/feature [archive | restore | rename | remove | flow]` ·
+`/spec-report [catalog | drift | metrics | changelog | export]` · `/spec-adopt [scan | reverse | coverage | import]` ·
+`/spec-setup [init | guard | statusline | superpowers | templates | tracks]` · `/eval [run | baseline | migrate]` ·
+`/spec-upgrade` · `/spec-tour` — aliases `/ds` `/dsx` `/dss`. Only `/spec` and `/spec-bugfix` are offered to the
+model; the others are yours to type (their descriptions stay out of the model's context).
+(As a plugin they are namespaced, e.g. `/dev-spec-driven:spec`; in other MCP clients they are the server's prompts.)
 
 ### The `dev-spec` CLI
 
@@ -1077,19 +1075,17 @@ projeto ou, com `--user`, no `~/.claude/CLAUDE.md`; `--remove` retira-o. Para de
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; em todo o lado,
 `/plugin disable` — ambos retiram também as skills do superpowers que este plugin não substitui.
 
-### Comandos (55)
+### Comandos (22)
 
-`/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
-`/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
-`/next-action` · `/add-track` · `/feature` · `/eval` · `/roadmap` · `/depend` · `/backlog` ·
-`/scan` · `/reverse` · `/coverage` · `/spec-status` · `/spec-commit` · `/spec-bugfix` · `/spec-finish` · `/spec-review-feedback` · `/prReview` · `/promptReview` ·
-`/migrateModel` — atalhos `/ds` `/dsx` `/dss`.
-Novos na 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
-`/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
-Novos na 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
-`/spec-tour`. Novo na 1.15: `/spec-tracks`.
-Novos na 1.16: `/spec-statusline`, `/spec-milestone`. Novo na 1.22: `/spec-simplify`.
-(Como plugin, têm namespace, ex.: `/dev-spec-driven:design`; noutros clientes MCP são os prompts do servidor.)
+`/spec [feature | idea] [phase]` · `/spec-bugfix` · `/clarify [--grill]` · `/approve [phase | --through p] [--force | --revoke]` ·
+`/spec-doctor [--deep]` · `/executeTask [--subagents] | commit` · `/spec-status` · `/roadmap [depend | backlog | milestone]` ·
+`/spec-review [branch | converge | simplify | feedback | prompt]` · `/spec-finish` · `/spec-spike` ·
+`/spec-change [impact | decide | track ±x]` · `/feature [archive | restore | rename | remove | flow]` ·
+`/spec-report [catalog | drift | metrics | changelog | export]` · `/spec-adopt [scan | reverse | coverage | import]` ·
+`/spec-setup [init | guard | statusline | superpowers | templates | tracks]` · `/eval [run | baseline | migrate]` ·
+`/spec-upgrade` · `/spec-tour` — atalhos `/ds` `/dsx` `/dss`. Só `/spec` e `/spec-bugfix` são oferecidos ao
+modelo; os restantes escreves tu (as descrições ficam fora do contexto do modelo).
+(Como plugin, têm namespace, ex.: `/dev-spec-driven:spec`; noutros clientes MCP são os prompts do servidor.)
 
 ### A CLI `dev-spec`
 
@@ -1654,19 +1650,17 @@ proyecto o, con `--user`, en `~/.claude/CLAUDE.md`; `--remove` lo quita. Para de
 proyecto, `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; en
 todas partes, `/plugin disable` — ambos quitan también las skills de superpowers que este plugin no sustituye.
 
-### Comandos (55)
+### Comandos (22)
 
-`/spec` · `/spec-init` · `/classify` · `/createSpec` · `/clarify` · `/design` · `/testPlan` ·
-`/evalPlan` · `/grill` · `/writeTests` · `/createTask` · `/executeTask [--subagents]` · `/spec-doctor` · `/approve` ·
-`/next-action` · `/add-track` · `/feature` · `/eval` · `/roadmap` · `/depend` · `/backlog` ·
-`/scan` · `/reverse` · `/coverage` · `/spec-status` · `/spec-commit` · `/spec-bugfix` · `/spec-finish` · `/spec-review-feedback` · `/prReview` · `/promptReview` ·
-`/migrateModel` — atajos `/ds` `/dsx` `/dss`.
-Nuevos en la 1.13: `/spec-impact` · `/spec-metrics` · `/spec-converge` · `/spec-import` · `/spec-catalog` ·
-`/spec-drift` · `/spec-guard` · `/spec-superpowers` · `/spec-upgrade`.
-Nuevos en la 1.14: `/spec-templates` · `/spec-export` · `/spec-changelog` · `/spec-ff` · `/spec-decide` · `/spec-spike` ·
-`/spec-tour`. Nuevo en la 1.15: `/spec-tracks`.
-Nuevos en la 1.16: `/spec-statusline`, `/spec-milestone`. Nuevo en la 1.22: `/spec-simplify`.
-(Como plugin, tienen namespace, p. ej. `/dev-spec-driven:design`; en otros clientes MCP son los prompts del servidor.)
+`/spec [feature | idea] [phase]` · `/spec-bugfix` · `/clarify [--grill]` · `/approve [phase | --through p] [--force | --revoke]` ·
+`/spec-doctor [--deep]` · `/executeTask [--subagents] | commit` · `/spec-status` · `/roadmap [depend | backlog | milestone]` ·
+`/spec-review [branch | converge | simplify | feedback | prompt]` · `/spec-finish` · `/spec-spike` ·
+`/spec-change [impact | decide | track ±x]` · `/feature [archive | restore | rename | remove | flow]` ·
+`/spec-report [catalog | drift | metrics | changelog | export]` · `/spec-adopt [scan | reverse | coverage | import]` ·
+`/spec-setup [init | guard | statusline | superpowers | templates | tracks]` · `/eval [run | baseline | migrate]` ·
+`/spec-upgrade` · `/spec-tour` — atajos `/ds` `/dsx` `/dss`. Solo `/spec` y `/spec-bugfix` se ofrecen al
+modelo; los demás los escribes tú (sus descripciones quedan fuera del contexto del modelo).
+(Como plugin, tienen namespace, p. ej. `/dev-spec-driven:spec`; en otros clientes MCP son los prompts del servidor.)
 
 ### La CLI `dev-spec`
 
@@ -1720,7 +1714,7 @@ dev-spec-driven/                      ← plugin root
 ├── skills/dev-spec-driven/
 │   ├── SKILL.md                      ← the track-based workflow (English, with PT / ES triggers)
 │   └── references/                   ← deep library (EARS, scale, eval, safety, …)
-├── commands/                         ← 55 slash commands (short English descriptions; also the MCP prompts)
+├── commands/                         ← 22 slash commands (short English descriptions; also the MCP prompts)
 ├── agents/                           ← spec-implementer + spec-reviewer + spec-verifier + spec-critic + spec-simplifier
 ├── evals/                            ← plugin evals for `claude plugin eval` (triggering EN/PT/ES + behavioural, with fixtures)
 ├── cli/dev-spec.js                   ← universal CLI (works in any tool / shell)

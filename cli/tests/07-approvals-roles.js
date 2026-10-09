@@ -72,10 +72,10 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const na2 = run(["next-action", "quick-spec", "--project", pf]);
   const ff2 = run(["approve", "quick-spec", "--through", "tasks", "--project", pf]);
   const met2 = run(["metrics", "quick-spec", "--project", pf]);
-  ok(/fast-forward: \/spec-ff quick-spec \(CLI: node "[^"]*dev-spec\.js" approve quick-spec --through tasks\) approves classification, requirements, design, tasks in order/.test(na2.out) &&
+  ok(/fast-forward: \/approve quick-spec --through tasks \(CLI: node "[^"]*dev-spec\.js" approve quick-spec --through tasks\) approves classification, requirements, design, tasks in order/.test(na2.out) &&
     ff2.code === 0 && /approved classification, requirements, design, tasks/.test(ff2.out) && /batch approvals \(fast-forward\): 4/.test(met2.out) &&
     /→ Implement task #1/.test(run(["next-action", "quick-spec", "--project", pf]).out),
-    "next-action names the fast-forward (/spec-ff + approve --through tasks); approve --through approves every phase; metrics counts the batch approvals");
+    "next-action names the fast-forward (/approve --through tasks + the CLI's approve --through tasks); approve --through approves every phase; metrics counts the batch approvals");
   run(["create", "Refused ff", "core", "--project", pf]);
   fillB3(pf, "refused-ff", ["design"]);
   const ffR = run(["approve", "refused-ff", "--through", "tasks", "--project", pf]);
@@ -119,7 +119,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
 
   const helpB3 = run(["help"]).out;
   const docB3 = fs.readFileSync(CLI, "utf8").split("*/")[0];
-  ok(/--roles requirements=product,design=tech\+security/.test(helpB3) && /approve <feature> --through <phase> {2}Fast-forward \(\/spec-ff\)/.test(helpB3) &&
+  ok(/--roles requirements=product,design=tech\+security/.test(helpB3) && /approve <feature> --through <phase> {2}Fast-forward \(\/approve --through\)/.test(helpB3) &&
     /--role ROLE \/ --through PHASE \(approve\)/.test(helpB3) && /--roles requirements=product,design=tech\+security/.test(docB3) && /approve <feature> --through <phase>/.test(docB3) &&
     /--role ROLE = the role you sign off for/.test(docB3),
     "help and the header docblock document init --roles, approve --role and approve --through");

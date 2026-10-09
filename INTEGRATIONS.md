@@ -57,7 +57,7 @@ prints the config with that path already filled in for your machine.
 Besides its tools, the `spec-driven` server advertises two more MCP capabilities, so clients that support them get
 more than tool calls:
 
-- **Prompts** — one per plugin command (`spec`, `spec-status`, `spec-impact`, `spec-ff`, `spec-tour`, … — 55 of them, read from
+- **Prompts** — one per plugin command (`spec`, `spec-status`, `spec-change`, `approve`, `spec-tour`, … — 22 of them, read from
   `commands/*.md`), each with one optional `args` argument. A client that surfaces MCP prompts shows them as slash
   commands or in a prompt picker — VS Code / Copilot Chat, for example, lists them under `/`; whether and how another
   client shows them depends on the client and its version. Each prompt starts with one line telling an agent without the
@@ -75,7 +75,7 @@ server entry (`"env": { "SPEC_MCP_PROMPTS": "off" }`) if you don't want them.
 
 ## Claude Code (CLI / IDE extension)
 
-Native — it's a plugin. Skills, the 55 commands, the 5 agents, the hooks (PostToolUse + SessionStart, the Stop /
+Native — it's a plugin. Skills, the 22 commands, the 5 agents, the hooks (PostToolUse + SessionStart, the Stop /
 SubagentStop evidence gate, the Bash observed-evidence log, the ExitPlanMode plan-mode bridge, plus the opt-in PreToolUse
 guard and approval guard) and the MCP server all load:
 
@@ -85,7 +85,7 @@ claude --plugin-dir "<PLUGIN>"
 
 Or register just the MCP server: `claude mcp add spec-driven -- node "<PLUGIN>/mcp/server.js"`.
 See [INSTALL.md](./INSTALL.md) for the persistent marketplace install, your defaults (`DEV_SPEC_DEFAULT_LANG`, `DEV_SPEC_STOP_CHECK`,
-`DEV_SPEC_GUARD_DEFAULT` — fallbacks a project's `roadmap.json` overrides) and the opt-in status line (`/spec-statusline`, or
+`DEV_SPEC_GUARD_DEFAULT` — fallbacks a project's `roadmap.json` overrides) and the opt-in status line (`/spec-setup statusline`, or
 `node "<PLUGIN>/cli/dev-spec.js" statusline --print-config` for the `settings.json` entry).
 
 The MCP server also answers `completion/complete` (feature slugs for the prompts' feature argument, and the `{slug}` /
@@ -94,7 +94,7 @@ The MCP server also answers `completion/complete` (feature slugs for the prompts
 client can use both.
 
 **Alongside superpowers.** If the superpowers plugin is installed too, its planning / TDD / debugging / execution /
-review / branch-finishing skills overlap this plugin. `/spec-superpowers` writes (after you confirm) a marked
+review / branch-finishing skills overlap this plugin. `/spec-setup superpowers` writes (after you confirm) a marked
 precedence block into the project's `CLAUDE.md` (or `~/.claude/CLAUDE.md` with `--user`) — superpowers itself defers
 to CLAUDE.md — so feature work runs here and superpowers keeps the rest. To switch it off instead: per project,
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; everywhere, `/plugin disable`.
@@ -232,7 +232,7 @@ for specs not implemented yet, the converge pass for half-done ones) runs inline
 |---|---|---|---|
 | Engine tools (classify, scaffold, doctor, trace, EARS, approval gates and roles, evidence, impact, converge, import, catalog, drift, metrics, upgrade, templates, export, changelog, decisions) | ✅ MCP | ✅ MCP | ✅ CLI |
 | Workflow methodology | ✅ skill | ✅ `AGENTS.md` / rules file | ✅ `AGENTS.md` |
-| Slash commands (`/spec`, `/spec-doctor`, `/spec-impact`, …) | ✅ | ✅ as MCP prompts, where the client shows them (else the CLI) | — (use the CLI; `dev-spec prompts` prints one) |
+| Slash commands (`/spec`, `/spec-doctor`, `/spec-change`, …) | ✅ | ✅ as MCP prompts, where the client shows them (else the CLI) | — (use the CLI; `dev-spec prompts` prints one) |
 | Spec resources (`specs://…`) | — (the files are in the project) | ✅ where the client supports resources | — |
 | Hooks on save (EARS / traceability / design checks) + SessionStart status, drift, upgrade and overlap lines | ✅ | — (use git `pre-commit`, `dev-spec doctor`, `dev-spec drift`, `dev-spec upgrade`, `dev-spec roadmap`) | ✅ git pre-commit |
 | End-of-turn evidence gate (a "done" claim with unverified ticks is sent back) | ✅ Stop / SubagentStop hook, on by default | — (call the `spec_stop_check {message}` MCP tool before claiming done — or the CLI `dev-spec stop-check --message "…"`) | — (`dev-spec stop-check`) |

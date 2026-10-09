@@ -695,10 +695,11 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
 
     // R3 — the prose: the implementer searches before it writes (a hard step) and reports a Reuse block; the reviewer checks new code
     // against the EXISTING codebase (a duplicate is Important); the controller files refactor candidates in the backlog; /executeTask,
-    // red-flags, /design, AGENTS.md and SKILL.md (≤ 5,000 words — 1.21 F3) say so — and none of the new text steers toward PRs or CI.
+    // red-flags, /spec's design phase (/design until 1.26), AGENTS.md and SKILL.md (≤ 5,000 words — 1.21 F3) say so — and none of the new
+    // text steers toward PRs or CI.
     const impl = rRd("agents", "spec-implementer.md"), rev = rRd("agents", "spec-reviewer.md"), sub = rRd("skills", "dev-spec-driven", "references", "subagent-execution.md");
     const exec = rRd("commands", "executeTask.md"), flags = rRd("skills", "dev-spec-driven", "references", "red-flags.md"), skill = rRd("skills", "dev-spec-driven", "SKILL.md");
-    const dcmd = rRd("commands", "design.md"), agentsMd = rRd("AGENTS.md"), guide = rRd("skills", "dev-spec-driven", "references", "code-reuse-and-quality.md");
+    const dcmd = rRd("commands", "spec.md"), agentsMd = rRd("AGENTS.md"), guide = rRd("skills", "dev-spec-driven", "references", "code-reuse-and-quality.md");
     const implSearch = cut(impl, "3. **Search before you write**", "4. If anything is unclear");
     const implReuse = cut(impl, "- **Reuse** — a `### Reuse` block", "- Files changed; commits");
     const revQuality = cut(rev, "### 4. Code quality", "### Calibration");
@@ -719,8 +720,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       () => /duplicate in the existing codebase/.test(exec), () => /"I'll write a quick helper" \| Search first/.test(flags),
       () => /"I'll copy this function and tweak it"/.test(flags), () => /rule of three/.test(flags), () => /\*\*Reuse & Integration\*\*/.test(skill),
       () => /design-reuse/.test(skill), () => /code-reuse-and-quality\.md/.test(skill), () => /\*\*Search before you write:\*\*/.test(skill),
-      () => skill.split(/\s+/).filter(Boolean).length <= 5000, () => /\*\*Every design names what it reuses:\*\*/.test(dcmd),
-      () => /design-reuse/.test(dcmd), () => /\*\*Reuse & Integration\*\*/.test(agentsMd), () => /design-reuse/.test(agentsMd),
+      () => skill.split(/\s+/).filter(Boolean).length <= 5000, () => /\*\*design\*\* — [^\n]*Reuse & Integration/.test(dcmd),
+      () => /\*\*Reuse & Integration\*\*/.test(agentsMd), () => /design-reuse/.test(agentsMd),
       () => /Search before you write/.test(agentsMd), () => /design-reuse/.test(guide),
       () => [implSearch, implReuse, revQuality, subRefactor, execReuse].every((t) => t.length > 100 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
     ]);
@@ -729,7 +730,9 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
     // Anthropic's code-review / code-simplifier plugins): the reviewer rates findings and lists what is not one, the
     // controller verifies each before a fix round (80+), /prReview verifies before it reports, the simplifier keeps the
     // feature's lines, never a test, one commit each, and proves it — and none of the new text steers toward PRs or CI.
-    const simp = rRd("agents", "spec-simplifier.md"), scmd = rRd("commands", "spec-simplify.md"), prr = rRd("commands", "prReview.md");
+    // (1.26: /prReview and /spec-simplify are the `branch` and `simplify` modes of /spec-review — each read as its own section.)
+    const specReview = rRd("commands", "spec-review.md");
+    const simp = rRd("agents", "spec-simplifier.md"), scmd = cut(specReview, "**simplify", "**feedback"), prr = cut(specReview, "**branch**", "**converge**");
     // 1.26: the verify pass is its own agent (agents/spec-verifier.md) — the reviewer's verify mode, moved whole.
     const ver = rRd("agents", "spec-verifier.md");
     const revNot = cut(rev, "**Not a finding**", "## Re-review mode"), revVerify = cut(ver, "## The questions", "## Output");
@@ -739,7 +742,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
     // One row per claim of the prose — [where, its text, a string it must hold verbatim or a RegExp it must match (, false: must
     // NOT)] — so a FAIL names exactly which file and which sentence went missing.
     const revVerdicts = cut(ver, "## Output", "For an ❌");
-    const V = "spec-verifier.md", R = "spec-reviewer.md", SX = "subagent-execution.md", SI = "spec-simplifier.md", SC = "/spec-simplify", PR = "/prReview";
+    const V = "spec-verifier.md", R = "spec-reviewer.md", SX = "subagent-execution.md", SI = "spec-simplifier.md", SC = "/spec-review simplify", PR = "/spec-review branch";
     const prose = [
       ...["**Pre-existing**", "**Outside the diff's lines**", "**Intended**", "**Disproved by a run**", "**Silenced on purpose**", "**A nitpick**"].map((w) => [R + " › Not a finding", revNot, w]),
       [R + " › Not a finding", revNot, /only \*\*80 or more\*\* there opens a fix round/], [R + " › Not a finding", revNot, /adapted from Anthropic's `code-review` plugin/],
@@ -759,7 +762,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       [SC, scmd, /\*\*before\*\*\s+`\/spec-finish`/], [SC, scmd, /\*\*reverted\*\*\s+\(`git revert <sha>`/], [SC, scmd, /done <feature> <n> --run/],
       [SC, scmd, /Never "behaviour unchanged" without the runs/],
       ["code-reuse-and-quality.md › The simplification pass", guideSimp, /\| Never a test, fixture or snapshot \|/], ["SKILL.md", skill, /simplification pass/],
-      ["/executeTask", exec, /\/spec-simplify/], ["/executeTask", exec, /verify-mode reviewer/],
+      ["/executeTask", exec, /\/spec-review <feature> simplify/], ["/executeTask", exec, /dev-spec-driven:spec-verifier/],
+      ["/spec-review branch", prr, /dev-spec-driven:spec-verifier/], ["/spec-review branch", prr, /verify mode/, false],
       ["AGENTS.md", agentsMd, /agents\/spec-verifier\.md`/], ["AGENTS.md", agentsMd, /simplification pass/],
       // review 1: an ❌ is never unconfirmed (nor pre-existing), a break on untouched lines is the diff's, the verifier gets the
       // report, the simplify pass records the checks again, documents guard mode, never runs the built-in /simplify, and the

@@ -1,100 +1,44 @@
 ---
-description: Phase 6 — implement the tasks in order, the right loop per task; --subagents runs an implementer + reviewer per task.
-argument-hint: "[feature name | task number | 'next'] [--subagents]"
+description: Implement a feature's next task (or task N) with evidence; --subagents adds an implementer + reviewer per task.
+disable-model-invocation: true
+argument-hint: "[feature | task number] [--subagents] | commit [note]"
 ---
 
-Use the **dev-spec-driven** skill, Phase 6 (Execute).
+Use the **dev-spec-driven** skill, Phase 6 (Execute). Target: $ARGUMENTS
 
-Target: $ARGUMENTS
+**Inline (default).**
+1. `spec_next_task` — the first open task whose `_Depends:_` tasks are all done, or the number given. A `skipped` or
+   `blocked` task means its dependencies first or a wrong plan (`spec_doctor` → `task-deps`) — never tick around it.
+2. The loop per track: core implement-and-test; +ai prompt iteration gated on the eval delta, in a new `prompts/vN.md`;
+   +tdd the **micro-cycle** — one behaviour at a time: the test first, watch it fail for the right reason, the minimal
+   code, refactor only on green; code written before its test is deleted and redone. The micro-cycle's
+   red flags for a NEW behaviour's test (a pass on its first run, a failure you can't explain) spare a guard test, a
+   characterization test of existing code and a T-ID an earlier task already turned green: they pass at once by design —
+   never make them fail artificially.
+3. **Search before you write** — reuse, else extend, else create: the design's Reuse & Integration, then the codebase by
+   concept and synonyms. Stay inside the task's `_Implements:_` files: a unit elsewhere is a plan change
+   (`spec_append_tasks`; the scope guard asks), and a refactor you notice is filed, not done —
+   `spec_roadmap_edit {kind: "backlog", action: "add", name: "refactor-<topic>", note: "refactor: <smell> in <files>"}`.
+4. **Evidence before claims** — run the task's `_Verify:_` fresh and tick with `spec_complete_task {name, number,
+   evidence: {command, exitCode, summary}}`: the `_Verify:_` command itself (several: all of them joined with ` && `). A
+   non-zero exit refuses the tick (an `_Expect: fail_` task is proven by its red run); a note alone leaves a runnable
+   `_Verify:_` unverified. Or `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run`.
 
-**Inline (default).** Before coding, re-read steering, requirements, design, any test/eval plans, and
-tasks; summarize your understanding. Use `spec_next_task` to find the next task (or jump to the given
-number) — the first open task whose `_Depends: 3, 5_` tasks are all done (a task without `_Depends:_` just follows
-tasks.md order). Pick the loop per task: plain implement-and-test (core); red → green → refactor against the
-target tests (+tdd) — as the **micro-cycle**, one behaviour at a time: write (or pick) the test, watch it fail for
-the right reason (an assertion or "not implemented" — not a typo or a missing import), write the minimal code, watch
-it pass, refactor only on green, repeat; code written before its test is deleted and redone, never kept as a
-reference (`references/test-patterns.md` — "The micro-cycle inside a task", with the rationalizations it answers and
-its red flags for a NEW behaviour's test: a test that passes on its first run, a failure you can't explain, a test
-written after the code — while a guard test, a characterization test of existing code and a planned T-ID an earlier
-task already turned green pass on their first run by design: never make them fail artificially);
-prompt-iteration gated on eval delta with a new `prompts/vN.md` (+ai). After each
-task, run its `_Verify:_` command fresh and call `spec_complete_task {…, evidence}` with the command, exit
-code and output summary — evidence before claims (`references/verification.md`). The rules the engine applies:
-- a task whose `_Verify:_` holds a runnable command is **verified only by `{command, exitCode: 0}`** — a text
-  note ticks it but leaves it unverified (`unverifiedReason: manual-note-on-runnable-verify`);
-- the `command` must be the `_Verify:_` command itself — with several, ALL of them in one run joined with ` && ` (a
-  leading `cd <project root> &&`, `set -o pipefail;` or `VAR=value` of your own, or a trailing `2>&1`, is fine (a `cd` into
-  any other folder runs it there: another run); a prefix the
-  `_Verify:_` holds must stay) — a run of any other command, or of one of its commands alone, ticks it unverified
-  (`command-mismatch`);
-- a **non-zero exit code refuses the tick** (except on an `_Expect: fail_` task, whose failing run is its proof) and the failed run is **recorded** (a failed re-check of a ticked task
-  makes it unverified until a passing run is recorded) — a failing run means the task is not done;
-- evidence marked **stale** by `/spec-impact --reopen` (or recorded for an earlier `_Verify:_` command) no longer
-  counts: run the check again;
-- duplicate task numbers resolve to the first open one — renumber them (doctor warns `duplicate-tasks`);
-- a bugfix refuses the fix (every task after task 1, the red regression test — or after the root-cause task, where
-  one exists) until `bug.md → Root Cause` is filled;
-- a task whose `_Depends:_` tasks are not all done is skipped by `spec_next_task` (`skipped`); ticking it anyway is
-  recorded — with `waitsOn` and a note, never refused — so do its dependencies first. No open task able to start
-  (`blocked`: a cycle, or a `_Depends:_` naming no task) means the plan is wrong: `spec_doctor` fails `task-deps` — fix
-  the markers in tasks.md and re-approve the tasks phase;
-- a task marked **`_Expect: fail_`** (it writes a test before its code) is proven by a **failing** run — record the
-  red run; a passing one is refused (`unexpected-pass`: the test doesn't fail yet), and so is a failing one whose
-  output shows the test never ran — a missing test file, module or script (`couldNotRun`);
-- a `_Verify:_` that pipes (`npm test | tee log`) reports the last command's exit code — the tick carries
-  `pipeMasked`; drop the pipe or `set -o pipefail`.
-CLI: `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run` runs the task's `_Verify:_` and records the result (with the git commit);
-a run that could not happen (no shell, a signal, `--timeout <seconds>`) records nothing.
-Ticked the wrong task, or its work turned out incomplete? **Undo the tick** — never edit the checkbox by hand:
-`spec_complete_task {name, number, undo: true, reason}` (CLI `dev-spec undone <feature> <n> --reason "…"`). The task
-is open again, its evidence turns stale (a re-tick needs a NEW run — `stale-evidence`, labelled unticked), and
-`.state.json → unticks` records it; a finished or signed-off feature must be finished and signed off again once the
-task is done.
+**Can't run the `_Verify:_` yourself?** Don't tick — name the command and ask the user to run it and paste the output (or
+the line above); never send a subagent to look for a shell. A wrong tick: `spec_complete_task {name, number, undo: true,
+reason}`.
 
-**Search before you write** (every task, every track — `references/code-reuse-and-quality.md`): before adding any
-helper, component, client, validator or formatter, look for one that exists — the design's **Reuse & Integration**
-section (the brief's **Reuse** section quotes its entries for the task and lists the files next to the task's own),
-then the codebase by concept and synonyms, the shared folders `structure.md` names. Reuse, else extend (existing
-callers unchanged, in the task's own `_Implements:_` files — a unit outside them is a plan change: a converge task via
-`spec_append_tasks`, never a silent edit; the scope guard asks before such an edit), else create — local to the feature
-until a second or third use; never copy-paste. A refactor you notice outside the task is **filed, not done**:
-`spec_roadmap_edit {kind: "backlog", action: "add", name: "refactor-<topic>", note: "refactor: <smell> in <files>"}` (CLI `dev-spec backlog
-add …`) — one name per candidate: an existing name gets the new note appended to its entry.
+**`--subagents`** — `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/subagent-execution.md`: its preconditions
+(doctor ready, tasks approved, not on the default branch, `trace_check` passing, baseline green), then per task
+`spec_task_brief {write: true}` → `dev-spec-driven:spec-implementer` → `dev-spec-driven:spec-reviewer` (each Critical /
+Important finding and each ❌ checked first by one `dev-spec-driven:spec-verifier` per finding — 80 or more opens a fix round;
+a new unit that is a duplicate in the existing codebase is Important) → `spec_complete_task` after a clean review. Stop at every `**Checkpoint:**`;
+`inlineOnly` tasks run inline; `spec_next_task {waves: true}` plans parallel waves.
 
-**Can't run the `_Verify:_` command yourself** (no shell, no runtime in this session)? **Do not tick the task** — not
-bare, not with a note, never with an exit code nobody saw — and never send a subagent (or a tool search) to look for a
-shell. Name the command and ask the user to run it and paste the
-output (or to run `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run`); record exactly what they report
-(`{command, exitCode, summary}`). Tick it unverified only if the user explicitly asks for exactly that, and say it
-stays unverified. In Claude Code the Stop hook sends back a closing "done" / "tests pass" while a ticked task has no
-passing evidence — the fix is the run, or saying plainly what is not verified. With project checks set
-(`meta.checks`), each brief lists them; run them before calling a task done.
+**`commit [note]`** — draft a conventional commit (`type(scope): summary`) whose body cites the chain: `Part of
+.specs/<feature>/ task #N.`, `Makes T-xx green` (+tdd), the eval delta (+ai); Phase 4 tests and a red regression test in
+their own `test:` commit. Commit only if the user asked.
 
-**`--subagents` (or the user asks for subagents).** Follow `references/subagent-execution.md`: check the
-preconditions (`spec_doctor` ready + tasks approved, not on the default branch, `trace_check` passes,
-baseline green: run the full suite once and ledger the result),
-then per task `spec_task_brief {write:true}` → dispatch the `dev-spec-driven:spec-implementer` agent with the brief and
-report paths → write the diff to `.execution/task-N-review.diff` → dispatch the `dev-spec-driven:spec-reviewer` agent →
-verify each ❌ and Critical / Important finding with a verify-mode reviewer (one per finding, in parallel; only a
-confidence of 80 or more opens a fix round, the rest is ledgered — the protocol's "Verify the findings") →
-fix loop (max 5 rounds) → `spec_complete_task` only after a clean review, with the evidence from the implementer's
-report (the SubagentStop hook sends back a DONE whose report lacks each `_Verify:_` command with the exit code the task
-needs — 0, or non-zero on an `_Expect: fail_` task). The report carries a **Reuse** block (searched, reused, extended,
-created and why); the reviewer checks every new unit for a duplicate in the existing codebase (a duplicate is
-Important); file the report's *Refactor candidates* and the reviewer's out-of-scope refactor ideas in the backlog
-(`spec_roadmap_edit {kind: "backlog"} add`, a `refactor:` note) — never in the task. Keep
-the ledger. Stop at every `**Checkpoint:**` for human review, and go back to the right phase for any finding that would change an
-AC, the design or a planned test. Tasks the brief flags `inlineOnly` (+ai prompt/eval) run inline. If the
-host has no subagent tool, say so and run inline. Independent `[P]` tasks may run concurrently in separate
-worktrees (`spec_next_task {batch:true}`, parallel mode in the protocol) — or dispatch the plan wave by wave:
-`spec_next_task {waves:true}` (CLI `dev-spec next <feature> --waves`) lists the waves (a wave's tasks have their
-dependencies done or in earlier waves and share no `_Implements:_` file); run one wave, merge and review it, then the next.
-
-When the last task is done, run `/spec-converge` if you doubt every AC is delivered, optionally `/spec-simplify` (a
-behaviour-preserving cleanup of the feature's own lines, proven by its tests), then close with `/spec-finish`.
-
-Either way: honor the track-gated "done" checks before finishing the feature: load test + observability
-validation (+saas), cost + safety validation (+ai), security scans + threat model re-check (+sec), data subject
-rights + retention verified (+privacy), failure-injection tests green (+dist), contract tests + the breaking-change diff green (+api), accessibility checks + the keyboard / screen-reader pass (+ui), an alert fired in a staged failure + a rollback drill (+obs), the data-quality checks + a partition re-run / backfill rehearsal (+data). A decision or discovery made on the way goes to `/spec-decide`. If blocked,
-pause and discuss rather than improvising outside the design. Respond in the user's language (EN/PT/ES).
+After the last task: `/spec-review <feature> converge` if you doubt an AC is delivered, optionally
+`/spec-review <feature> simplify`, then `/spec-finish`. Blocked? Pause and discuss — never improvise outside the design.
+Respond in the user's language (EN / PT / ES).

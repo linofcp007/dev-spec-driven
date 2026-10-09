@@ -480,15 +480,15 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
     const bug = S.nextAction(p, S.createFeature(p, "Crash", undefined, "", undefined, "en", "bugfix", { size: "xs" }).slug);
     const pt = S.nextAction(p, S.createFeature(p, "Exportar", ["core", "tdd"], "", undefined, "pt", undefined, { size: "s" }).slug);
     const es = S.nextAction(p, S.createFeature(p, "Exportar es", ["core", "tdd"], "", undefined, "es", undefined, { size: "s" }).slug);
-    all("1.21 review C3: size s with +tdd — next_action's fastForward ends at test-plan (requirements → design → test-plan; the text: then /writeTests, approve tests, then the tasks), the approve step names /spec-ff <f> test-plan, the call is approved whole, then Phase 4 (write the tests), tests and tasks; +ai ends at eval-plan; no +tdd / +ai and an XS bugfix still end at tasks; PT / ES localized (got " +
+    all("1.21 review C3: size s with +tdd — next_action's fastForward ends at test-plan (requirements → design → test-plan; the text: then /spec <f> tests, approve tests, then the tasks), the approve step names /approve <f> --through test-plan, the call is approved whole, then Phase 4 (write the tests), tests and tasks; +ai ends at eval-plan; no +tdd / +ai and an XS bugfix still end at tasks; PT / ES localized (got " +
       JSON.stringify({ na0: na0.fastForward, na1: [na1.step, na1.fastForward], ff: ff.approved || ff.failing, na2: na2.step, tests: tests.failing || tests.ok, tasks: tasks.failing || tasks.ok, ai: ai.fastForward, plain: plain.fastForward, bug: bug.fastForward }) + ")", [
       () => na0.step === "fill", () => na0.fastForward.through === "test-plan",
       () => na0.fastForward.phases.join() === "requirements,design,test-plan",
       () => /approve it through test-plan in one call: spec_approve \{name: "export-csv", through: "test-plan"\}/.test(na0.recommendation),
-      () => /write the failing tests \(\/writeTests export-csv\), approve tests/.test(na0.recommendation), () => na1.step === "approve",
-      () => na1.fastForward, () => na1.fastForward.through === "test-plan", () => /\/spec-ff export-csv test-plan/.test(na1.recommendation),
+      () => /write the failing tests \(\/spec export-csv tests\), approve tests/.test(na0.recommendation), () => na1.step === "approve",
+      () => na1.fastForward, () => na1.fastForward.through === "test-plan", () => /\/approve export-csv --through test-plan/.test(na1.recommendation),
       () => ff.ok, () => ff.approved.join() === "requirements,design,test-plan", () => na2.step === "fix",
-      () => /\/writeTests export-csv/.test(na2.recommendation), () => !na2.fastForward, () => tests.ok, () => tasks.ok,
+      () => /\/spec export-csv tests/.test(na2.recommendation), () => !na2.fastForward, () => tests.ok, () => tasks.ok,
       () => ai.fastForward.through === "eval-plan", () => plain.fastForward.through === "tasks", () => bug.fastForward.through === "tasks",
       () => /aprová-lo até test-plan numa só chamada/.test(pt.recommendation), () => /escrever os testes que falham/.test(pt.recommendation),
       () => /apruébalo hasta test-plan en una sola llamada/.test(es.recommendation), () => /escribe las pruebas que fallan/.test(es.recommendation),

@@ -63,7 +63,7 @@ document — code callers; both surfaces pass it explicitly: MCP `includeBody: a
 {listChanged: false}`, `resources {listChanged: false, subscribe: false}` and (1.16) `completions {}`; the logic lives in
 `mcp/lib/prompts-resources.js`, server.js only maps it onto JSON-RPC. `SPEC_MCP_PROMPTS=off|0|false|no` drops the
 prompts capability (and `prompts/*` answers -32601): `mcp/servers.json` sets it for the Claude Code plugin, whose own
-slash commands are the same files — without it Claude Code lists every command twice (`/mcp__…__spec-impact`).
+slash commands are the same files — without it Claude Code lists every command twice (`/mcp__…__spec-change`).
 - **Prompts** = `commands/*.md`, read at runtime (never a hardcoded list — a new command is a new prompt): name = file
   name without `.md`, description = front-matter `description`, one optional `args` argument described from
   `argument-hint` (front matter parsed by hand: BOM/CRLF, quoted values, block scalars). `prompts/get` renders the body

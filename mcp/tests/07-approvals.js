@@ -235,10 +235,10 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirnam
     const ffA = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pFF, name: fA.slug, through: "tasks", by: "ana" } }));
     const stA = state3(fA);
     const mA = S.metrics(pFF, fA.slug);
-    all("B3: next_action names the fast-forward (/spec-ff + the CLI) when every planning artifact through tasks is filled and passes its gate; spec_approve {through: 'tasks'} approves them in order — each snapshotted, recorded batch: true, counted apart by metrics (got " + nA.recommendation + ")", [
+    all("B3: next_action names the fast-forward (/approve --through — /spec-ff until 1.26 — + the CLI) when every planning artifact through tasks is filled and passes its gate; spec_approve {through: 'tasks'} approves them in order — each snapshotted, recorded batch: true, counted apart by metrics (got " + nA.recommendation + ")", [
       () => nA.step === "approve", () => nA.fastForward, () => nA.fastForward.phases.join() === "classification,requirements,design,tasks",
       () => nA.fastForward.through === "tasks", () => nA.fastForward.role === null,
-      () => /fast-forward: \/spec-ff quick-spec \(CLI: node "[^"]*dev-spec\.js" approve quick-spec --through tasks\) approves classification, requirements, design, tasks in order, each through its own gate\./.test(nA.recommendation),
+      () => /fast-forward: \/approve quick-spec --through tasks \(CLI: node "[^"]*dev-spec\.js" approve quick-spec --through tasks\) approves classification, requirements, design, tasks in order, each through its own gate\./.test(nA.recommendation),
       () => ffA.ok, () => ffA.complete === true, () => ffA.approved.join() === "classification,requirements,design,tasks", () => ffA.batch === true,
       () => ffA.steps.every((s) => s.approved),
       () => ffA.message === "Fast-forward 'quick-spec': approved classification, requirements, design, tasks, in order, each through its own gate — every phase through 'tasks' is approved.",
@@ -300,7 +300,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirnam
       () => ffC1.approved.join() === "classification,requirements", () => /'product' is not a role that signs off 'design'/.test(ffC1.error),
       () => stC.approvals.requirements.roles.product.by === "paula", () => nC1.fastForward, () => nC1.fastForward.role === "tech",
       () => nC1.fastForward.phases.join() === "design,tasks",
-      () => /\/spec-ff roles-ff --role tech \(CLI: node "[^"]*dev-spec\.js" approve roles-ff --through tasks --role tech\)/.test(nC1.recommendation),
+      () => /\/approve roles-ff --through tasks --role tech \(CLI: node "[^"]*dev-spec\.js" approve roles-ff --through tasks --role tech\)/.test(nC1.recommendation),
       () => ffC2.ok, () => ffC2.complete, () => ffC2.approved.join() === "design,tasks",
       () => Object.keys(stC.approvals.design.roles).sort().join() === "security,tech", () => stC.approvals.design.batch === true,
       () => stC.approvals.tasks.roles.tech.batch === true,

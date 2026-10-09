@@ -1,33 +1,22 @@
 ---
-description: Run a spike — a timeboxed investigation that ends in a decision (go / no-go / pivot), not in fake requirements.
+description: Run a spike — a timeboxed investigation that ends in a decision (go / no-go / pivot), not in made-up requirements.
+disable-model-invocation: true
 argument-hint: "[spike name] [the question it answers] [--timebox YYYY-MM-DD|3d]"
 ---
 
-Use the **dev-spec-driven** skill, spike flow (investigate → decide).
-
 Spike: $ARGUMENTS
 
-An investigation is neither an unrecorded vibe session nor a spec with made-up acceptance criteria. A spike records the
-question, the timebox, the options, the evidence and the decision.
+1. **Scaffold** — `spec_create {name, kind: "spike", question, timebox, lang}`: `spike.md` (Question · Timebox · Options
+   considered · Evidence · Decision · Follow-up) and a few investigation tasks. A spike is core only, with no planning
+   gates to approve.
+2. **Question and timebox** first — one question whose answer would change the plan, and an end date.
+3. **Investigate** — work the tasks. Prototype code lives outside `.specs/` (a scratch folder or a branch); link it, the
+   measurements and the sources under `spike.md → Evidence`.
+4. **Decide** — `spike.md → Decision`: the rationale and `_Outcome: go_`, `_Outcome: no-go_` or `_Outcome: pivot_` (doctor
+   fails `decision` until it is written and warns `timebox` once the date passed — then decide with the evidence you have).
+   Log it: `/spec-change <spike> decide`.
+5. **Follow `spec_next_action`** — go: `spec_create` the real feature from the result's `seed` and archive the spike, in
+   the order it gives (archive first when the feature takes the spike's name); no-go: archive it; pivot: a new spike, then
+   archive this one.
 
-1. Scaffold it: `spec_create {name, kind: "spike", question, timebox, lang}` (CLI:
-   `dev-spec spike "<name>" --question "…" --timebox 3d` — or `create "<name>" --kind spike`). It writes
-   `spike.md` (Question · Timebox · Options considered · Evidence · Decision · Follow-up) and a small `tasks.md` of
-   investigation steps. A spike is core-only: no requirements / design / tasks gates to approve.
-2. **Question + timebox** first — one question whose answer would change the plan; an end date (YYYY-MM-DD).
-3. **Investigate** — work the tasks (`dev-spec done <spike> <n>`). Prototype code lives **outside `.specs/`**
-   (a scratch folder or a branch); link it, the measurements and the sources under `spike.md → Evidence`.
-4. **Decide** — write `spike.md → Decision`: the rationale and a line `_Outcome: go_`, `_Outcome: no-go_` or
-   `_Outcome: pivot_`. `spec_doctor` fails the `decision` check until it is written and warns `timebox` once the end
-   date passed without one — then decide with the evidence you have. Log it with `/spec-decide` (`D-1`).
-5. Follow `spec_next_action`:
-   - **go** (`step: "promote"`) — spec the real feature with `spec_create` (the result's `seed` gives a name and a
-     summary from the question + decision) and archive the spike (`/feature archive <spike>`), in the order the
-     recommendation gives — archive first when the real feature takes the spike's name (it frees it). An architecture
-     the spike settled fits a design-first feature (`flow: "design-first"`, `references/design-first.md`);
-   - **no-go** — archive the spike; the reason stays in its Decision;
-   - **pivot** — a new spike for the new direction, then archive this one.
-6. `/spec-finish` is ready once the decision is written and every task ticked (no suite or evidence gates); its
-   merge summary carries the question, the decision and the evidence.
-
-Respond in the user's language (EN/PT/ES).
+`/spec-finish` is ready once the decision is written and every task ticked. Respond in the user's language (EN / PT / ES).

@@ -101,18 +101,33 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   platform now (a folder linked to `.specs/` — below).
 - **Commands never reuse a Claude Code built-in name.** `/init`, `/status`, `/doctor` and `/commit`
   collided with the built-ins (a bare `/doctor` ran Claude Code's, and our own messages told users to
-  "run /doctor"); they are `/spec-init`, `/spec-status`, `/spec-doctor`, `/spec-commit` since v1.11.
-- **Command descriptions are one short English line (1.24 review 6).** Claude Code lists every skill and command with its
-  description under ONE shared character budget; the 55 descriptions held 11,013 characters (~40 % of them "PT - … ES - …" /
-  "Atalho. Atajo." tails), and in a real session 15 dev-spec commands — /spec and /spec-status among them — were listed with no
-  description at all (the model can't pick a command it can't read). Each is ≤ 150 characters now (5,530 in all;
-  mcp/tests/10-guards-review6.js holds the bound: ≤ 150 each, ≤ 6,000 in all, no PT / ES tail); the multilingual triggers live in
-  SKILL.md's description. The MCP prompts serve the same lines.
-- **User-only commands: `disable-model-invocation: true` (1.24 review 6, C-I1).** Documented for command files
-  (code.claude.com/docs/en/slash-commands — the same front matter as skills, except `name` / `paths`): Claude can't run the command
-  on its own (nor preload it into a subagent); the user types it. Set on `approve`, `spec-ff`, `spec-guard`, `spec-statusline`,
-  `spec-superpowers`, `spec-tour` and the aliases `ds` / `dss` / `dsx` (the model has the full commands). The prompts loader
-  (prompts-resources.js `parseFrontMatter`) reads and ignores it; the D4 strict-YAML check accepts it.
+  "run /doctor"); they became `/spec-init`, `/spec-status`, `/spec-doctor`, `/spec-commit` in v1.11 — and the umbrella commands
+  of 1.26 keep the prefix (`/spec-setup`, `/spec-review`: `/review` is a built-in too).
+- **22 commands, 2 of them model-invocable (1.26 — the context diet).** Claude Code lists every model-invocable skill and
+  command with its description under ONE budget shared by every installed plugin (1 % of the context window; on overflow
+  descriptions are dropped, least-used first): 1.24 cut the 55 descriptions from 11,013 characters to 5,530 and a real session
+  still listed 15 dev-spec commands with no description. 1.26 folds the 55 into 22 (the phase commands into `/spec`, the rest
+  into umbrella commands with subcommands — extending.md → The 1.26 command set) and sets `disable-model-invocation: true` on
+  every command but `/spec` and `/spec-bugfix`: documented for command files (code.claude.com/docs/en/skills — the same front
+  matter as skills, except `name` / `paths`), a user-only command's description leaves the model's context entirely, the
+  user still types it, and Claude can't run it on its own (nor preload it into a subagent). The model-visible listing is those
+  two descriptions + the skill's: 776 characters (5,718 before: 46 commands' 4,707 + the skill's 1,011); mcp/tests/10-guards-review6.js holds it ≤ 1,500, each
+  description ≤ 125 characters, one English line (the multilingual triggers live in SKILL.md's description). The model reaches
+  the rest through the skill and the MCP tools, so a model-invocable command never tells it to RUN a user-only one
+  (17-docs-review7: "record it with `spec_approve`", never "with /approve"). The prompts loader (prompts-resources.js
+  `parseFrontMatter`) reads and ignores the key; the D4 strict-YAML check accepts it. The MCP prompts serve every command.
+- **Lean bodies.** A command routes (its subcommands), names the ONE tool call (or CLI line) per subcommand with the current
+  tool names, and states the few rules that matter (show the verdict, approvals are the user's, evidence before claims); the
+  catalogues — check ids, result keys, flag lists — live in the tool results and `references/` (named by the full
+  `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/<file>.md` path: an MCP prompt resolves it too; 17-docs P9 fails a bare
+  `references/…` in a command). Only the commands that need the workflow (`/spec`, `/spec-bugfix`, `/executeTask`,
+  `/spec-review`, `/spec-tour`) say "use the dev-spec-driven skill"; the self-contained ones (status, doctor, report, setup,
+  roadmap…) don't pull SKILL.md in.
+- **`allowed-tools` on the read-only commands.** `/spec-status` and `/dss` (`spec_status`, `spec_next_action`), `/spec-doctor`
+  (`spec_doctor`), `/roadmap` (`spec_roadmap` — it writes only the generated ROADMAP files) and `/spec-report` (`spec_drift`,
+  `spec_metrics`) grant their tools for the turn that invokes them, by their plugin names
+  (`mcp__plugin_dev-spec-driven_spec-driven__<tool>`, comma-separated). `claude plugin validate` passes (2.1.292 does not parse a
+  command's front matter at all — a deliberately broken probe passed too).
 - **The aliases follow the full command (1.24 review 6, C-I9).** `/ds`, `/dss`, `/dsx` read and follow
   `${CLAUDE_PLUGIN_ROOT}/commands/<spec | spec-status | executeTask>.md` with their arguments — Claude Code substitutes the
   variable anywhere in a command's body (plugins reference → Environment variables), and `getPrompt()` does for an MCP client — so

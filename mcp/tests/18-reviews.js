@@ -15,17 +15,20 @@ exports.run = async ({ ok, all, remeasure, rpc, rawOnce, payload, S, root, tmp, 
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
 
     // C4.1 — /spec-tour: a thin command, a short EN description (1.24 review 6: no PT / ES tail — Claude Code's skill-listing budget;
-    // the user types it: disable-model-invocation), every gate named, never auto-approves, keep/archive/remove.
+    // the user types it: disable-model-invocation), every gate named, never auto-approves, keep/archive/remove. 1.26: the fast path
+    // is a size-xs change (one change.md, ONE plan approval) and spec_create gets the size the user confirmed — without `size` it
+    // scaffolded the full chain and its four approvals.
     const PRc4 = require("./lib/prompts-resources.js");
     const tourMd = fs.readFileSync(path.join(root, "commands", "spec-tour.md"), "utf8");
     const tourFm = PRc4.parseFrontMatter(tourMd).data;
     const tourGet = PRc4.getPrompt("spec-tour", "add a length check to the signup name", { lang: "en" });
-    all("C4.1 /spec-tour: a short EN description (no PT / ES tail), user-invoked only, scan → classify → 1–2 EARS → design → 2 tasks with real _Verify:_ → approvals only on the user's yes → one task with evidence → next_action → finish → keep/archive/remove (confirm); no PR/CI wording; served as a prompt", [
+    all("C4.1 /spec-tour: a short EN description (no PT / ES tail), user-invoked only, scan → classify and size (xs: change.md, spec_create gets the size) → 1–2 EARS → 2 tasks with real _Verify:_ → one plan approval only on the user's yes → one task with evidence → next_action → finish → keep/archive/remove (confirm); no PR/CI wording; served as a prompt", [
       () => /10-minute tour/.test(tourFm.description), () => !/ PT - | ES - /.test(tourFm.description), () => tourFm.description.length <= 150,
       () => tourFm["disable-model-invocation"] === "true", () => tourFm["argument-hint"],
       () => ["spec_scan", "spec_classify", "spec_init", "spec_create", "ears_validate", "spec_doctor", "spec_approve", "spec_complete_task", "spec_next_action", "spec_finish", "spec_feature"].every((t) => tourMd.includes("`" + t)),
       () => /1–2 EARS criteria/.test(tourMd), () => /exactly \*\*2 tasks\*\*/.test(tourMd), () => /real\*\*\s+`_Verify: <command>_`/.test(tourMd),
-      () => /each only after the user says yes\*\*; never approve on their behalf/.test(tourMd),
+      () => /only after the\s+user says yes\*\*; never approve on their behalf/.test(tourMd), () => /size \*\*xs\*\*/.test(tourMd),
+      () => /`spec_create \{name, size, summary, lang\}` once — with the size the user confirmed/.test(tourMd), () => /`spec_approve \{name, through: "tasks"\}`/.test(tourMd),
       () => /evidence: \{command, exitCode, summary\}/.test(tourMd), () => /confirm: true` only after the user\s+confirms/.test(tourMd),
       () => /action: "archive"/.test(tourMd), () => /in the user's language/.test(tourMd), () => !/\b(?:PRs?|pull requests?|CI)\b/.test(tourMd),
       () => tourGet.ok,

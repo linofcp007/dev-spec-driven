@@ -21,20 +21,21 @@ exports.run = async ({ ok, S, root, tmp, list }) => {
     [path.join(".github", "copilot-instructions.md"), "copilot"], ["GEMINI.md", "gemini"]];
 
   { // 1.24 r6 H1: pt-BR is reachable through the documented flow — SKILL.md names the four codes (spec_classify's lang never
-    // says pt-BR: the agent picks it from the user's wording), /spec-init and /roadmap offer --lang en|pt|pt-BR|es
+    // says pt-BR: the agent picks it from the user's wording), /spec-setup init (/spec-init until 1.26) and /roadmap offer --lang en|pt|pt-BR|es
     const langSkill = (skill.split("## Language")[1] || "").split("## Core Principles")[0];
-    const init = rd("commands", "spec-init.md"), roadmap = rd("commands", "roadmap.md");
+    const init = rd("commands", "spec-setup.md"), roadmap = rd("commands", "roadmap.md");
     const hint = (t) => (t.match(/^argument-hint: .*$/m) || [""])[0];
     ok(["`en`", "`pt`", "`pt-BR`", "`es`"].every((c) => langSkill.includes(c)) && /Brazilian/.test(langSkill) && /pick `pt-BR` from the user's wording/.test(langSkill) &&
       /--lang en\|pt\|pt-BR\|es/.test(hint(init)) && /dev-spec init [^`]*--lang en\|pt\|pt-BR\|es/.test(ws(init)) && !/--lang pt\]/.test(init) &&
       /--lang en\|pt\|pt-BR\|es/.test(hint(roadmap)) && !/--lang pt\|es\|en/.test(roadmap),
-      "1.24 r6 H1: SKILL.md's Language section names en / pt / pt-BR / es (Brazilian picked from the user's wording); /spec-init's hint and CLI line and /roadmap's offer --lang en|pt|pt-BR|es (got " +
+      "1.24 r6 H1: SKILL.md's Language section names en / pt / pt-BR / es (Brazilian picked from the user's wording); /spec-setup's hint and init CLI line and /roadmap's offer --lang en|pt|pt-BR|es (got " +
       js(langSkill.slice(0, 160)) + ")");
   }
 
   { // 1.24 r6 H2: Phase 0 passes the size the user confirmed; only m / l (or no size) seed classification.md — s / xs have no
-    // classification gate (the documented "approve classification" failed on them: nothing to approve)
-    const cls = ws(rd("commands", "classify.md")), agents = ws(rd("AGENTS.md"));
+    // classification gate (the documented "approve classification" failed on them: nothing to approve). 1.26: /classify is /spec's
+    // Phase 0.
+    const cls = ws(rd("commands", "spec.md")), agents = ws(rd("AGENTS.md"));
     const step4 = (skill.split("4. **After Phase 0 approval:**")[1] || "").split("Worked examples:")[0];
     const step0 = (agents.split("0. **Classify**")[1] || "").split("1. **Requirements**")[0];
     const p = path.join(tmp, "proj-r6-h2");
@@ -43,13 +44,13 @@ exports.run = async ({ ok, S, root, tmp, list }) => {
       const c = S.createFeature(p, "Sized " + size, ["core"], "x", undefined, "en", undefined, { size });
       return [size, c.ok === true, c.ok && fs.existsSync(path.join(c.dir, "classification.md")), c.ok && S.approvePhase(p, c.slug, "classification", "t").ok === true];
     });
-    const docs = [["classify.md", cls], ["SKILL.md step 4", step4], ["AGENTS.md step 0", step0]];
+    const docs = [["spec.md", cls], ["SKILL.md step 4", step4], ["AGENTS.md step 0", step0]];
     const bad = docs.filter(([, t]) => !(/\bm \/ l\b/.test(t) && /\bs\b[^.]*\bxs\b|\bs \/ xs\b|\bs or xs\b/.test(t) && /no `?classification\.md`?/.test(t) &&
       /(?:requirements\.md|`requirements\.md`)[^.]*(?:change\.md|`change\.md`)/.test(t))).map(([f]) => f);
     ok(!bad.length && /spec_create \{name, tracks, summary, size, lang\}/.test(cls) && /spec_create \{name, tracks, size, lang\}/.test(step4) &&
       /dev-spec create "<name>" <tracks> --size <xs\|s\|m\|l> --lang <xx>/.test(step0) &&
       sized.every(([, created]) => created) && sized[0][2] === false && sized[1][2] === false && sized[2][2] === true && sized[0][3] === false && sized[1][3] === false,
-      "1.24 r6 H2: /classify, SKILL.md step 4 and AGENTS.md step 0 pass the size to spec_create / create; classification.md (and its approval) only at m / l — s / xs record Phase 0 in requirements.md's / change.md's Summary — as the engine scaffolds (bad: " +
+      "1.24 r6 H2: /spec's Phase 0, SKILL.md step 4 and AGENTS.md step 0 pass the size to spec_create / create; classification.md (and its approval) only at m / l — s / xs record Phase 0 in requirements.md's / change.md's Summary — as the engine scaffolds (bad: " +
       js(bad) + ", engine " + js(sized) + ")");
   }
 
