@@ -346,7 +346,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
     const hooksCfg16 = JSON.parse(cRead(path.join(root, "hooks", "hooks.json"))).hooks;
     // (1.25.1: exec form — `node` + the script as its one argument)
     const planCfg = (hooksCfg16.PostToolUse || []).find((e) => e.hooks.some((h) => /plan-hook\.js/.test((h.args || []).join(" ")))) || {};
-    ok(hp.every((h) => h.status === 0) && /\/spec-import — spec_import \{tool: "plan", text: <the approved plan's markdown>\}/.test(ctx(hpj[0])) && Object.keys(hpj[0]).join() === "hookSpecificOutput" &&
+    ok(hp.every((h) => h.status === 0) && /\/spec-adopt import — spec_import \{tool: "plan", text: <the approved plan's markdown>\}/.test(ctx(hpj[0])) && Object.keys(hpj[0]).join() === "hookSpecificOutput" &&
       /spec_import \{tool: "plan", path: "docs\/plan\.md"\}/.test(ctx(hpj[1])) && /o utilizador aprovou este plano/.test(ctx(hpj[2])) &&
       hp.slice(3, 7).every((h) => h.stdout === "") && /spec_import/.test(ctx(hpj[7])) &&
       planCfg.matcher === "ExitPlanMode" && planCfg.hooks[0].command === "node" && JSON.stringify(planCfg.hooks[0].args) === JSON.stringify(["${CLAUDE_PLUGIN_ROOT}/hooks/plan-hook.js"]) && planCfg.hooks[0].timeout === 10 &&

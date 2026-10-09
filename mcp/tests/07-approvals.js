@@ -220,13 +220,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const stA = state3(fA);
     const mA = S.metrics(pFF, fA.slug);
     ok(nA.step === "approve" && nA.fastForward && nA.fastForward.phases.join() === "classification,requirements,design,tasks" && nA.fastForward.through === "tasks" && nA.fastForward.role === null &&
-      /fast-forward: \/spec-ff quick-spec \(CLI: node "[^"]*dev-spec\.js" approve quick-spec --through tasks\) approves classification, requirements, design, tasks in order, each through its own gate\./.test(nA.recommendation) &&
+      /fast-forward: \/approve quick-spec --through tasks \(CLI: node "[^"]*dev-spec\.js" approve quick-spec --through tasks\) approves classification, requirements, design, tasks in order, each through its own gate\./.test(nA.recommendation) &&
       ffA.ok && ffA.complete === true && ffA.approved.join() === "classification,requirements,design,tasks" && ffA.batch === true && ffA.steps.every((s) => s.approved) &&
       ffA.message === "Fast-forward 'quick-spec': approved classification, requirements, design, tasks, in order, each through its own gate — every phase through 'tasks' is approved." &&
       ["classification", "requirements", "design", "tasks"].every((ph) => stA.approvals[ph].batch === true && stA.approvals[ph].by === "ana") &&
       stA.approvalHistory.filter((h) => h.batch === true && typeof h.snapshot === "string").length === 4 &&
       mA.batchApprovals === 4 && S.metricsLines(mA).includes("  batch approvals (fast-forward): 4") && S.nextAction(pFF, fA.slug).step === "implement",
-      "B3: next_action names the fast-forward (/spec-ff + the CLI) when every planning artifact through tasks is filled and passes its gate; spec_approve {through: 'tasks'} approves them in order — each snapshotted, recorded batch: true, counted apart by metrics (got " + nA.recommendation + ")");
+      "B3: next_action names the fast-forward (/approve --through — /spec-ff until 1.26 — + the CLI) when every planning artifact through tasks is filled and passes its gate; spec_approve {through: 'tasks'} approves them in order — each snapshotted, recorded batch: true, counted apart by metrics (got " + nA.recommendation + ")");
     const ffAgain = S.approvePhase(pFF, fA.slug, undefined, "ana", { through: "tasks" });
     ok(ffAgain.ok && ffAgain.nothingToDo && ffAgain.approved.length === 0 && /^Nothing to fast-forward: every active phase of 'quick-spec' through 'tasks' is already approved\.$/.test(ffAgain.message),
       "B3: a second fast-forward has nothing to do and says so");
@@ -275,7 +275,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const stC = state3(fC);
     ok(!nC0.fastForward && ffC1.ok === false && ffC1.stopReason === "role" && ffC1.stoppedAt === "design" && ffC1.approved.join() === "classification,requirements" &&
       /'product' is not a role that signs off 'design'/.test(ffC1.error) && stC.approvals.requirements.roles.product.by === "paula" &&
-      nC1.fastForward && nC1.fastForward.role === "tech" && nC1.fastForward.phases.join() === "design,tasks" && /\/spec-ff roles-ff --role tech \(CLI: node "[^"]*dev-spec\.js" approve roles-ff --through tasks --role tech\)/.test(nC1.recommendation) &&
+      nC1.fastForward && nC1.fastForward.role === "tech" && nC1.fastForward.phases.join() === "design,tasks" && /\/approve roles-ff --through tasks --role tech \(CLI: node "[^"]*dev-spec\.js" approve roles-ff --through tasks --role tech\)/.test(nC1.recommendation) &&
       ffC2.ok && ffC2.complete && ffC2.approved.join() === "design,tasks" && Object.keys(stC.approvals.design.roles).sort().join() === "security,tech" &&
       stC.approvals.design.batch === true && stC.approvals.tasks.roles.tech.batch === true,
       "B3: fast-forward with roles — the given role signs each phase; a phase that role doesn't sign stops it (role, nothing recorded there); next_action suggests it with --role when one role is all each remaining phase waits for (got " + nC1.recommendation + ")");

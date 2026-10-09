@@ -359,7 +359,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const naD10 = S.nextAction(w10d, "login-loop");
     ok(naD10.step === "drift" && naD10.drift.drifted && naD10.drift.changed.join() === "src/auth.js" && naD10.drift.missing.join() === "src/lib/x.js" && naD10.drift.nowPresent.join() === "src/new.js" &&
       /^'login-loop' was finished on \d{4}-\d\d-\d\d, but 3 of 5 implementing file\(s\) changed since: src\/auth\.js, src\/lib\/x\.js, src\/new\.js \(node "[^"]*dev-spec\.js" drift login-loop\)\. Decide: /.test(naD10.recommendation) &&
-      /\/spec-impact login-loop/.test(naD10.recommendation) && /re-run \/spec-finish login-loop for a fresh baseline/.test(naD10.recommendation) &&
+      /\/spec-change login-loop impact/.test(naD10.recommendation) && /re-run \/spec-finish login-loop for a fresh baseline/.test(naD10.recommendation) &&
       /mudaram desde então/.test(S.msg("pt").next.drifted("x", "2026-01-01", 1, 2, "a.js")) && /cambiaron desde entonces/.test(S.msg("es").next.drifted("x", "2026-01-01", 1, 2, "a.js")),
       "next_action on a finished feature whose implementing files drifted: step 'drift' with the files and the decision (spec wrong → spec_impact, code wrong → fix, harmless → re-finish); PT/ES localized");
     ok(/ {2}⚠ login-loop: 3 implementing file\(s\) changed since finish — run node \\?"[^"]*dev-spec\.js\\?" drift login-loop/.test(hook10(w10d)) /* the hook's JSON escapes the quotes */ &&
@@ -383,7 +383,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const naE10 = S.nextAction(w10d, "login-loop");
     ok(fin2.baseline.replaced && fin2.baseline.replaced.changed.join() === "src/auth.js" && fin2.baseline.replaced.missing.join() === "src/lib/x.js" &&
       fin2.baseline.replaced.nowPresent.join() === "src/new.js" && /^\d{4}-/.test(fin2.baseline.replaced.at) && S.finishFeature(w10d, "login-loop", { write: true }).baseline.replaced === undefined &&
-      apEx10.ok && naE10.step === "finished" && /Nothing left to do here — \/spec-drift login-loop checks it after later changes\.$/.test(naE10.recommendation),
+      apEx10.ok && naE10.step === "finished" && /Nothing left to do here — \/spec-report drift login-loop checks it after later changes\.$/.test(naE10.recommendation),
       "a re-finish over a drifted baseline returns baseline.replaced {at, changed, missing, nowPresent} (a clean re-finish none); after the execution sign-off next_action says nothing is left");
     // An unreadable state is an error, never "clean".
     const draftSt = path.join(w10d, ".specs", "draft", ".state.json");
@@ -1303,7 +1303,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const docGo = S.specDoctor(d6, "cache-spike");
     ok(spBare.ok && naQ.step === "fill" && naQ.file === "spike.md" && /Write the question this spike answers/.test(naQ.recommendation) && S.detectPhase(spBare.dir, ["core"]) === "requirements" &&
       naT.step === "implement" && /^Investigate — task #1: Sharpen the question/.test(naT.recommendation) &&
-      naD.step === "decide" && naD.phase === "executing" && phD === "executing" && /Record the decision in spike\.md → Decision/.test(naD.recommendation) && /\/spec-decide cache-spike/.test(naD.recommendation) &&
+      naD.step === "decide" && naD.phase === "executing" && phD === "executing" && /Record the decision in spike\.md → Decision/.test(naD.recommendation) && /\/spec-change cache-spike decide/.test(naD.recommendation) &&
       naO.step === "decide" && /State the outcome/.test(naO.recommendation) && c2Chk(docO, "decision").status === "warn" &&
       naGo.step === "promote" && naGo.outcome === "go" && naGo.phase === "complete" && naGo.seed.name === "cache" &&
       naGo.seed.summary === "Can Redis hold the sessions under 5 ms p95? — Redis held 2 ms p95 under a 5k rps load run." &&

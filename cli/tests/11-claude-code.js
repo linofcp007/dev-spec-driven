@@ -236,7 +236,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     ok(r.follows === true && !/["$`%!\\]/.test(L) && viaShell.status === 0 && viaShell.stdout === "v1.10.0 statusline dev-spec.js" &&
       (!viaBash || (viaBash.status === 0 && viaBash.stdout === "v1.10.0 statusline dev-spec.js")) &&
       plain.follows === false && /^node ".*a clone\/cli\/dev-spec\.js" statusline$/.test(plain.command) && odd.follows === false &&
-      ["en", "pt", "es"].every((l) => /spec-statusline/.test(S16.msg(l).claudeCode.statusLine.config.cacheFollows)),
+      ["en", "pt", "es"].every((l) => /\/spec-setup statusline/.test(S16.msg(l).claudeCode.statusLine.config.cacheFollows)),
       "1.25.1 r7: statusline --print-config in a versioned plugin folder prints a command that runs the NEWEST installed version (1.10.0 over 1.2.0, numeric parts) even after the printed one is removed — the platform shell" +
       (viaBash ? " and bash" : " (bash: skipped)") + " alike; a clone (or a path holding $ % ! \" `) keeps the plain command (got " +
       js([r.follows, viaShell.status, viaShell.stdout, viaShell.stderr.slice(0, 200), viaBash && viaBash.stdout, plain.command]) + ")");

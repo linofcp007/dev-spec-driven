@@ -1064,7 +1064,7 @@ funciona de extremo a extremo. Mantenlo concreto; cualquiera debería poder segu
 // ===========================================================================
 const steering = {
     "constitution.md":
-      "# Constitución\n\nPrincipios innegociables que toda función debe cumplir. Mantenlos pocos, concretos y testeables.\nEl `doctor` y el `/prReview` verifican contra ellos; un diseño que viole un principio se bloquea.\n\n## Principios\n1. [p.ej., Toda escritura es idempotente o explícitamente justificada.]\n2. [p.ej., Sin PII en los logs; los IDs de usuario se pseudonimizan.]\n3. [p.ej., Sin cambio de API con ruptura sin una ruta de migración versionada.]\n4. [p.ej., Los errores fallan cerrados (denegar) en la ruta de seguridad.]\n5. [p.ej., Buscar antes de escribir: extender un módulo existente antes de crear uno nuevo.]\n\n## Restricciones\n- [Restricciones técnicas/regulatorias rígidas que limitan todos los diseños.]\n\n## Reglas de Decisión\n- [Cómo desempatar — p.ej., 'preferir lo aburrido/probado a lo ingenioso'.]\n",
+      "# Constitución\n\nPrincipios innegociables que toda función debe cumplir. Mantenlos pocos, concretos y testeables.\nEl `doctor` y el `/spec-review` verifican contra ellos; un diseño que viole un principio se bloquea.\n\n## Principios\n1. [p.ej., Toda escritura es idempotente o explícitamente justificada.]\n2. [p.ej., Sin PII en los logs; los IDs de usuario se pseudonimizan.]\n3. [p.ej., Sin cambio de API con ruptura sin una ruta de migración versionada.]\n4. [p.ej., Los errores fallan cerrados (denegar) en la ruta de seguridad.]\n5. [p.ej., Buscar antes de escribir: extender un módulo existente antes de crear uno nuevo.]\n\n## Restricciones\n- [Restricciones técnicas/regulatorias rígidas que limitan todos los diseños.]\n\n## Reglas de Decisión\n- [Cómo desempatar — p.ej., 'preferir lo aburrido/probado a lo ingenioso'.]\n",
     "product.md":
       "# Producto\n\n## Visión\n[Una frase: ¿qué es este producto y para quién es?]\n\n## Usuarios Objetivo\n- Primario: [¿quién usa esto a diario?]\n- Secundario: [¿quién más lo toca?]\n\n## Métricas de Éxito\n- [métrica específica a 6 meses]\n\n## No-objetivos\n- [lo que esto explícitamente NO es]\n\n## Modelo de Negocio\n[cómo genera ingresos]\n",
     "tech.md":
@@ -1189,9 +1189,9 @@ const msg = {
       noGate: (phase, slug) => `'${slug}' es un cambio: sus únicas aprobaciones son el plan (fase tasks — change.md) y el cierre de la ejecución — no hay fase ${phase} que aprobar.`,
       scope: (acs, tasks, maxAcs, maxTasks, extra) => `un cambio es XS — 1–${maxAcs} criterios de aceptación y 1–${maxTasks} tareas, solo core; change.md tiene ${acs} criterios y ${tasks} tarea(s)${extra ? ` y el/los track(s) ${extra}` : ""} — créalo como función de tamaño s (spec_create {size: "s"}) y archiva este cambio`,
       scopeOk: (acs, tasks) => `XS: ${acs} criterios, ${tasks} tarea(s)`,
-      approvePlan: (slug) => `Revisa y aprueba el plan (change.md: sus criterios, el enfoque y las tareas) — spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug}).`,
-      planFastForward: (slug, size, list) => `Tamaño ${size}: rellena primero el plan entero — ${list} — y luego apruébalo en una sola llamada: spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug}; CLI: ${DEV_SPEC} approve ${slug} --through tasks). El gate de cada fase se sigue ejecutando, en orden; el primero que rechaza lo detiene y dice por qué.`,
-      planFastForwardTests: (slug, size, list, through, what) => `Tamaño ${size}: rellena primero el plan entero — ${list} — y luego apruébalo hasta ${through} en una sola llamada: spec_approve {name: "${slug}", through: "${through}"} (/spec-ff ${slug} ${through}; CLI: ${DEV_SPEC} approve ${slug} --through ${through}). El gate de cada fase se sigue ejecutando, en orden. Después la Fase 4, cuyo gate necesita trabajo que llega después del plan: ${({ tdd: "escribe las pruebas que fallan", ai: "escribe el harness de evals y los conjuntos de evaluación propios de la función", both: "escribe las pruebas que fallan y los conjuntos de evaluación propios de la función" })[what] || "escribe las pruebas que fallan"} (/writeTests ${slug}), aprueba las pruebas (/approve ${slug} tests) y luego las tareas (/approve ${slug} tasks).`,
+      approvePlan: (slug) => `Revisa y aprueba el plan (change.md: sus criterios, el enfoque y las tareas) — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks).`,
+      planFastForward: (slug, size, list) => `Tamaño ${size}: rellena primero el plan entero — ${list} — y luego apruébalo en una sola llamada: spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks; CLI: ${DEV_SPEC} approve ${slug} --through tasks). El gate de cada fase se sigue ejecutando, en orden; el primero que rechaza lo detiene y dice por qué.`,
+      planFastForwardTests: (slug, size, list, through, what) => `Tamaño ${size}: rellena primero el plan entero — ${list} — y luego apruébalo hasta ${through} en una sola llamada: spec_approve {name: "${slug}", through: "${through}"} (/approve ${slug} --through ${through}; CLI: ${DEV_SPEC} approve ${slug} --through ${through}). El gate de cada fase se sigue ejecutando, en orden. Después la Fase 4, cuyo gate necesita trabajo que llega después del plan: ${({ tdd: "escribe las pruebas que fallan", ai: "escribe el harness de evals y los conjuntos de evaluación propios de la función", both: "escribe las pruebas que fallan y los conjuntos de evaluación propios de la función" })[what] || "escribe las pruebas que fallan"} (/spec ${slug} tests), aprueba las pruebas (/approve ${slug} tests) y luego las tareas (/approve ${slug} tasks).`,
       templateApproved: (list) => `solo la orientación de la plantilla en: ${list} — el diseño se aprobó antes de la regla más estricta de 1.21, así que es un aviso; su próxima aprobación pide ahí texto propio (o una línea "n/a — <por qué no aplica>")`,
       sectionsPassSized: (filled, covered, optional) => `rellenadas: ${filled}` + (covered ? ` · cubiertas por la sección de otro track: ${covered}` : "") + (optional ? ` · opcionales en este tamaño, omitidas: ${optional}` : ""),
       extendedComment: (marker, names) => `Tamaño s: las demás secciones ${marker} — ${names} — son opcionales en este tamaño. Añade una cuando aplique (entonces debe rellenarse), o respóndela en una línea: "n/a — <por qué no aplica>".`,
@@ -1381,14 +1381,14 @@ const msg = {
       approveTestPlan: (slug) => `Revisa y aprueba el plan de pruebas — /approve ${slug} test-plan.`,
       approveEvalPlan: (slug) => `Revisa y aprueba el plan de evals — /approve ${slug} eval-plan.`,
       approveBugDesign: (slug) => `Revisa y aprueba bug.md (Reproducción + Causa Raíz — el diseño de un bugfix) — /approve ${slug} design.`,
-      signOffTests: (slug, what) => `Aprobación de la Fase 4: la implementación ya empezó, así que las pruebas ya no se escriben primero — ${({ tdd: "comprueba que cada prueba planificada existe con su T-ID en el nombre de la prueba (test(\"T-01 …\")) para que tests-in-code la encuentre", ai: `comprueba que el conjunto de evals es el de la propia función y registra la línea base (/eval ${slug} --set-baseline)`, both: `comprueba que cada prueba planificada existe con su T-ID en el nombre de la prueba (test("T-01 …")) y que el conjunto de evals es el de la propia función, y registra la línea base (/eval ${slug} --set-baseline)` })[what]}. Después apruébalo — /approve ${slug} tests.`,
-      approveTests: (slug, what) => `Fase 4, el gate estricto: ${({ tdd: "escribe todas las pruebas planificadas y confirma que cada una falla por la razón correcta", ai: "escribe las pruebas deterministas y el harness de evals, y registra la línea base", both: "escribe todas las pruebas planificadas (cada una fallando por la razón correcta) y el harness de evals, y registra la línea base" })[what]} — /writeTests ${slug}; ningún código de implementación antes. Después apruébalo — /approve ${slug} tests.`,
+      signOffTests: (slug, what) => `Aprobación de la Fase 4: la implementación ya empezó, así que las pruebas ya no se escriben primero — ${({ tdd: "comprueba que cada prueba planificada existe con su T-ID en el nombre de la prueba (test(\"T-01 …\")) para que tests-in-code la encuentre", ai: `comprueba que el conjunto de evals es el de la propia función y registra la línea base (/eval ${slug} baseline)`, both: `comprueba que cada prueba planificada existe con su T-ID en el nombre de la prueba (test("T-01 …")) y que el conjunto de evals es el de la propia función, y registra la línea base (/eval ${slug} baseline)` })[what]}. Después apruébalo — /approve ${slug} tests.`,
+      approveTests: (slug, what) => `Fase 4, el gate estricto: ${({ tdd: "escribe todas las pruebas planificadas y confirma que cada una falla por la razón correcta", ai: "escribe las pruebas deterministas y el harness de evals, y registra la línea base", both: "escribe todas las pruebas planificadas (cada una fallando por la razón correcta) y el harness de evals, y registra la línea base" })[what]} — /spec ${slug} tests; ningún código de implementación antes. Después apruébalo — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implementa la tarea #${n}: ${text} — /executeTask ${slug}.`,
-      allDone: (slug) => `Todas las tareas hechas — cierra la función con /spec-finish ${slug} (spec_finish): informe de preparación + resumen del merge. Opcional, antes: /spec-simplify ${slug} — una limpieza del código de la propia función sin cambiar el comportamiento, probada por sus pruebas.`,
-      breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /createTask ${slug}.`,
-      drifted: (slug, day, n, total, files) => `'${slug}' se cerró el ${day}, pero ${n} de ${total} fichero(s) de implementación cambiaron desde entonces: ${files} (${DEV_SPEC} drift ${slug}). Decide: la spec ahora es incorrecta → /spec-impact ${slug} (o una función nueva con _Supersedes:_); el código es incorrecto → corrígelo (/spec-bugfix); inofensivo → vuelve a ejecutar /spec-finish ${slug} para una línea base nueva.`,
+      allDone: (slug) => `Todas las tareas hechas — cierra la función con /spec-finish ${slug} (spec_finish): informe de preparación + resumen del merge. Opcional, antes: /spec-review ${slug} simplify — una limpieza del código de la propia función sin cambiar el comportamiento, probada por sus pruebas.`,
+      breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /spec ${slug} tasks.`,
+      drifted: (slug, day, n, total, files) => `'${slug}' se cerró el ${day}, pero ${n} de ${total} fichero(s) de implementación cambiaron desde entonces: ${files} (${DEV_SPEC} drift ${slug}). Decide: la spec ahora es incorrecta → /spec-change ${slug} impact (o una función nueva con _Supersedes:_); el código es incorrecto → corrígelo (/spec-bugfix); inofensivo → vuelve a ejecutar /spec-finish ${slug} para una línea base nueva.`,
       finished: (slug, day, total, signOff) => `'${slug}' está cerrada (${day}) — sus ${total} fichero(s) de implementación no han cambiado desde entonces.` +
-        (!signOff ? ` Nada más que hacer aquí — /spec-drift ${slug} la comprueba tras cambios futuros.`
+        (!signOff ? ` Nada más que hacer aquí — /spec-report drift ${slug} la comprueba tras cambios futuros.`
           : signOff.why ? ` La aprobación final (execution, ${signOff.at}) es anterior a ${signOff.why} — vuelve a confirmarla: /approve ${slug} execution${signOff.role ? " --role " + signOff.role : ""}.`
             : ` Falta la aprobación final${signOff.missing ? ` — ${signOff.missing}${signOff.signed ? ` (ya validaron: ${signOff.signed})` : ""}` : ""}: /approve ${slug} execution${signOff.role ? " --role " + signOff.role : ""}.`),
       verifySuite: (slug, list) => `'${slug}' está cerrada, pero sus verificaciones del proyecto no tienen una ejecución correcta desde la última actividad en las tareas: ${list} — /spec-finish se niega y el gate de fin de turno devuelve un "hecho" hasta que pasen. Ejecútalas y registra las ejecuciones: ${DEV_SPEC} finish ${slug} --run (o spec_finish {evidence: [{name, command, exitCode}]}).`,
@@ -1762,14 +1762,14 @@ const msg = {
       fillEmpty: "no tiene contenido además de los títulos",
       fillPlaceholders: (n, first) => `${n} placeholder(s) de la plantilla sin rellenar (primero: ${first})`,
       fillHint: {
-        "classification.md": (slug) => `confirma los tracks y escribe el radio de impacto y las etiquetas de cumplimiento (/classify ${slug}), luego /approve ${slug} classification`,
+        "classification.md": (slug) => `confirma los tracks y escribe el radio de impacto y las etiquetas de cumplimiento (/spec ${slug}), luego /approve ${slug} classification`,
         "requirements.md": (slug) => `compruébalo con /clarify ${slug} y ears_validate (${DEV_SPEC} ears ${slug})`,
         "bug.md": (slug) => `escribe la Reproducción y la Causa Raíz con evidencia (/spec-doctor ${slug})`,
         "design.md": (slug) => `ejecuta /spec-doctor ${slug} (secciones obligatorias, Verificación de la Constitución)`,
         "test-plan.md": (slug) => `comprueba la cobertura de los ACs con trace_check (${DEV_SPEC} trace ${slug})`,
         "eval-plan.md": (slug) => `define los umbrales y la baseline, luego /spec-doctor ${slug}`,
-        "tasks.md": (slug) => `desglosa el diseño en tareas reales (/createTask ${slug}), luego trace_check`,
-        "change.md": (slug) => `escribe el resumen, 1–3 criterios EARS, el enfoque y 1–3 tareas, cada una con un comando _Verify:_, y luego aprueba el plan en una sola llamada — spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug})`,
+        "tasks.md": (slug) => `desglosa el diseño en tareas reales (/spec ${slug} tasks), luego trace_check`,
+        "change.md": (slug) => `escribe el resumen, 1–3 criterios EARS, el enfoque y 1–3 tareas, cada una con un comando _Verify:_, y luego aprueba el plan en una sola llamada — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks)`,
         default: (slug) => `/spec-doctor ${slug}`,
       },
       approveClassification: (slug) => `Confirma y aprueba la clasificación — /approve ${slug} classification.`,
@@ -2325,7 +2325,7 @@ const msg = {
         intro: (from, to) => `.specs/ actualizado de ${from || "un dev-spec anterior a la 1.13"} a ${to || "?"}. Por función: lo que señalan las reglas de la ${to || "?"}, qué hacer y qué revisión ejecutar. Trabájalo con /spec-upgrade (Claude Code) o dev-spec upgrade; vuelve a ejecutar la auditoría cuando quieras para ver el estado actual.`,
         migrations: "Migraciones",
         group: { blocked: "⛔ Bloqueadas — el doctor falla", attention: "▲ Necesitan atención", ok: "✓ OK" },
-        footer: "Todo cambio pasa por los gates normales: nuevas aprobaciones con spec_approve (/approve), ediciones de la spec tras una aprobación con spec_impact (/spec-impact), trabajo de seguimiento con spec_append_tasks (/spec-converge). Nada de esto se aplica automáticamente.",
+        footer: "Todo cambio pasa por los gates normales: nuevas aprobaciones con spec_approve (/approve), ediciones de la spec tras una aprobación con spec_impact (/spec-change <función> impact), trabajo de seguimiento con spec_append_tasks (/spec-review <función> converge). Nada de esto se aplica automáticamente.",
       },
     },
 
@@ -2390,14 +2390,14 @@ const msg = {
         config: {
           head: "Status line — añade esto a ~/.claude/settings.json (todos los proyectos) o al .claude/settings.local.json de un proyecto (solo en esta máquina — la ruta es de esta máquina, así que nunca en el .claude/settings.json versionado):",
           after: "Muestra una línea — la función más activa, sus tareas, las tareas sin verificar y el siguiente paso — y nada fuera de un proyecto dev-spec.",
-          cacheNote: "Esta ruta es una copia con versión en la caché de plugins de Claude Code (…/plugins/cache/…): tras actualizar el plugin, vuelve a ejecutar /spec-statusline — la copia antigua se borra 14 días después de una actualización.",
-          cacheFollows: "Este CLI es una copia con versión en la caché de plugins de Claude Code (…/plugins/cache/…): el comando busca la versión instalada más reciente del plugin en cada ejecución, así que sigue funcionando tras una actualización — no hace falta volver a ejecutar /spec-statusline.",
+          cacheNote: "Esta ruta es una copia con versión en la caché de plugins de Claude Code (…/plugins/cache/…): tras actualizar el plugin, vuelve a ejecutar /spec-setup statusline — la copia antigua se borra 14 días después de una actualización.",
+          cacheFollows: "Este CLI es una copia con versión en la caché de plugins de Claude Code (…/plugins/cache/…): el comando busca la versión instalada más reciente del plugin en cada ejecución, así que sigue funcionando tras una actualización — no hace falta volver a ejecutar /spec-setup statusline.",
           tryIt: (cmd) => `Pruébalo: echo '{"cwd": "<tu proyecto>"}' | ${cmd}`,
         },
       },
       planBridge: {
-        byText: "dev-spec: el usuario aprobó este plan. Para seguirlo como spec (criterios EARS, tareas trazadas, gates de evidencia), propón /spec-import — spec_import {tool: \"plan\", text: <el markdown del plan aprobado>} (CLI: " + DEV_SPEC + " import plan - < plan.md). El fichero del plan en ~/.claude/plans está fuera del proyecto, así que pasa su texto. Para un cambio rápido, omítelo; importa solo con el OK del usuario.",
-        byPath: (rel) => `dev-spec: el usuario aprobó este plan. Para seguirlo como spec (criterios EARS, tareas trazadas, gates de evidencia), propón /spec-import — spec_import {tool: "plan", path: "${rel}"} (CLI: ${DEV_SPEC} import plan ${rel}). Para un cambio rápido, omítelo; importa solo con el OK del usuario.`,
+        byText: "dev-spec: el usuario aprobó este plan. Para seguirlo como spec (criterios EARS, tareas trazadas, gates de evidencia), propón /spec-adopt import — spec_import {tool: \"plan\", text: <el markdown del plan aprobado>} (CLI: " + DEV_SPEC + " import plan - < plan.md). El fichero del plan en ~/.claude/plans está fuera del proyecto, así que pasa su texto. Para un cambio rápido, omítelo; importa solo con el OK del usuario.",
+        byPath: (rel) => `dev-spec: el usuario aprobó este plan. Para seguirlo como spec (criterios EARS, tareas trazadas, gates de evidencia), propón /spec-adopt import — spec_import {tool: "plan", path: "${rel}"} (CLI: ${DEV_SPEC} import plan ${rel}). Para un cambio rápido, omítelo; importa solo con el OK del usuario.`,
       },
       importText: {
         label: "(texto)",
@@ -2875,9 +2875,9 @@ const msg = {
       ffWhyRefused: (ids, lines, slug, phase) => `su gate la rechaza — verificaciones que fallan: ${ids}.\n${lines}\nCorrígelas (detalles: /spec-doctor ${slug}) y vuelve a ejecutar el avance rápido (se reanuda en '${phase}').`,
       ffWhyRoles: (missing) => `validada, pero espera a los demás roles (${missing}) — las fases siguientes no pueden aprobarse antes que ella.`,
       ffWhyRole: (roles, slug, phase, through, given) => (given ? `'${given}' no es un rol que valide '${phase}' (roles: ${roles})` : `'${phase}' se valida por rol (${roles})`) +
-        ` — no se ha registrado nada para '${phase}'. Vuelve a ejecutar el avance rápido con el rol con el que validas: /spec-ff ${slug} --role <rol> (CLI: ${DEV_SPEC} approve ${slug} --through ${through} --role <rol>); se reanuda en '${phase}'.`,
-      ffHint: (slug, list, role) => `Todos los artefactos de planificación hasta las tareas están rellenados y pasan su gate — avance rápido: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through tasks${role ? " --role " + role : ""}) aprueba ${list} en orden, cada una por su propio gate.`,
-      ffHintTests: (slug, list, through, role) => `Todos los artefactos de planificación hasta ${through} están rellenados y pasan su gate — avance rápido: /spec-ff ${slug} ${through}${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through ${through}${role ? " --role " + role : ""}) aprueba ${list} en orden, cada una por su propio gate. Después la Fase 4: escribe las pruebas que fallan / los conjuntos de evaluación (/writeTests ${slug}), aprueba las pruebas y luego las tareas.`,
+        ` — no se ha registrado nada para '${phase}'. Vuelve a ejecutar el avance rápido con el rol con el que validas: /approve ${slug} --through ${through} --role <rol> (CLI: ${DEV_SPEC} approve ${slug} --through ${through} --role <rol>); se reanuda en '${phase}'.`,
+      ffHint: (slug, list, role) => `Todos los artefactos de planificación hasta las tareas están rellenados y pasan su gate — avance rápido: /approve ${slug} --through tasks${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through tasks${role ? " --role " + role : ""}) aprueba ${list} en orden, cada una por su propio gate.`,
+      ffHintTests: (slug, list, through, role) => `Todos los artefactos de planificación hasta ${through} están rellenados y pasan su gate — avance rápido: /approve ${slug} --through ${through}${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through ${through}${role ? " --role " + role : ""}) aprueba ${list} en orden, cada una por su propio gate. Después la Fase 4: escribe las pruebas que fallan / los conjuntos de evaluación (/spec ${slug} tests), aprueba las pruebas y luego las tareas.`,
       batch: (n) => `  aprobaciones en lote (avance rápido): ${n}`,
     },
 
@@ -2942,7 +2942,7 @@ const msg = {
         attentionFinished: (other, files) => `planifica ficheros de la línea base de cierre de ${other}: ${files} — declara _Supersedes: ${other}/US-n.AC-m_ donde sustituye ese comportamiento, o spec_drift señalará ${other} después del merge`,
         doctorActive: (list, slug) => `hay tareas pendientes que planifican los mismos ficheros que otra función activa — ${list}: ambas los tocan en el merge y una deriva sin aviso. Ordena las dos (spec_roadmap_edit {kind: "depend", name: "${slug}", add: ["<otra>"]} · ${DEV_SPEC} depend ${slug} <otra>) o, donde una sustituye el comportamiento de la otra, declara _Supersedes: <otra>/US-n.AC-m_`,
         doctorFinished: (list, slug) => `hay tareas pendientes que planifican ficheros que una función cerrada registró en su línea base de drift — ${list}: después del merge, spec_drift la señala. Declara _Supersedes: <función>/US-n.AC-m_ en los criterios de ${slug} que sustituyen su comportamiento, haz que ${slug} dependa de ella donde se apoya en ella (spec_roadmap_edit {kind: "depend", name: "${slug}", add: ["<función>"]} · ${DEV_SPEC} depend ${slug} --add <función>), o vuelve a cerrarla después del merge (spec_finish)`,
-        hookLine: (n, list) => `⚠ ${n} solapamiento(s) de ficheros entre funciones: ${list} — ejecuta /spec-doctor en ellas (ordénalas con /depend, o declara _Supersedes:_)`,
+        hookLine: (n, list) => `⚠ ${n} solapamiento(s) de ficheros entre funciones: ${list} — ejecuta /spec-doctor en ellas (ordénalas con /roadmap depend, o declara _Supersedes:_)`,
         cliHead: (n) => `⚠ ${n} solapamiento(s) de ficheros entre funciones:`,
         cliActive: (a, b, files) => `  ${a} ↔ ${b}: ${files}`,
         cliFinished: (a, b, files) => `  ${a} → ${b} (cerrada): ${files}`,
@@ -3027,7 +3027,7 @@ const msg = {
       implFirst: (n, tests, taskC, testC, files) => `red-first: el primer commit de la tarea ${n} (pone ${tests} en verde) es ${taskC}, anterior a cualquier commit que toque un fichero de prueba que nombre ${tests} (${files} — el primero en ${testC}): la implementación llegó antes que su prueba.`,
       testNotCommitted: (n, tests, taskC, files) => `red-first: la tarea ${n} (pone ${tests} en verde) tiene commit (${taskC}), pero ningún commit leído toca un fichero de prueba que nombre ${tests} (${files}) — haz primero el commit de la prueba.`,
       redFirstStatus: (n, tests, status) => `red-first: tarea ${n} (${tests}) — ` + ({ ok: "la prueba tuvo commit primero ✓", "no-test-file": "ningún fichero de prueba la nombra aún (nada que comparar)", "no-task-commit": "ningún commit cita aún la tarea", "outside-window": "no se puede saber: la ventana del log está llena (--max N)" })[status],
-      conventions: (slug) => `Ningún commit cita una tarea de '${slug}'. Convenciones: nombra la función y la tarea — "Part of .specs/${slug}/ task #N." (lo que escribe /spec-commit) — o los IDs que cubre: "Makes T-01 green", US-1.AC-2.`,
+      conventions: (slug) => `Ningún commit cita una tarea de '${slug}'. Convenciones: nombra la función y la tarea — "Part of .specs/${slug}/ task #N." (lo que escribe /executeTask commit) — o los IDs que cubre: "Makes T-01 green", US-1.AC-2.`,
       noGit: "git no está disponible aquí, o esto no es un repositorio git con commits — dev-spec log lee `git log`. O pasa un log por la entrada estándar: git log --name-only --relative | " + DEV_SPEC + " log <función> -",
     },
 
@@ -3123,9 +3123,9 @@ const msg = {
       on: "Modo guardia SCOPE (alcance) — Write/Edit en un fichero de código fuera de .specs/ pide confirmación salvo que una tarea sin terminar de una función aprobada lo nombre en _Implements:_ (el fichero, su carpeta o un glob; ficheros de prueba exceptuados), y la pide en todo cambio de código mientras ninguna función tenga tareas aprobadas sin terminar (roadmap.json meta.guard: \"scope\"). Los ficheros de prueba se permiten mientras el plan de pruebas de una función sin terminar esté aprobado (la Fase 4 escribe las pruebas que fallan antes del gate de las tareas), y todo fichero de código mientras un spike esté en curso (su prototipo).",
       ask: (file, features, hint) => `dev-spec guard (scope): ${file} no está en el plan — ninguna tarea sin terminar de ${features} lo nombra en _Implements:_. ${hint} (El modo guardia está en scope — ${DEV_SPEC} init --guard on permite todo fichero de código mientras haya tareas aprobadas; --guard off lo desactiva.)`,
       hint: {
-        "same-folder": (n, slug, ref) => `Añádelo al _Implements:_ de la tarea ${n} (${slug} — misma carpeta que ${ref}) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-converge (spec_append_tasks).`,
-        nearby: (n, slug, ref) => `Añádelo al _Implements:_ de la tarea ${n} (${slug} — planifica ${ref}, cerca) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-converge (spec_append_tasks).`,
-        next: (n, slug) => `Añádelo al _Implements:_ de la tarea ${n} (${slug}, la siguiente tarea sin terminar) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-converge (spec_append_tasks).`,
+        "same-folder": (n, slug, ref) => `Añádelo al _Implements:_ de la tarea ${n} (${slug} — misma carpeta que ${ref}) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-review ${slug} converge (spec_append_tasks).`,
+        nearby: (n, slug, ref) => `Añádelo al _Implements:_ de la tarea ${n} (${slug} — planifica ${ref}, cerca) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-review ${slug} converge (spec_append_tasks).`,
+        next: (n, slug) => `Añádelo al _Implements:_ de la tarea ${n} (${slug}, la siguiente tarea sin terminar) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-review ${slug} converge (spec_append_tasks).`,
       },
     },
 
@@ -3230,7 +3230,7 @@ _Outcome: [go | no-go | pivot]_
         missing: (slug) => `falta spike.md — vuelve a crearlo: ${DEV_SPEC} spike "${slug}" (solo crea: lo que existe se mantiene).`,
         fillQuestion: (slug) => `Escribe la pregunta que responde este spike (y su timebox) en spike.md → Pregunta / Timebox — /spec-spike ${slug}.`,
         investigate: (n, text, slug) => `Investiga — tarea #${n}: ${text}. El código de prototipo queda fuera de .specs/ (enlázalo en spike.md → Evidencia); márcala: ${DEV_SPEC} done ${slug} ${n}.`,
-        decide: (slug) => `Registra la decisión en spike.md → Decisión — go / no-go / pivot, la justificación y su línea _Outcome:_ — y regístrala en el log: /spec-decide ${slug} (spec_decide).`,
+        decide: (slug) => `Registra la decisión en spike.md → Decisión — go / no-go / pivot, la justificación y su línea _Outcome:_ — y regístrala en el log: /spec-change ${slug} decide (spec_decide).`,
         outcome: (slug) => `Indica el resultado en spike.md → Decisión: una línea _Outcome: go_, _Outcome: no-go_ o _Outcome: pivot_ (/spec-spike ${slug}).`,
         timeboxPassed: (d) => `El timebox terminó el ${d}: decide con la evidencia que tienes.`,
         goCreateFirst: (slug, name, summary) => `Decisión: go. Especifica la función real — spec_create {name: "${name}", summary: ${JSON.stringify(summary)}} (${DEV_SPEC} create "${name}" --summary ${JSON.stringify(summary)}) — y luego archiva el spike: /feature archive ${slug}.`,
@@ -3295,7 +3295,7 @@ _Outcome: [go | no-go | pivot]_
       plansDir: "El plan mode de Claude Code guarda los planes en plansDirectory (por defecto ~/.claude/plans — fuera del proyecto): copia primero el plan dentro del proyecto, o apunta plansDirectory a una carpeta dentro de él.",
       several: (dir, list) => `'${dir}' contiene varios documentos (${list}) — indica el que quieres importar.`,
       planTitle: "Plan",
-      wNoSteps: "no se encontró ninguna checklist, lista de to-dos ni de pasos — se mantuvo el tasks.md del scaffold (divide el trabajo en tareas con /createTask)",
+      wNoSteps: "no se encontró ninguna checklist, lista de to-dos ni de pasos — se mantuvo el tasks.md del scaffold (divide el trabajo en tareas con /spec <función> tasks)",
       wCancelled: (list) => `to-dos cancelados importados como tareas abiertas (elimina los que ya no apliquen): ${list}`,
       wNoDesignLeft: "no quedó nada para el diseño aparte de los criterios y los pasos — se mantuvo el design.md del scaffold",
       wNotExecPlan: "no se encontraron secciones de ExecPlan (Progress, Decision Log, Concrete Steps, Validation and Acceptance …) — ¿es un ExecPlan? Prueba la herramienta 'plan'.",

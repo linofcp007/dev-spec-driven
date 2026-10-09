@@ -669,7 +669,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const gFar = S.guardCheck(pSc, "lib/util.py", pSc);
     const gApiJs = S.guardCheck(pSc, "src/api/legacy.js", pSc);
     ok(gSame.decision === "ask" && gSame.why === "out-of-scope" && JSON.stringify(gSame.likely) === JSON.stringify({ feature: "checkout", number: 2, via: "same-folder" }) &&
-      hSame === gSame.reason && /^dev-spec guard \(scope\): src\/pay\/refund\.js is not in the plan — no open task of checkout names it in _Implements:_\. Add it to task 2's _Implements:_ \(checkout — same folder as src\/pay\/pay\.js\) and re-approve the tasks phase, or plan the change with \/spec-converge \(spec_append_tasks\)\./.test(hSame || "") &&
+      hSame === gSame.reason && /^dev-spec guard \(scope\): src\/pay\/refund\.js is not in the plan — no open task of checkout names it in _Implements:_\. Add it to task 2's _Implements:_ \(checkout — same folder as src\/pay\/pay\.js\) and re-approve the tasks phase, or plan the change with \/spec-review checkout converge \(spec_append_tasks\)\./.test(hSame || "") &&
       gDone.decision === "ask" && gFar.decision === "ask" && gFar.likely.via === "next" && gFar.likely.number === 2 && /task 2 \(checkout, the next open task\)/.test(gFar.reason) &&
       gApiJs.decision === "ask" && gApiJs.likely.number === 3 && gApiJs.likely.via === "same-folder",
       "C1 scope guard: a code file no open task names → ask naming the likely task (same folder — a glob's literal folder too — else the next open task); a file only a done task planned asks too (got " +

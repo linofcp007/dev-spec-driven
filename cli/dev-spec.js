@@ -60,7 +60,7 @@
  *   approve <feature> <phase> --revoke [--reason "…"]  Revoke the phase's approval (and its waiting role sign-offs) —
  *                                      it is pending again; never cascades to the later phases
  *   approve <feature> --through <phase> Fast-forward: approve every active phase up to <phase>, in order, each through its
- *                                      own gate — stops at the first refused one (/spec-ff)
+ *                                      own gate — stops at the first refused one (/approve --through)
  *   impact <feature> [--phase p] [--reopen]  What an edit after approval touches (vs the approved snapshot);
  *                                      --phase requirements|design|tasks, --reopen unticks the affected done tasks
  *                                      (never a removed criterion's — `retire` lists those to delete or repoint)
@@ -2519,7 +2519,7 @@ function helpText() {
                                   --expires YYYY-MM-DD|30d record its waiver (doctor warns waiver-expired once it lapses)
   approve <feature> <phase> --revoke [--reason "…"]   Revoke a phase approval (and the role sign-offs waiting for it): the
                                   phase is pending again; later phases stay approved (never cascades)
-  approve <feature> --through <phase>  Fast-forward (/spec-ff): approve every active phase up to <phase>, in order, each through its
+  approve <feature> --through <phase>  Fast-forward (/approve --through): approve every active phase up to <phase>, in order, each through its
                                   own gate — stops at the first refused gate (exit 1) or a phase still waiting for another role
   impact <feature> [--phase p] [--reopen]   What an edit after approval touches, against the approved snapshot
                                   (--phase requirements|design|test-plan|eval-plan|tasks, default requirements): changed ACs/sections/tests/tasks →
@@ -2568,7 +2568,7 @@ function helpText() {
                                   evidence? Prints the reason it would send the turn back (exit 1) or why it lets it end; - reads stdin;
                                   --agent spec-implementer checks the task report named in the message instead,
                                   --agent spec-simplifier the simplification report (its last '## Final runs' must all pass)
-  log <feature> [--max N] [-]     Per task, the commits whose message cites it — "task #N" / "#N" with the feature name (as /spec-commit
+  log <feature> [--max N] [-]     Per task, the commits whose message cites it — "task #N" / "#N" with the feature name (as /executeTask commit
                                   writes "Part of .specs/<feature>/ task #N."), or its T-/AC IDs ("Makes T-01 green") — and, +tdd, a
                                   red-first check (implementation committed before its test?); reads git log (read-only, local, --max
                                   commits, default 1000 — from the commit it started on when it has its own branch: create --branch);

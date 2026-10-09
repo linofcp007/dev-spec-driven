@@ -377,10 +377,10 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     write5(f6, "classification.md", read5(f6, "classification.md").replace(/\[[^\]]*\]/g, "filled"));
     S.approvePhase(w5, f6.slug, "classification");
     const n6a2 = S.nextAction(w5, f6.slug);
-    ok(n6a.step === "fill" && n6a.file === "classification.md" && /^Fill classification\.md — \d+ template placeholder/.test(n6a.recommendation) && /\/classify order/.test(n6a.recommendation) &&
+    ok(n6a.step === "fill" && n6a.file === "classification.md" && /^Fill classification\.md — \d+ template placeholder/.test(n6a.recommendation) && /\(\/spec order\)/.test(n6a.recommendation) &&
       !/saas-sections|traceability/.test(n6a.recommendation) &&
       n6a2.step === "fill" && n6a2.file === "requirements.md" && /^Fill requirements\.md — \d+ template placeholder/.test(n6a2.recommendation) && /\/clarify order/.test(n6a2.recommendation),
-      "next_action on a fresh +saas feature: 'fill classification.md' (Phase 0, /classify), then — once approved — 'fill requirements.md' (with /clarify); never the later phases' failing checks");
+      "next_action on a fresh +saas feature: 'fill classification.md' (Phase 0, /spec <feature> — /classify until 1.26), then — once approved — 'fill requirements.md' (with /clarify); never the later phases' failing checks");
     // The design is never asked for before the requirements are approved, the tasks never before the design: each phase is
     // filled, fixed and approved before the next one starts (the requirements, filled first, wait for their approval).
     const f6c = S.createFeature(w5, "Order core", ["core"]);
@@ -455,7 +455,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
       part6t.refused && /names yet: T-05 —/.test(part6t.error) && ap6tT.ok && !ap6tT.forced,
       "approve tests (+tdd) is refused until every planned T-ID is named by a test file (tests-in-code, the missing ones listed); then approved unforced");
     ok(d6t.pendingGates.join() === "tests,tasks" && d6t.gatesOk === false && n6t.step === "fix" && n6t.refusedGate.phase === "tests" && n6t.refusedGate.failing.join() === "tests-in-code" && /^Phase 4, the hard gate: write every planned test/.test(n6t.recommendation) &&
-      /\/writeTests order-tdd/.test(n6t.recommendation) && /\/approve order-tdd tests/.test(n6t.recommendation) && /\(the approve gate checks this: tests-in-code\)/.test(n6t.recommendation) &&
+      /\/spec order-tdd tests/.test(n6t.recommendation) && /\/approve order-tdd tests/.test(n6t.recommendation) && /\(the approve gate checks this: tests-in-code\)/.test(n6t.recommendation) &&
       ap6t.ok === false && ap6t.failing.join() === "phase-order" && /earlier phases are not approved yet: tests/.test(ap6t.error) &&
       n6t2.step === "fix" && n6t2.pendingGates.join() === "tests,tasks" && fin6t.blockers.some((b) => /tests/.test(b)) &&
       ap6t3.ok && n6t3.step === "implement" && n6t3.gatesOk === true && !S.specDoctor(w5, f6c.slug).pendingGates.length &&
@@ -490,8 +490,8 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
       /^Phase 4 sign-off: the implementation has already started/.test(n6l1.recommendation) && /T-ID in the test's name/.test(n6l1.recommendation) &&
       /\/approve order-legacy tests/.test(n6l1.recommendation) && /\(the approve gate checks this: tests-in-code\)/.test(n6l1.recommendation) &&
       n6l2.phase === "complete" && n6l2.step === "approve" && n6l2.pendingGates.join() === "tests" && /^Phase 4 sign-off/.test(n6l2.recommendation) &&
-      ![n6l1, n6l2].some((n) => /no implementation code|confirm each fails|\/writeTests/.test(n.recommendation)) &&
-      /^Aprovação da Fase 4/.test(S.msg("pt").next.signOffTests("x", "tdd")) && /línea base \(\/eval x --set-baseline\)/.test(S.msg("es").next.signOffTests("x", "ai")),
+      ![n6l1, n6l2].some((n) => /no implementation code|confirm each fails|\/writeTests|\/spec \S+ tests/.test(n.recommendation)) &&
+      /^Aprovação da Fase 4/.test(S.msg("pt").next.signOffTests("x", "tdd")) && /línea base \(\/eval x baseline\)/.test(S.msg("es").next.signOffTests("x", "ai")),
       "next_action on an executing / complete +tdd feature with `tests` pending: a sign-off for the existing tests (T-IDs in test names, what the gate checks) — never 'write failing tests first, no implementation code' (got " +
       JSON.stringify([n6l0.step, n6l1.phase, n6l1.step, n6l2.phase, n6l2.step, n6l2.recommendation.slice(0, 40)]) + ")");
     const tic = (r) => ((r.checks || []).find((c) => c.id === "tests-in-code") || {}).detail || "";

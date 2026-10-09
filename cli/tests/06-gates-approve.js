@@ -17,8 +17,8 @@ exports.run = ({ ok, run, tmp }) => {
     "approve on a template exits 1 listing the failing checks — the unapproved classification before it (phase-order) too (nothing recorded)");
   run(["approve", "gate", "classification", "--force", "--project", w5]);
   const naReq = run(["next-action", "gate", "--project", w5]).out;
-  ok(/→ Fill classification\.md — \d+ template placeholder\(s\) left .*\/classify gate/.test(naFresh) && /→ Fill requirements\.md — \d+ template placeholder\(s\) left .*\/clarify gate/.test(naReq),
-    "next-action phase by phase: a fresh feature fills classification.md first (/classify), then — once approved — requirements.md (/clarify)");
+  ok(/→ Fill classification\.md — \d+ template placeholder\(s\) left .*\(\/spec gate\)/.test(naFresh) && /→ Fill requirements\.md — \d+ template placeholder\(s\) left .*\/clarify gate/.test(naReq),
+    "next-action phase by phase: a fresh feature fills classification.md first (/spec — /classify until 1.26), then — once approved — requirements.md (/clarify)");
   const forced = run(["approve", "gate", "requirements", "--force", "--project", w5]);
   let forcedJ = null;
   try { forcedJ = JSON.parse(run(["approve", "gate", "design", "--force", "--json", "--project", w5]).out); } catch { /* invalid JSON */ }
@@ -30,7 +30,7 @@ exports.run = ({ ok, run, tmp }) => {
   const docG = run(["doctor", "gate", "--project", w5]);
   ok(/✗ placeholders — template placeholders left/.test(docG.out) && /▲ approval-gates — .*approved with force over failing checks: classification \(placeholders\), requirements \(placeholders/.test(docG.out),
     "doctor lists the placeholders failure and the forced approvals (warn)");
-  ok(/→ Fill tasks\.md — \d+ template placeholder\(s\) left .*\/createTask gate/.test(run(["next-action", "gate", "--project", w5]).out),
+  ok(/→ Fill tasks\.md — \d+ template placeholder\(s\) left .*\/spec gate tasks/.test(run(["next-action", "gate", "--project", w5]).out),
     "next-action after the design approval: the tasks are the next phase (fill tasks.md)");
   ok(/approve <feature> <phase> \[--force\]/.test(run(["help"]).out) && /--by NAME \/ --force \(approve\)/.test(run(["help"]).out), "help documents approve --force");
 
