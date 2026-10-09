@@ -295,34 +295,33 @@ function statusFeature(projectDir, name) {
 // spec_next_action — "you are here → do this next" + what changed since approval
 // ---------------------------------------------------------------------------
 
-// opts.doctor: this feature's specDoctor() result, already computed in the same call (spec_upgrade) — never run twice.
+// The doctor runs first (lean: the verdict and the failing checks only); the feature's tracks, phase, .state.json, language, size,
+// flow and gate walk are read from the context its checks judged, never computed again. opts.doctor: this feature's specDoctor()
+// result, already computed in the same call (spec_upgrade) — never run twice (the context is then built here).
 function nextAction(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error, code: f.code };
   if (isSpikeDir(f.dir)) return withBranchStep(projectDir, f.slug, readState(projectDir, f.slug), spikeNextAction(projectDir, f, opts)); // 1.14 C2 (+ 1.25 its branch)
   const { slug, dir } = f;
-  const tracks = detectTracks(dir);
-  const phase = detectPhase(dir, tracks);
-  const doc = opts.doctor && opts.doctor.ok ? opts.doctor : specDoctor(projectDir, name, { lean: true }); // lean: the verdict and the failing checks only
-  const st = readState(projectDir, name);
+  const run = opts.doctor && opts.doctor.ok ? { res: opts.doctor, ctx: doctorContext(projectDir, name, f) } : doctorRun(projectDir, name, { lean: true });
+  const doc = run.res, ctx = run.ctx;
+  const { tracks, phase, state: st } = ctx;
   // r5 review: a .state.json that doesn't parse (a git text merge's conflict markers, a truncated write) or has the wrong shape
   // holds the approvals, ticks and evidence: read as empty, every gate looked pending and the step said "approve" — which every
   // mutator refuses on that very file (a loop). The one step is to repair it; doctor fails `state`, finish blocks on it.
   if (st.invalid) {
     return { ok: true, feature: slug, tracks: trackLabel(tracks), phase, verdict: doc.verdict, gatesOk: false, pendingGates: [], changedSinceApproval: [],
-      step: "fix", stateInvalid: true, recommendation: i18n.msg(featureLang(projectDir, name)).next.stateInvalid(st.invalid, slug) };
+      step: "fix", stateInvalid: true, recommendation: ctx.fm.next.stateInvalid(st.invalid, slug) };
   }
   // 1.22 review: the approvals in force — a Phase 4 sign-off the plan outgrew (a T-ID planned since, a plan re-approved since)
   // is pending again (testsSignOffStale)
-  const approvals = approvalsInForce(dir, tracks, st.approvals || {});
+  const approvals = ctx.inForce;
   // An approved artifact whose content changed after ITS OWN approval needs re-review (shared with finish/roadmap).
   const changed = changedSinceApproval(dir, approvals, tracks, st.kind);
 
-  const lng = featureLang(projectDir, name);
-  const fm = i18n.msg(lng);
+  const { lang: lng, fm, kind } = ctx;
   const nx = fm.next;
   const G = fm.gates;
-  const kind = st.kind || "feature";
   // 1.24 review 6 (E4): roadmap.json that can't be read holds the approval roles and project checks — every approval, revocation and
   // finish refuses on it, so the one step is to repair it (it recommended a role-less /spec-ff the approval would have taken alone)
   const roadmapBad = roadmapError(projectDir);
@@ -341,12 +340,12 @@ function nextAction(projectDir, name, opts = {}) {
   // (4) the next task; (5) all tasks done → a ticked task without passing evidence → verify it (spec_finish would
   //     refuse), else drift since a finish → decide, else spec_finish (again, when its baseline is stale), else — finished —
   //     project checks without a passing run since the last task activity → verify (res.suite), else finished.
-  const pending = gateWalk(dir, tracks, kind).find((ph) => !approvals[ph]) || null;
+  const pending = ctx.walk.find((ph) => !approvals[ph]) || null;
   let open = null;
   let refused = null;
   // 1.21 F5 P3 — size XS / S: the plan is filled WHOLE, then approved in one call (spec_approve {through: "tasks"} — each gate still
   // runs, in order): the fill step names every planning artifact through tasks still a template, from the first pending phase on.
-  const size = featureSize(dir);
+  const size = ctx.size;
   const planFf = (size === "xs" || size === "s") && kind !== "spike";
   // 1.21 review C3: where the plan's one call ends — tasks, or the planning phase before a Phase 4 tests gate still ahead
   // (its gate needs the written failing tests / eval sets: a call through tasks stopped there every time)
@@ -354,7 +353,7 @@ function nextAction(projectDir, name, opts = {}) {
   let planOpen = [];
   if (pending) {
     if (planFf) {
-      const walk0 = gateWalk(dir, tracks, kind);
+      const walk0 = ctx.walk;
       const upto = walk0.indexOf("tasks") >= 0 ? walk0.indexOf("tasks") : walk0.length - 1;
       planOpen = walk0.slice(walk0.indexOf(pending), upto + 1).filter((ph) => !approvals[ph])
         .flatMap((ph) => gateArtifacts(dir, tracks, kind, ph)).map((file) => artifactReport(dir, file, tracks)).filter((r) => r.state !== "filled");
@@ -368,7 +367,7 @@ function nextAction(projectDir, name, opts = {}) {
       else if (planFf && planOpen.length) open = planOpen[0]; // P3: the rest of the plan before the one approval call
     }
   }
-  const flow = featureFlow(dir, kind); // C3: the phase scale of the feature's flow (design-first: design 1, requirements 2)
+  const flow = ctx.flow; // C3: the phase scale of the feature's flow (design-first: design 1, requirements 2)
   const cur = flowPhaseIndex(phase, flow);
   const fails = doc.ok ? doc.checks.filter((c) => c.status === "fail" && checkPhaseIndex(c.id, flow) <= cur) : [];
   // Phase 4 names what it asks for: failing tests (+tdd), the eval harness + baseline (+ai), or both.
@@ -399,7 +398,7 @@ function nextAction(projectDir, name, opts = {}) {
   // Re-review now only what can be re-approved now: an artifact of a phase AFTER the first pending gate waits for that gate
   // (approve refuses it on phase-order — next_action looped "re-review tasks.md" → refused → "re-review tasks.md"); the
   // chain reaches it again once the earlier gate is approved.
-  const walk = gateWalk(dir, tracks, kind);
+  const walk = ctx.walk;
   const phaseOfFile = (file) => Object.keys(PHASE_FILE).find((ph) => phaseFile(ph, kind) === file) || (file === "design.md" ? "design" : null);
   const reReviewNow = pending ? changed.filter((file) => { const i = walk.indexOf(phaseOfFile(file)); return i === -1 || i <= walk.indexOf(pending); }) : changed;
   if (reReviewNow.length) {
@@ -463,7 +462,7 @@ function nextAction(projectDir, name, opts = {}) {
     step = "fix";
     recommendation = nx.fixChecks(fails.map((c) => c.id).join(", "), slug);
   } else {
-    const activeText = activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks);
+    const activeText = ctx.tasksActive;
     const tasks = parseTasks(activeText);
     const sch = taskSchedule(taskBlocks(activeText || "")); // 1.14 F3: the next task whose _Depends:_ are all done
     const next = sch.next;
@@ -492,8 +491,8 @@ function nextAction(projectDir, name, opts = {}) {
       // Every task ticked, but not every tick verified: spec_finish and the execution sign-off refuse on exactly these
       // (verificationStatus) — never "close the feature" / "finished, nothing left to do" while a latest run failed or a
       // runnable _Verify:_ was never run (that looped: next_action → /spec-finish → refused → next_action …).
-      const vs = verificationStatus(projectDir, slug, dir);
-      const suiteGap = fin && !vs.unverified.length ? suiteStatus(projectDir, st, dir).missing : [];
+      const vs = ctx.vs;
+      const suiteGap = fin && !vs.unverified.length ? ctx.suite.missing : [];
       if (vs.unverified.length) {
         step = "verify";
         const n = vs.unverified[0];
@@ -557,7 +556,7 @@ function nextAction(projectDir, name, opts = {}) {
       // run since the last task activity (or on the code as it is now: Ga3's code-changed) — say how to run and record them
       // (dev-spec finish <f> --run / spec_finish {evidence}); also on `drift`, whose "harmless → re-finish" needs that run.
       if ((step === "finish" || step === "drift") && !st.invalid) {
-        const suite = suiteStatus(projectDir, st, dir);
+        const suite = ctx.suite;
         if (suite.missing.length) recommendation += " " + i18n.msg(lng).projectChecks.naFinish(slug, suiteLabel(suite.missing, lng));
       }
     }
