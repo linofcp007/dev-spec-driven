@@ -586,6 +586,44 @@ Tracks: ${label}. Marca antes de dar la función por terminada.`,
     saasLoadOnly: "SaaS: prueba de carga cumple el presupuesto (ruta crítica).",
     done: ["Doctor: `doctor` reporta readyToAdvance antes de cada gate.", "Todos los gates de fase aprobados (`approve`)."],
   },
+  // approvalActions — what the approval guard says an agent wants to do (msg.approvalGuard.action — its decision tree is the
+  // layout's): one sentence per case; asRole / onBehalf / forced follow an approval or a revocation.
+  approvalActions: {
+    remove: (feature) => `borrar definitivamente la función '${feature}' (su carpeta en .specs/, sus aprobaciones y su historial)`,
+    partial: "ejecutar una llamada de herramienta que la guardia de aprobaciones solo recibió en parte (la entrada llegó cortada) y que menciona dev-spec o .specs/",
+    fed: "darle a una shell un script que la guardia de aprobaciones no puede ver (llegado por una tubería desde un archivo o un programa, o una sustitución de procesos) en un comando que menciona dev-spec o .specs/",
+    specsArg: "ejecutar un programa que la guardia de aprobaciones no conoce sobre .specs/, su roadmap.json o un .state.json (puede cambiarlos)",
+    error: "ejecutar una llamada de herramienta que la guardia de aprobaciones no pudo comprobar (falló) con la guardia de aprobaciones activa",
+    project: "actuar sobre una carpeta de proyecto (projectDir) que la guardia de aprobaciones no puede leer",
+    tooLong: (length) => `ejecutar un comando de shell demasiado largo para que la guardia de aprobaciones lo lea (${length} caracteres) que menciona dev-spec o .specs/`,
+    unreadable: "ejecutar un comando de shell que menciona la CLI de dev-spec con una palabra de aprobación en una forma que la guardia de aprobaciones no puede leer (un lanzador desconocido, un glob, una variable o una cadena concatenada)",
+    roadmapEdit: "editar a mano .specs/roadmap.json (ahí están la guardia de aprobaciones y los gates del proyecto)",
+    stateEdit: (feature) => `editar a mano el .state.json de '${feature}' — sus aprobaciones, su evidencia y su historial`,
+    stateShell: (feature) => `cambiar el .state.json de '${feature}' desde la shell — sus aprobaciones, su evidencia y su historial`,
+    observedFeature: (feature) => `escribir a mano el registro de las ejecuciones observadas de '${feature}' (.execution/observed.jsonl) — las ejecuciones que los gates aceptan como evidencia`,
+    observedProject: "escribir a mano el registro de las ejecuciones observadas del proyecto (.specs/.execution/observed.jsonl) — las ejecuciones que los gates aceptan como evidencia",
+    trackOff: (tracks, feature) => `desactivar ${tracks} en '${feature}' — los gates que trae (el plan de pruebas / de evals, las pruebas en rojo o los evals de la Fase 4) dejan de exigirse`,
+    evidence: "volver a poner el modo de evidencia (meta.evidence) en reported",
+    stopCheck: "desactivar el gate de evidencia al final del turno (meta.stopCheck)",
+    guardLower: (from, to) => `bajar el modo guardia (meta.guard) de ${from} a ${to}`,
+    guardSet: (to) => `poner el modo guardia (meta.guard) en ${to}`,
+    rolesClear: "eliminar los roles de aprobación (meta.approvalRoles)",
+    rolesDrop: (roles) => `quitar roles de aprobación exigidos (${roles}) de meta.approvalRoles`,
+    rolesReplace: "sustituir los roles de aprobación (meta.approvalRoles)",
+    checkRemove: (name) => `eliminar la verificación del proyecto '${name}' (meta.checks)`,
+    checkChange: (name) => `cambiar el comando de la verificación del proyecto '${name}' (meta.checks)`,
+    roadmapShell: "cambiar .specs/roadmap.json desde la shell — escribirlo, moverlo o borrarlo (ahí están la guardia de aprobaciones y los gates del proyecto)",
+    specsEdit: "mover o borrar .specs/ o una carpeta dentro de ella con una herramienta de archivos (ahí están el roadmap.json y los .state.json de las funciones)",
+    specsShell: "cambiar .specs/ desde la shell — escribir, mover o borrar mediante un glob, una variable o una carpeta entera que puede alcanzar el roadmap.json o el .state.json de una función",
+    link: "crear un enlace a .specs/ o a un archivo dentro (enlace simbólico, junction o enlace duro) — lo que se escriba a través de él llega al roadmap.json y a los .state.json sin ser visto",
+    lower: (from, to) => `bajar la guardia de aprobaciones de ${from} a ${to}`,
+    revoke: (phase, feature) => `revocar la aprobación de la fase ${phase} de '${feature}'`,
+    approve: (phase, feature) => `aprobar la fase ${phase} de '${feature}'`,
+    approveThrough: (feature, through) => `aprobar todas las fases de '${feature}' hasta ${through}`,
+    asRole: (role) => ` como ${role}`,
+    onBehalf: (by) => ` en nombre de '${by}'`,
+    forced: " — FORZADA (--force)",
+  },
 };
 
 // ===========================================================================
@@ -1912,44 +1950,6 @@ const msg = {
       },
       off: "Guardia de aprobaciones DESACTIVADA — las aprobaciones que pide un agente no se controlan (roadmap.json meta.approvalGuard).",
       badValue: (v) => `--approval-guard admite off, ask o deny (recibido '${v}').`,
-      action: (a) => {
-        const f = a.feature || "?";
-        if (a.kind === "remove") return `borrar definitivamente la función '${f}' (su carpeta en .specs/, sus aprobaciones y su historial)`;
-        if (a.kind === "unreadable") {
-          if (a.why === "partial") return "ejecutar una llamada de herramienta que la guardia de aprobaciones solo recibió en parte (la entrada llegó cortada) y que menciona dev-spec o .specs/";
-          if (a.why === "fed") return "darle a una shell un script que la guardia de aprobaciones no puede ver (llegado por una tubería desde un archivo o un programa, o una sustitución de procesos) en un comando que menciona dev-spec o .specs/";
-          if (a.why === "specs-arg") return "ejecutar un programa que la guardia de aprobaciones no conoce sobre .specs/, su roadmap.json o un .state.json (puede cambiarlos)";
-          if (a.why === "error") return "ejecutar una llamada de herramienta que la guardia de aprobaciones no pudo comprobar (falló) con la guardia de aprobaciones activa";
-          if (a.why === "project") return "actuar sobre una carpeta de proyecto (projectDir) que la guardia de aprobaciones no puede leer";
-          return a.why === "too-long" ? `ejecutar un comando de shell demasiado largo para que la guardia de aprobaciones lo lea (${a.length} caracteres) que menciona dev-spec o .specs/`
-            : "ejecutar un comando de shell que menciona la CLI de dev-spec con una palabra de aprobación en una forma que la guardia de aprobaciones no puede leer (un lanzador desconocido, un glob, una variable o una cadena concatenada)";
-        }
-        if (a.kind === "guard-down") {
-          if (a.setting === "roadmap" && a.source === "edit") return "editar a mano .specs/roadmap.json (ahí están la guardia de aprobaciones y los gates del proyecto)";
-          if (a.setting === "state") return a.source === "edit" ? `editar a mano el .state.json de '${f}' — sus aprobaciones, su evidencia y su historial`
-            : `cambiar el .state.json de '${f}' desde la shell — sus aprobaciones, su evidencia y su historial`;
-          if (a.setting === "observed") return (a.feature ? `escribir a mano el registro de las ejecuciones observadas de '${a.feature}' (.execution/observed.jsonl)` : "escribir a mano el registro de las ejecuciones observadas del proyecto (.specs/.execution/observed.jsonl)") +
-            " — las ejecuciones que los gates aceptan como evidencia";
-          if (a.setting === "track") return `desactivar ${(a.tracks || []).map((t) => "+" + t).join(", ")} en '${f}' — los gates que trae (el plan de pruebas / de evals, las pruebas en rojo o los evals de la Fase 4) dejan de exigirse`;
-          if (a.setting === "evidence") return "volver a poner el modo de evidencia (meta.evidence) en reported";
-          if (a.setting === "stopCheck") return "desactivar el gate de evidencia al final del turno (meta.stopCheck)";
-          if (a.setting === "guard") return a.from ? `bajar el modo guardia (meta.guard) de ${a.from} a ${a.to}` : `poner el modo guardia (meta.guard) en ${a.to}`;
-          if (a.setting === "roles") {
-            if (!a.to || !Object.keys(a.to).length) return "eliminar los roles de aprobación (meta.approvalRoles)";
-            return Array.isArray(a.removed) ? `quitar roles de aprobación exigidos (${a.removed.join(", ")}) de meta.approvalRoles` : "sustituir los roles de aprobación (meta.approvalRoles)";
-          }
-          if (a.setting === "check") return a.to == null ? `eliminar la verificación del proyecto '${a.name}' (meta.checks)` : `cambiar el comando de la verificación del proyecto '${a.name}' (meta.checks)`;
-          if (a.setting === "roadmap") return "cambiar .specs/roadmap.json desde la shell — escribirlo, moverlo o borrarlo (ahí están la guardia de aprobaciones y los gates del proyecto)";
-          if (a.setting === "specs") return a.source === "edit" ? "mover o borrar .specs/ o una carpeta dentro de ella con una herramienta de archivos (ahí están el roadmap.json y los .state.json de las funciones)"
-            : "cambiar .specs/ desde la shell — escribir, mover o borrar mediante un glob, una variable o una carpeta entera que puede alcanzar el roadmap.json o el .state.json de una función";
-          if (a.setting === "link") return "crear un enlace a .specs/ o a un archivo dentro (enlace simbólico, junction o enlace duro) — lo que se escriba a través de él llega al roadmap.json y a los .state.json sin ser visto";
-          return `bajar la guardia de aprobaciones de ${a.from} a ${a.to}`;
-        }
-        if (a.revoke) return `revocar la aprobación de la fase ${a.phase || "?"} de '${f}'` + (a.role ? ` como ${a.role}` : "") + (a.by ? ` en nombre de '${a.by}'` : "");
-        return (a.through ? `aprobar todas las fases de '${f}' hasta ${a.through}` : `aprobar la fase ${a.phase || "?"} de '${f}'`) +
-          (a.role ? ` como ${a.role}` : "") + (a.by ? ` en nombre de '${a.by}'` : "") +
-          (a.force ? " — FORZADA (--force)" : "");
-      },
       ask: (list, force) => `dev-spec approval guard: el agente quiere ${list}.` + (force ? " ⚠ FORCE: se saltan las comprobaciones de la fase — un gate que falla quedaría registrado como aprobado igualmente." : "") +
         " Las aprobaciones te corresponden — permítelo solo si lo apruebas tú. (meta.approvalGuard: ask — " + DEV_SPEC + " init --approval-guard deny rechaza sin más las aprobaciones de los agentes.)",
       deny: (list, command) => `dev-spec approval guard: rechazado — las aprobaciones son de la persona, y un agente no puede ${list}. ` +

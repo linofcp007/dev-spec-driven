@@ -72,6 +72,9 @@ function loadLocale(l) {
   for (const [t, key] of TABLES) Object.defineProperty(t, l, { value: blocks[key], enumerable: true, configurable: true, writable: true });
   // The artifact layouts, bound to this language's text: BUILD[l] holds them beside the builders the language writes whole.
   for (const name of Object.keys(LAYOUTS)) BUILD[l][name] = (...args) => LAYOUTS[name](blocks.text, ...args);
+  // …and the approval guard's action sentence (its decision tree, approvalAction below — the sentences in text.approvalActions,
+  // never in MSG: pt-BR derives the bound function's output, not a group of sentences the hook would pay toPtBr for).
+  MSG[l].approvalGuard.action = (a) => approvalAction(blocks.text.approvalActions, a);
   // The [SEC] / [PRIVACY] section display names live with their track's messages; every caller reads sectionNames.
   Object.assign(MSG[l].sectionNames, MSG[l].secPrivacy.sectionNames); // pt-BR derives from pt's merged table
   MSG[l].quality = QUALITY_MSG[l];
@@ -392,6 +395,48 @@ const LAYOUTS = {
     }).join("");
   },
 };
+
+// What the approval guard tells the user an agent wants to do (msg.approvalGuard.action — the hook's ask / deny lines and
+// spec_approve's elicitation quote it): the case of `a` → one sentence of X (text.approvalActions). kind "remove" (a feature's
+// removal); "unreadable" (1.23 review 5 — a shell command the guard can't read: too long (a.length characters) or in a form it
+// can't follow; 1.24 review 6 — a tool call received only in part; 1.25.1 review 7 — a script fed to a shell out of sight, an
+// unknown program on .specs/ files, the hook's own failure, a projectDir it can't read); "guard-down" (lowering this guard, or
+// weakening what it stands for — a.setting: the spec_init / `init` setting, a shell write of roadmap.json, a hand edit with the
+// Write / Edit tool — a.source "edit", the harness-observed run log, a gated track turned off, a .specs/ link); else an approval
+// (or a revocation) of a phase, of every phase through one, as a role, in another's name, forced.
+function approvalAction(X, a) {
+  const f = a.feature || "?";
+  if (a.kind === "remove") return X.remove(f);
+  if (a.kind === "unreadable") {
+    if (a.why === "partial") return X.partial;
+    if (a.why === "fed") return X.fed;
+    if (a.why === "specs-arg") return X.specsArg;
+    if (a.why === "error") return X.error;
+    if (a.why === "project") return X.project;
+    return a.why === "too-long" ? X.tooLong(a.length) : X.unreadable;
+  }
+  if (a.kind === "guard-down") {
+    if (a.setting === "roadmap" && a.source === "edit") return X.roadmapEdit;
+    if (a.setting === "state") return a.source === "edit" ? X.stateEdit(f) : X.stateShell(f);
+    if (a.setting === "observed") return a.feature ? X.observedFeature(a.feature) : X.observedProject;
+    if (a.setting === "track") return X.trackOff((a.tracks || []).map((t) => "+" + t).join(", "), f);
+    if (a.setting === "evidence") return X.evidence;
+    if (a.setting === "stopCheck") return X.stopCheck;
+    if (a.setting === "guard") return a.from ? X.guardLower(a.from, a.to) : X.guardSet(a.to);
+    if (a.setting === "roles") {
+      if (!a.to || !Object.keys(a.to).length) return X.rolesClear;
+      return Array.isArray(a.removed) ? X.rolesDrop(a.removed.join(", ")) : X.rolesReplace;
+    }
+    if (a.setting === "check") return a.to == null ? X.checkRemove(a.name) : X.checkChange(a.name);
+    if (a.setting === "roadmap") return X.roadmapShell;
+    if (a.setting === "specs") return a.source === "edit" ? X.specsEdit : X.specsShell;
+    if (a.setting === "link") return X.link;
+    return X.lower(a.from, a.to);
+  }
+  const who = (a.role ? X.asRole(a.role) : "") + (a.by ? X.onBehalf(a.by) : "");
+  if (a.revoke) return X.revoke(a.phase || "?", f) + who;
+  return (a.through ? X.approveThrough(f, a.through) : X.approve(a.phase || "?", f)) + who + (a.force ? X.forced : "");
+}
 
 // pt-BR (1.14 D1) — every table's pt-BR twin, derived lazily from pt (i18n/pt-br.js, loaded by the first read of one).
 const defineDerivedLocale = (table, raw, patch) => Object.defineProperty(table, "pt-BR", { enumerable: true, configurable: true,

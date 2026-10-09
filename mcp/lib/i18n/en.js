@@ -579,6 +579,44 @@ Tracks: ${label}. Tick before calling the feature done.`,
     saasLoadOnly: "SaaS: load test meets budget (hot path).",
     done: ["Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`)."],
   },
+  // approvalActions — what the approval guard says an agent wants to do (msg.approvalGuard.action — its decision tree is the
+  // layout's): one sentence per case; asRole / onBehalf / forced follow an approval or a revocation.
+  approvalActions: {
+    remove: (feature) => `permanently delete the feature '${feature}' (its .specs/ folder, approvals and history)`,
+    partial: "run a tool call the approval guard received only in part (its input was cut off) that names dev-spec or .specs/",
+    fed: "feed a shell a script the approval guard can't see (piped from a file or a program, or a process substitution) in a command that names dev-spec or .specs/",
+    specsArg: "run a program the approval guard doesn't know on .specs/, its roadmap.json or a .state.json (it may change them)",
+    error: "run a tool call the approval guard could not check (it failed) while the approval guard is on",
+    project: "act on a project folder (projectDir) the approval guard can't read",
+    tooLong: (length) => `run a shell command too long for the approval guard to read (${length} characters) that names dev-spec or .specs/`,
+    unreadable: "run a shell command that names the dev-spec CLI with an approval word in a form the approval guard can't read (an unknown launcher, a glob, a variable or a joined string)",
+    roadmapEdit: "edit .specs/roadmap.json by hand (it holds the approval guard and the project's gates)",
+    stateEdit: (feature) => `edit the .state.json of '${feature}' by hand — its approvals, evidence and history`,
+    stateShell: (feature) => `change the .state.json of '${feature}' from the shell — its approvals, evidence and history`,
+    observedFeature: (feature) => `write the harness-observed run log of '${feature}' (.execution/observed.jsonl) by hand — the runs the gates trust as evidence`,
+    observedProject: "write the project's harness-observed run log (.specs/.execution/observed.jsonl) by hand — the runs the gates trust as evidence",
+    trackOff: (tracks, feature) => `turn off ${tracks} on '${feature}' — the gates it carries (the test / eval plan, Phase 4's failing tests or evals) stop being required`,
+    evidence: "switch the evidence mode (meta.evidence) back to reported",
+    stopCheck: "turn off the end-of-turn evidence gate (meta.stopCheck)",
+    guardLower: (from, to) => `lower the edit guard (meta.guard) from ${from} to ${to}`,
+    guardSet: (to) => `set the edit guard (meta.guard) to ${to}`,
+    rolesClear: "clear the approval roles (meta.approvalRoles)",
+    rolesDrop: (roles) => `drop required approval roles (${roles}) from meta.approvalRoles`,
+    rolesReplace: "replace the approval roles (meta.approvalRoles)",
+    checkRemove: (name) => `remove the project check '${name}' (meta.checks)`,
+    checkChange: (name) => `change the command of the project check '${name}' (meta.checks)`,
+    roadmapShell: "change .specs/roadmap.json from the shell — write, move or delete it (it holds the approval guard and the project's gates)",
+    specsEdit: "move or delete .specs/ or a folder in it with a file tool (it holds roadmap.json and the features' .state.json)",
+    specsShell: "change .specs/ from the shell — write, move or delete through a glob, a variable or a whole folder that may reach roadmap.json or a feature's .state.json",
+    link: "link a name to .specs/ or to a file in it (a symbolic link, junction or hard link) — writes through the link would reach roadmap.json and the .state.json files unseen",
+    lower: (from, to) => `lower the approval guard from ${from} to ${to}`,
+    revoke: (phase, feature) => `revoke the approval of the ${phase} phase of '${feature}'`,
+    approve: (phase, feature) => `approve the ${phase} phase of '${feature}'`,
+    approveThrough: (feature, through) => `approve every phase of '${feature}' through ${through}`,
+    asRole: (role) => ` as ${role}`,
+    onBehalf: (by) => ` in the name of '${by}'`,
+    forced: " — FORCED (--force)",
+  },
 };
 
 // ===========================================================================
@@ -2008,51 +2046,6 @@ const msg = {
       },
       off: "Approval guard OFF — an agent's approval calls are not gated (roadmap.json meta.approvalGuard).",
       badValue: (v) => `--approval-guard takes off, ask or deny (got '${v}').`,
-      action: (a) => {
-        const f = a.feature || "?";
-        if (a.kind === "remove") return `permanently delete the feature '${f}' (its .specs/ folder, approvals and history)`;
-        // 1.23 review 5: a shell command the guard can't read — too long (a.length characters) or in a form it can't follow
-        if (a.kind === "unreadable") {
-          if (a.why === "partial") return "run a tool call the approval guard received only in part (its input was cut off) that names dev-spec or .specs/"; // 1.24 review 6
-          // 1.25.1 (review 7): a script fed to a shell out of sight; an unknown program on .specs/ files; the hook's own failure; a projectDir
-          if (a.why === "fed") return "feed a shell a script the approval guard can't see (piped from a file or a program, or a process substitution) in a command that names dev-spec or .specs/";
-          if (a.why === "specs-arg") return "run a program the approval guard doesn't know on .specs/, its roadmap.json or a .state.json (it may change them)";
-          if (a.why === "error") return "run a tool call the approval guard could not check (it failed) while the approval guard is on";
-          if (a.why === "project") return "act on a project folder (projectDir) the approval guard can't read";
-          return a.why === "too-long" ? `run a shell command too long for the approval guard to read (${a.length} characters) that names dev-spec or .specs/`
-            : "run a shell command that names the dev-spec CLI with an approval word in a form the approval guard can't read (an unknown launcher, a glob, a variable or a joined string)";
-        }
-        // guard-down: lowering this guard, or weakening what it stands for (a.setting — the spec_init / `init` setting, or a
-        // shell write of roadmap.json)
-        if (a.kind === "guard-down") {
-          // 1.23 review 5: a hand edit with the Write / Edit tool
-          if (a.setting === "roadmap" && a.source === "edit") return "edit .specs/roadmap.json by hand (it holds the approval guard and the project's gates)";
-          if (a.setting === "state") return a.source === "edit" ? `edit the .state.json of '${f}' by hand — its approvals, evidence and history`
-            : `change the .state.json of '${f}' from the shell — its approvals, evidence and history`; // 1.24 review 6: merge-state, git restore, a redirection
-          // 1.24 review 6: the harness-observed run log; turning off a gated track
-          if (a.setting === "observed") return (a.feature ? `write the harness-observed run log of '${a.feature}' (.execution/observed.jsonl)` : "write the project's harness-observed run log (.specs/.execution/observed.jsonl)") +
-            " by hand — the runs the gates trust as evidence";
-          if (a.setting === "track") return `turn off ${(a.tracks || []).map((t) => "+" + t).join(", ")} on '${f}' — the gates it carries (the test / eval plan, Phase 4's failing tests or evals) stop being required`;
-          if (a.setting === "evidence") return "switch the evidence mode (meta.evidence) back to reported";
-          if (a.setting === "stopCheck") return "turn off the end-of-turn evidence gate (meta.stopCheck)";
-          if (a.setting === "guard") return a.from ? `lower the edit guard (meta.guard) from ${a.from} to ${a.to}` : `set the edit guard (meta.guard) to ${a.to}`;
-          if (a.setting === "roles") {
-            if (!a.to || !Object.keys(a.to).length) return "clear the approval roles (meta.approvalRoles)";
-            return Array.isArray(a.removed) ? `drop required approval roles (${a.removed.join(", ")}) from meta.approvalRoles` : "replace the approval roles (meta.approvalRoles)";
-          }
-          if (a.setting === "check") return a.to == null ? `remove the project check '${a.name}' (meta.checks)` : `change the command of the project check '${a.name}' (meta.checks)`;
-          if (a.setting === "roadmap") return "change .specs/roadmap.json from the shell — write, move or delete it (it holds the approval guard and the project's gates)";
-          // 1.25.1 (review 7): a glob / variable / whole-folder write or removal under .specs/; a link made to .specs/
-          if (a.setting === "specs") return a.source === "edit" ? "move or delete .specs/ or a folder in it with a file tool (it holds roadmap.json and the features' .state.json)"
-            : "change .specs/ from the shell — write, move or delete through a glob, a variable or a whole folder that may reach roadmap.json or a feature's .state.json";
-          if (a.setting === "link") return "link a name to .specs/ or to a file in it (a symbolic link, junction or hard link) — writes through the link would reach roadmap.json and the .state.json files unseen";
-          return `lower the approval guard from ${a.from} to ${a.to}`;
-        }
-        if (a.revoke) return `revoke the approval of the ${a.phase || "?"} phase of '${f}'` + (a.role ? ` as ${a.role}` : "") + (a.by ? ` in the name of '${a.by}'` : "");
-        return (a.through ? `approve every phase of '${f}' through ${a.through}` : `approve the ${a.phase || "?"} phase of '${f}'`) +
-          (a.role ? ` as ${a.role}` : "") + (a.by ? ` in the name of '${a.by}'` : "") +
-          (a.force ? " — FORCED (--force)" : "");
-      },
       ask: (list, force) => `dev-spec approval guard: the agent wants to ${list}.` + (force ? " ⚠ FORCE: the phase's checks are bypassed — a failing gate would be recorded as approved anyway." : "") +
         " Approvals are yours — allow this only if you approve it yourself. (meta.approvalGuard: ask — " + DEV_SPEC + " init --approval-guard deny refuses agent approvals outright.)",
       // command: the line the human runs, or null (a change with no dev-spec command — a shell write of roadmap.json)
