@@ -6,13 +6,13 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, S, tmp, __dirname }) => {
+exports.run = async ({ ok, S, tmp, __dirname, require }) => {
   const js = JSON.stringify;
   const HOOKS = path.join(__dirname, "..", "hooks");
   // The runner may itself run inside Claude Code: its CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR never leak into the hooks.
   const hookEnv = (env) => ({ ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) });
-  const hook = (name, pl, env, args) => spawnSync(process.execPath, [...(args || []), path.join(HOOKS, name + ".js")],
-    { input: typeof pl === "string" ? pl : js(pl), encoding: "utf8", env: hookEnv(env), cwd: tmp, timeout: 20000 });
+  const hook = (name, pl, env, args, cwd) => spawnSync(process.execPath, [...(args || []), path.join(HOOKS, name + ".js")],
+    { input: typeof pl === "string" ? pl : js(pl), encoding: "utf8", env: hookEnv(env), cwd: cwd || tmp, timeout: 20000 });
   const project = (name, lang) => {
     const p = path.join(tmp, name);
     S.initProject(p, ["core"], lang || "en");
@@ -93,5 +93,45 @@ exports.run = async ({ ok, S, tmp, __dirname }) => {
       !/process\.stdout\.write/.test(src),
       "1.25.1 (r7 finding 3): both observe-hook entries are async (PostToolUse and PostToolUseFailure, Bash|PowerShell) — it writes nothing to stdout; no other hook is async (got " +
       js({ obs, asyncOthers }) + ")");
+  }
+
+  // A probe preloaded into a hook (`node -r probe <hook>`): on exit it writes whether the engine (mcp/lib/spec.js) was loaded.
+  const probe = path.join(tmp, "r7-probe.js"), probeOut = path.join(tmp, "r7-probe.out");
+  fs.writeFileSync(probe, "process.on('exit', () => require('fs').writeFileSync(" + js(probeOut) + ", String(Object.keys(require.cache).some((k) => /[\\\\/]mcp[\\\\/]lib[\\\\/]spec\\.js$/.test(k)))));\n");
+  const probed = (name, pl, env, cwd) => {
+    try { fs.unlinkSync(probeOut); } catch { /* none */ }
+    const r = hook(name, pl, env, ["-r", probe], cwd);
+    return { status: r.status, stdout: r.stdout, engine: fs.existsSync(probeOut) ? fs.readFileSync(probeOut, "utf8") === "true" : null };
+  };
+
+  // Finding 4 — SessionStart (every session of every project: startup, resume, clear, compact) loaded the engine before asking whether
+  // a dev-spec project was there: 132 vs 49 ms (`node -e 0`) in a repository without one. The raw probe runs first — the nearest
+  // dev-spec .specs/ at or above the cwd (≤ SESSION_MAX_UP levels), the anchors — and only a hit loads the engine.
+  // Finding 6 — the context it prints stays bounded: ≤ 20 feature lines, then one "+N more" line.
+  {
+    const E = require("./lib/engine/index.js");
+    const ss = (cwd) => ({ session_id: "s", cwd, hook_event_name: "SessionStart", source: "startup" });
+    const none = path.join(tmp, "r7-ss-none", "a", "b", "c");
+    fs.mkdirSync(none, { recursive: true });
+    const other = path.join(tmp, "r7-ss-other");
+    fs.mkdirSync(path.join(other, ".specs", "notes"), { recursive: true }); // another tool's .specs/
+    const dev = project("r7-ss-dev");
+    S.createFeature(dev, "Alpha", ["core"]);
+    const deep = path.join(dev, "src", "a", "b");
+    fs.mkdirSync(deep, { recursive: true });
+    const big = project("r7-ss-big");
+    for (let i = 1; i <= 25; i++) S.createFeature(big, "Feature " + i, ["core"]);
+    const r = {
+      none: probed("spec-hook", ss(none)), other: probed("spec-hook", ss(other)), noCwd: probed("spec-hook", { session_id: "s", hook_event_name: "SessionStart" }, null, none),
+      deep: probed("spec-hook", ss(deep)), anchor: probed("spec-hook", ss(none), { CLAUDE_PROJECT_DIR: dev }), big: probed("spec-hook", ss(big)),
+    };
+    const ctx = (x) => { try { return JSON.parse(x.stdout).hookSpecificOutput.additionalContext; } catch { return ""; } };
+    const bigLines = ctx(r.big).split("\n");
+    const bound = Number((/const MAX_UP = (\d+);/.exec(fs.readFileSync(path.join(HOOKS, "spec-hook.js"), "utf8")) || [])[1]);
+    ok([r.none, r.other].every((x) => x.status === 0 && x.stdout === "" && x.engine === false) && r.noCwd.status === 0 && r.noCwd.stdout === "" && r.noCwd.engine === false &&
+      [r.deep, r.anchor].every((x) => x.engine === true && /alpha/.test(ctx(x))) && bound === E.SESSION_MAX_UP &&
+      bigLines.length <= 22 && bigLines.filter((l) => /^\s*\S.*\[core\]/.test(l)).length <= 20 && /\+5 more feature/.test(ctx(r.big)),
+      "1.25.1 (r7 findings 4 + 6): SessionStart in a folder without a dev-spec .specs/ (none, another tool's) exits before the engine loads; a project 3 folders above the cwd or named by CLAUDE_PROJECT_DIR still gets its status; the walk is SESSION_MAX_UP; 25 features print ≤ 20 lines + '+5 more' (got " +
+      js({ none: r.none, other: r.other, noCwd: r.noCwd.stdout, deep: [r.deep.engine, ctx(r.deep).slice(0, 60)], anchor: r.anchor.engine, bound, big: bigLines.length }) + ")");
   }
 };
