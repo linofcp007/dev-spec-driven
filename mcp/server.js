@@ -99,6 +99,7 @@ const TOOLS = [
         lang: { type: "string", enum: LANG_ENUM, description: "Language for the generated artifacts. Defaults to the project language (roadmap.json meta.lang), else en." },
         brownfield: { type: "boolean", description: "The feature lands in an EXISTING codebase: also scaffold integration-plan.md (integration points, modifications, sequencing, risks)." },
         flow: { type: "string", enum: [...spec.FLOWS], description: "Phase order: 'design-first' = classification → design → requirements → test / eval plan → tests → tasks (work that starts from an architecture); 'requirements-first' (default). A new feature only (later: spec_feature {action: 'flow'}); a bugfix ignores it." },
+        branch: { type: "string", description: "'true' or a name: the feature's own git branch (default feature/<slug>; fix/, spike/ by kind), recorded with its base — run the returned branch.command yourself (this server never runs git)." },
         projectDir: PROJECT_DIR,
       },
       required: ["name"],
@@ -506,7 +507,7 @@ function runTool(name, args, extra) {
       // lang, else the project's (same as the CLI: the engine classifies, never the surface — full review Pb2).
       return spec.createFeature(pdir, args.name, args.tracks, args.summary, undefined, args.lang, args.kind, { brownfield: args.brownfield === true, flow: args.flow, question: args.question, timebox: args.timebox,
         reproduction: args.reproduction, rootCause: args.rootCause, condition: args.condition, behaviour: args.behaviour, includeBody: args.includeBody === true, // flow (C3), question / timebox (C2 spike), the bugfix prefill + bodies (1.21 F3)
-        size: args.size }); // 1.21 F5: the feature's size (= `create --size`)
+        size: args.size, branch: args.branch }); // 1.21 F5: the feature's size (= `create --size`); 1.25: its own git branch (= `create --branch`)
     }
     case "spec_list":
       return spec.listFeatures(pdir);
@@ -973,11 +974,20 @@ function invalidArgs(toolName, args) {
 // matches it literally). Only the schema's own top-level keys are read; a value that folds to no member is left as given
 // (the enum error names it).
 const EXACT_ENUMS = { spec_import: new Set(["tool"]) };
+// 1.25: a string that also reads 'true' / 'false' (spec_create {branch}: 'true' = the default name, or the name itself) — a boolean
+// given for it becomes that string before validation (the schema stays one plain `type`, as guard's on / off: some MCP clients
+// reject a list-valued type).
+const BOOL_STRING_ARGS = { spec_create: new Set(["branch"]) };
 function foldEnumArgs(toolName, args) {
   const tool = TOOLS.find((t) => t.name === toolName);
   if (!tool || !tool.inputSchema || !tool.inputSchema.properties) return args;
   let out = args;
   for (const [k, s] of Object.entries(tool.inputSchema.properties)) {
+    if (BOOL_STRING_ARGS[toolName] && BOOL_STRING_ARGS[toolName].has(k) && hasOwn(args, k) && typeof args[k] === "boolean") {
+      if (out === args) out = { ...args };
+      out[k] = String(args[k]);
+      continue;
+    }
     // A boolean for an on/off string enum → "on" / "off" (spec_init {guard: true} — a boolean until 1.14 added "scope"; one plain
     // string enum stays portable: some MCP clients reject a schema whose `type` is a list).
     if (Array.isArray(s.enum) && s.enum.includes("on") && s.enum.includes("off") && hasOwn(args, k) && typeof args[k] === "boolean") {
