@@ -126,12 +126,11 @@ const RE_UBIQUITOUS = new RegExp(B + "(?:THE[^\\S\\n]+(?:[^\\s]+[^\\S\\n]+){1,4}
   "(?:DEVE|DEVEM|DEVER[ÁA]|DEVER[ÃA]O)|(?:EL|LA|LOS|LAS)[^\\S\\n]+(?:[^\\s]+[^\\S\\n]+){1,4}?(?:NO[^\\S\\n]+)?(?:DEBE|DEBEN|DEBER[ÁA]|DEBER[ÁA]N))" + E, "iu");
 // The scaffold's own edge cases / NFRs / success criteria (EC-1, NFR-1, SC-001) are stable IDs too.
 const RE_STABLE_ID = /(?<![A-Za-z0-9])(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
-// …of which a criterion's OWN ID is one trace_check reads: never a bare `AC-n` (RE_BARE_AC — not the AC-n of a US-n.AC-n, nor of
-// an importer's escaped `US-7\.AC-1`: an ID-led line of imported prose, demoted so it defines nothing — review 4).
-// (review 5, L31: never a sub-criterion ID — US-1.AC-1.2 is no US-1.AC-1)
-const RE_FULL_ID = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+(?!\.?\d)|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
+// …of which a criterion's OWN ID is never a bare `AC-n` (RE_BARE_AC — not the AC-n of a US-n.AC-n, nor of an importer's escaped
+// `US-7\.AC-1`: an ID-led line of imported prose, demoted so it defines nothing — review 4).
 const RE_BARE_AC = /(?<![A-Za-z0-9]|US-\d+\\?\.)AC-\d+(?!\d)/;
-// …and the stable IDs a criterion with no label may carry anywhere (EARS's no-id lint): never a T- ID (a test's — review 3).
+// …and the stable IDs a criterion with no label may carry anywhere (EARS's no-id lint): never a T- ID (a test's — review 3), never
+// a sub-criterion ID (review 5, L31 — US-1.AC-1.2 is no US-1.AC-1).
 const RE_FULL_ID_NO_T = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+(?!\.?\d)|EC-\d+|NFR-\d+|SC-\d+)/;
 
 // A unit that DEFINES an AC for the EARS linter (criterionBlocks {acUnits}) — 1.14 full review Pa2: only list items were
@@ -1681,7 +1680,7 @@ function rtmProjectMarkdown(projectDir, lang, features) {
 
 module.exports = { VAGUE_WORDS, VAGUE_RE, VAGUE_RE_ALL, RE_LIST_ITEM, RE_NUMBERED, RE_BLOCK_BREAK, B, E, RE_MODAL_EN,
   RE_MODAL_CAPS, RE_MODAL_SYSTEM, RE_LIST_DEFINES_AC, RE_MODAL, RE_MODAL_LOOSE, RE_AC_SHAPE, RE_AC_HEADING,
-  RE_EARS_CAPS, RE_EARS_KEYWORD, RE_UBIQUITOUS, RE_STABLE_ID, RE_FULL_ID, RE_BARE_AC, RE_FULL_ID_NO_T, RE_OWN_LABEL_ID, ownStableId, bareLabel, RE_LEAD_DEFINES_AC, RE_CELL_AC, criterionBlocks,
+  RE_EARS_CAPS, RE_EARS_KEYWORD, RE_UBIQUITOUS, RE_STABLE_ID, RE_BARE_AC, RE_FULL_ID_NO_T, RE_OWN_LABEL_ID, ownStableId, bareLabel, RE_LEAD_DEFINES_AC, RE_CELL_AC, criterionBlocks,
   VAGUE_VERB_NEXT, vagueTermsOf, earsFeature, earsUnlinted, earsUnidentified, criteriaBareIds, shortIdList, earsValidate, extractAcIds, RE_SUB_AC, extractTestIds, testIdKeys, taskCitations, traceCheck, TRACE_INFO_FIELDS, TRACE_GAP_ORDER,
   TRACE_VERDICT_KINDS, TRACE_TASK_KINDS, TRACE_PLAN_KINDS, traceGaps, traceGapLines, TRACE_WARNING_ORDER,
   TRACE_SECONDARY_KINDS, traceWarnings, traceWarningLines, RE_SECONDARY_ID, RE_SECONDARY_ID_LINE, idKey, secondaryIds,

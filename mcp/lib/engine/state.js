@@ -160,11 +160,7 @@ function stateFromFile(projectDir, file) {
 // The artifact each approvable phase signs off, and a content fingerprint recorded at approval so a
 // later edit is detected by CONTENT, not mtime (ticking a task checkbox is progress, not a spec edit).
 const PHASE_FILE = { classification: "classification.md", requirements: "requirements.md", design: "design.md", "test-plan": "test-plan.md", "eval-plan": "eval-plan.md", tasks: "tasks.md" };
-function artifactFingerprint(file, phase) {
-  const raw = readIfExists(file);
-  return raw == null ? null : textFingerprint(raw, phase);
-}
-// The same fingerprint from text (an approval snapshot is compared by it too).
+// That fingerprint, of the artifact's text (an approval snapshot is compared by it too).
 // A leading BOM is encoding, not content (like CRLF): an editor or Windows PowerShell 5.1 re-saving an approved
 // artifact as "UTF-8 with BOM" must not read as changed-since-approval (it blocked spec_finish while spec_impact
 // showed nothing changed).
@@ -207,7 +203,6 @@ function fingerprintMatches(raw, phase, stored) {
   return legacy !== text && (sha1Hex(legacy) === stored || sha1Hex(BOM_CHAR + legacy) === stored);
 }
 const BOM_CHAR = String.fromCharCode(0xfeff);
-const artifactMatches = (file, phase, stored) => fingerprintMatches(readIfExists(file), phase, stored);
 // Checkbox state is not content. The indent is read within its line ([^\S\n\r\u2028\u2029], not \s): from each line start of a
 // long blank run \s* rescanned the whole run (1.17 H) — the lines above keep their text either way ($1 puts it back). Any GFM
 // bullet (1.22 review: `* [ ] 1.` / `+ [ ] 1.` are task lines too — the scanner reads them).
@@ -1622,8 +1617,8 @@ function featureBranch(projectDir, name) {
 
 module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugifyFull, legacySlugify, RE_WIN_RESERVED,
   RESERVED_SLUGS, reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState,
-  stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, wsText, wsFingerprint, sha1Hex, fingerprintMatches,
-  BOM_CHAR, artifactMatches, uncheckTasks, phaseFile, FEATURE_SIZES, sizeInput, featureSize, isChangeDir, PLANNING_CEILING, PHASE_PERCENT, phasePercent, featurePercent,
+  stateFromFile, PHASE_FILE, textFingerprint, fingerprintText, wsText, wsFingerprint, sha1Hex, fingerprintMatches,
+  BOM_CHAR, uncheckTasks, phaseFile, FEATURE_SIZES, sizeInput, featureSize, isChangeDir, PLANNING_CEILING, PHASE_PERCENT, phasePercent, featurePercent,
   roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, findCycles, setDependency, dependencyUnlocked,
   roadmap, flatText, specNameText, addBacklog, BACKLOG_NOTE_MAX, BACKLOG_NOTE_SEP, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked, BACKLOG_ACTIONS, backlog,
   roadmapLang, roadmapChromeLang, setRoadmapLang, RE_AUTOGEN, isGeneratedOrAbsent, writeRoadmapMd, writeRoadmapHtml,

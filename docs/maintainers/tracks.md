@@ -300,7 +300,7 @@ signals, not +saas).
   release…" is no list). Never across . ! ? ; : or a line break, a contrast word (`LIST_CONTRAST`: just / only / but / instead
   / apenas / sino / solo …), **"and" / "e" / "y"** (a new predicate: "without downtime and roll back on errors", "don't store
   PII and encrypt the rest") or a gap over `LIST_GAP_MAX` (80 characters, ≤ 4 words). A list opens at an item negated by a
-  negator BEFORE it (`negatedBefore()` — `isNegated()` is now `negatedBefore || negatedAfter`; a hit keeps `negBy` before /
+  negator BEFORE it (`negatorBefore()`; a hit keeps `negBy` before /
   after / list); a **hazard's** negation opens none ("without downtime" is its requirement), though a hazard inside a list
   carries it on. `NEGATORS` gained the negative conjunctions nor / neither / nem / ni ("sem X nem Y", "ni X ni Y"), and a
   negative conjunction after an item a negator governs negates that item too ("Não vamos usar feature flags nem lançamento

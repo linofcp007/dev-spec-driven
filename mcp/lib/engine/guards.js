@@ -472,7 +472,6 @@ const APPROVAL_REMOVERS = new Set(["rm", "rmdir", "rd", "del", "erase", "remove-
 const APPROVAL_MOVERS = new Set(["mv", "move", "move-item", "mi", "ren", "rename", "rename-item", "rni"]);
 const APPROVAL_WRITERS_TARGET =new Set(["cp", "copy", "copy-item", "cpi", "install", "ln", "rsync", "xcopy", "robocopy", "scp"]); // the LAST path is written
 const APPROVAL_WRITERS_INPLACE = new Set(["sed", "perl", "ruby"]); // with -i / --in-place
-const RE_DEST_OPTION = /^-(?:destination|dest|t|-target-directory)$/i;
 // 1.25.1 (review 7): the other programs that write the files they name — editors run with their commands (ed, ex, vim -c …), awk -i
 // inplace, the downloaders' output files (curl -o, wget -O / -P), the archivers' extraction folders and members (tar -x -C, unzip -d,
 // 7z x -o, Expand-Archive), patch, sort -o, uniq's output, iconv -o, xxd's output, zip's archive — and the link makers (ln, mklink,
@@ -2894,7 +2893,7 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, RE
   APPROVAL_OPTION_VALUES, APPROVAL_SHELLS, APPROVAL_PS_SHELLS, APPROVAL_STDIN_SHELLS, approvalShellMode,
   RE_DEVSPEC_WORD, RE_APPROVAL_VAR_WORD, RE_APPROVAL_CANDIDATE, approvalCandidate, RE_ROADMAP_FILE, RE_SPECS_DIR,
   APPROVAL_WRITERS_ANY, APPROVAL_REMOVERS, APPROVAL_MOVERS, APPROVAL_WRITERS_TARGET, APPROVAL_WRITERS_INPLACE,
-  RE_DEST_OPTION, approvalGuardInput, RE_RAW_APPROVAL_GUARD, rawApprovalGuard, approvalGuardLevel, setApprovalGuard,
+  approvalGuardInput, RE_RAW_APPROVAL_GUARD, rawApprovalGuard, approvalGuardLevel, setApprovalGuard,
   lowersApprovalGuard, ANSI_C_ESCAPES, ansiCEscape, PS_ESCAPES, shellCommandWords, programAt, stdinShellMode,
   shellLexList, shellSubstitutionsIn, approvalProgram, devSpecWordAt, specsWriteActions, approvalStr, approvalTruthy,
   guardRank, guardName, initGuardDowns, initRolesInput, initChecksInput, cliApprovalAction, shellApprovalActions,

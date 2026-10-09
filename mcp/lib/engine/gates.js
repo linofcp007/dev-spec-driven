@@ -13,7 +13,7 @@ const path = require("path");
 const i18n = require("../i18n.js");
 const { featureLocked } = require("./files.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, artifactReport, artifactState,
+let acIndex, activeDesign, activeSectionTracks, activeTasks, artifactReport, artifactState,
   bugPlaceholders, clarificationMarkers, criterionBlocks, designSections, detectTracks, duplicateTaskNumbers,
   earsUnlinted, earsUnidentified, shortIdList, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection, extractTestIds,
   featureLang, fingerprintMatches, finishFeature, hasProseOutsideBrackets, headingsOnly, inactiveTaskLines, isBugStep,
@@ -27,7 +27,7 @@ let acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, ar
   featureSize, trackSectionReport, sectionVerdict,
   CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey,
   checkboxBytes, changesSince, wsText, wsFingerprint, roadmapError, sameApprovedContent;
-function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, artifactReport,
+function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks, artifactReport,
   artifactState, bugPlaceholders, clarificationMarkers, criterionBlocks, designSections, detectTracks,
   duplicateTaskNumbers, earsUnlinted, earsUnidentified, shortIdList, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection,
   extractTestIds, featureLang, fingerprintMatches, finishFeature, hasProseOutsideBrackets, headingsOnly,

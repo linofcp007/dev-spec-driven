@@ -313,8 +313,6 @@ function commandsCoverVerify(run, keys) {
   }
   return reach[n * size + full] === 1;
 }
-// Two commands with the same proofKey (from the same project root) are one command to the evidence gate.
-const proofKey = (cmd, root) => JSON.stringify(proofCommands(proofSteps(cmd), proofBase(root)));
 // 1.25.1 (review 7) — a command no shell runs as written: a `&&`, `||`, `|` or `|&` with no command after it (`npm test &&`,
 // `npm test |`) or none before it (`&& npm test`, `a; || b`), or right after another one (`a && && b`, `a | ; b`). proofSteps drops
 // the empty step, so a REPORTED `npm test &&` read as a run of `npm test`: runProvesVerify now refuses it (it proves no _Verify:_).
@@ -864,8 +862,6 @@ function verifyPipeMasked(cmd) {
 const POSIX_SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "fish"]);
 const PWSH_SHELLS = new Set(["pwsh", "powershell"]);
 const SHELL_WRAPPERS = new Set(["env", "command", "exec", "nohup", "time", "busybox", "wsl", "sudo", "doas", "nice", "ionice", "timeout", "setsid", "stdbuf"]);
-// every wrapper option that takes a value (per wrapper: WRAPPER_OPTION_VALUES — wrapperStep reads that)
-const WRAPPER_ARG_OPTS = new Set([...WRAPPER_OPTION_VALUES.values()].flat());
 // Split a command line into words and operators the way a shell reads it — enough to find pipes, `set` and shell scripts.
 // A word keeps its unquoted value `v` and its spelling as written (`raw`, quotes and escapes included — programName reads it).
 function lexShell(s) {
@@ -2098,7 +2094,7 @@ module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isR
   isPwshShell, isPosixShellName, resolveRunShell, PWSH_VALUE_OPTS, PWSH_VALUE_ALIASES, RE_PWSH_COMMAND_OPT, pwshOption,
   pwshTracker, WRAPPER_OPTION_VALUES, WRAPPER_POSITIONALS, wrapperStep, posixShellSyntax, POSIX_DQ_ESCAPES, posixPwshScript,
   posixPwshScan,
-  verifyPipeMasked, RE_CMD_CONTROL, commandHasControl, controlVisible, verifyControls, POSIX_SHELLS, PWSH_SHELLS, SHELL_WRAPPERS, WRAPPER_ARG_OPTS, lexShell, programName, setPipefail,
+  verifyPipeMasked, RE_CMD_CONTROL, commandHasControl, controlVisible, verifyControls, POSIX_SHELLS, PWSH_SHELLS, SHELL_WRAPPERS, lexShell, programName, setPipefail,
   shellScript, pipeMaskedIn, verifyPipes, expectsFail, unknownExpectValues, CANT_RUN_EXIT, CANT_RUN_OUTPUT, RE_ASSERTION_RAN,
   RE_PESTER_FAILED, RE_PESTER_NOT_RUN, pesterRan, couldNotRunOutput, VACUOUS_OUTPUT, RE_TESTS_RAN, vacuousRun, RE_PWSH_PARSE_FAILURE, pwshParseFailure, runsPwsh,
   cantRunRecord, CRASH_EXIT, crashExit, isRedRun, redProof, CMD_RULE, legacyRedRun, expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps,
@@ -2107,7 +2103,7 @@ module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isR
   observedLogFile, readObservedLog, observedRun, observedAny, observedStamp, RE_CD_STRIP, stripCdPrefix, runRootStamp, gitCommonDir, specsProjectOf,
   RE_PLAIN_ARG, RE_PROOF_CD, RE_PROOF_PIPEFAIL, RE_PROOF_ENV, PROOF_MAX_STEPS, PROOF_MAX_KEYS, unquotePlainArgs, splitAndSteps,
   proofSteps, proofSubstAt, proofSubstEnd, proofUnwrapCode, parseProofDir, joinProofDir, RE_PROOF_OPAQUE_DIR, cdInto, proofBase,
-  proofFolderKey, proofCommands, proofCommandIs, commandsCoverVerify, proofKey, proofIncomplete, runProvesVerify, observedProof,
+  proofFolderKey, proofCommands, proofCommandIs, commandsCoverVerify, proofIncomplete, runProvesVerify, observedProof,
   observeRun, observedNorm, RE_OBSERVED_ENV, observedBodies, observedKey, proofPlainParts, appendObserved, trimObservedLog, lastTaskActivity, CHECK_NAME_RE, CHECKS_MAX, validCheckName,
   validCheckCmd, projectChecks, checksInput, checksPlanError, writeChecks, recordFinishChecks, suiteStatus,
   suiteCodeStamp, runStartStamp, runStartOf, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, GITLOG_MAX_COMMITS, parseGitLog,

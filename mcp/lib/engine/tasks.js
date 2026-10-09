@@ -13,7 +13,7 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions, briefGlossary, briefSteering,
+let activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions, briefGlossary, briefSteering,
   bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir, errs, evidenceRule,
   existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds, extractSection,
   extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, idKey, implementsKey, implementsRel,
@@ -26,7 +26,7 @@ let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDeci
   briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
   decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame;
 let dayOf; // core.js — 1.25.1: the local calendar date (today / dayOf)
-function __link(E) { ({ dayOf, activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
+function __link(E) { ({ dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
   extractSection, extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, idKey, implementsKey,
