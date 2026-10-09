@@ -1341,6 +1341,23 @@ function rtmEvidence(rec) {
   if (rec.stale === true) o.stale = true;
   return Object.keys(o).length ? o : null;
 }
+// 1.25.1 — the matrix's indexes. A row's key (an AC by its ID, an EC / NFR / SC by its number key — the `cites` rule), the keys an
+// item cites (its ACs, its secondary IDs: a Map's or a Set's keys), item lists → Map(key → the item indexes, ascending), and the
+// ascending union of index lists (the candidates of a row, in document order — the order the old full scans produced).
+const rtmKey = (row) => (row.kind === "ac" ? "a" + row.id : "s" + row.key);
+function* rtmKeys(acs, sec) { for (const a of acs) yield "a" + a; for (const k of sec.keys()) yield "s" + k; }
+function rtmIndex(items, keysOf) {
+  const m = new Map();
+  items.forEach((it, n) => {
+    for (const k of keysOf(it)) { const l = m.get(k); if (!l) m.set(k, [n]); else if (l[l.length - 1] !== n) l.push(n); }
+  });
+  return m;
+}
+function rtmMerge(lists) {
+  const seen = new Set();
+  for (const l of lists) if (l) for (const n of l) seen.add(n);
+  return [...seen].sort((a, b) => a - b);
+}
 // traceMatrix for a resolved feature ({ slug, dir }). opts: code (+ scan: a scanTestCode() result or a function returning
 // one), supBy (a supersededByIndex() result to reuse).
 function buildTraceMatrix(projectDir, f, opts = {}) {
@@ -1387,6 +1404,9 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const tinfo = taskCites.per; // { b, acs, sec, tids: Map(T-ID key → spelling) }
   const tasksAcs = taskCites.acs;
   const tasksSec = new Set(tinfo.flatMap((t) => [...t.sec.keys()]));
+  // 1.25.1 — the rows read INDEXES built once (rtmIndex): each row scanned every task, test entry, design section and decision —
+  // O(rows × (tasks + tests)): 2,800 stories took the matrix 6.4 s beside a 0.6 s trace. A row's key: rtmKey.
+  const tasksBy = rtmIndex(tinfo, (t) => rtmKeys(t.acs, t.sec)), tasksByTid = rtmIndex(tinfo, (t) => t.tids.keys());
 
   // The test plan (+tdd only — an inactive artifact otherwise, as trace_check reads it).
   const planOn = phaseActive("test-plan", tracks);
@@ -1396,6 +1416,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   // trace_check's uncoveredByTests set: the ACs the plan's test ENTRIES cite (1.24 review 6, F3 — never a Gaps / Out of Scope note)
   const planAcs = new Set(entries.flatMap((e) => [...e.acs]));
   const planSec = new Set(entries.flatMap((e) => [...e.sec.keys()]));
+  const entriesBy = rtmIndex(entries, (e) => rtmKeys(e.acs, e.sec)); // (1.25.1 — the rows' index)
   const quickSec = secondaryIds(realLines(read("quickstart.md") || "", RE_SECONDARY_ID_LINE).join("\n"));
   let code = null;
   if (opts.code && planOn) code = traceTestCode(projectDir, dir, planText, requirementAcIds(reqs, dir), opts.scan);
@@ -1410,6 +1431,9 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   }
   const dinfo = dsecs.map((s) => { const hay = s.title + "\n" + s.body; return { title: s.title, acs: extractAcIds(hay), sec: secondaryIds(hay) }; });
   const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs (1.15)
+  // (1.25.1 — the rows' index: the sections citing a key, and each track marker's sections)
+  const dinfoBy = rtmIndex(dinfo, (d) => rtmKeys(d.acs, d.sec));
+  for (const m of trackMarks) m.secs = dinfo.map((d, n) => (d.title.includes(m.marker) ? n : -1)).filter((n) => n >= 0);
 
   // decisions.md — the current entries (a later entry's _Supersedes: D-n_ retires D-n).
   const decRaw = read(DECISIONS_FILE);
@@ -1425,6 +1449,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     }
     return { id: e.id, title: e.title, kind: e.kind, acs, secIds };
   });
+  const decsBy = rtmIndex(decs, (d) => rtmKeys(d.acs, d.secIds)); // (1.25.1 — the rows' index)
 
   // _Supersedes:_ both ways.
   const own = resolveSupersedes(projectDir, dir, supersedesMarkers(reqs), new Map()).valid;
@@ -1455,9 +1480,9 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
 
   const out = rows.map((row) => {
     const tests = [];
-    for (const e of entries) {
-      if (!cites(row, e.acs, e.sec)) continue;
-      for (const id of e.ids) if (!tests.some((t) => tKey(t.id.slice(2)) === tKey(id.slice(2)))) tests.push({ id });
+    const rk = rtmKey(row), seenT = new Set();
+    for (const n of entriesBy.get(rk) || []) { // (1.25.1: the entries citing the row, in plan order — the index)
+      for (const id of entries[n].ids) { const k = tKey(id.slice(2)); if (!seenT.has(k)) { seenT.add(k); tests.push({ id }); } }
     }
     if (code) for (const t of tests) {
       const k = tKey(t.id.slice(2));
@@ -1466,7 +1491,9 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     }
     const testKeys = new Set(tests.map((t) => tKey(t.id.slice(2))));
     const tasks = [];
-    for (const t of tinfo) {
+    // (1.25.1) the tasks that cite the row or one of its tests — the indexes, in task order
+    const cand = rtmMerge([tasksBy.get(rk), ...tests.map((tt) => tasksByTid.get(tKey(tt.id.slice(2))))]);
+    for (const t of cand.map((n) => tinfo[n])) {
       const via = [];
       if (cites(row, t.acs, t.sec)) via.push(row.id);
       for (const tt of tests) if (t.tids.has(tKey(tt.id.slice(2)))) via.push(tt.id);
@@ -1488,8 +1515,8 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
       gaps.push("no-coverage"); // a scaffold's untouched EC/NFR/SC row is no gap — trace_check warns about none (review R11)
     }
     const status = gaps.length ? "untraced" : !tasks.length || tasks.some((t) => !t.done) ? "planned" : tasks.some((t) => !t.verified) ? "implemented" : "verified";
-    const design = dinfo.filter((d) => cites(row, d.acs, d.sec) || (row.kind === "ac" && trackMarks.some((m) => m.acs.has(row.id) && d.title.includes(m.marker)))).map((d) => d.title);
-    const decisions = decs.filter((d) => (row.kind === "ac" ? d.acs.has(row.id) : d.secIds.has(row.key))).map((d) => ({ id: d.id, title: d.title, kind: d.kind }));
+    const design = rtmMerge([dinfoBy.get(rk), ...(row.kind === "ac" ? trackMarks.filter((m) => m.acs.has(row.id)).map((m) => m.secs) : [])]).map((n) => dinfo[n].title);
+    const decisions = (decsBy.get(rk) || []).map((n) => decs[n]).map((d) => ({ id: d.id, title: d.title, kind: d.kind }));
     const r = {
       id: row.id,
       kind: row.kind,

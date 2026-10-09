@@ -149,4 +149,30 @@ exports.run = async ({ ok, S, tmp, require }) => {
     ok(lf === "pass,2,2,2,2" && cr === lf && crlf === lf && E.decodeText(Buffer.from("a\rb\r")) === "a\nb\n" && E.decodeText(Buffer.from("a\r\r\nb")) === "a\r\r\nb",
       "1.25.1 (14): a feature saved with bare CR line endings traces as its LF / CRLF twin (it read 0 ACs beside the planned tests); decodeText turns CRs into line breaks only in a text with no LF (got " + js([lf, cr, crlf]) + ")");
   }
+
+  { // 1.25.1 (12): the traceability matrix reads indexes built once — linear in rows + tasks + tests (2,800 stories: 6.4 s → ~0.5 s)
+    const p = fresh("rtm-perf");
+    const f = S.createFeature(p, "Big", ["tdd"], "Big", null, "en");
+    const N = 2800;
+    const req = ["# Requirements: Big", "", "## User Stories", ""], tasks = ["# Tasks", ""], plan = ["# Test Plan", "", "| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |", "|---|---|---|---|---|---|"];
+    for (let s = 1; s <= N; s++) {
+      req.push(`### US-${s} (P1): Story ${s}`, "", "#### Acceptance Criteria (EARS)");
+      for (let a = 1; a <= 3; a++) req.push(`- **US-${s}.AC-${a}** — WHEN the user does action ${s}-${a} THE SYSTEM SHALL respond within 200 ms.`);
+      req.push("");
+      tasks.push(`- [ ] ${s}. [US${s}] Story ${s}`, `  - _Requirements: US-${s}.AC-1, US-${s}.AC-2, US-${s}.AC-3_`, `  - _Makes green: T-${s}_`);
+      plan.push(`| T-${s} | unit | example | story ${s} | US-${s}.AC-1, US-${s}.AC-2, US-${s}.AC-3 | \`tests/s${s}.test.js\` |`);
+    }
+    put(path.join(f.dir, "requirements.md"), req.join("\n") + "\n");
+    put(path.join(f.dir, "tasks.md"), tasks.join("\n") + "\n");
+    put(path.join(f.dir, "test-plan.md"), plan.join("\n") + "\n");
+    const time = (fn) => { const t0 = Date.now(); const r = fn(); return [Date.now() - t0, r]; };
+    const measure = () => { const [t] = time(() => S.traceCheck(p, f.slug)); const [m, mx] = time(() => S.traceMatrix(p, f.slug)); return { t, m, mx }; };
+    let r = measure();
+    if (r.m > Math.max(1500, 4 * r.t)) r = measure(); // a timing-only miss: once more (testing.md — the machine is shared)
+    const row = r.mx.rows.find((x) => x.id === "US-1400.AC-2");
+    ok(r.mx.ok && r.mx.rows.length === 3 * N && r.m <= Math.max(1500, 4 * r.t) &&
+      row && js(row.tests.map((x) => x.id)) === js(["T-1400"]) && js(row.tasks.map((x) => [x.number, x.cites])) === js([[1400, ["US-1400.AC-2", "T-1400"]]]) && row.status === "planned",
+      "1.25.1 (12): the matrix of 2,800 stories (8,400 rows) is linear — within max(1.5 s, 4 × the plain trace) (it took ~10× the trace: every row scanned every task and test entry); a row's tests, tasks and their citations are unchanged (got " +
+      js({ trace: r.t, matrix: r.m, rows: r.mx.rows.length, row: row && [row.tests, row.tasks.map((x) => [x.number, x.cites]), row.status] }) + ")");
+  }
 };

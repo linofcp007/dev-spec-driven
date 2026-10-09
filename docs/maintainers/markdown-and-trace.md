@@ -318,6 +318,11 @@ matrix.
   changed (`changed: null` when it did — unknown which row); none → `null`. Plus `approval` (with `baseline: snapshot |
   fingerprint-only | none`), `counts` {rows, verified, implemented, planned, untraced, template, superseded}, `lang`,
   `kind`, `tracks`.
+- **Linear (1.25.1):** every row reads INDEXES built once per matrix (`rtmIndex()` — key → the item indexes, ascending; `rtmKey()`:
+  an AC by its ID, an EC / NFR / SC by its number key; `rtmMerge()` keeps document order): the test entries citing the row, the
+  tasks citing it or one of its tests' T-IDs, the design sections (+ each active track marker's), the decisions. Each row scanned
+  every task, test entry, section and decision — 2,800 stories (8,400 rows) took the matrix 5.5–6.4 s beside a 0.5 s trace; now
+  ~0.5 s, the same rows (mcp/tests/05-markdown-r7-readers.js bounds it at max(1.5 s, 4 × the plain trace)).
 - **Stable codes.** `status` (`RTM_STATUSES`): `untraced` (a trace gap names it) · `planned` (traced; a linked task still
   open, or none linked yet) · `implemented` (every linked task done, one not verified) · `verified` (every linked task
   done and verified — nothingToVerify counts). `gaps`: `no-task` (an AC no task cites) · `no-test` (+tdd: an AC no test-plan
