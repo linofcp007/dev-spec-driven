@@ -70,7 +70,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_classify` | Recommend tracks from a description (multilingual keyword heuristic, weighted) |
 | `spec_init` | Scaffold `.specs/steering/` for the tracks; `lang` sets the project language, `guard` on · off · scope, `stopCheck` the end-of-turn evidence gate, `checks` the project's check commands, `approvalRoles` who signs off each phase, `evidence` reported · observed (only runs the harness saw verify), `approvalGuard` off · ask · deny (an agent's approval asks you / is refused) |
 | `spec_create` | Scaffold a feature folder for the active tracks (`kind: "bugfix"` for the bugfix flow, `kind: "spike"` for a timeboxed investigation, `brownfield: true` adds `integration-plan.md`, `flow: "design-first"` puts the design before the requirements, `branch: "true"` starts it on its own git branch — recorded, the `git switch -c` returned for you to run) |
-| `spec_import` | Import a Kiro, spec-kit or OpenSpec spec, a Claude Code / Cursor plan, a Codex ExecPlan or BMAD docs as a new feature (IDs remapped to `US-N.AC-M`, tasks renumbered; a plan can come as `text` — plan mode keeps plans outside the project) |
+| `spec_import` | Import a Kiro, spec-kit or OpenSpec spec, a Claude Code / Cursor plan, a Codex ExecPlan or BMAD docs as a new feature (IDs remapped to `US-N.AC-M`, tasks renumbered; a plan can come as `text` — plan mode keeps plans outside the project) — or Kiro steering / Cursor rules as `.specs/steering/` files; `dryRun` writes nothing |
 | `spec_templates` | Project templates: list, copy (`init`) or `check` the team's own scaffolds in `.specs/templates/`, which replace the built-in ones |
 | `spec_tracks` | Project-defined tracks: list, scaffold (`init`) or `check` the team's track packs in `.specs/tracks/<name>/` — each a marker track like `+sec` (signals, criteria, mandatory design sections, tasks, test rows, steering) |
 | `spec_list` / `spec_status` | Inspect features, phases, task progress, sections filled vs. present; each feature's kind (feature / bugfix / spike) and flow |
@@ -229,7 +229,9 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
   the project, or a Cursor `.cursor/plans/*.plan.md`), `execplan` (a Codex ExecPlan) and `bmad` (BMAD-METHOD PRD
   and stories) — and `fluidplan` (a plan settled with the fluidplan skill: `.fluidplan/<id>/` or its `PLAN.md` /
   `DECISIONS.md` → stories, criteria, tasks with `_Verify:_` / `_Depends:_`, and a `decisions.md` of the settled decisions).
-  The source must be inside the project and is only read.
+  The source must be inside the project and is only read. Steering too (1.25): `kiro-steering` (`.kiro/steering/`) and
+  `cursor-rules` (`.cursor/rules/*.mdc`, `.cursorrules`) become `.specs/steering/` files with their inclusion mode — never over
+  an existing one. `dryRun: true` (`--dry-run`) runs any import and writes nothing: what it would create, previewed.
 - **Deeper traceability** — `trace_check` warns about edge cases (EC-n), NFRs and success criteria
   (SC-nnn) nothing covers; `--code` looks for T-IDs in test names (`test("T-01 …")`, `def test_T01_…`).
   Test plans have a **Kind** column (`example` | `property`) with property-based testing guidance.
@@ -510,7 +512,7 @@ prints the raw result, and `help` lists every flag. A plugin install puts no `de
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates [list|init|check] · tracks [list|init|check]
-create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] [--branch [<name>]] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] [--branch [<name>]] · bugfix · spike · import [- | --text] [--dry-run] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
@@ -589,7 +591,7 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_classify` | Recomenda tracks a partir de uma descrição (heurística multilíngue, com peso) |
 | `spec_init` | Cria `.specs/steering/` para os tracks; `lang` define a língua do projeto, `guard` on · off · scope, `stopCheck` o gate de evidência no fim do turno, `checks` os comandos de verificação do projeto, `approvalRoles` quem aprova cada fase, `evidence` reported · observed (só verificam as execuções que o harness viu), `approvalGuard` off · ask · deny (a aprovação de um agente pergunta-te / é recusada) |
 | `spec_create` | Cria a pasta da funcionalidade para os tracks ativos (`kind: "bugfix"` para o fluxo de bugfix, `kind: "spike"` para uma investigação com prazo, `brownfield: true` acrescenta `integration-plan.md`, `flow: "design-first"` põe o design antes dos requisitos, `branch: "true"` começa-a no seu próprio branch git — registado, com o `git switch -c` devolvido para correres) |
-| `spec_import` | Importa uma spec do Kiro, spec-kit ou OpenSpec, um plano do Claude Code / Cursor, um ExecPlan do Codex ou documentos BMAD como nova funcionalidade (IDs convertidos para `US-N.AC-M`, tarefas renumeradas; um plano pode vir como `text` — o plan mode guarda os planos fora do projeto) |
+| `spec_import` | Importa uma spec do Kiro, spec-kit ou OpenSpec, um plano do Claude Code / Cursor, um ExecPlan do Codex ou documentos BMAD como nova funcionalidade (IDs convertidos para `US-N.AC-M`, tarefas renumeradas; um plano pode vir como `text` — o plan mode guarda os planos fora do projeto) — ou o steering do Kiro / as regras do Cursor como ficheiros de `.specs/steering/`; `dryRun` não escreve nada |
 | `spec_templates` | Templates do projeto: lista, copia (`init`) ou verifica (`check`) os scaffolds da equipa em `.specs/templates/`, que substituem os de origem |
 | `spec_tracks` | Tracks definidos pelo projeto: lista, cria (`init`) ou verifica (`check`) os track packs da equipa em `.specs/tracks/<nome>/` — cada um é um track com marcador como o `+sec` (sinais, critérios, secções obrigatórias do design, tarefas, linhas de teste, steering) |
 | `spec_list` / `spec_status` | Inspeciona funcionalidades, fases, progresso, secções preenchidas vs. presentes; o tipo de cada uma (feature / bugfix / spike) e o fluxo |
@@ -752,7 +754,10 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   ficheiro do plan mode do Claude Code copiado para o projeto, ou um `.cursor/plans/*.plan.md` do Cursor), `execplan`
   (um ExecPlan do Codex) e `bmad` (PRD e stories do BMAD-METHOD) — e `fluidplan` (um plano decidido com a skill
   fluidplan: `.fluidplan/<id>/` ou o `PLAN.md` / `DECISIONS.md` dele → histórias, critérios, tarefas com `_Verify:_` /
-  `_Depends:_` e um `decisions.md` com as decisões tomadas). A origem tem de estar dentro do projeto e só é lida.
+  `_Depends:_` e um `decisions.md` com as decisões tomadas). A origem tem de estar dentro do projeto e só é lida. Também
+  steering (1.25): `kiro-steering` (`.kiro/steering/`) e `cursor-rules` (`.cursor/rules/*.mdc`, `.cursorrules`) passam a
+  ficheiros de `.specs/steering/` com o seu modo de inclusão — nunca por cima de um existente. `dryRun: true` (`--dry-run`)
+  corre qualquer importação sem escrever nada: mostra o que criaria.
 - **Rastreabilidade mais funda** — o `trace_check` avisa sobre casos-limite (EC-n), NFRs e critérios de
   sucesso (SC-nnn) sem cobertura; `--code` procura T-IDs nos nomes dos testes (`test("T-01 …")`,
   `def test_T01_…`). Os planos de testes têm uma coluna **Tipo** (Kind: `example` | `property`) com orientação
@@ -1059,7 +1064,7 @@ executável, `node "<clone>/cli/dev-spec.js" …` com o caminho resolvido (fiche
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates [list|init|check] · tracks [list|init|check]
-create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] [--branch [<name>]] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] [--branch [<name>]] · bugfix · spike · import [- | --text] [--dry-run] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
@@ -1138,7 +1143,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_classify` | Recomienda tracks desde una descripción (heurística multilingüe, ponderada) |
 | `spec_init` | Crea `.specs/steering/` para los tracks; `lang` fija el idioma del proyecto, `guard` on · off · scope, `stopCheck` el gate de evidencia al final del turno, `checks` los comandos de comprobación del proyecto, `approvalRoles` quién aprueba cada fase, `evidence` reported · observed (solo verifican las ejecuciones que el harness vio), `approvalGuard` off · ask · deny (la aprobación de un agente te pregunta / se rechaza) |
 | `spec_create` | Crea la carpeta de la función para los tracks activos (`kind: "bugfix"` para el flujo de bugfix, `kind: "spike"` para una investigación con plazo, `brownfield: true` añade `integration-plan.md`, `flow: "design-first"` pone el diseño antes de los requisitos, `branch: "true"` la empieza en su propia rama git — registrada, con el `git switch -c` devuelto para que lo ejecutes) |
-| `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas; un plan puede llegar como `text` — el plan mode guarda los planes fuera del proyecto) |
+| `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas; un plan puede llegar como `text` — el plan mode guarda los planes fuera del proyecto) — o el steering de Kiro / las reglas de Cursor como archivos de `.specs/steering/`; `dryRun` no escribe nada |
 | `spec_templates` | Plantillas del proyecto: lista, copia (`init`) o comprueba (`check`) los scaffolds del equipo en `.specs/templates/`, que sustituyen a los de origen |
 | `spec_tracks` | Tracks definidos por el proyecto: lista, crea (`init`) o comprueba (`check`) los track packs del equipo en `.specs/tracks/<nombre>/` — cada uno es un track con marcador como `+sec` (señales, criterios, secciones obligatorias del diseño, tareas, filas de prueba, steering) |
 | `spec_list` / `spec_status` | Inspecciona funciones, fases, progreso, secciones completadas vs. presentes; el tipo de cada una (feature / bugfix / spike) y el flujo |
@@ -1305,7 +1310,10 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   Code copiado al proyecto, o un `.cursor/plans/*.plan.md` de Cursor), `execplan` (un ExecPlan de Codex) y `bmad` (PRD
   e historias de BMAD-METHOD) — y `fluidplan` (un plan decidido con la skill fluidplan: `.fluidplan/<id>/` o su
   `PLAN.md` / `DECISIONS.md` → historias, criterios, tareas con `_Verify:_` / `_Depends:_` y un `decisions.md` con las
-  decisiones tomadas). El origen debe estar dentro del proyecto y solo se lee.
+  decisiones tomadas). El origen debe estar dentro del proyecto y solo se lee. También steering (1.25): `kiro-steering`
+  (`.kiro/steering/`) y `cursor-rules` (`.cursor/rules/*.mdc`, `.cursorrules`) pasan a archivos de `.specs/steering/` con su
+  modo de inclusión — nunca encima de uno existente. `dryRun: true` (`--dry-run`) ejecuta cualquier importación sin escribir
+  nada: muestra lo que crearía.
 - **Trazabilidad más profunda** — `trace_check` avisa de casos límite (EC-n), NFRs y criterios de éxito
   (SC-nnn) sin cobertura; `--code` busca T-IDs en los nombres de las pruebas (`test("T-01 …")`,
   `def test_T01_…`). Los planes de pruebas tienen una columna **Tipo** (Kind: `example` | `property`) con
@@ -1613,7 +1621,7 @@ línea ejecutable, `node "<clone>/cli/dev-spec.js" …` con la ruta resuelta (lo
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
   [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates [list|init|check] · tracks [list|init|check]
-create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] [--branch [<name>]] · bugfix · spike · import [- | --text] · list · status · doctor
+create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] [--branch [<name>]] · bugfix · spike · import [- | --text] [--dry-run] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>

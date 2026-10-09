@@ -137,6 +137,11 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   repo (`alwaysApply: true`). For your own project, generate it with absolute paths:
   `mkdir -p .cursor/rules && node "<PLUGIN>/cli/dev-spec.js" rules cursor > .cursor/rules/dev-spec-driven.mdc`
   (PowerShell: the recipe at the top).
+- **Your existing rules (1.25):** `node "<PLUGIN>/cli/dev-spec.js" import cursor-rules --dry-run` shows how the project's
+  `.cursor/rules/*.mdc` and `.cursorrules` would become `.specs/steering/` files (`alwaysApply: true` → always, `globs` →
+  fileMatch, else manual); without `--dry-run` it writes them — never over an existing steering file, and never
+  `dev-spec-driven.mdc` itself. Coming from Kiro: `import kiro-steering` does the same for `.kiro/steering/`, and
+  `import kiro .kiro/specs/<name>` brings a spec in as a feature.
 
 ## Windsurf
 

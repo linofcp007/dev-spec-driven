@@ -54,7 +54,7 @@ Read the file BEFORE you change its area (a section name another note cites — 
   guard, the status line, user defaults or the plan-mode bridge: Hooks and commands · Guard mode · Human approval guard ·
   Claude Code integration (1.16 C).
 - **`docs/maintainers/conventions.md`** — before touching feature folders, `.state.json` / roadmap.json writes (or adding a key
-  to them — the merge driver must know it), any write under .specs/, the locks, process I/O or CLI flags / exit codes:
+  to them — the merge driver must know it), any write under .specs/ (the write gate, the 1.25 dry-run sink), the locks, process I/O or CLI flags / exit codes:
   Conventions & gotchas (resolver, the write gate, JSON state, merging the spec state — git's merge driver, 1.21 —, locks,
   rename, stdout, the CLI).
 - **`docs/maintainers/testing.md`** — before adding a test (which file of `mcp/tests/` / `cli/tests/`), writing one that

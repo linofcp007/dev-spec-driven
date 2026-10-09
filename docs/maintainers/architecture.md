@@ -77,7 +77,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
                                test file (isTestFile) the scan, coverage, the test-code scan and guard mode share (1.21.1)
   import/                      spec_import: index.js (the entry point, task import) · common.js (the shared readers) · one
                                parser per tool — kiro.js · speckit.js · openspec.js · plan.js (plan + execplan) · bmad.js ·
-                               fluidplan.js
+                               fluidplan.js · steering.js (1.25: Kiro steering / Cursor rules → .specs/steering/)
 mcp/lib/i18n.js                the localized content's FACADE: assembles the tables (BUILD / STEERING / EVALS_README / MSG / BRIEF)
                                — each language's file loads on its first use — and exports the public API — EN/PT/ES + pt-BR
 mcp/lib/i18n/                  en.js · pt.js · es.js (every table's block for that language) · common.js (language codes, the

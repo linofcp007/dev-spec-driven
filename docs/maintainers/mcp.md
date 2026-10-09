@@ -121,7 +121,8 @@ object properties. A task `number` (spec_task_brief, spec_complete_task) carries
 be an integer"; 0 is a task number: next serves a hand-written task 0, so refusing it looped next → complete); the engine
 refuses the CLI's raw word in these same words (`msg(lang).args` —
 conventions.md → CLI boolean switches), and a roadmap `order` past the safe range alike. It iterates the SCHEMA's keys, never the caller's (`__proto__` arguments are ignored);
-an absent or `null` value means "not given". Last, **projectDir** (`projectDirArg` — 1.24 r6 A2 / A3), read without any fs call
+an absent or `null` value means "not given". `REQUIRED_ONE_OF` (spec_import: `path` or `text`) is a group `{names, unless}` —
+1.25: `unless` the tool is a steering one (`spec.STEERING_IMPORT_TOOLS`: its path defaults to the tool's own folder). Last, **projectDir** (`projectDirArg` — 1.24 r6 A2 / A3), read without any fs call
 first (`parseProjectDir`): not given — absent, blank, or holding a variable a client left unexpanded (`spec.unexpandedVar`: any
 `${`, a leading `$NAME`, a `%NAME%` — only a whole `${VAR}` was caught, so with roots `$HOME` / `${workspaceFolder}/` went to the
 server's cwd) → the client's root when roots gave the default project, else left out (the engine's default); a relative `..`

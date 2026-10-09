@@ -630,8 +630,8 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require }) => {
       "C3 bmad v6 (_bmad-output/planning-artifacts): '#### FR-1: name' + its paragraph → FR-1, epics.md stories with bold Given/When/Then criteria → EARS (got " + JSON.stringify(b6).slice(0, 300) + ")");
     const noBmad = c3Safe(() => S.importSpec(ie, "bmad", ".agent"));
     const badTool = await c3Call("spec_import", { tool: "Plan", path: "x.md", projectDir: ib });
-    ok(!noBmad.ok && /No BMAD spec files found/.test(noBmad.error) && badTool.isError && /tool must be one of: kiro, spec-kit, openspec, plan, execplan, bmad, fluidplan \(got "Plan"\)/.test(badTool.body.error), // 1.17 F: + fluidplan
-      "C3 spec_import: a folder with no BMAD docs is refused; the tool enum lists the six formats and stays exact ('Plan' refused)");
+    ok(!noBmad.ok && /No BMAD spec files found/.test(noBmad.error) && badTool.isError && /tool must be one of: kiro, spec-kit, openspec, plan, execplan, bmad, fluidplan, kiro-steering, cursor-rules \(got "Plan"\)/.test(badTool.body.error), // 1.17 F: + fluidplan; 1.25: + kiro-steering, cursor-rules
+      "C3 spec_import: a folder with no BMAD docs is refused; the tool enum lists every format (1.25: the steering ones too) and stays exact ('Plan' refused)");
 
     // --- C3.2 design-first flow
     const df = path.join(tmp, "c3-design-first");

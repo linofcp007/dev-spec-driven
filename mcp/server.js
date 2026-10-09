@@ -230,19 +230,20 @@ const TOOLS = [
   {
     name: "spec_import",
     description:
-      "Import a spec written for another tool as a NEW dev-spec feature (never over an existing feature; the source is only read). `tool`: 'kiro' (.kiro/specs/<name>/), 'spec-kit' (specs/<nnn-name>/ — spec.md, plan.md, tasks.md), 'openspec' (openspec/specs/<capability>/ or a change folder openspec/changes/<id>/), 'plan' (a Markdown plan — Claude Code plan mode, a Cursor .cursor/plans/*.plan.md), 'execplan' (a Codex ExecPlan), 'bmad' (BMAD-METHOD: the PRD + its epics and stories, or one story file) or 'fluidplan' (a .fluidplan/<id>/ plan folder, its plan.json, PLAN.md or DECISIONS.md). Each scenario becomes ONE EARS criterion where possible (else its text is kept with [NEEDS CLARIFICATION]); IDs are remapped to US-N.AC-M (`mapping` {oldId: newId}); tasks are renumbered keeping their ticks, [P] / [USn] tags, files (_Implements:_), verify commands (_Verify:_) and dependencies; decisions go to decisions.md / design.md; every artifact notes 'Imported from <tool> <path> on <date>'. `path` must resolve inside the project (a folder holding several plans is refused — name the file); `text` (plan / execplan / fluidplan only, instead of path) is the document itself — e.g. a Claude Code plan, kept in ~/.claude/plans OUTSIDE the project. Tracks: `tracks`, else auto-classified from the imported requirements. Returns {feature, files, mapping, warnings}.",
+      "Import a spec written for another tool as a NEW dev-spec feature (never over an existing feature; the source is only read). `tool`: 'kiro' (.kiro/specs/<name>/), 'spec-kit' (specs/<nnn-name>/ — spec.md, plan.md, tasks.md), 'openspec' (openspec/specs/<capability>/ or openspec/changes/<id>/), 'plan' (a Markdown plan — Claude Code plan mode, a Cursor .cursor/plans/*.plan.md), 'execplan' (a Codex ExecPlan), 'bmad' (BMAD PRD + stories, or one story file) or 'fluidplan' (a .fluidplan/<id>/ folder, its plan.json, PLAN.md or DECISIONS.md); 'kiro-steering' (.kiro/steering/*.md) / 'cursor-rules' (.cursor/rules/*.mdc, .cursorrules) write .specs/steering/ files instead (path optional; an existing name is skipped, never overwritten). Each scenario becomes ONE EARS criterion where possible (else kept with [NEEDS CLARIFICATION]); IDs are remapped to US-N.AC-M (`mapping` {oldId: newId}); tasks are renumbered keeping their ticks, [P] / [USn] tags, files (_Implements:_), verify commands (_Verify:_) and dependencies; decisions go to decisions.md / design.md; every artifact notes 'Imported from <tool> <path> on <date>'. `path` must resolve inside the project (a folder holding several plans is refused — name the file); `text` (plan / execplan / fluidplan only, instead of path) is the document itself — e.g. a Claude Code plan, kept in ~/.claude/plans OUTSIDE the project. Tracks: `tracks`, else auto-classified. `dryRun: true` writes nothing: the same result plus `preview` (each file, bounded). Returns {feature, files, mapping, counts, warnings}.",
     inputSchema: {
       type: "object",
       properties: {
-        tool: { type: "string", enum: ["kiro", "spec-kit", "openspec", "plan", "execplan", "bmad", "fluidplan"], description: "The format of the source spec." },
+        tool: { type: "string", enum: ["kiro", "spec-kit", "openspec", "plan", "execplan", "bmad", "fluidplan", "kiro-steering", "cursor-rules"], description: "The format of the source spec." },
         path: { type: "string", description: "The spec's folder or file, relative to the project root or absolute — inside the project. Required unless `text` is given." },
         text: { type: "string", description: "tool 'plan' / 'execplan' / 'fluidplan' only, instead of `path`: the document's markdown itself (fluidplan: its PLAN.md, DECISIONS.md may follow) — e.g. an approved Claude Code plan, kept in ~/.claude/plans outside the project. The result then has inline: true, source: null." },
         name: { type: "string", description: "Feature name (default: the source's title, else its folder or file name). An existing feature with that slug is an error." },
         tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai | sec | privacy | dist | api | ui | obs | data, or a project track pack (spec_tracks); 'tdd,saas' / '+saas +ai' are split" }, description: "Active tracks ('core' always added). Omit to auto-classify from the imported requirements." },
         lang: { type: "string", enum: LANG_ENUM, description: "Language of the generated artifacts (headings, notes). Defaults to the project language, else en. The imported text itself is kept as written." },
+        dryRun: { type: "boolean", description: "Write nothing." },
         projectDir: PROJECT_DIR,
       },
-      required: ["tool"], // + `path` or `text` — the engine says which is missing (a schema can't express "one of")
+      required: ["tool"], // + `path` or `text` (not for a steering tool) — the engine says which is missing (a schema can't express "one of")
     },
   },
 
@@ -558,7 +559,7 @@ function runTool(name, args, extra) {
         ...(extra && TYPE_CHECK.object(extra.preview) ? { preview: extra.preview } : {}) });
 
     case "spec_import": // the engine refuses a path outside the project (same call as the CLI's `import`); text: 1.16 C4 (`import plan -`)
-      return spec.importSpec(pdir, args.tool, args.path, { name: args.name, tracks: args.tracks, lang: args.lang, text: args.text });
+      return spec.importSpec(pdir, args.tool, args.path, { name: args.name, tracks: args.tracks, lang: args.lang, text: args.text, dryRun: args.dryRun === true });
 
     case "spec_append_tasks":
       return spec.appendTasks(pdir, args.name, args.tasks, { heading: args.heading });
@@ -815,8 +816,9 @@ function error(id, code, message, data) {
 // Required arguments per tool, straight from the advertised inputSchema — a missing `name` must be an
 // error, not a folder called "undefined".
 // Groups of arguments of which ONE is required — a schema's `required` can't say "path or text" (spec_import, 1.16 C4): none
-// given → the group's first name is reported missing, as a required key would be.
-const REQUIRED_ONE_OF = { spec_import: [["path", "text"]] };
+// given → the group's first name is reported missing, as a required key would be. `unless`: the call needs none of them (1.25: a
+// steering import — kiro-steering / cursor-rules — reads the tool's own folder when no path is given).
+const REQUIRED_ONE_OF = { spec_import: [{ names: ["path", "text"], unless: (a) => spec.STEERING_IMPORT_TOOLS.includes(a.tool) }] };
 // Required string arguments for which an empty (or whitespace-only) value is a real value, not "not given" (1.16 U review 5):
 // an empty git log is what `git log` prints in a repository without commits (→ 0 commits), an empty closing message claims
 // nothing (→ no-claim) — the CLI's `log <f> -` / `stop-check --message ""` accept them, so MCP does too.
@@ -827,7 +829,7 @@ function missingArgs(toolName, args) {
   const emptyOk = hasOwn(EMPTY_OK, toolName) ? EMPTY_OK[toolName] : [];
   const given = (k) => !(args[k] === undefined || args[k] === null || (typeof args[k] === "string" && !args[k].trim() && !emptyOk.includes(k)));
   const missing = tool.inputSchema.required.filter((k) => !given(k));
-  for (const group of hasOwn(REQUIRED_ONE_OF, toolName) ? REQUIRED_ONE_OF[toolName] : []) if (!group.some(given)) missing.push(group[0]);
+  for (const group of hasOwn(REQUIRED_ONE_OF, toolName) ? REQUIRED_ONE_OF[toolName] : []) if (!group.unless(args) && !group.names.some(given)) missing.push(group.names[0]);
   return missing;
 }
 

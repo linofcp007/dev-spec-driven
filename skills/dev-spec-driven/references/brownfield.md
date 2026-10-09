@@ -83,9 +83,11 @@ test files, and `spec_finish {write: true}` records the implementing files so `s
 ## Import from other spec tools
 
 Specs and plans already written for another tool become dev-spec features with `spec_import {tool, path, name?,
-tracks?, lang?}` (CLI `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--tracks …]
-[--lang pt]`; `/spec-import`). The path must be inside the project; the source is only read; the result is always a
-NEW feature (an existing slug is an error).
+tracks?, lang?, dryRun?}` (CLI `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--tracks …]
+[--lang pt] [--dry-run]`; `/spec-import`). The path must be inside the project; the source is only read; the result is always a
+NEW feature (an existing slug is an error). `dryRun: true` (1.25) runs the whole import and writes nothing — no file, folder,
+lock or roadmap refresh: the same answer plus `preview` (each file it would write, its size and first characters), `counts`
+(stories, criteria, tasks, decisions), the tracks it would classify, `mapping` and `warnings`; every refusal is the real one's.
 
 | Tool | Source | Mapping |
 |---|---|---|
@@ -114,6 +116,28 @@ artifact carries an "Imported from <tool> <path> on <date>" note. Tracks come fr
 the imported requirements. The result returns `mapping` (old ID → new ID) and `warnings` — show both, confirm the
 tracks with the human (Phase 0), then run the normal gates. Imported checkboxes carry no evidence: re-verify
 ticked tasks before trusting them.
+
+### Steering from Kiro and Cursor (1.25)
+
+A project moving from Kiro or Cursor keeps its standing rules: `spec_import {tool: "kiro-steering" | "cursor-rules", path?}`
+(CLI `dev-spec import kiro-steering|cursor-rules [path] [--dry-run]`) writes each one as `.specs/steering/<name>.md` — no
+feature; `name` / `tracks` / `text` are refused. Without `path` it reads the tool's own places (`.kiro/steering/`;
+`.cursor/rules/` and `.cursorrules`); with one, a folder or a single file inside the project.
+
+| Source | Becomes |
+|---|---|
+| `.kiro/steering/<name>.md` | `<name>.md` with its front matter as written (Kiro's `inclusion` / `fileMatchPattern` are dev-spec's); none → Kiro's default, `inclusion: always`; Kiro's `auto` reads as `manual` (a warning) |
+| `.cursor/rules/<name>.mdc` (`.md` too) | `alwaysApply: true` → `inclusion: always`; `globs` (a comma list, a YAML or inline list) → `inclusion: fileMatch` + `fileMatchPattern` — a glob naming no folder (`*.tsx`) matches at any depth (`**/*.tsx`); neither → `inclusion: manual`; the `description` kept in the front matter |
+| `.cursorrules` | `cursorrules.md`, `inclusion: always` |
+
+The body is kept as written, after one provenance comment (`<!-- Imported from … -->` — a task brief never quotes a
+comment). A name is made a steering name (`Team Notes.md` → `team-notes.md`). **Never over an existing file:** a name
+`.specs/steering/` already holds is skipped and reported (`skipped`: `reason` exists / duplicate / name / own / empty /
+too-large / outside / unreadable; `template: true` when the file is still spec_init's stub — Kiro's `product.md`, `tech.md`,
+`structure.md` meet the stubs init wrote: confirm with the user, delete the stub, import again). dev-spec's own Cursor rule
+(`.cursor/rules/dev-spec-driven.mdc`, from `rules cursor`) is the workflow, not project steering: skipped (`own`). Sub-folders
+and other files are named in a warning (import a sub-folder by its path); at most 100 files, 2 MiB of text, per call. Each
+task brief then carries the imported files by their mode (`references/steering-templates.md` → Scoped steering).
 
 ## Principles
 - **Analyze first** — understand before you modify.
