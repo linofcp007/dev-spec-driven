@@ -164,7 +164,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   driver) writes the `.gitattributes` block (`mergeAttributes()`, pure, idempotent: a head comment + `MERGE_ATTRIBUTE_LINES`, the
   file's other lines and EOL kept) in the project folder and this clone's git config `merge.dev-spec-state.name` / `.driver` =
   `node '<clone>/cli/dev-spec.js' merge-state %O %A %B %P` (forward slashes, single-quoted: git runs it through sh); `--uninstall`
-  removes both (an emptied .gitattributes is deleted). Without `--install` in a clone, git falls back to its text merge (an
+  removes both (an emptied .gitattributes is deleted); neither writes through a `.gitattributes` that is a link or not a regular file
+  (1.25.1, review 7 — lstat first: a cloned repository's link made --install write into the file it pointed at; exit 1, code
+  `attributes-not-file`, `mergeState.attrsNotFile`, nothing written, no git config). Without `--install` in a clone, git falls back to its text merge (an
   undefined driver name). **The sign-offs' drop rule runs on the 3-way RESULT** (`pruneSignoffs()`, 1.21 review A1): when only one
   side changed `signoffs`, `mergeThree` hands that side back as it is, so the rule is applied after it too (a stale
   `signoffs.<phase>.<role>` stayed next to the other side's later approval). **The driver never approves anything:** role

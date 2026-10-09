@@ -109,6 +109,31 @@ exports.run = ({ ok, run, tmp, CLI }) => {
       "1.24 r6 B9: merge-state --uninstall outside a git repository exits 1 naming --uninstall, not --install" + (uNo ? " (got " + js(uNo.out.trim().slice(0, 200)) + ")" : " — skipped: tmp sits inside a repository"));
   }
 
+  // 1.25.1 (review 7): --install / --uninstall never write through a .gitattributes that is a link (a cloned repository's) — it wrote
+  // the driver's lines into the file it pointed at — nor over a folder of that name: refused (exit 1, code attributes-not-file), the
+  // target untouched, no git config written
+  {
+    const lr = path.join(tmp, "ms-link-repo");
+    fs.mkdirSync(lr, { recursive: true });
+    git(lr, "init", "-q");
+    const victim = path.join(tmp, "ms-link-victim.txt");
+    fs.writeFileSync(victim, "keep me\n");
+    let linked = true;
+    try { fs.symlinkSync(victim, path.join(lr, ".gitattributes"), "file"); } catch { linked = false; }
+    const li = linked ? jsonOf(run(["merge-state", "--install", "--json", "--project", lr])) : null;
+    const lu = linked ? run(["merge-state", "--uninstall", "--project", lr]) : null;
+    const fr = path.join(tmp, "ms-dir-repo");
+    fs.mkdirSync(path.join(fr, ".gitattributes"), { recursive: true });
+    git(fr, "init", "-q");
+    const fi = run(["merge-state", "--install", "--project", fr]);
+    const cfg = git(lr, "config", "--get", "merge.dev-spec-state.driver");
+    ok((!linked || (li && li.ok === false && li.code === "attributes-not-file" && lu.code === 1 && /is a link or not a regular file/.test(lu.out) &&
+      fs.readFileSync(victim, "utf8") === "keep me\n" && cfg.status !== 0)) && fi.code === 1 && /is a link or not a regular file/.test(fi.out) &&
+      fs.statSync(path.join(fr, ".gitattributes")).isDirectory(),
+      "1.25.1 r7: merge-state --install / --uninstall refuse a .gitattributes that is a link (the file it points at untouched, no git config) or a folder — exit 1, code attributes-not-file" +
+      (linked ? "" : " (a symbolic link can't be made here: that part skipped)") + " (got " + js([li, lu && lu.code, fi.code, fi.out.trim().slice(0, 120)]) + ")");
+  }
+
   // The end-to-end merge: main approves the planning phases; branch A approves the tasks, ticks task 1 and adds a backlog item;
   // branch B ticks task 2, adds another backlog item and a dependency. With the driver installed, `git merge` is clean and the
   // spec state holds both branches' work — valid JSON, doctor happy.

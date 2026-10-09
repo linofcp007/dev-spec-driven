@@ -2200,6 +2200,7 @@ const msg = {
       noGitUninstall: (dir) => `${dir} no está dentro de un repositorio git (o git no está instalado) — merge-state --uninstall quita la configuración git y las líneas de .gitattributes de ese repositorio; aquí no hay nada que quitar.`,
       attrsAdded: (file) => `${file}: líneas del merge driver añadidas (haz commit — todo el equipo las recibe):`,
       attrsKept: (file) => `${file}: las líneas del merge driver ya están.`,
+      attrsNotFile: (file) => `${file} es un enlace o no es un fichero normal — merge-state nunca escribe a través de él (cambiaría el fichero al que apunta): sustitúyelo por un .gitattributes normal y vuelve a ejecutarlo.`,
       attrsRemoved: (file) => `${file}: líneas del merge driver eliminadas (haz commit).`,
       attrsNone: (file) => `${file}: ninguna línea del merge driver que eliminar.`,
       configSet: (key, value) => `git config ${key} = ${value}`,

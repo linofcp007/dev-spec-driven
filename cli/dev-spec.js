@@ -2234,6 +2234,11 @@ function mergeDriverSetup(uninstall) {
   const top = git(["rev-parse", "--show-toplevel"]);
   if (!top || top.error || top.status !== 0) return fail({ ok: false, error: uninstall ? M.noGitUninstall(projectDir) : M.noGit(projectDir) }); // 1.24 r6 B9: each names its own switch
   const file = path.join(projectDir, ".gitattributes");
+  // 1.25.1 (review 7): never through a link — a .gitattributes that is a symbolic link (a cloned repository's) made --install write the
+  // driver's lines into the file it points at, and --uninstall rewrite or delete it; a folder (or any other kind) there neither.
+  let lst = null;
+  try { lst = fs.lstatSync(file); } catch { lst = null; }
+  if (lst && (lst.isSymbolicLink() || !lst.isFile())) return fail({ ok: false, code: "attributes-not-file", error: M.attrsNotFile(file) });
   let before = "";
   try { before = fs.readFileSync(file, "utf8"); } catch { before = ""; }
   const a = spec.mergeAttributes(before, uninstall);
