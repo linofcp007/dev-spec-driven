@@ -176,6 +176,23 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
     const varText = (l) => [...["classification", "requirements", "design", "tasks", "checklist"].map((b) => I[b]({ name: "n", tracks: ["core", ...allTr], label: "core", slug: "n", summary: "", signals: {} }, l)),
       ...["evalPlan", "loadTest", "quickstart", "integrationPlan", "promptStub", "bugTestPlan", "bugTasks"].map((b) => I[b]("n", l)), I.testPlan("n", l, ["core", ...allTr]),
       ...I.steeringKnownFiles().map((n) => I.steeringStub(n, l))].map(varsOf);
+    // 1.25.1 review — ES says "fichero" for a file (it said both, 92 / 67); "archivo" / "archivar" is the feature ARCHIVE
+    // (restore.renamedRecords read "registros de archivo" — file records). Only the test plan's older column name is named.
+    const esTexts = [];
+    const esWalk = (v, depth) => {
+      if (depth > 8) return;
+      if (typeof v === "string") return void esTexts.push(v);
+      if (Array.isArray(v)) return void v.forEach((x) => esWalk(x, depth + 1));
+      if (typeof v === "function") return void probes.forEach((p) => { let r; try { r = v(...p); } catch { return; } esWalk(r, depth + 1); });
+      if (v && typeof v === "object" && !(v instanceof RegExp)) for (const k of Object.keys(v)) if (k !== "stopGate") esWalk(v[k], depth + 1);
+    };
+    esWalk(I.msg("es"), 0); esWalk(I.brief("es"), 0);
+    for (const tracks of [["core"], ["core", ...allTr]]) for (const b of ["classification", "requirements", "design", "tasks", "checklist", "change"]) esTexts.push(I[b]({ name: "n", tracks, label: "core", slug: "n", summary: "", signals: {} }, "es"));
+    for (const b of ["evalPlan", "loadTest", "quickstart", "integrationPlan", "promptStub", "bugTestPlan", "bugTasks"]) esTexts.push(I[b]("n", "es"));
+    esTexts.push(I.testPlan("n", "es", ["core", ...allTr]), I.evalsReadme("es"), ...I.steeringKnownFiles().map((n) => I.steeringStub(n, "es")));
+    const esFile = esTexts.map((t) => t.replace(/columna Fichero \(o Archivo, en un plan más antiguo\)/g, "")).filter((t) => /(?<![\p{L}])[Aa]rchivos?(?![\p{L}])/u.test(t));
+    ok(esTexts.length > 1000 && !esFile.length && /registros de archivado/.test(I.msg("es").restore.renamedRecords("x")) && /\| Fichero \|/.test(I.testPlan("n", "es", ["core", "tdd"])),
+      "1.25.1 review: ES says 'fichero' for a file in every message and scaffold (the archive keeps archivo / archivado) (" + esTexts.length + " strings; " + esFile.slice(0, 2).map((t) => t.slice(0, 80)).join(" · ") + ")");
     const enVars = varText("en");
     ok(enVars.join(" ").includes("{{variables}}") && ["pt", "es", "pt-BR"].every((l) => JSON.stringify(varText(l)) === JSON.stringify(enVars)),
       "1.25.1 review: {{template variables}} are English-stable — every builder and steering stub names the same ones in PT / ES / pt-BR as in EN (got pt " + JSON.stringify(varsOf(I.promptStub("n", "pt"))) + ")");
