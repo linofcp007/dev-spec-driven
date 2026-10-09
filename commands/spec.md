@@ -35,5 +35,5 @@ phase}` only after their explicit yes (`/approve` is their own command). A refus
 them — `force` only when the user explicitly accepts the failures. Implementation follows in Phase 6 of the skill (the
 user's `/executeTask`).
 
-Detail: `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/workflows.md` (sizes, supporting flows) and
-`classification-matrix.md` beside it. Respond in the user's language (EN / PT / ES).
+Detail: `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/phase-guide.md` (each phase), with `workflows.md` (sizes)
+and `classification-matrix.md` beside it. Respond in the user's language (EN / PT / ES).
