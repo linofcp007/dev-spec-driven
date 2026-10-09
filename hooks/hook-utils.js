@@ -16,7 +16,7 @@
  *   - sessionFlagFile — a tiny per-session marker in the OS temp folder (the guard hook's forced-approval note, once a session).
  *   - claimProse / claimMatch — the stop gate's claim scan as the Stop hook's pre-filter, from the build's
  *     hooks/stop-claims.generated.json.
- * mcp/tests/10-guards-review6.js checks the readings agree with the engine's.
+ * mcp/tests/10-guards-guard-downs.js checks the readings agree with the engine's.
  */
 
 const fs = require("fs");
@@ -70,7 +70,7 @@ function editTargets(fp, cwd, win = process.platform === "win32") {
 }
 // ONE reading of an MCP tool's projectDir, shared by the approval hook and mcp/server.js (it accepted a
 // local file:// URI the hook read as a relative folder: spec_approve {projectDir: "file:///…/projA", force: true} went through at ask).
-// The engine's unexpanded-variable rule is the probe's (files.js unexpandedVar — mcp/tests/10-guards-review7.js checks they agree):
+// The engine's unexpanded-variable rule is the probe's (files.js unexpandedVar — mcp/tests/10-guards-shell-writes.js checks they agree):
 // `${…}`, a leading `$NAME`, a `%NAME%`.
 const RE_DOTDOT = /(^|[\\/])\.\.([\\/]|$)/;
 // A local file:// URI → its absolute path, else null (a host other than localhost, '..', a control character; on Windows a drive path
@@ -178,7 +178,7 @@ function sessionFlagFile(kind, sessionId) {
 // (scripts/build.js: the engine's own claim patterns, word wrapper and prose regexes — guards.js stopClaimFilter). claimProse is the
 // engine's stopProse run with those regexes (the message's tail without fenced code, HTML comments — core.js replaceHtmlCommentSpans'
 // scan —, inline code and quoted lines); claimMatch: does any claim pattern, word-bounded as stopPatterns compiles it, match that prose?
-// A superset of stopClaims' `claim` — negations and questions stay the engine's to judge. mcp/tests/10-guards-review6.js checks the
+// A superset of stopClaims' `claim` — negations and questions stay the engine's to judge. mcp/tests/10-guards-guard-downs.js checks the
 // prose is the engine's on every input it tries, and that no message the engine reads as a claim is filtered out.
 function claimProse(message, p) {
   const s = String(message == null ? "" : message).replace(/\r\n?/g, "\n");

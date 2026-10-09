@@ -31,7 +31,7 @@ const path = require("path");
 
 // the shell tools — the engine reads which files a command writes (spec.shellWriteTargets). Before it loads, a
 // command must hold an output redirection or the name of a program that writes, removes, moves, copies or extracts files (the
-// engine's readers — mcp/tests/10-guards-review7.js checks every one it reads matches) — read-only commands, test runs and git (the
+// engine's readers — mcp/tests/10-guards-shell-writes.js checks every one it reads matches) — read-only commands, test runs and git (the
 // edit guard leaves git to the user) exit here.
 const SHELLS = new Set(["Bash", "PowerShell", "Monitor"]);
 const RE_SHELL_WRITE = new RegExp("[>]|(?:^|[^\\w.-])(?:tee|sed|perl|ruby|g?awk|mawk|nawk|cp|mv|install|scp|ln|dd|rm|rmdir|unlink|shred|truncate|" +

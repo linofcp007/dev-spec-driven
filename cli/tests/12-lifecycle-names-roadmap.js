@@ -1,5 +1,5 @@
 "use strict";
-// 1.23 review 5 — roadmap --write on a broken roadmap.json (exit 1, ROADMAP.md kept), create re-run / archived-twin notes, restore's way out.
+// Names and the generated roadmap on the CLI — roadmap --write on a broken roadmap.json (exit 1, ROADMAP.md kept), create re-run / archived-twin notes, restore's way out.
 
 const fs = require("fs");
 const path = require("path");

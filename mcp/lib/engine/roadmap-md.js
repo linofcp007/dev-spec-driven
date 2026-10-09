@@ -693,7 +693,7 @@ const OVERLAP_FILES_SHOWN = 5;
 // (spikePhase) — and its dependsOn (roadmap.json's, as roadmap() reads it). Without a list, featureOverlaps (doctor's
 // cross-feature-overlap, the SessionStart line) went through roadmap() → listFeatures → detectPhase on EVERY feature: the planning
 // chain's artifacts and the placeholder corpus of each feature still being planned, for one bit. Reads tasks.md, .state.json and
-// roadmap.json only (mcp/tests/12-lifecycle-review6.js "I-I3" compares the pairs with roadmap()'s).
+// roadmap.json only (mcp/tests/12-lifecycle-write-gate.js "I-I3" compares the pairs with roadmap()'s).
 function overlapFeatures(projectDir) {
   const rm = readRoadmap(projectDir);
   return featureDirs(projectDir).filter((f) => !f.archived).map((f) => {

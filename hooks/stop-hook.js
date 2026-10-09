@@ -71,7 +71,7 @@ function gateOff(dir) {
 
 // the Stop event's cheap pre-filter, before the engine loads (it cost ~200 ms at the end of EVERY turn in a
 // dev-spec project): the gate can only send a turn back when some feature recorded activity within the last
-// STOP_RECENT_HOURS (spec.STOP_RECENT_HOURS — mcp/tests/10-guards-review.js checks they agree), stamped not more than
+// STOP_RECENT_HOURS (spec.STOP_RECENT_HOURS — mcp/tests/10-guards-stop-gate.js checks they agree), stamped not more than
 // 5 minutes in the future (the engine's stopActivity). A superset of what the engine counts: ANY string value of a feature
 // folder's .state.json that parses as a date in that window (lastTickAt, lastEditAt, ticks, evidence `at` / `noteAt` /
 // history, approvals…). None → silent, the engine's answer too. Bounded: ≤ STOP_PRE_MAX_FEATURES folders, ≤ 1 MB a file;

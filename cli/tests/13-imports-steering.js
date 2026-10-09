@@ -1,5 +1,5 @@
 "use strict";
-// import — 1.25: another tool's steering (import kiro-steering | cursor-rules [path]) and --dry-run on every import.
+// import — another tool's steering (import kiro-steering | cursor-rules [path]) and --dry-run on every import.
 
 const fs = require("fs");
 const path = require("path");

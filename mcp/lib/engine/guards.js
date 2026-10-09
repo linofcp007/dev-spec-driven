@@ -137,7 +137,7 @@ function guardTargetPath(p, win = process.platform === "win32") {
 // `roadmap.json::$DATA` were matched as text and allowed) plus, on Windows, when a segment looks like an 8.3 short name
 // (`ROADMA~1.JSO`, `STATE~1.JSO`), its real path (the file's, else its parent's + the name). Never a disk call on a network path;
 // a relative path under a network cwd is read as text. hooks/hook-utils.js editTargets is the same reading (the hook's pre-check,
-// before the engine loads — mcp/tests/10-guards-review6.js checks they agree).
+// before the engine loads — mcp/tests/10-guards-guard-downs.js checks they agree).
 function approvalEditTargets(fp, cwd, win = process.platform === "win32") {
   const s = guardTargetPath(String(fp).trim(), win);
   if (isNetworkPath(s)) return [s];
@@ -421,7 +421,7 @@ const RE_COMSPEC_WORD = /^(?:\$env:comspec|\$\{env:comspec\}|%comspec%)$/i;
 // hook's own pre-check is the same test.
 // or the files the guard stands on by name (`find . -name roadmap.json -delete`), or a glob / brace expansion that
 // may name .specs (`.s*/road*.json`, `.spec?/…`) or stand beside a writer / remover (PowerShell's `Remove-Item * -Recurse` reaches
-// .specs/). The hook's pre-check (approval-hook.js candidate) is the same test — mcp/tests/10-guards-review7.js checks they agree.
+// .specs/). The hook's pre-check (approval-hook.js candidate) is the same test — mcp/tests/10-guards-shell-writes.js checks they agree.
 const RE_APPROVAL_CANDIDATE = /dev-?spec|\.specs|roadmap\.json|\.state\.json|observed\.jsonl/i;
 const RE_APPROVAL_DOT_GLOB = /(?:^|[\s/\\'"=,(;&|])\.[^\s/\\'";&|]*[*?[{]/;
 const RE_APPROVAL_WRITE_WORD = /(?:^|[\s;&|(])(?:rm|rmdir|rd|del|erase|remove-item|ri|mv|move|move-item|mi|cp|copy|copy-item|cpi|set-content|sc|add-content|ac|clear-content|clc|out-file|new-item|ni|tee|robocopy|xcopy|rsync)(?=[\s;&|)]|$)/i;

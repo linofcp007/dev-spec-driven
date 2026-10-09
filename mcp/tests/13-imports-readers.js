@@ -1,6 +1,6 @@
 "use strict";
-// Imports — 1.25.1 readers review: the brownfield scan's entrypoints and stack label, spec-kit's uncovered FR-xxx warning, the importers on the ONE heading reader.
-// (13-imports.js, 13-imports-scan.js and the review files hold the area's earlier tests; this file the fixes of the 1.25.1 readers review.)
+// Imports — the readers: the brownfield scan's entrypoints and stack label, spec-kit's uncovered FR-xxx warning, the importers on the ONE heading reader.
+// (13-imports.js and 13-imports-scan.js hold the area's other tests.)
 
 const fs = require("fs");
 const path = require("path");

@@ -10,8 +10,13 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   same in both folders: 01 core · 02 the MCP server / CLI surfaces · 03 languages · 04 tracks · 05 markdown and trace ·
   06 gates · 07 approvals · 08 tasks · 09 evidence · 10 guards and hooks · 11 Claude Code integration · 12 lifecycle ·
   13 imports · 14 templates and exports · 15 spec quality · 16 conventions and source guards · 17 docs and prose ·
-  18 review regressions whose findings span several areas. `--list` prints every file with its one-line summary (the
-  file's first comment line). (1.21 F5: `06-gates-sizes.js` in both folders — the sizes, the change kind, the stricter
+  18 cross-area regressions (`18-cross-area*.js` — findings that span several areas). `--list` prints every file with its
+  one-line summary (the file's first comment line). **A file is named after its topic** — `10-guards-shell-writes.js`,
+  `12-lifecycle-branch.js` — never after a release or a review round: 1.27 renamed the 23 that were (`10-guards-review7.js`
+  → `10-guards-shell-writes.js`, `13-imports-1-25.js` → `13-imports-steering.js`, `18-reviews.js` → `18-cross-area.js`…) and
+  merged six small ones into their area's topic file (`05-markdown-r7-readers.js` into `05-markdown-readers.js`). An
+  assertion's label keeps its review id ("1.25.1 review 7: …", "1.24 r6 I-I3") — grep the label, not the file name.
+  (1.21 F5: `06-gates-sizes.js` in both folders — the sizes, the change kind, the stricter
   filled rule, the overlaps; its pinned sha1 is every no-size builder output of the pre-1.21 track combinations: update it
   only when the no-size scaffold changes ON PURPOSE. A test that "fills" a track section answers each `> **TODO**` line with
   a line of its own — deleting the sentinel and keeping the guidance bullet is the template, not an answer.) (1.24 r6 I-I8:
@@ -76,7 +81,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
 - **Adding a test.** Put it in the file of its area (the `--list` summaries say what each holds), in its own `{ … }`
   block under a one-line comment. No per-release sections any more: 1.13–1.19 each added a section / block per package;
   the 1.20 split moved them into their areas and kept their `// 1.xx …` comments as history. A new file only for a new
-  area or a file past ~1,500 lines: `NN-<area>-<topic>.js` whose first comment line says what it holds, exporting
+  area or a file past ~1,500 lines: `NN-<area>-<topic>.js` — named after its topic, never a release or a review — whose
+  first comment line says what it holds, exporting
   `run` (async in the MCP suite) — the runner picks it up. Make your projects under `tmp` (`path.join(tmp, "proj-<name>")`, a name no other file uses); the MCP
   server's default project (`tmp` itself) is 01-core's. A test that reads what another file built declares it in `deps`
   — never rely on file order. **Say what failed (1.26):** beside `ok(cond, label)` every file receives `all(label, conds)` and
@@ -98,12 +104,12 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   too, when the bound is relative), `holds(sample)` says whether the time bound holds; on a miss it measures again and returns
   the passing retry or the last miss (`sample.tries`). A load spike fails one sample, a real regression (a linear scan gone
   quadratic, a retry loop come back) fails both. Prefer counting to timing where the regression has a count: "refused at once"
-  is ONE rename attempt (16-conventions-review7-core.js — `took < 1000` missed at 1,333 ms under load), the wall time a backstop.
+  is ONE rename attempt (16-conventions-atomic-writes.js — `took < 1000` missed at 1,333 ms under load), the wall time a backstop.
   1.26 put it on: the read-only refusal, the `__complete` medians (cli/tests/16-conventions-completion.js), the 16 KB / 64 KB
   ratios and the 1 MB "at once" bound of the run matcher (09-evidence.js, 09-evidence-matcher.js), the cross-call cache's
   cold / warm ratio (15-quality.js), the nested lock's wait (16-conventions.js) and the in-process "bounded time" checks of
-  18-reviews.js (S2, S4, S5/S6, R10), 04-tracks.js, 04-tracks-builtin.js, 03-languages.js, 05-markdown-trace.js, 08-tasks.js,
-  09-evidence.js, 10-guards.js, 10-guards-review.js, 13-imports.js and 15-quality.js (bounds unchanged); and on one non-timing
+  18-cross-area.js (S2, S4, S5/S6, R10), 04-tracks.js, 04-tracks-builtin.js, 03-languages.js, 05-markdown-trace.js, 08-tasks.js,
+  09-evidence.js, 10-guards.js, 10-guards-stop-gate.js, 13-imports.js and 15-quality.js (bounds unchanged); and on one non-timing
   miss seen only under load — 16-conventions.js asks git `check-ignore` once more when it answers nothing.
 - **The source guards follow the layout:** the U+FEFF guard reads mcp/test.js, scripts/test-runner.js and every file of
   mcp/tests/. The engine guards (U+FEFF, backslash-stripped regex literals) also read scripts/build.js — a bundle's

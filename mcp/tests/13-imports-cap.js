@@ -1,6 +1,6 @@
 "use strict";
-// Imports — 1.23 review 5 regressions: a source over the import cap (refused, never cut), the design's track blocks after an open code fence, one-line names, an archived twin.
-// (13-imports.js holds the imports area's earlier tests; this file the findings of the 1.23 review 5 of spec_import.)
+// Imports — a source over the import cap (refused, never cut), the design's track blocks after an open code fence, one-line names, an archived twin.
+// (13-imports.js holds the area's main tests.)
 
 const fs = require("fs");
 const path = require("path");

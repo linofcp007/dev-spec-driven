@@ -1,6 +1,6 @@
 "use strict";
-// Conventions — 1.25.1 review 7 (engine core): writeFileAtomic is durable and never torn in place (fsync before the rename, a refused rename keeps the old content), one local calendar date (today / dayOf).
-// (16-conventions.js holds the area's earlier tests; this file the engine-core findings of the seventh review.)
+// Conventions — writeFileAtomic is durable and never torn in place (fsync before the rename, a refused rename keeps the old content), one local calendar date (today / dayOf).
+// (16-conventions.js holds the area's main tests.)
 
 const fs = require("fs");
 const path = require("path");
