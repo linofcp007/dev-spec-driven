@@ -169,7 +169,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   instruction, 0xC0000094 integer divide by zero, 0x80000003 breakpoint — unsigned or signed. `isRedRun()` refuses them (a
   segfault was the red proof of an `_Expect: fail_` task); `expectFailRefusal()` answers `couldNotRun: "crash"`
   (`redGreen.crashNotRed`), recorded as a failed run like any crash — the CLI's own signal case (no exit status) keeps refusing
-  before anything is recorded. Exit 137 / 143 (a kill) and 130 (Ctrl+C) are no crash codes.
+  before anything is recorded. Exit 137 / 143 (a kill) and 130 (Ctrl+C) are no crash codes. **1.25.1 (review 7):** a crash is also a
+  failed RE-CHECK of an `_Expect: fail_` task (`expectFailIssue`: `cantRunRecord(e) || crashExit(e.exitCode)`) — a re-run that
+  segfaulted fell through to the red run carried forward, so the task stayed verified and finish didn't block.
 - **Several `_Verify:_` commands, all passing (1.23 review):** `done --run` records ONE run (`cmd1 && cmd2`, as ever) whose
   summary holds one section per command — `$ <command>` and its summary (`runSummaries()`), each re-summarized shorter
   (`summarizeRunOutput(output, room)`) when together they'd pass the record's 2,000 characters — where it kept the LAST
@@ -185,7 +187,10 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `{command, exitCode: 0}`; a note ticks it but leaves it unverified. `{exitCode}` alone and a command
   without its exit code are rejected; "exit 0" without a command is kept as a note. A non-zero run refuses
   the tick and is recorded — a failed re-check of a ticked task makes it unverified until a later pass.
-- **Which run proves it (1.22 review).** Until 1.22 the reported `command` was never compared with the `_Verify:_`:
+- **Which run proves it (1.22 review).** (1.25.1, review 7: a REPORTED command no shell runs as written — `npm test &&`,
+  `npm test |`, `&& npm test`, `a && && b`: `proofIncomplete()`, an operator with no command after / before it or right after
+  another — proves nothing; `proofSteps` dropped the empty step and `npm test &&` read as a run of `npm test`. Quotes and
+  substitutions are skipped whole; a lone `;` is fine.) Until 1.22 the reported `command` was never compared with the `_Verify:_`:
   `{command: "echo hello", exitCode: 0}` verified a task whose `_Verify:_` is `npm test`. `runProvesVerify(run, verify,
   root)` (evidence.js) is now part of the ONE verdict (`taskEvidenceIssue`, after `evidenceIssue` passed it): the proving run —
   the latest passing run, an `_Expect: fail_` task's red proof — must run the task's `_Verify:_` commands, EVERY one of

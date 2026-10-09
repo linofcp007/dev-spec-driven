@@ -314,6 +314,32 @@ function commandsCoverVerify(run, keys) {
 }
 // Two commands with the same proofKey (from the same project root) are one command to the evidence gate.
 const proofKey = (cmd, root) => JSON.stringify(proofCommands(proofSteps(cmd), proofBase(root)));
+// 1.25.1 (review 7) — a command no shell runs as written: a `&&`, `||`, `|` or `|&` with no command after it (`npm test &&`,
+// `npm test |`) or none before it (`&& npm test`, `a; || b`), or right after another one (`a && && b`, `a | ; b`). proofSteps drops
+// the empty step, so a REPORTED `npm test &&` read as a run of `npm test`: runProvesVerify now refuses it (it proves no _Verify:_).
+// Quotes and substitutions are skipped whole (a quote left open hides the rest — cmd.exe runs `node -e "x`: no verdict on quoting
+// here); a `;` alone (leading, trailing, doubled) is accepted — PowerShell and cmd.exe take it; `\&` / `\|` / `\;` are literal. Linear.
+function proofIncomplete(cmd) {
+  const s = String(cmd == null ? "" : cmd);
+  let lead = true, pending = null, q = ""; // lead: no command read in this statement yet; pending: an operator waiting for one
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (q) { if (c === q) q = ""; continue; }
+    if (c === " " || c === "\t" || c === "\n" || c === "\r") continue;
+    if (proofSubstAt(s, i)) { i = proofSubstEnd(s, i) - 1; lead = false; pending = null; continue; }
+    if (c === String.fromCharCode(92) && /[&|;]/.test(s[i + 1] || "")) { i++; lead = false; pending = null; continue; }
+    let op = null;
+    if ((c === "&" && s[i + 1] === "&") || (c === "|" && s[i + 1] === "|")) op = c + c;
+    else if (c === "|" && s[i + 1] === "&") op = "|&";
+    else if (c === "|" && s[i - 1] !== ">") op = "|";
+    if (op) { if (lead || pending) return true; pending = op; i += op.length - 1; continue; }
+    if (c === ";") { if (pending) return true; lead = true; continue; }
+    if (c === '"' || c === "'") q = c;
+    lead = false;
+    pending = null;
+  }
+  return pending !== null;
+}
 // Does run r prove `verify` — the task's runnable _Verify:_ values (every one of them), or [a project check's command]? root:
 // the project folder both are walked from — the run's own `root` stamp first (runRootStamp: the folder it was recorded from,
 // maybe on another machine or in a git worktree of the project), else the given one (the project's), else none (an absolute
@@ -325,6 +351,7 @@ function runProvesVerify(r, verify, root) {
   if (!isRecord(r) || typeof r.command !== "string") return false;
   if (r.observed === "cli") return true; // `done --run` / `finish --run` ran exactly those commands
   if (r.command.length > PROOF_MAX_CHARS || (verify || []).some((v) => typeof v === "string" && v.length > PROOF_MAX_CHARS)) return false;
+  if (proofIncomplete(r.command)) return false; // 1.25.1: `npm test &&` is no run of `npm test` (proofIncomplete)
   const base = proofBase(typeof r.root === "string" && r.root ? r.root : root);
   const keys = [];
   const known = new Set();
@@ -1223,7 +1250,9 @@ function legacyRedRun(e) {
 function expectFailIssue(e, runnable) {
   // A could-not-run latest run is a failed re-check even while the red run it carries forward stays on record (so the
   // pass after the fix is still accepted as the green one).
-  const cantRun = cantRunRecord(e); // full review Ga2: a could-not-run OUTPUT too (a missing test file…)
+  // full review Ga2: a could-not-run OUTPUT too (a missing test file…). 1.25.1 (review 7): and a CRASH (crashExit — exit 139, an
+  // access violation): a re-run that segfaulted fell through to the red run carried forward and the task stayed verified.
+  const cantRun = cantRunRecord(e) || (typeof e.command === "string" && e.command.trim() !== "" && crashExit(e.exitCode));
   if (!cantRun && redProof(e)) return null; // (taskEvidenceIssue then asks whether that red run is one of the _Verify:_ commands)
   if (e.command && e.exitCode === 0) return "unexpected-pass";
   if (e.command && e.exitCode != null) return "failed-run";
@@ -2049,7 +2078,7 @@ module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isR
   observedLogFile, readObservedLog, observedRun, observedAny, observedStamp, RE_CD_STRIP, stripCdPrefix, runRootStamp, gitCommonDir, specsProjectOf,
   RE_PLAIN_ARG, RE_PROOF_CD, RE_PROOF_PIPEFAIL, RE_PROOF_ENV, PROOF_MAX_STEPS, PROOF_MAX_KEYS, unquotePlainArgs, splitAndSteps,
   proofSteps, proofSubstAt, proofSubstEnd, proofUnwrapCode, parseProofDir, joinProofDir, RE_PROOF_OPAQUE_DIR, cdInto, proofBase,
-  proofFolderKey, proofCommands, proofCommandIs, commandsCoverVerify, proofKey, runProvesVerify, observedProof,
+  proofFolderKey, proofCommands, proofCommandIs, commandsCoverVerify, proofKey, proofIncomplete, runProvesVerify, observedProof,
   observeRun, observedNorm, RE_OBSERVED_ENV, observedBodies, observedKey, proofPlainParts, appendObserved, trimObservedLog, lastTaskActivity, CHECK_NAME_RE, CHECKS_MAX, validCheckName,
   validCheckCmd, projectChecks, checksInput, checksPlanError, writeChecks, recordFinishChecks, suiteStatus,
   suiteCodeStamp, runStartStamp, runStartOf, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, GITLOG_MAX_COMMITS, parseGitLog,
