@@ -80,7 +80,9 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   (`.specs/roadmap.json` is not valid JSON — e.g. a text merge's conflict markers — or has the wrong shape: the approval
   roles and project checks it holds can't be read, so approve / revoke / the fast-forward refuse (code `roadmap-invalid`),
   spec_finish blocks on `roadmap` and next_action's one step is to repair it — every doctor reports it).
-- **Warn:** `steering` (core files missing, or files still holding template placeholders) · `success-criteria` ·
+- **Warn:** `observed-unguarded` (1.25.1 — `meta.evidence` is `observed` while `meta.approvalGuard` is off: one line appended to an
+  `.execution/observed.jsonl` forges an observed run, which only the approval guard asks about or refuses) ·
+  `steering` (core files missing, or files still holding template placeholders) · `success-criteria` ·
   `priorities` · `mermaid` (no mermaid code block outside comments, or only the template's own diagram) ·
   `constitution-check` (a `## Constitution Check` section with written content — the design gate's reader; a mention in a
   comment or a "TBD" is none) · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,

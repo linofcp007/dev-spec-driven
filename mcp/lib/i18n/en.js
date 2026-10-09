@@ -1484,7 +1484,9 @@ const msg = {
     },
     // 1.14 F1 — harness-observed evidence (hooks/observe-hook.js; roadmap.json meta.evidence "reported" | "observed").
     observed: {
-      on: "Evidence mode OBSERVED — a task whose _Verify:_ holds a command is verified only by a passing run the harness saw (in Claude Code the plugin's observe hook logs every Bash run of a _Verify:_ or project-check command) or that dev-spec done --run / finish --run made itself; a project check's run likewise (roadmap.json meta.evidence). An MCP-only client has no such hook: record its runs with " + DEV_SPEC + " done <feature> <n> --run.",
+      on: "Evidence mode OBSERVED — a task whose _Verify:_ holds a command is verified only by a passing run the harness saw (in Claude Code the plugin's observe hook logs every Bash run of a _Verify:_ or project-check command) or that dev-spec done --run / finish --run made itself; a project check's run likewise (roadmap.json meta.evidence). An MCP-only client has no such hook: record its runs with " + DEV_SPEC + " done <feature> <n> --run. With the PowerShell tool alone (Windows without Git Bash) a run is logged only when Claude Code reports its exit code — record the others with --run too.",
+      // 1.25.1 (review 7): observed evidence is only as strong as the approval guard
+      unguarded: "Observed evidence is only as strong as the approval guard, and it is off (meta.approvalGuard): an agent appending one line to an .execution/observed.jsonl forges an observed run. Turn it on — " + DEV_SPEC + " init --approval-guard ask (or deny) — so writing that log is asked or refused.",
       off: "Evidence mode REPORTED — the runs an agent reports verify as given (roadmap.json meta.evidence); each record still says whether the harness observed it.",
       badValue: (v) => `--evidence takes reported or observed (got '${v}').`,
       badInput: (v) => `evidence must be "reported" or "observed" (got '${v}').`,

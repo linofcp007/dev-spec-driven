@@ -174,6 +174,9 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   if (setsStop) res.stopCheckNote = i18n.msg(lng).stopGate[res.stopCheck ? "on" : "off"];
   if (approvalGuard) res.approvalGuardNote = res.approvalGuard === "off" ? i18n.msg(lng).approvalGuard.off : i18n.msg(lng).approvalGuard.on[res.approvalGuard];
   if (evMode) res.evidenceNote = i18n.msg(lng).observed[res.evidence === "observed" ? "on" : "off"];
+  // 1.25.1 (review 7): observed evidence is only as strong as the approval guard — with it off, one line appended to an
+  // .execution/observed.jsonl forges an observed run (the guard refuses / asks that write): said whenever both hold
+  if (res.evidence === "observed" && res.approvalGuard === "off") res.observedWarning = i18n.msg(lng).observed.unguarded;
   // The CURRENT approval roles, when the project has some or this call set them (+ a note when it did).
   const current = approvalRolesOf(projectDir);
   if (setsRoles || Object.keys(current).length) res.approvalRoles = current;
