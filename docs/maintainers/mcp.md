@@ -31,20 +31,42 @@ folder is chosen (see Argument validation → projectDir), every other tool shar
 track names share `TRACK_ITEM`.
 Roadmap/deps persist in `.specs/roadmap.json`; cross-feature deps are cycle-checked and must name existing features.
 
+**The operations (1.27).** What makes a tool and its CLI command the SAME call is one table both surfaces read, `OPERATIONS` in
+`mcp/lib/operations.js` (Node core only; it requires nothing — each surface hands it the facade): one entry per engine operation (40
+in 1.27) — its `id`, the `tool` that runs it (a tool of several: the `mode` — `{key, values, fallback}`, the folded tools — or a
+`when(args)` test — spec_status by a name, ears_validate by a feature without text, spec_tracks by action signals), the hidden
+aliases that land on it (`legacy`), the CLI commands that run it (`cli`), its `engine` (the facade function), `args` (each engine
+option → its MCP argument `mcp`, its CLI flag `cli` or positional `pos` — `rest` the words from there on —, and how it is read:
+`type` switch (true only when given true, false otherwise — on both surfaces) / bool (an explicit boolean, else the engine's
+default) / int / list, `join` (the CLI's words or occurrences as one string), `cmd` (the value a command implies: bugfix → kind
+"bugfix", undone → undo), `parsed` (the CLI handler reads it in its own syntax and gives it), `modes`, `required`), `internal` (the
+options a surface sets itself: the server's dry run / confirmation / preview, the CLI's `cli`, `git`, `ranBy`…), `cliOnly` (flags
+no option takes — done --run's --shell / --timeout) and `call(S, dir, o)` — THE engine call, written once. **runTool** has no
+dispatch of its own: `forTool(name, args)` picks the operation, `run(op, spec, dir, "mcp", read, own)` reads each option from its
+argument (`options()` — the shared rule) and makes the call; the CLI's handlers do the same through `c.call(id, given)` (cli/main.js
+reads the flags, words and implied values). Parity is structural: one engine function, one argument map, one set of defaults —
+`mcp/tests/02-mcp-server-tools.js` checks the tool side (every tool and alias runs an operation, every argument is mapped and typed,
+server.js calls no operation's engine function, and every operation run on twin projects — MCP on one, the CLI in-process on the
+other — answers the same JSON, path and time aside), `cli/tests/02-surfaces-parity.js` the command side (every command runs one
+through `c.call` or is a known non-operation, every flag is an argument of its operations, no handler calls the facade function
+itself). An option a surface gives that its operation doesn't declare is a programming error, thrown.
+
 **Folded tools and their hidden aliases (1.26).** Seven tools became modes of four: `spec_list` → `spec_status` without `name` (the
 same `listFeatures` result — the CLI's `status` without a feature is `list`); `spec_backlog` / `spec_depend` / `spec_milestone` →
 `spec_roadmap_edit {kind: "backlog" | "depend" | "milestone"}` (destructive: rm, dependsOn replaces; `spec_roadmap` stays the
-read + ROADMAP.md writer); `spec_catalog` / `spec_changelog` → `spec_export {format: "catalog" | "changelog"}` (`exportSpecs` hands
-them to `catalog()` / `changelog()` — the very results of `dev-spec catalog` / `changelog --json`); `spec_coverage` → `spec_scan
-{coverage: true}`. The CLI keeps its commands (list, backlog, depend, milestone, catalog, changelog, coverage) — parity is the same
-engine function and defaults behind both. **Hidden aliases** (`LEGACY_TOOLS`, server.js): a `tools/call` by an old name still
+read + ROADMAP.md writer); `spec_catalog` / `spec_changelog` → `spec_export {format: "catalog" | "changelog"}` (the operations
+catalog / changelog: `catalog()` / `changelog()` — the very calls of `dev-spec catalog` / `changelog --json`; `exportSpecs` still hands
+those formats to them for a code caller); `spec_coverage` → `spec_scan {coverage: true}`. The CLI keeps its commands (list, backlog,
+depend, milestone, catalog, changelog, coverage) — each mode is an operation (The operations), the same engine function and
+defaults behind both. **Hidden aliases** (`LEGACY_TOOLS`, server.js): a `tools/call` by an old name still
 works — its arguments are checked against the OLD schema (`toolDef()` returns the alias's; an old caller gets the very refusals it
 got: `spec_depend` without name is `missing-arguments`, `spec_catalog {includeBody}` an unknown argument named by `spec_catalog`),
 then translated (`translateLegacy`) and the NEW tool runs: the result is the new tool's. Never listed, never completed
-(completion/complete knows prompts and resources only), no `runTool` case of their own (02-mcp-server's guard counts the cases
-against tools/list). `mcp/tests/02-mcp-server-tools.js` asserts each alias = its new tool.
+(completion/complete knows prompts and resources only), no operation of their own — each is in the `legacy` of the operation its
+call lands on. `mcp/tests/02-mcp-server-tools.js` asserts each alias = its new tool, and = its operation's call.
 **Arguments by mode (`ARG_MODES`).** A folded tool takes some arguments in one of its modes only — `kind`, `format` (default html),
-`coverage` (default false). An argument the call's mode doesn't take is refused before anything runs: code `inapplicable-arguments`,
+`coverage` (default false). 1.27: derived from the operations table (`argModes()` — a mode's arguments are its operation's MCP
+arguments, in their order; export's `includeBody` only in html / md, its `modes`). An argument the call's mode doesn't take is refused before anything runs: code `inapplicable-arguments`,
 `inapplicable` [names], `args.inapplicable` (localized: "spec_roadmap_edit {kind: "backlog"} does not take dependsOn — nothing was
 done. With kind: "backlog" it takes: action, name, note."). Checked after the type checks (the mode key's enum first); a mode's
 `required` (depend → `name`) are `missing-arguments`. The mode key and `projectDir` go everywhere.
@@ -56,8 +78,9 @@ return `{bytes, preview, truncated, hint}` — the first 1,500 characters of the
 opens with its stylesheet) — unless `includeBody: true` (a template-only feature's HTML was ~18.5k characters per call); catalog /
 changelog leave their markdown out unless `includeBody`; `spec_upgrade` and `spec_templates` carry no `lines` (`upgradeLines(r)` /
 `templatesLines(r)` render the CLI's human report from the structure). The engine's own default (the option omitted) keeps the
-document — code callers; both surfaces pass it explicitly: MCP `includeBody: args.includeBody === true`, the CLI `bodyWanted()`
-(its human output always prints the document, `--json` only with `--include-body`), so `--json` stays the MCP result.
+document — code callers; both surfaces pass it explicitly: the operation's switch (`includeBody` true only when given true), the
+CLI's handler giving `bodyWanted()` (its human output always prints the document, `--json` only with `--include-body`), so `--json`
+stays the MCP result.
 
 **Capabilities (1.14 — no longer tools-only).** `initialize` advertises `tools {listChanged: false}`, `prompts
 {listChanged: false}`, `resources {listChanged: false, subscribe: false}` and (1.16) `completions {}`; the logic lives in
@@ -154,8 +177,8 @@ too). Checked before the required keys, so a misspelt required key (`nmae`) read
 `tasks[0].verify`; the message lists the keys that object takes, `tasks[] {text, …}`): `verfy` appended a task with no
 `_Verify:_` (which then ticked "verified, nothing to verify"), `evidence[0].sumary` dropped the summary. An object declared with
 `additionalProperties` (spec_init `checks`) takes any key. Every
-`args.X` runTool reads must be in its tool's schema — a key it doesn't list would now be refused, never read (a guard in
-02-mcp-server.js parses runTool's `case`s). Then required keys (`missingArgs` — a nested object's `required` too, by path:
+argument a tool's operation reads (its options' `mcp`, The operations) must be in its tool's schema — a key it doesn't list would
+now be refused, never read (a guard in 02-mcp-server.js checks the table; runTool itself reads only `projectDir`). Then required keys (`missingArgs` — a nested object's `required` too, by path:
 `evidence[0].command`, `tasks[0].text`; `evidence: [{}]` reached the engine as "'undefined' is not a project check"), then types (`invalidArgs` — `integer` means
 a *safe* integer, so `1.9` / `1e21` never become task 1), `enum`, `minimum`, `maximum` (1.24 r6 A5 — `spec_next_task.max` ≤ 8;
 the message reads "between 1 and 8"), `minItems` (1.25.1 — `spec_append_tasks.tasks`, `args.atLeastItems`), array `items` and nested

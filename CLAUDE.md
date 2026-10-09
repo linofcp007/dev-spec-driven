@@ -79,12 +79,14 @@ The engine (`mcp/lib/engine/`, behind its facade `mcp/lib/spec.js`) is the singl
 the engine's resolver), (2) the `dev-spec` CLI for any tool/terminal, (3) Claude Code skill+commands+hooks. Every surface
 requires `mcp/lib/spec.js` — never an engine module directly.
 When you add an operation, add it to the engine module of its concern first (see Layout), export it from the facade's
-object in `spec.js`, then wire it into server.js (tool) AND
-cli/commands.js (subcommand — one entry of its table) AND a test in the area's mcp/tests file. Keep the CLI and MCP behavior identical —
-both call the same engine function with the same defaults (e.g. `roadmapReport()` backs `spec_roadmap`
+object in `spec.js`, then give it ONE entry in the operations table, `mcp/lib/operations.js` (1.27 — its tool, its CLI command(s),
+each option's MCP argument and CLI flag, and its engine call, written once), and wire it into server.js (the tool's TOOLS entry —
+runTool runs the table's call) AND cli/commands.js (one entry of its table, whose handler runs it with `c.call()`) AND a test in the
+area's mcp/tests file. Both surfaces make the table's call, so the CLI and MCP behavior stay identical —
+the same engine function with the same defaults (e.g. `roadmapReport()` backs `spec_roadmap`
 and `dev-spec roadmap`; `approvePhase()` has one default approver, `$USER`/`$USERNAME`/`user`). A tool that folds
-several CLI commands calls each one's function: `spec_roadmap_edit {kind: "depend"}` = `setDependency()` = `dev-spec depend`,
-`spec_export {format: "catalog"}` = `catalog()` = `dev-spec catalog` (docs/maintainers/mcp.md → Folded tools).
+several CLI commands runs one operation per mode: `spec_roadmap_edit {kind: "depend"}` = `setDependency()` = `dev-spec depend`,
+`spec_export {format: "catalog"}` = `catalog()` = `dev-spec catalog` (docs/maintainers/mcp.md → The operations).
 Any user-facing string the operation GENERATES or RETURNS goes through `mcp/lib/i18n.js` (EN/PT/ES),
 never hardcoded in the engine — see docs/maintainers/languages.md. The CLI's human output is localized too
 (`cliText(lang)` over `i18n.msg(lang).cliOutput`: the feature's language for feature commands, the
