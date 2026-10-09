@@ -1021,13 +1021,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   return res;
 }
 
-module.exports = { DECISIONS_FILE, DECISION_TITLE_MAX, DECISION_TEXT_MAX, RE_DECISION_HEAD_START, isBlankUnit,
-  decisionHead, stripClosingHashes, underscoreMarkerLine, RE_DECISION_MARKER_HEAD, decisionMarker, DECISION_LABELS,
-  RE_DECISION_LABEL, BRIEF_DECISIONS_MAX, BRIEF_DECISIONS_CHARS, RE_LEADING_BOM, blankHtmlComments, splitRefs, affectPieces, rejoinRefs, affectsRefs, AFFECTS_JOIN_MAX,
-  normDecisionId, decisionLabelKey, decisionLog, retiredDecisions, decisionSectionKeys, decisionTargets, resolveAffect,
-  trimBlanksEnd, safeSpecText, appendSpecText, decisionInput, decisionEntryLines, decide, decisionsTrace, affectsWarnings,
-  decisionDoctorChecks, briefDecisions, decisionSummaryLines, catalogDecisions, ADR_DIR, ADR_INDEX, ADR_SLUG_MAX, RE_ADR_NAME, adrNumber,
-  adrFileName, adrInert, adrLabel, adrBlock, posixRel, adrModel, adrRef, adrStatusText, adrDocs, adrProjectIndex, adrStaleFiles, exportAdr, SPIKE_FILE, SPIKE_SYN, RE_OUTCOME_HEAD,
-  outcomeMarker, OUTCOME_SYN, normOutcome, spikeProse, spikeFilled, spikeOutcome, spikeParagraph, validIsoDay,
-  spikeTimebox, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeSeed, spikeDoctor, spikeNextAction,
-  spikeFinish, __link };
+module.exports = { DECISIONS_FILE, DECISION_TITLE_MAX, decisionLog, retiredDecisions, safeSpecText, appendSpecText,
+  decisionEntryLines, decide, decisionsTrace, affectsWarnings, decisionDoctorChecks, briefDecisions, decisionSummaryLines,
+  catalogDecisions, exportAdr, SPIKE_FILE, validIsoDay, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeDoctor,
+  spikeNextAction, spikeFinish, __link };

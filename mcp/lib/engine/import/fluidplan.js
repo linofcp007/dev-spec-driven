@@ -1160,11 +1160,4 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
 // Package A's core design section (1.17): the heading is written in English in every language (its synonym table reads it).
 const FP_TRADEOFFS_HEADING = "## Alternatives & Trade-offs";
 
-module.exports = { FP_PLAN_ID, FP_ID, FP_OTHER, FP_SEC, RE_FP_STATE, FP_LINE_MAX, fpShort, fpMap, FP_TITLE_SUFFIX,
-  fpTitleOf, fpTaskHeading, fpPhaseHeading, fpAcceptanceItem, RE_FP_DEC_HEAD, fpDecLine, FP_TASK_FIELDS, FP_DEC_FIELDS,
-  FP_OPS, FP_IMPORTANCE, FP_SRC_LABELS, fpFilled, FP_LS_PS, RE_FP_BREAK, RE_FP_BREAKS, RE_FP_LINE_SPLIT,
-  RE_FP_VERIFY_BAD, fpOneLine, fpList, fpStr, RE_FP_MARKER_LIKE, fpInert, fpV, fpHead, fpTitle, fpLine, fpProse, fpCell,
-  fpVerdictOfText, fpEdits, fpTextOf, fpHasEdits, fpItemVerdict, fpVerdict, fpStatus, fpOptions, fpChoice, fpChoices,
-  fpValue, fpOptionLabel, fpOrderedPhases, fpControlSummary, fpDecisionTasks, fpFromPlanJson, fpEmpty, fpNewDecision,
-  RE_FP_TO_CHANGE, fpTableCells, fpHeader, fpFields, fpTaskFromMd, fpParsePlanMd, fpParseDecisionsMd, fpConfig,
-  fpPlansDir, fpDocKind, fpSplitDocs, parseFluidplan, fpImportModel, FP_TRADEOFFS_HEADING, __link };
+module.exports = { fpInert, parseFluidplan, __link };

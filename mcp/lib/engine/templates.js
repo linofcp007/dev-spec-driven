@@ -657,10 +657,6 @@ function templatesLines(r) {
   return lines;
 }
 
-module.exports = { templatesLines, TEMPLATES_DIR, TEMPLATE_ARTIFACTS, TEMPLATE_CHAIN, TEMPLATE_VARS, RE_TEMPLATE_VAR,
-  RE_TEMPLATE_KNOWN_VAR, RE_TEMPLATE_KNOWN_VAR_G, templateRel, steeringTemplateName, templateKey, templateKeyList,
-  readTemplateFile, templateFileList, templateLangChain, templateOverride, templateVars, renderTemplate,
-  trackRequirementsBlock, trackIdMap, trackTestRowsBlock, withTrackBlocks, scaffoldText, steeringScaffold,
-  TEMPLATE_PARSE_CACHE, templateWildcard, wildcardMatch, setOrWildcard, parseTemplateText, buildProjectTemplateSets,
-  projectTemplateSets, projectTemplateHas, useTemplateScopeOf, builtInTemplate, allTemplateKeys, templates,
-  listTemplates, initTemplates, checkTemplateText, checkTemplates, __link };
+module.exports = { templatesLines, TEMPLATE_ARTIFACTS, RE_TEMPLATE_VAR, templateKey, readTemplateFile, templateFileList,
+  templateLangChain, templateOverride, withTrackBlocks, scaffoldText, steeringScaffold, wildcardMatch, projectTemplateHas,
+  useTemplateScopeOf, templates, __link };

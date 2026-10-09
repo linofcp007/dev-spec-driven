@@ -1913,18 +1913,13 @@ const RE_EDGE_CASES = /edge case|error handling|casos? limite|casos? l[íi]mite|
 // The +tdd design block heading, localized (used by addTrack to avoid re-appending it).
 const RE_TESTABILITY = /##\s*(testability notes|notas de testabilidade|notas de testabilidad)/i;
 
-module.exports = { phaseActive, testsGateDue, stateApprovals, TESTS_PLANS, plannedTestIds, testsPlanStamp, testsSignOffStale,
-  approvalsInForce, testsStaleText, previewMismatch, governanceError, roadmapGovernanceCheck, changedApprovedPhases, detectPhase, approvePhase, WAIVER_MAX_DAYS, waiverInput, waiverView,
-  forcedApprovalList, waiverSummaryLines, waiverResult, waiverExpiredCheck, strictestWaiver, legacySeeds,
-  revokeApproval, RE_ROLE, normRole, parseRoleList, validateApprovalRoles, parseApprovalRolesText, approvalRolesOf,
-  approvalRolesFrom, rolesSummary, setApprovalRoles, approvalRole, phaseContent, sameContent, approvalRoleRecords,
-  roleSignOffs, recordRoleSignOff, dropRoleSignOffs, roleSignOffResult, roleGateView, roleLabel, roleWaitList,
-  reReviewRoles, fastForwardPlan, planFastForwardEnd, approveStepExtras, approveThrough, HISTORY_DIR, IMPACT_PHASES, RE_REQ_REF,
-  RE_OTHER_REQ_REF, RE_TEST_REF, RE_DEFINES_REQ_ID, normWs, refsIn, shortDigest, isApprovalRecord, legacyRecord,
-  writeSnapshot, historyText, latestSnapshot, designBaseline, snapshotPhases, requirementIndex, diffEntries,
-  sectionEntries, taskEntries, plannedTestEntries, activeTaskBlocks, impactReport, impactLines, gateWalk, gateArtifacts,
-  pendingGateList, FLOWS, DESIGN_FIRST_PHASES, flowOfState, featureFlow, phaseOrder, flowIndex, flowPhaseIndex,
-  checkPhaseIndex, positionPhase, parseFlow, flowOrderText, setFeatureFlow, setFeatureFlowLocked, createFlow,
-  storeCreateFlow, CHECK_PHASE, CHANGE_MAX_ACS, CHANGE_MAX_TASKS, changeScope, PHASE_INDEX, chainArtifacts, changedSinceApproval, approvedContentSame, realLines, hasSuccessCriteria,
-  hasPriority, acDuplicates, sectionFilled, bugSectionFilled, CONSTITUTION_SYN, approvalChecks, RE_CONSTITUTION_CHECK,
-  RE_SUCCESS_CRITERIA, RE_INDEPENDENT_TEST, RE_OUT_OF_SCOPE, RE_NFR, RE_EDGE_CASES, RE_TESTABILITY, __link };
+module.exports = { phaseActive, approvalsInForce, testsStaleText, roadmapGovernanceCheck, detectPhase, approvePhase,
+  waiverInput, waiverView, forcedApprovalList, waiverSummaryLines, waiverResult, waiverExpiredCheck, validateApprovalRoles,
+  parseApprovalRolesText, approvalRolesOf, approvalRolesFrom, rolesSummary, setApprovalRoles, phaseContent, roleSignOffs,
+  roleGateView, roleLabel, roleWaitList, reReviewRoles, planFastForwardEnd, approveStepExtras, RE_TEST_REF, normWs,
+  isApprovalRecord, legacyRecord, writeSnapshot, historyText, latestSnapshot, snapshotPhases, requirementIndex, impactReport,
+  impactLines, gateWalk, gateArtifacts, pendingGateList, FLOWS, flowOfState, featureFlow, flowPhaseIndex, checkPhaseIndex,
+  positionPhase, flowOrderText, setFeatureFlowLocked, createFlow, storeCreateFlow, CHECK_PHASE, changeScope, chainArtifacts,
+  changedSinceApproval, approvedContentSame, realLines, hasSuccessCriteria, hasPriority, acDuplicates, sectionFilled,
+  bugSectionFilled, CONSTITUTION_SYN, approvalChecks, RE_CONSTITUTION_CHECK, RE_SUCCESS_CRITERIA, RE_INDEPENDENT_TEST,
+  RE_OUT_OF_SCOPE, RE_NFR, RE_EDGE_CASES, RE_TESTABILITY, __link };

@@ -448,6 +448,4 @@ function renderUpgradeMd(r, lang, proj) {
   return md;
 }
 
-module.exports = { engineVersion, parseSemver, compareSemver, stampOf, specVersionStatus, stampSpecVersion,
-  missingIgnoreLines, lastRecord, upgradePlan, applyUpgradePlan, NOT_STARTED_PHASES, shortDetail, upgradeFeature,
-  specUpgrade, upgradeItems, upgradeMigrationLines, upgradeLines, renderUpgradeMd, __link };
+module.exports = { engineVersion, compareSemver, specVersionStatus, stampSpecVersion, specUpgrade, upgradeLines, __link };

@@ -2888,30 +2888,11 @@ function scopeGuardDecision(pdir, abs, features, texts, allow, extra) {
     reason: S.ask(rel, list(features), hint).replace(/ {2,}/g, " ") + (extra.note ? " " + extra.note : "") };
 }
 
-module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, RE_APPROVAL_MCP, APPROVAL_SHELL_TOOLS,
-  APPROVAL_COMMAND_MAX, APPROVAL_SHELL_DEPTH, APPROVAL_LEX_DEPTH, CLI_SWITCHES, APPROVAL_WRAPPERS, APPROVAL_SUBCOMMANDS,
-  APPROVAL_OPTION_VALUES, APPROVAL_SHELLS, APPROVAL_PS_SHELLS, APPROVAL_STDIN_SHELLS, approvalShellMode,
-  RE_DEVSPEC_WORD, RE_APPROVAL_VAR_WORD, RE_APPROVAL_CANDIDATE, approvalCandidate, RE_ROADMAP_FILE, RE_SPECS_DIR,
-  APPROVAL_WRITERS_ANY, APPROVAL_REMOVERS, APPROVAL_MOVERS, APPROVAL_WRITERS_TARGET, APPROVAL_WRITERS_INPLACE,
-  approvalGuardInput, RE_RAW_APPROVAL_GUARD, rawApprovalGuard, approvalGuardLevel, setApprovalGuard,
-  lowersApprovalGuard, ANSI_C_ESCAPES, ansiCEscape, PS_ESCAPES, shellCommandWords, programAt, stdinShellMode,
-  shellLexList, shellSubstitutionsIn, approvalProgram, devSpecWordAt, specsWriteActions, approvalStr, approvalTruthy,
-  guardRank, guardName, initGuardDowns, initRolesInput, initChecksInput, cliApprovalAction, shellApprovalActions,
-  APPROVAL_POSITIONALS, joinScriptWords, restScript, APPROVAL_START_PROCESS, START_PROCESS_VALUES, startProcessLine, findExecActions,
-  approvalExtras, mcpApprovalAction, approvalCommand, approvalGuardDecision, STOP_RECENT_HOURS, STOP_MESSAGE_MAX,
-  STOP_MAX_FEATURES, STOP_TASKS_SHOWN, STOP_REPORT_MAX, STOP_WINDOW, guardLevel, guardInput, stopCheckEnabled,
-  setStopCheck, stopPatterns, STOP_CLAUSE_SPAN, stopClauseStart, RE_ES_NO_NEXT, RE_ES_SE_NEXT, stopNegates,
-  stopPastFailure, stopZeroCount, STOP_WORD, RE_STOP_FENCE, RE_STOP_CODE, RE_STOP_QUOTE, stopProse, stopClaimSources, STOP_FILTER_SOURCES, stopClaimFilter, stopClaims, stopActivity, SPEC_EDIT_LOCK_WAIT_MS, recordSpecEdit, stopTaskLabel, stopCheck, implementerStopCheck,
-  scopeGuardDecision, APPROVAL_EDIT_TOOLS, RE_STATE_FILE, DEVSPEC_NAMES, devSpecGlob, isDevSpecWord, RE_COMSPEC_WORD, RE_APPROVAL_VERB,
-  approvalPlain, APPROVAL_TEXT_PROGRAMS, APPROVAL_STDIN_RUNTIMES, APPROVAL_POSIX_SHELLS, withPositionals, stdinScriptAt,
-  decodePwshEncoded, approvalSpecsProject, approvalUnparsed, guardTargetPath, SESSION_MAX_UP, sessionUsable, sessionSame, sessionSpecs,
-  gitCheckoutOf, worktreeProject, sessionProject, sessionPath, stopReportFile, reportCommandSpans, readStopReport,
-  RE_OBSERVED_FILE, APPROVAL_GATED_TRACKS, approvalGatedTracks, approvalPathText, approvalGuardedFile, approvalGuardedDir, GIT_VALUE_OPTIONS,
-  gitWriteTargets, approvalEditTargets, RE_PS_STOP_AFTER_CLI, cliSubcommandUnread,
+module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, APPROVAL_SHELL_TOOLS, CLI_SWITCHES,
+  approvalCandidate, APPROVAL_WRITERS_ANY, APPROVAL_REMOVERS, APPROVAL_MOVERS, APPROVAL_WRITERS_TARGET,
+  APPROVAL_WRITERS_INPLACE, approvalGuardInput, rawApprovalGuard, approvalGuardLevel, setApprovalGuard, shellCommandWords,
+  approvalGuardDecision, STOP_RECENT_HOURS, guardLevel, guardInput, stopCheckEnabled, setStopCheck, stopProse,
+  stopClaimSources, STOP_FILTER_SOURCES, stopClaimFilter, stopClaims, stopActivity, recordSpecEdit, stopCheck, devSpecGlob,
+  guardTargetPath, SESSION_MAX_UP, worktreeProject, sessionProject, sessionPath, readStopReport, approvalEditTargets,
   // 1.25.1 (review 7): the shell's file operations, fed scripts, MCP file tools, the edit guard on the shell
-  APPROVAL_WRITERS_OTHER, APPROVAL_READERS, RE_PS_READER, RE_APPROVAL_DOT_GLOB, RE_APPROVAL_WRITE_WORD, RE_MCP_FILE_TOOL, RE_DEVSPEC_MCP_TOOL,
-  RE_MCP_PATH_KEY, APPROVAL_ASK_WHYS, approvalRoadmapGone, SHELL_VAR, SHELL_ANY, GUARDED_NAMES, shellVarText, braceExpand, shellGlobRe,
-  shellSegCould, shellPathFacts, shellPathReadings, shellOperands, SHELL_TAKES, PS_FILE_ALIASES, PS_FILE_CMDLETS, PS_SWITCHES, psParams,
-  shellProducedPaths, shellSegOps, shellKnownProgram, tarOps, findFileOps, psFileOps, netFileOps, shellOpActions, shellOpPaths, shellTrack,
-  shellFedScript, shellProducedText, shellProcText, shellWriteTargets, CLI_GUARDED_COMMANDS, cliSubcommandGlob, approvalEditActions,
-  approvalPathArgs, __link };
+  APPROVAL_WRITERS_OTHER, braceExpand, PS_FILE_ALIASES, PS_FILE_CMDLETS, shellWriteTargets, __link };

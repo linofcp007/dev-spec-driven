@@ -980,14 +980,8 @@ function initTrackPack(projectDir, name, lang, lng) {
   return { ok: true, action: "init", name: n, marker: "[" + token + "]", dir, lang: lng, created, kept, lines };
 }
 
-module.exports = { TRACK_PACKS_DIR, PACK_JSON, PACK_FRAGMENTS, PACK_LIMITS, RE_PACK_NAME, RE_PACK_MARKER,
-  RE_PACK_MARKER_RESERVED, RE_PACK_KEYWORD, PACK_KEYS, PACK_SECTION_KEYS, PACK_TIERS, PACK_RESERVED_WORDS,
-  packReservedName, RE_PACK_ITEM, RE_TABLE_SEPARATOR, packTextOk, packGuidanceOk, stripJsonComments, packScan,
-  readPackItem, packListItems, packTableRows, RE_PACK_VAR, RE_PACK_GUIDANCE_VAR, packSectionKey, coreDesignHeadingKeys,
-  packVarRefs, parsePackFragment, packLocalized, PACK_CACHE, loadPack, loadPackScan, loadTrackPacks, NO_PACKS,
-  packRegistry, packTracks, packOf, isPackTrack, isPackMarkerBracket, packMarkersFor, noteGhostPacks, ghostMarkers,
-  savedPackName, legacyPackName, legacyPackMarkerTrack, TRACK_RESERVED_SINCE, packReservedSince, missingPackTracks,
-  packLocal, packTitle, packFragment, packSubst, packCtx, packSubstBasic, packDesignBlock, packRequirementsBlock,
-  insertPackRequirements, packPlanRows, packTaskBlock, packTestRowsBlock, packChecklistBlock, packSteeringStub,
-  trackSteeringStub, RE_PACK_WILD_VAR, RE_PACK_WILD_VAR_G, PACK_CORPUS_CACHE, packCorpusSets, localizePackProblem,
-  trackPacks, listTrackPacks, checkTrackPacks, initTrackPack, __link };
+module.exports = { PACK_LIMITS, RE_PACK_MARKER_RESERVED, RE_PACK_KEYWORD, packTableRows, packRegistry, packTracks, packOf,
+  isPackTrack, isPackMarkerBracket, packMarkersFor, noteGhostPacks, ghostMarkers, savedPackName, legacyPackName,
+  legacyPackMarkerTrack, packReservedSince, missingPackTracks, packTitle, packDesignBlock, packRequirementsBlock,
+  insertPackRequirements, packTaskBlock, packTestRowsBlock, packChecklistBlock, trackSteeringStub, packCorpusSets,
+  trackPacks, __link };

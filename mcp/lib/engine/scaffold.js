@@ -1454,11 +1454,8 @@ function removeTrack(projectDir, name, track) {
   return addTrack(projectDir, name, track, { remove: true });
 }
 
-module.exports = { linkedSpecsFolder, steeringFilesForTracks, initProject, scaffoldSteeringFile, RE_CUSTOM_STEERING, PROTO_KEYS,
-  customSteeringError, customSteeringStub, frontMatterScalar, frontMatterValues, steeringFrontMatter, BRIEF_STEERING_BUDGET, briefSteering,
-  steeringPlaceholders, classificationMd, requirementsMd, trackDesignBlock, designMd, tasksMd, testPlanMd, evalPlanMd,
-  loadTestMd, SAMPLE_GOLDEN, SAMPLE_ADVERSARIAL, quickstartMd, checklistMd, sizedTrackSections, sizeDesignText, RE_SIZE_TASK, sizeTasksText, sizedSectionCounts, integrationPlanMd, BUG_PREFILL, bugCreateInput, createdBodies, createFeature,
-  pruneBacklog, STEERING_GOVERNED, safeSteeringName, STEERING_MAX_PATTERNS, governingSteering, steeringTargetsMatch,
-  featureImplementsTargets, steeringFingerprints, steeringChanges, steeringChangeText, steeringImpact,
-  steeringImpactLines, applyTracks, testPlanTracks, trackTemplateAcs, scaffoldTestPlan, trackTaskBlock,
-  updateActiveTracks, removeTracks, restoreCoveredSections, inactiveArtifacts, addTrack, removeTrack, __link };
+module.exports = { linkedSpecsFolder, initProject, scaffoldSteeringFile, RE_CUSTOM_STEERING, PROTO_KEYS, customSteeringError,
+  customSteeringStub, frontMatterScalar, frontMatterValues, steeringFrontMatter, briefSteering, steeringPlaceholders,
+  trackDesignBlock, SAMPLE_GOLDEN, SAMPLE_ADVERSARIAL, createFeature, pruneBacklog, STEERING_GOVERNED, steeringFingerprints,
+  steeringChanges, steeringChangeText, steeringImpact, steeringImpactLines, trackTemplateAcs, scaffoldTestPlan,
+  trackTaskBlock, addTrack, removeTrack, __link };

@@ -1790,10 +1790,10 @@ const SIGNALS = {
   },
 };
 
-module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, parseTracks, normalizeTracks,
-  TRACK_ALIASES, suggestTrack, unknownTracksError, trackLabel, SIGNALS, allTracks, optionalTracks, markerTracks, trackMarker, trackSectionTable, trackSteeringFiles, trackSignalTable,
-  detectTracks, savedTracks, headingHasMarker, TRACK_MARKER, MARKER_TRACKS, trackAcIds, normTaskHeading, TASK_HEADINGS,
-  renderTrackTaskHeadings, trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
-  inactiveMarkerLines, headingLeadMarkers, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
-  SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, OBS_SECTIONS, DATA_SECTIONS, TRACK_SECTIONS,
-  TRACK_OVERLAPS, TRACK_TASK_OVERLAPS, activeSectionTracks, activeDesign, __link };
+module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, parseTracks, normalizeTracks, TRACK_ALIASES,
+  unknownTracksError, trackLabel, SIGNALS, allTracks, optionalTracks, markerTracks, trackMarker, trackSectionTable,
+  trackSteeringFiles, trackSignalTable, detectTracks, savedTracks, headingHasMarker, TRACK_MARKER, MARKER_TRACKS, trackAcIds,
+  normTaskHeading, TASK_HEADINGS, renderTrackTaskHeadings, trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading,
+  activeTasks, sectionDropLines, inactiveTaskLines, inactiveMarkerLines, headingLeadMarkers, RE_ACTIVE_TRACKS, trackRunRe,
+  SAAS_SECTIONS, AI_SECTIONS, TRACK_SECTIONS, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS, activeSectionTracks, activeDesign,
+  __link };

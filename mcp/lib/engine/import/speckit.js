@@ -301,5 +301,4 @@ function demoteMd(text, by = 1) {
   }).join("\n");
 }
 
-module.exports = { SPECKIT_GUIDANCE, specKitInput, RE_SPECKIT_PRIORITY, specKitStoryHeading, parseSpecKit, RE_SK_TASK, RE_SK_STORY_TAG,
-  RE_SK_FENCE, skClosesFence, specKitTaskMarkers, SPECKIT_CONTRACTS_MAX, SPECKIT_CONTRACT_EXT, specKitDesignDocs, demoteMd, __link };
+module.exports = { parseSpecKit, __link };

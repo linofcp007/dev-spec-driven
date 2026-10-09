@@ -1266,7 +1266,5 @@ function planBridge(projectDir, payload) {
   return { hint: rel ? P.byPath(rel) : P.byText, lang: lng, planFile: file, inProject: !!rel, hasText };
 }
 
-module.exports = { designSaveCheck, userOptionRaw, boolWord, userDefaults, newProjectLang, userDefaultsApplied,
-  seedProjectLang, listFeatures, statusFeature, nextAction, specDoctor, STATUS_MAX_FEATURES, STATUS_MAX_UP,
-  STATUS_TEST_FILES, STATUS_DOCTOR_WARNS, isDevSpecDir, statusLineProject, statusActivity, statusTestsGate, statusNext,
-  statusLine, planBridge, __link };
+module.exports = { designSaveCheck, userDefaults, newProjectLang, userDefaultsApplied, seedProjectLang, listFeatures,
+  statusFeature, nextAction, specDoctor, isDevSpecDir, statusLineProject, statusLine, planBridge, __link };

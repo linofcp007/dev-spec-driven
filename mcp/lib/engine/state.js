@@ -1616,18 +1616,15 @@ function featureBranch(projectDir, name) {
 }
 
 module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugifyFull, legacySlugify, RE_WIN_RESERVED,
-  RESERVED_SLUGS, reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState,
-  stateFromFile, PHASE_FILE, textFingerprint, fingerprintText, wsText, wsFingerprint, sha1Hex, fingerprintMatches,
-  BOM_CHAR, uncheckTasks, phaseFile, FEATURE_SIZES, sizeInput, featureSize, isChangeDir, PLANNING_CEILING, PHASE_PERCENT, phasePercent, featurePercent,
-  roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, findCycles, setDependency, dependencyUnlocked,
-  roadmap, flatText, specNameText, addBacklog, BACKLOG_NOTE_MAX, BACKLOG_NOTE_SEP, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked, BACKLOG_ACTIONS, backlog,
-  roadmapLang, roadmapChromeLang, setRoadmapLang, RE_AUTOGEN, isGeneratedOrAbsent, writeRoadmapMd, writeRoadmapHtml,
-  writeRoadmapFile, maybeRefreshRoadmap, ROADMAP_STALE_FILE, markRoadmapStale, roadmapStale, clearRoadmapStale, refreshStaleRoadmap, staleGeneratedText,
-  roadmapReport, featureDirs, locateFeatures,
+  reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState, stateFromFile, PHASE_FILE,
+  textFingerprint, wsText, wsFingerprint, sha1Hex, fingerprintMatches, BOM_CHAR, uncheckTasks, phaseFile, FEATURE_SIZES,
+  sizeInput, featureSize, isChangeDir, PHASE_PERCENT, featurePercent, roadmapPath, loadRoadmap, readRoadmap, roadmapError,
+  writeRoadmap, findCycle, findCycles, setDependency, roadmap, flatText, specNameText, BACKLOG_ACTIONS, backlog,
+  setRoadmapLang, isGeneratedOrAbsent, writeRoadmapMd, writeRoadmapHtml, maybeRefreshRoadmap, ROADMAP_STALE_FILE,
+  markRoadmapStale, roadmapStale, refreshStaleRoadmap, staleGeneratedText, roadmapReport, featureDirs, locateFeatures,
   // 1.21 F1a — the spec state's git merge driver
-  MERGE_DRIVER, MERGE_KINDS, MERGE_ATTRIBUTE_PATHS, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY, mergeStateJson, mergeStateText,
-  mergeKindOfPath, mergeAttributes, mergeConflictsCheck,
+  MERGE_DRIVER, MERGE_ATTRIBUTE_LINES, mergeStateJson, mergeStateText, mergeKindOfPath, mergeAttributes, mergeConflictsCheck,
   // 1.21 review A3 — the installed driver still this clone's? (merge-state --check, the SessionStart hook)
-  MERGE_DRIVER_KEY, gitConfigGet, mergeDriverScript, repoGitConfigText, mergeDriverStatus,
+  MERGE_DRIVER_KEY, gitConfigGet, mergeDriverScript, mergeDriverStatus,
   // 1.25 — a feature's own git branch (create --branch): its name, the repository read as files, the record
-  BRANCH_PREFIX, BRANCH_NAME_MAX, branchNameOk, defaultBranchName, gitDirsOf, gitRepoFacts, featureBranchRecord, branchView, featureBranch, __link };
+  branchNameOk, defaultBranchName, gitRepoFacts, featureBranchRecord, branchView, featureBranch, __link };

@@ -1678,16 +1678,10 @@ function rtmProjectMarkdown(projectDir, lang, features) {
   return [italic(R.projectLegend), "", `| ${R.projectCols.join(" | ")} |`, `|${R.projectCols.map(() => "---").join("|")}|`, ...rows].join("\n");
 }
 
-module.exports = { VAGUE_WORDS, VAGUE_RE, VAGUE_RE_ALL, RE_LIST_ITEM, RE_NUMBERED, RE_BLOCK_BREAK, B, E, RE_MODAL_EN,
-  RE_MODAL_CAPS, RE_MODAL_SYSTEM, RE_LIST_DEFINES_AC, RE_MODAL, RE_MODAL_LOOSE, RE_AC_SHAPE, RE_AC_HEADING,
-  RE_EARS_CAPS, RE_EARS_KEYWORD, RE_UBIQUITOUS, RE_STABLE_ID, RE_BARE_AC, RE_FULL_ID_NO_T, RE_OWN_LABEL_ID, ownStableId, bareLabel, RE_LEAD_DEFINES_AC, RE_CELL_AC, criterionBlocks,
-  VAGUE_VERB_NEXT, vagueTermsOf, earsFeature, earsUnlinted, earsUnidentified, criteriaBareIds, shortIdList, earsValidate, extractAcIds, RE_SUB_AC, extractTestIds, testIdKeys, taskCitations, traceCheck, TRACE_INFO_FIELDS, TRACE_GAP_ORDER,
-  TRACE_VERDICT_KINDS, TRACE_TASK_KINDS, TRACE_PLAN_KINDS, traceGaps, traceGapLines, TRACE_WARNING_ORDER,
-  TRACE_SECONDARY_KINDS, traceWarnings, traceWarningLines, RE_SECONDARY_ID, RE_SECONDARY_ID_LINE, idKey, secondaryIds,
-  secondaryDefinitions, traceSecondary, testPlanEntries, RE_CODE_TID, CODE_TRACE_CAP, CODE_TRACE_READ_CAP,
-  CODE_TRACE_FILES_PER_ID, isTestCodePath, tKey, specFeatureDirs, scanTestCode,
-  allPlannedTestKeys, RE_FILE_COLUMN, pathUnder, pathNames, scannableTestPath, nonCodeArtifactPath, codePathToken,
-  planFileScopes, fileCellTokens, outsideCodeTemplates, otherPlanTestFiles, traceTestCode, RTM_STATUSES, RTM_KIND_ORDER,
-  RTM_TEXT_MAX, acNums, supersededByIndex, shippedSupersedeKeys, featureShipped, rtmEvidence, buildTraceMatrix,
-  traceMatrix, RE_CSV_FORMULA, csvCell, csvRecord, RTM_CSV_COLS, rtmTaskWords, rtmEvidenceWords, matrixCsv, RTM_ICON,
-  rtmCell, rtmTextCell, rtmMarkdown, rtmProjectMarkdown, __link };
+module.exports = { RE_LIST_ITEM, B, E, RE_MODAL, RE_EARS_KEYWORD, RE_BARE_AC, bareLabel, criterionBlocks, earsFeature,
+  earsUnlinted, earsUnidentified, criteriaBareIds, shortIdList, earsValidate, extractAcIds, extractTestIds, traceCheck,
+  TRACE_INFO_FIELDS, TRACE_VERDICT_KINDS, TRACE_TASK_KINDS, TRACE_PLAN_KINDS, traceGaps, traceGapLines,
+  TRACE_SECONDARY_KINDS, traceWarningLines, idKey, secondaryIds, secondaryDefinitions, testPlanEntries, RE_CODE_TID,
+  isTestCodePath, tKey, scanTestCode, planFileScopes, outsideCodeTemplates, traceTestCode, RTM_STATUSES, supersededByIndex,
+  shippedSupersedeKeys, featureShipped, buildTraceMatrix, traceMatrix, csvCell, csvRecord, matrixCsv, rtmMarkdown,
+  rtmProjectMarkdown, __link };

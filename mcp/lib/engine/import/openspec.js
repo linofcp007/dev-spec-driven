@@ -199,4 +199,4 @@ function parseOpenSpec(dir, read, W) {
   return model;
 }
 
-module.exports = { renamedRequirementNames, RE_OS_CLAUSE_HEAD, openSpecClause, parseOpenSpec, __link };
+module.exports = { parseOpenSpec, __link };

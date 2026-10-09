@@ -838,11 +838,6 @@ function overlapDoctorDetail(pairs, slug, lang) {
   return [act.length ? O.doctorActive(act.join("; "), slug) : null, fin.length ? O.doctorFinished(fin.join("; "), slug) : null].filter(Boolean).join(" · ");
 }
 
-module.exports = { progressBar, mid, mlabel, cutText, ROADMAP_I18N, i18nLang, htmlEsc, cleanTaskText, ROW_CACHE, ROW_CACHE_MAX, ROW_CALLS, ROW_OPTS,
-  ROW_SCRATCH, rowStatSig, rowProjectSig, roadmapData, roadmapRow, buildAttention,
-  roadmapTaskText, roadmapPhaseName, renderRoadmapMd, renderRoadmapHtml, SIZE_POINTS, RE_SIZE_VALUE,
-  FORECAST_WINDOW_DAYS, FORECAST_MIN_TASKS, FORECAST_SPREAD, FC_DAY_MS, taskSize, taskCompletedAt, fcDay, fcWeekend,
-  fcIso, fcWorkingDays, fcAddWorkingDays, velocityOf, forecastInput, forecastInputAt, archivedCompletions, rmvCycles, forecastData, featureVelocity, roadmapExtras,
-  etaText, velocityText, roadmapTailLines, OVERLAP_MAX_KEYS, OVERLAP_MAX_GLOB_CHECKS, OVERLAP_MAX_REF_LEN,
-  OVERLAP_MAX_GLOB_WORK, OVERLAP_MAX_PAIRS, OVERLAP_FILES_SHOWN, overlapFeatures, featureOverlaps, overlapFiles, overlapAttention,
-  overlapDoctorDetail, __link };
+module.exports = { cutText, htmlEsc, cleanTaskText, ROW_CACHE, ROW_CALLS, ROW_OPTS, roadmapData, renderRoadmapMd,
+  renderRoadmapHtml, SIZE_POINTS, taskSize, fcDay, fcIso, velocityOf, forecastInput, archivedCompletions, forecastData,
+  featureVelocity, roadmapExtras, etaText, roadmapTailLines, overlapFeatures, featureOverlaps, overlapDoctorDetail, __link };

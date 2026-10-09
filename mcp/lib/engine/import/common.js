@@ -351,7 +351,6 @@ function titleAfterDash(s, i) {
   return restAfterBlanks(s, i, false);
 }
 
-module.exports = { inertOutsideCode, mdHeadings, isWs, mdHeadingParts, mdRange, mdBody, markRange, unusedLines,
-  RE_MD_HR, firstParagraph, mdListItems, leftoverExtras, trimClause, tidyLines, lcFirst, IRREGULAR_VERBS, baseVerb,
-  earsThen, earsFromClauses, clauseScanner, GWT, gwtMatch, earsFromGwt, titleFromStory, wantClause, newImportModel,
-  titleAfterDash, __link };
+module.exports = { inertOutsideCode, mdHeadings, mdRange, mdBody, markRange, unusedLines, RE_MD_HR, firstParagraph,
+  mdListItems, leftoverExtras, trimClause, tidyLines, earsThen, earsFromClauses, clauseScanner, earsFromGwt, titleFromStory,
+  newImportModel, titleAfterDash, __link };

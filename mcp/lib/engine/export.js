@@ -1613,15 +1613,6 @@ function milestonesFollow(rm, slug, how, to) {
   return { changed, invalid: store.bad ? { ...store.bad, names: store.bad.names.slice() } : null };
 }
 
-module.exports = { EXPORT_DIR, EXPORT_FORMATS, SUMMARY_SYN, SUCCESS_SYN, expItem, RE_EXP_RULE, RE_EXP_BLOCK, RE_EXP_SEP,
-  expInline, RE_MD_ESCAPE, MD_ENTITIES, mdPlainText, nextPlainStop, expFence, expCells, expTable, expList, expBlocks,
-  markdownToHtml, shiftHeadings, squeezeBlankLines, artifactBody, sectionText, specTitle, titledSlug, mdCell, utcStamp,
-  italic, exportAcLine, exportStories, requirementSections, exportFeatureDoc, exportProjectDoc, exportMd, EXPORT_CSS,
-  EXPORT_JS, exportHtml, exportSpecs, exportGherkin, GHERKIN_DIALECT, GHERKIN_BLOCK_KINDS, GHERKIN_STEP_KINDS,
-  ghRiskyLine, GHERKIN_COND, GHERKIN_THEN, RE_GH_KEYWORD, RE_GH_MODAL, RE_GH_DET, ghMask, ghStripEmphasis,
-  GHERKIN_LANG_KEYWORDS, earsSteps, ghLine, ghTag, gherkinFeatureTags, gherkinFeature, gherkinBase, TRACKERS,
-  TRACKER_LABELS_MAX, TRACKER_SUMMARY_MAX, TRACKER_STATUS, trackerRecords, trackerCsv, isoTime, oneLiner, releaseAcs,
-  changelogData, renderReleaseNotes, changelog, MILESTONE_ACTIONS, MILESTONE_MAX,
-  MILESTONE_FEATURES_MAX, RE_MILESTONE_NAME, RE_ISO_DAY, milestoneName, milestoneKey, milestoneFileKey, strList,
-  slugList, milestoneStore, milestoneInvalidInfo, findMilestone, milestoneStatuses, milestoneAttention, MILESTONE_ICON,
-  milestoneLine, milestonesNow, milestone, milestonesFollow, __link };
+module.exports = { EXPORT_DIR, EXPORT_FORMATS, mdPlainText, markdownToHtml, shiftHeadings, squeezeBlankLines, specTitle,
+  mdCell, utcStamp, italic, exportSpecs, earsSteps, TRACKERS, oneLiner, changelog, MILESTONE_ACTIONS, milestoneInvalidInfo,
+  milestoneStatuses, milestoneAttention, MILESTONE_ICON, milestoneLine, milestone, milestonesFollow, __link };

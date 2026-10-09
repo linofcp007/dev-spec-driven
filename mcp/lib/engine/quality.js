@@ -1371,21 +1371,6 @@ function clarifyChange(projectDir, f, c) {
   return clarifyResult(projectDir, f, tracks, fm, add, questions, null);
 }
 
-module.exports = { XAC_DUPLICATE, XAC_CONFLICT, XAC_TRIGGER, XAC_RESPONSE, XAC_MIN_WORDS, XAC_MAX_CRITERIA,
-  XAC_MAX_COMPARISONS, XAC_MAX_PAIRS, XAC_STOP, XAC_MODALS, RE_XAC_SYS_MODAL, RE_XAC_MODAL, XAC_TRIGGER_NEG, RE_XAC_NT,
-  RE_XAC_CANNOT, RE_XAC_NEG, RE_XAC_IDS, xacNumber, xacStem, xacWords, RE_XAC_NUM, xacNumbers, acShape, xacClauseSim,
-  xacOpposed, acSkeleton, templateShapeTable, builtinTemplateAcs, projectTemplateAcs, jaccard, XAC_FEATURE_CACHE,
-  XAC_FEATURE_CACHE_MAX, XAC_RACY_MS, xacStatSig, xacContextSig, xacFeatureRows, xacTable, crossFeatureAcs,
-  crossFeatureAcsOf, comparePair, crossAcItem, crossAcDoctorDetail, renderCrossAcsMd, GLOSSARY_FILE,
-  GLOSSARY_MAX_ENTRIES, GLOSSARY_MAX_AVOID, GLOSSARY_MAX_HITS, GLOSSARY_BRIEF_MAX, GLOSSARY_BRIEF_CHARS,
-  RE_GLOSSARY_ITEM, escRe, foldTerm, glossaryEntries, glossaryEntry, RE_WORD_BEFORE, RE_WORD_AFTER, wordListRe,
-  GLOSS_TEMPLATE_LINES, glossLineKey, glossPatternSegs, glossVisibleLines, glossAddLines, glossNewSet,
-  glossBuiltinLines, glossProjectLines, glossSpans, glossUserParts, glossaryHits, briefGlossary, TRADEOFFS_SYN,
-  RISKS_SYN, DESIGN_WEIGH, DESIGN_WEIGH_IDS, RE_WEIGH_HEADING_REST, weighSection, weighSectionHead, genericUnit,
-  designBody, WEIGH_PROSE_WORDS, designWeighState, designWeighChecks,
-  REUSE_SYN, WEIGH_MERGED_SYN, DESIGN_WEIGH_STAMPS, designReuseFallback, BRIEF_REUSE_MAX_ENTRIES, BRIEF_REUSE_CHARS, BRIEF_REUSE_MAX_FILES,
-  BRIEF_REUSE_MAX_DIRS, BRIEF_REUSE_DIR_ENTRIES, RE_REUSE_PATH, reuseUnits, reuseInsideRel, reuseProbe, reuseTargets, reuseEntryMatches,
-  readDirBounded, reuseNearbyFiles, reuseQuotedSection, briefReuse,
-  RE_RATE_LIMIT, RE_ACCESS_DENIED, RE_SUBJECT_RIGHTS, CONSTRAINT_KINDS, CONSTRAINT_SIGNALS, CONSTRAINT_RE,
-  constraintSignalRe, RE_CONSISTENCY_ANSWER, RE_ACID, CONSTRAINT_MAX_WORDS, userSpecText, constraintNudge,
-  RE_DIST_DELIVERY, RE_DIST_FAILURE, clarify, clarifyResult, CHANGE_SUMMARY_SYN, CHANGE_APPROACH_SYN, clarifyChange, __link };
+module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
+  TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, REUSE_SYN, reuseQuotedSection, briefReuse,
+  clarify, __link };
