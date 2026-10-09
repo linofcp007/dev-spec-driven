@@ -438,7 +438,7 @@ function importRun(projectDir, tool, source, opts) {
   const cls = classify(evidence, { name, lang: opts.lang, fallbackLang: configuredLang(projectDir), projectDir });
   // refresh: false — the roadmap is refreshed ONCE, after the imported files are written (1.23 review 5: every import rendered
   // ROADMAP.md twice, each a walk over every feature)
-  const cr = createFeature(projectDir, name, pt.given ? pt.tracks : cls.tracks, model.summary || undefined, cls, opts.lang, undefined, { refresh: false });
+  const cr = createFeature(projectDir, { name, tracks: pt.given ? pt.tracks : cls.tracks, summary: model.summary || undefined, cls, lang: opts.lang, refresh: false });
   if (!cr.ok) return cr;
   // 1.24 r6 (G4): from here on the name is WRITTEN (every title, decisions.md's header, a pack's {{name}}): inert to HTML comments
   // like createFeature's — a name the caller gives too ("Import <!-- x" opened a comment in every imported file's title)

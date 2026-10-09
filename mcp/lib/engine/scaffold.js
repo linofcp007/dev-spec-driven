@@ -662,7 +662,10 @@ function storeFeatureBranch(dir, record) {
 // opts.brownfield: the feature lands in an existing codebase — also scaffold integration-plan.md.
 // opts.reproduction / rootCause / condition / behaviour: a bugfix's prefill (1.21 F3, bugCreateInput); opts.includeBody: return
 // the created artifacts' bodies (`bodies`).
+// The options form (1.27): createFeature(projectDir, { name, tracks, summary, cls, lang, kind, …opts }) — one object, no positional
+// holes; what both surfaces call (mcp/lib/operations.js). The positional form stays the same call.
 function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts = {}) {
+  if (isObj(name)) ({ name, tracks, summary, cls, lang, kind, ...opts } = name);
   const f = resolveFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
