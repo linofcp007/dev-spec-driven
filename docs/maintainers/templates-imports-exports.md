@@ -2,359 +2,331 @@
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
 `.specs/templates/`, steering front matter, the `spec_import` sources, and every export (HTML / md / CSV, Gherkin,
-trackers, ADRs, release notes, milestones).
+trackers, ADRs, release notes, milestones). The rules come first; how they came to be — the releases and review findings —
+is in History at the end.
 
-## Project templates (1.14) — `.specs/templates/`
-- **Resolution:** `.specs/templates/<lang>/<artifact>.md` wins over `.specs/templates/<artifact>.md`, which wins over the
-  built-in i18n builder (`templateOverride()`); a pt-BR feature reads `pt-BR/`, then `pt/` (`templateLangChain()`). Only allowlisted names are ever read — `TEMPLATE_ARTIFACTS`
-  (classification, requirements, design, tasks, test-plan, eval-plan, load-test, quickstart, checklist, integration-plan,
-  bug, bug-requirements, bug-test-plan, bug-tasks, spike, spike-tasks, change — 1.21 F5: a change's one file; a sized
-  feature's built-in scaffold follows its size, a project template is written as it says, its missing track blocks
-  appended whole) plus `steering/<file>.md` (a known stub, or a name
-  steering_scaffold accepts). Every path is built from the allowlist and `LANGS`, never from a caller's string; at most
-  three levels; dot files are not listed; a linked folder is never entered, a file whose real path is outside the project
-  is ignored, and `init` refuses to write through a link. Files are read BOM-stripped with LF line ends; a
-  whitespace-only file is ignored.
-- **Who uses them:** `createFeature` (so `spec_import` too), `applyTracks` (spec_add_track), `initProject` and
-  `scaffoldSteeringFile` — still create-only (`writeIfAbsent`); results name the templates used (`templates`).
-- **Variables** (case-insensitive, spaces allowed inside the braces): `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}`
-  `{{lang}}` `{{date}}`; an unknown `{{x}}` is left as is; no summary → the language's generic slot (`[TBD]` /
-  `[a definir]` / `[por definir]`) so the scaffold still reads 'placeholder'. For steering, `{{name}}` / `{{slug}}` are the
-  project folder's name and `{{tracks}}` the tracks init was given. For a spike, `{{summary}}` is its question.
-  **The summary is written through `safeSpecText`** (1.22 review) — into `{{summary}}` and every built-in scaffold that holds it
-  (requirements.md, classification.md, change.md, bug.md, the bug requirements), as the bug prefill and the spike question
-  are: its `<!--` paired with the scaffold's closing EARS-guidance `-->` and hid every criterion (placeholders 30 → 0, trace
-  5 ACs → 0, EARS 0 criteria). `createFeature` keeps the RAW text for the classifier (`writtenSummary` is only what is written).
-- **Track-block rule — ONE rule for an overridden design / requirements / tasks / test-plan:** every active track still
-  gets what the built-in template would hold for it, appended at the end as spec_add_track appends it
-  (`trackDesignBlock`, `trackRequirementsBlock` — renumbered after the template's own US-1 ACs when an ID would collide —,
-  `trackTaskBlock`, `trackTestRowsBlock` — T-IDs after the template's), citing the IDs requirements.md defines for the
-  track (`trackIdMap`) — UNLESS the template already carries that track (its marker on a real heading, the localized
-  Testability Notes, the track's task-block heading; for the test plan: it cites the track's criteria). The bugfix /
-  spike variants and every other artifact are written as the template says.
-- **Placeholder corpus from the project:** `projectTemplateSets()` adds the bracket texts, code-span slots and task lines
-  of the project's templates to the corpus, so an untouched custom scaffold reads 'placeholder' for doctor / approve /
-  next_action (and bug.md's own slots join `bugTemplateSlots()` — the root-cause gate holds). Scoped to the `.specs/`
-  folder the current engine call works in (`TEMPLATE_SCOPE_ROOT`, set by `specsRoot()`), memoized per call, dropped when
-  the engine writes under `templates/` (`forgetCached`), each file's parse cached by content (`TEMPLATE_PARSE_CACHE`). A
-  slot holding a variable (`[Describe {{name}}]`) matches whatever the variable became through a LINEAR wildcard match
-  (`templateWildcard`) — never a regex built from template text.
-- **Reserved slugs:** `RESERVED_SLUGS` = `steering`, `exports`, `templates`, `tracks` (1.15) (`resolveFeature` refuses them for new
-  features). **Legacy exception** (`reservedSlug(name, root)`): a `templates/` or `exports/` folder holding a
-  `.state.json` is a feature created before 1.14 — it stays a feature (listed, reachable, renameable) and is never read as
-  templates (`templateFileList()` returns nothing; every `spec_templates` action refuses with `legacyFeature: true`). The
-  PostToolUse hook and the pre-commit check skip `.specs/templates/` with the same exception.
-- **`check`** validates against the current rules (a design template with some of a track's marker headings but not all
-  its sections, a track section without its `> **TODO**`, EARS / AC-ID problems, phantom AC and `_Makes green:_` T-IDs
-  across the trio, bug.md without a real Root Cause slot, unknown `{{variables}}`, chain templates with no slot at all,
-  empty files, non-template names) → `{file, line?, code, severity, message}` + verdict pass | warn | fail; CLI exit 1 on
-  an error.
+## Project templates — `.specs/templates/`
+- **Resolution:** `.specs/templates/<lang>/<artifact>.md`, then `.specs/templates/<artifact>.md`, then the built-in i18n
+  builder (`templateOverride()`); a pt-BR feature reads `pt-BR/`, then `pt/` (`templateLangChain()`).
+- **Only allowlisted names are read:** `TEMPLATE_ARTIFACTS` (the phase artifacts, the bug and spike variants, `change`) and
+  `steering/<file>.md` (a known stub or a name steering_scaffold accepts). Every path is built from the allowlist and
+  `LANGS`, never from a caller's string; at most three levels, no dot files, no linked folder, no file whose real path
+  leaves the project; `init` never writes through a link. Files are read BOM-stripped, LF; a whitespace-only one is ignored.
+- **Who uses them:** `createFeature` (so `spec_import` too), `applyTracks`, `initProject`, `scaffoldSteeringFile` — all
+  create-only (`writeIfAbsent`), naming the templates used (`templates`). A sized feature's built-in scaffold follows its
+  size; a project template is written as it says.
+- **Variables** (case-insensitive, inner spaces allowed): `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}`
+  `{{date}}`; an unknown one stays as is; no summary → the language's generic slot (`[TBD]`, `[a definir]`,
+  `[por definir]`), still a placeholder. Steering: name and slug are the project folder's, tracks init's; a spike's
+  summary is its question.
+- **The summary is written through `safeSpecText`** wherever a scaffold holds it, as are the bug prefill and the spike
+  question: a raw `<!--` pairs with the scaffold's closing EARS-guidance `-->` and hides every criterion. `createFeature`
+  classifies the RAW text (`writtenSummary` is only what is written).
+- **Track blocks — ONE rule for an overridden design / requirements / tasks / test-plan:** each active track's built-in
+  block is appended as spec_add_track appends it (`trackDesignBlock`, `trackTaskBlock`, `trackRequirementsBlock` and
+  `trackTestRowsBlock` numbered after the template's own IDs, from `trackIdMap`) — UNLESS the template already carries the
+  track (its marker on a real heading, the localized Testability Notes, its task-block heading; a test plan citing its
+  criteria). Every other artifact, the bugfix and spike variants included, is written as the template says.
+- **Placeholder corpus:** `projectTemplateSets()` adds the templates' bracket texts, code-span slots and task lines (bug.md's
+  join `bugTemplateSlots()`), so an untouched custom scaffold reads placeholder to doctor, approve and next_action. Scoped
+  to the engine call's
+  `.specs/` (`TEMPLATE_SCOPE_ROOT`, set by `specsRoot()`), memoized per call, dropped on a write under `templates/`
+  (`forgetCached`), parses cached by content (`TEMPLATE_PARSE_CACHE`). A slot holding a variable matches through a LINEAR
+  wildcard (`templateWildcard`) — never a regex built from template text.
+- **Reserved slugs:** `RESERVED_SLUGS` (`steering`, `exports`, `templates`, `tracks`) are refused for a new feature
+  (`resolveFeature`). **Legacy exception** (`reservedSlug(name, root)`): a `templates/`, `exports/` or `tracks/` folder
+  holding a `.state.json` is a feature made before its name was reserved and stays one; a legacy `templates/` is never
+  read as templates (`templateFileList()` returns nothing, `spec_templates` refuses with `legacyFeature: true`, the
+  PostToolUse hook and the pre-commit check treat it as a feature).
+- **`check`** applies the current rules (track sections and their `> **TODO**`, EARS and AC / T-IDs across the trio,
+  bug.md's Root Cause slot, unknown variables, slot-less chain templates, empty or stray files) →
+  `{file, line?, code, severity, message}` + verdict pass | warn | fail; the CLI exits 1 on an error.
 
-## Scoped steering (1.13 — from Catalog, drift, restore, guard, steering)
-- **Scoped steering:** `steeringFrontMatter()` reads Kiro-compatible front matter — `inclusion: always |
-  fileMatch | manual` + `fileMatchPattern` (string or list). No front matter → the brief's default files
-  (constitution/tech/structure + the active tracks' files) count as `always`, others stay out; front matter
-  without `inclusion` → `always`; an unknown mode (Kiro `auto`) → `manual`. `briefSteering()` quotes a
-  matching `fileMatch` file's body (front matter and guidance comments stripped, `BRIEF_STEERING_BUDGET`) and
-  lists `manual` ones. `steeringGlobMatch()` is a linear matcher with capped brace expansion — never a
-  backtracking regex. Custom names (`steering_scaffold`) must match `^[a-z0-9][a-z0-9-]{0,62}\.md$` and not be
-  a Windows device name or a prototype key. Doctor's `steering` check warns about files still templates.
-- **Steering imported from Kiro / Cursor (1.25)** — `spec_import {tool: "kiro-steering" | "cursor-rules"}` writes steering files
-  (import/steering.js — Import sources below); what they hold is real content, read by `steeringFrontMatter()` like any file
-  here. The steering logic itself is untouched: an imported file is never a template, and an existing one (spec_init's stub
-  included) is never overwritten.
+## Scoped steering
+- **Front matter** (`steeringFrontMatter()`, Kiro-compatible): `inclusion: always | fileMatch | manual` +
+  `fileMatchPattern` (string or list). None → the brief's default files (constitution / tech / structure + the active
+  tracks' files) count as `always`, others stay out; no `inclusion` → `always`; an unknown mode (Kiro's `auto`) →
+  `manual` — listed, never injected silently.
+- **The brief:** `briefSteering()` quotes a matching `fileMatch` file's body (front matter and guidance comments stripped,
+  within `BRIEF_STEERING_BUDGET`) and lists the `manual` ones. `steeringGlobMatch()` is linear with capped brace
+  expansion — never a backtracking regex.
+- **Custom names** (`steering_scaffold`): `^[a-z0-9][a-z0-9-]{0,62}\.md$`, never a Windows device name or a prototype key.
+  Doctor's `steering` check warns about files still templates.
+- **Imported steering** (Import sources → Steering sources) is real content, read like any file here — never a template.
 
-## Import sources and flows (1.14)
-- **`spec_import` tools** (exact enum on both surfaces): `kiro` · `spec-kit` · `openspec` · `plan` · `execplan` · `bmad` · `fluidplan`
-  (+ the steering tools `kiro-steering` · `cursor-rules`, 1.25 — below), same guarantees for all (a NEW feature, the source only read and inside the project, mapping + warnings, the localized
-  "Imported from" note, tracks auto-classified unless given; nothing dropped silently — what no mapping takes goes to
-  design.md (plan / ExecPlan) or requirements.md (PRD), or into a warning).
-  - `plan` — a Claude Code plan-mode file (plansDirectory defaults to `~/.claude/plans`, OUTSIDE the project — the refusal
-    says to copy it in or point plansDirectory inside) or a Cursor `.cursor/plans/*.plan.md` (front matter name / overview /
-    todos): goals and acceptance-like bullets → US-1's criteria (EARS when they already read like one, else
-    `[NEEDS CLARIFICATION]`; a command-only bullet — "Run `npm test`", "`npm test` passes", 1.22 review: also with a trailing
-    "and expect …" / PT "e esperar …" / ES "y esperar …" clause, `planCommandOnly()` — stays in design.md); checklists, else Cursor todos, else a Steps / Implementation section's items (an Approach / Abordagem / Enfoque section
-    only when there is no other), else its
-    sub-headings → tasks keeping state; file paths a step names → `_Implements:_` (`planPaths()`: never a URL, absolute or
-    home path, `..`, alias, glob; `:line` / `#L10` dropped; a single backticked name without a folder needs a known
-    extension — `PLAN_FILE_EXT`: since 1.21.1 every `CODE_EXT` / test-only extension (engine/scan.js — `.psm1`, `.bats`,
-    `.go`…) but `PLAN_EXT_AMBIGUOUS` (d, s, v, f, t, m, r, el, re, sc, cmd — `conf.d`, `this.el`, `color.r`, `args.cmd`,
-    `obj.m` are object fields: such a name needs a folder part, `scripts/build.cmd`), plus docs / config / data such as `.psd1`); the
-    rest → design.md. A folder holding several plans is refused (name the file).
-  - `execplan` — a Codex ExecPlan (PLANS.md): Validation and Acceptance → criteria; Progress (state kept) + Concrete Steps
-    → tasks (deduplicated), a step naming a check command → `_Verify:_` (`planCommand`; 1.22 review 4: a leading `cd <dir> &&`
-    is kept — the runner / check test reads the command after it; dropping it imported `cd packages/web && npm test` as
-    `_Verify: npm test_`, which `done --run` ran at the root and the natural run read command-mismatch; `planCommandOnly`
-    reads a cd-led validation line the same way); Decision Log → design.md `## Decisions` (D-1…);
-    Purpose → summary; living sections → design.md verbatim.
-  - `bmad` — the PRD (`docs/prd.md`, sharded `docs/prd/`, v6 `_bmad-output/planning-artifacts/`) FR / NFR lines → FR-n /
-    NFR-n; epic stories + story files (`docs/stories/*.md`; the file wins over the PRD's copy) → US-1…US-n in story order,
-    their ACs → US-n.AC-m; Tasks / Subtasks → `[USn]` tasks with `(AC: 1, 3)` → `_Requirements:_` (1.22 review: a nested unit
-    citing none inherits its parent's — the nearest unit above with a smaller indent; a grandchild its inherited ones);
-    architecture + Dev Notes → design.md. One story file imports one story.
-  - `fluidplan` (1.17) — a plan settled with the fluidplan skill (`.fluidplan/<id>/`, its plan.json, PLAN.md / DECISIONS.md —
-    also at plan.json's `output` paths or fluidplan.config.json's `outputDir` (`fpConfig`) —, or PLAN.md's text inline,
-    DECISIONS.md optionally following it). The finalized PLAN.md / DECISIONS.md win (PLAN.md is where fluidplan ticks tasks;
-    state.json "exported" with no PLAN.md found → a warning); plan.json + answers.json fill in or stand alone
-    (`fpFromPlanJson` restates fluidplan's rules — "Not OK" is a final rejection there). Pages → stories, acceptance →
-    criteria (EARS, else `[NEEDS CLARIFICATION]`), tasks numbered by the parser (`model.tasks.numbered`), files →
-    `_Implements:_` (a delete → a "To delete" line), one `_Verify:_` per command, after → `_Depends:_` (an `after` cycle:
-    the edges against the plan's order dropped, `wCycle`), settled decisions → decisions.md (`decisionEntryLines`,
-    `_Affects:_` = their tasks' criteria, the revision note in Context) + design.md `## Decisions` /
-    `## Alternatives & Trade-offs`, rejected → Out of Scope, open ones (a list decision with an item "to change" too —
-    verdict `mixed`, "partly settled") → "Open decisions" with `[NEEDS CLARIFICATION]` + the reviewer's question / remarks,
-    working rules → Global Constraints, the intro of a page no story carries → design.md `## Themes`, the subtitle →
-    the summary or design.md's Context. **The plan's text is written inert** (1.17 F review): every value written into one
-    line is one line (`fpV` / `fpHead` for headings — whitespace runs folded), marker look-alikes get their colon escaped
-    (`_Verify\:` — `fpInert`: task + decision + `_Outcome:_` labels), AC / T / EC / NFR / SC IDs are escaped (`US-7\.AC-1`),
-    `<!--` / `-->` neutralized, and each physical line gets the heading / task-line / checkpoint escapes (`fpLine`,
-    `fpProse` — which also closes a fence the text leaves open): only fluidplan's `verify` field makes a `_Verify:_`. A
-    plans folder is listed only when its real path is inside the project. EN / FR labels; every pattern linear
-    (`fpTitleOf` / `fpTaskHeading`, `FP_LINE_MAX`, `fpOneLine` splits, `sortGroup` = Kahn + a min-heap; `mdHeadings` is a
-    scan — `mdHeadingParts`). importSpec writes every imported requirements.md line comment-inert for every importer
-    (`commentInert` / `inertBlock`). A `<!--` / `-->` inside an inline code span stays as written (`inertOutsideCode` —
-    backtickRuns, commentLines' pairing): in `commentInert` and in `fpInert(s, true)` for the criteria, a story's prose and
-    Out of Scope (whole requirements.md lines or after a backtick-free prefix); everything else (design.md, decisions.md —
-    read by the code-span-blind `blankHtmlComments` —, tasks.md, a value joined to others on a line, the feature name) is
-    escaped everywhere. The ID / marker escapes apply inside code spans too (extractAcIds / taskMarkerSpans read them).
-    The escapes never reach stakeholders as stray characters: `expInline` unescapes every ASCII punctuation escape
-    (`RE_MD_ESCAPE`), and the Gherkin / matrix CSV / tracker (criteria, summaries) exports and the HTML `<title>` write
-    `mdPlainText()` (escapes + entities decoded outside code spans; a numeric reference to a control character kept).
-    Never write a raw U+2028 / U+2029 (or its `\u` escape through the Edit tool): build it
-    (`FP_LS_PS`). Pinned to fluidplan 755d1b2 (2026-09-26).
-- **spec-kit scenarios** (1.22 review): numbered items under the story, else — only under an explicit "Acceptance Scenarios"
-  label, as kiro.js reads its criteria — bulleted ones (`mdListItems(…, false)`); a bullet outside the label stays prose.
-- **spec-kit tasks and design documents (1.24 r6 G-I1 / G-I3).** `specKitTaskMarkers()` gives each task line (a checkbox outside
-  fenced code and HTML comments) the sub-lines it lacks: `_Requirements: US<n>_` for its `[USn]` tag — importSpec's `refs` turn it
-  into that story's AC IDs, as a hand-written `US2` — and `_Implements: <paths>_` for the paths its text names (`planPaths()`, the
-  plan import's rule); a marker the task already carries (its line or a sub-line) is kept. The imported sample traces clean (it
-  read every criterion uncovered). `specKitDesignDocs()` appends `research.md`, `data-model.md`, `contracts/` and
-  `quickstart.md` to plan.md's text (they were skipped with a "not imported" warning): each under a localized `## ` heading
-  (`importSpec.skDocs`) with a provenance line (`skFrom`), its first-line title dropped and its headings one level down outside
-  fenced code (`demoteMd`); a contract that is no markdown goes into a fence (`SPECKIT_CONTRACT_EXT` gives its language and the
-  text kinds read); contracts/ two levels deep, at most `SPECKIT_CONTRACTS_MAX` (30) files — the rest, and any other kind, are
-  named in the "not imported" warning; a document holding only its title adds no section. Every file goes through the
-  importer's `read` (inside the project; over `IMPORT_MAX_BYTES` → the whole import refused). No plan.md but such documents:
-  design.md holds them, the warning says so (`wNoPlanDocs`).
-- **A title that names no folder** (1.22 review): when the caller gives no `name` and the parser's `nameHint` (a plan's /
-  ExecPlan's / fluidplan's title, BMAD's PRD or story title) slugifies to nothing (`# Добавить тёмную тему`), importSpec uses the
-  parser's `nameFallback` — the name it had without the title (the plan file's stem, the folder, fp.id, the story file's stem);
-  inline text has none (its virtual file is `<tool>.md`): `importSpec.noUsableTitle` says to pass a name. A name the caller
-  gives is theirs (resolveFeature's own error).
-- **`spec_import` stays inside the project.** The source path must resolve inside `projectDir` — checked
-  lexically first (nothing outside is even stat'ed), then by real path (a symlink out is refused) — and it is
-  only read. Tool names are exact (`kiro` | `spec-kit` | `openspec` | `plan` | `execplan` | `bmad` | `fluidplan` | `kiro-steering` |
-  `cursor-rules`, the schema enum) on both surfaces, and it never imports over an existing feature (nor a steering file).
-  `importSourceAt()` (import/index.js) is that rule, shared by the steering import (1.25). **What it may read (1.25.1, review
-  7)** — `spec_import {projectDir: "<home>/.aws", tool: "plan", path: "credentials", dryRun: true}` returned the credentials in its
-  `preview`: never a hidden folder or file (`importHiddenPart`: a path segment starting with `.`, lexically before any stat and by
-  real path — a link into one) but the importers' own as the path's first segment (`IMPORT_DOT_ROOTS`: `.kiro`, `.cursor`,
-  `.cursorrules`, `.fluidplan`, `.agent` — Codex's ExecPlans) and `.claude/plans/` (a plansDirectory inside the project); a FILE
-  named as the source is a document (`IMPORT_SOURCE_EXT`: md, markdown, mdc, txt, json, yaml, yml, or `.cursorrules`), and every
-  file a parser reads is a kind importers know (`IMPORT_READ_EXT`: + spec-kit's contracts/ kinds) — else a `wUnreadable` warning.
-  Refusals carry a stable `code`: `import-outside` · `import-not-found` · `import-hidden` · `import-not-source`. Over MCP an explicit
-  `projectDir` that is not the default project must hold a dev-spec `.specs/` (`project-no-specs`, mcp.md → Argument validation);
-  the CLI is user-driven (`--project` any folder) and gets the engine's rules.
-- **The import cap (1.23 review 5).** `IMPORT_MAX_BYTES` (2 MiB) counts CHARACTERS after decoding. A source over it — inline text,
-  or any file a parser reads (a plan, a folder source's design.md, a BMAD shard) — refuses the whole import (`tooLarge: true`,
-  `importSpec.tooLarge` naming the file(s) and the cap; nothing created). It used to be cut silently: a plan's Steps past the cut
-  were dropped and the import kept the scaffold's tasks saying no steps list was found. A file is stat'ed first — a text holds
-  at least one character per 3 bytes, so one over 3 × the cap is refused without being read whole; bytes are not characters (a
-  2.1 MB file of CJK text under the cap imports whole).
-- **What an import writes (1.23 review 5):** the name — the caller's or the title's — is one line (`flatText`: a line break opened a
-  heading in every file's title) and, once the feature is created, inert to HTML comments (`specNameText` — 1.24 r6 G4: a GIVEN
-  name's `<!--` opened a comment in every imported file's title; a title's `<!--` is escaped before its slug is taken, as ever); the active tracks' design blocks follow the imported design body through `appendSpecText` (an
-  open code fence at its end closed first — a design ending inside a ```mermaid had the sections written into it), as do the
-  packs' task blocks; an archived feature holding the same slug is a warning (`createArchivedTwin`); the roadmap is refreshed
-  ONCE, after the imported files (createFeature's refresh skipped: `{ refresh: false }` — it rendered every feature twice).
-- **Steering sources (1.25 — import/steering.js `importSteering`).** `kiro-steering` / `cursor-rules` write `.specs/steering/<name>.md`
-  files, no feature: `STEERING_IMPORT_TOOLS` (the facade exports it — server.js's `REQUIRED_ONE_OF` has an `unless` for them, so
-  `path` is optional over MCP; the CLI's usage too). No path → `STEERING_IMPORT_DEFAULTS` that exist (`.kiro/steering`;
-  `.cursor/rules` + `.cursorrules`); a path → a folder (its `.md` — Cursor: `.mdc` / `.md` — files, top level; sub-folders and
-  other files named in `wOthers`) or one file, through `importSourceAt` (inside the project, read with the cap). `name` /
-  `tracks` are a feature's — refused (`featureArgs`); `text` gets the existing `textOnly`. The name: the stem slugified
-  (`steeringTargetName` — `customSteeringError`'s rule: a Windows device name / a prototype key → skipped, `name`). **Kiro:**
-  the front matter kept verbatim when `steeringFrontMatter()` sees one (else `inclusion: always` written in — Kiro's default;
-  dev-spec would leave such a non-default file out of every brief); a mode dev-spec lacks (`auto`) → `wMode`. **Cursor:**
-  `ruleFrontMatter()` reads leniently (Cursor writes `globs: *.ts` — no YAML), `alwaysApply: true` → always, `globs`
-  (`cursorGlobs` — a comma string split outside braces, a YAML / inline list; a glob naming no folder → `**/` + it, as Cursor
-  matches it at any depth; a leading `./` or `/` dropped; quoted in the quote kind it lacks — `globQuoted`, steeringFrontMatter
-  unescapes nothing; both kinds → left out, `wGlobs`) → fileMatch, else manual; `description` kept (`yamlQuoted`; dev-spec never
-  reads it); `.cursorrules` → `cursorrules.md`, always; `dev-spec-driven.mdc` (the plugin's own rule, `rules cursor`) → skipped,
-  `own`. The body follows ONE provenance comment (`importSteering.note` — a brief never quotes a comment; the front matter must
-  stay the first line), line ends LF. **Create-only:** `existsRaw` then `writeIfAbsent` — an existing file is skipped,
-  `exists` (+ `template: true` when `isSteeringStub` / `artifactState` reads it as a stub: Kiro's product / tech / structure.md
-  are init's names — the message says to delete it and import again; never overwritten, never `--force`). Other reasons:
-  `duplicate` (two sources → one name), `empty`, `too-large` (over IMPORT_MAX_BYTES, or past `STEERING_IMPORT_MAX_CHARS` over the
-  call), `outside` (a link out), `unreadable`; `STEERING_IMPORT_MAX_FILES` (100) per call (`wLimit`). A linked `.specs/steering/`
-  is refused up front (`linkedSpecsFolder`). Result `{ok, kind: "steering", tool, toolName, sources, dir, lang, imported: [{file,
-  from, inclusion, patterns?}], skipped: [{file, from, reason, template?}], warnings}` — inclusion / patterns as
-  `steeringFrontMatter()` reads the written file back.
-- **Dry run (1.25 — `spec_import {dryRun: true}`, CLI `--dry-run`).** `importSpec` runs `importRun` (the import itself, every tool)
-  inside `withDryRun` (conventions.md → The dry-run sink): the same reads, refusals, classification and rendering, nothing
-  written — no feature folder, lock, roadmap refresh (`isDryRun()` skips `maybeRefreshRoadmap`) or .specs/.gitignore line. The
-  result (`dryRunResult`) is the real one + `dryRun: true` + `preview: [{file, chars, content, truncated?}]` — the files written
-  under the result's `dir` (the feature folder; the steering folder) in first-write order, dot files (.state.json) left out, each
-  cut to `DRY_RUN_FILE_CHARS` (4,000, at a line end) within `DRY_RUN_TOTAL_CHARS` (24,000) — and a refusal the real one's +
-  `dryRun: true`. `counts` {stories, criteria, tasks, decisions} is on every import's result (1.25). The parity test
-  (mcp/tests/13-imports-1-25.js) compares the dry answer with the real import that follows it, file by file.
-- (**Flows** — the section's last bullet — moved to gates-and-approvals.md.)
-- **The brownfield scan and coverage** (engine/scan.js — area 13 of the suites; 1.22 review):
-  - **The cap counts code.** Both walk with `walkProject(…, {counts, gitignore})`: only a file `counts` says yes to — code
-    (`isCodeFile`, not a fixture) and, for the scan, a manifest (`MANIFEST_NAMES`, `*.csproj` / `*.psd1` / `*.cabal` /
-    `*.nimble`) — counts toward `cap` (scan 5000, coverage `COVERAGE_CAP`; coverage's `opts.cap` is engine-internal, for
-    tests); every other file is still visited, and `WALK_ENTRY_CAP` (200,000 folder entries) still ends a huge tree.
-    `truncated` = a counted file (or, past the entry cap, any entry) was left unvisited — "code was skipped". The scan's
-    `filesScanned` is every file visited, `codeFilesCounted` what the cap counted. The other walks (globs, trace, finish)
-    pass no `counts`: every file counts, as before.
-  - **Generated folders** (`gitignoreRules()`): the ROOT `.gitignore`'s plain directory patterns — a name, a leading / trailing
-    `/`, a path of names (a slash inside anchors it), simple classes (`[Bb]in/`, `[a-z]`), folded where the file system folds
-    case — skip a folder (and a top-level module); wildcards, escapes and negated classes are ignored (a pattern
-    read wrongly would hide code). **Negations (review 2):** a pattern a negation could re-include is not applied — the Python
-    template's `lib/` with `!frontend/src/lib/` hid a SvelteKit app's `frontend/src/lib/*.ts` (coverage 4 → 2 code files, its
-    `_Implements:_` "non-code"). `gitignoreNegationReincludes()` compares the negation's LAST name (after `!`, `/`, a trailing
-    `/` — Git re-includes nothing under a folder that stays excluded, so `!lib/keep.txt` brings back no `lib/`; review 4: one
-    ending in `/**` re-includes EVERY name below its folder, so it reads as any name — `!frontend/src/**` was read as `src` and
-    root `lib/` kept hiding frontend/src/lib/) with the
-    pattern's last name: the same name, or a wildcard / class (`!b*/`, `!*`) that could match it — a DP over the pattern's
-    units, exact for its classes; Visual Studio's `!**/[Pp]ackages/build/`, `!?*.[Cc]ache/` keep `[Bb]in/` / `[Oo]bj/`. The
-    line order is not read (a negation before its pattern loses in Git — dropping that pattern only shows more code). Bounded:
-    over `GITIGNORE_MAX_NEGATIONS` (200) negations or `GITIGNORE_NEGATION_BUDGET` unit comparisons, no pattern is applied.
-    **Nested negations (review 3):** only the ROOT .gitignore's negations were read — root `lib/` with `frontend/.gitignore`
-    holding `!src/lib/` (Git tracks frontend/src/lib/api.ts) still hid it. While walking, a folder's own .gitignore is read once
-    (`folderGitignore` — its head, the ignore-all test too) and `reincluded(text)` (gitignoreRules) turns OFF, for that folder's
-    subtree, every root pattern one of its negations could re-include (the same last-name rule); `walkProject` carries the set
-    down the stack (`gitignoreOffMerge` — a new set per folder, siblings never share one) and `dir(rel, off)` skips those. A
-    root pattern stays on elsewhere (`backend/lib/`). Bounded: `GITIGNORE_NESTED_MAX` (200) nested files weighed and ONE
-    `GITIGNORE_NEGATION_BUDGET` over all of them; a file over `GITIGNORE_MAX_CHARS`, over `GITIGNORE_MAX_NEGATIONS`
-    negations, past the cap or the budget turns every root pattern off below it (`GITIGNORE_ALL_OFF` — never hide code).
-    **Read as Git reads it (review 4):** `gitignoreLines` skips a leading UTF-8 BOM (it hid a nested file's first-line
-    negation) and drops only TRAILING unescaped spaces — `raw.trim()` turned `  lib/` / `lib/\t` / ` *` into patterns Git never
-    applies; `gitignoreHead` reads a UTF-16 file (FF FE / FE FF — Windows PowerShell 5.1's `echo lib/ > .gitignore`) as no
-    pattern (Git matches its raw bytes against nothing); a ROOT file over `GITIGNORE_MAX_CHARS` applies no pattern (its head
-    ended mid-line — `srcgen/` read as `src` — and a negation past it was never weighed); the ignore-all test reads the whole
-    file (`GITIGNORE_ALL_HEAD` + 1 characters: a longer one is no ignore-all — `*` + 4 KB of comments + `!keep.ts` was).
-    Known limit: case is folded with `toLowerCase` where the file system folds it, while Git's `core.ignorecase` folds ASCII
-    only (`Äpp/` hides `äpp/`, `[@-Z]` folds to `[@-z]`).
-    A folder (not the root) whose own `.gitignore` ignores everything (`gitignoresAll`: `*`,
-    re-including at most `.gitignore` / `.gitkeep` / `.keep`) is skipped too (Laravel's storage/framework/views). Never a
-    built-in `bin` (Ruby / Node keep code there). `testdata/` is a fixture folder (`isTestFixture`).
-  - **Manifests:** a root one is read only as a file or a link that stays inside the project (`projectFileInside`); nested
-    ones (`NESTED_MANIFESTS` — a package's manifest, never a per-folder CMakeLists / Makefile; never under a
-    `MANIFEST_FIXTURE_DIRS` folder: fixtures / `__fixtures__` / testdata and — review 2 — docs / doc / examples / example /
-    samples / sample: a Node app's Sphinx `docs/requirements.txt`, Jekyll `docs/Gemfile` and `examples/flask-client/` made its
-    stack "python (flask)" and "ruby") join the stack by name and the first `NESTED_MANIFEST_CAP` (20) are read for frameworks / test runners; the
-    root package.json alone gives entrypoints (listed first).
-  - **Entrypoints and the stack label (1.25.1):** a test file (`isTestFile`) is never an entrypoint (`tests/app.py` was a "python"
-    one — `entryKind`'s Python rule reaches depth 2); `@SpringBootApplication` marks a `.java` / `.kt` source only (any code file
-    naming it — a JS string, a Python comment — was a "spring boot" entrypoint); a package.json with no dependency is the stack
-    "node", never "node ()".
-  - **ASP.NET tokens:** `[controller]` = the class name minus "Controller", `[action]` = the decorated method
-    (`aspActionName`, its "Async" suffix dropped); one it can't name stays. **A projectDir that is no folder** → ok: false
-    (`brownfield.notFolder`; the CLI exits 1).
-  - **coverage's folder lookup:** `implementsTargets(…, sorted)` binary-searches keys sorted once per call
-    (`keysWithPrefix`) — the same files the scan of every key gives, in key order.
+## Import sources and the brownfield scan
+- **The tools** — `spec_import {tool}`, one exact enum on both surfaces: `kiro`, `spec-kit`, `openspec`, `plan`,
+  `execplan`, `bmad`, `fluidplan` make a feature; `kiro-steering`, `cursor-rules` steering files. A feature import is
+  always a NEW feature, the source only read, with a mapping, warnings, `counts`, the localized "Imported from" note and
+  tracks auto-classified unless given; nothing is dropped silently (unmapped text goes to design.md or requirements.md,
+  or into a warning). The design-first flow: gates-and-approvals.md → Flows.
+- **`spec_import` stays inside the project.** `importSourceAt()` (import/index.js, shared by the steering import): the
+  path must resolve inside `projectDir` lexically (nothing outside is even stat'ed), then by real path; it is only read.
+  No hidden segment (`importHiddenPart`, also by real path) except an importer's own folder as the first segment
+  (`IMPORT_DOT_ROOTS`) and `.claude/plans/`; a source FILE must be a document (`IMPORT_SOURCE_EXT`), every file a
+  parser reads a known kind (`IMPORT_READ_EXT`, else `wUnreadable`). Codes: `import-outside`, `import-not-found`,
+  `import-hidden`, `import-not-source`. Over MCP an explicit non-default `projectDir` must hold a dev-spec `.specs/` (`project-no-specs`,
+  mcp.md → Argument validation); the CLI gets the engine's rules only.
+- **The import cap:** `IMPORT_MAX_BYTES` (2 MiB) counts CHARACTERS after decoding. Inline text or any file a parser reads
+  over it refuses the WHOLE import (`tooLarge: true`, `importSpec.tooLarge`) — never a silent cut. A file over 3 × the
+  cap (a text holds ≥ 1 character per 3 bytes) is refused from its stat, unread.
+- **What an import writes:** the name is one line (`flatText`) and comment-inert (`specNameText`; a title's `<!--` is
+  escaped before its slug is taken); every requirements.md line is comment-inert (`commentInert`, `inertBlock`); the
+  track design and task blocks follow the body through `appendSpecText` (an open fence closed first); an archived twin
+  slug is a warning (`createArchivedTwin`); the roadmap is refreshed ONCE, at the end (createFeature's
+  `{ refresh: false }`).
+- **No usable title** (a parser's `nameHint` slugifying to nothing, `# Добавить тёмную тему`) → its `nameFallback` (the
+  file's stem, the folder, fp.id); inline text has none → `importSpec.noUsableTitle`.
+- **Dry run** (`dryRun: true`, CLI `--dry-run`): `importRun` inside `withDryRun` (conventions.md → The dry-run sink) — the
+  same reads, refusals and rendering, nothing written (`isDryRun()` also skips `maybeRefreshRoadmap`). `dryRunResult` =
+  the real result or refusal + `dryRun: true` + a `preview` of the files under `dir` (first-write order, no dot files,
+  each ≤ `DRY_RUN_FILE_CHARS` cut at a line end, ≤ `DRY_RUN_TOTAL_CHARS` in all). mcp/tests/13-imports-1-25.js compares
+  it with the real import, file by file.
 
-## Stakeholder export and release notes (1.14)
-- **`spec_export`** writes (with `write`) `.specs/exports/<slug>.<html|md>` (1.14 F5: `format: "csv"` → `<slug>.rtm.csv`,
-  the traceability matrix — markdown-and-trace.md → Requirements traceability matrix) — the project: `project.<fmt>`, a feature
-  slugged `project`: `project.feature.<fmt>` — with the `RE_AUTOGEN` marker family; `isGeneratedOrAbsent()` means never
-  over a hand-written file (an error), and (1.22 review) never through a link: `specsWriteContained()` (engine/files.js) refuses
-  — before anything is read or written — a `.specs/exports/` or a target document that is a symlink / junction or resolves
-  outside the real `.specs/` (a link inside the project is still refused), in every format, Gherkin's all-or-nothing write
-  included (`stakeholderExport.exportsLinked`). A feature renders in its language, the project in the project language. The HTML
-  is offline by construction: a zero-dep markdown renderer (`expInline` and friends) escapes EVERY text run (`htmlEsc` —
-  a `<script>` in a criterion is shown as text), keeps link targets only for http(s) / mailto, turns an image into its alt
-  text, and loads no font, script or stylesheet URL (a test asserts it); roadmap palette, system light/dark + toggle,
-  print rules. Approvals are flagged "changed since" by content fingerprint only — a file date is no evidence (as in
-  finish). A change (1.21 review C5) exports as itself: its kind label, its criteria (change.md without the task blocks),
-  one Tasks table, no design, the plan's approval row (`planPhase`); the project export lists its criteria, not stories. A story written as its own `## US-n` section appears once, under the stories.
-- **`spec_export {format: "changelog"}`** reads the spec data only (no model, no git log). Added = features that shipped since `since`
-  (finish `{write}` recorded their baseline, or their execution sign-off was approved) with their user-story ACs (template
-  criteria left out); Changed = the CHANGES shipped since then (kind `change` — 1.24 r6 G-I10: `changed.changes`, each with its
-  summary and criteria; they were listed under Added as new features) + ACs superseded by a feature shipped since then + change
-  requests (`changes`) recorded since then, with the current AC text (folded into the entry of a feature new in these notes); Fixed = bugfixes shipped + the
-  root-cause one-liner. A feature shipped before `since` is never Added again (a role's `partial` execution sign-off is no shipment — only the
-  completing one); a spike is never listed. `since`: an ISO
-  date (`YYYY-MM-DD` = 00:00 UTC) or timestamp, `last` (default — `meta.changelogAt`; everything while unset) or `all`.
-  `write` → `.specs/RELEASE-NOTES.md` (AUTO-GENERATED, never over a hand-written one) and stamps `meta.changelogAt`, both
-  under the roadmap lock; nothing to report → nothing written or stamped (`note`).
+### The sources
+- **`plan`** — a Claude Code plan-mode file (its default plansDirectory, `~/.claude/plans`, is outside the project: the
+  refusal says to copy it in) or a Cursor `.cursor/plans/*.plan.md`. Goal and acceptance bullets → US-1's criteria (EARS
+  as written, else `[NEEDS CLARIFICATION]`); a command-only bullet, even with a trailing "and expect …" (PT, ES too —
+  `planCommandOnly()`), stays in design.md. Tasks, state kept: checklists, else Cursor todos, else a Steps or
+  Implementation section (Approach only alone), else the sub-headings. Named paths → `_Implements:_` (`planPaths()`: no
+  URL, absolute or home path, `..`, alias, glob; `:line` and `#L10` dropped; a bare name needs a `PLAN_FILE_EXT`
+  extension — scan.js's code and test ones minus `PLAN_EXT_AMBIGUOUS`, whose `conf.d` or `args.cmd` need a folder — or a
+  docs, config or data one). A folder holding several plans is refused.
+- **`execplan`** — a Codex PLANS.md: Validation and Acceptance → criteria; Progress and Concrete Steps → tasks
+  (deduplicated); a check command → `_Verify:_` (`planCommand`) with its leading `cd <dir> &&` KEPT — the runner reads the
+  command after it, and without it `done --run` runs at the root; Decision Log → design.md `## Decisions`; Purpose →
+  summary; living sections → design.md.
+- **`bmad`** — the PRD (`docs/prd.md`, sharded `docs/prd/`, v6 `_bmad-output/planning-artifacts/`): FR and NFR lines →
+  FR-n, NFR-n; stories (a story file wins over the PRD's copy) → US-n with their ACs; Tasks and Subtasks → `[USn]` tasks,
+  `(AC: 1, 3)` → `_Requirements:_` (an uncited nested unit inherits its parent's); architecture and Dev Notes →
+  design.md. One story file imports one story.
+- **`spec-kit`** — scenarios: numbered items, else bullets only under an explicit "Acceptance Scenarios" label.
+  `specKitTaskMarkers()` adds the `_Requirements: US<n>_` and `_Implements:_` sub-lines a task lacks.
+  `specKitDesignDocs()` appends research.md, data-model.md, contracts/ and quickstart.md to plan.md under localized,
+  demoted headings (`importSpec.skDocs`, `demoteMd`); a non-markdown contract is fenced (`SPECKIT_CONTRACT_EXT`); at most
+  `SPECKIT_CONTRACTS_MAX` contracts, two levels deep, the rest named in the "not imported" warning; no plan.md →
+  `wNoPlanDocs`.
+- **`fluidplan`** — `.fluidplan/<id>/` (plan.json, PLAN.md, DECISIONS.md, also at the `output` / `outputDir` paths —
+  `fpConfig`) or PLAN.md inline; the finalized PLAN.md and DECISIONS.md win, plan.json and answers.json fill in or stand
+  alone (`fpFromPlanJson`). Pages → stories, acceptance → criteria, files → `_Implements:_` (a delete → "To delete"),
+  commands → `_Verify:_`, after → `_Depends:_` (cycle edges dropped, `wCycle`); settled decisions → decisions.md
+  (`decisionEntryLines`) and design.md, rejected → Out of Scope, open or `mixed` → "Open decisions" with
+  `[NEEDS CLARIFICATION]`; working rules → Global Constraints, a page intro no story carries → `## Themes`. A plans
+  folder counts only when its real path is inside the project. Pinned to fluidplan 755d1b2 (2026-09-26).
+- **Imported text is written inert:** one value, one line; marker look-alikes and AC, T, EC, NFR, SC IDs escaped
+  (`fpInert` — `_Verify\:`, `US-7\.AC-1`), inside code spans too; comment delimiters neutralized; heading, task and
+  checkpoint escapes per line, an unclosed fence closed (`fpLine`, `fpProse`) — only fluidplan's `verify` field makes a
+  `_Verify:_`. A comment inside an inline code span stays as written (`inertOutsideCode`) only in requirements.md prose;
+  design.md, decisions.md (the code-span-blind `blankHtmlComments` reads it), tasks.md and the name escape it everywhere.
+  Every pattern is linear (`FP_LINE_MAX`, `sortGroup` = Kahn + a min-heap). Never write a raw U+2028 / U+2029 (nor its
+  `\u` escape through the Edit tool) — build it (`FP_LS_PS`). Exports undo the escapes: `expInline` (`RE_MD_ESCAPE`),
+  `mdPlainText()` (Gherkin, the CSVs, the HTML `<title>`).
 
-## Exports and planning (1.16 E)
-- **Formats** — `EXPORT_FORMATS` = html · md · csv · gherkin · jira · linear · adr (server.js reads its enum from there).
-- **ADR (1.25)** — `format: "adr"` (CLI `export [f] --adr`; `exportAdr()` lives in engine/decisions.js beside the log it reads —
-  exportSpecs hands it over): the decision log as one MADR 4 file per DECISION, `.specs/exports/adr/<slug>/NNNN-<title>.md` +
-  `<slug>/index.md`; no name → every feature's (archived ones in `adr/_archive/<slug>/` — an ADR log is history; a twin slug
-  never collides) + `adr/index.md` (project language). **Numbering = the D-number, per feature** (D-3 → 0003, ≥ 4 digits):
-  the log is append-only and numbers after its highest D-n, so no number ever moves — a global sequence (by date across
-  features) would shift with every removed feature and every merge of interleaved dates, and keeping one stable needs a
-  registry (state to merge). Only a hand-deleted LAST entry lets spec_decide reuse its number (outside the log's contract).
-  The title part is `slugify(mdPlainText(title))` cut to `ADR_SLUG_MAX` (60; `decision` when empty) — a retitled decision
-  changes the file name: the old file is stale. **Content:** front matter `status` (accepted · superseded by ADR-NNNN ·
-  superseded — when the superseder is no ADR) and `date` (the log's day), English-stable in every language; then `# title`,
-  a localized Status / Date / Supersedes list, `## Context and Problem Statement`, `## Decision Outcome` + `### Consequences`,
-  `## More Information` (the feature, its log entry, each `_Affects:_` reference linked to its file — `entryRefs` /
-  `resolveAffect`: requirements.md or change.md, test-plan.md, the section's file; a phantom one as text) — only the
-  sections the log has text for: MADR's Considered Options / Decision Drivers / Pros and Cons are never written (the log
-  holds no such data). **Discoveries** are no ADR: left out, named in the feature's index and `excluded` (reason
-  `discovery`; also `duplicate-id` — a D-n written twice, the first kept — and `unsafe-file` — a decisions.md linked out of
-  .specs/, never read: `readContained`). **User text** stays markdown where it is prose; where it sits in our structure it is
-  inert: `adrLabel` escapes `[` `]` outside code spans (a title is never a live link — heading, index, link labels), `mdCell`
-  the `|`, `adrInert` every `<!--` (an unclosed one hid the rest of the file), `adrBlock` closes a fence the paragraph leaves
-  open and moves its headings below the section's; the front matter and the marker comment hold none. No date of the run
-  anywhere: a re-run is byte-identical. **Write** (all-or-nothing): the legacy `exports` feature, a linked target or scope
-  folder (`specsWriteContained`), a same-named file without the marker (`isGeneratedOrAbsent`) refuse it all (`skipped: true`
-  for the last); a file whose text is unchanged (CRLF read as LF) is not rewritten (`unchanged`); then `adrStaleFiles()` —
-  the scope's ADR-named (`RE_ADR_NAME`) / index.md regular files carrying the marker that the export no longer produces —
-  are removed (`removeSpecFile`) and the folders that leaves empty (`removeEmptySpecDir`, files.js — gated, never a link),
-  never above `adr/`. A feature export touches only its own folder (`adr/index.md` is the project export's). Without
-  `write`: `documents` (content) + `stale` (what a write would remove; nothing is listed through a linked scope).
-- **Gherkin** — `gherkinFeature()` (the matrix — `buildTraceMatrix` — gives the planned T-IDs and the supersession state):
-  `# language: en|pt|es` first (pt-BR → pt), then the AUTO-GENERATED marker as a `#` comment; Feature tags = the tracks
-  (marker without brackets, else the name) + `@bugfix`; one Scenario per current AC tagged with its ID, T-IDs and track
-  marker; template ACs and ACs a SHIPPED feature retired are left out with a comment, a draft's pending supersession is
-  kept with one. `earsSteps(raw, lang)` is THE EARS → steps splitter and never drops a character: WHILE / WHERE / IF →
-  Given, WHEN → When, the SHALL response → Then; quoted and code spans never split a clause; only English keywords plus the
-  feature's own language count ("SI units" is no condition); a criterion that can't be split cleanly — a response with no
-  subject before its modal included ("WHEN x, the cart, …, SHALL be kept", on the comma path too) — is one `Then` with its
-  whole text (`unsplit`). Markup: `ghStripEmphasis()` drops only PAIRED emphasis runs (`**WHEN**`, `*WHEN*`, `_WHEN_`;
-  flanking rules, an opener never after a letter / digit, a closer never before one; code spans opaque; linear) — `2**n`,
-  `a_b_c`, `2*3*4` stay; characters before the first keyword (`(WHEN …`) lead its step. A fuzz test (mcp/test.js "1.16 E
-  review m5") checks no character is lost. Dialect keywords are Gherkin tokens, so they live in `engine/export.js` `GHERKIN_DIALECT`,
-  not i18n — `keywords` holds EVERY en / pt / es keyword of gherkin-languages.json (compare with cucumber/gherkin when
-  adding a language; never vendor it), and `ghRiskyLine()` labels a summary line starting with any of them (block keyword +
-  ':', step keyword + space, '*', a tag / comment / table / doc string). A named spike is refused (`spike: true`); no name →
-  one `.feature` per active feature (`documents`), written all-or-nothing.
-- **Tracker CSV** — `trackerRecords()` / `trackerCsv()` (the F5 `csvCell` / `csvRecord`: RFC 4180, the formula guard, a
-  BOM): Jira `Work item ID · Work type (Epic / Story / Sub-task / Task) · Summary · Description · Status · Parent · Labels…`
-  (one label per repeated column), Linear `ID · Title · Description · Status · Estimate · Labels · Parent issue` (local keys
-  `<slug>`, `<slug>/US-n`, `<slug>/#n`; a duplicated task number's later occurrences `<slug>/#n (2)` — every key unique);
-  parents first. Jira's Work item ID is the record's row number; a Parent names the FIRST record with that key. The
-  AUTO-GENERATED marker is the LAST HEADER CELL (an empty column to leave unmapped) — a trailing record would become a
-  work item.
-- **Milestones** — `roadmap.json → meta.milestones [{name, date, features, archived?}]` (`spec_roadmap_edit {kind: "milestone"}` / `dev-spec
-  milestone` / /roadmap milestone), under the roadmap lock; `milestoneStore()` sanitizes — an entry is valid only as add writes
-  it (a name `RE_MILESTONE_NAME` accepts — letters of any script with their marks —, a date `isoTime` accepts as a real
-  day, feature lists of slugs, one entry per identity; a hand-edited roadmap.json reaches ROADMAP.md / .html, where every
-  stored value still goes through `cell()` / `htmlEsc()`); a malformed list is refused by add / rm and read as its valid
-  entries otherwise, and `list` / `findMilestone` return `roadmapError()` for a roadmap.json that doesn't parse. A name ≤ 60
-  characters, ≤ 50 milestones × 200 features. IDENTITY = `milestoneKey()` — NFKC, lower-case, Latin accents folded,
-  separator runs (space _ - . : # ( )) as one '-', every other letter / digit / mark / '+' kept ("Sprint α" ≠ "Sprint β",
-  "C" ≠ "C++"; never the slug, which collapsed them); the FILE name is `milestoneFileKey()` — the slug when it equals the
-  key (1.16.0's names keep their file), else slug (or `milestone`) + 8 hex of the key's sha1, hashed too when another
-  milestone would share it. Features: a list's items split on commas only ("User Login" is one name), a single string on
-  whitespace too (spec_roadmap_edit {kind: "depend"}'s resolution). Adding an existing name updates date + features and keeps its `archived` list
-  minus the slugs listed again. `milestoneStatuses()` (inside `roadmapExtras`) → stable codes `on-track` · `at-risk` (reasons
-  `eta-after-date` · `eta-unknown` · `no-features`) · `late` · `done` + `eta`, `unknownEta`, `done`, `total`; ROADMAP.md /
-  .html get a table between Features and Dependencies and late / at-risk attention lines. `milestonesFollow(rm, slug,
-  rename | archive | remove | restore)` runs from `pruneRoadmapRefsLocked` (4th argument `archived`; the results carry
-  `milestonesUpdated`) and restore (`restored.milestones`): an archived feature moves to the milestone's `archived` list
-  (its notes still cover it). It edits every VALID stored entry in place (`milestoneStore().valid`) and leaves an invalid one
-  (or a meta.milestones that is no list) exactly as it is — one hand-edit typo used to stop every entry from following (1.16
-  verify NEW-1); the results then carry `milestonesInvalid` {count, names — the entry's name when add would accept it, else
-  `#<position>` —, notList?}, and so do spec_roadmap (`milestoneInvalidInfo()`), a "Needs attention" line of ROADMAP.md / .html
-  (`🏁 meta.milestones`, `milestone.attention.invalid` / `notList`, EN/PT/ES) and the CLI roadmap tail. `spec_export {format: "changelog", milestone}` → that milestone's features + its archived ones, `since`
-  defaulting to `all`, written to `RELEASE-NOTES.<milestoneFileKey>.md` without stamping `meta.changelogAt`
-  (`changelogData(…, only)`).
-- CLI: switches `revoke`, `print-config`, `gherkin`, `adr` (1.25) (`spec.CLI_SWITCHES`); value flags `reason`, `expires`, `text`,
-  `tracker`, `milestone`.
+### Steering sources
+- **Where:** `importSteering` (import/steering.js) writes `.specs/steering/<name>.md`, no feature. `path` is optional
+  (`STEERING_IMPORT_TOOLS`: server.js's `REQUIRED_ONE_OF` `unless`, the CLI's usage) — none → the
+  `STEERING_IMPORT_DEFAULTS` that exist; a folder → its top-level `.md` (Cursor: `.mdc`, `.md`) files, the rest named
+  (`wOthers`); `name` and `tracks` are refused (`featureArgs`). The file name is the stem slugified
+  (`steeringTargetName`, `customSteeringError`'s rule).
+- **Kiro:** front matter kept verbatim, else `inclusion: always` written in (Kiro's default; without it dev-spec would
+  leave the file out of every brief); `auto` → `wMode`. **Cursor:** `ruleFrontMatter()` reads leniently (`globs: *.ts`
+  is no YAML): `alwaysApply: true` → always; `globs` → fileMatch (`cursorGlobs`: a folder-less glob → `**/` + it, as
+  Cursor matches at any depth; quoted in the quote kind it lacks — `globQuoted`; holding both → left out, `wGlobs`); else
+  manual. `.cursorrules` → `cursorrules.md`; the plugin's own `dev-spec-driven.mdc` is skipped (`own`).
+- **Create-only:** one provenance comment after the front matter (`importSteering.note`); `existsRaw` then
+  `writeIfAbsent` — an existing file is skipped (`exists`, plus `template: true` for an init stub: delete it, import
+  again). Other skips: `duplicate`, `empty`, `too-large` (also `STEERING_IMPORT_MAX_CHARS` per call), `outside`,
+  `unreadable`, `name`; at most `STEERING_IMPORT_MAX_FILES` per call (`wLimit`); a linked `.specs/steering/` is refused
+  (`linkedSpecsFolder`).
+
+### The brownfield scan and coverage
+engine/scan.js — area 13 of the suites.
+- **The cap counts code:** `walkProject(…, {counts, gitignore})` counts toward `cap` (scan 5000, coverage `COVERAGE_CAP`)
+  only code (`isCodeFile`, not a fixture) and the scan's manifests; every other file is still visited, and
+  `WALK_ENTRY_CAP` ends a huge tree. `truncated` = a counted file (past the entry cap, any entry) was left unvisited
+  (`filesScanned`, `codeFilesCounted`).
+  The other walks (globs, trace, finish) pass no `counts`.
+- **Generated folders** (`gitignoreRules()`): only the root `.gitignore`'s PLAIN directory patterns (names, anchoring
+  slashes, simple classes like `[Bb]in/`, case folded where the file system folds it) skip a folder; wildcards, escapes and
+  negated classes are ignored — a pattern read wrongly would hide code. A nested folder whose own `.gitignore` ignores
+  everything (`gitignoresAll`) is skipped too; never a built-in `bin`; `testdata/` is a fixture (`isTestFixture`).
+- **Negations:** a root pattern a negation could re-include is not applied (`gitignoreNegationReincludes()`: the
+  negation's LAST name, `/**` reading as any, against the pattern's — a DP exact for classes; line order ignored); a
+  nested `.gitignore`'s negations switch it off for that subtree only (`folderGitignore`, `reincluded(text)`,
+  `gitignoreOffMerge` — a new set per folder). Past `GITIGNORE_MAX_NEGATIONS`, `GITIGNORE_NESTED_MAX`, the one
+  `GITIGNORE_NEGATION_BUDGET` or `GITIGNORE_MAX_CHARS`, every root pattern goes off below (`GITIGNORE_ALL_OFF`).
+- **Read as Git reads it:** `gitignoreLines` skips a BOM and drops only TRAILING unescaped spaces (never a trim);
+  `gitignoreHead` reads UTF-16 (PowerShell 5.1's `echo lib/ > .gitignore`) as no pattern; a root file over
+  `GITIGNORE_MAX_CHARS` applies none; the ignore-all test reads `GITIGNORE_ALL_HEAD` + 1 characters. Known limit:
+  `toLowerCase` folding, while Git's `core.ignorecase` folds ASCII only.
+- **Manifests and entrypoints:** the root manifest only as a file or an inside link (`projectFileInside`); nested ones
+  (`NESTED_MANIFESTS`, never under a `MANIFEST_FIXTURE_DIRS` folder such as docs or examples) name the stack, the first
+  `NESTED_MANIFEST_CAP` give frameworks and test runners; only the root package.json gives entrypoints. Never a test file
+  (`isTestFile`); `@SpringBootApplication` only in a `.java` or `.kt` source; a package.json with no dependency is
+  "node". ASP.NET `[controller]` and `[action]` are resolved (`aspActionName`).
+- **Edges:** a projectDir that is no folder → `brownfield.notFolder` (CLI exit 1). coverage binary-searches keys sorted
+  once per call (`implementsTargets(…, sorted)`, `keysWithPrefix`).
+
+## Stakeholder export and release notes
+- **`spec_export`** with `write` → `.specs/exports/<slug>.<html|md>` (csv: `<slug>.rtm.csv`, markdown-and-trace.md →
+  Requirements traceability matrix); the project's `project.<fmt>`, a feature slugged `project` `project.feature.<fmt>`;
+  the `RE_AUTOGEN` marker. Without `write` and `includeBody` (the MCP default), html and md return a markdown preview
+  (`EXPORT_PREVIEW_CHARS`, `bytes`, `hint`).
+- **Never over a hand-written file** (`isGeneratedOrAbsent()`) **and never through a link:** `specsWriteContained()`
+  (engine/files.js) refuses, before any read or write, a `.specs/exports/` or document that is a link or resolves outside
+  the real `.specs/`, in every format (`stakeholderExport.exportsLinked`).
+- **The document:** a feature in its language, the project in the project's. The HTML is offline by construction: a
+  zero-dep renderer (`expInline`) escapes EVERY text run (`htmlEsc`), links only http(s) and mailto, shows an image as its
+  alt text and loads no font, script or stylesheet URL (a test asserts it). "Changed since" approvals go by content
+  fingerprint only — a file date is no evidence. A change exports as itself (`planPhase` gives its approval row); a story
+  written as its own `## US-n` section appears once.
+- **Release notes** (`format: "changelog"`) read the spec data only — no model, no git log. Added: features shipped since
+  `since` (a finish `{write}` baseline or the completing execution sign-off — a role's `partial` is none), with their
+  user-story ACs (template criteria left out), never twice. Changed: the changes shipped (`changed.changes`), ACs
+  superseded by a feature shipped since and change requests since, with the current text. Fixed: bugfixes and their root
+  cause. Never a spike. `since`: an ISO date (00:00 UTC) or timestamp, `last` (default: `meta.changelogAt`, everything
+  while unset) or `all`. `write` → `.specs/RELEASE-NOTES.md` (never over a hand-written one) and stamps
+  `meta.changelogAt`, under the roadmap lock; nothing to report → nothing written or stamped (`note`).
+
+## Exports and planning
+- **Formats** — `EXPORT_FORMATS`: html, md, csv, gherkin, jira, linear, adr, catalog, changelog (server.js reads the
+  facade's copy); catalog and changelog return what `dev-spec catalog` and `dev-spec changelog` do.
+- **ADR** (`format: "adr"`, CLI `--adr`; `exportAdr()` in engine/decisions.js, beside the log): one MADR 4 file per
+  decision, `.specs/exports/adr/<slug>/NNNN-<title>.md` and an `index.md`; no name → every feature's (archived ones under
+  `adr/_archive/<slug>/`) and `adr/index.md`.
+  - **The number IS the D-number, per feature** (D-3 → 0003, ≥ 4 digits): the log is append-only, so no number moves —
+    only a hand-deleted LAST entry lets spec_decide reuse one. Never a global sequence: it shifts with every removed
+    feature and interleaved merge, and a stable one needs a registry to merge. The title part is
+    `slugify(mdPlainText(title))` cut to `ADR_SLUG_MAX`: a retitle renames the file.
+  - **Content:** front matter `status` (accepted, superseded by ADR-NNNN, superseded) and `date` (the log's day),
+    English-stable; then only the localized MADR sections the log has text for, linking the feature, the log entry and
+    each `_Affects:_` target (`resolveAffect`). A discovery is no ADR (`excluded`: `discovery`, `duplicate-id`,
+    `unsafe-file` — a linked decisions.md is never read, `readContained`). User text is inert where it sits in our
+    structure (`adrLabel`, `mdCell`, `adrInert`, `adrBlock`). No run date: a re-run is byte-identical.
+  - **Write**, all-or-nothing: the legacy `exports` feature, a linked target or scope (`specsWriteContained`) or an
+    unmarked same-named file (`isGeneratedOrAbsent`, `skipped: true`) refuses it all; unchanged text is not rewritten;
+    `adrStaleFiles()` (marked `RE_ADR_NAME` or index.md files no longer produced) are removed (`removeSpecFile`,
+    `removeEmptySpecDir`, never above `adr/`). A feature export touches only its folder. Without `write`: `documents`,
+    `stale`.
+- **Gherkin** (`gherkinFeature()`; T-IDs and supersession from `buildTraceMatrix`): `# language:` first (pt-BR → pt), the
+  marker as a `#` comment; the tracks and `@bugfix` as Feature tags; one Scenario per current AC, tagged with its ID,
+  T-IDs and track; template and shipped-retired ACs left out with a comment, a draft's pending supersession kept with
+  one. A named spike is refused (`spike: true`); no name → one `.feature` per active feature, all-or-nothing.
+  - **`earsSteps(raw, lang)` is THE splitter and never drops a character:** WHILE, WHERE, IF → Given; WHEN → When; the
+    SHALL response → Then; quoted and code spans never split; only English and the feature's own keywords count; what
+    can't split cleanly is one `Then` (`unsplit`). `ghStripEmphasis()` drops only PAIRED emphasis runs (linear; `2**n`,
+    `a_b_c` stay). A fuzz test (mcp/test.js "1.16 E review m5") checks no character is lost.
+  - **Dialect keywords are Gherkin tokens:** `GHERKIN_DIALECT` in `engine/export.js`, not i18n — EVERY en, pt and es
+    keyword of gherkin-languages.json (compare with cucumber/gherkin when adding a language; never vendor it);
+    `ghRiskyLine()` labels a summary line that starts with one.
+- **Tracker CSV** (`trackerRecords()`, `trackerCsv()`; the matrix's `csvCell` and `csvRecord`): Jira columns Work item ID
+  (the row number), Work type, Summary, Description, Status, Parent (the FIRST record with that key), one Labels column
+  per label; Linear columns ID, Title, Description, Status, Estimate, Labels, Parent issue, with local keys `<slug>`,
+  `<slug>/US-n`, `<slug>/#n` (a repeat `<slug>/#n (2)` — every key unique); parents first. The marker is the LAST
+  HEADER CELL — a trailing record would become a work item.
+- **Milestones** — roadmap.json `meta.milestones` (`spec_roadmap_edit {kind: "milestone"}`, `dev-spec milestone`),
+  under the roadmap lock.
+  - **Stored entries:** `milestoneStore()` keeps only what add could write (`RE_MILESTONE_NAME`, a real day, slug lists,
+    one per identity, ≤ 50 × 200 features); add and rm refuse a malformed list, readers take its valid entries; a stored
+    value still goes through `cell()` or `htmlEsc()`. An unparsable roadmap.json → `roadmapError()`.
+  - **Identity** is `milestoneKey()` (NFKC, lower-case, Latin accents folded, separator runs → '-', other letters, marks
+    and '+' kept — never the slug: "C" ≠ "C++"); the file is `milestoneFileKey()` (the slug when it equals the key, else
+    plus 8 hex of its sha1). A features list splits on commas only, a single string on whitespace too. Re-adding a name
+    replaces its date and features; its `archived` list loses the slugs listed again.
+  - **Status:** `milestoneStatuses()` → `on-track`, `at-risk` (`eta-after-date`, `eta-unknown`, `no-features`), `late`,
+    `done`.
+  - **Following the features:** `milestonesFollow()` (from `pruneRoadmapRefsLocked` and restore) edits each VALID entry
+    in place — an archived feature moves to `archived` — and leaves invalid ones as they are, reported
+    (`milestonesInvalid` {count, names, notList?}, `milestoneInvalidInfo()`, the "Needs attention" line —
+    `milestone.attention.invalid` / `notList`).
+  - **Release notes:** `{format: "changelog", milestone}` → its features and archived ones, `since` = `all`,
+    `RELEASE-NOTES.<milestoneFileKey>.md`, `meta.changelogAt` untouched (`changelogData(…, only)`).
+- **CLI flags of this area:** switches `revoke`, `print-config`, `gherkin`, `adr`, `dry-run` (`spec.CLI_SWITCHES`); value
+  flags `reason`, `expires`, `text`, `tracker`, `milestone`.
+
+## History
+How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
+
+### Project templates
+- **1.14** — `.specs/templates/` introduced: a team's own scaffolds over the built-in i18n ones. `templates` and `exports`
+  became reserved slugs; a feature created before 1.14 under either name stays a feature (the legacy exception).
+- **1.15** — `tracks` joined `RESERVED_SLUGS` (the project's track packs), with the same exception.
+- **1.21 F5** — `change` joined `TEMPLATE_ARTIFACTS` (a change's one file, kind change, size xs); a sized feature's built-in
+  scaffold follows its size, while a project template is written as it says, its missing track blocks appended whole.
+- **1.22 review** — the summary goes through `safeSpecText` (requirements.md, classification.md, change.md, bug.md, the
+  bug requirements): its `<!--` paired with the scaffold's closing EARS-guidance `-->` and hid every criterion
+  (placeholders 30 → 0, trace 5 ACs → 0, EARS 0 criteria).
+
+### Scoped steering
+- **1.13** — scoped steering: Kiro-compatible front matter, fileMatch bodies quoted into the brief, `manual` files listed.
+  Before it every default file was always in the brief — why one without front matter still counts as `always`. First
+  written under "Catalog, drift, restore, guard, steering" (lifecycle.md), then moved here.
+- **1.25** — steering imported from Kiro / Cursor; the steering logic itself was left untouched.
+
+### Import sources and the brownfield scan
+- **1.14** — `spec_import`, with the same guarantees for every source. The section ("Import sources and flows") also held
+  the design-first Flows, since moved to gates-and-approvals.md → Flows.
+- **1.17 (F)** — the `fluidplan` source, read at fluidplan 755d1b2 (EN / FR labels). **1.17 F review** — the plan's text is
+  written inert (one line per value, marker / ID / comment escapes, fences closed): plan text could otherwise forge a
+  marker, an ID or a `_Verify:_`.
+- **1.21.1** — `PLAN_FILE_EXT` grew to every `CODE_EXT` / test-only extension of engine/scan.js (`.psm1`, `.bats`, `.go`…),
+  minus `PLAN_EXT_AMBIGUOUS` (d, s, v, f, t, m, r, el, re, sc, cmd): `conf.d`, `this.el`, `color.r`, `args.cmd`, `obj.m` are
+  object fields, not files.
+- **1.22 review** — a plan's command-only bullet with a trailing "and expect …" / "e esperar …" / "y esperar …" stays in
+  design.md; a BMAD nested unit citing no AC inherits its parent's; spec-kit bullets count as scenarios only under an
+  "Acceptance Scenarios" label, as kiro.js reads its criteria; a title that slugifies to nothing falls back to the
+  parser's `nameFallback`. The brownfield scan and coverage got their rules (engine/scan.js): the cap counts code
+  (`WALK_ENTRY_CAP` 200,000 entries), generated folders from the root .gitignore, manifests, ASP.NET tokens (the "Async"
+  suffix dropped), the binary-searched folder lookup.
+- **1.22 review 2** — gitignore negations: the Python template's `lib/` with `!frontend/src/lib/` hid a SvelteKit app's
+  `frontend/src/lib/*.ts` (coverage 4 → 2 code files, its `_Implements:_` "non-code"); Visual Studio's
+  `!**/[Pp]ackages/build/` must keep `[Bb]in/` applied. Nested manifests under docs / examples: a Node app's Sphinx
+  `docs/requirements.txt`, Jekyll `docs/Gemfile` and `examples/flask-client/` made its stack "python (flask)" and "ruby".
+- **1.22 review 3** — nested negations: only the root .gitignore's were read, so root `lib/` with `frontend/.gitignore`'s
+  `!src/lib/` (Git tracks frontend/src/lib/api.ts) still hid it; `backend/lib/` must stay hidden.
+- **1.22 review 4** — `execplan` keeps a leading `cd <dir> &&`: dropping it imported `cd packages/web && npm test` as
+  `_Verify: npm test_`, which `done --run` ran at the root and the natural run read command-mismatch. Gitignore read as
+  Git reads it: `!frontend/src/**` was read as `src`, so root `lib/` kept hiding frontend/src/lib/; a leading BOM hid a
+  nested file's first-line negation; a trim turned `  lib/` / `lib/\t` / ` *` into patterns Git never applies; a UTF-16
+  file; a root file over the cap ended mid-line (`srcgen/` read as `src`) and a negation past it was never weighed; `*` +
+  4 KB of comments + `!keep.ts` read as ignore-all. Known limit kept: `Äpp/` hides `äpp/`, `[@-Z]` folds to `[@-z]`.
+- **1.23 review 5** — the import cap: a source over `IMPORT_MAX_BYTES` was cut silently (a plan's Steps past the cut
+  dropped, the scaffold's tasks kept with a "no steps list found" note); now the whole import is refused, and 2.1 MB of
+  CJK text under the cap imports whole. What an import writes: a line break in the name opened a heading in every file's
+  title (`flatText`); a design ending inside a ```mermaid had the track sections written into it (`appendSpecText`); an
+  archived twin became a warning; the roadmap rendered every feature twice per import (`{ refresh: false }`).
+- **1.24 r6 (G4)** — a GIVEN name's `<!--` opened a comment in every imported file's title: `specNameText`.
+- **1.24 r6 (G-I1 / G-I3)** — spec-kit: `specKitTaskMarkers()` (the imported sample read every criterion uncovered) and
+  `specKitDesignDocs()` (research.md, data-model.md, contracts/, quickstart.md had been skipped with a "not imported"
+  warning; `SPECKIT_CONTRACTS_MAX` = 30).
+- **1.25** — the steering tools `kiro-steering` · `cursor-rules` (import/steering.js), sharing `importSourceAt()`; the dry
+  run (`DRY_RUN_FILE_CHARS` 4,000, `DRY_RUN_TOTAL_CHARS` 24,000); `counts` on every result.
+- **1.25.1 (review 7)** — `spec_import {projectDir: "<home>/.aws", tool: "plan", path: "credentials", dryRun: true}`
+  returned the credentials in its `preview`: hidden paths and non-documents are refused, and over MCP a foreign projectDir
+  must hold a `.specs/`. Scan: `tests/app.py` was a "python" entrypoint (`entryKind` reaches depth 2); any code file naming
+  `@SpringBootApplication` (a JS string, a Python comment) was a "spring boot" one; a package.json with no dependency read
+  "node ()".
+
+### Stakeholder export and release notes
+- **1.14** — `spec_export`: one offline HTML / md document (roadmap palette, light / dark + toggle, print rules).
+  **1.14 F5** — `format: "csv"`, the traceability matrix (`<slug>.rtm.csv`), with `csvCell` / `csvRecord` (the tracker
+  CSV reuses them).
+- **1.21 review C5** — a change exported as a feature; it exports as itself (the project export lists its criteria, not
+  stories).
+- **1.22 review** — never through a link: `specsWriteContained()` before any read or write under `.specs/exports/`.
+- **1.24 r6 G-I10** — the changes shipped since `since` were listed under Added as new features; they are under Changed.
+- **1.26** — html / md without `write` return a preview of `EXPORT_PREVIEW_CHARS` (1,500): an 18.5k-character HTML for a
+  template-only feature landed in the agent's context on every call.
+
+### Exports and planning
+- **1.16 E** — Gherkin (E1), the Jira / Linear tracker CSV (E2) and milestones; with them the CLI switches `revoke` (U2),
+  `print-config` (C1) and `gherkin`. **1.16 E review m5** — Gherkin's emphasis: `2**n` / `a_b_c` / `2*3*4` and code spans
+  kept, `*WHEN*` / `_WHEN_` read as the keyword, a leading `(` kept; the fuzz test checks no character is lost.
+- **1.16.0** — milestones were filed by slug, which collapsed "Sprint α" / "Sprint β" and "C" / "C++"; identity became
+  `milestoneKey()`, and `milestoneFileKey()` keeps a 1.16.0 name's file when its slug equals the key.
+- **1.16 verify NEW-1** — one hand-edit typo in meta.milestones stopped every entry from following a rename / archive:
+  `milestonesFollow` edits each valid entry and reports the invalid ones (`milestonesInvalid`).
+- **1.25** — the ADR export (`format: "adr"`, CLI `--adr`), numbered by D-number rather than a global sequence (the
+  reasons are in the rules); `ADR_SLUG_MAX` = 60.
+- **1.26** — `catalog` and `changelog` became `spec_export` formats (`EXPORT_FORMATS`); this note listed the formats only up
+  to `adr` until the 1.27 restructure.
